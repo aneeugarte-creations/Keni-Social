@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, X } from "lucide-react";
+import { Loader2, Menu, Moon, Sun, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
@@ -6,8 +6,17 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NAVEGACION } from "@/components/layout/navegacion";
 import { Button } from "@/components/ui/button";
-import { useTema } from "@/hooks/use-tema";
+import { useTema } from "@/hooks/tema-contexto";
 import { cn } from "@/lib/utils";
+
+/** Fallback mientras se descarga el chunk de una pagina (lazy/Suspense). */
+function CargandoPagina() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center text-muted-foreground">
+      <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+    </div>
+  );
+}
 
 /** Busca la etiqueta de la ruta activa para mostrarla como titulo en la topbar. */
 function tituloDeRuta(pathname: string): string {
@@ -89,7 +98,9 @@ export function AppShell() {
 
         <main className={cn("flex-1 overflow-y-auto")}>
           <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:py-8">
-            <Outlet />
+            <React.Suspense fallback={<CargandoPagina />}>
+              <Outlet />
+            </React.Suspense>
           </div>
         </main>
       </div>

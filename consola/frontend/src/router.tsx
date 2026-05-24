@@ -1,13 +1,19 @@
+import { lazy } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
-import Carpetas from "@/pages/Carpetas";
-import Configuracion from "@/pages/Configuracion";
-import Estado from "@/pages/Estado";
-import GenerarCopy from "@/pages/GenerarCopy";
-import Metricas from "@/pages/Metricas";
-import Proyectos from "@/pages/Proyectos";
-import Tareas from "@/pages/Tareas";
+
+// Carga diferida por ruta (code-splitting): cada pagina viaja en su propio chunk
+// y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
+// de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
+// <Suspense> que muestra el fallback mientras carga vive en el AppShell.
+const GenerarCopy = lazy(() => import("@/pages/GenerarCopy"));
+const Metricas = lazy(() => import("@/pages/Metricas"));
+const Tareas = lazy(() => import("@/pages/Tareas"));
+const Proyectos = lazy(() => import("@/pages/Proyectos"));
+const Carpetas = lazy(() => import("@/pages/Carpetas"));
+const Estado = lazy(() => import("@/pages/Estado"));
+const Configuracion = lazy(() => import("@/pages/Configuracion"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las 7 paginas

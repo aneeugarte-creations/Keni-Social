@@ -32,4 +32,6 @@ function Badge({ className, variant, ...props }: BadgeProps) {
   return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
 }
 
-export { Badge, badgeVariants };
+// `badgeVariants` queda como const local (lo usa Badge); no se exporta para que
+// el archivo exporte solo el componente y porque nadie mas lo consume.
+export { Badge };

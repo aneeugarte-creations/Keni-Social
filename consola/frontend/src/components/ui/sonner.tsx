@@ -1,6 +1,6 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
-import { useTema } from "@/hooks/use-tema";
+import { useTema } from "@/hooks/tema-contexto";
 
 /**
  * Contenedor de notificaciones (toasts). Usa el tema actual (claro/oscuro) para

@@ -47,4 +47,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-export { Button, buttonVariants };
+// `buttonVariants` se mantiene como const local (lo usa Button y el tipo
+// ButtonProps); no se exporta para que este archivo exporte solo el componente
+// (regla react-refresh/only-export-components) y porque nadie mas lo consume.
+export { Button };
