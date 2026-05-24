@@ -18,6 +18,7 @@ SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from starlette.requests import Request
@@ -26,6 +27,7 @@ from starlette.routing import Route
 
 from .. import db, marcas, redes
 from .._http_json import leer_json
+from . import franjas as api_franjas
 
 # Nombres legibles de los estados (para poblar selects de la UI), en orden de flujo.
 _ESTADO_NOMBRE: dict[str, str] = {
@@ -41,7 +43,12 @@ _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 
 def _publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
-    """Serializa una publicacion resolviendo nombres legibles de marca y red."""
+    """Serializa una publicacion resolviendo nombres legibles de marca y red.
+
+    Anade `imagen` (nombre de archivo en el dir de media, o "") y `imagen_url`
+    (`/api/media/{imagen}` o "" si no hay imagen) para que la UI la pueda mostrar.
+    """
+    imagen = pub.get("imagen") or ""
     return {
         "id": pub["id"],
         "titulo": pub["titulo"],
@@ -56,6 +63,8 @@ def _publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],
         "origen": pub["origen"],
+        "imagen": imagen,
+        "imagen_url": f"/api/media/{imagen}" if imagen else "",
     }
 
 
@@ -83,12 +92,14 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
     veredicto = datos.get("veredicto", "")
     fecha_programada = datos.get("fecha_programada", "")
     origen = datos.get("origen", "")
+    imagen = datos.get("imagen", "")
     for valor, etiqueta in (
         (titulo, "El título"),
         (contenido, "El contenido"),
         (veredicto, "El veredicto"),
         (fecha_programada, "La fecha programada"),
         (origen, "El origen"),
+        (imagen, "La imagen"),
     ):
         if not isinstance(valor, str):
             return None, f"{etiqueta} debe ser texto."
@@ -103,6 +114,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
             "veredicto": veredicto,
             "fecha_programada": fecha_programada.strip(),
             "origen": origen.strip(),
+            "imagen": imagen.strip(),
         },
         None,
     )
@@ -148,6 +160,7 @@ async def crear(request: Request) -> Response:
         veredicto=entrada["veredicto"],
         fecha_programada=entrada["fecha_programada"],
         origen=entrada["origen"],
+        imagen=entrada["imagen"],
     )
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
@@ -210,10 +223,15 @@ async def actualizar(request: Request) -> Response:
                 {"error": "La fecha programada debe ser texto."}, status_code=400
             )
         campos["fecha_programada"] = fecha.strip()
+    if "imagen" in datos:
+        imagen = datos.get("imagen")
+        if not isinstance(imagen, str):
+            return JSONResponse({"error": "La imagen debe ser texto."}, status_code=400)
+        campos["imagen"] = imagen.strip()
 
     if not campos:
         return JSONResponse(
-            {"error": "No hay nada que actualizar (título, contenido, estado o fecha)."},
+            {"error": "No hay nada que actualizar (título, contenido, estado, fecha o imagen)."},
             status_code=400,
         )
 
@@ -230,11 +248,107 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Publicación borrada."})
 
 
+def calcular_hueco_para(
+    pub: dict[str, Any], ahora: datetime | None = None
+) -> str | None:
+    """Calcula el proximo hueco futuro para `pub` segun las franjas configuradas.
+
+    Devuelve el datetime ISO ('YYYY-MM-DDTHH:MM') del hueco, o None si no hay NINGUNA
+    franja aplicable a la (marca, red) de la publicacion. `ahora` se puede inyectar
+    para tests; por defecto es `datetime.now()`. Los huecos ya ocupados por OTRAS
+    publicaciones en estado `programado` (su `fecha_programada`) se evitan.
+    """
+    if ahora is None:
+        ahora = datetime.now()
+    franjas = db.listar_franjas()
+    aplican = api_franjas.franjas_aplicables(franjas, pub["marca"], pub["red"])
+    if not aplican:
+        return None
+    ocupados = {
+        otra["fecha_programada"]
+        for otra in db.listar_publicaciones(estado="programado")
+        if otra["id"] != pub["id"] and otra["fecha_programada"]
+    }
+    return api_franjas.proximo_hueco(aplican, ahora, ocupados)
+
+
+async def encolar(request: Request) -> Response:
+    """Programa la publicacion en el proximo hueco futuro de sus franjas.
+
+    `POST /api/publicaciones/{id}/encolar` -> `{publicacion}` (estado=programado y
+    fecha_programada puesta al hueco). 404 si no existe; 400 si no hay franjas
+    aplicables a su (marca, red).
+    """
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = db.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    hueco = calcular_hueco_para(pub)
+    if hueco is None:
+        return JSONResponse(
+            {"error": "No hay franjas configuradas para esta marca/red."}, status_code=400
+        )
+    actualizada = db.actualizar_publicacion(
+        publicacion_id, {"estado": "programado", "fecha_programada": hueco}
+    )
+    if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
+
+
+async def duplicar(request: Request) -> Response:
+    """Duplica una publicacion como borrador, con overrides opcionales.
+
+    `POST /api/publicaciones/{id}/duplicar` con JSON opcional `{red?, marca?, titulo?}`.
+    Copia contenido/imagen/veredicto/hashtags; estado=borrador, fecha_programada=''.
+    -> `{publicacion}` | 404.
+    """
+    publicacion_id = request.path_params["publicacion_id"]
+    original = db.obtener_publicacion(publicacion_id)
+    if original is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    marca = original["marca"]
+    red = original["red"]
+    titulo = original["titulo"]
+    if "marca" in datos:
+        nueva_marca = datos.get("marca")
+        if not isinstance(nueva_marca, str) or nueva_marca not in _MARCAS_IDS:
+            return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+        marca = nueva_marca
+    if "red" in datos:
+        nueva_red = datos.get("red")
+        if not isinstance(nueva_red, str) or not redes.es_red(nueva_red):
+            return JSONResponse({"error": "Red no permitida."}, status_code=400)
+        red = nueva_red
+    if "titulo" in datos:
+        nuevo_titulo = datos.get("titulo")
+        if not isinstance(nuevo_titulo, str):
+            return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
+        titulo = nuevo_titulo.strip()
+
+    copia = db.crear_publicacion(
+        marca,
+        red,
+        titulo=titulo,
+        contenido=original["contenido"],
+        estado="borrador",
+        veredicto=original["veredicto"],
+        fecha_programada="",
+        origen=original["origen"],
+        imagen=original["imagen"],
+    )
+    return JSONResponse({"publicacion": _publicacion_a_dict(copia)})
+
+
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
     Route("/api/publicaciones", crear, methods=["POST"]),
     Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),
