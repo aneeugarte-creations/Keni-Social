@@ -8,11 +8,18 @@ secciones, no textos exactos fragiles.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 
 import pytest
 
 from keni_metricas import reporte
+
+# Nº esperado de filas marca x plataforma en la fuente de muestra. Cada marca
+# aporta tantas filas como plataformas tenga configuradas (5+5+4+5+4+3 = 26).
+FILAS_PLATAFORMA_MUESTRA = 5 + 5 + 4 + 5 + 4 + 3
+MARCAS_MUESTRA = 6
 
 
 @pytest.fixture(autouse=True)
@@ -138,3 +145,64 @@ def test_md_picos_acotados_a_top_n(capsys):
     assert len(lineas_alerta) <= PICOS_VISIBLES
     # las alertas tambien usan el nombre legible
     assert "claro_sports" not in seccion
+
+
+def test_formato_csv_es_parseable_con_encabezados_y_filas(capsys):
+    # --formato csv debe emitir un CSV bien formado: encabezados en español y el
+    # nº de filas esperado (marcas x plataformas + un TOTAL por marca + 1 global).
+    rc = reporte.main(["--formato", "csv"])
+    assert rc == 0
+    salida = capsys.readouterr().out
+    filas = list(csv.reader(io.StringIO(salida)))
+    assert filas[0] == [
+        "marca",
+        "plataforma",
+        "visualizaciones",
+        "alcance",
+        "interacciones",
+        "engagement_pct",
+    ]
+    cuerpo = filas[1:]
+    esperadas = FILAS_PLATAFORMA_MUESTRA + MARCAS_MUESTRA + 1  # +totales por marca +global
+    assert len(cuerpo) == esperadas
+    # una fila TOTAL por marca + el total global => MARCAS + 1
+    totales = [f for f in cuerpo if f[1] == "TOTAL"]
+    assert len(totales) == MARCAS_MUESTRA + 1
+    # la ultima fila es el total global (marca y plataforma = TOTAL)
+    assert cuerpo[-1][0] == "TOTAL" and cuerpo[-1][1] == "TOTAL"
+
+
+def test_formato_csv_usa_nombre_legible_no_id(capsys):
+    # el CSV debe traer el NOMBRE legible de la marca, no el id crudo.
+    rc = reporte.main(["--formato", "csv"])
+    assert rc == 0
+    salida = capsys.readouterr().out
+    marcas = {f[0] for f in csv.reader(io.StringIO(salida))}
+    assert "Claro Sports" in marcas
+    assert "claro_sports" not in marcas
+
+
+def test_formato_csv_salida_escribe_archivo_parseable(capsys, tmp_path):
+    destino = tmp_path / "reporte.csv"
+    rc = reporte.main(["--formato", "csv", "--salida", str(destino)])
+    assert rc == 0
+    assert destino.exists()
+    # el archivo debe ser CSV parseable con los mismos encabezados
+    with destino.open(encoding="utf-8", newline="") as fh:
+        filas = list(csv.reader(fh))
+    assert filas[0][0] == "marca" and filas[0][1] == "plataforma"
+    assert len(filas) - 1 == FILAS_PLATAFORMA_MUESTRA + MARCAS_MUESTRA + 1
+    # al escribir a archivo, stdout solo lleva el aviso de ruta (no el CSV)
+    out = capsys.readouterr().out
+    assert "marca,plataforma" not in out
+    assert str(destino) in out
+
+
+def test_csv_es_el_formato_csv_no_otro(capsys):
+    # csv no debe colarse como json ni markdown.
+    rc = reporte.main(["--formato", "csv"])
+    assert rc == 0
+    salida = capsys.readouterr().out
+    assert "## Total" not in salida
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(salida)
