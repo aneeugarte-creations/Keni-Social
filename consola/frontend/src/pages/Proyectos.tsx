@@ -197,9 +197,8 @@ function DialogoNuevoProyecto({
 
   const crear = useMutation({
     mutationFn: () => api.crearProyecto({ nombre: nombre.trim(), ruta: ruta.trim() }),
-    // `crearProyecto` devuelve `{ proyecto }`, no `{ mensaje }`: usamos el nombre.
     onSuccess: (res) => {
-      toast.success(`Proyecto «${res.proyecto.nombre}» añadido.`);
+      toast.success(res.mensaje || "Proyecto añadido.");
       void queryClient.invalidateQueries({ queryKey: CLAVE_PROYECTOS });
       onAbiertoChange(false);
     },

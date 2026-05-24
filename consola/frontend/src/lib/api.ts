@@ -20,7 +20,6 @@ import type {
   DetalleHistorial,
   ErrorApi,
   OpcionesMetricas,
-  Proyecto,
   ReporteMetricas,
   RespuestaCarpetas,
   RespuestaConfig,
@@ -136,7 +135,7 @@ export const api = {
   // --- Proyectos ---
   proyectos: (signal?: AbortSignal) => peticion<RespuestaProyectos>("/proyectos", { signal }),
   crearProyecto: (cuerpo: CuerpoCrearProyecto) =>
-    peticion<{ proyecto: Proyecto }>("/proyectos", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaMensaje>("/proyectos", { metodo: "POST", json: cuerpo }),
   guardarClaudeMd: (id: string, cuerpo: CuerpoGuardarClaudeMd) =>
     peticion<RespuestaMensaje>(`/proyectos/${encodeURIComponent(id)}/claude-md`, {
       metodo: "PUT",
@@ -170,7 +169,7 @@ export const api = {
   crearTarea: (cuerpo: CuerpoCrearTarea) =>
     peticion<RespuestaCrearTarea>("/tareas", { metodo: "POST", json: cuerpo }),
   actualizarTarea: (id: string, cuerpo: CuerpoActualizarTarea) =>
-    peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
+    peticion<RespuestaCrearTarea>(`/tareas/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   eliminarTarea: (id: string) =>
     peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   abrirTarea: (id: string) =>
