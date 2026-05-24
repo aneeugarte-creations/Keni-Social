@@ -1,6 +1,6 @@
 [project]
 name = "keni-metricas"
-version = "0.1.0"
+version = "0.2.0"
 description = "Servidor MCP de metricas de redes sociales multi-plataforma (Keni)"
 readme = "README.md"
 requires-python = ">=3.11"
