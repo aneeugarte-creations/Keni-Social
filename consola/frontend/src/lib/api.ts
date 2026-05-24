@@ -13,13 +13,18 @@ import type {
   CuerpoActualizarPublicacion,
   CuerpoActualizarTarea,
   CuerpoCrearCarpeta,
+  CuerpoCrearFranja,
   CuerpoCrearProyecto,
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
   CuerpoCrearTarea,
+  CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
+  CuerpoGenerarMedia,
+  CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
   CuerpoGuardarConfig,
+  CuerpoSugerirHashtags,
   DetalleHistorial,
   ErrorApi,
   FiltrosPublicaciones,
@@ -32,16 +37,33 @@ import type {
   RespuestaCrearTarea,
   RespuestaEjecutarSkill,
   RespuestaEstado,
+  RespuestaFranja,
+  RespuestaFranjas,
+  RespuestaGrupoHashtags,
+  RespuestaHashtags,
   RespuestaHistorial,
+  RespuestaMedia,
   RespuestaMensaje,
   RespuestaProyectos,
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaSkills,
+  RespuestaSugerirHashtags,
   RespuestaTareas,
 } from "@/types";
 
 export const BASE_API = "/api";
+
+/**
+ * URL para servir una imagen del almacén de medios. Acepta tanto el nombre del
+ * archivo (`foto.png`) como una `imagen_url` ya formada (`/api/media/foto.png`);
+ * devuelve cadena vacía si no hay imagen.
+ */
+export function urlMedia(nombreOUrl: string | null | undefined): string {
+  if (!nombreOUrl) return "";
+  if (nombreOUrl.startsWith("/api/") || nombreOUrl.startsWith("http")) return nombreOUrl;
+  return `${BASE_API}/media/${encodeURIComponent(nombreOUrl)}`;
+}
 
 /** Error de la API con el mensaje legible (en espanol) ya extraido. */
 export class ApiError extends Error {
@@ -191,6 +213,45 @@ export const api = {
     }),
   eliminarPublicacion: (id: string) =>
     peticion<RespuestaMensaje>(`/publicaciones/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  duplicarPublicacion: (id: string, cuerpo: CuerpoDuplicarPublicacion = {}) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/duplicar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  encolarPublicacion: (id: string) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/encolar`, {
+      metodo: "POST",
+    }),
+
+  // --- Media (imágenes) ---
+  subirMedia: (archivo: File) => {
+    const form = new FormData();
+    form.set("archivo", archivo);
+    return peticion<RespuestaMedia>("/media", { metodo: "POST", form });
+  },
+  generarMedia: (cuerpo: CuerpoGenerarMedia) =>
+    peticion<RespuestaMedia>("/media/generar", { metodo: "POST", json: cuerpo }),
+
+  // --- Hashtags ---
+  hashtags: (signal?: AbortSignal) => peticion<RespuestaHashtags>("/hashtags", { signal }),
+  crearGrupoHashtags: (cuerpo: CuerpoGrupoHashtags) =>
+    peticion<RespuestaGrupoHashtags>("/hashtags", { metodo: "POST", json: cuerpo }),
+  actualizarGrupoHashtags: (id: string, cuerpo: CuerpoGrupoHashtags) =>
+    peticion<RespuestaGrupoHashtags>(`/hashtags/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarGrupoHashtags: (id: string) =>
+    peticion<RespuestaMensaje>(`/hashtags/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
+    peticion<RespuestaSugerirHashtags>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
+
+  // --- Franjas (colas) ---
+  franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),
+  crearFranja: (cuerpo: CuerpoCrearFranja) =>
+    peticion<RespuestaFranja>("/franjas", { metodo: "POST", json: cuerpo }),
+  eliminarFranja: (id: string) =>
+    peticion<RespuestaMensaje>(`/franjas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Tareas ---
   tareas: (signal?: AbortSignal) => peticion<RespuestaTareas>("/tareas", { signal }),

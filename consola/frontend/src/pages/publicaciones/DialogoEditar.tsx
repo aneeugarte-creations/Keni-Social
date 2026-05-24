@@ -1,8 +1,11 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Eye, Loader2, Pencil } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
+import { EditorImagen } from "@/components/media/EditorImagen";
+import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -21,12 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { CuerpoActualizarPublicacion, EstadoOpcion, EstadoPublicacion, Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
+import { GestionHashtags } from "./GestionHashtags";
 import { EtiquetaRed } from "./insignias";
 import { datetimeLocalAIso, isoADatetimeLocal, metaRed } from "./meta";
 
@@ -51,6 +56,19 @@ export function DialogoEditar({
   const [contenido, setContenido] = React.useState("");
   const [estado, setEstado] = React.useState<EstadoPublicacion>("borrador");
   const [fechaLocal, setFechaLocal] = React.useState("");
+  // Imagen: nombre del archivo + url para previsualizar.
+  const [imagen, setImagen] = React.useState("");
+  const [imagenUrl, setImagenUrl] = React.useState("");
+  const [vista, setVista] = React.useState<"editar" | "previa">("editar");
+  const [gestionHashtags, setGestionHashtags] = React.useState(false);
+
+  // Catálogo de marcas para la gestión de grupos de hashtags.
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    enabled: publicacion !== null,
+  });
+  const marcas = opcionesQuery.data?.marcas ?? [];
 
   // Cargamos los valores cada vez que se abre con una publicación nueva.
   React.useEffect(() => {
@@ -59,6 +77,9 @@ export function DialogoEditar({
     setContenido(publicacion.contenido);
     setEstado(publicacion.estado);
     setFechaLocal(isoADatetimeLocal(publicacion.fecha_programada));
+    setImagen(publicacion.imagen ?? "");
+    setImagenUrl(publicacion.imagen_url ?? "");
+    setVista("editar");
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
@@ -74,6 +95,7 @@ export function DialogoEditar({
         estado,
         // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
         fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
+        imagen,
       };
       return api.actualizarPublicacion(publicacion.id, cuerpo);
     },
@@ -91,7 +113,7 @@ export function DialogoEditar({
 
   return (
     <Dialog open={publicacion !== null} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar publicación</DialogTitle>
           <DialogDescription className="flex items-center gap-2">
@@ -104,73 +126,117 @@ export function DialogoEditar({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label htmlFor="editar-titulo">Título</Label>
-            <Input
-              id="editar-titulo"
-              value={titulo}
-              onChange={(e) => setTitulo(e.target.value)}
-              maxLength={200}
-            />
-          </div>
+        <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "previa")}>
+          <TabsList>
+            <TabsTrigger value="editar" className="gap-1.5">
+              <Pencil className="h-4 w-4" />
+              Editar
+            </TabsTrigger>
+            <TabsTrigger value="previa" className="gap-1.5">
+              <Eye className="h-4 w-4" />
+              Vista previa
+            </TabsTrigger>
+          </TabsList>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="editar-contenido">Contenido</Label>
-              <span
-                className={cn(
-                  "text-xs tabular-nums",
-                  excede ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground",
-                )}
-              >
-                {contenido.length.toLocaleString("es-MX")}
-                {limite !== null && ` / ${limite.toLocaleString("es-MX")}`}
-              </span>
-            </div>
-            <Textarea
-              id="editar-contenido"
-              value={contenido}
-              onChange={(e) => setContenido(e.target.value)}
-              className="min-h-[10rem] font-mono text-sm"
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
+          <TabsContent value="editar" className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="editar-estado">Estado</Label>
-              <Select value={estado} onValueChange={(v) => setEstado(v as EstadoPublicacion)}>
-                <SelectTrigger id="editar-estado">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {estados.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="editar-titulo">Título</Label>
+              <Input
+                id="editar-titulo"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+                maxLength={200}
+              />
             </div>
 
-            {programado && (
-              <div className="space-y-1.5">
-                <Label htmlFor="editar-fecha">Fecha y hora programada</Label>
-                <Input
-                  id="editar-fecha"
-                  type="datetime-local"
-                  value={fechaLocal}
-                  onChange={(e) => setFechaLocal(e.target.value)}
-                />
-                {faltaFecha && (
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    Elige una fecha para programar la publicación.
-                  </p>
-                )}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="editar-contenido">Contenido</Label>
+                <span
+                  className={cn(
+                    "text-xs tabular-nums",
+                    excede ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground",
+                  )}
+                >
+                  {contenido.length.toLocaleString("es-MX")}
+                  {limite !== null && ` / ${limite.toLocaleString("es-MX")}`}
+                </span>
               </div>
+              <Textarea
+                id="editar-contenido"
+                value={contenido}
+                onChange={(e) => setContenido(e.target.value)}
+                className="min-h-[10rem] font-mono text-sm"
+              />
+            </div>
+
+            {publicacion && (
+              <HerramientasHashtags
+                contenido={contenido}
+                onContenido={setContenido}
+                marca={publicacion.marca}
+                red={publicacion.red}
+                onGestionar={() => setGestionHashtags(true)}
+              />
             )}
-          </div>
-        </div>
+
+            <EditorImagen
+              imagen={imagen}
+              imagenUrl={imagenUrl}
+              onCambio={(nombre, url) => {
+                setImagen(nombre);
+                setImagenUrl(url);
+              }}
+              idPrefijo="editar"
+            />
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="editar-estado">Estado</Label>
+                <Select value={estado} onValueChange={(v) => setEstado(v as EstadoPublicacion)}>
+                  <SelectTrigger id="editar-estado">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {estados.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {programado && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="editar-fecha">Fecha y hora programada</Label>
+                  <Input
+                    id="editar-fecha"
+                    type="datetime-local"
+                    value={fechaLocal}
+                    onChange={(e) => setFechaLocal(e.target.value)}
+                  />
+                  {faltaFecha && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Elige una fecha para programar la publicación.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="previa">
+            {publicacion && (
+              <VistaPreviaRed
+                red={publicacion.red}
+                marca={publicacion.marca_nombre}
+                contenido={contenido}
+                imagen_url={imagenUrl || imagen}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
 
         <DialogFooter>
           <Button variant="outline" onClick={onCerrar} disabled={guardar.isPending}>
@@ -181,6 +247,12 @@ export function DialogoEditar({
             Guardar cambios
           </Button>
         </DialogFooter>
+
+        <GestionHashtags
+          abierto={gestionHashtags}
+          onCerrar={() => setGestionHashtags(false)}
+          marcas={marcas}
+        />
       </DialogContent>
     </Dialog>
   );
