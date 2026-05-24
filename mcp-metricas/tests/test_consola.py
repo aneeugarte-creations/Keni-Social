@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from pathlib import Path
 
 import pytest
@@ -283,6 +284,142 @@ def test_export_csv_filtrado_por_marca(entorno):
     # marcas presentes (excluyendo filas TOTAL globales)
     marcas_en_csv = {f[0] for f in filas[1:] if f and f[0] != "TOTAL"}
     assert marcas_en_csv == {nombre_marca}
+
+
+# --------------------------------------------------------------------------- #
+# Metricas: comparar periodos (A vs B)                                         #
+# --------------------------------------------------------------------------- #
+
+
+def test_metricas_pagina_tiene_seccion_comparar(entorno):
+    """La pagina /metricas sigue 200 y trae la nueva seccion de comparar (a11y)."""
+    c = _cliente()
+    r = c.get("/metricas")
+    assert r.status_code == 200
+    texto = r.text
+    # El dashboard embebido sigue presente.
+    assert 'id="iframe-dashboard"' in texto
+    # Controles de comparar con label for/id homogeneo (a11y).
+    for sel in ("cmp-marca", "cmp-rango-a", "cmp-rango-b"):
+        assert f'<label for="{sel}">' in texto
+        assert f'<select id="{sel}">' in texto
+    assert 'id="btn-comparar"' in texto
+
+
+def test_comparar_devuelve_estructura_de_dos_rangos(entorno):
+    """El endpoint comparar devuelve total + por_marca con las 4 metricas y su
+    diferencia/variacion para los dos rangos. Estructura, no textos fragiles."""
+    c = _cliente()
+    r = c.get("/metricas/comparar.json?rango_a=semana&rango_b=mes")
+    assert r.status_code == 200
+    assert "application/json" in r.headers["content-type"]
+    datos = r.json()
+    assert datos["rango_a"] == "semana"
+    assert datos["rango_b"] == "mes"
+    # Total consolidado: las cuatro metricas, cada una con a/b/diferencia/variacion.
+    metricas = datos["total"]["metricas"]
+    claves = {m["metrica"] for m in metricas}
+    assert claves == {"visualizaciones", "alcance", "interacciones", "engagement_pct"}
+    for m in metricas:
+        assert set(m) >= {"metrica", "a", "b", "diferencia", "variacion_pct"}
+    # Por marca: al menos una marca, con nombre legible y su comparativa.
+    assert datos["por_marca"], "debe comparar por marca"
+    primera = datos["por_marca"][0]
+    assert primera["marca"]  # nombre legible, no vacio
+    assert len(primera["comparativa"]) == 4
+
+
+def test_comparar_diferencia_consistente_con_los_valores(entorno):
+    """La diferencia de cada metrica = a - b (sanity de la logica de comparacion)."""
+    c = _cliente()
+    datos = c.get("/metricas/comparar.json?rango_a=semana&rango_b=mes").json()
+    for m in datos["total"]["metricas"]:
+        if m["metrica"] == "engagement_pct":
+            assert m["diferencia"] == round(m["a"] - m["b"], 1)
+        else:
+            assert m["diferencia"] == m["a"] - m["b"]
+
+
+def test_comparar_acotado_por_marca(entorno):
+    """Con una marca concreta, la comparativa por_marca contiene solo esa marca."""
+    from keni_metricas.config import cargar_config, construir_fuente
+
+    fuente = construir_fuente(cargar_config())
+    cuentas = fuente.cuentas()
+    assert cuentas
+    marca = cuentas[0].id
+    c = _cliente()
+    datos = c.get(f"/metricas/comparar.json?rango_a=semana&rango_b=mes&marca={marca}").json()
+    ids = {m["marca_id"] for m in datos["por_marca"]}
+    assert ids == {marca}
+
+
+def test_comparar_rango_invalido_cae_al_default(entorno):
+    """Un rango invalido no crashea: cae al default (mes) y devuelve 200."""
+    c = _cliente()
+    r = c.get("/metricas/comparar.json?rango_a=anio&rango_b=decada")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["rango_a"] == "mes"
+    assert datos["rango_b"] == "mes"
+
+
+# --------------------------------------------------------------------------- #
+# Metricas: descargar reporte md / json                                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_export_md_descarga_con_secciones(entorno):
+    c = _cliente()
+    r = c.get("/metricas/export.md?rango=mes")
+    assert r.status_code == 200
+    assert "text/markdown" in r.headers["content-type"]
+    disp = r.headers["content-disposition"]
+    assert "attachment" in disp
+    assert ".md" in disp
+    # Contenido con secciones del reporte (encabezados Markdown).
+    assert r.text.startswith("# Reporte de redes")
+    assert "## Total" in r.text
+
+
+def test_export_json_descarga_parseable(entorno):
+    c = _cliente()
+    r = c.get("/metricas/export.json?rango=mes")
+    assert r.status_code == 200
+    assert "application/json" in r.headers["content-type"]
+    disp = r.headers["content-disposition"]
+    assert "attachment" in disp
+    assert ".json" in disp
+    # Contenido parseable y con la forma del reporte consolidado.
+    datos = json.loads(r.text)
+    assert datos["rango"] == "mes"
+    assert "total" in datos
+    assert "cuentas" in datos
+
+
+def test_export_md_json_filtrados_por_marca_en_el_nombre(entorno):
+    """Con marca, el nombre de descarga la incluye (coherente con el CSV)."""
+    from keni_metricas.config import cargar_config, construir_fuente
+
+    fuente = construir_fuente(cargar_config())
+    marca = fuente.cuentas()[0].id
+    c = _cliente()
+    for ext, ctype in (("md", "markdown"), ("json", "json")):
+        r = c.get(f"/metricas/export.{ext}?rango=mes&marca={marca}")
+        assert r.status_code == 200
+        assert ctype in r.headers["content-type"]
+        assert marca in r.headers["content-disposition"]
+
+
+def test_estaticos_metricas_servidos_localmente(entorno):
+    """Los estaticos propios de Metricas (css/js) se sirven local, sin red."""
+    c = _cliente()
+    css = c.get("/estaticos/metricas.css")
+    js = c.get("/estaticos/metricas.js")
+    assert css.status_code == 200
+    assert "text/css" in css.headers["content-type"]
+    assert js.status_code == 200
+    assert "javascript" in js.headers["content-type"]
 
 
 # --------------------------------------------------------------------------- #
