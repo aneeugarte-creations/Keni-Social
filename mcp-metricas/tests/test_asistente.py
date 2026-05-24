@@ -260,3 +260,197 @@ def test_guia_plataforma_menciona_docs_y_system_user():
 def test_toda_plataforma_tiene_guia(plat):
     g = a.guia_plataforma(plat)
     assert g["titulo"] and g["que"] and g["docs"]
+
+
+# --- flujo interactivo: entrada/salida inyectables -------------------------
+def _entrada_simulada(respuestas):
+    """Devuelve un callable tipo input() que va entregando `respuestas` en orden.
+
+    Lanza EOFError al agotarse (como un input() sin stdin), que el flujo trata
+    como "valor por defecto"; util para no tener que enumerar cada prompt.
+    """
+    it = iter(respuestas)
+
+    def _entrada(_prompt=""):
+        try:
+            return next(it)
+        except StopIteration as exc:
+            raise EOFError from exc
+
+    return _entrada
+
+
+def _capturar_salida():
+    """Devuelve (lista_lineas, fn_salida) para inyectar como `salida=`."""
+    lineas: list[str] = []
+
+    def _salida(*args):
+        lineas.append(" ".join(str(x) for x in args))
+
+    return lineas, _salida
+
+
+# --- indicador de progreso paso X/N ----------------------------------------
+def test_flujo_muestra_marca_progreso_3_pasos():
+    """En modo muestra el flujo tiene 3 etapas reales: paso X/3 (sin credenciales)."""
+    # respuestas: fuente? (n=muestra), nombre marca (vacio -> termina), no hay
+    # marcas asi que no se pregunta alcance.
+    entrada = _entrada_simulada(["n", ""])
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+
+    texto = "\n".join(lineas)
+    assert "paso 1/3: Fuente de datos" in texto
+    assert "paso 2/3: Marcas / cuentas" in texto
+    assert "paso 3/3: Alcance" in texto
+    # nunca aparece la etapa de credenciales en modo muestra
+    assert "/3: Credenciales" not in texto
+    assert "paso 4/" not in texto
+    assert plan.fuente == "muestra"
+
+
+def test_flujo_real_marca_progreso_4_pasos():
+    """En modo real hay 4 etapas reales: incluye credenciales -> paso X/4."""
+    # fuente? (s=real); marca: nombre, id, fb handle, ig vacio, yt vacio, x vacio;
+    # fin de marcas (vacio); alcance (vacio=todas); credencial meta token; system user? (n)
+    entrada = _entrada_simulada(
+        [
+            "s",            # fuente real
+            "UnoTV",        # nombre marca
+            "unotv",        # id
+            "PAGE_ID",      # facebook handle
+            "",             # instagram vacio
+            "",             # youtube vacio
+            "",             # x vacio
+            "",             # fin de marcas
+            "",             # alcance: todas
+            TOKEN_FALSO,    # meta access_token
+            "n",            # no es system user
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+
+    texto = "\n".join(lineas)
+    assert "paso 1/4: Fuente de datos" in texto
+    assert "paso 2/4: Marcas / cuentas" in texto
+    assert "paso 3/4: Alcance" in texto
+    assert "paso 4/4: Credenciales" in texto
+    assert plan.fuente == "real"
+    assert plan.credenciales["meta"]["access_token"] == TOKEN_FALSO
+    # el progreso (ni nada del flujo) imprime el token en claro
+    assert TOKEN_FALSO not in texto
+
+
+def test_etapas_segun_fuente():
+    assert len(a._etapas("muestra")) == 3
+    assert len(a._etapas("real")) == 4
+    assert a.ETAPA_CREDENCIALES not in a._etapas("muestra")
+    assert a.ETAPA_CREDENCIALES in a._etapas("real")
+
+
+# --- recap final (sin tokens) + proximo paso -------------------------------
+def test_recap_final_incluye_lo_configurado_y_proximo_paso():
+    recap = a.recap_final(_plan_ejemplo())
+    assert "Fuente de datos: real" in recap
+    # marcas por nombre/id
+    assert "Claro Sports (claro_sports)" in recap
+    assert "UnoTV (unotv)" in recap
+    # alcance declarado
+    assert "claro_sports" in recap
+    # credenciales: solo el bloque y su estado, jamas el valor
+    assert "meta" in recap
+    assert "token presente" in recap
+    # proximo paso explicito
+    assert "python -m keni_metricas.doctor" in recap
+
+
+def test_recap_final_no_filtra_tokens():
+    recap = a.recap_final(_plan_ejemplo())
+    assert TOKEN_FALSO not in recap
+    assert BEARER_FALSO not in recap
+    # tampoco fragmentos largos del token
+    assert TOKEN_FALSO[:-4] not in recap
+
+
+def test_recap_final_muestra_pendiente_si_placeholder():
+    plan = a.PlanConfig(
+        fuente="real",
+        credenciales={"meta": {"access_token": a.PLACEHOLDER_TOKEN}},
+    )
+    recap = a.recap_final(plan)
+    assert "PENDIENTE" in recap
+    # el placeholder es el valor literal, no un secreto, pero igual marcamos estado
+    assert "meta" in recap
+
+
+def test_recap_final_modo_muestra_sin_credenciales():
+    plan = a.PlanConfig(fuente="muestra")
+    recap = a.recap_final(plan)
+    assert "Fuente de datos: muestra" in recap
+    assert "ninguna" in recap.lower()
+    assert "python -m keni_metricas.doctor" in recap
+
+
+# --- aviso de incoherencia (handles/tokens reales pero fuente=muestra) ------
+def test_incoherencia_handles_en_muestra_avisa():
+    plan = a.PlanConfig(
+        fuente="muestra",
+        marcas_cuenta=[a.MarcaEntrada(id="unotv", nombre="UnoTV", plataformas={"facebook": "PAGE"})],
+    )
+    aviso = a.detectar_incoherencia(plan)
+    assert aviso is not None
+    assert "muestra" in aviso
+    assert "real" in aviso  # sugiere cambiar a real
+
+
+def test_incoherencia_tokens_reales_en_muestra_avisa():
+    plan = a.PlanConfig(
+        fuente="muestra",
+        credenciales={"meta": {"access_token": TOKEN_FALSO}},
+    )
+    aviso = a.detectar_incoherencia(plan)
+    assert aviso is not None
+    # el aviso NO filtra el token
+    assert TOKEN_FALSO not in aviso
+
+
+def test_incoherencia_no_avisa_si_coherente():
+    # muestra sin handles ni tokens: coherente -> None
+    assert a.detectar_incoherencia(a.PlanConfig(fuente="muestra")) is None
+    # fuente real: nunca es incoherente por esto
+    assert a.detectar_incoherencia(_plan_ejemplo()) is None
+
+
+def test_incoherencia_placeholder_no_cuenta_como_token_real():
+    # un placeholder no es un token real -> sin handles, no hay incoherencia
+    plan = a.PlanConfig(
+        fuente="muestra",
+        credenciales={"meta": {"access_token": a.PLACEHOLDER_TOKEN}},
+    )
+    assert a.detectar_incoherencia(plan) is None
+
+
+def test_recap_incluye_aviso_de_incoherencia():
+    plan = a.PlanConfig(
+        fuente="muestra",
+        marcas_cuenta=[a.MarcaEntrada(id="unotv", nombre="UnoTV", plataformas={"facebook": "PAGE"})],
+    )
+    recap = a.recap_final(plan)
+    assert "AVISO" in recap
+
+
+# --- main(): recap impreso sin tokens, tambien en --solo-mostrar -----------
+def test_main_solo_mostrar_imprime_recap_sin_tokens(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(a, "flujo_interactivo", lambda: _plan_ejemplo())
+    ruta = tmp_path / "config.toml"
+    rc = a.main(["--solo-mostrar", "--ruta", str(ruta)])
+    assert rc == 0
+    salida = capsys.readouterr().out
+    # el recap aparece y apunta a doctor
+    assert "Recap de tu configuracion" in salida
+    assert "python -m keni_metricas.doctor" in salida
+    # y NO filtra tokens (ni resumen, ni TOML, ni recap)
+    assert TOKEN_FALSO not in salida
+    assert BEARER_FALSO not in salida
+    assert not ruta.exists()

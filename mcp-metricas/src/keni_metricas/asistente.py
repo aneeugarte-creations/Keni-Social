@@ -543,22 +543,56 @@ def _preguntar_si_no(texto: str, por_defecto: bool = False, entrada=input) -> bo
     return resp.startswith("s")
 
 
+# Etapas reales del flujo, en orden. La de credenciales solo corre si fuente=real;
+# por eso el total `N` de "paso X/N" depende de la fuente elegida (ver `_etapas`).
+ETAPA_FUENTE = "Fuente de datos"
+ETAPA_MARCAS = "Marcas / cuentas"
+ETAPA_ALCANCE = "Alcance (que gestionas tu)"
+ETAPA_CREDENCIALES = "Credenciales por plataforma"
+
+
+def _etapas(fuente: str) -> list[str]:
+    """Lista ordenada de etapas REALES del flujo para una fuente dada.
+
+    La etapa de credenciales solo aplica cuando `fuente == "real"`, asi que el
+    total de etapas (la N de "paso X/N") es 3 en modo muestra y 4 en modo real.
+    """
+    etapas = [ETAPA_FUENTE, ETAPA_MARCAS, ETAPA_ALCANCE]
+    if fuente == "real":
+        etapas.append(ETAPA_CREDENCIALES)
+    return etapas
+
+
 def flujo_interactivo(entrada=input, salida=print) -> PlanConfig:
-    """Recorre las preguntas y devuelve un PlanConfig. Capa fina sobre la logica pura."""
+    """Recorre las preguntas y devuelve un PlanConfig. Capa fina sobre la logica pura.
+
+    Muestra un indicador de progreso `paso X/N` al entrar en cada etapa real del
+    flujo. El total N depende de la fuente: 3 etapas en modo muestra (sin
+    credenciales) y 4 en modo real. La fuente se pregunta dentro de la etapa 1, asi
+    que el encabezado de progreso de esa etapa se emite una vez ya se conoce N.
+    """
     plan = PlanConfig()
     salida("== Asistente de configuracion de keni-metricas ==")
     salida("Te guio para crear/actualizar tu config.toml. Tus tokens se quedan en tu maquina.\n")
 
-    # 1) fuente
+    def _paso(indice: int, total: int, titulo: str) -> None:
+        salida(f"--- paso {indice}/{total}: {titulo} ---")
+
+    # 1) fuente. La respuesta fija N (3 muestra / 4 real), por eso el encabezado de
+    #    progreso de esta etapa se imprime DESPUES de conocer la fuente.
     real = _preguntar_si_no(
         "Quieres usar datos REALES de las plataformas? (no = datos de muestra offline)",
         por_defecto=False,
         entrada=entrada,
     )
     plan.fuente = "real" if real else "muestra"
+    etapas = _etapas(plan.fuente)
+    total = len(etapas)
+    _paso(1, total, ETAPA_FUENTE)
     salida(f"-> fuente = {plan.fuente}\n")
 
     # 2) marcas
+    _paso(2, total, ETAPA_MARCAS)
     salida("Ahora declara las marcas/cuentas que gestionas.")
     while True:
         nombre = _preguntar("Nombre de la marca (vacio para terminar)", entrada=entrada)
@@ -579,6 +613,7 @@ def flujo_interactivo(entrada=input, salida=print) -> PlanConfig:
         salida(f"  -> marca '{marca.id}' anadida.\n")
 
     # 3) alcance
+    _paso(3, total, ETAPA_ALCANCE)
     ids = [m.id for m in plan.marcas_cuenta]
     if ids:
         salida(f"Marcas declaradas: {', '.join(ids)}")
@@ -586,10 +621,13 @@ def flujo_interactivo(entrada=input, salida=print) -> PlanConfig:
             "Cuales gestionas TU? (coma-separadas; vacio = todas)", entrada=entrada
         )
         plan.alcance = normalizar_alcance(crudo, ids_validos=ids)
+    else:
+        salida("(sin marcas declaradas; nada que acotar)")
 
     # 4) credenciales (solo si fuente real)
     if plan.fuente == "real":
-        salida("\nAhora las credenciales por plataforma. Si no la tienes aun, dejala vacia y se guarda un placeholder.")
+        _paso(4, total, ETAPA_CREDENCIALES)
+        salida("Ahora las credenciales por plataforma. Si no la tienes aun, dejala vacia y se guarda un placeholder.")
         bloques_usados = _bloques_para_marcas(plan.marcas_cuenta)
         for bloque in bloques_usados:
             campo = CAMPO_TOKEN[bloque]
@@ -650,6 +688,91 @@ def resumen_plan(plan: PlanConfig) -> str:
     return "\n".join(lineas)
 
 
+# Comando que el usuario debe ejecutar para verificar su configuracion.
+PROXIMO_PASO_DOCTOR = "python -m keni_metricas.doctor"
+
+
+def _tiene_credenciales_reales(plan: PlanConfig) -> bool:
+    """True si el plan declara algun token de verdad (no vacio ni placeholder)."""
+    for valores in plan.credenciales.values():
+        for clave, valor in valores.items():
+            if clave in CLAVES_SECRETAS and valor and valor != PLACEHOLDER_TOKEN:
+                return True
+    return False
+
+
+def detectar_incoherencia(plan: PlanConfig) -> str | None:
+    """Devuelve un aviso si el plan parece incoherente con `fuente = muestra`.
+
+    El caso tipico: la persona ya declaro handles de plataforma y/o tokens reales,
+    pero dejo la fuente en `muestra`, asi que NUNCA vera datos reales. No bloquea
+    nada: solo sugiere cambiar a `fuente = real`. Devuelve `None` si todo es
+    coherente (o si la fuente ya es `real`).
+    """
+    if plan.fuente != "muestra":
+        return None
+    tiene_handles = any(m.plataformas for m in plan.marcas_cuenta)
+    tiene_tokens = _tiene_credenciales_reales(plan)
+    if not (tiene_handles or tiene_tokens):
+        return None
+    declaro = []
+    if tiene_handles:
+        declaro.append("handles de plataforma")
+    if tiene_tokens:
+        declaro.append("credenciales reales")
+    return (
+        f"AVISO: declaraste {' y '.join(declaro)} pero la fuente quedo en 'muestra', "
+        "asi que el sistema seguira usando datos offline de ejemplo. "
+        "Si quieres ver tus datos reales, reejecuta el asistente y elige fuente = real."
+    )
+
+
+def recap_final(plan: PlanConfig) -> str:
+    """Recap legible de lo configurado + el proximo paso. NUNCA imprime tokens.
+
+    Resume marcas, alcance, fuente y QUE credenciales se declararon (solo el
+    nombre del bloque y si el token quedo pendiente o presente, jamas el valor).
+    Cierra con el comando para verificar la configuracion con `doctor`. Si detecta
+    incoherencia (handles/tokens reales pero fuente=muestra) la incluye como aviso.
+    """
+    lineas = ["== Recap de tu configuracion =="]
+    lineas.append(f"Fuente de datos: {plan.fuente}")
+
+    if plan.marcas_cuenta:
+        nombres = ", ".join(f"{m.nombre} ({m.id})" for m in plan.marcas_cuenta)
+        lineas.append(f"Marcas/cuentas ({len(plan.marcas_cuenta)}): {nombres}")
+    else:
+        lineas.append("Marcas/cuentas: ninguna declarada")
+
+    if plan.alcance:
+        lineas.append(f"Gestionas (alcance): {', '.join(plan.alcance)}")
+    else:
+        lineas.append("Gestionas (alcance): todas las marcas declaradas")
+
+    if plan.credenciales:
+        estados = []
+        for bloque, valores in plan.credenciales.items():
+            campo = CAMPO_TOKEN.get(bloque)
+            valor = valores.get(campo) if campo else None
+            if valor and valor != PLACEHOLDER_TOKEN:
+                estado = "token presente"
+            else:
+                estado = "PENDIENTE (placeholder)"
+            estados.append(f"{bloque} ({estado})")
+        lineas.append(f"Credenciales declaradas: {', '.join(estados)}")
+    else:
+        lineas.append("Credenciales declaradas: ninguna (modo muestra)")
+
+    aviso = detectar_incoherencia(plan)
+    if aviso:
+        lineas.append("")
+        lineas.append(aviso)
+
+    lineas.append("")
+    lineas.append(f"Proximo paso -> Verifica con: {PROXIMO_PASO_DOCTOR}")
+    return "\n".join(lineas)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m keni_metricas.asistente",
@@ -686,6 +809,9 @@ def main(argv: list[str] | None = None) -> int:
         # secretos en claro (igual que el resumen de arriba).
         print("\n== TOML (no escrito; tokens enmascarados) ==")
         print(serializar_toml(enmascarar_credenciales(datos)))
+        # El recap nunca imprime tokens; util tambien en --solo-mostrar.
+        print()
+        print(recap_final(plan))
         return 0
 
     if not _preguntar_si_no(f"\nEscribir en {ruta}?", por_defecto=True):
@@ -700,6 +826,10 @@ def main(argv: list[str] | None = None) -> int:
         for nombre, ok, detalle in validar_conectividad(datos):
             marca = "OK " if ok else "FALLO"
             print(f"  [{marca}] {nombre}: {detalle}")
+
+    # Recap final: que quedo configurado (SIN tokens) + el proximo paso.
+    print()
+    print(recap_final(plan))
 
     return 0
 
