@@ -309,6 +309,10 @@ export interface Publicacion {
   fecha_programada: string | null;
   /** Origen (p. ej. `historial_id` de la generación). */
   origen: string | null;
+  /** Nombre del archivo de imagen adjunto; `""` si no hay imagen. */
+  imagen: string;
+  /** URL para servir la imagen (`/api/media/...`); `""` si no hay imagen. */
+  imagen_url: string;
 }
 
 export interface RespuestaPublicaciones {
@@ -329,6 +333,8 @@ export interface CuerpoCrearPublicacion {
   fecha_programada?: string | null;
   veredicto?: Veredicto;
   origen?: string | null;
+  /** Nombre del archivo de imagen adjunto (vacío para ninguna). */
+  imagen?: string;
 }
 
 export interface CuerpoCrearPublicacionesLote {
@@ -341,6 +347,101 @@ export interface CuerpoActualizarPublicacion {
   contenido?: string;
   estado?: EstadoPublicacion;
   fecha_programada?: string | null;
+  /** Nombre del archivo de imagen adjunto (`""` para quitarla). */
+  imagen?: string;
+}
+
+/** Cuerpo opcional para duplicar una publicación (red/marca/título destino). */
+export interface CuerpoDuplicarPublicacion {
+  red?: string;
+  marca?: string;
+  titulo?: string;
+}
+
+// --- Media (imágenes) ---
+
+/** Respuesta al subir o generar una imagen. */
+export interface RespuestaMedia {
+  id: string;
+  /** URL para servir la imagen (`/api/media/{id}`). */
+  url: string;
+}
+
+/** Cuerpo para generar una imagen con IA. */
+export interface CuerpoGenerarMedia {
+  prompt: string;
+}
+
+// --- Hashtags ---
+
+/** Un grupo de hashtags guardado. */
+export interface GrupoHashtags {
+  id: string;
+  nombre: string;
+  /** Marca asociada (`""` si es general). */
+  marca: string;
+  marca_nombre: string;
+  hashtags: string[];
+}
+
+export interface RespuestaHashtags {
+  grupos: GrupoHashtags[];
+}
+
+export interface RespuestaGrupoHashtags {
+  grupo: GrupoHashtags;
+}
+
+/** Cuerpo para crear o editar un grupo de hashtags. */
+export interface CuerpoGrupoHashtags {
+  nombre: string;
+  /** Marca asociada (opcional). */
+  marca?: string;
+  hashtags: string[];
+}
+
+/** Cuerpo para pedir sugerencias de hashtags con IA. */
+export interface CuerpoSugerirHashtags {
+  texto: string;
+  marca: string;
+  red?: string;
+}
+
+export interface RespuestaSugerirHashtags {
+  hashtags: string[];
+}
+
+// --- Franjas (colas de publicación) ---
+
+/** Una franja horaria de la cola de publicación. */
+export interface Franja {
+  id: string;
+  /** Marca asociada (`""` si aplica a todas). */
+  marca: string;
+  marca_nombre: string;
+  /** Red asociada (`""` si aplica a todas). */
+  red: string;
+  red_nombre: string;
+  /** Día de la semana: 0=lunes .. 6=domingo. */
+  dia_semana: number;
+  /** Hora en formato "HH:MM". */
+  hora: string;
+}
+
+export interface RespuestaFranjas {
+  franjas: Franja[];
+}
+
+export interface RespuestaFranja {
+  franja: Franja;
+}
+
+/** Cuerpo para crear una franja. */
+export interface CuerpoCrearFranja {
+  dia_semana: number;
+  hora: string;
+  marca?: string;
+  red?: string;
 }
 
 export interface FiltrosPublicaciones {

@@ -1,0 +1,273 @@
+/**
+ * Diálogo de gestión (CRUD) de franjas de la cola de publicación.
+ *
+ * Cada franja es un hueco recurrente (día de semana + hora) opcionalmente
+ * acotado a una marca/red. "Añadir a la cola" asigna la publicación al próximo
+ * hueco libre. Lista legible (p. ej. "Lun 09:00 · X · UnoTV"). React Query +
+ * invalidación; toasts; modo claro/oscuro; texto es-MX.
+ */
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { CalendarClock, Clock, Loader2, Plus, Trash2 } from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { api, ApiError } from "@/lib/api";
+import type { Franja, MarcaDisponible, RedPublicacion } from "@/types";
+
+import { CLAVE_FRANJAS, DIAS_SEMANA, nombreDiaCorto } from "./franjas";
+import { EtiquetaRed } from "./insignias";
+
+function mensajeError(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
+
+const FILTRO_TODAS = "__todas__";
+
+/** Formulario para añadir una franja nueva. */
+function FormularioFranja({
+  marcas,
+  redes,
+}: {
+  marcas: MarcaDisponible[];
+  redes: RedPublicacion[];
+}) {
+  const queryClient = useQueryClient();
+  const [dia, setDia] = React.useState("0");
+  const [hora, setHora] = React.useState("09:00");
+  const [marca, setMarca] = React.useState(FILTRO_TODAS);
+  const [red, setRed] = React.useState(FILTRO_TODAS);
+
+  const crear = useMutation({
+    mutationFn: () =>
+      api.crearFranja({
+        dia_semana: Number(dia),
+        hora,
+        marca: marca === FILTRO_TODAS ? undefined : marca,
+        red: red === FILTRO_TODAS ? undefined : red,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_FRANJAS });
+      toast.success("Franja añadida");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puedeCrear = !!hora && !crear.isPending;
+
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-muted/20 p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="franja-dia">Día</Label>
+          <Select value={dia} onValueChange={setDia}>
+            <SelectTrigger id="franja-dia">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DIAS_SEMANA.map((nombre, i) => (
+                <SelectItem key={i} value={String(i)}>
+                  {nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="franja-hora">Hora</Label>
+          <Input
+            id="franja-hora"
+            type="time"
+            value={hora}
+            onChange={(e) => setHora(e.target.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="franja-marca">
+            Marca <span className="font-normal text-muted-foreground">(opcional)</span>
+          </Label>
+          <Select value={marca} onValueChange={setMarca}>
+            <SelectTrigger id="franja-marca">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTRO_TODAS}>Todas las marcas</SelectItem>
+              {marcas.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="franja-red">
+            Red <span className="font-normal text-muted-foreground">(opcional)</span>
+          </Label>
+          <Select value={red} onValueChange={setRed}>
+            <SelectTrigger id="franja-red">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={FILTRO_TODAS}>Todas las redes</SelectItem>
+              {redes.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          {crear.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Añadir franja
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Una fila de franja con acción de borrado. */
+function FilaFranja({ franja }: { franja: Franja }) {
+  const queryClient = useQueryClient();
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarFranja(franja.id),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_FRANJAS });
+      toast.success(res?.mensaje ?? "Franja borrada");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <span className="inline-flex items-center gap-1.5 font-medium">
+          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+          {nombreDiaCorto(franja.dia_semana)} {franja.hora}
+        </span>
+        {franja.red && (
+          <>
+            <span className="text-muted-foreground">·</span>
+            <EtiquetaRed red={franja.red} nombre={franja.red_nombre} className="text-xs" />
+          </>
+        )}
+        {franja.marca && (
+          <>
+            <span className="text-muted-foreground">·</span>
+            <Badge variant="outline" className="font-normal">
+              {franja.marca_nombre || franja.marca}
+            </Badge>
+          </>
+        )}
+      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Borrar franja"
+        title="Borrar"
+        className="text-muted-foreground hover:text-destructive"
+        onClick={() => borrar.mutate()}
+        disabled={borrar.isPending}
+      >
+        {borrar.isPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Trash2 className="h-4 w-4" />
+        )}
+      </Button>
+    </div>
+  );
+}
+
+export function GestionFranjas({
+  abierto,
+  onCerrar,
+  marcas,
+  redes,
+}: {
+  abierto: boolean;
+  onCerrar: () => void;
+  marcas: MarcaDisponible[];
+  redes: RedPublicacion[];
+}) {
+  const query = useQuery({
+    queryKey: CLAVE_FRANJAS,
+    queryFn: ({ signal }) => api.franjas(signal),
+    enabled: abierto,
+  });
+
+  const franjas = React.useMemo(() => {
+    const lista = [...(query.data?.franjas ?? [])];
+    lista.sort((a, b) =>
+      a.dia_semana !== b.dia_semana
+        ? a.dia_semana - b.dia_semana
+        : a.hora.localeCompare(b.hora),
+    );
+    return lista;
+  }, [query.data]);
+
+  return (
+    <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarClock className="h-5 w-5" />
+            Franjas de la cola
+          </DialogTitle>
+          <DialogDescription>
+            Define huecos recurrentes (día + hora). Al añadir una publicación a la cola se
+            asigna al próximo hueco libre.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <FormularioFranja marcas={marcas} redes={redes} />
+
+          {query.isPending ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Cargando franjas…</p>
+          ) : query.isError ? (
+            <p className="py-6 text-center text-sm text-destructive">
+              {mensajeError(query.error)}
+            </p>
+          ) : franjas.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Aún no hay franjas. Añade la primera arriba para poder encolar.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {franjas.map((f) => (
+                <FilaFranja key={f.id} franja={f} />
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
