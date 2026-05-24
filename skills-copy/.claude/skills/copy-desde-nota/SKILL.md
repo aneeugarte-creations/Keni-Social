@@ -26,7 +26,11 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
    - `contexto-editorial/tropicalizacion.md` (siempre)
    - `contexto-editorial/plataformas.md` (siempre)
    - `contexto-editorial/marcas/{marca}.md`
-   - `contexto-editorial/voces/{voz}.md` — si solo tiene marcadores `[... — se rellena en sesión]` sin rellenar, **NO inventes la voz**: avísalo y usa solo la de marca.
+   - **Voz personal** `{voz}.md` — búscala en este orden y usa la PRIMERA que exista (así tu voz sobrevive a las actualizaciones del plugin):
+     1. `~/.config/keni-social/voces/{voz}.md` (ubicación personal, fuera del repo — gana)
+     2. `contexto-editorial/voces/{voz}.md` (fallback dentro del repo)
+
+     Si solo tiene marcadores `[... — se rellena en sesión]` sin rellenar, **NO inventes la voz**: avísalo y usa solo la de marca.
 
 2. **Extrae el núcleo**: titular real, dato/cifra con su fuente si aparece, ángulo. **No inventes nada que no esté en las fuentes.** Si falta un dato, dilo; no lo rellenes.
    - **Cross-check (si hay varias fuentes):** compara los datos clave (cifras, fechas, nombres, cargos). Si **coinciden**, úsalos con confianza. Si **discrepan** (p. ej. una agencia dice 40 y otra 45), **NO elijas en silencio**: usa la formulación más prudente o ninguna cifra, y **anota la discrepancia** para reportarla en la verificación.

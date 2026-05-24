@@ -2,9 +2,15 @@
 
 > [VOZ DE [NOMBRE] — se rellena en sesión]
 >
-> Copia este archivo a `voces/tu-nombre.md` y rellénalo. La skill lo carga
-> ENCIMA de la voz de marca: la marca pone la línea editorial, tú pones el toque.
-> Mientras esté con marcadores sin rellenar, la skill usa solo la voz de marca y avisa.
+> Copia este archivo a tu voz y rellénalo. La skill lo carga ENCIMA de la voz de
+> marca: la marca pone la línea editorial, tú pones el toque. Mientras esté con
+> marcadores sin rellenar, la skill usa solo la voz de marca y avisa.
+>
+> **Dónde guardarlo** (la skill busca en este orden y usa la primera que exista):
+> 1. `~/.config/keni-social/voces/tu-nombre.md` — **recomendado**: vive fuera del
+>    repo, así tu voz SOBREVIVE a las actualizaciones del plugin.
+> 2. `contexto-editorial/voces/tu-nombre.md` — dentro del repo (fallback; se puede
+>    sobrescribir al actualizar).
 
 ## Cómo escribo (3–5 rasgos)
 - [se rellena en sesión — ej.: "voy directo, arranco con el dato, sin floreo"]

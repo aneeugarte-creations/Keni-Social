@@ -38,7 +38,11 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni subes nada. **La tran
    - `contexto-editorial/tropicalizacion.md` (siempre)
    - `contexto-editorial/plataformas.md` (siempre)
    - `contexto-editorial/marcas/{marca}.md`
-   - `contexto-editorial/voces/{voz}.md` — si solo tiene marcadores `[... — se rellena en sesión]` sin rellenar, **NO inventes la voz**: avísalo y usa solo la de marca.
+   - **Voz personal** `{voz}.md` — búscala en este orden y usa la PRIMERA que exista (así tu voz sobrevive a las actualizaciones del plugin):
+     1. `~/.config/keni-social/voces/{voz}.md` (ubicación personal, fuera del repo — gana)
+     2. `contexto-editorial/voces/{voz}.md` (fallback dentro del repo)
+
+     Si solo tiene marcadores `[... — se rellena en sesión]` sin rellenar, **NO inventes la voz**: avísalo y usa solo la de marca.
 
 5. **Consulta qué funciona (métricas).** Si el MCP `keni-metricas` está conectado, ANTES de redactar:
    - `metricas_resumen(marca, "mes")` → qué **plataforma** rinde más en esa marca.
