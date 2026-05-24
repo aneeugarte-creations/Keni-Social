@@ -6,7 +6,13 @@ on:
 
 jobs:
   mcp-metricas:
-    runs-on: ubuntu-latest
+    # Matriz multi-SO: ubuntu cubre el grueso y macos ejercita el lanzador macOS
+    # y la consola (Starlette/uvicorn) en su SO real.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: mcp-metricas
