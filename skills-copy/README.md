@@ -11,6 +11,7 @@ Sistema de producción de copy para el equipo de redes de AMX, como **Agent Skil
 | **resumen-tendencia** | Tema/fuentes → brief interno: qué pasa + ángulo por marca + riesgos legales. |
 | **nota-a-formato** | Nota cruda → normalizada a la voz de la casa (limpia giros españoles). Paso previo opcional. |
 | **publica-preview** | Copy ya aprobado → pre-vuelo final en **dry-run**: muestra EXACTO qué se publicaría por plataforma (texto, conteo, hashtags, hilo/carrusel, media referenciada) + avisos + checklist humana. **No publica.** |
+| **revisa-imagen** | **Imagen/arte propuesto** → repaso legal antes de publicar: bandera con/sin escudo, menores/víctimas y rostros identificables, datos personales visibles (matrículas, documentos), marcas/copyright, texto con errores o cifras sin fuente. Checklist ✅/⚠️/❌ + veredicto (APTA solo si todo ✅). **No genera ni edita: solo revisa; el humano decide.** |
 
 ## Layout
 
@@ -52,6 +53,14 @@ Cuando el copy ya está aprobado y quieres el **último vistazo antes de publica
 ```
 
 Muestra plataforma por plataforma **exactamente qué se publicaría** (texto final, conteo con `contar.py`, hashtags, desglose de hilo/carrusel y qué media acompaña — solo referenciada, nunca subida), avisos por red (Instagram exige media, un enlace en X cuesta caracteres extra, último repaso legal) y cierra con una **checklist** que marcas tú. Es dry-run puro: **nada se publica; la publicación real llega en una fase futura.**
+
+Cuando tienes un **arte o imagen propuesto** y quieres un **repaso legal antes de publicar**:
+
+```
+> usa revisa-imagen con /ruta/al/arte.png para claro-sports
+```
+
+Claude **lee la imagen** (no la genera ni la edita), carga `contexto-editorial/reglas-legales.md` y la revisa punto por punto: **bandera con escudo** (prohibida) vs sin escudo (OK), menores/víctimas y rostros identificables, datos personales visibles (matrículas, documentos, domicilios), marcas/logos de terceros o copyright, y texto sobreimpreso con errores o cifras sin fuente. Devuelve un **checklist ✅/⚠️/❌** y un veredicto (**APTA solo si todo es ✅**, si no, exactamente qué corregir). El **juicio visual puede fallar** (sobre todo en la bandera/escudo): ante la duda lo marca para **confirmación humana**. **Solo revisa; tú decides publicar, corregir o descartar.**
 
 ## Personaliza tu voz (5 minutos)
 
