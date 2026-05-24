@@ -1,0 +1,40 @@
+# Plantilla de configuracion LOCAL POR PERSONA.
+# Copiala a ~/.config/keni-metricas/config.toml y rellena lo tuyo.
+# NUNCA la subas a git: contiene tus llaves. Se queda en tu maquina.
+#
+# Por defecto fuente = "muestra" (datos offline): el MCP funciona sin configurar
+# nada. Cambia a "real" cuando tengas credenciales de las plataformas.
+
+fuente = "muestra"   # "muestra" | "real"
+
+# --- Cuentas/marcas que gestionas y su handle/id en cada plataforma ----------
+[[cuenta]]
+id = "claro_sports"
+nombre = "Claro Sports"
+[cuenta.plataformas]
+facebook = "PAGE_ID"
+instagram = "IG_USER_ID"
+youtube = "CHANNEL_ID"
+x = "USER_ID"
+# tiktok va por el token del usuario (no necesita handle)
+
+[[cuenta]]
+id = "unotv"
+nombre = "UnoTV"
+[cuenta.plataformas]
+facebook = "PAGE_ID"
+instagram = "IG_USER_ID"
+
+# --- Credenciales por plataforma (solo si fuente = "real") -------------------
+# Cada bloque es opcional: si falta, esa plataforma se omite con un aviso.
+[credenciales.meta]
+access_token = "EAAB..."     # token de Meta Graph (requiere App Review)
+
+[credenciales.youtube]
+access_token = "ya29..."     # OAuth con scope yt-analytics.readonly
+
+[credenciales.x]
+bearer_token = "AAAA..."     # X API v2 (tier de pago)
+
+[credenciales.tiktok]
+access_token = "act...."     # TikTok Display API (requiere auditoria)

@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# Credenciales locales (NUNCA se versionan)
+credenciales.toml
+*.secret.toml
+.env
+
+# SO / editor
+.DS_Store
+.idea/
+.vscode/
