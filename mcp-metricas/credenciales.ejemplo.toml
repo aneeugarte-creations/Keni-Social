@@ -29,12 +29,23 @@ instagram = "IG_USER_ID"
 # Cada bloque es opcional: si falta, esa plataforma se omite con un aviso.
 [credenciales.meta]
 access_token = "EAAB..."     # token de Meta Graph (requiere App Review)
+# app_id / app_secret: opcionales, para extender el token (fb_exchange_token) ante un 401
+# app_id = "..."
+# app_secret = "..."
 
 [credenciales.youtube]
 access_token = "ya29..."     # OAuth con scope yt-analytics.readonly
+# para refresco automático (el access token de Google caduca en ~1h):
+# client_id = "..."
+# client_secret = "..."
+# refresh_token = "..."
 
 [credenciales.x]
-bearer_token = "AAAA..."     # X API v2 (tier de pago)
+bearer_token = "AAAA..."     # X API v2 (tier de pago); el bearer de app no caduca
 
 [credenciales.tiktok]
 access_token = "act...."     # TikTok Display API (requiere auditoria)
+# para refresco automático del token:
+# client_key = "..."
+# client_secret = "..."
+# refresh_token = "..."

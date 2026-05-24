@@ -39,3 +39,36 @@ def get_json(
     r = cliente.get(url, params=params, headers=headers)
     r.raise_for_status()
     return r.json()
+
+
+def post_json(
+    cliente: httpx.Client,
+    url: str,
+    *,
+    params: dict | None = None,
+    data: dict | None = None,
+    json: dict | None = None,
+    headers: dict | None = None,
+) -> dict:
+    """POST simple (para endpoints de token / TikTok). Sin reintentos."""
+    r = cliente.post(url, params=params, data=data, json=json, headers=headers)
+    r.raise_for_status()
+    return r.json()
+
+
+def con_refresh(hacer, refrescar):
+    """Ejecuta hacer(); si da 401 y refrescar() consigue un token nuevo, reintenta 1 vez.
+
+    `hacer` debe leer el token actual del adaptador (que `refrescar` actualiza),
+    y `refrescar` devuelve True si obtuvo un token nuevo.
+    """
+    try:
+        return hacer()
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code != 401 or not refrescar():
+            raise
+        return hacer()
+
+
+# Tope de seguridad para los bucles de paginación.
+MAX_PAGINAS = 10

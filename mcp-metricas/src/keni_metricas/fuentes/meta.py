@@ -2,8 +2,11 @@
 
 Requiere App Review de Meta (`pages_read_engagement`, `read_insights`,
 `instagram_manage_insights`). Hasta entonces, `disponible()` es False salvo que
-se configure un access token (p. ej. dev token sobre cuentas de prueba). Ver
-docs/credenciales.md.
+se configure un access token. Ver docs/credenciales.md.
+
+- piezas: pagina siguiendo `paging.next` (con tope MAX_PAGINAS).
+- refresh: si hay app_id/app_secret, intercambia el token por uno de larga
+  duración (fb_exchange_token) ante un 401. Meta no tiene refresh_token clásico.
 """
 
 from __future__ import annotations
@@ -13,13 +16,12 @@ from datetime import date
 import httpx
 
 from ..schema import MetricaPlataforma, Pieza, Plataforma
-from ._http import cliente_http, get_json, log
+from ._http import MAX_PAGINAS, cliente_http, con_refresh, get_json, log
 
 BASE = "https://graph.facebook.com/v21.0"
 
 
 def _suma_valores(datos: dict) -> dict[str, int]:
-    """Suma los valores diarios de cada metrica de un payload de insights."""
     out: dict[str, int] = {}
     for serie in datos.get("data", []):
         nombre = serie.get("name")
@@ -37,86 +39,106 @@ class AdaptadorMeta:
         cliente: httpx.Client | None = None,
     ):
         self.plataforma = plataforma
+        self._creds = creds
         self._token = creds.get("access_token")
         self._cli = cliente or cliente_http()
 
     def disponible(self) -> bool:
         return bool(self._token)
 
+    def _refrescar(self) -> bool:
+        cid, secret = self._creds.get("app_id"), self._creds.get("app_secret")
+        if not (cid and secret and self._token):
+            return False
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/oauth/access_token",
+                params={
+                    "grant_type": "fb_exchange_token",
+                    "client_id": cid,
+                    "client_secret": secret,
+                    "fb_exchange_token": self._token,
+                },
+            )
+            if (nuevo := datos.get("access_token")):
+                self._token = nuevo
+                return True
+        except Exception as e:  # noqa: BLE001
+            log.warning("Meta refresh falló: %s", e)
+        return False
+
+    # --- métricas -----------------------------------------------------------
     def metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma | None:
         if not self.disponible():
             return None
         try:
-            if self.plataforma is Plataforma.facebook:
-                datos = get_json(
-                    self._cli,
-                    f"{BASE}/{handle}/insights",
-                    params={
-                        "metric": "page_impressions,page_impressions_unique,page_post_engagements",
-                        "period": "day",
-                        "since": desde.isoformat(),
-                        "until": hasta.isoformat(),
-                        "access_token": self._token,
-                    },
-                )
-                m = _suma_valores(datos)
-                vis = m.get("page_impressions", 0)
-                alc = m.get("page_impressions_unique", 0)
-                inter = m.get("page_post_engagements", 0)
-            else:  # instagram
-                datos = get_json(
-                    self._cli,
-                    f"{BASE}/{handle}/insights",
-                    params={
-                        "metric": "impressions,reach,accounts_engaged",
-                        "period": "day",
-                        "since": desde.isoformat(),
-                        "until": hasta.isoformat(),
-                        "access_token": self._token,
-                    },
-                )
-                m = _suma_valores(datos)
-                vis = m.get("impressions", 0)
-                alc = m.get("reach", 0)
-                inter = m.get("accounts_engaged", 0)
-
-            eng = round(inter / vis * 100, 1) if vis else 0.0
-            return MetricaPlataforma(
-                plataforma=self.plataforma,
-                visualizaciones=vis,
-                alcance=alc,
-                interacciones=inter,
-                engagement_pct=eng,
-            )
-        except Exception as e:  # noqa: BLE001 - degradacion elegante
-            log.warning("Meta %s fallo para %s: %s", self.plataforma.value, handle, e)
+            return con_refresh(lambda: self._metricas(handle, desde, hasta), self._refrescar)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Meta %s falló para %s: %s", self.plataforma.value, handle, e)
             return None
 
+    def _metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma:
+        if self.plataforma is Plataforma.facebook:
+            metric = "page_impressions,page_impressions_unique,page_post_engagements"
+            k_vis, k_alc, k_int = "page_impressions", "page_impressions_unique", "page_post_engagements"
+        else:
+            metric = "impressions,reach,accounts_engaged"
+            k_vis, k_alc, k_int = "impressions", "reach", "accounts_engaged"
+        datos = get_json(
+            self._cli,
+            f"{BASE}/{handle}/insights",
+            params={
+                "metric": metric,
+                "period": "day",
+                "since": desde.isoformat(),
+                "until": hasta.isoformat(),
+                "access_token": self._token,
+            },
+        )
+        m = _suma_valores(datos)
+        vis, alc, inter = m.get(k_vis, 0), m.get(k_alc, 0), m.get(k_int, 0)
+        return MetricaPlataforma(
+            plataforma=self.plataforma,
+            visualizaciones=vis,
+            alcance=alc,
+            interacciones=inter,
+            engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
+        )
+
+    # --- piezas (con paginación) -------------------------------------------
     def piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
         if not self.disponible():
             return []
+        try:
+            return con_refresh(lambda: self._piezas(handle, desde, hasta, n), self._refrescar)
+        except Exception as e:  # noqa: BLE001
+            log.warning("Meta %s piezas falló para %s: %s", self.plataforma.value, handle, e)
+            return []
+
+    def _piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
         es_fb = self.plataforma is Plataforma.facebook
         edge = "posts" if es_fb else "media"
         metrica = "post_impressions" if es_fb else "impressions"
         engaged = "post_engaged_users" if es_fb else "total_interactions"
-        try:
-            datos = get_json(
-                self._cli,
-                f"{BASE}/{handle}/{edge}",
-                params={
-                    "fields": f"id,message,caption,permalink_url,created_time,timestamp,"
-                    f"insights.metric({metrica},{engaged})",
-                    "since": desde.isoformat(),
-                    "until": hasta.isoformat(),
-                    "limit": max(n, 10),
-                    "access_token": self._token,
-                },
-            )
-            piezas: list[Pieza] = []
+
+        # primera página
+        url: str | None = f"{BASE}/{handle}/{edge}"
+        params: dict | None = {
+            "fields": f"id,message,caption,permalink_url,created_time,timestamp,"
+            f"insights.metric({metrica},{engaged})",
+            "since": desde.isoformat(),
+            "until": hasta.isoformat(),
+            "limit": max(n, 25),
+            "access_token": self._token,
+        }
+
+        piezas: list[Pieza] = []
+        for _ in range(MAX_PAGINAS):
+            datos = get_json(self._cli, url, params=params)
             for it in datos.get("data", []):
                 ins = _suma_valores(it.get("insights", {}))
-                vis = ins.get(metrica, 0)
-                inter = ins.get(engaged, 0)
+                vis, inter = ins.get(metrica, 0), ins.get(engaged, 0)
                 if not vis:
                     continue
                 fecha = (it.get("created_time") or it.get("timestamp") or "")[:10]
@@ -132,8 +154,10 @@ class AdaptadorMeta:
                         url=it.get("permalink_url"),
                     )
                 )
-            piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
-            return piezas[:n]
-        except Exception as e:  # noqa: BLE001
-            log.warning("Meta %s piezas fallo para %s: %s", self.plataforma.value, handle, e)
-            return []
+            url = (datos.get("paging") or {}).get("next")  # URL completa con cursor + token
+            params = None
+            if not url:
+                break
+
+        piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
+        return piezas[:n]

@@ -1,8 +1,9 @@
 """Adaptador X (API v2).
 
-OJO: la lectura de metricas en X esta en tier de pago (ver docs/credenciales.md);
+OJO: la lectura de métricas en X está en tier de pago (ver docs/credenciales.md);
 `impression_count` solo llega con contexto de usuario/elevado. `handle` = user id.
-Sin token, `disponible()` es False y el agregador omite X.
+- paginación: sigue `meta.next_token` (con tope MAX_PAGINAS) para cubrir el rango.
+- el bearer token de app no caduca → no hay refresh.
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from datetime import date, datetime, time, timezone
 import httpx
 
 from ..schema import MetricaPlataforma, Pieza, Plataforma
-from ._http import cliente_http, get_json, log
+from ._http import MAX_PAGINAS, cliente_http, get_json, log
 
 BASE = "https://api.twitter.com/2"
 
@@ -33,18 +34,23 @@ class AdaptadorX:
         return bool(self._token)
 
     def _tweets(self, handle: str, desde: date, hasta: date) -> list[dict]:
-        datos = get_json(
-            self._cli,
-            f"{BASE}/users/{handle}/tweets",
-            params={
-                "max_results": 100,
-                "start_time": _iso_utc(desde),
-                "end_time": _iso_utc(hasta, fin=True),
-                "tweet.fields": "public_metrics,created_at,text",
-            },
-            headers={"Authorization": f"Bearer {self._token}"},
-        )
-        return datos.get("data", [])
+        """Todos los tweets del rango, paginando con next_token."""
+        tweets: list[dict] = []
+        params = {
+            "max_results": 100,
+            "start_time": _iso_utc(desde),
+            "end_time": _iso_utc(hasta, fin=True),
+            "tweet.fields": "public_metrics,created_at,text",
+        }
+        headers = {"Authorization": f"Bearer {self._token}"}
+        for _ in range(MAX_PAGINAS):
+            datos = get_json(self._cli, f"{BASE}/users/{handle}/tweets", params=params, headers=headers)
+            tweets.extend(datos.get("data", []))
+            siguiente = (datos.get("meta") or {}).get("next_token")
+            if not siguiente:
+                break
+            params = {**params, "pagination_token": siguiente}
+        return tweets
 
     @staticmethod
     def _inter(pm: dict) -> int:
@@ -70,7 +76,7 @@ class AdaptadorX:
                 engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
             )
         except Exception as e:  # noqa: BLE001
-            log.warning("X fallo para %s: %s", handle, e)
+            log.warning("X falló para %s: %s", handle, e)
             return None
 
     def piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
@@ -98,5 +104,5 @@ class AdaptadorX:
             piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
             return piezas[:n]
         except Exception as e:  # noqa: BLE001
-            log.warning("X piezas fallo para %s: %s", handle, e)
+            log.warning("X piezas falló para %s: %s", handle, e)
             return []
