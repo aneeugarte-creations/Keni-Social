@@ -67,7 +67,9 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             "b": b.model_dump(mode="json"),
             "diferencia": {
                 "visualizaciones_pct": pct(a.visualizaciones, b.visualizaciones),
-                "engagement_pp": round(a.engagement_pct - b.engagement_pct, 1),
+                # delta de engagement en PUNTOS. Misma clave que historico.variacion
+                # y variacion_vs_anterior del esquema: una sola convencion en todo el MCP.
+                "engagement_pct": round(a.engagement_pct - b.engagement_pct, 1),
             },
         }
 
