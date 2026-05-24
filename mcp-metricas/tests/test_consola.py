@@ -76,7 +76,7 @@ def test_proyectos_y_metricas_devuelven_html(entorno):
     assert "text/html" in rp.headers["content-type"]
     assert "text/html" in rm.headers["content-type"]
     assert "Proyectos" in rp.text
-    assert "Metricas" in rm.text
+    assert "Métricas" in rm.text
 
 
 def test_estaticos_servidos_localmente(entorno):

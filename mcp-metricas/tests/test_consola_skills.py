@@ -8,6 +8,8 @@ skill (y marca) fuera de allowlist -> 400; fallos del runner -> mensaje en espan
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from starlette.testclient import TestClient
 
@@ -48,6 +50,50 @@ def test_get_skills_lista_todas_las_skills_de_la_allowlist(entorno):
         assert s.id in texto
         assert s.nombre in texto
         assert s.descripcion in texto
+
+
+def test_get_skills_incluye_youtube_metadata(entorno):
+    """El tipo de contenido `youtube-metadata` esta curado y visible en la lista."""
+    ids = {s.id for s in feat_skills.SKILLS}
+    assert "youtube-metadata" in ids
+    c = _cliente()
+    texto = c.get("/skills").text
+    assert 'value="youtube-metadata"' in texto
+    # Su nombre humano (de-jergonizado) aparece, no el slug crudo a secas.
+    info = next(s for s in feat_skills.SKILLS if s.id == "youtube-metadata")
+    assert info.nombre in texto
+    assert info.descripcion in texto
+
+
+# --------------------------------------------------------------------------- #
+# Drift: cada tipo de contenido listado DEBE existir como carpeta en disco     #
+# --------------------------------------------------------------------------- #
+
+
+def _dir_skills_curadas() -> Path:
+    """Ruta a las skills curadas del repo: <repo>/skills-copy/.claude/skills/.
+
+    El test vive en <repo>/mcp-metricas/tests/, asi que el repo esta tres niveles
+    por encima. La fuente de las carpetas es la copia versionada en el repo."""
+    repo = Path(__file__).resolve().parent.parent.parent
+    return repo / "skills-copy" / ".claude" / "skills"
+
+
+def test_skills_listadas_existen_como_carpeta_en_disco():
+    """Anti-drift: si la consola lista un tipo de contenido cuyo `id` NO existe
+    como carpeta en skills-copy/.claude/skills/, este test falla. Asi la lista
+    curada nunca ofrece un tipo de contenido que el asistente no sabe ejecutar."""
+    dir_skills = _dir_skills_curadas()
+    assert dir_skills.is_dir(), (
+        f"No se encontro el directorio de skills curadas: {dir_skills}"
+    )
+    carpetas = {p.name for p in dir_skills.iterdir() if p.is_dir()}
+    faltantes = sorted(s.id for s in feat_skills.SKILLS if s.id not in carpetas)
+    assert not faltantes, (
+        "Tipos de contenido listados en la consola sin carpeta en "
+        f"skills-copy/.claude/skills/: {faltantes}. Crea la carpeta o quita el tipo "
+        "de la lista curada (SKILLS) para arreglar el drift."
+    )
 
 
 def test_get_skills_lista_todas_las_marcas(entorno):
@@ -196,7 +242,7 @@ def test_skill_fuera_de_allowlist_da_400_sin_ejecutar(entorno, monkeypatch):
         json={"skill": "rm-rf-todo", "marca": "unotv", "texto": "hola"},
     )
     assert r.status_code == 400
-    assert "no permitida" in r.json()["error"].lower()
+    assert "no permitido" in r.json()["error"].lower()
     assert llamadas == []  # NO se intento ejecutar nada
 
 
@@ -228,7 +274,7 @@ def test_faltan_campos_da_400(entorno):
 
 
 def test_ejecutar_skill_valida_allowlist_directamente():
-    with pytest.raises(feat_skills.SkillError, match="Skill no permitida"):
+    with pytest.raises(feat_skills.SkillError, match="Tipo de contenido no permitido"):
         feat_skills.ejecutar_skill("inventada", "unotv", "x", runner=lambda *a, **k: "y")
     with pytest.raises(feat_skills.SkillError, match="Marca no permitida"):
         feat_skills.ejecutar_skill("copy-desde-nota", "ninguna", "x", runner=lambda *a, **k: "y")
@@ -241,7 +287,7 @@ def test_ejecutar_skill_valida_allowlist_directamente():
 
 def test_runner_lanza_error_devuelve_mensaje_espanol_500(entorno, monkeypatch):
     def ejecutar_explota(skill, marca, texto, **kw):
-        raise feat_skills.SkillError("Claude termino con error: detalle tecnico.")
+        raise feat_skills.SkillError("El asistente terminó con error: detalle técnico.")
 
     monkeypatch.setattr(feat_skills, "ejecutar_skill", ejecutar_explota)
     c = _cliente()
@@ -252,7 +298,7 @@ def test_runner_lanza_error_devuelve_mensaje_espanol_500(entorno, monkeypatch):
     assert r.status_code == 500
     cuerpo = r.json()
     assert "error" in cuerpo
-    assert "Claude termino con error" in cuerpo["error"]
+    assert "El asistente terminó con error" in cuerpo["error"]
     # Nunca un traceback crudo.
     assert "Traceback" not in cuerpo["error"]
 
@@ -283,14 +329,14 @@ def test_runner_timeout_da_mensaje_espanol(monkeypatch):
 
     monkeypatch.setattr(feat_skills.shutil, "which", fake_which)
     monkeypatch.setattr(feat_skills.subprocess, "run", fake_run)
-    with pytest.raises(feat_skills.SkillError, match="tardo demasiado"):
+    with pytest.raises(feat_skills.SkillError, match="tardó demasiado"):
         feat_skills.ejecutar_skill("copy-desde-nota", "unotv", "hola", timeout=1)
 
 
 def test_claude_no_encontrado_da_mensaje_espanol(monkeypatch):
     """Si `claude` no esta en el PATH, mensaje claro en espanol (sin ejecutar)."""
     monkeypatch.setattr(feat_skills.shutil, "which", lambda _n: None)
-    with pytest.raises(feat_skills.SkillError, match="No se encontro el comando 'claude'"):
+    with pytest.raises(feat_skills.SkillError, match="No se encontró el asistente"):
         feat_skills.ejecutar_skill("copy-desde-nota", "unotv", "hola")
 
 
@@ -304,7 +350,7 @@ def test_runner_rc_distinto_de_cero_da_mensaje(monkeypatch):
 
     monkeypatch.setattr(feat_skills.shutil, "which", lambda _n: "/usr/bin/claude")
     monkeypatch.setattr(feat_skills.subprocess, "run", lambda *a, **k: FakeProc())
-    with pytest.raises(feat_skills.SkillError, match="Claude termino con error"):
+    with pytest.raises(feat_skills.SkillError, match="El asistente terminó con error"):
         feat_skills.ejecutar_skill("copy-desde-nota", "unotv", "hola")
 
 

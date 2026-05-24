@@ -41,10 +41,11 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import layout
+from .. import layout, marcas
+from .._http_json import leer_json
 from . import Feature, RecursoEstatico, features_ordenadas
 
-_ESTATICOS = Path(__file__).parent
+_ESTATICOS = Path(__file__).parent.parent / "estaticos"
 
 
 # --------------------------------------------------------------------------- #
@@ -59,29 +60,30 @@ class _SkillInfo:
     descripcion: str  # una linea, para no tecnicos
 
 
-# Lista CURADA. El `id` es el nombre de la skill tal como la invoca Claude.
+# Lista CURADA de TIPOS DE CONTENIDO. El `id` es el nombre de la skill tal como la
+# invoca Claude por debajo y DEBE existir como carpeta en `skills-copy/.claude/skills/`
+# (un test de la consola verifica que no haya drift entre esta lista y el disco).
 SKILLS: tuple[_SkillInfo, ...] = (
     _SkillInfo("copy-desde-nota", "Copy desde nota", "Convierte una nota en copy para redes."),
-    _SkillInfo("clip-a-copy", "Clip a copy", "De la transcripcion de un clip a copy listo para publicar."),
+    _SkillInfo("clip-a-copy", "Clip a copy", "De la transcripción de un clip a copy listo para publicar."),
     _SkillInfo("nota-a-formato", "Nota a formato", "Adapta una nota al formato de una plataforma concreta."),
     _SkillInfo("resumen-tendencia", "Resumen de tendencia", "Resume una tendencia a partir de varias fuentes."),
     _SkillInfo("responde-comentarios", "Responde comentarios", "Propone respuestas a comentarios de la comunidad."),
     _SkillInfo("calendario-editorial", "Calendario editorial", "Arma un calendario editorial desde el material dado."),
     _SkillInfo("nota-a-hilo", "Nota a hilo", "Convierte una nota en un hilo encadenado para redes."),
+    _SkillInfo(
+        "youtube-metadata",
+        "Metadatos de YouTube",
+        "Arma título, descripción, etiquetas y capítulos para un video de YouTube.",
+    ),
 )
 
-# Marcas editoriales permitidas (coinciden con contexto-editorial/marcas del repo).
-# El primer elemento es el VALUE interno (slug-guion que Skills envia a Claude); el
-# segundo es la ETIQUETA visible (nombre humano legible, con acentos). El nombre
-# humano debe coincidir con el que muestra Metricas, para que el equipo vea los
-# mismos nombres en TODA la consola (ver `metricas.NOMBRE_MARCA`).
-MARCAS: tuple[tuple[str, str], ...] = (
-    ("unotv", "UnoTV"),
-    ("claro-sports", "Claro Sports"),
-    ("nacion-gamer", "Nación Gamer"),
-    ("piso-15", "Piso 15"),
-    ("fundacion", "Fundación"),
-)
+# Marcas editoriales permitidas. Se leen de la fuente UNICA de marcas de la consola
+# (`marcas`), tomando solo las que tienen `slug` (las curadas como destino de copy
+# en Skills). El VALUE interno es el slug-guion que Skills envia a Claude; la
+# ETIQUETA visible es el nombre humano con acentos, identico al que muestra
+# Metricas, para que el equipo vea los mismos nombres en TODA la consola.
+MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
 
 _SKILLS_IDS = {s.id for s in SKILLS}
 _MARCAS_IDS = {m[0] for m in MARCAS}
@@ -137,7 +139,7 @@ def _runner(prompt: str, *, cwd: Path, timeout: int) -> str:
     """
     if shutil.which("claude") is None:
         raise SkillError(
-            "No se encontro el comando 'claude' en el PATH. Instala Claude Code para "
+            "No se encontró el asistente en este equipo. Instala Claude Code para "
             "poder generar borradores desde la consola."
         )
     try:
@@ -149,15 +151,15 @@ def _runner(prompt: str, *, cwd: Path, timeout: int) -> str:
             timeout=timeout,
         )
     except FileNotFoundError as e:  # carrera: el binario desaparecio entre which y run
-        raise SkillError("No se encontro el comando 'claude' en el PATH.") from e
+        raise SkillError("No se encontró el asistente en este equipo.") from e
     except subprocess.TimeoutExpired as e:
         raise SkillError(
-            f"Claude tardo demasiado (mas de {timeout} s) y se cancelo. "
-            "Prueba con una nota mas corta."
+            f"El asistente tardó demasiado (más de {timeout} s) y se canceló. "
+            "Prueba con una nota más corta."
         ) from e
     if proc.returncode != 0:
-        detalle = (proc.stderr or "").strip() or "error desconocido al ejecutar Claude"
-        raise SkillError(f"Claude termino con error: {detalle}")
+        detalle = (proc.stderr or "").strip() or "error desconocido al generar el borrador"
+        raise SkillError(f"El asistente terminó con error: {detalle}")
     return proc.stdout.strip()
 
 
@@ -176,20 +178,20 @@ def ejecutar_skill(
     que llama a `claude` (por defecto `_runner`); los tests lo usan / parchean.
     """
     if skill not in _SKILLS_IDS:
-        raise SkillError("Skill no permitida.")
+        raise SkillError("Tipo de contenido no permitido.")
     if marca not in _MARCAS_IDS:
         raise SkillError("Marca no permitida.")
     texto = (texto or "").strip()
     if not texto:
-        raise SkillError("Falta la nota o transcripcion para generar el borrador.")
+        raise SkillError("Falta la nota o transcripción para generar el borrador.")
     if len(texto) > _MAX_TEXTO:
-        raise SkillError("El texto es demasiado largo; acortalo e intenta de nuevo.")
+        raise SkillError("El texto es demasiado largo; acórtalo e inténtalo de nuevo.")
 
     prompt = construir_prompt(skill, marca, texto)
     ejecutor = runner if runner is not None else _runner
     salida = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
     if not salida:
-        raise SkillError("Claude no devolvio ningun contenido.")
+        raise SkillError("El asistente no devolvió ningún contenido.")
     return salida
 
 
@@ -199,7 +201,7 @@ def ejecutar_skill(
 
 
 def _pagina_skills() -> str:
-    opciones_skill = ['<option value="">Elige una skill...</option>']
+    opciones_skill = ['<option value="">Elige un tipo de contenido...</option>']
     for s in SKILLS:
         opciones_skill.append(
             f'<option value="{escape(s.id)}" data-desc="{escape(s.descripcion)}">{escape(s.nombre)}</option>'
@@ -211,13 +213,13 @@ def _pagina_skills() -> str:
 
     contenido = f"""
 <h1>Generar copy</h1>
-<p class="intro">Elige una skill y una marca, pega tu nota o transcripcion y pulsa Generar.
-La consola corre Claude por debajo y te muestra el borrador aqui.</p>
-<p class="aviso-global" role="note">Nada se publica; revisa antes de usar.</p>
+<p class="intro">Elige un tipo de contenido y una marca, pega tu nota o transcripción y pulsa Generar.
+Te devolvemos un borrador listo para revisar.</p>
+<p class="aviso-global" role="note">Nada se publica; revisa el borrador antes de usarlo.</p>
 
 <form id="form-skills" class="skills-form">
   <div class="skills-campos">
-    <label for="skills-skill">Skill
+    <label for="skills-skill">Tipo de contenido
       <select id="skills-skill" name="skill" required>{"".join(opciones_skill)}</select>
     </label>
     <label for="skills-marca">Marca
@@ -226,9 +228,9 @@ La consola corre Claude por debajo y te muestra el borrador aqui.</p>
   </div>
   <p id="skills-desc" class="skills-desc" aria-live="polite"></p>
 
-  <label for="skills-texto">Nota o transcripcion (o pega una ruta de archivo)</label>
+  <label for="skills-texto">Nota o transcripción (o pega una ruta de archivo)</label>
   <textarea id="skills-texto" name="texto" class="skills-texto" spellcheck="false"
-    placeholder="Pega aqui la nota, la transcripcion del clip, o la ruta de un archivo..."></textarea>
+    placeholder="Pega aquí la nota, la transcripción del clip, o la ruta de un archivo..."></textarea>
 
   <div class="skills-acciones">
     <button type="submit" class="primario" id="skills-generar">Generar</button>
@@ -265,40 +267,40 @@ async def pagina_skills(request: Request) -> Response:
     return HTMLResponse(_pagina_skills())
 
 
-async def _leer_json(request: Request) -> dict:
-    try:
-        datos = await request.json()
-    except Exception:  # noqa: BLE001 -- body invalido => dict vacio (se valida abajo)
-        return {}
-    return datos if isinstance(datos, dict) else {}
+# Mensajes de SkillError que son fallos de VALIDACION de entrada (=> 400), no
+# fallos del motor (=> 500). Deben coincidir exactamente con los que lanza
+# `ejecutar_skill`; se centralizan aqui para mantenerlos en sincronia.
+_ERRORES_VALIDACION = frozenset({
+    "Falta la nota o transcripción para generar el borrador.",
+    "El texto es demasiado largo; acórtalo e inténtalo de nuevo.",
+    "Tipo de contenido no permitido.",
+    "Marca no permitida.",
+})
 
 
 async def api_ejecutar(request: Request) -> Response:
-    datos = await _leer_json(request)
+    datos = await leer_json(request)
     skill = datos.get("skill")
     marca = datos.get("marca")
     texto = datos.get("texto")
     if not isinstance(skill, str) or not isinstance(marca, str) or not isinstance(texto, str):
-        return JSONResponse({"error": "Faltan skill, marca o texto."}, status_code=400)
+        return JSONResponse(
+            {"error": "Faltan el tipo de contenido, la marca o el texto."}, status_code=400
+        )
     # Rechazo de allowlist explicito antes de ejecutar nada.
     if skill not in _SKILLS_IDS:
-        return JSONResponse({"error": "Skill no permitida."}, status_code=400)
+        return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
     if marca not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     try:
         # Inyectable: en tests se parchea `skills.ejecutar_skill` o `skills._runner`.
         resultado = ejecutar_skill(skill, marca, texto)
     except SkillError as e:
-        # Entradas invalidas (texto vacio/largo) => 400; el resto (fallo de Claude)
-        # tambien sale como mensaje claro, sin traceback. Usamos 400 para validacion
-        # y 500 para fallo del motor.
+        # Entradas invalidas (texto vacio/largo) => 400; el resto (fallo del motor)
+        # tambien sale como mensaje claro, sin traceback. 400 para validacion,
+        # 500 para fallo del motor.
         mensaje = str(e)
-        codigo = 400 if mensaje in (
-            "Falta la nota o transcripcion para generar el borrador.",
-            "El texto es demasiado largo; acortalo e intenta de nuevo.",
-            "Skill no permitida.",
-            "Marca no permitida.",
-        ) else 500
+        codigo = 400 if mensaje in _ERRORES_VALIDACION else 500
         return JSONResponse({"error": mensaje}, status_code=codigo)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al navegador
         return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
@@ -309,7 +311,7 @@ FEATURE = Feature(
     id="skills",
     etiqueta="Generar copy",
     orden=30,
-    descripcion="Elige una skill, una marca y tu nota; la consola corre Claude por debajo.",
+    descripcion="Elige un tipo de contenido, una marca y tu nota; te devolvemos un borrador para revisar.",
     rutas=[
         Route("/skills", pagina_skills),
         Route("/api/skills/ejecutar", api_ejecutar, methods=["POST"]),

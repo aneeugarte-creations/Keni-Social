@@ -35,7 +35,7 @@ from ...config import cargar_config, construir_fuente
 from ...dashboard import generar_dashboard
 from ...reporte import construir_reporte, render_csv, render_markdown
 from ...schema import RANGOS_DIAS
-from .. import layout
+from .. import layout, marcas
 from . import Feature, RecursoEstatico, features_ordenadas
 
 _ESTATICOS = Path(__file__).parent.parent / "estaticos"
@@ -44,38 +44,29 @@ _ESTATICOS = Path(__file__).parent.parent / "estaticos"
 RANGOS_VALIDOS = tuple(RANGOS_DIAS.keys())
 
 # Etiquetas legibles de cada rango (para selectores y para la tabla comparativa).
-ETIQUETAS_RANGO = {"semana": "Semana", "mes": "Mes", "7d": "7 dias", "30d": "30 dias"}
-
-# Mapeo id-de-cuenta (slug con guion_bajo de la fuente) -> nombre humano legible.
-# El `value` del <option> sigue siendo el id crudo que Metricas necesita
-# (`claro_sports`, `nacion_gamer`, ...); solo cambia la ETIQUETA visible para que
-# coincida con la de Skills (ver `skills.MARCAS`) y el equipo vea los mismos
-# nombres en TODA la consola. Ids no listados caen a su `nombre` de la fuente.
-NOMBRE_MARCA: dict[str, str] = {
-    "unotv": "UnoTV",
-    "claro_sports": "Claro Sports",
-    "nacion_gamer": "Nación Gamer",
-    "piso_15": "Piso 15",
-    "fundacion": "Fundación",
-}
-
-
-def _etiqueta_marca(cuenta) -> str:  # noqa: ANN001 -- Cuenta del schema (id, nombre)
-    """Nombre humano legible de una cuenta (cae a su `nombre` si no esta mapeada)."""
-    return NOMBRE_MARCA.get(cuenta.id, cuenta.nombre)
+ETIQUETAS_RANGO = {"semana": "Semana", "mes": "Mes", "7d": "7 días", "30d": "30 días"}
 
 
 def _nombre_marca_id(cuenta_id: str, nombres: dict[str, str]) -> str:
-    """Nombre legible a partir del id crudo. Prioriza el mapa comun de la consola
-    (coherente con Skills) y cae al `nombre` de la fuente, luego al id."""
-    return NOMBRE_MARCA.get(cuenta_id) or nombres.get(cuenta_id) or cuenta_id
+    """Nombre legible a partir del id crudo. Prioriza la fuente UNICA de marcas de
+    la consola (`marcas`, coherente con Skills) y cae al `nombre` de la fuente de
+    datos, luego al propio id."""
+    etiqueta = marcas.etiqueta_por_id(cuenta_id)
+    if etiqueta != cuenta_id:  # marca conocida en la fuente unica
+        return etiqueta
+    return nombres.get(cuenta_id) or cuenta_id
 
 
-def _opciones_marca(cuentas) -> list[str]:  # noqa: ANN001
+def _opciones_marca() -> list[str]:
+    """Opciones del <select> de marca desde la fuente UNICA (`marcas.opciones_por_id`).
+
+    La ETIQUETA visible es el nombre humano con acentos; el VALUE sigue siendo el
+    id crudo (guion_bajo) que Metricas necesita. Asi el equipo ve los mismos
+    nombres de marca en TODA la consola (Skills y Metricas)."""
     opciones = ['<option value="">Todas las marcas</option>']
-    for c in cuentas:
+    for marca_id, etiqueta in marcas.opciones_por_id():
         opciones.append(
-            f'<option value="{escape(c.id)}">{escape(_etiqueta_marca(c))}</option>'
+            f'<option value="{escape(marca_id)}">{escape(etiqueta)}</option>'
         )
     return opciones
 
@@ -90,24 +81,19 @@ def _opciones_rango(seleccionado: str) -> list[str]:
 
 
 def _pagina_metricas() -> str:
-    # Selector de marca desde la fuente activa (scoped por config si aplica).
-    try:
-        fuente = construir_fuente(cargar_config())
-        cuentas = fuente.cuentas()
-    except Exception:  # noqa: BLE001 -- sin fuente valida igualmente mostramos la pestana
-        cuentas = []
-
-    opciones_marca = _opciones_marca(cuentas)
+    # Selector de marca desde la fuente UNICA de marcas de la consola (`marcas`),
+    # con etiquetas humanas (acentos) y value=id; mismos nombres que en Skills.
+    opciones_marca = _opciones_marca()
     opciones_rango = _opciones_rango("mes")
     # La comparativa reusa las mismas opciones de marca; los rangos arrancan en
     # combinaciones utiles distintas (semana vs mes) para que tenga sentido al abrir.
-    op_marca_cmp = _opciones_marca(cuentas)
+    op_marca_cmp = _opciones_marca()
     op_rango_a = _opciones_rango("semana")
     op_rango_b = _opciones_rango("mes")
 
     contenido = f"""
-<h1>Metricas</h1>
-<p class="intro">Dashboard consolidado de redes (mismas funciones que el reporte). Elige marca y rango.</p>
+<h1>Métricas</h1>
+<p class="intro">Dashboard consolidado de redes (las mismas cifras que el reporte). Elige marca y rango.</p>
 <div class="controles">
   <label for="sel-marca">Marca
     <select id="sel-marca">{"".join(opciones_marca)}</select>
@@ -123,7 +109,7 @@ def _pagina_metricas() -> str:
   sandbox="allow-same-origin" src="about:blank"></iframe>
 
 <section class="comparar" aria-labelledby="titulo-comparar">
-  <h2 id="titulo-comparar">Comparar periodos</h2>
+  <h2 id="titulo-comparar">Comparar períodos</h2>
   <p class="intro">Compara dos rangos (A vs B): diferencia en visualizaciones, alcance, interacciones y engagement.</p>
   <div class="controles">
     <label for="cmp-marca">Marca
@@ -143,7 +129,7 @@ def _pagina_metricas() -> str:
     return layout.render_pagina(
         features=features_ordenadas(),
         activa=FEATURE.id,
-        titulo="Metricas",
+        titulo="Métricas",
         contenido=contenido,
         css=FEATURE.css,
         js=FEATURE.js,
@@ -168,7 +154,7 @@ def _pagina_error(mensaje: str) -> str:
     return layout.render_pagina(
         features=features_ordenadas(),
         activa=FEATURE.id,
-        titulo="Metricas",
+        titulo="Métricas",
         contenido=f'<p class="aviso-global" role="alert">{escape(mensaje)}</p>',
     )
 
@@ -369,9 +355,9 @@ async def metricas_export_json(request: Request) -> Response:
 
 FEATURE = Feature(
     id="metricas",
-    etiqueta="Metricas",
+    etiqueta="Métricas",
     orden=20,
-    descripcion="Dashboard de redes, comparar periodos y descarga del reporte (CSV/MD/JSON).",
+    descripcion="Dashboard de redes, comparar períodos y descarga del reporte (CSV/MD/JSON).",
     rutas=[
         Route("/metricas", pagina_metricas),
         Route("/metricas/dashboard", metricas_dashboard),
