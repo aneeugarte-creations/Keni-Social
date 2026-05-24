@@ -63,6 +63,20 @@ def test_dashboard_seccion_de_picos():
     assert "Alertas (picos)" in html
 
 
+def test_picos_usan_nombres_legibles_no_slugs():
+    """Las alertas (picos) deben mostrar el nombre legible de la marca, no el id
+    crudo (regresion: _render_alerta imprimia el slug `piso_15`/`claro_sports_golf`)."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres)
+    # la seccion de alertas debe usar el nombre legible dentro de <strong>
+    for slug, nombre in nombres.items():
+        if nombre != slug:  # marcas cuyo nombre difiere del id
+            assert f"<strong>{slug}</strong>" not in html
+
+
 def test_dashboard_escapa_html_de_titulos():
     """Los titulos de contenido se escapan (sin inyeccion de HTML)."""
     fuente = FuenteMuestra()

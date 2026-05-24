@@ -376,20 +376,23 @@ def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
     return "".join(partes)
 
 
-def _render_alerta(a: dict) -> str:
+def _render_alerta(a: dict, nombres: dict[str, str]) -> str:
+    # nombre legible de la marca (mismo criterio que el resto del dashboard);
+    # cae al id crudo solo si la fuente no lo trae.
+    marca = escape(nombres.get(a["cuenta"], a["cuenta"]))
     tipo = a.get("tipo")
     if tipo == "pieza_despunta":
         plat = _PLATAFORMA_ETIQUETA.get(a["plataforma"], a["plataforma"])
         return (
             '<li><span class="tag">Pieza que despunta</span>'
-            f'<strong>{escape(a["cuenta"])}</strong> · {escape(plat)} · '
+            f"<strong>{marca}</strong> · {escape(plat)} · "
             f'&laquo;{escape(a["titulo"])}&raquo; alcanza {escape(str(a["engagement_pct"]))}% de engagement '
             f'({escape(str(a["factor"]))}&times; la media de {escape(str(a["baseline_engagement_pct"]))}%).</li>'
         )
     verbo = "sube" if tipo == "cuenta_alza" else "cae"
     return (
         f'<li><span class="tag">Cuenta que {escape(verbo)}</span>'
-        f'<strong>{escape(a["cuenta"])}</strong> {escape(verbo)} {escape(str(a["desviacion_pct"]))}% '
+        f'<strong>{marca}</strong> {escape(verbo)} {escape(str(a["desviacion_pct"]))}% '
         f'vs. su baseline ({_miles(a["baseline"])} &rarr; {_miles(a["visualizaciones"])} vis).</li>'
     )
 
@@ -398,11 +401,11 @@ def _render_alerta(a: dict) -> str:
 _PICOS_VISIBLES = 6
 
 
-def _render_picos(picos: dict) -> str:
+def _render_picos(picos: dict, nombres: dict[str, str]) -> str:
     partes = ['<h2 class="seccion">Alertas (picos)</h2>']
     cob = picos.get("cobertura") or {}
     if cob.get("cuentas_parciales"):
-        parciales = ", ".join(escape(c) for c in cob["cuentas_parciales"])
+        parciales = ", ".join(escape(nombres.get(c, c)) for c in cob["cuentas_parciales"])
         partes.append(
             f'<p class="aviso"><strong>Aviso.</strong> Cobertura parcial en {parciales}: '
             "las alertas pueden estar incompletas.</p>"
@@ -416,10 +419,10 @@ def _render_picos(picos: dict) -> str:
     # enterrar el cierre de la pantalla en una demo compartida.
     visibles = alertas[:_PICOS_VISIBLES]
     resto = alertas[_PICOS_VISIBLES:]
-    lis = "".join(_render_alerta(a) for a in visibles)
+    lis = "".join(_render_alerta(a, nombres) for a in visibles)
     partes.append(f'<ul class="alertas">{lis}</ul>')
     if resto:
-        lis_resto = "".join(_render_alerta(a) for a in resto)
+        lis_resto = "".join(_render_alerta(a, nombres) for a in resto)
         partes.append(
             '<details class="alertas-resto">'
             f"<summary>Ver todas las alertas ({len(alertas)})</summary>"
@@ -670,7 +673,7 @@ def construir_html(
 {tarjetas}
 </div>
 
-{_render_picos(picos)}
+{_render_picos(picos, nombres)}
 
 <footer>Generado en tu máquina · datos de muestra · sin red. \
 Keni AI · dashboard de metricas · HTML estatico autocontenido (sin JS externo).</footer>
