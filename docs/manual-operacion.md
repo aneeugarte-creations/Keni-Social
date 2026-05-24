@@ -44,6 +44,13 @@ Por cada persona del equipo, en este orden:
    ver el paso 2 de credenciales más abajo. Detalle completo en
    [`despliegue-local.md`](despliegue-local.md).
 
+   Para configurar marcas, scoping y credenciales **sin editar TOML a mano**, corre el asistente guiado:
+   ```
+   python -m keni_metricas.asistente          # crea/actualiza ~/.config/keni-metricas/config.toml
+   python -m keni_metricas.asistente --solo-mostrar   # previsualiza sin escribir
+   python -m keni_metricas.asistente --validar        # prueba la conexión si hay tokens
+   ```
+
 3. **Elegir el modo de despliegue del MCP.** Conviven los dos (arquitectura híbrida):
 
    | Modo | Cuándo usarlo | Doc |
