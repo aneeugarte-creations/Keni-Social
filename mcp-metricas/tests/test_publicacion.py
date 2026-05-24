@@ -50,6 +50,24 @@ def test_media_ref_rechaza_url_vacia():
         MediaRef(tipo=TipoMedia.imagen, url="  ")
 
 
+def test_hashtags_no_lista_se_devuelve_sin_tocar():
+    """El normalizador de hashtags solo opera sobre listas; otros tipos pasan tal cual
+    y pydantic los rechaza despues (no se traga un valor invalido silenciosamente)."""
+    with pytest.raises(ValidationError):
+        Borrador(plataforma=Plataforma.facebook, cuenta="PAGE", hashtags="deporte")
+
+
+def test_texto_final_solo_hashtags_sin_cuerpo():
+    """Sin texto pero con hashtags: el texto final son solo las etiquetas."""
+    b = Borrador(
+        plataforma=Plataforma.instagram,
+        cuenta="IG",
+        media=[MediaRef(tipo=TipoMedia.imagen, url="https://e/x.jpg")],
+        hashtags=["a", "b"],
+    )
+    assert b.texto_final() == "#a #b"
+
+
 # --- DRY-RUN: cero red -----------------------------------------------------
 @respx.mock
 def test_dry_run_facebook_no_llama_red_y_arma_feed():
@@ -116,6 +134,43 @@ def test_instagram_sin_media_falla():
     b = Borrador(plataforma=Plataforma.instagram, cuenta="IGID", texto="hola")
     with pytest.raises(ValueError, match="exige media"):
         ad.publicar(b)
+
+
+def test_dry_run_facebook_video_arma_endpoint_videos():
+    """FB con video usa /videos con file_url/description (rama de video del dry-run)."""
+    ad = AdaptadorPublicacionMeta(creds={})
+    b = Borrador(
+        plataforma=Plataforma.facebook,
+        cuenta="PAGE",
+        texto="mira esto",
+        media=[MediaRef(tipo=TipoMedia.video, url="https://e/v.mp4")],
+    )
+    res = ad.publicar(b)
+    assert res.dry_run is True
+    assert len(res.peticiones) == 1
+    pet = res.peticiones[0]
+    assert pet.paso == "fb_video"
+    assert pet.url.endswith("/PAGE/videos")
+    assert pet.data == {"file_url": "https://e/v.mp4", "description": "mira esto"}
+
+
+def test_peticiones_para_plataforma_no_meta_es_defensa_en_profundidad(monkeypatch):
+    """`peticiones_para` lanza ValueError ante una plataforma no-Meta.
+
+    El modelo ya valida que sea Meta, asi que para llegar aqui hay que saltarse
+    esa validacion (defensa en profundidad). Forzamos el atributo tras construir
+    un borrador valido para no depender del validador de `Borrador`.
+    """
+    ad = AdaptadorPublicacionMeta(creds={})
+    b = Borrador(plataforma=Plataforma.facebook, cuenta="PAGE", texto="x")
+    object.__setattr__(b, "plataforma", Plataforma.tiktok)  # estado imposible por la API
+    with pytest.raises(ValueError, match="no publicable por Meta"):
+        ad.peticiones_para(b)
+
+
+def test_disponible_refleja_token():
+    assert AdaptadorPublicacionMeta(creds={}).disponible() is False
+    assert AdaptadorPublicacionMeta(creds={"access_token": "tok"}).disponible() is True
 
 
 # --- camino REAL (mockeado) ------------------------------------------------
@@ -229,6 +284,42 @@ def test_cli_facebook_dry_run_ok(capsys):
     out = capsys.readouterr().out
     assert "DRY-RUN" in out
     assert "PAGE/feed" in out
+
+
+@respx.mock
+def test_cli_facebook_video_usa_endpoint_videos(capsys):
+    """La CLI con --video construye el borrador con media de video (rama --video)."""
+    from keni_metricas.publicacion.__main__ import main
+
+    code = main(
+        [
+            "--plataforma", "facebook", "--cuenta", "PAGE",
+            "--texto", "clip", "--video", "https://e/v.mp4",
+            "--formato", "json",
+        ]
+    )
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "fb_video" in out
+    assert "/PAGE/videos" in out
+    assert "https://e/v.mp4" in out
+    assert respx.calls.call_count == 0  # la CLI nunca toca la red
+
+
+def test_cli_json_facebook_estructura(capsys):
+    """Formato json: salida parseable con dry_run=True y una peticion fb_feed."""
+    import json
+
+    from keni_metricas.publicacion.__main__ import main
+
+    code = main(["--plataforma", "facebook", "--cuenta", "PAGE", "--texto", "Hola", "--formato", "json"])
+    assert code == 0
+    datos = json.loads(capsys.readouterr().out)
+    assert datos["dry_run"] is True
+    assert datos["plataforma"] == "facebook"
+    assert [p["paso"] for p in datos["peticiones"]] == ["fb_feed"]
+    # el token nunca aparece en el payload de dry-run
+    assert "access_token" not in datos["peticiones"][0]["data"]
 
 
 @respx.mock

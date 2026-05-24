@@ -86,6 +86,18 @@ def test_parsear_publicaciones_no_lista_falla():
         parsear_entradas({"publicaciones": {"plataforma": "facebook", "cuenta": "X"}})
 
 
+@pytest.mark.parametrize("datos", [42, "texto", None, True])
+def test_parsear_entrada_no_reconocida_falla(datos):
+    """Un escalar (ni dict, ni lista, ni {'publicaciones': [...]}) se rechaza claro."""
+    with pytest.raises(ValueError, match="no reconocida"):
+        parsear_entradas(datos)
+
+
+def test_parsear_lista_vacia_da_cero_entradas():
+    assert parsear_entradas([]) == []
+    assert parsear_entradas({"publicaciones": []}) == []
+
+
 # --- carga desde archivo (JSON / TOML) -------------------------------------
 def test_cargar_entradas_json(tmp_path):
     ruta = tmp_path / "pubs.json"
@@ -254,6 +266,29 @@ def test_render_reporte_muestra_agendado_no_vencido():
     assert "nada vencido a esta hora" in texto
 
 
+@respx.mock
+def test_render_reporte_publicacion_real(capsys):
+    """Con dry_run=False, el reporte usa el encabezado/cierre de PUBLICACION REAL.
+
+    Se mockea el POST para que el flujo real arme el ResultadoFlujo sin red viva,
+    y luego se verifica que el render refleja el modo real (no se afirma texto fragil).
+    """
+    respx.post(f"{BASE}/PAGE/feed").mock(return_value=httpx.Response(200, json={"id": "PAGE_1"}))
+    entradas = parsear_entradas(_entrada_fb_dict("real"))
+    res = ejecutar_flujo(
+        entradas,
+        adaptador=AdaptadorPublicacionMeta(creds={"access_token": "tok"}),
+        ahora=AHORA,
+        publicar_real=True,
+    )
+    texto = render_reporte(res, entradas)
+    assert res.dry_run is False
+    assert "PUBLICACION REAL" in texto
+    assert "SE ENVIARON" in texto
+    # NO debe verse el descargo de dry-run cuando es publicacion real
+    assert "no hubo peticiones de red" not in texto
+
+
 # --- CLI --------------------------------------------------------------------
 @respx.mock
 def test_cli_dry_run_json_sin_red(tmp_path, capsys):
@@ -306,6 +341,45 @@ def test_cli_archivo_inexistente(capsys):
     code = main(["/no/existe/pubs.json"])
     assert code == 2
     assert "no existe" in capsys.readouterr().err
+
+
+def test_cli_extension_no_soportada(tmp_path, capsys):
+    """Extension no .json/.toml => ValueError de cargar_entradas, codigo 2 limpio."""
+    archivo = tmp_path / "pubs.yaml"
+    archivo.write_text("x", encoding="utf-8")
+    code = main([str(archivo)])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "Error en la entrada" in err
+    assert "Traceback" not in err
+
+
+def test_cli_entrada_sin_publicaciones(tmp_path, capsys):
+    """Lista vacia => 'la entrada no contiene publicaciones', codigo 2."""
+    archivo = tmp_path / "pubs.json"
+    archivo.write_text(json.dumps({"publicaciones": []}), encoding="utf-8")
+    code = main([str(archivo)])
+    assert code == 2
+    assert "no contiene publicaciones" in capsys.readouterr().err
+
+
+@respx.mock
+def test_cli_dry_run_formato_texto(tmp_path, capsys):
+    """--formato texto (defecto) imprime el reporte legible dry-run, sin red."""
+    ruta_red = respx.post(f"{BASE}/PAGE/feed").mock(
+        return_value=httpx.Response(200, json={"id": "x"})
+    )
+    archivo = tmp_path / "pubs.json"
+    archivo.write_text(json.dumps(_entrada_fb_dict("Hola texto")), encoding="utf-8")
+
+    code = main([str(archivo), "--formato", "texto"])
+    assert code == 0
+    salida = capsys.readouterr().out
+    assert "DRY-RUN" in salida
+    assert "PAGE/feed" in salida
+    assert "NADA se ha publicado" in salida
+    assert not ruta_red.called
+    assert respx.calls.call_count == 0
 
 
 def test_cli_entrada_invalida(tmp_path, capsys):
