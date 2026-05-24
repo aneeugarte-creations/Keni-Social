@@ -5,9 +5,10 @@ from __future__ import annotations
 from mcp.server.fastmcp import FastMCP
 
 from .fuentes.base import CuentaNoEncontrada, FuenteMetricas
+from .historico import Historico
 
 
-def registrar(mcp: FastMCP, fuente: FuenteMetricas) -> None:
+def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None = None) -> None:
     @mcp.tool()
     def listar_cuentas() -> dict:
         """Lista las cuentas/marcas de redes disponibles (UnoTV, Claro Sports, etc.)
@@ -23,9 +24,13 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas) -> None:
         '30d'): visualizaciones, alcance, engagement y variacion vs. el periodo
         anterior, con desglose por plataforma. Responde '¿como van mis metricas?'."""
         try:
-            return fuente.resumen(cuenta, rango).model_dump(mode="json")
+            r = fuente.resumen(cuenta, rango)
         except (CuentaNoEncontrada, ValueError) as e:
             return {"error": str(e)}
+        if historico is not None:
+            historico.aplicar_variacion(r)  # variacion REAL si hay periodo anterior
+            historico.guardar(r)
+        return r.model_dump(mode="json")
 
     @mcp.tool()
     def mejores_piezas(cuenta: str, rango: str = "semana", n: int = 3) -> dict:
@@ -65,3 +70,21 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas) -> None:
                 "engagement_pp": round(a.engagement_pct - b.engagement_pct, 1),
             },
         }
+
+    @mcp.tool()
+    def tendencia_historica(cuenta: str, rango: str = "semana", n: int = 8) -> dict:
+        """Evolucion historica de una cuenta: las ultimas n lecturas guardadas
+        (visualizaciones y engagement por periodo). Util para ver si una cuenta
+        sube o baja en el tiempo. Requiere haber consultado metricas_resumen antes."""
+        if historico is None:
+            return {"error": "El historico no esta activado (KENI_METRICAS_HISTORICO=0)."}
+        n = max(1, min(int(n), 52))
+        puntos = historico.serie(cuenta, rango, n)
+        if not puntos:
+            return {
+                "cuenta": cuenta,
+                "rango": rango,
+                "puntos": [],
+                "nota": "Aun no hay historico para esta cuenta/rango. Consulta metricas_resumen y vuelve mas tarde.",
+            }
+        return {"cuenta": cuenta, "rango": rango, "puntos": puntos}

@@ -10,6 +10,11 @@ Servidor **MCP** que lee métricas de redes sociales (Meta FB/IG, YouTube, X, Ti
 | `metricas_resumen(cuenta, rango)` | Visualizaciones, alcance, engagement y variación, con desglose por plataforma. `rango`: `semana`, `mes`, `7d`, `30d`. |
 | `mejores_piezas(cuenta, rango, n)` | Las N piezas con mejor engagement. |
 | `comparar_periodos(cuenta, rango_a, rango_b)` | Compara dos rangos. |
+| `tendencia_historica(cuenta, rango, n)` | Evolución de las últimas n lecturas guardadas. |
+
+## Histórico
+
+Cada lectura de `metricas_resumen` se guarda en un SQLite local (`~/.local/share/keni-metricas/historico.db`, o `KENI_METRICAS_DB`). Con dos o más lecturas de periodos distintos, `variacion_vs_anterior` pasa a ser **real** y `tendencia_historica` muestra la evolución. Desactivable con `KENI_METRICAS_HISTORICO=0`. Es local por persona, como las credenciales.
 
 ## Fuentes de datos
 
