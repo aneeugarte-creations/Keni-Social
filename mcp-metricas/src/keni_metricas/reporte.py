@@ -13,11 +13,21 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from .formato import partes_cobertura, signo
 from .fuentes.base import FuenteMetricas
 
+if TYPE_CHECKING:
+    from .historico import Historico
 
-def construir_reporte(fuente: FuenteMetricas, rango: str = "mes", top: int = 3, historico=None) -> dict:
+
+def construir_reporte(
+    fuente: FuenteMetricas,
+    rango: str = "mes",
+    top: int = 3,
+    historico: Historico | None = None,
+) -> dict:
     """Estructura JSON-serializable con el total y el desglose por marca."""
     cuentas = fuente.cuentas()
     filas: list[dict] = []
@@ -63,23 +73,11 @@ def construir_reporte(fuente: FuenteMetricas, rango: str = "mes", top: int = 3, 
     }
 
 
-def _signo(pct: float) -> str:
-    return f"+{pct}" if pct > 0 else f"{pct}"
-
-
-_MOTIVO_TEXTO = {
-    "sin_credenciales": "sin credenciales",
-    "presupuesto_agotado": "presupuesto agotado",
-    "error_api": "error de API",
-}
-
-
 def _nota_cobertura(cob: dict | None) -> str | None:
     """Nota corta de cobertura para una marca; None si respondio todo (o no aplica)."""
-    if not cob or not cob.get("omitidas"):
+    partes = partes_cobertura(cob)
+    if partes is None:
         return None
-    motivo = cob.get("motivo") or {}
-    partes = [f"{p} ({_MOTIVO_TEXTO.get(motivo.get(p, ''), motivo.get(p, '?'))})" for p in cob["omitidas"]]
     return "⚠️ cobertura parcial — sin datos de: " + ", ".join(partes) + " (los ceros NO son datos reales)"
 
 
@@ -106,7 +104,7 @@ def render_markdown(rep: dict) -> str:
         v_vis = var.get("visualizaciones_pct")
         cab = f"## {r['cuenta']}"
         if v_vis is not None:
-            cab += f"  ({_signo(v_vis)}% vis vs. anterior)"
+            cab += f"  ({signo(v_vis)}% vis vs. anterior)"
         out.append(cab)
         out.append(
             f"- {r['visualizaciones']:,} vis · {r['alcance']:,} alcance · {r['engagement_pct']}% eng"
