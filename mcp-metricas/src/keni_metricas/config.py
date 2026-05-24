@@ -9,6 +9,7 @@ sin configurar nada. Ver `credenciales.ejemplo.toml`.
 from __future__ import annotations
 
 import os
+import re
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -120,7 +121,12 @@ def cargar_config() -> Config:
             # B1: un TOML mal formado no debe tumbar los comandos con un
             # traceback de tomllib. Lo convertimos en un error de dominio en
             # espanol con la ruta y, si esta disponible, la linea del fallo.
+            # `TOMLDecodeError.lineno` solo existe desde Python 3.14; en 3.11-3.13
+            # extraemos la linea del propio mensaje ("... at line N, column M").
             linea = getattr(e, "lineno", None)
+            if linea is None:
+                m = re.search(r"at line (\d+)", str(e))
+                linea = int(m.group(1)) if m else None
             ubicacion = f" (linea {linea})" if linea else ""
             raise ConfigInvalida(
                 f"El config en {ruta} tiene un error de sintaxis TOML{ubicacion}: {e}"
