@@ -12,9 +12,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from .fuentes.base import FuenteMetricas
+from .historico import Historico
 
 
-def detectar_picos(fuente: FuenteMetricas, rango: str = "semana", umbral_pct: int = 50, historico=None) -> dict:
+def detectar_picos(
+    fuente: FuenteMetricas,
+    rango: str = "semana",
+    umbral_pct: int = 50,
+    historico: Historico | None = None,
+) -> dict:
     alertas: list[dict] = []
     cuentas_parciales: list[str] = []  # marcas con cobertura incompleta al detectar picos
 
@@ -62,7 +68,18 @@ def detectar_picos(fuente: FuenteMetricas, rango: str = "semana", umbral_pct: in
                         )
 
     def _magnitud(a: dict) -> float:
-        return a.get("factor", 1 + abs(a.get("desviacion_pct", 0)) / 100)
+        # Ranking unico: ambos tipos de alerta se normalizan al MISMO eje, un
+        # "factor sobre baseline" (1.0 = igual al baseline; cuanto mayor, mas
+        # anomalo). Asi piezas y cuentas son comparables en una sola lista.
+        #   - pieza_despunta: `factor` = engagement / engagement_medio (p.ej. 1.5
+        #     = 50% por encima de la media de la cuenta).
+        #   - cuenta_alza/cuenta_caida: 1 + |desviacion_pct|/100 (p.ej. una caida
+        #     o alza del 60% => 1.6). El valor absoluto trata alza y caida con la
+        #     misma severidad: lo que ordena es cuanto se aleja del baseline, no
+        #     la direccion.
+        if "factor" in a:
+            return a["factor"]
+        return 1 + abs(a.get("desviacion_pct", 0)) / 100
 
     alertas.sort(key=_magnitud, reverse=True)
     return {
