@@ -233,9 +233,10 @@ def comprobar_binario(
     nombre_binario: str,
     *,
     pista: str,
-    which=shutil.which,
+    which=None,
 ) -> Resultado:
     """Un binario esta en el PATH (via `shutil.which`, inyectable para tests)."""
+    which = which or shutil.which  # resolver en tiempo de llamada (monkeypatch-friendly)
     ruta = which(nombre_binario)
     if ruta:
         return Resultado(
@@ -393,7 +394,7 @@ def ejecutar_chequeos(
     cfg: Config | None = None,
     *,
     validar: bool = False,
-    which=shutil.which,
+    which=None,
     env_modelo: str | None | object = _DEL_ENTORNO,
     rutas_modelo=None,
 ) -> list[Resultado]:
@@ -406,6 +407,7 @@ def ejecutar_chequeos(
     `env_modelo=None` explicitamente fuerza el escaneo de rutas (lo usan los tests).
     """
     cfg = cfg or cargar_config()
+    which = which or shutil.which  # resolver en tiempo de llamada (monkeypatch-friendly)
     if env_modelo is _DEL_ENTORNO:
         env_modelo = os.environ.get("KENI_WHISPER_MODEL") or None
 
