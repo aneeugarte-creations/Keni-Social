@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from .formato import etiqueta_marca, linea_resto_picos, particionar_picos
 from .fuentes.base import FuenteMetricas
 from .historico import Historico
 
@@ -23,8 +24,12 @@ def detectar_picos(
 ) -> dict:
     alertas: list[dict] = []
     cuentas_parciales: list[str] = []  # marcas con cobertura incompleta al detectar picos
+    # Mapa id->nombre legible (mismo origen que usa el dashboard). Las alertas
+    # guardan el id crudo; el render lo traduce a nombre legible con este mapa.
+    nombres: dict[str, str] = {}
 
     for c in fuente.cuentas():
+        nombres[c.id] = c.nombre
         r = fuente.resumen(c.id, rango)
         if r.cobertura is not None and r.cobertura.omitidas:
             cuentas_parciales.append(c.id)
@@ -87,6 +92,9 @@ def detectar_picos(
         "umbral_pct": umbral_pct,
         "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "alertas": alertas,
+        # mapa id->nombre legible para que el render (markdown/digest) imprima el
+        # NOMBRE de la marca, no el id crudo. No cambia los ids internos.
+        "nombres": nombres,
         # cobertura: si alguna marca tuvo datos parciales, las alertas (y la ausencia
         # de ellas) pueden estar incompletas. Vacio = se evaluo todo.
         "cobertura": {
@@ -96,26 +104,36 @@ def detectar_picos(
     }
 
 
+def _render_alerta(a: dict, nombres: dict) -> str:
+    """Linea Markdown de UNA alerta, con el NOMBRE legible de la marca."""
+    marca = etiqueta_marca(a["cuenta"], nombres)
+    if a["tipo"] == "pieza_despunta":
+        return (
+            f"- 🔼 **{marca}** · [{a['plataforma']}] \"{a['titulo']}\" despunta a "
+            f"{a['engagement_pct']}% ({a['factor']}× la media de {a['baseline_engagement_pct']}%)"
+        )
+    icono = "📈" if a["tipo"] == "cuenta_alza" else "📉"
+    verbo = "sube" if a["tipo"] == "cuenta_alza" else "cae"
+    base, vis = f"{a['baseline']:,}", f"{a['visualizaciones']:,}"
+    return f"- {icono} **{marca}** {verbo} {a['desviacion_pct']}% vs. su baseline ({base} → {vis})"
+
+
 def render_markdown(rep: dict) -> str:
     out = [f"## Alertas (picos, umbral {rep['umbral_pct']}%)"]
+    nombres = rep.get("nombres") or {}
     cob = rep.get("cobertura") or {}
     if cob.get("cuentas_parciales"):
-        parciales = ", ".join(cob["cuentas_parciales"])
+        # Cobertura tambien con NOMBRE legible (consistente con el resto del CLI).
+        parciales = ", ".join(etiqueta_marca(c, nombres) for c in cob["cuentas_parciales"])
         out.append(f"> ⚠️ Cobertura parcial en {parciales}: las alertas pueden estar incompletas.")
     if not rep["alertas"]:
         out.append("- Sin anomalías por encima del umbral. Todo dentro de lo normal.")
         return "\n".join(out)
-    for a in rep["alertas"]:
-        if a["tipo"] == "pieza_despunta":
-            out.append(
-                f"- 🔼 **{a['cuenta']}** · [{a['plataforma']}] \"{a['titulo']}\" despunta a "
-                f"{a['engagement_pct']}% ({a['factor']}× la media de {a['baseline_engagement_pct']}%)"
-            )
-        else:
-            icono = "📈" if a["tipo"] == "cuenta_alza" else "📉"
-            verbo = "sube" if a["tipo"] == "cuenta_alza" else "cae"
-            base, vis = f"{a['baseline']:,}", f"{a['visualizaciones']:,}"
-            out.append(
-                f"- {icono} **{a['cuenta']}** {verbo} {a['desviacion_pct']}% vs. su baseline ({base} → {vis})"
-            )
+    # top-N por magnitud (ya vienen ordenadas) + resto colapsado en una linea,
+    # mismo criterio que el dashboard para no volcar ~24 alertas planas.
+    visibles, n_resto = particionar_picos(rep["alertas"])
+    for a in visibles:
+        out.append(_render_alerta(a, nombres))
+    if (linea := linea_resto_picos(n_resto)) is not None:
+        out.append(f"- {linea}")
     return "\n".join(out)

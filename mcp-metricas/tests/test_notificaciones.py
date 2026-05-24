@@ -42,6 +42,29 @@ def test_formatear_payload_slack_es_text():
     assert "alertas de redes" in p["text"]
 
 
+def test_digest_texto_usa_nombre_legible_no_id():
+    # el texto plano del digest (lo que ve un humano en Slack) debe mostrar el
+    # NOMBRE legible de la marca, no el id crudo.
+    d = construir_digest(FuenteMuestra(), "semana", 50)
+    texto = formatear_payload(d, "slack")["text"]
+    assert "Claro Sports" in texto
+    assert "claro_sports" not in texto
+
+
+def test_digest_texto_acota_picos_a_top_n():
+    # el texto del digest no debe volcar las ~29 alertas planas: top-N + resumen.
+    from keni_metricas.formato import PICOS_VISIBLES
+
+    d = construir_digest(FuenteMuestra(), "semana", 50)
+    assert d["n_alertas"] > PICOS_VISIBLES, "la muestra debe dar mas alertas que el top-N"
+    texto = formatear_payload(d, "slack")["text"]
+    lineas_alerta = [ln for ln in texto.splitlines() if ln.startswith(("- 🔼", "- 📈", "- 📉"))]
+    assert len(lineas_alerta) <= PICOS_VISIBLES
+    # y aparece la linea-resumen del resto colapsado
+    n_resto = d["n_alertas"] - PICOS_VISIBLES
+    assert any(str(n_resto) in ln and "mas" in ln for ln in texto.splitlines())
+
+
 def test_formatear_payload_generico_es_rico():
     d = construir_digest(FuenteMuestra(), "semana", 50)
     p = formatear_payload(d, "generico")
