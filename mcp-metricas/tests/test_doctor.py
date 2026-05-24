@@ -11,7 +11,7 @@ import sys
 
 import pytest
 
-from keni_metricas.config import Config, CuentaConfig, cargar_config
+from keni_metricas.config import Config, ConfigInvalida, CuentaConfig, cargar_config
 from keni_metricas.doctor import (
     Estado,
     Resultado,
@@ -28,6 +28,7 @@ from keni_metricas.doctor import (
     main,
     renderizar,
     resumir_credenciales,
+    validar_conectividad,
 )
 from keni_metricas.schema import Plataforma
 
@@ -538,3 +539,199 @@ def test_main_con_config_corrupto_devuelve_1_y_no_lanza(tmp_path, monkeypatch, c
     assert rc == 1
     assert "❌" in salida
     assert "Configuracion" in salida
+
+
+# --- comprobar_fuente: rama de error al construir ---------------------------
+
+
+def test_comprobar_fuente_error_se_reporta_como_error(monkeypatch):
+    """Si construir_fuente lanza, comprobar_fuente devuelve ❌ con el detalle."""
+    import keni_metricas.doctor as doctor
+
+    def _explota(_cfg):
+        raise RuntimeError("boom al construir")
+
+    monkeypatch.setattr(doctor, "construir_fuente", _explota)
+    r = comprobar_fuente(Config(fuente="real"))
+    assert r.estado is Estado.ERROR
+    assert "real" in r.detalle
+    assert "boom al construir" in r.detalle
+    assert r.extra["fuente"] == "real"
+
+
+# --- cierre_accionable: rama con/sin error de forma directa -----------------
+
+
+def test_cierre_accionable_lista_vacia_es_camino_sin_error():
+    # Sin resultados no hay ningun ❌ -> camino "listo para demo".
+    cierre = cierre_accionable([])
+    assert "Que hacer ahora" in cierre
+    assert "asistente" in cierre
+
+
+# --- ejecutar_chequeos: cfg None defensivo (config invalida) ----------------
+
+
+def test_ejecutar_chequeos_cfg_none_por_config_invalida(monkeypatch, tmp_path):
+    """Si cargar_config lanza ConfigInvalida, el doctor reporta ❌ y no crashea.
+
+    A diferencia del test con TOML roto en disco, aqui forzamos directamente la
+    excepcion para ejercitar la rama defensiva de ejecutar_chequeos sin depender
+    del parser de TOML.
+    """
+    import keni_metricas.doctor as doctor
+
+    def _config_invalida():
+        raise ConfigInvalida("config a proposito invalida")
+
+    monkeypatch.setattr(doctor, "cargar_config", _config_invalida)
+    resultados = ejecutar_chequeos(
+        cfg=None,
+        which=_which_falso({"whisper-cli", "ffmpeg"}),
+        rutas_modelo=[tmp_path / "no.bin"],
+        env_modelo=None,
+    )
+    por_nombre = {r.nombre: r for r in resultados}
+    assert por_nombre["Configuracion"].estado is Estado.ERROR
+    assert "config a proposito invalida" in por_nombre["Configuracion"].detalle
+    # Los chequeos dependientes de cfg se omiten.
+    assert "Fuente" not in por_nombre
+    assert "Cuentas" not in por_nombre
+    # Los independientes siguen.
+    assert por_nombre["Python"].estado is Estado.OK
+    assert codigo_salida(resultados) == 1
+
+
+def test_ejecutar_chequeos_cfg_none_sin_excepcion_mensaje_generico(monkeypatch, tmp_path):
+    """Si cargar_config devuelve None sin lanzar, el detalle usa el texto generico."""
+    import keni_metricas.doctor as doctor
+
+    monkeypatch.setattr(doctor, "cargar_config", lambda: None)
+    resultados = ejecutar_chequeos(
+        cfg=None,
+        which=_which_falso({"whisper-cli", "ffmpeg"}),
+        rutas_modelo=[tmp_path / "no.bin"],
+        env_modelo=None,
+    )
+    cfg_res = next(r for r in resultados if r.nombre == "Configuracion")
+    assert cfg_res.estado is Estado.ERROR
+    assert "No se pudo cargar la configuracion" in cfg_res.detalle
+
+
+def test_validar_no_se_ejecuta_si_cfg_es_none(monkeypatch, tmp_path):
+    """Con config invalida (cfg None), --validar NO debe añadir lineas Conectividad."""
+    import keni_metricas.doctor as doctor
+
+    monkeypatch.setattr(
+        doctor, "cargar_config", lambda: (_ for _ in ()).throw(ConfigInvalida("x"))
+    )
+    resultados = ejecutar_chequeos(
+        cfg=None,
+        validar=True,
+        which=_which_falso({"whisper-cli", "ffmpeg"}),
+        rutas_modelo=[tmp_path / "no.bin"],
+        env_modelo=None,
+    )
+    assert not any(r.nombre.startswith("Conectividad") for r in resultados)
+
+
+# --- validar_conectividad: ramas offline (todo monkeypatcheado, CERO red) ----
+
+
+def test_validar_conectividad_fuente_no_construye(monkeypatch):
+    """Si construir_fuente lanza, devuelve un unico AVISO (no crashea, no red)."""
+    import keni_metricas.doctor as doctor
+
+    monkeypatch.setattr(
+        doctor,
+        "construir_fuente",
+        lambda _cfg: (_ for _ in ()).throw(RuntimeError("no se pudo")),
+    )
+    res = validar_conectividad(Config(fuente="real"))
+    assert len(res) == 1
+    assert res[0].nombre == "Conectividad"
+    assert res[0].estado is Estado.AVISO
+    assert "no se pudo construir la fuente" in res[0].detalle
+
+
+def test_validar_conectividad_adaptadores_fallan_al_cargar(monkeypatch):
+    """Fuente real construida, pero cargar adaptadores lanza -> AVISO."""
+    import keni_metricas.doctor as doctor
+
+    class _FuenteReal:
+        nombre = "real"
+
+    monkeypatch.setattr(doctor, "construir_fuente", lambda _cfg: _FuenteReal())
+    monkeypatch.setattr(
+        doctor,
+        "_adaptadores_desde_config",
+        lambda _cfg: (_ for _ in ()).throw(ImportError("modulo roto")),
+    )
+    res = validar_conectividad(Config(fuente="real"))
+    assert len(res) == 1
+    assert res[0].estado is Estado.AVISO
+    assert "no se pudieron cargar los adaptadores" in res[0].detalle
+
+
+def test_validar_conectividad_sin_adaptadores(monkeypatch):
+    """Fuente real sin ningun adaptador con credenciales -> AVISO 'nada que validar'."""
+    import keni_metricas.doctor as doctor
+
+    class _FuenteReal:
+        nombre = "real"
+
+    monkeypatch.setattr(doctor, "construir_fuente", lambda _cfg: _FuenteReal())
+    monkeypatch.setattr(doctor, "_adaptadores_desde_config", lambda _cfg: {})
+    res = validar_conectividad(Config(fuente="real"))
+    assert len(res) == 1
+    assert res[0].estado is Estado.AVISO
+    assert "nada que validar" in res[0].detalle
+
+
+def test_validar_conectividad_adaptador_lanza_y_no_disponible(monkeypatch):
+    """Un adaptador que lanza en disponible() y otro que devuelve False -> ambos AVISO."""
+    import keni_metricas.doctor as doctor
+
+    class _FuenteReal:
+        nombre = "real"
+
+    class _AdLanza:
+        def disponible(self):
+            raise RuntimeError("token caducado")
+
+    class _AdNoDisponible:
+        def disponible(self):
+            return False
+
+    monkeypatch.setattr(doctor, "construir_fuente", lambda _cfg: _FuenteReal())
+    monkeypatch.setattr(
+        doctor,
+        "_adaptadores_desde_config",
+        lambda _cfg: {"x": _AdLanza(), "youtube": _AdNoDisponible()},
+    )
+    res = validar_conectividad(Config(fuente="real"))
+    por_nombre = {r.nombre: r for r in res}
+    assert por_nombre["Conectividad x"].estado is Estado.AVISO
+    assert "fallo al comprobarse" in por_nombre["Conectividad x"].detalle
+    assert "token caducado" in por_nombre["Conectividad x"].detalle
+    assert por_nombre["Conectividad youtube"].estado is Estado.AVISO
+    assert "no disponible" in por_nombre["Conectividad youtube"].detalle
+
+
+def test_validar_conectividad_adaptador_disponible_ok(monkeypatch):
+    """Adaptador disponible() True -> Conectividad OK (rama positiva sin red)."""
+    import keni_metricas.doctor as doctor
+
+    class _FuenteReal:
+        nombre = "real"
+
+    class _AdOk:
+        def disponible(self):
+            return True
+
+    monkeypatch.setattr(doctor, "construir_fuente", lambda _cfg: _FuenteReal())
+    monkeypatch.setattr(doctor, "_adaptadores_desde_config", lambda _cfg: {"x": _AdOk()})
+    res = validar_conectividad(Config(fuente="real"))
+    assert len(res) == 1
+    assert res[0].nombre == "Conectividad x"
+    assert res[0].estado is Estado.OK
