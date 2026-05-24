@@ -53,3 +53,37 @@ def test_metricas_degrada_en_error():
     )
     ad = AdaptadorMeta({"access_token": "tok"}, Plataforma.facebook)
     assert ad.metricas("PAGE", DESDE, HASTA) is None  # no rompe, degrada
+
+
+@respx.mock
+def test_system_user_no_llama_token_exchange_en_401():
+    """Token de System User no caduca: ante un 401 NO se intenta fb_exchange_token."""
+    # Aunque haya app_id/app_secret, el tipo system_user manda: refresh = no-op.
+    ruta_insights = respx.get("https://graph.facebook.com/v21.0/PAGE/insights").mock(
+        return_value=httpx.Response(401, json={"error": {"message": "token"}})
+    )
+    ruta_exchange = respx.get("https://graph.facebook.com/v21.0/oauth/access_token").mock(
+        return_value=httpx.Response(200, json={"access_token": "nuevo"})
+    )
+    ad = AdaptadorMeta(
+        {"access_token": "tok", "tipo_token": "system_user", "app_id": "a", "app_secret": "s"},
+        Plataforma.facebook,
+    )
+    assert ad.metricas("PAGE", DESDE, HASTA) is None  # degrada, no rompe
+    assert ruta_insights.called
+    assert not ruta_exchange.called  # nunca se llamó al endpoint de intercambio
+    assert ad._token == "tok"  # el token no cambió
+
+
+def test_system_user_refrescar_es_noop():
+    ad = AdaptadorMeta(
+        {"access_token": "tok", "tipo_token": "system_user", "app_id": "a", "app_secret": "s"},
+        Plataforma.facebook,
+    )
+    assert ad._es_system_user is True
+    assert ad._refrescar() is False  # no-op: no caduca, nada que renovar
+
+
+def test_token_normal_no_es_system_user():
+    ad = AdaptadorMeta({"access_token": "tok"}, Plataforma.facebook)
+    assert ad._es_system_user is False  # comportamiento por defecto sin cambios
