@@ -65,6 +65,19 @@ def test_digest_texto_acota_picos_a_top_n():
     assert any(str(n_resto) in ln and "mas" in ln for ln in texto.splitlines())
 
 
+def test_digest_texto_usa_separador_es_mx_punto_no_coma():
+    # D1: el resumen del digest usa el separador es-MX (punto), MISMA regla
+    # (`formato.miles`) que el reporte/dashboard. La coma de Python no debe salir.
+    from keni_metricas.formato import miles
+
+    d = construir_digest(FuenteMuestra(), "mes", 50, incluir_resumen=True)
+    texto = formatear_payload(d, "slack")["text"]
+    total_vis = d["resumen"]["total"]["visualizaciones"]
+    assert total_vis >= 1000
+    assert miles(total_vis) in texto
+    assert f"{total_vis:,}" not in texto
+
+
 def test_formatear_payload_generico_es_rico():
     d = construir_digest(FuenteMuestra(), "semana", 50)
     p = formatear_payload(d, "generico")

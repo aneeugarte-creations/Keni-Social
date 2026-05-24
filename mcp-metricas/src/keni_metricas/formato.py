@@ -9,6 +9,7 @@ final (Markdown vs. HTML) se queda en cada modulo; aqui solo viven los datos.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from html import escape
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -25,6 +26,21 @@ _MOTIVO_TEXTO: dict[str, str] = {
 def signo(pct: float) -> str:
     """Devuelve el porcentaje con signo explicito (+/-)."""
     return f"+{pct}" if pct > 0 else f"{pct}"
+
+
+def miles(n: int | float) -> str:
+    """Formatea un entero con separador de miles estilo es-MX (punto: "1.234").
+
+    UNICA fuente de verdad del separador de miles para TODA la salida (texto y
+    HTML): antes el dashboard usaba punto (es-MX) y el reporte/picos/digest
+    usaban la coma de Python (`f"{n:,}"`), asi que el mismo numero salia distinto
+    segun el canal. Aqui se unifica al separador es-MX (punto). Si `n` no es un
+    numero, cae a su texto (escapado por seguridad, ya que tambien alimenta HTML).
+    """
+    try:
+        return f"{int(n):,}".replace(",", ".")
+    except (TypeError, ValueError):
+        return escape(str(n))
 
 
 def etiqueta_marca(cuenta_id: str, nombres: Mapping[str, str] | None = None) -> str:

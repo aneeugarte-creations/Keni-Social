@@ -58,6 +58,22 @@ def test_dashboard_incluye_nota_de_cobertura():
     assert "NO son datos reales" in html or "respondieron" in html
 
 
+def test_cobertura_global_usa_nombre_legible_no_slug():
+    """C3: el aviso de cobertura parcial a nivel reporte debe mostrar el NOMBRE
+    legible de la marca, no el id crudo (regresion: imprimia el slug)."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=2)
+    # fuerza cobertura parcial en una marca cuyo nombre difiere del id
+    rep["cobertura"] = {"completa": False, "cuentas_parciales": ["claro_sports"]}
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes")
+
+    aviso = html.split("Cobertura parcial", 1)[1].split("</p>", 1)[0]
+    assert "Claro Sports" in aviso  # nombre legible
+    assert "claro_sports" not in aviso  # no el slug crudo
+
+
 def test_dashboard_seccion_de_picos():
     html = generar_dashboard(FuenteMuestra(), "mes", top=3)
     assert "Alertas (picos)" in html
