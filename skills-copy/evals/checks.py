@@ -426,10 +426,10 @@ def _digitos(tok: str) -> str:
 
 def _es_linea_meta(linea: str) -> bool:
     """True si la linea es metadato (conteo, numeracion, encabezado de seccion)."""
-    l = linea.strip().lower()
-    if not l:
+    norm = linea.strip().lower()
+    if not norm:
         return True
-    if re.match(r"^\s*(?:\*\*)?\s*(caracteres|conteo|chars|cp|count)\b", l):
+    if re.match(r"^\s*(?:\*\*)?\s*(caracteres|conteo|chars|cp|count)\b", norm):
         return True
     return False
 
