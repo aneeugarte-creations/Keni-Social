@@ -32,18 +32,23 @@ import argparse
 import json
 import os
 import sys
+from typing import TYPE_CHECKING
 
 # NO se modifican estos modulos: se importan de SOLO LECTURA.
 from .fuentes._http import cliente_http, log, post_json
+
+if TYPE_CHECKING:
+    from .fuentes.base import FuenteMetricas
+    from .historico import Historico
 
 FORMATOS = ("generico", "slack")
 
 
 def construir_digest(
-    fuente,
+    fuente: FuenteMetricas,
     rango: str = "semana",
     umbral_pct: int = 50,
-    historico=None,
+    historico: Historico | None = None,
     incluir_resumen: bool = False,
 ) -> dict:
     """Arma el digest (picos + opcionalmente un resumen corto). Funcion PURA: SIN red.

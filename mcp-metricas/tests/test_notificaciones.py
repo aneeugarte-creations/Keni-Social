@@ -95,6 +95,23 @@ def test_preview_con_url_sin_flag_cero_red(monkeypatch, capsys):
 
 
 @respx.mock
+def test_formato_env_invalido_aborta_sin_red(monkeypatch, capsys):
+    """KENI_WEBHOOK_FORMATO invalido (p.ej. 'telegram'): rc=2, stderr, cero red."""
+    monkeypatch.setenv("KENI_WEBHOOK_FORMATO", "telegram")
+    monkeypatch.setenv("KENI_WEBHOOK_URL", WEBHOOK)  # aun con URL, no debe tocar la red
+    monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
+    ruta = respx.post(WEBHOOK).mock(return_value=httpx.Response(200, text="ok"))
+
+    code = main([])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "telegram" in err
+    assert "KENI_WEBHOOK_FORMATO" in err
+    assert not ruta.called
+    assert respx.calls.call_count == 0
+
+
+@respx.mock
 def test_no_url_ni_flag_cero_red(monkeypatch, capsys):
     """Caso por defecto absoluto: sin URL y sin flag => preview, code 0, cero red."""
     monkeypatch.delenv("KENI_WEBHOOK_URL", raising=False)
