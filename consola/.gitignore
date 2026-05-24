@@ -1,0 +1,8 @@
+# Frontend (SPA React/Vite). El codigo fuente SI se versiona; las dependencias
+# instaladas y la salida intermedia de dev (dist/) NO.
+frontend/node_modules/
+frontend/dist/
+frontend/*.tsbuildinfo
+
+# OJO: NO ignorar src/keni_consola/webapp/ -- ese es el bundle COMPILADO que se
+# distribuye con el paquete Python (asi la consola corre sin Node instalado).
