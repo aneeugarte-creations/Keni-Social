@@ -16,9 +16,12 @@ from .fuentes.base import FuenteMetricas
 
 def detectar_picos(fuente: FuenteMetricas, rango: str = "semana", umbral_pct: int = 50, historico=None) -> dict:
     alertas: list[dict] = []
+    cuentas_parciales: list[str] = []  # marcas con cobertura incompleta al detectar picos
 
     for c in fuente.cuentas():
         r = fuente.resumen(c.id, rango)
+        if r.cobertura is not None and r.cobertura.omitidas:
+            cuentas_parciales.append(c.id)
 
         # 1) piezas que despuntan vs. el engagement medio de la cuenta
         if r.engagement_pct > 0:
@@ -67,11 +70,21 @@ def detectar_picos(fuente: FuenteMetricas, rango: str = "semana", umbral_pct: in
         "umbral_pct": umbral_pct,
         "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "alertas": alertas,
+        # cobertura: si alguna marca tuvo datos parciales, las alertas (y la ausencia
+        # de ellas) pueden estar incompletas. Vacio = se evaluo todo.
+        "cobertura": {
+            "completa": not cuentas_parciales,
+            "cuentas_parciales": cuentas_parciales,
+        },
     }
 
 
 def render_markdown(rep: dict) -> str:
     out = [f"## Alertas (picos, umbral {rep['umbral_pct']}%)"]
+    cob = rep.get("cobertura") or {}
+    if cob.get("cuentas_parciales"):
+        parciales = ", ".join(cob["cuentas_parciales"])
+        out.append(f"> ⚠️ Cobertura parcial en {parciales}: las alertas pueden estar incompletas.")
     if not rep["alertas"]:
         out.append("- Sin anomalías por encima del umbral. Todo dentro de lo normal.")
         return "\n".join(out)

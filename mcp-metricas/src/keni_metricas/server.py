@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -22,15 +23,49 @@ from .config import cargar_config, construir_fuente
 from .historico import Historico, historico_activo
 from .tools import registrar
 
+log = logging.getLogger("keni_metricas")
+
 
 def _transporte() -> str:
     """Transporte activo, normalizado: `stdio` (def.) | `http`."""
     return (os.environ.get("KENI_MCP_TRANSPORT") or "stdio").strip().lower()
 
 
-def crear_servidor() -> FastMCP:
-    # logging a stderr (NUNCA stdout: stdout es el canal JSON-RPC del MCP)
+def _configurar_logging() -> None:
+    """Logging a stderr (NUNCA stdout: stdout es el canal JSON-RPC del MCP).
+
+    Observabilidad opcional: si `KENI_METRICAS_LOG` apunta a un archivo, ademas
+    de stderr se escribe un log estructurado (timestamp, nivel, logger, mensaje)
+    a esa ruta. Los mensajes no contienen secretos (handles/ids y motivos, no
+    tokens). Por defecto (sin la env var) el comportamiento es el de siempre.
+    """
     logging.basicConfig(level=logging.WARNING)
+    ruta = (os.environ.get("KENI_METRICAS_LOG") or "").strip()
+    if not ruta:
+        return
+    destino = Path(ruta).expanduser()
+    # idempotente: no dupliques el handler si crear_servidor se llama mas de una vez
+    ya_existe = any(
+        isinstance(h, logging.FileHandler) and getattr(h, "baseFilename", None) == str(destino)
+        for h in log.handlers
+    )
+    if ya_existe:
+        return
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(destino, encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        )
+        log.addHandler(handler)
+        log.setLevel(logging.INFO)  # al archivo va INFO+; stderr sigue en WARNING (root)
+        log.info("logging a archivo activado en %s", destino)
+    except OSError as e:  # ruta inaccesible: no tumbar el arranque, avisar a stderr
+        logging.getLogger("keni_metricas").warning("no se pudo abrir KENI_METRICAS_LOG=%s: %s", ruta, e)
+
+
+def crear_servidor() -> FastMCP:
+    _configurar_logging()
     fuente = construir_fuente(cargar_config())
     historico = Historico() if historico_activo() else None
     # En HTTP, host/puerto se fijan en la construccion del servidor (FastMCP los

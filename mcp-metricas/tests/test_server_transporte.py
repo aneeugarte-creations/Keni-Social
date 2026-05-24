@@ -6,6 +6,7 @@ invoca, y crear_servidor para no tocar config/red.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import keni_metricas.server as server
@@ -87,3 +88,42 @@ def test_crear_servidor_puerto_invalido_cae_a_8000(monkeypatch):
 
     assert capturado["host"] == "127.0.0.1"
     assert capturado["port"] == 8000  # fallback ante valor inválido
+
+
+# --- Logging opcional a archivo (KENI_METRICAS_LOG) -------------------------
+
+
+def _limpiar_handlers_archivo() -> None:
+    log = logging.getLogger("keni_metricas")
+    for h in list(log.handlers):
+        if isinstance(h, logging.FileHandler):
+            log.removeHandler(h)
+            h.close()
+
+
+def test_log_a_archivo_desactivado_por_defecto(monkeypatch):
+    monkeypatch.delenv("KENI_METRICAS_LOG", raising=False)
+    _limpiar_handlers_archivo()
+    server._configurar_logging()
+    log = logging.getLogger("keni_metricas")
+    assert not any(isinstance(h, logging.FileHandler) for h in log.handlers)
+
+
+def test_log_a_archivo_activado_por_env(monkeypatch, tmp_path):
+    ruta = tmp_path / "sub" / "metricas.log"  # el dir padre no existe aun
+    monkeypatch.setenv("KENI_METRICAS_LOG", str(ruta))
+    _limpiar_handlers_archivo()
+    try:
+        server._configurar_logging()
+        log = logging.getLogger("keni_metricas")
+        handlers = [h for h in log.handlers if isinstance(h, logging.FileHandler)]
+        assert len(handlers) == 1
+        log.warning("aviso de prueba %s", "sin-secreto")
+        handlers[0].flush()
+        contenido = ruta.read_text(encoding="utf-8")
+        assert "aviso de prueba sin-secreto" in contenido
+        # idempotente: segunda llamada no duplica el handler
+        server._configurar_logging()
+        assert len([h for h in log.handlers if isinstance(h, logging.FileHandler)]) == 1
+    finally:
+        _limpiar_handlers_archivo()
