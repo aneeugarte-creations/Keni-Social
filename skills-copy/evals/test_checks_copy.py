@@ -118,6 +118,80 @@ def test_viola_bandera_con_escudo():
     assert checks.viola_bandera_con_escudo(s)
 
 
+def test_no_viola_negacion_no_usar_bandera_con_escudo():
+    # "no usar" es una de las advertencias de contexto -> no se considera propuesta
+    s = "Recuerda: no usar bandera con escudo en el arte."
+    assert not checks.viola_bandera_con_escudo(s)
+
+
+def test_no_viola_bandera_y_escudo_fuera_de_la_ventana_de_proximidad():
+    # la heuristica solo mira una ventana de 60 chars desde "bandera"; si "escudo"
+    # cae mas lejos, no hay combinacion peligrosa detectable -> no viola.
+    relleno = "decorando el plano " * 4  # empuja "escudo" mas alla de 60 chars
+    s = f"Usa la bandera de fondo {relleno}y al final aparece el escudo."
+    # sanity check: el gap supera la ventana de 60 chars que mira la heuristica
+    assert s.index("escudo") - s.index("bandera") > 60
+    assert not checks.viola_bandera_con_escudo(s)
+
+
+def test_normaliza_quita_acentos_y_baja_a_minusculas():
+    # _normaliza es la base de la deteccion robusta: minusculas + sin acentos
+    assert checks._normaliza("Canción ESCUDÓ áéíóúñ") == "cancion escudo aeioun"
+    # y por eso "BANDERA con ESCUDO" (mayusculas/acentos) sigue violando
+    assert checks.viola_bandera_con_escudo("Pon la BANDERA con el ESCUDO nacional.")
+
+
+# --- extraer_secciones: encabezados de plataforma ---
+
+def test_extraer_secciones_carrusel_es_se_mapea_a_carrusel():
+    # encabezado en espanol "Carrusel" -> clave normalizada "carrusel"
+    s = "## Carrusel\n1/3 slide uno\n2/3 slide dos\n\n## Instagram\nhola"
+    secciones = checks.extraer_secciones(s)
+    assert "carrusel" in secciones
+    assert secciones["carrusel"].startswith("1/3")
+
+
+def test_extraer_secciones_carousel_en_se_reconoce_como_seccion():
+    # encabezado en ingles "Carousel" SI se reconoce como seccion de plataforma.
+    # OJO: la logica real de checks.py mapea a "carrusel" solo los encabezados
+    # que empiezan por "carrus"/"carrou"; "carousel" no casa con ninguno, asi que
+    # conserva su clave cruda "carousel". Documentamos ese comportamiento real.
+    s = "## Carousel\nSlide A\nmas texto\n\n## Instagram\nhola"
+    secciones = checks.extraer_secciones(s)
+    assert "carousel" in secciones
+    assert "carousel" in checks.extraer_secciones("## Carousel\nx").keys()
+
+
+# --- limites: sin seccion de la plataforma -> [] (no se afirma violacion) ---
+
+def test_excede_limite_x_sin_seccion_x_no_afirma():
+    # no hay seccion X identificable -> no se puede afirmar violacion -> []
+    assert checks.excede_limite_x("## Instagram\nhola mundo") == []
+
+
+def test_excede_limite_youtube_sin_seccion_youtube_no_afirma():
+    assert checks.excede_limite_youtube("## Instagram\nhola") == []
+
+
+def test_excede_limite_tuits_sin_hilo_ni_x_no_afirma():
+    assert checks.excede_limite_tuits("## Instagram\nhola") == []
+
+
+# --- YouTube: titulo sin "Titulo:" usa la primera linea ---
+
+def test_titulo_youtube_sin_etiqueta_usa_primera_linea():
+    # sin linea "Titulo:", se mide la primera linea de copy de la seccion
+    primera = "p" * 71
+    s = f"## YouTube\n{primera}\nDescripción: algo"
+    problemas = checks.excede_limite_youtube(s)
+    assert problemas and "71" in problemas[0]
+
+
+def test_titulo_youtube_sin_etiqueta_primera_linea_corta_pasa():
+    s = "## YouTube\nTitulo corto y valido\nDescripción: algo"
+    assert checks.excede_limite_youtube(s) == []
+
+
 # --- numeros inventados ---
 
 def test_copy_bueno_sin_numeros_inventados():

@@ -34,7 +34,14 @@ import checks  # noqa: E402  (tras ajustar sys.path)
 def test_skills_existen():
     skills = checks.listar_skills()
     nombres = {p.parent.name for p in skills}
-    esperadas = {"copy-desde-nota", "clip-a-copy", "resumen-tendencia", "nota-a-formato"}
+    esperadas = {
+        "copy-desde-nota",
+        "clip-a-copy",
+        "resumen-tendencia",
+        "nota-a-formato",
+        "publica-preview",
+        "revisa-imagen",
+    }
     faltan = esperadas - nombres
     assert not faltan, f"faltan SKILL.md de: {sorted(faltan)}"
 
