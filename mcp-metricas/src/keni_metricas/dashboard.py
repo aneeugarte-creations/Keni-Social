@@ -234,6 +234,11 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
   font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
   font-size: 0.78rem; color: var(--marca);
 }
+/* UX-10: aclara el criterio del callout sin gritar (no es el "más importante"). */
+.estrella .e-criterio {
+  font-weight: 600; text-transform: none; letter-spacing: 0;
+  color: var(--gris);
+}
 .estrella .e-marca { font-weight: 700; }
 .estrella .e-plat { color: var(--gris); }
 .estrella .e-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -305,6 +310,68 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
 footer {
   margin-top: 48px; color: var(--gris); font-size: 0.75rem;
   border-top: 1px solid var(--gris-claro); padding-top: 12px;
+}
+/* UX-12: pie con leyenda de niveles/iconos como referencia rapida (tier-2). */
+footer .leyenda {
+  display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+  margin: 0 0 8px;
+}
+footer .leyenda .et { font-weight: 600; color: var(--tinta); }
+footer .leyenda .chip {
+  font-size: 0.7rem; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  white-space: nowrap;
+}
+
+/* ===========================================================================
+   UX-9: impresion / "Guardar como PDF" del navegador.
+   El dashboard ya es autocontenido (sin red/JS); aqui solo lo preparamos para
+   que la copia en papel/PDF salga limpia: <details> abiertos para no esconder
+   info, fondos clave forzados, sin cortes feos a media tarjeta, una pagina
+   coherente. NO introduce recursos externos.
+   =========================================================================== */
+@media print {
+  /* Forzamos la impresion de fondos/colores: si no, Chrome los descarta y los
+     chips de nivel y el hero quedan en blanco e ilegibles. */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page { margin: 14mm; }
+  body {
+    /* color de fondo blanco puro y escala estable para una pagina coherente. */
+    background: #fff;
+    font-size: 12px;
+  }
+  /* el modo presentacion no aporta en papel: volvemos a la escala normal. */
+  body.presentacion { --base-font: 16px; }
+  .envoltura { max-width: none; padding: 0; margin: 0; }
+  body.presentacion .envoltura { max-width: none; }
+
+  /* <details> SIEMPRE abiertos al imprimir (alertas plegadas, tablas de
+     tendencia): el PDF no debe esconder informacion tras un triangulo. */
+  details { display: block; }
+  details > * { display: revert; }
+  details[open] > *, details > * { display: revert; }
+  /* el triangulo/summary interactivo no aporta en papel: lo neutralizamos
+     visualmente como un subtitulo, sin cursor de "clic". */
+  summary { cursor: default; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+
+  /* evitar cortes feos a media tarjeta/seccion/alerta entre paginas. */
+  .kpi, .tarjeta, .estrella, .ns-hero, .alertas li, .ranking li,
+  .tendencia table, footer {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  h2.seccion { break-after: avoid; page-break-after: avoid; }
+
+  /* bordes mas marcados: en papel el gris muy claro casi no se ve. */
+  .kpi, .tarjeta, .alertas li, .ranking li { border-color: #999; }
+  header.cabecera { border-bottom-color: #000; }
+
+  /* el ranking en una sola columna imprime mejor que el grid de tarjetas. */
+  .tarjetas { display: block; }
+  .tarjetas .tarjeta { margin-bottom: 12px; }
 }
 """
 
@@ -615,7 +682,8 @@ def _render_estrella(rep: dict, nombres: dict[str, str]) -> str:
     titulo = escape(str(pieza.get("titulo", "")))
     return (
         '<div class="estrella">'
-        '<span class="e-titulo">🔥 Lo que más rompió este mes</span> '
+        '<span class="e-titulo">🔥 Lo que más rompió este mes '
+        '<span class="e-criterio">(mayor engagement %)</span></span> '
         f'<span class="e-marca">{marca}</span> · '
         f'<span class="e-plat">{plat}</span> · '
         f'<span class="e-pct">{eng}%</span>'
@@ -644,6 +712,9 @@ def construir_html(
     engagement = _render_engagement(rep, nombres, rango_serie, historico)
     estrella = _render_estrella(rep, nombres)
     body_clase = " presentacion" if presentacion else ""
+    # UX-12: umbrales para la leyenda del pie (misma fuente de verdad que el hero).
+    alto = _ENG_UMBRAL_ALTO
+    bajo = _ENG_UMBRAL_BAJO
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -675,7 +746,13 @@ def construir_html(
 
 {_render_picos(picos, nombres)}
 
-<footer>Generado en tu máquina · datos de muestra · sin red. \
+<footer>
+<div class="leyenda"><span class="et">Niveles de engagement:</span>\
+<span class="chip nivel eng-alto">alto &ge; {alto}%</span>\
+<span class="chip nivel eng-medio">ok {bajo}–{alto}%</span>\
+<span class="chip nivel eng-bajo">bajo &lt; {bajo}%</span>\
+<span>· 🔥 pieza con mayor engagement del periodo</span></div>
+Generado en tu máquina · datos de muestra · sin red. \
 Keni AI · dashboard de metricas · HTML estatico autocontenido (sin JS externo).</footer>
 </div>
 </body>
