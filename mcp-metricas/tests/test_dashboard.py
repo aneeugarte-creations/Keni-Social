@@ -375,3 +375,109 @@ def test_dashboard_callout_estrella_aclara_criterio():
     html = generar_dashboard(FuenteMuestra(), "mes", top=3)
     assert "Lo que más rompió" in html
     assert "mayor engagement %" in html
+
+
+# --- Accesibilidad (a11y) + responsive (issue #58) ---
+
+
+def test_dashboard_lang_es_y_meta_viewport():
+    """El documento declara idioma espanol y viewport responsive."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert '<html lang="es">' in html
+    # viewport para que escale en pantallas angostas / proyeccion vertical
+    assert '<meta name="viewport"' in html
+    assert "width=device-width" in html
+
+
+def test_dashboard_title_descriptivo():
+    """El <title> describe el contenido e incluye el rango."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert "<title>Dashboard de metricas — mes</title>" in html
+
+
+def test_dashboard_landmarks_semanticos():
+    """Estructura semantica: header, main, footer y secciones con encabezado."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    # landmarks
+    assert "<main>" in html and "</main>" in html
+    assert "<header" in html and "</header>" in html
+    assert "<footer" in html and "</footer>" in html
+    # secciones etiquetadas por su encabezado (aria-labelledby -> id del <h2>)
+    assert "<section aria-labelledby=" in html
+    for tid in ("titulo-total", "titulo-engagement", "titulo-marca", "titulo-picos"):
+        assert f'id="{tid}"' in html
+
+
+def test_dashboard_aria_label_en_hero_y_barras():
+    """El hero north-star y las barras del ranking exponen su valor a lectores
+    de pantalla via role=img + aria-label (comunican valor visualmente)."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes")
+
+    # hero: figura con etiqueta legible del engagement global
+    assert 'class="ns-hero" role="img" aria-label="Engagement global' in html
+    # barras del ranking: cada una es una figura con su valor en la etiqueta
+    assert 'class="barra" role="img" aria-label=' in html
+    # el % superpuesto a la barra es decorativo (no duplica para el lector)
+    assert 'class="barra-pct" aria-hidden="true"' in html
+
+
+def test_dashboard_aria_label_barra_escapa_nombre():
+    """El nombre de marca dentro del aria-label de la barra tambien se escapa."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    cid = rep["cuentas"][0]["resumen"]["cuenta"]
+    nombres[cid] = '<b>x</b>'
+    html = construir_html(rep, picos, nombres, "mes")
+    assert "<b>x</b>" not in html
+    assert "&lt;b&gt;x&lt;/b&gt;" in html
+
+
+def test_dashboard_usa_color_de_texto_marca_con_contraste():
+    """El acento de marca para TEXTO usa una variante oscura (--marca-texto) que
+    cumple contraste AA; el naranja vivo queda para bordes/decoracion."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert "--marca-texto:" in html
+    # los textos de acento (eyebrow, titulos de callout) usan la variante oscura
+    assert "color: var(--marca-texto)" in html
+
+
+def test_dashboard_incluye_media_query_responsive():
+    """Hay un @media (max-width: 640px) para apilar tarjetas/KPIs/ranking."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert "@media screen and (max-width: 640px)" in html
+    # convive con el bloque de impresion sin pisarlo
+    assert "@media print" in html
+
+
+def test_dashboard_responsive_sigue_autocontenido():
+    """Los bloques a11y/responsive no introducen recursos externos."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    low = html.lower()
+    assert "<script" not in low
+    assert "http://" not in html
+    assert "https://" not in html
+    assert "cdn" not in low
+    assert "@import" not in low
+    assert "url(" not in low
+
+
+def test_dashboard_cta_siguiente_paso():
+    """Tier-2 (roadmap #11): cierra con un CTA que devuelve a la accion,
+    nombrando la marca de mayor engagement del periodo."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes")
+
+    assert 'class="cta"' in html
+    assert "Siguiente paso" in html
+    # nombra la marca top por engagement
+    mejor = max(rep["cuentas"], key=lambda f: f["resumen"]["engagement_pct"])
+    assert nombres[mejor["resumen"]["cuenta"]] in html.split('class="cta"', 1)[1]

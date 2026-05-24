@@ -128,8 +128,11 @@ _CSS = """
   --aviso-fondo: #fff8e1;
   --aviso-borde: #e0b500;
   --aviso-tinta: #7a5b00;
-  /* Marca Keni: acento corporativo para branding (UX-2). */
+  /* Marca Keni: acento corporativo para branding (UX-2). El naranja vivo se
+     reserva para bordes/decoracion; para TEXTO usamos --marca-texto, mas oscuro,
+     que cumple contraste WCAG AA (>=4.5:1) sobre los fondos claros del dashboard. */
   --marca: #ff5a1f;
+  --marca-texto: #b8400f;
   --marca-2: #1f6dff;
   --base-font: 16px;
 }
@@ -156,7 +159,7 @@ header.cabecera {
 header.cabecera .eyebrow {
   display: inline-block; margin: 0 0 6px;
   font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.12em; color: var(--marca);
+  letter-spacing: 0.12em; color: var(--marca-texto);
 }
 header.cabecera .eyebrow .sep { color: var(--gris-claro); margin: 0 4px; font-weight: 400; }
 header.cabecera h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
@@ -225,7 +228,7 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
 }
 .estrella .e-titulo {
   font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-  font-size: 0.78rem; color: var(--marca);
+  font-size: 0.78rem; color: var(--marca-texto);
 }
 /* UX-10: aclara el criterio del callout sin gritar (no es el "más importante"). */
 .estrella .e-criterio {
@@ -300,6 +303,16 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
 .tendencia th:first-child, .tendencia td:first-child { text-align: left; color: var(--gris); }
 .spark { font-variant-numeric: tabular-nums; letter-spacing: 1px; }
 .spark .pip { display: inline-block; }
+/* Cierre "siguiente paso" (UX-11/roadmap #11): devuelve al usuario a la accion. */
+.cta {
+  margin: 36px 0 0; padding: 14px 18px;
+  border: 1px solid var(--gris-claro); border-left: 4px solid var(--marca);
+  border-radius: 10px; background: var(--fondo-suave); font-size: 0.92rem;
+}
+.cta .cta-titulo {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  font-size: 0.72rem; color: var(--marca-texto);
+}
 footer {
   margin-top: 48px; color: var(--gris); font-size: 0.75rem;
   border-top: 1px solid var(--gris-claro); padding-top: 12px;
@@ -352,7 +365,7 @@ footer .leyenda .chip {
 
   /* evitar cortes feos a media tarjeta/seccion/alerta entre paginas. */
   .kpi, .tarjeta, .estrella, .ns-hero, .alertas li, .ranking li,
-  .tendencia table, footer {
+  .tendencia table, .cta, footer {
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -365,6 +378,43 @@ footer .leyenda .chip {
   /* el ranking en una sola columna imprime mejor que el grid de tarjetas. */
   .tarjetas { display: block; }
   .tarjetas .tarjeta { margin-bottom: 12px; }
+}
+
+/* ===========================================================================
+   Responsive: pantalla angosta o proyeccion vertical (movil, columna estrecha).
+   Apila KPIs, tarjetas y la fila del ranking para que todo siga legible sin
+   scroll horizontal. Convive con @media print (que es para papel/PDF) sin
+   pisarlo: este bloque solo aplica en pantalla <= 640px.
+   =========================================================================== */
+@media screen and (max-width: 640px) {
+  .envoltura { padding: 20px 14px 48px; }
+  header.cabecera h1 { font-size: 1.3rem; }
+  body.presentacion header.cabecera h1 { font-size: 1.5rem; }
+
+  /* KPIs: de fila flexible a columna apilada, cada uno a ancho completo. */
+  .totales { flex-direction: column; gap: 8px; }
+  .totales .kpi { flex: 1 1 auto; width: 100%; }
+
+  /* Tarjetas por marca: una sola columna en vez del grid auto-fill. */
+  .tarjetas { grid-template-columns: 1fr; }
+
+  /* Hero north-star: apila valor y etiqueta, escala el numero a la pantalla. */
+  .ns-hero { gap: 6px 14px; padding: 14px 16px; }
+  .ns-hero .ns-valor { font-size: 2.1rem; }
+  body.presentacion .ns-hero .ns-valor { font-size: 2.4rem; }
+
+  /* Ranking: la fila de grid (pos | marca | nivel | pct) se reordena a bloque
+     para que el nombre largo no comprima al pct; la barra sigue a ancho total. */
+  .ranking li {
+    grid-template-columns: 1.6rem 1fr auto;
+    gap: 6px 8px;
+  }
+  .ranking .nivel { grid-column: 2 / -1; justify-self: start; }
+  .ranking .pct { grid-column: 1 / -1; text-align: left; }
+  .ranking .marca .marca-spark { display: block; margin-left: 0; margin-top: 2px; }
+
+  /* La estrella y la leyenda de chips se apilan sin desbordar. */
+  .estrella { gap: 4px 8px; }
 }
 """
 
@@ -458,7 +508,7 @@ def _render_alerta(a: dict, nombres: dict[str, str]) -> str:
 
 
 def _render_picos(picos: dict, nombres: dict[str, str]) -> str:
-    partes = ['<h2 class="seccion">Alertas (picos)</h2>']
+    partes = ['<h2 class="seccion" id="titulo-picos">Alertas (picos)</h2>']
     cob = picos.get("cobertura") or {}
     if cob.get("cuentas_parciales"):
         parciales = ", ".join(
@@ -596,11 +646,16 @@ def _render_engagement(
         "</div>"
     )
 
+    # a11y: el hero comunica un valor clave; lo exponemos como figura con etiqueta
+    # legible para lectores de pantalla (el <br> visual no se lee bien si no).
+    hero_label = escape(
+        f"Engagement global {eng_global}%, nivel {_etiqueta_engagement(eng_global)}"
+    )
     partes = [
-        '<h2 class="seccion">Engagement (north-star)</h2>',
-        '<div class="ns-hero">',
+        '<h2 class="seccion" id="titulo-engagement">Engagement (north-star)</h2>',
+        f'<div class="ns-hero" role="img" aria-label="{hero_label}">',
         f'<span class="ns-valor {clase_global}">{escape(str(eng_global))}%</span>',
-        '<span class="ns-etiqueta">Engagement global<br>'
+        '<span class="ns-etiqueta" aria-hidden="true">Engagement global<br>'
         f'nivel {escape(_etiqueta_engagement(eng_global))}</span>',
         leyenda,
         "</div>",
@@ -629,16 +684,22 @@ def _render_engagement(
         ancho = round(eng / max_eng * 100, 1) if max_eng else 0.0
         # UX-3: sparkline inline (siempre visible) + tabla detallada plegada.
         spark_inline, tabla_detalle = _tendencia_engagement(cuenta_id, rango, historico)
+        # a11y: la barra comunica el valor visualmente -> role="img" + aria-label
+        # con el dato exacto; el % superpuesto es decorativo (aria-hidden) porque
+        # ya lo dice la etiqueta de la barra y el .pct contiguo.
+        barra_label = escape(
+            f"{nombre}: {eng}% de engagement, nivel {_etiqueta_engagement(eng)}"
+        )
         lis.append(
             "<li>"
-            f'<span class="pos">{pos}</span>'
+            f'<span class="pos" aria-hidden="true">{pos}</span>'
             f'<span class="marca">{escape(nombre)}{spark_inline}</span>'
             f'<span class="nivel {clase}">{escape(_etiqueta_engagement(eng))}</span>'
             f'<span class="pct {clase}">{escape(str(eng))}%</span>'
             # UX-10: barra mas alta con el % visible dentro.
-            f'<span class="barra">'
+            f'<span class="barra" role="img" aria-label="{barra_label}">'
             f'<span class="relleno {clase}" style="width: {ancho}%"></span>'
-            f'<span class="barra-pct">{escape(str(eng))}%</span>'
+            f'<span class="barra-pct" aria-hidden="true">{escape(str(eng))}%</span>'
             f"</span>"
             f"{tabla_detalle}"
             "</li>"
@@ -688,6 +749,40 @@ def _render_estrella(rep: dict, nombres: dict[str, str]) -> str:
     )
 
 
+def _marca_top_engagement(rep: dict, nombres: dict[str, str]) -> str | None:
+    """Nombre legible de la marca con mayor engagement del periodo (para el CTA).
+
+    None si no hay marcas. No escapa: lo hace el llamante al inyectarlo en HTML.
+    """
+    filas = rep.get("cuentas") or []
+    if not filas:
+        return None
+    mejor = max(filas, key=lambda f: f["resumen"].get("engagement_pct", 0.0))
+    return etiqueta_marca(mejor["resumen"]["cuenta"], nombres)
+
+
+def _render_cta(rep: dict, nombres: dict[str, str]) -> str:
+    """Cierre que devuelve al usuario a la accion (UX-11/roadmap #11, tier-2).
+
+    El dashboard muestra QUE rinde; este bloque cierra el loop sugiriendo el
+    siguiente paso ("pide copy de lo que funciona"). Bajo riesgo: solo texto,
+    sin red ni JS, escapado. Principio UX #7: cada pantalla termina con el paso
+    siguiente. Se omite con elegancia si no hay marcas.
+    """
+    marca = _marca_top_engagement(rep, nombres)
+    if marca is None:
+        return ""
+    marca_esc = escape(marca)
+    return (
+        '<aside class="cta" aria-label="Siguiente paso">'
+        '<span class="cta-titulo">Siguiente paso</span> '
+        f'<span class="cta-texto">{marca_esc} es lo que más engagement tuvo este '
+        'periodo. Pídele a Claude copy para esa marca y dobla la apuesta por lo '
+        'que funciona.</span>'
+        "</aside>"
+    )
+
+
 def construir_html(
     rep: dict,
     picos: dict,
@@ -707,6 +802,7 @@ def construir_html(
     tarjetas = "".join(_render_tarjeta(f, nombres) for f in rep.get("cuentas", []))
     engagement = _render_engagement(rep, nombres, rango_serie, historico)
     estrella = _render_estrella(rep, nombres)
+    cta = _render_cta(rep, nombres)
     body_clase = " presentacion" if presentacion else ""
     # UX-12: umbrales para la leyenda del pie (misma fuente de verdad que el hero).
     alto = _ENG_UMBRAL_ALTO
@@ -728,19 +824,31 @@ def construir_html(
 <p class="meta">Generado {generado} · fuente: {fuente}</p>
 </header>
 
-<h2 class="seccion">Total</h2>
+<main>
+<section aria-labelledby="titulo-total">
+<h2 class="seccion" id="titulo-total">Total</h2>
 {_render_kpis(rep["total"])}
 {_render_cobertura_global(rep, nombres)}
 {estrella}
+</section>
 
+<section aria-labelledby="titulo-engagement">
 {engagement}
+</section>
 
-<h2 class="seccion">Por marca</h2>
+<section aria-labelledby="titulo-marca">
+<h2 class="seccion" id="titulo-marca">Por marca</h2>
 <div class="tarjetas">
 {tarjetas}
 </div>
+</section>
 
+<section aria-labelledby="titulo-picos">
 {_render_picos(picos, nombres)}
+</section>
+
+{cta}
+</main>
 
 <footer>
 <div class="leyenda"><span class="et">Niveles de engagement:</span>\
