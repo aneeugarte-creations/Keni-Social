@@ -1,0 +1,13 @@
+{
+  "_comentario": "Ejemplo de cableado del servidor MCP de métricas. Hoy corre LOCAL por persona vía stdio con uvx (sin permisos de admin). Una opción alojada por HTTP llegará en una feature aparte; cuando exista, este bloque se cambiará a { \"type\": \"http\", \"url\": \"https://...\" }. ${CLAUDE_PLUGIN_ROOT} apunta a la copia del plugin instalada en caché.",
+  "mcpServers": {
+    "keni-metricas": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "${CLAUDE_PLUGIN_ROOT}/mcp-metricas",
+        "keni-metricas"
+      ]
+    }
+  }
+}

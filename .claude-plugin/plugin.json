@@ -1,0 +1,29 @@
+{
+  "name": "keni-social",
+  "version": "0.1.0",
+  "description": "Sistemas de producción de Keni para equipos de redes sociales: skills que convierten una nota, varios cables o un clip en copy publicable (voz de marca, tropicalización mexicana, formato por plataforma y auto-verificación) más el servidor MCP de métricas multi-marca (Meta, YouTube, X, TikTok).",
+  "author": {
+    "name": "Keni Engineering"
+  },
+  "homepage": "https://github.com/kenitech-io/keni-social",
+  "repository": "https://github.com/kenitech-io/keni-social",
+  "license": "Proprietary",
+  "keywords": [
+    "redes-sociales",
+    "copy",
+    "metricas",
+    "mcp",
+    "amx"
+  ],
+  "skills": "./skills-copy/.claude/skills",
+  "mcpServers": {
+    "keni-metricas": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "${CLAUDE_PLUGIN_ROOT}/mcp-metricas",
+        "keni-metricas"
+      ]
+    }
+  }
+}
