@@ -199,6 +199,41 @@ def test_anadir_rechaza_ruta_que_es_archivo(entorno, tmp_path):
 # --------------------------------------------------------------------------- #
 
 
+def test_metricas_muestra_nombre_humano_de_marca_no_slug(entorno):
+    """UX1 (QA #69): la ETIQUETA visible es el nombre humano; el VALUE es el id crudo.
+
+    Skills y Metricas deben mostrar los MISMOS nombres de marca al usuario.
+    """
+    c = _cliente()
+    texto = c.get("/metricas").text
+    # Nombre humano legible (con acentos donde toca).
+    assert "Claro Sports" in texto
+    assert "Nación Gamer" in texto
+    assert "Fundación" in texto
+    # El value interno (id con guion_bajo) que Metricas necesita se mantiene.
+    assert 'value="claro_sports"' in texto
+    assert 'value="nacion_gamer"' in texto
+    assert 'value="fundacion"' in texto
+
+
+def test_metricas_labels_con_for_explicito(entorno):
+    """UX2 (a11y): cada <label> referencia su <select> por id (for/id homogeneo)."""
+    c = _cliente()
+    texto = c.get("/metricas").text
+    assert '<label for="sel-marca">' in texto
+    assert '<select id="sel-marca">' in texto
+    assert '<label for="sel-rango">' in texto
+    assert '<select id="sel-rango">' in texto
+
+
+def test_metricas_iframe_tiene_sandbox(entorno):
+    """UX3: el iframe del dashboard lleva sandbox (conjunto minimo same-origin)."""
+    c = _cliente()
+    texto = c.get("/metricas").text
+    assert 'id="iframe-dashboard"' in texto
+    assert 'sandbox="allow-same-origin"' in texto
+
+
 def test_dashboard_devuelve_html_sin_recursos_externos(entorno):
     c = _cliente()
     r = c.get("/metricas/dashboard?rango=mes")

@@ -160,6 +160,25 @@ def test_crear_fuera_de_la_raiz_con_dotdot_rechazado(entorno, tmp_path):
     assert not (entorno.parent / "fuera").exists()
 
 
+def test_dotdot_da_mensaje_claro_de_escape_no_de_caracteres(entorno):
+    """UX5 (QA #69): un intento con `..` explica que no se permite salir de la
+    carpeta base, ANTES que el mensaje generico de caracteres (y sigue 400)."""
+    c = _cliente()
+    r = c.post("/api/carpetas/crear", json={"nombre": "../fuera", "plantilla": "general"})
+    assert r.status_code == 400
+    mensaje = r.json()["error"].lower()
+    assert "salir de la carpeta base" in mensaje
+    assert ".." in r.json()["error"]
+    # No es el mensaje generico de caracteres prohibidos.
+    assert "caracteres no permitidos" not in mensaje
+
+
+def test_resolver_destino_dotdot_da_mensaje_de_escape(entorno):
+    """`resolver_destino('../x')` lanza el mensaje de escape, no el de caracteres."""
+    with pytest.raises(carpetas.NombreInvalido, match="salir de la carpeta base"):
+        carpetas.resolver_destino("../x")
+
+
 def test_crear_con_ruta_absoluta_rechazado(entorno, tmp_path):
     """Una ruta absoluta no debe crear nada fuera de la raiz."""
     objetivo = tmp_path / "intruso"

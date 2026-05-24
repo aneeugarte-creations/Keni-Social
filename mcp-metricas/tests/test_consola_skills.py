@@ -58,6 +58,31 @@ def test_get_skills_lista_todas_las_marcas(entorno):
         assert mnombre in texto
 
 
+def test_get_skills_muestra_nombre_humano_no_solo_slug(entorno):
+    """La ETIQUETA visible es el nombre humano legible; el VALUE sigue siendo el slug.
+
+    UX1 (QA #69): el equipo ve los mismos nombres de marca en Skills y Metricas.
+    """
+    c = _cliente()
+    texto = c.get("/skills").text
+    # Etiqueta humana visible (con acentos donde toca).
+    assert "Claro Sports" in texto
+    assert "Nación Gamer" in texto
+    assert "Fundación" in texto
+    # El value interno (slug-guion) que Skills envia a Claude se mantiene.
+    assert 'value="claro-sports"' in texto
+    assert 'value="nacion-gamer"' in texto
+    assert 'value="fundacion"' in texto
+
+
+def test_marcas_usan_acentos_en_la_etiqueta(entorno):
+    """El mapeo de marcas trae nombres humanos legibles (no slugs crudos)."""
+    nombres = dict(feat_skills.MARCAS)
+    assert nombres["nacion-gamer"] == "Nación Gamer"
+    assert nombres["fundacion"] == "Fundación"
+    assert nombres["claro-sports"] == "Claro Sports"
+
+
 def test_get_skills_muestra_aviso_no_publica(entorno):
     c = _cliente()
     texto = c.get("/skills").text
@@ -76,6 +101,20 @@ def test_skills_no_referencia_recursos_externos(entorno):
     texto = c.get("/skills").text.lower()
     assert "https://" not in texto
     assert "cdn" not in texto
+
+
+def test_skills_ofrece_copiar_y_descargar_el_borrador(entorno):
+    """Tras generar, la UI ofrece Copiar (portapapeles) y Descargar (Blob en cliente)."""
+    c = _cliente()
+    texto = c.get("/skills").text
+    assert 'id="skills-copiar"' in texto
+    assert "Copiar" in texto
+    assert 'id="skills-descargar"' in texto
+    assert "Descargar" in texto
+    # La logica de copiar/descargar vive en el JS propio de skills (cliente).
+    js = c.get("/estaticos/skills.js").text
+    assert "navigator.clipboard" in js
+    assert "Blob" in js
 
 
 def test_estaticos_propios_de_skills_servidos(entorno):

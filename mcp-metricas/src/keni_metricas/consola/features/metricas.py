@@ -23,6 +23,24 @@ from . import Feature, features_ordenadas
 # Rangos validos (misma fuente de verdad que el schema).
 RANGOS_VALIDOS = tuple(RANGOS_DIAS.keys())
 
+# Mapeo id-de-cuenta (slug con guion_bajo de la fuente) -> nombre humano legible.
+# El `value` del <option> sigue siendo el id crudo que Metricas necesita
+# (`claro_sports`, `nacion_gamer`, ...); solo cambia la ETIQUETA visible para que
+# coincida con la de Skills (ver `skills.MARCAS`) y el equipo vea los mismos
+# nombres en TODA la consola. Ids no listados caen a su `nombre` de la fuente.
+NOMBRE_MARCA: dict[str, str] = {
+    "unotv": "UnoTV",
+    "claro_sports": "Claro Sports",
+    "nacion_gamer": "Nación Gamer",
+    "piso_15": "Piso 15",
+    "fundacion": "Fundación",
+}
+
+
+def _etiqueta_marca(cuenta) -> str:  # noqa: ANN001 -- Cuenta del schema (id, nombre)
+    """Nombre humano legible de una cuenta (cae a su `nombre` si no esta mapeada)."""
+    return NOMBRE_MARCA.get(cuenta.id, cuenta.nombre)
+
 
 def _pagina_metricas() -> str:
     # Selector de marca desde la fuente activa (scoped por config si aplica).
@@ -34,7 +52,9 @@ def _pagina_metricas() -> str:
 
     opciones_marca = ['<option value="">Todas las marcas</option>']
     for c in cuentas:
-        opciones_marca.append(f'<option value="{escape(c.id)}">{escape(c.nombre)}</option>')
+        opciones_marca.append(
+            f'<option value="{escape(c.id)}">{escape(_etiqueta_marca(c))}</option>'
+        )
 
     etiquetas_rango = {"semana": "Semana", "mes": "Mes", "7d": "7 dias", "30d": "30 dias"}
     opciones_rango = []
@@ -46,15 +66,16 @@ def _pagina_metricas() -> str:
 <h1>Metricas</h1>
 <p class="intro">Dashboard consolidado de redes (mismas funciones que el reporte). Elige marca y rango.</p>
 <div class="controles">
-  <label>Marca
+  <label for="sel-marca">Marca
     <select id="sel-marca">{"".join(opciones_marca)}</select>
   </label>
-  <label>Rango
+  <label for="sel-rango">Rango
     <select id="sel-rango">{"".join(opciones_rango)}</select>
   </label>
   <a id="enlace-csv" class="boton" href="/metricas/export.csv?rango=mes" download>Descargar CSV</a>
 </div>
-<iframe id="iframe-dashboard" class="dashboard" title="Dashboard de metricas" src="about:blank"></iframe>
+<iframe id="iframe-dashboard" class="dashboard" title="Dashboard de metricas"
+  sandbox="allow-same-origin" src="about:blank"></iframe>
 """
     return layout.render_pagina(
         features=features_ordenadas(),

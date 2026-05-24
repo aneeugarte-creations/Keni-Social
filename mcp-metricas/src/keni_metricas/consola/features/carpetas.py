@@ -104,15 +104,21 @@ def resolver_destino(nombre: str) -> Path:
     if crudo.startswith(("/", "~")) or (len(crudo) >= 2 and crudo[1] == ":"):
         raise NombreInvalido("Usa solo un nombre de carpeta, no una ruta absoluta.")
 
+    # `..` o `.` como componentes: intento de salir de la carpeta base. Se valida
+    # ANTES que los caracteres prohibidos para que un escape con `..` reciba el
+    # mensaje claro ("no se permite salir de la carpeta base") y no el generico de
+    # caracteres (un nombre como `../fuera` contiene `/`, prohibido, pero el
+    # problema real es el intento de escape).
+    if crudo in (".", "..") or ".." in crudo:
+        raise NombreInvalido(
+            "El nombre no puede contener '..': no se permite salir de la carpeta base."
+        )
+
     # Caracteres peligrosos: separadores de ruta, control, comodines.
     if any(c in _CARACTERES_PROHIBIDOS for c in crudo):
         raise NombreInvalido("El nombre tiene caracteres no permitidos (no uses / \\ : * ? etc.).")
     if any(ord(c) < 32 for c in crudo):
         raise NombreInvalido("El nombre tiene caracteres de control no permitidos.")
-
-    # `..` o `.` como componentes: intento de salir de la raiz.
-    if crudo in (".", "..") or ".." in crudo:
-        raise NombreInvalido("El nombre no puede contener '..' ni intentar salir de la raiz.")
 
     raiz = raiz_permitida()
     destino = (raiz / crudo).resolve()

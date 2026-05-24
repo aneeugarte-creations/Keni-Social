@@ -71,12 +71,16 @@ SKILLS: tuple[_SkillInfo, ...] = (
 )
 
 # Marcas editoriales permitidas (coinciden con contexto-editorial/marcas del repo).
+# El primer elemento es el VALUE interno (slug-guion que Skills envia a Claude); el
+# segundo es la ETIQUETA visible (nombre humano legible, con acentos). El nombre
+# humano debe coincidir con el que muestra Metricas, para que el equipo vea los
+# mismos nombres en TODA la consola (ver `metricas.NOMBRE_MARCA`).
 MARCAS: tuple[tuple[str, str], ...] = (
     ("unotv", "UnoTV"),
     ("claro-sports", "Claro Sports"),
-    ("nacion-gamer", "Nacion Gamer"),
+    ("nacion-gamer", "Nación Gamer"),
     ("piso-15", "Piso 15"),
-    ("fundacion", "Fundacion"),
+    ("fundacion", "Fundación"),
 )
 
 _SKILLS_IDS = {s.id for s in SKILLS}
@@ -234,6 +238,11 @@ La consola corre Claude por debajo y te muestra el borrador aqui.</p>
 
 <section id="skills-resultado-wrap" class="skills-resultado-wrap" hidden>
   <h2>Borrador generado</h2>
+  <div class="skills-resultado-acciones">
+    <button type="button" class="boton" id="skills-copiar">Copiar</button>
+    <button type="button" class="boton" id="skills-descargar">Descargar</button>
+    <span class="estado" id="skills-copia-estado" role="status" aria-live="polite"></span>
+  </div>
   <pre id="skills-resultado" class="skills-resultado" tabindex="0"></pre>
 </section>
 """
