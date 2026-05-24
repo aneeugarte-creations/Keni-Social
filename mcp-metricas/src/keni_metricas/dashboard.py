@@ -73,6 +73,32 @@ def _etiqueta_engagement(pct: float) -> str:
     return "ok"
 
 
+# Meses abreviados en espanol (es-MX), sin depender del locale del SO (UX-6).
+_MESES_ES = (
+    "",
+    "ene", "feb", "mar", "abr", "may", "jun",
+    "jul", "ago", "sep", "oct", "nov", "dic",
+)
+
+
+def _fecha_legible(generado: str) -> str:
+    """Convierte la marca ISO (`2026-05-24T17:05:32+00:00`) a "24 may 2026".
+
+    Best-effort: si no parsea, devuelve el texto original tal cual (escapado por
+    el llamante). Solo necesitamos los primeros 10 caracteres (AAAA-MM-DD).
+    """
+    if not generado or len(generado) < 10:
+        return generado
+    try:
+        anio, mes, dia = generado[:10].split("-")
+        m = int(mes)
+        if not 1 <= m <= 12:
+            return generado
+        return f"{int(dia)} {_MESES_ES[m]} {anio}"
+    except (ValueError, IndexError):
+        return generado
+
+
 def _miles(n: int | float) -> str:
     """Formatea un entero con separador de miles (estilo es-MX: punto)."""
     try:
@@ -120,6 +146,10 @@ _CSS = """
   --aviso-fondo: #fff8e1;
   --aviso-borde: #e0b500;
   --aviso-tinta: #7a5b00;
+  /* Marca Keni: acento corporativo para branding (UX-2). */
+  --marca: #ff5a1f;
+  --marca-2: #1f6dff;
+  --base-font: 16px;
 }
 * { box-sizing: border-box; }
 body {
@@ -128,10 +158,25 @@ body {
   color: var(--tinta);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.5;
-  font-size: 16px;
+  font-size: var(--base-font);
 }
+/* UX-8: modo presentacion (--presentacion) sube la escala tipografica para sala proyectada. */
+body.presentacion { --base-font: 20px; }
+body.presentacion .envoltura { max-width: 1120px; }
+body.presentacion header.cabecera h1 { font-size: 1.9rem; }
+body.presentacion .ns-hero .ns-valor { font-size: 3.2rem; }
 .envoltura { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
-header.cabecera { border-bottom: 2px solid var(--tinta); padding-bottom: 16px; margin-bottom: 24px; }
+header.cabecera {
+  border-top: 4px solid var(--marca);
+  border-bottom: 2px solid var(--tinta);
+  padding: 14px 0 16px; margin-bottom: 24px;
+}
+header.cabecera .eyebrow {
+  display: inline-block; margin: 0 0 6px;
+  font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.12em; color: var(--marca);
+}
+header.cabecera .eyebrow .sep { color: var(--gris-claro); margin: 0 4px; font-weight: 400; }
 header.cabecera h1 { font-size: 1.6rem; margin: 0 0 4px; letter-spacing: -0.01em; }
 .meta { color: var(--gris); font-size: 0.85rem; }
 .totales { display: flex; flex-wrap: wrap; gap: 12px; margin: 20px 0; }
@@ -179,7 +224,31 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
   font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--gris); display: block;
 }
+/* UX-1: el resto de alertas vive plegado para no enterrar el cierre. */
+.alertas-resto { margin: 8px 0 0; }
+.alertas-resto > summary {
+  cursor: pointer; color: var(--gris); font-size: 0.85rem; font-weight: 600;
+  padding: 6px 0;
+}
+.alertas-resto[open] > summary { margin-bottom: 4px; }
+.alertas-resto .alertas { margin-top: 8px; }
 .vacio { color: var(--gris); font-style: italic; }
+
+/* --- Callout pieza estrella global (UX-7) --- */
+.estrella {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  border: 1px solid var(--gris-claro); border-left: 4px solid var(--marca);
+  border-radius: 8px; background: var(--fondo-suave);
+  padding: 12px 16px; margin: 20px 0 0; font-size: 0.95rem;
+}
+.estrella .e-titulo {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+  font-size: 0.78rem; color: var(--marca);
+}
+.estrella .e-marca { font-weight: 700; }
+.estrella .e-plat { color: var(--gris); }
+.estrella .e-pct { font-weight: 700; font-variant-numeric: tabular-nums; }
+.estrella .e-pieza { color: var(--gris); font-size: 0.85rem; flex-basis: 100%; }
 
 /* --- Engagement: metrica north-star --- */
 .ns-hero {
@@ -189,7 +258,12 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
 }
 .ns-hero .ns-valor { font-size: 2.6rem; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
 .ns-hero .ns-etiqueta { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gris); }
-.ns-hero .ns-nota { color: var(--gris); font-size: 0.82rem; flex-basis: 100%; }
+/* UX-5: leyenda del north-star como chips de color, no como frase larga. */
+.ns-leyenda { display: flex; gap: 8px; flex-wrap: wrap; flex-basis: 100%; margin-top: 4px; }
+.ns-leyenda .chip {
+  font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+  white-space: nowrap;
+}
 .ranking { margin: 0; padding: 0; list-style: none; }
 .ranking li {
   display: grid; grid-template-columns: 1.6rem 1fr auto auto; align-items: center;
@@ -198,12 +272,21 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
 }
 .ranking .pos { color: var(--gris); font-size: 0.9rem; font-weight: 600; text-align: right; }
 .ranking .marca { font-weight: 600; }
+.ranking .marca .marca-spark { margin-left: 8px; color: var(--gris); }
 .ranking .pct { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* UX-10: barras mas altas y con el % visible dentro/al lado. */
 .ranking .barra {
-  grid-column: 1 / -1; height: 6px; border-radius: 3px;
-  background: var(--gris-claro); overflow: hidden; margin-top: 2px;
+  grid-column: 1 / -1; height: 18px; border-radius: 4px;
+  background: var(--gris-claro); overflow: hidden; margin-top: 4px;
+  position: relative;
 }
-.ranking .barra span { display: block; height: 100%; border-radius: 3px; }
+.ranking .barra span.relleno { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+.ranking .barra .barra-pct {
+  position: absolute; top: 0; left: 8px; height: 100%;
+  display: flex; align-items: center;
+  font-size: 0.72rem; font-weight: 700; color: var(--tinta);
+  font-variant-numeric: tabular-nums;
+}
 .nivel {
   font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em;
   font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
@@ -322,6 +405,10 @@ def _render_alerta(a: dict) -> str:
     )
 
 
+# UX-1: nº de alertas visibles antes de plegar el resto en <details>.
+_PICOS_VISIBLES = 6
+
+
 def _render_picos(picos: dict) -> str:
     partes = ['<h2 class="seccion">Alertas (picos)</h2>']
     cob = picos.get("cobertura") or {}
@@ -335,8 +422,21 @@ def _render_picos(picos: dict) -> str:
     if not alertas:
         partes.append('<p class="vacio">Sin anomalias por encima del umbral. Todo dentro de lo normal.</p>')
         return "".join(partes)
-    lis = "".join(_render_alerta(a) for a in alertas)
+
+    # UX-1: muestra solo las primeras alertas y pliega el resto para no
+    # enterrar el cierre de la pantalla en una demo compartida.
+    visibles = alertas[:_PICOS_VISIBLES]
+    resto = alertas[_PICOS_VISIBLES:]
+    lis = "".join(_render_alerta(a) for a in visibles)
     partes.append(f'<ul class="alertas">{lis}</ul>')
+    if resto:
+        lis_resto = "".join(_render_alerta(a) for a in resto)
+        partes.append(
+            '<details class="alertas-resto">'
+            f"<summary>Ver todas las alertas ({len(alertas)})</summary>"
+            f'<ul class="alertas">{lis_resto}</ul>'
+            "</details>"
+        )
     return "".join(partes)
 
 
@@ -375,23 +475,33 @@ def _sparkline(valores: list[float]) -> str:
     return f'<span class="spark">{"".join(pips)}</span>'
 
 
-def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> str:
-    """Mini-tendencia de engagement por marca desde el historico.
+def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> tuple[str, str]:
+    """Mini-tendencia de engagement por marca desde el historico (UX-3).
 
-    Devuelve "" si no hay historico o no hay >= 2 snapshots (sin tendencia que
+    Devuelve la tupla `(spark_inline, tabla_detalle)`:
+      - `spark_inline`: sparkline + delta, SIEMPRE visible en la linea del ranking.
+      - `tabla_detalle`: la tabla periodo-por-periodo, plegada en un <details>.
+    Ambos son "" si no hay historico o no hay >= 2 snapshots (sin tendencia que
     mostrar): se omite con elegancia, nunca lanza.
     """
     if historico is None:
-        return ""
+        return "", ""
     try:
         serie = historico.serie(cuenta_id, rango, _ENG_TREND_N)
     except Exception:  # noqa: BLE001 — el historico es best-effort, nunca debe romper el dashboard
-        return ""
+        return "", ""
     if not serie or len(serie) < 2:
-        return ""
+        return "", ""
 
     engs = [float(p.get("engagement_pct") or 0.0) for p in serie]
     spark = _sparkline(engs)
+    delta = round(engs[-1] - engs[0], 1)
+    delta_html = (
+        f'<span class="var {_clase_variacion(delta)}">{escape(_signo(delta))} pts</span>'
+    )
+
+    # UX-3: el sparkline va inline en la linea del ranking (siempre visible).
+    spark_inline = f'<span class="marca-spark">{spark} {delta_html}</span>'
 
     encabezados = "".join(
         f"<th>{escape(str(p.get('periodo_hasta', '')))}</th>" for p in serie
@@ -399,20 +509,17 @@ def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> str:
     celdas = "".join(
         f'<td class="{_clase_engagement(e)}">{escape(str(e))}%</td>' for e in engs
     )
-    delta = round(engs[-1] - engs[0], 1)
-    delta_html = (
-        f'<span class="var {_clase_variacion(delta)}">{escape(_signo(delta))} pts</span>'
-    )
-
-    return (
+    # UX-3: la tabla detallada queda dentro del desplegable.
+    tabla_detalle = (
         '<details class="tendencia">'
-        f"<summary>Tendencia de engagement {spark} {delta_html}</summary>"
+        "<summary>Tendencia de engagement (detalle)</summary>"
         "<table>"
         f"<tr><th>Periodo</th>{encabezados}</tr>"
         f"<tr><td>Engagement</td>{celdas}</tr>"
         "</table>"
         "</details>"
     )
+    return spark_inline, tabla_detalle
 
 
 def _render_engagement(rep: dict, nombres: dict[str, str], rango: str, historico) -> str:
@@ -421,15 +528,22 @@ def _render_engagement(rep: dict, nombres: dict[str, str], rango: str, historico
     eng_global = total.get("engagement_pct", 0.0)
     clase_global = _clase_engagement(eng_global)
 
+    # UX-5: leyenda del north-star como chips de color (no como frase larga gris).
+    leyenda = (
+        '<div class="ns-leyenda">'
+        f'<span class="chip nivel eng-alto">alto &ge; {_ENG_UMBRAL_ALTO}%</span>'
+        f'<span class="chip nivel eng-medio">ok {_ENG_UMBRAL_BAJO}–{_ENG_UMBRAL_ALTO}%</span>'
+        f'<span class="chip nivel eng-bajo">bajo &lt; {_ENG_UMBRAL_BAJO}%</span>'
+        "</div>"
+    )
+
     partes = [
         '<h2 class="seccion">Engagement (north-star)</h2>',
         '<div class="ns-hero">',
         f'<span class="ns-valor {clase_global}">{escape(str(eng_global))}%</span>',
         '<span class="ns-etiqueta">Engagement global<br>'
         f'nivel {escape(_etiqueta_engagement(eng_global))}</span>',
-        '<span class="ns-nota">Interacciones / visualizaciones del periodo. '
-        f"Umbrales: alto &ge; {_ENG_UMBRAL_ALTO}%, ok {_ENG_UMBRAL_BAJO}–{_ENG_UMBRAL_ALTO}%, "
-        f"bajo &lt; {_ENG_UMBRAL_BAJO}%.</span>",
+        leyenda,
         "</div>",
     ]
 
@@ -454,19 +568,64 @@ def _render_engagement(rep: dict, nombres: dict[str, str], rango: str, historico
         eng = r.get("engagement_pct", 0.0)
         clase = _clase_engagement(eng)
         ancho = round(eng / max_eng * 100, 1) if max_eng else 0.0
-        tendencia = _tendencia_engagement(cuenta_id, rango, historico)
+        # UX-3: sparkline inline (siempre visible) + tabla detallada plegada.
+        spark_inline, tabla_detalle = _tendencia_engagement(cuenta_id, rango, historico)
         lis.append(
             "<li>"
             f'<span class="pos">{pos}</span>'
-            f'<span class="marca">{escape(nombre)}</span>'
+            f'<span class="marca">{escape(nombre)}{spark_inline}</span>'
             f'<span class="nivel {clase}">{escape(_etiqueta_engagement(eng))}</span>'
             f'<span class="pct {clase}">{escape(str(eng))}%</span>'
-            f'<span class="barra"><span class="{clase}" style="width: {ancho}%"></span></span>'
-            f"{tendencia}"
+            # UX-10: barra mas alta con el % visible dentro.
+            f'<span class="barra">'
+            f'<span class="relleno {clase}" style="width: {ancho}%"></span>'
+            f'<span class="barra-pct">{escape(str(eng))}%</span>'
+            f"</span>"
+            f"{tabla_detalle}"
             "</li>"
         )
     partes.append(f'<ul class="ranking">{"".join(lis)}</ul>')
     return "".join(partes)
+
+
+def _pieza_estrella(rep: dict) -> tuple[dict, str] | None:
+    """Pieza con mayor engagement de todas las marcas (callout estrella, UX-7).
+
+    Devuelve (pieza, cuenta_id) o None si no hay piezas en el reporte.
+    """
+    mejor: dict | None = None
+    mejor_cuenta = ""
+    for fila in rep.get("cuentas", []):
+        cuenta_id = fila.get("resumen", {}).get("cuenta", "")
+        for p in fila.get("mejores_piezas") or []:
+            eng = p.get("engagement_pct") or 0.0
+            if mejor is None or eng > (mejor.get("engagement_pct") or 0.0):
+                mejor = p
+                mejor_cuenta = cuenta_id
+    if mejor is None:
+        return None
+    return mejor, mejor_cuenta
+
+
+def _render_estrella(rep: dict, nombres: dict[str, str]) -> str:
+    """Callout superior con la pieza que mas rompio del periodo (UX-7)."""
+    estrella = _pieza_estrella(rep)
+    if estrella is None:
+        return ""
+    pieza, cuenta_id = estrella
+    marca = escape(nombres.get(cuenta_id, cuenta_id))
+    plat = escape(_PLATAFORMA_ETIQUETA.get(pieza["plataforma"], pieza["plataforma"]))
+    eng = escape(str(pieza.get("engagement_pct", 0.0)))
+    titulo = escape(str(pieza.get("titulo", "")))
+    return (
+        '<div class="estrella">'
+        '<span class="e-titulo">🔥 Lo que más rompió este mes</span> '
+        f'<span class="e-marca">{marca}</span> · '
+        f'<span class="e-plat">{plat}</span> · '
+        f'<span class="e-pct">{eng}%</span>'
+        f'<span class="e-pieza">«{titulo}»</span>'
+        "</div>"
+    )
 
 
 def construir_html(
@@ -475,16 +634,20 @@ def construir_html(
     nombres: dict[str, str],
     rango: str | None = None,
     historico=None,
+    presentacion: bool = False,
 ) -> str:
     """Renderiza el reporte + picos a un unico documento HTML autocontenido."""
     # rango crudo (para consultar el historico) vs. el escapado (para mostrar).
     rango_serie = rango if rango is not None else rep.get("rango", "")
     rango_txt = escape(str(rep.get("rango", "")))
-    generado = escape(str(rep.get("generado", "")))
+    # UX-6: fecha legible es-MX ("24 may 2026") en vez del ISO crudo.
+    generado = escape(_fecha_legible(str(rep.get("generado", ""))))
     fuente = escape(str(rep.get("fuente", "")))
 
     tarjetas = "".join(_render_tarjeta(f, nombres) for f in rep.get("cuentas", []))
     engagement = _render_engagement(rep, nombres, rango_serie, historico)
+    estrella = _render_estrella(rep, nombres)
+    body_clase = " presentacion" if presentacion else ""
 
     return f"""<!DOCTYPE html>
 <html lang="es">
@@ -494,9 +657,10 @@ def construir_html(
 <title>Dashboard de metricas — {rango_txt}</title>
 <style>{_CSS}</style>
 </head>
-<body>
+<body class="raiz{body_clase}">
 <div class="envoltura">
 <header class="cabecera">
+<span class="eyebrow">KENI AI <span class="sep">·</span> AMX Contenido</span>
 <h1>Dashboard de metricas — {rango_txt}</h1>
 <p class="meta">Generado {generado} · fuente: {fuente}</p>
 </header>
@@ -504,6 +668,7 @@ def construir_html(
 <h2 class="seccion">Total</h2>
 {_render_kpis(rep["total"])}
 {_render_cobertura_global(rep)}
+{estrella}
 
 {engagement}
 
@@ -514,7 +679,8 @@ def construir_html(
 
 {_render_picos(picos)}
 
-<footer>Keni AI · dashboard de metricas · HTML estatico autocontenido (sin red, sin JS externo).</footer>
+<footer>Generado en tu máquina · datos de muestra · sin red. \
+Keni AI · dashboard de metricas · HTML estatico autocontenido (sin JS externo).</footer>
 </div>
 </body>
 </html>
@@ -527,12 +693,13 @@ def generar_dashboard(
     top: int = 3,
     historico=None,
     umbral_picos: int = 50,
+    presentacion: bool = False,
 ) -> str:
     """Construye el reporte + picos desde la fuente y devuelve el HTML completo."""
     rep = construir_reporte(fuente, rango, top, historico)
     picos = detectar_picos(fuente, rango, umbral_picos, historico)
     nombres = {c.id: c.nombre for c in fuente.cuentas()}
-    return construir_html(rep, picos, nombres, rango, historico)
+    return construir_html(rep, picos, nombres, rango, historico, presentacion)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -544,6 +711,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--rango", default="mes", help="semana | mes | 7d | 30d (def: mes)")
     ap.add_argument("--top", type=int, default=3, help="nº de mejores piezas por marca (def: 3)")
     ap.add_argument("--umbral-picos", type=int, default=50, help="umbral %% para alertas de picos (def: 50)")
+    ap.add_argument(
+        "--presentacion",
+        action="store_true",
+        help="sube la escala tipografica para sala proyectada (def: desactivado)",
+    )
     args = ap.parse_args(argv)
 
     from .config import cargar_config, construir_fuente
@@ -552,7 +724,9 @@ def main(argv: list[str] | None = None) -> int:
     fuente = construir_fuente(cargar_config())
     historico = Historico() if historico_activo() else None
     try:
-        html = generar_dashboard(fuente, args.rango, args.top, historico, args.umbral_picos)
+        html = generar_dashboard(
+            fuente, args.rango, args.top, historico, args.umbral_picos, args.presentacion
+        )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
