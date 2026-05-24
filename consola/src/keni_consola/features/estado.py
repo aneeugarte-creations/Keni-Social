@@ -17,11 +17,11 @@ from __future__ import annotations
 from html import escape
 from pathlib import Path
 
+from keni_metricas import doctor
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, Response
 from starlette.routing import Route
 
-from ... import doctor
 from .. import layout
 from . import Feature, RecursoEstatico, features_ordenadas
 

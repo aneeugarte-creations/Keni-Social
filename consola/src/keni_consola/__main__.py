@@ -1,6 +1,6 @@
 """Arranca la Consola Keni: servidor LOCAL (Starlette/uvicorn) en 127.0.0.1.
 
-    python -m keni_metricas.consola
+    python -m keni_consola
 
 Puerto configurable con `KENI_CONSOLA_PORT` (def: 8765). Bind SIEMPRE a 127.0.0.1
 (nunca 0.0.0.0): es una app que toca el disco y lanza procesos, no debe quedar

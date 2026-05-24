@@ -14,7 +14,7 @@ import tomllib
 import pytest
 from starlette.testclient import TestClient
 
-from keni_metricas.consola import app as app_modulo
+from keni_consola import app as app_modulo
 
 # Un config de prueba con un bloque de credenciales (token real falso) que NUNCA
 # debe perderse al guardar fuente/marcas ni aparecer en el HTML de la pagina.

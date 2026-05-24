@@ -21,18 +21,18 @@ import dataclasses
 from html import escape
 from pathlib import Path
 
-from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
-from starlette.routing import Route
-
-from ... import asistente
-from ...config import (
+from keni_metricas import asistente
+from keni_metricas.config import (
     FUENTES_VALIDAS,
     ConfigInvalida,
     cargar_config,
     construir_fuente,
     ruta_config,
 )
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.routing import Route
+
 from .. import layout, marcas
 from .._http_json import leer_json
 from . import Feature, RecursoEstatico, features_ordenadas

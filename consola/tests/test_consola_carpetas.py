@@ -9,9 +9,9 @@ from __future__ import annotations
 import pytest
 from starlette.testclient import TestClient
 
-from keni_metricas.consola import app as app_modulo
-from keni_metricas.consola import proyectos
-from keni_metricas.consola.features import carpetas
+from keni_consola import app as app_modulo
+from keni_consola import proyectos
+from keni_consola.features import carpetas
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ def test_carpetas_body_malformado_da_400_sin_crashear(entorno):
 
 def test_carpetas_aparece_en_la_nav(entorno):
     """La pestana se auto-descubre y sale en la nav de otras paginas."""
-    from keni_metricas.consola import features
+    from keni_consola import features
 
     ids = [f.id for f in features.descubrir(refresco=True)]
     assert "carpetas" in ids
