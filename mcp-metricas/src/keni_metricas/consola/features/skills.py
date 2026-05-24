@@ -80,23 +80,66 @@ class _SkillInfo:
     descripcion: str  # una linea, para no tecnicos
 
 
-# Lista CURADA de TIPOS DE CONTENIDO. El `id` es el nombre de la skill tal como la
-# invoca Claude por debajo y DEBE existir como carpeta en `skills-copy/.claude/skills/`
-# (un test de la consola verifica que no haya drift entre esta lista y el disco).
-SKILLS: tuple[_SkillInfo, ...] = (
-    _SkillInfo("copy-desde-nota", "Copy desde nota", "Convierte una nota en copy para redes."),
-    _SkillInfo("clip-a-copy", "Clip a copy", "De la transcripción de un clip a copy listo para publicar."),
-    _SkillInfo("nota-a-formato", "Nota a formato", "Adapta una nota al formato de una plataforma concreta."),
-    _SkillInfo("resumen-tendencia", "Resumen de tendencia", "Resume una tendencia a partir de varias fuentes."),
-    _SkillInfo("responde-comentarios", "Responde comentarios", "Propone respuestas a comentarios de la comunidad."),
-    _SkillInfo("calendario-editorial", "Calendario editorial", "Arma un calendario editorial desde el material dado."),
-    _SkillInfo("nota-a-hilo", "Nota a hilo", "Convierte una nota en un hilo encadenado para redes."),
-    _SkillInfo(
-        "youtube-metadata",
-        "Metadatos de YouTube",
-        "Arma título, descripción, etiquetas y capítulos para un video de YouTube.",
+# Lista CURADA de TIPOS DE CONTENIDO, organizada en DOS GRUPOS para el render del
+# `<select>` (un `<optgroup>` por grupo) y para que el equipo distinga de un vistazo
+# lo VALIDADO de lo EXPERIMENTAL. El `id` es el nombre de la skill tal como la invoca
+# Claude por debajo y DEBE existir como carpeta en `skills-copy/.claude/skills/` (un
+# test de la consola verifica que no haya drift entre estas listas y el disco).
+#
+# - "Validadas con el equipo": tipos que el piloto pidió y usa de verdad.
+# - "Experimentales (no validadas con el piloto)": construidas adelantadas a la
+#   demanda; el piloto no las pidió. Se ofrecen aparte y etiquetadas como tales.
+#
+# La LÓGICA de ejecución (allowlist, prompt, runner) NO distingue grupos: ambos son
+# skills curadas igual de válidas; el grupo es solo una señal de UI/curaduría.
+
+
+@dataclass(frozen=True)
+class _GrupoSkills:
+    etiqueta: str  # título visible del grupo (label del <optgroup>)
+    experimental: bool  # True => se etiqueta como experimental en la UI
+    skills: tuple[_SkillInfo, ...]
+
+
+GRUPOS_SKILLS: tuple[_GrupoSkills, ...] = (
+    _GrupoSkills(
+        etiqueta="Validadas con el equipo",
+        experimental=False,
+        skills=(
+            _SkillInfo("copy-desde-nota", "Copy desde nota", "Convierte una nota en copy para redes."),
+            _SkillInfo("clip-a-copy", "Clip a copy", "De la transcripción de un clip a copy listo para publicar."),
+            _SkillInfo("nota-a-formato", "Nota a formato", "Adapta una nota al formato de una plataforma concreta."),
+            _SkillInfo("resumen-tendencia", "Resumen de tendencia", "Resume una tendencia a partir de varias fuentes."),
+            _SkillInfo(
+                "youtube-metadata",
+                "Metadatos de YouTube",
+                "Arma título, descripción, etiquetas y capítulos para un video de YouTube.",
+            ),
+        ),
+    ),
+    _GrupoSkills(
+        etiqueta="Experimentales (no validadas con el piloto)",
+        experimental=True,
+        skills=(
+            _SkillInfo("nota-a-hilo", "Nota a hilo", "Convierte una nota en un hilo encadenado para redes."),
+            _SkillInfo(
+                "calendario-editorial",
+                "Calendario editorial",
+                "Arma un calendario editorial desde el material dado.",
+            ),
+            _SkillInfo(
+                "responde-comentarios",
+                "Responde comentarios",
+                "Propone respuestas a comentarios de la comunidad.",
+            ),
+        ),
     ),
 )
+
+# Vista PLANA de todas las skills curadas (de todos los grupos), en orden de grupo.
+# Es la fuente para la allowlist y el test anti-drift: ambos grupos son skills
+# válidas, solo cambia dónde se muestran en la UI.
+SKILLS: tuple[_SkillInfo, ...] = tuple(s for g in GRUPOS_SKILLS for s in g.skills)
 
 # Marcas editoriales permitidas. Se leen de la fuente UNICA de marcas de la consola
 # (`marcas`), tomando solo las que tienen `slug` (las curadas como destino de copy
@@ -366,11 +409,18 @@ async def _guardar_subida_segura(archivo: UploadFile, *, limite: int) -> tuple[P
 
 
 def _pagina_skills() -> str:
+    # El <select> agrupa los tipos de contenido en un <optgroup> por grupo: los
+    # validados con el equipo y, aparte, los experimentales (etiquetados como
+    # tales en el propio label del grupo). Los `value` (slugs) no cambian, así que
+    # la lógica de ejecución es idéntica; solo cambia la presentación.
     opciones_skill = ['<option value="">Elige un tipo de contenido...</option>']
-    for s in SKILLS:
-        opciones_skill.append(
-            f'<option value="{escape(s.id)}" data-desc="{escape(s.descripcion)}">{escape(s.nombre)}</option>'
-        )
+    for grupo in GRUPOS_SKILLS:
+        opciones_skill.append(f'<optgroup label="{escape(grupo.etiqueta)}">')
+        for s in grupo.skills:
+            opciones_skill.append(
+                f'<option value="{escape(s.id)}" data-desc="{escape(s.descripcion)}">{escape(s.nombre)}</option>'
+            )
+        opciones_skill.append("</optgroup>")
 
     opciones_marca = ['<option value="">Elige una marca...</option>']
     for mid, mnombre in MARCAS:
