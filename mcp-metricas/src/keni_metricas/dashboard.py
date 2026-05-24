@@ -20,17 +20,15 @@ import argparse
 import sys
 from html import escape
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from .formato import partes_cobertura, signo
 from .fuentes.base import FuenteMetricas
 from .picos import detectar_picos
 from .reporte import construir_reporte
 
-# Etiquetas legibles para los motivos de omision de cobertura.
-_MOTIVO_TEXTO = {
-    "sin_credenciales": "sin credenciales",
-    "presupuesto_agotado": "presupuesto agotado",
-    "error_api": "error de API",
-}
+if TYPE_CHECKING:
+    from .historico import Historico
 
 # Iconos textuales por plataforma (sin imagenes externas: solo glifos unicode).
 _PLATAFORMA_ETIQUETA = {
@@ -107,11 +105,6 @@ def _miles(n: int | float) -> str:
         return escape(str(n))
 
 
-def _signo(pct: float) -> str:
-    """Devuelve el porcentaje con signo explicito (+/-)."""
-    return f"+{pct}" if pct > 0 else f"{pct}"
-
-
 def _clase_variacion(pct: float | None) -> str:
     if pct is None:
         return "var-neutra"
@@ -124,13 +117,9 @@ def _clase_variacion(pct: float | None) -> str:
 
 def _nota_cobertura_marca(cob: dict | None) -> str | None:
     """Texto de cobertura parcial para una marca; None si respondio todo."""
-    if not cob or not cob.get("omitidas"):
+    partes = partes_cobertura(cob, _PLATAFORMA_ETIQUETA)
+    if partes is None:
         return None
-    motivo = cob.get("motivo") or {}
-    partes = [
-        f"{_PLATAFORMA_ETIQUETA.get(p, p)} ({_MOTIVO_TEXTO.get(motivo.get(p, ''), motivo.get(p, '?'))})"
-        for p in cob["omitidas"]
-    ]
     return "Cobertura parcial: sin datos de " + ", ".join(partes) + ". Los ceros NO son datos reales."
 
 
@@ -345,7 +334,7 @@ def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
 
     if v_vis is not None:
         var_html = (
-            f'<span class="var {_clase_variacion(v_vis)}">{escape(_signo(v_vis))}% vis</span>'
+            f'<span class="var {_clase_variacion(v_vis)}">{escape(signo(v_vis))}% vis</span>'
         )
     else:
         var_html = ""
@@ -475,7 +464,9 @@ def _sparkline(valores: list[float]) -> str:
     return f'<span class="spark">{"".join(pips)}</span>'
 
 
-def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> tuple[str, str]:
+def _tendencia_engagement(
+    cuenta_id: str, rango: str, historico: Historico | None
+) -> tuple[str, str]:
     """Mini-tendencia de engagement por marca desde el historico (UX-3).
 
     Devuelve la tupla `(spark_inline, tabla_detalle)`:
@@ -497,7 +488,7 @@ def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> tuple[str, s
     spark = _sparkline(engs)
     delta = round(engs[-1] - engs[0], 1)
     delta_html = (
-        f'<span class="var {_clase_variacion(delta)}">{escape(_signo(delta))} pts</span>'
+        f'<span class="var {_clase_variacion(delta)}">{escape(signo(delta))} pts</span>'
     )
 
     # UX-3: el sparkline va inline en la linea del ranking (siempre visible).
@@ -522,7 +513,9 @@ def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> tuple[str, s
     return spark_inline, tabla_detalle
 
 
-def _render_engagement(rep: dict, nombres: dict[str, str], rango: str, historico) -> str:
+def _render_engagement(
+    rep: dict, nombres: dict[str, str], rango: str, historico: Historico | None
+) -> str:
     """Seccion north-star: engagement global + ranking por marca, color-coded."""
     total = rep.get("total") or {}
     eng_global = total.get("engagement_pct", 0.0)
@@ -633,7 +626,7 @@ def construir_html(
     picos: dict,
     nombres: dict[str, str],
     rango: str | None = None,
-    historico=None,
+    historico: Historico | None = None,
     presentacion: bool = False,
 ) -> str:
     """Renderiza el reporte + picos a un unico documento HTML autocontenido."""
@@ -691,7 +684,7 @@ def generar_dashboard(
     fuente: FuenteMetricas,
     rango: str = "mes",
     top: int = 3,
-    historico=None,
+    historico: Historico | None = None,
     umbral_picos: int = 50,
     presentacion: bool = False,
 ) -> str:
