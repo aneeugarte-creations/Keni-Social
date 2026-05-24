@@ -10,6 +10,7 @@ Sistema de producción de copy para el equipo de redes de AMX, como **Agent Skil
 | **clip-a-copy** | **Video/audio** (entrevista, declaración, podcast) → copy por plataforma + **citas con marca de tiempo** para cortar el clip. Transcribe en **local** (whisper.cpp, el audio no sale de la máquina). |
 | **resumen-tendencia** | Tema/fuentes → brief interno: qué pasa + ángulo por marca + riesgos legales. |
 | **nota-a-formato** | Nota cruda → normalizada a la voz de la casa (limpia giros españoles). Paso previo opcional. |
+| **publica-preview** | Copy ya aprobado → pre-vuelo final en **dry-run**: muestra EXACTO qué se publicaría por plataforma (texto, conteo, hashtags, hilo/carrusel, media referenciada) + avisos + checklist humana. **No publica.** |
 
 ## Layout
 
@@ -43,6 +44,14 @@ Partiendo de un **video o audio** (en vez de una nota escrita):
 ```
 
 Transcribe el archivo **en local** (no sube nada), saca las mejores citas con su marca de tiempo para cortar el clip, y redacta el copy. Requisitos de transcripción (whisper.cpp + ffmpeg + modelo) en `../docs/despliegue-local.md`. Para probar sin un video real: `cd ejemplos && bash generar-clip-prueba.sh`. Como la transcripción automática **falla en nombres y cifras**, la skill los marca como "verificar contra el audio" — saber cuándo creerle a la IA es parte del entregable.
+
+Cuando el copy ya está aprobado y quieres el **último vistazo antes de publicar**:
+
+```
+> usa publica-preview con este copy para X e Instagram, media reel-jugada.mp4
+```
+
+Muestra plataforma por plataforma **exactamente qué se publicaría** (texto final, conteo con `contar.py`, hashtags, desglose de hilo/carrusel y qué media acompaña — solo referenciada, nunca subida), avisos por red (Instagram exige media, un enlace en X cuesta caracteres extra, último repaso legal) y cierra con una **checklist** que marcas tú. Es dry-run puro: **nada se publica; la publicación real llega en una fase futura.**
 
 ## Personaliza tu voz (5 minutos)
 
