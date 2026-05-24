@@ -377,3 +377,249 @@ def test_runner_usa_argv_sin_shell(monkeypatch):
     # El texto peligroso va como UN argumento, nunca interpretado por shell.
     assert "una nota; rm -rf /" in capturado["cmd"][2]
     assert capturado["shell"] is False
+
+
+# --------------------------------------------------------------------------- #
+# SUBIR ARCHIVO (multipart): GET muestra el input; POST con runner MOCKEADO     #
+# --------------------------------------------------------------------------- #
+
+
+def test_get_skills_muestra_input_de_archivo(entorno):
+    """La pagina ofrece subir un archivo como alternativa a pegar texto."""
+    c = _cliente()
+    texto = c.get("/skills").text
+    assert 'type="file"' in texto
+    assert 'name="archivo"' in texto
+    assert 'id="skills-archivo"' in texto
+    # UX: deja claro "pega texto O sube un archivo".
+    bajo = texto.lower()
+    assert "sube un archivo" in bajo
+    # Sigue el aviso "nada se publica".
+    assert "Nada se publica" in texto
+
+
+def test_subir_archivo_texto_lee_contenido_y_llama_al_runner(entorno, monkeypatch):
+    """Skill de texto: se LEE el contenido del archivo y se pasa como nota al runner."""
+    capturado = {}
+
+    def runner_mock(prompt, *, cwd, timeout):
+        capturado["prompt"] = prompt
+        return "BORRADOR (mock archivo)"
+
+    monkeypatch.setattr(feat_skills, "_runner", runner_mock)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "copy-desde-nota", "marca": "unotv"},
+        files={"archivo": ("nota.txt", b"Contenido de mi nota subida.", "text/plain")},
+    )
+    assert r.status_code == 200
+    assert r.json()["resultado"] == "BORRADOR (mock archivo)"
+    # El prompt es el de TEXTO (nota), con el contenido del archivo incrustado.
+    assert capturado["prompt"] == (
+        "usa copy-desde-nota con la siguiente nota, marca unotv:\n\nContenido de mi nota subida."
+    )
+
+
+def test_subir_archivo_media_clip_a_copy_pasa_la_ruta_al_prompt(entorno, monkeypatch):
+    """clip-a-copy es MEDIA: al runner le llega la RUTA temporal, no el contenido."""
+    capturado = {}
+
+    def runner_mock(prompt, *, cwd, timeout):
+        capturado["prompt"] = prompt
+        return "BORRADOR (mock media)"
+
+    monkeypatch.setattr(feat_skills, "_runner", runner_mock)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "clip-a-copy", "marca": "claro-sports"},
+        files={"archivo": ("entrevista.mp4", b"\x00\x01\x02 binario de video", "video/mp4")},
+    )
+    assert r.status_code == 200
+    assert r.json()["resultado"] == "BORRADOR (mock media)"
+    # El prompt referencia una RUTA (temporal, con la extension saneada .mp4).
+    assert capturado["prompt"].startswith(
+        "usa clip-a-copy con el archivo en esta ruta, marca claro-sports:\n\n"
+    )
+    ruta = capturado["prompt"].split("\n\n", 1)[1]
+    assert ruta.endswith(".mp4")
+    # NO se uso el nombre crudo del cliente como nombre de archivo.
+    assert "entrevista.mp4" not in ruta
+
+
+def test_subir_archivo_no_usa_el_nombre_crudo_del_cliente(entorno, monkeypatch):
+    """Nombre saneado: un filename con path traversal NO aparece en la ruta temporal."""
+    capturado = {}
+
+    def runner_mock(prompt, *, cwd, timeout):
+        capturado["prompt"] = prompt
+        return "ok"
+
+    monkeypatch.setattr(feat_skills, "_runner", runner_mock)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "clip-a-copy", "marca": "unotv"},
+        files={"archivo": ("../../etc/evil.mp4", b"datos", "video/mp4")},
+    )
+    assert r.status_code == 200
+    ruta = capturado["prompt"].split("\n\n", 1)[1]
+    assert ".." not in ruta
+    assert "etc" not in ruta
+    assert "evil" not in ruta
+    assert ruta.endswith(".mp4")  # conserva solo la extension saneada
+
+
+def test_subir_archivo_demasiado_grande_da_400_en_espanol(entorno, monkeypatch):
+    """Excede el limite -> 400 con mensaje en espanol; el runner NO se llama."""
+    llamado = {"runner": False}
+
+    def runner_mock(prompt, *, cwd, timeout):
+        llamado["runner"] = True
+        return "no deberia"
+
+    # Limite ridiculo para forzar el rechazo sin subir megas.
+    monkeypatch.setattr(feat_skills, "_MAX_SUBIDA_TEXTO", 10)
+    monkeypatch.setattr(feat_skills, "_runner", runner_mock)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "copy-desde-nota", "marca": "unotv"},
+        files={"archivo": ("nota.txt", b"x" * 1000, "text/plain")},
+    )
+    assert r.status_code == 400
+    assert "demasiado grande" in r.json()["error"].lower()
+    assert llamado["runner"] is False
+
+
+def test_subir_archivo_vacio_da_400(entorno, monkeypatch):
+    monkeypatch.setattr(feat_skills, "_runner", lambda *a, **k: "x")
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "copy-desde-nota", "marca": "unotv"},
+        files={"archivo": ("vacio.txt", b"", "text/plain")},
+    )
+    assert r.status_code == 400
+    assert "vacío" in r.json()["error"].lower()
+
+
+def test_sin_archivo_ni_texto_da_400(entorno):
+    """Multipart sin la parte 'archivo' -> 400 en espanol (no 500, no traza)."""
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "copy-desde-nota", "marca": "unotv"},
+    )
+    assert r.status_code == 400
+    assert "archivo" in r.json()["error"].lower()
+
+
+def test_subir_archivo_skill_fuera_de_allowlist_da_400(entorno, monkeypatch):
+    llamado = {"runner": False}
+    monkeypatch.setattr(
+        feat_skills, "_runner", lambda *a, **k: llamado.__setitem__("runner", True) or "x"
+    )
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "rm-rf-todo", "marca": "unotv"},
+        files={"archivo": ("nota.txt", b"hola", "text/plain")},
+    )
+    assert r.status_code == 400
+    assert "no permitido" in r.json()["error"].lower()
+    assert llamado["runner"] is False
+
+
+def test_subir_archivo_marca_fuera_de_allowlist_da_400(entorno):
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "copy-desde-nota", "marca": "marca-falsa"},
+        files={"archivo": ("nota.txt", b"hola", "text/plain")},
+    )
+    assert r.status_code == 400
+    assert "no permitida" in r.json()["error"].lower()
+
+
+def test_subir_archivo_limpia_el_temporal(entorno, monkeypatch):
+    """Tras procesar, el dir temporal de la subida se borra (no quedan residuos)."""
+    capturado = {}
+
+    def runner_mock(prompt, *, cwd, timeout):
+        # En este momento la ruta TODAVIA existe (estamos procesando).
+        ruta = Path(prompt.split("\n\n", 1)[1])
+        capturado["ruta"] = ruta
+        capturado["existia_durante"] = ruta.exists()
+        capturado["dir"] = ruta.parent
+        return "ok"
+
+    monkeypatch.setattr(feat_skills, "_runner", runner_mock)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "clip-a-copy", "marca": "unotv"},
+        files={"archivo": ("clip.mp4", b"datos", "video/mp4")},
+    )
+    assert r.status_code == 200
+    assert capturado["existia_durante"] is True
+    # Tras la respuesta, el temporal (y su dir) ya no existen.
+    assert not capturado["ruta"].exists()
+    assert not capturado["dir"].exists()
+
+
+def test_subir_archivo_error_del_motor_limpia_y_da_500(entorno, monkeypatch):
+    """Si el runner falla, el temporal se limpia igual y el error sale en espanol."""
+    capturado = {}
+
+    def runner_explota(prompt, *, cwd, timeout):
+        capturado["dir"] = Path(prompt.split("\n\n", 1)[1]).parent
+        raise feat_skills.SkillError("El asistente terminó con error: detalle.")
+
+    monkeypatch.setattr(feat_skills, "_runner", runner_explota)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "clip-a-copy", "marca": "unotv"},
+        files={"archivo": ("clip.mp4", b"datos", "video/mp4")},
+    )
+    assert r.status_code == 500
+    assert "El asistente terminó con error" in r.json()["error"]
+    assert "Traceback" not in r.json()["error"]
+    # Limpieza garantizada incluso ante fallo del motor.
+    assert not capturado["dir"].exists()
+
+
+def test_construir_prompt_ruta_referencia_la_ruta():
+    prompt = feat_skills.construir_prompt_ruta("clip-a-copy", "unotv", "/tmp/x/abc.mp4")
+    assert prompt == "usa clip-a-copy con el archivo en esta ruta, marca unotv:\n\n/tmp/x/abc.mp4"
+
+
+def test_subir_archivo_argv_sin_shell_con_la_ruta(entorno, monkeypatch):
+    """La ruta del media va como UN argumento argv, nunca por shell."""
+    capturado = {}
+
+    class FakeProc:
+        returncode = 0
+        stdout = "ok"
+        stderr = ""
+
+    def fake_run(cmd, **kw):
+        capturado["cmd"] = cmd
+        capturado["shell"] = kw.get("shell", False)
+        return FakeProc()
+
+    monkeypatch.setattr(feat_skills.shutil, "which", lambda _n: "/usr/bin/claude")
+    monkeypatch.setattr(feat_skills.subprocess, "run", fake_run)
+    c = _cliente()
+    r = c.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "clip-a-copy", "marca": "unotv"},
+        files={"archivo": ("clip.mp4", b"datos", "video/mp4")},
+    )
+    assert r.status_code == 200
+    assert isinstance(capturado["cmd"], list)
+    assert capturado["cmd"][0] == "claude"
+    assert capturado["cmd"][1] == "-p"
+    assert capturado["shell"] is False

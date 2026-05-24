@@ -58,6 +58,39 @@ textarea.skills-texto {
   background: var(--fondo-suave);
   color: var(--tinta);
 }
+.skills-modo-ayuda {
+  font-size: 0.85rem;
+  color: var(--gris);
+  margin: 0 0 10px;
+}
+.skills-archivo-label {
+  display: block;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gris);
+  margin: 14px 0 4px;
+}
+.skills-archivo-pista {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--gris);
+  font-size: 0.78rem;
+}
+input.skills-archivo {
+  display: block;
+  font: inherit;
+  font-size: 0.85rem;
+  width: 100%;
+  padding: 8px 0;
+  color: var(--tinta);
+}
+.skills-archivo-nombre {
+  font-size: 0.82rem;
+  color: var(--gris);
+  min-height: 1.1em;
+  margin: 4px 0 0;
+}
 .skills-acciones {
   display: flex;
   gap: 12px;
