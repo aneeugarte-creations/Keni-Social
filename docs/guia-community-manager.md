@@ -110,17 +110,22 @@ usa picos con rango semana
 
 ## La auto-verificación: cuándo creerle
 
-Cada vez que Claude redacta copy, **termina con una auto-verificación**: una lista que marca
-cada punto con un símbolo.
+Cada vez que Claude redacta copy, lo **ABRE con un veredicto** (arriba del todo, antes del
+copy, para que no tengas que bajar a buscarlo) y una leyenda corta de los símbolos. El
+veredicto es una de estas tres líneas:
 
-- ✅ comprobado, puedes confiar.
-- ⚠️ dudoso, **revísalo tú** antes de publicar (típico en nombres y cifras sacados de un audio).
-- ❌ hay un problema (por ejemplo, se pasa del límite de caracteres o hay un tema legal).
+- **✅ LISTO PARA APROBAR** — todo salió bien.
+- **⚠️ REVISAR ANTES DE PUBLICAR** — hay algo que **te toca confirmar** tú (típico: una cifra
+  o un nombre sacados de un audio, o una discrepancia entre fuentes).
+- **❌ NO PUBLICAR** — hay un problema (por ejemplo, se pasa del límite de caracteres o hay un
+  tema legal).
 
-Revisa fechas, números, nombres, citas, reglas legales (bandera/escudo, menores, datos
-personales) y que "suene mexicano". El veredicto final es **"LISTO PARA APROBAR"** solo si
-todo está en ✅. Si ves ⚠️, no es que esté mal: es que **te toca confirmarlo**. Esa es la idea
-del sistema — te dice exactamente cuándo creerle y cuándo verificar.
+Esos mismos símbolos marcan cada punto del **detalle de la auto-verificación, que sigue al
+final** del copy: ✅ comprobado, ⚠️ revísalo tú, ❌ problema. Ahí Claude revisa fechas, números,
+nombres, citas, reglas legales (bandera/escudo, menores, datos personales) y que "suene
+mexicano". El veredicto de arriba es el resumen de ese detalle: dice **"LISTO PARA APROBAR"**
+solo si todo está en ✅. Si ves ⚠️, no es que esté mal: es que **te toca confirmarlo**. Esa es
+la idea del sistema — te dice exactamente cuándo creerle y cuándo verificar.
 
 ---
 
