@@ -32,6 +32,33 @@ class MetricaPlataforma(BaseModel):
     engagement_pct: float
 
 
+class MotivoOmision(StrEnum):
+    """Por que una plataforma configurada NO aporto datos a un resumen."""
+
+    sin_credenciales = "sin_credenciales"  # no hay adaptador (credenciales insuficientes)
+    presupuesto_agotado = "presupuesto_agotado"  # se agoto el rate-limit de la plataforma
+    error_api = "error_api"  # el adaptador respondio None/[] por fallo de la API
+
+
+class Cobertura(BaseModel):
+    """Que plataformas RESPONDIERON vs. se OMITIERON al armar un resumen.
+
+    Hace explicito, dentro de la respuesta, que los ceros de una plataforma
+    omitida no son datos reales. `ok` y `omitidas` son disjuntos y juntos cubren
+    todas las plataformas que la cuenta tiene configuradas; `motivo` mapea cada
+    plataforma omitida a un `MotivoOmision`.
+    """
+
+    ok: list[Plataforma] = Field(default_factory=list)
+    omitidas: list[Plataforma] = Field(default_factory=list)
+    motivo: dict[str, MotivoOmision] = Field(default_factory=dict)
+
+    @property
+    def completa(self) -> bool:
+        """True si no se omitio ninguna plataforma configurada."""
+        return not self.omitidas
+
+
 class Periodo(BaseModel):
     desde: date
     hasta: date
@@ -49,6 +76,9 @@ class ResumenMetricas(BaseModel):
     variacion_vs_anterior: dict[str, float] = Field(default_factory=dict)
     por_plataforma: list[MetricaPlataforma] = Field(default_factory=list)
     fuente: str = "desconocida"
+    # cobertura: que plataformas respondieron vs. se omitieron (y por que). Opcional
+    # para no romper consumidores existentes; las fuentes lo rellenan cuando aplica.
+    cobertura: Cobertura | None = None
 
 
 class Pieza(BaseModel):

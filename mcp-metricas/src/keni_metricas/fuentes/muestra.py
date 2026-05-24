@@ -23,6 +23,7 @@ import hashlib
 from datetime import timedelta
 
 from ..schema import (
+    Cobertura,
     Cuenta,
     MetricaPlataforma,
     Periodo,
@@ -242,6 +243,9 @@ class FuenteMuestra:
             },
             por_plataforma=por_plataforma,
             fuente=self.nombre,
+            # la muestra siempre "responde" en todas las plataformas de la marca:
+            # cobertura completa, sin omisiones.
+            cobertura=Cobertura(ok=list(plats)),
         )
 
     def mejores_piezas(self, cuenta_id: str, rango: str, n: int) -> list[Pieza]:

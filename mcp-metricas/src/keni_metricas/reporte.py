@@ -22,6 +22,7 @@ def construir_reporte(fuente: FuenteMetricas, rango: str = "mes", top: int = 3, 
     cuentas = fuente.cuentas()
     filas: list[dict] = []
     tot_vis = tot_alc = tot_inter = 0
+    cuentas_parciales: list[str] = []  # marcas con alguna plataforma omitida
 
     for c in cuentas:
         r = fuente.resumen(c.id, rango)  # ValueError si el rango es inválido (se propaga)
@@ -38,6 +39,8 @@ def construir_reporte(fuente: FuenteMetricas, rango: str = "mes", top: int = 3, 
         tot_vis += r.visualizaciones
         tot_alc += r.alcance
         tot_inter += r.interacciones
+        if r.cobertura is not None and r.cobertura.omitidas:
+            cuentas_parciales.append(c.id)
 
     return {
         "rango": rango,
@@ -50,12 +53,34 @@ def construir_reporte(fuente: FuenteMetricas, rango: str = "mes", top: int = 3, 
             "engagement_pct": round(tot_inter / tot_vis * 100, 1) if tot_vis else 0.0,
             "cuentas": len(filas),
         },
+        # cobertura global: marcas con datos parciales. Vacio = todas completas.
+        # Hace explicito que los totales pueden no incluir todas las plataformas.
+        "cobertura": {
+            "completa": not cuentas_parciales,
+            "cuentas_parciales": cuentas_parciales,
+        },
         "cuentas": filas,
     }
 
 
 def _signo(pct: float) -> str:
     return f"+{pct}" if pct > 0 else f"{pct}"
+
+
+_MOTIVO_TEXTO = {
+    "sin_credenciales": "sin credenciales",
+    "presupuesto_agotado": "presupuesto agotado",
+    "error_api": "error de API",
+}
+
+
+def _nota_cobertura(cob: dict | None) -> str | None:
+    """Nota corta de cobertura para una marca; None si respondio todo (o no aplica)."""
+    if not cob or not cob.get("omitidas"):
+        return None
+    motivo = cob.get("motivo") or {}
+    partes = [f"{p} ({_MOTIVO_TEXTO.get(motivo.get(p, ''), motivo.get(p, '?'))})" for p in cob["omitidas"]]
+    return "⚠️ cobertura parcial — sin datos de: " + ", ".join(partes) + " (los ceros NO son datos reales)"
 
 
 def render_markdown(rep: dict) -> str:
@@ -68,7 +93,12 @@ def render_markdown(rep: dict) -> str:
     out.append(f"- **Alcance:** {t['alcance']:,}")
     out.append(f"- **Interacciones:** {t['interacciones']:,}")
     out.append(f"- **Engagement:** {t['engagement_pct']}%")
-    out.append(f"- **Cuentas:** {t['cuentas']}\n")
+    out.append(f"- **Cuentas:** {t['cuentas']}")
+    cob_global = rep.get("cobertura") or {}
+    if cob_global.get("cuentas_parciales"):
+        parciales = ", ".join(cob_global["cuentas_parciales"])
+        out.append(f"- ⚠️ **Cobertura:** datos parciales en {parciales} (ver detalle por marca)")
+    out.append("")
 
     for fila in rep["cuentas"]:
         r = fila["resumen"]
@@ -81,6 +111,8 @@ def render_markdown(rep: dict) -> str:
         out.append(
             f"- {r['visualizaciones']:,} vis · {r['alcance']:,} alcance · {r['engagement_pct']}% eng"
         )
+        if (nota := _nota_cobertura(r.get("cobertura"))) is not None:
+            out.append(f"- {nota}")
         if r.get("por_plataforma"):
             out.append("\n| Plataforma | Visualizaciones | Engagement |")
             out.append("|---|---:|---:|")

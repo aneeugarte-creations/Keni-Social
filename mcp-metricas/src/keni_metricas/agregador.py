@@ -9,7 +9,17 @@ import logging
 from .config import Config, CuentaConfig
 from .fuentes.base import AdaptadorPlataforma, CuentaNoEncontrada
 from .presupuesto import Presupuesto, PresupuestoExcedido
-from .schema import Cuenta, MetricaPlataforma, Periodo, Pieza, Plataforma, ResumenMetricas, resolver_rango
+from .schema import (
+    Cobertura,
+    Cuenta,
+    MetricaPlataforma,
+    MotivoOmision,
+    Periodo,
+    Pieza,
+    Plataforma,
+    ResumenMetricas,
+    resolver_rango,
+)
 
 log = logging.getLogger("keni_metricas")
 
@@ -81,13 +91,34 @@ class FuenteCompuesta:
         desde, hasta, _ = resolver_rango(rango)
 
         por_plataforma: list[MetricaPlataforma] = []
+        cobertura = Cobertura()
         for plat, handle in cc.plataformas.items():
             ad = self._adaptadores.get(plat)
-            if ad is None or not self._consumir(plat):
+            if ad is None:
+                # plataforma configurada pero sin adaptador: faltan credenciales
+                self._omitir(cobertura, plat, MotivoOmision.sin_credenciales)
+                continue
+            if not self._consumir(plat):
+                self._omitir(cobertura, plat, MotivoOmision.presupuesto_agotado)
                 continue
             m = ad.metricas(handle, desde, hasta)
-            if m is not None:
-                por_plataforma.append(m)
+            if m is None:
+                # el adaptador devolvio None: la API fallo (ver log.warning del adaptador)
+                self._omitir(cobertura, plat, MotivoOmision.error_api)
+                continue
+            por_plataforma.append(m)
+            cobertura.ok.append(plat)
+
+        if cobertura.omitidas:
+            detalle = ", ".join(f"{p.value}={cobertura.motivo[p.value].value}" for p in cobertura.omitidas)
+            log.warning(
+                "cobertura parcial en %s/%s: %d/%d plataformas omitidas (%s)",
+                cuenta_id,
+                rango,
+                len(cobertura.omitidas),
+                len(cc.plataformas),
+                detalle,
+            )
 
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
@@ -104,7 +135,13 @@ class FuenteCompuesta:
             variacion_vs_anterior={},  # idem
             por_plataforma=por_plataforma,
             fuente=self.nombre,
+            cobertura=cobertura,
         )
+
+    @staticmethod
+    def _omitir(cobertura: Cobertura, plat: Plataforma, motivo: MotivoOmision) -> None:
+        cobertura.omitidas.append(plat)
+        cobertura.motivo[plat.value] = motivo
 
     def mejores_piezas(self, cuenta_id: str, rango: str, n: int) -> list[Pieza]:
         cc = self._buscar(cuenta_id)
