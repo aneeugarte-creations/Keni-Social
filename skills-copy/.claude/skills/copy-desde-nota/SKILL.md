@@ -29,7 +29,7 @@ Leyenda: ✅ = listo · ⚠️ = revísalo tú antes de publicar · ❌ = proble
 
 - **Fuente(s):** uno o VARIOS archivos indicados por el usuario (o el `.md` más reciente si no indica). Detecta el tipo de cada uno:
   - **Nota** (encabezados, prosa): extrae tesis, dato clave y ángulo más fuerte.
-  - **Transcripción de clip** (habla oral, marcas de tiempo, en `ejemplos/` o `transcripciones/`): extrae la declaración o el momento con más gancho; cita textual cuando aporte.
+  - **Transcripción de clip** (habla oral, marcas de tiempo; p. ej. un ejemplo en `ejemplos/` o la salida `.srt`/`.txt` que produce la skill `clip-a-copy`): extrae la declaración o el momento con más gancho; cita textual cuando aporte.
   - **Varias fuentes del mismo tema** (cables de distintas agencias): trátalas como UNA historia. Sintetiza lo común y **cruza los datos** (ver paso 2).
 - **Marca:** si el usuario la indica, úsala; si no, infiérela del tema y dilo explícitamente. Marcas: `unotv`, `claro-sports`, `nacion-gamer`, `piso-15`, `fundacion`.
 - **Voz:** si el usuario indica una persona, carga su voz; si no, usa solo la voz de marca.
