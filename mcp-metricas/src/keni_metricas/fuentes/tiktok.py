@@ -9,7 +9,7 @@ Requiere auditoría de TikTok para acceso completo (ver docs/credenciales.md).
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import httpx
 
@@ -80,7 +80,7 @@ class AdaptadorTikTok:
                 if ct is None:
                     out.append(v)
                     continue
-                d = datetime.fromtimestamp(int(ct), tz=timezone.utc).date()
+                d = datetime.fromtimestamp(int(ct), tz=UTC).date()
                 if desde <= d <= hasta:
                     out.append(v)
             if not data.get("has_more"):
@@ -120,7 +120,7 @@ class AdaptadorTikTok:
                 vis = int(v.get("view_count", 0))
                 inter = self._inter(v)
                 ct = v.get("create_time")
-                pub = datetime.fromtimestamp(int(ct), tz=timezone.utc).date() if ct else hasta
+                pub = datetime.fromtimestamp(int(ct), tz=UTC).date() if ct else hasta
                 vid = str(v.get("id", ""))
                 piezas.append(
                     Pieza(

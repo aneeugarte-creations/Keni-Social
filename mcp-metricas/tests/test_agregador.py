@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 from keni_metricas.agregador import FuenteCompuesta
 from keni_metricas.config import CuentaConfig
 from keni_metricas.schema import MetricaPlataforma, Pieza, Plataforma

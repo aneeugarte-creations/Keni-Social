@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .fuentes.base import FuenteMetricas
@@ -41,7 +41,7 @@ def construir_reporte(fuente: FuenteMetricas, rango: str = "mes", top: int = 3, 
 
     return {
         "rango": rango,
-        "generado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "fuente": fuente.nombre,
         "total": {
             "visualizaciones": tot_vis,
@@ -89,7 +89,8 @@ def render_markdown(rep: dict) -> str:
         if fila["mejores_piezas"]:
             out.append("\n**Mejores piezas:**")
             for p in fila["mejores_piezas"]:
-                out.append(f"- [{p['plataforma']}] {p['titulo']} — {p['engagement_pct']}% ({p['visualizaciones']:,} vis)")
+                vis = f"{p['visualizaciones']:,}"
+                out.append(f"- [{p['plataforma']}] {p['titulo']} — {p['engagement_pct']}% ({vis} vis)")
         out.append("")
 
     return "\n".join(out)

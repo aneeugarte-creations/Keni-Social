@@ -8,7 +8,7 @@ OJO: la lectura de métricas en X está en tier de pago (ver docs/credenciales.m
 
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 
 import httpx
 
@@ -20,7 +20,7 @@ BASE = "https://api.twitter.com/2"
 
 def _iso_utc(d: date, fin: bool = False) -> str:
     t = time(23, 59, 59) if fin else time(0, 0, 0)
-    return datetime.combine(d, t, tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.combine(d, t, tzinfo=UTC).isoformat().replace("+00:00", "Z")
 
 
 class AdaptadorX:

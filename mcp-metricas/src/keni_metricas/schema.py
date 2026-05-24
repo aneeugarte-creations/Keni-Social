@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class Plataforma(str, Enum):
+class Plataforma(StrEnum):
     facebook = "facebook"
     instagram = "instagram"
     x = "x"

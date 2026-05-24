@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "respx>=0.21", "anyio>=4"]
+dev = ["pytest>=8", "respx>=0.21", "anyio>=4", "ruff>=0.6"]
 
 [project.scripts]
 keni-metricas = "keni_metricas.server:main"
@@ -30,3 +30,10 @@ packages = ["src/keni_metricas"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

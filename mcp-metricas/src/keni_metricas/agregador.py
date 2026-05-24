@@ -4,9 +4,14 @@ multi-marca/multi-plataforma. Implementa FuenteMetricas a partir de la config.
 
 from __future__ import annotations
 
+import logging
+
 from .config import Config, CuentaConfig
 from .fuentes.base import AdaptadorPlataforma, CuentaNoEncontrada
+from .presupuesto import Presupuesto, PresupuestoExcedido
 from .schema import Cuenta, MetricaPlataforma, Periodo, Pieza, Plataforma, ResumenMetricas, resolver_rango
+
+log = logging.getLogger("keni_metricas")
 
 
 class FuenteCompuesta:
@@ -16,12 +21,25 @@ class FuenteCompuesta:
         self,
         cuentas: list[CuentaConfig],
         adaptadores: dict[Plataforma, AdaptadorPlataforma],
+        presupuesto: Presupuesto | None = None,
     ):
         self._cuentas = cuentas
         self._adaptadores = adaptadores
+        self._presupuesto = presupuesto
+
+    def _consumir(self, plat: Plataforma) -> bool:
+        """True si hay presupuesto para consultar la plataforma; si no, avisa y False."""
+        if self._presupuesto is None:
+            return True
+        try:
+            self._presupuesto.consumir(plat)
+            return True
+        except PresupuestoExcedido as e:
+            log.warning("%s", e)
+            return False
 
     @classmethod
-    def desde_config(cls, cfg: Config) -> "FuenteCompuesta":
+    def desde_config(cls, cfg: Config) -> FuenteCompuesta:
         from .fuentes.meta import AdaptadorMeta
         from .fuentes.tiktok import AdaptadorTikTok
         from .fuentes.x import AdaptadorX
@@ -37,7 +55,7 @@ class FuenteCompuesta:
         }
         # solo conserva los adaptadores con credenciales suficientes
         adaptadores = {p: a for p, a in posibles.items() if a.disponible()}
-        return cls(cfg.cuentas, adaptadores)
+        return cls(cfg.cuentas, adaptadores, Presupuesto())
 
     def _buscar(self, cuenta_id: str) -> CuentaConfig:
         for c in self._cuentas:
@@ -65,7 +83,7 @@ class FuenteCompuesta:
         por_plataforma: list[MetricaPlataforma] = []
         for plat, handle in cc.plataformas.items():
             ad = self._adaptadores.get(plat)
-            if ad is None:
+            if ad is None or not self._consumir(plat):
                 continue
             m = ad.metricas(handle, desde, hasta)
             if m is not None:
@@ -94,7 +112,7 @@ class FuenteCompuesta:
         todas: list[Pieza] = []
         for plat, handle in cc.plataformas.items():
             ad = self._adaptadores.get(plat)
-            if ad is None:
+            if ad is None or not self._consumir(plat):
                 continue
             todas.extend(ad.piezas(handle, desde, hasta, n))
         todas.sort(key=lambda p: p.engagement_pct, reverse=True)

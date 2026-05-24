@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import httpx
 import respx
@@ -13,7 +13,7 @@ from keni_metricas.schema import Plataforma
 
 DESDE = date(2026, 5, 16)
 HASTA = date(2026, 5, 22)
-TS_EN_RANGO = int(datetime(2026, 5, 20, 12, 0, tzinfo=timezone.utc).timestamp())
+TS_EN_RANGO = int(datetime(2026, 5, 20, 12, 0, tzinfo=UTC).timestamp())
 
 
 @respx.mock
@@ -25,11 +25,12 @@ def test_x_pagina_dos_paginas():
         "retweet_count": 0,
         "quote_count": 0,
     }
+    def pagina(tid, imp, lk, next_token=None):
+        meta = {"next_token": next_token} if next_token else {}
+        return httpx.Response(200, json={"data": [{"id": tid, "public_metrics": pm(imp, lk)}], "meta": meta})
+
     respx.get("https://api.twitter.com/2/users/U/tweets").mock(
-        side_effect=[
-            httpx.Response(200, json={"data": [{"id": "1", "public_metrics": pm(100, 5)}], "meta": {"next_token": "abc"}}),
-            httpx.Response(200, json={"data": [{"id": "2", "public_metrics": pm(200, 10)}], "meta": {}}),
-        ]
+        side_effect=[pagina("1", 100, 5, "abc"), pagina("2", 200, 10)]
     )
     m = AdaptadorX({"bearer_token": "t"}).metricas("U", DESDE, HASTA)
     assert m is not None
@@ -40,7 +41,10 @@ def test_x_pagina_dos_paginas():
 @respx.mock
 def test_tiktok_pagina_dos_paginas():
     def vid(i, vc, lk):
-        return {"id": i, "view_count": vc, "like_count": lk, "comment_count": 0, "share_count": 0, "create_time": TS_EN_RANGO}
+        return {
+            "id": i, "view_count": vc, "like_count": lk,
+            "comment_count": 0, "share_count": 0, "create_time": TS_EN_RANGO,
+        }
 
     respx.post("https://open.tiktokapis.com/v2/video/list/").mock(
         side_effect=[

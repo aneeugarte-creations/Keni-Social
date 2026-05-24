@@ -9,7 +9,7 @@ lo que se sale de lo normal, para no tener que vigilar dashboards:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from .fuentes.base import FuenteMetricas
 
@@ -65,7 +65,7 @@ def detectar_picos(fuente: FuenteMetricas, rango: str = "semana", umbral_pct: in
     return {
         "rango": rango,
         "umbral_pct": umbral_pct,
-        "generado": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "alertas": alertas,
     }
 
@@ -81,8 +81,11 @@ def render_markdown(rep: dict) -> str:
                 f"- 🔼 **{a['cuenta']}** · [{a['plataforma']}] \"{a['titulo']}\" despunta a "
                 f"{a['engagement_pct']}% ({a['factor']}× la media de {a['baseline_engagement_pct']}%)"
             )
-        elif a["tipo"] == "cuenta_alza":
-            out.append(f"- 📈 **{a['cuenta']}** sube {a['desviacion_pct']}% vs. su baseline ({a['baseline']:,} → {a['visualizaciones']:,})")
         else:
-            out.append(f"- 📉 **{a['cuenta']}** cae {a['desviacion_pct']}% vs. su baseline ({a['baseline']:,} → {a['visualizaciones']:,})")
+            icono = "📈" if a["tipo"] == "cuenta_alza" else "📉"
+            verbo = "sube" if a["tipo"] == "cuenta_alza" else "cae"
+            base, vis = f"{a['baseline']:,}", f"{a['visualizaciones']:,}"
+            out.append(
+                f"- {icono} **{a['cuenta']}** {verbo} {a['desviacion_pct']}% vs. su baseline ({base} → {vis})"
+            )
     return "\n".join(out)

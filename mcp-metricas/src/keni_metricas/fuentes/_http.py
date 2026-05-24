@@ -37,6 +37,7 @@ def get_json(
 ) -> dict:
     """GET con reintentos en errores transitorios (red / 5xx). Lanza en 4xx."""
     r = cliente.get(url, params=params, headers=headers)
+    log.debug("GET %s -> %s", url, r.status_code)
     r.raise_for_status()
     return r.json()
 
@@ -52,6 +53,7 @@ def post_json(
 ) -> dict:
     """POST simple (para endpoints de token / TikTok). Sin reintentos."""
     r = cliente.post(url, params=params, data=data, json=json, headers=headers)
+    log.debug("POST %s -> %s", url, r.status_code)
     r.raise_for_status()
     return r.json()
 

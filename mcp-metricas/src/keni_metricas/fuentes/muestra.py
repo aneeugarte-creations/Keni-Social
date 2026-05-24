@@ -10,7 +10,7 @@ coste (X). Cifras ancladas a la realidad del cliente (p. ej. Claro Sports
 from __future__ import annotations
 
 import hashlib
-from datetime import date, timedelta
+from datetime import timedelta
 
 from ..schema import (
     Cuenta,

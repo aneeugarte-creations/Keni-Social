@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from .schema import ResumenMetricas
@@ -76,7 +76,7 @@ class Historico:
                    seguidores_netos, fuente, por_plataforma)
                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
                 r.cuenta,
                 r.rango,
                 r.periodo.desde.isoformat(),
