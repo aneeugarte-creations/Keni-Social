@@ -3,8 +3,18 @@
 No es codigo de usar-y-tirar: es el adaptador de prueba del sistema (lo usan los
 tests) y la fuente con la que el MCP funciona desde el dia 1, mientras los
 adaptadores reales pasan App Review (Meta), auditoria (TikTok) o se decide el
-coste (X). Cifras ancladas a la realidad del cliente (p. ej. Claro Sports
-~80M visualizaciones/mes, engagement 2-3%).
+coste (X).
+
+Cifras ancladas a la realidad del cliente (entrevista a Mariana de Leon,
+estrategia digital de AMX, 2026-05-18; ordenes de magnitud de followers
+contrastados en redes publicas):
+- Claro Sports Mexico: ~80M visualizaciones/mes, engagement 2-3% (audiencia muy
+  futbolera). Picos: Olimpicos Milano-Cortina ~150M/3%; proyeccion Mundial 2026
+  ~120-150M con engagement esperado 5-6%.
+- UnoTV: prioriza alcance/distribucion sobre engagement (noticias = poca
+  interaccion), por eso su factor de engagement es el mas bajo.
+- Claro Sports Golf y otras verticales: en fase de crecimiento (cifras menores).
+El engagement por marca se modula con `_ENG_FACTOR` (no todas interactuan igual).
 """
 
 from __future__ import annotations
@@ -79,6 +89,18 @@ _ENG = {
     Plataforma.x: (0.6, 1.6),
     Plataforma.tiktok: (4.5, 9.0),
     Plataforma.youtube: (3.0, 6.0),
+}
+
+# factor de engagement por marca: no todas las audiencias interactuan igual.
+# Calibrado para que Claro Sports caiga en ~2-3% combinado (cifra de Mariana) y
+# UnoTV mucho mas abajo (noticias = mucho alcance, poca interaccion).
+_ENG_FACTOR: dict[str, float] = {
+    "claro_sports": 0.62,
+    "unotv": 0.30,
+    "claro_sports_golf": 0.70,
+    "nacion_gamer": 0.85,
+    "piso_15": 0.90,
+    "fundacion": 0.55,
 }
 
 _TITULOS: dict[str, list[str]] = {
@@ -174,7 +196,8 @@ class FuenteMuestra:
         vistas_mes = base_mes * _PESO[plat]
         vistas = int(vistas_mes * (dias / 30) * _entre(_rand(cuenta_id, plat, rango, "v"), 0.85, 1.15))
         eng_min, eng_max = _ENG[plat]
-        eng = round(_entre(_rand(cuenta_id, plat, rango, "e"), eng_min, eng_max), 1)
+        factor = _ENG_FACTOR.get(cuenta_id, 1.0)
+        eng = round(_entre(_rand(cuenta_id, plat, rango, "e"), eng_min, eng_max) * factor, 1)
         interacciones = int(vistas * eng / 100)
         alcance = int(vistas * _entre(_rand(cuenta_id, plat, rango, "a"), 0.55, 0.75))
         return MetricaPlataforma(
@@ -227,12 +250,15 @@ class FuenteMuestra:
         titulos = _TITULOS[tema]
 
         candidatas: list[Pieza] = []
+        factor = _ENG_FACTOR.get(cuenta_id, 1.0)
         # genera un pool amplio y se queda con las n mejores por engagement
         for i in range(max(n, 12)):
             plat = plats[int(_rand(cuenta_id, rango, "p", i) * len(plats))]
             eng_min, eng_max = _ENG[plat]
             # las "mejores piezas" baten la media de la plataforma
-            eng = round(_entre(_rand(cuenta_id, rango, "pe", i), (eng_min + eng_max) / 2, eng_max * 1.4), 1)
+            eng = round(
+                _entre(_rand(cuenta_id, rango, "pe", i), (eng_min + eng_max) / 2, eng_max * 1.4) * factor, 1
+            )
             vistas = int(
                 base_mes * _PESO[plat] * (dias / 30) * _entre(_rand(cuenta_id, rango, "pv", i), 0.04, 0.22)
             )
