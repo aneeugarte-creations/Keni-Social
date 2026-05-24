@@ -45,11 +45,11 @@ usa copy-desde-nota con ejemplos/cable-1.md y ejemplos/cable-2.md, marca claro-s
 ```
 
 **Qué señalar en el resultado, en este orden:**
-1. **Una versión por red** (X, Instagram, Facebook, TikTok, YouTube), cada una con su conteo de caracteres. "No es un texto que copiar y recortar a mano: ya viene medido para cada red."
-2. **Suena mexicano.** "Fíjense que no dice 'vale' ni 'os'. Está tropicalizado a México porque conoce la voz de Claro Sports."
-3. **El cazador de errores (el momento clave).** Los dos cables **se contradicen**: uno dice **40 millones / 5 temporadas**, el otro **45 millones / 4 temporadas**. En la auto-verificación final marca esa discrepancia con ⚠️ y **no inventa una cifra**.
+1. **El veredicto, ARRIBA del todo.** La salida ABRE con una línea de veredicto (`✅ LISTO PARA APROBAR` / `⚠️ REVISAR ANTES DE PUBLICAR` / `❌ NO PUBLICAR`) y una leyenda corta de los símbolos, **antes del copy**. "Lo primero que ven, sin hacer scroll, es si pueden aprobar o no. Verde ✅ = confía. Amarillo ⚠️ = revísalo tú. Rojo ❌ = hay un problema. Solo dice 'LISTO PARA APROBAR' si todo está en verde." Como los cables se contradicen, aquí saldrá ⚠️.
+2. **Una versión por red** (X, Instagram, Facebook, TikTok, YouTube), cada una con su conteo de caracteres. "No es un texto que copiar y recortar a mano: ya viene medido para cada red."
+3. **Suena mexicano.** "Fíjense que no dice 'vale' ni 'os'. Está tropicalizado a México porque conoce la voz de Claro Sports."
+4. **El cazador de errores (el momento clave).** Los dos cables **se contradicen**: uno dice **40 millones / 5 temporadas**, el otro **45 millones / 4 temporadas**. En la auto-verificación detallada (al final) marca esa discrepancia con ⚠️ y **no inventa una cifra**; ese ⚠️ es el que ya se anunció en el veredicto de arriba.
    > "Miren esto. Las dos agencias dieron datos distintos. La IA **no eligió a la ciega**: les avisa con ⚠️ que hay que confirmar el monto y las temporadas. Eso es lo que las herramientas normales no hacen: les dice **cuándo creerle y cuándo verificar.**"
-4. Cierra el paso: "Verde ✅ = confía. Amarillo ⚠️ = revísalo tú. Rojo ❌ = hay un problema. El veredicto solo dice 'LISTO PARA APROBAR' si todo está en verde."
 
 **Variante para meter un error a propósito** (si quieres un ⚠️ aún más obvio): después de mostrar lo anterior, di "ahora a propósito le doy un dato falso" y pega:
 ```
@@ -144,7 +144,7 @@ Señala en pantalla:
 - ❌ **NO publicar de verdad** en ninguna red. Todo es dry-run/borrador. Si surge "¿y publica?", responde: "esa fase llega después; hoy el sistema prepara y previsualiza, tú publicas."
 - ❌ **NO mencionar ni mostrar** el estado de permisos de Meta / TikTok / X (App Review, gating). Está pausado y es ruido para esta audiencia.
 - ❌ **NO entrar en arquitectura** (MCP, adaptadores, App Review, código). Si Bernardo pregunta técnico, ofrécele una llamada aparte.
-- ❌ **NO correr `doctor` en vivo** ante la audiencia (muestra avisos que confunden a no-técnicos). El doctor es de tu checklist privada de la noche anterior.
+- ❌ **NO correr `doctor` en vivo** ante la audiencia. Aunque ahora es más limpio (agrupa las credenciales en una sola línea y cierra con un siguiente paso accionable), sigue siendo de tu checklist privada de la noche anterior, no material de demo.
 - ❌ Evitar `publica-preview` en la demo principal salvo que pregunten "¿y antes de publicar?". Si lo piden, es buen broche: muestra el preview final con la checklist y el aviso en negrita de que **nada se publicó**.
 
 ---
@@ -164,7 +164,7 @@ Corre esto y confirma cada línea. **Todo en rutas absolutas; macOS no trae `tim
    ```
    /tmp/keni-ux/bin/python -m keni_metricas.doctor
    ```
-   - Debe salir **0 ❌**. Los ⚠️ de credenciales y config son normales (fuente de muestra).
+   - Debe salir **0 ❌**. Con datos de muestra es normal ver **unos 3 ⚠️** (config, cuentas y una sola línea de credenciales agrupada del tipo `Credenciales: 0/5 plataformas conectadas (normal con datos de muestra…)`). El informe cierra con un siguiente paso accionable; con muestra, ese paso es simplemente "listo para la demo".
    - Confirma especialmente: `✅ whisper-cli`, `✅ ffmpeg`, `✅ modelo whisper`. Si alguno sale ❌, el paso 3 va por plan B (B1/B2).
 
 3. **Dashboard pre-generado y abierto:**

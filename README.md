@@ -38,7 +38,7 @@ Listo. Cierra y vuelve a abrir Claude Code (o ejecuta `/reload-plugins`). Despu�
 - `/keni-social:resumen-tendencia` — brief corto de un tema: qué pasa, ángulo por marca y riesgos legales.
 - `/keni-social:nota-a-formato` — normaliza una nota cruda al estilo editorial de la casa.
 
-> Las skills de copy funcionan solas. El servidor de **métricas** (`keni-metricas`) viene declarado en el plugin pero necesita `uv`/`uvx` en la máquina para arrancar y, para datos reales, credenciales locales. Ver [`mcp-metricas/README.md`](mcp-metricas/README.md) y [`docs/credenciales.md`](docs/credenciales.md). El cableado de ejemplo del servidor está en [`.mcp.json`](.mcp.json).
+> Las skills de copy funcionan solas. El servidor de **métricas** (`keni-metricas`) viene declarado en el plugin pero necesita `uv`/`uvx` en la máquina para arrancar y, para datos reales, credenciales locales. Para configurarlo sin tocar archivos a mano hay un **asistente guiado** (`python -m keni_metricas.asistente`): te lleva **paso a paso** (te indica en qué `paso X/N` vas) y cierra con un **recap** de lo que dejó configurado y el próximo paso (`verifica con doctor`). Ver [`mcp-metricas/README.md`](mcp-metricas/README.md) y [`docs/credenciales.md`](docs/credenciales.md). El cableado de ejemplo del servidor está en [`.mcp.json`](.mcp.json).
 
 ### Comandos disponibles
 
