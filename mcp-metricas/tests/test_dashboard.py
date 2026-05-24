@@ -311,3 +311,51 @@ def test_dashboard_ranking_barra_con_porcentaje_visible():
     html = generar_dashboard(FuenteMuestra(), "mes", top=3)
     assert 'class="barra-pct"' in html
     assert 'class="relleno' in html
+
+
+# --- UX-9: impresion / "Guardar como PDF" (@media print) ---
+
+
+def test_dashboard_incluye_bloque_media_print():
+    """El CSS lleva un bloque @media print para que el PDF del navegador salga limpio."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert "@media print" in html
+    # los <details> plegados se fuerzan abiertos al imprimir (no esconder info)
+    assert "details" in html and "revert" in html
+    # se fuerza la impresion de fondos/colores y se evitan cortes feos
+    assert "print-color-adjust" in html
+    assert "break-inside" in html
+
+
+def test_dashboard_media_print_sigue_autocontenido():
+    """El bloque @media print no introduce recursos externos: sigue autocontenido."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    low = html.lower()
+    assert "<script" not in low
+    assert "http://" not in html
+    assert "https://" not in html
+    assert "cdn" not in low
+    # ni @import ni url() que carguen recursos remotos en el CSS
+    assert "@import" not in low
+    assert "url(" not in low
+
+
+# --- tier-2: pie con leyenda de niveles + criterio del callout estrella ---
+
+
+def test_dashboard_footer_leyenda_de_niveles():
+    """UX-12: el pie incluye una leyenda imprimible de los niveles de engagement."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    seccion = html.split("<footer", 1)[1]
+    assert "Niveles de engagement" in seccion
+    # los tres niveles con sus umbrales y el icono de la pieza estrella
+    assert "eng-alto" in seccion and "eng-medio" in seccion and "eng-bajo" in seccion
+    assert str(_ENG_UMBRAL_ALTO) in seccion and str(_ENG_UMBRAL_BAJO) in seccion
+    assert "🔥" in seccion
+
+
+def test_dashboard_callout_estrella_aclara_criterio():
+    """UX-10: el callout aclara que se elige por mayor engagement %."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert "Lo que más rompió" in html
+    assert "mayor engagement %" in html
