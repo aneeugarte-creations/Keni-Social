@@ -303,6 +303,95 @@ def test_evaluar_copy_malo_falla():
     assert "sin numeros ausentes de la fuente" in fallidos
 
 
+# --- consistencia del contrato de cada SKILL.md (veredicto + contexto) -------
+#
+# Estos tests SÍ leen el repo (los SKILL.md reales), pero siguen siendo CI-safe:
+# no usan modelo ni red, solo `checks.produce_copy_con_veredicto` sobre el texto.
+
+# Skills que PRODUCEN/PREVISUALIZAN copy y deben cumplir el contrato de
+# consistencia. `revisa-imagen` NO está aquí: revisa imágenes y su veredicto es
+# APTA/NO APTA, así que el check de copy no le aplica (se valida aparte abajo).
+SKILLS_DE_COPY = (
+    "copy-desde-nota",
+    "clip-a-copy",
+    "nota-a-formato",
+    "resumen-tendencia",
+    "publica-preview",
+    "responde-comentarios",
+    "calendario-editorial",
+)
+
+
+def _texto_skill(nombre: str) -> str:
+    ruta = checks.SKILLS_DIR / nombre / "SKILL.md"
+    assert ruta.is_file(), f"no existe {ruta}"
+    return ruta.read_text(encoding="utf-8")
+
+
+def test_skills_de_copy_cumplen_veredicto_y_contexto():
+    # toda skill de copy debe abrir con veredicto+leyenda (3 símbolos) y cargar
+    # el contexto editorial.
+    errores = []
+    for nombre in SKILLS_DE_COPY:
+        texto = _texto_skill(nombre)
+        if not checks.produce_copy(texto):
+            errores.append(f"{nombre}: no se reconoce como skill de copy")
+            continue
+        if not checks.produce_copy_con_veredicto(texto):
+            faltan = []
+            if not checks.tiene_bloque_veredicto_leyenda(texto):
+                faltan.append("bloque veredicto+leyenda (✅/⚠️/❌)")
+            if not checks.carga_contexto_editorial(texto):
+                faltan.append("carga de contexto-editorial")
+            errores.append(f"{nombre}: falta {', '.join(faltan)}")
+    assert not errores, "\n".join(errores)
+
+
+def test_revisa_imagen_no_aplica_el_check_de_copy():
+    # revisa-imagen trae veredicto+leyenda PERO su dictamen es APTA/NO APTA: no
+    # produce copy, así que el check de consistencia de copy NO le aplica.
+    texto = _texto_skill("revisa-imagen")
+    assert checks.usa_veredicto_apta(texto)
+    assert not checks.produce_copy(texto)
+    assert not checks.produce_copy_con_veredicto(texto)
+
+
+def test_produce_copy_con_veredicto_caso_negativo_sin_veredicto():
+    # un SKILL.md hipotético que produce copy pero NO documenta el veredicto
+    # (sin los 3 símbolos ni leyenda) -> False.
+    texto = (
+        "---\nname: copy-sin-veredicto\n---\n\n"
+        "# copy-sin-veredicto\n\nRedacta copy. Carga contexto-editorial/plataformas.md.\n"
+        "Pero NO documenta ningún bloque de veredicto ni leyenda.\n"
+    )
+    assert not checks.tiene_bloque_veredicto_leyenda(texto)
+    assert not checks.produce_copy_con_veredicto(texto)
+
+
+def test_produce_copy_con_veredicto_caso_negativo_sin_contexto():
+    # tiene veredicto+leyenda pero NO carga el contexto editorial -> False.
+    texto = (
+        "Veredicto:\n"
+        "✅ LISTO PARA APROBAR   ·   ⚠️ REVISAR ANTES DE PUBLICAR   ·   ❌ NO PUBLICAR\n"
+        "Leyenda: ✅ = listo · ⚠️ = revísalo tú · ❌ = no publicar\n\n"
+        "Redacta copy, pero nunca menciona de dónde carga el contexto.\n"
+    )
+    assert checks.tiene_bloque_veredicto_leyenda(texto)
+    assert not checks.carga_contexto_editorial(texto)
+    assert checks.produce_copy(texto)  # parece de copy (veredicto, sin APTA)
+    assert not checks.produce_copy_con_veredicto(texto)  # ...pero incumple
+
+
+def test_produce_copy_con_veredicto_caso_positivo_minimo():
+    # bloque veredicto+leyenda + carga de contexto, sin APTA -> True.
+    texto = (
+        "✅ LISTO PARA APROBAR · ⚠️ REVISAR · ❌ NO PUBLICAR\n"
+        "Leyenda: ✅ listo · ⚠️ revisa · ❌ no\n\n"
+        "Carga contexto-editorial/reglas-legales.md y redacta el copy.\n"
+    )
+    assert checks.produce_copy_con_veredicto(texto)
+
+
 def _main() -> int:
     funcs = [v for k, v in sorted(globals().items())
              if k.startswith("test_") and callable(v)]
