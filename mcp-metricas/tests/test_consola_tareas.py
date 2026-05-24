@@ -71,14 +71,14 @@ def test_tareas_aparece_en_la_nav(entorno):
 def test_estado_vacio_sin_proyectos_invita_a_configurar(entorno):
     c = _cliente()
     texto = c.get("/tareas").text
-    assert "Aun no tienes proyectos configurados" in texto
+    assert "Aún no tienes proyectos configurados" in texto
 
 
 def test_estado_vacio_con_proyecto_pero_sin_tareas(entorno):
     _registrar_proyecto(entorno)
     c = _cliente()
     texto = c.get("/tareas").text
-    assert "No hay tareas todavia" in texto
+    assert "No hay tareas todavía" in texto
     # El proyecto aparece como opcion del desplegable.
     assert "Proyecto A" in texto
 
@@ -230,15 +230,137 @@ def test_abrir_tarea_huerfana_no_llama_al_lanzador(entorno, monkeypatch):
     assert llamadas == []  # NO se intento lanzar nada
 
 
-def test_abrir_default_usa_lanzador_compartido(monkeypatch):
-    """El wrapper por defecto delega en consola.lanzador (sin editar lanzador.py)."""
+def test_abrir_default_pasa_el_detalle_como_prompt_al_lanzador(monkeypatch):
+    """B8: el wrapper por defecto delega en consola.lanzador pasandole el detalle de
+    la tarea como `prompt` (sin editar la firma del wrapper)."""
     from keni_metricas.consola import lanzador
 
-    capt: list[Path] = []
-    monkeypatch.setattr(lanzador, "abrir_en_claude_code", lambda ruta: capt.append(ruta) or "ok")
-    msg = feat_tareas.abrir_tarea_en_claude_code(Path("/tmp/x"), "detalle ignorado por ahora")
-    assert capt == [Path("/tmp/x")]
+    capt: list[tuple[Path, object]] = []
+
+    def fake(ruta, prompt=None):  # noqa: ANN001 -- mock con la firma extendida
+        capt.append((ruta, prompt))
+        return "ok"
+
+    monkeypatch.setattr(lanzador, "abrir_en_claude_code", fake)
+    msg = feat_tareas.abrir_tarea_en_claude_code(Path("/tmp/x"), "haz el guion")
+    assert capt == [(Path("/tmp/x"), "haz el guion")]
     assert msg == "ok"
+
+
+def test_abrir_sin_detalle_no_pasa_prompt(monkeypatch):
+    """Sin detalle, el lanzador recibe prompt=None (abre el asistente sin texto)."""
+    from keni_metricas.consola import lanzador
+
+    capt: list[tuple[Path, object]] = []
+    monkeypatch.setattr(
+        lanzador, "abrir_en_claude_code", lambda ruta, prompt=None: capt.append((ruta, prompt)) or "ok"
+    )
+    feat_tareas.abrir_tarea_en_claude_code(Path("/tmp/x"), "")
+    assert capt == [(Path("/tmp/x"), None)]
+
+
+def test_endpoint_abrir_pasa_el_detalle_de_la_tarea_como_prompt(entorno, monkeypatch):
+    """B8 extremo a extremo: POST /tareas/{id}/abrir lleva el detalle de la tarea
+    hasta el lanzador como `prompt` (mockeado, sin lanzar nada real)."""
+    carpeta = _registrar_proyecto(entorno)
+    pid = proyectos.cargar_proyectos()[0].id
+    t = feat_tareas.crear_tarea(pid, "Escribir intro", detalle="Tono cercano, 3 parrafos")
+
+    from keni_metricas.consola import lanzador
+
+    capt: list[tuple[Path, object]] = []
+    monkeypatch.setattr(
+        lanzador, "abrir_en_claude_code", lambda ruta, prompt=None: capt.append((ruta, prompt)) or "ok"
+    )
+
+    c = _cliente()
+    r = c.post(f"/tareas/{t['id']}/abrir", follow_redirects=False)
+    assert r.status_code == 303
+    assert capt == [(carpeta.resolve(), "Tono cercano, 3 parrafos")]
+
+
+def test_boton_abrir_se_llama_abrir_asistente(entorno):
+    """Des-jerga: el boton ya no dice 'Abrir en Claude Code' sino 'Abrir asistente'."""
+    _registrar_proyecto(entorno)
+    pid = proyectos.cargar_proyectos()[0].id
+    feat_tareas.crear_tarea(pid, "Una tarea")
+    texto = _cliente().get("/tareas").text
+    assert "Abrir asistente" in texto
+    assert "Abrir en Claude Code" not in texto
+
+
+# --------------------------------------------------------------------------- #
+# B8: el lanzador entrecomilla el prompt de forma segura (incl. apostrofo)     #
+# --------------------------------------------------------------------------- #
+
+
+def test_lanzador_con_prompt_escapa_bien_incluido_apostrofo(monkeypatch):
+    """`abrir_en_claude_code(ruta, prompt=...)` arranca `claude '<prompt>'` con el
+    prompt entrecomillado con shlex: un apostrofo dentro del texto NO rompe el
+    comando ni permite inyeccion. Mockeamos osascript (no se lanza nada real)."""
+    import shlex
+
+    from keni_metricas.consola import lanzador
+
+    monkeypatch.setattr(lanzador.sys, "platform", "darwin")
+
+    capturado: dict[str, str] = {}
+
+    def fake_run(args, **kwargs):  # noqa: ANN001, ANN003
+        capturado["script"] = args[2]
+
+        class _R:
+            stdout = ""
+            stderr = ""
+
+        return _R()
+
+    monkeypatch.setattr(lanzador.subprocess, "run", fake_run)
+
+    # Prompt con apostrofo y comillas: el caso peligroso para un `cd && claude '...'`.
+    prompt = "haz el guion de O'Brien sin \"comillas raras\""
+    lanzador.abrir_en_claude_code(Path("/Users/o'brien/Proyecto"), prompt=prompt)
+
+    script = capturado["script"]
+    # Recuperamos el comando de shell deshaciendo el escape de AppleScript.
+    inicio = script.index('do script "') + len('do script "')
+    fin = script.index('"\n', inicio)
+    comando_shell = script[inicio:fin].replace('\\"', '"').replace("\\\\", "\\")
+    # Una vez parseado por /bin/sh, el comando es exactamente cd <ruta> && claude <prompt>.
+    assert shlex.split(comando_shell) == [
+        "cd",
+        "/Users/o'brien/Proyecto",
+        "&&",
+        "claude",
+        prompt,
+    ]
+
+
+def test_lanzador_sin_prompt_no_anade_argumento(monkeypatch):
+    """Sin prompt (caso Proyectos) el comando sigue siendo `cd <ruta> && claude`."""
+    import shlex
+
+    from keni_metricas.consola import lanzador
+
+    monkeypatch.setattr(lanzador.sys, "platform", "darwin")
+    capturado: dict[str, str] = {}
+
+    def fake_run(args, **kwargs):  # noqa: ANN001, ANN003
+        capturado["script"] = args[2]
+
+        class _R:
+            stdout = ""
+            stderr = ""
+
+        return _R()
+
+    monkeypatch.setattr(lanzador.subprocess, "run", fake_run)
+    lanzador.abrir_en_claude_code(Path("/tmp/proj"))
+    script = capturado["script"]
+    inicio = script.index('do script "') + len('do script "')
+    fin = script.index('"\n', inicio)
+    comando_shell = script[inicio:fin].replace('\\"', '"').replace("\\\\", "\\")
+    assert shlex.split(comando_shell) == ["cd", "/tmp/proj", "&&", "claude"]
 
 
 # --------------------------------------------------------------------------- #

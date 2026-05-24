@@ -240,3 +240,66 @@ def test_placeholder_no_cuenta_como_conectada(entorno):
     _escribir(entorno, contenido)
     html = _cliente().get("/config").text
     assert "sin conectar" in html
+
+
+# --------------------------------------------------------------------------- #
+# H2: marcas con etiqueta humana (con acentos), nunca ids crudos en la UI      #
+# --------------------------------------------------------------------------- #
+
+
+def test_marcas_se_muestran_con_etiqueta_humana_no_id_crudo(entorno):
+    """La marca 'nacion_gamer' se muestra como 'Nación Gamer' (acentos), nunca como
+    'nacion_gamer' visible ni '(nacion_gamer)' entre parentesis."""
+    contenido = (
+        'fuente = "muestra"\n\n'
+        "[[cuenta]]\n"
+        'id = "nacion_gamer"\n'
+        'nombre = "Nacion Gamer"\n'  # nombre sin acento en el config...
+    )
+    _escribir(entorno, contenido)
+    html = _cliente().get("/config").text
+    # ...pero en la UI sale la etiqueta canonica de marcas, con acento.
+    assert "Nación Gamer" in html
+    # El id crudo NUNCA aparece entre parentesis como texto visible.
+    assert "(nacion_gamer)" not in html
+
+
+def test_id_de_marca_viaja_en_title_no_como_texto(entorno):
+    """El id tecnico de la marca solo aparece en title= (para quien lo necesite)."""
+    contenido = (
+        'fuente = "muestra"\n\n'
+        "[[cuenta]]\n"
+        'id = "unotv"\n'
+        'nombre = "UnoTV"\n'
+    )
+    _escribir(entorno, contenido)
+    html = _cliente().get("/config").text
+    # El id sigue siendo el value del checkbox y el title de la etiqueta.
+    assert 'name="marca" value="unotv"' in html
+    assert 'title="unotv"' in html
+
+
+def test_alcance_en_resumen_usa_etiqueta_humana(entorno):
+    """El resumen de alcance muestra etiquetas humanas, no ids con guion_bajo."""
+    _escribir(entorno, 'fuente = "muestra"\nmarcas = ["claro_sports"]\n')
+    html = _cliente().get("/config").text
+    assert "Claro Sports" in html
+    # El id con guion_bajo no debe salir como texto del alcance.
+    assert ">claro_sports<" not in html
+
+
+def test_comando_del_asistente_no_esta_en_texto_principal_sino_en_details(entorno):
+    """Des-jerga: el comando CLI y la ruta del config no estan en el texto principal,
+    sino escondidos en un <details> para personas tecnicas."""
+    _escribir(entorno, 'fuente = "muestra"\n')
+    html = _cliente().get("/config").text
+    # Hay un <details> con el detalle tecnico.
+    assert "<details" in html
+    assert "Detalles técnicos" in html
+    # El comando sigue disponible (dentro del details), pero la nota principal es amable.
+    assert "keni_metricas.asistente" in html
+    assert "asistente de configuración" in html
+    # La ruta del config aparece tras el summary del details (no en el cuerpo principal).
+    pos_details = html.index("<details")
+    pos_ruta = html.index("Tu configuración se guarda en")
+    assert pos_ruta > pos_details

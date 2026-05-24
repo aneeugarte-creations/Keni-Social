@@ -56,6 +56,29 @@ def test_pagina_carpetas_200_y_lista_plantillas(entorno):
     assert str(entorno) in texto
 
 
+def test_carpetas_des_jerga_plantilla_de_contexto(entorno):
+    """Des-jerga: la UI dice 'Plantilla de contexto', no 'Plantilla de CLAUDE.md'.
+
+    Comprobamos el <main> de la pagina (no la nav, cuyos title= vienen de otras
+    features que no editamos)."""
+    texto = _cliente().get("/carpetas").text
+    main = texto[texto.index("<main") : texto.index("</main>")]
+    assert "Plantilla de contexto" in main
+    assert "CLAUDE.md" not in main  # nada de jerga del archivo de contexto en la pagina
+    assert "Plantilla de CLAUDE.md" not in texto
+    # Acentos correctos en textos de usuario.
+    assert "después" in main
+
+
+def test_carpetas_body_malformado_da_400_sin_crashear(entorno):
+    """Con `leer_json`, un body no-JSON se trata como vacio => falta nombre => 400."""
+    r = _cliente().post(
+        "/api/carpetas/crear", content=b"no-json", headers={"Content-Type": "application/json"}
+    )
+    assert r.status_code == 400
+    assert "error" in r.json()
+
+
 def test_carpetas_aparece_en_la_nav(entorno):
     """La pestana se auto-descubre y sale en la nav de otras paginas."""
     from keni_metricas.consola import features
