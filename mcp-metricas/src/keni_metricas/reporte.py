@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .formato import partes_cobertura, signo
+from .formato import etiqueta_marca, partes_cobertura, signo
 from .fuentes.base import FuenteMetricas
 
 if TYPE_CHECKING:
@@ -33,8 +33,12 @@ def construir_reporte(
     filas: list[dict] = []
     tot_vis = tot_alc = tot_inter = 0
     cuentas_parciales: list[str] = []  # marcas con alguna plataforma omitida
+    # Mapa id->nombre legible (mismo origen que el dashboard). El resumen guarda
+    # el id crudo; el render lo traduce al NOMBRE legible con este mapa.
+    nombres: dict[str, str] = {}
 
     for c in cuentas:
+        nombres[c.id] = c.nombre
         r = fuente.resumen(c.id, rango)  # ValueError si el rango es inválido (se propaga)
         if historico is not None:
             historico.aplicar_variacion(r)
@@ -69,6 +73,9 @@ def construir_reporte(
             "completa": not cuentas_parciales,
             "cuentas_parciales": cuentas_parciales,
         },
+        # mapa id->nombre legible para que el render imprima el NOMBRE de la
+        # marca (no el id crudo). No cambia los ids internos del resumen.
+        "nombres": nombres,
         "cuentas": filas,
     }
 
@@ -83,6 +90,7 @@ def _nota_cobertura(cob: dict | None) -> str | None:
 
 def render_markdown(rep: dict) -> str:
     t = rep["total"]
+    nombres = rep.get("nombres") or {}
     out: list[str] = []
     out.append(f"# Reporte de redes — {rep['rango']}")
     out.append(f"*Generado {rep['generado']} · fuente: {rep['fuente']}*\n")
@@ -94,7 +102,7 @@ def render_markdown(rep: dict) -> str:
     out.append(f"- **Cuentas:** {t['cuentas']}")
     cob_global = rep.get("cobertura") or {}
     if cob_global.get("cuentas_parciales"):
-        parciales = ", ".join(cob_global["cuentas_parciales"])
+        parciales = ", ".join(etiqueta_marca(c, nombres) for c in cob_global["cuentas_parciales"])
         out.append(f"- ⚠️ **Cobertura:** datos parciales en {parciales} (ver detalle por marca)")
     out.append("")
 
@@ -102,7 +110,7 @@ def render_markdown(rep: dict) -> str:
         r = fila["resumen"]
         var = r.get("variacion_vs_anterior") or {}
         v_vis = var.get("visualizaciones_pct")
-        cab = f"## {r['cuenta']}"
+        cab = f"## {etiqueta_marca(r['cuenta'], nombres)}"
         if v_vis is not None:
             cab += f"  ({signo(v_vis)}% vis vs. anterior)"
         out.append(cab)

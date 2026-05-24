@@ -22,7 +22,22 @@ def test_render_markdown():
     md = render_markdown(construir_reporte(FuenteMuestra(), "semana", top=2))
     assert md.startswith("# Reporte de redes — semana")
     assert "## Total" in md
-    assert "Claro Sports".lower() in md.lower() or "claro_sports" in md
+
+
+def test_reporte_expone_nombres_legibles():
+    # el reporte debe traer el mapa id->nombre legible (mismo origen que el
+    # dashboard) para que el render no imprima el id crudo.
+    rep = construir_reporte(FuenteMuestra(), "mes", top=1)
+    assert rep["nombres"]["claro_sports"] == "Claro Sports"
+
+
+def test_render_markdown_cabecera_usa_nombre_legible_no_id():
+    # la cabecera de marca debe ser el NOMBRE legible ("## Claro Sports"), no el
+    # id crudo ("## claro_sports").
+    md = render_markdown(construir_reporte(FuenteMuestra(), "mes", top=1))
+    assert "## Claro Sports" in md
+    # el id crudo no debe aparecer como cabecera de marca
+    assert "## claro_sports" not in md
 
 
 def test_rango_invalido_propaga():

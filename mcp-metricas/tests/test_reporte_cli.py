@@ -112,3 +112,29 @@ def test_sin_picos_no_hay_seccion_markdown(capsys):
     rc = reporte.main(["--formato", "md"])
     assert rc == 0
     assert "Alertas" not in capsys.readouterr().out
+
+
+def test_md_muestra_nombre_legible_no_id(capsys):
+    # el CLI de reporte debe imprimir el NOMBRE legible de la marca, no el id
+    # crudo (alineado con el dashboard).
+    rc = reporte.main(["--formato", "md"])
+    assert rc == 0
+    salida = capsys.readouterr().out
+    assert "## Claro Sports" in salida
+    assert "## claro_sports" not in salida
+
+
+def test_md_picos_acotados_a_top_n(capsys):
+    # con --picos, el reporte no debe volcar todas las alertas planas: se acota
+    # a un top-N y se resume el resto en una linea.
+    from keni_metricas.formato import PICOS_VISIBLES
+
+    rc = reporte.main(["--formato", "md", "--picos"])
+    assert rc == 0
+    salida = capsys.readouterr().out
+    seccion = salida[salida.index("## Alertas") :]
+    lineas_alerta = [ln for ln in seccion.splitlines() if ln.startswith(("- 🔼", "- 📈", "- 📉"))]
+    assert lineas_alerta, "la muestra deberia producir alertas"
+    assert len(lineas_alerta) <= PICOS_VISIBLES
+    # las alertas tambien usan el nombre legible
+    assert "claro_sports" not in seccion

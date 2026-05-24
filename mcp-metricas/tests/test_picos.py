@@ -68,12 +68,58 @@ def test_detecta_caida_de_cuenta_con_historico(tmp_path):
     ]
     assert caidas, "baseline alto + muestra inferior debe marcar cuenta_caida"
     assert caidas[0]["desviacion_pct"] < 0  # desviacion negativa
-    # render_markdown muestra la caida (icono 📉 + verbo "cae")
-    md = render_markdown(rep)
+    # render_markdown muestra la caida (icono 📉 + verbo "cae"). Como el render
+    # acota a un top-N por magnitud, renderizamos solo la(s) caida(s) para
+    # comprobar su formato sin depender de que entre en el top global.
+    rep_caida = {**rep, "alertas": caidas}
+    md = render_markdown(rep_caida)
     assert "📉" in md
     assert "cae" in md
+    # y se muestra con el NOMBRE legible de la marca, no el id crudo
+    assert "Claro Sports" in md
+    assert "claro_sports" not in md
 
 
 def test_render_markdown():
     md = render_markdown(detectar_picos(FuenteMuestra(), "semana", 50))
     assert md.startswith("## Alertas")
+
+
+def test_detectar_picos_expone_nombres_legibles():
+    # el reporte de picos debe traer el mapa id->nombre legible (mismo origen
+    # que usa el dashboard) para que el render no imprima el id crudo.
+    rep = detectar_picos(FuenteMuestra(), "semana", 50)
+    assert rep["nombres"]["claro_sports"] == "Claro Sports"
+
+
+def test_render_markdown_usa_nombre_legible_no_id():
+    # con varias alertas de claro_sports, el markdown debe mostrar el NOMBRE
+    # legible ("Claro Sports") y no el id crudo ("claro_sports").
+    rep = detectar_picos(FuenteMuestra(), "semana", 50)
+    assert any(a["cuenta"] == "claro_sports" for a in rep["alertas"])
+    md = render_markdown(rep)
+    assert "Claro Sports" in md
+    assert "claro_sports" not in md  # el id crudo no debe filtrarse al texto
+
+
+def test_render_markdown_limita_a_top_n_y_resume_el_resto():
+    # la muestra genera bastantes alertas (>visibles); el render debe acotar a
+    # un top-N y resumir el resto en una linea, no volcarlas todas.
+    from keni_metricas.formato import PICOS_VISIBLES
+
+    rep = detectar_picos(FuenteMuestra(), "semana", 50)
+    assert len(rep["alertas"]) > PICOS_VISIBLES, "la muestra debe dar mas alertas que el top-N"
+    md = render_markdown(rep)
+    # nº de lineas de alerta concretas (las que empiezan con un icono de pico)
+    lineas_alerta = [ln for ln in md.splitlines() if ln.startswith(("- 🔼", "- 📈", "- 📉"))]
+    assert len(lineas_alerta) <= PICOS_VISIBLES
+    # y hay una linea-resumen del resto colapsado
+    n_resto = len(rep["alertas"]) - PICOS_VISIBLES
+    assert any(str(n_resto) in ln and "mas" in ln for ln in md.splitlines())
+
+
+def test_render_markdown_no_resume_cuando_hay_pocas():
+    # con umbral altisimo casi no hay alertas: ninguna linea de "resto".
+    rep = detectar_picos(FuenteMuestra(), "semana", 100000)
+    md = render_markdown(rep)
+    assert "mas (ordenadas por magnitud)" not in md

@@ -27,6 +27,51 @@ def signo(pct: float) -> str:
     return f"+{pct}" if pct > 0 else f"{pct}"
 
 
+def etiqueta_marca(cuenta_id: str, nombres: Mapping[str, str] | None = None) -> str:
+    """Nombre legible de una marca a partir de su id interno.
+
+    Es la MISMA regla que usa el dashboard (`nombres.get(cuenta_id, cuenta_id)`):
+    se traduce el id crudo (`claro_sports`) al nombre legible (`Claro Sports`)
+    usando el mapa `{id: nombre}` que las fuentes ya exponen via `cuentas()`. Si
+    no hay nombre para ese id (o no se pasa mapa), se cae al id tal cual para no
+    perder informacion. Centraliza el fallback id->titulo de las CLIs de texto
+    (reporte, picos, digest) para que sean consistentes con el dashboard.
+    """
+    if not nombres:
+        return cuenta_id
+    return nombres.get(cuenta_id, cuenta_id)
+
+
+# Nº de alertas (picos) que se muestran antes de colapsar el resto en un resumen.
+# Mismo criterio que el dashboard (que muestra 6 + "ver todas (N)"); aqui, en
+# texto, mostramos el top-N por magnitud y resumimos el resto en una linea.
+PICOS_VISIBLES = 6
+
+
+def particionar_picos(
+    alertas: list, visibles: int = PICOS_VISIBLES
+) -> tuple[list, int]:
+    """Parte una lista de alertas (ya ordenada por magnitud) en (top-N, nº resto).
+
+    Centraliza el criterio "top-N + resto colapsado" que comparten el reporte y
+    el digest de notificaciones: en vez de volcar las ~24/~29 alertas planas,
+    se muestran las `visibles` de mayor magnitud y se resume cuantas quedan. El
+    render de la linea de resumen ("… y N alertas mas") se hace en cada modulo.
+    """
+    alertas = alertas or []
+    if visibles < 0:
+        visibles = 0
+    return alertas[:visibles], max(len(alertas) - visibles, 0)
+
+
+def linea_resto_picos(n_resto: int) -> str | None:
+    """Linea de resumen para las alertas colapsadas; None si no hay resto."""
+    if n_resto <= 0:
+        return None
+    plural = "alerta" if n_resto == 1 else "alertas"
+    return f"… y {n_resto} {plural} mas (ordenadas por magnitud)"
+
+
 def _cobertura_dict(cob: Cobertura | Mapping | None) -> dict | None:
     """Normaliza una `Cobertura` (modelo o dict) a un dict simple, o None."""
     if cob is None:
