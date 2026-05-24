@@ -41,6 +41,37 @@ _PLATAFORMA_ETIQUETA = {
     "youtube": "YouTube",
 }
 
+# Engagement es la metrica north-star del producto. Umbrales (en % de engagement)
+# para clasificar cada marca por color. Calibrados contra la realidad del cliente
+# (Claro Sports ~2-3% combinado segun estrategia de AMX; noticias muy por debajo;
+# gaming/podcast por encima) y los rangos tipicos de engagement en redes sociales:
+#   - alto  (good): >= 3.5%  -> audiencia que interactua de forma destacada
+#   - medio (ok):   1.5% - 3.5%  -> dentro de lo normal/saludable
+#   - bajo  (low):  < 1.5%   -> poca interaccion relativa al alcance
+_ENG_UMBRAL_ALTO = 3.5
+_ENG_UMBRAL_BAJO = 1.5
+
+# Nº de snapshots historicos a mostrar en la mini-tendencia de engagement por marca.
+_ENG_TREND_N = 6
+
+
+def _clase_engagement(pct: float) -> str:
+    """Clase CSS segun el nivel de engagement (north-star)."""
+    if pct >= _ENG_UMBRAL_ALTO:
+        return "eng-alto"
+    if pct < _ENG_UMBRAL_BAJO:
+        return "eng-bajo"
+    return "eng-medio"
+
+
+def _etiqueta_engagement(pct: float) -> str:
+    """Etiqueta legible del nivel de engagement."""
+    if pct >= _ENG_UMBRAL_ALTO:
+        return "alto"
+    if pct < _ENG_UMBRAL_BAJO:
+        return "bajo"
+    return "ok"
+
 
 def _miles(n: int | float) -> str:
     """Formatea un entero con separador de miles (estilo es-MX: punto)."""
@@ -149,6 +180,56 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
   color: var(--gris); display: block;
 }
 .vacio { color: var(--gris); font-style: italic; }
+
+/* --- Engagement: metrica north-star --- */
+.ns-hero {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  border: 2px solid var(--tinta); border-radius: 12px;
+  padding: 18px 22px; margin: 0 0 18px; background: var(--fondo-suave);
+}
+.ns-hero .ns-valor { font-size: 2.6rem; font-weight: 700; line-height: 1; letter-spacing: -0.02em; }
+.ns-hero .ns-etiqueta { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gris); }
+.ns-hero .ns-nota { color: var(--gris); font-size: 0.82rem; flex-basis: 100%; }
+.ranking { margin: 0; padding: 0; list-style: none; }
+.ranking li {
+  display: grid; grid-template-columns: 1.6rem 1fr auto auto; align-items: center;
+  gap: 10px; padding: 10px 12px; border: 1px solid var(--gris-claro);
+  border-radius: 8px; margin-bottom: 8px;
+}
+.ranking .pos { color: var(--gris); font-size: 0.9rem; font-weight: 600; text-align: right; }
+.ranking .marca { font-weight: 600; }
+.ranking .pct { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ranking .barra {
+  grid-column: 1 / -1; height: 6px; border-radius: 3px;
+  background: var(--gris-claro); overflow: hidden; margin-top: 2px;
+}
+.ranking .barra span { display: block; height: 100%; border-radius: 3px; }
+.nivel {
+  font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.04em;
+  font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.eng-alto { color: var(--sube); }
+.eng-medio { color: var(--aviso-tinta); }
+.eng-bajo { color: var(--baja); }
+.nivel.eng-alto { background: #e7f6ec; }
+.nivel.eng-medio { background: var(--aviso-fondo); }
+.nivel.eng-bajo { background: #fbeaea; }
+.barra .eng-alto { background: var(--sube); }
+.barra .eng-medio { background: var(--aviso-borde); }
+.barra .eng-bajo { background: var(--baja); }
+.tendencia { margin: 10px 0 0; }
+.tendencia summary {
+  cursor: pointer; color: var(--gris); font-size: 0.78rem;
+  text-transform: uppercase; letter-spacing: 0.03em;
+}
+.tendencia table { border-collapse: collapse; margin: 8px 0 0; font-size: 0.8rem; width: 100%; }
+.tendencia th, .tendencia td {
+  text-align: right; padding: 3px 8px; border-bottom: 1px solid var(--gris-claro);
+  font-variant-numeric: tabular-nums;
+}
+.tendencia th:first-child, .tendencia td:first-child { text-align: left; color: var(--gris); }
+.spark { font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+.spark .pip { display: inline-block; }
 footer {
   margin-top: 48px; color: var(--gris); font-size: 0.75rem;
   border-top: 1px solid var(--gris-claro); padding-top: 12px;
@@ -274,32 +355,157 @@ def _render_cobertura_global(rep: dict) -> str:
     )
 
 
-def construir_html(rep: dict, picos: dict, nombres: dict[str, str]) -> str:
+# Caracteres de bloque para la mini-sparkline (de menor a mayor, sin imagenes/JS).
+_SPARK = "▁▂▃▄▅▆▇█"
+
+
+def _sparkline(valores: list[float]) -> str:
+    """Sparkline de bloques unicode a partir de una serie de valores."""
+    if not valores:
+        return ""
+    lo, hi = min(valores), max(valores)
+    span = hi - lo
+    pips = []
+    for v in valores:
+        if span == 0:
+            idx = len(_SPARK) // 2  # todos iguales: bloque medio
+        else:
+            idx = round((v - lo) / span * (len(_SPARK) - 1))
+        pips.append(f'<span class="pip">{_SPARK[idx]}</span>')
+    return f'<span class="spark">{"".join(pips)}</span>'
+
+
+def _tendencia_engagement(cuenta_id: str, rango: str, historico) -> str:
+    """Mini-tendencia de engagement por marca desde el historico.
+
+    Devuelve "" si no hay historico o no hay >= 2 snapshots (sin tendencia que
+    mostrar): se omite con elegancia, nunca lanza.
+    """
+    if historico is None:
+        return ""
+    try:
+        serie = historico.serie(cuenta_id, rango, _ENG_TREND_N)
+    except Exception:  # noqa: BLE001 — el historico es best-effort, nunca debe romper el dashboard
+        return ""
+    if not serie or len(serie) < 2:
+        return ""
+
+    engs = [float(p.get("engagement_pct") or 0.0) for p in serie]
+    spark = _sparkline(engs)
+
+    encabezados = "".join(
+        f"<th>{escape(str(p.get('periodo_hasta', '')))}</th>" for p in serie
+    )
+    celdas = "".join(
+        f'<td class="{_clase_engagement(e)}">{escape(str(e))}%</td>' for e in engs
+    )
+    delta = round(engs[-1] - engs[0], 1)
+    delta_html = (
+        f'<span class="var {_clase_variacion(delta)}">{escape(_signo(delta))} pts</span>'
+    )
+
+    return (
+        '<details class="tendencia">'
+        f"<summary>Tendencia de engagement {spark} {delta_html}</summary>"
+        "<table>"
+        f"<tr><th>Periodo</th>{encabezados}</tr>"
+        f"<tr><td>Engagement</td>{celdas}</tr>"
+        "</table>"
+        "</details>"
+    )
+
+
+def _render_engagement(rep: dict, nombres: dict[str, str], rango: str, historico) -> str:
+    """Seccion north-star: engagement global + ranking por marca, color-coded."""
+    total = rep.get("total") or {}
+    eng_global = total.get("engagement_pct", 0.0)
+    clase_global = _clase_engagement(eng_global)
+
+    partes = [
+        '<h2 class="seccion">Engagement (north-star)</h2>',
+        '<div class="ns-hero">',
+        f'<span class="ns-valor {clase_global}">{escape(str(eng_global))}%</span>',
+        '<span class="ns-etiqueta">Engagement global<br>'
+        f'nivel {escape(_etiqueta_engagement(eng_global))}</span>',
+        '<span class="ns-nota">Interacciones / visualizaciones del periodo. '
+        f"Umbrales: alto &ge; {_ENG_UMBRAL_ALTO}%, ok {_ENG_UMBRAL_BAJO}–{_ENG_UMBRAL_ALTO}%, "
+        f"bajo &lt; {_ENG_UMBRAL_BAJO}%.</span>",
+        "</div>",
+    ]
+
+    # Ranking por marca, ordenado por engagement descendente.
+    filas = rep.get("cuentas") or []
+    ordenadas = sorted(
+        filas,
+        key=lambda f: f["resumen"].get("engagement_pct", 0.0),
+        reverse=True,
+    )
+    if not ordenadas:
+        partes.append('<p class="vacio">Sin marcas en el periodo.</p>')
+        return "".join(partes)
+
+    max_eng = max((f["resumen"].get("engagement_pct", 0.0) for f in ordenadas), default=0.0)
+
+    lis = []
+    for pos, fila in enumerate(ordenadas, start=1):
+        r = fila["resumen"]
+        cuenta_id = r["cuenta"]
+        nombre = nombres.get(cuenta_id, cuenta_id)
+        eng = r.get("engagement_pct", 0.0)
+        clase = _clase_engagement(eng)
+        ancho = round(eng / max_eng * 100, 1) if max_eng else 0.0
+        tendencia = _tendencia_engagement(cuenta_id, rango, historico)
+        lis.append(
+            "<li>"
+            f'<span class="pos">{pos}</span>'
+            f'<span class="marca">{escape(nombre)}</span>'
+            f'<span class="nivel {clase}">{escape(_etiqueta_engagement(eng))}</span>'
+            f'<span class="pct {clase}">{escape(str(eng))}%</span>'
+            f'<span class="barra"><span class="{clase}" style="width: {ancho}%"></span></span>'
+            f"{tendencia}"
+            "</li>"
+        )
+    partes.append(f'<ul class="ranking">{"".join(lis)}</ul>')
+    return "".join(partes)
+
+
+def construir_html(
+    rep: dict,
+    picos: dict,
+    nombres: dict[str, str],
+    rango: str | None = None,
+    historico=None,
+) -> str:
     """Renderiza el reporte + picos a un unico documento HTML autocontenido."""
-    rango = escape(str(rep.get("rango", "")))
+    # rango crudo (para consultar el historico) vs. el escapado (para mostrar).
+    rango_serie = rango if rango is not None else rep.get("rango", "")
+    rango_txt = escape(str(rep.get("rango", "")))
     generado = escape(str(rep.get("generado", "")))
     fuente = escape(str(rep.get("fuente", "")))
 
     tarjetas = "".join(_render_tarjeta(f, nombres) for f in rep.get("cuentas", []))
+    engagement = _render_engagement(rep, nombres, rango_serie, historico)
 
     return f"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard de metricas — {rango}</title>
+<title>Dashboard de metricas — {rango_txt}</title>
 <style>{_CSS}</style>
 </head>
 <body>
 <div class="envoltura">
 <header class="cabecera">
-<h1>Dashboard de metricas — {rango}</h1>
+<h1>Dashboard de metricas — {rango_txt}</h1>
 <p class="meta">Generado {generado} · fuente: {fuente}</p>
 </header>
 
 <h2 class="seccion">Total</h2>
 {_render_kpis(rep["total"])}
 {_render_cobertura_global(rep)}
+
+{engagement}
 
 <h2 class="seccion">Por marca</h2>
 <div class="tarjetas">
@@ -326,7 +532,7 @@ def generar_dashboard(
     rep = construir_reporte(fuente, rango, top, historico)
     picos = detectar_picos(fuente, rango, umbral_picos, historico)
     nombres = {c.id: c.nombre for c in fuente.cuentas()}
-    return construir_html(rep, picos, nombres)
+    return construir_html(rep, picos, nombres, rango, historico)
 
 
 def main(argv: list[str] | None = None) -> int:

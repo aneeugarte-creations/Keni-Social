@@ -2,8 +2,14 @@ from __future__ import annotations
 
 import pytest
 
-from keni_metricas.dashboard import construir_html, generar_dashboard
+from keni_metricas.dashboard import (
+    _ENG_UMBRAL_ALTO,
+    _ENG_UMBRAL_BAJO,
+    construir_html,
+    generar_dashboard,
+)
 from keni_metricas.fuentes.muestra import FuenteMuestra
+from keni_metricas.historico import Historico
 from keni_metricas.picos import detectar_picos
 from keni_metricas.reporte import construir_reporte
 
@@ -71,3 +77,109 @@ def test_dashboard_escapa_html_de_titulos():
 def test_dashboard_rango_invalido_propaga():
     with pytest.raises(ValueError):
         generar_dashboard(FuenteMuestra(), "trimestre")
+
+
+# --- Engagement: metrica north-star ---
+
+
+def test_dashboard_seccion_engagement_north_star():
+    """La seccion north-star aparece con el engagement global y los umbrales."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes")
+
+    assert "Engagement (north-star)" in html
+    assert "Engagement global" in html
+    # el engagement global del total aparece tambien en el hero north-star
+    assert f"{rep['total']['engagement_pct']}%" in html
+    # los umbrales documentados se muestran al lector
+    assert str(_ENG_UMBRAL_ALTO) in html
+    assert str(_ENG_UMBRAL_BAJO) in html
+
+
+def test_dashboard_engagement_ranking_color_coded():
+    """El ranking por marca clasifica con clases de color y etiquetas de nivel."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert 'class="ranking"' in html
+    # al menos una clase de color de engagement aparece
+    assert "eng-alto" in html or "eng-medio" in html or "eng-bajo" in html
+    # las etiquetas de nivel legibles
+    assert ">alto<" in html or ">ok<" in html or ">bajo<" in html
+
+
+def test_dashboard_engagement_ranking_ordenado_desc():
+    """Las marcas se listan de mayor a menor engagement en el ranking."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes")
+
+    # posicion de cada nombre en el ranking, por el orden en que aparece su <li>
+    ranking_html = html.split('class="ranking"', 1)[1].split("</ul>", 1)[0]
+    engs = sorted(
+        ((f["resumen"]["engagement_pct"], nombres[f["resumen"]["cuenta"]]) for f in rep["cuentas"]),
+        reverse=True,
+    )
+    posiciones = [ranking_html.find(f">{nombre}<") for _, nombre in engs]
+    assert all(p != -1 for p in posiciones)
+    assert posiciones == sorted(posiciones)  # aparecen en orden de engagement desc
+
+
+def test_dashboard_sin_historico_omite_tendencia():
+    """Sin historico, no se renderiza la tendencia (y no falla)."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3, historico=None)
+    assert "Engagement (north-star)" in html  # la seccion sigue
+    assert "Tendencia de engagement" not in html  # pero sin trend
+
+
+def test_dashboard_con_historico_muestra_tendencia(tmp_path):
+    """Con >= 2 snapshots historicos, aparece la tendencia de engagement por marca."""
+    from datetime import date
+
+    fuente = FuenteMuestra()
+    hist = Historico(tmp_path / "h.db")
+    # siembra un periodo previo (fecha fija, distinta de la actual) para cada marca
+    for c in fuente.cuentas():
+        r = fuente.resumen(c.id, "semana")
+        r.periodo.hasta = date(2020, 1, 6)  # periodo claramente anterior y distinto
+        hist.guardar(r)
+
+    # genera con historico activo: construir_reporte guarda el snapshot actual,
+    # de modo que la serie tendra >= 2 lecturas (la sembrada + la actual).
+    html = generar_dashboard(fuente, "semana", top=3, historico=hist)
+    assert "Engagement (north-star)" in html
+    assert "Tendencia de engagement" in html
+    # la tabla de tendencia rinde filas de Periodo y Engagement
+    assert "Engagement</td>" in html
+
+
+def test_dashboard_tendencia_historico_roto_no_explota():
+    """Si Historico.serie lanza, la tendencia se omite sin romper el dashboard."""
+
+    class HistoricoRoto:
+        def serie(self, *a, **k):
+            raise RuntimeError("boom")
+
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes", HistoricoRoto())
+    assert "Engagement (north-star)" in html
+    assert "Tendencia de engagement" not in html
+
+
+def test_dashboard_engagement_escapa_nombres():
+    """Los nombres de marca en el ranking north-star se escapan."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    cid = rep["cuentas"][0]["resumen"]["cuenta"]
+    nombres[cid] = "<b>x</b>"
+    html = construir_html(rep, picos, nombres, "mes")
+    assert "<b>x</b>" not in html
+    assert "&lt;b&gt;x&lt;/b&gt;" in html
