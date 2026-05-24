@@ -65,11 +65,11 @@ function cmpTabla(metricas, etiquetaA, etiquetaB) {
     .join("");
   return (
     '<table class="cmp-tabla"><thead><tr>' +
-    "<th>Metrica</th><th>" +
+    "<th>Métrica</th><th>" +
     escaparHtml(etiquetaA) +
     " (A)</th><th>" +
     escaparHtml(etiquetaB) +
-    " (B)</th><th>Diferencia</th><th>Variacion</th>" +
+    " (B)</th><th>Diferencia</th><th>Variación</th>" +
     "</tr></thead><tbody>" +
     filas +
     "</tbody></table>"
@@ -102,9 +102,12 @@ function cmpRender(datos) {
   cont.innerHTML = partes.join("");
 }
 
-// Pide la comparativa al endpoint local y la pinta.
+// Pide la comparativa al endpoint local y la pinta. Mientras dura la peticion,
+// marca el boton Comparar como "cargando" (spinner) con el helper compartido
+// marcarCargando() de consola.js (no lo redefinimos aqui).
 function compararPeriodos() {
   var cont = document.getElementById("cmp-resultado");
+  var btn = document.getElementById("btn-comparar");
   var marcaSel = document.getElementById("cmp-marca");
   var rangoA = document.getElementById("cmp-rango-a");
   var rangoB = document.getElementById("cmp-rango-b");
@@ -115,6 +118,7 @@ function compararPeriodos() {
   params.set("rango_b", rangoB.value);
   if (marcaSel && marcaSel.value) params.set("marca", marcaSel.value);
 
+  marcarCargando(btn, true);
   cont.innerHTML = '<p class="cmp-vacio">Comparando...</p>';
   fetch("/metricas/comparar.json?" + params.toString())
     .then(function (resp) {
@@ -134,6 +138,9 @@ function compararPeriodos() {
     })
     .catch(function () {
       cont.innerHTML = '<p class="cmp-error">No se pudo comparar.</p>';
+    })
+    .finally(function () {
+      marcarCargando(btn, false);
     });
 }
 

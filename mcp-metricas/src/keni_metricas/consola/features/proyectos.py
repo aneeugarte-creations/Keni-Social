@@ -18,6 +18,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 from starlette.routing import Route
 
 from .. import lanzador, layout, proyectos
+from .._http_json import leer_json
 from . import Feature, features_ordenadas
 
 # Inyectable: `crear_app(abrir=...)` reasigna esto (los tests lo usan para NO
@@ -44,8 +45,8 @@ def _render_proyecto(p: proyectos.Proyecto) -> str:
     aviso = ""
     if not p.existe:
         aviso = (
-            '<p class="aviso-global">La carpeta de este proyecto ya no existe en el '
-            "disco. Corrige la ruta en consola.toml.</p>"
+            '<p class="aviso-global">La carpeta de este proyecto ya no existe en este '
+            "equipo. Revisa que no se haya movido o renombrado.</p>"
         )
 
     id_ta = f"md-{escape(p.id)}"
@@ -58,7 +59,7 @@ def _render_proyecto(p: proyectos.Proyecto) -> str:
   <textarea id="{id_ta}" class="claude-md" spellcheck="false" {deshab}>{escape(contenido_md)}</textarea>
   <div class="acciones">
     <button type="button" class="primario" data-accion="guardar" {deshab}>Guardar CLAUDE.md</button>
-    <button type="button" data-accion="abrir" {deshab}>Abrir en Claude Code</button>
+    <button type="button" data-accion="abrir" {deshab}>Abrir asistente</button>
     <span class="estado" role="status" aria-live="polite"></span>
   </div>
 </section>
@@ -69,7 +70,7 @@ def _pagina_proyectos(error: str | None = None) -> str:
     cuerpo: list[str] = [
         "<h1>Proyectos</h1>",
         '<p class="intro">Tus carpetas de proyecto. Edita el CLAUDE.md de cada una y '
-        "lanza Claude Code dentro de la carpeta. Claude Code queda debajo como motor.</p>",
+        "abre el asistente dentro de la carpeta para trabajar con ella.</p>",
     ]
     if error:
         cuerpo.append(f'<p class="aviso-global" role="alert">{escape(error)}</p>')
@@ -77,15 +78,15 @@ def _pagina_proyectos(error: str | None = None) -> str:
     cuerpo.append(
         """
 <form class="anadir" id="form-anadir">
-  <h2>Anadir carpeta</h2>
-  <p class="ayuda">Pega la ruta de una carpeta de tu equipo. La consola solo podra editar el
-  CLAUDE.md y abrir Claude Code dentro de las carpetas que anadas aqui.</p>
+  <h2>Añadir carpeta</h2>
+  <p class="ayuda">Pega la ruta de una carpeta de tu equipo. La consola solo podrá editar el
+  CLAUDE.md y abrir el asistente dentro de las carpetas que añadas aquí.</p>
   <div class="campos">
     <label class="oculto-visual" for="anadir-nombre">Nombre del proyecto</label>
     <input id="anadir-nombre" type="text" name="nombre" placeholder="Nombre del proyecto" autocomplete="off" required>
     <label class="oculto-visual" for="anadir-ruta">Ruta de la carpeta</label>
     <input id="anadir-ruta" type="text" name="ruta" placeholder="/ruta/a/la/carpeta" autocomplete="off" required>
-    <button type="submit" class="primario">Anadir</button>
+    <button type="submit" class="primario">Añadir</button>
   </div>
   <p class="estado" role="status" aria-live="polite" style="margin-top:8px"></p>
 </form>
@@ -95,15 +96,24 @@ def _pagina_proyectos(error: str | None = None) -> str:
     try:
         lista = proyectos.cargar_proyectos()
     except proyectos.ConsolaConfigInvalida as e:
-        cuerpo.append(f'<p class="aviso-global" role="alert">{escape(str(e))}</p>')
+        # No exponemos rutas ni nombres de archivo de configuracion al usuario: le
+        # damos la accion humana y dejamos el detalle tecnico plegado en un <details>.
+        cuerpo.append(
+            '<div class="aviso-global" role="alert">'
+            "<p>No se pudo leer la lista de carpetas guardadas. "
+            "Pídele ayuda a quien configuró la consola.</p>"
+            "<details><summary>Detalle técnico</summary>"
+            f"<pre>{escape(str(e))}</pre></details>"
+            "</div>"
+        )
         lista = []
 
     if not lista:
         cuerpo.append(
             '<div class="vacio">'
-            "<p><strong>Aun no tienes carpetas.</strong></p>"
-            "<p>Anade una carpeta con el formulario de arriba para empezar a editar su "
-            "CLAUDE.md y abrir Claude Code dentro de ella.</p>"
+            "<p><strong>Aún no tienes carpetas.</strong></p>"
+            "<p>Añade una carpeta con el formulario de arriba para empezar a editar su "
+            "CLAUDE.md y abrir el asistente dentro de ella.</p>"
             "</div>"
         )
     else:
@@ -126,14 +136,6 @@ async def pagina_proyectos(request: Request) -> Response:
     return HTMLResponse(_pagina_proyectos())
 
 
-async def _leer_json(request: Request) -> dict:
-    try:
-        datos = await request.json()
-    except Exception:  # noqa: BLE001 -- body invalido => dict vacio (se valida abajo)
-        return {}
-    return datos if isinstance(datos, dict) else {}
-
-
 def _resolver_proyecto_o_400(proyecto_id: object) -> proyectos.Proyecto | JSONResponse:
     """Resuelve un proyecto por id contra la allowlist; 400 si no esta o el id falta."""
     if not isinstance(proyecto_id, str) or not proyecto_id:
@@ -146,7 +148,7 @@ def _resolver_proyecto_o_400(proyecto_id: object) -> proyectos.Proyecto | JSONRe
 
 
 async def api_guardar_claude_md(request: Request) -> Response:
-    datos = await _leer_json(request)
+    datos = await leer_json(request)
     p = _resolver_proyecto_o_400(datos.get("id"))
     if isinstance(p, JSONResponse):
         return p
@@ -155,13 +157,17 @@ async def api_guardar_claude_md(request: Request) -> Response:
         return JSONResponse({"error": "Falta el contenido del CLAUDE.md."}, status_code=400)
     try:
         proyectos.guardar_claude_md(p, contenido)
-    except (ValueError, OSError) as e:
-        return JSONResponse({"error": f"No se pudo guardar: {e}"}, status_code=400)
+    except (ValueError, OSError):
+        # No echamos rutas internas al usuario: accion humana clara.
+        return JSONResponse(
+            {"error": "No se pudo guardar. Revisa que la carpeta siga disponible."},
+            status_code=400,
+        )
     return JSONResponse({"mensaje": "CLAUDE.md guardado."})
 
 
 async def api_abrir(request: Request) -> Response:
-    datos = await _leer_json(request)
+    datos = await leer_json(request)
     p = _resolver_proyecto_o_400(datos.get("id"))
     if isinstance(p, JSONResponse):
         return p
@@ -176,7 +182,7 @@ async def api_abrir(request: Request) -> Response:
 
 
 async def api_anadir(request: Request) -> Response:
-    datos = await _leer_json(request)
+    datos = await leer_json(request)
     nombre = datos.get("nombre")
     ruta = datos.get("ruta")
     if not isinstance(nombre, str) or not isinstance(ruta, str):
@@ -185,16 +191,20 @@ async def api_anadir(request: Request) -> Response:
         p = proyectos.anadir_proyecto(nombre, ruta)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
-    except OSError as e:
-        return JSONResponse({"error": f"No se pudo guardar la carpeta: {e}"}, status_code=400)
-    return JSONResponse({"mensaje": f"Anadida la carpeta {p.nombre}."})
+    except OSError:
+        # No echamos detalles internos: accion humana clara.
+        return JSONResponse(
+            {"error": "No se pudo guardar la carpeta. Inténtalo de nuevo."},
+            status_code=400,
+        )
+    return JSONResponse({"mensaje": f"Añadida la carpeta {p.nombre}."})
 
 
 FEATURE = Feature(
     id="proyectos",
     etiqueta="Proyectos",
     orden=10,
-    descripcion="Edita el CLAUDE.md de tus carpetas y abre Claude Code dentro de ellas.",
+    descripcion="Edita el CLAUDE.md de tus carpetas y abre el asistente dentro de ellas.",
     rutas=[
         Route("/proyectos", pagina_proyectos),
         Route("/api/proyectos/claude-md", api_guardar_claude_md, methods=["POST"]),

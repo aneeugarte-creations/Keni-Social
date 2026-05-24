@@ -1,8 +1,9 @@
 // Feature Skills (Generar copy) — JS vanilla minimo, solo fetch local.
-// Sin librerias ni red externa. Reusa fijarEstado()/postJSON() de consola.js.
+// Sin librerias ni red externa. Reusa los helpers globales de consola.js
+// (fijarEstado, postJSON, marcarCargando); no los redefine.
 "use strict";
 
-// Muestra la descripcion de la skill elegida (de su data-desc).
+// Muestra la descripcion del tipo de contenido elegido (de su data-desc).
 function actualizarDescSkill() {
   const sel = document.getElementById("skills-skill");
   const desc = document.getElementById("skills-desc");
@@ -14,7 +15,9 @@ function actualizarDescSkill() {
 // Texto del ultimo borrador generado (para copiar/descargar en cliente).
 let ultimoBorrador = "";
 
-// Envia el formulario, corre la skill por debajo y pinta el resultado.
+// Envia el formulario, genera el borrador por debajo y pinta el resultado.
+// Durante la espera marca el boton Generar como "cargando" (spinner) con el
+// helper compartido marcarCargando() de consola.js.
 async function generarSkill(form) {
   const estado = document.getElementById("skills-estado");
   const boton = document.getElementById("skills-generar");
@@ -27,18 +30,18 @@ async function generarSkill(form) {
   const texto = form.querySelector("[name=texto]").value;
 
   if (!skill || !marca) {
-    fijarEstado(estado, "Elige una skill y una marca.", "error");
+    fijarEstado(estado, "Elige un tipo de contenido y una marca.", "error");
     return;
   }
   if (!texto.trim()) {
-    fijarEstado(estado, "Pega una nota o transcripcion.", "error");
+    fijarEstado(estado, "Pega una nota o transcripción.", "error");
     return;
   }
 
-  boton.disabled = true;
+  marcarCargando(boton, true);
   if (wrap) wrap.hidden = true;
   if (copiaEstado) fijarEstado(copiaEstado, "", "");
-  fijarEstado(estado, "Generando con Claude... esto puede tardar un poco.", "");
+  fijarEstado(estado, "Generando el borrador... esto puede tardar un poco.", "");
 
   const { ok, datos } = await postJSON("/api/skills/ejecutar", {
     skill: skill,
@@ -46,7 +49,7 @@ async function generarSkill(form) {
     texto: texto,
   });
 
-  boton.disabled = false;
+  marcarCargando(boton, false);
   if (ok) {
     fijarEstado(estado, "Listo. Revisa el borrador antes de usarlo.", "ok");
     ultimoBorrador = datos.resultado || "";
