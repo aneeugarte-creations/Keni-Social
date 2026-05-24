@@ -9,11 +9,11 @@ de la feature. Nada de red, nada de binarios reales.
 from __future__ import annotations
 
 import pytest
+from keni_metricas import doctor
 from starlette.testclient import TestClient
 
-from keni_metricas import doctor
-from keni_metricas.consola import app as app_modulo
-from keni_metricas.consola.features import estado as feat_estado
+from keni_consola import app as app_modulo
+from keni_consola.features import estado as feat_estado
 
 
 @pytest.fixture

@@ -23,7 +23,7 @@ Dos componentes independientes pero complementarios:
 keni-consola
 ```
 
-(o el equivalente `python -m keni_metricas.consola`) y abre `http://127.0.0.1:8765`. Escucha **solo en localhost** y arranca con datos de muestra. Guía completa en [`docs/consola.md`](docs/consola.md).
+(o el equivalente `python -m keni_consola`) y abre `http://127.0.0.1:8765`. Escucha **solo en localhost** y arranca con datos de muestra. La consola es su propio paquete (`keni-consola`) que depende de `keni-metricas`; instálalos con `pip install -e ./mcp-metricas && pip install -e ./consola` (o `uv tool install ./consola` / `uvx --from ./consola keni-consola`). Guía completa en [`docs/consola.md`](docs/consola.md).
 
 ## Por dónde empezar
 

@@ -14,7 +14,7 @@ En una terminal, dentro de la carpeta del proyecto:
 keni-consola
 ```
 
-(Si por lo que sea ese comando no existe, sirve el equivalente: `python -m keni_metricas.consola`.)
+(Si por lo que sea ese comando no existe, sirve el equivalente: `python -m keni_consola`.)
 
 Verás un mensaje con la dirección. Abre en tu navegador:
 
@@ -42,6 +42,19 @@ La consola intenta abrir el navegador sola; si no lo hace, copia esa dirección.
 
 - La consola escucha **solo en `127.0.0.1`** (tu propia máquina). **No** se expone a la red local ni a internet por diseño: nadie más puede entrar.
 - Por defecto trabaja con **datos de muestra** (números con la forma real de las marcas, pero ficticios). No se conecta a ninguna cuenta hasta que configures credenciales reales.
+
+---
+
+## Instalación
+
+La consola es su propio paquete (`keni-consola`) y **depende de `keni-metricas`**. Instala primero la dependencia y luego la consola:
+
+```
+pip install -e ./mcp-metricas
+pip install -e ./consola
+```
+
+Con `uv` también puedes instalarla como herramienta desde la ruta del paquete (`uv tool install ./consola`) o ejecutarla sin instalar (`uvx --from ./consola keni-consola`).
 
 ---
 

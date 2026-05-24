@@ -22,6 +22,10 @@ import json
 from html import escape
 from pathlib import Path
 
+from keni_metricas.config import cargar_config, construir_fuente
+from keni_metricas.dashboard import generar_dashboard
+from keni_metricas.reporte import construir_reporte, render_csv, render_markdown
+from keni_metricas.schema import RANGOS_DIAS
 from starlette.requests import Request
 from starlette.responses import (
     HTMLResponse,
@@ -31,10 +35,6 @@ from starlette.responses import (
 )
 from starlette.routing import Route
 
-from ...config import cargar_config, construir_fuente
-from ...dashboard import generar_dashboard
-from ...reporte import construir_reporte, render_csv, render_markdown
-from ...schema import RANGOS_DIAS
 from .. import layout, marcas
 from . import Feature, RecursoEstatico, features_ordenadas
 
@@ -138,7 +138,7 @@ def _pagina_metricas() -> str:
 
 def _fuente_para(marca: str | None):
     """Fuente activa, opcionalmente acotada a UNA marca (selector de la pestana)."""
-    from ...config import FuenteScoped
+    from keni_metricas.config import FuenteScoped
 
     fuente = construir_fuente(cargar_config())
     if marca:

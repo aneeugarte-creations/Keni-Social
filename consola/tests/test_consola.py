@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from keni_metricas.consola import app as app_modulo
-from keni_metricas.consola import proyectos
+from keni_consola import app as app_modulo
+from keni_consola import proyectos
 
 
 @pytest.fixture
@@ -430,13 +430,13 @@ def test_estaticos_metricas_servidos_localmente(entorno):
 
 def test_bind_solo_localhost():
     """El entrypoint fija el host a 127.0.0.1 (nunca 0.0.0.0)."""
-    from keni_metricas.consola import __main__ as entry
+    from keni_consola import __main__ as entry
 
     assert entry.HOST == "127.0.0.1"
 
 
 def test_puerto_configurable_por_env(monkeypatch):
-    from keni_metricas.consola import __main__ as entry
+    from keni_consola import __main__ as entry
 
     monkeypatch.setenv("KENI_CONSOLA_PORT", "9123")
     assert entry._puerto() == 9123
@@ -446,7 +446,7 @@ def test_puerto_configurable_por_env(monkeypatch):
 
 def test_lanzador_no_macos_devuelve_aviso(monkeypatch):
     """En no-macOS el lanzador NO intenta nada y avisa con claridad."""
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     monkeypatch.setattr(lanzador.sys, "platform", "linux")
     mensaje = lanzador.abrir_en_claude_code(Path("/tmp/x"))
@@ -460,7 +460,7 @@ def test_lanzador_no_macos_devuelve_aviso(monkeypatch):
 
 def test_auto_discovery_encuentra_proyectos_y_metricas():
     """El descubrimiento encuentra al menos las dos features migradas."""
-    from keni_metricas.consola import features
+    from keni_consola import features
 
     ids = [f.id for f in features.descubrir(refresco=True)]
     assert "proyectos" in ids
@@ -469,7 +469,7 @@ def test_auto_discovery_encuentra_proyectos_y_metricas():
 
 def test_descubrimiento_ordena_proyectos_antes_que_metricas(entorno):
     """El descubrimiento ordena por `orden`: Proyectos (10) antes que Metricas (20)."""
-    from keni_metricas.consola import features
+    from keni_consola import features
 
     descubiertas = features.descubrir(refresco=True)
     ids = [f.id for f in descubiertas]
@@ -487,7 +487,7 @@ def test_nav_html_agrupa_trabajo_antes_que_ajustes(entorno):
 
 def test_raiz_redirige_a_skills_si_existe(entorno):
     """GET / aterriza en /skills (Generar copy) si esa feature esta presente."""
-    from keni_metricas.consola import features
+    from keni_consola import features
 
     ids = {f.id for f in features.descubrir(refresco=True)}
     assert "skills" in ids  # precondicion del comportamiento esperado
@@ -506,7 +506,7 @@ def feature_de_prueba():
     import importlib
     import sys
 
-    from keni_metricas.consola import features as features_pkg
+    from keni_consola import features as features_pkg
 
     dir_features = Path(features_pkg.__file__).parent
     modulo = dir_features / "zzprueba.py"
@@ -531,13 +531,13 @@ def feature_de_prueba():
         yield
     finally:
         modulo.unlink(missing_ok=True)
-        sys.modules.pop("keni_metricas.consola.features.zzprueba", None)
+        sys.modules.pop("keni_consola.features.zzprueba", None)
         features_pkg.descubrir(refresco=True)  # limpia el cache para el resto
 
 
 def test_feature_de_prueba_se_monta_sola(entorno, feature_de_prueba):
     """Una feature recien soltada en features/ se descubre, monta y navega."""
-    from keni_metricas.consola import features
+    from keni_consola import features
 
     ids = [f.id for f in features.descubrir(refresco=True)]
     assert "zzprueba" in ids
@@ -554,7 +554,7 @@ def test_feature_de_prueba_se_monta_sola(entorno, feature_de_prueba):
 
 def test_id_de_feature_duplicado_da_error_claro():
     """Dos features con el mismo id => error explicito (no silencioso)."""
-    from keni_metricas.consola.features import Feature, _validar
+    from keni_consola.features import Feature, _validar
 
     f = Feature(id="MAYUS", etiqueta="x", orden=1, rutas=[])
     with pytest.raises(ValueError, match="id invalido"):
@@ -625,7 +625,7 @@ def test_helper_carga_expuesto_globalmente(entorno):
 
 
 def test_marcas_etiqueta_por_id_con_acentos():
-    from keni_metricas.consola import marcas
+    from keni_consola import marcas
 
     assert marcas.etiqueta_por_id("claro_sports") == "Claro Sports"
     assert marcas.etiqueta_por_id("claro_sports_golf") == "Claro Sports Golf"
@@ -638,7 +638,7 @@ def test_marcas_etiqueta_por_id_con_acentos():
 
 
 def test_marcas_etiqueta_por_slug_con_acentos():
-    from keni_metricas.consola import marcas
+    from keni_consola import marcas
 
     assert marcas.etiqueta_por_slug("claro-sports") == "Claro Sports"
     assert marcas.etiqueta_por_slug("nacion-gamer") == "Nación Gamer"
@@ -650,7 +650,7 @@ def test_marcas_etiqueta_por_slug_con_acentos():
 
 
 def test_marcas_listas_ids_y_slugs():
-    from keni_metricas.consola import marcas
+    from keni_consola import marcas
 
     assert marcas.ids() == [
         "unotv", "claro_sports", "claro_sports_golf", "nacion_gamer", "piso_15", "fundacion",
@@ -662,7 +662,7 @@ def test_marcas_listas_ids_y_slugs():
 
 
 def test_marcas_opciones_para_selects():
-    from keni_metricas.consola import marcas
+    from keni_consola import marcas
 
     por_id = dict(marcas.opciones_por_id())
     assert por_id["claro_sports"] == "Claro Sports"
@@ -683,7 +683,7 @@ def test_marcas_opciones_para_selects():
 def test_leer_json_objeto_valido():
     import anyio
 
-    from keni_metricas.consola._http_json import leer_json
+    from keni_consola._http_json import leer_json
 
     class _Req:
         async def json(self):
@@ -695,7 +695,7 @@ def test_leer_json_objeto_valido():
 def test_leer_json_body_invalido_da_dict_vacio():
     import anyio
 
-    from keni_metricas.consola._http_json import leer_json
+    from keni_consola._http_json import leer_json
 
     class _ReqRota:
         async def json(self):
@@ -708,7 +708,7 @@ def test_leer_json_no_objeto_da_dict_vacio():
     """Un JSON valido pero que no es objeto (lista/numero) -> {}."""
     import anyio
 
-    from keni_metricas.consola._http_json import leer_json
+    from keni_consola._http_json import leer_json
 
     class _ReqLista:
         async def json(self):
@@ -724,7 +724,7 @@ def test_leer_json_no_objeto_da_dict_vacio():
 
 def test_lanzador_ruta_con_apostrofo_no_rompe_el_shell(monkeypatch):
     """Una ruta con apostrofo (/Users/o'brien) se entrecomilla de forma segura."""
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     monkeypatch.setattr(lanzador.sys, "platform", "darwin")
 

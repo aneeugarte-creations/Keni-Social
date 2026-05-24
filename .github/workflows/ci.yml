@@ -28,6 +28,31 @@ jobs:
       - name: Tests (pytest)
         run: pytest
 
+  keni-consola:
+    # La consola es ahora su propio paquete (keni-consola) que DEPENDE de
+    # keni-metricas. Matriz multi-SO: macos ejercita el lanzador macOS y la pila
+    # ASGI (Starlette/uvicorn) en su SO real.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar keni-metricas (dependencia de la consola)
+        run: pip install -e ./mcp-metricas
+      - name: Instalar keni-consola con dev
+        run: pip install -e "./consola[dev]"
+      - name: Lint (ruff)
+        working-directory: consola
+        run: ruff check .
+      - name: Tests (pytest)
+        working-directory: consola
+        run: pytest
+
   skills-copy-estatico:
     # Solo los chequeos ESTATICOS de skills-copy (sin modelo, sin whisper, sin red).
     # El gate local con `claude -p` (skills-copy/evals/run.sh) NO corre en CI.

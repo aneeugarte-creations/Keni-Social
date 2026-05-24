@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from keni_metricas.consola import app as app_modulo
-from keni_metricas.consola.features import skills as feat_skills
+from keni_consola import app as app_modulo
+from keni_consola.features import skills as feat_skills
 
 
 @pytest.fixture

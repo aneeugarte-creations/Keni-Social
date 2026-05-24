@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from keni_metricas.consola import app as app_modulo
-from keni_metricas.consola import proyectos
-from keni_metricas.consola.features import tareas as feat_tareas
+from keni_consola import app as app_modulo
+from keni_consola import proyectos
+from keni_consola.features import tareas as feat_tareas
 
 
 @pytest.fixture
@@ -233,7 +233,7 @@ def test_abrir_tarea_huerfana_no_llama_al_lanzador(entorno, monkeypatch):
 def test_abrir_default_pasa_el_detalle_como_prompt_al_lanzador(monkeypatch):
     """B8: el wrapper por defecto delega en consola.lanzador pasandole el detalle de
     la tarea como `prompt` (sin editar la firma del wrapper)."""
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     capt: list[tuple[Path, object]] = []
 
@@ -249,7 +249,7 @@ def test_abrir_default_pasa_el_detalle_como_prompt_al_lanzador(monkeypatch):
 
 def test_abrir_sin_detalle_no_pasa_prompt(monkeypatch):
     """Sin detalle, el lanzador recibe prompt=None (abre el asistente sin texto)."""
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     capt: list[tuple[Path, object]] = []
     monkeypatch.setattr(
@@ -266,7 +266,7 @@ def test_endpoint_abrir_pasa_el_detalle_de_la_tarea_como_prompt(entorno, monkeyp
     pid = proyectos.cargar_proyectos()[0].id
     t = feat_tareas.crear_tarea(pid, "Escribir intro", detalle="Tono cercano, 3 parrafos")
 
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     capt: list[tuple[Path, object]] = []
     monkeypatch.setattr(
@@ -300,7 +300,7 @@ def test_lanzador_con_prompt_escapa_bien_incluido_apostrofo(monkeypatch):
     comando ni permite inyeccion. Mockeamos osascript (no se lanza nada real)."""
     import shlex
 
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     monkeypatch.setattr(lanzador.sys, "platform", "darwin")
 
@@ -340,7 +340,7 @@ def test_lanzador_sin_prompt_no_anade_argumento(monkeypatch):
     """Sin prompt (caso Proyectos) el comando sigue siendo `cd <ruta> && claude`."""
     import shlex
 
-    from keni_metricas.consola import lanzador
+    from keni_consola import lanzador
 
     monkeypatch.setattr(lanzador.sys, "platform", "darwin")
     capturado: dict[str, str] = {}
