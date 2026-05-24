@@ -212,3 +212,53 @@ def test_enviar_usa_post_json():
     resp = enviar({"text": "hola", "n_alertas": 0}, WEBHOOK)
     assert ruta.called
     assert resp == {"recibido": 1}
+
+
+# --- main: error de dominio (ValueError) al construir el digest, CERO red ----
+@respx.mock
+def test_rango_invalido_aborta_con_rc2_sin_red(monkeypatch, capsys):
+    """--rango invalido => construir_digest lanza ValueError => rc=2 y cero red.
+
+    Cubre la rama `except ValueError` de main(): el error de dominio se imprime
+    en espanol y se aborta ANTES del camino de envio (sin tocar la red), aunque
+    haya URL configurada.
+    """
+    monkeypatch.setenv("KENI_WEBHOOK_URL", WEBHOOK)
+    monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
+    ruta = respx.post(WEBHOOK).mock(return_value=httpx.Response(200, text="ok"))
+
+    code = main(["--enviar", "--rango", "trimestre"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "Error:" in err
+    assert "trimestre" in err
+    assert not ruta.called
+    assert respx.calls.call_count == 0
+
+
+# --- digest vacio (umbral imposible => 0 alertas) ----------------------------
+def test_digest_sin_alertas_umbral_altisimo():
+    # Un umbral altisimo no marca ningun pico: el digest queda con 0 alertas pero
+    # sigue siendo un payload valido (no se rompe el formateo).
+    d = construir_digest(FuenteMuestra(), "semana", 100_000)
+    assert d["n_alertas"] == 0
+    assert d["picos"]["alertas"] == []
+    p = formatear_payload(d, "slack")
+    assert isinstance(p["text"], str)
+    assert "alertas de redes" in p["text"]
+
+
+def test_formatear_payload_default_es_generico():
+    # Sin pasar formato, el default es 'generico' (payload rico).
+    d = construir_digest(FuenteMuestra(), "semana", 50)
+    p = formatear_payload(d)
+    assert "picos" in p
+    assert p["fuente"] == d["fuente"]
+
+
+def test_formatear_payload_generico_incluye_resumen_si_presente():
+    # Con incluir_resumen, el payload generico arrastra el bloque 'resumen'.
+    d = construir_digest(FuenteMuestra(), "semana", 50, incluir_resumen=True)
+    p = formatear_payload(d, "generico")
+    assert "resumen" in p
+    assert p["resumen"] == d["resumen"]
