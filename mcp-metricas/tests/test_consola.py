@@ -59,11 +59,12 @@ def _cliente(abrir=None) -> TestClient:
 # --------------------------------------------------------------------------- #
 
 
-def test_raiz_redirige_a_proyectos(entorno):
+def test_raiz_redirige_a_skills(entorno):
+    """La landing por defecto es Generar copy (/skills), lo que un CM usa a diario."""
     c = _cliente()
     r = c.get("/", follow_redirects=False)
     assert r.status_code in (302, 307)
-    assert r.headers["location"] == "/proyectos"
+    assert r.headers["location"] == "/skills"
 
 
 def test_proyectos_y_metricas_devuelven_html(entorno):
@@ -466,28 +467,33 @@ def test_auto_discovery_encuentra_proyectos_y_metricas():
     assert "metricas" in ids
 
 
-def test_orden_de_nav_proyectos_antes_que_metricas(entorno):
-    """La nav se ordena por `orden`: Proyectos (10) va antes que Metricas (20)."""
+def test_descubrimiento_ordena_proyectos_antes_que_metricas(entorno):
+    """El descubrimiento ordena por `orden`: Proyectos (10) antes que Metricas (20)."""
     from keni_metricas.consola import features
 
     descubiertas = features.descubrir(refresco=True)
     ids = [f.id for f in descubiertas]
     assert ids.index("proyectos") < ids.index("metricas")
 
-    # Y se refleja en el HTML real: la pestana Proyectos aparece antes en la nav.
+
+def test_nav_html_agrupa_trabajo_antes_que_ajustes(entorno):
+    """En el HTML la nav esta agrupada: Metricas (grupo Trabajo) sale ANTES que
+    Proyectos (grupo Ajustes), aunque por `orden` Proyectos sea menor. Es la
+    agrupacion por sentido de uso, no el orden numerico, la que manda en la barra."""
     c = _cliente()
     html = c.get("/proyectos").text
-    assert html.index('href="/proyectos"') < html.index('href="/metricas"')
+    assert html.index('href="/metricas"') < html.index('href="/proyectos"')
 
 
-def test_raiz_redirige_a_la_primera_feature(entorno):
-    """GET / redirige a la primera feature por orden (proyectos)."""
+def test_raiz_redirige_a_skills_si_existe(entorno):
+    """GET / aterriza en /skills (Generar copy) si esa feature esta presente."""
     from keni_metricas.consola import features
 
-    primera = features.descubrir(refresco=True)[0].id
+    ids = {f.id for f in features.descubrir(refresco=True)}
+    assert "skills" in ids  # precondicion del comportamiento esperado
     c = _cliente()
     r = c.get("/", follow_redirects=False)
-    assert r.headers["location"] == f"/{primera}"
+    assert r.headers["location"] == "/skills"
 
 
 @pytest.fixture
@@ -553,3 +559,204 @@ def test_id_de_feature_duplicado_da_error_claro():
     f = Feature(id="MAYUS", etiqueta="x", orden=1, rutas=[])
     with pytest.raises(ValueError, match="id invalido"):
         _validar(f, "modulo_x")
+
+
+# --------------------------------------------------------------------------- #
+# Shell/UX: nav agrupada (Trabajo/Ajustes), wordmark, favicon                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_nav_agrupada_trabajo_y_ajustes(entorno):
+    """La nav se agrupa en dos bloques con etiqueta: Trabajo y Ajustes."""
+    c = _cliente()
+    texto = c.get("/skills").text
+    assert 'aria-label="Trabajo"' in texto
+    assert 'aria-label="Ajustes"' in texto
+    # Las etiquetas visibles de cada grupo estan presentes.
+    assert ">Trabajo<" in texto
+    assert ">Ajustes<" in texto
+
+
+def test_nav_grupo_trabajo_va_antes_que_ajustes_y_contiene_lo_esperado(entorno):
+    """Trabajo (Generar copy/Metricas/Tareas) precede a Ajustes en el HTML."""
+    c = _cliente()
+    texto = c.get("/skills").text
+    pos_trabajo = texto.index('aria-label="Trabajo"')
+    pos_ajustes = texto.index('aria-label="Ajustes"')
+    assert pos_trabajo < pos_ajustes
+    # Las 7 pestanas siguen presentes en la nav (agrupar no las pierde).
+    for href in (
+        'href="/skills"', 'href="/metricas"', 'href="/tareas"',
+        'href="/proyectos"', 'href="/carpetas"', 'href="/estado"', 'href="/config"',
+    ):
+        assert href in texto
+    # Generar copy (skills) cae en Trabajo: aparece antes que el bloque Ajustes.
+    assert texto.index('href="/skills"') < pos_ajustes
+    # Proyectos cae en Ajustes: aparece despues del inicio del bloque Ajustes.
+    assert texto.index('href="/proyectos"') > pos_ajustes
+
+
+def test_wordmark_y_favicon_presentes(entorno):
+    """Barra con wordmark 'KENI · Consola' y un favicon SVG data-URI inline."""
+    c = _cliente()
+    texto = c.get("/skills").text
+    assert "KENI" in texto and "Consola" in texto  # wordmark
+    assert '<link rel="icon"' in texto
+    assert "data:image/svg+xml" in texto  # favicon inline, sin red
+    # El titulo de la pestana usa el separador de marca.
+    assert "· Consola Keni" in texto
+
+
+def test_helper_carga_expuesto_globalmente(entorno):
+    """El JS compartido expone window.marcarCargando para que las features lo usen."""
+    c = _cliente()
+    js = c.get("/estaticos/consola.js").text
+    assert "function marcarCargando" in js
+    assert "window.marcarCargando" in js
+    # El CSS compartido trae el spinner puro (sin librerias) y el estado cargando.
+    css = c.get("/estaticos/consola.css").text
+    assert ".spinner" in css
+    assert ".cargando" in css
+
+
+# --------------------------------------------------------------------------- #
+# marcas.py: fuente unica de verdad de marcas (id / slug / etiqueta)           #
+# --------------------------------------------------------------------------- #
+
+
+def test_marcas_etiqueta_por_id_con_acentos():
+    from keni_metricas.consola import marcas
+
+    assert marcas.etiqueta_por_id("claro_sports") == "Claro Sports"
+    assert marcas.etiqueta_por_id("claro_sports_golf") == "Claro Sports Golf"
+    assert marcas.etiqueta_por_id("nacion_gamer") == "Nación Gamer"
+    assert marcas.etiqueta_por_id("piso_15") == "Piso 15"
+    assert marcas.etiqueta_por_id("fundacion") == "Fundación"
+    assert marcas.etiqueta_por_id("unotv") == "UnoTV"
+    # Id desconocido cae a si mismo (no lanza).
+    assert marcas.etiqueta_por_id("desconocida") == "desconocida"
+
+
+def test_marcas_etiqueta_por_slug_con_acentos():
+    from keni_metricas.consola import marcas
+
+    assert marcas.etiqueta_por_slug("claro-sports") == "Claro Sports"
+    assert marcas.etiqueta_por_slug("nacion-gamer") == "Nación Gamer"
+    assert marcas.etiqueta_por_slug("piso-15") == "Piso 15"
+    assert marcas.etiqueta_por_slug("fundacion") == "Fundación"
+    assert marcas.etiqueta_por_slug("unotv") == "UnoTV"
+    # Slug desconocido cae a si mismo (no lanza).
+    assert marcas.etiqueta_por_slug("no-existe") == "no-existe"
+
+
+def test_marcas_listas_ids_y_slugs():
+    from keni_metricas.consola import marcas
+
+    assert marcas.ids() == [
+        "unotv", "claro_sports", "claro_sports_golf", "nacion_gamer", "piso_15", "fundacion",
+    ]
+    # Golf tiene id/etiqueta pero NO slug en Skills.
+    assert "claro_sports_golf" in marcas.ids()
+    assert marcas.slugs() == ["unotv", "claro-sports", "nacion-gamer", "piso-15", "fundacion"]
+    assert "claro-sports-golf" not in marcas.slugs()
+
+
+def test_marcas_opciones_para_selects():
+    from keni_metricas.consola import marcas
+
+    por_id = dict(marcas.opciones_por_id())
+    assert por_id["claro_sports"] == "Claro Sports"
+    assert por_id["claro_sports_golf"] == "Claro Sports Golf"
+    por_slug = dict(marcas.opciones_por_slug())
+    assert por_slug["nacion-gamer"] == "Nación Gamer"
+    # Golf no aparece entre las opciones por slug (sin slug curado).
+    assert all(slug is not None for slug, _ in marcas.opciones_por_slug())
+    assert len(marcas.opciones_por_id()) == 6
+    assert len(marcas.opciones_por_slug()) == 5
+
+
+# --------------------------------------------------------------------------- #
+# _http_json.leer_json: body invalido -> {} (sin lanzar)                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_leer_json_objeto_valido():
+    import anyio
+
+    from keni_metricas.consola._http_json import leer_json
+
+    class _Req:
+        async def json(self):
+            return {"a": 1, "b": "x"}
+
+    assert anyio.run(leer_json, _Req()) == {"a": 1, "b": "x"}
+
+
+def test_leer_json_body_invalido_da_dict_vacio():
+    import anyio
+
+    from keni_metricas.consola._http_json import leer_json
+
+    class _ReqRota:
+        async def json(self):
+            raise ValueError("body no es JSON")
+
+    assert anyio.run(leer_json, _ReqRota()) == {}
+
+
+def test_leer_json_no_objeto_da_dict_vacio():
+    """Un JSON valido pero que no es objeto (lista/numero) -> {}."""
+    import anyio
+
+    from keni_metricas.consola._http_json import leer_json
+
+    class _ReqLista:
+        async def json(self):
+            return [1, 2, 3]
+
+    assert anyio.run(leer_json, _ReqLista()) == {}
+
+
+# --------------------------------------------------------------------------- #
+# Lanzador: ruta con apostrofo no rompe el comando de shell (B1)               #
+# --------------------------------------------------------------------------- #
+
+
+def test_lanzador_ruta_con_apostrofo_no_rompe_el_shell(monkeypatch):
+    """Una ruta con apostrofo (/Users/o'brien) se entrecomilla de forma segura."""
+    from keni_metricas.consola import lanzador
+
+    monkeypatch.setattr(lanzador.sys, "platform", "darwin")
+
+    capturado: dict[str, str] = {}
+
+    def fake_run(args, **kwargs):  # noqa: ANN001, ANN003
+        # args = ["osascript", "-e", script]
+        capturado["script"] = args[2]
+
+        class _R:
+            stdout = ""
+            stderr = ""
+
+        return _R()
+
+    monkeypatch.setattr(lanzador.subprocess, "run", fake_run)
+
+    ruta = Path("/Users/o'brien/Proyecto")
+    mensaje = lanzador.abrir_en_claude_code(ruta)
+    script = capturado["script"]
+    # Robustez: que el comando de shell, una vez DESESCAPADO el AppleScript, se
+    # parsee con shlex a EXACTAMENTE `["cd", "/Users/o'brien/Proyecto", "&&",
+    # "claude"]`. Es decir: el apostrofo llega intacto al programa, sin romper
+    # comillas. (Un `cd 'o'brien'` ingenuo dejaria una comilla suelta y fallaria.)
+    import shlex
+
+    # Deshacemos el escape de AppleScript (inverso de _escapar_applescript) para
+    # recuperar el comando tal cual lo recibiria /bin/sh.
+    inicio = script.index('do script "') + len('do script "')
+    fin = script.index('"\n', inicio)
+    comando_shell = script[inicio:fin].replace('\\"', '"').replace("\\\\", "\\")
+    assert shlex.split(comando_shell) == ["cd", "/Users/o'brien/Proyecto", "&&", "claude"]
+    # El apostrofo crudo `o'brien` NO debe aparecer pegado (iria escapado).
+    assert "o'brien" not in comando_shell
+    assert "o'brien" in mensaje  # el mensaje legible si muestra la ruta real

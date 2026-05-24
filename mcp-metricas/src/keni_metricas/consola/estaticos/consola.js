@@ -9,6 +9,30 @@ function fijarEstado(el, texto, clase) {
   el.className = "estado" + (clase ? " " + clase : "");
 }
 
+// Helper de carga COMPARTIDO (lo usan las features). Marca un elemento como
+// "cargando": le pone/quita la clase `.cargando` (spinner CSS puro, ver
+// consola.css) y, si es un control (button/input/select/etc.), lo deshabilita
+// mientras dura la operacion. Idempotente y seguro con `el` nulo.
+//
+//   marcarCargando(boton, true);   // empieza: spinner + deshabilitado
+//   try { ...await fetch... } finally { marcarCargando(boton, false); }
+//
+// Expuesto globalmente como `window.marcarCargando` para que cualquier JS de
+// feature lo reutilice sin importar (no hay modulos en esta consola).
+function marcarCargando(el, cargando) {
+  if (!el) return;
+  if (cargando) {
+    el.classList.add("cargando");
+    el.setAttribute("aria-busy", "true");
+    if ("disabled" in el) el.disabled = true;
+  } else {
+    el.classList.remove("cargando");
+    el.removeAttribute("aria-busy");
+    if ("disabled" in el) el.disabled = false;
+  }
+}
+window.marcarCargando = marcarCargando;
+
 async function postJSON(url, cuerpo) {
   const resp = await fetch(url, {
     method: "POST",

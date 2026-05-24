@@ -9,6 +9,7 @@
   --fondo-suave: #fafafa;
   --marca: #ff5a1f;
   --marca-texto: #b8400f;
+  --marca-suave: #fff1ea; /* naranja muy claro para fondos de foco/seccion */
   --sube: #1a7f37;
   --baja: #b42318;
   --aviso-fondo: #fff8e1;
@@ -16,6 +17,28 @@
   --aviso-tinta: #7a5b00;
   --ok-fondo: #e7f6ec;
   --ok-tinta: #1a7f37;
+
+  /* Escala tipografica (sistema visual). Pasos consistentes en toda la consola.
+     Las features deben usar estas variables en vez de px sueltos. */
+  --txt-xs: 0.72rem;
+  --txt-sm: 0.85rem;
+  --txt-base: 0.95rem;
+  --txt-md: 1.05rem;
+  --txt-lg: 1.25rem;
+  --txt-xl: 1.85rem; /* presencia del h1 */
+
+  /* Escala de espaciado (multiplos de 4px). */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* Radios homogeneos para tarjetas/controles. */
+  --radio: 8px;
+  --radio-tarjeta: 12px;
 }
 * { box-sizing: border-box; }
 body {
@@ -70,45 +93,100 @@ header.barra {
   z-index: 10;
 }
 header.barra .marca-keni {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   color: var(--marca-texto);
 }
-header.barra .marca-keni .sub { color: var(--gris); font-weight: 400; margin-left: 6px; }
-nav.pestanas { display: flex; gap: 4px; margin-top: 10px; }
+/* Logotipo "K" en cuadro de marca, coherente con el favicon. */
+header.barra .marca-keni .marca-keni-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--marca);
+  color: #fff;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+}
+header.barra .marca-keni .sub { color: var(--gris); font-weight: 400; }
+
+nav.pestanas { display: flex; align-items: flex-end; gap: var(--sp-3); margin-top: var(--sp-3); flex-wrap: wrap; }
+/* Grupos de pestanas (Trabajo / Ajustes), cada uno con su etiqueta. */
+.grupo-nav { display: flex; align-items: flex-end; gap: var(--sp-1); }
+.grupo-nav-etiqueta {
+  align-self: center;
+  font-size: var(--txt-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gris);
+  margin-right: var(--sp-1);
+  padding-bottom: 9px;
+}
+/* Divisor vertical entre grupos. */
+.grupo-nav-divisor {
+  width: 1px;
+  align-self: stretch;
+  margin: 0 var(--sp-1) 6px;
+  background: var(--gris-claro);
+}
 nav.pestanas a {
   text-decoration: none;
   color: var(--gris);
   font-weight: 600;
-  font-size: 0.95rem;
-  padding: 8px 14px;
+  font-size: var(--txt-base);
+  padding: var(--sp-2) var(--sp-4);
   border: 1px solid transparent;
   border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--radio) var(--radio) 0 0;
 }
+nav.pestanas a:hover { color: var(--tinta); }
 nav.pestanas a.activa {
   color: var(--tinta);
   background: var(--fondo-suave);
   border-color: var(--gris-claro);
+  box-shadow: inset 0 2px 0 var(--marca); /* acento de marca en la pestana activa */
 }
 
-main { max-width: 980px; margin: 0 auto; padding: 28px 24px 64px; }
-h1 { font-size: 1.5rem; margin: 0 0 6px; letter-spacing: -0.01em; }
-.intro { color: var(--gris); font-size: 0.92rem; margin: 0 0 24px; }
+main { max-width: 980px; margin: 0 auto; padding: var(--sp-8) var(--sp-6) 64px; }
+h1 {
+  font-size: var(--txt-xl);
+  font-weight: 800;
+  line-height: 1.15;
+  margin: 0 0 var(--sp-2);
+  letter-spacing: -0.02em;
+}
+/* Acento de marca bajo el h1, para darle presencia (sistema visual). */
+h1::after {
+  content: "";
+  display: block;
+  width: 44px;
+  height: 3px;
+  margin-top: var(--sp-2);
+  border-radius: 999px;
+  background: var(--marca);
+}
+.intro { color: var(--gris); font-size: var(--txt-base); margin: 0 0 var(--sp-6); }
+h2 { letter-spacing: -0.01em; }
 
 /* Tarjetas de proyecto */
 .proyecto {
   border: 1px solid var(--gris-claro);
-  border-radius: 10px;
-  padding: 18px 20px;
-  margin-bottom: 18px;
+  border-radius: var(--radio-tarjeta);
+  padding: var(--sp-5);
+  margin-bottom: var(--sp-5);
   background: var(--fondo);
 }
 .proyecto h2 {
-  margin: 0 0 4px; font-size: 1.1rem;
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 var(--sp-1); font-size: var(--txt-md);
+  display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
 }
 .proyecto .ruta { color: var(--gris); font-size: 0.82rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .chip {
@@ -138,9 +216,9 @@ button, .boton {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radio);
   border: 1px solid var(--gris-claro);
-  padding: 8px 14px;
+  padding: var(--sp-2) var(--sp-4);
   background: var(--fondo);
   color: var(--tinta);
 }
@@ -158,13 +236,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Formulario anadir carpeta */
 .anadir {
   border: 1px dashed var(--gris-claro);
-  border-radius: 10px;
-  padding: 16px 20px;
-  margin: 8px 0 28px;
+  border-radius: var(--radio-tarjeta);
+  padding: var(--sp-4) var(--sp-5);
+  margin: var(--sp-2) 0 var(--sp-8);
   background: var(--fondo-suave);
 }
-.anadir h2 { font-size: 1.05rem; margin: 0 0 10px; }
-.anadir .ayuda { color: var(--gris); font-size: 0.85rem; margin: 0 0 12px; }
+/* Encabezado de seccion con el acento de marca (no solo en botones). */
+.anadir h2 {
+  font-size: var(--txt-md);
+  margin: 0 0 var(--sp-3);
+  border-left: 3px solid var(--marca);
+  padding-left: var(--sp-3);
+}
+.anadir .ayuda { color: var(--gris); font-size: var(--txt-sm); margin: 0 0 var(--sp-3); }
 .anadir .campos { display: flex; gap: 10px; flex-wrap: wrap; }
 .anadir input {
   font: inherit;
@@ -191,16 +275,56 @@ iframe.dashboard {
   width: 100%;
   height: 78vh;
   border: 1px solid var(--gris-claro);
-  border-radius: 10px;
+  border-radius: var(--radio-tarjeta);
   background: var(--fondo);
+}
+
+/* --------------------------------------------------------------------------- *
+ * Infra de carga compartida (sin librerias). Las features marcan estado
+ * "cargando" via el helper JS `marcarCargando(el, on)` (ver consola.js): este
+ * pone/quita la clase `.cargando` en el elemento. Aqui van el spinner CSS puro y
+ * el aspecto del estado cargando, para que todas las pestanas se vean igual.
+ * --------------------------------------------------------------------------- */
+@keyframes keni-girar { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  border: 2px solid var(--gris-claro);
+  border-top-color: var(--marca);
+  border-radius: 50%;
+  animation: keni-girar 0.7s linear infinite;
+  vertical-align: -0.15em;
+}
+/* Un boton/contenedor marcado como cargando: atenuado, no clicable, con spinner. */
+.cargando { position: relative; opacity: 0.7; pointer-events: none; }
+button.cargando, .boton.cargando { cursor: progress; }
+/* Spinner generado tras el contenido del elemento marcado (no necesita markup). */
+.cargando::after {
+  content: "";
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-left: var(--sp-2);
+  border: 2px solid var(--gris-claro);
+  border-top-color: var(--marca);
+  border-radius: 50%;
+  animation: keni-girar 0.7s linear infinite;
+  vertical-align: -0.15em;
+}
+/* Respeta a quien prefiere menos movimiento: sin animacion, solo atenuado. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner, .cargando::after { animation: none; }
 }
 
 /* Responsive: en pantallas angostas la nav y los campos pasan a una columna. */
 @media (max-width: 640px) {
   header.barra { padding: 12px 16px 0; }
   main { padding: 20px 16px 48px; }
-  nav.pestanas { flex-wrap: wrap; }
+  nav.pestanas { flex-wrap: wrap; gap: var(--sp-2); }
+  .grupo-nav { flex: 1 1 100%; flex-wrap: wrap; }
   nav.pestanas a { flex: 1 1 auto; text-align: center; }
+  .grupo-nav-divisor { display: none; } /* el divisor vertical no aplica apilado */
   .controles { flex-direction: column; align-items: stretch; }
   .controles label, .controles select, .controles .boton { width: 100%; }
   .controles .boton { text-align: center; }
