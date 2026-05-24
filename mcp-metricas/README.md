@@ -12,6 +12,7 @@ Servidor **MCP** que lee métricas de redes sociales (Meta FB/IG, YouTube, X, Ti
 | `comparar_periodos(cuenta, rango_a, rango_b)` | Compara dos rangos. |
 | `tendencia_historica(cuenta, rango, n)` | Evolución de las últimas n lecturas guardadas. |
 | `reporte_consolidado(rango, top)` | Informe de TODAS las marcas en un rango (total + desglose + mejores piezas). |
+| `picos(rango, umbral_pct)` | Alerta proactiva: piezas que despuntan sobre la media y cuentas que se desvían de su baseline. |
 
 ## Histórico
 
@@ -55,7 +56,15 @@ keni-reporte --rango mes --formato md --salida reporte-mayo.md
 keni-reporte --rango semana --formato json        # a stdout
 ```
 
-La misma información está disponible como tool MCP `reporte_consolidado` para pedirla por conversación.
+La misma información está disponible como tool MCP `reporte_consolidado` para pedirla por conversación. Con `--picos` añade una sección de **alertas** (anomalías).
+
+### Por cron (entrega automática, con red de seguridad)
+
+`scripts/cron-reporte.sh` corre el reporte+picos por launchd/cron: usa un lock para no solaparse, registra en log, escribe a un archivo fechado y **solo lee** (nunca publica). Configurable por entorno:
+
+```bash
+KENI_REPORTE_RANGO=semana KENI_REPORTE_DIR="$HOME/keni-reportes" scripts/cron-reporte.sh
+```
 
 ## Desarrollo
 

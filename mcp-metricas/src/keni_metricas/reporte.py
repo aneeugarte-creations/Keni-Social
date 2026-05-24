@@ -101,6 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--top", type=int, default=3, help="nº de mejores piezas por marca (def: 3)")
     ap.add_argument("--formato", choices=["md", "json"], default="md")
     ap.add_argument("--salida", help="ruta de archivo; si se omite, imprime a stdout")
+    ap.add_argument("--picos", action="store_true", help="añade una sección de alertas (picos/anomalías)")
     args = ap.parse_args(argv)
 
     from .config import cargar_config, construir_fuente
@@ -114,7 +115,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 2
 
-    texto = json.dumps(rep, ensure_ascii=False, indent=2) if args.formato == "json" else render_markdown(rep)
+    if args.picos:
+        from . import picos as picos_mod
+
+        rep["picos"] = picos_mod.detectar_picos(fuente, args.rango, 50, historico)
+
+    if args.formato == "json":
+        texto = json.dumps(rep, ensure_ascii=False, indent=2)
+    else:
+        texto = render_markdown(rep)
+        if args.picos:
+            from . import picos as picos_mod
+
+            texto += "\n\n" + picos_mod.render_markdown(rep["picos"])
+
     if args.salida:
         Path(args.salida).expanduser().write_text(texto, encoding="utf-8")
         print(f"Reporte escrito en {args.salida}")

@@ -101,3 +101,15 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             return construir_reporte(fuente, rango, top, historico)
         except ValueError as e:
             return {"error": str(e)}
+
+    @mcp.tool()
+    def picos(rango: str = "semana", umbral_pct: int = 50) -> dict:
+        """Alerta proactiva de anomalías: marca piezas que despuntan muy por encima
+        del engagement medio de su cuenta, y cuentas que se desvían de su baseline
+        histórico (>= umbral_pct). Responde '¿qué debería estar mirando AHORA?'."""
+        from .picos import detectar_picos
+
+        try:
+            return detectar_picos(fuente, rango, max(1, int(umbral_pct)), historico)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}
