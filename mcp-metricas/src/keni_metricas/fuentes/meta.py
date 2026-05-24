@@ -7,6 +7,10 @@ se configure un access token. Ver docs/credenciales.md.
 - piezas: pagina siguiendo `paging.next` (con tope MAX_PAGINAS).
 - refresh: si hay app_id/app_secret, intercambia el token por uno de larga
   duración (fb_exchange_token) ante un 401. Meta no tiene refresh_token clásico.
+- tipo_token: si las credenciales traen `tipo_token = "system_user"`, el token
+  es de un System User de Business Manager y NO caduca; entonces el refresh es
+  un no-op (no se intenta fb_exchange_token). Es la mitad "hosted" de la
+  arquitectura híbrida. Ver docs/credenciales.md.
 """
 
 from __future__ import annotations
@@ -19,6 +23,9 @@ from ..schema import MetricaPlataforma, Pieza, Plataforma
 from ._http import MAX_PAGINAS, cliente_http, con_refresh, get_json, log
 
 BASE = "https://graph.facebook.com/v21.0"
+
+# Valor de `tipo_token` para tokens de System User (Business Manager): no caducan.
+TIPO_SYSTEM_USER = "system_user"
 
 
 def _suma_valores(datos: dict) -> dict[str, int]:
@@ -41,12 +48,17 @@ class AdaptadorMeta:
         self.plataforma = plataforma
         self._creds = creds
         self._token = creds.get("access_token")
+        # System User tokens (Business Manager) no caducan: refresh es no-op.
+        self._es_system_user = creds.get("tipo_token") == TIPO_SYSTEM_USER
         self._cli = cliente or cliente_http()
 
     def disponible(self) -> bool:
         return bool(self._token)
 
     def _refrescar(self) -> bool:
+        if self._es_system_user:
+            # Token de System User: no caduca, no hay nada que renovar.
+            return False
         cid, secret = self._creds.get("app_id"), self._creds.get("app_secret")
         if not (cid and secret and self._token):
             return False
