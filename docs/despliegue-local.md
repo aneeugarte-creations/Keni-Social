@@ -1,6 +1,6 @@
 # Despliegue local por persona
 
-El MCP corre en la máquina/entorno de cada persona (no hay hosting central). Aquí están las formas de instalarlo, pensadas para **máquinas corporativas bloqueadas** (sin permisos de admin).
+El MCP corre en la máquina/entorno de cada persona. Aquí están las formas de instalarlo, pensadas para **máquinas corporativas bloqueadas** (sin permisos de admin). La alternativa —un MCP **alojado por Keni** por HTTP (System User tokens, OAuth centralizado)— está en `despliegue-hosted.md`; ambos modos conviven (arquitectura híbrida).
 
 ## Opción 1 — `uv` (recomendada, sin admin)
 

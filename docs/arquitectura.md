@@ -24,7 +24,7 @@ Separación clave: **marca** (línea editorial institucional, estable) vs **voz*
 
 ## 2. MCP de métricas (`mcp-metricas/`)
 
-Servidor MCP (Python/FastMCP, stdio) con una **fuente** activa:
+Servidor MCP (Python/FastMCP), ejecutable por **stdio** (local) o **HTTP** (alojado, `KENI_MCP_TRANSPORT=http`), con una **fuente** activa y acotable por marca:
 
 ```
 tools (listar_cuentas, metricas_resumen, mejores_piezas, comparar_periodos,
@@ -40,7 +40,13 @@ tools (listar_cuentas, metricas_resumen, mejores_piezas, comparar_periodos,
 
 Añadir una plataforma = un adaptador nuevo, sin tocar las tools. El esquema (`schema.py`) normaliza todas las redes a la misma forma.
 
-Ejecución **local por persona**, credenciales en la máquina de cada quien (ver `credenciales.md`).
+**Multi-usuario:** cada persona acota sus marcas con `KENI_METRICAS_MARCAS` (o el campo `marcas` del config); solo ve y consulta las suyas.
+
+**Dos modos de despliegue** (arquitectura híbrida del producto):
+- **Local por persona** — MCP por stdio, credenciales en la máquina de cada quien (ver `despliegue-local.md`, `credenciales.md`). Máxima privacidad.
+- **Alojado por Keni** — MCP por HTTP con **System User tokens de Meta** (no caducan: evita las desconexiones tipo Metricool) y OAuth centralizado, para máquinas bloqueadas (ver `despliegue-hosted.md`). Solo expone números agregados.
+
+Distribución: todo el conjunto (skills + MCP) se instala y actualiza como **plugin de Claude Code** desde un marketplace privado (ver `README.md`). La voz personal de cada quien vive en `~/.config/keni-social/voces/` para sobrevivir a las actualizaciones.
 
 ## Cómo encajan
 
