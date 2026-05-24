@@ -43,6 +43,6 @@ Claude carga el contexto editorial, redacta una variante por plataforma y cierra
 
 (Si ya escribiste tu estilo en tu CLAUDE.md personal del Día 3, cópialo aquí: este es el archivo que la skill lee.)
 
-## Integración con métricas (opcional)
+## Integración con métricas (loop)
 
-Si tienes el MCP `keni-metricas` conectado (ver `../mcp-metricas/`), `copy-desde-nota` puede consultar qué piezas funcionaron mejor en esa marca y ajustar el tono. Si no, se omite sin romperse.
+Si tienes el MCP `keni-metricas` conectado (ver `../mcp-metricas/`), `copy-desde-nota` consulta **antes de redactar** qué plataforma rinde más y qué piezas funcionaron mejor en esa marca (`metricas_resumen` + `mejores_piezas`), y **adapta ángulo, plataforma y tono** a lo que funciona — diciendo en una línea qué aprendió. Si el MCP no está conectado, lo dice y sigue sin métricas (no es obligatorio).

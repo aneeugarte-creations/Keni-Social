@@ -1,7 +1,7 @@
 ---
 name: copy-desde-nota
 description: Convierte una nota (.md) o una transcripción de clip en copy LISTO PARA PUBLICAR por plataforma (X, Instagram, Facebook, TikTok, YouTube) para las marcas de AMX (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación), aplicando voz de marca, voz personal, tropicalización mexicana y una auto-verificación. Úsala cuando haya que redactar copy de redes a partir de una nota o un clip.
-allowed-tools: Read, Glob, Bash(date:*)
+allowed-tools: Read, Glob, Bash(date:*), mcp__keni-metricas__metricas_resumen, mcp__keni-metricas__mejores_piezas
 ---
 
 # copy-desde-nota
@@ -29,12 +29,18 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
 
 2. **Extrae el núcleo de la fuente**: titular real, dato/cifra con su fuente si aparece, ángulo. **No inventes nada que no esté en la fuente.** Si falta un dato, dilo; no lo rellenes.
 
-3. **Redacta una variante por plataforma** según `plataformas.md` (respeta el límite de caracteres de forma estricta y **muestra el conteo real** de cada variante):
+3. **Consulta qué funciona (métricas).** Si el MCP `keni-metricas` está conectado, ANTES de redactar:
+   - `metricas_resumen(marca, "mes")` → qué **plataforma** rinde más (mayor engagement) en esa marca.
+   - `mejores_piezas(marca, "mes", 5)` → qué **temas/ángulos/formatos** funcionaron mejor (títulos y plataforma de las piezas top).
+   - Decide con eso: a qué plataformas dar más fuerza, qué ángulo priorizar, qué tono. **Di en una línea qué aprendiste y cómo lo aplicas** (p. ej. "TikTok es lo más fuerte de Claro Sports, 5.1% eng, y lo que mejor funcionó fueron clips de jugada polémica → priorizo gancho de polémica en TikTok").
+   - Si el MCP **no** está conectado, dilo en una línea y sigue sin métricas (no es obligatorio).
+
+4. **Redacta una variante por plataforma** según `plataformas.md` (respeta el límite de caracteres de forma estricta y **muestra el conteo real** de cada variante), **aplicando lo aprendido en el paso 3**:
    - **X/Twitter** · **Instagram** · **Facebook** · **TikTok** · **YouTube**
 
-4. **Aplica voz + tropicalización:** impregna el tono de la marca y de la voz personal; sustituye giros de España por mexicanos (ver `tropicalizacion.md`); elimina acentos/léxico de fuentes españolas.
+5. **Aplica voz + tropicalización:** impregna el tono de la marca y de la voz personal; sustituye giros de España por mexicanos (ver `tropicalizacion.md`); elimina acentos/léxico de fuentes españolas.
 
-5. **Auto-verificación (OBLIGATORIO, al final).** Marca cada punto con ✅ / ⚠️ / ❌:
+6. **Auto-verificación (OBLIGATORIO, al final).** Marca cada punto con ✅ / ⚠️ / ❌:
    - **Fechas y números:** ¿coinciden con la fuente? ¿alguna inventada? (usa `date` para comparar "hoy/ayer/mañana").
    - **Nombres y cargos:** errores típicos (p. ej. "expresidente Trump" cuando es **presidente**; nombres mal escritos).
    - **Cifras sin fuente:** marca toda cifra que no tenga respaldo en la fuente.
@@ -42,8 +48,6 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
    - **¿Suena mexicano?:** ¿quedó algún giro español? ¿el tono es de la marca y de la voz?
    - **Límites por plataforma:** ¿todas las variantes caben?
    - **Veredicto:** "LISTO PARA APROBAR" solo si todo es ✅. Si hay ⚠️/❌, dilo claro y señala exactamente qué revisar.
-
-6. (Opcional) **Aprende de lo que funcionó.** Si el MCP `keni-metricas` está conectado, consulta `mejores_piezas(marca, "mes")` y ajusta el ángulo/tono a lo que mejor rindió en esa marca/plataforma. Si no está, omite este paso sin más.
 
 ## Reglas
 
