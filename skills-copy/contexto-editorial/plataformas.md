@@ -29,7 +29,18 @@ Reglas de formato, largo y tono de cada red. La skill produce **una variante por
 - **Descripción: 2–3 frases** + (si es vídeo largo) una línea de capítulos/CTA.
 - Menos jerga que TikTok; busca búsqueda orgánica, no solo gancho.
 
+## Carrusel (Instagram / Facebook)
+- Para contenido con **varios puntos** (una nota con varias claves, un "lo que pasó en 5 datos").
+- **3–7 slides numeradas.** Slide 1 = **gancho** (lo que para el scroll). Slides intermedias = un punto cada una, frase corta. Última slide = **CTA** (link, "desliza", "más en…").
+- Texto por slide breve (cabe en la imagen). El caption acompaña, no repite las slides.
+
+## Hilo (X)
+- Para una historia o explicación que **no cabe en 280**.
+- **2–5 tuits**, cada uno **≤280** (verifícalo con el contador). Numéralos `1/n`.
+- `1/n` = gancho que funcione solo. Cada tuit aporta algo nuevo; el último cierra o lleva al enlace.
+
 ## Reglas comunes
-- Muestra el **conteo de caracteres real** de cada variante.
+- **Conteo de caracteres:** para X, cada tuit del hilo y el título de YouTube, usa el contador (`contar.py`), no el ojo. Para el resto, muéstralo aproximado.
 - No repitas el mismo texto en todas; **adapta** longitud, tono y gancho a cada red.
+- Carrusel/hilo son **adicionales** al post simple: se ofrecen cuando el contenido lo pide, no siempre.
 - Si la marca tiene un formato propio en su ficha (`marcas/{marca}.md`), ese manda sobre esto.

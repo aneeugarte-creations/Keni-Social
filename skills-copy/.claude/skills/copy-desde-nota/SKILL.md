@@ -1,7 +1,7 @@
 ---
 name: copy-desde-nota
 description: Convierte una nota (.md) o una transcripción de clip en copy LISTO PARA PUBLICAR por plataforma (X, Instagram, Facebook, TikTok, YouTube) para las marcas de AMX (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación), aplicando voz de marca, voz personal, tropicalización mexicana y una auto-verificación. Úsala cuando haya que redactar copy de redes a partir de una nota o un clip.
-allowed-tools: Read, Glob, Bash(date:*), mcp__keni-metricas__metricas_resumen, mcp__keni-metricas__mejores_piezas
+allowed-tools: Read, Glob, Bash(date:*), Bash(python3:*), mcp__keni-metricas__metricas_resumen, mcp__keni-metricas__mejores_piezas
 ---
 
 # copy-desde-nota
@@ -35,8 +35,15 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
    - Decide con eso: a qué plataformas dar más fuerza, qué ángulo priorizar, qué tono. **Di en una línea qué aprendiste y cómo lo aplicas** (p. ej. "TikTok es lo más fuerte de Claro Sports, 5.1% eng, y lo que mejor funcionó fueron clips de jugada polémica → priorizo gancho de polémica en TikTok").
    - Si el MCP **no** está conectado, dilo en una línea y sigue sin métricas (no es obligatorio).
 
-4. **Redacta una variante por plataforma** según `plataformas.md` (respeta el límite de caracteres de forma estricta y **muestra el conteo real** de cada variante), **aplicando lo aprendido en el paso 3**:
+4. **Redacta una variante por plataforma** según `plataformas.md`, **aplicando lo aprendido en el paso 3**:
    - **X/Twitter** · **Instagram** · **Facebook** · **TikTok** · **YouTube**
+   - **Formatos largos** (cuando la fuente tiene varios puntos o el usuario lo pide): añade además un **carrusel** para Instagram/Facebook (3–7 slides numeradas: slide 1 = gancho, últimas = CTA) y/o un **hilo** para X (2–5 tuits, cada uno ≤280, numerados `1/n`; el 1/n es el gancho). Si la fuente es corta (p. ej. un clip de una sola declaración), un post simple basta.
+   - **Conteo exacto:** muestra el nº de caracteres de cada variante. Para los límites estrictos (**X y cada tuit del hilo = 280**, **título de YouTube = 70**) **no cuentes a ojo**: usa el contador con heredoc:
+     ```
+     python3 .claude/skills/copy-desde-nota/contar.py <<'TXT'
+     <pega aquí la variante>
+     TXT
+     ```
 
 5. **Aplica voz + tropicalización:** impregna el tono de la marca y de la voz personal; sustituye giros de España por mexicanos (ver `tropicalizacion.md`); elimina acentos/léxico de fuentes españolas.
 
@@ -46,7 +53,7 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
    - **Cifras sin fuente:** marca toda cifra que no tenga respaldo en la fuente.
    - **Reglas legales** (`reglas-legales.md`): bandera con escudo, tratamiento de menores/víctimas, datos personales identificables.
    - **¿Suena mexicano?:** ¿quedó algún giro español? ¿el tono es de la marca y de la voz?
-   - **Límites por plataforma:** ¿todas las variantes caben?
+   - **Límites por plataforma:** ¿todas las variantes caben? Verifica con `contar.py` el post de X, **cada tuit del hilo** y el título de YouTube; no des por bueno un conteo a ojo en esos.
    - **Veredicto:** "LISTO PARA APROBAR" solo si todo es ✅. Si hay ⚠️/❌, dilo claro y señala exactamente qué revisar.
 
 ## Reglas
