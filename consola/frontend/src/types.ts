@@ -123,11 +123,26 @@ export interface CuerpoEjecutarSkill {
   skill: string;
   marca: string;
   texto: string;
+  /** Redes para las que generar piezas. Si se omite, el backend decide. */
+  redes?: string[];
+}
+
+/** Veredicto editorial de una pieza/generación. "" = sin veredicto. */
+export type Veredicto = "listo" | "revisar" | "no_publicar" | "";
+
+/** Una pieza generada para una red concreta. */
+export interface PiezaGenerada {
+  red: string;
+  contenido: string;
+  caracteres: number;
 }
 
 export interface RespuestaEjecutarSkill {
   resultado: string;
   historial_id: string;
+  verdicto: Veredicto;
+  /** Una pieza por red. Si viene vacío, se muestra `resultado` en una sola pestaña. */
+  piezas: PiezaGenerada[];
 }
 
 export interface EntradaHistorial {
@@ -251,6 +266,89 @@ export interface CompararMetricas {
     metricas: ComparativaMetrica[];
   };
   por_marca: ComparativaPorMarca[];
+}
+
+// --- Publicaciones ---
+
+/** Estados del ciclo de vida de una publicación, en orden de avance. */
+export type EstadoPublicacion = "borrador" | "aprobado" | "programado" | "publicado";
+
+/** Una red social del catálogo (id canónico + límite de caracteres). */
+export interface RedPublicacion {
+  id: string;
+  nombre: string;
+  /** Límite de caracteres; `null` si la red no tiene límite. */
+  limite: number | null;
+}
+
+/** Una opción de estado para los filtros. */
+export interface EstadoOpcion {
+  id: string;
+  nombre: string;
+}
+
+export interface OpcionesPublicaciones {
+  redes: RedPublicacion[];
+  estados: EstadoOpcion[];
+  marcas: MarcaDisponible[];
+}
+
+export interface Publicacion {
+  id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  red: string;
+  red_nombre: string;
+  contenido: string;
+  estado: EstadoPublicacion;
+  veredicto: Veredicto;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+  /** ISO de la fecha/hora programada; `null` si no aplica. */
+  fecha_programada: string | null;
+  /** Origen (p. ej. `historial_id` de la generación). */
+  origen: string | null;
+}
+
+export interface RespuestaPublicaciones {
+  publicaciones: Publicacion[];
+}
+
+export interface RespuestaPublicacion {
+  publicacion: Publicacion;
+}
+
+/** Cuerpo para crear una publicación. */
+export interface CuerpoCrearPublicacion {
+  titulo: string;
+  marca: string;
+  red: string;
+  contenido: string;
+  estado?: EstadoPublicacion;
+  fecha_programada?: string | null;
+  veredicto?: Veredicto;
+  origen?: string | null;
+}
+
+export interface CuerpoCrearPublicacionesLote {
+  publicaciones: CuerpoCrearPublicacion[];
+}
+
+/** Cuerpo parcial para actualizar una publicación. */
+export interface CuerpoActualizarPublicacion {
+  titulo?: string;
+  contenido?: string;
+  estado?: EstadoPublicacion;
+  fecha_programada?: string | null;
+}
+
+export interface FiltrosPublicaciones {
+  marca?: string;
+  red?: string;
+  estado?: string;
+  /** Permite pasarse a `query()` (Record<string, string | undefined>). */
+  [clave: string]: string | undefined;
 }
 
 // --- Respuesta generica con mensaje ---

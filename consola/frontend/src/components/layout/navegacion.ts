@@ -4,6 +4,7 @@ import {
   FolderPlus,
   FolderTree,
   ListTodo,
+  Send,
   Settings2,
   Sparkles,
   type LucideIcon,
@@ -35,6 +36,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Generar copy",
         icono: Sparkles,
         descripcion: "Crea publicaciones con las skills editoriales.",
+      },
+      {
+        ruta: "/publicaciones",
+        etiqueta: "Publicaciones",
+        icono: Send,
+        descripcion: "Gestiona borradores, aprueba, programa y publica.",
       },
       {
         ruta: "/metricas",

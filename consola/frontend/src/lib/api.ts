@@ -10,16 +10,21 @@
  */
 import type {
   CompararMetricas,
+  CuerpoActualizarPublicacion,
   CuerpoActualizarTarea,
   CuerpoCrearCarpeta,
   CuerpoCrearProyecto,
+  CuerpoCrearPublicacion,
+  CuerpoCrearPublicacionesLote,
   CuerpoCrearTarea,
   CuerpoEjecutarSkill,
   CuerpoGuardarClaudeMd,
   CuerpoGuardarConfig,
   DetalleHistorial,
   ErrorApi,
+  FiltrosPublicaciones,
   OpcionesMetricas,
+  OpcionesPublicaciones,
   ReporteMetricas,
   RespuestaCarpetas,
   RespuestaConfig,
@@ -30,6 +35,8 @@ import type {
   RespuestaHistorial,
   RespuestaMensaje,
   RespuestaProyectos,
+  RespuestaPublicacion,
+  RespuestaPublicaciones,
   RespuestaSkills,
   RespuestaTareas,
 } from "@/types";
@@ -153,16 +160,37 @@ export const api = {
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),
   ejecutarSkill: (cuerpo: CuerpoEjecutarSkill) =>
     peticion<RespuestaEjecutarSkill>("/skills/ejecutar", { metodo: "POST", json: cuerpo }),
-  ejecutarSkillArchivo: (skill: string, marca: string, archivo: File) => {
+  ejecutarSkillArchivo: (skill: string, marca: string, archivo: File, redes?: string[]) => {
     const form = new FormData();
     form.set("skill", skill);
     form.set("marca", marca);
     form.set("archivo", archivo);
+    // Cada red va como un campo `redes` repetido (multivalor).
+    for (const red of redes ?? []) form.append("redes", red);
     return peticion<RespuestaEjecutarSkill>("/skills/ejecutar-archivo", { metodo: "POST", form });
   },
   historial: (signal?: AbortSignal) => peticion<RespuestaHistorial>("/skills/historial", { signal }),
   detalleHistorial: (id: string, signal?: AbortSignal) =>
     peticion<DetalleHistorial>(`/skills/historial/${encodeURIComponent(id)}`, { signal }),
+
+  // --- Publicaciones ---
+  publicacionesOpciones: (signal?: AbortSignal) =>
+    peticion<OpcionesPublicaciones>("/publicaciones/opciones", { signal }),
+  publicaciones: (filtros: FiltrosPublicaciones = {}, signal?: AbortSignal) =>
+    peticion<RespuestaPublicaciones>(`/publicaciones${query(filtros)}`, { signal }),
+  publicacion: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, { signal }),
+  crearPublicacion: (cuerpo: CuerpoCrearPublicacion) =>
+    peticion<RespuestaPublicacion>("/publicaciones", { metodo: "POST", json: cuerpo }),
+  crearPublicacionesLote: (cuerpo: CuerpoCrearPublicacionesLote) =>
+    peticion<RespuestaPublicaciones>("/publicaciones/lote", { metodo: "POST", json: cuerpo }),
+  actualizarPublicacion: (id: string, cuerpo: CuerpoActualizarPublicacion) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarPublicacion: (id: string) =>
+    peticion<RespuestaMensaje>(`/publicaciones/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Tareas ---
   tareas: (signal?: AbortSignal) => peticion<RespuestaTareas>("/tareas", { signal }),

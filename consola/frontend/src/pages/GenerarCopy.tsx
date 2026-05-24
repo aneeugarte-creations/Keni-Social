@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -36,6 +37,9 @@ import type { GrupoSkills, RespuestaEjecutarSkill, Skill } from "@/types";
 
 import { Historial } from "./copy/Historial";
 import { Resultado } from "./copy/Resultado";
+import { ResultadoRedes } from "./copy/ResultadoRedes";
+import { SelectorRedes } from "./copy/SelectorRedes";
+import { ORDEN_REDES } from "./publicaciones/meta";
 
 type Modo = "texto" | "archivo";
 
@@ -59,6 +63,7 @@ function EsqueletoFormulario() {
           <Skeleton className="h-5 w-40" />
         </CardHeader>
         <CardContent className="space-y-4">
+          <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-36 w-full" />
@@ -85,13 +90,41 @@ export default function GenerarCopy() {
     queryFn: ({ signal }) => api.skills(signal),
   });
 
+  // Catálogo de redes para los checkboxes. Si no se puede cargar, caemos a las
+  // redes canónicas para no bloquear la generación.
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+  });
+
+  const opcionesRedes = React.useMemo(
+    () =>
+      opcionesQuery.data?.redes.map((r) => ({ id: r.id, nombre: r.nombre })) ??
+      ORDEN_REDES.map((id) => ({ id, nombre: id })),
+    [opcionesQuery.data],
+  );
+
   const [skillId, setSkillId] = React.useState("");
   const [marcaId, setMarcaId] = React.useState("");
+  const [titulo, setTitulo] = React.useState("");
   const [modo, setModo] = React.useState<Modo>("texto");
   const [texto, setTexto] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
-  const [resultado, setResultado] = React.useState<string | null>(null);
+  const [redes, setRedes] = React.useState<Set<string>>(new Set());
+  const [respuesta, setRespuesta] = React.useState<RespuestaEjecutarSkill | null>(null);
+  // Marca/título usados en la última generación (para guardar coherente al editar arriba).
+  const [contextoResultado, setContextoResultado] = React.useState<{
+    titulo: string;
+    marca: string;
+  } | null>(null);
   const inputArchivoRef = React.useRef<HTMLInputElement>(null);
+
+  // Por defecto, todas las redes marcadas (en cuanto conocemos el catálogo).
+  React.useEffect(() => {
+    setRedes((prev) =>
+      prev.size === 0 ? new Set(opcionesRedes.map((r) => r.id)) : prev,
+    );
+  }, [opcionesRedes]);
 
   const indice = React.useMemo(
     () => (skillsQuery.data ? indexarSkills(skillsQuery.data.grupos) : new Map()),
@@ -119,14 +152,21 @@ export default function GenerarCopy() {
 
   const mutacion = useMutation<RespuestaEjecutarSkill, Error>({
     mutationFn: () => {
+      const redesSel = [...redes];
       if (modo === "archivo") {
         // archivo no nulo: garantizado por la guarda de `puedeGenerar`.
-        return api.ejecutarSkillArchivo(skillId, marcaId, archivo as File);
+        return api.ejecutarSkillArchivo(skillId, marcaId, archivo as File, redesSel);
       }
-      return api.ejecutarSkill({ skill: skillId, marca: marcaId, texto: texto.trim() });
+      return api.ejecutarSkill({
+        skill: skillId,
+        marca: marcaId,
+        texto: texto.trim(),
+        redes: redesSel,
+      });
     },
     onSuccess: (data) => {
-      setResultado(data.resultado);
+      setRespuesta(data);
+      setContextoResultado({ titulo, marca: marcaId });
       toast.success("Borrador generado");
       void queryClient.invalidateQueries({ queryKey: ["skills", "historial"] });
     },
@@ -141,6 +181,7 @@ export default function GenerarCopy() {
     !generando &&
     skillId !== "" &&
     marcaId !== "" &&
+    redes.size > 0 &&
     (modo === "archivo" ? archivo !== null : texto.trim().length > 0);
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -150,6 +191,15 @@ export default function GenerarCopy() {
   function limpiarArchivo() {
     setArchivo(null);
     if (inputArchivoRef.current) inputArchivoRef.current.value = "";
+  }
+
+  function alternarRed(red: string, marcada: boolean) {
+    setRedes((prev) => {
+      const siguiente = new Set(prev);
+      if (marcada) siguiente.add(red);
+      else siguiente.delete(red);
+      return siguiente;
+    });
   }
 
   // --- Carga / error de las skills ---
@@ -200,6 +250,7 @@ export default function GenerarCopy() {
 
   const { grupos, marcas } = skillsQuery.data;
   const skillSeleccionada = skillId ? indice.get(skillId)?.skill : undefined;
+  const tienePiezas = (respuesta?.piezas.length ?? 0) > 0;
 
   return (
     <>
@@ -277,6 +328,27 @@ export default function GenerarCopy() {
                 </div>
               </div>
 
+              {/* Título */}
+              <div className="space-y-1.5">
+                <Label htmlFor="titulo-publicacion">
+                  Título <span className="text-muted-foreground">(opcional)</span>
+                </Label>
+                <Input
+                  id="titulo-publicacion"
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  placeholder="Ej. Lanzamiento campaña verano"
+                  maxLength={200}
+                />
+              </div>
+
+              {/* Redes */}
+              <SelectorRedes
+                opciones={opcionesRedes}
+                seleccionadas={redes}
+                onCambio={alternarRed}
+              />
+
               {/* Entrada dual */}
               {esSkillMedia ? (
                 <EntradaArchivo
@@ -338,7 +410,16 @@ export default function GenerarCopy() {
             </CardContent>
           </Card>
 
-          {resultado !== null && <Resultado resultado={resultado} />}
+          {respuesta !== null &&
+            (tienePiezas ? (
+              <ResultadoRedes
+                respuesta={respuesta}
+                titulo={contextoResultado?.titulo ?? ""}
+                marca={contextoResultado?.marca ?? marcaId}
+              />
+            ) : (
+              <Resultado resultado={respuesta.resultado} />
+            ))}
         </div>
 
         <Historial />
