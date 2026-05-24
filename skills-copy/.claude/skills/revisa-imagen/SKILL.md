@@ -12,6 +12,21 @@ Modo **revisión pura**: **NO generas imágenes, NO las editas, NO subes nada ni
 
 Esta skill **complementa al humano, no lo reemplaza**, en la misma línea de dry-run y auto-verificación que el resto de skills de `skills-copy`. Un juicio visual **puede equivocarse** (compresión, baja resolución, un escudo pequeño o borroso): cuando no estés seguro, **describe exactamente lo que ves y márcalo para confirmación humana** en vez de afirmar.
 
+## Cómo ABRE tu salida (veredicto + leyenda, ANTES del checklist)
+
+La salida SIEMPRE empieza por este bloque, **arriba del todo, antes del checklist por regla**, para que un community manager no técnico vea el veredicto sin hacer scroll. Resume el dictamen del paso 4; el checklist regla por regla y el veredicto detallado (APTA / NO APTA) se mantienen al final, intactos.
+
+```
+<una línea de veredicto, según el dictamen de tu revisión>
+✅ LISTO PARA APROBAR   ·   ⚠️ REVISAR ANTES DE PUBLICAR   ·   ❌ NO PUBLICAR
+
+Leyenda: ✅ = listo · ⚠️ = revísalo tú antes de publicar · ❌ = problema, no publicar
+```
+
+- La **línea de veredicto** es UNA de las tres, la que corresponda: `✅ LISTO PARA APROBAR` (= imagen APTA) solo si TODOS los puntos son ✅; `⚠️ REVISAR ANTES DE PUBLICAR` si hay algún ⚠️ a confirmar (escudo dudoso, una cifra a verificar, una licencia por revisar); `❌ NO PUBLICAR` si hay un ❌ (escudo visible con claridad, menor/víctima identificable). Tras esa línea, indica en pocas palabras qué corregir si no es ✅.
+- La **leyenda** explica los tres símbolos para quien no los conoce.
+- Esto va ANTES del checklist. El **checklist regla por regla** y el **veredicto detallado (APTA / NO APTA)** se mantienen al final (paso 4), sin recortar nada.
+
 ## Entradas
 
 - **Ruta de la imagen/arte:** un archivo de imagen (`.png`, `.jpg`, `.jpeg`, `.webp`, …) que el usuario señala. **Léelo con `Read`** (Claude lo interpreta visualmente). Si el usuario no da ninguna ruta, **pídela** — no inventes el contenido de una imagen que no has visto. Si la ruta no existe o no es una imagen legible, dilo y para.
@@ -50,6 +65,9 @@ Esta skill **complementa al humano, no lo reemplaza**, en la misma línea de dry
 ## Formato de salida (plantilla)
 
 ```
+✅ LISTO PARA APROBAR   (o ⚠️ REVISAR ANTES DE PUBLICAR / ❌ NO PUBLICAR — la que corresponda + qué corregir)
+Leyenda: ✅ = listo · ⚠️ = revísalo tú antes de publicar · ❌ = problema, no publicar
+
 # Revisión de imagen — <descripción breve del arte>
 Ruta: <ruta revisada>   ·   Marca: <marca | no indicada>
 Qué muestra: <1–2 líneas de lo que se ve>

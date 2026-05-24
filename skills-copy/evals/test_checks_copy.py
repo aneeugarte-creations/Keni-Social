@@ -151,15 +151,15 @@ def test_extraer_secciones_carrusel_es_se_mapea_a_carrusel():
     assert secciones["carrusel"].startswith("1/3")
 
 
-def test_extraer_secciones_carousel_en_se_reconoce_como_seccion():
-    # encabezado en ingles "Carousel" SI se reconoce como seccion de plataforma.
-    # OJO: la logica real de checks.py mapea a "carrusel" solo los encabezados
-    # que empiezan por "carrus"/"carrou"; "carousel" no casa con ninguno, asi que
-    # conserva su clave cruda "carousel". Documentamos ese comportamiento real.
+def test_extraer_secciones_carousel_en_se_mapea_a_carrusel():
+    # encabezado en ingles "Carousel" -> clave normalizada "carrusel".
+    # checks.py mapea a "carrusel" los encabezados que empiezan por
+    # "carrus" (es), "carrou" (fr) o "carou" (en/"carousel").
     s = "## Carousel\nSlide A\nmas texto\n\n## Instagram\nhola"
     secciones = checks.extraer_secciones(s)
-    assert "carousel" in secciones
-    assert "carousel" in checks.extraer_secciones("## Carousel\nx").keys()
+    assert "carrusel" in secciones
+    assert "carousel" not in secciones
+    assert secciones["carrusel"].startswith("Slide A")
 
 
 # --- limites: sin seccion de la plataforma -> [] (no se afirma violacion) ---
