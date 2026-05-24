@@ -7,6 +7,7 @@ Sistema de producción de copy para el equipo de redes de AMX, como **Agent Skil
 | Skill | Para qué |
 |---|---|
 | **copy-desde-nota** | Nota o transcripción de clip → copy por plataforma (X, IG, FB, TikTok, YouTube) con auto-verificación. La principal. |
+| **clip-a-copy** | **Video/audio** (entrevista, declaración, podcast) → copy por plataforma + **citas con marca de tiempo** para cortar el clip. Transcribe en **local** (whisper.cpp, el audio no sale de la máquina). |
 | **resumen-tendencia** | Tema/fuentes → brief interno: qué pasa + ángulo por marca + riesgos legales. |
 | **nota-a-formato** | Nota cruda → normalizada a la voz de la casa (limpia giros españoles). Paso previo opcional. |
 
@@ -34,6 +35,14 @@ Trabaja con Claude Code en esta carpeta (o instala el conjunto como plugin). Lue
 ```
 
 Claude carga el contexto editorial, redacta una variante por plataforma y cierra con la auto-verificación (✅/⚠️/❌). Si tu voz está vacía, te avisa y usa solo la de marca. **Nada se publica: es dry-run, tú apruebas.**
+
+Partiendo de un **video o audio** (en vez de una nota escrita):
+
+```
+> usa clip-a-copy con /ruta/al/video.mp4 para claro-sports
+```
+
+Transcribe el archivo **en local** (no sube nada), saca las mejores citas con su marca de tiempo para cortar el clip, y redacta el copy. Requisitos de transcripción (whisper.cpp + ffmpeg + modelo) en `../docs/despliegue-local.md`. Para probar sin un video real: `cd ejemplos && bash generar-clip-prueba.sh`. Como la transcripción automática **falla en nombres y cifras**, la skill los marca como "verificar contra el audio" — saber cuándo creerle a la IA es parte del entregable.
 
 ## Personaliza tu voz (5 minutos)
 

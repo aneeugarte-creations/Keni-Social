@@ -57,3 +57,32 @@ claude mcp list                      # debe aparecer keni-metricas
 > usa listar_cuentas
 > usa metricas_resumen con cuenta claro_sports y rango semana
 ```
+
+## Transcripción local (skill `clip-a-copy`)
+
+La skill `clip-a-copy` (video/audio → copy) transcribe **en la máquina**, sin nube: el audio no sale del equipo. Necesita tres cosas en un Mac (Apple Silicon):
+
+```bash
+# 1) whisper.cpp (motor de transcripción) y ffmpeg (extrae el audio)
+brew install whisper-cpp ffmpeg
+
+# 2) el modelo large-v3-turbo en español (~1.6 GB), una sola vez
+mkdir -p ~/models
+curl -L -o ~/models/ggml-large-v3-turbo.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+
+# 3) comprobar
+whisper-cli --help >/dev/null && echo "whisper-cli ok"
+```
+
+El script `skills-copy/.claude/skills/clip-a-copy/transcribir.sh` busca el modelo en `KENI_WHISPER_MODEL`, luego en `~/models/` y `~/.cache/whisper/`. Velocidad de referencia: en un M4 de 16 GB, `large-v3-turbo` transcribe **mucho más rápido que tiempo real** (un podcast de 1 h tarda unos minutos). Hay Macs del equipo con 24 GB y un Mac Studio, que pueden hacer de "caja de transcripción" compartida si hiciera falta.
+
+Ensayo rápido sin video real:
+
+```bash
+cd skills-copy/ejemplos && bash generar-clip-prueba.sh
+# luego, en una sesión de Claude desde skills-copy/:
+> usa clip-a-copy con /tmp/keni-clip/declaracion.m4a para claro-sports
+```
+
+> **Máquinas de community bloqueadas:** si no pueden instalar Homebrew, la transcripción se corre en un Mac con permisos (el de la persona de datos, o el Mac Studio como caja compartida) y el copy se redacta a partir del `.txt`/`.srt` resultante.
