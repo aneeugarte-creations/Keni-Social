@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from .formato import etiqueta_marca, linea_resto_picos, particionar_picos
+from .formato import etiqueta_marca, linea_resto_picos, miles, particionar_picos
 from .fuentes.base import FuenteMetricas
 from .historico import Historico
 
@@ -114,7 +114,7 @@ def _render_alerta(a: dict, nombres: dict) -> str:
         )
     icono = "📈" if a["tipo"] == "cuenta_alza" else "📉"
     verbo = "sube" if a["tipo"] == "cuenta_alza" else "cae"
-    base, vis = f"{a['baseline']:,}", f"{a['visualizaciones']:,}"
+    base, vis = miles(a['baseline']), miles(a['visualizaciones'])
     return f"- {icono} **{marca}** {verbo} {a['desviacion_pct']}% vs. su baseline ({base} → {vis})"
 
 

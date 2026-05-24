@@ -85,6 +85,37 @@ def test_render_markdown():
     assert md.startswith("## Alertas")
 
 
+def test_render_markdown_baseline_usa_separador_es_mx_punto(tmp_path):
+    # D1: las cifras de baseline/visualizaciones de una alerta de cuenta usan el
+    # separador es-MX (punto), MISMA regla (`formato.miles`) que el resto de la
+    # salida; la coma de Python no debe filtrarse.
+    from keni_metricas.formato import miles
+
+    h = Historico(tmp_path / "h.db")
+    for d in (date(2020, 1, 1), date(2020, 1, 8)):  # baseline alto -> cuenta_caida
+        h.guardar(
+            ResumenMetricas(
+                cuenta="claro_sports",
+                rango="semana",
+                periodo=Periodo(desde=d, hasta=d),
+                visualizaciones=100_000_000,
+                alcance=70_000_000,
+                interacciones=4_000_000,
+                engagement_pct=4.0,
+                seguidores_netos=0,
+                por_plataforma=[],
+                fuente="muestra",
+            )
+        )
+    rep = detectar_picos(FuenteMuestra(), "semana", 50, h)
+    caidas = [a for a in rep["alertas"] if a["tipo"] == "cuenta_caida"]
+    assert caidas, "el baseline alto debe producir una cuenta_caida"
+    md = render_markdown({**rep, "alertas": caidas})
+    base = caidas[0]["baseline"]
+    assert miles(base) in md  # separador es-MX (punto)
+    assert f"{base:,}" not in md  # no la coma de Python
+
+
 def test_detectar_picos_expone_nombres_legibles():
     # el reporte de picos debe traer el mapa id->nombre legible (mismo origen
     # que usa el dashboard) para que el render no imprima el id crudo.

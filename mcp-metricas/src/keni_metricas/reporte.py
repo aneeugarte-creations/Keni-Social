@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .formato import etiqueta_marca, partes_cobertura, signo
+from .formato import etiqueta_marca, miles, partes_cobertura, signo
 from .fuentes.base import FuenteMetricas
 
 if TYPE_CHECKING:
@@ -95,9 +95,9 @@ def render_markdown(rep: dict) -> str:
     out.append(f"# Reporte de redes — {rep['rango']}")
     out.append(f"*Generado {rep['generado']} · fuente: {rep['fuente']}*\n")
     out.append("## Total")
-    out.append(f"- **Visualizaciones:** {t['visualizaciones']:,}")
-    out.append(f"- **Alcance:** {t['alcance']:,}")
-    out.append(f"- **Interacciones:** {t['interacciones']:,}")
+    out.append(f"- **Visualizaciones:** {miles(t['visualizaciones'])}")
+    out.append(f"- **Alcance:** {miles(t['alcance'])}")
+    out.append(f"- **Interacciones:** {miles(t['interacciones'])}")
     out.append(f"- **Engagement:** {t['engagement_pct']}%")
     out.append(f"- **Cuentas:** {t['cuentas']}")
     cob_global = rep.get("cobertura") or {}
@@ -115,7 +115,7 @@ def render_markdown(rep: dict) -> str:
             cab += f"  ({signo(v_vis)}% vis vs. anterior)"
         out.append(cab)
         out.append(
-            f"- {r['visualizaciones']:,} vis · {r['alcance']:,} alcance · {r['engagement_pct']}% eng"
+            f"- {miles(r['visualizaciones'])} vis · {miles(r['alcance'])} alcance · {r['engagement_pct']}% eng"
         )
         if (nota := _nota_cobertura(r.get("cobertura"))) is not None:
             out.append(f"- {nota}")
@@ -123,11 +123,11 @@ def render_markdown(rep: dict) -> str:
             out.append("\n| Plataforma | Visualizaciones | Engagement |")
             out.append("|---|---:|---:|")
             for m in r["por_plataforma"]:
-                out.append(f"| {m['plataforma']} | {m['visualizaciones']:,} | {m['engagement_pct']}% |")
+                out.append(f"| {m['plataforma']} | {miles(m['visualizaciones'])} | {m['engagement_pct']}% |")
         if fila["mejores_piezas"]:
             out.append("\n**Mejores piezas:**")
             for p in fila["mejores_piezas"]:
-                vis = f"{p['visualizaciones']:,}"
+                vis = miles(p['visualizaciones'])
                 out.append(f"- [{p['plataforma']}] {p['titulo']} — {p['engagement_pct']}% ({vis} vis)")
         out.append("")
 

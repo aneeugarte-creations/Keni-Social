@@ -22,7 +22,8 @@ from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .formato import partes_cobertura, signo
+from . import formato
+from .formato import etiqueta_marca, miles, partes_cobertura, signo
 from .fuentes.base import FuenteMetricas
 from .picos import detectar_picos
 from .reporte import construir_reporte
@@ -95,14 +96,6 @@ def _fecha_legible(generado: str) -> str:
         return f"{int(dia)} {_MESES_ES[m]} {anio}"
     except (ValueError, IndexError):
         return generado
-
-
-def _miles(n: int | float) -> str:
-    """Formatea un entero con separador de miles (estilo es-MX: punto)."""
-    try:
-        return f"{int(n):,}".replace(",", ".")
-    except (TypeError, ValueError):
-        return escape(str(n))
 
 
 def _clase_variacion(pct: float | None) -> str:
@@ -378,11 +371,11 @@ footer .leyenda .chip {
 
 def _render_kpis(total: dict) -> str:
     kpis = [
-        ("Visualizaciones", _miles(total["visualizaciones"])),
-        ("Alcance", _miles(total["alcance"])),
-        ("Interacciones", _miles(total["interacciones"])),
+        ("Visualizaciones", miles(total["visualizaciones"])),
+        ("Alcance", miles(total["alcance"])),
+        ("Interacciones", miles(total["interacciones"])),
         ("Engagement", f"{total['engagement_pct']}%"),
-        ("Cuentas", _miles(total["cuentas"])),
+        ("Cuentas", miles(total["cuentas"])),
     ]
     items = "".join(
         f'<div class="kpi"><div class="etiqueta">{escape(et)}</div>'
@@ -395,7 +388,7 @@ def _render_kpis(total: dict) -> str:
 def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
     r = fila["resumen"]
     cuenta_id = r["cuenta"]
-    nombre = nombres.get(cuenta_id, cuenta_id)
+    nombre = etiqueta_marca(cuenta_id, nombres)
     var = r.get("variacion_vs_anterior") or {}
     v_vis = var.get("visualizaciones_pct")
 
@@ -408,8 +401,8 @@ def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
 
     cifras = (
         '<div class="cifras">'
-        f'<div><span class="n">{_miles(r["visualizaciones"])}</span><span class="l">Visualizaciones</span></div>'
-        f'<div><span class="n">{_miles(r["alcance"])}</span><span class="l">Alcance</span></div>'
+        f'<div><span class="n">{miles(r["visualizaciones"])}</span><span class="l">Visualizaciones</span></div>'
+        f'<div><span class="n">{miles(r["alcance"])}</span><span class="l">Alcance</span></div>'
         f'<div><span class="n">{escape(str(r["engagement_pct"]))}%</span><span class="l">Engagement</span></div>'
         "</div>"
     )
@@ -431,7 +424,7 @@ def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
             plat = _PLATAFORMA_ETIQUETA.get(p["plataforma"], p["plataforma"])
             titulo = escape(p["titulo"])
             eng = escape(str(p["engagement_pct"]))
-            vis = _miles(p["visualizaciones"])
+            vis = miles(p["visualizaciones"])
             lis.append(
                 f'<li><span class="plat">{escape(plat)}</span> · '
                 f'<span class="eng">{eng}%</span> · {vis} vis<br>'
@@ -446,7 +439,7 @@ def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
 def _render_alerta(a: dict, nombres: dict[str, str]) -> str:
     # nombre legible de la marca (mismo criterio que el resto del dashboard);
     # cae al id crudo solo si la fuente no lo trae.
-    marca = escape(nombres.get(a["cuenta"], a["cuenta"]))
+    marca = escape(etiqueta_marca(a["cuenta"], nombres))
     tipo = a.get("tipo")
     if tipo == "pieza_despunta":
         plat = _PLATAFORMA_ETIQUETA.get(a["plataforma"], a["plataforma"])
@@ -460,19 +453,17 @@ def _render_alerta(a: dict, nombres: dict[str, str]) -> str:
     return (
         f'<li><span class="tag">Cuenta que {escape(verbo)}</span>'
         f'<strong>{marca}</strong> {escape(verbo)} {escape(str(a["desviacion_pct"]))}% '
-        f'vs. su baseline ({_miles(a["baseline"])} &rarr; {_miles(a["visualizaciones"])} vis).</li>'
+        f'vs. su baseline ({miles(a["baseline"])} &rarr; {miles(a["visualizaciones"])} vis).</li>'
     )
-
-
-# UX-1: nº de alertas visibles antes de plegar el resto en <details>.
-_PICOS_VISIBLES = 6
 
 
 def _render_picos(picos: dict, nombres: dict[str, str]) -> str:
     partes = ['<h2 class="seccion">Alertas (picos)</h2>']
     cob = picos.get("cobertura") or {}
     if cob.get("cuentas_parciales"):
-        parciales = ", ".join(escape(nombres.get(c, c)) for c in cob["cuentas_parciales"])
+        parciales = ", ".join(
+            escape(etiqueta_marca(c, nombres)) for c in cob["cuentas_parciales"]
+        )
         partes.append(
             f'<p class="aviso"><strong>Aviso.</strong> Cobertura parcial en {parciales}: '
             "las alertas pueden estar incompletas.</p>"
@@ -483,12 +474,13 @@ def _render_picos(picos: dict, nombres: dict[str, str]) -> str:
         return "".join(partes)
 
     # UX-1: muestra solo las primeras alertas y pliega el resto para no
-    # enterrar el cierre de la pantalla en una demo compartida.
-    visibles = alertas[:_PICOS_VISIBLES]
-    resto = alertas[_PICOS_VISIBLES:]
+    # enterrar el cierre de la pantalla en una demo compartida. Mismo criterio
+    # top-N (`formato.PICOS_VISIBLES`/`particionar_picos`) que el reporte/digest.
+    visibles, n_resto = formato.particionar_picos(alertas)
+    resto = alertas[len(visibles):]
     lis = "".join(_render_alerta(a, nombres) for a in visibles)
     partes.append(f'<ul class="alertas">{lis}</ul>')
-    if resto:
+    if n_resto:
         lis_resto = "".join(_render_alerta(a, nombres) for a in resto)
         partes.append(
             '<details class="alertas-resto">'
@@ -499,11 +491,15 @@ def _render_picos(picos: dict, nombres: dict[str, str]) -> str:
     return "".join(partes)
 
 
-def _render_cobertura_global(rep: dict) -> str:
+def _render_cobertura_global(rep: dict, nombres: dict[str, str]) -> str:
     """Aviso de cobertura a nivel reporte. Siempre rinde algo (la nota es obligatoria)."""
     cob = rep.get("cobertura") or {}
     if cob.get("cuentas_parciales"):
-        parciales = ", ".join(escape(c) for c in cob["cuentas_parciales"])
+        # C3: nombre legible de la marca (no el id crudo), igual que el resto del
+        # dashboard; el escape protege HTML porque alimenta el documento.
+        parciales = ", ".join(
+            escape(etiqueta_marca(c, nombres)) for c in cob["cuentas_parciales"]
+        )
         return (
             f'<p class="aviso"><strong>Cobertura parcial.</strong> Datos incompletos en {parciales} '
             "(ver detalle por marca). Los ceros de una plataforma omitida NO son datos reales.</p>"
@@ -627,7 +623,7 @@ def _render_engagement(
     for pos, fila in enumerate(ordenadas, start=1):
         r = fila["resumen"]
         cuenta_id = r["cuenta"]
-        nombre = nombres.get(cuenta_id, cuenta_id)
+        nombre = etiqueta_marca(cuenta_id, nombres)
         eng = r.get("engagement_pct", 0.0)
         clase = _clase_engagement(eng)
         ancho = round(eng / max_eng * 100, 1) if max_eng else 0.0
@@ -676,7 +672,7 @@ def _render_estrella(rep: dict, nombres: dict[str, str]) -> str:
     if estrella is None:
         return ""
     pieza, cuenta_id = estrella
-    marca = escape(nombres.get(cuenta_id, cuenta_id))
+    marca = escape(etiqueta_marca(cuenta_id, nombres))
     plat = escape(_PLATAFORMA_ETIQUETA.get(pieza["plataforma"], pieza["plataforma"]))
     eng = escape(str(pieza.get("engagement_pct", 0.0)))
     titulo = escape(str(pieza.get("titulo", "")))
@@ -734,7 +730,7 @@ def construir_html(
 
 <h2 class="seccion">Total</h2>
 {_render_kpis(rep["total"])}
-{_render_cobertura_global(rep)}
+{_render_cobertura_global(rep, nombres)}
 {estrella}
 
 {engagement}

@@ -34,6 +34,8 @@ import os
 import sys
 from typing import TYPE_CHECKING
 
+from .formato import miles
+
 # NO se modifican estos modulos: se importan de SOLO LECTURA.
 from .fuentes._http import cliente_http, log, post_json
 
@@ -87,7 +89,7 @@ def _texto_digest(digest: dict) -> str:
     if (resumen := digest.get("resumen")) is not None:
         t = resumen["total"]
         out.append(
-            f"Total: {t['visualizaciones']:,} vis · {t['alcance']:,} alcance · "
+            f"Total: {miles(t['visualizaciones'])} vis · {miles(t['alcance'])} alcance · "
             f"{t['engagement_pct']}% eng · {t['cuentas']} cuentas"
         )
     out.append("")
