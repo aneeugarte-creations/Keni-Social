@@ -141,6 +141,60 @@ def test_normaliza_quita_acentos_y_baja_a_minusculas():
     assert checks.viola_bandera_con_escudo("Pon la BANDERA con el ESCUDO nacional.")
 
 
+# --- espanolismos (tropicalizacion) ---
+
+def test_espanolismos_detecta_vale_vosotros_coche():
+    s = "Vale, vosotros subid el coche al taller."
+    hallados = checks.detecta_espanolismos(s)
+    assert "vale" in hallados
+    assert "vosotros" in hallados
+    assert "coche" in hallados
+
+
+def test_espanolismos_insensible_a_acentos_y_mayusculas():
+    # mismo termino con acento y/o mayusculas debe detectarse igual
+    assert checks.detecta_espanolismos("MÓVIL") == ["movil"]
+    assert checks.detecta_espanolismos("Móvil y ZUMO") == ["movil", "zumo"]
+
+
+def test_espanolismos_copy_mexicano_sin_falsos_positivos():
+    # copy ya tropicalizado: nada que marcar
+    s = (
+        "Sale, ustedes suban el carro al taller. Agarren su celular y su jugo, "
+        "que esto se va a poner bueno."
+    )
+    assert checks.detecta_espanolismos(s) == []
+
+
+def test_espanolismos_casa_palabra_completa_no_subcadena():
+    # "valeroso" contiene "vale", "sosos" contiene "os": NO deben marcarse
+    s = "Un gesto valeroso de jugadores sosos no es espanolismo."
+    assert checks.detecta_espanolismos(s) == []
+
+
+def test_espanolismos_no_repite_termino():
+    s = "Vale, vale y otra vez vale."
+    assert checks.detecta_espanolismos(s) == ["vale"]
+
+
+def test_espanolismos_ambiguos_no_disparan_el_gate():
+    # piso/tio/coger son ambiguos en MX -> conservador: no se marcan
+    s = "Mi tío barrió el piso y fue a coger el balón."
+    assert checks.detecta_espanolismos(s) == []
+
+
+def test_espanolismos_preserva_orden_de_aparicion():
+    # casa formas base de la lista (molar/flipar/guay), no flexiones (mola/flipo)
+    assert checks.detecta_espanolismos("guay y luego vale") == ["guay", "vale"]
+    assert checks.detecta_espanolismos("vale y luego guay") == ["vale", "guay"]
+
+
+def test_espanolismos_casa_forma_base_no_flexion():
+    # el detector es conservador: marca "molar"/"flipar" (lema), no "mola"/"flipo"
+    assert checks.detecta_espanolismos("eso mola y yo flipo") == []
+    assert checks.detecta_espanolismos("eso es de flipar y molar") == ["flipar", "molar"]
+
+
 # --- extraer_secciones: encabezados de plataforma ---
 
 def test_extraer_secciones_carrusel_es_se_mapea_a_carrusel():
