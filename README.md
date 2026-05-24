@@ -15,6 +15,16 @@ Dos componentes independientes pero complementarios:
 | [`mcp-metricas/`](mcp-metricas/) | Servidor **MCP** que lee métricas de redes (Meta FB/IG, YouTube, X, TikTok), multi-marca, y las expone a Claude. Corre **local por persona** con sus propias credenciales. | Núcleo + fuente `muestra` listos; adaptadores reales escalonados por App Review/auditoría. |
 | [`skills-copy/`](skills-copy/) | **Agent Skills** de Claude Code + contexto editorial versionado, que convierten una nota, varios cables o un clip en copy publicable (voz de marca + tropicalización mexicana + formato por plataforma + auto-verificación) y ayudan a responder comentarios en voz de marca. | Listo para usar. |
 
+## Consola (interfaz)
+
+¿Prefieres botones a teclear comandos? La **Consola Keni** es una app web que corre **en tu máquina** y te da una interfaz con pestañas (Proyectos, Métricas, Generar copy, Tareas, Nueva carpeta) para el día a día. Es una **capa de gestión**: el motor que hace el trabajo sigue siendo Claude Code. Arráncala con:
+
+```
+keni-consola
+```
+
+(o el equivalente `python -m keni_metricas.consola`) y abre `http://127.0.0.1:8765`. Escucha **solo en localhost** y arranca con datos de muestra. Guía completa en [`docs/consola.md`](docs/consola.md).
+
 ## Por dónde empezar
 
 - **Primeros pasos (recomendado):** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 min, sin tecnicismos.

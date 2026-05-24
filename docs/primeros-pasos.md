@@ -4,6 +4,8 @@ Esta guía es para quien **acaba de instalar el plugin** y quiere ver el sistema
 
 Trabajas dentro de **Claude Code**, en la carpeta del proyecto `keni-social`. Si aún no has instalado el plugin, hazlo primero con los dos comandos del [`README.md`](../README.md#instalación-como-plugin).
 
+> **¿Prefieres una interfaz a teclear comandos?** Hay una **Consola Keni** con pestañas (Proyectos, Métricas, Generar copy, Tareas, Nueva carpeta) que corre en tu máquina. Arráncala con `keni-consola` (o `python -m keni_metricas.consola`) y abre `http://127.0.0.1:8765`. Es una alternativa con botones a escribirle a Claude Code; ver la [**guía de la consola**](consola.md).
+
 > **Importante (honestidad por defecto):** las métricas funcionan con **datos de muestra** —números con la forma real de las cinco marcas, pero ficticios— hasta que conectes credenciales reales. Todo lo de esta guía corre **sin conectar ninguna cuenta**.
 
 Las marcas se escriben así (cópialas tal cual): `unotv`, `claro-sports`, `nacion-gamer`, `piso-15`, `fundacion`.
