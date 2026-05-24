@@ -70,16 +70,33 @@ def test_modulo_api_de_prueba_se_monta_solo(entorno, tmp_path):
 # --------------------------------------------------------------------------- #
 
 
-def test_raiz_sin_build_devuelve_placeholder(cliente):
-    r = cliente.get("/")
+@pytest.fixture
+def sin_build(monkeypatch, tmp_path):
+    """Simula que el SPA aún NO está compilado: webapp/ existe pero sin index.html.
+
+    Asi probamos el placeholder de forma determinista, exista o no el bundle real
+    versionado en el paquete (tras el merge y en CI, webapp/index.html SI existe).
+    """
+    vacio = tmp_path / "webapp-vacio"
+    (vacio / "assets").mkdir(parents=True)
+    monkeypatch.setattr(app_modulo, "_DIR_WEBAPP", vacio)
+    monkeypatch.setattr(app_modulo, "_INDICE_SPA", vacio / "index.html")
+    monkeypatch.setattr(app_modulo, "_DIR_ASSETS", vacio / "assets")
+    return vacio
+
+
+def test_raiz_sin_build_devuelve_placeholder(entorno, sin_build):
+    c = _cliente()
+    r = c.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
     assert "La interfaz aún no está construida" in r.text
 
 
-def test_ruta_cualquiera_no_api_devuelve_placeholder(cliente):
+def test_ruta_cualquiera_no_api_devuelve_placeholder(entorno, sin_build):
     """Cualquier ruta que no sea /api ni /assets cae al fallback del SPA."""
-    r = cliente.get("/tareas")  # antes era una pagina; ahora la enruta el SPA
+    c = _cliente()
+    r = c.get("/tareas")  # antes era una pagina; ahora la enruta el SPA
     assert r.status_code == 200
     assert "La interfaz aún no está construida" in r.text
 

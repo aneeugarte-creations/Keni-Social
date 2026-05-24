@@ -53,6 +53,30 @@ jobs:
         working-directory: consola
         run: pytest
 
+  keni-consola-frontend:
+    # SPA React (Vite + TS) de la consola. El bundle compilado se versiona en
+    # src/keni_consola/webapp/ (para instalar sin Node); aqui validamos que el
+    # codigo FUENTE compila, tipa y pasa lint. SO-agnostico -> solo ubuntu.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: consola/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: consola/frontend/package-lock.json
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Lint (eslint)
+        run: npm run lint
+      - name: Typecheck (tsc)
+        run: npm run typecheck
+      - name: Build (vite)
+        run: npm run build
+
   skills-copy-estatico:
     # Solo los chequeos ESTATICOS de skills-copy (sin modelo, sin whisper, sin red).
     # El gate local con `claude -p` (skills-copy/evals/run.sh) NO corre en CI.
