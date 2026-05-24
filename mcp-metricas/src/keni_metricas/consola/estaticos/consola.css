@@ -1,0 +1,161 @@
+/* Consola Keni — estilos propios, servidos por la app (sin CDN, sin red).
+   Paleta coherente con el dashboard de metricas: tinta #111, gris, acento de
+   marca naranja. Tipografia del sistema. */
+:root {
+  --tinta: #111;
+  --gris: #666;
+  --gris-claro: #e6e6e6;
+  --fondo: #fff;
+  --fondo-suave: #fafafa;
+  --marca: #ff5a1f;
+  --marca-texto: #b8400f;
+  --sube: #1a7f37;
+  --baja: #b42318;
+  --aviso-fondo: #fff8e1;
+  --aviso-borde: #e0b500;
+  --aviso-tinta: #7a5b00;
+  --ok-fondo: #e7f6ec;
+  --ok-tinta: #1a7f37;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--tinta);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+}
+a { color: var(--marca-texto); }
+
+/* Barra superior + pestanas */
+header.barra {
+  border-top: 4px solid var(--marca);
+  border-bottom: 1px solid var(--gris-claro);
+  background: var(--fondo);
+  padding: 12px 24px 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+header.barra .marca-keni {
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: var(--marca-texto);
+}
+header.barra .marca-keni .sub { color: var(--gris); font-weight: 400; margin-left: 6px; }
+nav.pestanas { display: flex; gap: 4px; margin-top: 10px; }
+nav.pestanas a {
+  text-decoration: none;
+  color: var(--gris);
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+}
+nav.pestanas a.activa {
+  color: var(--tinta);
+  background: var(--fondo-suave);
+  border-color: var(--gris-claro);
+}
+
+main { max-width: 980px; margin: 0 auto; padding: 28px 24px 64px; }
+h1 { font-size: 1.5rem; margin: 0 0 6px; letter-spacing: -0.01em; }
+.intro { color: var(--gris); font-size: 0.92rem; margin: 0 0 24px; }
+
+/* Tarjetas de proyecto */
+.proyecto {
+  border: 1px solid var(--gris-claro);
+  border-radius: 10px;
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  background: var(--fondo);
+}
+.proyecto h2 {
+  margin: 0 0 4px; font-size: 1.1rem;
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+}
+.proyecto .ruta { color: var(--gris); font-size: 0.82rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.chip {
+  font-size: 0.68rem; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
+}
+.chip.ok { background: var(--ok-fondo); color: var(--ok-tinta); }
+.chip.aviso { background: var(--aviso-fondo); color: var(--aviso-tinta); }
+.chip.error { background: #fbeaea; color: var(--baja); }
+
+textarea.claude-md {
+  width: 100%;
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  border: 1px solid var(--gris-claro);
+  border-radius: 8px;
+  padding: 12px;
+  resize: vertical;
+  background: var(--fondo-suave);
+  color: var(--tinta);
+}
+.acciones { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; align-items: center; }
+
+button, .boton {
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--gris-claro);
+  padding: 8px 14px;
+  background: var(--fondo);
+  color: var(--tinta);
+}
+button.primario, .boton.primario {
+  background: var(--marca);
+  border-color: var(--marca);
+  color: #fff;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.estado { font-size: 0.85rem; color: var(--gris); min-height: 1.2em; }
+.estado.ok { color: var(--sube); }
+.estado.error { color: var(--baja); }
+
+/* Formulario anadir carpeta */
+.anadir {
+  border: 1px dashed var(--gris-claro);
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 8px 0 28px;
+  background: var(--fondo-suave);
+}
+.anadir h2 { font-size: 1.05rem; margin: 0 0 10px; }
+.anadir .campos { display: flex; gap: 10px; flex-wrap: wrap; }
+.anadir input {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--gris-claro);
+  border-radius: 8px;
+  flex: 1 1 200px;
+}
+.anadir input[name="ruta"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.85rem; }
+
+.vacio { color: var(--gris); font-style: italic; border: 1px dashed var(--gris-claro); border-radius: 10px; padding: 24px; text-align: center; }
+.aviso-global {
+  background: var(--aviso-fondo); border: 1px solid var(--aviso-borde); color: var(--aviso-tinta);
+  border-radius: 8px; padding: 10px 14px; font-size: 0.88rem; margin-bottom: 20px;
+}
+
+/* Metricas: controles + iframe del dashboard */
+.controles { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 18px; }
+.controles label { display: flex; flex-direction: column; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gris); gap: 4px; }
+.controles select { font: inherit; padding: 8px 10px; border: 1px solid var(--gris-claro); border-radius: 8px; min-width: 160px; }
+iframe.dashboard {
+  width: 100%;
+  height: 78vh;
+  border: 1px solid var(--gris-claro);
+  border-radius: 10px;
+  background: var(--fondo);
+}
