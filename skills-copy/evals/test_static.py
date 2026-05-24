@@ -31,18 +31,26 @@ import checks  # noqa: E402  (tras ajustar sys.path)
 # 1) Frontmatter de cada SKILL.md
 # ---------------------------------------------------------------------------
 
+# Skills que DEBEN existir en el repo. Al crecer la suite, registramos aquí las
+# nuevas conforme aterrizan en main: `responde-comentarios` y
+# `calendario-editorial`. (NO se incluye `nota-a-hilo`: esa skill se crea en otra
+# rama de esta ola y aún no existe en este worktree; exigirla rompería el test.)
+ESPERADAS = {
+    "copy-desde-nota",
+    "clip-a-copy",
+    "resumen-tendencia",
+    "nota-a-formato",
+    "publica-preview",
+    "revisa-imagen",
+    "responde-comentarios",
+    "calendario-editorial",
+}
+
+
 def test_skills_existen():
     skills = checks.listar_skills()
     nombres = {p.parent.name for p in skills}
-    esperadas = {
-        "copy-desde-nota",
-        "clip-a-copy",
-        "resumen-tendencia",
-        "nota-a-formato",
-        "publica-preview",
-        "revisa-imagen",
-    }
-    faltan = esperadas - nombres
+    faltan = ESPERADAS - nombres
     assert not faltan, f"faltan SKILL.md de: {sorted(faltan)}"
 
 

@@ -517,6 +517,94 @@ def _quita_bloque_verificacion(salida: str) -> str:
     return salida
 
 
+# ---------------------------------------------------------------------------
+# 3) Consistencia del propio SKILL.md (CI-safe, sobre el texto del .md)
+# ---------------------------------------------------------------------------
+#
+# Estos checks NO miran el copy generado, sino el CONTRATO escrito en cada
+# SKILL.md: que una skill que produce copy DOCUMENTE su bloque de
+# veredicto+leyenda (los 3 símbolos ✅/⚠️/❌) y que CARGUE el contexto editorial.
+# Reciben el texto del SKILL.md (no llaman al modelo): son testeables con
+# fixtures y se corren en CI igual que el resto de la familia estática.
+#
+# Criterio de aplicabilidad (¿esta skill "produce copy"?):
+#   Las 7 skills de copy (copy-desde-nota, clip-a-copy, nota-a-formato,
+#   resumen-tendencia, publica-preview, responde-comentarios,
+#   calendario-editorial) abren con el bloque veredicto+leyenda de 3 símbolos y
+#   cargan contexto-editorial. `revisa-imagen` es un CASO APARTE: no produce
+#   copy, REVISA imágenes y su dictamen es **APTA / NO APTA** (no el de copy).
+#   La señal que lo distingue es ese vocabulario APTA/NO APTA, ausente en las 7
+#   skills de copy. Por eso `produce_copy()` excluye explícitamente la skill cuyo
+#   veredicto es APTA/NO APTA: el check de consistencia de copy NO le aplica.
+
+_RE_VERDICTO_3_SIMBOLOS = re.compile(r"✅.*⚠️.*❌")
+_RE_APTA = re.compile(r"\bNO\s+APTA\b|\bAPTA\b", re.IGNORECASE)
+
+
+def tiene_bloque_veredicto_leyenda(texto_skill_md: str) -> bool:
+    """True si el SKILL.md documenta el bloque veredicto+leyenda de copy.
+
+    Exige las DOS piezas que abren la salida de las skills de copy:
+      (a) una línea de veredicto con los 3 símbolos juntos (✅ … ⚠️ … ❌), y
+      (b) una línea de **leyenda** que explique esos símbolos ("Leyenda:").
+    """
+    tiene_simbolos = bool(_RE_VERDICTO_3_SIMBOLOS.search(texto_skill_md))
+    tiene_leyenda = "leyenda:" in texto_skill_md.lower()
+    return tiene_simbolos and tiene_leyenda
+
+
+def carga_contexto_editorial(texto_skill_md: str) -> bool:
+    """True si el SKILL.md carga el contexto editorial (lo lee con Read).
+
+    Heurística simple sobre el contrato escrito: una skill que produce copy
+    referencia archivos bajo `contexto-editorial/` (reglas-legales, plataformas,
+    marcas, etc.). No comprueba que los ficheros existan (eso es
+    `ficheros_contexto_faltantes`), solo que la skill DIGA que los carga.
+    """
+    return "contexto-editorial/" in texto_skill_md
+
+
+def usa_veredicto_apta(texto_skill_md: str) -> bool:
+    """True si el dictamen del SKILL.md es APTA / NO APTA (caso revisa-imagen).
+
+    Es la señal que separa la skill de REVISIÓN DE IMAGEN (cuyo veredicto es
+    APTA/NO APTA) de las skills que producen copy (cuyo veredicto es
+    LISTO PARA APROBAR / REVISAR / NO PUBLICAR). Solo `revisa-imagen` usa este
+    vocabulario; por eso sirve de discriminante.
+    """
+    return bool(_RE_APTA.search(texto_skill_md))
+
+
+def produce_copy(texto_skill_md: str) -> bool:
+    """True si el SKILL.md es de una skill que PRODUCE/PREVISUALIZA copy.
+
+    Criterio: documenta el bloque veredicto+leyenda de copy Y NO usa el dictamen
+    APTA/NO APTA. Así quedan dentro las 7 skills de copy y FUERA `revisa-imagen`
+    (que sí trae veredicto+leyenda pero su dictamen es APTA/NO APTA: es revisión
+    de imagen, no producción de copy). El check de consistencia de copy solo
+    aplica a las skills para las que `produce_copy` es True.
+    """
+    return tiene_bloque_veredicto_leyenda(texto_skill_md) and not usa_veredicto_apta(texto_skill_md)
+
+
+def produce_copy_con_veredicto(texto_skill_md: str) -> bool:
+    """True si una skill de COPY cumple el contrato de consistencia.
+
+    Para una skill que produce copy (`produce_copy` True), exige las dos
+    propiedades del contrato:
+      (a) bloque veredicto+leyenda con los 3 símbolos ✅/⚠️/❌, y
+      (b) carga del contexto editorial (`contexto-editorial/...`).
+
+    Devuelve **False** tanto si una skill de copy INCUMPLE el contrato como si la
+    skill NO produce copy (p. ej. `revisa-imagen`, cuyo veredicto es APTA/NO APTA
+    y a la que este check NO aplica). Para distinguir "no aplica" de "incumple",
+    filtra antes con `produce_copy(...)`.
+    """
+    if not produce_copy(texto_skill_md):
+        return False
+    return tiene_bloque_veredicto_leyenda(texto_skill_md) and carga_contexto_editorial(texto_skill_md)
+
+
 def evaluar_copy(salida: str, fuente: str, *, ignorar_numeros: set[str] | None = None) -> InformeCopy:
     """Corre TODAS las propiedades deterministicas sobre un copy generado.
 
