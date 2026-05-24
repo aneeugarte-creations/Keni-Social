@@ -256,7 +256,8 @@ def extraer_secciones(salida: str) -> dict[str, str]:
         crudo = m.group(1).lower()
         if crudo.startswith("x") or crudo == "twitter":
             clave = "x"
-        elif crudo.startswith("carrou") or crudo.startswith("carrus"):
+        elif crudo.startswith("carrou") or crudo.startswith("carrus") or crudo.startswith("carou"):
+            # "carrusel" (es), "carrousel" (fr) y "carousel" (en) -> "carrusel"
             clave = "carrusel"
         else:
             clave = crudo
