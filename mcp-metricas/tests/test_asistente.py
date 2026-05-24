@@ -454,3 +454,306 @@ def test_main_solo_mostrar_imprime_recap_sin_tokens(monkeypatch, capsys, tmp_pat
     assert TOKEN_FALSO not in salida
     assert BEARER_FALSO not in salida
     assert not ruta.exists()
+
+
+# ===========================================================================
+# Ampliacion de cobertura: mas ramas del flujo interactivo (issue #52).
+# Sin red ni input() real: se inyectan `entrada=`/`salida=` o se sustituye
+# `flujo_interactivo` en main(). Verificamos COMPORTAMIENTO, no textos fragiles.
+# ===========================================================================
+
+
+# --- fuente: muestra vs real (rama de _preguntar_si_no por defecto) --------
+def test_flujo_fuente_muestra_por_eof_defecto():
+    """Sin responder a la fuente (EOF) cae al por_defecto = muestra (3 pasos)."""
+    # entrada vacia: el primer prompt (fuente) ya lanza EOFError -> por_defecto (no).
+    entrada = _entrada_simulada([])
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    assert plan.fuente == "muestra"
+    assert plan.marcas_cuenta == []
+    assert plan.alcance == []
+    # con 0 marcas se entra en la rama "sin marcas declaradas"
+    assert any("sin marcas" in ln.lower() for ln in lineas)
+
+
+def test_flujo_fuente_real_con_respuesta_si():
+    """Responder 's' a la fuente activa modo real (4 pasos)."""
+    # fuente=s; sin marcas (vacio); no se llega a credenciales porque no hay bloques.
+    entrada = _entrada_simulada(["s", ""])
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    assert plan.fuente == "real"
+    texto = "\n".join(lineas)
+    assert "paso 1/4" in texto
+
+
+# --- varias marcas/cuentas declaradas en una pasada ------------------------
+def test_flujo_declara_varias_marcas():
+    """Se pueden declarar multiples marcas seguidas; cada una pide handles."""
+    entrada = _entrada_simulada(
+        [
+            "n",            # fuente muestra
+            "Claro Sports",  # marca 1 nombre
+            "",             # id 1 -> usa sugerido (claro_sports)
+            "FB1",          # facebook
+            "IG1",          # instagram
+            "",             # youtube vacio
+            "",             # x vacio
+            "UnoTV",        # marca 2 nombre
+            "unotv",        # id 2 explicito
+            "FB2",          # facebook
+            "",             # instagram vacio
+            "",             # youtube vacio
+            "",             # x vacio
+            "",             # fin de marcas
+            "",             # alcance vacio (todas)
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+
+    ids = [m.id for m in plan.marcas_cuenta]
+    assert ids == ["claro_sports", "unotv"]
+    # tiktok jamas se pregunta (sin handle); ningun handle de tiktok aparece
+    primera = plan.marcas_cuenta[0]
+    assert "tiktok" not in primera.plataformas
+    assert primera.plataformas == {"facebook": "FB1", "instagram": "IG1"}
+    assert plan.marcas_cuenta[1].plataformas == {"facebook": "FB2"}
+    # cada marca anadida se confirma en la salida
+    texto = "\n".join(lineas)
+    assert "claro_sports" in texto
+    assert "unotv" in texto
+
+
+# --- alcance: limitado vs todas -------------------------------------------
+def test_flujo_alcance_limitado_filtra_a_ids_validos():
+    """Declarar alcance acotado guarda solo ids validos (descarta fantasmas)."""
+    entrada = _entrada_simulada(
+        [
+            "n",            # muestra
+            "UnoTV", "unotv", "", "", "", "",   # marca 1 (sin handles)
+            "Claro", "claro", "", "", "", "",   # marca 2
+            "",             # fin marcas
+            "unotv, fantasma",  # alcance: uno valido + uno inexistente
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    # solo el id valido sobrevive; el fantasma se descarta
+    assert plan.alcance == ["unotv"]
+
+
+def test_flujo_alcance_todas_si_vacio():
+    """Dejar el alcance vacio significa 'todas' (alcance == [])."""
+    entrada = _entrada_simulada(
+        [
+            "n",
+            "UnoTV", "unotv", "", "", "", "",
+            "",     # fin marcas
+            "",     # alcance vacio -> todas
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    assert plan.alcance == []
+    # con marcas si se muestra la lista de marcas declaradas
+    assert any("Marcas declaradas" in ln for ln in lineas)
+
+
+# --- credenciales: declaradas, placeholder y system_user ------------------
+def test_flujo_real_credenciales_placeholder_si_vacio():
+    """En real, dejar el token vacio guarda el placeholder (no falla)."""
+    entrada = _entrada_simulada(
+        [
+            "s",            # real
+            "UnoTV", "unotv", "PAGE", "", "", "",  # marca con facebook -> bloque meta
+            "",             # fin marcas
+            "",             # alcance todas
+            "",             # meta access_token vacio -> placeholder
+            "n",            # no system user
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    assert plan.credenciales["meta"]["access_token"] == a.PLACEHOLDER_TOKEN
+    # el placeholder no es un secreto: tipo_token no se anadio (respondio n)
+    assert "tipo_token" not in plan.credenciales["meta"]
+    # se ofrece tambien tiktok (bloque sin handle) con placeholder
+    assert "tiktok" in plan.credenciales
+
+
+def test_flujo_real_meta_system_user_anade_tipo_token():
+    """Responder 's' a 'es System User?' anade tipo_token = system_user."""
+    entrada = _entrada_simulada(
+        [
+            "s",            # real
+            "UnoTV", "unotv", "PAGE", "", "", "",  # marca con facebook
+            "",             # fin marcas
+            "",             # alcance
+            TOKEN_FALSO,    # meta access_token real
+            "s",            # SI es system user -> rama de linea 645
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    assert plan.credenciales["meta"]["access_token"] == TOKEN_FALSO
+    assert plan.credenciales["meta"]["tipo_token"] == "system_user"
+    # ni el progreso ni el eco del token lo imprimen en claro
+    texto = "\n".join(lineas)
+    assert TOKEN_FALSO not in texto
+
+
+def test_flujo_real_solo_tiktok_sin_handles():
+    """Sin plataformas con handle, en real solo se ofrece el bloque tiktok."""
+    entrada = _entrada_simulada(
+        [
+            "s",            # real
+            "Marca", "marca", "", "", "", "",  # marca sin ningun handle
+            "",             # fin marcas
+            "",             # alcance
+            TOKEN_FALSO,    # tiktok access_token
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    # solo tiktok (siempre ofrecido); ningun otro bloque
+    assert set(plan.credenciales) == {"tiktok"}
+    assert plan.credenciales["tiktok"]["access_token"] == TOKEN_FALSO
+
+
+# --- incoherencia: handles reales + fuente muestra (via flujo completo) ----
+def test_flujo_handles_en_muestra_genera_incoherencia():
+    """Declarar handles pero quedarse en muestra -> detectar_incoherencia avisa."""
+    entrada = _entrada_simulada(
+        [
+            "n",            # muestra
+            "UnoTV", "unotv", "PAGE", "", "", "",  # handle real de facebook
+            "",             # fin marcas
+            "",             # alcance
+        ]
+    )
+    lineas, salida = _capturar_salida()
+    plan = a.flujo_interactivo(entrada=entrada, salida=salida)
+    aviso = a.detectar_incoherencia(plan)
+    assert aviso is not None
+    assert "muestra" in aviso
+    # el recap del plan tambien arrastra el aviso
+    assert "AVISO" in a.recap_final(plan)
+
+
+# --- resumen_plan con alcance (linea 676) ----------------------------------
+def test_resumen_plan_con_alcance_lista_marcas():
+    """resumen_plan lista el alcance cuando esta acotado, sin filtrar tokens."""
+    resumen = a.resumen_plan(_plan_ejemplo())
+    assert "gestionas (alcance) = claro_sports" in resumen
+    # marca sin handles se reporta como tal
+    plan_sin = a.PlanConfig(
+        fuente="muestra",
+        marcas_cuenta=[a.MarcaEntrada(id="x", nombre="X")],
+    )
+    assert "(sin handles)" in a.resumen_plan(plan_sin)
+
+
+# --- main(): camino de escritura (confirma) y cancelacion ------------------
+def test_main_escribe_cuando_se_confirma(monkeypatch, capsys, tmp_path):
+    """main sin --solo-mostrar: si se confirma, escribe el archivo y recapea."""
+    monkeypatch.setattr(a, "flujo_interactivo", lambda: _plan_ejemplo())
+    # _preguntar_si_no de confirmacion -> 's' (escribir)
+    monkeypatch.setattr(a, "_preguntar_si_no", lambda *args, **kwargs: True)
+    ruta = tmp_path / "config.toml"
+    rc = a.main(["--ruta", str(ruta)])
+    assert rc == 0
+    assert ruta.exists()
+    salida = capsys.readouterr().out
+    assert "Recap de tu configuracion" in salida
+    # el config en disco SI contiene el token (es su sitio); pero el log no lo filtra
+    assert TOKEN_FALSO not in salida
+    assert TOKEN_FALSO in ruta.read_text(encoding="utf-8")
+
+
+def test_main_cancela_no_escribe(monkeypatch, capsys, tmp_path):
+    """Si la persona no confirma, main devuelve 1 y no escribe nada."""
+    monkeypatch.setattr(a, "flujo_interactivo", lambda: _plan_ejemplo())
+    monkeypatch.setattr(a, "_preguntar_si_no", lambda *args, **kwargs: False)
+    ruta = tmp_path / "config.toml"
+    rc = a.main(["--ruta", str(ruta)])
+    assert rc == 1
+    assert not ruta.exists()
+    assert "Cancelado" in capsys.readouterr().out
+
+
+# --- ruta_config(): ramas de entorno --------------------------------------
+def test_ruta_config_respeta_env_explicito(monkeypatch, tmp_path):
+    destino = tmp_path / "mi-config.toml"
+    monkeypatch.setenv("KENI_METRICAS_CONFIG", str(destino))
+    assert a.ruta_config() == destino
+
+
+def test_ruta_config_usa_xdg_si_sin_env_explicito(monkeypatch, tmp_path):
+    monkeypatch.delenv("KENI_METRICAS_CONFIG", raising=False)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    ruta = a.ruta_config()
+    assert ruta == tmp_path / "keni-metricas" / "config.toml"
+
+
+# --- enmascarado: bloque de credenciales con valor no-dict (lineas 210-211) -
+def test_enmascarar_credenciales_bloque_no_dict_se_conserva():
+    """Un bloque cuyo valor no es dict se deja tal cual (no revienta)."""
+    datos = {"credenciales": {"raro": "no-soy-un-dict", "meta": {"access_token": TOKEN_FALSO}}}
+    masc = a.enmascarar_credenciales(datos)
+    assert masc["credenciales"]["raro"] == "no-soy-un-dict"
+    # el bloque normal si se enmascara
+    assert masc["credenciales"]["meta"]["access_token"] != TOKEN_FALSO
+
+
+# --- serializacion: escalares bool/int y tablas (lineas 336/338/347/352) ---
+def test_serializar_bool_e_int_round_trip():
+    datos = {"fuente": "real", "activo": True, "inactivo": False, "limite": 7}
+    releido = tomllib.loads(a.serializar_toml(datos))
+    assert releido["activo"] is True
+    assert releido["inactivo"] is False
+    assert releido["limite"] == 7
+
+
+def test_es_tabla_simple_distingue_tablas():
+    # no-dict -> False (linea 347 indirecta)
+    assert a._es_tabla_simple("texto") is False
+    # dict con sub-dict -> False
+    assert a._es_tabla_simple({"a": {"b": 1}}) is False
+    # dict con lista de dicts -> False (linea 352)
+    assert a._es_tabla_simple({"a": [{"b": 1}]}) is False
+    # dict de hojas -> True
+    assert a._es_tabla_simple({"a": 1, "b": "x"}) is True
+
+
+def test_serializar_seccion_con_hojas_y_subtabla(tmp_path):
+    """Una seccion con hojas propias + sub-tabla emite [clave] y [clave.sub] (418-421)."""
+    datos = {
+        "credenciales": {
+            "meta": {"access_token": TOKEN_FALSO, "extra": {"anidado": "v"}},
+        }
+    }
+    texto = a.serializar_toml(datos)
+    releido = tomllib.loads(texto)
+    assert releido["credenciales"]["meta"]["access_token"] == TOKEN_FALSO
+    assert releido["credenciales"]["meta"]["extra"]["anidado"] == "v"
+
+
+# --- escritura atomica: limpieza del temporal ante fallo (lineas 454-457) ---
+def test_escribir_atomico_limpia_temporal_si_falla(monkeypatch, tmp_path):
+    """Si el replace final falla (tras crear el temporal), se limpia el .tmp."""
+    import os as _os
+
+    ruta = tmp_path / "config.toml"
+
+    def _replace_boom(_src, _dst):
+        raise RuntimeError("fallo simulado en os.replace")
+
+    # os.replace ocurre DESPUES de mkstemp, asi que se ejercita el except/cleanup.
+    monkeypatch.setattr(_os, "replace", _replace_boom)
+    with pytest.raises(RuntimeError):
+        a.escribir_config_atomico(ruta, {"fuente": "muestra"})
+    # ni el archivo final ni temporales quedan tras el fallo (temporal eliminado)
+    assert not ruta.exists()
+    assert list(tmp_path.glob(".config-*.tmp")) == []
