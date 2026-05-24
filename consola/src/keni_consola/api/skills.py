@@ -22,17 +22,25 @@ trozos). Tras procesar, BORRA el temporal (siempre, incluso ante error).
 INYECCION/MOCKEO: `ejecutar_skill`/`ejecutar_skill_ruta` delegan en `_runner`
 (modulo-nivel), que es lo unico que toca el binario `claude`. Los tests parchean
 `_runner`/`ejecutar_skill` para NUNCA llamar a `claude` real en CI.
+
+GENERACION POR RED: ambos endpoints aceptan `redes` (ids de `consola.redes`; en
+multipart como campo repetido o CSV). Si no llegan, se usan las 5. Se anade al
+prompt una instruccion ADITIVA para que la skill (a) genere solo esas redes y (b)
+cierre con un bloque ```json con `piezas`. `parsear_salida` localiza ese ULTIMO
+bloque, lo quita del `resultado`, y devuelve `piezas:[{red,contenido,caracteres}]`
+y `verdicto` ("listo"|"revisar"|"no_publicar"|"") derivado de la 1a linea ✅/⚠️/❌.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,7 +49,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas
+from .. import db, marcas, redes
 from .._http_json import leer_json
 
 # --------------------------------------------------------------------------- #
@@ -173,18 +181,47 @@ def _cwd_skills() -> Path:
     return Path.cwd()
 
 
-def construir_prompt(skill: str, marca: str, texto: str) -> str:
+def _instruccion_redes(redes_ids: list[str]) -> str:
+    """Instruccion ADITIVA: limita las redes y pide un bloque json con las piezas.
+
+    No cambia el copy ni la auto-verificacion de la skill; solo (a) acota a las
+    redes pedidas y (b) anade, AL FINAL, un bloque ```json con `piezas` para esas
+    redes, que la consola parsea luego. `redes_ids` ya viene validado contra las
+    redes canonicas (en orden fijo).
+    """
+    etiquetas = ", ".join(redes.nombre_por_id(r) for r in redes_ids)
+    ids_json = ", ".join(f'"{r}"' for r in redes_ids)
+    return (
+        f"Genera el copy SOLO para estas redes: {etiquetas}. "
+        "Mantén tu formato y tu auto-verificación habituales. "
+        "Además, al FINAL de toda tu respuesta, añade un único bloque de código "
+        'cercado ```json con esta forma exacta: {"piezas": [{"red": "<id>", '
+        '"texto": "<copy de esa red>"}, ...]}, usando como <id> únicamente estos '
+        f"valores: {ids_json}. Incluye una pieza por cada red pedida."
+    )
+
+
+def construir_prompt(skill: str, marca: str, texto: str, redes_ids: list[str] | None = None) -> str:
     """Construye el prompt de invocacion headless para una skill+marca+texto.
 
     El texto viaja como argumento de subprocess (no por shell), asi que no hay
-    inyeccion. Marca y skill ya estan validadas contra sus allowlists.
+    inyeccion. Marca y skill ya estan validadas contra sus allowlists. Si se pasan
+    `redes_ids`, se anade una instruccion ADITIVA (redes + bloque json de piezas).
     """
-    return f"usa {skill} con la siguiente nota, marca {marca}:\n\n{texto}"
+    base = f"usa {skill} con la siguiente nota, marca {marca}:\n\n{texto}"
+    if redes_ids:
+        return f"{base}\n\n{_instruccion_redes(redes_ids)}"
+    return base
 
 
-def construir_prompt_ruta(skill: str, marca: str, ruta: str) -> str:
+def construir_prompt_ruta(
+    skill: str, marca: str, ruta: str, redes_ids: list[str] | None = None
+) -> str:
     """Construye el prompt para una skill de MEDIA que parte de una RUTA de archivo."""
-    return f"usa {skill} con el archivo en esta ruta, marca {marca}:\n\n{ruta}"
+    base = f"usa {skill} con el archivo en esta ruta, marca {marca}:\n\n{ruta}"
+    if redes_ids:
+        return f"{base}\n\n{_instruccion_redes(redes_ids)}"
+    return base
 
 
 # Extension de la ruta saneada: sin punto, [a-z0-9] hasta 8 chars.
@@ -233,11 +270,27 @@ def _runner(prompt: str, *, cwd: Path, timeout: int) -> str:
     return proc.stdout.strip()
 
 
+def normalizar_redes(crudas: Iterable[str] | None) -> list[str]:
+    """Filtra/ordena ids de red contra las canonicas; sin entradas validas => las 5.
+
+    Ignora ids desconocidos o repetidos. El resultado respeta SIEMPRE el orden fijo
+    de `redes.REDES`, sea cual sea el orden en que llegaron. Si no llega ninguna red
+    valida (lista vacia, None o solo basura), se usan las 5 redes canonicas.
+    """
+    if crudas is None:
+        return redes.ids()
+    pedidas = {r for r in crudas if isinstance(r, str) and redes.es_red(r)}
+    if not pedidas:
+        return redes.ids()
+    return [r for r in redes.ids() if r in pedidas]
+
+
 def ejecutar_skill(
     skill: str,
     marca: str,
     texto: str,
     *,
+    redes_ids: list[str] | None = None,
     timeout: int = _TIMEOUT_DEF,
     runner: Callable[..., str] | None = None,
 ) -> str:
@@ -252,7 +305,7 @@ def ejecutar_skill(
     if len(texto) > _MAX_TEXTO:
         raise SkillError("El texto es demasiado largo; acórtalo e inténtalo de nuevo.")
 
-    prompt = construir_prompt(skill, marca, texto)
+    prompt = construir_prompt(skill, marca, texto, redes_ids)
     ejecutor = runner if runner is not None else _runner
     salida = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
     if not salida:
@@ -265,6 +318,7 @@ def ejecutar_skill_ruta(
     marca: str,
     ruta: str,
     *,
+    redes_ids: list[str] | None = None,
     timeout: int = _TIMEOUT_DEF,
     runner: Callable[..., str] | None = None,
 ) -> str:
@@ -276,7 +330,7 @@ def ejecutar_skill_ruta(
     if not ruta:
         raise SkillError("Falta el archivo para generar el borrador.")
 
-    prompt = construir_prompt_ruta(skill, marca, ruta)
+    prompt = construir_prompt_ruta(skill, marca, ruta, redes_ids)
     ejecutor = runner if runner is not None else _runner
     salida = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
     if not salida:
@@ -349,6 +403,83 @@ def _preview(resultado: str) -> str:
     return resultado[:_PREVIEW_CHARS].rstrip() + "…"
 
 
+# Bloque ```json ... ``` cercado (el ultimo de la salida es el de las piezas).
+# Tolera "json"/"JSON" tras las comillas y espacios; captura el cuerpo (no greedy).
+_RE_BLOQUE_JSON = re.compile(r"```[ \t]*[jJ][sS][oO][nN][ \t]*\r?\n(.*?)```", re.DOTALL)
+
+# Mapa del simbolo de veredicto (primera linea) a su valor interno estable.
+_VEREDICTO_POR_SIMBOLO = {"✅": "listo", "⚠️": "revisar", "❌": "no_publicar"}
+
+
+def _derivar_verdicto(texto: str) -> str:
+    """Deriva el veredicto desde la PRIMERA linea con contenido (✅/⚠️/❌).
+
+    Devuelve "listo"|"revisar"|"no_publicar" segun el simbolo que aparezca en esa
+    linea, o "" si no hay ninguno. Mira solo la primera linea no vacia.
+    """
+    for linea in texto.splitlines():
+        if not linea.strip():
+            continue
+        for simbolo, valor in _VEREDICTO_POR_SIMBOLO.items():
+            if simbolo in linea:
+                return valor
+        return ""
+    return ""
+
+
+def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
+    """Parte la salida cruda en `resultado` limpio + `piezas` + `verdicto`.
+
+    - Localiza el ULTIMO bloque ```json cercado y lo `json.loads`; mapea su clave
+      `piezas` a `[{red, contenido, caracteres}]` (solo redes en `redes_ids`, en
+      orden fijo; `caracteres` = len(contenido)).
+    - QUITA ese bloque json del texto para que `resultado` quede limpio.
+    - Deriva `verdicto` de la primera linea con ✅/⚠️/❌.
+    - Si no hay bloque, el json es invalido o no trae `piezas` utilizables:
+      `piezas=[]` y `resultado` = salida tal cual (la UI lo muestra en una pestaña).
+
+    Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}`.
+    """
+    salida = salida or ""
+    coincidencias = list(_RE_BLOQUE_JSON.finditer(salida))
+    if not coincidencias:
+        return {"resultado": salida.strip(), "piezas": [], "verdicto": _derivar_verdicto(salida)}
+
+    ultima = coincidencias[-1]
+    try:
+        datos = json.loads(ultima.group(1))
+    except (json.JSONDecodeError, ValueError):
+        # JSON malformado: dejamos el texto tal cual (incluido el bloque) y sin piezas.
+        return {"resultado": salida.strip(), "piezas": [], "verdicto": _derivar_verdicto(salida)}
+
+    # Texto LIMPIO: quitamos solo el ultimo bloque json (el de las piezas).
+    limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
+    verdicto = _derivar_verdicto(limpio)
+
+    permitidas = set(redes_ids)
+    por_red: dict[str, str] = {}
+    crudas = datos.get("piezas") if isinstance(datos, dict) else None
+    if isinstance(crudas, list):
+        for cruda in crudas:
+            if not isinstance(cruda, dict):
+                continue
+            red = cruda.get("red")
+            texto = cruda.get("texto")
+            if not isinstance(red, str) or red not in permitidas:
+                continue  # ignora redes desconocidas o fuera de las pedidas
+            if not isinstance(texto, str):
+                continue
+            por_red.setdefault(red, texto)  # primera gana ante duplicados
+
+    # Emitimos las piezas en el ORDEN FIJO de las redes pedidas.
+    piezas = [
+        {"red": r, "contenido": por_red[r], "caracteres": len(por_red[r])}
+        for r in redes_ids
+        if r in por_red
+    ]
+    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
+
+
 async def opciones(request: Request) -> Response:
     """Grupos de skills + marcas + ids de skills de media (para el SPA)."""
     grupos = [
@@ -386,6 +517,20 @@ _ERRORES_VALIDACION_ARCHIVO = frozenset({
 })
 
 
+def _redes_desde_form(form) -> list[str]:  # noqa: ANN001 -- starlette FormData
+    """Lee `redes` de un multipart: campo REPETIDO o un unico valor CSV.
+
+    Acepta varias entradas `redes=x` (campo repetido) y/o un valor con comas
+    (`redes=x,instagram`). Devuelve los ids crudos (sin validar); `normalizar_redes`
+    se encarga de filtrar contra las canonicas.
+    """
+    crudas: list[str] = []
+    for valor in form.getlist("redes"):
+        if isinstance(valor, str):
+            crudas.extend(parte.strip() for parte in valor.split(",") if parte.strip())
+    return crudas
+
+
 async def ejecutar(request: Request) -> Response:
     datos = await leer_json(request)
     skill = datos.get("skill")
@@ -399,16 +544,27 @@ async def ejecutar(request: Request) -> Response:
         return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
     if marca not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    crudas = datos.get("redes")
+    redes_ids = normalizar_redes(crudas if isinstance(crudas, list) else None)
     try:
-        resultado = ejecutar_skill(skill, marca, texto)
+        salida = ejecutar_skill(skill, marca, texto, redes_ids=redes_ids)
     except SkillError as e:
         mensaje = str(e)
         codigo = 400 if mensaje in _ERRORES_VALIDACION else 500
         return JSONResponse({"error": mensaje}, status_code=codigo)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
+    parsed = parsear_salida(salida, redes_ids)
+    resultado = parsed["resultado"]
     historial_id = db.registrar_historial_skill(skill, marca, resultado)
-    return JSONResponse({"resultado": resultado, "historial_id": historial_id})
+    return JSONResponse(
+        {
+            "resultado": resultado,
+            "historial_id": historial_id,
+            "verdicto": parsed["verdicto"],
+            "piezas": parsed["piezas"],
+        }
+    )
 
 
 async def ejecutar_archivo(request: Request) -> Response:
@@ -432,13 +588,16 @@ async def ejecutar_archivo(request: Request) -> Response:
             {"error": "No se recibió ningún archivo. Súbelo o pega el texto."}, status_code=400
         )
 
+    redes_crudas = _redes_desde_form(form)
+    redes_ids = normalizar_redes(redes_crudas or None)
+
     dir_temporal: Path | None = None
     try:
         ruta, dir_temporal = await _guardar_subida_segura(archivo, limite=_max_subida(skill))
         if skill in _SKILLS_MEDIA:
-            resultado = ejecutar_skill_ruta(skill, marca, str(ruta))
+            salida = ejecutar_skill_ruta(skill, marca, str(ruta), redes_ids=redes_ids)
         else:
-            resultado = ejecutar_skill(skill, marca, _leer_texto_archivo(ruta))
+            salida = ejecutar_skill(skill, marca, _leer_texto_archivo(ruta), redes_ids=redes_ids)
     except SkillError as e:
         mensaje = str(e)
         es_validacion = mensaje in _ERRORES_VALIDACION_ARCHIVO or mensaje in _ERRORES_VALIDACION
@@ -449,8 +608,17 @@ async def ejecutar_archivo(request: Request) -> Response:
     finally:
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)
+    parsed = parsear_salida(salida, redes_ids)
+    resultado = parsed["resultado"]
     historial_id = db.registrar_historial_skill(skill, marca, resultado)
-    return JSONResponse({"resultado": resultado, "historial_id": historial_id})
+    return JSONResponse(
+        {
+            "resultado": resultado,
+            "historial_id": historial_id,
+            "verdicto": parsed["verdicto"],
+            "piezas": parsed["piezas"],
+        }
+    )
 
 
 async def historial(request: Request) -> Response:

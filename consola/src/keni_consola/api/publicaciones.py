@@ -1,0 +1,241 @@
+"""API Publicaciones: CRUD de posts a gestionar (titulo, marca, red, estado, fechas).
+
+El SPA gestiona el ciclo de vida de cada pieza: nace como borrador (a mano o desde
+una generacion por red de Skills), se edita, se aprueba, se programa y se publica.
+Persistencia en SQLite (`consola.db`, via `consola.db`). Nada se publica de verdad
+aqui: solo se administra el estado editorial.
+
+SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
+  - `marca` SOLO puede ser una marca de la allowlist de Skills (`consola.marcas`,
+    las que tienen slug, mismo `value` que usa la generacion de copy).
+  - `red` SOLO puede ser una red canonica (`consola.redes`).
+  - `estado` SOLO puede ser uno de `db.ESTADOS_PUBLICACION`.
+  - SQL parametrizado en `consola.db`; los errores salen como JSON en espanol, sin
+    tracebacks crudos.
+
+`marca_nombre` y `red_nombre` se resuelven EN SERVIDOR (la UI solo muestra nombres).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.routing import Route
+
+from .. import db, marcas, redes
+from .._http_json import leer_json
+
+# Nombres legibles de los estados (para poblar selects de la UI), en orden de flujo.
+_ESTADO_NOMBRE: dict[str, str] = {
+    "borrador": "Borrador",
+    "aprobado": "Aprobado",
+    "programado": "Programado",
+    "publicado": "Publicado",
+}
+
+# Marcas validas como destino de copy: las de Skills (con slug). value interno=slug.
+_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
+_MARCAS_IDS = {m[0] for m in _MARCAS}
+
+
+def _publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
+    """Serializa una publicacion resolviendo nombres legibles de marca y red."""
+    return {
+        "id": pub["id"],
+        "titulo": pub["titulo"],
+        "marca": pub["marca"],
+        "marca_nombre": marcas.etiqueta_por_slug(pub["marca"]),
+        "red": pub["red"],
+        "red_nombre": redes.nombre_por_id(pub["red"]),
+        "contenido": pub["contenido"],
+        "estado": pub["estado"],
+        "veredicto": pub["veredicto"],
+        "fecha_creacion": pub["fecha_creacion"],
+        "fecha_actualizacion": pub["fecha_actualizacion"],
+        "fecha_programada": pub["fecha_programada"],
+        "origen": pub["origen"],
+    }
+
+
+def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+    """Valida el cuerpo de una publicacion nueva.
+
+    Devuelve `(entrada_normalizada, None)` si es valida, o `(None, mensaje)` con el
+    error en espanol. No toca la base; solo valida tipos y allowlists.
+    """
+    marca = datos.get("marca")
+    red = datos.get("red")
+    if not isinstance(marca, str) or marca not in _MARCAS_IDS:
+        return None, "Marca no permitida."
+    if not isinstance(red, str) or not redes.es_red(red):
+        return None, "Red no permitida."
+
+    estado = datos.get("estado", "borrador")
+    if estado is None or estado == "":
+        estado = "borrador"
+    if not isinstance(estado, str) or estado not in db.ESTADOS_PUBLICACION:
+        return None, "Estado no permitido."
+
+    titulo = datos.get("titulo", "")
+    contenido = datos.get("contenido", "")
+    veredicto = datos.get("veredicto", "")
+    fecha_programada = datos.get("fecha_programada", "")
+    origen = datos.get("origen", "")
+    for valor, etiqueta in (
+        (titulo, "El título"),
+        (contenido, "El contenido"),
+        (veredicto, "El veredicto"),
+        (fecha_programada, "La fecha programada"),
+        (origen, "El origen"),
+    ):
+        if not isinstance(valor, str):
+            return None, f"{etiqueta} debe ser texto."
+
+    return (
+        {
+            "titulo": titulo.strip(),
+            "marca": marca,
+            "red": red,
+            "contenido": contenido,
+            "estado": estado,
+            "veredicto": veredicto,
+            "fecha_programada": fecha_programada.strip(),
+            "origen": origen.strip(),
+        },
+        None,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Endpoints                                                                    #
+# --------------------------------------------------------------------------- #
+
+
+async def opciones(request: Request) -> Response:
+    """Catalogos para los selects del SPA: redes, estados y marcas."""
+    return JSONResponse(
+        {
+            "redes": redes.opciones(),
+            "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in db.ESTADOS_PUBLICACION],
+            "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in _MARCAS],
+        }
+    )
+
+
+async def listar(request: Request) -> Response:
+    """Listado de publicaciones con filtros opcionales `?marca=&red=&estado=`."""
+    qp = request.query_params
+    marca = qp.get("marca") or None
+    red = qp.get("red") or None
+    estado = qp.get("estado") or None
+    pubs = db.listar_publicaciones(marca=marca, red=red, estado=estado)
+    return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
+
+
+async def crear(request: Request) -> Response:
+    datos = await leer_json(request)
+    entrada, error = _validar_nueva(datos)
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    pub = db.crear_publicacion(
+        entrada["marca"],
+        entrada["red"],
+        titulo=entrada["titulo"],
+        contenido=entrada["contenido"],
+        estado=entrada["estado"],
+        veredicto=entrada["veredicto"],
+        fecha_programada=entrada["fecha_programada"],
+        origen=entrada["origen"],
+    )
+    return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
+
+
+async def crear_lote(request: Request) -> Response:
+    """Crea varias publicaciones de una vez. Todo o nada: si una falla, 400 y no inserta."""
+    datos = await leer_json(request)
+    crudas = datos.get("publicaciones")
+    if not isinstance(crudas, list) or not crudas:
+        return JSONResponse(
+            {"error": "Envía una lista de publicaciones a crear."}, status_code=400
+        )
+    entradas: list[dict[str, Any]] = []
+    for i, cruda in enumerate(crudas, start=1):
+        if not isinstance(cruda, dict):
+            return JSONResponse(
+                {"error": f"La publicación {i} no es válida."}, status_code=400
+            )
+        entrada, error = _validar_nueva(cruda)
+        if error is not None:
+            return JSONResponse({"error": f"Publicación {i}: {error}"}, status_code=400)
+        entradas.append(entrada)
+    pubs = db.crear_publicaciones(entradas)
+    return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
+
+
+async def detalle(request: Request) -> Response:
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = db.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
+
+
+async def actualizar(request: Request) -> Response:
+    """Edicion PARCIAL: titulo/contenido/estado/fecha_programada (404 si no existe)."""
+    publicacion_id = request.path_params["publicacion_id"]
+    datos = await leer_json(request)
+
+    campos: dict[str, Any] = {}
+    if "titulo" in datos:
+        titulo = datos.get("titulo")
+        if not isinstance(titulo, str):
+            return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
+        campos["titulo"] = titulo.strip()
+    if "contenido" in datos:
+        contenido = datos.get("contenido")
+        if not isinstance(contenido, str):
+            return JSONResponse({"error": "El contenido debe ser texto."}, status_code=400)
+        campos["contenido"] = contenido
+    if "estado" in datos:
+        estado = datos.get("estado")
+        if not isinstance(estado, str) or estado not in db.ESTADOS_PUBLICACION:
+            return JSONResponse({"error": "Estado no permitido."}, status_code=400)
+        campos["estado"] = estado
+    if "fecha_programada" in datos:
+        fecha = datos.get("fecha_programada")
+        if not isinstance(fecha, str):
+            return JSONResponse(
+                {"error": "La fecha programada debe ser texto."}, status_code=400
+            )
+        campos["fecha_programada"] = fecha.strip()
+
+    if not campos:
+        return JSONResponse(
+            {"error": "No hay nada que actualizar (título, contenido, estado o fecha)."},
+            status_code=400,
+        )
+
+    pub = db.actualizar_publicacion(publicacion_id, campos)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
+
+
+async def borrar(request: Request) -> Response:
+    publicacion_id = request.path_params["publicacion_id"]
+    if not db.borrar_publicacion(publicacion_id):
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Publicación borrada."})
+
+
+RUTAS = [
+    Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
+    Route("/api/publicaciones", listar, methods=["GET"]),
+    Route("/api/publicaciones", crear, methods=["POST"]),
+    Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
+    Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
+    Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),
+]
