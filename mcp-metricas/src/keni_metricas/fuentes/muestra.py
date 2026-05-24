@@ -106,50 +106,50 @@ _ENG_FACTOR: dict[str, float] = {
 
 _TITULOS: dict[str, list[str]] = {
     "deportes": [
-        "Gol agonico en el ultimo minuto",
-        "El crack que rompio las redes",
+        "Gol agónico en el último minuto",
+        "El crack que rompió las redes",
         "Resumen: la jugada que nadie vio venir",
-        "Polemica en el VAR: lo que dice el reglamento",
-        "La declaracion que incendio al vestuario",
-        "Asi se vivio la remontada historica",
+        "Polémica en el VAR: lo que dice el reglamento",
+        "La declaración que incendió al vestuario",
+        "Así se vivió la remontada histórica",
         "El golazo de media cancha que es viral",
         "Lo mejor de la jornada en un minuto",
     ],
     "noticias": [
-        "Lo que tienes que saber esta manana",
-        "Asi quedo tras el operativo",
+        "Lo que tienes que saber esta mañana",
+        "Así quedó tras el operativo",
         "La cifra que cambia todo el panorama",
         "Claves para entender la nueva medida",
         "El momento que se hizo viral",
-        "Esto fue lo que paso anoche",
+        "Esto fue lo que pasó anoche",
         "El dato que nadie esperaba",
-        "Reaccion en cadena: las consecuencias",
+        "Reacción en cadena: las consecuencias",
     ],
     "gaming": [
-        "El tráiler que rompio internet",
+        "El tráiler que rompió internet",
         "Lo nuevo que cambia el meta",
-        "Filtracion: lo que viene en el parche",
-        "Reaccion en vivo al gameplay",
-        "El easter egg que nadie habia visto",
+        "Filtración: lo que viene en el parche",
+        "Reacción en vivo al gameplay",
+        "El easter egg que nadie había visto",
         "Top jugadas de la semana",
-        "La actualizacion mas esperada ya tiene fecha",
-        "Asi se ve corriendo al maximo",
+        "La actualización más esperada ya tiene fecha",
+        "Así se ve corriendo al máximo",
     ],
     "podcast": [
-        "El momento mas comentado del episodio",
-        "Lo que confeso nuestro invitado",
-        "El clip que se volvio tendencia",
-        "La pregunta incomoda que nadie hace",
+        "El momento más comentado del episodio",
+        "Lo que confesó nuestro invitado",
+        "El clip que se volvió tendencia",
+        "La pregunta incómoda que nadie hace",
         "Un minuto que resume el episodio",
-        "La anecdota que nos dejo helados",
+        "La anécdota que nos dejó helados",
     ],
     "social": [
-        "Asi cambiamos una comunidad",
+        "Así cambiamos una comunidad",
         "Una historia que vale la pena contar",
         "Lo que logramos juntos este mes",
         "Voces que merecen ser escuchadas",
-        "Detras de camaras de la jornada",
-        "El antes y el despues que emociona",
+        "Detrás de cámaras de la jornada",
+        "El antes y el después que emociona",
     ],
 }
 
@@ -210,7 +210,7 @@ class FuenteMuestra:
         )
 
     def resumen(self, cuenta_id: str, rango: str) -> ResumenMetricas:
-        nombre, base_mes, plats, _ = self._marca(cuenta_id)
+        _, base_mes, plats, _ = self._marca(cuenta_id)
         desde, hasta, dias = resolver_rango(rango)
 
         # renormaliza pesos entre las plataformas presentes: cada plataforma recibe
@@ -249,7 +249,10 @@ class FuenteMuestra:
         )
 
     def mejores_piezas(self, cuenta_id: str, rango: str, n: int) -> list[Pieza]:
-        nombre, base_mes, plats, tema = self._marca(cuenta_id)
+        # n negativo no tiene sentido y haria slicing raro abajo (candidatas[:n]
+        # con n<0 devolveria casi todas las candidatas): lo acotamos a 0.
+        n = max(n, 0)
+        _, base_mes, plats, tema = self._marca(cuenta_id)
         desde, hasta, dias = resolver_rango(rango)
         titulos = _TITULOS[tema]
 
