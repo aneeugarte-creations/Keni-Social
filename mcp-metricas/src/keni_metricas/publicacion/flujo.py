@@ -286,7 +286,12 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError:
         print(f"Error: no existe el archivo {args.entrada!r}", file=sys.stderr)
         return 2
-    except (ValueError, ValidationError) as e:
+    except ValidationError as e:
+        # B6: pydantic dumpea texto en ingles + URL errors.pydantic.dev. Mostramos
+        # solo el mensaje limpio del primer error (ya en espanol via validadores).
+        print(f"Error en la entrada: {e.errors()[0]['msg']}", file=sys.stderr)
+        return 2
+    except ValueError as e:
         print(f"Error en la entrada: {e}", file=sys.stderr)
         return 2
 

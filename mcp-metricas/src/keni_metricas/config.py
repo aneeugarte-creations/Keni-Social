@@ -16,6 +16,19 @@ from pathlib import Path
 from .fuentes.base import CuentaNoEncontrada, FuenteMetricas
 from .schema import Cuenta, Pieza, Plataforma, ResumenMetricas
 
+# Valores aceptados para `fuente`. `muestra` = datos offline (defecto); `real` =
+# adaptadores que pegan a las APIs reales (requiere credenciales).
+FUENTES_VALIDAS: frozenset[str] = frozenset({"muestra", "real"})
+
+
+class ConfigInvalida(ValueError):
+    """El config.toml existe pero no se puede usar (sintaxis o contenido invalido).
+
+    Hereda de `ValueError` para que los CLIs que ya capturan `ValueError` la
+    traten como un error de dominio (mensaje en espanol, sin traceback de
+    `tomllib` ni KeyError crudos). El `doctor` la reporta como ❌.
+    """
+
 
 def ruta_config() -> Path:
     if (p := os.environ.get("KENI_METRICAS_CONFIG")):
@@ -54,20 +67,78 @@ class Config:
     marcas: list[str] = field(default_factory=list)
 
 
+def _parsear_cuenta(idx: int, c: object) -> CuentaConfig:
+    """Valida una entrada `[[cuenta]]` del TOML y la materializa (B4).
+
+    Exige `id` y `nombre`, y que cada plataforma declarada sea valida; ante
+    cualquier fallo lanza `ConfigInvalida` con un mensaje en espanol que indica
+    QUE cuenta (por posicion e id si lo hay) y QUE campo esta mal.
+    """
+    # `n` identifica la cuenta para el humano: 1-based, mas el id si lo trae.
+    n = f"#{idx + 1}"
+    if not isinstance(c, dict):
+        raise ConfigInvalida(
+            f"La cuenta {n} del config no es una tabla [[cuenta]] valida."
+        )
+    etiqueta = f"{n} (id={c['id']!r})" if c.get("id") else n
+    for campo in ("id", "nombre"):
+        valor = c.get(campo)
+        if not (isinstance(valor, str) and valor.strip()):
+            raise ConfigInvalida(
+                f"La cuenta {etiqueta} no tiene un campo {campo!r} valido "
+                "(es obligatorio y no puede estar vacio)."
+            )
+
+    plataformas_crudas = c.get("plataformas") or {}
+    if not isinstance(plataformas_crudas, dict):
+        raise ConfigInvalida(
+            f"El campo 'plataformas' de la cuenta {etiqueta} debe ser una tabla "
+            "plataforma -> handle/id."
+        )
+    plataformas: dict[Plataforma, str] = {}
+    validas = ", ".join(sorted(p.value for p in Plataforma))
+    for k, v in plataformas_crudas.items():
+        try:
+            plataforma = Plataforma(k)
+        except ValueError as e:
+            raise ConfigInvalida(
+                f"La cuenta {etiqueta} declara una plataforma invalida {k!r}. "
+                f"Validas: {validas}."
+            ) from e
+        plataformas[plataforma] = str(v)
+
+    return CuentaConfig(id=c["id"], nombre=c["nombre"], plataformas=plataformas)
+
+
 def cargar_config() -> Config:
     datos: dict = {}
     ruta = ruta_config()
     if ruta.exists():
-        datos = tomllib.loads(ruta.read_text(encoding="utf-8"))
+        try:
+            datos = tomllib.loads(ruta.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as e:
+            # B1: un TOML mal formado no debe tumbar los comandos con un
+            # traceback de tomllib. Lo convertimos en un error de dominio en
+            # espanol con la ruta y, si esta disponible, la linea del fallo.
+            linea = getattr(e, "lineno", None)
+            ubicacion = f" (linea {linea})" if linea else ""
+            raise ConfigInvalida(
+                f"El config en {ruta} tiene un error de sintaxis TOML{ubicacion}: {e}"
+            ) from e
+        except OSError as e:
+            raise ConfigInvalida(
+                f"No se pudo leer el config en {ruta}: {e}"
+            ) from e
 
     fuente = os.environ.get("KENI_METRICAS_FUENTE") or datos.get("fuente", "muestra")
+    # B5: una `fuente` desconocida hoy caia en silencio (ceros). La rechazamos.
+    if fuente not in FUENTES_VALIDAS:
+        validas = ", ".join(sorted(FUENTES_VALIDAS))
+        raise ConfigInvalida(
+            f"Fuente invalida {fuente!r}. Usa una de: {validas}."
+        )
 
-    cuentas: list[CuentaConfig] = []
-    for c in datos.get("cuenta", []):
-        plataformas = {
-            Plataforma(k): str(v) for k, v in (c.get("plataformas") or {}).items()
-        }
-        cuentas.append(CuentaConfig(id=c["id"], nombre=c["nombre"], plataformas=plataformas))
+    cuentas = [_parsear_cuenta(i, c) for i, c in enumerate(datos.get("cuenta", []))]
 
     # La env var tiene prioridad sobre el campo `marcas` del config.toml.
     marcas = _parsear_marcas(os.environ.get("KENI_METRICAS_MARCAS") or datos.get("marcas"))

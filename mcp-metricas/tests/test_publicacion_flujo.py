@@ -314,3 +314,20 @@ def test_cli_entrada_invalida(tmp_path, capsys):
     code = main([str(archivo)])
     assert code == 2
     assert "Error en la entrada" in capsys.readouterr().err
+
+
+def test_b6_cli_flujo_error_pydantic_sin_url_ni_ingles(tmp_path, capsys):
+    """B6: el CLI del flujo mostraba el dump de pydantic (ingles + URL).
+
+    Ahora extrae solo el mensaje limpio del primer error (en espanol).
+    """
+    archivo = tmp_path / "pubs.json"
+    archivo.write_text(json.dumps({"plataforma": "tiktok", "cuenta": "X"}), encoding="utf-8")
+    code = main([str(archivo)])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "Error en la entrada" in err
+    assert "Entrada para Meta solo admite" in err  # mensaje del validador, en espanol
+    assert "errors.pydantic.dev" not in err  # sin la URL
+    assert "validation error for" not in err  # sin el dump en ingles
+    assert "input_value=" not in err
