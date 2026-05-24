@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CalendarDays, List, RefreshCw, Send } from "lucide-react";
+import { AlertCircle, CalendarClock, CalendarDays, Hash, List, RefreshCw, Send } from "lucide-react";
 import * as React from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -12,8 +12,11 @@ import { cn } from "@/lib/utils";
 import type { OpcionesPublicaciones, Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./publicaciones/claves";
+import { DialogoDuplicar } from "./publicaciones/DialogoDuplicar";
 import { DialogoEditar } from "./publicaciones/DialogoEditar";
 import { FILTRO_TODOS, FiltrosPublicaciones } from "./publicaciones/Filtros";
+import { GestionFranjas } from "./publicaciones/GestionFranjas";
+import { GestionHashtags } from "./publicaciones/GestionHashtags";
 import { VistaCalendario } from "./publicaciones/VistaCalendario";
 import { VistaLista } from "./publicaciones/VistaLista";
 
@@ -120,6 +123,9 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [estado, setEstado] = React.useState(FILTRO_TODOS);
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
+  const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
+  const [gestionFranjas, setGestionFranjas] = React.useState(false);
+  const [gestionHashtags, setGestionHashtags] = React.useState(false);
 
   const filtros = {
     marca: marca === FILTRO_TODOS ? undefined : marca,
@@ -144,18 +150,38 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
         onRed={setRed}
         onEstado={setEstado}
       />
-      <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
-        <TabsList>
-          <TabsTrigger value="lista" className="gap-1.5">
-            <List className="h-4 w-4" />
-            Lista
-          </TabsTrigger>
-          <TabsTrigger value="calendario" className="gap-1.5">
-            <CalendarDays className="h-4 w-4" />
-            Calendario
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setGestionHashtags(true)}
+          title="Gestionar grupos de hashtags"
+        >
+          <Hash className="h-4 w-4" />
+          Hashtags
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setGestionFranjas(true)}
+          title="Gestionar franjas de la cola"
+        >
+          <CalendarClock className="h-4 w-4" />
+          Franjas
+        </Button>
+        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
+          <TabsList>
+            <TabsTrigger value="lista" className="gap-1.5">
+              <List className="h-4 w-4" />
+              Lista
+            </TabsTrigger>
+            <TabsTrigger value="calendario" className="gap-1.5">
+              <CalendarDays className="h-4 w-4" />
+              Calendario
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
     </div>
   );
 
@@ -196,13 +222,38 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
           </CardContent>
         </Card>
       ) : (
-        <VistaLista publicaciones={publicaciones} onEditar={setEditando} />
+        <VistaLista
+          publicaciones={publicaciones}
+          onEditar={setEditando}
+          onDuplicar={setDuplicando}
+          onGestionarFranjas={() => setGestionFranjas(true)}
+        />
       )}
 
       <DialogoEditar
         publicacion={editando}
         estados={opciones.estados}
         onCerrar={() => setEditando(null)}
+      />
+
+      <DialogoDuplicar
+        publicacion={duplicando}
+        marcas={opciones.marcas}
+        redes={opciones.redes}
+        onCerrar={() => setDuplicando(null)}
+      />
+
+      <GestionFranjas
+        abierto={gestionFranjas}
+        onCerrar={() => setGestionFranjas(false)}
+        marcas={opciones.marcas}
+        redes={opciones.redes}
+      />
+
+      <GestionHashtags
+        abierto={gestionHashtags}
+        onCerrar={() => setGestionHashtags(false)}
+        marcas={opciones.marcas}
       />
     </>
   );

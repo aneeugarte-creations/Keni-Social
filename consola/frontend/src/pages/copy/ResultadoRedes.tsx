@@ -1,9 +1,12 @@
-import { useMutation } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Loader2, Save } from "lucide-react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { Check, Copy, Eye, ExternalLink, Loader2, Pencil, Save } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
+import { EditorImagen } from "@/components/media/EditorImagen";
+import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +16,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { PiezaGenerada, RespuestaEjecutarSkill, Veredicto } from "@/types";
 
+import { GestionHashtags } from "../publicaciones/GestionHashtags";
 import { iconoRed, metaRed, metaVeredicto, nombreRed } from "../publicaciones/meta";
 
 function mensajeError(error: unknown): string {
@@ -54,27 +58,38 @@ function EnlacePublicaciones() {
   );
 }
 
-/** Panel de una red: textarea editable, contador, veredicto y acciones. */
+/** Panel de una red: toggle Editar/Vista previa, imagen, hashtags y acciones. */
 function PanelRed({
   red,
   contenido,
   onCambio,
+  imagen,
+  imagenUrl,
+  onImagen,
   titulo,
   marca,
+  marcaNombre,
   veredicto,
   origen,
   onGuardado,
+  onGestionarHashtags,
 }: {
   red: string;
   contenido: string;
   onCambio: (valor: string) => void;
+  imagen: string;
+  imagenUrl: string;
+  onImagen: (nombre: string, url: string) => void;
   titulo: string;
   marca: string;
+  marcaNombre: string;
   veredicto: Veredicto;
   origen: string;
   onGuardado: (red: string) => void;
+  onGestionarHashtags: () => void;
 }) {
   const [copiado, setCopiado] = React.useState(false);
+  const [modo, setModo] = React.useState<"editar" | "previa">("editar");
   const limite = metaRed(red).limite;
   const caracteres = contenido.length;
 
@@ -88,6 +103,7 @@ function PanelRed({
         estado: "borrador",
         veredicto,
         origen,
+        imagen: imagen || undefined,
       }),
     onSuccess: () => {
       onGuardado(red);
@@ -111,14 +127,49 @@ function PanelRed({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <BadgeVeredicto veredicto={veredicto} />
-        <Contador caracteres={caracteres} limite={limite} />
+        <div className="ml-auto flex items-center gap-2">
+          <Contador caracteres={caracteres} limite={limite} />
+          <Tabs value={modo} onValueChange={(v) => setModo(v as "editar" | "previa")}>
+            <TabsList className="h-8">
+              <TabsTrigger value="editar" className="gap-1.5 px-2.5 py-1 text-xs">
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
+              </TabsTrigger>
+              <TabsTrigger value="previa" className="gap-1.5 px-2.5 py-1 text-xs">
+                <Eye className="h-3.5 w-3.5" />
+                Vista previa
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
-      <Textarea
-        value={contenido}
-        onChange={(e) => onCambio(e.target.value)}
-        className="min-h-[12rem] font-mono text-sm leading-relaxed"
-        aria-label={`Contenido para ${nombreRed(red)}`}
-      />
+
+      {modo === "editar" ? (
+        <>
+          <Textarea
+            value={contenido}
+            onChange={(e) => onCambio(e.target.value)}
+            className="min-h-[12rem] font-mono text-sm leading-relaxed"
+            aria-label={`Contenido para ${nombreRed(red)}`}
+          />
+          <HerramientasHashtags
+            contenido={contenido}
+            onContenido={onCambio}
+            marca={marca}
+            red={red}
+            onGestionar={onGestionarHashtags}
+          />
+          <EditorImagen
+            imagen={imagen}
+            imagenUrl={imagenUrl}
+            onCambio={onImagen}
+            idPrefijo={`copy-${red}`}
+          />
+        </>
+      ) : (
+        <VistaPreviaRed red={red} marca={marcaNombre} contenido={contenido} imagen_url={imagenUrl || imagen} />
+      )}
+
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" size="sm" onClick={() => void copiar()}>
           {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -144,10 +195,11 @@ function PanelRed({
 /**
  * Resultado de la generación con una pestaña por red.
  *
- * Cada pestaña: contenido editable, contador con su límite, badge de veredicto
- * y botones Copiar / "Guardar como publicación". El botón global "Guardar
- * todas" usa el endpoint de lote. Si no hay piezas, el contenedor padre muestra
- * el `Resultado` simple en su lugar.
+ * Cada pestaña: contenido editable con toggle Editar/Vista previa, imagen
+ * (adjuntar/generar), herramientas de hashtags, contador con su límite, badge de
+ * veredicto y botones Copiar / "Guardar como publicación". El botón global
+ * "Guardar todas" usa el endpoint de lote. Si no hay piezas, el contenedor padre
+ * muestra el `Resultado` simple en su lugar.
  */
 export function ResultadoRedes({
   respuesta,
@@ -161,12 +213,24 @@ export function ResultadoRedes({
   // Estado editable: una copia local del contenido por red, reiniciada cuando
   // llega una generación nueva (identificada por historial_id).
   const [contenidos, setContenidos] = React.useState<Record<string, string>>({});
+  // Imagen por red: { nombre, url }.
+  const [imagenes, setImagenes] = React.useState<Record<string, { nombre: string; url: string }>>({});
   const [guardadas, setGuardadas] = React.useState<Set<string>>(new Set());
+  const [gestionHashtags, setGestionHashtags] = React.useState(false);
+
+  // Catálogo de marcas para la gestión de grupos de hashtags.
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+  });
+  const marcas = opcionesQuery.data?.marcas ?? [];
+  const marcaNombre = marcas.find((m) => m.id === marca)?.nombre ?? marca;
 
   React.useEffect(() => {
     const inicial: Record<string, string> = {};
     for (const p of respuesta.piezas) inicial[p.red] = p.contenido;
     setContenidos(inicial);
+    setImagenes({});
     setGuardadas(new Set());
   }, [respuesta]);
 
@@ -190,6 +254,7 @@ export function ResultadoRedes({
           estado: "borrador" as const,
           veredicto: respuesta.verdicto,
           origen: respuesta.historial_id,
+          imagen: imagenes[p.red]?.nombre || undefined,
         })),
       }),
     onSuccess: (data) => {
@@ -249,16 +314,29 @@ export function ResultadoRedes({
                 red={p.red}
                 contenido={contenidos[p.red] ?? p.contenido}
                 onCambio={(valor) => setContenidos((prev) => ({ ...prev, [p.red]: valor }))}
+                imagen={imagenes[p.red]?.nombre ?? ""}
+                imagenUrl={imagenes[p.red]?.url ?? ""}
+                onImagen={(nombre, url) =>
+                  setImagenes((prev) => ({ ...prev, [p.red]: { nombre, url } }))
+                }
                 titulo={titulo}
                 marca={marca}
+                marcaNombre={marcaNombre}
                 veredicto={respuesta.verdicto}
                 origen={respuesta.historial_id}
                 onGuardado={marcarGuardada}
+                onGestionarHashtags={() => setGestionHashtags(true)}
               />
             </TabsContent>
           ))}
         </Tabs>
       </CardContent>
+
+      <GestionHashtags
+        abierto={gestionHashtags}
+        onCerrar={() => setGestionHashtags(false)}
+        marcas={marcas}
+      />
     </Card>
   );
 }
