@@ -10,7 +10,7 @@
       "name": "keni-social",
       "source": "./",
       "description": "Skills de copy para redes (nota/cable/clip -> copy publicable, voz de marca, tropicalización mexicana, auto-verificación) y servidor MCP de métricas multi-marca para el equipo de AMX Contenido (UnoTV / Claro Sports).",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Keni Engineering"
       },
