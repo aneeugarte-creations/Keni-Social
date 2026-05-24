@@ -20,7 +20,7 @@ contexto-editorial/
   tropicalizacion.md       # español de México (España → México)
   reglas-legales.md        # bandera/escudo, menores, datos + checklist de verificación
   marcas/                  # VOZ INSTITUCIONAL por marca (estable, la define el equipo)
-  voces/                   # TU VOZ personal (la rellenas tú; se carga ENCIMA de la de marca)
+  voces/                   # voces personales versionadas (fallback). Tu voz vive mejor en ~/.config/keni-social/voces/ (sobrevive a updates)
 ejemplos/                  # una nota y un clip para probar
 ```
 
@@ -46,11 +46,20 @@ Transcribe el archivo **en local** (no sube nada), saca las mejores citas con su
 
 ## Personaliza tu voz (5 minutos)
 
-1. Copia `contexto-editorial/voces/_plantilla.md` a `voces/tu-nombre.md`.
+1. Copia `contexto-editorial/voces/_plantilla.md` a **`~/.config/keni-social/voces/tu-nombre.md`** (ubicación recomendada, ver abajo).
 2. Rellena tus 3–5 rasgos, tus muletillas, lo que nunca haces y **pega 2 copies tuyos** que te enorgullezcan.
 3. Vuelve a correr `copy-desde-nota` con `voz tu-nombre` y compara: ahora sale en tu voz.
 
 (Si ya escribiste tu estilo en tu CLAUDE.md personal del Día 3, cópialo aquí: este es el archivo que la skill lee.)
+
+### Dónde guardar tu voz (sobrevive a las actualizaciones)
+
+Las skills buscan tu voz `tu-nombre.md` en este orden y usan **la primera que exista**:
+
+1. **`~/.config/keni-social/voces/tu-nombre.md`** — fuera del repo. **Recomendado**: tu voz personal NO se pierde ni se sobrescribe cuando el plugin/repo se actualiza.
+2. `contexto-editorial/voces/tu-nombre.md` — dentro del repo (fallback). Útil para una voz compartida del equipo, pero una actualización puede sobrescribirla.
+
+Como mínimo, crea la carpeta una vez: `mkdir -p ~/.config/keni-social/voces`.
 
 ## Integración con métricas (loop)
 

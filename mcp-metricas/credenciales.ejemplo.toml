@@ -7,6 +7,14 @@
 
 fuente = "muestra"   # "muestra" | "real"
 
+# --- Acotamiento por marca (multiusuario) ------------------------------------
+# Si gestionas solo algunas marcas, declaralas aqui y el MCP SOLO mostrara esas
+# (en listar_cuentas, reporte_consolidado, picos, etc.). Asi 16 personas sobre 5
+# marcas no se pisan. Si lo dejas vacio/sin poner, ves TODAS (comportamiento
+# por defecto). La env var KENI_METRICAS_MARCAS="claro_sports,unotv" tiene
+# prioridad sobre este campo.
+# marcas = ["claro_sports", "unotv"]
+
 # --- Cuentas/marcas que gestionas y su handle/id en cada plataforma ----------
 [[cuenta]]
 id = "claro_sports"
