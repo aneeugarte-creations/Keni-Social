@@ -30,8 +30,14 @@ def _escapar_applescript(texto: str) -> str:
     return texto.replace("\\", "\\\\").replace('"', '\\"')
 
 
-def abrir_en_claude_code(ruta: Path) -> str:
+def abrir_en_claude_code(ruta: Path, prompt: str | None = None) -> str:
     """Abre Terminal en `ruta` y ejecuta `claude` (macOS). Devuelve un mensaje legible.
+
+    Si se pasa `prompt`, se lanza `claude '<prompt>'` para que el asistente arranque
+    con ese texto inicial (p.ej. el detalle de una tarea). El `prompt` se entrecomilla
+    con `shlex.quote` igual que la ruta, asi que un apostrofo dentro del texto no rompe
+    el comando ni permite inyeccion. Sin `prompt` (caso de Proyectos) se abre `claude`
+    a secas; por eso el parametro es opcional con default `None`.
 
     Lanza `RuntimeError` (mensaje en espanol) si `osascript` falla. En no-macOS
     devuelve un aviso de plataforma sin intentar lanzar nada.
@@ -41,14 +47,17 @@ def abrir_en_claude_code(ruta: Path) -> str:
 
     ruta_str = str(Path(ruta))
     # DOS niveles de escape, en orden:
-    #   1) shell: la ruta se incrusta en un comando que Terminal teclea en /bin/sh.
-    #      `shlex.quote` la entrecomilla de forma segura (una ruta con apostrofo
-    #      como /Users/o'brien rompe un `cd '<ruta>'` ingenuo; shlex lo resuelve
-    #      cerrando/escapando la comilla: 'o'\''brien').
+    #   1) shell: la ruta (y el prompt opcional) se incrustan en un comando que
+    #      Terminal teclea en /bin/sh. `shlex.quote` los entrecomilla de forma segura
+    #      (una ruta o prompt con apostrofo como /Users/o'brien rompe un `cd '<ruta>'`
+    #      ingenuo; shlex lo resuelve cerrando/escapando la comilla: 'o'\''brien').
     #   2) AppleScript: el comando completo va como literal "..." dentro del script,
     #      asi que escapamos comillas dobles y backslashes para no romperlo.
     # Sin shell=True por aqui: osascript recibe el script como argumento -e.
     comando_shell = f"cd {shlex.quote(ruta_str)} && claude"
+    prompt_limpio = (prompt or "").strip()
+    if prompt_limpio:
+        comando_shell += f" {shlex.quote(prompt_limpio)}"
     comando_esc = _escapar_applescript(comando_shell)
     script = f'tell application "Terminal" to do script "{comando_esc}"\n' 'tell application "Terminal" to activate'
 

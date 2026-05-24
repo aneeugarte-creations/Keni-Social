@@ -81,7 +81,7 @@ def _cuerpo() -> str:
         return (
             "<h1>Estado del sistema</h1>"
             '<p class="aviso-global" role="alert">No se pudo ejecutar el '
-            "autodiagnostico. Vuelve a intentarlo en un momento.</p>"
+            "autodiagnóstico. Vuelve a intentarlo en un momento.</p>"
             '<p><a class="boton" href="/estado">Volver a comprobar</a></p>'
         )
 
@@ -91,14 +91,20 @@ def _cuerpo() -> str:
     cierre = escape(doctor.cierre_accionable(resultados))
     filas = "".join(_render_fila(r) for r in resultados)
 
+    # El "siguiente paso" del doctor puede incluir comandos/rutas tecnicas: lo
+    # presentamos dentro de un <details> para no abrumar a quien no es tecnico, con
+    # el resumen amable siempre visible arriba.
     return f"""
 <h1>Estado del sistema</h1>
-<p class="intro">Autodiagnostico de tu maquina. Te dice, en lenguaje sencillo, si
-todo esta listo y, si algo falla, cual es el siguiente paso.</p>
+<p class="intro">Esta página revisa tu equipo y te dice, en lenguaje sencillo, si todo
+está listo para trabajar. Si algo falla, te indica el siguiente paso.</p>
 <p class="resumen-estado {clase_resumen}" role="status">{resumen}</p>
 {_contador(resultados)}
 <ul class="chequeos">{filas}</ul>
-<p class="cierre-estado">{cierre}</p>
+<details class="cierre-detalle" open>
+  <summary>¿Qué hago ahora?</summary>
+  <p class="cierre-estado">{cierre}</p>
+</details>
 <p class="acciones-estado">
   <a class="boton primario" href="/estado">Volver a comprobar</a>
 </p>
@@ -123,7 +129,7 @@ FEATURE = Feature(
     id="estado",
     etiqueta="Estado",
     orden=60,
-    descripcion="Autodiagnostico del sistema: si todo esta listo y, si no, que hacer.",
+    descripcion="Revisa tu equipo: si todo está listo para trabajar y, si no, qué hacer.",
     rutas=[Route("/estado", pagina_estado)],
     estaticos=[
         RecursoEstatico("estado.css", _ESTATICOS / "estado.css", "text/css; charset=utf-8"),

@@ -33,10 +33,11 @@ from ...config import (
     construir_fuente,
     ruta_config,
 )
-from .. import layout
+from .. import layout, marcas
+from .._http_json import leer_json
 from . import Feature, RecursoEstatico, features_ordenadas
 
-_ESTATICOS = Path(__file__).parent
+_ESTATICOS = Path(__file__).parent.parent / "estaticos"
 
 # Bloques de credenciales que el sistema reconoce (mismo mapa que el asistente),
 # en orden estable para mostrarlos siempre igual. Cada bloque cubre una o mas
@@ -50,14 +51,21 @@ _BLOQUES_CREDENCIALES: tuple[tuple[str, str], ...] = (
 
 # Etiquetas humanas de la fuente para los radios.
 _ETIQUETA_FUENTE: dict[str, str] = {
-    "muestra": "Muestra (datos de ejemplo, sin conexion)",
+    "muestra": "Muestra (datos de ejemplo, sin conexión)",
     "real": "Real (datos de tus plataformas; requiere credenciales)",
 }
 
+# Texto amable de cara al usuario: nada de comandos ni rutas en la frase principal.
 _NOTA_CREDENCIALES = (
-    "Para conectar cuentas reales usa el asistente "
-    "(python -m keni_metricas.asistente) o consulta docs/credenciales.md. "
-    "Los tokens nunca se editan ni se muestran desde el navegador."
+    "Para conectar tus cuentas reales necesitas el asistente de configuración. "
+    "Tus tokens nunca se editan ni se muestran desde el navegador."
+)
+
+# Detalle tecnico (comando y docs) escondido en un <details> para quien lo necesite.
+_NOTA_CREDENCIALES_TECNICA = (
+    "Ejecuta el asistente de configuración en una terminal: "
+    "<code>python -m keni_metricas.asistente</code>. "
+    "Más detalle en <code>docs/credenciales.md</code>."
 )
 
 
@@ -134,21 +142,39 @@ def _render_fuente(fuente_activa: str) -> str:
     return "\n".join(opciones)
 
 
+def _etiqueta_humana(marca_id: str, nombre: str) -> str:
+    """Nombre legible (con acentos) de una marca para mostrar en la UI.
+
+    Prioriza la etiqueta canonica de `marcas` (fuente unica de verdad, con acentos);
+    si la marca no esta en ese catalogo, cae al nombre declarado en el config y, en
+    ultimo termino, al propio id. NUNCA mostramos el id crudo entre parentesis.
+    """
+    marca = marcas.marca_por_id(marca_id)
+    if marca is not None:
+        return marca.etiqueta
+    return nombre or marca_id
+
+
 def _render_alcance(disponibles: list[tuple[str, str]], alcance: list[str]) -> str:
-    """Checkboxes de marcas para el alcance. Vacio (ninguna marcada) = todas."""
+    """Checkboxes de marcas para el alcance. Vacio (ninguna marcada) = todas.
+
+    Cada marca se muestra con su etiqueta HUMANA (con acentos). El id tecnico solo
+    viaja en `title=` para quien lo necesite, nunca como texto visible.
+    """
     if not disponibles:
         return (
-            '<p class="ayuda">No hay marcas configuradas todavia. Declara marcas con '
-            "el asistente para poder acotar tu alcance.</p>"
+            '<p class="ayuda">Todavía no hay marcas configuradas. Conecta tus cuentas con '
+            "el asistente de configuración para poder acotar tu alcance.</p>"
         )
     activas = set(alcance)
     filas = []
     for marca_id, nombre in disponibles:
         marcado = " checked" if marca_id in activas else ""
+        etiqueta = _etiqueta_humana(marca_id, nombre)
         filas.append(
-            f'<label class="opcion-marca">'
+            f'<label class="opcion-marca" title="{escape(marca_id)}">'
             f'<input type="checkbox" name="marca" value="{escape(marca_id)}"{marcado}> '
-            f"{escape(nombre)} <span class=\"id-marca\">({escape(marca_id)})</span></label>"
+            f"{escape(etiqueta)}</label>"
         )
     return "\n".join(filas)
 
@@ -159,6 +185,7 @@ def _render_credenciales(presencia: list[tuple[str, str, bool]]) -> str:
     for etiqueta, bloque, presente in presencia:
         clase = "ok" if presente else "aviso"
         texto = "conectada" if presente else "sin conectar"
+        # (textos cortos, ya legibles; el detalle tecnico vive en el <details> de la pagina)
         filas.append(
             f'<li class="credencial {clase}" data-bloque="{escape(bloque)}">'
             f'<span class="nombre">{escape(etiqueta)}</span>'
@@ -168,19 +195,24 @@ def _render_credenciales(presencia: list[tuple[str, str, bool]]) -> str:
 
 
 def _alcance_texto(alcance: list[str]) -> str:
-    """Resumen humano del alcance actual."""
+    """Resumen humano del alcance actual, con etiquetas legibles (con acentos)."""
     if not alcance:
         return "todas las marcas"
-    return ", ".join(alcance)
+    return ", ".join(marcas.etiqueta_por_id(mid) for mid in alcance)
+
+
+def _fuente_legible(fuente: str) -> str:
+    """Nombre corto y humano de la fuente activa (sin jerga) para el resumen."""
+    return {"muestra": "Muestra", "real": "Real"}.get(fuente, fuente)
 
 
 def _cuerpo(error: str | None = None) -> str:
     """Arma el contenido de la pagina leyendo el estado actual del config."""
     cuerpo: list[str] = [
-        "<h1>Configuracion</h1>",
-        '<p class="intro">Elige de donde salen los datos (muestra o real) y que marcas '
-        "gestionas. Los cambios se guardan en tu config local; tus credenciales no se "
-        "tocan desde aqui.</p>",
+        "<h1>Configuración</h1>",
+        '<p class="intro">Elige de dónde salen los datos (de muestra o reales) y qué marcas '
+        "gestionas. Los cambios se guardan en tu equipo; tus credenciales no se "
+        "tocan desde aquí.</p>",
     ]
 
     if error:
@@ -191,12 +223,12 @@ def _cuerpo(error: str | None = None) -> str:
     except ConfigInvalida as e:
         cuerpo.append(
             '<p class="aviso-global" role="alert">'
-            f"No se pudo leer tu configuracion: {escape(str(e))}</p>"
+            f"No se pudo leer tu configuración: {escape(str(e))}</p>"
         )
         return layout.render_pagina(
             features=features_ordenadas(),
             activa=FEATURE.id,
-            titulo="Configuracion",
+            titulo="Configuración",
             contenido="".join(cuerpo),
             css=FEATURE.css,
             js=FEATURE.js,
@@ -212,7 +244,7 @@ def _cuerpo(error: str | None = None) -> str:
   <h2>Estado actual</h2>
   <ul class="resumen-config">
     <li><span class="clave">Fuente activa</span>
-        <span class="valor fuente-{escape(cfg.fuente)}">{escape(cfg.fuente)}</span></li>
+        <span class="valor fuente-{escape(cfg.fuente)}">{escape(_fuente_legible(cfg.fuente))}</span></li>
     <li><span class="clave">Marcas configuradas</span>
         <span class="valor">{escape(str(len(disponibles)))}</span></li>
     <li><span class="clave">Tu alcance</span>
@@ -227,7 +259,7 @@ def _cuerpo(error: str | None = None) -> str:
   </fieldset>
 
   <fieldset class="campo-alcance">
-    <legend>Alcance (que marcas gestionas)</legend>
+    <legend>Alcance (qué marcas gestionas)</legend>
     <p class="ayuda">Marca las que gestionas. Si no marcas ninguna, gestionas todas.</p>
     {_render_alcance(disponibles, cfg.marcas)}
   </fieldset>
@@ -240,10 +272,14 @@ def _cuerpo(error: str | None = None) -> str:
 
 <section class="estado-credenciales">
   <h2>Credenciales</h2>
-  <p class="ayuda">Estado de conexion por plataforma (solo presencia, nunca se muestran tokens).</p>
+  <p class="ayuda">Estado de conexión por plataforma (solo si está conectada o no; nunca se muestran tokens).</p>
   <ul class="credenciales">{_render_credenciales(presencia)}</ul>
   <p class="nota-credenciales">{escape(_NOTA_CREDENCIALES)}</p>
-  <p class="ruta-config">Tu config vive en: <code>{escape(str(ruta))}</code></p>
+  <details class="detalle-tecnico">
+    <summary>Detalles técnicos (para personas técnicas)</summary>
+    <p class="nota-tecnica">{_NOTA_CREDENCIALES_TECNICA}</p>
+    <p class="ruta-config">Tu configuración se guarda en: <code>{escape(str(ruta))}</code></p>
+  </details>
 </section>
 """
     )
@@ -251,7 +287,7 @@ def _cuerpo(error: str | None = None) -> str:
     return layout.render_pagina(
         features=features_ordenadas(),
         activa=FEATURE.id,
-        titulo="Configuracion",
+        titulo="Configuración",
         contenido="".join(cuerpo),
         css=FEATURE.css,
         js=FEATURE.js,
@@ -293,18 +329,13 @@ async def pagina_config(request: Request) -> Response:
 
 
 async def api_guardar(request: Request) -> Response:
-    try:
-        datos = await request.json()
-    except Exception:  # noqa: BLE001 -- body invalido => error de dominio claro
-        return JSONResponse({"error": "No se pudo leer la peticion."}, status_code=400)
-    if not isinstance(datos, dict):
-        return JSONResponse({"error": "Datos invalidos."}, status_code=400)
+    datos = await leer_json(request)
 
     fuente = datos.get("fuente")
     if not isinstance(fuente, str) or fuente not in FUENTES_VALIDAS:
         validas = ", ".join(sorted(FUENTES_VALIDAS))
         return JSONResponse(
-            {"error": f"Fuente invalida. Usa una de: {validas}."},
+            {"error": f"Fuente inválida. Usa una de: {validas}."},
             status_code=400,
         )
 
@@ -322,27 +353,34 @@ async def api_guardar(request: Request) -> Response:
         cfg = cargar_config()
     except ConfigInvalida as e:
         return JSONResponse(
-            {"error": f"No se pudo leer tu configuracion: {e}"}, status_code=400
+            {"error": f"No se pudo leer tu configuración: {e}"}, status_code=400
         )
     ids_validos = [mid for mid, _ in _marcas_disponibles(cfg)]
-    marcas = asistente.normalizar_alcance(marcas_crudas, ids_validos=ids_validos)
+    alcance_ids = asistente.normalizar_alcance(marcas_crudas, ids_validos=ids_validos)
     desconocidas = [m for m in marcas_crudas if m.strip() and m.strip() not in ids_validos]
     if desconocidas:
+        # Mostramos la etiqueta humana de cada marca desconocida (cae al id si no se conoce).
+        etiquetas = ", ".join(marcas.etiqueta_por_id(m) for m in desconocidas)
         return JSONResponse(
-            {"error": f"Marcas desconocidas: {', '.join(desconocidas)}."},
+            {"error": f"Marcas desconocidas: {etiquetas}."},
             status_code=400,
         )
 
     try:
-        _guardar_fuente_y_marcas(ruta_config(), fuente, marcas)
+        _guardar_fuente_y_marcas(ruta_config(), fuente, alcance_ids)
     except OSError as e:
         return JSONResponse(
-            {"error": f"No se pudo guardar la configuracion: {e}"}, status_code=400
+            {"error": f"No se pudo guardar la configuración: {e}"}, status_code=400
         )
 
-    alcance = ", ".join(marcas) if marcas else "todas las marcas"
+    # En el mensaje de exito mostramos etiquetas humanas (con acentos), no ids crudos.
+    alcance = (
+        ", ".join(marcas.etiqueta_por_id(mid) for mid in alcance_ids)
+        if alcance_ids
+        else "todas las marcas"
+    )
     return JSONResponse(
-        {"mensaje": f"Configuracion guardada. Fuente: {fuente}. Alcance: {alcance}."}
+        {"mensaje": f"Configuración guardada. Fuente: {_fuente_legible(fuente)}. Alcance: {alcance}."}
     )
 
 
@@ -350,7 +388,7 @@ FEATURE = Feature(
     id="config",
     etiqueta="Configuración",
     orden=70,
-    descripcion="Elige la fuente de datos y que marcas gestionas, sin tocar el TOML a mano.",
+    descripcion="Elige la fuente de datos y qué marcas gestionas, sin tocar archivos a mano.",
     rutas=[
         Route("/config", pagina_config),
         Route("/api/config/guardar", api_guardar, methods=["POST"]),

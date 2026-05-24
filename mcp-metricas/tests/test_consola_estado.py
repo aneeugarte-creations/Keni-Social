@@ -138,6 +138,17 @@ def test_boton_volver_a_comprobar_reapunta_a_estado(entorno, doctor_mockeado):
     assert 'href="/estado"' in html
 
 
+def test_intro_amable_con_acentos_y_cierre_en_details(entorno, doctor_mockeado):
+    """Suavizado: intro amable con acentos y el 'siguiente paso' dentro de un <details>."""
+    html = _cliente().get("/estado").text
+    # Intro mas amable, con acentos correctos.
+    assert "revisa tu equipo" in html.lower()
+    assert "está listo" in html
+    # El cierre accionable (que puede traer comandos del doctor) va en un <details>.
+    assert '<details class="cierre-detalle"' in html
+    assert "¿Qué hago ahora?" in html
+
+
 # --------------------------------------------------------------------------- #
 # Robustez                                                                     #
 # --------------------------------------------------------------------------- #
@@ -161,7 +172,7 @@ def test_si_el_doctor_lanza_se_muestra_mensaje_en_espanol(entorno, monkeypatch):
     monkeypatch.setattr(feat_estado, "ejecutar_chequeos", boom)
     r = _cliente().get("/estado")
     assert r.status_code == 200
-    assert "No se pudo ejecutar el autodiagnostico" in r.text
+    assert "No se pudo ejecutar el autodiagnóstico" in r.text
 
 
 def test_estado_real_offline_no_crashea(entorno):

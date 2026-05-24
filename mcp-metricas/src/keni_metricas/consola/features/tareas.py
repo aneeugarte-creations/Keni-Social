@@ -43,15 +43,17 @@ _ESTATICOS = Path(__file__).parent.parent / "estaticos"
 
 # Inyectable: wrapper PROPIO sobre el lanzador compartido. Los tests lo parchean
 # para NO abrir nada real. Por defecto delega en la funcion de verdad, pasando
-# SOLO la carpeta del proyecto (el lanzador no recibe rutas crudas del navegador).
+# SOLO la carpeta del proyecto (el lanzador no recibe rutas crudas del navegador)
+# y el detalle de la tarea como PROMPT inicial del asistente.
 def abrir_tarea_en_claude_code(ruta: Path, detalle: str = "") -> str:
-    """Abre Claude Code en la carpeta de la tarea.
+    """Abre el asistente (Claude Code) en la carpeta de la tarea.
 
-    `detalle` queda disponible como prompt inicial conceptual; hoy el lanzador
-    compartido solo abre la carpeta (no se edita lanzador.py). Mantener la firma
-    permite enriquecerlo mas adelante sin tocar el resto de la feature.
+    `detalle` viaja como prompt inicial: el lanzador arranca `claude '<detalle>'`
+    para que el asistente abra ya con el contexto de la tarea. El lanzador
+    entrecomilla el prompt de forma segura (sin shell injection). Si la tarea no
+    tiene detalle, abre el asistente sin prompt.
     """
-    return lanzador.abrir_en_claude_code(ruta)
+    return lanzador.abrir_en_claude_code(ruta, prompt=detalle or None)
 
 
 # --------------------------------------------------------------------------- #
@@ -199,6 +201,13 @@ def _render_tarea(t: dict) -> str:
             '<button type="submit">Marcar hecha</button></form>'
         )
     )
+    # El asistente abre con el detalle de la tarea como prompt; lo anunciamos en el
+    # `title` para que la persona sepa que el contexto viaja con ella.
+    titulo_abrir = (
+        "Abre el asistente en la carpeta del proyecto con el detalle de la tarea como punto de partida"
+        if t["detalle"]
+        else "Abre el asistente en la carpeta del proyecto"
+    )
     return f"""
 <li class="{clase}" data-id="{tid}">
   <div class="tarea-cabecera">
@@ -209,11 +218,11 @@ def _render_tarea(t: dict) -> str:
   {detalle}
   <div class="tarea-acciones">
     <form method="post" action="/tareas/{tid}/abrir" class="en-linea">
-      <button type="submit" class="primario">Abrir en Claude Code</button>
+      <button type="submit" class="primario" title="{escape(titulo_abrir)}">Abrir asistente</button>
     </form>
     {boton_hecha}
     <form method="post" action="/tareas/{tid}/borrar" class="en-linea"
-          onsubmit="return confirm('Borrar esta tarea?');">
+          onsubmit="return confirm('¿Borrar esta tarea?');">
       <button type="submit">Borrar</button>
     </form>
   </div>
@@ -230,11 +239,11 @@ def _render_huerfana(t: dict) -> str:
     <span class="tarea-titulo">{escape(t["titulo"])}</span>
     <span class="chip error">proyecto no configurado</span>
   </div>
-  <p class="tarea-detalle">El proyecto de esta tarea ya no esta en consola.toml. Borrala o
-  vuelve a anadir su carpeta en la pestana Proyectos.</p>
+  <p class="tarea-detalle">El proyecto de esta tarea ya no está disponible. Bórrala o
+  vuelve a añadir su carpeta en la pestaña Proyectos.</p>
   <div class="tarea-acciones">
     <form method="post" action="/tareas/{tid}/borrar" class="en-linea"
-          onsubmit="return confirm('Borrar esta tarea?');">
+          onsubmit="return confirm('¿Borrar esta tarea?');">
       <button type="submit">Borrar</button>
     </form>
   </div>
@@ -245,8 +254,8 @@ def _render_huerfana(t: dict) -> str:
 def _pagina_tareas(error: str | None = None, aviso_ok: str | None = None) -> str:
     cuerpo: list[str] = [
         "<h1>Tareas</h1>",
-        '<p class="intro">Organiza tareas por proyecto y abre Claude Code dentro de la '
-        "carpeta correspondiente para ponerte a trabajar.</p>",
+        '<p class="intro">Organiza tareas por proyecto y abre el asistente dentro de la '
+        "carpeta correspondiente, ya con el detalle de la tarea, para ponerte a trabajar.</p>",
     ]
     if error:
         cuerpo.append(f'<p class="aviso-global" role="alert">{escape(error)}</p>')
@@ -264,17 +273,17 @@ def _pagina_tareas(error: str | None = None, aviso_ok: str | None = None) -> str
             f"""
 <form class="anadir" id="form-tarea" method="post" action="/tareas/crear">
   <h2>Nueva tarea</h2>
-  <p class="ayuda">Elige un proyecto configurado, ponle titulo y, si quieres, un detalle o
-  prompt para arrancar el trabajo.</p>
+  <p class="ayuda">Elige un proyecto configurado, ponle título y, si quieres, un detalle o
+  instrucciones. Ese detalle será el punto de partida del asistente al abrirlo.</p>
   <div class="campos">
     <label class="oculto-visual" for="tarea-proyecto">Proyecto</label>
     <select id="tarea-proyecto" name="proyecto" required>{_opciones_proyecto(lista_proyectos)}</select>
-    <label class="oculto-visual" for="tarea-titulo">Titulo de la tarea</label>
-    <input id="tarea-titulo" type="text" name="titulo" placeholder="Titulo de la tarea" autocomplete="off" required>
+    <label class="oculto-visual" for="tarea-titulo">Título de la tarea</label>
+    <input id="tarea-titulo" type="text" name="titulo" placeholder="Título de la tarea" autocomplete="off" required>
   </div>
-  <label class="oculto-visual" for="tarea-detalle">Detalle o prompt</label>
+  <label class="oculto-visual" for="tarea-detalle">Detalle o instrucciones</label>
   <textarea id="tarea-detalle" name="detalle" class="tarea-detalle-input"
-            placeholder="Detalle o prompt inicial (opcional)" spellcheck="false"></textarea>
+            placeholder="Detalle o instrucciones para arrancar (opcional)" spellcheck="false"></textarea>
   <div class="campos" style="margin-top:10px">
     <button type="submit" class="primario">Crear tarea</button>
   </div>
@@ -284,8 +293,8 @@ def _pagina_tareas(error: str | None = None, aviso_ok: str | None = None) -> str
     else:
         cuerpo.append(
             '<div class="vacio">'
-            "<p><strong>Aun no tienes proyectos configurados.</strong></p>"
-            "<p>Anade una carpeta en la pestana <a href=\"/proyectos\">Proyectos</a> para poder "
+            "<p><strong>Aún no tienes proyectos configurados.</strong></p>"
+            "<p>Añade una carpeta en la pestaña <a href=\"/proyectos\">Proyectos</a> para poder "
             "crear tareas asociadas a ella.</p>"
             "</div>"
         )
@@ -294,7 +303,7 @@ def _pagina_tareas(error: str | None = None, aviso_ok: str | None = None) -> str
     if not tareas:
         cuerpo.append(
             '<div class="vacio">'
-            "<p><strong>No hay tareas todavia.</strong></p>"
+            "<p><strong>No hay tareas todavía.</strong></p>"
             "<p>Crea la primera con el formulario de arriba.</p>"
             "</div>"
         )
@@ -383,7 +392,8 @@ async def crear_tarea_endpoint(request: Request) -> Response:
         )
     except ValueError as e:
         return _redirigir(error=str(e))
-    return _redirigir(ok="Tarea creada.")
+    # El aviso "creada" es trivial (la tarea ya aparece en la lista): redirigimos sin ruido.
+    return _redirigir()
 
 
 async def marcar_hecha(request: Request) -> Response:
@@ -394,7 +404,8 @@ async def marcar_hecha(request: Request) -> Response:
         return _redirigir(error="La tarea ya no existe.")
     t["estado"] = "hecha"
     guardar_tareas(tareas)
-    return _redirigir(ok="Tarea marcada como hecha.")
+    # Trivial: la tarea ya se ve como "hecha" en la lista; sin aviso de ruido.
+    return _redirigir()
 
 
 async def borrar_tarea(request: Request) -> Response:
@@ -404,7 +415,8 @@ async def borrar_tarea(request: Request) -> Response:
     if len(restantes) == len(tareas):
         return _redirigir(error="La tarea ya no existe.")
     guardar_tareas(restantes)
-    return _redirigir(ok="Tarea borrada.")
+    # Trivial: la tarea desaparece de la lista; sin aviso de ruido.
+    return _redirigir()
 
 
 async def abrir_tarea(request: Request) -> Response:
@@ -431,7 +443,7 @@ FEATURE = Feature(
     id="tareas",
     etiqueta="Tareas",
     orden=40,
-    descripcion="Organiza tareas por proyecto y abre Claude Code en su carpeta.",
+    descripcion="Organiza tareas por proyecto y abre el asistente en su carpeta con el detalle de la tarea.",
     rutas=[
         Route("/tareas", pagina_tareas),
         Route("/tareas/crear", crear_tarea_endpoint, methods=["POST"]),
