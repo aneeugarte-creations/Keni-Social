@@ -14,7 +14,9 @@ Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha)
   - `skill_historial`(id, skill, marca, fecha, resultado)
   - `publicaciones`(id, titulo, marca, red, contenido, estado, veredicto,
-    fecha_creacion, fecha_actualizacion, fecha_programada, origen)
+    fecha_creacion, fecha_actualizacion, fecha_programada, origen, imagen)
+  - `grupos_hashtags`(id, nombre, marca, hashtags)  [hashtags = JSON list]
+  - `franjas`(id, marca, red, dia_semana, hora)  [dia 0=lunes..6=domingo, "HH:MM"]
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
@@ -91,11 +93,38 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             fecha_creacion        TEXT NOT NULL DEFAULT '',
             fecha_actualizacion   TEXT NOT NULL DEFAULT '',
             fecha_programada      TEXT NOT NULL DEFAULT '',
-            origen                TEXT NOT NULL DEFAULT ''
+            origen                TEXT NOT NULL DEFAULT '',
+            imagen                TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS grupos_hashtags (
+            id        TEXT PRIMARY KEY,
+            nombre    TEXT NOT NULL,
+            marca     TEXT NOT NULL DEFAULT '',
+            hashtags  TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS franjas (
+            id          TEXT PRIMARY KEY,
+            marca       TEXT NOT NULL DEFAULT '',
+            red         TEXT NOT NULL DEFAULT '',
+            dia_semana  INTEGER NOT NULL DEFAULT 0,
+            hora        TEXT NOT NULL DEFAULT ''
         );
         """
     )
+    _migrar_columna_imagen(con)
     con.commit()
+
+
+def _migrar_columna_imagen(con: sqlite3.Connection) -> None:
+    """Anade la columna `imagen` a `publicaciones` si una base antigua no la tiene.
+
+    `CREATE TABLE IF NOT EXISTS` no toca tablas ya creadas, asi que una base de una
+    version previa no tendria `imagen`. Aqui se anade con `ALTER TABLE ... ADD COLUMN`
+    de forma idempotente (best-effort: comprobamos el esquema con PRAGMA antes).
+    """
+    cols = {fila["name"] for fila in con.execute("PRAGMA table_info(publicaciones)")}
+    if "imagen" not in cols:
+        con.execute("ALTER TABLE publicaciones ADD COLUMN imagen TEXT NOT NULL DEFAULT ''")
 
 
 # --------------------------------------------------------------------------- #
@@ -361,11 +390,12 @@ _COLS_PUBLICACION = (
     "fecha_actualizacion",
     "fecha_programada",
     "origen",
+    "imagen",
 )
 _SELECT_PUBLICACION = f"SELECT {', '.join(_COLS_PUBLICACION)} FROM publicaciones"
 
 # Campos que la edicion parcial puede tocar (el resto es inmutable desde la API).
-_CAMPOS_EDITABLES_PUBLICACION = ("titulo", "contenido", "estado", "fecha_programada")
+_CAMPOS_EDITABLES_PUBLICACION = ("titulo", "contenido", "estado", "fecha_programada", "imagen")
 
 
 def _fila_a_publicacion(fila: sqlite3.Row) -> dict[str, Any]:
@@ -393,6 +423,7 @@ def _normalizar_publicacion_entrada(datos: dict[str, Any]) -> dict[str, Any]:
         "fecha_actualizacion": hoy,
         "fecha_programada": datos.get("fecha_programada") or "",
         "origen": datos.get("origen") or "",
+        "imagen": datos.get("imagen") or "",
     }
 
 
@@ -415,6 +446,7 @@ def crear_publicacion(
     veredicto: str = "",
     fecha_programada: str = "",
     origen: str = "",
+    imagen: str = "",
 ) -> dict[str, Any]:
     """Inserta una publicacion nueva y la devuelve. NO valida marca/red/estado (lo hace la API)."""
     fila = _normalizar_publicacion_entrada(
@@ -427,6 +459,7 @@ def crear_publicacion(
             "veredicto": veredicto,
             "fecha_programada": fecha_programada,
             "origen": origen,
+            "imagen": imagen,
         }
     )
     con = _conectar()
@@ -534,6 +567,190 @@ def borrar_publicacion(publicacion_id: str) -> bool:
     con = _conectar()
     try:
         cur = con.execute("DELETE FROM publicaciones WHERE id = ?", (publicacion_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Grupos de hashtags (nombre + marca + lista de hashtags como JSON)            #
+# --------------------------------------------------------------------------- #
+
+
+def _fila_a_grupo_hashtags(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `grupos_hashtags` en un dict (hashtags ya como lista)."""
+    crudo = fila["hashtags"] or "[]"
+    try:
+        tags = json.loads(crudo)
+    except (json.JSONDecodeError, ValueError):
+        tags = []
+    if not isinstance(tags, list):
+        tags = []
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"],
+        "marca": fila["marca"],
+        "hashtags": [t for t in tags if isinstance(t, str)],
+    }
+
+
+def listar_grupos_hashtags() -> list[dict[str, Any]]:
+    """Todos los grupos de hashtags (mas recientes primero por rowid)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, nombre, marca, hashtags FROM grupos_hashtags ORDER BY rowid DESC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_grupo_hashtags(f) for f in filas]
+
+
+def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
+    """Un grupo de hashtags por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT id, nombre, marca, hashtags FROM grupos_hashtags WHERE id = ?",
+            (grupo_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_grupo_hashtags(fila) if fila is not None else None
+
+
+def crear_grupo_hashtags(
+    nombre: str, marca: str = "", hashtags: list[str] | None = None
+) -> dict[str, Any]:
+    """Inserta un grupo de hashtags y lo devuelve. NO valida marca (lo hace la API)."""
+    tags = [t for t in (hashtags or []) if isinstance(t, str)]
+    grupo = {
+        "id": uuid.uuid4().hex[:12],
+        "nombre": nombre,
+        "marca": marca,
+        "hashtags": tags,
+    }
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO grupos_hashtags (id, nombre, marca, hashtags) VALUES (?, ?, ?, ?)",
+            (grupo["id"], grupo["nombre"], grupo["marca"], json.dumps(tags)),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return grupo
+
+
+def actualizar_grupo_hashtags(
+    grupo_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente un grupo (nombre/marca/hashtags); None si el id no existe.
+
+    `hashtags` se serializa a JSON. Ignora cualquier otra clave del dict.
+    """
+    asignaciones: list[str] = []
+    params: list[Any] = []
+    if "nombre" in campos:
+        asignaciones.append("nombre = ?")
+        params.append(campos["nombre"])
+    if "marca" in campos:
+        asignaciones.append("marca = ?")
+        params.append(campos["marca"])
+    if "hashtags" in campos:
+        tags = [t for t in (campos["hashtags"] or []) if isinstance(t, str)]
+        asignaciones.append("hashtags = ?")
+        params.append(json.dumps(tags))
+    if not asignaciones:
+        return obtener_grupo_hashtags(grupo_id)
+    params.append(grupo_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE grupos_hashtags SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            "SELECT id, nombre, marca, hashtags FROM grupos_hashtags WHERE id = ?",
+            (grupo_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_grupo_hashtags(fila) if fila is not None else None
+
+
+def borrar_grupo_hashtags(grupo_id: str) -> bool:
+    """Borra un grupo de hashtags; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM grupos_hashtags WHERE id = ?", (grupo_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Franjas horarias (colas: marca/red opcionales + dia_semana 0..6 + hora HH:MM) #
+# --------------------------------------------------------------------------- #
+
+
+def _fila_a_franja(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `franjas` en un dict simple."""
+    return {
+        "id": fila["id"],
+        "marca": fila["marca"],
+        "red": fila["red"],
+        "dia_semana": fila["dia_semana"],
+        "hora": fila["hora"],
+    }
+
+
+def listar_franjas() -> list[dict[str, Any]]:
+    """Todas las franjas, ordenadas por dia y hora (luego id, deterministico)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, marca, red, dia_semana, hora FROM franjas "
+            "ORDER BY dia_semana ASC, hora ASC, id ASC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_franja(f) for f in filas]
+
+
+def crear_franja(
+    dia_semana: int, hora: str, marca: str = "", red: str = ""
+) -> dict[str, Any]:
+    """Inserta una franja y la devuelve. NO valida (lo hace la API)."""
+    franja = {
+        "id": uuid.uuid4().hex[:12],
+        "marca": marca,
+        "red": red,
+        "dia_semana": dia_semana,
+        "hora": hora,
+    }
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO franjas (id, marca, red, dia_semana, hora) VALUES (?, ?, ?, ?, ?)",
+            (franja["id"], franja["marca"], franja["red"], franja["dia_semana"], franja["hora"]),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return franja
+
+
+def borrar_franja(franja_id: str) -> bool:
+    """Borra una franja; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM franjas WHERE id = ?", (franja_id,))
         con.commit()
         return cur.rowcount > 0
     finally:
