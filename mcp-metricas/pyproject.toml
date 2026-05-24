@@ -19,6 +19,7 @@ dev = ["pytest>=8", "respx>=0.21", "anyio>=4", "ruff>=0.6"]
 [project.scripts]
 keni-metricas = "keni_metricas.server:main"
 keni-reporte = "keni_metricas.reporte:main"
+keni-consola = "keni_metricas.consola.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
