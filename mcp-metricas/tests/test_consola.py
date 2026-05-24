@@ -278,3 +278,106 @@ def test_lanzador_no_macos_devuelve_aviso(monkeypatch):
     monkeypatch.setattr(lanzador.sys, "platform", "linux")
     mensaje = lanzador.abrir_en_claude_code(Path("/tmp/x"))
     assert "macos" in mensaje.lower()
+
+
+# --------------------------------------------------------------------------- #
+# Registry de features: auto-discovery, orden de nav, montaje de una feature   #
+# --------------------------------------------------------------------------- #
+
+
+def test_auto_discovery_encuentra_proyectos_y_metricas():
+    """El descubrimiento encuentra al menos las dos features migradas."""
+    from keni_metricas.consola import features
+
+    ids = [f.id for f in features.descubrir(refresco=True)]
+    assert "proyectos" in ids
+    assert "metricas" in ids
+
+
+def test_orden_de_nav_proyectos_antes_que_metricas(entorno):
+    """La nav se ordena por `orden`: Proyectos (10) va antes que Metricas (20)."""
+    from keni_metricas.consola import features
+
+    descubiertas = features.descubrir(refresco=True)
+    ids = [f.id for f in descubiertas]
+    assert ids.index("proyectos") < ids.index("metricas")
+
+    # Y se refleja en el HTML real: la pestana Proyectos aparece antes en la nav.
+    c = _cliente()
+    html = c.get("/proyectos").text
+    assert html.index('href="/proyectos"') < html.index('href="/metricas"')
+
+
+def test_raiz_redirige_a_la_primera_feature(entorno):
+    """GET / redirige a la primera feature por orden (proyectos)."""
+    from keni_metricas.consola import features
+
+    primera = features.descubrir(refresco=True)[0].id
+    c = _cliente()
+    r = c.get("/", follow_redirects=False)
+    assert r.headers["location"] == f"/{primera}"
+
+
+@pytest.fixture
+def feature_de_prueba():
+    """Suelta una feature de prueba en `features/` y la limpia al terminar.
+
+    Verifica el contrato: basta crear UN archivo con `FEATURE` para que se
+    descubra, se monte su ruta y aparezca en la nav (cero ediciones a app.py).
+    """
+    import importlib
+    import sys
+
+    from keni_metricas.consola import features as features_pkg
+
+    dir_features = Path(features_pkg.__file__).parent
+    modulo = dir_features / "zzprueba.py"
+    modulo.write_text(
+        'from starlette.responses import PlainTextResponse\n'
+        'from starlette.routing import Route\n'
+        'from . import Feature\n'
+        '\n'
+        'async def _pagina(request):\n'
+        '    return PlainTextResponse("hola prueba")\n'
+        '\n'
+        'FEATURE = Feature(\n'
+        '    id="zzprueba",\n'
+        '    etiqueta="Prueba",\n'
+        '    orden=999,\n'
+        '    rutas=[Route("/zzprueba", _pagina)],\n'
+        ')\n',
+        encoding="utf-8",
+    )
+    importlib.invalidate_caches()
+    try:
+        yield
+    finally:
+        modulo.unlink(missing_ok=True)
+        sys.modules.pop("keni_metricas.consola.features.zzprueba", None)
+        features_pkg.descubrir(refresco=True)  # limpia el cache para el resto
+
+
+def test_feature_de_prueba_se_monta_sola(entorno, feature_de_prueba):
+    """Una feature recien soltada en features/ se descubre, monta y navega."""
+    from keni_metricas.consola import features
+
+    ids = [f.id for f in features.descubrir(refresco=True)]
+    assert "zzprueba" in ids
+    # orden=999 => al final de la nav.
+    assert ids[-1] == "zzprueba"
+
+    c = _cliente()
+    r = c.get("/zzprueba")
+    assert r.status_code == 200
+    assert "hola prueba" in r.text
+    # Y su pestana aparece en la nav de las demas paginas, sin tocar app.py.
+    assert 'href="/zzprueba"' in c.get("/proyectos").text
+
+
+def test_id_de_feature_duplicado_da_error_claro():
+    """Dos features con el mismo id => error explicito (no silencioso)."""
+    from keni_metricas.consola.features import Feature, _validar
+
+    f = Feature(id="MAYUS", etiqueta="x", orden=1, rutas=[])
+    with pytest.raises(ValueError, match="id invalido"):
+        _validar(f, "modulo_x")
