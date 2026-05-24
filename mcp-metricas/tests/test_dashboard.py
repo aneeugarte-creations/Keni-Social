@@ -5,8 +5,11 @@ import pytest
 from keni_metricas.dashboard import (
     _ENG_UMBRAL_ALTO,
     _ENG_UMBRAL_BAJO,
+    _fecha_legible,
+    _sparkline,
     construir_html,
     generar_dashboard,
+    main,
 )
 from keni_metricas.fuentes.muestra import FuenteMuestra
 from keni_metricas.historico import Historico
@@ -183,3 +186,114 @@ def test_dashboard_engagement_escapa_nombres():
     html = construir_html(rep, picos, nombres, "mes")
     assert "<b>x</b>" not in html
     assert "&lt;b&gt;x&lt;/b&gt;" in html
+
+
+# --- T5: CLI (main) y robustez de helpers (pulido demo) ---
+
+
+def test_main_escribe_html_y_rc_cero(tmp_path):
+    """main(['--salida', <tmp>]) escribe el HTML y retorna rc=0."""
+    salida = tmp_path / "dash.html"
+    rc = main(["--salida", str(salida)])
+    assert rc == 0
+    assert salida.exists()
+    html = salida.read_text(encoding="utf-8")
+    assert html.lstrip().startswith("<!DOCTYPE html>")
+    # sigue autocontenido tras pasar por el CLI
+    assert "<script" not in html.lower()
+    assert "http://" not in html and "https://" not in html
+
+
+def test_main_rango_invalido_rc_dos(tmp_path, capsys):
+    """--rango invalido -> rc=2 + mensaje en stderr (no escribe el archivo)."""
+    salida = tmp_path / "dash.html"
+    rc = main(["--salida", str(salida), "--rango", "trimestre"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "Error" in err
+    assert not salida.exists()
+
+
+def test_main_argparse_arg_invalido_rc_dos(tmp_path):
+    """Un valor no entero para --top hace que argparse aborte con SystemExit(2)."""
+    with pytest.raises(SystemExit) as exc:
+        main(["--salida", str(tmp_path / "d.html"), "--top", "no-numero"])
+    assert exc.value.code == 2
+
+
+def test_main_presentacion_no_rompe(tmp_path):
+    """El flag --presentacion no rompe y marca el body en modo presentacion."""
+    salida = tmp_path / "dash.html"
+    rc = main(["--salida", str(salida), "--presentacion"])
+    assert rc == 0
+    html = salida.read_text(encoding="utf-8")
+    assert "presentacion" in html  # clase de body activada
+    # por defecto (sin el flag) no debe activarse
+    salida2 = tmp_path / "dash2.html"
+    main(["--salida", str(salida2)])
+    assert 'class="raiz presentacion"' not in salida2.read_text(encoding="utf-8")
+
+
+def test_sparkline_serie_constante_no_divide_por_cero():
+    """_sparkline con valores identicos (span 0) no lanza ZeroDivisionError."""
+    out = _sparkline([5, 5, 5])
+    assert out  # rinde algo
+    assert out.count('class="pip"') == 3  # un pip por valor
+    # sin entradas tampoco explota
+    assert _sparkline([]) == ""
+
+
+def test_fecha_legible_es_mx():
+    """La marca ISO se muestra como fecha es-MX legible ('24 may 2026')."""
+    assert _fecha_legible("2026-05-24T17:05:32+00:00") == "24 may 2026"
+    assert _fecha_legible("2026-01-01T00:00:00+00:00") == "1 ene 2026"
+    # entradas degeneradas: devuelve el original sin lanzar
+    assert _fecha_legible("") == ""
+    assert _fecha_legible("no-es-fecha") == "no-es-fecha"
+
+
+def test_dashboard_branding_y_footer_privacidad():
+    """UX-2/UX-6/UX-11: eyebrow Keni, fecha legible y footer de privacidad."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert "KENI AI" in html and "AMX Contenido" in html  # eyebrow (UX-2)
+    assert "Generado en tu máquina" in html  # footer privacidad (UX-11)
+    assert "sin red" in html
+
+
+def test_dashboard_callout_pieza_estrella():
+    """UX-7: callout con la pieza de mayor engagement global."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    html = construir_html(rep, picos, nombres, "mes")
+    assert "Lo que más rompió" in html
+    # la pieza del callout es la de mayor engagement entre todas las marcas
+    mejor = max(
+        (p for f in rep["cuentas"] for p in (f.get("mejores_piezas") or [])),
+        key=lambda p: p["engagement_pct"],
+    )
+    assert f'{mejor["engagement_pct"]}%' in html
+
+
+def test_dashboard_picos_colapsa_el_resto():
+    """UX-1: solo se muestran las primeras alertas; el resto va en un <details>."""
+    fuente = FuenteMuestra()
+    rep = construir_reporte(fuente, "mes", top=3)
+    picos = detectar_picos(fuente, "mes", 50)
+    nombres = {c.id: c.nombre for c in fuente.cuentas()}
+    total = len(picos["alertas"])
+    html = construir_html(rep, picos, nombres, "mes")
+    if total > 6:
+        assert "alertas-resto" in html
+        assert f"Ver todas las alertas ({total})" in html
+    # todas las alertas siguen presentes (visibles + plegadas)
+    seccion = html.split("Alertas (picos)", 1)[1].split("<footer", 1)[0]
+    assert seccion.count("<li>") == total
+
+
+def test_dashboard_ranking_barra_con_porcentaje_visible():
+    """UX-10: cada barra del ranking muestra el % visible."""
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert 'class="barra-pct"' in html
+    assert 'class="relleno' in html
