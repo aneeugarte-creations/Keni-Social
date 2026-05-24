@@ -13,6 +13,8 @@ SEGURIDAD:
 Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha)
   - `skill_historial`(id, skill, marca, fecha, resultado)
+  - `publicaciones`(id, titulo, marca, red, contenido, estado, veredicto,
+    fecha_creacion, fecha_actualizacion, fecha_programada, origen)
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
@@ -32,6 +34,9 @@ from typing import Any
 
 # Estados validos de una tarea (misma convencion que la feature historica).
 ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "hecha")
+
+# Estados validos de una publicacion (flujo editorial borrador -> publicado).
+ESTADOS_PUBLICACION: tuple[str, ...] = ("borrador", "aprobado", "programado", "publicado")
 
 
 def ruta_db() -> Path:
@@ -74,6 +79,19 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             marca      TEXT NOT NULL,
             fecha      TEXT NOT NULL DEFAULT '',
             resultado  TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS publicaciones (
+            id                    TEXT PRIMARY KEY,
+            titulo                TEXT NOT NULL DEFAULT '',
+            marca                 TEXT NOT NULL,
+            red                   TEXT NOT NULL,
+            contenido             TEXT NOT NULL DEFAULT '',
+            estado                TEXT NOT NULL DEFAULT 'borrador',
+            veredicto             TEXT NOT NULL DEFAULT '',
+            fecha_creacion        TEXT NOT NULL DEFAULT '',
+            fecha_actualizacion   TEXT NOT NULL DEFAULT '',
+            fecha_programada      TEXT NOT NULL DEFAULT '',
+            origen                TEXT NOT NULL DEFAULT ''
         );
         """
     )
@@ -324,3 +342,199 @@ def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
         "fecha": fila["fecha"],
         "resultado": fila["resultado"],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Publicaciones (posts a gestionar: titulo, red, estado, fechas)              #
+# --------------------------------------------------------------------------- #
+
+# Columnas de `publicaciones` en orden de declaracion (reusadas en SELECT/INSERT).
+_COLS_PUBLICACION = (
+    "id",
+    "titulo",
+    "marca",
+    "red",
+    "contenido",
+    "estado",
+    "veredicto",
+    "fecha_creacion",
+    "fecha_actualizacion",
+    "fecha_programada",
+    "origen",
+)
+_SELECT_PUBLICACION = f"SELECT {', '.join(_COLS_PUBLICACION)} FROM publicaciones"
+
+# Campos que la edicion parcial puede tocar (el resto es inmutable desde la API).
+_CAMPOS_EDITABLES_PUBLICACION = ("titulo", "contenido", "estado", "fecha_programada")
+
+
+def _fila_a_publicacion(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `publicaciones` en un dict simple."""
+    return {col: fila[col] for col in _COLS_PUBLICACION}
+
+
+def _normalizar_publicacion_entrada(datos: dict[str, Any]) -> dict[str, Any]:
+    """Toma un dict de entrada y devuelve una fila lista para insertar.
+
+    No valida marca/red/estado (eso es responsabilidad de la API contra sus
+    allowlists); aqui solo se rellenan defaults, se genera id y se ponen fechas.
+    """
+    hoy = date.today().isoformat()
+    estado = datos.get("estado") or "borrador"
+    return {
+        "id": uuid.uuid4().hex[:12],
+        "titulo": datos.get("titulo") or "",
+        "marca": datos.get("marca") or "",
+        "red": datos.get("red") or "",
+        "contenido": datos.get("contenido") or "",
+        "estado": estado,
+        "veredicto": datos.get("veredicto") or "",
+        "fecha_creacion": hoy,
+        "fecha_actualizacion": hoy,
+        "fecha_programada": datos.get("fecha_programada") or "",
+        "origen": datos.get("origen") or "",
+    }
+
+
+def _insertar_publicacion(con: sqlite3.Connection, fila: dict[str, Any]) -> None:
+    """Inserta una fila ya normalizada de publicacion (consulta parametrizada)."""
+    marcadores = ", ".join("?" for _ in _COLS_PUBLICACION)
+    con.execute(
+        f"INSERT INTO publicaciones ({', '.join(_COLS_PUBLICACION)}) VALUES ({marcadores})",
+        tuple(fila[col] for col in _COLS_PUBLICACION),
+    )
+
+
+def crear_publicacion(
+    marca: str,
+    red: str,
+    *,
+    titulo: str = "",
+    contenido: str = "",
+    estado: str = "borrador",
+    veredicto: str = "",
+    fecha_programada: str = "",
+    origen: str = "",
+) -> dict[str, Any]:
+    """Inserta una publicacion nueva y la devuelve. NO valida marca/red/estado (lo hace la API)."""
+    fila = _normalizar_publicacion_entrada(
+        {
+            "titulo": titulo,
+            "marca": marca,
+            "red": red,
+            "contenido": contenido,
+            "estado": estado,
+            "veredicto": veredicto,
+            "fecha_programada": fecha_programada,
+            "origen": origen,
+        }
+    )
+    con = _conectar()
+    try:
+        _insertar_publicacion(con, fila)
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Inserta varias publicaciones en una sola transaccion y las devuelve.
+
+    Cada elemento es un dict de entrada (marca/red obligatorias; el resto opcional).
+    NO valida marca/red/estado (lo hace la API). Lista vacia => no toca la base.
+    """
+    if not lista:
+        return []
+    filas = [_normalizar_publicacion_entrada(d) for d in lista]
+    con = _conectar()
+    try:
+        for fila in filas:
+            _insertar_publicacion(con, fila)
+        con.commit()
+    finally:
+        con.close()
+    return filas
+
+
+def listar_publicaciones(
+    marca: str | None = None,
+    red: str | None = None,
+    estado: str | None = None,
+) -> list[dict[str, Any]]:
+    """Publicaciones (mas recientes primero), con filtros opcionales por marca/red/estado."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if red:
+        clausulas.append("red = ?")
+        params.append(red)
+    if estado:
+        clausulas.append("estado = ?")
+        params.append(estado)
+    sql = _SELECT_PUBLICACION
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY fecha_creacion DESC, rowid DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_publicacion(f) for f in filas]
+
+
+def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
+    """Una publicacion por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_PUBLICACION} WHERE id = ?", (publicacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_publicacion(fila) if fila is not None else None
+
+
+def actualizar_publicacion(
+    publicacion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una publicacion (titulo/contenido/estado/fecha_programada).
+
+    Ignora cualquier otra clave del dict. Pone `fecha_actualizacion` al dia de hoy.
+    Devuelve la publicacion actualizada, o None si el id no existe.
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PUBLICACION}
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("fecha_actualizacion = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(date.today().isoformat())
+    params.append(publicacion_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE publicaciones SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_PUBLICACION} WHERE id = ?", (publicacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_publicacion(fila) if fila is not None else None
+
+
+def borrar_publicacion(publicacion_id: str) -> bool:
+    """Borra una publicacion; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM publicaciones WHERE id = ?", (publicacion_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
