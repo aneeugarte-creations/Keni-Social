@@ -66,6 +66,85 @@ def test_get_skills_incluye_youtube_metadata(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Render AGRUPADO: validadas vs experimentales (optgroup en el select)          #
+# --------------------------------------------------------------------------- #
+
+
+def test_grupos_skills_cubren_exactamente_la_lista_plana():
+    """La vista plana SKILLS es la union (en orden) de los grupos, sin drift."""
+    plana = tuple(s.id for s in feat_skills.SKILLS)
+    de_grupos = tuple(s.id for g in feat_skills.GRUPOS_SKILLS for s in g.skills)
+    assert plana == de_grupos
+    # No hay ids repetidos entre grupos.
+    assert len(plana) == len(set(plana))
+
+
+def test_grupos_son_dos_validadas_y_experimentales():
+    """Hay exactamente dos grupos: uno validado y otro experimental."""
+    etiquetas = [g.etiqueta for g in feat_skills.GRUPOS_SKILLS]
+    assert len(feat_skills.GRUPOS_SKILLS) == 2
+    assert any("Validadas" in e for e in etiquetas)
+    assert any("Experimentales" in e for e in etiquetas)
+    experimentales = [g for g in feat_skills.GRUPOS_SKILLS if g.experimental]
+    assert len(experimentales) == 1
+    assert "Experimentales" in experimentales[0].etiqueta
+
+
+def test_cada_skill_cae_en_su_grupo_correcto():
+    """Las validadas y las experimentales estan en el grupo que les toca."""
+    por_grupo = {g.etiqueta: {s.id for s in g.skills} for g in feat_skills.GRUPOS_SKILLS}
+    validadas = next(ids for et, ids in por_grupo.items() if "Validadas" in et)
+    experimentales = next(ids for et, ids in por_grupo.items() if "Experimentales" in et)
+
+    assert validadas == {
+        "copy-desde-nota",
+        "clip-a-copy",
+        "nota-a-formato",
+        "resumen-tendencia",
+        "youtube-metadata",
+    }
+    assert experimentales == {
+        "nota-a-hilo",
+        "calendario-editorial",
+        "responde-comentarios",
+    }
+    # Disjuntos: ninguna skill esta en ambos grupos.
+    assert validadas.isdisjoint(experimentales)
+
+
+def test_get_skills_render_agrupado_con_optgroups(entorno):
+    """El <select> trae un <optgroup> por grupo, con sus labels visibles."""
+    c = _cliente()
+    texto = c.get("/skills").text
+    assert '<optgroup label="Validadas con el equipo">' in texto
+    assert '<optgroup label="Experimentales (no validadas con el piloto)">' in texto
+    # Las experimentales se etiquetan como tales en el propio label del grupo.
+    assert "Experimentales" in texto
+    assert "no validadas con el piloto" in texto
+
+
+def test_get_skills_cada_skill_dentro_de_su_optgroup(entorno):
+    """Cada <option> aparece DENTRO del <optgroup> de su grupo (no traspapelada)."""
+    import re
+
+    c = _cliente()
+    texto = c.get("/skills").text
+    # Trozos por optgroup: del label de cada grupo hasta su </optgroup>.
+    grupos = re.findall(r'<optgroup label="([^"]+)">(.*?)</optgroup>', texto, re.DOTALL)
+    bloques = dict(grupos)
+    val = next(html for et, html in grupos if "Validadas" in et)
+    exp = next(html for et, html in grupos if "Experimentales" in et)
+    assert len(bloques) == 2
+
+    for sid in ("copy-desde-nota", "clip-a-copy", "youtube-metadata"):
+        assert f'value="{sid}"' in val
+        assert f'value="{sid}"' not in exp
+    for sid in ("nota-a-hilo", "calendario-editorial", "responde-comentarios"):
+        assert f'value="{sid}"' in exp
+        assert f'value="{sid}"' not in val
+
+
+# --------------------------------------------------------------------------- #
 # Drift: cada tipo de contenido listado DEBE existir como carpeta en disco     #
 # --------------------------------------------------------------------------- #
 
