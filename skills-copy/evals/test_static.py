@@ -32,9 +32,7 @@ import checks  # noqa: E402  (tras ajustar sys.path)
 # ---------------------------------------------------------------------------
 
 # Skills que DEBEN existir en el repo. Al crecer la suite, registramos aquí las
-# nuevas conforme aterrizan en main: `responde-comentarios` y
-# `calendario-editorial`. (NO se incluye `nota-a-hilo`: esa skill se crea en otra
-# rama de esta ola y aún no existe en este worktree; exigirla rompería el test.)
+# nuevas conforme aterrizan en main.
 ESPERADAS = {
     "copy-desde-nota",
     "clip-a-copy",
@@ -44,6 +42,7 @@ ESPERADAS = {
     "revisa-imagen",
     "responde-comentarios",
     "calendario-editorial",
+    "nota-a-hilo",
 }
 
 

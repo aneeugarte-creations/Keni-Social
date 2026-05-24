@@ -319,6 +319,7 @@ SKILLS_DE_COPY = (
     "publica-preview",
     "responde-comentarios",
     "calendario-editorial",
+    "nota-a-hilo",
 )
 
 
