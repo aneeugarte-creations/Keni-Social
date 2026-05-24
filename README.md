@@ -40,6 +40,15 @@ Listo. Cierra y vuelve a abrir Claude Code (o ejecuta `/reload-plugins`). Despu�
 
 > Las skills de copy funcionan solas. El servidor de **métricas** (`keni-metricas`) viene declarado en el plugin pero necesita `uv`/`uvx` en la máquina para arrancar y, para datos reales, credenciales locales. Ver [`mcp-metricas/README.md`](mcp-metricas/README.md) y [`docs/credenciales.md`](docs/credenciales.md). El cableado de ejemplo del servidor está en [`.mcp.json`](.mcp.json).
 
+### Comandos disponibles
+
+Además de las skills, el plugin trae **comandos `/`** que envuelven los flujos más comunes para que sean fáciles de descubrir y lanzar (escríbelos con `/` dentro de Claude Code). Son **seguros**: solo lectura o dry-run, nunca publican ni borran nada.
+
+- `/keni-social:keni-reporte` — genera y **explica en claro** el reporte consolidado multi-marca con picos/anomalías (acepta rango, p. ej. `mes` o `semana`).
+- `/keni-social:keni-dashboard` — genera el **dashboard HTML** autocontenido (reporte + picos) y te dice dónde quedó y qué contiene.
+- `/keni-social:keni-doctor` — corre el **autodiagnóstico** del entorno de métricas y explica cada ❌ con el paso para arreglarlo.
+- `/keni-social:keni-preview` — guía el **pre-vuelo (dry-run)** de una publicación con la skill `publica-preview`: muestra exacto qué se publicaría, sin publicar.
+
 ### Actualizar
 
 Cuando Keni publique una versión nueva, actualízala con:
