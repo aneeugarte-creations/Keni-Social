@@ -4,7 +4,10 @@ En macOS le decimos a Terminal.app, via `osascript`, que abra una ventana y
 ejecute `cd <ruta> && claude`. SEGURIDAD:
   - NUNCA `shell=True`. Se invoca `subprocess.run(["osascript", "-e", script])`.
   - La `ruta` ya viene validada contra la allowlist (consola.toml) por el llamante.
-  - La ruta se escapa para AppleScript (comillas dobles -> `\\"`, backslash -> `\\\\`).
+  - DOBLE escape de la ruta: primero para el SHELL que teclea Terminal (con
+    `shlex.quote`, asi una ruta con apostrofo como `/Users/o'brien` no rompe el
+    `cd`), y despues para el literal AppleScript (comillas dobles -> `\\"`,
+    backslash -> `\\\\`).
 
 En sistemas que no son macOS no lanzamos nada: devolvemos un aviso claro de
 "solo macOS por ahora" sin crashear.
@@ -15,6 +18,7 @@ En sistemas que no son macOS no lanzamos nada: devolvemos un aviso claro de
 
 from __future__ import annotations
 
+import shlex
 import shutil
 import subprocess
 import sys
@@ -36,13 +40,17 @@ def abrir_en_claude_code(ruta: Path) -> str:
         return "Por ahora 'Abrir en Claude Code' solo funciona en macOS."
 
     ruta_str = str(Path(ruta))
-    ruta_esc = _escapar_applescript(ruta_str)
-    # Construimos el comando que se teclea en Terminal. La ruta va entre comillas
-    # SIMPLES dentro del comando de shell (cd '<ruta>') y todo el comando va como
-    # literal AppleScript con comillas dobles escapadas. Sin shell=True por aqui:
-    # osascript recibe el script como argumento -e, no pasa por /bin/sh nuestro.
-    comando_shell = f"cd '{ruta_esc}' && claude"
-    script = f'tell application "Terminal" to do script "{comando_shell}"\n' 'tell application "Terminal" to activate'
+    # DOS niveles de escape, en orden:
+    #   1) shell: la ruta se incrusta en un comando que Terminal teclea en /bin/sh.
+    #      `shlex.quote` la entrecomilla de forma segura (una ruta con apostrofo
+    #      como /Users/o'brien rompe un `cd '<ruta>'` ingenuo; shlex lo resuelve
+    #      cerrando/escapando la comilla: 'o'\''brien').
+    #   2) AppleScript: el comando completo va como literal "..." dentro del script,
+    #      asi que escapamos comillas dobles y backslashes para no romperlo.
+    # Sin shell=True por aqui: osascript recibe el script como argumento -e.
+    comando_shell = f"cd {shlex.quote(ruta_str)} && claude"
+    comando_esc = _escapar_applescript(comando_shell)
+    script = f'tell application "Terminal" to do script "{comando_esc}"\n' 'tell application "Terminal" to activate'
 
     try:
         subprocess.run(

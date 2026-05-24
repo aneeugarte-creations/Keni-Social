@@ -76,9 +76,13 @@ def crear_app(abrir=None) -> Starlette:
 
     rutas: list[Route] = []
 
-    # Raiz -> primera feature (por orden). Sin features, una pagina minima.
+    # Raiz -> landing por defecto. Apuntamos a "skills" (Generar copy), que es lo
+    # que un CM usa a diario, en vez de a la primera feature por orden. Si esa
+    # feature no estuviera, caemos a la primera descubierta. Sin features, una
+    # pagina minima.
     if descubiertas:
-        destino = f"/{descubiertas[0].id}"
+        ids = {f.id for f in descubiertas}
+        destino = "/skills" if "skills" in ids else f"/{descubiertas[0].id}"
 
         async def raiz(request: Request) -> Response:
             return RedirectResponse(url=destino)
