@@ -14,6 +14,8 @@ import pytest
 from keni_metricas.config import Config, CuentaConfig, cargar_config
 from keni_metricas.doctor import (
     Estado,
+    Resultado,
+    cierre_accionable,
     codigo_salida,
     comprobar_binario,
     comprobar_config,
@@ -25,6 +27,7 @@ from keni_metricas.doctor import (
     ejecutar_chequeos,
     main,
     renderizar,
+    resumir_credenciales,
 )
 from keni_metricas.schema import Plataforma
 
@@ -181,6 +184,77 @@ def test_credencial_vacia_cuenta_como_ausente():
     assert por_plat["facebook"].estado is Estado.AVISO
 
 
+# --- Credenciales agrupadas en UNA linea (UX-roadmap #4) --------------------
+
+
+def test_resumir_credenciales_muestra_es_una_linea_aviso():
+    r = resumir_credenciales(Config(fuente="muestra"))
+    # Un unico Resultado, no una lista de 5.
+    assert isinstance(r, Resultado)
+    assert r.nombre == "Credenciales"
+    assert r.estado is Estado.AVISO  # faltan credenciales -> AVISO, nunca ERROR
+    assert not r.es_error
+    # Resumen "0/5 plataformas conectadas" y la coletilla tranquilizadora.
+    assert "0/5 plataformas conectadas" in r.detalle
+    assert "muestra" in r.detalle
+    # El detalle por plataforma se conserva de forma compacta y en extra.
+    assert r.extra["total"] == 5
+    assert r.extra["conectadas"] == 0
+    assert set(r.extra["por_plataforma"]) == {
+        "facebook",
+        "instagram",
+        "youtube",
+        "x",
+        "tiktok",
+    }
+    assert all(v is False for v in r.extra["por_plataforma"].values())
+
+
+def test_resumir_credenciales_todas_conectadas_es_ok():
+    cfg = Config(
+        fuente="real",
+        credenciales={
+            "meta": {"access_token": "t"},
+            "youtube": {"access_token": "t"},
+            "x": {"bearer_token": "t"},
+            "tiktok": {"access_token": "t"},
+        },
+    )
+    r = resumir_credenciales(cfg)
+    assert r.estado is Estado.OK
+    assert "5/5 plataformas conectadas" in r.detalle
+    assert r.extra["conectadas"] == 5
+
+
+def test_resumir_credenciales_parcial_es_aviso_y_no_filtra_secreto():
+    secreto = "EAAB-super-secreto-123"
+    cfg = Config(fuente="real", credenciales={"meta": {"access_token": secreto}})
+    r = resumir_credenciales(cfg)
+    assert r.estado is Estado.AVISO
+    # meta cubre facebook + instagram -> 2 conectadas de 5
+    assert "2/5 plataformas conectadas" in r.detalle
+    assert secreto not in r.detalle
+
+
+def test_ejecutar_chequeos_credenciales_en_una_sola_linea(tmp_path):
+    # Antes habia 5 lineas "Credenciales <plataforma>"; ahora UNA "Credenciales".
+    modelo = tmp_path / "ggml-large-v3-turbo.bin"
+    modelo.write_bytes(b"fake")
+    resultados = ejecutar_chequeos(
+        Config(fuente="muestra"),
+        which=_which_falso({"whisper-cli", "ffmpeg"}),
+        rutas_modelo=[modelo],
+    )
+    lineas_cred = [r for r in resultados if r.nombre.startswith("Credenciales")]
+    assert len(lineas_cred) == 1
+    assert lineas_cred[0].nombre == "Credenciales"
+    # Y nunca aparecen las viejas lineas por plataforma en el render.
+    texto = renderizar(resultados)
+    assert "Credenciales facebook" not in texto
+    assert "Credenciales tiktok" not in texto
+    assert texto.count("Credenciales:") == 1
+
+
 # --- Binarios (which inyectado) ---------------------------------------------
 
 
@@ -273,6 +347,55 @@ def test_renderizar_incluye_resumen_y_iconos(tmp_path):
     assert "Autodiagnostico de keni-metricas" in texto
     assert "Resumen:" in texto
     assert Estado.OK.value in texto
+
+
+# --- Cierre accionable: "que hacer ahora" (UX-roadmap #4) -------------------
+
+
+def test_cierre_accionable_sin_errores_apunta_al_asistente():
+    listos = [comprobar_python()]  # solo OK, ningun ❌
+    cierre = cierre_accionable(listos)
+    assert "Que hacer ahora" in cierre
+    assert "python -m keni_metricas.asistente" in cierre
+
+
+def test_cierre_accionable_con_errores_remite_a_las_lineas_error():
+    rotos = [comprobar_python(version=(3, 9, 0))]  # un ❌
+    cierre = cierre_accionable(rotos)
+    assert "Que hacer ahora" in cierre
+    assert "❌" in cierre
+    # No debe sugerir el asistente cuando hay errores que resolver primero.
+    assert "asistente" not in cierre
+
+
+def test_renderizar_cierra_con_siguiente_paso_despues_del_resumen(tmp_path):
+    modelo = tmp_path / "ggml-large-v3-turbo.bin"
+    modelo.write_bytes(b"fake")
+    resultados = ejecutar_chequeos(
+        Config(fuente="muestra"),
+        which=_which_falso({"whisper-cli", "ffmpeg"}),
+        rutas_modelo=[modelo],
+    )
+    texto = renderizar(resultados)
+    # El cierre va DESPUES de la linea de resumen.
+    pos_resumen = texto.index("Resumen:")
+    pos_cierre = texto.index("Que hacer ahora")
+    assert pos_cierre > pos_resumen
+    # Con muestra y todo OK -> apunta al asistente.
+    assert "python -m keni_metricas.asistente" in texto
+
+
+def test_renderizar_con_error_cierra_remitiendo_a_lineas_error(tmp_path):
+    # Sin whisper-cli/ffmpeg ni modelo -> hay ❌, el cierre cambia.
+    resultados = ejecutar_chequeos(
+        Config(fuente="muestra"),
+        which=_which_falso(set()),
+        rutas_modelo=[tmp_path / "no.bin"],
+    )
+    texto = renderizar(resultados)
+    assert "Que hacer ahora" in texto
+    assert "❌" in texto
+    assert "python -m keni_metricas.asistente" not in texto
 
 
 def test_codigo_salida_pura():
