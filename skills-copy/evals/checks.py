@@ -223,6 +223,70 @@ def _normaliza(texto: str) -> str:
     return "".join(c for c in nfkd if not unicodedata.combining(c))
 
 
+# --- tropicalizacion: deteccion de espanolismos (es-ES) ---
+
+# Lista CERRADA de terminos inequivocamente peninsulares. La forma guardada es la
+# ya normalizada (minusculas, sin acentos) para casar contra `_normaliza`.
+#
+# Decision (conservadora, pocos falsos positivos):
+#   - Solo entran terminos que en es-MX NO se usan (o suenan a "de fuera"):
+#     vale, vosotros, os, coche, ordenador, movil, zumo, gilipollas, flipar,
+#     chaval, molar, currar, guay.
+#   - Se EXCLUYEN a proposito los ambiguos, porque en MX tambien existen con otro
+#     sentido y dispararian falsos positivos:
+#       * "piso"  -> en MX = suelo (no solo vivienda).
+#       * "tio"   -> en MX = pariente (uso literal muy comun).
+#       * "coger" -> en MX es de uso (aunque con carga vulgar); reescribir es
+#                    criterio editorial, no un error inequivoco de origen.
+#     Estos se documentan aqui y se tratan en tropicalizacion.md, no en el gate.
+ESPANOLISMOS = (
+    "vale",
+    "vosotros",
+    "os",
+    "coche",
+    "ordenador",
+    "movil",
+    "zumo",
+    "gilipollas",
+    "flipar",
+    "chaval",
+    "molar",
+    "currar",
+    "guay",
+)
+
+# Terminos ambiguos: existen en es-MX con otro sentido, por eso NO disparan el
+# gate (se documentan en tropicalizacion.md para revision humana).
+ESPANOLISMOS_AMBIGUOS = ("piso", "tio", "coger")
+
+_RE_PALABRA = re.compile(r"[a-z]+")
+
+
+def detecta_espanolismos(texto: str) -> list[str]:
+    """Devuelve los espanolismos (es-ES) crudos hallados en el texto. [] = ok.
+
+    Conservador a proposito: solo busca palabras de la lista CERRADA
+    `ESPANOLISMOS` (terminos inequivocamente peninsulares). No incluye los
+    ambiguos (piso/tio/coger), que en MX existen con otro sentido y darian falsos
+    positivos; esos se tratan como criterio editorial en tropicalizacion.md.
+
+    - Insensible a acentos y mayusculas (usa `_normaliza`, igual que el resto de
+      checks).
+    - Casa por PALABRA COMPLETA (tokeniza), asi "valeroso" no marca "vale" ni
+      "sosa"/"sosos" marcan "os".
+    - Preserva el orden de aparicion y no repite el mismo termino.
+    """
+    norm = _normaliza(texto)
+    objetivo = set(ESPANOLISMOS)
+    encontrados: list[str] = []
+    vistos: set[str] = set()
+    for palabra in _RE_PALABRA.findall(norm):
+        if palabra in objetivo and palabra not in vistos:
+            vistos.add(palabra)
+            encontrados.append(palabra)
+    return encontrados
+
+
 # --- limites de caracteres por plataforma ---
 
 # Secciones de plataforma en la salida. La skill produce "una variante por
