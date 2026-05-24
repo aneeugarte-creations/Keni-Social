@@ -1,6 +1,6 @@
 ---
 name: copy-desde-nota
-description: Convierte una nota (.md) o una transcripción de clip en copy LISTO PARA PUBLICAR por plataforma (X, Instagram, Facebook, TikTok, YouTube) para las marcas de AMX (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación), aplicando voz de marca, voz personal, tropicalización mexicana y una auto-verificación. Úsala cuando haya que redactar copy de redes a partir de una nota o un clip.
+description: Convierte una o varias notas/fuentes (.md) o una transcripción de clip en copy LISTO PARA PUBLICAR por plataforma (X, Instagram, Facebook, TikTok, YouTube) para las marcas de AMX (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación), aplicando voz de marca, voz personal, tropicalización mexicana y una auto-verificación. Cuando hay varias fuentes del mismo tema, las sintetiza y hace cross-check de datos. Úsala para redactar copy de redes a partir de una nota, varios cables o un clip.
 allowed-tools: Read, Glob, Bash(date:*), Bash(python3:*), mcp__keni-metricas__metricas_resumen, mcp__keni-metricas__mejores_piezas
 ---
 
@@ -12,9 +12,10 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
 
 ## Entradas
 
-- **Fuente:** el archivo indicado por el usuario; si no, el `.md` más reciente del proyecto o de `ejemplos/`. Detecta el tipo:
+- **Fuente(s):** uno o VARIOS archivos indicados por el usuario (o el `.md` más reciente si no indica). Detecta el tipo de cada uno:
   - **Nota** (encabezados, prosa): extrae tesis, dato clave y ángulo más fuerte.
   - **Transcripción de clip** (habla oral, marcas de tiempo, en `ejemplos/` o `transcripciones/`): extrae la declaración o el momento con más gancho; cita textual cuando aporte.
+  - **Varias fuentes del mismo tema** (cables de distintas agencias): trátalas como UNA historia. Sintetiza lo común y **cruza los datos** (ver paso 2).
 - **Marca:** si el usuario la indica, úsala; si no, infiérela del tema y dilo explícitamente. Marcas: `unotv`, `claro-sports`, `nacion-gamer`, `piso-15`, `fundacion`.
 - **Voz:** si el usuario indica una persona, carga su voz; si no, usa solo la voz de marca.
 
@@ -27,7 +28,8 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
    - `contexto-editorial/marcas/{marca}.md`
    - `contexto-editorial/voces/{voz}.md` — si solo tiene marcadores `[... — se rellena en sesión]` sin rellenar, **NO inventes la voz**: avísalo y usa solo la de marca.
 
-2. **Extrae el núcleo de la fuente**: titular real, dato/cifra con su fuente si aparece, ángulo. **No inventes nada que no esté en la fuente.** Si falta un dato, dilo; no lo rellenes.
+2. **Extrae el núcleo**: titular real, dato/cifra con su fuente si aparece, ángulo. **No inventes nada que no esté en las fuentes.** Si falta un dato, dilo; no lo rellenes.
+   - **Cross-check (si hay varias fuentes):** compara los datos clave (cifras, fechas, nombres, cargos). Si **coinciden**, úsalos con confianza. Si **discrepan** (p. ej. una agencia dice 40 y otra 45), **NO elijas en silencio**: usa la formulación más prudente o ninguna cifra, y **anota la discrepancia** para reportarla en la verificación.
 
 3. **Consulta qué funciona (métricas).** Si el MCP `keni-metricas` está conectado, ANTES de redactar:
    - `metricas_resumen(marca, "mes")` → qué **plataforma** rinde más (mayor engagement) en esa marca.
@@ -50,7 +52,8 @@ Modo **dry-run**: preparas y previsualizas. No publicas ni haces peticiones de r
 6. **Auto-verificación (OBLIGATORIO, al final).** Marca cada punto con ✅ / ⚠️ / ❌:
    - **Fechas y números:** ¿coinciden con la fuente? ¿alguna inventada? (usa `date` para comparar "hoy/ayer/mañana").
    - **Nombres y cargos:** errores típicos (p. ej. "expresidente Trump" cuando es **presidente**; nombres mal escritos).
-   - **Cifras sin fuente:** marca toda cifra que no tenga respaldo en la fuente.
+   - **Cifras sin fuente:** marca toda cifra que no tenga respaldo en las fuentes.
+   - **Discrepancias entre fuentes:** si varias fuentes daban datos distintos, dilo y explica qué usaste (la formulación prudente) o por qué omitiste el dato.
    - **Reglas legales** (`reglas-legales.md`): bandera con escudo, tratamiento de menores/víctimas, datos personales identificables.
    - **¿Suena mexicano?:** ¿quedó algún giro español? ¿el tono es de la marca y de la voz?
    - **Límites por plataforma:** ¿todas las variantes caben? Verifica con `contar.py` el post de X, **cada tuit del hilo** y el título de YouTube; no des por bueno un conteo a ojo en esos.
