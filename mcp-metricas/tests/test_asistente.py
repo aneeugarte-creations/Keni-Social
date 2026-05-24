@@ -205,6 +205,45 @@ def test_escribir_incluye_cabecera_y_no_filtra_token_en_log(tmp_path):
     assert "system_user" in resumen  # metadatos no secretos si se muestran
 
 
+# --- enmascarado del TOML mostrado (B3: --solo-mostrar no filtra tokens) ----
+def test_enmascarar_credenciales_no_filtra_tokens():
+    datos = a.plan_a_dict(_plan_ejemplo())
+    masc = a.enmascarar_credenciales(datos)
+    # no muta el original
+    assert datos["credenciales"]["meta"]["access_token"] == TOKEN_FALSO
+    # los secretos quedan enmascarados (no aparece el token completo)
+    assert masc["credenciales"]["meta"]["access_token"] != TOKEN_FALSO
+    assert masc["credenciales"]["meta"]["access_token"].endswith(TOKEN_FALSO[-4:])
+    assert masc["credenciales"]["x"]["bearer_token"] != BEARER_FALSO
+    # metadatos no secretos se conservan
+    assert masc["credenciales"]["meta"]["tipo_token"] == "system_user"
+
+
+def test_enmascarar_credenciales_sin_bloque_credenciales():
+    datos = {"fuente": "muestra"}
+    assert a.enmascarar_credenciales(datos) == {"fuente": "muestra"}
+
+
+def test_solo_mostrar_no_filtra_token_completo(monkeypatch, capsys, tmp_path):
+    """`--solo-mostrar` no debe imprimir NINGUN token en claro (ni resumen ni TOML)."""
+    # el flujo interactivo se sustituye por un plan con tokens reales (falsos)
+    monkeypatch.setattr(a, "flujo_interactivo", lambda: _plan_ejemplo())
+    ruta = tmp_path / "config.toml"  # no debe escribirse
+
+    rc = a.main(["--solo-mostrar", "--ruta", str(ruta)])
+    assert rc == 0
+
+    salida = capsys.readouterr().out
+    # ni el token ni el bearer aparecen completos en NINGUNA parte de la salida
+    assert TOKEN_FALSO not in salida
+    assert BEARER_FALSO not in salida
+    # pero el TOML si se muestra (con el bloque de credenciales enmascarado)
+    assert "== TOML" in salida
+    assert "access_token" in salida
+    # y --solo-mostrar nunca escribe el archivo
+    assert not ruta.exists()
+
+
 # --- guia por plataforma ---------------------------------------------------
 def test_guia_plataforma_menciona_docs_y_system_user():
     g_meta = a.texto_guia_plataforma("facebook")

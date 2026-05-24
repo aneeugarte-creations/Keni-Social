@@ -149,10 +149,6 @@ def normalizar_id_marca(texto: str) -> str:
     return out
 
 
-def plataforma_valida(plataforma: str) -> bool:
-    return plataforma in PLATAFORMAS
-
-
 def normalizar_alcance(valor: str | list | None, ids_validos: list[str] | None = None) -> list[str]:
     """Normaliza la lista de marcas en alcance (de coma-separado o lista).
 
@@ -188,6 +184,37 @@ def enmascarar_token(token: str | None, visibles: int = 4) -> str:
     if n <= visibles:
         return "*" * n
     return "*" * (n - visibles) + token[-visibles:]
+
+
+# Claves de credenciales cuyo valor es un secreto y NUNCA debe mostrarse en claro.
+CLAVES_SECRETAS: frozenset[str] = frozenset(
+    {"access_token", "bearer_token", "refresh_token", "app_secret", "client_secret"}
+)
+
+
+def enmascarar_credenciales(datos: dict) -> dict:
+    """Devuelve una copia del dict de config con los tokens enmascarados.
+
+    No muta `datos`. Recorre `credenciales[bloque]` y enmascara (con
+    `enmascarar_token`) el valor de toda clave secreta (`CLAVES_SECRETAS`). El
+    resto de claves (p.ej. `tipo_token`, `app_id`) se dejan tal cual. Pensado
+    para mostrar el TOML en pantalla SIN filtrar secretos (modo --solo-mostrar).
+    """
+    copia = dict(datos)
+    creds = copia.get("credenciales")
+    if not isinstance(creds, dict):
+        return copia
+    creds_masc: dict[str, dict[str, str]] = {}
+    for bloque, valores in creds.items():
+        if not isinstance(valores, dict):
+            creds_masc[bloque] = valores
+            continue
+        creds_masc[bloque] = {
+            clave: (enmascarar_token(valor) if clave in CLAVES_SECRETAS else valor)
+            for clave, valor in valores.items()
+        }
+    copia["credenciales"] = creds_masc
+    return copia
 
 
 def guia_plataforma(plataforma: str) -> dict[str, str]:
@@ -615,7 +642,7 @@ def resumen_plan(plan: PlanConfig) -> str:
     for bloque, valores in plan.credenciales.items():
         partes = []
         for clave, valor in valores.items():
-            if clave in ("access_token", "bearer_token", "refresh_token", "app_secret", "client_secret"):
+            if clave in CLAVES_SECRETAS:
                 partes.append(f"{clave}={enmascarar_token(valor)}")
             else:
                 partes.append(f"{clave}={valor}")
@@ -655,8 +682,10 @@ def main(argv: list[str] | None = None) -> int:
     datos = construir_y_fusionar(plan, ruta)
 
     if args.solo_mostrar:
-        print("\n== TOML (no escrito) ==")
-        print(serializar_toml(datos))
+        # Enmascara los tokens tambien aqui: el TOML mostrado no debe filtrar
+        # secretos en claro (igual que el resumen de arriba).
+        print("\n== TOML (no escrito; tokens enmascarados) ==")
+        print(serializar_toml(enmascarar_credenciales(datos)))
         return 0
 
     if not _preguntar_si_no(f"\nEscribir en {ruta}?", por_defecto=True):

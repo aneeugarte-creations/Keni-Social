@@ -63,7 +63,16 @@ wav="$base.16k.wav"
 # --- duracion (informativa) ---
 if command -v ffprobe >/dev/null 2>&1; then
   dur="$(ffprobe -v error -show_entries format=duration -of default=nw=1:nk=1 "$ENTRADA" 2>/dev/null || echo "")"
-  [ -n "$dur" ] && printf 'Duracion del audio: %.0f s (~%.0f min)\n' "$dur" "$(echo "$dur/60" | bc -l)" >&2
+  if [ -n "$dur" ]; then
+    # segundos enteros; muestra mm:ss solo si hay al menos 1 minuto, si no solo s.
+    seg="$(printf '%.0f' "$dur")"
+    mins=$((seg / 60))
+    if [ "$mins" -ge 1 ]; then
+      printf 'Duracion del audio: %d s (%d:%02d)\n' "$seg" "$mins" "$((seg % 60))" >&2
+    else
+      printf 'Duracion del audio: %d s\n' "$seg" >&2
+    fi
+  fi
 fi
 
 # --- 1) extraer audio normalizado: 16 kHz mono PCM (lo que espera whisper.cpp) ---

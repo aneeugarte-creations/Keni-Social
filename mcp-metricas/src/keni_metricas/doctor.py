@@ -447,9 +447,34 @@ def ejecutar_chequeos(
 # --- Renderizado (la CLI solo formatea lo que devuelven las funciones puras) ---
 
 
+def resumen_humano(resultados: list[Resultado]) -> str:
+    """Una frase de cabecera, en lenguaje no tecnico, segun el estado global.
+
+    Sin ❌: tranquiliza a quien no es tecnico (los avisos de credenciales/config
+    son normales con datos de muestra). Con ❌: deja claro que algo hay que
+    arreglar. No mira los codigos de salida; solo formula el mensaje.
+    """
+    if any(r.es_error for r in resultados):
+        n = sum(1 for r in resultados if r.es_error)
+        return (
+            f"❌ Hay {n} problema(s) que impiden usar el sistema. "
+            "Revisa las lineas con ❌ de abajo."
+        )
+    return (
+        "✅ Todo listo para la demo (con datos de muestra). "
+        "Los avisos de credenciales/config son normales sin conectar cuentas reales."
+    )
+
+
 def renderizar(resultados: list[Resultado]) -> str:
     """Genera el informe legible a partir de los resultados estructurados."""
-    lineas: list[str] = ["Autodiagnostico de keni-metricas", "=" * 40, ""]
+    lineas: list[str] = [
+        "Autodiagnostico de keni-metricas",
+        "=" * 40,
+        "",
+        resumen_humano(resultados),
+        "",
+    ]
     for r in resultados:
         lineas.append(f"{r.estado.value} {r.nombre}: {r.detalle}")
     lineas.append("")
