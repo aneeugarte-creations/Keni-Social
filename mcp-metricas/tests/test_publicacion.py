@@ -189,6 +189,48 @@ def test_real_sin_token_no_toca_red():
     assert not ruta.called  # falla ANTES de cualquier red
 
 
+# --- CLI dry-run (__main__): robustez sin tracebacks ------------------------
+def test_b2_cli_instagram_sin_media_error_limpio(capsys):
+    """B2: IG sin media reventaba con ValueError crudo + traceback en la CLI.
+
+    Ahora `publicar()` esta dentro del try/except: mensaje espanol, codigo != 0
+    limpio (sin traceback).
+    """
+    from keni_metricas.publicacion.__main__ import main
+
+    code = main(["--plataforma", "instagram", "--cuenta", "IG_ID", "--texto", "Hola"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "Instagram exige media" in err
+    assert "Traceback" not in err
+
+
+def test_b6_cli_error_pydantic_sin_url_ni_ingles(capsys):
+    """B6: errores de pydantic mostraban texto en ingles + errors.pydantic.dev.
+
+    Cuenta vacia (' ') dispara ValidationError; debe verse el mensaje limpio.
+    """
+    from keni_metricas.publicacion.__main__ import main
+
+    code = main(["--plataforma", "facebook", "--cuenta", "   ", "--texto", "Hola"])
+    assert code == 2
+    err = capsys.readouterr().err
+    assert "obligatorio" in err  # mensaje en espanol del validador
+    assert "errors.pydantic.dev" not in err  # sin la URL ni el dump en ingles
+    assert "validation error for" not in err
+
+
+def test_cli_facebook_dry_run_ok(capsys):
+    """Camino feliz de la CLI: FB con texto produce el payload dry-run, codigo 0."""
+    from keni_metricas.publicacion.__main__ import main
+
+    code = main(["--plataforma", "facebook", "--cuenta", "PAGE", "--texto", "Hola"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "DRY-RUN" in out
+    assert "PAGE/feed" in out
+
+
 @respx.mock
 def test_real_ig_sin_creation_id_falla_y_no_publica():
     ruta_cont = respx.post(f"{BASE}/IGID/media").mock(

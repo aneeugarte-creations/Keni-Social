@@ -52,15 +52,21 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--formato", choices=["json", "texto"], default="texto")
     args = ap.parse_args(argv)
 
+    # B2/B6: tanto la construccion del borrador como `publicar()` van dentro del
+    # try. Instagram sin media lanza ValueError en `publicar()`; sin esto la CLI
+    # reventaba con un traceback crudo. Los errores de pydantic se muestran con
+    # su mensaje limpio (sin el texto en ingles ni la URL errors.pydantic.dev).
     try:
         borrador = construir_borrador(args)
-    except (ValueError, ValidationError) as e:
+        # Adaptador SIN credenciales: imposible publicar de verdad desde la CLI.
+        adaptador = AdaptadorPublicacionMeta(creds={})
+        resultado = adaptador.publicar(borrador, dry_run=True)  # SIEMPRE dry-run aqui
+    except ValidationError as e:
+        print(f"Error: {e.errors()[0]['msg']}", file=sys.stderr)
+        return 2
+    except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 2
-
-    # Adaptador SIN credenciales: imposible publicar de verdad desde la CLI.
-    adaptador = AdaptadorPublicacionMeta(creds={})
-    resultado = adaptador.publicar(borrador, dry_run=True)  # SIEMPRE dry-run aqui
 
     if args.formato == "json":
         print(json.dumps(resultado.como_dict(), ensure_ascii=False, indent=2))
