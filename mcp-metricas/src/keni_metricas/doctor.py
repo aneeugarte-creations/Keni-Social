@@ -235,6 +235,54 @@ def comprobar_credenciales(cfg: Config) -> list[Resultado]:
     return resultados
 
 
+def resumir_credenciales(cfg: Config) -> Resultado:
+    """Colapsa las N plataformas en UNA sola linea legible para no tecnicos.
+
+    En vez de una linea ⚠️ por plataforma (ruidoso, asusta), devuelve un unico
+    `Resultado` tipo `Credenciales: K/N plataformas conectadas`. Mantiene el
+    estado correcto (OK solo si todas conectadas; AVISO si falta alguna, NUNCA
+    ERROR: faltar credenciales es normal con datos de muestra). El detalle por
+    plataforma se conserva de forma compacta entre parentesis y, completo, en
+    `extra["por_plataforma"]` para inspeccion programatica/tests.
+    """
+    es_muestra = cfg.fuente == "muestra"
+    por_plataforma = comprobar_credenciales(cfg)
+    total = len(por_plataforma)
+    conectadas = [r for r in por_plataforma if r.extra.get("tiene")]
+    n_ok = len(conectadas)
+
+    # Detalle compacto por plataforma: "facebook ✅, instagram ❌, ..."
+    compacto = ", ".join(
+        f"{r.extra['plataforma']} {'✅' if r.extra.get('tiene') else '❌'}"
+        for r in por_plataforma
+    )
+
+    if n_ok == total and total > 0:
+        estado = Estado.OK
+        detalle = f"{n_ok}/{total} plataformas conectadas ({compacto})"
+    else:
+        estado = Estado.AVISO
+        if es_muestra:
+            coletilla = "normal con datos de muestra"
+        else:
+            coletilla = "las plataformas sin credenciales se omitiran en fuente real"
+        detalle = f"{n_ok}/{total} plataformas conectadas ({coletilla}: {compacto})"
+
+    return Resultado(
+        "Credenciales",
+        estado,
+        detalle,
+        extra={
+            "total": total,
+            "conectadas": n_ok,
+            "es_muestra": es_muestra,
+            "por_plataforma": {
+                r.extra["plataforma"]: bool(r.extra.get("tiene")) for r in por_plataforma
+            },
+        },
+    )
+
+
 def comprobar_binario(
     nombre_binario: str,
     *,
@@ -443,7 +491,9 @@ def ejecutar_chequeos(
         resultados.append(comprobar_config())
         resultados.append(comprobar_fuente(cfg))
         resultados.append(comprobar_marcas(cfg))
-        resultados.extend(comprobar_credenciales(cfg))
+        # Una sola linea resumen en vez de N lineas (una por plataforma): menos
+        # ruido para no tecnicos. El detalle por plataforma va compacto y en extra.
+        resultados.append(resumir_credenciales(cfg))
 
     # clip-a-copy (transcripcion local)
     resultados.append(
@@ -492,6 +542,25 @@ def resumen_humano(resultados: list[Resultado]) -> str:
     )
 
 
+def cierre_accionable(resultados: list[Resultado]) -> str:
+    """El "que hacer ahora" que cierra el informe (despues del resumen N/N/N).
+
+    Complementa a `resumen_humano` (la cabecera tranquiliza), sin duplicar el
+    mensaje: aqui se dice el PROXIMO PASO concreto.
+      - Con ❌: remite a las lineas ❌ que hay que resolver.
+      - Sin ❌: listo para la demo con muestra y como conectar cuentas reales.
+    """
+    if any(r.es_error for r in resultados):
+        return (
+            "Que hacer ahora: revisa cada linea ❌ de arriba y resuelvela "
+            "(suelen incluir el comando exacto a ejecutar)."
+        )
+    return (
+        "Que hacer ahora: listo para la demo con datos de muestra. "
+        "Para conectar cuentas reales: python -m keni_metricas.asistente"
+    )
+
+
 def renderizar(resultados: list[Resultado]) -> str:
     """Genera el informe legible a partir de los resultados estructurados."""
     lineas: list[str] = [
@@ -508,10 +577,7 @@ def renderizar(resultados: list[Resultado]) -> str:
     avisos = sum(1 for r in resultados if r.estado is Estado.AVISO)
     oks = sum(1 for r in resultados if r.ok)
     lineas.append(f"Resumen: {oks} ✅  {avisos} ⚠️  {errores} ❌")
-    if errores:
-        lineas.append("Hay errores que debes resolver antes de usar el sistema.")
-    else:
-        lineas.append("Entorno listo (los avisos ⚠️ son opcionales segun tu uso).")
+    lineas.append(cierre_accionable(resultados))
     return "\n".join(lineas)
 
 
