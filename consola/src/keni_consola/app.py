@@ -1,70 +1,131 @@
-"""App Starlette de la Consola Keni (capa de gestion web LOCAL).
+"""App Starlette de la Consola Keni: API JSON pura + servir el SPA React.
 
-Arquitectura de FEATURES auto-descubiertas: cada pestana de la consola vive en su
-propio modulo dentro de `consola/features/` y exporta una variable `FEATURE` (ver
-el contrato documentado en `consola/features/__init__.py`). Esta app NO conoce las
-pestanas concretas: las descubre, ordena su nav por `orden`, y monta sus rutas y
-sus estaticos. Anadir una pestana = soltar UN archivo en `features/`, sin tocar
-este `app.py`.
+Arquitectura de MODULOS DE API auto-descubiertos: cada area funcional vive en su
+propio modulo dentro de `consola/api/` y exporta una variable `RUTAS` (ver el
+contrato en `consola/api/__init__.py`). Esta app NO conoce los modulos concretos:
+los descubre y monta sus rutas `/api/...`. Anadir un area = soltar UN archivo en
+`api/`, sin tocar este `app.py`.
 
-HTML renderizado en servidor con el cascaron compartido (`consola.layout`); CSS/JS
-servidos por la app (sin CDN, sin red externa). Bind SOLO a 127.0.0.1 (ver
-`__main__.py`).
+El resto (todo lo que NO empieza por `/api`) sirve el SPA React que construye otra
+persona: `/assets/*` desde `webapp/assets/`, los favicons/recursos sueltos de
+`webapp/`, y cualquier otra ruta devuelve `webapp/index.html` (fallback SPA). Si
+`webapp/index.html` no existe todavia (caso normal en este worktree), devuelve un
+placeholder amable en espanol (200).
+
+Bind SOLO a 127.0.0.1 (ver `__main__.py`).
 
 SEGURIDAD (resumen): el guardado de CLAUDE.md y el "abrir en Claude Code" SOLO
 operan sobre carpetas presentes en consola.toml (allowlist por id estable); sin
-shell=True; los errores salen como mensajes en espanol (sin tracebacks crudos).
+shell=True; SQL parametrizado; los errores salen como JSON en espanol (sin
+tracebacks crudos).
 """
 
 from __future__ import annotations
 
+import mimetypes
 from pathlib import Path
 
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse, RedirectResponse, Response
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from . import features, proyectos
-from .features import RecursoEstatico
+from . import api, proyectos
 
-_DIR_ESTATICOS = Path(__file__).parent / "estaticos"
+# Carpeta donde el build del frontend deja el SPA (no existe aun en este worktree).
+_DIR_WEBAPP = Path(__file__).parent / "webapp"
+_INDICE_SPA = _DIR_WEBAPP / "index.html"
+_DIR_ASSETS = _DIR_WEBAPP / "assets"
 
-# Estaticos compartidos que el layout incluye SIEMPRE (no son de ninguna feature).
-_ESTATICOS_COMPARTIDOS = (
-    RecursoEstatico("consola.css", _DIR_ESTATICOS / "consola.css", "text/css; charset=utf-8"),
-    RecursoEstatico("consola.js", _DIR_ESTATICOS / "consola.js", "application/javascript; charset=utf-8"),
+# Archivos sueltos de la RAIZ de webapp/ que el SPA puede pedir (favicon, manifest,
+# robots...). SOLO estos nombres conocidos se sirven desde la raiz: cualquier otra
+# cosa cae al index del SPA, de modo que un archivo ajeno colocado en webapp/ nunca
+# se sirve por error (defensa en profundidad, ademas del anti-traversal).
+_ARCHIVOS_RAIZ = frozenset(
+    {
+        "favicon.ico",
+        "favicon.svg",
+        "favicon.png",
+        "apple-touch-icon.png",
+        "manifest.webmanifest",
+        "site.webmanifest",
+        "robots.txt",
+    }
+)
+
+# Placeholder amable cuando aun no hay build del frontend (caso normal aqui).
+_PLACEHOLDER = (
+    "<!DOCTYPE html><html lang='es'><head><meta charset='utf-8'>"
+    "<title>Consola Keni</title></head><body>"
+    "<main style='font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem'>"
+    "<h1>Consola Keni</h1>"
+    "<p>La interfaz aún no está construida; ejecuta el build del frontend.</p>"
+    "</main></body></html>"
 )
 
 
-def _servir_estatico(recurso: RecursoEstatico):
-    """Devuelve un handler que sirve un archivo estatico desde disco (404 si falta)."""
+def _resolver_dentro(base: Path, sub: str) -> Path | None:
+    """Resuelve `sub` DENTRO de `base`; None si escaparia (defensa anti-traversal)."""
+    try:
+        destino = (base / sub).resolve()
+    except (OSError, ValueError):
+        return None
+    base_res = base.resolve()
+    if destino == base_res or not destino.is_relative_to(base_res):
+        return None
+    return destino
 
-    async def handler(request: Request) -> Response:
-        try:
-            texto = recurso.ruta.read_text(encoding="utf-8")
-        except OSError:
-            return PlainTextResponse("No encontrado", status_code=404)
-        return Response(texto, media_type=recurso.media_type)
 
-    return handler
+async def _servir_asset(request: Request) -> Response:
+    """Sirve un archivo estatico del SPA desde `webapp/assets/` (404 si no esta)."""
+    sub = request.path_params["ruta"]
+    destino = _resolver_dentro(_DIR_ASSETS, sub)
+    if destino is None or not destino.is_file():
+        return PlainTextResponse("No encontrado", status_code=404)
+    return FileResponse(destino)
 
 
-def _ruta_estatica(recurso: RecursoEstatico) -> Route:
-    return Route(f"/estaticos/{recurso.nombre}", _servir_estatico(recurso))
+async def _servir_spa(request: Request) -> Response:
+    """Fallback SPA: sirve `webapp/index.html` o un placeholder amable (200).
+
+    Si la ruta pedida corresponde a un archivo suelto de `webapp/` (favicon, etc.)
+    lo sirve; en cualquier otro caso devuelve el index del SPA (enrutado en cliente).
+    """
+    sub = (request.path_params.get("resto") or "").strip("/")
+    # Solo servimos archivos sueltos de webapp/ cuyo nombre este en la allowlist
+    # (favicon, manifest...). Cualquier otra ruta cae al index del SPA (enrutado en
+    # cliente); asi un archivo plantado en webapp/ (p.ej. secreto.txt) jamas se sirve.
+    if sub in _ARCHIVOS_RAIZ:
+        candidato = _resolver_dentro(_DIR_WEBAPP, sub)
+        if candidato is not None and candidato.is_file():
+            tipo, _ = mimetypes.guess_type(str(candidato))
+            return FileResponse(candidato, media_type=tipo or "application/octet-stream")
+
+    if _INDICE_SPA.is_file():
+        return FileResponse(_INDICE_SPA, media_type="text/html; charset=utf-8")
+    return HTMLResponse(_PLACEHOLDER)
+
+
+async def _api_no_encontrado(request: Request) -> Response:
+    """Sub-ruta /api inexistente: 404 JSON en espanol (NO debe caer al SPA)."""
+    return JSONResponse({"error": "Recurso no encontrado."}, status_code=404)
 
 
 def crear_app(abrir=None) -> Starlette:
-    """Construye la app Starlette de la consola descubriendo las features.
+    """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
     `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code; por defecto
-    la real. Los tests pasan un mock; se inyecta en la feature Proyectos.
+    la real. Los tests pasan un mock; se inyecta en los modulos que lo usan
+    (Proyectos y Tareas).
     """
     if abrir is not None:
-        # La feature Proyectos expone un punto inyectable a nivel de modulo.
-        from .features import proyectos as feat_proyectos
+        from .api import proyectos as api_proyectos
+        from .api import tareas as api_tareas
 
-        feat_proyectos.abrir_en_claude_code = abrir
+        api_proyectos.abrir_en_claude_code = abrir
+        # Tareas usa su propio wrapper (con detalle como prompt). Lo envolvemos para
+        # que tambien dependa del `abrir` inyectado, ignorando el detalle (mock simple).
+        api_tareas.abrir_tarea_en_claude_code = lambda ruta, detalle="": abrir(ruta)
 
     # Aseguramos que existe el consola.toml (best-effort; no rompe si falla).
     try:
@@ -72,38 +133,16 @@ def crear_app(abrir=None) -> Starlette:
     except OSError:
         pass
 
-    descubiertas = features.descubrir(refresco=True)
+    rutas: list[Route] = list(api.descubrir(refresco=True))
 
-    rutas: list[Route] = []
+    # Cualquier OTRA sub-ruta /api (no descubierta) -> 404 JSON. Va despues de las
+    # rutas reales y ANTES del fallback del SPA, para que un /api/... inexistente no
+    # devuelva el index.html del SPA (que confundiria al cliente).
+    rutas.append(Route("/api/{resto:path}", _api_no_encontrado))
 
-    # Raiz -> landing por defecto. Apuntamos a "skills" (Generar copy), que es lo
-    # que un CM usa a diario, en vez de a la primera feature por orden. Si esa
-    # feature no estuviera, caemos a la primera descubierta. Sin features, una
-    # pagina minima.
-    if descubiertas:
-        ids = {f.id for f in descubiertas}
-        destino = "/skills" if "skills" in ids else f"/{descubiertas[0].id}"
-
-        async def raiz(request: Request) -> Response:
-            return RedirectResponse(url=destino)
-    else:
-        async def raiz(request: Request) -> Response:
-            return PlainTextResponse("No hay features registradas en la consola.", status_code=200)
-
-    rutas.append(Route("/", raiz))
-
-    # Estaticos compartidos.
-    for recurso in _ESTATICOS_COMPARTIDOS:
-        rutas.append(_ruta_estatica(recurso))
-
-    # Rutas y estaticos de cada feature.
-    estaticos_vistos: set[str] = {r.nombre for r in _ESTATICOS_COMPARTIDOS}
-    for feature in descubiertas:
-        rutas.extend(feature.rutas)
-        for recurso in feature.estaticos:
-            if recurso.nombre in estaticos_vistos:
-                continue  # ya servido (compartido u otra feature): no duplicar
-            estaticos_vistos.add(recurso.nombre)
-            rutas.append(_ruta_estatica(recurso))
+    # Estaticos del SPA y fallback. Van DESPUES de las rutas /api para no taparlas.
+    rutas.append(Route("/assets/{ruta:path}", _servir_asset))
+    rutas.append(Route("/", _servir_spa))
+    rutas.append(Route("/{resto:path}", _servir_spa))
 
     return Starlette(routes=rutas)

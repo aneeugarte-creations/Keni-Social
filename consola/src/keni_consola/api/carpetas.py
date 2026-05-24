@@ -1,34 +1,32 @@
-"""Feature Carpetas: crea una carpeta de proyecto nueva dentro de una RAIZ
-permitida, escribe un CLAUDE.md institucional (a partir de una plantilla
-editable) y la registra en consola.toml reutilizando `consola.proyectos`.
-
-Filosofia: la consola da un PUNTO DE PARTIDA. El CLAUDE.md que se escribe es una
-plantilla institucional pensada para que el equipo la edite, no un texto cerrado.
+"""API Carpetas: crea una carpeta de proyecto nueva dentro de una RAIZ permitida,
+escribe un CLAUDE.md institucional (a partir de una plantilla) y la registra en
+consola.toml reutilizando `consola.proyectos`.
 
 SEGURIDAD (critica): la carpeta SOLO puede crearse DENTRO de una raiz permitida
-(env `KENI_CONSOLA_RAIZ`, def `~/keni-proyectos`). El nombre/subruta que llega
-del navegador se valida y la ruta final se resuelve con `Path.resolve()`; si no
-queda estrictamente dentro de la raiz (intentos con `..`, rutas absolutas,
-nombres peligrosos) se rechaza con 400 y un mensaje en espanol. Nunca se crea en
-una ruta arbitraria. Sin shell.
+(env `KENI_CONSOLA_RAIZ`, def `~/keni-proyectos`). El nombre que llega del cliente
+se valida y la ruta final se resuelve con `Path.resolve()`; si no queda
+estrictamente dentro de la raiz (intentos con `..`, rutas absolutas, nombres
+peligrosos) se rechaza con 400 y un mensaje en espanol. Nunca se crea en una ruta
+arbitraria. Sin shell.
+
+Las plantillas viven ahora en `src/keni_consola/plantillas/` (movidas desde la
+antigua carpeta de features al migrar a API JSON).
 """
 
 from __future__ import annotations
 
 import os
-from html import escape
 from pathlib import Path
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import layout, proyectos
+from .. import proyectos
 from .._http_json import leer_json
-from . import Feature, RecursoEstatico, features_ordenadas
 
-_ESTATICOS = Path(__file__).parent.parent / "estaticos"
-_DIR_PLANTILLAS = Path(__file__).parent / "plantillas"
+# Las plantillas viven en el paquete (no en features/, que se elimino).
+_DIR_PLANTILLAS = Path(__file__).parent.parent / "plantillas"
 
 # Marcador de posicion del nombre dentro de las plantillas (.md).
 _MARCADOR_NOMBRE = "{NOMBRE}"
@@ -36,13 +34,7 @@ _MARCADOR_NOMBRE = "{NOMBRE}"
 # Caracteres prohibidos en el nombre de la carpeta (separadores, control, etc.).
 _CARACTERES_PROHIBIDOS = set('/\\:*?"<>|')
 
-
-# --------------------------------------------------------------------------- #
-# Plantillas de CLAUDE.md                                                      #
-# --------------------------------------------------------------------------- #
-
-
-# Cada entrada: id estable (en URL/form) -> (etiqueta visible, archivo .md).
+# Cada entrada: id estable -> (etiqueta visible, archivo .md).
 PLANTILLAS: dict[str, tuple[str, str]] = {
     "general": ("General", "claude-md-general.md"),
     "noticias": ("Marca de noticias", "claude-md-noticias.md"),
@@ -73,11 +65,6 @@ def render_claude_md(plantilla_id: str, nombre: str) -> str:
     return texto.replace(_MARCADOR_NOMBRE, nombre)
 
 
-# --------------------------------------------------------------------------- #
-# Raiz permitida + validacion de seguridad                                     #
-# --------------------------------------------------------------------------- #
-
-
 def raiz_permitida() -> Path:
     """Raiz dentro de la cual se pueden crear carpetas. `KENI_CONSOLA_RAIZ` la
     sobreescribe (tests/equipos); por defecto `~/keni-proyectos`."""
@@ -94,22 +81,18 @@ def resolver_destino(nombre: str) -> Path:
     """Resuelve la carpeta destino DENTRO de la raiz permitida.
 
     Valida el nombre y garantiza que la ruta final cae estrictamente dentro de la
-    raiz. Lanza `NombreInvalido` (en espanol) ante cualquier intento de escape
-    (rutas absolutas, `..`, separadores, nombres peligrosos).
+    raiz. Lanza `NombreInvalido` (en espanol) ante cualquier intento de escape.
     """
     crudo = (nombre or "").strip()
     if not crudo:
         raise NombreInvalido("El nombre de la carpeta no puede estar vacío.")
 
-    # Rutas absolutas: prohibidas (la carpeta vive bajo la carpeta base, no fuera).
+    # Rutas absolutas: prohibidas.
     if crudo.startswith(("/", "~")) or (len(crudo) >= 2 and crudo[1] == ":"):
         raise NombreInvalido("Usa solo un nombre de carpeta, no una ruta absoluta.")
 
     # `..` o `.` como componentes: intento de salir de la carpeta base. Se valida
-    # ANTES que los caracteres prohibidos para que un escape con `..` reciba el
-    # mensaje claro ("no se permite salir de la carpeta base") y no el generico de
-    # caracteres (un nombre como `../fuera` contiene `/`, prohibido, pero el
-    # problema real es el intento de escape).
+    # ANTES que los caracteres prohibidos para dar el mensaje claro de escape.
     if crudo in (".", "..") or ".." in crudo:
         raise NombreInvalido(
             "El nombre no puede contener '..': no se permite salir de la carpeta base."
@@ -124,8 +107,8 @@ def resolver_destino(nombre: str) -> Path:
     raiz = raiz_permitida()
     destino = (raiz / crudo).resolve()
 
-    # Defensa en profundidad: la ruta resuelta debe quedar DENTRO de la carpeta base
-    # y no ser la base misma. `is_relative_to` cubre cualquier escape por symlink/`..`.
+    # Defensa en profundidad: la ruta resuelta debe quedar DENTRO de la base y no
+    # ser la base misma. `is_relative_to` cubre cualquier escape por symlink/`..`.
     if destino == raiz or not destino.is_relative_to(raiz):
         raise NombreInvalido("La carpeta quedaría fuera de la carpeta base permitida.")
 
@@ -150,56 +133,7 @@ def crear_carpeta(nombre: str, plantilla_id: str) -> proyectos.Proyecto:
     contenido = render_claude_md(plantilla_id, destino.name)
     (destino / "CLAUDE.md").write_text(contenido, encoding="utf-8")
 
-    # Registro en la allowlist reutilizando el helper compartido (valida que la
-    # carpeta existe y no duplica). El nombre del proyecto = nombre de la carpeta.
     return proyectos.anadir_proyecto(destino.name, str(destino))
-
-
-# --------------------------------------------------------------------------- #
-# Render                                                                       #
-# --------------------------------------------------------------------------- #
-
-
-def _opciones_plantilla() -> str:
-    opciones = []
-    for pid, etiqueta in plantillas_disponibles():
-        sel = " selected" if pid == _PLANTILLA_DEF else ""
-        opciones.append(f'<option value="{escape(pid)}"{sel}>{escape(etiqueta)}</option>')
-    return "".join(opciones)
-
-
-def _pagina_carpetas() -> str:
-    raiz = raiz_permitida()
-    cuerpo = f"""
-<h1>Nueva carpeta</h1>
-<p class="intro">Crea una carpeta de proyecto nueva con un contexto de partida para el
-asistente. La carpeta se crea siempre dentro de una carpeta base segura y se registra en
-Proyectos.</p>
-<form class="anadir" id="form-carpetas">
-  <h2>Crear carpeta de proyecto</h2>
-  <p class="ayuda">Por seguridad, la carpeta se crea dentro de esta carpeta base:
-  <code>{escape(str(raiz))}</code>. Solo necesitas darle un nombre y elegir una plantilla
-  de contexto (un punto de partida que tu equipo puede editar después).</p>
-  <div class="campos">
-    <label class="oculto-visual" for="carpetas-nombre">Nombre de la carpeta</label>
-    <input id="carpetas-nombre" type="text" name="nombre" placeholder="nombre-del-proyecto" autocomplete="off" required>
-    <label class="carpetas-label" for="carpetas-plantilla">Plantilla de contexto
-      <select id="carpetas-plantilla" name="plantilla">{_opciones_plantilla()}</select>
-    </label>
-    <button type="submit" class="primario">Crear carpeta</button>
-  </div>
-  <p class="estado" role="status" aria-live="polite" style="margin-top:8px"></p>
-  <p class="carpetas-exito" role="status" aria-live="polite" hidden></p>
-</form>
-"""
-    return layout.render_pagina(
-        features=features_ordenadas(),
-        activa=FEATURE.id,
-        titulo="Nueva carpeta",
-        contenido=cuerpo,
-        css=FEATURE.css,
-        js=FEATURE.js,
-    )
 
 
 # --------------------------------------------------------------------------- #
@@ -207,11 +141,13 @@ Proyectos.</p>
 # --------------------------------------------------------------------------- #
 
 
-async def pagina_carpetas(request: Request) -> Response:
-    return HTMLResponse(_pagina_carpetas())
+async def opciones(request: Request) -> Response:
+    """Raiz permitida + plantillas disponibles (para poblar el formulario del SPA)."""
+    plantillas = [{"id": pid, "nombre": etiqueta} for pid, etiqueta in plantillas_disponibles()]
+    return JSONResponse({"raiz": str(raiz_permitida()), "plantillas": plantillas})
 
 
-async def api_crear(request: Request) -> Response:
+async def crear(request: Request) -> Response:
     datos = await leer_json(request)
     nombre = datos.get("nombre")
     plantilla = datos.get("plantilla", _PLANTILLA_DEF)
@@ -233,19 +169,7 @@ async def api_crear(request: Request) -> Response:
     )
 
 
-FEATURE = Feature(
-    id="carpetas",
-    etiqueta="Nueva carpeta",
-    orden=50,
-    descripcion="Crea una carpeta de proyecto con un contexto de partida para el asistente y la registra.",
-    rutas=[
-        Route("/carpetas", pagina_carpetas),
-        Route("/api/carpetas/crear", api_crear, methods=["POST"]),
-    ],
-    estaticos=[
-        RecursoEstatico("carpetas.css", _ESTATICOS / "carpetas.css", "text/css; charset=utf-8"),
-        RecursoEstatico("carpetas.js", _ESTATICOS / "carpetas.js", "application/javascript; charset=utf-8"),
-    ],
-    css=["carpetas.css"],
-    js=["carpetas.js"],
-)
+RUTAS = [
+    Route("/api/carpetas", opciones, methods=["GET"]),
+    Route("/api/carpetas", crear, methods=["POST"]),
+]
