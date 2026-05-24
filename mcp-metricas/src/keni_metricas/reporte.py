@@ -9,6 +9,8 @@ headless/cron.
 from __future__ import annotations
 
 import argparse
+import csv
+import io
 import json
 import sys
 from datetime import UTC, datetime
@@ -134,11 +136,86 @@ def render_markdown(rep: dict) -> str:
     return "\n".join(out)
 
 
+# Encabezados del CSV (español, claros para una hoja de cálculo). Una fila por
+# marca x plataforma + una fila TOTAL por marca + un total global.
+CSV_ENCABEZADOS = [
+    "marca",
+    "plataforma",
+    "visualizaciones",
+    "alcance",
+    "interacciones",
+    "engagement_pct",
+]
+# Etiqueta de la columna "plataforma" en las filas de total (por marca y global).
+CSV_TOTAL = "TOTAL"
+
+
+def render_csv(rep: dict) -> str:
+    """Serializa el reporte consolidado a CSV bien formado (módulo csv de stdlib).
+
+    Pensado para abrir directo en Excel/Sheets y dejar de juntar números a mano:
+    una fila por **marca x plataforma**, una fila **TOTAL** por marca (con
+    `plataforma = "TOTAL"`) y una fila de **total global** al final (marca y
+    plataforma = "TOTAL"). Usa el mapa `nombres` para imprimir el NOMBRE legible
+    de la marca (no el id crudo), igual que el render Markdown.
+    """
+    nombres = rep.get("nombres") or {}
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(CSV_ENCABEZADOS)
+
+    for fila in rep["cuentas"]:
+        r = fila["resumen"]
+        marca = etiqueta_marca(r["cuenta"], nombres)
+        for m in r.get("por_plataforma") or []:
+            w.writerow(
+                [
+                    marca,
+                    m["plataforma"],
+                    m["visualizaciones"],
+                    m["alcance"],
+                    m["interacciones"],
+                    m["engagement_pct"],
+                ]
+            )
+        # total por marca (suma de sus plataformas, ya consolidado en el resumen)
+        w.writerow(
+            [
+                marca,
+                CSV_TOTAL,
+                r["visualizaciones"],
+                r["alcance"],
+                r["interacciones"],
+                r["engagement_pct"],
+            ]
+        )
+
+    # total global de todas las marcas
+    t = rep["total"]
+    w.writerow(
+        [
+            CSV_TOTAL,
+            CSV_TOTAL,
+            t["visualizaciones"],
+            t["alcance"],
+            t["interacciones"],
+            t["engagement_pct"],
+        ]
+    )
+
+    return buf.getvalue()
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="keni-reporte", description="Reporte consolidado de métricas de redes.")
     ap.add_argument("--rango", default="mes", help="semana | mes | 7d | 30d (def: mes)")
     ap.add_argument("--top", type=int, default=3, help="nº de mejores piezas por marca (def: 3)")
-    ap.add_argument("--formato", choices=["md", "json"], default="md")
+    ap.add_argument(
+        "--formato",
+        choices=["md", "json", "csv"],
+        default="md",
+        help="md (def) | json | csv (una fila por marca x plataforma + totales, para hoja de cálculo)",
+    )
     ap.add_argument("--salida", help="ruta de archivo; si se omite, imprime a stdout")
     ap.add_argument("--picos", action="store_true", help="añade una sección de alertas (picos/anomalías)")
     args = ap.parse_args(argv)
@@ -161,6 +238,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.formato == "json":
         texto = json.dumps(rep, ensure_ascii=False, indent=2)
+    elif args.formato == "csv":
+        # csv ignora --picos: es una tabla consolidada para hoja de cálculo, no
+        # un documento con secciones (las alertas viven en md/json).
+        texto = render_csv(rep)
     else:
         texto = render_markdown(rep)
         if args.picos:
@@ -169,8 +250,19 @@ def main(argv: list[str] | None = None) -> int:
             texto += "\n\n" + picos_mod.render_markdown(rep["picos"])
 
     if args.salida:
-        Path(args.salida).expanduser().write_text(texto, encoding="utf-8")
+        destino = Path(args.salida).expanduser()
+        if args.formato == "csv":
+            # csv ya emite sus propios fin-de-línea (\r\n): newline="" evita que
+            # el modo texto los vuelva a traducir y duplique los retornos.
+            with destino.open("w", encoding="utf-8", newline="") as fh:
+                fh.write(texto)
+        else:
+            destino.write_text(texto, encoding="utf-8")
         print(f"Reporte escrito en {args.salida}")
+    elif args.formato == "csv":
+        # el csv ya termina cada fila con su propio salto: lo escribimos tal cual
+        # (sin el "\n" extra de print) para no dejar una fila vacia al final.
+        sys.stdout.write(texto)
     else:
         print(texto)
     return 0
