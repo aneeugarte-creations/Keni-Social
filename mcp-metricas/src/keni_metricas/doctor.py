@@ -32,7 +32,13 @@ from enum import Enum
 from pathlib import Path
 
 # Importaciones de solo lectura del paquete (no se modifican esos modulos).
-from .config import Config, cargar_config, construir_fuente, ruta_config
+from .config import (
+    Config,
+    ConfigInvalida,
+    cargar_config,
+    construir_fuente,
+    ruta_config,
+)
 
 # Centinela: distingue "no inyectado" (lee del entorno) de un None explicito
 # (los tests fuerzan el escaneo de rutas sin tocar la env var real).
@@ -406,18 +412,38 @@ def ejecutar_chequeos(
     de whisper se lee de `KENI_WHISPER_MODEL` (como hace transcribir.sh); pasar
     `env_modelo=None` explicitamente fuerza el escaneo de rutas (lo usan los tests).
     """
-    cfg = cfg or cargar_config()
+    # Cargar la config de forma defensiva: un config corrupto/invalido NO debe
+    # tumbar el doctor (es justo lo que el doctor existe para diagnosticar). Si
+    # `cargar_config` lanza `ConfigInvalida`, se reporta como ❌ y se omiten los
+    # chequeos que dependen de la config.
+    config_error: ConfigInvalida | None = None
+    if cfg is None:
+        try:
+            cfg = cargar_config()
+        except ConfigInvalida as e:
+            config_error = e
+            cfg = None
     which = which or shutil.which  # resolver en tiempo de llamada (monkeypatch-friendly)
     if env_modelo is _DEL_ENTORNO:
         env_modelo = os.environ.get("KENI_WHISPER_MODEL") or None
 
-    resultados: list[Resultado] = [
-        comprobar_python(),
-        comprobar_config(),
-        comprobar_fuente(cfg),
-        comprobar_marcas(cfg),
-    ]
-    resultados.extend(comprobar_credenciales(cfg))
+    resultados: list[Resultado] = [comprobar_python()]
+    if cfg is None:
+        resultados.append(
+            Resultado(
+                "Configuracion",
+                Estado.ERROR,
+                str(config_error)
+                if config_error
+                else "No se pudo cargar la configuracion",
+                extra={"ruta": str(ruta_config())},
+            )
+        )
+    else:
+        resultados.append(comprobar_config())
+        resultados.append(comprobar_fuente(cfg))
+        resultados.append(comprobar_marcas(cfg))
+        resultados.extend(comprobar_credenciales(cfg))
 
     # clip-a-copy (transcripcion local)
     resultados.append(
@@ -438,7 +464,7 @@ def ejecutar_chequeos(
         comprobar_modelo_whisper(env_modelo=env_modelo, rutas=rutas_modelo)
     )
 
-    if validar:
+    if validar and cfg is not None:
         resultados.extend(validar_conectividad(cfg))
 
     return resultados
@@ -507,8 +533,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    cfg = cargar_config()
-    resultados = ejecutar_chequeos(cfg, validar=args.validar)
+    # No cargamos la config aqui: `ejecutar_chequeos` lo hace de forma defensiva
+    # (un config corrupto se reporta como ❌, no tumba el doctor).
+    resultados = ejecutar_chequeos(validar=args.validar)
     print(renderizar(resultados))
     return codigo_salida(resultados)
 

@@ -375,3 +375,43 @@ def test_validar_con_credenciales_marca_adaptador_disponible():
     por_nombre = {r.nombre: r for r in resultados if r.nombre.startswith("Conectividad")}
     assert "Conectividad x" in por_nombre
     assert por_nombre["Conectividad x"].estado is Estado.OK
+
+
+# --- Regresion B1: un config corrupto NO debe tumbar el doctor --------------
+
+
+def test_config_corrupto_se_reporta_como_error_sin_crashear(tmp_path, monkeypatch):
+    """Un config.toml mal formado debe salir como ❌ en el informe, no como traceback.
+
+    Es justo lo que el doctor existe para diagnosticar: antes, `cargar_config`
+    lanzaba `ConfigInvalida` y tumbaba el propio doctor.
+    """
+    malo = tmp_path / "config.toml"
+    malo.write_text("no valido [[[\n", encoding="utf-8")
+    monkeypatch.setenv("KENI_METRICAS_CONFIG", str(malo))
+
+    resultados = ejecutar_chequeos(
+        which=_which_falso({"whisper-cli", "ffmpeg"}),
+        rutas_modelo=[],
+        env_modelo=None,
+    )
+    por_nombre = {r.nombre: r for r in resultados}
+    assert por_nombre["Configuracion"].estado is Estado.ERROR
+    # Los chequeos que dependen de la config se omiten (no se puede construir).
+    assert "Fuente" not in por_nombre
+    # Los chequeos independientes (Python, whisper) siguen presentes.
+    assert por_nombre["Python"].estado is Estado.OK
+    assert codigo_salida(resultados) == 1
+
+
+def test_main_con_config_corrupto_devuelve_1_y_no_lanza(tmp_path, monkeypatch, capsys):
+    malo = tmp_path / "config.toml"
+    malo.write_text("clave = sin comillas ni valor [[[\n", encoding="utf-8")
+    monkeypatch.setenv("KENI_METRICAS_CONFIG", str(malo))
+    monkeypatch.setenv("KENI_WHISPER_MODEL", "")
+
+    rc = main([])  # no debe lanzar
+    salida = capsys.readouterr().out
+    assert rc == 1
+    assert "❌" in salida
+    assert "Configuracion" in salida
