@@ -88,3 +88,16 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
                 "nota": "Aun no hay historico para esta cuenta/rango. Consulta metricas_resumen y vuelve mas tarde.",
             }
         return {"cuenta": cuenta, "rango": rango, "puntos": puntos}
+
+    @mcp.tool()
+    def reporte_consolidado(rango: str = "mes", top: int = 3) -> dict:
+        """Reporte de TODAS las marcas/verticales en un rango: total + desglose por
+        marca + mejores piezas + variacion. Es el informe periodico consolidado
+        (lo que antes se hacia a mano). 'rango': semana|mes|7d|30d."""
+        from .reporte import construir_reporte
+
+        top = max(1, min(int(top), 10))
+        try:
+            return construir_reporte(fuente, rango, top, historico)
+        except ValueError as e:
+            return {"error": str(e)}

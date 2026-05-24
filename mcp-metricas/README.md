@@ -11,6 +11,7 @@ Servidor **MCP** que lee métricas de redes sociales (Meta FB/IG, YouTube, X, Ti
 | `mejores_piezas(cuenta, rango, n)` | Las N piezas con mejor engagement. |
 | `comparar_periodos(cuenta, rango_a, rango_b)` | Compara dos rangos. |
 | `tendencia_historica(cuenta, rango, n)` | Evolución de las últimas n lecturas guardadas. |
+| `reporte_consolidado(rango, top)` | Informe de TODAS las marcas en un rango (total + desglose + mejores piezas). |
 
 ## Histórico
 
@@ -44,6 +45,17 @@ claude mcp add keni-metricas -- uvx --from /ruta/a/keni-social/mcp-metricas keni
 ```
 
 Configuración (opcional, para datos reales): copia `credenciales.ejemplo.toml` a `~/.config/keni-metricas/config.toml`. Ver [`../docs/despliegue-local.md`](../docs/despliegue-local.md).
+
+## Reporte consolidado (CLI / cron)
+
+El comando `keni-reporte` arma el informe de todas las marcas y lo escribe en Markdown o JSON — pensado para correr headless o por cron (resuelve la consolidación manual de métricas):
+
+```bash
+keni-reporte --rango mes --formato md --salida reporte-mayo.md
+keni-reporte --rango semana --formato json        # a stdout
+```
+
+La misma información está disponible como tool MCP `reporte_consolidado` para pedirla por conversación.
 
 ## Desarrollo
 
