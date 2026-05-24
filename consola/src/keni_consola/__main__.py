@@ -33,7 +33,7 @@ def _puerto() -> int:
 
 def main() -> int:
     puerto = _puerto()
-    url = f"http://{HOST}:{puerto}/proyectos"
+    url = f"http://{HOST}:{puerto}/"
     print(f"Consola Keni en {url}")
     print("Privacidad por diseno: solo escucha en 127.0.0.1 (no expuesta a la red).")
 
