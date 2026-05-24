@@ -142,12 +142,10 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
   qué media acompaña) y cierra con una checklist. **No toca la red, no sube media.** También hay
   una CLI dry-run del payload de Meta: `python -m keni_metricas.publicacion ...` (solo imprime la
   petición exacta; no publica).
-- **Publicación real: tras App Review.** El andamiaje de publicación a Meta existe
-  (`publicar(..., dry_run=False)`) pero queda gateado hasta aprobar permisos. El material y el
-  estado del proceso están en [`meta-app-review.md`](meta-app-review.md).
-- **Costes/bloqueos por plataforma a tener en cuenta:** modelo de coste de **X** y cuota de
-  **YouTube** en [`youtube-cuota-x-coste.md`](youtube-cuota-x-coste.md); **auditoría de TikTok**
-  en [`tiktok-audit.md`](tiktok-audit.md).
+- **Publicación real: pendiente.** El andamiaje de publicación a Meta existe
+  (`publicar(..., dry_run=False)`) pero queda gateado por aprobaciones de plataforma. Para la
+  demo no se usa; el trabajo externo está **pausado** y se sigue en los issues de GitHub
+  (#5 Meta App Review, #6 auditoría TikTok, #7 cuota YouTube / coste X).
 
 ---
 
@@ -183,10 +181,8 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
   personales las mantiene cada quien en su carpeta de config.
 - **Qué vigilar.**
   - **Caducidad de tokens** de usuario (la causa #1 de "se desconectó"): migrar a System User.
-  - **Bloqueos externos** que habilitan datos reales: Meta App Review, auditoría de TikTok,
-    decisión de coste de X (ver los docs de cada uno).
-  - **Cuota de YouTube** (10k unidades/día): ampliar en Google Cloud si hace falta
-    ([`youtube-cuota-x-coste.md`](youtube-cuota-x-coste.md)).
+  - **Bloqueos externos** que habilitarían datos reales (Meta App Review, auditoría de TikTok,
+    coste de X, cuota de YouTube): **pausados** para la demo; se siguen en los issues #5/#6/#7.
   - **`cron.log`** del reporte programado (en `KENI_REPORTE_DIR`): revisar `FALLO` (no reintenta
     solo). El reporte es solo lectura: un fallo nunca rompe nada, solo no entrega ese informe.
   - **Auto-verificación:** recordar al equipo que ⚠️ significa "revísalo tú" (típico en nombres y
@@ -205,8 +201,5 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
 | Credenciales y tokens | [`credenciales.md`](credenciales.md) |
 | Privacidad / flujo de datos | [`flujo-de-datos-privacidad.md`](flujo-de-datos-privacidad.md) |
 | Uso diario del equipo | [`guia-community-manager.md`](guia-community-manager.md) |
-| App Review de Meta | [`meta-app-review.md`](meta-app-review.md) |
-| Auditoría de TikTok | [`tiktok-audit.md`](tiktok-audit.md) |
-| Cuota de YouTube / coste de X | [`youtube-cuota-x-coste.md`](youtube-cuota-x-coste.md) |
 | Resumen para dirección | [`resumen-para-direccion.md`](resumen-para-direccion.md) |
 | Go-to-market y pricing | [`go-to-market.md`](go-to-market.md) |
