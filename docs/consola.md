@@ -28,13 +28,20 @@ La consola intenta abrir el navegador sola; si no lo hace, copia esa dirección.
 
 ---
 
-## Las 5 pestañas
+## Las 7 pestañas
 
-- **Proyectos** — edita el `CLAUDE.md` de tus carpetas y abre Claude Code dentro de ellas.
-- **Métricas** — dashboard consolidado de las redes de tus marcas y descarga de los datos en CSV.
-- **Generar copy / skills** — eliges una skill, una marca y pegas tu nota; la consola corre Claude por debajo y te devuelve el copy.
-- **Tareas** — organiza tareas por proyecto y abre Claude Code en la carpeta de cada una.
-- **Nueva carpeta** — crea una carpeta de proyecto con un `CLAUDE.md` de partida y la deja registrada para usarla.
+Agrupadas en **Trabajo** (lo del día a día) y **Ajustes** (configuración):
+
+**Trabajo**
+- **Generar copy** — eliges el tipo de contenido y la marca, y pegas tu nota **o subes un archivo**; la consola corre el asistente por debajo y te devuelve el copy (con botones para copiarlo o descargarlo). Nada se publica.
+- **Métricas** — dashboard consolidado de las redes de tus marcas, comparar dos periodos y descargar los datos (CSV / Markdown / JSON).
+- **Tareas** — organiza tareas por proyecto y abre el asistente en la carpeta de cada una con su prompt.
+
+**Ajustes**
+- **Proyectos** — edita el `CLAUDE.md` de tus carpetas y abre el asistente dentro de ellas.
+- **Nueva carpeta** — crea una carpeta de proyecto con un `CLAUDE.md` de partida (plantilla por tipo de marca) y la deja registrada.
+- **Estado** — autodiagnóstico del entorno (✅ / ⚠️ / ❌) y el siguiente paso, en lenguaje claro.
+- **Configuración** — elige tus marcas, su alcance y la fuente de datos (muestra / real) sin tocar archivos.
 
 ---
 
