@@ -1,0 +1,59 @@
+import * as React from "react";
+import type { LucideIcon } from "lucide-react";
+
+import { Card, CardContent } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+/**
+ * Estado vacío reutilizable: icono opcional, título, texto descriptivo y una
+ * acción opcional (p. ej. un botón). Sustituye los bloques de "sin resultados"
+ * duplicados en varias páginas.
+ */
+export function EstadoVacio({
+  icono: Icono,
+  titulo,
+  texto,
+  accion,
+  className,
+}: {
+  /** Icono opcional mostrado en un círculo destacado. */
+  icono?: LucideIcon;
+  titulo: string;
+  texto?: string;
+  /** Acción opcional (botón, enlace…) bajo el texto. */
+  accion?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Card className={className}>
+      <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
+        {Icono && (
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Icono className="h-6 w-6" />
+          </div>
+        )}
+        <div className="space-y-1">
+          <p className="font-medium">{titulo}</p>
+          {texto && <p className="max-w-md text-sm text-muted-foreground">{texto}</p>}
+        </div>
+        {accion}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Variante "ligera" del estado vacío: solo texto centrado, sin tarjeta. Útil
+ * dentro de paneles que ya viven en una Card (Fuentes, etc.).
+ */
+export function EstadoVacioTexto({
+  texto,
+  className,
+}: {
+  texto: string;
+  className?: string;
+}) {
+  return (
+    <p className={cn("py-12 text-center text-sm text-muted-foreground", className)}>{texto}</p>
+  );
+}

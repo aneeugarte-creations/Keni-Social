@@ -67,10 +67,16 @@ def test_crear_marca_invalida_400(cliente):
     assert "marca" in r.json()["error"].lower()
 
 
-def test_crear_marca_sin_slug_400(cliente):
-    # claro_sports_golf existe en marcas pero NO tiene slug => no es destino de copy
-    r = _crear(cliente, marca="claro_sports_golf")
-    assert r.status_code == 400
+def test_crear_marca_golf_visible(cliente):
+    # Catalogo unico: golf YA es marca de pleno derecho, visible como destino de copy.
+    r = _crear(cliente, marca="claro-sports-golf")
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["marca_nombre"] == "Claro Sports Golf"
+
+
+def test_crear_id_metricas_no_es_id_canonico_400(cliente):
+    # La forma id_metricas (guion_bajo) NO es un id canonico => no vale como marca.
+    assert _crear(cliente, marca="claro_sports_golf").status_code == 400
 
 
 def test_crear_red_invalida_400(cliente):

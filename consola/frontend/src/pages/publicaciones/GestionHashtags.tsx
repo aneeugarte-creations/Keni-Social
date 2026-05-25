@@ -10,6 +10,8 @@ import { Hash, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,13 +23,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import type { GrupoHashtags, MarcaDisponible } from "@/types";
@@ -39,9 +34,6 @@ function mensajeError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
-
-/** Valor de marca "sin marca / general". */
-const MARCA_NINGUNA = "__ninguna__";
 
 /** Formulario de creación/edición de un grupo (inline). */
 function FormularioGrupo({
@@ -57,7 +49,7 @@ function FormularioGrupo({
 }) {
   const queryClient = useQueryClient();
   const [nombre, setNombre] = React.useState(grupo?.nombre ?? "");
-  const [marca, setMarca] = React.useState(grupo?.marca || MARCA_NINGUNA);
+  const [marca, setMarca] = React.useState(desdeMarca(grupo?.marca));
   const [texto, setTexto] = React.useState((grupo?.hashtags ?? []).join(" "));
 
   const hashtags = React.useMemo(() => parsearHashtags(texto), [texto]);
@@ -66,7 +58,7 @@ function FormularioGrupo({
     mutationFn: () => {
       const cuerpo = {
         nombre: nombre.trim(),
-        marca: marca === MARCA_NINGUNA ? undefined : marca,
+        marca: marcaParam(marca),
         hashtags,
       };
       return grupo
@@ -101,19 +93,14 @@ function FormularioGrupo({
           <Label htmlFor="grupo-marca">
             Marca <span className="font-normal text-muted-foreground">(opcional)</span>
           </Label>
-          <Select value={marca} onValueChange={setMarca}>
-            <SelectTrigger id="grupo-marca">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={MARCA_NINGUNA}>Todas las marcas</SelectItem>
-              {marcas.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectorMarca
+            id="grupo-marca"
+            marcas={marcas}
+            valor={marca}
+            onCambio={setMarca}
+            ariaLabel="Marca"
+            className="w-full"
+          />
         </div>
       </div>
       <div className="space-y-1.5">

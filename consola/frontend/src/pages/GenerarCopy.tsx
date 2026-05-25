@@ -13,6 +13,7 @@ import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -337,18 +338,16 @@ export default function GenerarCopy() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="select-marca">Marca</Label>
-                  <Select value={marcaId} onValueChange={setMarcaId}>
-                    <SelectTrigger id="select-marca">
-                      <SelectValue placeholder="Elige una marca" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {marcas.map((marca) => (
-                        <SelectItem key={marca.id} value={marca.id}>
-                          {marca.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SelectorMarca
+                    id="select-marca"
+                    marcas={marcas}
+                    valor={marcaId}
+                    onCambio={setMarcaId}
+                    incluirTodas={false}
+                    placeholder="Elige una marca"
+                    ariaLabel="Marca"
+                    className="w-full"
+                  />
                 </div>
               </div>
 

@@ -1,8 +1,11 @@
 /**
- * Controles del dashboard: selectores reutilizables de marca y de rango.
+ * Controles del dashboard: selector de rango y re-export del selector de marca
+ * compartido.
  *
- * Se alimentan de `metricasOpciones()` y notifican el cambio hacia arriba para
- * que la página dispare el refetch del reporte / comparativa correspondiente.
+ * El selector de marca vive ahora en `@/components/comunes/SelectorMarca`
+ * (un único componente y un único centinela `MARCA_TODAS`). Aquí se re-exporta
+ * para no cambiar los imports de Métricas / Comparar periodos. `SelectorRango`
+ * es específico de Métricas y se mantiene local.
  */
 import {
   Select,
@@ -11,35 +14,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { MarcaDisponible, RangoMetrica } from "@/types";
+import type { RangoMetrica } from "@/types";
 
-/** Valor especial que representa "todas las marcas" en el selector. */
-export const MARCA_TODAS = "todas";
-
-interface SelectorMarcaProps {
-  marcas: MarcaDisponible[];
-  valor: string;
-  onCambio: (valor: string) => void;
-  id?: string;
-}
-
-export function SelectorMarca({ marcas, valor, onCambio, id }: SelectorMarcaProps) {
-  return (
-    <Select value={valor} onValueChange={onCambio}>
-      <SelectTrigger id={id} className="w-full sm:w-[200px]" aria-label="Marca">
-        <SelectValue placeholder="Marca" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value={MARCA_TODAS}>Todas las marcas</SelectItem>
-        {marcas.map((m) => (
-          <SelectItem key={m.id} value={m.id}>
-            {m.nombre}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
+export { SelectorMarca } from "@/components/comunes/SelectorMarca";
+export { MARCA_TODAS } from "@/components/comunes/selectores";
 
 interface SelectorRangoProps {
   rangos: RangoMetrica[];
