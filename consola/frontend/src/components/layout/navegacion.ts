@@ -6,6 +6,7 @@ import {
   Send,
   Settings2,
   Sparkles,
+  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -35,6 +36,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Generar copy",
         icono: Sparkles,
         descripcion: "Crea publicaciones con las skills editoriales.",
+      },
+      {
+        ruta: "/skills",
+        etiqueta: "Skills",
+        icono: Wand2,
+        descripcion: "Gestiona las skills editoriales: campos, plantilla y SKILL.md.",
       },
       {
         ruta: "/publicaciones",

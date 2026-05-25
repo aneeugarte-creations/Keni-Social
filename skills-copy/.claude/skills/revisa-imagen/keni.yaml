@@ -1,0 +1,20 @@
+nombre: Revisa imagen
+explicacion: Revisa un arte o imagen contra las reglas legales (bandera con escudo, rostros, datos) antes de publicar.
+grupo: experimentales
+aplica_redes: false
+salida: documento
+media: true
+orden: 100
+campos:
+  - id: imagen
+    etiqueta: Imagen o arte
+    tipo: archivo
+    requerido: true
+    placeholder: ""
+    ayuda: Una portada, banner o tarjeta. No la genera ni la edita; solo la revisa y reporta.
+    opciones: []
+    media_tipos: image/*
+plantilla_invocacion: |
+  usa revisa-imagen con la imagen en esta ruta, marca {marca}:
+
+  {imagen}

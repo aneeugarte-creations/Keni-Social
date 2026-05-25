@@ -1,25 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertCircle,
-  FileAudio,
-  FileText,
-  Loader2,
-  RefreshCw,
-  Sparkles,
-  Upload,
-  X,
-} from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { EstadoMensaje } from "@/components/layout/EstadoMensaje";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -32,31 +23,34 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { GrupoSkills, RespuestaEjecutarSkill, RespuestaGeneracion, Skill } from "@/types";
 
+import { CamposSkill } from "./copy/CamposSkill";
+import {
+  campoArchivo,
+  esSkillConArchivo,
+  puedeGenerarSkill,
+  valoresIniciales,
+  valoresRecortados,
+} from "./copy/dynamico";
 import { Historial } from "./copy/Historial";
+import { ResultadoDocumento } from "./copy/ResultadoDocumento";
 import { ResultadoRedes } from "./copy/ResultadoRedes";
 import { SelectorRedes } from "./copy/SelectorRedes";
+import { VistaPrompt } from "./copy/VistaPrompt";
 import { ORDEN_REDES } from "./publicaciones/meta";
 
 /** Clave de sessionStorage para reanudar la generación en curso al volver a la página. */
 const CLAVE_GEN_COPY = "keni:generacion-copy";
 
-type Modo = "texto" | "archivo";
-
-/** Aplana los grupos en un mapa id -> {skill, grupo} para resolver metadatos. */
-function indexarSkills(grupos: GrupoSkills[]): Map<string, { skill: Skill; grupo: GrupoSkills }> {
-  const mapa = new Map<string, { skill: Skill; grupo: GrupoSkills }>();
+/** Aplana los grupos en un mapa id -> skill para resolver metadatos. */
+function indexarSkills(grupos: GrupoSkills[]): Map<string, Skill> {
+  const mapa = new Map<string, Skill>();
   for (const grupo of grupos) {
-    for (const skill of grupo.skills) {
-      mapa.set(skill.id, { skill, grupo });
-    }
+    for (const skill of grupo.skills) mapa.set(skill.id, skill);
   }
   return mapa;
 }
@@ -70,7 +64,6 @@ function EsqueletoFormulario() {
           <Skeleton className="h-5 w-40" />
         </CardHeader>
         <CardContent className="space-y-4">
-          <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-36 w-full" />
@@ -99,37 +92,49 @@ export default function GenerarCopy() {
     queryFn: ({ signal }) => api.skills(signal),
   });
 
-  // Catálogo de redes para los checkboxes. Si no se puede cargar, caemos a las
-  // redes canónicas para no bloquear la generación.
-  const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
-    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
-  });
-
-  const opcionesRedes = React.useMemo(
-    () =>
-      opcionesQuery.data?.redes.map((r) => ({ id: r.id, nombre: r.nombre })) ??
-      ORDEN_REDES.map((id) => ({ id, nombre: id })),
-    [opcionesQuery.data],
-  );
-
   const [skillId, setSkillId] = React.useState("");
   const [marcaId, setMarcaId] = React.useState("");
-  const [titulo, setTitulo] = React.useState("");
-  const [modo, setModo] = React.useState<Modo>("texto");
-  const [texto, setTexto] = React.useState("");
+  // Valores del formulario dinámico: id de campo -> valor de texto.
+  const [valores, setValores] = React.useState<Record<string, string>>({});
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [redes, setRedes] = React.useState<Set<string>>(new Set());
-  const inputArchivoRef = React.useRef<HTMLInputElement>(null);
 
   // Generación en segundo plano (streaming en vivo + reanudable al cambiar de pestaña).
   const { generacion, ejecutando, iniciar } = useGeneracion(CLAVE_GEN_COPY);
 
-  // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes,
-  // o "Generar copy" desde Métricas con una marca preseleccionada).
-  // Aceptamos `texto` y `marca` por el `state` del router y, como alternativa,
-  // `?marca=` en la query (enlaces directos). Limpiamos el `state` para que no
-  // reaparezca al volver atrás o refrescar; la query se deja intacta.
+  const indice = React.useMemo(
+    () => (skillsQuery.data ? indexarSkills(skillsQuery.data.grupos) : new Map<string, Skill>()),
+    [skillsQuery.data],
+  );
+  const skillSeleccionada = skillId ? indice.get(skillId) : undefined;
+
+  // Catálogo de redes: del backend (`/api/skills`); si falta, caemos a las canónicas.
+  const opcionesRedes = React.useMemo(
+    () =>
+      skillsQuery.data?.redes?.map((r) => ({ id: r.id, nombre: r.nombre })) ??
+      ORDEN_REDES.map((id) => ({ id, nombre: id })),
+    [skillsQuery.data],
+  );
+
+  // Al cambiar de skill, reinicializamos los valores del formulario y el archivo.
+  React.useEffect(() => {
+    setValores(valoresIniciales(skillSeleccionada));
+    setArchivo(null);
+    // Solo depende de la skill seleccionada.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skillId, skillSeleccionada?.id]);
+
+  // Por defecto, todas las redes marcadas (en cuanto conocemos el catálogo).
+  React.useEffect(() => {
+    setRedes((prev) => (prev.size === 0 ? new Set(opcionesRedes.map((r) => r.id)) : prev));
+  }, [opcionesRedes]);
+
+  // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes, o
+  // "Generar copy" desde Métricas con una marca preseleccionada). Aceptamos
+  // `texto` y `marca` por el `state` del router y, como alternativa, `?marca=` en
+  // la query. El `texto` se vuelca en el PRIMER campo de tipo textarea/texto de la
+  // skill seleccionada; si aún no hay skill, queda pendiente hasta que se elija.
+  const [textoPendiente, setTextoPendiente] = React.useState<string | null>(null);
   React.useEffect(() => {
     const estado = location.state as { texto?: string; marca?: string } | null;
     const prefillTexto = estado?.texto;
@@ -137,8 +142,7 @@ export default function GenerarCopy() {
     const prefillMarca = estado?.marca ?? marcaQuery;
 
     if (typeof prefillTexto === "string" && prefillTexto.length > 0) {
-      setModo("texto");
-      setTexto(prefillTexto);
+      setTextoPendiente(prefillTexto);
     }
     if (typeof prefillMarca === "string" && prefillMarca.length > 0) {
       setMarcaId(prefillMarca);
@@ -150,56 +154,53 @@ export default function GenerarCopy() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, location.search]);
 
-  // Por defecto, todas las redes marcadas (en cuanto conocemos el catálogo).
+  // Cuando hay texto pendiente y ya tenemos una skill con un campo de texto,
+  // lo volcamos en el primer campo textarea/texto y limpiamos el pendiente.
   React.useEffect(() => {
-    setRedes((prev) =>
-      prev.size === 0 ? new Set(opcionesRedes.map((r) => r.id)) : prev,
+    if (textoPendiente === null || !skillSeleccionada) return;
+    const destino = skillSeleccionada.campos.find(
+      (c) => c.tipo === "textarea" || c.tipo === "texto",
     );
-  }, [opcionesRedes]);
+    if (!destino) return;
+    setValores((prev) => ({ ...prev, [destino.id]: textoPendiente }));
+    setTextoPendiente(null);
+  }, [textoPendiente, skillSeleccionada]);
 
-  const indice = React.useMemo(
-    () => (skillsQuery.data ? indexarSkills(skillsQuery.data.grupos) : new Map()),
-    [skillsQuery.data],
-  );
+  function setValor(id: string, valor: string) {
+    setValores((prev) => ({ ...prev, [id]: valor }));
+  }
 
-  // Una skill es "de medios" si su id figura en skills_media: solo acepta
-  // archivo (video/audio) y no permite pegar texto (se transcribe en local).
-  const esSkillMedia = React.useMemo(
-    () => (skillId ? (skillsQuery.data?.skills_media.includes(skillId) ?? false) : false),
-    [skillId, skillsQuery.data],
-  );
-
-  // Si cambia la skill seleccionada, ajustamos el modo de entrada permitido.
-  React.useEffect(() => {
-    if (esSkillMedia) {
-      setModo("archivo");
-      setTexto("");
-    } else {
-      setModo("texto");
-    }
-    setArchivo(null);
-    if (inputArchivoRef.current) inputArchivoRef.current.value = "";
-  }, [skillId, esSkillMedia]);
+  function alternarRed(red: string, marcada: boolean) {
+    setRedes((prev) => {
+      const siguiente = new Set(prev);
+      if (marcada) siguiente.add(red);
+      else siguiente.delete(red);
+      return siguiente;
+    });
+  }
 
   const mutacion = useMutation<RespuestaGeneracion, Error>({
     mutationFn: () => {
-      const redesSel = [...redes];
-      const tituloLimpio = titulo.trim();
-      if (modo === "archivo") {
-        // archivo no nulo: garantizado por la guarda de `puedeGenerar`.
+      if (!skillSeleccionada) throw new Error("Elige una skill.");
+      const limpio = valoresRecortados(valores);
+      const redesSel = skillSeleccionada.aplica_redes ? [...redes] : undefined;
+
+      if (esSkillConArchivo(skillSeleccionada)) {
+        // archivo no nulo: garantizado por la guarda de `puedeGenerar` cuando el
+        // campo archivo es requerido. (Si fuera opcional y no hay archivo, el
+        // backend lo aceptaría; aquí lo exigimos por contrato del formulario.)
         return api.ejecutarSkillArchivo(
           skillId,
           marcaId,
           archivo as File,
+          limpio,
           redesSel,
-          tituloLimpio || undefined,
         );
       }
       return api.ejecutarSkill({
         skill: skillId,
         marca: marcaId,
-        texto: texto.trim(),
-        titulo: tituloLimpio || undefined,
+        valores: limpio,
         redes: redesSel,
       });
     },
@@ -213,10 +214,14 @@ export default function GenerarCopy() {
     },
   });
 
-  // Resultado de copy (forma RespuestaEjecutarSkill) cuando la generación completa.
+  // Resultado de copy (forma RespuestaEjecutarSkill) cuando la generación completa
+  // y la skill es de salida "piezas".
   const resultadoCopy: RespuestaEjecutarSkill | null = React.useMemo(() => {
     if (!generacion || generacion.estado !== "completado" || !generacion.resultado) return null;
+    if (skillSeleccionada && skillSeleccionada.salida !== "piezas") return null;
     const r = generacion.resultado;
+    // Las skills de documento no traen `resultado`/`piezas`; las descartamos arriba.
+    if (r.documento !== undefined && (r.piezas?.length ?? 0) === 0) return null;
     return {
       resultado: r.resultado ?? "",
       historial_id: r.historial_id ?? "",
@@ -224,6 +229,14 @@ export default function GenerarCopy() {
       piezas: r.piezas ?? [],
       publicaciones: r.publicaciones ?? [],
     };
+  }, [generacion, skillSeleccionada]);
+
+  // Resultado de documento cuando la generación completa y la skill es "documento".
+  const resultadoDocumento = React.useMemo(() => {
+    if (!generacion || generacion.estado !== "completado" || !generacion.resultado) return null;
+    const r = generacion.resultado;
+    if (r.documento === undefined) return null;
+    return { documento: r.documento, historialId: r.historial_id ?? "" };
   }, [generacion]);
 
   // Efectos secundarios al alcanzar el estado terminal (una sola vez por generación).
@@ -250,28 +263,8 @@ export default function GenerarCopy() {
 
   const puedeGenerar =
     !generando &&
-    skillId !== "" &&
     marcaId !== "" &&
-    redes.size > 0 &&
-    (modo === "archivo" ? archivo !== null : texto.trim().length > 0);
-
-  function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
-    setArchivo(e.target.files?.[0] ?? null);
-  }
-
-  function limpiarArchivo() {
-    setArchivo(null);
-    if (inputArchivoRef.current) inputArchivoRef.current.value = "";
-  }
-
-  function alternarRed(red: string, marcada: boolean) {
-    setRedes((prev) => {
-      const siguiente = new Set(prev);
-      if (marcada) siguiente.add(red);
-      else siguiente.delete(red);
-      return siguiente;
-    });
-  }
+    puedeGenerarSkill({ skill: skillSeleccionada, valores, archivo, redes });
 
   // --- Carga / error de las skills ---
   if (skillsQuery.isPending) {
@@ -318,7 +311,7 @@ export default function GenerarCopy() {
   }
 
   const { grupos, marcas } = skillsQuery.data;
-  const skillSeleccionada = skillId ? indice.get(skillId)?.skill : undefined;
+  const campoArch = campoArchivo(skillSeleccionada);
 
   return (
     <>
@@ -372,9 +365,9 @@ export default function GenerarCopy() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {skillSeleccionada?.descripcion && (
+                  {skillSeleccionada?.explicacion && (
                     <p className="text-xs text-muted-foreground">
-                      {skillSeleccionada.descripcion}
+                      {skillSeleccionada.explicacion}
                     </p>
                   )}
                 </div>
@@ -394,67 +387,38 @@ export default function GenerarCopy() {
                 </div>
               </div>
 
-              {/* Título */}
-              <div className="space-y-1.5">
-                <Label htmlFor="titulo-publicacion">
-                  Título <span className="text-muted-foreground">(opcional)</span>
-                </Label>
-                <Input
-                  id="titulo-publicacion"
-                  value={titulo}
-                  onChange={(e) => setTitulo(e.target.value)}
-                  placeholder="Ej. Lanzamiento campaña verano"
-                  maxLength={200}
-                />
-              </div>
+              {skillSeleccionada ? (
+                <>
+                  {/* Formulario dinámico: un control por campo de la skill. */}
+                  <CamposSkill
+                    campos={skillSeleccionada.campos}
+                    valores={valores}
+                    onValor={setValor}
+                    archivo={archivo}
+                    onArchivo={setArchivo}
+                  />
 
-              {/* Redes */}
-              <SelectorRedes
-                opciones={opcionesRedes}
-                seleccionadas={redes}
-                onCambio={alternarRed}
-              />
+                  {/* Redes: solo si la skill genera piezas por red. */}
+                  {skillSeleccionada.aplica_redes && (
+                    <SelectorRedes
+                      opciones={opcionesRedes}
+                      seleccionadas={redes}
+                      onCambio={alternarRed}
+                    />
+                  )}
 
-              {/* Entrada dual */}
-              {esSkillMedia ? (
-                <EntradaArchivo
-                  archivo={archivo}
-                  inputRef={inputArchivoRef}
-                  onArchivo={onArchivo}
-                  onLimpiar={limpiarArchivo}
-                  acepta="video/*,audio/*"
-                  ayuda="Sube un video o audio. Se transcribe en tu equipo (en local) y luego se genera el borrador. Esta skill no admite texto pegado."
-                  media
-                />
+                  {/* Vista previa del prompt (solo lectura, en vivo). */}
+                  <VistaPrompt
+                    skillId={skillId}
+                    marca={marcaId}
+                    valores={valoresRecortados(valores)}
+                    redes={skillSeleccionada.aplica_redes ? [...redes] : []}
+                  />
+                </>
               ) : (
-                <Tabs value={modo} onValueChange={(v) => setModo(v as Modo)}>
-                  <TabsList>
-                    <TabsTrigger value="texto">Pegar texto</TabsTrigger>
-                    <TabsTrigger value="archivo">Subir archivo</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="texto" className="space-y-1.5">
-                    <Label htmlFor="texto-entrada" className="sr-only">
-                      Texto de entrada
-                    </Label>
-                    <Textarea
-                      id="texto-entrada"
-                      value={texto}
-                      onChange={(e) => setTexto(e.target.value)}
-                      placeholder="Pega aquí la nota, el comunicado o el material base…"
-                      className="min-h-[10rem]"
-                    />
-                  </TabsContent>
-                  <TabsContent value="archivo">
-                    <EntradaArchivo
-                      archivo={archivo}
-                      inputRef={inputArchivoRef}
-                      onArchivo={onArchivo}
-                      onLimpiar={limpiarArchivo}
-                      acepta=".txt,.md,.doc,.docx,.pdf,text/*"
-                      ayuda="Sube un documento de texto como material base para el borrador."
-                    />
-                  </TabsContent>
-                </Tabs>
+                <p className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+                  Elige una skill para ver su formulario.
+                </p>
               )}
 
               {/* Generar */}
@@ -467,6 +431,11 @@ export default function GenerarCopy() {
                   )}
                   {generando ? "Generando…" : "Generar borrador"}
                 </Button>
+                {campoArch && (
+                  <span className="text-xs text-muted-foreground">
+                    El archivo se procesa en tu equipo antes de generar.
+                  </span>
+                )}
                 {generando && (
                   <span className="text-xs text-muted-foreground">
                     Se genera en segundo plano: puedes cambiar de pestaña, el progreso continúa.
@@ -480,78 +449,21 @@ export default function GenerarCopy() {
           {generacion && ejecutando && <ProgresoGeneracion generacion={generacion} />}
           {/* Estado de error con opción de reintentar. */}
           {generacion && generacion.estado === "error" && (
-            <ProgresoGeneracion
-              generacion={generacion}
-              onReintentar={() => mutacion.mutate()}
+            <ProgresoGeneracion generacion={generacion} onReintentar={() => mutacion.mutate()} />
+          )}
+          {/* Resultado por red (editores) cuando completa una skill de piezas. */}
+          {resultadoCopy !== null && <ResultadoRedes respuesta={resultadoCopy} />}
+          {/* Resultado en documento cuando completa una skill de documento. */}
+          {resultadoDocumento !== null && (
+            <ResultadoDocumento
+              documento={resultadoDocumento.documento}
+              historialId={resultadoDocumento.historialId}
             />
           )}
-          {/* Resultado por red (editores) cuando completa. */}
-          {resultadoCopy !== null && <ResultadoRedes respuesta={resultadoCopy} />}
         </div>
 
         <Historial />
       </div>
     </>
-  );
-}
-
-/** Zona de subida de archivo reutilizable (modo texto-doc y modo medios). */
-function EntradaArchivo({
-  archivo,
-  inputRef,
-  onArchivo,
-  onLimpiar,
-  acepta,
-  ayuda,
-  media = false,
-}: {
-  archivo: File | null;
-  inputRef: React.RefObject<HTMLInputElement>;
-  onArchivo: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onLimpiar: () => void;
-  acepta: string;
-  ayuda: string;
-  media?: boolean;
-}) {
-  const Icono = media ? FileAudio : FileText;
-  return (
-    <div className="space-y-2">
-      <input
-        ref={inputRef}
-        type="file"
-        accept={acepta}
-        onChange={onArchivo}
-        className="hidden"
-      />
-      {archivo ? (
-        <div className="flex items-center gap-3 rounded-md border border-border bg-muted/40 px-3 py-2.5">
-          <Icono className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate text-sm">{archivo.name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {(archivo.size / 1024 / 1024).toFixed(1)} MB
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            onClick={onLimpiar}
-            aria-label="Quitar archivo"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border bg-muted/20 px-4 py-8 text-center transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-        >
-          <Upload className="h-5 w-5 text-muted-foreground" />
-          <span className="text-sm font-medium">Haz clic para elegir un archivo</span>
-          <span className="text-xs text-muted-foreground">{ayuda}</span>
-        </button>
-      )}
-      {archivo && <p className="text-xs text-muted-foreground">{ayuda}</p>}
-    </div>
   );
 }

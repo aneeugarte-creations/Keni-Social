@@ -130,7 +130,7 @@ def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
     cli = _cliente()  # lanzador de generacion por defecto = noop (no claude)
     r = cli.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": _MARCA, "texto": "una nota"},
+        json={"skill": "copy-desde-nota", "marca": _MARCA, "valores": {"fuente": "una nota"}},
     )
     assert r.status_code == 200
     gen = r.json()["generacion"]

@@ -1,0 +1,20 @@
+nombre: Nota a hilo
+explicacion: Convierte una nota larga en un hilo de X, tuit a tuit, con gancho y cierre.
+grupo: experimentales
+aplica_redes: false
+salida: documento
+media: false
+orden: 60
+campos:
+  - id: nota
+    etiqueta: Nota larga o análisis
+    tipo: textarea
+    requerido: true
+    placeholder: Pega aquí la nota larga o el análisis a convertir en hilo…
+    ayuda: El insumo ideal tiene varios puntos que justifican contar la historia en varios tuits.
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa nota-a-hilo con la siguiente nota, marca {marca}:
+
+  {nota}
