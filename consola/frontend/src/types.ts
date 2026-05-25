@@ -475,8 +475,22 @@ export interface ResultadoGeneracion {
   // imagen
   id?: string;
   url?: string;
+  /**
+   * Imágenes producidas por una skill de imagen (estudio-imagen), ya importadas al
+   * almacén de media para previsualizarlas. Cada una trae su `nombre` y la `url`
+   * (`/api/media/...`). Vacío o ausente si la skill no generó imágenes.
+   */
+  imagenes?: ImagenGenerada[];
   // verificacion (workflow propio: datar un video)
   verificacion?: ReporteVerificacion;
+}
+
+/** Una imagen producida por una skill de imagen, lista para previsualizar. */
+export interface ImagenGenerada {
+  /** Nombre del archivo en el almacén de media. */
+  nombre: string;
+  /** URL para servir la imagen (`/api/media/{nombre}`). */
+  url: string;
 }
 
 /** Una señal (pista objetiva) del análisis de procedencia, clasificada por nivel. */

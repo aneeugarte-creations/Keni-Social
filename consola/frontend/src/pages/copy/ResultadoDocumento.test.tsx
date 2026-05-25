@@ -68,4 +68,30 @@ describe("ResultadoDocumento", () => {
     renderConProviders(<ResultadoDocumento documento="texto" historialId="h1" />);
     expect(screen.getByRole("button", { name: /Guardar como publicación/ })).toBeDisabled();
   });
+
+  it("previsualiza las imágenes generadas cuando llegan (Estudio de imagen)", () => {
+    renderConProviders(
+      <ResultadoDocumento
+        documento="# Estudio de imagen"
+        historialId="h1"
+        imagenes={[
+          { nombre: "a.png", url: "/api/media/a.png" },
+          { nombre: "b.png", url: "/api/media/b.png" },
+        ]}
+      />,
+    );
+    // Encabezado de la galería con el conteo.
+    expect(screen.getByText(/Imágenes generadas \(2\)/)).toBeInTheDocument();
+    // Las dos imágenes se renderizan apuntando a su URL de media.
+    const imgs = screen.getAllByRole("img");
+    const srcs = imgs.map((i) => i.getAttribute("src"));
+    expect(srcs).toContain("/api/media/a.png");
+    expect(srcs).toContain("/api/media/b.png");
+  });
+
+  it("no muestra galería si no hay imágenes", () => {
+    renderConProviders(<ResultadoDocumento documento="texto" historialId="h1" />);
+    expect(screen.queryByText(/Imágenes? generadas?/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Imagen generada/)).not.toBeInTheDocument();
+  });
 });

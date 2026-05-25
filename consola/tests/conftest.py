@@ -209,9 +209,14 @@ def lanzador_generacion_completa(salida: str, metricas=None):  # noqa: ANN001
     from keni_consola.api import skills
 
     def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
-        if dir_temporal is not None:
-            _sh.rmtree(dir_temporal, ignore_errors=True)
-        resultado = procesar(salida, metricas)
+        # Igual que el lanzador real: el temporal se borra DESPUES de `procesar`, porque
+        # el post-procesado de las skills de imagen importa al media los .png que la skill
+        # dejo en ese dir. Borrarlo antes los perderia (ver generaciones._finalizar).
+        try:
+            resultado = procesar(salida, metricas)
+        finally:
+            if dir_temporal is not None:
+                _sh.rmtree(dir_temporal, ignore_errors=True)
         generaciones.actualizar(
             gen_id,
             {
