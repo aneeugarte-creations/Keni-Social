@@ -3,6 +3,7 @@ import {
   Activity,
   CircleDollarSign,
   Coins,
+  Loader2,
   type LucideIcon,
   Play,
   RefreshCw,
@@ -48,6 +49,9 @@ import type {
 /** Centinela del filtro "todos los agentes". */
 const AGENTE_TODOS = "__todos__";
 
+/** Sondeo suave del Monitor mientras haya algún run en curso. */
+const INTERVALO_SONDEO_MS = 3000;
+
 /** Texto legible del error de la API (o un fallback en español). */
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -85,13 +89,24 @@ function etiquetaModo(modo: Run["modo"]): string {
   return modo === "interactivo" ? "Interactivo" : "Headless";
 }
 
+/** `true` mientras el run está en curso. */
+function estaEjecutando(estado: EstadoRun): boolean {
+  return estado === "ejecutando";
+}
+
 /** Etiqueta + variante de badge para el estado de un run. */
-function presentacionEstado(estado: EstadoRun): { texto: string; variante: BadgeProps["variant"] } {
+function presentacionEstado(estado: EstadoRun): {
+  texto: string;
+  variante: BadgeProps["variant"];
+  spinner?: boolean;
+} {
   switch (estado) {
     case "completado":
       return { texto: "Completado", variante: "ok" };
     case "error":
       return { texto: "Error", variante: "error" };
+    case "ejecutando":
+      return { texto: "Ejecutando…", variante: "aviso", spinner: true };
     case "lanzado":
       return { texto: "Lanzado", variante: "secondary" };
     default:
@@ -338,7 +353,7 @@ function TablaRuns({ runs }: { runs: Run[] }) {
               </TableRow>
             ) : (
               filtrados.map((r) => {
-                const { texto, variante } = presentacionEstado(r.estado);
+                const { texto, variante, spinner } = presentacionEstado(r.estado);
                 const m = r.metricas;
                 return (
                   <TableRow key={r.id}>
@@ -354,7 +369,10 @@ function TablaRuns({ runs }: { runs: Run[] }) {
                       <Badge variant="outline">{etiquetaModo(r.modo)}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={variante}>{texto}</Badge>
+                      <Badge variant={variante} className={cn(spinner && "gap-1")}>
+                        {spinner && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+                        {texto}
+                      </Badge>
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-muted-foreground">
                       {formatearFecha(r.fecha_inicio)}
@@ -414,13 +432,22 @@ function EsqueletoMonitor() {
  * un error en cualquiera de las dos consultas se muestra como bloque de error.
  */
 export default function Monitor() {
-  const agregadosQuery = useQuery({
-    queryKey: ["runs", "agregados"],
-    queryFn: ({ signal }) => api.runsAgregados(signal),
-  });
+  // Sondeo suave mientras haya algún run en curso: la lista se refresca y, si
+  // hay actividad en vivo, también los agregados. Sin runs ejecutando, no hay
+  // polling (devolvemos `false`).
   const runsQuery = useQuery({
     queryKey: ["runs", "lista"],
     queryFn: ({ signal }) => api.runs(signal),
+    refetchInterval: (query) =>
+      (query.state.data?.runs ?? []).some((r) => estaEjecutando(r.estado))
+        ? INTERVALO_SONDEO_MS
+        : false,
+  });
+  const hayEjecutando = (runsQuery.data?.runs ?? []).some((r) => estaEjecutando(r.estado));
+  const agregadosQuery = useQuery({
+    queryKey: ["runs", "agregados"],
+    queryFn: ({ signal }) => api.runsAgregados(signal),
+    refetchInterval: hayEjecutando ? INTERVALO_SONDEO_MS : false,
   });
 
   const cargando = agregadosQuery.isPending || runsQuery.isPending;
