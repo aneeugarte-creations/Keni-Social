@@ -321,6 +321,68 @@ export interface RespuestaEjecutarSkill {
   publicaciones: Publicacion[];
 }
 
+// --- Generaciones (trabajos de IA en segundo plano, seguibles en vivo) ---
+
+/** Tipo de trabajo de IA: define cómo se renderiza su `resultado`. */
+export type TipoGeneracion = "copy" | "rss" | "hashtags" | "imagen";
+
+/** Estado del ciclo de vida de una generación. */
+export type EstadoGeneracion = "ejecutando" | "completado" | "error";
+
+/**
+ * Resultado de una generación COMPLETADA. Los campos presentes dependen del
+ * `tipo`: copy/rss traen `{resultado, historial_id, verdicto, piezas,
+ * publicaciones}`; hashtags trae `{hashtags}`; imagen trae `{id, url}`.
+ */
+export interface ResultadoGeneracion {
+  // copy / rss
+  resultado?: string;
+  historial_id?: string;
+  verdicto?: Veredicto;
+  piezas?: PiezaGenerada[];
+  publicaciones?: Publicacion[];
+  // hashtags
+  hashtags?: string[];
+  // imagen
+  id?: string;
+  url?: string;
+}
+
+/**
+ * Un trabajo de IA en segundo plano. El POST que lo lanza responde de inmediato
+ * con `estado="ejecutando"`; el frontend sondea `GET /api/generaciones/{id}` hasta
+ * el estado terminal. `salida` es el texto del asistente EN VIVO (crece token a
+ * token con streaming); `resultado` se rellena al completar.
+ */
+export interface Generacion {
+  id: string;
+  tipo: TipoGeneracion | string;
+  marca: string;
+  /** Etiqueta legible (p. ej. "Copy desde nota · UnoTV"). */
+  etiqueta: string;
+  estado: EstadoGeneracion | string;
+  /** Motivo terminal (p. ej. "timeout"); normalmente vacío. */
+  motivo: string;
+  /** Texto del asistente en vivo (vacío para imágenes; crece mientras corre). */
+  salida: string;
+  /** Mensaje de error legible (cuando `estado === "error"`). */
+  error: string;
+  /** Métricas (tokens/coste/turnos/duración); `null` mientras no hay. */
+  metricas: MetricasRun | null;
+  /** Payload al completar; `null` mientras corre o si falla. */
+  resultado: ResultadoGeneracion | null;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+export interface RespuestaGeneracion {
+  generacion: Generacion;
+}
+
+export interface RespuestaGeneraciones {
+  generaciones: Generacion[];
+}
+
 export interface EntradaHistorial {
   id: string;
   skill: string;

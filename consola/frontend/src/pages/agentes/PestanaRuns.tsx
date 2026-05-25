@@ -102,10 +102,19 @@ function MetricasRunLinea({ metricas }: { metricas: MetricasRun | null | undefin
   );
 }
 
-/** Muestra la salida de un run como texto preformateado. */
+/** Muestra la salida de un run como texto preformateado (auto-scroll al final). */
 function SalidaRun({ salida }: { salida: string }) {
+  const ref = React.useRef<HTMLPreElement>(null);
+  // Seguir el stream: al crecer el texto, bajamos al final.
+  React.useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [salida]);
   return (
-    <pre className="max-h-[400px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed">
+    <pre
+      ref={ref}
+      className="max-h-[400px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed"
+    >
       {salida}
     </pre>
   );
@@ -169,13 +178,14 @@ function ResultadoRun({ agenteId, runInicial }: { agenteId: string; runInicial: 
       </div>
       {/* Métricas parciales en vivo mientras corre; finales al terminar. */}
       <MetricasRunLinea metricas={run.metricas} />
-      {ejecutando ? (
+      {/* El texto del asistente aparece en vivo (token a token) en cuanto llega. */}
+      {run.salida ? (
+        <SalidaRun salida={run.salida} />
+      ) : ejecutando ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          Ejecutando… las métricas se actualizan en vivo.
+          Ejecutando… el texto y las métricas aparecen en vivo.
         </p>
-      ) : run.salida ? (
-        <SalidaRun salida={run.salida} />
       ) : run.mensaje ? (
         <p className="text-sm text-muted-foreground">{run.mensaje}</p>
       ) : null}

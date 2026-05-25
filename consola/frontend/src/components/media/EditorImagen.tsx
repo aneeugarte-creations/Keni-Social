@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
 
 function mensajeError(error: unknown): string {
@@ -60,16 +61,17 @@ export function EditorImagen({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // La imagen se genera como trabajo de IA en background; seguimos su progreso.
+  const { generacion, ejecutando, iniciar } = useGeneracion();
+
   const generar = useMutation({
     mutationFn: () => api.generarMedia({ prompt: prompt.trim() }),
     onSuccess: (data) => {
       setAvisoGenerar("");
-      onCambio(data.id, data.url);
-      setPrompt("");
-      toast.success("Imagen generada");
+      iniciar(data.generacion);
     },
     onError: (e) => {
-      // 400 = generación no configurada: aviso amable, no error rojo.
+      // 400 = generación no configurada: aviso amable, no error rojo (es síncrono).
       if (e instanceof ApiError && e.status === 400) {
         setAvisoGenerar(e.message);
         return;
@@ -77,6 +79,26 @@ export function EditorImagen({
       toast.error(mensajeError(e));
     },
   });
+
+  // Al completarse la generación, adjuntamos la imagen (una vez por id).
+  const terminalRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!generacion || generacion.id === terminalRef.current) return;
+    if (generacion.estado === "completado") {
+      terminalRef.current = generacion.id;
+      const r = generacion.resultado;
+      if (r?.id && r?.url) {
+        onCambio(r.id, r.url);
+        setPrompt("");
+        toast.success("Imagen generada");
+      }
+    } else if (generacion.estado === "error") {
+      terminalRef.current = generacion.id;
+      toast.error(generacion.error || "No se pudo generar la imagen.");
+    }
+  }, [generacion, onCambio]);
+
+  const generando = generar.isPending || ejecutando;
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
@@ -90,7 +112,7 @@ export function EditorImagen({
     setAvisoGenerar("");
   }
 
-  const ocupado = subir.isPending || generar.isPending || !!disabled;
+  const ocupado = subir.isPending || generando || !!disabled;
 
   return (
     <div className="space-y-2.5">
@@ -171,12 +193,12 @@ export function EditorImagen({
               disabled={ocupado || prompt.trim().length === 0}
               className="shrink-0"
             >
-              {generar.isPending ? (
+              {generando ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              Generar con IA
+              {generando ? "Generando…" : "Generar con IA"}
             </Button>
           </div>
           {avisoGenerar && (

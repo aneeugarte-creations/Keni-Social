@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -78,20 +79,36 @@ export function HerramientasHashtags({
     toast.success(`Insertado: ${grupo.nombre}`);
   }
 
+  // La sugerencia corre como trabajo de IA en background; seguimos su progreso.
+  const { generacion, ejecutando, iniciar } = useGeneracion();
+
   const sugerir = useMutation({
     mutationFn: () =>
       api.sugerirHashtags({ texto: contenido, marca, red: red || undefined }),
-    onSuccess: (data) => {
-      const lista = data.hashtags ?? [];
+    onSuccess: (data) => iniciar(data.generacion),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Al completarse la generación, volcamos los hashtags sugeridos (una vez por id).
+  const terminalRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!generacion || generacion.id === terminalRef.current) return;
+    if (generacion.estado === "completado") {
+      terminalRef.current = generacion.id;
+      const lista = generacion.resultado?.hashtags ?? [];
       if (lista.length === 0) {
         toast.info("No se obtuvieron sugerencias.");
         return;
       }
       setSugeridos(lista);
       setSeleccion(new Set(lista));
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
+    } else if (generacion.estado === "error") {
+      terminalRef.current = generacion.id;
+      toast.error(generacion.error || "No se pudieron sugerir hashtags.");
+    }
+  }, [generacion]);
+
+  const sugiriendo = sugerir.isPending || ejecutando;
 
   function alternar(h: string) {
     setSeleccion((prev) => {
@@ -148,14 +165,14 @@ export function HerramientasHashtags({
           variant="outline"
           size="sm"
           onClick={() => sugerir.mutate()}
-          disabled={sugerir.isPending || contenido.trim().length === 0}
+          disabled={sugiriendo || contenido.trim().length === 0}
         >
-          {sugerir.isPending ? (
+          {sugiriendo ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
             <Sparkles className="h-4 w-4" />
           )}
-          Sugerir con IA
+          {sugiriendo ? "Sugiriendo…" : "Sugerir con IA"}
         </Button>
 
         <Button

@@ -55,13 +55,13 @@ import type {
   RespuestaConfig,
   RespuestaCrearCarpeta,
   RespuestaCrearTarea,
-  RespuestaEjecutarSkill,
   RespuestaEstado,
   RespuestaFranja,
   RespuestaFranjas,
   RespuestaFuenteRss,
   RespuestaFuentesRss,
-  RespuestaGenerarDesdeItem,
+  RespuestaGeneracion,
+  RespuestaGeneraciones,
   RespuestaGrupoHashtags,
   RespuestaHashtags,
   RespuestaHistorial,
@@ -81,7 +81,6 @@ import type {
   RespuestaRunsAgregados,
   RespuestaSkills,
   RespuestaSubContextos,
-  RespuestaSugerirHashtags,
   RespuestaTareas,
   Run,
 } from "@/types";
@@ -263,10 +262,18 @@ export const api = {
   runsAgregados: (signal?: AbortSignal) =>
     peticion<RespuestaRunsAgregados>("/runs/agregados", { signal }),
 
+  // --- Generaciones (sondeo de trabajos de IA en segundo plano) ---
+  // Toda generación (copy/RSS/hashtags/imagen) responde de inmediato con `{generacion}`
+  // (estado "ejecutando"); se sondea aquí hasta el estado terminal.
+  generaciones: (signal?: AbortSignal) =>
+    peticion<RespuestaGeneraciones>("/generaciones", { signal }),
+  generacion: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaGeneracion>(`/generaciones/${encodeURIComponent(id)}`, { signal }),
+
   // --- Skills (Generar copy) ---
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),
   ejecutarSkill: (cuerpo: CuerpoEjecutarSkill) =>
-    peticion<RespuestaEjecutarSkill>("/skills/ejecutar", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaGeneracion>("/skills/ejecutar", { metodo: "POST", json: cuerpo }),
   ejecutarSkillArchivo: (
     skill: string,
     marca: string,
@@ -281,7 +288,7 @@ export const api = {
     if (titulo) form.set("titulo", titulo);
     // Cada red va como un campo `redes` repetido (multivalor).
     for (const red of redes ?? []) form.append("redes", red);
-    return peticion<RespuestaEjecutarSkill>("/skills/ejecutar-archivo", { metodo: "POST", form });
+    return peticion<RespuestaGeneracion>("/skills/ejecutar-archivo", { metodo: "POST", form });
   },
   historial: (signal?: AbortSignal) => peticion<RespuestaHistorial>("/skills/historial", { signal }),
   detalleHistorial: (id: string, signal?: AbortSignal) =>
@@ -331,7 +338,7 @@ export const api = {
     return peticion<RespuestaMedia>("/media", { metodo: "POST", form });
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
-    peticion<RespuestaMedia>("/media/generar", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
 
   // --- Hashtags ---
   hashtags: (signal?: AbortSignal) => peticion<RespuestaHashtags>("/hashtags", { signal }),
@@ -345,7 +352,7 @@ export const api = {
   eliminarGrupoHashtags: (id: string) =>
     peticion<RespuestaMensaje>(`/hashtags/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
-    peticion<RespuestaSugerirHashtags>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaGeneracion>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
 
   // --- Plantillas de post ---
   plantillas: (signal?: AbortSignal) => peticion<RespuestaPlantillas>("/plantillas", { signal }),
@@ -378,7 +385,7 @@ export const api = {
   marcarItemRssUsado: (cuerpo: CuerpoMarcarItemUsado) =>
     peticion<RespuestaMensaje>("/rss/items/usado", { metodo: "POST", json: cuerpo }),
   generarDesdeItemRss: (cuerpo: CuerpoGenerarDesdeItem) =>
-    peticion<RespuestaGenerarDesdeItem>("/rss/generar", { metodo: "POST", json: cuerpo }),
+    peticion<RespuestaGeneracion>("/rss/generar", { metodo: "POST", json: cuerpo }),
 
   // --- Franjas (colas) ---
   franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),
