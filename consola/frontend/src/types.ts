@@ -53,6 +53,22 @@ export interface CuerpoGuardarConfig {
   marcas: string[];
 }
 
+/** Una opción del selector de esfuerzo de generación (`claude --effort`). */
+export interface OpcionEsfuerzo {
+  id: string; // "" = predeterminado del modelo
+  etiqueta: string;
+  descripcion: string;
+}
+
+export interface RespuestaEsfuerzo {
+  esfuerzo: string; // nivel actual ("" = predeterminado)
+  opciones: OpcionEsfuerzo[];
+}
+
+export interface CuerpoGuardarEsfuerzo {
+  esfuerzo: string;
+}
+
 // --- Proyectos ---
 
 export interface Proyecto {

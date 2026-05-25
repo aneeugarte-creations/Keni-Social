@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 
-from keni_consola import generaciones
+from keni_consola import generaciones, preferencias
 from keni_consola.api import skills
 
 from .conftest import _cliente
@@ -27,6 +27,26 @@ _MARCA = "unotv"
 # FAKE inyectado (crear_app reasigna el atributo de modulo), que persistiria. Los tests que
 # ejercitan el lanzador REAL lo invocan por esta referencia capturada al importar.
 _LANZAR_IMAGEN_REAL = generaciones.lanzar_job_imagen
+
+
+# --------------------------------------------------------------------------- #
+# argv de claude: --effort segun preferencias                                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_argv_sin_esfuerzo_no_pasa_effort(entorno):
+    argv = generaciones._argv_claude("hola")
+    assert "--effort" not in argv
+    # Sigue siendo un comando de streaming valido.
+    assert argv[:2] == ["claude", "-p"]
+    assert "--include-partial-messages" in argv
+
+
+def test_argv_con_esfuerzo_pasa_effort(entorno):
+    preferencias.guardar_esfuerzo("high")
+    argv = generaciones._argv_claude("hola")
+    i = argv.index("--effort")
+    assert argv[i + 1] == "high"
 
 
 # --------------------------------------------------------------------------- #

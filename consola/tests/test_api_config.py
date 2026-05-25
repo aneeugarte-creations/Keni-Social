@@ -38,6 +38,7 @@ def cfg_metricas(monkeypatch, tmp_path):
     ruta = tmp_path / "config.toml"
     monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
     monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
+    monkeypatch.setenv("KENI_CONSOLA_PREFERENCIAS", str(tmp_path / "preferencias.toml"))
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(ruta))
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
@@ -169,4 +170,49 @@ def test_post_body_invalido_400(cfg_metricas):
 def test_post_marcas_no_lista_400(cfg_metricas):
     _escribir(cfg_metricas, 'fuente = "muestra"\n')
     r = _cli().post("/api/config", json={"fuente": "muestra", "marcas": "unotv"})
+    assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Esfuerzo de generacion (/api/config/esfuerzo)                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_get_esfuerzo_contrato(cfg_metricas):
+    datos = _cli().get("/api/config/esfuerzo").json()
+    assert set(datos) == {"esfuerzo", "opciones"}
+    assert datos["esfuerzo"] == ""  # predeterminado: sin --effort
+    ids = [o["id"] for o in datos["opciones"]]
+    assert ids == ["", "low", "medium", "high", "xhigh", "max"]
+    # Cada opcion trae etiqueta y descripcion legibles.
+    for o in datos["opciones"]:
+        assert o["etiqueta"] and o["descripcion"]
+
+
+def test_post_esfuerzo_guarda_y_se_refleja(cfg_metricas):
+    c = _cli()
+    r = c.post("/api/config/esfuerzo", json={"esfuerzo": "high"})
+    assert r.status_code == 200
+    assert r.json()["esfuerzo"] == "high"
+    assert "Alto" in r.json()["mensaje"]
+    assert c.get("/api/config/esfuerzo").json()["esfuerzo"] == "high"
+
+
+def test_post_esfuerzo_vacio_vuelve_a_predeterminado(cfg_metricas):
+    c = _cli()
+    c.post("/api/config/esfuerzo", json={"esfuerzo": "max"})
+    r = c.post("/api/config/esfuerzo", json={"esfuerzo": ""})
+    assert r.status_code == 200
+    assert r.json()["esfuerzo"] == ""
+    assert c.get("/api/config/esfuerzo").json()["esfuerzo"] == ""
+
+
+def test_post_esfuerzo_invalido_400(cfg_metricas):
+    r = _cli().post("/api/config/esfuerzo", json={"esfuerzo": "turbo"})
+    assert r.status_code == 400
+    assert "inválido" in r.json()["error"].lower()
+
+
+def test_post_esfuerzo_no_texto_400(cfg_metricas):
+    r = _cli().post("/api/config/esfuerzo", json={"esfuerzo": 5})
     assert r.status_code == 400

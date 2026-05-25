@@ -25,7 +25,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas
+from .. import marcas, preferencias
 from .._http_json import leer_json
 
 # Bloques de credenciales que el sistema reconoce (mismo mapa que el asistente),
@@ -177,7 +177,95 @@ async def guardar_config(request: Request) -> Response:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Esfuerzo de generacion (claude --effort) — preferencia local del equipo      #
+# --------------------------------------------------------------------------- #
+
+# Opciones que pinta la UI. El backend es la fuente de verdad de id/etiqueta/ayuda;
+# el id "" es el predeterminado del modelo (no se pasa `--effort`). Orden estable.
+_ESFUERZO_OPCIONES: tuple[dict[str, str], ...] = (
+    {
+        "id": "",
+        "etiqueta": "Predeterminado",
+        "descripcion": "Usa el esfuerzo por defecto del modelo. Equilibrado y recomendado.",
+    },
+    {
+        "id": "low",
+        "etiqueta": "Bajo",
+        "descripcion": "Responde antes y piensa menos. Para borradores rápidos.",
+    },
+    {
+        "id": "medium",
+        "etiqueta": "Medio",
+        "descripcion": "Equilibrio entre rapidez y calidad.",
+    },
+    {
+        "id": "high",
+        "etiqueta": "Alto",
+        "descripcion": "Piensa más: mejor calidad, algo más lento.",
+    },
+    {
+        "id": "xhigh",
+        "etiqueta": "Muy alto",
+        "descripcion": "Razonamiento extenso para tareas difíciles.",
+    },
+    {
+        "id": "max",
+        "etiqueta": "Máximo",
+        "descripcion": "Máximo razonamiento. El más lento y costoso.",
+    },
+)
+
+
+def _etiqueta_esfuerzo(nivel: str) -> str:
+    """Etiqueta humana de un nivel de esfuerzo (cae a «Predeterminado»)."""
+    for opcion in _ESFUERZO_OPCIONES:
+        if opcion["id"] == nivel:
+            return opcion["etiqueta"]
+    return "Predeterminado"
+
+
+async def obtener_esfuerzo(request: Request) -> Response:
+    """GET: nivel de esfuerzo actual + catálogo de opciones para la UI."""
+    return JSONResponse(
+        {
+            "esfuerzo": preferencias.obtener_esfuerzo(),
+            "opciones": [dict(o) for o in _ESFUERZO_OPCIONES],
+        }
+    )
+
+
+async def guardar_esfuerzo(request: Request) -> Response:
+    """POST `{esfuerzo}`: guarda el nivel (atómico). Vacío => predeterminado del modelo."""
+    datos = await leer_json(request)
+    nivel = datos.get("esfuerzo", "")
+    if not isinstance(nivel, str):
+        return JSONResponse({"error": "El esfuerzo debe ser un texto."}, status_code=400)
+
+    try:
+        guardado = preferencias.guardar_esfuerzo(nivel)
+    except ValueError:
+        validos = ", ".join(preferencias.ESFUERZOS_VALIDOS)
+        return JSONResponse(
+            {"error": f"Esfuerzo inválido. Usa uno de: {validos} (o vacío para el predeterminado)."},
+            status_code=400,
+        )
+    except OSError as e:
+        return JSONResponse(
+            {"error": f"No se pudo guardar el esfuerzo: {e}"}, status_code=400
+        )
+
+    return JSONResponse(
+        {
+            "esfuerzo": guardado,
+            "mensaje": f"Esfuerzo de generación guardado: {_etiqueta_esfuerzo(guardado)}.",
+        }
+    )
+
+
 RUTAS = [
     Route("/api/config", obtener_config, methods=["GET"]),
     Route("/api/config", guardar_config, methods=["POST"]),
+    Route("/api/config/esfuerzo", obtener_esfuerzo, methods=["GET"]),
+    Route("/api/config/esfuerzo", guardar_esfuerzo, methods=["POST"]),
 ]

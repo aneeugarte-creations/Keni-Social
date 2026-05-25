@@ -42,7 +42,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agentes, lanzador
+from .. import agentes, lanzador, preferencias
 from .._http_json import leer_json
 from . import skills
 
@@ -284,12 +284,14 @@ def _argv_stream(prompt: str) -> list[str]:
 
     `--verbose` es OBLIGATORIO para `stream-json`; `--include-partial-messages` habilita
     el STREAMING token a token (eventos `stream_event`/`text_delta`) para ver el texto en
-    vivo. Reutiliza `skills._arg_presupuesto` para `--max-budget-usd` (de
-    `KENI_CLAUDE_MAX_USD`). Sin shell: el prompt viaja como argumento de la lista argv.
+    vivo. `--effort` se añade solo si hay un nivel guardado en preferencias. Reutiliza
+    `skills._arg_presupuesto` para `--max-budget-usd` (de `KENI_CLAUDE_MAX_USD`). Sin
+    shell: el prompt viaja como argumento de la lista argv.
     """
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        *preferencias.arg_esfuerzo(),
         *skills._arg_presupuesto(),
     ]
 
