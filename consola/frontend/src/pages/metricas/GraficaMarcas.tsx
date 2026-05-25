@@ -59,7 +59,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
             data={datosBarras}
             index="marca"
             categories={["Visualizaciones", "Interacciones"]}
-            colors={["neutral", "gray"]}
+            colors={["#1e3a8a", "#93c5fd"]}
             valueFormatter={numeroCompacto}
             yAxisWidth={56}
             showAnimation
@@ -86,7 +86,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
                 </div>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-foreground transition-all"
+                    className="h-full rounded-full bg-[#1e3a8a] transition-all dark:bg-[#1e3a8a]"
                     style={{ width: `${it.pct}%` }}
                   />
                 </div>
@@ -127,9 +127,9 @@ function TooltipBarras({ payload, active, label }: CustomTooltipProps) {
 function colorTooltip(dataKey: string): string {
   switch (dataKey) {
     case "Visualizaciones":
-      return "#404040";
+      return "#1e3a8a";
     case "Interacciones":
-      return "#a3a3a3";
+      return "#93c5fd";
     default:
       return "#9ca3af";
   }

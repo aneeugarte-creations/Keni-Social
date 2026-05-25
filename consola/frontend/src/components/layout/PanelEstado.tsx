@@ -9,32 +9,22 @@
  * `resumen` y el `siguiente_paso`, con un botón para volver a comprobar.
  */
 import { useQuery } from "@tanstack/react-query";
-import {
-  CheckCircle2,
-  RefreshCw,
-  TriangleAlert,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { NivelEstado, ResultadoEstado } from "@/types";
 
-/** Metadatos visuales por nivel de estado. */
-const META_NIVEL: Record<
-  NivelEstado,
-  { icono: LucideIcon; etiqueta: string; clase: string; variante: "ok" | "aviso" | "error" }
-> = {
-  ok: { icono: CheckCircle2, etiqueta: "OK", clase: "text-emerald-500", variante: "ok" },
-  aviso: { icono: TriangleAlert, etiqueta: "Aviso", clase: "text-amber-500", variante: "aviso" },
-  error: { icono: XCircle, etiqueta: "Error", clase: "text-red-500", variante: "error" },
+/** Color del punto de estado por nivel (el color basta; el detalle va al lado). */
+const PUNTO_NIVEL: Record<NivelEstado, string> = {
+  ok: "bg-emerald-500",
+  aviso: "bg-amber-500",
+  error: "bg-red-500",
 };
 
-function meta(nivel: NivelEstado) {
-  return META_NIVEL[nivel] ?? META_NIVEL.aviso;
+function puntoNivel(nivel: NivelEstado): string {
+  return PUNTO_NIVEL[nivel] ?? PUNTO_NIVEL.aviso;
 }
 
 /** ¿Es un chequeo de herramienta local (whisper / ffmpeg)? */
@@ -43,18 +33,16 @@ function esHerramientaLocal(r: ResultadoEstado): boolean {
   return n.includes("whisper") || n.includes("ffmpeg");
 }
 
-/** Una fila de chequeo: icono coloreado, nombre, detalle y badge de nivel. */
+/** Una fila de chequeo: punto de color por nivel, nombre y detalle. */
 function FilaChequeo({ resultado }: { resultado: ResultadoEstado }) {
-  const m = meta(resultado.estado);
-  const Icono = m.icono;
   return (
     <li className="flex items-start gap-3 px-4 py-3">
-      <Icono className={cn("mt-0.5 h-4 w-4 shrink-0", m.clase)} aria-hidden="true" />
+      <span
+        className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", puntoNivel(resultado.estado))}
+        aria-hidden="true"
+      />
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{resultado.nombre}</span>
-          <Badge variant={m.variante}>{m.etiqueta}</Badge>
-        </div>
+        <p className="text-sm font-medium">{resultado.nombre}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">{resultado.detalle}</p>
       </div>
     </li>

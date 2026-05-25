@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 
-import { Wordmark } from "@/components/layout/Wordmark";
+import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
 import { NAVEGACION } from "@/components/layout/navegacion";
 import { cn } from "@/lib/utils";
 
@@ -14,8 +14,8 @@ export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
       aria-label="Navegación principal"
       className="flex h-full w-64 flex-col border-r border-border bg-background"
     >
-      <div className="flex h-12 items-center border-b border-border px-4">
-        <Wordmark />
+      <div className="flex h-12 items-center border-b border-border px-2">
+        <CuentaUsuario />
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4">

@@ -533,11 +533,11 @@ def resumen_humano(resultados: list[Resultado]) -> str:
     if any(r.es_error for r in resultados):
         n = sum(1 for r in resultados if r.es_error)
         return (
-            f"❌ Hay {n} problema(s) que impiden usar el sistema. "
-            "Revisa las lineas con ❌ de abajo."
+            f"Hay {n} problema(s) que impiden usar el sistema. "
+            "Revisa las lineas marcadas de abajo."
         )
     return (
-        "✅ Todo listo para la demo (con datos de muestra). "
+        "Todo listo para la demo (con datos de muestra). "
         "Los avisos de credenciales/config son normales sin conectar cuentas reales."
     )
 
@@ -552,7 +552,7 @@ def cierre_accionable(resultados: list[Resultado]) -> str:
     """
     if any(r.es_error for r in resultados):
         return (
-            "Que hacer ahora: revisa cada linea ❌ de arriba y resuelvela "
+            "Que hacer ahora: revisa cada linea marcada de arriba y resuelvela "
             "(suelen incluir el comando exacto a ejecutar)."
         )
     return (

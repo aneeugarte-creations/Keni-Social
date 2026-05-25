@@ -176,10 +176,10 @@ function TarjetaComparativa({ comp }: { comp: ComparativaMetrica }) {
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-muted-foreground">
+        <p className="min-w-0 truncate text-sm font-medium text-muted-foreground">
           {etiquetaMetrica(comp.metrica)}
         </p>
-        <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs">
+        <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs" className="shrink-0">
           {variacion(comp.variacion_pct)}
         </BadgeDelta>
       </div>
@@ -201,7 +201,7 @@ function FilaComparativa({ comp }: { comp: ComparativaMetrica }) {
         <p className="truncate text-xs text-muted-foreground">{etiquetaMetrica(comp.metrica)}</p>
         <p className="text-sm font-medium tabular-nums">{formatoValor(comp.metrica, comp.b)}</p>
       </div>
-      <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs">
+      <BadgeDelta deltaType={deltaType(comp.variacion_pct)} size="xs" className="shrink-0">
         {variacion(comp.variacion_pct)}
       </BadgeDelta>
     </div>
