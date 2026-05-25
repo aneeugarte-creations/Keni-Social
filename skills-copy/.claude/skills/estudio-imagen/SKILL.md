@@ -35,14 +35,17 @@ Leyenda: ✅ = listo · ⚠️ = revísalo tú antes de publicar · ❌ = proble
    | Lo que piden | Motor | Herramienta |
    |---|---|---|
    | Recortar a formato (9:16 / 4:5 / 1:1 / 16:9), "las 3 medidas" | Determinista | `python3 editar.py recortar --foto F --formato feed` (o `--todos`) |
-   | Cambiar tamaño / peso | Determinista | `python3 editar.py redimensionar --foto F --max 1080` |
+   | Cambiar tamaño manteniendo proporción | Determinista | `python3 editar.py redimensionar --foto F --max 1080` |
+   | "Full": que pese menos para subir (internet malo del evento), conservando el tamaño | Determinista | `python3 editar.py comprimir --foto F --peso-max-mb 2` |
+   | Encajar en 4:5 sin cortar al sujeto, extendiendo solo el cielo/negro del fondo | Determinista | `python3 editar.py extender --foto F --formato feed` |
    | Placa / tarjeta de texto (cita o dato) en marca, con o sin foto | Determinista | `python3 editar.py placa --texto "..." --marca M --formato feed [--fuente-cita "— Autor"] [--foto F]` |
    | Logo + pleca + archivo de breaking sobre una foto | Determinista | `python3 ../breaking-express/componer.py --foto F --marca M --overlay <breaking.png>` |
    | Generar una **ilustración/fondo/gráfico** (no documental) | Generativo (IA) | `python3 generar.py --prompt "..." --marca M --formato feed` |
    | "Altera/recrea/quita-pon con IA" sobre una **foto real** | ❌ **Ninguno** | Niégate (§3) y propón la vía determinista |
 
    - Si la ruta de un script no resuelve, localízala con `Glob` (`**/estudio-imagen/editar.py`, `**/breaking-express/componer.py`).
-   - **Entradas de `placa`:** `--texto` (la cita o el dato) y `--marca` son obligatorios; opcionales `--formato` (vertical/feed/cuadrado/horizontal), `--fuente-cita` ("— Autor", va debajo más pequeña), `--foto` (fondo: recorte + degradado + texto) y `--salida`. Lee color/estilo de `../breaking-express/marcas.json` (UnoTV sobrio; Claro Sports en mayúsculas y condensada).
+   - **Entradas de `comprimir` (formato "full"):** `--peso-max-mb` es el peso objetivo (el usuario lo elige; default 2). Conserva el tamaño; con `--max LADO` aplica un resize pequeño opcional. Si ni la calidad mínima cabe en el peso, reduce el tamaño para lograrlo y lo deja anotado en `DATOS`. `--formato-archivo jpg|webp`.
+   - **Entradas de `extender` (encaje 4:5 sin recortar):** úsalo cuando el recorte cubriente cortaría al sujeto y lo que falta es **solo cielo o solo el negro del fondo**. Añade lienzo SOLO por el lado uniforme estirando el borde (no inventa contenido → respeta §3). Si **ningún borde es uniforme** o haría falta extender más de `--max-ext` (default 25%), NO inventa: cae al recorte cubriente y marca `extension_segura: false` en `DATOS` — preséntalo al humano y, si lo aprueba como **excepción editorial**, ahí entraría la vía de IA (outpainting). El humano ve la previsualización y aprueba antes de exportar (auto + vista previa).
    - **Generativo sin API key:** `generar.py` no falla: te da el **prompt de dirección de arte** para pegar en tu herramienta (Nano Banana/Gemini, etc.) y cómo configurar la key. Trasládalo al usuario.
    - **Generativo sobre foto real:** llama a `generar.py` con `--foto-real` para que aplique el guardrail (se niega y te redirige).
 
