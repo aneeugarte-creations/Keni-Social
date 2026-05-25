@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Bot, FileText, Play, RefreshCw, Send } from "lucide-react";
+import { Bot, FileText, FolderInput, Pencil, Play, Plus, RefreshCw, Send, Trash2 } from "lucide-react";
+import * as React from "react";
 import { Link } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -12,6 +13,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AgenteResumen } from "@/types";
+
+import {
+  DialogoBorrarAgente,
+  DialogoConectarAgente,
+  DialogoCrearAgente,
+  DialogoRenombrarAgente,
+} from "./agentes/GestionAgentes";
 
 /** Clave de React Query para el listado de agentes. */
 export const CLAVE_AGENTES = ["agentes"] as const;
@@ -42,10 +50,22 @@ function EsqueletoAgentes() {
   );
 }
 
-/** Tarjeta de un agente (= una marca = su carpeta). Clic → detalle. */
-function TarjetaAgente({ agente }: { agente: AgenteResumen }) {
+/**
+ * Tarjeta de un agente (= su carpeta). Clic en el cuerpo → detalle. Las marcas
+ * de serie muestran un badge "Marca" y no se pueden gestionar; los genéricos
+ * exponen acciones de renombrar y borrar.
+ */
+function TarjetaAgente({
+  agente,
+  onRenombrar,
+  onBorrar,
+}: {
+  agente: AgenteResumen;
+  onRenombrar: (a: AgenteResumen) => void;
+  onBorrar: (a: AgenteResumen) => void;
+}) {
   return (
-    <Card className="transition-colors hover:border-primary/50">
+    <Card className="flex flex-col transition-colors hover:border-primary/50">
       <Link to={`/agentes/${encodeURIComponent(agente.id)}`} className="block">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
@@ -61,9 +81,12 @@ function TarjetaAgente({ agente }: { agente: AgenteResumen }) {
                 {agente.ruta}
               </p>
             </div>
-            <Badge variant={agente.tiene_claude_md ? "ok" : "aviso"} className="shrink-0">
-              {agente.tiene_claude_md ? "Con CLAUDE.md" : "Sin CLAUDE.md"}
-            </Badge>
+            <div className="flex shrink-0 flex-col items-end gap-1">
+              {agente.es_marca && <Badge variant="secondary">Marca</Badge>}
+              <Badge variant={agente.tiene_claude_md ? "ok" : "aviso"}>
+                {agente.tiene_claude_md ? "Con CLAUDE.md" : "Sin CLAUDE.md"}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-0 text-sm text-muted-foreground">
@@ -78,14 +101,39 @@ function TarjetaAgente({ agente }: { agente: AgenteResumen }) {
           </span>
         </CardContent>
       </Link>
+
+      {/* Acciones de gestión: solo para agentes genéricos (no marcas). */}
+      {!agente.es_marca && (
+        <div className="mt-auto flex items-center justify-end gap-1 border-t border-border px-4 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => onRenombrar(agente)}
+          >
+            <Pencil className="h-4 w-4" />
+            Renombrar
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => onBorrar(agente)}
+          >
+            <Trash2 className="h-4 w-4" />
+            Borrar
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }
 
 /**
- * Página de Agentes: lista las marcas (cada una es un agente con su carpeta,
- * CLAUDE.md, sub-contextos y runs). Unifica las antiguas Proyectos, Tareas y
- * Nueva carpeta. Al pulsar una tarjeta se abre su detalle.
+ * Página de Agentes: lista un conjunto abierto de agentes (cada uno con su
+ * carpeta, CLAUDE.md, sub-contextos y runs). Hay 5 marcas de serie (no
+ * gestionables) y agentes genéricos que se pueden crear, conectar, renombrar y
+ * borrar. Al pulsar una tarjeta se abre su detalle.
  */
 export default function Agentes() {
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
@@ -93,18 +141,33 @@ export default function Agentes() {
     queryFn: ({ signal }) => api.agentes(signal),
   });
 
+  const [crear, setCrear] = React.useState(false);
+  const [conectar, setConectar] = React.useState(false);
+  const [renombrando, setRenombrando] = React.useState<AgenteResumen | null>(null);
+  const [borrando, setBorrando] = React.useState<AgenteResumen | null>(null);
+
   const acciones = (
-    <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
-      <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
-      Actualizar
-    </Button>
+    <>
+      <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>
+        <RefreshCw className={cn("h-4 w-4", isFetching && "animate-spin")} />
+        Actualizar
+      </Button>
+      <Button variant="outline" onClick={() => setConectar(true)}>
+        <FolderInput className="h-4 w-4" />
+        Conectar carpeta
+      </Button>
+      <Button onClick={() => setCrear(true)}>
+        <Plus className="h-4 w-4" />
+        Crear agente
+      </Button>
+    </>
   );
 
   return (
     <>
       <PageHeader
         titulo="Agentes"
-        descripcion="Cada marca es un agente con su carpeta: contexto (CLAUDE.md), sub-contextos y ejecuciones."
+        descripcion="Cada agente es una carpeta con su contexto (CLAUDE.md), sub-contextos y ejecuciones. Las marcas de serie son fijas; los genéricos se gestionan aquí."
         acciones={acciones}
       />
 
@@ -121,23 +184,43 @@ export default function Agentes() {
         <EstadoVacio
           icono={Bot}
           titulo="Aún no hay agentes"
-          texto="Cada marca configurada aparecerá aquí como un agente con su propia carpeta y contexto."
+          texto="Crea un agente genérico o conecta una carpeta existente para empezar. Las marcas configuradas también aparecerán aquí."
           accion={
-            <Button asChild variant="outline" size="sm">
-              <Link to="/configuracion">
-                <FileText className="h-4 w-4" />
-                Configurar marcas
-              </Link>
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setConectar(true)}>
+                <FolderInput className="h-4 w-4" />
+                Conectar carpeta
+              </Button>
+              <Button size="sm" onClick={() => setCrear(true)}>
+                <Plus className="h-4 w-4" />
+                Crear agente
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/configuracion">
+                  <FileText className="h-4 w-4" />
+                  Configurar marcas
+                </Link>
+              </Button>
+            </div>
           }
         />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {data.agentes.map((a) => (
-            <TarjetaAgente key={a.id} agente={a} />
+            <TarjetaAgente
+              key={a.id}
+              agente={a}
+              onRenombrar={setRenombrando}
+              onBorrar={setBorrando}
+            />
           ))}
         </div>
       )}
+
+      <DialogoCrearAgente abierto={crear} onCerrar={() => setCrear(false)} />
+      <DialogoConectarAgente abierto={conectar} onCerrar={() => setConectar(false)} />
+      <DialogoRenombrarAgente agente={renombrando} onCerrar={() => setRenombrando(null)} />
+      <DialogoBorrarAgente agente={borrando} onCerrar={() => setBorrando(null)} />
     </>
   );
 }
