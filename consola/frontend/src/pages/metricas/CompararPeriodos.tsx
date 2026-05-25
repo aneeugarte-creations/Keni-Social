@@ -229,7 +229,7 @@ function ErrorComparar({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 py-8 text-center">
-      <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
+      <AlertCircle className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
       <p className="max-w-md text-sm text-muted-foreground">
         {mensaje ?? "No se pudo calcular la comparativa. Vuelve a intentarlo."}
       </p>

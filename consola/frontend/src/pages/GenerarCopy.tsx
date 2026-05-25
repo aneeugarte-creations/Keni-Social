@@ -14,6 +14,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { EstadoMensaje } from "@/components/layout/EstadoMensaje";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -259,27 +260,26 @@ export default function GenerarCopy() {
           titulo="Generar copy"
           descripcion="Crea borradores de publicaciones con las skills editoriales para cada marca."
         />
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
-            <div className="space-y-1">
-              <p className="text-sm font-medium text-foreground">No se pudieron cargar las skills</p>
-              <p className="max-w-md text-sm text-muted-foreground">
-                {skillsQuery.error instanceof Error
-                  ? skillsQuery.error.message
-                  : "Ocurrió un problema inesperado. Vuelve a intentarlo."}
-              </p>
-            </div>
+        <EstadoMensaje
+          icono={AlertCircle}
+          titulo="No se pudieron cargar las skills"
+          mensaje={
+            skillsQuery.error instanceof Error
+              ? skillsQuery.error.message
+              : "Ocurrió un problema inesperado. Vuelve a intentarlo."
+          }
+          accion={
             <Button
               variant="outline"
+              size="sm"
               onClick={() => void skillsQuery.refetch()}
               disabled={skillsQuery.isFetching}
             >
               <RefreshCw className={cn("h-4 w-4", skillsQuery.isFetching && "animate-spin")} />
               Reintentar
             </Button>
-          </CardContent>
-        </Card>
+          }
+        />
       </>
     );
   }
