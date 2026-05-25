@@ -53,7 +53,7 @@ ESTADO_COMPLETADO = "completado"
 ESTADO_ERROR = "error"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
-TIPOS = ("copy", "rss", "hashtags", "imagen")
+TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion")
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
 # `KENI_CLAUDE_TIMEOUT`. Sustituye al viejo timeout de 180 s de la peticion sincrona.

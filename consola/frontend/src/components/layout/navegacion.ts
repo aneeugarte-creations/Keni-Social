@@ -4,6 +4,7 @@ import {
   Bot,
   Lightbulb,
   Rss,
+  ScanSearch,
   Send,
   Settings2,
   Sparkles,
@@ -55,6 +56,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Fuentes",
         icono: Rss,
         descripcion: "Feeds RSS para alimentar Generar copy.",
+      },
+      {
+        ruta: "/verificacion",
+        etiqueta: "Verificación",
+        icono: ScanSearch,
+        descripcion: "Pega el enlace de un video y comprueba si es nuevo o ya circulaba.",
       },
       {
         ruta: "/metricas",

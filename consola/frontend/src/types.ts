@@ -451,7 +451,7 @@ export interface RespuestaEjecutarSkill {
 // --- Generaciones (trabajos de IA en segundo plano, seguibles en vivo) ---
 
 /** Tipo de trabajo de IA: define cómo se renderiza su `resultado`. */
-export type TipoGeneracion = "copy" | "rss" | "hashtags" | "imagen";
+export type TipoGeneracion = "copy" | "rss" | "hashtags" | "imagen" | "verificacion";
 
 /** Estado del ciclo de vida de una generación. */
 export type EstadoGeneracion = "ejecutando" | "completado" | "error";
@@ -475,6 +475,70 @@ export interface ResultadoGeneracion {
   // imagen
   id?: string;
   url?: string;
+  // verificacion (workflow propio: datar un video)
+  verificacion?: ReporteVerificacion;
+}
+
+/** Una señal (pista objetiva) del análisis de procedencia, clasificada por nivel. */
+export interface SenalVerificacion {
+  nivel: "alto" | "medio" | "bajo" | "info" | string;
+  texto: string;
+}
+
+/** Una verificación previa relacionada (Google Fact Check API), si hubo key. */
+export interface FactCheckResultado {
+  afirmacion?: string | null;
+  quien_lo_dijo?: string | null;
+  verificador?: string | null;
+  veredicto?: string | null;
+  url?: string | null;
+  fecha?: string | null;
+}
+
+/**
+ * Reporte del motor de verificación de video (`analiza-video.py`). Junta EVIDENCIA
+ * para datar un video (nuevo vs reciclado); NO es un veredicto automático.
+ */
+export interface ReporteVerificacion {
+  entrada: string;
+  tipo_entrada: "url" | "archivo" | string;
+  contexto_afirmado?: string | null;
+  metadatos: {
+    disponible?: boolean;
+    plataforma?: string | null;
+    titulo?: string | null;
+    autor?: string | null;
+    url_pagina?: string | null;
+    miniatura?: string | null;
+    subido_iso?: string | null;
+    anio_subida?: number | null;
+    duracion_s?: number | null;
+    vistas?: number | null;
+    error?: string;
+  };
+  ocr: {
+    frames_analizados?: number;
+    anios?: number[];
+    fechas?: string[];
+    horas?: string[];
+    error?: string;
+  };
+  busqueda_inversa: {
+    base?: string;
+    imagen_url?: string;
+    enlaces?: Record<string, string>;
+    fotogramas_guardados_en?: string | null;
+  };
+  fact_check: { consultado: boolean; motivo?: string; resultados?: FactCheckResultado[] };
+  senales: SenalVerificacion[];
+  avisos?: string[];
+  carpeta_trabajo?: string;
+}
+
+/** Cuerpo de POST /api/verificar: el enlace del video y, opcional, lo que se afirma. */
+export interface CuerpoVerificar {
+  enlace: string;
+  contexto?: string;
 }
 
 /**
