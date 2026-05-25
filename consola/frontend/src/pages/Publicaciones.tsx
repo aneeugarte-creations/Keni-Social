@@ -9,7 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -95,8 +95,22 @@ export default function Publicaciones() {
 
 /** Cuerpo de la página una vez tenemos el catálogo de opciones. */
 function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
+  const location = useLocation();
+
+  // Marca preseleccionada al llegar desde otra página (p. ej. «Ver
+  // publicaciones» desde el detalle de un agente). El id canónico viaja por
+  // `?marca=`; solo lo aceptamos si existe en el catálogo, si no, "Todas".
+  const marcaInicial = React.useMemo(() => {
+    const desdeQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
+    return desdeQuery && opciones.marcas.some((m) => m.id === desdeQuery)
+      ? desdeQuery
+      : FILTRO_TODOS;
+    // Solo al montar (la query no cambia dentro de esta página).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const [vista, setVista] = React.useState<Vista>("lista");
-  const [marca, setMarca] = React.useState(FILTRO_TODOS);
+  const [marca, setMarca] = React.useState(marcaInicial);
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [estado, setEstado] = React.useState(FILTRO_TODOS);
   const [soloPerennes, setSoloPerennes] = React.useState(false);
