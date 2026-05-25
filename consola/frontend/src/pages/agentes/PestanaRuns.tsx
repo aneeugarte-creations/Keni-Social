@@ -1,5 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Play } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, Loader2, Play } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -22,20 +22,34 @@ import { cn } from "@/lib/utils";
 import { costeUsd, duracion, numeroCompleto } from "@/pages/metricas/formato";
 import type { AgenteDetalle, EstadoRun, MetricasRun, ModoRun, Run } from "@/types";
 
-import { claveAgente, formatearFecha, mensajeError } from "./claves";
+import { claveAgente, claveRuns, formatearFecha, mensajeError } from "./claves";
 
 /** Etiqueta legible (es-MX) del modo de un run. */
 function etiquetaModo(modo: ModoRun): string {
   return modo === "interactivo" ? "Interactivo" : "Headless";
 }
 
-/** Etiqueta + variante de badge para el estado de un run. */
-function presentacionEstado(estado: EstadoRun): { texto: string; variante: BadgeProps["variant"] } {
+/** `true` mientras el run está en curso (sondeo activo). */
+function estaEjecutando(estado: EstadoRun): boolean {
+  return estado === "ejecutando";
+}
+
+/**
+ * Etiqueta + variante de badge para el estado de un run. El estado `ejecutando`
+ * usa la variante ámbar (`aviso`) y marca que debe llevar spinner.
+ */
+function presentacionEstado(estado: EstadoRun): {
+  texto: string;
+  variante: BadgeProps["variant"];
+  spinner?: boolean;
+} {
   switch (estado) {
     case "completado":
       return { texto: "Completado", variante: "ok" };
     case "error":
       return { texto: "Error", variante: "error" };
+    case "ejecutando":
+      return { texto: "Ejecutando…", variante: "aviso", spinner: true };
     case "lanzado":
       return { texto: "Lanzado", variante: "secondary" };
     default:
@@ -43,10 +57,15 @@ function presentacionEstado(estado: EstadoRun): { texto: string; variante: Badge
   }
 }
 
-/** Badge de estado de un run. */
+/** Badge de estado de un run; el estado en curso muestra un spinner. */
 function BadgeEstado({ estado }: { estado: EstadoRun }) {
-  const { texto, variante } = presentacionEstado(estado);
-  return <Badge variant={variante}>{texto}</Badge>;
+  const { texto, variante, spinner } = presentacionEstado(estado);
+  return (
+    <Badge variant={variante} className={cn(spinner && "gap-1")}>
+      {spinner && <Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+      {texto}
+    </Badge>
+  );
 }
 
 /**
@@ -92,7 +111,79 @@ function SalidaRun({ salida }: { salida: string }) {
   );
 }
 
-/** Formulario para lanzar un run + resultado inmediato del último lanzamiento. */
+/** Cada cuánto sondeamos el estado de un run en curso. */
+const INTERVALO_SONDEO_MS = 1500;
+
+/**
+ * Sondea el detalle de un run mientras esté `ejecutando` y detiene el sondeo al
+ * terminar (`completado`/`error`). Arranca con `runInicial` (lo que devolvió el
+ * `POST`) y, al pasar a un estado final, invalida el detalle del agente y la
+ * lista global de runs. Devuelve el run más reciente conocido.
+ */
+function useSondeoRun(agenteId: string, runInicial: Run): Run {
+  const queryClient = useQueryClient();
+  // Solo tiene sentido sondear runs headless en curso; los interactivos y los
+  // que ya terminaron al volver del POST no necesitan red adicional.
+  const sondeable = runInicial.modo === "headless" && estaEjecutando(runInicial.estado);
+  const yaFinalizado = React.useRef(false);
+
+  const { data } = useQuery({
+    queryKey: claveRuns(agenteId).concat(runInicial.id),
+    queryFn: ({ signal }) => api.runAgente(agenteId, runInicial.id, signal),
+    initialData: runInicial,
+    enabled: sondeable,
+    // Mientras el run siga ejecutando, repetimos; al terminar devolvemos `false`
+    // para cortar el sondeo.
+    refetchInterval: (query) =>
+      estaEjecutando(query.state.data?.estado ?? runInicial.estado)
+        ? INTERVALO_SONDEO_MS
+        : false,
+  });
+
+  const run = data ?? runInicial;
+
+  // Al pasar a un estado final, refrescamos el detalle del agente (su lista de
+  // runs) y la lista global del Monitor. Una sola vez por run.
+  React.useEffect(() => {
+    if (!yaFinalizado.current && !estaEjecutando(run.estado)) {
+      yaFinalizado.current = true;
+      void queryClient.invalidateQueries({ queryKey: claveAgente(agenteId) });
+      void queryClient.invalidateQueries({ queryKey: ["runs"] });
+    }
+  }, [run.estado, agenteId, queryClient]);
+
+  return run;
+}
+
+/** Bloque de resultado del último lanzamiento (en vivo mientras corre). */
+function ResultadoRun({ agenteId, runInicial }: { agenteId: string; runInicial: Run }) {
+  const run = useSondeoRun(agenteId, runInicial);
+  const ejecutando = estaEjecutando(run.estado);
+
+  return (
+    <div className="mt-5 space-y-2 border-t border-border pt-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">Resultado</span>
+        <BadgeEstado estado={run.estado} />
+        <Badge variant="outline">{etiquetaModo(run.modo)}</Badge>
+      </div>
+      {/* Métricas parciales en vivo mientras corre; finales al terminar. */}
+      <MetricasRunLinea metricas={run.metricas} />
+      {ejecutando ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          Ejecutando… las métricas se actualizan en vivo.
+        </p>
+      ) : run.salida ? (
+        <SalidaRun salida={run.salida} />
+      ) : run.mensaje ? (
+        <p className="text-sm text-muted-foreground">{run.mensaje}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Formulario para lanzar un run + resultado (en vivo) del último lanzamiento. */
 function FormularioRun({ agente }: { agente: AgenteDetalle }) {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = React.useState("");
@@ -108,6 +199,8 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
         toast.error("El run terminó con error.");
       } else if (res.run.modo === "interactivo") {
         toast.success(res.run.mensaje || "Run interactivo lanzado.");
+      } else if (estaEjecutando(res.run.estado)) {
+        toast.success("Run lanzado. Sigue el progreso aquí abajo.");
       } else {
         toast.success("Run completado.");
       }
@@ -116,7 +209,6 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
     onError: (error) => toast.error(mensajeError(error)),
   });
 
-  const corriendoHeadless = ejecutar.isPending && modo === "headless";
   const valido = prompt.trim().length > 0 && !ejecutar.isPending;
 
   function enviar(e: React.FormEvent) {
@@ -155,7 +247,7 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
                   <SelectValue placeholder="Modo" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="headless">Headless (espera el resultado)</SelectItem>
+                  <SelectItem value="headless">Headless (sigue el progreso aquí)</SelectItem>
                   <SelectItem value="interactivo">Interactivo (abre Claude Code)</SelectItem>
                 </SelectContent>
               </Select>
@@ -163,30 +255,12 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
 
             <Button type="submit" disabled={!valido}>
               <Play className={cn("h-4 w-4", ejecutar.isPending && "animate-pulse")} />
-              {corriendoHeadless
-                ? "Ejecutando…"
-                : ejecutar.isPending
-                  ? "Lanzando…"
-                  : "Ejecutar"}
+              {ejecutar.isPending ? "Lanzando…" : "Ejecutar"}
             </Button>
           </div>
         </form>
 
-        {ultimo && (
-          <div className="mt-5 space-y-2 border-t border-border pt-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium">Resultado</span>
-              <BadgeEstado estado={ultimo.estado} />
-              <Badge variant="outline">{etiquetaModo(ultimo.modo)}</Badge>
-            </div>
-            <MetricasRunLinea metricas={ultimo.metricas} />
-            {ultimo.salida ? (
-              <SalidaRun salida={ultimo.salida} />
-            ) : ultimo.mensaje ? (
-              <p className="text-sm text-muted-foreground">{ultimo.mensaje}</p>
-            ) : null}
-          </div>
-        )}
+        {ultimo && <ResultadoRun key={ultimo.id} agenteId={agente.id} runInicial={ultimo} />}
       </CardContent>
     </Card>
   );
