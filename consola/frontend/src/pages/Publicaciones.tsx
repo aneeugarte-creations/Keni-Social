@@ -1,25 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  AlertCircle,
   CalendarClock,
   CalendarDays,
   FileText,
   Hash,
   List,
-  RefreshCw,
   Send,
   Sparkles,
 } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
+import { BloqueError } from "@/components/comunes/BloqueError";
+import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type { OpcionesPublicaciones, Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./publicaciones/claves";
@@ -38,39 +36,6 @@ function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
-
-/** Bloque de error reutilizable con botón de reintento. */
-function BloqueError({
-  titulo,
-  mensaje,
-  onReintentar,
-  cargando,
-}: {
-  titulo: string;
-  mensaje?: string;
-  onReintentar: () => void;
-  cargando: boolean;
-}) {
-  return (
-    <Card className="border-destructive/40">
-      <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <AlertCircle className="h-6 w-6" />
-        </div>
-        <div className="space-y-1">
-          <p className="font-medium">{titulo}</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            {mensaje ?? "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento."}
-          </p>
-        </div>
-        <Button onClick={onReintentar} disabled={cargando}>
-          <RefreshCw className={cn("h-4 w-4", cargando && "animate-spin")} />
-          Reintentar
-        </Button>
-      </CardContent>
-    </Card>
-  );
 }
 
 /** Esqueleto de carga (lista de tarjetas). */
@@ -238,31 +203,25 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
       ) : vista === "calendario" ? (
         <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} />
       ) : publicaciones.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <Send className="h-6 w-6" />
-            </div>
-            <div className="space-y-1">
-              <p className="font-medium">
-                {filtrando ? "Sin resultados con estos filtros" : "Aún no hay publicaciones"}
-              </p>
-              <p className="max-w-md text-sm text-muted-foreground">
-                {filtrando
-                  ? "Prueba a cambiar o limpiar los filtros."
-                  : "Genera un copy y guárdalo como publicación para empezar a gestionarlo aquí."}
-              </p>
-            </div>
-            {!filtrando && (
+        <EstadoVacio
+          icono={Send}
+          titulo={filtrando ? "Sin resultados con estos filtros" : "Aún no hay publicaciones"}
+          texto={
+            filtrando
+              ? "Prueba a cambiar o limpiar los filtros."
+              : "Genera un copy y guárdalo como publicación para empezar a gestionarlo aquí."
+          }
+          accion={
+            !filtrando && (
               <Button asChild size="sm">
                 <Link to="/generar-copy">
                   <Sparkles className="h-4 w-4" />
                   Generar copy
                 </Link>
               </Button>
-            )}
-          </CardContent>
-        </Card>
+            )
+          }
+        />
       ) : (
         <VistaLista
           publicaciones={publicaciones}

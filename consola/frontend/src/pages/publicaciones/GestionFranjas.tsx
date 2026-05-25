@@ -11,6 +11,9 @@ import { CalendarClock, Clock, Loader2, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRed } from "@/components/comunes/SelectorRed";
+import { MARCA_TODAS, marcaParam, RED_TODAS, redParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,8 +44,6 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-const FILTRO_TODAS = "__todas__";
-
 /** Formulario para añadir una franja nueva. */
 function FormularioFranja({
   marcas,
@@ -54,16 +55,16 @@ function FormularioFranja({
   const queryClient = useQueryClient();
   const [dia, setDia] = React.useState("0");
   const [hora, setHora] = React.useState("09:00");
-  const [marca, setMarca] = React.useState(FILTRO_TODAS);
-  const [red, setRed] = React.useState(FILTRO_TODAS);
+  const [marca, setMarca] = React.useState(MARCA_TODAS);
+  const [red, setRed] = React.useState(RED_TODAS);
 
   const crear = useMutation({
     mutationFn: () =>
       api.crearFranja({
         dia_semana: Number(dia),
         hora,
-        marca: marca === FILTRO_TODAS ? undefined : marca,
-        red: red === FILTRO_TODAS ? undefined : red,
+        marca: marcaParam(marca),
+        red: redParam(red),
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_FRANJAS });
@@ -105,37 +106,27 @@ function FormularioFranja({
           <Label htmlFor="franja-marca">
             Marca <span className="font-normal text-muted-foreground">(opcional)</span>
           </Label>
-          <Select value={marca} onValueChange={setMarca}>
-            <SelectTrigger id="franja-marca">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FILTRO_TODAS}>Todas las marcas</SelectItem>
-              {marcas.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectorMarca
+            id="franja-marca"
+            marcas={marcas}
+            valor={marca}
+            onCambio={setMarca}
+            ariaLabel="Marca"
+            className="w-full"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="franja-red">
             Red <span className="font-normal text-muted-foreground">(opcional)</span>
           </Label>
-          <Select value={red} onValueChange={setRed}>
-            <SelectTrigger id="franja-red">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={FILTRO_TODAS}>Todas las redes</SelectItem>
-              {redes.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectorRed
+            id="franja-red"
+            redes={redes}
+            valor={red}
+            onCambio={setRed}
+            ariaLabel="Red"
+            className="w-full"
+          />
         </div>
       </div>
       <div className="flex justify-end">

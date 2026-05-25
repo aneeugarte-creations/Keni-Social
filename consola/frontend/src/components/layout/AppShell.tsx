@@ -2,6 +2,7 @@ import { Loader2, Menu, Moon, Sun, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
+import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NAVEGACION } from "@/components/layout/navegacion";
@@ -84,6 +85,7 @@ export function AppShell() {
           <h1 className="hidden text-sm font-semibold md:block">{titulo}</h1>
 
           <div className="ml-auto flex items-center gap-1">
+            <IndicadorEstado />
             <Button
               variant="ghost"
               size="icon"
