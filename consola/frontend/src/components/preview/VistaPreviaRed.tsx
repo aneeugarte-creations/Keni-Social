@@ -1,10 +1,15 @@
 /**
  * Vista previa estilizada de un post por red social.
  *
- * Dado `{red, marca, contenido, imagen_url?}` renderiza un mockup reconocible
- * (no pixel-perfect) de cómo se vería la pieza en esa red: X, Instagram,
- * Facebook, TikTok y YouTube. Reutilizado por "Generar copy" (ResultadoRedes) y
- * por el diálogo de edición de Publicaciones. Modo claro/oscuro; texto es-MX.
+ * Dado `{red, marca, contenido, imagen_url?}` renderiza un mockup reconocible de
+ * cómo se vería la pieza en esa red: X, Instagram, Facebook, TikTok y YouTube.
+ * Reutilizado por "Generar copy" (ResultadoRedes) y por el diálogo de edición de
+ * Publicaciones. Modo claro/oscuro; texto es-MX.
+ *
+ * Importante sobre el texto: las redes NO renderizan Markdown. Por eso aquí el
+ * cuerpo se muestra TAL CUAL —respetando saltos de línea y enlazando URLs—, sin
+ * convertir `**negrita**` ni listas a formato. (El render Markdown se reserva
+ * para la lectura interna; ver `Markdown`.)
  */
 import {
   Bookmark,
@@ -53,7 +58,7 @@ function Avatar({ marca, className }: { marca: string; className?: string }) {
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground",
+        "flex shrink-0 items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground",
         className,
       )}
       aria-hidden="true"
@@ -63,54 +68,97 @@ function Avatar({ marca, className }: { marca: string; className?: string }) {
   );
 }
 
-/** Placeholder de imagen (cuando no hay imagen adjunta). */
+/** Placeholder de imagen elegante (cuando no hay imagen adjunta). */
 function PlaceholderImagen({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground",
+        "flex flex-col items-center justify-center gap-1.5 bg-gradient-to-br from-muted to-muted/60 text-muted-foreground",
         className,
       )}
     >
-      <ImageIcon className="h-6 w-6" />
-      <span className="text-[10px]">Sin imagen</span>
+      <ImageIcon className="h-7 w-7 opacity-70" />
+      <span className="text-[11px] font-medium">Sin imagen</span>
     </div>
   );
 }
 
-/** Texto del post conservando saltos de línea; vacío muestra un guía. */
-function Texto({ contenido, className }: { contenido: string; className?: string }) {
+// Regex para detectar URLs sueltas y enlazarlas en la vista previa.
+const RE_URL = /(https?:\/\/[^\s]+)/g;
+
+/**
+ * Texto del post tal y como lo vería la red: conserva saltos de línea y enlaza
+ * URLs, pero NO interpreta Markdown (las redes no lo hacen). Vacío => guía.
+ */
+function TextoRed({ contenido, className }: { contenido: string; className?: string }) {
   if (!contenido.trim()) {
     return <p className={cn("italic text-muted-foreground", className)}>Sin texto…</p>;
   }
-  return <p className={cn("whitespace-pre-wrap break-words", className)}>{contenido}</p>;
+  const partes = contenido.split(RE_URL);
+  return (
+    <p className={cn("whitespace-pre-wrap break-words", className)}>
+      {partes.map((parte, i) =>
+        RE_URL.test(parte) ? (
+          <a
+            key={i}
+            href={parte}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sky-600 hover:underline dark:text-sky-400"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {parte}
+          </a>
+        ) : (
+          <React.Fragment key={i}>{parte}</React.Fragment>
+        ),
+      )}
+    </p>
+  );
+}
+
+interface MockupProps {
+  marca: string;
+  contenido: string;
+  imagen: string;
 }
 
 /** Mockup de X (antes Twitter). */
-function PreviaX({ marca, contenido, imagen }: { marca: string; contenido: string; imagen: string }) {
+function PreviaX({ marca, contenido, imagen }: MockupProps) {
   return (
-    <div className="rounded-xl border border-border bg-card p-3.5 text-sm">
+    <div className="rounded-2xl border border-border bg-card p-4 text-[15px]">
       <div className="flex gap-3">
-        <Avatar marca={marca} className="h-10 w-10 text-sm" />
+        <Avatar marca={marca} className="h-11 w-11 text-sm" />
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="font-semibold">{marca}</span>
-            <span className="text-muted-foreground">{handleDe(marca)} · ahora</span>
-            <MoreHorizontal className="ml-auto h-4 w-4 text-muted-foreground" />
+          <div className="flex items-center gap-1 text-[15px]">
+            <span className="truncate font-bold leading-tight">{marca}</span>
+            <span className="truncate text-muted-foreground">{handleDe(marca)}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">ahora</span>
+            <MoreHorizontal className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
           </div>
-          <Texto contenido={contenido} className="mt-1 leading-relaxed" />
+          <TextoRed contenido={contenido} className="mt-0.5 leading-normal" />
           {imagen && (
             <img
               src={imagen}
               alt=""
-              className="mt-2.5 max-h-72 w-full rounded-2xl border border-border object-cover"
+              className="mt-3 aspect-video w-full rounded-2xl border border-border object-cover"
             />
           )}
-          <div className="mt-3 flex max-w-xs items-center justify-between text-muted-foreground">
-            <MessageCircle className="h-4 w-4" />
-            <Repeat2 className="h-4 w-4" />
-            <Heart className="h-4 w-4" />
-            <Share2 className="h-4 w-4" />
+          <div className="mt-3 flex max-w-md items-center justify-between text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-xs">
+              <MessageCircle className="h-[18px] w-[18px]" />
+            </span>
+            <span className="flex items-center gap-1.5 text-xs">
+              <Repeat2 className="h-[18px] w-[18px]" />
+            </span>
+            <span className="flex items-center gap-1.5 text-xs">
+              <Heart className="h-[18px] w-[18px]" />
+            </span>
+            <span className="flex items-center gap-1.5 text-xs">
+              <Share2 className="h-[18px] w-[18px]" />
+            </span>
+            <span aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -118,21 +166,16 @@ function PreviaX({ marca, contenido, imagen }: { marca: string; contenido: strin
   );
 }
 
-/** Mockup de Instagram (imagen cuadrada + caption). */
-function PreviaInstagram({
-  marca,
-  contenido,
-  imagen,
-}: {
-  marca: string;
-  contenido: string;
-  imagen: string;
-}) {
+/** Mockup de Instagram (imagen cuadrada 1:1 + caption). */
+function PreviaInstagram({ marca, contenido, imagen }: MockupProps) {
   return (
     <div className="mx-auto max-w-sm overflow-hidden rounded-xl border border-border bg-card text-sm">
-      <div className="flex items-center gap-2.5 p-3">
-        <Avatar marca={marca} className="h-8 w-8 text-[11px]" />
-        <span className="font-semibold">{handleDe(marca).slice(1)}</span>
+      <div className="flex items-center gap-2.5 px-3 py-2.5">
+        <Avatar
+          marca={marca}
+          className="h-8 w-8 text-[11px] ring-2 ring-pink-500/60 ring-offset-2 ring-offset-card"
+        />
+        <span className="text-[13px] font-semibold">{handleDe(marca).slice(1)}</span>
         <MoreHorizontal className="ml-auto h-4 w-4 text-muted-foreground" />
       </div>
       {imagen ? (
@@ -140,16 +183,17 @@ function PreviaInstagram({
       ) : (
         <PlaceholderImagen className="aspect-square w-full" />
       )}
-      <div className="space-y-2 p-3">
+      <div className="space-y-2 px-3 py-2.5">
         <div className="flex items-center gap-4 text-foreground">
-          <Heart className="h-5 w-5" />
-          <MessageCircle className="h-5 w-5" />
-          <Send className="h-5 w-5" />
-          <Bookmark className="ml-auto h-5 w-5" />
+          <Heart className="h-6 w-6" />
+          <MessageCircle className="h-6 w-6 -scale-x-100" />
+          <Send className="h-6 w-6" />
+          <Bookmark className="ml-auto h-6 w-6" />
         </div>
-        <p className="leading-relaxed">
+        <p className="text-[13px] font-semibold">128 Me gusta</p>
+        <p className="text-[13px] leading-snug">
           <span className="font-semibold">{handleDe(marca).slice(1)} </span>
-          <Texto contenido={contenido} className="inline" />
+          <TextoRed contenido={contenido} className="inline" />
         </p>
       </div>
     </div>
@@ -157,38 +201,32 @@ function PreviaInstagram({
 }
 
 /** Mockup de Facebook. */
-function PreviaFacebook({
-  marca,
-  contenido,
-  imagen,
-}: {
-  marca: string;
-  contenido: string;
-  imagen: string;
-}) {
+function PreviaFacebook({ marca, contenido, imagen }: MockupProps) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card text-sm">
-      <div className="flex items-center gap-2.5 p-3">
+    <div className="overflow-hidden rounded-xl border border-border bg-card text-[15px]">
+      <div className="flex items-center gap-2.5 px-3 pt-3">
         <Avatar marca={marca} className="h-10 w-10 text-sm" />
         <div className="min-w-0">
-          <p className="font-semibold leading-tight">{marca}</p>
+          <p className="text-[15px] font-semibold leading-tight">{marca}</p>
           <p className="text-xs text-muted-foreground">Ahora · Público</p>
         </div>
-        <MoreHorizontal className="ml-auto h-4 w-4 text-muted-foreground" />
+        <MoreHorizontal className="ml-auto h-5 w-5 text-muted-foreground" />
       </div>
-      <div className="px-3 pb-2">
-        <Texto contenido={contenido} className="leading-relaxed" />
+      <div className="px-3 py-2.5">
+        <TextoRed contenido={contenido} className="leading-normal" />
       </div>
-      {imagen && <img src={imagen} alt="" className="max-h-80 w-full object-cover" />}
-      <div className="flex items-center justify-around border-t border-border px-3 py-2 text-muted-foreground">
-        <span className="flex items-center gap-1.5 text-xs font-medium">
-          <ThumbsUp className="h-4 w-4" /> Me gusta
+      {imagen ? (
+        <img src={imagen} alt="" className="max-h-96 w-full object-cover" />
+      ) : null}
+      <div className="mt-1 flex items-center justify-around border-t border-border py-1.5 text-muted-foreground">
+        <span className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium">
+          <ThumbsUp className="h-[18px] w-[18px]" /> Me gusta
         </span>
-        <span className="flex items-center gap-1.5 text-xs font-medium">
-          <MessageCircle className="h-4 w-4" /> Comentar
+        <span className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium">
+          <MessageCircle className="h-[18px] w-[18px]" /> Comentar
         </span>
-        <span className="flex items-center gap-1.5 text-xs font-medium">
-          <Share2 className="h-4 w-4" /> Compartir
+        <span className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium">
+          <Share2 className="h-[18px] w-[18px]" /> Compartir
         </span>
       </div>
     </div>
@@ -196,37 +234,39 @@ function PreviaFacebook({
 }
 
 /** Mockup de TikTok (vertical 9:16 + caption sobreimpreso). */
-function PreviaTikTok({
-  marca,
-  contenido,
-  imagen,
-}: {
-  marca: string;
-  contenido: string;
-  imagen: string;
-}) {
+function PreviaTikTok({ marca, contenido, imagen }: MockupProps) {
   return (
-    <div className="mx-auto w-full max-w-[16rem]">
-      <div className="relative aspect-[9/16] overflow-hidden rounded-xl border border-border bg-black">
+    <div className="mx-auto w-full max-w-[17rem]">
+      <div className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-border bg-black">
         {imagen ? (
-          <img src={imagen} alt="" className="h-full w-full object-cover opacity-90" />
+          <img src={imagen} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-neutral-900 text-neutral-500">
-            <Play className="h-10 w-10" />
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-neutral-800 to-black text-neutral-500">
+            <Play className="h-12 w-12" />
           </div>
         )}
         {/* Acciones laterales */}
-        <div className="absolute bottom-16 right-2 flex flex-col items-center gap-3 text-white">
-          <Heart className="h-6 w-6 drop-shadow" />
-          <MessageCircle className="h-6 w-6 drop-shadow" />
-          <Share2 className="h-6 w-6 drop-shadow" />
+        <div className="absolute bottom-20 right-2.5 flex flex-col items-center gap-4 text-white">
+          <Avatar marca={marca} className="h-9 w-9 border-2 border-white text-[11px]" />
+          <div className="flex flex-col items-center gap-1">
+            <Heart className="h-7 w-7 fill-white drop-shadow" />
+            <span className="text-[11px] font-semibold drop-shadow">12.4k</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <MessageCircle className="h-7 w-7 fill-white drop-shadow" />
+            <span className="text-[11px] font-semibold drop-shadow">312</span>
+          </div>
+          <div className="flex flex-col items-center gap-1">
+            <Share2 className="h-7 w-7 fill-white drop-shadow" />
+            <span className="text-[11px] font-semibold drop-shadow">Compartir</span>
+          </div>
         </div>
         {/* Pie con marca + caption */}
-        <div className="absolute inset-x-0 bottom-0 space-y-1 bg-gradient-to-t from-black/80 to-transparent p-3 text-white">
-          <p className="text-sm font-semibold">{handleDe(marca)}</p>
-          <Texto contenido={contenido} className="line-clamp-3 text-xs leading-snug" />
-          <p className="flex items-center gap-1 text-[11px] text-white/80">
-            <Music2 className="h-3 w-3" /> Sonido original
+        <div className="absolute inset-x-0 bottom-0 space-y-1.5 bg-gradient-to-t from-black/85 via-black/40 to-transparent p-3 pr-16 text-white">
+          <p className="text-sm font-semibold drop-shadow">{handleDe(marca)}</p>
+          <TextoRed contenido={contenido} className="line-clamp-3 text-[13px] leading-snug drop-shadow" />
+          <p className="flex items-center gap-1.5 text-xs text-white/90">
+            <Music2 className="h-3.5 w-3.5" /> Sonido original — {marca}
           </p>
         </div>
       </div>
@@ -234,16 +274,8 @@ function PreviaTikTok({
   );
 }
 
-/** Mockup de YouTube (thumbnail 16:9 + título + canal). */
-function PreviaYouTube({
-  marca,
-  contenido,
-  imagen,
-}: {
-  marca: string;
-  contenido: string;
-  imagen: string;
-}) {
+/** Mockup de YouTube (thumbnail 16:9 + título 2 líneas + canal). */
+function PreviaYouTube({ marca, contenido, imagen }: MockupProps) {
   // En YouTube el "contenido" hace de título: tomamos la primera línea.
   const titulo = contenido.trim().split("\n")[0] || "Título del video";
   return (
@@ -255,16 +287,20 @@ function PreviaYouTube({
           <PlaceholderImagen className="h-full w-full" />
         )}
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600/90 text-white">
+          <div className="flex h-12 w-16 items-center justify-center rounded-xl bg-red-600 text-white shadow-lg">
             <Play className="h-6 w-6 fill-current" />
           </div>
         </div>
+        <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-[11px] font-medium text-white">
+          10:24
+        </span>
       </div>
-      <div className="mt-2.5 flex gap-2.5">
+      <div className="mt-3 flex gap-3">
         <Avatar marca={marca} className="h-9 w-9 text-xs" />
         <div className="min-w-0">
-          <p className="line-clamp-2 font-medium leading-snug">{titulo}</p>
-          <p className="text-xs text-muted-foreground">{marca} · Hace un momento</p>
+          <p className="line-clamp-2 text-[15px] font-medium leading-snug">{titulo}</p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground">{marca}</p>
+          <p className="text-[13px] text-muted-foreground">1.2 mil vistas · Hace un momento</p>
         </div>
       </div>
     </div>
@@ -272,10 +308,7 @@ function PreviaYouTube({
 }
 
 /** Mapa red -> componente de mockup. */
-const PREVIAS: Record<
-  string,
-  React.ComponentType<{ marca: string; contenido: string; imagen: string }>
-> = {
+const PREVIAS: Record<string, React.ComponentType<MockupProps>> = {
   x: PreviaX,
   instagram: PreviaInstagram,
   facebook: PreviaFacebook,
@@ -303,7 +336,8 @@ export function VistaPreviaRed({ red, marca, contenido, imagen_url }: VistaPrevi
       </div>
       <Mockup marca={nombreMarca} contenido={contenido} imagen={imagen} />
       <p className="text-[11px] text-muted-foreground">
-        Mockup aproximado. El render real puede variar según la red.
+        Mockup aproximado. El render real puede variar según la red. Las redes no aplican formato
+        Markdown.
       </p>
     </div>
   );

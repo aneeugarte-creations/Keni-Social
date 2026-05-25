@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, Link2, Loader2, Pencil, Sprout } from "lucide-react";
+import { Eye, FileText, Link2, Loader2, Pencil, Sprout } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { BarraFormato } from "@/components/editor/BarraFormato";
+import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { SelectorPlantilla } from "@/components/plantillas/SelectorPlantilla";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -20,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Markdown } from "@/components/ui/Markdown";
 import {
   Select,
   SelectContent,
@@ -28,9 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type { CuerpoActualizarPublicacion, EstadoOpcion, EstadoPublicacion, Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
@@ -64,9 +66,10 @@ export function DialogoEditar({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
-  const [vista, setVista] = React.useState<"editar" | "previa">("editar");
+  const [vista, setVista] = React.useState<"editar" | "lectura" | "previa">("editar");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
+  const areaRef = React.useRef<HTMLTextAreaElement>(null);
 
   // Catálogo de marcas para la gestión de grupos de hashtags.
   const opcionesQuery = useQuery({
@@ -90,7 +93,6 @@ export function DialogoEditar({
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
-  const excede = limite !== null && contenido.length > limite;
   const programado = estado === "programado";
 
   const guardar = useMutation({
@@ -134,15 +136,19 @@ export function DialogoEditar({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "previa")}>
+        <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "lectura" | "previa")}>
           <TabsList>
             <TabsTrigger value="editar" className="gap-1.5">
               <Pencil className="h-4 w-4" />
               Editar
             </TabsTrigger>
+            <TabsTrigger value="lectura" className="gap-1.5">
+              <FileText className="h-4 w-4" />
+              Vista
+            </TabsTrigger>
             <TabsTrigger value="previa" className="gap-1.5">
               <Eye className="h-4 w-4" />
-              Vista previa
+              Previa
             </TabsTrigger>
           </TabsList>
 
@@ -160,20 +166,14 @@ export function DialogoEditar({
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="editar-contenido">Contenido</Label>
-                <span
-                  className={cn(
-                    "text-xs tabular-nums",
-                    excede ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground",
-                  )}
-                >
-                  {contenido.length.toLocaleString("es-MX")}
-                  {limite !== null && ` / ${limite.toLocaleString("es-MX")}`}
-                </span>
+                <ContadorCaracteres caracteres={contenido.length} limite={limite} />
               </div>
-              <Textarea
+              <AutoTextarea
+                ref={areaRef}
                 id="editar-contenido"
                 value={contenido}
                 onChange={(e) => setContenido(e.target.value)}
+                maxHeight={420}
                 className="min-h-[10rem] font-mono text-sm"
               />
               {publicacion && (
@@ -193,6 +193,7 @@ export function DialogoEditar({
                     <Link2 className="h-4 w-4" />
                     Enlace UTM
                   </Button>
+                  <BarraFormato refArea={areaRef} valor={contenido} onContenido={setContenido} />
                 </div>
               )}
             </div>
@@ -273,6 +274,16 @@ export function DialogoEditar({
                   más adelante.
                 </p>
               </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="lectura">
+            <div className="rounded-md border border-border bg-muted/20 p-4">
+              {contenido.trim() ? (
+                <Markdown>{contenido}</Markdown>
+              ) : (
+                <p className="text-sm italic text-muted-foreground">Sin contenido todavía.</p>
+              )}
             </div>
           </TabsContent>
 

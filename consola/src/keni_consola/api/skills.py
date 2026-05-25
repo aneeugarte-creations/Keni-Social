@@ -122,6 +122,11 @@ _MARCAS_IDS = {m[0] for m in MARCAS}
 _SKILL_NOMBRE = {s.id: s.nombre for s in SKILLS}
 _MARCA_NOMBRE = dict(MARCAS)
 
+# Instruccion ADITIVA de estilo que se anade a TODO prompt de generacion: el copy
+# no debe llevar emojis. Es defensa en profundidad; ademas `quitar_emojis` los borra
+# de forma determinista por si el modelo igual mete alguno.
+_INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
+
 # Tope de tamano del texto de entrada (evita prompts gigantes accidentales).
 _MAX_TEXTO = 60_000
 # Timeout por defecto para la invocacion de Claude (segundos).
@@ -211,6 +216,7 @@ def construir_prompt(skill: str, marca: str, texto: str, redes_ids: list[str] | 
     `redes_ids`, se anade una instruccion ADITIVA (redes + bloque json de piezas).
     """
     base = f"usa {skill} con la siguiente nota, marca {marca}:\n\n{texto}"
+    base = f"{base}\n\n{_INSTRUCCION_SIN_EMOJIS}"
     if redes_ids:
         return f"{base}\n\n{_instruccion_redes(redes_ids)}"
     return base
@@ -221,6 +227,7 @@ def construir_prompt_ruta(
 ) -> str:
     """Construye el prompt para una skill de MEDIA que parte de una RUTA de archivo."""
     base = f"usa {skill} con el archivo en esta ruta, marca {marca}:\n\n{ruta}"
+    base = f"{base}\n\n{_INSTRUCCION_SIN_EMOJIS}"
     if redes_ids:
         return f"{base}\n\n{_instruccion_redes(redes_ids)}"
     return base
@@ -429,6 +436,146 @@ def _derivar_verdicto(texto: str) -> str:
     return ""
 
 
+# --------------------------------------------------------------------------- #
+# Limpieza de emojis del copy generado por IA (determinista)                   #
+# --------------------------------------------------------------------------- #
+
+# Rangos unicode de emojis/simbolos pictograficos que quitamos del copy. Cubre:
+#   - Emoticonos (U+1F600-U+1F64F)
+#   - Misc Symbols and Pictographs (U+1F300-U+1F5FF)
+#   - Transporte y mapas (U+1F680-U+1F6FF)
+#   - Symbols and Pictographs Extended-A (U+1FA70-U+1FAFF)
+#   - Supplemental Symbols and Pictographs (U+1F900-U+1F9FF)
+#   - Banderas / Regional Indicators (U+1F1E6-U+1F1FF)
+#   - Misc Symbols (U+2600-U+26FF) y Dingbats (U+2700-U+27BF) -> incluye ✅⚠❌
+#   - Variation Selector U+FE0F y ZWJ U+200D (unen secuencias tipo familia/banderas)
+# NOTA: NO toca acentos (latin) ni los caracteres de las URLs (ASCII), porque esos
+# puntos de codigo caen fuera de estos rangos. El veredicto se deriva ANTES de
+# aplicar esto (ver `parsear_salida`), asi que su simbolo no se pierde.
+_RE_EMOJI = re.compile(
+    "["
+    "\U0001f600-\U0001f64f"  # emoticonos
+    "\U0001f300-\U0001f5ff"  # misc symbols and pictographs
+    "\U0001f680-\U0001f6ff"  # transporte y mapas
+    "\U0001fa70-\U0001faff"  # symbols and pictographs extended-a
+    "\U0001f900-\U0001f9ff"  # supplemental symbols and pictographs
+    "\U0001f1e6-\U0001f1ff"  # regional indicators (banderas)
+    "\U00002600-\U000026ff"  # misc symbols (incluye ⚠)
+    "\U00002700-\U000027bf"  # dingbats (incluye ✅❌)
+    "\U0000fe0f"  # variation selector-16
+    "\U0000200d"  # zero width joiner (ZWJ)
+    "]+",
+    flags=re.UNICODE,
+)
+
+# Colapsa dobles espacios (no saltos de linea) que deja el borrado de emojis.
+_RE_ESPACIOS = re.compile(r"[ \t]{2,}")
+# Espacios/tabs colgando al FINAL de una linea (antes de un salto o del fin).
+_RE_COLA_LINEA = re.compile(r"[ \t]+(?=\n|$)")
+
+
+def quitar_emojis(texto: str) -> str:
+    """Quita emojis/simbolos pictograficos del texto de forma determinista.
+
+    Borra los puntos de codigo en `_RE_EMOJI` (emojis, dingbats, banderas,
+    variation selectors y ZWJ), colapsa los dobles espacios que pueda dejar el
+    borrado y recorta los extremos. NO toca acentos ni URLs (caen fuera de los
+    rangos). Sobre un texto sin emojis es practicamente la identidad (salvo el
+    recorte de extremos y el colapso de espacios dobles).
+    """
+    if not texto:
+        return texto
+    limpio = _RE_EMOJI.sub("", texto)
+    # Colapsa los dobles espacios/tabs horizontales (no los saltos de linea) que
+    # deja el borrado de un emoji rodeado de espacios.
+    limpio = _RE_ESPACIOS.sub(" ", limpio)
+    # Quita el espacio que pueda quedar colgando al final de cada linea (p.ej. un
+    # emoji al final de la linea); conserva los saltos y la sangria a la izquierda.
+    limpio = _RE_COLA_LINEA.sub("", limpio)
+    return limpio.strip()
+
+
+# --------------------------------------------------------------------------- #
+# Fallback de reparto por encabezados de plataforma (cuando NO hay JSON valido) #
+# --------------------------------------------------------------------------- #
+
+# Variantes tolerantes de etiqueta -> id canonico de `redes`. En minusculas y sin
+# `#`/`*`/`:` (esos se quitan al normalizar el encabezado). El orden no importa: el
+# reparto final se emite en el orden fijo de las redes pedidas.
+_ALIAS_RED: dict[str, str] = {
+    "x": "x",
+    "x/twitter": "x",
+    "twitter": "x",
+    "instagram": "instagram",
+    "ig": "instagram",
+    "facebook": "facebook",
+    "fb": "facebook",
+    "tiktok": "tiktok",
+    "youtube": "youtube",
+}
+
+# Encabezado de plataforma: linea cuyo unico contenido (ignorando `#`/`##`, `**`,
+# `:` y espacios) es una de las etiquetas conocidas. Captura la etiqueta cruda.
+# El sufijo tolera `:` y `*` en cualquier orden ("Instagram:", "**Twitter**",
+# "**Instagram:**").
+_RE_ENCABEZADO_RED = re.compile(
+    r"^[ \t]*#{0,6}[ \t]*\*{0,2}[ \t]*"
+    r"([A-Za-z][A-Za-z/]*)"
+    r"[ \t]*[:*]*[ \t]*$"
+)
+
+
+def _id_red_de_encabezado(linea: str) -> str | None:
+    """Si `linea` es un encabezado de plataforma reconocible, devuelve su id canonico.
+
+    Tolera `#`/`##`/.../`**`/`:` alrededor de la etiqueta ("## X", "**Twitter:**",
+    "Instagram:", "IG"). Devuelve None si la linea no es uno de esos encabezados.
+    """
+    m = _RE_ENCABEZADO_RED.match(linea)
+    if m is None:
+        return None
+    return _ALIAS_RED.get(m.group(1).strip().lower())
+
+
+def _repartir_por_encabezados(texto: str, redes_ids: list[str]) -> dict[str, str]:
+    """Parte `texto` por encabezados de plataforma y asigna el cuerpo a cada red.
+
+    Recorre las lineas: cada encabezado reconocible abre una seccion; el texto hasta
+    el siguiente encabezado (o el fin) es el copy de esa red. Acota a `redes_ids`
+    (ignora redes fuera de las pedidas) y deja la primera ocurrencia ante duplicados.
+    Devuelve `{red_id: copy}` (vacio si no hay encabezados reconocibles).
+    """
+    permitidas = set(redes_ids)
+    por_red: dict[str, list[str]] = {}
+    actual: str | None = None
+    for linea in texto.splitlines():
+        red = _id_red_de_encabezado(linea)
+        if red is not None:
+            # Solo abrimos seccion para redes pedidas y no vistas antes.
+            actual = red if (red in permitidas and red not in por_red) else None
+            if actual is not None:
+                por_red[actual] = []
+            continue
+        if actual is not None:
+            por_red[actual].append(linea)
+    return {red: "\n".join(cuerpo).strip() for red, cuerpo in por_red.items()}
+
+
+def _piezas_desde_por_red(por_red: dict[str, str], redes_ids: list[str]) -> list[dict[str, object]]:
+    """Construye las piezas en el ORDEN FIJO de las redes pedidas, sin emojis.
+
+    Cada `contenido` se limpia con `quitar_emojis` y `caracteres = len(contenido)`
+    YA limpio. Solo incluye redes presentes en `por_red`.
+    """
+    piezas: list[dict[str, object]] = []
+    for r in redes_ids:
+        if r not in por_red:
+            continue
+        contenido = quitar_emojis(por_red[r])
+        piezas.append({"red": r, "contenido": contenido, "caracteres": len(contenido)})
+    return piezas
+
+
 def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
     """Parte la salida cruda en `resultado` limpio + `piezas` + `verdicto`.
 
@@ -436,30 +583,36 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
       `piezas` a `[{red, contenido, caracteres}]` (solo redes en `redes_ids`, en
       orden fijo; `caracteres` = len(contenido)).
     - QUITA ese bloque json del texto para que `resultado` quede limpio.
-    - Deriva `verdicto` de la primera linea con ✅/⚠️/❌.
-    - Si no hay bloque, el json es invalido o no trae `piezas` utilizables:
-      `piezas=[]` y `resultado` = salida tal cual (la UI lo muestra en una pestaña).
+    - Deriva `verdicto` de la primera linea con ✅/⚠️/❌ ANTES de tocar nada (asi el
+      simbolo se conserva aunque luego se borren los emojis del copy).
+    - FALLBACK: si no hay bloque JSON valido (o no trae `piezas` utilizables), intenta
+      repartir el texto por ENCABEZADOS de plataforma. Si tampoco hay encabezados
+      reconocibles, `piezas=[]` (comportamiento previo).
+    - `resultado` y el `contenido` de cada pieza salen SIN emojis (`quitar_emojis`);
+      el JSON sigue siendo la via preferente, el fallback solo actua si aquel falla.
 
     Devuelve `{"resultado": str, "piezas": [...], "verdicto": str}`.
     """
     salida = salida or ""
+    # El veredicto se deriva PRIMERO, sobre el texto crudo, para no perder su simbolo.
+    verdicto = _derivar_verdicto(salida)
+
     coincidencias = list(_RE_BLOQUE_JSON.finditer(salida))
-    if not coincidencias:
-        return {"resultado": salida.strip(), "piezas": [], "verdicto": _derivar_verdicto(salida)}
+    datos = None
+    limpio = salida.strip()
+    if coincidencias:
+        ultima = coincidencias[-1]
+        try:
+            datos = json.loads(ultima.group(1))
+        except (json.JSONDecodeError, ValueError):
+            # JSON malformado: dejamos el texto tal cual (incluido el bloque), sin piezas via JSON.
+            datos = None
+        else:
+            # Texto LIMPIO: quitamos solo el ultimo bloque json (el de las piezas).
+            limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
 
-    ultima = coincidencias[-1]
-    try:
-        datos = json.loads(ultima.group(1))
-    except (json.JSONDecodeError, ValueError):
-        # JSON malformado: dejamos el texto tal cual (incluido el bloque) y sin piezas.
-        return {"resultado": salida.strip(), "piezas": [], "verdicto": _derivar_verdicto(salida)}
-
-    # Texto LIMPIO: quitamos solo el ultimo bloque json (el de las piezas).
-    limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
-    verdicto = _derivar_verdicto(limpio)
-
-    permitidas = set(redes_ids)
     por_red: dict[str, str] = {}
+    permitidas = set(redes_ids)
     crudas = datos.get("piezas") if isinstance(datos, dict) else None
     if isinstance(crudas, list):
         for cruda in crudas:
@@ -473,13 +626,12 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
                 continue
             por_red.setdefault(red, texto)  # primera gana ante duplicados
 
-    # Emitimos las piezas en el ORDEN FIJO de las redes pedidas.
-    piezas = [
-        {"red": r, "contenido": por_red[r], "caracteres": len(por_red[r])}
-        for r in redes_ids
-        if r in por_red
-    ]
-    return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
+    # FALLBACK: sin piezas via JSON, intenta repartir por encabezados de plataforma.
+    if not por_red:
+        por_red = _repartir_por_encabezados(limpio, redes_ids)
+
+    piezas = _piezas_desde_por_red(por_red, redes_ids)
+    return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
 
 
 # Largo maximo del titulo derivado de la nota (chars).

@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -159,16 +159,15 @@ function SeccionImagen() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-4">
         <CardTitle className="text-base">Imagen con IA</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-0">
-        <p className="text-sm text-muted-foreground">
+        <CardDescription>
           Configura la clave del proveedor para activar <strong>«Generar con IA»</strong> al crear
           imágenes en las publicaciones. La clave se guarda{" "}
           <strong>solo en esta máquina</strong> y nunca se muestra.
-        </p>
-
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0">
         {isPending ? (
           <div className="space-y-3">
             <Skeleton className="h-9 w-full" />
@@ -446,8 +445,11 @@ function SeccionRedes() {
 
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-4">
         <CardTitle className="text-base">Redes sociales</CardTitle>
+        <CardDescription>
+          Conecta cada plataforma pegando su token de acceso para alimentar métricas y publicación.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
         {/* Aviso honesto */}
