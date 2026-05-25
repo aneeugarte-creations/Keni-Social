@@ -3,80 +3,77 @@
 @tailwind utilities;
 
 /*
-  Sistema de diseno Keni (guia de marketing: 02-marketing/diseno).
-  Filosofia wabi-sabi / Vervoordt: minimalismo calido, mucho aire, tipografia
-  ligera (Inter 300/400/500). Paleta monocroma: blanco, negro y grises. Sin
-  colores llamativos; el acento se aisla en el bloque ACENTO de abajo para poder
-  probar variantes (monocromo / naranja / teal).
+  Sistema de diseno: estilo Vercel / Geist (dashboard monocromo en grises).
+  Patron de capas: el LIENZO de la app es gris muy sutil (#fafafa) y las
+  superficies (tarjetas, popovers) son blancas (#fff), de modo que flotan sobre
+  el gris separadas por bordes hairline (#eaeaea). Texto principal #171717,
+  secundario #666. Primario negro solido para acciones; sin color de acento.
 
   Tokens shadcn en HSL. Modo oscuro por clase `.dark` en <html> (persistido en
-  localStorage por el TemaProvider). La guia es clara/blanca por defecto.
+  localStorage por el TemaProvider). Claro por defecto.
 */
 @layer base {
   :root {
-    --background: 0 0% 100%; /* #FFFFFF */
-    --foreground: 0 0% 0%; /* #000000 titulares / texto principal */
+    --background: 0 0% 98%; /* #fafafa lienzo gris sutil */
+    --foreground: 0 0% 9%; /* #171717 texto principal (Geist gray-1000) */
 
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
+    --card: 0 0% 100%; /* #ffffff superficies que flotan sobre el lienzo */
+    --card-foreground: 0 0% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
+    --popover-foreground: 0 0% 9%;
 
-    /* ---- ACENTO (variante: MONOCROMO) ---- */
-    --primary: 0 0% 10%; /* #1a1a1a carbon */
+    /* Primario = negro Geist (acciones). Sin color de acento. */
+    --primary: 0 0% 9%;
     --primary-foreground: 0 0% 100%;
-    --ring: 0 0% 10%;
-    /* --------------------------------------- */
+    --ring: 0 0% 9%;
 
-    --secondary: 0 0% 98%; /* #FAFAFA superficie */
-    --secondary-foreground: 0 0% 0%;
+    --secondary: 0 0% 95%; /* #f2f2f2 badges / superficies sutiles */
+    --secondary-foreground: 0 0% 9%;
 
-    --muted: 0 0% 98%;
-    --muted-foreground: 0 0% 45%; /* #737373 texto secundario / labels */
+    --muted: 0 0% 96%; /* #f5f5f5 */
+    --muted-foreground: 0 0% 40%; /* #666 texto secundario / metadata (Geist gray-700) */
 
-    --accent: 0 0% 96%; /* #f5f5f5 hover gris Apple */
-    --accent-foreground: 0 0% 0%;
+    --accent: 0 0% 95%; /* #f2f2f2 hover / nav activa */
+    --accent-foreground: 0 0% 9%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 92%; /* ~rgba(0,0,0,0.08) bordes finos */
+    --border: 0 0% 92%; /* #eaeaea hairline */
     --input: 0 0% 92%;
 
-    --radius: 0.5rem;
+    --radius: 0.625rem; /* botones/inputs ~8px; tarjetas usan rounded-xl (12px) */
   }
 
   .dark {
-    --background: 0 0% 4%; /* #0a0a0a */
-    --foreground: 0 0% 98%; /* #FAFAFA */
+    --background: 0 0% 4%; /* #0a0a0a lienzo */
+    --foreground: 0 0% 93%; /* #ededed */
 
-    --card: 0 0% 8%; /* #141414 superficie */
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 7%; /* #121212 superficie (mas clara que el lienzo) */
+    --card-foreground: 0 0% 93%;
 
-    --popover: 0 0% 8%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 93%;
 
-    /* ---- ACENTO (variante: MONOCROMO) ---- */
-    --primary: 0 0% 98%;
+    --primary: 0 0% 98%; /* boton claro sobre fondo oscuro */
     --primary-foreground: 0 0% 9%;
-    --ring: 0 0% 70%;
-    /* --------------------------------------- */
+    --ring: 0 0% 83%;
 
-    --secondary: 0 0% 12%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 93%;
 
-    --muted: 0 0% 12%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 56%; /* #8f8f8f */
 
     --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 98%;
+    --accent-foreground: 0 0% 93%;
 
     --destructive: 0 63% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
+    --border: 0 0% 16%; /* #292929 */
+    --input: 0 0% 16%;
   }
 }
 
@@ -85,13 +82,13 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground font-sans font-light antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
-  /* Label de seccion estilo guia: mayusculas, tracking amplio, peso medio. */
+  /* Label de seccion estilo dashboard: mayusculas, tracking ligero, gris. */
   .text-label {
-    @apply text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground;
+    @apply text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground;
   }
 }

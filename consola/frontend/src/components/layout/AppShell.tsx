@@ -1,4 +1,4 @@
-import { Loader2, Menu, Moon, Sun, X } from "lucide-react";
+import { Loader2, Menu, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
@@ -6,7 +6,6 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NAVEGACION } from "@/components/layout/navegacion";
 import { Button } from "@/components/ui/button";
-import { useTema } from "@/hooks/tema-contexto";
 import { cn } from "@/lib/utils";
 
 /** Fallback mientras se descarga el chunk de una pagina (lazy/Suspense). */
@@ -29,11 +28,10 @@ function tituloDeRuta(pathname: string): string {
 
 /**
  * Cascaron de la aplicacion: sidebar a la izquierda, topbar con el titulo de la
- * seccion y el toggle de modo oscuro, y el area de contenido (Outlet del router).
- * En pantallas chicas el sidebar se vuelve un panel deslizable.
+ * seccion y el area de contenido (Outlet del router) a ancho completo. En
+ * pantallas chicas el sidebar se vuelve un panel deslizable.
  */
 export function AppShell() {
-  const { esOscuro, alternar } = useTema();
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
 
@@ -66,7 +64,7 @@ export function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:px-6">
           <Button
             variant="ghost"
             size="icon"
@@ -77,27 +75,17 @@ export function AppShell() {
             {menuAbierto ? <X /> : <Menu />}
           </Button>
 
+          {/* Marca (solo movil; en escritorio vive en el sidebar). */}
           <div className="md:hidden">
             <Wordmark />
           </div>
 
-          <h1 className="hidden text-sm font-medium tracking-wide md:block">{titulo}</h1>
-
-          <div className="ml-auto flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={alternar}
-              aria-label={esOscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-              title={esOscuro ? "Modo claro" : "Modo oscuro"}
-            >
-              {esOscuro ? <Sun /> : <Moon />}
-            </Button>
-          </div>
+          {/* Titulo de la seccion activa (escritorio), estilo Vercel. */}
+          <h1 className="hidden text-sm font-medium text-foreground md:block">{titulo}</h1>
         </header>
 
         <main className={cn("flex-1 overflow-y-auto")}>
-          <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:py-8">
+          <div className="w-full px-6 py-6 lg:px-8">
             <React.Suspense fallback={<CargandoPagina />}>
               <Outlet />
             </React.Suspense>

@@ -124,8 +124,9 @@ export default {
         "tremor-full": "9999px",
       },
       fontFamily: {
-        // Fuente unica de la marca Keni (cargada en index.html).
+        // Tipografia del sistema de diseno (estilo Vercel/Geist, cargada en index.html).
         sans: [
+          "Geist",
           "Inter",
           "ui-sans-serif",
           "system-ui",
@@ -136,6 +137,7 @@ export default {
           "Arial",
           "sans-serif",
         ],
+        mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       fontSize: {
         // Label de seccion guia Keni: mayusculas + tracking amplio + peso medio.
