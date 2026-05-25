@@ -63,11 +63,12 @@ export default {
         // Paleta Tremor mapeada a tokens (modo claro).
         tremor: {
           brand: {
-            faint: "#fff3ed",
-            muted: "#ffc2a8",
-            subtle: "#ff9670",
-            DEFAULT: "#ff5a1f",
-            emphasis: "#d12d07",
+            // ACENTO charts (variante: MONOCROMO).
+            faint: "#f5f5f5",
+            muted: "#d4d4d4",
+            subtle: "#a3a3a3",
+            DEFAULT: "#404040",
+            emphasis: "#171717",
             inverted: "#ffffff",
           },
           background: {
@@ -89,11 +90,12 @@ export default {
         // Paleta Tremor (modo oscuro).
         "dark-tremor": {
           brand: {
-            faint: "#0b1729",
-            muted: "#711b11",
-            subtle: "#ad2009",
-            DEFAULT: "#ff5a1f",
-            emphasis: "#ff9670",
+            // ACENTO charts (variante: MONOCROMO) — modo oscuro.
+            faint: "#1a1a1a",
+            muted: "#404040",
+            subtle: "#737373",
+            DEFAULT: "#d4d4d4",
+            emphasis: "#fafafa",
             inverted: "#0b0f17",
           },
           background: {
@@ -121,7 +123,23 @@ export default {
         "tremor-default": "0.5rem",
         "tremor-full": "9999px",
       },
+      fontFamily: {
+        // Fuente unica de la marca Keni (cargada en index.html).
+        sans: [
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif",
+        ],
+      },
       fontSize: {
+        // Label de seccion guia Keni: mayusculas + tracking amplio + peso medio.
+        label: ["0.75rem", { lineHeight: "1rem", letterSpacing: "0.15em", fontWeight: "500" }],
         "tremor-label": ["0.75rem", { lineHeight: "1rem" }],
         "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
         "tremor-title": ["1.125rem", { lineHeight: "1.75rem" }],

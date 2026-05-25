@@ -81,7 +81,7 @@ export function AppShell() {
             <Wordmark />
           </div>
 
-          <h1 className="hidden text-sm font-semibold md:block">{titulo}</h1>
+          <h1 className="hidden text-sm font-medium tracking-wide md:block">{titulo}</h1>
 
           <div className="ml-auto flex items-center gap-1">
             <Button

@@ -21,11 +21,11 @@ export const TemaContext = React.createContext<ContextoTema | null>(null);
 
 /** Lee el tema inicial: lo guardado en localStorage o, si no, la preferencia del SO. */
 export function temaInicial(): Tema {
-  if (typeof window === "undefined") return "oscuro";
+  if (typeof window === "undefined") return "claro";
   const guardado = window.localStorage.getItem(CLAVE_LS);
   if (guardado === "claro" || guardado === "oscuro") return guardado;
-  const prefiereOscuro = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-  return prefiereOscuro ? "oscuro" : "claro";
+  // La guia de marca Keni es clara/blanca por defecto (wabi-sabi, mucho aire).
+  return "claro";
 }
 
 export function useTema(): ContextoTema {
