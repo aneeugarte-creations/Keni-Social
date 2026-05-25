@@ -113,3 +113,22 @@ def test_generar_proveedor_configurado_helper(monkeypatch, entorno):
     assert media.proveedor_configurado() is False
     monkeypatch.setenv("OPENAI_API_KEY", "x")
     assert media.proveedor_configurado() is True
+
+
+def test_media_lee_clave_del_almacen(monkeypatch, entorno):
+    """media toma la clave del almacen de secretos (no solo del env)."""
+    from keni_consola import secretos
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    assert media.proveedor_configurado() is False
+    secretos.guardar_clave_imagen("openai", "sk-del-almacen-1234")
+    assert media.proveedor_configurado() is True
+
+
+def test_media_almacen_tiene_prioridad_sobre_env(monkeypatch, entorno):
+    """Si hay clave en el almacen, esa se usa antes que la del env."""
+    from keni_consola import secretos
+
+    monkeypatch.setenv("OPENAI_API_KEY", "clave-de-env")
+    secretos.guardar_clave_imagen("openai", "clave-del-almacen")
+    assert media._clave_openai() == "clave-del-almacen"

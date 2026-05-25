@@ -452,6 +452,62 @@ export interface FiltrosPublicaciones {
   [clave: string]: string | undefined;
 }
 
+// --- Conexiones (clave de imagen IA + tokens de redes) ---
+//
+// Los secretos son write-only: nunca llegan al frontend. Del servidor solo se
+// recibe el estado (`configurado`/`conectado`) y, para la imagen IA, una
+// `pista` no sensible (p. ej. los últimos caracteres de la clave).
+
+/** Estado de la configuración del proveedor de imagen con IA. */
+export interface RespuestaConexionImagen {
+  proveedor: string;
+  modelo: string;
+  configurado: boolean;
+  /** Pista no sensible de la clave (nunca el valor completo). */
+  pista: string;
+}
+
+/** Cuerpo para guardar la clave del proveedor de imagen IA. */
+export interface CuerpoGuardarConexionImagen {
+  /** Identificador del proveedor (opcional; el backend tiene uno por defecto). */
+  proveedor?: string;
+  api_key: string;
+}
+
+/** Respuesta al guardar la clave de imagen IA. */
+export interface RespuestaGuardarConexionImagen {
+  configurado: boolean;
+  mensaje: string;
+}
+
+/** Respuesta de la prueba de conexión de imagen IA. */
+export interface RespuestaProbarConexionImagen {
+  ok: boolean;
+  mensaje: string;
+}
+
+/** Estado de conexión de una red social. */
+export interface RedConexion {
+  plataforma: string;
+  nombre: string;
+  conectado: boolean;
+}
+
+export interface RespuestaConexionesRedes {
+  redes: RedConexion[];
+}
+
+/** Cuerpo para conectar (guardar token de) una red social. */
+export interface CuerpoConectarRed {
+  token: string;
+}
+
+/** Respuesta al conectar una red social. */
+export interface RespuestaConectarRed {
+  conectado: boolean;
+  mensaje: string;
+}
+
 // --- Respuesta generica con mensaje ---
 
 export interface RespuestaMensaje {

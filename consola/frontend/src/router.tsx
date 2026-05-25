@@ -15,9 +15,10 @@ const Proyectos = lazy(() => import("@/pages/Proyectos"));
 const Carpetas = lazy(() => import("@/pages/Carpetas"));
 const Estado = lazy(() => import("@/pages/Estado"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
+const Conexiones = lazy(() => import("@/pages/Conexiones"));
 
 /**
- * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las 7 paginas
+ * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
  * cuelgan de el. La landing `/` redirige a `/generar-copy`, que es el uso diario.
  */
 export const router = createBrowserRouter([
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
       { path: "carpetas", element: <Carpetas /> },
       { path: "estado", element: <Estado /> },
       { path: "configuracion", element: <Configuracion /> },
+      { path: "conexiones", element: <Conexiones /> },
       // Cualquier otra ruta: de vuelta al inicio.
       { path: "*", element: <Navigate to="/generar-copy" replace /> },
     ],

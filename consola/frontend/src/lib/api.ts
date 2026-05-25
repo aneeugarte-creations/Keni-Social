@@ -12,6 +12,7 @@ import type {
   CompararMetricas,
   CuerpoActualizarPublicacion,
   CuerpoActualizarTarea,
+  CuerpoConectarRed,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
   CuerpoCrearProyecto,
@@ -23,6 +24,7 @@ import type {
   CuerpoGenerarMedia,
   CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
+  CuerpoGuardarConexionImagen,
   CuerpoGuardarConfig,
   CuerpoSugerirHashtags,
   DetalleHistorial,
@@ -32,6 +34,9 @@ import type {
   OpcionesPublicaciones,
   ReporteMetricas,
   RespuestaCarpetas,
+  RespuestaConectarRed,
+  RespuestaConexionesRedes,
+  RespuestaConexionImagen,
   RespuestaConfig,
   RespuestaCrearCarpeta,
   RespuestaCrearTarea,
@@ -45,6 +50,8 @@ import type {
   RespuestaMedia,
   RespuestaMensaje,
   RespuestaProyectos,
+  RespuestaProbarConexionImagen,
+  RespuestaGuardarConexionImagen,
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaSkills,
@@ -275,4 +282,28 @@ export const api = {
   ) => peticion<CompararMetricas>(`/metricas/comparar${query(params)}`, { signal }),
   exportarMetricas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/export.${formato}${query(params)}`),
+
+  // --- Conexiones (imagen IA + tokens de redes) ---
+  // Los secretos son write-only: solo se envían (PUT); del servidor llega
+  // únicamente el estado y, para la imagen, una pista no sensible.
+  conexionImagen: (signal?: AbortSignal) =>
+    peticion<RespuestaConexionImagen>("/conexiones/imagen", { signal }),
+  guardarConexionImagen: (cuerpo: CuerpoGuardarConexionImagen) =>
+    peticion<RespuestaGuardarConexionImagen>("/conexiones/imagen", { metodo: "PUT", json: cuerpo }),
+  probarConexionImagen: () =>
+    peticion<RespuestaProbarConexionImagen>("/conexiones/imagen/probar", { metodo: "POST" }),
+  eliminarConexionImagen: () =>
+    peticion<RespuestaMensaje>("/conexiones/imagen", { metodo: "DELETE" }),
+
+  conexionesRedes: (signal?: AbortSignal) =>
+    peticion<RespuestaConexionesRedes>("/conexiones/redes", { signal }),
+  conectarRed: (plataforma: string, cuerpo: CuerpoConectarRed) =>
+    peticion<RespuestaConectarRed>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  desconectarRed: (plataforma: string) =>
+    peticion<RespuestaMensaje>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
+      metodo: "DELETE",
+    }),
 };

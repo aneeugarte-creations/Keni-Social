@@ -17,7 +17,8 @@ GENERACION POR IA (inyectable / mockeable):
     endpoint responde 400 con un mensaje claro en espanol.
   - `generar_imagen(prompt)` delega en `_PROVEEDOR` (modulo-nivel). Los tests lo
     parchean para NUNCA tocar la red: ni se llama a OpenAI ni se necesita httpx real.
-  - Proveedor por defecto: OpenAI Images (`gpt-image-1`) via `OPENAI_API_KEY`.
+  - Proveedor por defecto: OpenAI Images (`gpt-image-1`). La clave se toma del
+    almacen de secretos (`keni_consola.secretos`) y, si no, del env `OPENAI_API_KEY`.
 """
 
 from __future__ import annotations
@@ -198,7 +199,16 @@ def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
 
 
 def _clave_openai() -> str | None:
-    """Clave de OpenAI desde el entorno (`OPENAI_API_KEY`), o None si no esta."""
+    """Clave de OpenAI: primero del almacen de secretos, si no, del env.
+
+    Configurarla por la UI (almacen `secretos.toml`) activa la generacion. Se
+    mantiene el fallback al entorno (`OPENAI_API_KEY`) para no romper despliegues
+    que ya la pasan por variable. NUNCA se loguea aqui.
+    """
+    from . import secretos
+
+    if (clave := secretos.obtener_clave_imagen()):
+        return clave
     clave = os.environ.get("OPENAI_API_KEY")
     return clave if clave else None
 
