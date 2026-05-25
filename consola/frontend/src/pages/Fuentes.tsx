@@ -17,6 +17,10 @@ import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { BloqueError } from "@/components/comunes/BloqueError";
+import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -59,8 +63,6 @@ import {
 const CLAVE_FUENTES = ["rss", "fuentes"] as const;
 const CLAVE_ITEMS = ["rss", "items"] as const;
 
-/** Valor de "sin marca / general" en los selectores. */
-const MARCA_NINGUNA = "__ninguna__";
 /** Valor de "todas las fuentes" en el filtro de items. */
 const FUENTE_TODAS = "__todas__";
 
@@ -151,9 +153,10 @@ function GestionFuentes({
         ) : query.isError ? (
           <p className="py-4 text-center text-sm text-destructive">{mensajeError(query.error)}</p>
         ) : fuentes.length === 0 ? (
-          <p className="py-4 text-center text-sm text-muted-foreground">
-            Aún no hay feeds. Añade el primero con el botón de arriba.
-          </p>
+          <EstadoVacioTexto
+            texto="Aún no hay feeds. Añade el primero con el botón de arriba."
+            className="py-4"
+          />
         ) : (
           <div className="space-y-2">
             {fuentes.map((f) => (
@@ -367,7 +370,7 @@ function FormularioFuente({
   const queryClient = useQueryClient();
   const [nombre, setNombre] = React.useState(fuente?.nombre ?? "");
   const [url, setUrl] = React.useState(fuente?.url ?? "");
-  const [marca, setMarca] = React.useState(fuente?.marca || MARCA_NINGUNA);
+  const [marca, setMarca] = React.useState(desdeMarca(fuente?.marca));
   const [incluir, setIncluir] = React.useState(fuente?.incluir ?? "");
   const [excluir, setExcluir] = React.useState(fuente?.excluir ?? "");
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
@@ -377,7 +380,7 @@ function FormularioFuente({
 
   const guardar = useMutation({
     mutationFn: () => {
-      const marcaVal = marca === MARCA_NINGUNA ? "" : marca;
+      const marcaVal = marcaParam(marca) ?? "";
       const redesArr = [...redesDef];
       if (fuente) {
         return api.actualizarFuenteRss(fuente.id, {
@@ -453,19 +456,14 @@ function FormularioFuente({
         <Label htmlFor="fuente-marca">
           Marca <span className="font-normal text-muted-foreground">(opcional)</span>
         </Label>
-        <Select value={marca} onValueChange={setMarca}>
-          <SelectTrigger id="fuente-marca">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={MARCA_NINGUNA}>Todas las marcas</SelectItem>
-            {marcas.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.nombre}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SelectorMarca
+          id="fuente-marca"
+          marcas={marcas}
+          valor={marca}
+          onCambio={setMarca}
+          ariaLabel="Marca"
+          className="w-full"
+        />
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -672,22 +670,20 @@ function ItemsRecientes({
             ))}
           </div>
         ) : query.isError ? (
-          <div className="flex flex-col items-center gap-3 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertCircle className="h-6 w-6" />
-            </div>
-            <p className="max-w-md text-sm text-muted-foreground">{mensajeError(query.error)}</p>
-            <Button onClick={() => void query.refetch()} disabled={query.isFetching}>
-              <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} />
-              Reintentar
-            </Button>
-          </div>
+          <BloqueError
+            titulo="No se pudieron cargar las noticias"
+            mensaje={mensajeError(query.error)}
+            onReintentar={() => void query.refetch()}
+            cargando={query.isFetching}
+          />
         ) : itemsFiltrados.length === 0 ? (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            {items.length === 0
-              ? "No hay noticias para mostrar. Añade un feed o cambia el filtro."
-              : "Ninguna noticia coincide con el filtro."}
-          </p>
+          <EstadoVacioTexto
+            texto={
+              items.length === 0
+                ? "No hay noticias para mostrar. Añade un feed o cambia el filtro."
+                : "Ninguna noticia coincide con el filtro."
+            }
+          />
         ) : (
           <div className="space-y-3">
             {itemsFiltrados.map((item, i) => (

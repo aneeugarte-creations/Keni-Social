@@ -14,9 +14,7 @@ const Metricas = lazy(() => import("@/pages/Metricas"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Proyectos = lazy(() => import("@/pages/Proyectos"));
 const Carpetas = lazy(() => import("@/pages/Carpetas"));
-const Estado = lazy(() => import("@/pages/Estado"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
-const Conexiones = lazy(() => import("@/pages/Conexiones"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
@@ -37,9 +35,11 @@ export const router = createBrowserRouter([
       // Ajustes
       { path: "proyectos", element: <Proyectos /> },
       { path: "carpetas", element: <Carpetas /> },
-      { path: "estado", element: <Estado /> },
       { path: "configuracion", element: <Configuracion /> },
-      { path: "conexiones", element: <Conexiones /> },
+      // Redirecciones de páginas fusionadas/retiradas (issues #87, #88):
+      // Conexiones se fusionó en Configuración; Estado pasó a la topbar.
+      { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
+      { path: "estado", element: <Navigate to="/configuracion" replace /> },
       // Cualquier otra ruta: de vuelta al inicio.
       { path: "*", element: <Navigate to="/generar-copy" replace /> },
     ],

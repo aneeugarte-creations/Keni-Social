@@ -1,5 +1,8 @@
 import { Sprout } from "lucide-react";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRed } from "@/components/comunes/SelectorRed";
+import { MARCA_TODAS } from "@/components/comunes/selectores";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
@@ -11,8 +14,12 @@ import {
 } from "@/components/ui/select";
 import type { OpcionesPublicaciones } from "@/types";
 
-/** Valor que representa "todos" en cada filtro (sin filtrar). */
-export const FILTRO_TODOS = "__todos__";
+/**
+ * Valor que representa "todos / sin filtrar". Es el mismo centinela único
+ * (`MARCA_TODAS`) que usan los selectores compartidos, de modo que marca, red y
+ * estado comparten una sola constante.
+ */
+export const FILTRO_TODOS = MARCA_TODAS;
 
 /** Filtros de marca, red, estado y "solo perennes". Notifica los cambios hacia arriba. */
 export function FiltrosPublicaciones({
@@ -38,33 +45,21 @@ export function FiltrosPublicaciones({
 }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <Select value={marca} onValueChange={onMarca}>
-        <SelectTrigger className="w-full sm:w-[180px]" aria-label="Filtrar por marca">
-          <SelectValue placeholder="Marca" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={FILTRO_TODOS}>Todas las marcas</SelectItem>
-          {opciones.marcas.map((m) => (
-            <SelectItem key={m.id} value={m.id}>
-              {m.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SelectorMarca
+        marcas={opciones.marcas}
+        valor={marca}
+        onCambio={onMarca}
+        ariaLabel="Filtrar por marca"
+        className="w-full sm:w-[180px]"
+      />
 
-      <Select value={red} onValueChange={onRed}>
-        <SelectTrigger className="w-full sm:w-[160px]" aria-label="Filtrar por red">
-          <SelectValue placeholder="Red" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={FILTRO_TODOS}>Todas las redes</SelectItem>
-          {opciones.redes.map((r) => (
-            <SelectItem key={r.id} value={r.id}>
-              {r.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SelectorRed
+        redes={opciones.redes}
+        valor={red}
+        onCambio={onRed}
+        ariaLabel="Filtrar por red"
+        className="w-full sm:w-[160px]"
+      />
 
       <Select value={estado} onValueChange={onEstado}>
         <SelectTrigger className="w-full sm:w-[160px]" aria-label="Filtrar por estado">

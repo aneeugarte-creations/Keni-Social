@@ -8,6 +8,8 @@ import { Copy, Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,13 +21,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { api, ApiError } from "@/lib/api";
 import type { MarcaDisponible, Publicacion, RedPublicacion } from "@/types";
 
@@ -103,33 +98,27 @@ export function DialogoDuplicar({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="dup-red">Red destino</Label>
-              <Select value={red} onValueChange={setRed}>
-                <SelectTrigger id="dup-red">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {redes.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectorRed
+                id="dup-red"
+                redes={redes}
+                valor={red}
+                onCambio={setRed}
+                incluirTodas={false}
+                ariaLabel="Red destino"
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="dup-marca">Marca destino</Label>
-              <Select value={marca} onValueChange={setMarca}>
-                <SelectTrigger id="dup-marca">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {marcas.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectorMarca
+                id="dup-marca"
+                marcas={marcas}
+                valor={marca}
+                onCambio={setMarca}
+                incluirTodas={false}
+                ariaLabel="Marca destino"
+                className="w-full"
+              />
             </div>
           </div>
         </div>

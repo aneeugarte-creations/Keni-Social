@@ -10,6 +10,9 @@ import { FileText, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRed } from "@/components/comunes/SelectorRed";
+import { desdeMarca, desdeRed, marcaParam, redParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,13 +24,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import type { MarcaDisponible, Plantilla, RedPublicacion } from "@/types";
@@ -39,9 +35,6 @@ function mensajeError(error: unknown): string {
   if (error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
-
-/** Valor de "sin marca / general" y "cualquier red". */
-const NINGUNA = "__ninguna__";
 
 /** Formulario de creación/edición de una plantilla (inline). */
 function FormularioPlantilla({
@@ -59,16 +52,16 @@ function FormularioPlantilla({
 }) {
   const queryClient = useQueryClient();
   const [nombre, setNombre] = React.useState(plantilla?.nombre ?? "");
-  const [marca, setMarca] = React.useState(plantilla?.marca || NINGUNA);
-  const [red, setRed] = React.useState(plantilla?.red || NINGUNA);
+  const [marca, setMarca] = React.useState(desdeMarca(plantilla?.marca));
+  const [red, setRed] = React.useState(desdeRed(plantilla?.red));
   const [contenido, setContenido] = React.useState(plantilla?.contenido ?? "");
 
   const guardar = useMutation({
     mutationFn: () => {
       const cuerpo = {
         nombre: nombre.trim(),
-        marca: marca === NINGUNA ? undefined : marca,
-        red: red === NINGUNA ? undefined : red,
+        marca: marcaParam(marca),
+        red: redParam(red),
         contenido,
       };
       return plantilla
@@ -103,37 +96,28 @@ function FormularioPlantilla({
           <Label htmlFor="plantilla-marca">
             Marca <span className="font-normal text-muted-foreground">(opcional)</span>
           </Label>
-          <Select value={marca} onValueChange={setMarca}>
-            <SelectTrigger id="plantilla-marca">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NINGUNA}>Todas las marcas</SelectItem>
-              {marcas.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectorMarca
+            id="plantilla-marca"
+            marcas={marcas}
+            valor={marca}
+            onCambio={setMarca}
+            ariaLabel="Marca"
+            className="w-full"
+          />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="plantilla-red">
             Red <span className="font-normal text-muted-foreground">(opcional)</span>
           </Label>
-          <Select value={red} onValueChange={setRed}>
-            <SelectTrigger id="plantilla-red">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NINGUNA}>Cualquier red</SelectItem>
-              {redes.map((r) => (
-                <SelectItem key={r.id} value={r.id}>
-                  {r.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SelectorRed
+            id="plantilla-red"
+            redes={redes}
+            valor={red}
+            onCambio={setRed}
+            etiquetaTodas="Cualquier red"
+            ariaLabel="Red"
+            className="w-full"
+          />
         </div>
       </div>
       <div className="space-y-1.5">

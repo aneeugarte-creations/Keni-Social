@@ -10,6 +10,7 @@ import { BadgeDelta, type DeltaType } from "@tremor/react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import * as React from "react";
 
+import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,12 +50,12 @@ export function CompararPeriodos({ opciones }: { opciones: OpcionesMetricas }) {
   const [marca, setMarca] = React.useState(MARCA_TODAS);
 
   const habilitado = Boolean(rangoA && rangoB);
-  const marcaParam = marca === MARCA_TODAS ? undefined : marca;
+  const marca_ = marcaParam(marca);
 
   const { data, isPending, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["metricas", "comparar", rangoA, rangoB, marcaParam ?? "todas"],
+    queryKey: ["metricas", "comparar", rangoA, rangoB, marca_ ?? "todas"],
     queryFn: ({ signal }) =>
-      api.metricasComparar({ rango_a: rangoA, rango_b: rangoB, marca: marcaParam }, signal),
+      api.metricasComparar({ rango_a: rangoA, rango_b: rangoB, marca: marca_ }, signal),
     enabled: habilitado,
   });
 
