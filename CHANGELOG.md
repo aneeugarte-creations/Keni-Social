@@ -7,6 +7,24 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Termómetro mundial (experimental)
+
+- Nueva skill **`termometro-mundial`**: arma el posteo de **galería** diario con las
+  **5–8 noticias internacionales** más importantes de la coyuntura, **una por región**.
+  **Jerarquiza** las notas que se le pasan por relevancia internacional, impacto y
+  frescura, elige el top, lo reparte por región en slides y cierra con el **copy del
+  posteo** (tropicalizado a MX) más su auto-verificación. Abre con el bloque
+  veredicto + leyenda (✅/⚠️/❌) y carga el contexto editorial; el humano aprueba.
+- **Página dedicada en la Consola** (*Termómetro mundial*, grupo *Trabajo*): configura
+  número de slides, regiones, hora y marca; pega las noticias (o las **trae del RSS**
+  con un clic) y genera en segundo plano, con el progreso en vivo y el resultado listo
+  para guardar como publicación. Endpoints `GET/PUT /api/termometro` y
+  `POST /api/termometro/generar`, reutilizando el motor de generación de Skills.
+- **Generación programada (cron 07:00)**: nuevo CLI **`keni-termometro`** que, sin
+  servidor, reúne las noticias de los feeds RSS activos (o de un archivo), corre la
+  skill y deja el termómetro en el **historial** para encontrarlo a primera hora. Ver
+  `docs/termometro-mundial.md` para la instalación con launchd (macOS) o cron.
+
 ### Brief matutino (experimental)
 
 - Nueva skill **`brief-matutino`**: el brief de la mañana para la mesa editorial de

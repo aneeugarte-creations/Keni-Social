@@ -34,6 +34,8 @@ import type {
   CuerpoEjecutarSkill,
   CuerpoGenerarDesdeItem,
   CuerpoGenerarMedia,
+  CuerpoGenerarTermometro,
+  CuerpoGuardarTermometro,
   CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
   CuerpoGuardarContexto,
@@ -90,6 +92,8 @@ import type {
   RespuestaSkillDef,
   RespuestaSkillMd,
   RespuestaSkills,
+  RespuestaConfigTermometro,
+  RespuestaTermometro,
   RespuestaSubContextos,
   RespuestaSugerencia,
   RespuestaSugerencias,
@@ -287,6 +291,13 @@ export const api = {
     peticion<RespuestaGeneraciones>("/generaciones", { signal }),
   generacion: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaGeneracion>(`/generaciones/${encodeURIComponent(id)}`, { signal }),
+
+  // --- Termómetro mundial ---
+  termometro: (signal?: AbortSignal) => peticion<RespuestaTermometro>("/termometro", { signal }),
+  guardarTermometro: (cuerpo: CuerpoGuardarTermometro) =>
+    peticion<RespuestaConfigTermometro>("/termometro/config", { metodo: "PUT", json: cuerpo }),
+  generarTermometro: (cuerpo: CuerpoGenerarTermometro) =>
+    peticion<RespuestaGeneracion>("/termometro/generar", { metodo: "POST", json: cuerpo }),
 
   // --- Skills (Generar copy) ---
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),

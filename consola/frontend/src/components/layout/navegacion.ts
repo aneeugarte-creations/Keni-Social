@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Bot,
+  Globe,
   ImagePlus,
   Lightbulb,
   Rss,
@@ -64,6 +65,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Fuentes",
         icono: Rss,
         descripcion: "Feeds RSS para alimentar Generar copy.",
+      },
+      {
+        ruta: "/termometro",
+        etiqueta: "Termómetro mundial",
+        icono: Globe,
+        descripcion: "Galería diaria con las 5–8 noticias internacionales más importantes.",
       },
       {
         ruta: "/verificacion",

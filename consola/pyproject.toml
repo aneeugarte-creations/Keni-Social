@@ -21,6 +21,7 @@ dev = ["pytest>=8", "pytest-cov>=5", "respx>=0.21", "anyio>=4", "ruff>=0.6"]
 
 [project.scripts]
 keni-consola = "keni_consola.__main__:main"
+keni-termometro = "keni_consola.termometro_cli:main"
 
 [build-system]
 requires = ["hatchling"]

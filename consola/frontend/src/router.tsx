@@ -14,6 +14,7 @@ const Skills = lazy(() => import("@/pages/Skills"));
 const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
+const Termometro = lazy(() => import("@/pages/Termometro"));
 const Agentes = lazy(() => import("@/pages/Agentes"));
 const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
@@ -37,6 +38,7 @@ export const router = createBrowserRouter([
       { path: "skills", element: <Skills /> },
       { path: "publicaciones", element: <Publicaciones /> },
       { path: "fuentes", element: <Fuentes /> },
+      { path: "termometro", element: <Termometro /> },
       { path: "metricas", element: <Metricas /> },
       { path: "agentes", element: <Agentes /> },
       { path: "agentes/:id", element: <DetalleAgente /> },

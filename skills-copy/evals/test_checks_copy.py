@@ -320,6 +320,7 @@ SKILLS_DE_COPY = (
     "responde-comentarios",
     "calendario-editorial",
     "nota-a-hilo",
+    "termometro-mundial",
 )
 
 
