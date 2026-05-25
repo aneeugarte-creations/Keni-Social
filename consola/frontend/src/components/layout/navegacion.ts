@@ -4,6 +4,7 @@ import {
   Bot,
   ImagePlus,
   Lightbulb,
+  Presentation,
   Rss,
   ScanSearch,
   Send,
@@ -76,6 +77,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Métricas",
         icono: BarChart3,
         descripcion: "Reportes y comparativas de tus cuentas.",
+      },
+      {
+        ruta: "/reporte-deportes",
+        etiqueta: "Reporte deportes",
+        icono: Presentation,
+        descripcion: "Deck semanal de Claro Sports: mejores piezas, cuentas hermanas y agenda.",
       },
       {
         ruta: "/agentes",
