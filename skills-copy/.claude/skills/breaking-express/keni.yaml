@@ -1,0 +1,53 @@
+nombre: Breaking exprés
+explicacion: De una FOTO a una pieza de última hora en un solo paso. Revisa lo legal de la foto, le superpone logo + pleca de breaking + titular de forma determinista (no la genera con IA, respeta la foto) y genera el copy por plataforma con auto-verificación. Modo dry-run, no publica.
+grupo: experimentales
+aplica_redes: true
+salida: piezas
+media: true
+orden: 35
+campos:
+  - id: foto
+    etiqueta: Foto del hecho
+    tipo: archivo
+    requerido: true
+    placeholder: ""
+    ayuda: "La foto de la noticia (jpg/png/webp). No se reinventa con IA: se le superpone el logo, la pleca de breaking y el titular. Antes se revisa contra las reglas legales (escudo, menores, datos personales)."
+    opciones: []
+    media_tipos: image/*
+  - id: hecho
+    etiqueta: El hecho de último momento
+    tipo: textarea
+    requerido: true
+    placeholder: "Qué pasó, en lenguaje normal o pega la nota/cable. P. ej.: Guardiola anuncia que deja el Manchester City al final de la temporada."
+    ayuda: De aquí salen el titular sobre la imagen y el copy. No se inventa ningún dato que no esté aquí.
+    opciones: []
+    media_tipos: ""
+  - id: formato
+    etiqueta: Formato
+    tipo: select
+    requerido: false
+    placeholder: ""
+    ayuda: vertical = Reels/TikTok/Shorts (9:16) · feed = post IG/Facebook (4:5) · cuadrado = 1:1. Si lo dejas vacío, se usa vertical.
+    opciones:
+      - vertical
+      - feed
+      - cuadrado
+    media_tipos: ""
+  - id: etiqueta
+    etiqueta: Texto de la pleca
+    tipo: texto
+    requerido: false
+    placeholder: "ÚLTIMA HORA"
+    ayuda: El texto de la barra roja de breaking. Si lo dejas vacío se usa "ÚLTIMA HORA". Escribe un espacio para omitir la pleca.
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa breaking-express, marca {marca}.
+
+  Foto (ruta): {foto}
+
+  El hecho de último momento:
+  {hecho}
+
+  Formato (vacío = vertical): {formato}
+  Texto de la pleca (vacío = ÚLTIMA HORA): {etiqueta}

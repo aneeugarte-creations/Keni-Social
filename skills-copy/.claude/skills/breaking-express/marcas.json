@@ -1,0 +1,40 @@
+{
+  "_nota": "Tokens de diseño para el ensamblado de breaking. Los valores de marca vienen del sistema de diseño de 07-innovacion (diseno-redes-amx) y están marcados [VERIFICAR] hasta confirmarlos contra el manual oficial de AMX. Sustituye 'logo' por la ruta real del PNG del logo cuando el cliente lo aporte. Para usar los artes de la casa precargados, pon en 'marca_agua' y 'overlay_breaking' la ruta del PNG transparente correspondiente: se superponen a tamaño completo y, cuando existen, el compositor NO dibuja su propia pleca/logo.",
+  "formatos": {
+    "vertical": { "w": 1080, "h": 1920, "safe_top": 220, "safe_bottom": 420, "_uso": "Reels / TikTok / Shorts 9:16" },
+    "feed": { "w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96, "_uso": "Post IG / Facebook 4:5" },
+    "cuadrado": { "w": 1080, "h": 1080, "safe_top": 60, "safe_bottom": 96, "_uso": "Post 1:1" }
+  },
+  "marcas": {
+    "unotv": {
+      "nombre": "UnoTV",
+      "rojo": "#E30613",
+      "tinta": "#111315",
+      "blanco": "#FFFFFF",
+      "etiqueta_default": "ÚLTIMA HORA",
+      "titular_mayusculas": false,
+      "titular_condensada": false,
+      "logo": "",
+      "marca_agua": "",
+      "overlay_breaking": "",
+      "logo_posicion": "superior-izquierda",
+      "wordmark": "UnoTV",
+      "verificar": "Rojo #E30613, tipografía y logo son defaults razonados; confirmar contra el manual de UnoTV/AMX."
+    },
+    "claro-sports": {
+      "nombre": "Claro Sports",
+      "rojo": "#CF2E2E",
+      "tinta": "#0A0A0A",
+      "blanco": "#FFFFFF",
+      "etiqueta_default": "ÚLTIMA HORA",
+      "titular_mayusculas": true,
+      "titular_condensada": true,
+      "logo": "",
+      "marca_agua": "",
+      "overlay_breaking": "",
+      "logo_posicion": "superior-izquierda",
+      "wordmark": "Claro Sports",
+      "verificar": "Rojo #CF2E2E extraído de assets públicos (no del manual); tipografía condensada es referencia de estilo. Confirmar contra el manual de Claro Sports/AMX."
+    }
+  }
+}
