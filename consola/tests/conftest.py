@@ -6,6 +6,7 @@ ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_DB`      -> consola.db (SQLite: tareas + historial de skills)
   - `KENI_CONSOLA_TAREAS`  -> tareas.json (solo para probar la migracion)
   - `KENI_CONSOLA_MEDIA`   -> dir de media (imagenes) aislado en tmp
+  - `KENI_CONSOLA_SECRETOS`-> almacen de secretos (clave de imagen) aislado en tmp
   - `KENI_METRICAS_CONFIG` -> apunta a un archivo inexistente => fuente de muestra
   - `KENI_SKILLS_CWD`      -> cwd valido para skills (no toca el repo real)
 
@@ -30,6 +31,7 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
     monkeypatch.setenv("KENI_CONSOLA_TAREAS", str(tmp_path / "tareas.json"))
     monkeypatch.setenv("KENI_CONSOLA_MEDIA", str(tmp_path / "media"))
+    monkeypatch.setenv("KENI_CONSOLA_SECRETOS", str(tmp_path / "secretos.toml"))
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
