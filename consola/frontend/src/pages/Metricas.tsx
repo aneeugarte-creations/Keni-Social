@@ -5,7 +5,6 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
@@ -19,35 +18,6 @@ import { TablaCuentas } from "./metricas/TablaCuentas";
 
 /** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
 const ETIQUETA_TODAS = "Todas las marcas";
-
-/**
- * Badge de la fuente de datos activa. Avisa de un vistazo si lo que se ve es
- * una muestra de demostración (ámbar) o datos reales (verde), para que nunca se
- * confunda una demo con producción. Consume `GET /api/config` (`fuente`).
- */
-function BadgeFuente() {
-  const { data } = useQuery({
-    queryKey: ["config"],
-    queryFn: ({ signal }) => api.config(signal),
-    // El badge es informativo: si /api/config falla, no estorbamos al dashboard.
-    retry: false,
-  });
-
-  if (!data) return null;
-  const esMuestra = data.fuente === "muestra";
-  return (
-    <Badge
-      variant={esMuestra ? "aviso" : "ok"}
-      title={
-        esMuestra
-          ? "Estás viendo datos de muestra (demostración), no métricas reales."
-          : "Estás viendo métricas reales de tus cuentas conectadas."
-      }
-    >
-      {esMuestra ? "Datos de muestra" : "Datos reales"}
-    </Badge>
-  );
-}
 
 /**
  * Dashboard de Métricas multi-marca.
@@ -141,7 +111,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   const acciones = (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-      <BadgeFuente />
       <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} />
       <SelectorRango rangos={rangos} valor={rango} onCambio={setRango} />
     </div>

@@ -172,6 +172,20 @@ export default {
     },
   },
   safelist: [
+    // Colores hex de las graficas (Tremor genera fill-[#..]/bg-[#..]/stroke-[#..]
+    // en runtime, asi que hay que listarlos para que el JIT no los purgue).
+    "fill-[#1e3a8a]",
+    "dark:fill-[#1e3a8a]",
+    "bg-[#1e3a8a]",
+    "dark:bg-[#1e3a8a]",
+    "stroke-[#1e3a8a]",
+    "dark:stroke-[#1e3a8a]",
+    "fill-[#93c5fd]",
+    "dark:fill-[#93c5fd]",
+    "bg-[#93c5fd]",
+    "dark:bg-[#93c5fd]",
+    "stroke-[#93c5fd]",
+    "dark:stroke-[#93c5fd]",
     {
       pattern:
         /^(bg-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|100|200|300|400|500|600|700|800|900|950))$/,
