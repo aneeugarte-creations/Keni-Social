@@ -37,7 +37,6 @@ import { cn } from "@/lib/utils";
 import type { GrupoSkills, RespuestaEjecutarSkill, Skill } from "@/types";
 
 import { Historial } from "./copy/Historial";
-import { Resultado } from "./copy/Resultado";
 import { ResultadoRedes } from "./copy/ResultadoRedes";
 import { SelectorRedes } from "./copy/SelectorRedes";
 import { ORDEN_REDES } from "./publicaciones/meta";
@@ -115,11 +114,6 @@ export default function GenerarCopy() {
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [redes, setRedes] = React.useState<Set<string>>(new Set());
   const [respuesta, setRespuesta] = React.useState<RespuestaEjecutarSkill | null>(null);
-  // Marca/título usados en la última generación (para guardar coherente al editar arriba).
-  const [contextoResultado, setContextoResultado] = React.useState<{
-    titulo: string;
-    marca: string;
-  } | null>(null);
   const inputArchivoRef = React.useRef<HTMLInputElement>(null);
 
   // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes).
@@ -170,22 +164,36 @@ export default function GenerarCopy() {
   const mutacion = useMutation<RespuestaEjecutarSkill, Error>({
     mutationFn: () => {
       const redesSel = [...redes];
+      const tituloLimpio = titulo.trim();
       if (modo === "archivo") {
         // archivo no nulo: garantizado por la guarda de `puedeGenerar`.
-        return api.ejecutarSkillArchivo(skillId, marcaId, archivo as File, redesSel);
+        return api.ejecutarSkillArchivo(
+          skillId,
+          marcaId,
+          archivo as File,
+          redesSel,
+          tituloLimpio || undefined,
+        );
       }
       return api.ejecutarSkill({
         skill: skillId,
         marca: marcaId,
         texto: texto.trim(),
+        titulo: tituloLimpio || undefined,
         redes: redesSel,
       });
     },
     onSuccess: (data) => {
       setRespuesta(data);
-      setContextoResultado({ titulo, marca: marcaId });
-      toast.success("Borrador generado");
+      const n = data.publicaciones?.length ?? 0;
+      toast.success(
+        n > 0
+          ? `Borrador generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
+          : "Borrador generado",
+      );
       void queryClient.invalidateQueries({ queryKey: ["skills", "historial"] });
+      // Las piezas ya quedaron guardadas como borradores: refresca Publicaciones.
+      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "No se pudo generar el borrador.");
@@ -267,7 +275,6 @@ export default function GenerarCopy() {
 
   const { grupos, marcas } = skillsQuery.data;
   const skillSeleccionada = skillId ? indice.get(skillId)?.skill : undefined;
-  const tienePiezas = (respuesta?.piezas.length ?? 0) > 0;
 
   return (
     <>
@@ -427,16 +434,7 @@ export default function GenerarCopy() {
             </CardContent>
           </Card>
 
-          {respuesta !== null &&
-            (tienePiezas ? (
-              <ResultadoRedes
-                respuesta={respuesta}
-                titulo={contextoResultado?.titulo ?? ""}
-                marca={contextoResultado?.marca ?? marcaId}
-              />
-            ) : (
-              <Resultado resultado={respuesta.resultado} />
-            ))}
+          {respuesta !== null && <ResultadoRedes respuesta={respuesta} />}
         </div>
 
         <Historial />

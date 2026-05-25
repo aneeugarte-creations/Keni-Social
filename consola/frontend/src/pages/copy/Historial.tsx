@@ -1,8 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Clock, History as HistoryIcon } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, Clock, ExternalLink, History as HistoryIcon, Loader2, Save } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -11,9 +14,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { api } from "@/lib/api";
-import type { EntradaHistorial } from "@/types";
+import { api, ApiError } from "@/lib/api";
+import type { DetalleHistorial, EntradaHistorial } from "@/types";
+
+import { iconoRed, nombreRed } from "../publicaciones/meta";
+
+function mensajeError(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
 
 /** Formatea una fecha ISO a algo legible en es-MX; tolera valores no-ISO. */
 function formatearFecha(iso: string): string {
@@ -25,6 +44,16 @@ function formatearFecha(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+/** Enlace de éxito a Publicaciones que se muestra en el toast. */
+function EnlacePublicaciones() {
+  return (
+    <Link to="/publicaciones" className="inline-flex items-center gap-1 underline">
+      Ver en Publicaciones
+      <ExternalLink className="h-3 w-3" />
+    </Link>
+  );
 }
 
 /** Esqueleto de carga para la lista de historial. */
@@ -71,8 +100,98 @@ function FilaHistorial({
 }
 
 /**
+ * Cuerpo del diálogo de detalle: resultado completo + recuperación como
+ * publicación(es). Si la entrada tiene piezas, las guarda todas; si no, pide
+ * elegir una red antes de guardar (`POST /api/skills/historial/{id}/guardar`).
+ */
+function DetalleHistorialDialogo({ detalle }: { detalle: DetalleHistorial }) {
+  const queryClient = useQueryClient();
+  const tienePiezas = detalle.piezas.length > 0;
+  const [red, setRed] = React.useState("");
+
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    enabled: !tienePiezas,
+  });
+  const redes = opcionesQuery.data?.redes ?? [];
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.guardarHistorial(detalle.id, tienePiezas ? {} : { red }),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
+      const n = data?.publicaciones?.length ?? 0;
+      toast.success(
+        `Se ${n === 1 ? "guardó" : "guardaron"} ${n} ${n === 1 ? "publicación" : "publicaciones"}`,
+        { description: <EnlacePublicaciones /> },
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puedeGuardar = !guardar.isPending && (tienePiezas || red !== "");
+
+  return (
+    <>
+      {tienePiezas ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {detalle.piezas.map((p) => {
+            const Icono = iconoRed(p.red);
+            return (
+              <Badge key={p.red} variant="secondary" className="gap-1.5 font-normal">
+                <Icono className="h-3.5 w-3.5" />
+                {nombreRed(p.red)}
+              </Badge>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <pre className="max-h-[50vh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-4 text-sm leading-relaxed">
+        {detalle.resultado}
+      </pre>
+
+      <div className="flex flex-wrap items-end gap-2">
+        {!tienePiezas && (
+          <div className="space-y-1.5">
+            <Label htmlFor="historial-red">Red</Label>
+            <Select value={red} onValueChange={setRed}>
+              <SelectTrigger id="historial-red" className="w-44">
+                <SelectValue placeholder="Elige una red" />
+              </SelectTrigger>
+              <SelectContent>
+                {redes.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+          {guardar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          {tienePiezas ? "Guardar como publicaciones" : "Guardar como publicación"}
+        </Button>
+        {!tienePiezas && (
+          <p className="text-xs text-muted-foreground">
+            Esta entrada no tiene piezas por red: elige una para guardarla.
+          </p>
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
  * Lista del historial de generaciones. Cada entrada abre un Dialog con el
- * resultado completo (cargado bajo demanda con `api.detalleHistorial`).
+ * resultado completo (cargado bajo demanda con `api.detalleHistorial`) y un
+ * botón para recuperarlo como publicación(es).
  */
 export function Historial() {
   const [abiertoId, setAbiertoId] = React.useState<string | null>(null);
@@ -120,11 +239,12 @@ export function Historial() {
       </CardContent>
 
       <Dialog open={abiertoId !== null} onOpenChange={(open) => !open && setAbiertoId(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Borrador del historial</DialogTitle>
             <DialogDescription>
-              Resultado completo de una generación anterior. Es un borrador, no se publica.
+              Resultado completo de una generación anterior. Guárdalo como publicación para
+              gestionarlo.
             </DialogDescription>
           </DialogHeader>
           {detalle.isPending ? (
@@ -140,11 +260,9 @@ export function Historial() {
                 ? detalle.error.message
                 : "No se pudo cargar el detalle."}
             </p>
-          ) : (
-            <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-4 text-sm leading-relaxed">
-              {detalle.data?.resultado}
-            </pre>
-          )}
+          ) : detalle.data ? (
+            <DetalleHistorialDialogo detalle={detalle.data} />
+          ) : null}
         </DialogContent>
       </Dialog>
     </Card>

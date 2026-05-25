@@ -123,6 +123,8 @@ export interface CuerpoEjecutarSkill {
   skill: string;
   marca: string;
   texto: string;
+  /** Título opcional para las publicaciones creadas a partir del copy. */
+  titulo?: string;
   /** Redes para las que generar piezas. Si se omite, el backend decide. */
   redes?: string[];
 }
@@ -143,6 +145,11 @@ export interface RespuestaEjecutarSkill {
   verdicto: Veredicto;
   /** Una pieza por red. Si viene vacío, se muestra `resultado` en una sola pestaña. */
   piezas: PiezaGenerada[];
+  /**
+   * Publicaciones ya creadas (borradores), una por red. Si viene vacío, no se
+   * guardó nada automáticamente y hay que guardar a mano eligiendo red.
+   */
+  publicaciones: Publicacion[];
 }
 
 export interface EntradaHistorial {
@@ -165,6 +172,23 @@ export interface DetalleHistorial {
   marca: string;
   fecha: string;
   resultado: string;
+  /** Título de la generación (puede venir vacío en entradas antiguas). */
+  titulo: string;
+  /** Piezas por red (pueden venir vacías en entradas antiguas). */
+  piezas: PiezaGenerada[];
+}
+
+/**
+ * Cuerpo opcional para recuperar una entrada del historial como publicación(es)
+ * (`POST /api/skills/historial/{id}/guardar`). Si la entrada no tiene piezas,
+ * hay que indicar `red`; si las tiene, `redes` permite acotar cuáles guardar.
+ */
+export interface CuerpoGuardarHistorial {
+  titulo?: string;
+  /** Subconjunto de redes a guardar (cuando la entrada tiene piezas). */
+  redes?: string[];
+  /** Red obligatoria cuando la entrada no tiene piezas. */
+  red?: string;
 }
 
 // --- Tareas ---

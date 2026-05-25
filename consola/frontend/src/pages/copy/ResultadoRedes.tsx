@@ -1,5 +1,18 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Copy, Eye, ExternalLink, Link2, Loader2, Pencil, Save } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CalendarPlus,
+  Check,
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  Eye,
+  Link2,
+  Loader2,
+  Pencil,
+  Save,
+  Sprout,
+  Trash2,
+} from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -12,14 +25,41 @@ import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { PiezaGenerada, RespuestaEjecutarSkill, Veredicto } from "@/types";
+import type {
+  CuerpoActualizarPublicacion,
+  EstadoOpcion,
+  EstadoPublicacion,
+  Publicacion,
+  RespuestaEjecutarSkill,
+  Veredicto,
+} from "@/types";
 
+import { CLAVE_PUBLICACIONES } from "../publicaciones/claves";
 import { GestionHashtags } from "../publicaciones/GestionHashtags";
-import { iconoRed, metaRed, metaVeredicto, nombreRed } from "../publicaciones/meta";
+import { BadgeEstado } from "../publicaciones/insignias";
+import { datetimeLocalAIso, iconoRed, isoADatetimeLocal, metaRed, metaVeredicto, nombreRed } from "../publicaciones/meta";
 import { agregarEnlace } from "../publicaciones/plantillas";
 
 function mensajeError(error: unknown): string {
@@ -61,60 +101,105 @@ function EnlacePublicaciones() {
   );
 }
 
-/** Panel de una red: toggle Editar/Vista previa, imagen, hashtags y acciones. */
-function PanelRed({
-  red,
-  contenido,
-  onCambio,
-  imagen,
-  imagenUrl,
-  onImagen,
-  titulo,
-  marca,
-  marcaNombre,
-  veredicto,
-  origen,
-  onGuardado,
+/**
+ * Panel de edición de UNA publicación ya creada (un borrador por red).
+ *
+ * Reutiliza la misma lógica de `DialogoEditar`: contenido editable con
+ * "Guardar cambios" (`PUT`), selector de estado, fecha programada, imagen,
+ * hashtags, UTM, vista previa y toggle de perenne. Añade además
+ * Programar/Encolar (`POST encolar`) y Borrar (`DELETE`).
+ */
+function PanelPublicacion({
+  publicacion,
+  estados,
+  onBorrada,
   onGestionarHashtags,
 }: {
-  red: string;
-  contenido: string;
-  onCambio: (valor: string) => void;
-  imagen: string;
-  imagenUrl: string;
-  onImagen: (nombre: string, url: string) => void;
-  titulo: string;
-  marca: string;
-  marcaNombre: string;
-  veredicto: Veredicto;
-  origen: string;
-  onGuardado: (red: string) => void;
+  publicacion: Publicacion;
+  estados: EstadoOpcion[];
+  onBorrada: (id: string) => void;
   onGestionarHashtags: () => void;
 }) {
-  const [copiado, setCopiado] = React.useState(false);
-  const [modo, setModo] = React.useState<"editar" | "previa">("editar");
+  const queryClient = useQueryClient();
+
+  const [contenido, setContenido] = React.useState(publicacion.contenido);
+  const [estado, setEstado] = React.useState<EstadoPublicacion>(publicacion.estado);
+  const [evergreen, setEvergreen] = React.useState(publicacion.evergreen ?? false);
+  const [fechaLocal, setFechaLocal] = React.useState(isoADatetimeLocal(publicacion.fecha_programada));
+  const [imagen, setImagen] = React.useState(publicacion.imagen ?? "");
+  const [imagenUrl, setImagenUrl] = React.useState(publicacion.imagen_url ?? "");
+  const [vista, setVista] = React.useState<"editar" | "previa">("editar");
   const [utmAbierto, setUtmAbierto] = React.useState(false);
+  const [copiado, setCopiado] = React.useState(false);
+  const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
+
+  const red = publicacion.red;
   const limite = metaRed(red).limite;
-  const caracteres = contenido.length;
+  const programado = estado === "programado";
+  const faltaFecha = programado && !fechaLocal;
+
+  function invalidar() {
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+  }
 
   const guardar = useMutation({
-    mutationFn: () =>
-      api.crearPublicacion({
-        titulo: titulo.trim() || `Borrador ${nombreRed(red)}`,
-        marca,
-        red,
+    mutationFn: () => {
+      const cuerpo: CuerpoActualizarPublicacion = {
         contenido,
-        estado: "borrador",
-        veredicto,
-        origen,
-        imagen: imagen || undefined,
-      }),
+        estado,
+        evergreen,
+        // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
+        fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
+        imagen,
+      };
+      return api.actualizarPublicacion(publicacion.id, cuerpo);
+    },
     onSuccess: () => {
-      onGuardado(red);
-      toast.success(`Guardado en ${nombreRed(red)}`, { description: <EnlacePublicaciones /> });
+      invalidar();
+      toast.success("Cambios guardados", { description: <EnlacePublicaciones /> });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  const alternarEvergreen = useMutation({
+    mutationFn: (valor: boolean) =>
+      api.actualizarPublicacion(publicacion.id, { evergreen: valor }),
+    onSuccess: (_res, valor) => {
+      invalidar();
+      toast.success(valor ? "Marcada como perenne" : "Ya no es perenne");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const encolar = useMutation({
+    mutationFn: () => api.encolarPublicacion(publicacion.id),
+    onSuccess: (res) => {
+      invalidar();
+      const fecha = res?.publicacion?.fecha_programada;
+      if (fecha) {
+        setEstado(res.publicacion.estado);
+        setFechaLocal(isoADatetimeLocal(fecha));
+      }
+      toast.success("Publicación añadida a la cola", { description: <EnlacePublicaciones /> });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarPublicacion(publicacion.id),
+    onSuccess: () => {
+      setConfirmarBorrado(false);
+      invalidar();
+      onBorrada(publicacion.id);
+      toast.success("Publicación borrada");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  function cambiarEvergreen(valor: boolean) {
+    setEvergreen(valor);
+    alternarEvergreen.mutate(valor);
+  }
 
   async function copiar() {
     try {
@@ -127,13 +212,27 @@ function PanelRed({
     }
   }
 
+  const puedeGuardar = contenido.trim().length > 0 && !faltaFecha && !guardar.isPending;
+
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <BadgeVeredicto veredicto={veredicto} />
+        <div className="flex flex-wrap items-center gap-2">
+          <BadgeEstado estado={estado} />
+          <BadgeVeredicto veredicto={publicacion.veredicto} />
+          {evergreen && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-emerald-500/40 font-normal text-emerald-700 dark:text-emerald-300"
+            >
+              <Sprout className="h-3 w-3" />
+              Perenne
+            </Badge>
+          )}
+        </div>
         <div className="ml-auto flex items-center gap-2">
-          <Contador caracteres={caracteres} limite={limite} />
-          <Tabs value={modo} onValueChange={(v) => setModo(v as "editar" | "previa")}>
+          <Contador caracteres={contenido.length} limite={limite} />
+          <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "previa")}>
             <TabsList className="h-8">
               <TabsTrigger value="editar" className="gap-1.5 px-2.5 py-1 text-xs">
                 <Pencil className="h-3.5 w-3.5" />
@@ -148,10 +247,10 @@ function PanelRed({
         </div>
       </div>
 
-      {modo === "editar" ? (
+      {vista === "editar" ? (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <SelectorPlantilla marca={marca} red={red} onUsar={onCambio} />
+            <SelectorPlantilla marca={publicacion.marca} red={red} onUsar={setContenido} />
             <Button
               type="button"
               variant="outline"
@@ -165,37 +264,236 @@ function PanelRed({
           </div>
           <Textarea
             value={contenido}
-            onChange={(e) => onCambio(e.target.value)}
+            onChange={(e) => setContenido(e.target.value)}
             className="min-h-[12rem] font-mono text-sm leading-relaxed"
             aria-label={`Contenido para ${nombreRed(red)}`}
           />
           <HerramientasHashtags
             contenido={contenido}
-            onContenido={onCambio}
-            marca={marca}
+            onContenido={setContenido}
+            marca={publicacion.marca}
             red={red}
             onGestionar={onGestionarHashtags}
           />
           <EditorImagen
             imagen={imagen}
             imagenUrl={imagenUrl}
-            onCambio={onImagen}
+            onCambio={(nombre, url) => {
+              setImagen(nombre);
+              setImagenUrl(url);
+            }}
             idPrefijo={`copy-${red}`}
           />
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor={`estado-${red}`}>Estado</Label>
+              <Select value={estado} onValueChange={(v) => setEstado(v as EstadoPublicacion)}>
+                <SelectTrigger id={`estado-${red}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {estados.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {programado && (
+              <div className="space-y-1.5">
+                <Label htmlFor={`fecha-${red}`}>Fecha y hora programada</Label>
+                <Input
+                  id={`fecha-${red}`}
+                  type="datetime-local"
+                  value={fechaLocal}
+                  onChange={(e) => setFechaLocal(e.target.value)}
+                />
+                {faltaFecha && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                    Elige una fecha para programar la publicación.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
+            <Checkbox
+              id={`evergreen-${red}`}
+              checked={evergreen}
+              onCheckedChange={cambiarEvergreen}
+              disabled={alternarEvergreen.isPending}
+              aria-label="Marcar como perenne"
+              className="mt-0.5"
+            />
+            <div className="space-y-0.5">
+              <Label
+                htmlFor={`evergreen-${red}`}
+                className="flex cursor-pointer items-center gap-1.5 font-normal"
+              >
+                <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Contenido perenne
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Marca esta publicación como reutilizable para reciclarla y volver a publicarla más
+                adelante.
+              </p>
+            </div>
+          </div>
         </>
       ) : (
-        <VistaPreviaRed red={red} marca={marcaNombre} contenido={contenido} imagen_url={imagenUrl || imagen} />
+        <VistaPreviaRed
+          red={red}
+          marca={publicacion.marca_nombre}
+          contenido={contenido}
+          imagen_url={imagenUrl || imagen}
+        />
       )}
 
       <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+          {guardar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          Guardar cambios
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => encolar.mutate()}
+          disabled={encolar.isPending}
+          title="Programar/Encolar en la próxima franja libre"
+        >
+          {encolar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <CalendarPlus className="h-4 w-4" />
+          )}
+          Programar/Encolar
+        </Button>
         <Button variant="outline" size="sm" onClick={() => void copiar()}>
           {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
           {copiado ? "Copiado" : "Copiar"}
         </Button>
         <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto text-muted-foreground hover:text-destructive"
+          onClick={() => setConfirmarBorrado(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          Borrar
+        </Button>
+      </div>
+
+      <ConstructorUtm
+        abierto={utmAbierto}
+        onCerrar={() => setUtmAbierto(false)}
+        onInsertar={(enlace) => setContenido((prev) => agregarEnlace(prev, enlace))}
+      />
+
+      <Dialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Borrar publicación</DialogTitle>
+            <DialogDescription>
+              ¿Seguro que quieres borrar el borrador de {nombreRed(red)}? Esta acción no se puede
+              deshacer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmarBorrado(false)}
+              disabled={borrar.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => borrar.mutate()}
+              disabled={borrar.isPending}
+            >
+              {borrar.isPending ? "Borrando…" : "Borrar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/**
+ * Panel de respaldo para cuando la generación NO devolvió publicaciones (ni
+ * piezas). Muestra el `resultado` en bruto y permite guardarlo a mano eligiendo
+ * una red, vía `POST /api/skills/historial/{id}/guardar`.
+ */
+function PanelManual({
+  resultado,
+  historialId,
+  redes,
+}: {
+  resultado: string;
+  historialId: string;
+  redes: { id: string; nombre: string }[];
+}) {
+  const queryClient = useQueryClient();
+  const [red, setRed] = React.useState("");
+  const [copiado, setCopiado] = React.useState(false);
+
+  const guardar = useMutation({
+    mutationFn: () => api.guardarHistorial(historialId, { red }),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      const n = data?.publicaciones?.length ?? 1;
+      toast.success(`Se ${n === 1 ? "guardó" : "guardaron"} ${n} ${n === 1 ? "publicación" : "publicaciones"}`, {
+        description: <EnlacePublicaciones />,
+      });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(resultado);
+      setCopiado(true);
+      toast.success("Copiado al portapapeles");
+      window.setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      toast.error("No se pudo copiar. Selecciona el texto y cópialo a mano.");
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-4 text-sm leading-relaxed">
+        {resultado}
+      </pre>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="guardar-red">Red</Label>
+          <Select value={red} onValueChange={setRed}>
+            <SelectTrigger id="guardar-red" className="w-44">
+              <SelectValue placeholder="Elige una red" />
+            </SelectTrigger>
+            <SelectContent>
+              {redes.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
           size="sm"
           onClick={() => guardar.mutate()}
-          disabled={guardar.isPending || contenido.trim().length === 0}
+          disabled={guardar.isPending || red === ""}
         >
           {guardar.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -204,155 +502,119 @@ function PanelRed({
           )}
           Guardar como publicación
         </Button>
+        <Button variant="outline" size="sm" onClick={() => void copiar()}>
+          {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+          {copiado ? "Copiado" : "Copiar"}
+        </Button>
       </div>
-
-      <ConstructorUtm
-        abierto={utmAbierto}
-        onCerrar={() => setUtmAbierto(false)}
-        onInsertar={(enlace) => onCambio(agregarEnlace(contenido, enlace))}
-      />
     </div>
   );
 }
 
 /**
- * Resultado de la generación con una pestaña por red.
- *
- * Cada pestaña: contenido editable con toggle Editar/Vista previa, imagen
- * (adjuntar/generar), herramientas de hashtags, contador con su límite, badge de
- * veredicto y botones Copiar / "Guardar como publicación". El botón global
- * "Guardar todas" usa el endpoint de lote. Si no hay piezas, el contenedor padre
- * muestra el `Resultado` simple en su lugar.
+ * Resultado de la generación. Las piezas ya se guardaron como borradores
+ * (`respuesta.publicaciones`), así que cada pestaña por red es un editor de la
+ * publicación creada con controles completos (guardar, estado, programar,
+ * perenne, imagen, hashtags, UTM, vista previa y borrar). Si no se creó nada,
+ * se muestra el `resultado` en una sola pestaña "Todo" para guardarlo a mano.
  */
 export function ResultadoRedes({
   respuesta,
-  titulo,
-  marca,
 }: {
   respuesta: RespuestaEjecutarSkill;
-  titulo: string;
-  marca: string;
 }) {
-  // Estado editable: una copia local del contenido por red, reiniciada cuando
-  // llega una generación nueva (identificada por historial_id).
-  const [contenidos, setContenidos] = React.useState<Record<string, string>>({});
-  // Imagen por red: { nombre, url }.
-  const [imagenes, setImagenes] = React.useState<Record<string, { nombre: string; url: string }>>({});
-  const [guardadas, setGuardadas] = React.useState<Set<string>>(new Set());
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
+  // Publicaciones locales: arrancan de la respuesta y se podan al borrar pestañas.
+  const [publicaciones, setPublicaciones] = React.useState<Publicacion[]>(
+    respuesta.publicaciones ?? [],
+  );
 
-  // Catálogo de marcas para la gestión de grupos de hashtags.
+  React.useEffect(() => {
+    setPublicaciones(respuesta.publicaciones ?? []);
+  }, [respuesta]);
+
+  // Catálogo de opciones (marcas para hashtags, estados, redes para guardado manual).
   const opcionesQuery = useQuery({
     queryKey: ["publicaciones", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
-  const marcaNombre = marcas.find((m) => m.id === marca)?.nombre ?? marca;
+  const estados = opcionesQuery.data?.estados ?? [];
+  const redes =
+    opcionesQuery.data?.redes.map((r) => ({ id: r.id, nombre: r.nombre })) ?? [];
+
+  const [activa, setActiva] = React.useState(publicaciones[0]?.red ?? "");
 
   React.useEffect(() => {
-    const inicial: Record<string, string> = {};
-    for (const p of respuesta.piezas) inicial[p.red] = p.contenido;
-    setContenidos(inicial);
-    setImagenes({});
-    setGuardadas(new Set());
-  }, [respuesta]);
-
-  const piezas = respuesta.piezas;
-  const [activa, setActiva] = React.useState(piezas[0]?.red ?? "");
-
-  React.useEffect(() => {
-    if (piezas.length > 0 && !piezas.some((p) => p.red === activa)) {
-      setActiva(piezas[0].red);
+    if (publicaciones.length > 0 && !publicaciones.some((p) => p.red === activa)) {
+      setActiva(publicaciones[0].red);
     }
-  }, [piezas, activa]);
+  }, [publicaciones, activa]);
 
-  const guardarTodas = useMutation({
-    mutationFn: () =>
-      api.crearPublicacionesLote({
-        publicaciones: piezas.map((p) => ({
-          titulo: titulo.trim() || `Borrador ${nombreRed(p.red)}`,
-          marca,
-          red: p.red,
-          contenido: contenidos[p.red] ?? p.contenido,
-          estado: "borrador" as const,
-          veredicto: respuesta.verdicto,
-          origen: respuesta.historial_id,
-          imagen: imagenes[p.red]?.nombre || undefined,
-        })),
-      }),
-    onSuccess: (data) => {
-      setGuardadas(new Set(piezas.map((p) => p.red)));
-      const n = data?.publicaciones?.length ?? piezas.length;
-      toast.success(`Se guardaron ${n} ${n === 1 ? "publicación" : "publicaciones"}`, {
-        description: <EnlacePublicaciones />,
-      });
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  function marcarGuardada(red: string) {
-    setGuardadas((prev) => new Set(prev).add(red));
+  function borrarPanel(id: string) {
+    setPublicaciones((prev) => prev.filter((p) => p.id !== id));
   }
+
+  const sinPublicaciones = publicaciones.length === 0;
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
-        <div className="space-y-1">
-          <CardTitle className="text-base">Resultado por red</CardTitle>
-          <Badge variant="aviso">Borrador · no se publica</Badge>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => guardarTodas.mutate()}
-          disabled={guardarTodas.isPending}
-        >
-          {guardarTodas.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Guardar todas
-        </Button>
+      <CardHeader className="space-y-2 pb-3">
+        <CardTitle className="text-base">Resultado por red</CardTitle>
+        {sinPublicaciones ? (
+          <Badge variant="aviso">Borrador · no guardado</Badge>
+        ) : (
+          <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>
+              Guardadas como borradores en{" "}
+              <Link to="/publicaciones" className="inline-flex items-center gap-1 font-medium underline">
+                Publicaciones
+                <ExternalLink className="h-3 w-3" />
+              </Link>
+            </span>
+          </div>
+        )}
       </CardHeader>
       <CardContent>
-        <Tabs value={activa} onValueChange={setActiva}>
-          <TabsList className="flex-wrap">
-            {piezas.map((p) => {
-              const Icono = iconoRed(p.red);
-              return (
-                <TabsTrigger key={p.red} value={p.red} className="gap-1.5">
-                  <Icono className="h-4 w-4" />
-                  {nombreRed(p.red)}
-                  {guardadas.has(p.red) && (
-                    <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                  )}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-          {piezas.map((p: PiezaGenerada) => (
-            <TabsContent key={p.red} value={p.red}>
-              <PanelRed
-                red={p.red}
-                contenido={contenidos[p.red] ?? p.contenido}
-                onCambio={(valor) => setContenidos((prev) => ({ ...prev, [p.red]: valor }))}
-                imagen={imagenes[p.red]?.nombre ?? ""}
-                imagenUrl={imagenes[p.red]?.url ?? ""}
-                onImagen={(nombre, url) =>
-                  setImagenes((prev) => ({ ...prev, [p.red]: { nombre, url } }))
-                }
-                titulo={titulo}
-                marca={marca}
-                marcaNombre={marcaNombre}
-                veredicto={respuesta.verdicto}
-                origen={respuesta.historial_id}
-                onGuardado={marcarGuardada}
-                onGestionarHashtags={() => setGestionHashtags(true)}
+        {sinPublicaciones ? (
+          <Tabs value="todo">
+            <TabsList className="flex-wrap">
+              <TabsTrigger value="todo">Todo</TabsTrigger>
+            </TabsList>
+            <TabsContent value="todo">
+              <PanelManual
+                resultado={respuesta.resultado}
+                historialId={respuesta.historial_id}
+                redes={redes}
               />
             </TabsContent>
-          ))}
-        </Tabs>
+          </Tabs>
+        ) : (
+          <Tabs value={activa} onValueChange={setActiva}>
+            <TabsList className="flex-wrap">
+              {publicaciones.map((p) => {
+                const Icono = iconoRed(p.red);
+                return (
+                  <TabsTrigger key={p.id} value={p.red} className="gap-1.5">
+                    <Icono className="h-4 w-4" />
+                    {nombreRed(p.red)}
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+            {publicaciones.map((p) => (
+              <TabsContent key={p.id} value={p.red}>
+                <PanelPublicacion
+                  publicacion={p}
+                  estados={estados}
+                  onBorrada={borrarPanel}
+                  onGestionarHashtags={() => setGestionHashtags(true)}
+                />
+              </TabsContent>
+            ))}
+          </Tabs>
+        )}
       </CardContent>
 
       <GestionHashtags
