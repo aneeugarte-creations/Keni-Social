@@ -7,9 +7,9 @@ sugerencia con runner mock y parseo tolerante.
 
 from __future__ import annotations
 
-from keni_consola.api import hashtags, skills
+from keni_consola.api import hashtags
 
-from .conftest import _cliente
+from .conftest import _cliente, lanzador_generacion_completa
 
 # --------------------------------------------------------------------------- #
 # CRUD                                                                        #
@@ -100,31 +100,26 @@ def test_parsear_vacio_devuelve_lista_vacia():
 # --------------------------------------------------------------------------- #
 
 
-def _mock_runner(salida, metricas=None):
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida, metricas
-
-    return runner
-
-
-def test_sugerir_con_runner_mock(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("#gol\n#liga\n#mundial"))
-    r = _cliente().post(
+def test_sugerir_con_generacion_mock(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa("#gol\n#liga\n#mundial"))
+    r = cli.post(
         "/api/hashtags/sugerir", json={"texto": "resumen del partido", "marca": "unotv"}
     )
     assert r.status_code == 200
-    assert r.json()["hashtags"] == ["#gol", "#liga", "#mundial"]
+    gen = r.json()["generacion"]
+    assert gen["tipo"] == "hashtags"
+    assert gen["resultado"]["hashtags"] == ["#gol", "#liga", "#mundial"]
 
 
-def test_sugerir_con_red(entorno, monkeypatch):
+def test_sugerir_con_red(entorno):
     capturado = {}
+    base = lanzador_generacion_completa("#x #y")
 
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
+    def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return "#x #y", None
+        base(gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal)
 
-    monkeypatch.setattr(skills, "_runner", runner)
-    r = _cliente().post(
+    r = _cliente(lanzar_generacion=lanzar).post(
         "/api/hashtags/sugerir",
         json={"texto": "t", "marca": "unotv", "red": "instagram"},
     )
@@ -132,31 +127,26 @@ def test_sugerir_con_red(entorno, monkeypatch):
     assert "Instagram" in capturado["prompt"]
 
 
-def test_sugerir_red_invalida_400(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("#a"))
+def test_sugerir_red_invalida_400(entorno):
     r = _cliente().post(
         "/api/hashtags/sugerir", json={"texto": "t", "marca": "unotv", "red": "myspace"}
     )
     assert r.status_code == 400
 
 
-def test_sugerir_marca_invalida_400(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("#a"))
+def test_sugerir_marca_invalida_400(entorno):
     r = _cliente().post("/api/hashtags/sugerir", json={"texto": "t", "marca": "marca_falsa"})
     assert r.status_code == 400
 
 
-def test_sugerir_sin_texto_400(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("#a"))
+def test_sugerir_sin_texto_400(entorno):
     r = _cliente().post("/api/hashtags/sugerir", json={"marca": "unotv"})
     assert r.status_code == 400
 
 
-def test_sugerir_sin_salida_devuelve_lista_vacia(entorno, monkeypatch):
-    # Salida sin nada utilizable (solo espacios) => hashtags vacios + mensaje claro.
-    monkeypatch.setattr(skills, "_runner", _mock_runner("   \n   "))
-    r = _cliente().post("/api/hashtags/sugerir", json={"texto": "t", "marca": "unotv"})
+def test_sugerir_sin_salida_devuelve_lista_vacia(entorno):
+    # Salida sin nada utilizable (solo espacios) => hashtags vacios al completar.
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa("   \n   "))
+    r = cli.post("/api/hashtags/sugerir", json={"texto": "t", "marca": "unotv"})
     assert r.status_code == 200
-    cuerpo = r.json()
-    assert cuerpo["hashtags"] == []
-    assert "mensaje" in cuerpo
+    assert r.json()["generacion"]["resultado"]["hashtags"] == []

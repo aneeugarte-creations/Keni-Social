@@ -111,14 +111,16 @@ async def _api_no_encontrado(request: Request) -> Response:
     return JSONResponse({"error": "Recurso no encontrado."}, status_code=404)
 
 
-def crear_app(abrir=None, lanzar_run=None) -> Starlette:
+def crear_app(abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
     `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
     por defecto la real. `lanzar_run`: funcion opcional
-    `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background;
-    por defecto la real (Popen + hilo + stream-json). Los tests pasan mocks; se inyectan
-    en los modulos que los usan (Proyectos, Tareas y Agentes).
+    `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background.
+    `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
+    para lanzar trabajos de IA (copy/RSS/hashtags) en background. `lanzar_imagen`: funcion
+    opcional `(gen_id, *, generar)` para trabajos de imagen. Por defecto todas son las
+    reales (Popen/hilo/stream-json); los tests pasan mocks que NO tocan `claude` ni la red.
     """
     if abrir is not None or lanzar_run is not None:
         from .api import agentes as api_agentes
@@ -138,6 +140,14 @@ def crear_app(abrir=None, lanzar_run=None) -> Starlette:
     if lanzar_run is not None:
         # Runs headless en background: inyectamos una fake que NO usa Popen ni red.
         api_agentes.lanzar_run_background = lanzar_run
+
+    if lanzar_generacion is not None or lanzar_imagen is not None:
+        from . import generaciones as gen_modulo
+
+        if lanzar_generacion is not None:
+            gen_modulo.lanzar_job_claude = lanzar_generacion
+        if lanzar_imagen is not None:
+            gen_modulo.lanzar_job_imagen = lanzar_imagen
 
     # Aseguramos que existe el consola.toml (best-effort; no rompe si falla).
     try:

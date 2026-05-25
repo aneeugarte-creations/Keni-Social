@@ -7,8 +7,9 @@ SEGURIDAD / VALIDACION (reusa las fuentes de verdad):
   - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`, por su id canonico).
   - `red` (en sugerir, si viene) SOLO una red canonica (`consola.redes`).
   - Cada hashtag se normaliza con `#` inicial; SQL parametrizado en `consola.db`.
-  - La sugerencia corre el MISMO runner mockeable que Skills: en tests NUNCA se llama
-    a `claude` real (se parchea `skills._runner` o se inyecta un runner).
+  - La sugerencia corre como TRABAJO de IA en background (`consola.generaciones`): el
+    endpoint responde `{generacion}` y el frontend sondea hasta `resultado={hashtags}`.
+    En tests NUNCA se llama a `claude` real (se inyecta `lanzar_generacion`).
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import generaciones, marcas, redes, repos
 from .._http_json import leer_json
 from . import skills
 
@@ -192,7 +193,11 @@ async def borrar(request: Request) -> Response:
 
 
 async def sugerir(request: Request) -> Response:
-    """Sugiere hashtags por IA `{texto, marca, red?}` -> `{hashtags:[..]}`."""
+    """Sugiere hashtags por IA, EN SEGUNDO PLANO `{texto, marca, red?}` -> `{generacion}`.
+
+    Lanza un trabajo de claude (tipo "hashtags") que no bloquea; el frontend sondea
+    `GET /api/generaciones/{id}` y, al completarse, recoge `resultado = {hashtags:[..]}`.
+    """
     datos = await leer_json(request)
     texto = datos.get("texto")
     marca = datos.get("marca")
@@ -208,21 +213,24 @@ async def sugerir(request: Request) -> Response:
         red = None
 
     prompt = construir_prompt_sugerencia(texto.strip(), marca, red)
-    try:
-        salida, _metricas = skills._runner(
-            prompt, cwd=skills._cwd_skills(), timeout=skills._TIMEOUT_DEF
-        )
-    except skills.SkillError as e:
-        return JSONResponse({"error": str(e)}, status_code=500)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
-        return JSONResponse({"error": "No se pudieron sugerir hashtags."}, status_code=500)
 
-    hashtags = parsear_hashtags(salida)
-    if not hashtags:
-        return JSONResponse(
-            {"hashtags": [], "mensaje": "El asistente no devolvió hashtags utilizables."}
+    def procesar(salida: str, _metricas: object) -> dict[str, object]:
+        return {"hashtags": parsear_hashtags(salida)}
+
+    gen = generaciones.crear(
+        {"tipo": "hashtags", "marca": marca, "etiqueta": f"Hashtags · {marcas.etiqueta_de(marca)}"}
+    )
+    try:
+        generaciones.lanzar_job_claude(
+            gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar
         )
-    return JSONResponse({"hashtags": hashtags})
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudieron sugerir hashtags.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
 
 
 RUTAS = [

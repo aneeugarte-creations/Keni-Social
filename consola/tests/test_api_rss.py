@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola.api import rss, skills
+from keni_consola.api import rss
+
+from .conftest import _cliente, lanzador_generacion_completa
 
 # IP publica literal: pasa el guard SSRF sin tocar DNS. example.com no se resuelve aqui.
 _URL_OK = "https://93.184.216.34/feed.xml"
 
-# Salida mock del runner de skills: ✅ + bloque json con dos piezas (sin red real).
+# Salida mock de la generacion de skills: ✅ + bloque json con dos piezas (sin red real).
 _SALIDA_SKILL = """✅ Copy listo.
 
 ```json
@@ -27,15 +29,6 @@ _SALIDA_SKILL = """✅ Copy listo.
             {"red": "instagram", "texto": "IG desde el item."}]}
 ```
 """
-
-
-def _mock_runner_skills(salida=_SALIDA_SKILL, metricas=None):
-    """Runner que ignora el prompt y devuelve `(salida, metricas)` (NUNCA llama a claude real)."""
-
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida, metricas
-
-    return runner
 
 
 # --------------------------------------------------------------------------- #
@@ -566,12 +559,12 @@ def test_items_actualiza_salud_error(cliente, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_generar_autocrea_publicaciones_y_marca_usado(cliente, monkeypatch):
-    f = _fuente(cliente, "Diario", marca="unotv")
-    monkeypatch.setattr(skills, "_runner", _mock_runner_skills())
+def test_generar_autocrea_publicaciones_y_marca_usado(entorno, monkeypatch):
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    f = _fuente(cli, "Diario", marca="unotv")
 
-    r = cliente.post(
+    r = cli.post(
         "/api/rss/generar",
         json={
             "titulo": "Avance de IA y agentes",
@@ -584,28 +577,28 @@ def test_generar_autocrea_publicaciones_y_marca_usado(cliente, monkeypatch):
         },
     )
     assert r.status_code == 200
-    cuerpo = r.json()
-    # Misma forma que /api/skills/ejecutar
+    # La generacion completa (fake sincrona): su `resultado` tiene la forma de copy.
+    res = r.json()["generacion"]["resultado"]
     for clave in ("resultado", "historial_id", "verdicto", "piezas", "publicaciones"):
-        assert clave in cuerpo
-    assert cuerpo["verdicto"] == "listo"
-    assert [p["red"] for p in cuerpo["publicaciones"]] == ["x", "instagram"]
-    assert all(p["estado"] == "borrador" for p in cuerpo["publicaciones"])
+        assert clave in res
+    assert res["verdicto"] == "listo"
+    assert [p["red"] for p in res["publicaciones"]] == ["x", "instagram"]
+    assert all(p["estado"] == "borrador" for p in res["publicaciones"])
     # Persistidas de verdad
-    assert len(cliente.get("/api/publicaciones").json()["publicaciones"]) == 2
-    # El item quedo marcado como usado (no aparece con ocultar_usados=1)
-    items = cliente.get(f"/api/rss/items?fuente={f['id']}&ocultar_usados=1").json()["items"]
+    assert len(cli.get("/api/publicaciones").json()["publicaciones"]) == 2
+    # El item quedo marcado como usado (solo al completar con exito).
+    items = cli.get(f"/api/rss/items?fuente={f['id']}&ocultar_usados=1").json()["items"]
     assert "guid-ia" not in {i["clave"] for i in items}
 
 
-def test_generar_sin_fuente_no_marca_pero_genera(cliente, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner_skills())
-    r = cliente.post(
+def test_generar_sin_fuente_no_marca_pero_genera(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    r = cli.post(
         "/api/rss/generar",
         json={"titulo": "Solo titulo", "marca": "unotv", "redes": ["x"]},
     )
     assert r.status_code == 200
-    assert len(r.json()["publicaciones"]) == 1
+    assert len(r.json()["generacion"]["resultado"]["publicaciones"]) == 1
 
 
 def test_generar_marca_invalida_400(cliente):
@@ -628,15 +621,16 @@ def test_generar_titulo_obligatorio_400(cliente):
     assert r.status_code == 400
 
 
-def test_generar_skill_por_defecto(cliente, monkeypatch):
+def test_generar_skill_por_defecto(entorno):
     capturado = {}
+    base = lanzador_generacion_completa(_SALIDA_SKILL)
 
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
+    def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return _SALIDA_SKILL, None
+        base(gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal)
 
-    monkeypatch.setattr(skills, "_runner", runner)
-    r = cliente.post(
+    cli = _cliente(lanzar_generacion=lanzar)
+    r = cli.post(
         "/api/rss/generar", json={"titulo": "T", "resumen": "R", "marca": "unotv", "redes": ["x"]}
     )
     assert r.status_code == 200

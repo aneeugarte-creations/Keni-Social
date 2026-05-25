@@ -42,6 +42,8 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
     monkeypatch.setenv("KENI_SKILLS_CWD", str(tmp_path))
+    # Almacen de generaciones (trabajos de IA en background) aislado en tmp.
+    monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     return tmp_path
 
 
@@ -55,19 +57,124 @@ def _lanzador_run_noop(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
     return None
 
 
-def _cliente(abrir=None, lanzar_run=None) -> TestClient:
-    """TestClient de la app. Ni `abrir` ni `lanzar_run` tocan nada real (mocks).
+def _lanzador_generacion_noop(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
+    """Fake del lanzador de generaciones de claude: NO usa Popen ni red.
 
-    `abrir` (interactivo) y `lanzar_run` (runs headless en background) se inyectan por
-    defecto a fakes inofensivas para que NUNCA se llame a `claude` ni se abra Terminal.
+    Deja la generacion en `estado="ejecutando"`. Los tests que necesiten el resultado
+    pasan `lanzar_generacion=lanzador_generacion_completa(salida, metricas)` a `_cliente`.
+    """
+    import shutil as _sh
+
+    if dir_temporal is not None:
+        _sh.rmtree(dir_temporal, ignore_errors=True)
+    return None
+
+
+def _lanzador_imagen_noop(gen_id, *, generar):  # noqa: ANN001
+    """Fake del lanzador de imagen: NO toca la red. Deja la generacion en `ejecutando`."""
+    return None
+
+
+def lanzador_generacion_completa(salida: str, metricas=None):  # noqa: ANN001
+    """Fake del lanzador de claude que COMPLETA la generacion SINCRONAMENTE.
+
+    Llama al `procesar` REAL con una `salida` canned (asi se cubre el post-procesado:
+    piezas/publicaciones/historial/hashtags) y fija el registro en `completado`. Sin
+    Popen ni red. Equivale a lo que antes hacia `monkeypatch.setattr(skills, "_runner", ...)`.
+    """
+    import shutil as _sh
+
+    from keni_consola import generaciones
+    from keni_consola.api import skills
+
+    def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
+        if dir_temporal is not None:
+            _sh.rmtree(dir_temporal, ignore_errors=True)
+        resultado = procesar(salida, metricas)
+        generaciones.actualizar(
+            gen_id,
+            {
+                "estado": generaciones.ESTADO_COMPLETADO,
+                "salida": salida,
+                "metricas": skills.metricas_a_dict(metricas),
+                "resultado": resultado,
+                "fecha_fin": generaciones.ahora_iso(),
+            },
+        )
+
+    return lanzar
+
+
+def lanzador_imagen_completa(resultado: dict):
+    """Fake del lanzador de imagen que COMPLETA la generacion con `resultado` (sin red)."""
+    from keni_consola import generaciones
+
+    def lanzar(gen_id, *, generar):  # noqa: ANN001
+        generaciones.actualizar(
+            gen_id,
+            {
+                "estado": generaciones.ESTADO_COMPLETADO,
+                "resultado": resultado,
+                "fecha_fin": generaciones.ahora_iso(),
+            },
+        )
+
+    return lanzar
+
+
+def lanzador_imagen_ejecuta():
+    """Fake del lanzador de imagen que EJECUTA `generar` SINCRONAMENTE (sin hilo).
+
+    Corre el `generar` real del endpoint (con su proveedor MOCK) y fija el estado segun
+    el resultado. Asi se cubre el pipeline real (generar -> guardar -> servir) sin red.
+    """
+    from keni_consola import generaciones
+
+    def lanzar(gen_id, *, generar):  # noqa: ANN001
+        try:
+            resultado = generar()
+        except Exception as e:  # noqa: BLE001 -- reflejamos el error como la generacion real
+            generaciones.actualizar(
+                gen_id,
+                {"estado": generaciones.ESTADO_ERROR, "error": str(e) or "error",
+                 "fecha_fin": generaciones.ahora_iso()},
+            )
+            return
+        generaciones.actualizar(
+            gen_id,
+            {"estado": generaciones.ESTADO_COMPLETADO, "resultado": resultado,
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+
+    return lanzar
+
+
+def _cliente(abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None) -> TestClient:
+    """TestClient de la app. Ningun lanzador toca nada real (mocks).
+
+    `abrir` (interactivo), `lanzar_run` (runs headless), `lanzar_generacion` (trabajos de
+    copy/RSS/hashtags) y `lanzar_imagen` (imagen) se inyectan por defecto a fakes
+    inofensivas para que NUNCA se llame a `claude`, a un proveedor de imagen, ni se abra
+    Terminal. Los tests que necesiten un resultado pasan una fake "completa".
     """
     if abrir is None:
         def abrir(_ruta):  # noqa: ANN001
             return "ok-mock"
     if lanzar_run is None:
         lanzar_run = _lanzador_run_noop
+    if lanzar_generacion is None:
+        lanzar_generacion = _lanzador_generacion_noop
+    if lanzar_imagen is None:
+        lanzar_imagen = _lanzador_imagen_noop
 
-    return TestClient(app_modulo.crear_app(abrir=abrir, lanzar_run=lanzar_run))
+    return TestClient(
+        app_modulo.crear_app(
+            abrir=abrir,
+            lanzar_run=lanzar_run,
+            lanzar_generacion=lanzar_generacion,
+            lanzar_imagen=lanzar_imagen,
+        )
+    )
 
 
 @pytest.fixture

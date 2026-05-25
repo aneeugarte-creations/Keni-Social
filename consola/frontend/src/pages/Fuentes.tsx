@@ -44,6 +44,8 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip } from "@/components/ui/tooltip";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -869,6 +871,9 @@ function DialogoGenerar({
     });
   }
 
+  // La generación corre en background; seguimos el progreso en el propio diálogo.
+  const { generacion, ejecutando, iniciar } = useGeneracion();
+
   const generar = useMutation({
     mutationFn: () =>
       api.generarDesdeItemRss({
@@ -880,28 +885,34 @@ function DialogoGenerar({
         fuente_id: item.fuente_id || undefined,
         clave: item.clave || undefined,
       }),
-    onSuccess: (data) => {
-      const n = data.publicaciones?.length ?? 0;
+    onSuccess: (data) => iniciar(data.generacion),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Al completar: avisamos, refrescamos items/publicaciones y cerramos. Error -> toast.
+  const terminalRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!generacion || generacion.id === terminalRef.current) return;
+    if (generacion.estado === "completado") {
+      terminalRef.current = generacion.id;
+      const n = generacion.resultado?.publicaciones?.length ?? 0;
       toast.success(
         n > 0
           ? `Generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
           : "Copy generado",
-        {
-          action: {
-            label: "Ver publicaciones",
-            onClick: () => navigate("/publicaciones"),
-          },
-        },
+        { action: { label: "Ver publicaciones", onClick: () => navigate("/publicaciones") } },
       );
-      // El item queda usado; refrescamos items y publicaciones.
       void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
       onCerrar();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
+    } else if (generacion.estado === "error") {
+      terminalRef.current = generacion.id;
+      toast.error(generacion.error || "No se pudo generar el copy.");
+    }
+  }, [generacion, navigate, queryClient, onCerrar]);
 
-  const puedeGenerar = marca !== "" && seleccionadas.size > 0 && !generar.isPending;
+  const generando = generar.isPending || ejecutando;
+  const puedeGenerar = marca !== "" && seleccionadas.size > 0 && !generando;
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
@@ -935,24 +946,29 @@ function DialogoGenerar({
             opciones={opcionesRedes}
             seleccionadas={seleccionadas}
             onCambio={alternarRed}
-            disabled={generar.isPending}
+            disabled={generando}
           />
 
           <div className="flex items-center gap-3">
             <Button onClick={() => generar.mutate()} disabled={!puedeGenerar}>
-              {generar.isPending ? (
+              {generando ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Sparkles className="h-4 w-4" />
               )}
-              {generar.isPending ? "Generando…" : "Generar y guardar"}
+              {generando ? "Generando…" : "Generar y guardar"}
             </Button>
-            {generar.isPending && (
+            {generando && (
               <span className="text-xs text-muted-foreground">
-                Esto puede tardar un poco. No cierres la página.
+                Se genera en segundo plano; lo verás aquí.
               </span>
             )}
           </div>
+
+          {/* Progreso en vivo (texto token a token + métricas) mientras corre. */}
+          {generacion && (ejecutando || generacion.estado === "error") && (
+            <ProgresoGeneracion generacion={generacion} />
+          )}
           <p className="text-xs text-muted-foreground">
             Se crea un borrador por red en{" "}
             <Link to="/publicaciones" className="underline hover:text-foreground">

@@ -279,17 +279,24 @@ async def borrar_contexto(request: Request) -> Response:
 
 
 def _argv_stream(prompt: str) -> list[str]:
-    """argv de `claude -p <prompt> --output-format stream-json --verbose [--max-budget-usd N]`.
+    """argv de `claude -p <prompt> --output-format stream-json --verbose
+    --include-partial-messages [--max-budget-usd N]`.
 
-    `--verbose` es OBLIGATORIO para que `stream-json` emita los eventos por linea.
-    Reutiliza `skills._arg_presupuesto` para el tope `--max-budget-usd` (de
+    `--verbose` es OBLIGATORIO para `stream-json`; `--include-partial-messages` habilita
+    el STREAMING token a token (eventos `stream_event`/`text_delta`) para ver el texto en
+    vivo. Reutiliza `skills._arg_presupuesto` para `--max-budget-usd` (de
     `KENI_CLAUDE_MAX_USD`). Sin shell: el prompt viaja como argumento de la lista argv.
     """
     return [
         "claude", "-p", prompt,
-        "--output-format", "stream-json", "--verbose",
+        "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         *skills._arg_presupuesto(),
     ]
+
+
+# Cada cuanto (s) persistimos el avance: con parciales llegan muchos eventos por segundo;
+# throttlear evita martillear el disco sin perder la sensacion de "en vivo".
+_THROTTLE_S = 0.4
 
 
 def _leer_stream(
@@ -297,22 +304,32 @@ def _leer_stream(
 ) -> None:
     """Hilo lector: parsea el NDJSON de `proc.stdout` linea a linea y avanza el YAML.
 
-    Por cada linea actualiza el acumulador y persiste `estado="ejecutando"` con las
-    metricas PARCIALES (turnos/tokens hasta ahora). Es la fuente de verdad del sondeo.
-    Tolerante: una linea no JSON se ignora; cualquier fallo se refleja como run en error
-    (en espanol), nunca un traceback crudo.
+    Por cada avance persiste `estado="ejecutando"`, el TEXTO en vivo (`acumulador.texto`,
+    que va creciendo token a token) y las metricas PARCIALES (turnos/tokens). Es la fuente
+    de verdad del sondeo. Persiste al cambiar de turno (hito) o cada `_THROTTLE_S` s; nunca
+    en la linea terminal (`result`): el cierre fija el estado final. Tolerante: una linea
+    no JSON se ignora; cualquier fallo se traga (nunca un traceback crudo).
     """
+    import time
+
+    if proc.stdout is None:
+        return
+    ultimo = 0.0
+    ultimo_turno = -1
     try:
-        if proc.stdout is not None:
-            for linea in proc.stdout:
-                acumulador.procesar_linea(linea)
-                if acumulador.terminado:
-                    continue
+        for linea in proc.stdout:
+            acumulador.procesar_linea(linea)
+            if acumulador.terminado:
+                continue
+            ahora = time.monotonic()
+            if acumulador.turnos != ultimo_turno or (ahora - ultimo) >= _THROTTLE_S:
+                ultimo, ultimo_turno = ahora, acumulador.turnos
                 agentes.actualizar_run(
                     marca_id,
                     run_id,
                     {
                         "estado": "ejecutando",
+                        "salida": acumulador.texto,
                         "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
                     },
                 )

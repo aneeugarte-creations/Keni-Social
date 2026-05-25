@@ -34,14 +34,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { GrupoSkills, RespuestaEjecutarSkill, Skill } from "@/types";
+import type { GrupoSkills, RespuestaEjecutarSkill, RespuestaGeneracion, Skill } from "@/types";
 
 import { Historial } from "./copy/Historial";
 import { ResultadoRedes } from "./copy/ResultadoRedes";
 import { SelectorRedes } from "./copy/SelectorRedes";
 import { ORDEN_REDES } from "./publicaciones/meta";
+
+/** Clave de sessionStorage para reanudar la generación en curso al volver a la página. */
+const CLAVE_GEN_COPY = "keni:generacion-copy";
 
 type Modo = "texto" | "archivo";
 
@@ -115,8 +120,10 @@ export default function GenerarCopy() {
   const [texto, setTexto] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
   const [redes, setRedes] = React.useState<Set<string>>(new Set());
-  const [respuesta, setRespuesta] = React.useState<RespuestaEjecutarSkill | null>(null);
   const inputArchivoRef = React.useRef<HTMLInputElement>(null);
+
+  // Generación en segundo plano (streaming en vivo + reanudable al cambiar de pestaña).
+  const { generacion, ejecutando, iniciar } = useGeneracion(CLAVE_GEN_COPY);
 
   // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes,
   // o "Generar copy" desde Métricas con una marca preseleccionada).
@@ -174,7 +181,7 @@ export default function GenerarCopy() {
     if (inputArchivoRef.current) inputArchivoRef.current.value = "";
   }, [skillId, esSkillMedia]);
 
-  const mutacion = useMutation<RespuestaEjecutarSkill, Error>({
+  const mutacion = useMutation<RespuestaGeneracion, Error>({
     mutationFn: () => {
       const redesSel = [...redes];
       const tituloLimpio = titulo.trim();
@@ -197,23 +204,49 @@ export default function GenerarCopy() {
       });
     },
     onSuccess: (data) => {
-      setRespuesta(data);
-      const n = data.publicaciones?.length ?? 0;
-      toast.success(
-        n > 0
-          ? `Borrador generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
-          : "Borrador generado",
-      );
-      void queryClient.invalidateQueries({ queryKey: ["skills", "historial"] });
-      // Las piezas ya quedaron guardadas como borradores: refresca Publicaciones.
-      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
+      // No bloquea: seguimos la generación en vivo y reaccionamos al completarse.
+      iniciar(data.generacion);
+      toast.success("Generación en curso. Puedes seguirla aquí o cambiar de pestaña.");
     },
     onError: (err) => {
       toast.error(err instanceof Error ? err.message : "No se pudo generar el borrador.");
     },
   });
 
-  const generando = mutacion.isPending;
+  // Resultado de copy (forma RespuestaEjecutarSkill) cuando la generación completa.
+  const resultadoCopy: RespuestaEjecutarSkill | null = React.useMemo(() => {
+    if (!generacion || generacion.estado !== "completado" || !generacion.resultado) return null;
+    const r = generacion.resultado;
+    return {
+      resultado: r.resultado ?? "",
+      historial_id: r.historial_id ?? "",
+      verdicto: r.verdicto ?? "",
+      piezas: r.piezas ?? [],
+      publicaciones: r.publicaciones ?? [],
+    };
+  }, [generacion]);
+
+  // Efectos secundarios al alcanzar el estado terminal (una sola vez por generación).
+  const terminalRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!generacion || generacion.id === terminalRef.current) return;
+    if (generacion.estado === "completado") {
+      terminalRef.current = generacion.id;
+      const n = generacion.resultado?.publicaciones?.length ?? 0;
+      toast.success(
+        n > 0
+          ? `Borrador generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
+          : "Borrador generado",
+      );
+      void queryClient.invalidateQueries({ queryKey: ["skills", "historial"] });
+      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
+    } else if (generacion.estado === "error") {
+      terminalRef.current = generacion.id;
+      toast.error(generacion.error || "No se pudo generar el borrador.");
+    }
+  }, [generacion, queryClient]);
+
+  const generando = mutacion.isPending || ejecutando;
 
   const puedeGenerar =
     !generando &&
@@ -436,14 +469,24 @@ export default function GenerarCopy() {
                 </Button>
                 {generando && (
                   <span className="text-xs text-muted-foreground">
-                    Esto puede tardar hasta ~3 min. No cierres la página.
+                    Se genera en segundo plano: puedes cambiar de pestaña, el progreso continúa.
                   </span>
                 )}
               </div>
             </CardContent>
           </Card>
 
-          {respuesta !== null && <ResultadoRedes respuesta={respuesta} />}
+          {/* Progreso en vivo mientras corre (texto token a token + métricas). */}
+          {generacion && ejecutando && <ProgresoGeneracion generacion={generacion} />}
+          {/* Estado de error con opción de reintentar. */}
+          {generacion && generacion.estado === "error" && (
+            <ProgresoGeneracion
+              generacion={generacion}
+              onReintentar={() => mutacion.mutate()}
+            />
+          )}
+          {/* Resultado por red (editores) cuando completa. */}
+          {resultadoCopy !== null && <ResultadoRedes respuesta={resultadoCopy} />}
         </div>
 
         <Historial />

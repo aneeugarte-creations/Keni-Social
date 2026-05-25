@@ -21,7 +21,7 @@ import pytest
 from keni_consola import agentes
 from keni_consola.api import skills
 
-from .conftest import _cliente
+from .conftest import _cliente, lanzador_generacion_completa
 
 _MARCA = "unotv"
 
@@ -200,15 +200,6 @@ def test_metricas_a_dict_omite_none_y_extras():
 # --------------------------------------------------------------------------- #
 
 
-def _runner_con_metricas(texto: str, metricas: skills.MetricasRun):
-    """Runner SINCRONO para la generacion de copy (skills.ejecutar sigue siendo sincrona)."""
-
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return texto, metricas
-
-    return runner
-
-
 _METRICAS_DEMO = skills.MetricasRun(
     tokens_in=130, tokens_out=50, num_turns=3, total_cost_usd=0.0123,
     duration_ms=4200, session_id="sess-abc-123", modelo="claude-opus-4-7",
@@ -278,16 +269,13 @@ _SALIDA_SKILL = """✅ Copy listo.
 """
 
 
-def test_historial_skill_guarda_y_expone_metricas(entorno, monkeypatch):
-    monkeypatch.setattr(
-        skills, "_runner", _runner_con_metricas(_SALIDA_SKILL, _METRICAS_DEMO)
-    )
-    c = _cliente()
+def test_historial_skill_guarda_y_expone_metricas(entorno):
+    c = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL, _METRICAS_DEMO))
     gen = c.post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": _MARCA, "texto": "una nota", "redes": ["x"]},
     ).json()
-    hid = gen["historial_id"]
+    hid = gen["generacion"]["resultado"]["historial_id"]
 
     # Listado expone metricas.
     lista = c.get("/api/skills/historial").json()["historial"]

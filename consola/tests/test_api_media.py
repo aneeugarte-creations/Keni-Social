@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from keni_consola import media
 
+from .conftest import _cliente, lanzador_imagen_ejecuta
+
 # PNG minimo valido (1x1) -> bytes de ejemplo para subir.
 _PNG_1x1 = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -94,16 +96,23 @@ def test_generar_sin_prompt_400(cliente):
     assert r.status_code == 400
 
 
-def test_generar_con_proveedor_mock(cliente, monkeypatch):
-    """Con clave + proveedor MOCK que devuelve bytes => 200 y guarda la imagen."""
+def test_generar_con_proveedor_mock(entorno, monkeypatch):
+    """Con clave + proveedor MOCK => la generacion (background) completa con `{id,url}`.
+
+    El lanzador de imagen aqui EJECUTA el `generar` real (con el proveedor MOCK), asi se
+    cubre el pipeline generar -> guardar -> servir sin red.
+    """
     monkeypatch.setenv("OPENAI_API_KEY", "clave-de-prueba")
     monkeypatch.setattr(media, "_PROVEEDOR", lambda prompt: _PNG_1x1)
-    r = cliente.post("/api/media/generar", json={"prompt": "un gato astronauta"})
+    cli = _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
+    r = cli.post("/api/media/generar", json={"prompt": "un gato astronauta"})
     assert r.status_code == 200
-    cuerpo = r.json()
-    assert cuerpo["id"].endswith(".png")
+    gen = r.json()["generacion"]
+    assert gen["tipo"] == "imagen"
+    res = gen["resultado"]
+    assert res["id"].endswith(".png")
     # la imagen generada se puede servir
-    servida = cliente.get(cuerpo["url"])
+    servida = cli.get(res["url"])
     assert servida.status_code == 200
     assert servida.content == _PNG_1x1
 
