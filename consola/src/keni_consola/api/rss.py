@@ -1,16 +1,28 @@
-"""API RSS: fuentes RSS/Atom (CRUD) + lectura de items para importar como borradores.
+"""API RSS: fuentes RSS/Atom (CRUD + salud + filtros) + items (dedup) + generar copy.
 
 El SPA guarda fuentes (un feed por marca, opcional) y lista sus items recientes para
-que la persona elija cuales convertir en publicaciones. Persistencia de las FUENTES en
-SQLite (`consola.db`); los ITEMS se leen del feed en vivo (no se persisten aqui).
+que la persona elija cuales convertir en publicaciones. Persistencia de las FUENTES y
+de los ITEMS YA USADOS en SQLite (`consola.db`); los ITEMS en si se leen del feed en
+vivo (no se persisten, solo su `clave` cuando se marcan usados).
+
+CAPACIDADES (RSS v2):
+  - Fuentes: CRUD completo (incl. PUT parcial) + activar/desactivar (`activo`) +
+    filtros por palabra clave (`incluir`/`excluir`, CSV) + redes por defecto
+    (`redes_def`) + salud (ultima_actualizacion / ultimo_error / ultimo_conteo).
+  - Items: `clave` estable por item (guid/id del feed, fallback al enlace), marcado
+    de usado / dedup (`rss_items_vistos`) y filtros del feed aplicados al listar.
+  - Generar: copy DIRECTO desde un item, reutilizando el AUTO-GUARDADO de Skills
+    (`api.skills._responder_generacion`): crea historial + N publicaciones borrador.
 
 SEGURIDAD / VALIDACION:
   - `nombre` y `url` obligatorios al crear una fuente.
   - La URL SOLO puede ser `http`/`https` y se valida contra SSRF: se resuelve el host
     y se RECHAZA si apunta a loopback / rangos privados / link-local / etc. El guard
-    se aplica TANTO al crear la fuente COMO antes de cada descarga (defensa en
-    profundidad: una IP puede cambiar de resolucion entre el alta y la lectura).
-  - `marca` (si viene) SOLO de la allowlist de Skills (`consola.marcas` con slug).
+    se aplica al crear la fuente, al cambiar la url en el PUT, Y antes de cada descarga
+    (defensa en profundidad: una IP puede cambiar de resolucion entre el alta y la
+    lectura).
+  - `marca` (si viene) SOLO de la allowlist de Skills (`consola.marcas` con slug);
+    `redes_def`/`redes` solo redes canonicas; `skill` solo de la allowlist de Skills.
   - SQL parametrizado en `consola.db`; errores en espanol, sin tracebacks crudos.
 
 DESCARGA Y PARSEO:
@@ -25,6 +37,7 @@ DESCARGA Y PARSEO:
 from __future__ import annotations
 
 import ipaddress
+import json
 import re
 import socket
 from typing import Any
@@ -35,8 +48,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas
+from .. import db, marcas, redes
 from .._http_json import leer_json
+from . import skills
 
 # Marcas validas: las de Skills (con slug). Mismo criterio que publicaciones.
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
@@ -145,6 +159,39 @@ def _validar_marca(marca: Any) -> tuple[str | None, str | None]:
     return marca, None
 
 
+def _validar_filtro(valor: Any, nombre: str) -> tuple[str | None, str | None]:
+    """Normaliza un CSV de filtro (`incluir`/`excluir`). `(csv, None)` o `(None, msg)`.
+
+    Acepta un string (se guarda tal cual) o una lista de strings (se une por comas).
+    None/ausente => CSV vacio. Cualquier otro tipo => error en espanol.
+    """
+    if valor is None:
+        return "", None
+    if isinstance(valor, str):
+        return valor.strip(), None
+    if isinstance(valor, list) and all(isinstance(v, str) for v in valor):
+        return ", ".join(v.strip() for v in valor if v.strip()), None
+    return None, f"El filtro de {nombre} debe ser texto o una lista de términos."
+
+
+def _validar_redes_def(valor: Any) -> tuple[str | None, str | None]:
+    """Valida `redes_def` (lista de ids de red) y la serializa a JSON. `(json, None)`.
+
+    None/ausente => '' (sin redes por defecto). Lista => se filtran ids contra las
+    redes canonicas, en orden fijo, y se serializa a JSON. Cualquier id desconocido
+    => error en espanol. Otro tipo => error.
+    """
+    if valor is None or valor == "":
+        return "", None
+    if not isinstance(valor, list) or not all(isinstance(v, str) for v in valor):
+        return None, "Las redes por defecto deben ser una lista de identificadores."
+    for r in valor:
+        if not redes.es_red(r):
+            return None, "Red no permitida."
+    ordenadas = [r for r in redes.ids() if r in set(valor)]
+    return json.dumps(ordenadas), None
+
+
 # --------------------------------------------------------------------------- #
 # Descarga (INYECTABLE) + parseo tolerante (RSS 2.0 y Atom)                    #
 # --------------------------------------------------------------------------- #
@@ -238,11 +285,45 @@ def _enlace_atom(entrada: ET.Element) -> str:
     return candidato
 
 
+def _clave_item(clave_feed: str, enlace: str) -> str:
+    """Clave estable de un item: el `<guid>`/`<id>` del feed, o el enlace como fallback.
+
+    Es la identidad que usamos para dedup / marcar usado. Si el feed no trae ni guid
+    ni enlace, la clave queda vacia (el item no se puede marcar de forma estable).
+    """
+    return (clave_feed or "").strip() or (enlace or "").strip()
+
+
+def _terminos_csv(crudo: str | None) -> list[str]:
+    """Parte un CSV de terminos en una lista limpia (sin vacios, en minusculas)."""
+    if not crudo:
+        return []
+    return [parte.strip().lower() for parte in crudo.split(",") if parte.strip()]
+
+
+def item_pasa_filtros(item: dict[str, Any], incluir: str, excluir: str) -> bool:
+    """Aplica los filtros incluir/excluir de un feed sobre titulo+resumen (insensible).
+
+    Pasa si: (no hay terminos `incluir` O el texto contiene ALGUNO de `incluir`) Y
+    (el texto NO contiene NINGUNO de `excluir`). CSV vacios => no filtran.
+    """
+    texto = f"{item.get('titulo', '')} {item.get('resumen', '')}".lower()
+    incluir_terms = _terminos_csv(incluir)
+    excluir_terms = _terminos_csv(excluir)
+    if incluir_terms and not any(t in texto for t in incluir_terms):
+        return False
+    if any(t in texto for t in excluir_terms):
+        return False
+    return True
+
+
 def parsear_feed(xml: str) -> list[dict[str, str]]:
     """Parsea un feed RSS 2.0 o Atom y devuelve hasta `_MAX_ITEMS` items.
 
-    Cada item es `{titulo, resumen, enlace, fecha}`. Tolerante: campos ausentes salen
-    como ''. Lanza `RSSError` si el XML no se puede parsear.
+    Cada item es `{titulo, resumen, enlace, fecha, clave}`. La `clave` es estable
+    (`<guid>`/`<id>` del feed, con fallback al enlace) y sirve para dedup / marcar
+    usado. Tolerante: campos ausentes salen como ''. Lanza `RSSError` si el XML no
+    se puede parsear.
 
     No depende de feedparser: la stdlib `xml.etree.ElementTree` basta para RSS 2.0
     (`<channel><item>`) y Atom (`<feed><entry>`), que cubren el caso de uso.
@@ -263,12 +344,14 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
             resumen = _texto_local(_buscar_hijo(entrada, "summary", "content"))
             enlace = _enlace_atom(entrada)
             fecha = _texto_local(_buscar_hijo(entrada, "updated", "published"))
+            clave_feed = _texto_local(_buscar_hijo(entrada, "id"))
             items.append(
                 {
                     "titulo": titulo,
                     "resumen": _limpiar_resumen(resumen),
                     "enlace": enlace,
                     "fecha": fecha,
+                    "clave": _clave_item(clave_feed, enlace),
                 }
             )
         return items
@@ -285,12 +368,14 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
         resumen = _texto_local(_buscar_hijo(entrada, "description", "summary"))
         enlace = _texto_local(_buscar_hijo(entrada, "link"))
         fecha = _texto_local(_buscar_hijo(entrada, "pubDate", "date"))
+        clave_feed = _texto_local(_buscar_hijo(entrada, "guid", "id"))
         items.append(
             {
                 "titulo": titulo,
                 "resumen": _limpiar_resumen(resumen),
                 "enlace": enlace,
                 "fecha": fecha,
+                "clave": _clave_item(clave_feed, enlace),
             }
         )
     return items
@@ -319,14 +404,44 @@ def leer_items_fuente(fuente: dict[str, Any]) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 
 
+def _parsear_redes_def(crudo: Any) -> list[str]:
+    """Parsea `redes_def` (JSON de ids) a una lista de ids de red canonicos y en orden.
+
+    Tolerante: JSON invalido / no-lista / ids desconocidos => se descartan. El
+    resultado respeta el orden fijo de `redes.REDES` (igual criterio que Skills).
+    """
+    if not crudo:
+        return []
+    if isinstance(crudo, list):
+        datos = crudo
+    elif isinstance(crudo, str):
+        try:
+            datos = json.loads(crudo)
+        except (json.JSONDecodeError, ValueError):
+            return []
+    else:
+        return []
+    if not isinstance(datos, list):
+        return []
+    pedidas = {r for r in datos if isinstance(r, str) and redes.es_red(r)}
+    return [r for r in redes.ids() if r in pedidas]
+
+
 def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
-    """Serializa una fuente resolviendo el nombre legible de la marca."""
+    """Serializa una fuente resolviendo el nombre de la marca y `redes_def` como lista."""
     return {
         "id": fuente["id"],
         "nombre": fuente["nombre"],
         "url": fuente["url"],
         "marca": fuente["marca"],
         "marca_nombre": marcas.etiqueta_por_slug(fuente["marca"]) if fuente["marca"] else "",
+        "activo": bool(fuente.get("activo", True)),
+        "incluir": fuente.get("incluir", ""),
+        "excluir": fuente.get("excluir", ""),
+        "redes_def": _parsear_redes_def(fuente.get("redes_def", "")),
+        "ultima_actualizacion": fuente.get("ultima_actualizacion", ""),
+        "ultimo_error": fuente.get("ultimo_error", ""),
+        "ultimo_conteo": fuente.get("ultimo_conteo", 0),
     }
 
 
@@ -337,7 +452,11 @@ async def listar_fuentes(request: Request) -> Response:
 
 
 async def crear_fuente(request: Request) -> Response:
-    """Crea una fuente `{nombre, url, marca?}` -> `{fuente}`. Valida URL + SSRF."""
+    """Crea una fuente `{nombre, url, marca?, incluir?, excluir?, redes_def?}` -> `{fuente}`.
+
+    Valida URL + SSRF; la fuente nace activa. `incluir`/`excluir` son CSV de
+    terminos; `redes_def` una lista de ids de red por defecto.
+    """
     datos = await leer_json(request)
     nombre = datos.get("nombre")
     if not isinstance(nombre, str) or not nombre.strip():
@@ -348,8 +467,72 @@ async def crear_fuente(request: Request) -> Response:
     marca, error = _validar_marca(datos.get("marca", ""))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
+    incluir, error = _validar_filtro(datos.get("incluir"), "inclusión")
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    excluir, error = _validar_filtro(datos.get("excluir"), "exclusión")
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+    redes_def, error = _validar_redes_def(datos.get("redes_def"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
 
-    fuente = db.crear_fuente_rss(nombre.strip(), url, marca=marca)
+    fuente = db.crear_fuente_rss(
+        nombre.strip(), url, marca=marca, incluir=incluir, excluir=excluir, redes_def=redes_def
+    )
+    return JSONResponse({"fuente": _fuente_a_dict(fuente)})
+
+
+async def actualizar_fuente(request: Request) -> Response:
+    """Edita parcialmente una fuente `{nombre?,url?,marca?,activo?,incluir?,excluir?,redes_def?}`.
+
+    -> `{fuente}` | 404. Si cambia la `url`, se RE-VALIDA URL + guard SSRF (defensa
+    en profundidad). Solo se tocan los campos presentes en el cuerpo.
+    """
+    fuente_id = request.path_params["fuente_id"]
+    if db.obtener_fuente_rss(fuente_id) is None:
+        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    campos: dict[str, Any] = {}
+
+    if "nombre" in datos:
+        nombre = datos.get("nombre")
+        if not isinstance(nombre, str) or not nombre.strip():
+            return JSONResponse(
+                {"error": "El nombre de la fuente es obligatorio."}, status_code=400
+            )
+        campos["nombre"] = nombre.strip()
+    if "url" in datos:
+        url, error = validar_url(datos.get("url"))  # re-valida URL + SSRF
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["url"] = url
+    if "marca" in datos:
+        marca, error = _validar_marca(datos.get("marca"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["marca"] = marca
+    if "activo" in datos:
+        campos["activo"] = bool(datos.get("activo"))
+    if "incluir" in datos:
+        incluir, error = _validar_filtro(datos.get("incluir"), "inclusión")
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["incluir"] = incluir
+    if "excluir" in datos:
+        excluir, error = _validar_filtro(datos.get("excluir"), "exclusión")
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["excluir"] = excluir
+    if "redes_def" in datos:
+        redes_def, error = _validar_redes_def(datos.get("redes_def"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        campos["redes_def"] = redes_def
+
+    fuente = db.actualizar_fuente_rss(fuente_id, campos)
+    if fuente is None:
+        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
 
 
@@ -365,13 +548,47 @@ async def borrar_fuente(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-async def listar_items(request: Request) -> Response:
-    """Items recientes `?fuente={id}` (o de TODAS las fuentes si no se pasa).
+def _flag(request: Request, nombre: str) -> bool:
+    """Lee un query param booleano (`1`/`true`/`si`/`yes` => True; ausente/otro => False)."""
+    return (request.query_params.get(nombre) or "").strip().lower() in ("1", "true", "si", "yes")
 
-    -> `{items:[{titulo, resumen, enlace, fecha, fuente_id, fuente_nombre}], errores:[..]}`.
-    Si un feed falla, se OMITE y su error se anota en `errores` sin romper los demas.
-    Si se pide una fuente concreta inexistente -> 404.
+
+def _items_de_fuente(fuente: dict[str, Any], *, ocultar_usados: bool) -> list[dict[str, Any]]:
+    """Lee, filtra (incluir/excluir) y marca `usado` los items de UNA fuente.
+
+    Aplica los filtros del feed sobre titulo+resumen, marca cada item segun
+    `rss_items_vistos`, y con `ocultar_usados` omite los ya usados. Cada item sale
+    como `{titulo, resumen, enlace, fecha, fuente_id, fuente_nombre, clave, usado}`.
+    Propaga `RSSError` (la maneja el llamante para anotar el error y la salud).
     """
+    crudos = leer_items_fuente(fuente)
+    vistas = db.claves_vistas(fuente["id"])
+    incluir = fuente.get("incluir", "")
+    excluir = fuente.get("excluir", "")
+    resultado: list[dict[str, Any]] = []
+    for item in crudos:
+        if not item_pasa_filtros(item, incluir, excluir):
+            continue
+        usado = item["clave"] in vistas if item["clave"] else False
+        if ocultar_usados and usado:
+            continue
+        resultado.append({**item, "usado": usado})
+    return resultado
+
+
+async def listar_items(request: Request) -> Response:
+    """Items recientes `?fuente=&ocultar_usados=0|1&incluir_inactivas=0|1`.
+
+    -> `{items:[{titulo, resumen, enlace, fecha, fuente_id, fuente_nombre, clave,
+    usado}], errores:[..]}`. Aplica los filtros incluir/excluir del feed, marca
+    `usado` segun `rss_items_vistos` (y con `ocultar_usados=1` los omite). Solo lee
+    feeds `activo` salvo `incluir_inactivas=1`. Tras descargar, ACTUALIZA la salud de
+    la fuente (ultima_actualizacion/ultimo_conteo/ultimo_error). Un feed que falla se
+    OMITE con su error sin romper los demas. Fuente concreta inexistente -> 404.
+    """
+    ocultar_usados = _flag(request, "ocultar_usados")
+    incluir_inactivas = _flag(request, "incluir_inactivas")
+
     fuente_id = request.query_params.get("fuente") or None
     if fuente_id:
         fuente = db.obtener_fuente_rss(fuente_id)
@@ -381,27 +598,120 @@ async def listar_items(request: Request) -> Response:
     else:
         fuentes = db.listar_fuentes_rss()
 
+    if not incluir_inactivas:
+        fuentes = [f for f in fuentes if f.get("activo", True)]
+
     items: list[dict[str, Any]] = []
     errores: list[dict[str, str]] = []
     for fuente in fuentes:
         try:
-            items.extend(leer_items_fuente(fuente))
+            propios = _items_de_fuente(fuente, ocultar_usados=ocultar_usados)
+            items.extend(propios)
+            db.registrar_salud_fuente_rss(fuente["id"], conteo=len(propios), error="")
         except RSSError as e:
+            db.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=str(e))
             errores.append({"fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"], "error": str(e)})
         except Exception:  # noqa: BLE001 -- nunca un traceback crudo; se omite la fuente
+            mensaje = "No se pudo leer el feed."
+            db.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=mensaje)
             errores.append(
                 {
                     "fuente_id": fuente["id"],
                     "fuente_nombre": fuente["nombre"],
-                    "error": "No se pudo leer el feed.",
+                    "error": mensaje,
                 }
             )
     return JSONResponse({"items": items, "errores": errores})
 
 
+async def marcar_item_usado(request: Request) -> Response:
+    """Marca/desmarca un item como usado `{fuente_id, clave, usado?: true}` -> `{mensaje}`.
+
+    Requiere `fuente_id` (existente) y `clave` no vacia. `usado` por defecto True.
+    """
+    datos = await leer_json(request)
+    fuente_id = datos.get("fuente_id")
+    clave = datos.get("clave")
+    if not isinstance(fuente_id, str) or not fuente_id:
+        return JSONResponse({"error": "Falta la fuente del item."}, status_code=400)
+    if not isinstance(clave, str) or not clave.strip():
+        return JSONResponse({"error": "Falta la clave del item."}, status_code=400)
+    if db.obtener_fuente_rss(fuente_id) is None:
+        return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
+    usado = datos.get("usado", True)
+    db.marcar_item(fuente_id, clave.strip(), bool(usado))
+    return JSONResponse({"mensaje": "Item marcado como usado." if usado else "Item desmarcado."})
+
+
+# Skill por defecto para generar copy desde un item del feed.
+_SKILL_DEFECTO = "copy-desde-nota"
+
+
+def _nota_desde_item(titulo: str, resumen: str, enlace: str) -> str:
+    """Construye la nota para la skill: titulo + resumen + enlace (los vacios se omiten)."""
+    partes = [p for p in (titulo.strip(), resumen.strip(), enlace.strip()) if p]
+    return "\n\n".join(partes)
+
+
+async def generar(request: Request) -> Response:
+    """Genera copy DIRECTO desde un item y auto-guarda publicaciones (reutiliza Skills).
+
+    `{titulo, resumen?, enlace?, marca, redes:[..], skill?, fuente_id?, clave?}`:
+      - Construye la nota (`titulo + "\\n\\n" + resumen + "\\n\\n" + enlace`).
+      - Corre la generacion que AUTO-GUARDA publicaciones reutilizando el mismo helper
+        de `api/skills.py` (`_responder_generacion` -> historial + N publicaciones).
+      - Si llegan `fuente_id` + `clave`, marca el item como usado.
+      - Skill por defecto `copy-desde-nota`. Valida marca/redes/skill contra allowlists.
+    -> misma forma que `/api/skills/ejecutar`:
+       `{resultado, historial_id, verdicto, piezas, publicaciones:[Publicacion]}`.
+    """
+    datos = await leer_json(request)
+    titulo = datos.get("titulo")
+    if not isinstance(titulo, str) or not titulo.strip():
+        return JSONResponse({"error": "El título del item es obligatorio."}, status_code=400)
+    resumen = datos.get("resumen") if isinstance(datos.get("resumen"), str) else ""
+    enlace = datos.get("enlace") if isinstance(datos.get("enlace"), str) else ""
+
+    marca = datos.get("marca")
+    if not isinstance(marca, str) or marca not in skills._MARCAS_IDS:
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+
+    skill = datos.get("skill")
+    if skill is None or skill == "":
+        skill = _SKILL_DEFECTO
+    if not isinstance(skill, str) or skill not in skills._SKILLS_IDS:
+        return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
+
+    crudas = datos.get("redes")
+    redes_ids = skills.normalizar_redes(crudas if isinstance(crudas, list) else None)
+
+    nota = _nota_desde_item(titulo, resumen, enlace)
+    try:
+        salida = skills.ejecutar_skill(skill, marca, nota, redes_ids=redes_ids)
+    except skills.SkillError as e:
+        mensaje = str(e)
+        codigo = 400 if mensaje in skills._ERRORES_VALIDACION else 500
+        return JSONResponse({"error": mensaje}, status_code=codigo)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
+
+    # Marca el item como usado si tenemos su identidad (fuente + clave).
+    fuente_id = datos.get("fuente_id")
+    clave = datos.get("clave")
+    if isinstance(fuente_id, str) and fuente_id and isinstance(clave, str) and clave.strip():
+        if db.obtener_fuente_rss(fuente_id) is not None:
+            db.marcar_item(fuente_id, clave.strip(), True)
+
+    parsed = skills.parsear_salida(salida, redes_ids)
+    return skills._responder_generacion(skill, marca, nota, parsed, titulo.strip())
+
+
 RUTAS = [
     Route("/api/rss/fuentes", listar_fuentes, methods=["GET"]),
     Route("/api/rss/fuentes", crear_fuente, methods=["POST"]),
+    Route("/api/rss/fuentes/{fuente_id}", actualizar_fuente, methods=["PUT"]),
     Route("/api/rss/fuentes/{fuente_id}", borrar_fuente, methods=["DELETE"]),
     Route("/api/rss/items", listar_items, methods=["GET"]),
+    Route("/api/rss/items/usado", marcar_item_usado, methods=["POST"]),
+    Route("/api/rss/generar", generar, methods=["POST"]),
 ]
