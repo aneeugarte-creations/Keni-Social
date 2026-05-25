@@ -140,8 +140,43 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
     queryFn: ({ signal }) => api.publicaciones(filtros, signal),
   });
 
+  // En la cabecera, junto al título: solo las acciones de gestión de la página.
   const acciones = (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <div className="flex flex-wrap items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setGestionPlantillas(true)}
+        title="Gestionar plantillas de post"
+      >
+        <FileText className="h-4 w-4" />
+        Plantillas
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setGestionHashtags(true)}
+        title="Gestionar grupos de hashtags"
+      >
+        <Hash className="h-4 w-4" />
+        Hashtags
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setGestionFranjas(true)}
+        title="Gestionar franjas de la cola"
+      >
+        <CalendarClock className="h-4 w-4" />
+        Franjas
+      </Button>
+    </div>
+  );
+
+  // Barra de herramientas sobre el contenido: filtros a la izquierda y el
+  // selector de vista (Lista/Calendario) a la derecha, junto a lo que controla.
+  const barraHerramientas = (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <FiltrosPublicaciones
         opciones={opciones}
         marca={marca}
@@ -153,47 +188,18 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
         onEstado={setEstado}
         onSoloPerennes={setSoloPerennes}
       />
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setGestionPlantillas(true)}
-          title="Gestionar plantillas de post"
-        >
-          <FileText className="h-4 w-4" />
-          Plantillas
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setGestionHashtags(true)}
-          title="Gestionar grupos de hashtags"
-        >
-          <Hash className="h-4 w-4" />
-          Hashtags
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setGestionFranjas(true)}
-          title="Gestionar franjas de la cola"
-        >
-          <CalendarClock className="h-4 w-4" />
-          Franjas
-        </Button>
-        <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
-          <TabsList>
-            <TabsTrigger value="lista" className="gap-1.5">
-              <List className="h-4 w-4" />
-              Lista
-            </TabsTrigger>
-            <TabsTrigger value="calendario" className="gap-1.5">
-              <CalendarDays className="h-4 w-4" />
-              Calendario
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      <Tabs value={vista} onValueChange={(v) => setVista(v as Vista)}>
+        <TabsList>
+          <TabsTrigger value="lista" className="gap-1.5">
+            <List className="h-4 w-4" />
+            Lista
+          </TabsTrigger>
+          <TabsTrigger value="calendario" className="gap-1.5">
+            <CalendarDays className="h-4 w-4" />
+            Calendario
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
     </div>
   );
 
@@ -204,6 +210,8 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   return (
     <>
       <PageHeader {...CABECERA} acciones={acciones} />
+
+      {barraHerramientas}
 
       {query.isPending ? (
         <EsqueletoLista />
