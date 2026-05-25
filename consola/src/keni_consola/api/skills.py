@@ -42,6 +42,7 @@ import tempfile
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from starlette.datastructures import UploadFile
@@ -51,6 +52,7 @@ from starlette.routing import Route
 
 from .. import db, marcas, redes
 from .._http_json import leer_json
+from .publicaciones import _publicacion_a_dict
 
 # --------------------------------------------------------------------------- #
 # Allowlists: skills curadas y marcas (NUNCA invocaciones arbitrarias)         #
@@ -480,6 +482,62 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
     return {"resultado": limpio, "piezas": piezas, "verdicto": verdicto}
 
 
+# Largo maximo del titulo derivado de la nota (chars).
+_MAX_TITULO = 80
+
+
+def derivar_titulo(texto: str) -> str:
+    """Deriva un titulo legible desde el texto: 1a linea no vacia recortada a ~80 chars.
+
+    Si no hay ninguna linea con contenido, cae a `"Borrador {YYYY-MM-DD}"`.
+    """
+    for linea in (texto or "").splitlines():
+        limpia = linea.strip()
+        if limpia:
+            if len(limpia) > _MAX_TITULO:
+                return limpia[:_MAX_TITULO].rstrip() + "…"
+            return limpia
+    return f"Borrador {date.today().isoformat()}"
+
+
+def _crear_publicaciones_desde_piezas(
+    piezas: list[dict[str, object]],
+    *,
+    marca: str,
+    titulo: str,
+    verdicto: str,
+    origen: str,
+    redes_filtro: set[str] | None = None,
+) -> list[dict[str, object]]:
+    """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
+
+    Cada pieza aporta `red` y `contenido`. Si `redes_filtro` no es None, solo se
+    crean las piezas cuya red este en el filtro. `marca`/`titulo`/`verdicto`/`origen`
+    son comunes a todas. El estado siempre nace como `borrador`.
+    """
+    creadas: list[dict[str, object]] = []
+    for pieza in piezas:
+        red = pieza.get("red")
+        contenido = pieza.get("contenido")
+        if not isinstance(red, str) or not redes.es_red(red):
+            continue
+        if redes_filtro is not None and red not in redes_filtro:
+            continue
+        if not isinstance(contenido, str):
+            contenido = ""
+        pub = db.crear_publicacion(
+            marca,
+            red,
+            titulo=titulo,
+            contenido=contenido,
+            estado="borrador",
+            veredicto=verdicto,
+            origen=origen,
+        )
+        creadas.append(_publicacion_a_dict(pub))
+    return creadas
+
+
 async def opciones(request: Request) -> Response:
     """Grupos de skills + marcas + ids de skills de media (para el SPA)."""
     grupos = [
@@ -531,6 +589,40 @@ def _redes_desde_form(form) -> list[str]:  # noqa: ANN001 -- starlette FormData
     return crudas
 
 
+def _responder_generacion(
+    skill: str,
+    marca: str,
+    texto_nota: str,
+    parsed: dict[str, object],
+    titulo_dado: str,
+) -> Response:
+    """Registra el historial (con piezas+titulo), AUTO-GUARDA publicaciones y responde.
+
+    - Deriva el `titulo` (del dado o de la nota) y lo registra junto a las piezas.
+    - Crea UNA publicacion (borrador) por pieza con `origen = historial_id`. Si no hay
+      piezas (no se pudo partir por red), no crea ninguna y devuelve `publicaciones: []`.
+    """
+    resultado = parsed["resultado"]
+    piezas = parsed["piezas"]
+    verdicto = parsed["verdicto"]
+    titulo = titulo_dado or derivar_titulo(texto_nota)
+    historial_id = db.registrar_historial_skill(
+        skill, marca, resultado, piezas=piezas, titulo=titulo
+    )
+    publicaciones = _crear_publicaciones_desde_piezas(
+        piezas, marca=marca, titulo=titulo, verdicto=verdicto, origen=historial_id
+    )
+    return JSONResponse(
+        {
+            "resultado": resultado,
+            "historial_id": historial_id,
+            "verdicto": verdicto,
+            "piezas": piezas,
+            "publicaciones": publicaciones,
+        }
+    )
+
+
 async def ejecutar(request: Request) -> Response:
     datos = await leer_json(request)
     skill = datos.get("skill")
@@ -546,6 +638,8 @@ async def ejecutar(request: Request) -> Response:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
     crudas = datos.get("redes")
     redes_ids = normalizar_redes(crudas if isinstance(crudas, list) else None)
+    titulo_dado = datos.get("titulo")
+    titulo_dado = titulo_dado.strip() if isinstance(titulo_dado, str) else ""
     try:
         salida = ejecutar_skill(skill, marca, texto, redes_ids=redes_ids)
     except SkillError as e:
@@ -554,17 +648,7 @@ async def ejecutar(request: Request) -> Response:
         return JSONResponse({"error": mensaje}, status_code=codigo)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
-    parsed = parsear_salida(salida, redes_ids)
-    resultado = parsed["resultado"]
-    historial_id = db.registrar_historial_skill(skill, marca, resultado)
-    return JSONResponse(
-        {
-            "resultado": resultado,
-            "historial_id": historial_id,
-            "verdicto": parsed["verdicto"],
-            "piezas": parsed["piezas"],
-        }
-    )
+    return _responder_generacion(skill, marca, texto, parsear_salida(salida, redes_ids), titulo_dado)
 
 
 async def ejecutar_archivo(request: Request) -> Response:
@@ -590,14 +674,18 @@ async def ejecutar_archivo(request: Request) -> Response:
 
     redes_crudas = _redes_desde_form(form)
     redes_ids = normalizar_redes(redes_crudas or None)
+    titulo_form = form.get("titulo")
+    titulo_dado = titulo_form.strip() if isinstance(titulo_form, str) else ""
 
+    texto_nota = ""
     dir_temporal: Path | None = None
     try:
         ruta, dir_temporal = await _guardar_subida_segura(archivo, limite=_max_subida(skill))
         if skill in _SKILLS_MEDIA:
             salida = ejecutar_skill_ruta(skill, marca, str(ruta), redes_ids=redes_ids)
         else:
-            salida = ejecutar_skill(skill, marca, _leer_texto_archivo(ruta), redes_ids=redes_ids)
+            texto_nota = _leer_texto_archivo(ruta)
+            salida = ejecutar_skill(skill, marca, texto_nota, redes_ids=redes_ids)
     except SkillError as e:
         mensaje = str(e)
         es_validacion = mensaje in _ERRORES_VALIDACION_ARCHIVO or mensaje in _ERRORES_VALIDACION
@@ -609,16 +697,9 @@ async def ejecutar_archivo(request: Request) -> Response:
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)
     parsed = parsear_salida(salida, redes_ids)
-    resultado = parsed["resultado"]
-    historial_id = db.registrar_historial_skill(skill, marca, resultado)
-    return JSONResponse(
-        {
-            "resultado": resultado,
-            "historial_id": historial_id,
-            "verdicto": parsed["verdicto"],
-            "piezas": parsed["piezas"],
-        }
-    )
+    # Para skills de media no hay nota de texto; el titulo se deriva del resultado.
+    base_titulo = texto_nota or parsed["resultado"]
+    return _responder_generacion(skill, marca, base_titulo, parsed, titulo_dado)
 
 
 async def historial(request: Request) -> Response:
@@ -632,7 +713,9 @@ async def historial(request: Request) -> Response:
             "marca": e["marca"],
             "marca_nombre": _MARCA_NOMBRE.get(e["marca"], e["marca"]),
             "fecha": e["fecha"],
+            "titulo": e["titulo"],
             "preview": _preview(e["resultado"]),
+            "piezas": e["piezas"],
         }
         for e in entradas
     ]
@@ -651,9 +734,75 @@ async def historial_detalle(request: Request) -> Response:
             "skill": entrada["skill"],
             "marca": entrada["marca"],
             "fecha": entrada["fecha"],
+            "titulo": entrada["titulo"],
             "resultado": entrada["resultado"],
+            "piezas": entrada["piezas"],
         }
     )
+
+
+async def historial_guardar(request: Request) -> Response:
+    """Recupera una entrada del historial como publicaciones (borradores).
+
+    `POST /api/skills/historial/{id}/guardar` con JSON opcional `{titulo?, redes?, red?}`:
+      - Si la entrada tiene `piezas`: crea UNA publicacion por pieza (filtradas a `redes`
+        si se pasa). Usa `titulo` (param) o el de la entrada o el derivado del resultado.
+      - Si NO tiene piezas (entradas antiguas): requiere `red` (∈ redes canonicas) y crea
+        UNA publicacion con `contenido = resultado` y esa red. Sin `red` => 400.
+    -> `{publicaciones:[Publicacion]}` | 404 si la entrada no existe.
+    """
+    historial_id = request.path_params["historial_id"]
+    entrada = db.obtener_historial_skill(historial_id)
+    if entrada is None:
+        return JSONResponse(
+            {"error": "No se encontró ese borrador en el historial."}, status_code=404
+        )
+
+    datos = await leer_json(request)
+    titulo_dado = datos.get("titulo")
+    titulo_dado = titulo_dado.strip() if isinstance(titulo_dado, str) else ""
+    crudas = datos.get("redes")
+    redes_filtro: set[str] | None = None
+    if isinstance(crudas, list):
+        redes_filtro = {r for r in crudas if isinstance(r, str) and redes.es_red(r)}
+
+    marca = entrada["marca"]
+    verdicto = _derivar_verdicto(entrada["resultado"])
+    titulo = titulo_dado or entrada["titulo"] or derivar_titulo(entrada["resultado"])
+    piezas = entrada["piezas"]
+
+    if piezas:
+        publicaciones = _crear_publicaciones_desde_piezas(
+            piezas,
+            marca=marca,
+            titulo=titulo,
+            verdicto=verdicto,
+            origen=historial_id,
+            redes_filtro=redes_filtro,
+        )
+        return JSONResponse({"publicaciones": publicaciones})
+
+    # Entrada antigua sin piezas: requiere una red explicita.
+    red = datos.get("red")
+    if not isinstance(red, str) or not redes.es_red(red):
+        return JSONResponse(
+            {"error": "Indica la red para guardar este borrador como publicación."},
+            status_code=400,
+        )
+    if redes_filtro is not None and red not in redes_filtro:
+        return JSONResponse(
+            {"error": "La red indicada no está entre las redes pedidas."}, status_code=400
+        )
+    pub = db.crear_publicacion(
+        marca,
+        red,
+        titulo=titulo,
+        contenido=entrada["resultado"],
+        estado="borrador",
+        veredicto=verdicto,
+        origen=historial_id,
+    )
+    return JSONResponse({"publicaciones": [_publicacion_a_dict(pub)]})
 
 
 RUTAS = [
@@ -661,5 +810,6 @@ RUTAS = [
     Route("/api/skills/ejecutar", ejecutar, methods=["POST"]),
     Route("/api/skills/ejecutar-archivo", ejecutar_archivo, methods=["POST"]),
     Route("/api/skills/historial", historial, methods=["GET"]),
+    Route("/api/skills/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
     Route("/api/skills/historial/{historial_id}", historial_detalle, methods=["GET"]),
 ]

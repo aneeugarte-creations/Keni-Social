@@ -247,3 +247,237 @@ def test_endpoint_ejecutar_archivo_redes_csv(entorno, monkeypatch):
     assert [p["red"] for p in cuerpo["piezas"]] == ["x", "instagram"]
     # CSV parseado: solo X e Instagram en el prompt (no las 5)
     assert "TikTok" not in capturado["prompt"]
+
+
+# --------------------------------------------------------------------------- #
+# derivar_titulo (helper puro)                                                #
+# --------------------------------------------------------------------------- #
+
+
+def test_derivar_titulo_primera_linea_no_vacia():
+    assert skills.derivar_titulo("\n\n  Titular de la nota  \nresto") == "Titular de la nota"
+
+
+def test_derivar_titulo_recorta_a_80_chars():
+    largo = "x" * 200
+    titulo = skills.derivar_titulo(largo)
+    # 80 chars + el caracter de elipsis
+    assert titulo.endswith("…")
+    assert len(titulo) == 81
+
+
+def test_derivar_titulo_sin_contenido_cae_a_borrador_con_fecha():
+    titulo = skills.derivar_titulo("   \n\n  ")
+    assert titulo.startswith("Borrador ")
+
+
+# --------------------------------------------------------------------------- #
+# Auto-guardado: generacion crea N publicaciones (una por pieza)              #
+# --------------------------------------------------------------------------- #
+
+
+def _listar_publicaciones(cli):
+    return cli.get("/api/publicaciones").json()["publicaciones"]
+
+
+def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={
+            "skill": "copy-desde-nota",
+            "marca": "unotv",
+            "texto": "Mi nota importante\nsegunda linea",
+            "redes": ["x", "instagram"],
+        },
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    # 2 piezas => 2 publicaciones recien creadas en la respuesta.
+    pubs = cuerpo["publicaciones"]
+    assert len(pubs) == 2
+    assert [p["red"] for p in pubs] == ["x", "instagram"]
+    # Forma completa serializada (igual que en api/publicaciones).
+    primera = pubs[0]
+    for clave in ("id", "titulo", "marca", "marca_nombre", "red", "red_nombre",
+                  "contenido", "estado", "veredicto", "origen", "imagen_url"):
+        assert clave in primera
+    assert primera["estado"] == "borrador"
+    assert primera["veredicto"] == "listo"
+    assert primera["marca"] == "unotv"
+    # origen = historial_id
+    assert primera["origen"] == cuerpo["historial_id"]
+    assert primera["contenido"] == "Titular fuerte y al grano."
+    # Titulo derivado de la 1a linea de la nota (no se paso titulo).
+    assert primera["titulo"] == "Mi nota importante"
+    # Persistidas de verdad: el listado las devuelve.
+    assert len(_listar_publicaciones(cli)) == 2
+
+
+def test_ejecutar_usa_titulo_dado_si_viene(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={
+            "skill": "copy-desde-nota",
+            "marca": "unotv",
+            "texto": "una nota",
+            "redes": ["x"],
+            "titulo": "  Mi titulo a mano  ",
+        },
+    )
+    assert r.status_code == 200
+    pubs = r.json()["publicaciones"]
+    assert pubs[0]["titulo"] == "Mi titulo a mano"
+
+
+def test_ejecutar_sin_piezas_no_crea_publicaciones(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_SIN_JSON))
+    cli = _cliente()
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "una nota"},
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["piezas"] == []
+    assert cuerpo["publicaciones"] == []
+    assert _listar_publicaciones(cli) == []
+
+
+def test_ejecutar_archivo_autocrea_publicaciones(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    r = cli.post(
+        "/api/skills/ejecutar-archivo",
+        data={"skill": "copy-desde-nota", "marca": "unotv", "redes": "x,instagram",
+              "titulo": "Desde archivo"},
+        files={"archivo": ("nota.txt", b"contenido de la nota", "text/plain")},
+    )
+    assert r.status_code == 200
+    pubs = r.json()["publicaciones"]
+    assert len(pubs) == 2
+    assert all(p["titulo"] == "Desde archivo" for p in pubs)
+    assert len(_listar_publicaciones(cli)) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Historial: listado/detalle devuelven piezas + titulo                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_historial_listado_y_detalle_incluyen_piezas_y_titulo(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    gen = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+              "redes": ["x", "instagram"]},
+    ).json()
+    hid = gen["historial_id"]
+
+    lista = cli.get("/api/skills/historial").json()["historial"]
+    assert lista[0]["titulo"] == "Una nota"
+    assert [p["red"] for p in lista[0]["piezas"]] == ["x", "instagram"]
+
+    detalle = cli.get(f"/api/skills/historial/{hid}").json()
+    assert detalle["titulo"] == "Una nota"
+    assert [p["red"] for p in detalle["piezas"]] == ["x", "instagram"]
+
+
+# --------------------------------------------------------------------------- #
+# Recuperar historial -> publicaciones                                        #
+# --------------------------------------------------------------------------- #
+
+
+def test_historial_guardar_con_piezas_crea_una_por_pieza(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    gen = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+              "redes": ["x", "instagram"]},
+    ).json()
+    hid = gen["historial_id"]
+    antes = len(_listar_publicaciones(cli))
+
+    r = cli.post(f"/api/skills/historial/{hid}/guardar", json={})
+    assert r.status_code == 200
+    pubs = r.json()["publicaciones"]
+    assert [p["red"] for p in pubs] == ["x", "instagram"]
+    assert all(p["origen"] == hid for p in pubs)
+    assert all(p["estado"] == "borrador" for p in pubs)
+    # Crea publicaciones NUEVAS (ademas de las auto-guardadas).
+    assert len(_listar_publicaciones(cli)) == antes + 2
+
+
+def test_historial_guardar_con_piezas_filtra_a_redes(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    hid = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+              "redes": ["x", "instagram"]},
+    ).json()["historial_id"]
+
+    r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"redes": ["instagram"]})
+    assert r.status_code == 200
+    pubs = r.json()["publicaciones"]
+    assert [p["red"] for p in pubs] == ["instagram"]
+
+
+def test_historial_guardar_usa_titulo_param(entorno, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
+    cli = _cliente()
+    hid = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+              "redes": ["x"]},
+    ).json()["historial_id"]
+
+    r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"titulo": "Recuperado"})
+    assert r.json()["publicaciones"][0]["titulo"] == "Recuperado"
+
+
+def test_historial_guardar_sin_piezas_requiere_red(entorno):
+    # Entrada antigua sin piezas: la insertamos directo via db.
+    from keni_consola import db
+
+    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "✅ texto plano")
+    cli = _cliente()
+    # Sin red => 400 claro.
+    r = cli.post(f"/api/skills/historial/{hid}/guardar", json={})
+    assert r.status_code == 400
+    assert "red" in r.json()["error"].lower()
+
+
+def test_historial_guardar_sin_piezas_con_red_crea_una(entorno):
+    from keni_consola import db
+
+    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "✅ contenido viejo")
+    cli = _cliente()
+    r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"red": "facebook"})
+    assert r.status_code == 200
+    pubs = r.json()["publicaciones"]
+    assert len(pubs) == 1
+    assert pubs[0]["red"] == "facebook"
+    assert pubs[0]["contenido"] == "✅ contenido viejo"
+    assert pubs[0]["veredicto"] == "listo"  # derivado del ✅
+    assert pubs[0]["origen"] == hid
+
+
+def test_historial_guardar_red_invalida_da_400(entorno):
+    from keni_consola import db
+
+    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "texto viejo")
+    cli = _cliente()
+    r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"red": "myspace"})
+    assert r.status_code == 400
+
+
+def test_historial_guardar_404_si_no_existe(entorno):
+    cli = _cliente()
+    r = cli.post("/api/skills/historial/noexiste/guardar", json={})
+    assert r.status_code == 404
