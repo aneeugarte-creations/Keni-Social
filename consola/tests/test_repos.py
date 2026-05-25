@@ -47,7 +47,8 @@ def test_reexporta_constantes_publicas():
 
 
 def test_delega_en_db_tareas(entorno):
-    # Escribir por repos -> leer por db (misma SQLite por debajo).
+    # Las tareas viven SIEMPRE en SQLite (en ambos backends): escribir por repos ->
+    # leer por db (misma SQLite por debajo).
     tarea = repos.crear_tarea("proy", "Mi tarea", "detalle")
     leida = db.obtener_tarea(tarea["id"])
     assert leida is not None
@@ -56,7 +57,9 @@ def test_delega_en_db_tareas(entorno):
     assert any(t["id"] == tarea["id"] for t in repos.listar_tareas())
 
 
-def test_delega_en_db_publicaciones(entorno):
+def test_delega_en_db_publicaciones(entorno, monkeypatch):
+    # Con el backend SQLite explicito, repos debe delegar 1:1 en db.
+    monkeypatch.setenv("KENI_CONSOLA_BACKEND", "sqlite")
     pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="C")
     # repos.ruta_db apunta al mismo fichero que db.ruta_db.
     assert repos.ruta_db() == db.ruta_db()
@@ -68,7 +71,8 @@ def test_delega_en_db_publicaciones(entorno):
     assert repos.obtener_publicacion(pub["id"])["titulo"] == "Z"
 
 
-def test_delega_en_db_contenido_reutilizable(entorno):
+def test_delega_en_db_contenido_reutilizable(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_BACKEND", "sqlite")
     f = repos.crear_franja(2, "09:00", marca="unotv", red="x")
     assert any(x["id"] == f["id"] for x in db.listar_franjas())
     g = repos.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol"])
@@ -79,7 +83,8 @@ def test_delega_en_db_contenido_reutilizable(entorno):
     assert db.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
 
 
-def test_historial_skill_por_repos(entorno):
+def test_historial_skill_por_repos(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CONSOLA_BACKEND", "sqlite")
     hid = repos.registrar_historial_skill("copy-desde-nota", "unotv", "RES", titulo="T")
     leido = db.obtener_historial_skill(hid)
     assert leido is not None

@@ -1,6 +1,7 @@
 """Arranca la Consola Keni: servidor LOCAL (Starlette/uvicorn) en 127.0.0.1.
 
-    python -m keni_consola
+    python -m keni_consola                  # arranca el servidor
+    python -m keni_consola migrar-a-ficheros  # migra consola.db -> YAML (one-shot)
 
 Puerto configurable con `KENI_CONSOLA_PORT` (def: 8765). Bind SIEMPRE a 127.0.0.1
 (nunca 0.0.0.0): es una app que toca el disco y lanza procesos, no debe quedar
@@ -31,7 +32,20 @@ def _puerto() -> int:
         return PUERTO_DEF
 
 
-def main() -> int:
+def _migrar() -> int:
+    """Subcomando `migrar-a-ficheros`: vuelca consola.db al backend de ficheros YAML."""
+    from .migracion import _texto_resumen, migrar_a_ficheros
+
+    conteos = migrar_a_ficheros()
+    print(_texto_resumen(conteos))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "migrar-a-ficheros":
+        return _migrar()
+
     puerto = _puerto()
     url = f"http://{HOST}:{puerto}/"
     print(f"Consola Keni en {url}")

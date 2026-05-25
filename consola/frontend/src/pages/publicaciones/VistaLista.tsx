@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowRight,
+  BarChart3,
   CalendarClock,
   CalendarPlus,
   Copy,
@@ -12,8 +13,10 @@ import {
   Trash2,
 } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { marcaMetricasDesdeCanonica } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -218,6 +221,18 @@ function TarjetaPublicacion({
               )}
             </Button>
           </Tooltip>
+          {publicacion.estado === "publicado" && (
+            <Tooltip label="Ver métricas de esta marca">
+              <Button asChild variant="ghost" size="icon" aria-label="Ver métricas">
+                <Link
+                  to="/metricas"
+                  state={{ marca: marcaMetricasDesdeCanonica(publicacion.marca) }}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                </Link>
+              </Button>
+            </Tooltip>
+          )}
           {(publicacion.estado === "publicado" || publicacion.evergreen) && (
             <Tooltip label="Reciclar (volver a publicar)">
               <Button
