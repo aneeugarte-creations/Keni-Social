@@ -77,6 +77,80 @@ export interface CuerpoGuardarClaudeMd {
   contenido: string;
 }
 
+// --- Agentes (marca = carpeta con CLAUDE.md, sub-contextos y runs) ---
+
+/** Resumen de un agente (una marca = su carpeta) en el listado. */
+export interface AgenteResumen {
+  id: string;
+  nombre: string;
+  ruta: string;
+  tiene_claude_md: boolean;
+  n_publicaciones: number;
+  n_runs: number;
+}
+
+export interface RespuestaAgentes {
+  agentes: AgenteResumen[];
+}
+
+/** Un sub-contexto del agente: un archivo `contexto/*.md`. */
+export interface SubContexto {
+  nombre: string;
+  contenido: string;
+}
+
+/** Modo de ejecución de un run del agente. */
+export type ModoRun = "headless" | "interactivo";
+
+/** Estado del ciclo de vida de un run. */
+export type EstadoRun = "completado" | "error" | "lanzado" | string;
+
+/** Un run (ejecución) del agente. */
+export interface Run {
+  id: string;
+  prompt: string;
+  modo: ModoRun;
+  estado: EstadoRun;
+  fecha_inicio: string;
+  /** Salida del run headless (puede venir vacía mientras corre o si es interactivo). */
+  salida?: string;
+  /** Mensaje legible (p. ej. al lanzar uno interactivo). */
+  mensaje?: string;
+}
+
+/** Detalle completo de un agente. */
+export interface AgenteDetalle {
+  id: string;
+  nombre: string;
+  ruta: string;
+  claude_md: string;
+  sub_contextos: SubContexto[];
+  runs: Run[];
+}
+
+export interface RespuestaSubContextos {
+  sub_contextos: SubContexto[];
+}
+
+/** Cuerpo para guardar el contenido de un sub-contexto. */
+export interface CuerpoGuardarContexto {
+  contenido: string;
+}
+
+/** Cuerpo para lanzar un run del agente. */
+export interface CuerpoCrearRun {
+  prompt: string;
+  modo: ModoRun;
+}
+
+export interface RespuestaRun {
+  run: Run;
+}
+
+export interface RespuestaRuns {
+  runs: Run[];
+}
+
 // --- Carpetas ---
 
 export interface PlantillaCarpeta {
