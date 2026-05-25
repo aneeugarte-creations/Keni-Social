@@ -40,6 +40,13 @@ _SALIDA_SIN_JSON = """⚠️ Revisa antes de publicar.
 Un solo bloque de texto sin json al final.
 """
 
+# Sin bloque json Y sin encabezados de plataforma reconocibles: ni JSON ni
+# fallback aplican, asi que `piezas` debe quedar vacio.
+_SALIDA_SIN_JSON_NI_ENCABEZADOS = """⚠️ Revisa antes de publicar.
+
+Un parrafo corrido sin ningun encabezado de red, solo prosa.
+"""
+
 _SALIDA_JSON_MALFORMADO = """❌ No publicar.
 
 ## X
@@ -107,18 +114,24 @@ def test_parsear_usa_el_ultimo_bloque_json():
 # --------------------------------------------------------------------------- #
 
 
-def test_parsear_sin_json_devuelve_salida_tal_cual():
-    res = skills.parsear_salida(_SALIDA_SIN_JSON, ["x"])
+def test_parsear_sin_json_ni_encabezados_devuelve_salida_sin_piezas():
+    # Sin JSON y sin encabezados reconocibles: ni JSON ni fallback => piezas=[].
+    res = skills.parsear_salida(_SALIDA_SIN_JSON_NI_ENCABEZADOS, ["x"])
     assert res["piezas"] == []
-    assert res["verdicto"] == "revisar"
-    assert res["resultado"] == _SALIDA_SIN_JSON.strip()
+    assert res["verdicto"] == "revisar"  # el ⚠️ se deriva ANTES de quitar emojis
+    # El resultado se devuelve sin emojis (se quito el ⚠️ del inicio).
+    assert res["resultado"] == skills.quitar_emojis(_SALIDA_SIN_JSON_NI_ENCABEZADOS)
+    assert "⚠" not in res["resultado"]
 
 
-def test_parsear_json_malformado_no_crashea():
+def test_parsear_json_malformado_cae_al_fallback_por_encabezados():
+    # JSON invalido => no se quita el bloque del texto, pero el FALLBACK por
+    # encabezados reparte el cuerpo bajo "## X" a la red x.
     res = skills.parsear_salida(_SALIDA_JSON_MALFORMADO, ["x"])
-    assert res["piezas"] == []
-    assert res["verdicto"] == "no_publicar"
-    # con json malformado, el texto se deja TAL CUAL (incluido el bloque)
+    assert res["verdicto"] == "no_publicar"  # el ❌ se deriva ANTES de quitar emojis
+    assert [p["red"] for p in res["piezas"]] == ["x"]
+    assert "Texto." in res["piezas"][0]["contenido"]
+    # con json malformado, el bloque sigue presente en el texto (no se quito)
     assert "```json" in res["resultado"]
 
 
@@ -214,7 +227,7 @@ def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno, monkeypatch):
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return _SALIDA_SIN_JSON
+        return _SALIDA_SIN_JSON_NI_ENCABEZADOS
 
     monkeypatch.setattr(skills, "_runner", runner)
     r = _cliente().post(
@@ -225,7 +238,7 @@ def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno, monkeypatch):
     # el prompt debe mencionar las 5 redes por nombre
     for nombre in ("X", "Instagram", "Facebook", "TikTok", "YouTube"):
         assert nombre in capturado["prompt"]
-    # sin json en la salida => piezas vacias, resultado tal cual
+    # sin json NI encabezados => piezas vacias
     assert r.json()["piezas"] == []
 
 
@@ -334,7 +347,7 @@ def test_ejecutar_usa_titulo_dado_si_viene(entorno, monkeypatch):
 
 
 def test_ejecutar_sin_piezas_no_crea_publicaciones(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_SIN_JSON))
+    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_SIN_JSON_NI_ENCABEZADOS))
     cli = _cliente()
     r = cli.post(
         "/api/skills/ejecutar",
@@ -481,3 +494,190 @@ def test_historial_guardar_404_si_no_existe(entorno):
     cli = _cliente()
     r = cli.post("/api/skills/historial/noexiste/guardar", json={})
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# quitar_emojis (helper puro y determinista)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_quitar_emojis_emoji_simple():
+    assert skills.quitar_emojis("Hola 😀 mundo") == "Hola mundo"
+
+
+def test_quitar_emojis_zwj_familia():
+    # Familia = secuencia unida por ZWJ (U+200D); debe desaparecer entera.
+    familia = "Mira 👨‍👩‍👧‍👦 aqui"
+    assert skills.quitar_emojis(familia) == "Mira aqui"
+
+
+def test_quitar_emojis_bandera():
+    # Bandera = dos regional indicators (U+1F1F2 U+1F1FD = MX).
+    assert skills.quitar_emojis("Viva 🇲🇽 Mexico") == "Viva Mexico"
+
+
+def test_quitar_emojis_variation_selector():
+    # ⚠ + U+FE0F (variation selector-16): se quitan ambos.
+    assert skills.quitar_emojis("Cuidado ⚠️ ahora") == "Cuidado ahora"
+
+
+def test_quitar_emojis_dingbat_y_check():
+    assert skills.quitar_emojis("Listo ✅ y ❌ no") == "Listo y no"
+
+
+def test_quitar_emojis_texto_sin_emojis_intacto():
+    texto = "Texto con acentos: añadió, corazón, mañana."
+    assert skills.quitar_emojis(texto) == texto
+
+
+def test_quitar_emojis_no_toca_urls():
+    texto = "Visita https://kenitech.io/ruta?x=1&y=2 hoy"
+    assert skills.quitar_emojis(texto) == texto
+
+
+def test_quitar_emojis_colapsa_dobles_espacios_y_recorta():
+    # Al quitar el emoji entre dos espacios queda un doble espacio que se colapsa;
+    # los extremos se recortan.
+    assert skills.quitar_emojis("  uno 🔥 dos  ") == "uno dos"
+
+
+def test_quitar_emojis_conserva_saltos_de_linea():
+    assert skills.quitar_emojis("linea1 🚀\nlinea2") == "linea1\nlinea2"
+
+
+def test_quitar_emojis_vacio():
+    assert skills.quitar_emojis("") == ""
+
+
+# --------------------------------------------------------------------------- #
+# parsear_salida: quita emojis de piezas y resultado, conserva el verdicto    #
+# --------------------------------------------------------------------------- #
+
+_SALIDA_JSON_CON_EMOJIS = """✅ Copy listo 🎉
+
+## X
+Titular con fuego 🔥
+
+```json
+{"piezas": [{"red": "x", "texto": "Titular con fuego 🔥 y mas 🚀"},
+            {"red": "instagram", "texto": "IG con corazon ❤️ aqui"}]}
+```
+"""
+
+
+def test_parsear_quita_emojis_de_piezas_pero_conserva_verdicto():
+    res = skills.parsear_salida(_SALIDA_JSON_CON_EMOJIS, ["x", "instagram"])
+    # El verdicto se deriva del ✅ ANTES de borrar emojis.
+    assert res["verdicto"] == "listo"
+    piezas = res["piezas"]
+    assert piezas[0]["contenido"] == "Titular con fuego y mas"
+    assert piezas[1]["contenido"] == "IG con corazon aqui"
+    # caracteres = len del contenido YA sin emojis.
+    assert piezas[0]["caracteres"] == len("Titular con fuego y mas")
+    # Ni el resultado ni las piezas llevan emojis.
+    assert "🔥" not in res["resultado"] and "🎉" not in res["resultado"]
+    for p in piezas:
+        assert "🔥" not in p["contenido"] and "❤" not in p["contenido"]
+
+
+# --------------------------------------------------------------------------- #
+# parsear_salida: FALLBACK por encabezados de plataforma (sin JSON valido)    #
+# --------------------------------------------------------------------------- #
+
+_SALIDA_FALLBACK_MD = """✅ Listo.
+
+## X
+Tweet corto desde el fallback.
+
+## Instagram
+Post de IG desde el fallback.
+
+## Facebook
+Estado de FB desde el fallback.
+"""
+
+_SALIDA_FALLBACK_BOLD = """**Twitter**
+Texto para X en negrita.
+
+**Instagram:**
+Texto para IG en negrita.
+"""
+
+_SALIDA_FALLBACK_DOSPUNTOS = """Twitter:
+Texto para X con dos puntos.
+
+YouTube:
+Descripcion de YouTube.
+"""
+
+
+def test_fallback_encabezados_markdown_reparte_por_red():
+    res = skills.parsear_salida(_SALIDA_FALLBACK_MD, ["x", "instagram", "facebook"])
+    assert [p["red"] for p in res["piezas"]] == ["x", "instagram", "facebook"]
+    assert res["piezas"][0]["contenido"] == "Tweet corto desde el fallback."
+    assert res["piezas"][2]["contenido"] == "Estado de FB desde el fallback."
+    assert res["verdicto"] == "listo"
+
+
+def test_fallback_encabezados_bold_y_alias_twitter():
+    # "**Twitter**" -> x ; "**Instagram:**" -> instagram
+    res = skills.parsear_salida(_SALIDA_FALLBACK_BOLD, ["x", "instagram"])
+    assert [p["red"] for p in res["piezas"]] == ["x", "instagram"]
+    assert res["piezas"][0]["contenido"] == "Texto para X en negrita."
+
+
+def test_fallback_encabezados_dos_puntos():
+    res = skills.parsear_salida(_SALIDA_FALLBACK_DOSPUNTOS, ["x", "youtube"])
+    assert [p["red"] for p in res["piezas"]] == ["x", "youtube"]
+    assert res["piezas"][1]["contenido"] == "Descripcion de YouTube."
+
+
+def test_fallback_acotado_a_redes_pedidas():
+    # El texto trae X, Instagram y Facebook, pero solo se pidio X: el resto se ignora.
+    res = skills.parsear_salida(_SALIDA_FALLBACK_MD, ["x"])
+    assert [p["red"] for p in res["piezas"]] == ["x"]
+
+
+def test_fallback_orden_fijo_aunque_encabezados_desordenados():
+    salida = "## Instagram\nIG\n\n## X\nTW\n"
+    res = skills.parsear_salida(salida, ["x", "instagram"])
+    assert [p["red"] for p in res["piezas"]] == ["x", "instagram"]
+
+
+def test_fallback_quita_emojis_del_cuerpo():
+    salida = "## X\nTweet con fuego 🔥 final\n"
+    res = skills.parsear_salida(salida, ["x"])
+    assert res["piezas"][0]["contenido"] == "Tweet con fuego final"
+    assert res["piezas"][0]["caracteres"] == len("Tweet con fuego final")
+
+
+def test_fallback_sin_encabezados_devuelve_piezas_vacias():
+    salida = "Solo prosa corrida, sin ningun encabezado de red reconocible.\n"
+    res = skills.parsear_salida(salida, ["x", "instagram"])
+    assert res["piezas"] == []
+
+
+def test_json_valido_tiene_prioridad_sobre_encabezados():
+    # Hay encabezados ## X / ## Instagram PERO tambien un JSON valido: gana el JSON.
+    salida = (
+        "## X\nTexto suelto bajo X\n\n## Instagram\nTexto suelto bajo IG\n\n"
+        '```json\n{"piezas": [{"red": "x", "texto": "DESDE JSON"}]}\n```\n'
+    )
+    res = skills.parsear_salida(salida, ["x", "instagram"])
+    assert [p["red"] for p in res["piezas"]] == ["x"]
+    assert res["piezas"][0]["contenido"] == "DESDE JSON"
+
+
+# --------------------------------------------------------------------------- #
+# construir_prompt: instruccion ADITIVA "sin emojis"                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_prompt_incluye_instruccion_sin_emojis():
+    p = skills.construir_prompt("copy-desde-nota", "unotv", "una nota", ["x"])
+    assert "No uses emojis en el copy." in p
+
+
+def test_prompt_ruta_incluye_instruccion_sin_emojis():
+    p = skills.construir_prompt_ruta("clip-a-copy", "unotv", "/tmp/clip.mp4")
+    assert "No uses emojis en el copy." in p
