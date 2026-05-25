@@ -4,6 +4,8 @@ Aisla en `tmp_path` (env vars) toda la persistencia y configuracion para que
 ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_CONFIG`  -> consola.toml (allowlist de proyectos)
   - `KENI_CONSOLA_DB`      -> consola.db (SQLite: tareas + historial de skills)
+  - `KENI_CONSOLA_RAIZ`    -> raiz de datos del backend de ficheros (YAML por marca)
+  - `KENI_CONSOLA_INDICE`  -> indice SQLite regenerable del backend de ficheros
   - `KENI_CONSOLA_TAREAS`  -> tareas.json (solo para probar la migracion)
   - `KENI_CONSOLA_MEDIA`   -> dir de media (imagenes) aislado en tmp
   - `KENI_CONSOLA_SECRETOS`-> almacen de secretos (clave de imagen) aislado en tmp
@@ -29,6 +31,8 @@ def entorno(monkeypatch, tmp_path):
     """Config + DB aisladas en tmp; metricas offline (fuente de muestra)."""
     monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
     monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
+    monkeypatch.setenv("KENI_CONSOLA_RAIZ", str(tmp_path / "datos"))
+    monkeypatch.setenv("KENI_CONSOLA_INDICE", str(tmp_path / "indice.sqlite"))
     monkeypatch.setenv("KENI_CONSOLA_TAREAS", str(tmp_path / "tareas.json"))
     monkeypatch.setenv("KENI_CONSOLA_MEDIA", str(tmp_path / "media"))
     monkeypatch.setenv("KENI_CONSOLA_SECRETOS", str(tmp_path / "secretos.toml"))

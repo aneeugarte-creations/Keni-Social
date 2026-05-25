@@ -12,6 +12,8 @@ dependencies = [
     # MCP usa la pila que trae el SDK `mcp`. Floors alineados con los de `mcp`.
     "starlette>=0.27",
     "uvicorn>=0.31.1",
+    # Backend de ficheros: el contenido vive en YAML por marca (fuente de verdad).
+    "PyYAML>=6",
 ]
 
 [project.optional-dependencies]
