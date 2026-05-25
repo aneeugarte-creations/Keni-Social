@@ -74,6 +74,7 @@ import type {
   RespuestaReciclarPublicacion,
   RespuestaRun,
   RespuestaRuns,
+  RespuestaRunsAgregados,
   RespuestaSkills,
   RespuestaSubContextos,
   RespuestaSugerirHashtags,
@@ -239,6 +240,11 @@ export const api = {
     peticion<Run>(`/agentes/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, {
       signal,
     }),
+
+  // --- Monitor (actividad IA: runs de todos los agentes + agregados) ---
+  runs: (signal?: AbortSignal) => peticion<RespuestaRuns>("/runs", { signal }),
+  runsAgregados: (signal?: AbortSignal) =>
+    peticion<RespuestaRunsAgregados>("/runs/agregados", { signal }),
 
   // --- Skills (Generar copy) ---
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),

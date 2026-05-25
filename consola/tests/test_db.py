@@ -145,6 +145,21 @@ def test_historial_sin_piezas_devuelve_lista_vacia(base):
     entrada = db.obtener_historial_skill(hid)
     assert entrada["piezas"] == []
     assert entrada["titulo"] == ""
+    assert entrada["metricas"] is None
+
+
+def test_historial_guarda_y_devuelve_metricas(base):
+    metricas = {
+        "tokens_in": 130, "tokens_out": 50, "num_turns": 3,
+        "total_cost_usd": 0.0123, "duration_ms": 4200, "modelo": "claude-opus-4-7",
+    }
+    hid = db.registrar_historial_skill(
+        "copy-desde-nota", "unotv", "RES", metricas=metricas
+    )
+    entrada = db.obtener_historial_skill(hid)
+    assert entrada["metricas"] == metricas
+    # El listado tambien las devuelve (parseadas a dict).
+    assert db.listar_historial_skills()[0]["metricas"] == metricas
 
 
 def test_historial_filas_antiguas_sin_columnas_devuelven_defaults(base):
@@ -170,6 +185,8 @@ def test_historial_filas_antiguas_sin_columnas_devuelven_defaults(base):
     assert entrada["resultado"] == "antiguo"
     assert entrada["piezas"] == []
     assert entrada["titulo"] == ""
+    # La columna `metricas` se migra (idempotente) y una fila vieja la lee como None.
+    assert entrada["metricas"] is None
 
 
 # --------------------------------------------------------------------------- #

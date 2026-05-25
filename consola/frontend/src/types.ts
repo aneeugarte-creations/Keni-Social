@@ -105,6 +105,26 @@ export type ModoRun = "headless" | "interactivo";
 /** Estado del ciclo de vida de un run. */
 export type EstadoRun = "completado" | "error" | "lanzado" | string;
 
+/**
+ * Métricas de monitorización de un run IA, tal y como las reporta el CLI cuando
+ * devuelve JSON. Puede venir `null` (p. ej. un run interactivo o un CLI que no
+ * emitió JSON), en cuyo caso la UI no muestra cifras.
+ */
+export interface MetricasRun {
+  /** Tokens de entrada (prompt) consumidos. */
+  tokens_in: number;
+  /** Tokens de salida (respuesta) generados. */
+  tokens_out: number;
+  /** Número de turnos del run. */
+  num_turns: number;
+  /** Coste total en dólares estadounidenses. */
+  total_cost_usd: number;
+  /** Duración del run en milisegundos. */
+  duration_ms: number;
+  /** Identificador del modelo usado. */
+  modelo: string;
+}
+
 /** Un run (ejecución) del agente. */
 export interface Run {
   id: string;
@@ -116,6 +136,12 @@ export interface Run {
   salida?: string;
   /** Mensaje legible (p. ej. al lanzar uno interactivo). */
   mensaje?: string;
+  /** Métricas de monitorización (tokens, coste, duración…); `null` si no hay. */
+  metricas?: MetricasRun | null;
+  /** Id del agente dueño del run (presente en el listado global `/api/runs`). */
+  agente?: string;
+  /** Nombre legible del agente (presente en el listado global `/api/runs`). */
+  agente_nombre?: string;
 }
 
 /** Detalle completo de un agente. */
@@ -149,6 +175,39 @@ export interface RespuestaRun {
 
 export interface RespuestaRuns {
   runs: Run[];
+}
+
+// --- Monitorización de actividad IA (runs globales + agregados) ---
+
+/** Totales acumulados de toda la actividad IA del periodo disponible. */
+export interface TotalRuns {
+  coste_usd: number;
+  tokens: number;
+  runs: number;
+}
+
+/** Agregado de actividad IA por agente. */
+export interface AgregadoPorAgente {
+  agente: string;
+  agente_nombre: string;
+  coste_usd: number;
+  tokens: number;
+  runs: number;
+}
+
+/** Agregado de actividad IA por día (clave `dia` en ISO `YYYY-MM-DD`). */
+export interface AgregadoPorDia {
+  dia: string;
+  coste_usd: number;
+  tokens: number;
+  runs: number;
+}
+
+/** Respuesta de `GET /api/runs/agregados`. */
+export interface RespuestaRunsAgregados {
+  total: TotalRuns;
+  por_agente: AgregadoPorAgente[];
+  por_dia: AgregadoPorDia[];
 }
 
 // --- Carpetas ---

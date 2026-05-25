@@ -688,7 +688,7 @@ async def generar(request: Request) -> Response:
 
     nota = _nota_desde_item(titulo, resumen, enlace)
     try:
-        salida = skills.ejecutar_skill(skill, marca, nota, redes_ids=redes_ids)
+        salida, metricas = skills.ejecutar_skill(skill, marca, nota, redes_ids=redes_ids)
     except skills.SkillError as e:
         mensaje = str(e)
         codigo = 400 if mensaje in skills._ERRORES_VALIDACION else 500
@@ -704,7 +704,7 @@ async def generar(request: Request) -> Response:
             repos.marcar_item(fuente_id, clave.strip(), True)
 
     parsed = skills.parsear_salida(salida, redes_ids)
-    return skills._responder_generacion(skill, marca, nota, parsed, titulo.strip())
+    return skills._responder_generacion(skill, marca, nota, parsed, titulo.strip(), metricas)
 
 
 RUTAS = [

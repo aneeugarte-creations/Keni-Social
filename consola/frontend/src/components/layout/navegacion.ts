@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   Bot,
   Rss,
@@ -58,6 +59,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Agentes",
         icono: Bot,
         descripcion: "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones.",
+      },
+      {
+        ruta: "/monitor",
+        etiqueta: "Actividad IA",
+        icono: Activity,
+        descripcion: "Monitoriza tokens, coste y duración de los runs de IA.",
       },
     ],
   },

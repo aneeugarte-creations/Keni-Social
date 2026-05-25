@@ -1053,10 +1053,13 @@ def claves_vistas(fuente_id: str) -> set[str]:
 
 
 def _parsear_historial(datos: dict[str, Any], marca: str, hid: str) -> dict[str, Any]:
-    """Reconstruye el dict publico de una entrada de historial (`piezas` lista de dicts)."""
+    """Reconstruye el dict publico de una entrada de historial (`piezas` lista, `metricas` dict|None)."""
     piezas = datos.get("piezas")
     if not isinstance(piezas, list):
         piezas = []
+    metricas = datos.get("metricas")
+    if not isinstance(metricas, dict) or not metricas:
+        metricas = None
     return {
         "id": hid,
         "skill": datos.get("skill", "") or "",
@@ -1065,6 +1068,7 @@ def _parsear_historial(datos: dict[str, Any], marca: str, hid: str) -> dict[str,
         "resultado": datos.get("resultado", "") or "",
         "piezas": [p for p in piezas if isinstance(p, dict)],
         "titulo": datos.get("titulo", "") or "",
+        "metricas": metricas,
     }
 
 
@@ -1075,11 +1079,16 @@ def registrar_historial_skill(
     *,
     piezas: list[dict[str, Any]] | None = None,
     titulo: str = "",
+    metricas: dict[str, Any] | None = None,
 ) -> str:
-    """Guarda una ejecucion de skill (un YAML en `<marca>/historial/<YYYY>/<MM>/`) y devuelve su id."""
+    """Guarda una ejecucion de skill (un YAML en `<marca>/historial/<YYYY>/<MM>/`) y devuelve su id.
+
+    `metricas` (tokens/turnos/coste/duracion/modelo del run) se guarda como un mapa en
+    el YAML, o se omite si es None.
+    """
     hid = _nuevo_id()
     ahora = datetime.now()
-    cuerpo = {
+    cuerpo: dict[str, Any] = {
         "skill": skill,
         "fecha": date.today().isoformat(),
         "fecha_creacion": ahora.isoformat(timespec="seconds"),
@@ -1087,6 +1096,8 @@ def registrar_historial_skill(
         "piezas": [dict(p) for p in (piezas or [])],
         "resultado": resultado,
     }
+    if metricas:
+        cuerpo["metricas"] = dict(metricas)
     carpeta = carpeta_marca(marca) / "historial" / f"{ahora.year:04d}" / f"{ahora.month:02d}"
     ruta = carpeta / f"{hid}.yaml"
     _escribir_yaml(ruta, cuerpo)

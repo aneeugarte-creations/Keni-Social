@@ -2,8 +2,10 @@
 
 El SPA elige una skill de una ALLOWLIST curada, una marca, pega una nota/transcripcion
 (o sube un archivo) y pide "Generar". La consola construye el prompt de invocacion
-y corre `claude -p "<prompt>"` POR DEBAJO, captura su salida, la persiste en
-`skill_historial` (SQLite) y la devuelve. Nada se publica: solo borradores.
+y corre `claude -p "<prompt>" --output-format json` POR DEBAJO, captura el texto del
+campo `result` Y las METRICAS del run (tokens/turnos/coste/duracion via
+`parsear_resultado_json`), lo persiste en `skill_historial` y lo devuelve. Nada se
+publica: solo borradores. `_runner` devuelve `(texto, MetricasRun | None)`.
 
 SEGURIDAD (resumen):
   - La lista de skills es una ALLOWLIST fija (`SKILLS`); las marcas tambien (`MARCAS`).
@@ -41,7 +43,7 @@ import subprocess
 import tempfile
 import uuid
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 
@@ -168,6 +170,58 @@ class SkillError(RuntimeError):
 
 
 # --------------------------------------------------------------------------- #
+# Metricas de un run de IA (tokens / turnos / coste / duracion)                #
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class MetricasRun:
+    """Metricas reales capturadas de una ejecucion de `claude -p ... --output-format json`.
+
+    - `tokens_in`/`tokens_out`: tokens de entrada/salida (preferentemente sumados de
+      `modelUsage`, con fallback a `usage`). `cache_read`/`cache_creation`: tokens de
+      cache (solo de `usage`, no siempre presentes por modelo).
+    - `num_turns`: turnos del agente; `total_cost_usd`: coste total en USD;
+      `duration_ms`: duracion de pared en milisegundos; `session_id`: id de la sesion.
+    - `modelo`: el (o los) modelos usados (coma-separados si hubo varios).
+    Todos los campos son opcionales (None si la salida no los trae).
+    """
+
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    cache_read: int | None = None
+    cache_creation: int | None = None
+    num_turns: int | None = None
+    total_cost_usd: float | None = None
+    duration_ms: int | None = None
+    session_id: str | None = None
+    modelo: str | None = None
+
+
+# Subconjunto de campos de `MetricasRun` que se persisten (run YAML + historial).
+_CAMPOS_METRICAS_PERSISTIDOS: tuple[str, ...] = (
+    "tokens_in",
+    "tokens_out",
+    "num_turns",
+    "total_cost_usd",
+    "duration_ms",
+    "modelo",
+)
+
+
+def metricas_a_dict(metricas: MetricasRun | None) -> dict[str, object] | None:
+    """Serializa las metricas persistibles a un dict simple (o None si no hay metricas).
+
+    Solo incluye el subconjunto que guardamos (`_CAMPOS_METRICAS_PERSISTIDOS`); las
+    claves con valor None se omiten para no ensuciar el YAML/JSON.
+    """
+    if metricas is None:
+        return None
+    completo = asdict(metricas)
+    return {k: completo[k] for k in _CAMPOS_METRICAS_PERSISTIDOS if completo.get(k) is not None}
+
+
+# --------------------------------------------------------------------------- #
 # Invocacion de Claude (headless) — punto inyectable para los tests            #
 # --------------------------------------------------------------------------- #
 
@@ -248,19 +302,162 @@ def _extension_segura(nombre_cliente: str | None) -> str:
     return f".{sufijo}" if _RE_EXT.match(sufijo) else ""
 
 
-def _runner(prompt: str, *, cwd: Path, timeout: int) -> str:
-    """Llama a `claude -p "<prompt>"` por subprocess y devuelve su stdout.
+# Env opcional: tope de presupuesto (USD) que se pasa a `claude` como `--max-budget-usd`.
+_ENV_MAX_USD = "KENI_CLAUDE_MAX_USD"
 
-    Esta es LA funcion que toca el binario real; los tests la parchean. Sin shell.
+# Subtipos de error conocidos del campo `result` que conviene reportar especificamente.
+_SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
+
+
+def _arg_presupuesto() -> list[str]:
+    """Devuelve `['--max-budget-usd', '<n>']` si `KENI_CLAUDE_MAX_USD` es valido; si no, `[]`.
+
+    Tolerante: un valor ausente, vacio, no numerico o <= 0 se ignora (sin tope).
+    """
+    crudo = (os.environ.get(_ENV_MAX_USD) or "").strip()
+    if not crudo:
+        return []
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return []
+    if valor <= 0:
+        return []
+    # Sin notacion cientifica ni ceros colgantes: formato estable para el argv.
+    texto = f"{valor:.10f}".rstrip("0").rstrip(".")
+    return ["--max-budget-usd", texto]
+
+
+def _entero(valor: object) -> int | None:
+    """Convierte `valor` a int si es un numero; None en cualquier otro caso."""
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, int):
+        return valor
+    if isinstance(valor, float):
+        return int(valor)
+    return None
+
+
+def _flotante(valor: object) -> float | None:
+    """Convierte `valor` a float si es un numero; None en cualquier otro caso."""
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, (int, float)):
+        return float(valor)
+    return None
+
+
+def _tokens_de_model_usage(model_usage: object) -> tuple[int | None, int | None, str | None]:
+    """Suma tokens in/out de `modelUsage` (dict modelo->{inputTokens,outputTokens}).
+
+    Devuelve `(tokens_in, tokens_out, modelos)` donde `modelos` es la lista de modelos
+    usados (coma-separada) o None. Si `modelUsage` no aporta nada utilizable, devuelve
+    `(None, None, None)` para que el llamante caiga al fallback de `usage`.
+    """
+    if not isinstance(model_usage, dict) or not model_usage:
+        return None, None, None
+    total_in = 0
+    total_out = 0
+    visto = False
+    modelos: list[str] = []
+    for nombre, uso in model_usage.items():
+        if isinstance(nombre, str) and nombre:
+            modelos.append(nombre)
+        if not isinstance(uso, dict):
+            continue
+        ti = _entero(uso.get("inputTokens"))
+        to = _entero(uso.get("outputTokens"))
+        if ti is not None:
+            total_in += ti
+            visto = True
+        if to is not None:
+            total_out += to
+            visto = True
+    if not visto:
+        return None, None, (", ".join(modelos) or None)
+    return total_in, total_out, (", ".join(modelos) or None)
+
+
+def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
+    """Parsea el stdout de `claude ... --output-format json` en `(texto, metricas)`.
+
+    Funcion PURA y testeable (no toca subprocess). Contrato:
+      - Si `stdout` NO es JSON valido o no es un objeto con `type == "result"`, se trata
+        TODO el stdout como texto y se devuelve `(stdout.strip(), None)` (degradacion
+        robusta: la generacion de copy nunca debe romperse por un formato inesperado).
+      - Si el objeto marca error (`is_error` true o `subtype` distinto de "success"),
+        se lanza `SkillError` en espanol (mensaje especifico si es tope de presupuesto).
+      - En caso de exito, el texto = campo `result`; las metricas se parsean sumando
+        tokens preferentemente de `modelUsage`, con fallback a `usage`.
+    """
+    crudo = (stdout or "").strip()
+    try:
+        datos = json.loads(crudo)
+    except (json.JSONDecodeError, ValueError):
+        return crudo, None
+    if not isinstance(datos, dict) or datos.get("type") != "result":
+        # No es el objeto de resultado esperado: trata el stdout como texto plano.
+        return crudo, None
+
+    subtype = datos.get("subtype")
+    es_error = bool(datos.get("is_error")) or (subtype not in (None, "success"))
+    if es_error:
+        if isinstance(subtype, str) and subtype in _SUBTIPOS_PRESUPUESTO:
+            raise SkillError(
+                "El asistente alcanzó el tope de presupuesto configurado y se detuvo. "
+                "Sube el límite o prueba con una nota más corta."
+            )
+        detalle = datos.get("result")
+        detalle = detalle.strip() if isinstance(detalle, str) and detalle.strip() else (
+            subtype if isinstance(subtype, str) and subtype else "error desconocido al generar"
+        )
+        raise SkillError(f"El asistente terminó con error: {detalle}")
+
+    texto = datos.get("result")
+    texto = texto.strip() if isinstance(texto, str) else ""
+
+    usage = datos.get("usage") if isinstance(datos.get("usage"), dict) else {}
+    tokens_in, tokens_out, modelo = _tokens_de_model_usage(datos.get("modelUsage"))
+    if tokens_in is None and tokens_out is None:
+        # Fallback a `usage` (tokens agregados a nivel de sesion).
+        tokens_in = _entero(usage.get("input_tokens"))
+        tokens_out = _entero(usage.get("output_tokens"))
+    if modelo is None:
+        m = datos.get("model")
+        modelo = m if isinstance(m, str) and m else None
+
+    metricas = MetricasRun(
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        cache_read=_entero(usage.get("cache_read_input_tokens")),
+        cache_creation=_entero(usage.get("cache_creation_input_tokens")),
+        num_turns=_entero(datos.get("num_turns")),
+        total_cost_usd=_flotante(datos.get("total_cost_usd")),
+        duration_ms=_entero(datos.get("duration_ms")),
+        session_id=(datos.get("session_id") if isinstance(datos.get("session_id"), str) else None),
+        modelo=modelo,
+    )
+    return texto, metricas
+
+
+def _runner(prompt: str, *, cwd: Path, timeout: int) -> tuple[str, MetricasRun | None]:
+    """Llama a `claude -p "<prompt>" --output-format json` por subprocess.
+
+    Devuelve `(texto, metricas)` (texto = campo `result`; metricas parseadas, o None si
+    la salida no es el JSON de resultado esperado). Esta es LA funcion que toca el
+    binario real; los tests la parchean. Sin shell. Aplica `--max-budget-usd` desde
+    `KENI_CLAUDE_MAX_USD` si esta configurado.
     """
     if shutil.which("claude") is None:
         raise SkillError(
             "No se encontró el asistente en este equipo. Instala Claude Code para "
             "poder generar borradores desde la consola."
         )
+    argv = ["claude", "-p", prompt, "--output-format", "json", *_arg_presupuesto()]
     try:
         proc = subprocess.run(
-            ["claude", "-p", prompt],
+            argv,
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -274,9 +471,15 @@ def _runner(prompt: str, *, cwd: Path, timeout: int) -> str:
             "Prueba con una nota más corta."
         ) from e
     if proc.returncode != 0:
+        # Aun con rc!=0, el stdout puede traer el JSON de resultado con el error
+        # (p.ej. tope de presupuesto): si es asi, `parsear_resultado_json` lo
+        # convierte en un SkillError especifico. Si no, usamos stderr.
+        salida = (proc.stdout or "").strip()
+        if salida:
+            return parsear_resultado_json(salida)
         detalle = (proc.stderr or "").strip() or "error desconocido al generar el borrador"
         raise SkillError(f"El asistente terminó con error: {detalle}")
-    return proc.stdout.strip()
+    return parsear_resultado_json(proc.stdout)
 
 
 def normalizar_redes(crudas: Iterable[str] | None) -> list[str]:
@@ -301,9 +504,13 @@ def ejecutar_skill(
     *,
     redes_ids: list[str] | None = None,
     timeout: int = _TIMEOUT_DEF,
-    runner: Callable[..., str] | None = None,
-) -> str:
-    """Valida entradas, construye el prompt y corre Claude por debajo (headless)."""
+    runner: Callable[..., tuple[str, MetricasRun | None]] | None = None,
+) -> tuple[str, MetricasRun | None]:
+    """Valida entradas, construye el prompt y corre Claude por debajo (headless).
+
+    Devuelve `(texto, metricas)`: el copy generado y las metricas del run (None si la
+    salida no trajo el JSON de resultado esperado).
+    """
     if skill not in _SKILLS_IDS:
         raise SkillError("Tipo de contenido no permitido.")
     if marca not in _MARCAS_IDS:
@@ -316,10 +523,10 @@ def ejecutar_skill(
 
     prompt = construir_prompt(skill, marca, texto, redes_ids)
     ejecutor = runner if runner is not None else _runner
-    salida = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
+    salida, metricas = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
     if not salida:
         raise SkillError("El asistente no devolvió ningún contenido.")
-    return salida
+    return salida, metricas
 
 
 def ejecutar_skill_ruta(
@@ -329,9 +536,12 @@ def ejecutar_skill_ruta(
     *,
     redes_ids: list[str] | None = None,
     timeout: int = _TIMEOUT_DEF,
-    runner: Callable[..., str] | None = None,
-) -> str:
-    """Como `ejecutar_skill` pero para skills de MEDIA: pasa la RUTA al prompt."""
+    runner: Callable[..., tuple[str, MetricasRun | None]] | None = None,
+) -> tuple[str, MetricasRun | None]:
+    """Como `ejecutar_skill` pero para skills de MEDIA: pasa la RUTA al prompt.
+
+    Devuelve `(texto, metricas)` igual que `ejecutar_skill`.
+    """
     if skill not in _SKILLS_IDS:
         raise SkillError("Tipo de contenido no permitido.")
     if marca not in _MARCAS_IDS:
@@ -341,10 +551,10 @@ def ejecutar_skill_ruta(
 
     prompt = construir_prompt_ruta(skill, marca, ruta, redes_ids)
     ejecutor = runner if runner is not None else _runner
-    salida = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
+    salida, metricas = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
     if not salida:
         raise SkillError("El asistente no devolvió ningún contenido.")
-    return salida
+    return salida, metricas
 
 
 # --------------------------------------------------------------------------- #
@@ -747,10 +957,12 @@ def _responder_generacion(
     texto_nota: str,
     parsed: dict[str, object],
     titulo_dado: str,
+    metricas: MetricasRun | None = None,
 ) -> Response:
-    """Registra el historial (con piezas+titulo), AUTO-GUARDA publicaciones y responde.
+    """Registra el historial (con piezas+titulo+metricas), AUTO-GUARDA publicaciones y responde.
 
     - Deriva el `titulo` (del dado o de la nota) y lo registra junto a las piezas.
+    - Guarda las `metricas` del run (tokens/turnos/coste/duracion) en el historial.
     - Crea UNA publicacion (borrador) por pieza con `origen = historial_id`. Si no hay
       piezas (no se pudo partir por red), no crea ninguna y devuelve `publicaciones: []`.
     """
@@ -759,7 +971,7 @@ def _responder_generacion(
     verdicto = parsed["verdicto"]
     titulo = titulo_dado or derivar_titulo(texto_nota)
     historial_id = repos.registrar_historial_skill(
-        skill, marca, resultado, piezas=piezas, titulo=titulo
+        skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas_a_dict(metricas)
     )
     publicaciones = _crear_publicaciones_desde_piezas(
         piezas, marca=marca, titulo=titulo, verdicto=verdicto, origen=historial_id
@@ -793,14 +1005,16 @@ async def ejecutar(request: Request) -> Response:
     titulo_dado = datos.get("titulo")
     titulo_dado = titulo_dado.strip() if isinstance(titulo_dado, str) else ""
     try:
-        salida = ejecutar_skill(skill, marca, texto, redes_ids=redes_ids)
+        salida, metricas = ejecutar_skill(skill, marca, texto, redes_ids=redes_ids)
     except SkillError as e:
         mensaje = str(e)
         codigo = 400 if mensaje in _ERRORES_VALIDACION else 500
         return JSONResponse({"error": mensaje}, status_code=codigo)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
-    return _responder_generacion(skill, marca, texto, parsear_salida(salida, redes_ids), titulo_dado)
+    return _responder_generacion(
+        skill, marca, texto, parsear_salida(salida, redes_ids), titulo_dado, metricas
+    )
 
 
 async def ejecutar_archivo(request: Request) -> Response:
@@ -831,13 +1045,14 @@ async def ejecutar_archivo(request: Request) -> Response:
 
     texto_nota = ""
     dir_temporal: Path | None = None
+    metricas: MetricasRun | None = None
     try:
         ruta, dir_temporal = await _guardar_subida_segura(archivo, limite=_max_subida(skill))
         if skill in _SKILLS_MEDIA:
-            salida = ejecutar_skill_ruta(skill, marca, str(ruta), redes_ids=redes_ids)
+            salida, metricas = ejecutar_skill_ruta(skill, marca, str(ruta), redes_ids=redes_ids)
         else:
             texto_nota = _leer_texto_archivo(ruta)
-            salida = ejecutar_skill(skill, marca, texto_nota, redes_ids=redes_ids)
+            salida, metricas = ejecutar_skill(skill, marca, texto_nota, redes_ids=redes_ids)
     except SkillError as e:
         mensaje = str(e)
         es_validacion = mensaje in _ERRORES_VALIDACION_ARCHIVO or mensaje in _ERRORES_VALIDACION
@@ -851,7 +1066,7 @@ async def ejecutar_archivo(request: Request) -> Response:
     parsed = parsear_salida(salida, redes_ids)
     # Para skills de media no hay nota de texto; el titulo se deriva del resultado.
     base_titulo = texto_nota or parsed["resultado"]
-    return _responder_generacion(skill, marca, base_titulo, parsed, titulo_dado)
+    return _responder_generacion(skill, marca, base_titulo, parsed, titulo_dado, metricas)
 
 
 async def historial(request: Request) -> Response:
@@ -868,6 +1083,7 @@ async def historial(request: Request) -> Response:
             "titulo": e["titulo"],
             "preview": _preview(e["resultado"]),
             "piezas": e["piezas"],
+            "metricas": e.get("metricas"),
         }
         for e in entradas
     ]
@@ -889,6 +1105,7 @@ async def historial_detalle(request: Request) -> Response:
             "titulo": entrada["titulo"],
             "resultado": entrada["resultado"],
             "piezas": entrada["piezas"],
+            "metricas": entrada.get("metricas"),
         }
     )
 

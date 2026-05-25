@@ -194,11 +194,15 @@ def test_prompt_con_redes_anade_bloque_json_y_redes():
 # --------------------------------------------------------------------------- #
 
 
-def _mock_runner(salida: str):
-    """Devuelve un runner que ignora el prompt y devuelve `salida` fija."""
+def _mock_runner(salida: str, metricas=None):
+    """Devuelve un runner que ignora el prompt y devuelve `(salida, metricas)` fijos.
+
+    El nuevo contrato de `_runner` es `(texto, MetricasRun | None)`; por defecto se
+    devuelven `(salida, None)`.
+    """
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida
+        return salida, metricas
 
     return runner
 
@@ -227,7 +231,7 @@ def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno, monkeypatch):
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return _SALIDA_SIN_JSON_NI_ENCABEZADOS
+        return _SALIDA_SIN_JSON_NI_ENCABEZADOS, None
 
     monkeypatch.setattr(skills, "_runner", runner)
     r = _cliente().post(
@@ -247,7 +251,7 @@ def test_endpoint_ejecutar_archivo_redes_csv(entorno, monkeypatch):
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return _SALIDA_CON_JSON
+        return _SALIDA_CON_JSON, None
 
     monkeypatch.setattr(skills, "_runner", runner)
     r = _cliente().post(

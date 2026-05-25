@@ -87,9 +87,10 @@ def registrar_historial_skill(
     *,
     piezas: list[dict[str, Any]] | None = None,
     titulo: str = "",
+    metricas: dict[str, Any] | None = None,
 ) -> str:
     return _backend().registrar_historial_skill(
-        skill, marca, resultado, piezas=piezas, titulo=titulo
+        skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas
     )
 
 

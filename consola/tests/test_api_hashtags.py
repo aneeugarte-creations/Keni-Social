@@ -100,9 +100,9 @@ def test_parsear_vacio_devuelve_lista_vacia():
 # --------------------------------------------------------------------------- #
 
 
-def _mock_runner(salida):
+def _mock_runner(salida, metricas=None):
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida
+        return salida, metricas
 
     return runner
 
@@ -121,7 +121,7 @@ def test_sugerir_con_red(entorno, monkeypatch):
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return "#x #y"
+        return "#x #y", None
 
     monkeypatch.setattr(skills, "_runner", runner)
     r = _cliente().post(

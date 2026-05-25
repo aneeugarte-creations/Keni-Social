@@ -83,6 +83,7 @@ async def detalle(request: Request) -> Response:
             "modo": r["modo"],
             "estado": r["estado"],
             "fecha_inicio": r["fecha_inicio"],
+            "metricas": r.get("metricas"),
         }
         for r in runs
     ]
@@ -175,21 +176,26 @@ async def borrar_contexto(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
-def _ejecutar_headless(carpeta: Path, prompt: str) -> dict[str, str]:
+def _ejecutar_headless(carpeta: Path, prompt: str) -> dict[str, object]:
     """Corre `claude -p <prompt>` con cwd = carpeta del agente (reusa `_runner` de skills).
 
     Llama a `skills._runner` POR REFERENCIA al modulo (no por nombre importado) para
     que los tests que parchean `skills._runner` surtan efecto y NUNCA toquen `claude`
-    real. Devuelve `{estado, salida}`: "completado"+stdout si sale bien; "error"+mensaje
-    en espanol si el asistente falla (binario ausente, timeout, rc!=0). No relanza.
+    real. `_runner` devuelve `(texto, metricas)`. Devuelve `{estado, salida, metricas}`:
+    "completado"+stdout+metricas si sale bien; "error"+mensaje (metricas None) si el
+    asistente falla (binario ausente, timeout, rc!=0). No relanza.
     """
     try:
-        salida = skills._runner(prompt, cwd=carpeta, timeout=skills._TIMEOUT_DEF)
+        salida, metricas = skills._runner(prompt, cwd=carpeta, timeout=skills._TIMEOUT_DEF)
     except skills.SkillError as e:
-        return {"estado": "error", "salida": str(e)}
+        return {"estado": "error", "salida": str(e), "metricas": None}
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; lo reflejamos como error del run
-        return {"estado": "error", "salida": "No se pudo ejecutar el run."}
-    return {"estado": "completado", "salida": salida or ""}
+        return {"estado": "error", "salida": "No se pudo ejecutar el run.", "metricas": None}
+    return {
+        "estado": "completado",
+        "salida": salida or "",
+        "metricas": skills.metricas_a_dict(metricas),
+    }
 
 
 async def crear_run(request: Request) -> Response:
@@ -244,6 +250,7 @@ async def crear_run(request: Request) -> Response:
             "modo": "headless",
             "estado": resultado["estado"],
             "salida": resultado["salida"],
+            "metricas": resultado["metricas"],
             "fecha_inicio": fecha_inicio,
             "fecha_fin": agentes.ahora_iso(),
         },
@@ -271,7 +278,40 @@ async def obtener_run(request: Request) -> Response:
     return JSONResponse({"run": run})
 
 
+# --------------------------------------------------------------------------- #
+# Endpoints: monitorizacion de runs (global + agregados)                      #
+# --------------------------------------------------------------------------- #
+
+
+async def listar_runs_globales(request: Request) -> Response:
+    """Runs de TODOS los agentes, recientes primero. -> `{runs:[...]}`.
+
+    Cada run: `{id, agente, agente_nombre, prompt, modo, estado, fecha_inicio, metricas}`.
+    """
+    runs = [
+        {
+            "id": r["id"],
+            "agente": r["agente"],
+            "agente_nombre": r["agente_nombre"],
+            "prompt": r["prompt"],
+            "modo": r["modo"],
+            "estado": r["estado"],
+            "fecha_inicio": r["fecha_inicio"],
+            "metricas": r.get("metricas"),
+        }
+        for r in agentes.listar_runs_globales()
+    ]
+    return JSONResponse({"runs": runs})
+
+
+async def agregados_runs(request: Request) -> Response:
+    """Totales de coste/tokens/runs: `{total, por_agente, por_dia}`."""
+    return JSONResponse(agentes.agregados_runs())
+
+
 RUTAS = [
+    Route("/api/runs", listar_runs_globales, methods=["GET"]),
+    Route("/api/runs/agregados", agregados_runs, methods=["GET"]),
     Route("/api/agentes", listar, methods=["GET"]),
     Route("/api/agentes/{agente_id}", detalle, methods=["GET"]),
     Route("/api/agentes/{agente_id}/claude-md", guardar_claude_md, methods=["PUT"]),
