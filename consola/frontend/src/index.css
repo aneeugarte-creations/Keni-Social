@@ -3,72 +3,77 @@
 @tailwind utilities;
 
 /*
-  Variables de diseno (tokens shadcn) en HSL. La marca Keni es naranja #ff5a1f,
-  que en HSL es ~16 100% 56%. Lo usamos como --primary en ambos modos.
-  El modo oscuro se activa con la clase `.dark` en <html> (persistida en
-  localStorage por el AppShell).
+  Sistema de diseno: estilo Vercel / Geist (dashboard monocromo en grises).
+  Patron de capas: el LIENZO de la app es gris muy sutil (#fafafa) y las
+  superficies (tarjetas, popovers) son blancas (#fff), de modo que flotan sobre
+  el gris separadas por bordes hairline (#eaeaea). Texto principal #171717,
+  secundario #666. Primario negro solido para acciones; sin color de acento.
+
+  Tokens shadcn en HSL. Modo oscuro por clase `.dark` en <html> (persistido en
+  localStorage por el TemaProvider). Claro por defecto.
 */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 4%;
+    --background: 0 0% 98%; /* #fafafa lienzo gris sutil */
+    --foreground: 0 0% 9%; /* #171717 texto principal (Geist gray-1000) */
 
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 4%;
+    --card: 0 0% 100%; /* #ffffff superficies que flotan sobre el lienzo */
+    --card-foreground: 0 0% 9%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 4%;
+    --popover-foreground: 0 0% 9%;
 
-    --primary: 16 100% 56%;
+    /* Primario = negro Geist (acciones). Sin color de acento. */
+    --primary: 0 0% 9%;
     --primary-foreground: 0 0% 100%;
+    --ring: 0 0% 9%;
 
-    --secondary: 240 5% 96%;
-    --secondary-foreground: 240 6% 10%;
+    --secondary: 0 0% 95%; /* #f2f2f2 badges / superficies sutiles */
+    --secondary-foreground: 0 0% 9%;
 
-    --muted: 240 5% 96%;
-    --muted-foreground: 240 4% 46%;
+    --muted: 0 0% 96%; /* #f5f5f5 */
+    --muted-foreground: 0 0% 40%; /* #666 texto secundario / metadata (Geist gray-700) */
 
-    --accent: 240 5% 96%;
-    --accent-foreground: 240 6% 10%;
+    --accent: 0 0% 95%; /* #f2f2f2 hover / nav activa */
+    --accent-foreground: 0 0% 9%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 240 6% 90%;
-    --input: 240 6% 90%;
-    --ring: 16 100% 56%;
+    --border: 0 0% 94%; /* #f0f0f0 lineas divisorias mas claras (como Vercel) */
+    --input: 0 0% 92%;
 
-    --radius: 0.6rem;
+    --radius: 0.625rem; /* botones/inputs ~8px; tarjetas usan rounded-xl (12px) */
   }
 
   .dark {
-    --background: 240 10% 6%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 4%; /* #0a0a0a lienzo */
+    --foreground: 0 0% 93%; /* #ededed */
 
-    --card: 240 8% 9%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 7%; /* #121212 superficie (mas clara que el lienzo) */
+    --card-foreground: 0 0% 93%;
 
-    --popover: 240 8% 9%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 93%;
 
-    --primary: 16 100% 56%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 0 0% 98%; /* boton claro sobre fondo oscuro */
+    --primary-foreground: 0 0% 9%;
+    --ring: 0 0% 83%;
 
-    --secondary: 240 5% 15%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 93%;
 
-    --muted: 240 5% 15%;
-    --muted-foreground: 240 5% 65%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 0 0% 56%; /* #8f8f8f */
 
-    --accent: 240 5% 16%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 93%;
 
     --destructive: 0 63% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 240 5% 18%;
-    --input: 240 5% 18%;
-    --ring: 16 100% 56%;
+    --border: 0 0% 14%; /* lineas divisorias mas sutiles */
+    --input: 0 0% 16%;
   }
 }
 
@@ -77,7 +82,13 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* Label de seccion estilo dashboard: mayusculas, tracking ligero, gris. */
+  .text-label {
+    @apply text-xs font-medium uppercase tracking-[0.06em] text-muted-foreground;
   }
 }

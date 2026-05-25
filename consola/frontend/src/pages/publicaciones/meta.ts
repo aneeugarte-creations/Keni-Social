@@ -6,9 +6,11 @@
  * catálogo real (qué redes/estados/marcas hay) llega del backend vía
  * `/api/publicaciones/opciones`; aquí solo añadimos la capa visual.
  */
-import { AtSign, Facebook, Instagram, Music2, Twitter, Youtube, type LucideIcon } from "lucide-react";
+import { AtSign, Facebook, Instagram, Music2, Youtube, type LucideIcon } from "lucide-react";
 
 import type { EstadoPublicacion, Veredicto } from "@/types";
+
+import { IconoX } from "./IconoX";
 
 /** Metadatos visuales de una red. */
 export interface MetaRed {
@@ -24,7 +26,7 @@ export interface MetaRed {
  * x=280, instagram=2200, facebook=∞, tiktok=2200, youtube=∞.
  */
 export const META_REDES: Record<string, MetaRed> = {
-  x: { nombre: "X", limite: 280, icono: Twitter },
+  x: { nombre: "X", limite: 280, icono: IconoX as unknown as LucideIcon },
   instagram: { nombre: "Instagram", limite: 2200, icono: Instagram },
   facebook: { nombre: "Facebook", limite: null, icono: Facebook },
   tiktok: { nombre: "TikTok", limite: 2200, icono: Music2 },

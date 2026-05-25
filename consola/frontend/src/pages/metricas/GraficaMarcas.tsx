@@ -2,12 +2,13 @@
  * Comparativa visual por cuenta/marca con Tremor.
  *
  * - BarChart: visualizaciones vs interacciones por cuenta (escala compacta).
- * - DonutChart: reparto de visualizaciones entre cuentas.
+ * - Reparto: lista ordenada con barras de progreso (en lugar de una dona
+ *   multicolor), coherente con el sistema de diseño monocromo (estilo Vercel).
  *
  * Los ejes y tooltips usan los formateadores es-MX para que los números grandes
  * se lean como "221.6 M" en lugar de notación cruda.
  */
-import { BarChart, type CustomTooltipProps, DonutChart, Legend } from "@tremor/react";
+import { BarChart, type CustomTooltipProps } from "@tremor/react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CuentaMetrica } from "@/types";
@@ -22,10 +23,14 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
     Interacciones: c.interacciones,
   }));
 
-  const datosDona = cuentas.map((c) => ({
-    marca: c.marca,
-    visualizaciones: c.visualizaciones,
-  }));
+  const totalVis = cuentas.reduce((suma, c) => suma + c.visualizaciones, 0);
+  const datosReparto = [...cuentas]
+    .sort((a, b) => b.visualizaciones - a.visualizaciones)
+    .map((c) => ({
+      marca: c.marca,
+      visualizaciones: c.visualizaciones,
+      pct: totalVis > 0 ? Math.round((c.visualizaciones / totalVis) * 100) : 0,
+    }));
 
   if (cuentas.length === 0) {
     return (
@@ -54,7 +59,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
             data={datosBarras}
             index="marca"
             categories={["Visualizaciones", "Interacciones"]}
-            colors={["orange", "violet"]}
+            colors={["neutral", "gray"]}
             valueFormatter={numeroCompacto}
             yAxisWidth={56}
             showAnimation
@@ -69,21 +74,25 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
           <CardTitle className="text-base">Reparto de visualizaciones</CardTitle>
         </CardHeader>
         <CardContent>
-          <DonutChart
-            className="mx-auto h-52"
-            data={datosDona}
-            category="visualizaciones"
-            index="marca"
-            colors={["orange", "sky", "violet", "emerald", "amber", "rose"]}
-            valueFormatter={numeroCompacto}
-            showAnimation
-            noDataText="Sin datos para este rango."
-          />
-          <Legend
-            className="mt-4 justify-center"
-            categories={datosDona.map((d) => d.marca)}
-            colors={["orange", "sky", "violet", "emerald", "amber", "rose"]}
-          />
+          <ul className="space-y-4">
+            {datosReparto.map((it) => (
+              <li key={it.marca}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-sm text-foreground">{it.marca}</span>
+                  <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                    {numeroCompacto(it.visualizaciones)}
+                    <span className="ml-1.5 text-xs text-muted-foreground/70">{it.pct}%</span>
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-foreground transition-all"
+                    style={{ width: `${it.pct}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
     </div>
@@ -114,13 +123,13 @@ function TooltipBarras({ payload, active, label }: CustomTooltipProps) {
   );
 }
 
-/** Mapa de las categorías de la gráfica a su hex para el punto del tooltip. */
+/** Mapa de las categorías de la gráfica a su hex para el punto del tooltip (monocromo). */
 function colorTooltip(dataKey: string): string {
   switch (dataKey) {
     case "Visualizaciones":
-      return "#f97316";
+      return "#404040";
     case "Interacciones":
-      return "#8b5cf6";
+      return "#a3a3a3";
     default:
       return "#9ca3af";
   }

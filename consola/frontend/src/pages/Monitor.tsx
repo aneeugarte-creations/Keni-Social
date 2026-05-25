@@ -1,13 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import {
-  Activity,
-  CircleDollarSign,
-  Coins,
-  Loader2,
-  type LucideIcon,
-  Play,
-  RefreshCw,
-} from "lucide-react";
+import { Activity, Loader2, Play, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -114,40 +106,29 @@ function presentacionEstado(estado: EstadoRun): {
   }
 }
 
-/** Tarjeta KPI de un agregado (icono con acento + valor grande). */
+/**
+ * Tarjeta KPI de un agregado. Estilo Vercel/Geist: etiqueta gris pequena +
+ * valor contenido, sin iconos ni acentos de color (coherente con Métricas).
+ */
 function TarjetaKpi({
   etiqueta,
   valor,
   titulo,
-  icono: Icono,
-  acentoTexto,
-  acentoFondo,
 }: {
   etiqueta: string;
   valor: string;
   titulo?: string;
-  icono: LucideIcon;
-  acentoTexto: string;
-  acentoFondo: string;
 }) {
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="flex items-start justify-between gap-3 p-5">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">{etiqueta}</p>
-          <p className="truncate text-3xl font-semibold tracking-tight" title={titulo ?? valor}>
-            {valor}
-          </p>
-        </div>
-        <div
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-            acentoFondo,
-            acentoTexto,
-          )}
+    <Card>
+      <CardContent className="space-y-1.5 p-5">
+        <p className="text-sm text-muted-foreground">{etiqueta}</p>
+        <p
+          className="truncate text-2xl font-semibold tracking-tight tabular-nums"
+          title={titulo ?? valor}
         >
-          <Icono className="h-5 w-5" />
-        </div>
+          {valor}
+        </p>
       </CardContent>
     </Card>
   );
@@ -157,28 +138,13 @@ function TarjetaKpi({
 function KpisTotales({ total }: { total: TotalRuns }) {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <TarjetaKpi
-        etiqueta="Coste total"
-        valor={costeUsd(total.coste_usd)}
-        icono={CircleDollarSign}
-        acentoTexto="text-emerald-600 dark:text-emerald-400"
-        acentoFondo="bg-emerald-500/10"
-      />
+      <TarjetaKpi etiqueta="Coste total" valor={costeUsd(total.coste_usd)} />
       <TarjetaKpi
         etiqueta="Tokens"
         valor={numeroCompacto(total.tokens)}
         titulo={numeroCompleto(total.tokens)}
-        icono={Coins}
-        acentoTexto="text-sky-600 dark:text-sky-400"
-        acentoFondo="bg-sky-500/10"
       />
-      <TarjetaKpi
-        etiqueta="Ejecuciones"
-        valor={numeroCompleto(total.runs)}
-        icono={Activity}
-        acentoTexto="text-violet-600 dark:text-violet-400"
-        acentoFondo="bg-violet-500/10"
-      />
+      <TarjetaKpi etiqueta="Ejecuciones" valor={numeroCompleto(total.runs)} />
     </div>
   );
 }

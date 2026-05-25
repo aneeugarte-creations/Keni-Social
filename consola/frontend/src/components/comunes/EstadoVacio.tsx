@@ -16,7 +16,7 @@ export function EstadoVacio({
   accion,
   className,
 }: {
-  /** Icono opcional mostrado en un círculo destacado. */
+  /** Icono opcional mostrado en gris (estilo sobrio, sin círculo tintado). */
   icono?: LucideIcon;
   titulo: string;
   texto?: string;
@@ -26,14 +26,10 @@ export function EstadoVacio({
 }) {
   return (
     <Card className={className}>
-      <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
-        {Icono && (
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <Icono className="h-6 w-6" />
-          </div>
-        )}
+      <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+        {Icono && <Icono className="h-6 w-6 text-muted-foreground" aria-hidden="true" />}
         <div className="space-y-1">
-          <p className="font-medium">{titulo}</p>
+          <p className="text-sm font-medium text-foreground">{titulo}</p>
           {texto && <p className="max-w-md text-sm text-muted-foreground">{texto}</p>}
         </div>
         {accion}
