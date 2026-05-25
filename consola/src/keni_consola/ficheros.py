@@ -141,16 +141,41 @@ def _marca_de_slug(slug: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
+class _DumperBloque(yaml.SafeDumper):
+    """SafeDumper que vuelca los strings multilinea como bloque literal `|`.
+
+    PyYAML por defecto representa los textos con saltos de linea en estilo plegado
+    o entre comillas (feo de editar a mano). Forzamos el bloque `|` cuando el texto
+    tiene saltos de linea, para que un humano (o Claude Code) edite el cuerpo
+    (p. ej. `contenido`, `resultado`) comodamente. Si una linea tiene espacios al
+    final, PyYAML cae solo a un estilo seguro (no se puede romper el round-trip).
+    """
+
+
+def _str_bloque(dumper: yaml.Dumper, data: str) -> Any:
+    if "\n" in data:
+        return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data)
+
+
+_DumperBloque.add_representer(str, _str_bloque)
+
+
 def _escribir_yaml(ruta: Path, datos: dict[str, Any]) -> None:
     """Escribe un dict como YAML legible de forma ATOMICA (tmp + os.replace).
 
     `default_flow_style=False` (mapas/listas en bloque), `allow_unicode=True`
     (acentos sin escapar), `sort_keys=False` (respeta el orden dado), y bloque `|`
-    para textos multilinea (lo decide PyYAML por el contenido).
+    para textos multilinea (via `_DumperBloque`).
     """
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    texto = yaml.safe_dump(
-        datos, default_flow_style=False, allow_unicode=True, sort_keys=False, width=4096
+    texto = yaml.dump(
+        datos,
+        Dumper=_DumperBloque,
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+        width=4096,
     )
     fd, tmp_nombre = tempfile.mkstemp(dir=str(ruta.parent), prefix=".tmp-", suffix=".yaml")
     tmp = Path(tmp_nombre)
