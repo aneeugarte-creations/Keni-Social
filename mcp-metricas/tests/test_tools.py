@@ -56,14 +56,13 @@ async def _llamar(mcp: FastMCP, nombre: str, **args) -> dict:
 # --- T1: camino feliz de las 7 tools ----------------------------------------
 
 
-async def test_listar_cuentas_lista_las_6_marcas_y_la_fuente():
+async def test_listar_cuentas_lista_las_5_marcas_y_la_fuente():
     out = await _llamar(_mcp(FuenteMuestra()), "listar_cuentas")
     assert out["fuente"] == "muestra"
     ids = [c["id"] for c in out["cuentas"]]
     assert ids == [
         "claro_sports",
         "unotv",
-        "claro_sports_golf",
         "nacion_gamer",
         "piso_15",
         "fundacion",
@@ -125,10 +124,10 @@ async def test_reporte_consolidado_devuelve_estructura_serializable():
     out = await _llamar(_mcp(FuenteMuestra()), "reporte_consolidado", rango="mes", top=2)
     assert out["rango"] == "mes"
     assert out["fuente"] == "muestra"
-    assert out["total"]["cuentas"] == 6  # las 6 marcas de la muestra
+    assert out["total"]["cuentas"] == 5  # las 5 marcas de la muestra
     assert out["total"]["visualizaciones"] > 0
     assert out["cobertura"]["completa"] is True  # la muestra siempre responde todo
-    assert len(out["cuentas"]) == 6
+    assert len(out["cuentas"]) == 5
     # cada fila trae resumen + mejores_piezas (top=2)
     fila = out["cuentas"][0]
     assert "resumen" in fila

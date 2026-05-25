@@ -1,8 +1,14 @@
 """Tests de la API Agentes (/api/agentes). OFFLINE.
 
 Un agente = una marca = su carpeta `<KENI_CONSOLA_RAIZ>/<marca>/`. Todo aislado en
-tmp (env vars del fixture `entorno`); NUNCA se llama a `claude` real (se parchea
-`skills._runner`) ni se lanza Claude Code (el `abrir` inyectado es un mock).
+tmp (env vars del fixture `entorno`); NUNCA se llama a `claude` real (los runs headless
+usan un lanzador en background FAKE inyectado) ni se lanza Claude Code (el `abrir`
+inyectado es un mock).
+
+Los runs headless son AHORA en segundo plano: el POST devuelve de inmediato con
+`estado="ejecutando"`; un lanzador (`api.agentes.lanzar_run_background`) avanza el YAML
+del run. En los tests inyectamos una fake de ese lanzador que escribe el estado final
+(o parcial) directamente en el YAML, SIN Popen ni red.
 """
 
 from __future__ import annotations
@@ -10,7 +16,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from keni_consola import agentes, marcas
-from keni_consola.api import skills
 
 from .conftest import _cliente
 
@@ -18,13 +23,22 @@ from .conftest import _cliente
 _MARCA = "unotv"
 
 
-def _mock_runner(salida: str, metricas=None):
-    """Runner que ignora el prompt y devuelve `(salida, metricas)` (nuevo contrato tupla)."""
+def _lanzador_que_completa(salida: str, metricas=None):
+    """Fake del lanzador background: marca el run como completado al instante (sin Popen)."""
 
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida, metricas
+    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+        agentes.actualizar_run(
+            marca_id,
+            run_id,
+            {
+                "estado": "completado",
+                "salida": salida,
+                "metricas": metricas,
+                "fecha_fin": agentes.ahora_iso(),
+            },
+        )
 
-    return runner
+    return lanzar
 
 
 # --------------------------------------------------------------------------- #
@@ -152,55 +166,94 @@ def test_contexto_marca_inexistente_404(entorno):
 
 
 # --------------------------------------------------------------------------- #
-# Runs headless (mock runner, NUNCA claude real)                              #
+# Runs headless EN BACKGROUND (lanzador fake, NUNCA claude real)              #
 # --------------------------------------------------------------------------- #
 
 
-def test_run_headless_completado(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("salida del asistente"))
+def test_run_headless_arranca_ejecutando_de_inmediato(entorno):
+    """El POST headless devuelve YA, con estado 'ejecutando' (no bloquea)."""
+    # El lanzador por defecto del cliente es un no-op: deja el run en "ejecutando".
     r = _cliente().post(
         f"/api/agentes/{_MARCA}/runs", json={"prompt": "haz algo", "modo": "headless"}
     )
     assert r.status_code == 200
     run = r.json()["run"]
     assert run["modo"] == "headless"
-    assert run["estado"] == "completado"
-    assert run["salida"] == "salida del asistente"
+    assert run["estado"] == "ejecutando"
     assert run["prompt"] == "haz algo"
-    assert run["fecha_inicio"] and run["fecha_fin"]
+    assert run["fecha_inicio"] and not run["fecha_fin"]
     # Persistido como runs/<id>.yaml.
     assert (entorno / "datos" / _MARCA / "runs" / f"{run['id']}.yaml").is_file()
 
 
-def test_run_headless_corre_en_la_carpeta_del_agente(entorno, monkeypatch):
-    """El cwd del runner debe ser la carpeta del agente."""
+def test_run_headless_progresa_a_completado(entorno):
+    """Con un lanzador que simula el final, el run termina 'completado' con su salida."""
+    c = _cliente(lanzar_run=_lanzador_que_completa("salida del asistente"))
+    r = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "haz algo", "modo": "headless"})
+    assert r.status_code == 200
+    run = r.json()["run"]
+    assert run["estado"] == "completado"
+    assert run["salida"] == "salida del asistente"
+    assert run["fecha_inicio"] and run["fecha_fin"]
+
+
+def test_run_headless_recibe_marca_run_y_carpeta(entorno):
+    """El lanzador background recibe la carpeta del agente como cwd y el prompt."""
     capturado = {}
 
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
+    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+        capturado["marca_id"] = marca_id
+        capturado["run_id"] = run_id
         capturado["cwd"] = Path(cwd)
         capturado["prompt"] = prompt
-        return "ok", None
 
-    monkeypatch.setattr(skills, "_runner", runner)
-    _cliente().post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p", "modo": "headless"})
+    c = _cliente(lanzar_run=lanzar)
+    run = c.post(
+        f"/api/agentes/{_MARCA}/runs", json={"prompt": "p", "modo": "headless"}
+    ).json()["run"]
     assert capturado["cwd"] == (entorno / "datos" / _MARCA).resolve()
     assert capturado["prompt"] == "p"
+    assert capturado["marca_id"] == _MARCA
+    assert capturado["run_id"] == run["id"]
 
 
-def test_run_headless_error_se_guarda_como_error(entorno, monkeypatch):
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        raise skills.SkillError("El asistente terminó con error: detalle")
+def test_run_headless_error_se_guarda_como_error(entorno):
+    """Un lanzador que marca el run en error deja el estado 'error' con mensaje."""
 
-    monkeypatch.setattr(skills, "_runner", runner)
-    r = _cliente().post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"})
+    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+        agentes.actualizar_run(
+            marca_id, run_id,
+            {"estado": "error", "salida": "El asistente terminó con error: detalle",
+             "fecha_fin": agentes.ahora_iso()},
+        )
+
+    c = _cliente(lanzar_run=lanzar)
+    r = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"})
     assert r.status_code == 200
     run = r.json()["run"]
     assert run["estado"] == "error"
     assert "error" in run["salida"].lower()
 
 
-def test_run_modo_por_defecto_es_headless(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("x"))
+def test_run_headless_timeout_se_marca_con_motivo(entorno):
+    """Un lanzador que simula timeout deja estado 'error' y motivo 'timeout'."""
+
+    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+        agentes.actualizar_run(
+            marca_id, run_id,
+            {"estado": "error", "motivo": "timeout",
+             "salida": "El asistente tardó demasiado y se canceló.",
+             "fecha_fin": agentes.ahora_iso()},
+        )
+
+    c = _cliente(lanzar_run=lanzar)
+    run_id = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]["id"]
+    run = c.get(f"/api/agentes/{_MARCA}/runs/{run_id}").json()["run"]
+    assert run["estado"] == "error"
+    assert run["motivo"] == "timeout"
+
+
+def test_run_modo_por_defecto_es_headless(entorno):
     r = _cliente().post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"})
     assert r.json()["run"]["modo"] == "headless"
 
@@ -249,9 +302,8 @@ def test_run_interactivo_usa_el_lanzador(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_listar_runs(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("ok"))
-    c = _cliente()
+def test_listar_runs(entorno):
+    c = _cliente(lanzar_run=_lanzador_que_completa("ok"))
     c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "uno"})
     c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "dos"})
     runs = c.get(f"/api/agentes/{_MARCA}/runs").json()["runs"]
@@ -260,9 +312,8 @@ def test_listar_runs(entorno, monkeypatch):
     assert prompts == {"uno", "dos"}
 
 
-def test_obtener_run_completo(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner("contenido completo"))
-    c = _cliente()
+def test_obtener_run_completo(entorno):
+    c = _cliente(lanzar_run=_lanzador_que_completa("contenido completo"))
     run_id = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]["id"]
     r = c.get(f"/api/agentes/{_MARCA}/runs/{run_id}")
     assert r.status_code == 200
@@ -270,9 +321,10 @@ def test_obtener_run_completo(entorno, monkeypatch):
     assert run["id"] == run_id
     assert run["salida"] == "contenido completo"
     assert set(run) == {
-        "id", "prompt", "modo", "estado", "salida", "fecha_inicio", "fecha_fin", "metricas"
+        "id", "prompt", "modo", "estado", "salida", "motivo",
+        "fecha_inicio", "fecha_fin", "metricas",
     }
-    # Sin metricas (el mock devolvio None).
+    # Sin metricas (el lanzador fake no aporto).
     assert run["metricas"] is None
 
 

@@ -111,15 +111,19 @@ async def _api_no_encontrado(request: Request) -> Response:
     return JSONResponse({"error": "Recurso no encontrado."}, status_code=404)
 
 
-def crear_app(abrir=None) -> Starlette:
+def crear_app(abrir=None, lanzar_run=None) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
-    `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code; por defecto
-    la real. Los tests pasan un mock; se inyecta en los modulos que lo usan
-    (Proyectos y Tareas).
+    `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
+    por defecto la real. `lanzar_run`: funcion opcional
+    `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background;
+    por defecto la real (Popen + hilo + stream-json). Los tests pasan mocks; se inyectan
+    en los modulos que los usan (Proyectos, Tareas y Agentes).
     """
-    if abrir is not None:
+    if abrir is not None or lanzar_run is not None:
         from .api import agentes as api_agentes
+
+    if abrir is not None:
         from .api import proyectos as api_proyectos
         from .api import tareas as api_tareas
 
@@ -130,6 +134,10 @@ def crear_app(abrir=None) -> Starlette:
         # Agentes (runs interactivos) abre con `prompt=`; lo envolvemos para que use el
         # `abrir` inyectado ignorando el prompt (el mock simple solo recibe la ruta).
         api_agentes.abrir_en_claude_code = lambda ruta, prompt=None: abrir(ruta)
+
+    if lanzar_run is not None:
+        # Runs headless en background: inyectamos una fake que NO usa Popen ni red.
+        api_agentes.lanzar_run_background = lanzar_run
 
     # Aseguramos que existe el consola.toml (best-effort; no rompe si falla).
     try:

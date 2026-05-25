@@ -45,13 +45,29 @@ def entorno(monkeypatch, tmp_path):
     return tmp_path
 
 
-def _cliente(abrir=None) -> TestClient:
-    """TestClient de la app. `abrir` por defecto NO lanza nada real (mock)."""
+def _lanzador_run_noop(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+    """Fake del lanzador de runs en background: NO usa Popen ni red, deja el run tal cual.
+
+    Por defecto el run queda en `estado="ejecutando"` (como recien lanzado). Los tests
+    que quieran simular avance/terminacion parchean `api.agentes.lanzar_run_background`
+    por una fake propia que escribe estados/medidas en el YAML.
+    """
+    return None
+
+
+def _cliente(abrir=None, lanzar_run=None) -> TestClient:
+    """TestClient de la app. Ni `abrir` ni `lanzar_run` tocan nada real (mocks).
+
+    `abrir` (interactivo) y `lanzar_run` (runs headless en background) se inyectan por
+    defecto a fakes inofensivas para que NUNCA se llame a `claude` ni se abra Terminal.
+    """
     if abrir is None:
         def abrir(_ruta):  # noqa: ANN001
             return "ok-mock"
+    if lanzar_run is None:
+        lanzar_run = _lanzador_run_noop
 
-    return TestClient(app_modulo.crear_app(abrir=abrir))
+    return TestClient(app_modulo.crear_app(abrir=abrir, lanzar_run=lanzar_run))
 
 
 @pytest.fixture

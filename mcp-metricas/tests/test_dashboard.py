@@ -32,7 +32,7 @@ def test_dashboard_es_html_autocontenido():
 
 def test_dashboard_contiene_nombres_de_marca():
     html = generar_dashboard(FuenteMuestra(), "mes", top=3)
-    # nombres legibles de las 6 marcas de la muestra
+    # nombres legibles de las 5 marcas de la muestra
     for nombre in ["Claro Sports", "UnoTV", "Nacion Gamer", "Piso 15", "Fundacion"]:
         assert nombre in html
 
@@ -81,7 +81,7 @@ def test_dashboard_seccion_de_picos():
 
 def test_picos_usan_nombres_legibles_no_slugs():
     """Las alertas (picos) deben mostrar el nombre legible de la marca, no el id
-    crudo (regresion: _render_alerta imprimia el slug `piso_15`/`claro_sports_golf`)."""
+    crudo (regresion: _render_alerta imprimia el slug `piso_15`/`nacion_gamer`)."""
     fuente = FuenteMuestra()
     rep = construir_reporte(fuente, "mes", top=3)
     picos = detectar_picos(fuente, "mes", 50)

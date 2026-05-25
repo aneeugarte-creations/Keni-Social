@@ -27,7 +27,7 @@ def _entorno_limpio(monkeypatch, tmp_path):
 def test_sin_marcas_devuelve_fuente_cruda(monkeypatch):
     fuente = construir_fuente(cargar_config())
     assert isinstance(fuente, FuenteMuestra)  # NO envuelta
-    assert len(fuente.cuentas()) == 6
+    assert len(fuente.cuentas()) == 5
 
 
 def test_marcas_vacia_no_envuelve():
