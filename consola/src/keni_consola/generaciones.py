@@ -319,8 +319,11 @@ def lanzar_job_claude(
             pass
 
     def _finalizar(timed_out: bool, returncode: int | None) -> None:
-        if dir_temporal is not None:
-            shutil.rmtree(dir_temporal, ignore_errors=True)
+        # OJO: el `dir_temporal` se borra al FINAL (no aqui), porque el post-procesado
+        # `procesar` puede necesitar los ARCHIVOS que la skill dejo ahi: las skills de
+        # imagen (estudio-imagen) escriben los .png derivados junto a la foto subida y
+        # `procesar` los importa al media para previsualizarlos. Borrarlo antes los
+        # perderia. La limpieza va en el `finally`, asi corre pase lo que pase.
         fecha_fin = ahora_iso()
         try:
             if timed_out:
@@ -365,6 +368,10 @@ def lanzar_job_claude(
             })
         except Exception:  # noqa: BLE001 -- el cierre nunca debe propagar
             pass
+        finally:
+            # Limpieza del temporal de la subida: DESPUES de `procesar` (ver nota arriba).
+            if dir_temporal is not None:
+                shutil.rmtree(dir_temporal, ignore_errors=True)
 
     if shutil.which("claude") is None:
         if dir_temporal is not None:
