@@ -13,6 +13,7 @@ const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Agentes = lazy(() => import("@/pages/Agentes"));
 const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
+const Monitor = lazy(() => import("@/pages/Monitor"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 
 /**
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
       { path: "metricas", element: <Metricas /> },
       { path: "agentes", element: <Agentes /> },
       { path: "agentes/:id", element: <DetalleAgente /> },
+      { path: "monitor", element: <Monitor /> },
       // Ajustes
       { path: "configuracion", element: <Configuracion /> },
       // Redirecciones de páginas fusionadas/retiradas (issues #87, #88):

@@ -19,7 +19,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { AgenteDetalle, EstadoRun, ModoRun, Run } from "@/types";
+import { costeUsd, duracion, numeroCompleto } from "@/pages/metricas/formato";
+import type { AgenteDetalle, EstadoRun, MetricasRun, ModoRun, Run } from "@/types";
 
 import { claveAgente, formatearFecha, mensajeError } from "./claves";
 
@@ -46,6 +47,40 @@ function presentacionEstado(estado: EstadoRun): { texto: string; variante: Badge
 function BadgeEstado({ estado }: { estado: EstadoRun }) {
   const { texto, variante } = presentacionEstado(estado);
   return <Badge variant={variante}>{texto}</Badge>;
+}
+
+/**
+ * Línea compacta de métricas de un run completado: turnos, tokens (in/out),
+ * coste USD y duración. Se omite por completo si el run no trae `metricas`
+ * (p. ej. el CLI no devolvió JSON o fue interactivo).
+ */
+function MetricasRunLinea({ metricas }: { metricas: MetricasRun | null | undefined }) {
+  if (!metricas) return null;
+  const items: { etiqueta: string; valor: string; titulo?: string }[] = [
+    { etiqueta: "Turnos", valor: numeroCompleto(metricas.num_turns) },
+    {
+      etiqueta: "Tokens",
+      valor: `${numeroCompleto(metricas.tokens_in)} / ${numeroCompleto(metricas.tokens_out)}`,
+      titulo: "Tokens de entrada / salida",
+    },
+    { etiqueta: "Coste", valor: costeUsd(metricas.total_cost_usd) },
+    { etiqueta: "Duración", valor: duracion(metricas.duration_ms) },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      {items.map((it) => (
+        <span key={it.etiqueta} className="inline-flex items-center gap-1" title={it.titulo}>
+          <span>{it.etiqueta}:</span>
+          <span className="font-medium tabular-nums text-foreground">{it.valor}</span>
+        </span>
+      ))}
+      {metricas.modelo && (
+        <Badge variant="secondary" className="font-mono text-[10px]">
+          {metricas.modelo}
+        </Badge>
+      )}
+    </div>
+  );
 }
 
 /** Muestra la salida de un run como texto preformateado. */
@@ -144,6 +179,7 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
               <BadgeEstado estado={ultimo.estado} />
               <Badge variant="outline">{etiquetaModo(ultimo.modo)}</Badge>
             </div>
+            <MetricasRunLinea metricas={ultimo.metricas} />
             {ultimo.salida ? (
               <SalidaRun salida={ultimo.salida} />
             ) : ultimo.mensaje ? (
@@ -193,6 +229,7 @@ function FilaRun({ run }: { run: Run }) {
           <p className="truncate text-sm" title={run.prompt}>
             {run.prompt || <span className="text-muted-foreground">Sin prompt</span>}
           </p>
+          <MetricasRunLinea metricas={run.metricas} />
         </div>
       </button>
       {abierto && tieneDetalle && (
