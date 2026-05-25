@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tooltip } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -202,83 +203,89 @@ function TarjetaPublicacion({
               {metaEstado(proximo).nombre}
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Añadir a la cola"
-            title="Añadir a la cola"
-            onClick={() => encolar.mutate()}
-            disabled={encolar.isPending}
-          >
-            {encolar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CalendarPlus className="h-4 w-4" />
-            )}
-          </Button>
-          {(publicacion.estado === "publicado" || publicacion.evergreen) && (
+          <Tooltip label="Añadir a la cola">
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Reciclar publicación"
-              title="Reciclar (volver a publicar)"
-              onClick={() => reciclar.mutate()}
-              disabled={reciclar.isPending}
+              aria-label="Añadir a la cola"
+              onClick={() => encolar.mutate()}
+              disabled={encolar.isPending}
             >
-              {reciclar.isPending ? (
+              {encolar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <RefreshCw className="h-4 w-4" />
+                <CalendarPlus className="h-4 w-4" />
               )}
             </Button>
+          </Tooltip>
+          {(publicacion.estado === "publicado" || publicacion.evergreen) && (
+            <Tooltip label="Reciclar (volver a publicar)">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Reciclar publicación"
+                onClick={() => reciclar.mutate()}
+                disabled={reciclar.isPending}
+              >
+                {reciclar.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </Tooltip>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={publicacion.evergreen ? "Quitar perenne" : "Marcar perenne"}
-            title={publicacion.evergreen ? "Quitar de perennes" : "Marcar como perenne"}
-            className={cn(
-              publicacion.evergreen
-                ? "text-emerald-600 dark:text-emerald-400"
-                : "text-muted-foreground",
-            )}
-            onClick={() => alternarEvergreen.mutate()}
-            disabled={alternarEvergreen.isPending}
-          >
-            {alternarEvergreen.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sprout className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Duplicar publicación"
-            title="Duplicar"
-            onClick={() => onDuplicar(publicacion)}
-          >
-            <Copy className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Editar publicación"
-            title="Editar"
-            onClick={() => onEditar(publicacion)}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Borrar publicación"
-            title="Borrar"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => setConfirmarBorrado(true)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <Tooltip label={publicacion.evergreen ? "Quitar de perennes" : "Marcar como perenne"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={publicacion.evergreen ? "Quitar perenne" : "Marcar perenne"}
+              className={cn(
+                publicacion.evergreen
+                  ? "text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground",
+              )}
+              onClick={() => alternarEvergreen.mutate()}
+              disabled={alternarEvergreen.isPending}
+            >
+              {alternarEvergreen.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sprout className="h-4 w-4" />
+              )}
+            </Button>
+          </Tooltip>
+          <Tooltip label="Duplicar">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Duplicar publicación"
+              onClick={() => onDuplicar(publicacion)}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Editar">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Editar publicación"
+              onClick={() => onEditar(publicacion)}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Borrar">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Borrar publicación"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmarBorrado(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </Tooltip>
         </div>
       </CardContent>
 

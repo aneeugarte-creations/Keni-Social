@@ -6,6 +6,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  FileText,
   Link2,
   Loader2,
   Pencil,
@@ -17,11 +18,14 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { BarraFormato } from "@/components/editor/BarraFormato";
+import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { SelectorPlantilla } from "@/components/plantillas/SelectorPlantilla";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,6 +40,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Markdown } from "@/components/ui/Markdown";
 import {
   Select,
   SelectContent,
@@ -44,9 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type {
   CuerpoActualizarPublicacion,
   EstadoOpcion,
@@ -68,27 +71,36 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
+/** Modos del editor: textarea crudo, lectura Markdown y vista previa por red. */
+type Vista = "editar" | "lectura" | "previa";
+
+/** Toggle de modo del editor (Editar / Vista / Previa), compacto y reutilizable. */
+function ToggleVista({ value, onChange }: { value: Vista; onChange: (v: Vista) => void }) {
+  return (
+    <Tabs value={value} onValueChange={(v) => onChange(v as Vista)}>
+      <TabsList className="h-8">
+        <TabsTrigger value="editar" className="gap-1.5 px-2.5 py-1 text-xs">
+          <Pencil className="h-3.5 w-3.5" />
+          Editar
+        </TabsTrigger>
+        <TabsTrigger value="lectura" className="gap-1.5 px-2.5 py-1 text-xs">
+          <FileText className="h-3.5 w-3.5" />
+          Vista
+        </TabsTrigger>
+        <TabsTrigger value="previa" className="gap-1.5 px-2.5 py-1 text-xs">
+          <Eye className="h-3.5 w-3.5" />
+          Previa
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+}
+
 /** Badge de veredicto editorial; no renderiza nada si no hay veredicto. */
 function BadgeVeredicto({ veredicto }: { veredicto: Veredicto }) {
   const m = metaVeredicto(veredicto);
   if (!m) return null;
   return <Badge variant={m.variante}>{m.nombre}</Badge>;
-}
-
-/** Contador de caracteres con su límite; rojo si se pasa. */
-function Contador({ caracteres, limite }: { caracteres: number; limite: number | null }) {
-  const excede = limite !== null && caracteres > limite;
-  return (
-    <span
-      className={cn(
-        "text-xs tabular-nums",
-        excede ? "font-medium text-red-600 dark:text-red-400" : "text-muted-foreground",
-      )}
-    >
-      {caracteres.toLocaleString("es-MX")}
-      {limite !== null && ` / ${limite.toLocaleString("es-MX")}`}
-    </span>
-  );
 }
 
 /** Enlace de éxito a Publicaciones que se muestra en el toast. */
@@ -128,10 +140,11 @@ function PanelPublicacion({
   const [fechaLocal, setFechaLocal] = React.useState(isoADatetimeLocal(publicacion.fecha_programada));
   const [imagen, setImagen] = React.useState(publicacion.imagen ?? "");
   const [imagenUrl, setImagenUrl] = React.useState(publicacion.imagen_url ?? "");
-  const [vista, setVista] = React.useState<"editar" | "previa">("editar");
+  const [vista, setVista] = React.useState<Vista>("editar");
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const [copiado, setCopiado] = React.useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
+  const areaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const red = publicacion.red;
   const limite = metaRed(red).limite;
@@ -231,19 +244,8 @@ function PanelPublicacion({
           )}
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Contador caracteres={contenido.length} limite={limite} />
-          <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "previa")}>
-            <TabsList className="h-8">
-              <TabsTrigger value="editar" className="gap-1.5 px-2.5 py-1 text-xs">
-                <Pencil className="h-3.5 w-3.5" />
-                Editar
-              </TabsTrigger>
-              <TabsTrigger value="previa" className="gap-1.5 px-2.5 py-1 text-xs">
-                <Eye className="h-3.5 w-3.5" />
-                Vista previa
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <ContadorCaracteres caracteres={contenido.length} limite={limite} />
+          <ToggleVista value={vista} onChange={setVista} />
         </div>
       </div>
 
@@ -261,10 +263,13 @@ function PanelPublicacion({
               <Link2 className="h-4 w-4" />
               Enlace UTM
             </Button>
+            <BarraFormato refArea={areaRef} valor={contenido} onContenido={setContenido} />
           </div>
-          <Textarea
+          <AutoTextarea
+            ref={areaRef}
             value={contenido}
             onChange={(e) => setContenido(e.target.value)}
+            maxHeight={520}
             className="min-h-[12rem] font-mono text-sm leading-relaxed"
             aria-label={`Contenido para ${nombreRed(red)}`}
           />
@@ -344,6 +349,14 @@ function PanelPublicacion({
             </div>
           </div>
         </>
+      ) : vista === "lectura" ? (
+        <div className="rounded-md border border-border bg-muted/20 p-4">
+          {contenido.trim() ? (
+            <Markdown>{contenido}</Markdown>
+          ) : (
+            <p className="text-sm italic text-muted-foreground">Sin contenido todavía.</p>
+          )}
+        </div>
       ) : (
         <VistaPreviaRed
           red={red}
@@ -471,9 +484,9 @@ function PanelManual({
 
   return (
     <div className="space-y-3">
-      <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-muted/40 p-4 text-sm leading-relaxed">
-        {resultado}
-      </pre>
+      <div className="max-h-[28rem] overflow-auto rounded-md border border-border bg-muted/20 p-4 leading-relaxed">
+        <Markdown>{resultado}</Markdown>
+      </div>
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1.5">
           <Label htmlFor="guardar-red">Red</Label>

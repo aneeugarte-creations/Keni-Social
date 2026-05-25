@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip } from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -240,49 +241,47 @@ function FilaFuente({
           </a>
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={fuente.activo ? "Desactivar feed" : "Activar feed"}
-            title={fuente.activo ? "Desactivar" : "Activar"}
-            className={cn(
-              fuente.activo ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
-            )}
-            onClick={() => alternarActivo.mutate()}
-            disabled={alternarActivo.isPending}
-          >
-            {alternarActivo.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : fuente.activo ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : (
-              <CircleSlash className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Editar feed"
-            title="Editar"
-            onClick={onEditar}
-          >
-            <Pencil className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Borrar feed"
-            title="Borrar"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => borrar.mutate()}
-            disabled={borrar.isPending}
-          >
-            {borrar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-          </Button>
+          <Tooltip label={fuente.activo ? "Desactivar" : "Activar"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={fuente.activo ? "Desactivar feed" : "Activar feed"}
+              className={cn(
+                fuente.activo ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
+              )}
+              onClick={() => alternarActivo.mutate()}
+              disabled={alternarActivo.isPending}
+            >
+              {alternarActivo.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : fuente.activo ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <CircleSlash className="h-4 w-4" />
+              )}
+            </Button>
+          </Tooltip>
+          <Tooltip label="Editar">
+            <Button variant="ghost" size="icon" aria-label="Editar feed" onClick={onEditar}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Borrar">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Borrar feed"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => borrar.mutate()}
+              disabled={borrar.isPending}
+            >
+              {borrar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </Button>
+          </Tooltip>
         </div>
       </div>
       <SaludFeed fuente={fuente} />
@@ -609,16 +608,17 @@ function ItemsRecientes({
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="Refrescar noticias"
-              title="Refrescar"
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} />
-            </Button>
+            <Tooltip label="Refrescar">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Refrescar noticias"
+                onClick={() => void query.refetch()}
+                disabled={query.isFetching}
+              >
+                <RefreshCw className={cn("h-4 w-4", query.isFetching && "animate-spin")} />
+              </Button>
+            </Tooltip>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3">
