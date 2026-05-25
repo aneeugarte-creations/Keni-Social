@@ -16,6 +16,19 @@ const COLOR_PUNTO: Record<NivelEstado, string> = {
   error: "bg-red-500",
 };
 
+/**
+ * Limpia el texto del backend: quita emojis/simbolos (❌ ✅ ⚠️) y ordena la
+ * puntuacion. El estado se transmite con el punto de color, no con iconos.
+ */
+function limpiarTexto(t: string): string {
+  return t
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️‍]/gu, "")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+([,.;:!?)])/g, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 /** Punto de estado pequeno (a lo Vercel): un solo toque de color. */
 function Punto({ nivel, className }: { nivel: NivelEstado; className?: string }) {
   return (
@@ -60,7 +73,9 @@ function FilaChequeo({ resultado }: { resultado: ResultadoEstado }) {
       <Punto nivel={resultado.estado} className="mt-1.5" />
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground">{resultado.nombre}</p>
-        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{resultado.detalle}</p>
+        <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">
+          {limpiarTexto(resultado.detalle)}
+        </p>
       </div>
       {resultado.estado === "error" && (
         <span className="mt-0.5 shrink-0 text-xs font-medium text-red-600 dark:text-red-400">
@@ -210,7 +225,7 @@ function SiguientePaso({ texto }: { texto: string }) {
         <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Siguiente paso
         </p>
-        <p className="text-sm leading-relaxed text-foreground">{texto}</p>
+        <p className="text-sm leading-relaxed text-foreground">{limpiarTexto(texto)}</p>
       </CardContent>
     </Card>
   );
