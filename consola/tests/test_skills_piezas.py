@@ -14,7 +14,7 @@ from __future__ import annotations
 from keni_consola import redes
 from keni_consola.api import skills
 
-from .conftest import _cliente
+from .conftest import _cliente, lanzador_generacion_completa
 
 # --------------------------------------------------------------------------- #
 # Fixtures de salida cruda (lo que devolveria `claude`)                        #
@@ -190,26 +190,38 @@ def test_prompt_con_redes_anade_bloque_json_y_redes():
 
 
 # --------------------------------------------------------------------------- #
-# Endpoint /api/skills/ejecutar con runner mockeado                            #
+# Endpoint /api/skills/ejecutar (generacion EN BACKGROUND, lanzador mockeado)  #
 # --------------------------------------------------------------------------- #
+#
+# El endpoint ya NO es sincrono: crea una generacion y la lanza en background. En tests
+# inyectamos `lanzar_generacion=lanzador_generacion_completa(salida)`, una fake que
+# completa la generacion SINCRONAMENTE corriendo el `procesar` REAL con `salida` canned.
+# Asi la respuesta del POST ya trae la generacion COMPLETADA y su `resultado`.
 
 
-def _mock_runner(salida: str, metricas=None):
-    """Devuelve un runner que ignora el prompt y devuelve `(salida, metricas)` fijos.
-
-    El nuevo contrato de `_runner` es `(texto, MetricasRun | None)`; por defecto se
-    devuelven `(salida, None)`.
-    """
-
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida, metricas
-
-    return runner
+def _resultado(respuesta) -> dict:  # noqa: ANN001
+    """`resultado` de la generacion COMPLETADA que devuelve un POST a /ejecutar*."""
+    cuerpo = respuesta.json()
+    gen = cuerpo["generacion"]
+    assert gen["estado"] == "completado", gen
+    return gen["resultado"]
 
 
-def test_endpoint_ejecutar_devuelve_piezas_y_verdicto(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    r = _cliente().post(
+def _captura_prompt(salida: str):
+    """Lanzador que COMPLETA la generacion y ademas captura el prompt construido."""
+    base = lanzador_generacion_completa(salida)
+    capturado: dict[str, str] = {}
+
+    def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
+        capturado["prompt"] = prompt
+        base(gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal)
+
+    return lanzar, capturado
+
+
+def test_endpoint_ejecutar_devuelve_piezas_y_verdicto(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
+    r = cli.post(
         "/api/skills/ejecutar",
         json={
             "skill": "copy-desde-nota",
@@ -219,22 +231,16 @@ def test_endpoint_ejecutar_devuelve_piezas_y_verdicto(entorno, monkeypatch):
         },
     )
     assert r.status_code == 200
-    cuerpo = r.json()
-    assert cuerpo["verdicto"] == "listo"
-    assert [p["red"] for p in cuerpo["piezas"]] == ["x", "instagram"]
-    assert cuerpo["historial_id"]
-    assert "```json" not in cuerpo["resultado"]
+    res = _resultado(r)
+    assert res["verdicto"] == "listo"
+    assert [p["red"] for p in res["piezas"]] == ["x", "instagram"]
+    assert res["historial_id"]
+    assert "```json" not in res["resultado"]
 
 
-def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno, monkeypatch):
-    capturado = {}
-
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        capturado["prompt"] = prompt
-        return _SALIDA_SIN_JSON_NI_ENCABEZADOS, None
-
-    monkeypatch.setattr(skills, "_runner", runner)
-    r = _cliente().post(
+def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno):
+    lanzar, capturado = _captura_prompt(_SALIDA_SIN_JSON_NI_ENCABEZADOS)
+    r = _cliente(lanzar_generacion=lanzar).post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "una nota"},
     )
@@ -243,25 +249,19 @@ def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno, monkeypatch):
     for nombre in ("X", "Instagram", "Facebook", "TikTok", "YouTube"):
         assert nombre in capturado["prompt"]
     # sin json NI encabezados => piezas vacias
-    assert r.json()["piezas"] == []
+    assert _resultado(r)["piezas"] == []
 
 
-def test_endpoint_ejecutar_archivo_redes_csv(entorno, monkeypatch):
-    capturado = {}
-
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        capturado["prompt"] = prompt
-        return _SALIDA_CON_JSON, None
-
-    monkeypatch.setattr(skills, "_runner", runner)
-    r = _cliente().post(
+def test_endpoint_ejecutar_archivo_redes_csv(entorno):
+    lanzar, capturado = _captura_prompt(_SALIDA_CON_JSON)
+    r = _cliente(lanzar_generacion=lanzar).post(
         "/api/skills/ejecutar-archivo",
         data={"skill": "copy-desde-nota", "marca": "unotv", "redes": "x,instagram"},
         files={"archivo": ("nota.txt", b"una nota de prueba", "text/plain")},
     )
     assert r.status_code == 200
-    cuerpo = r.json()
-    assert [p["red"] for p in cuerpo["piezas"]] == ["x", "instagram"]
+    res = _resultado(r)
+    assert [p["red"] for p in res["piezas"]] == ["x", "instagram"]
     # CSV parseado: solo X e Instagram en el prompt (no las 5)
     assert "TikTok" not in capturado["prompt"]
 
@@ -297,9 +297,8 @@ def _listar_publicaciones(cli):
     return cli.get("/api/publicaciones").json()["publicaciones"]
 
 
-def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
+def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     r = cli.post(
         "/api/skills/ejecutar",
         json={
@@ -310,9 +309,9 @@ def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno, monkeypatch):
         },
     )
     assert r.status_code == 200
-    cuerpo = r.json()
-    # 2 piezas => 2 publicaciones recien creadas en la respuesta.
-    pubs = cuerpo["publicaciones"]
+    res = _resultado(r)
+    # 2 piezas => 2 publicaciones recien creadas en el resultado.
+    pubs = res["publicaciones"]
     assert len(pubs) == 2
     assert [p["red"] for p in pubs] == ["x", "instagram"]
     # Forma completa serializada (igual que en api/publicaciones).
@@ -324,7 +323,7 @@ def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno, monkeypatch):
     assert primera["veredicto"] == "listo"
     assert primera["marca"] == "unotv"
     # origen = historial_id
-    assert primera["origen"] == cuerpo["historial_id"]
+    assert primera["origen"] == res["historial_id"]
     assert primera["contenido"] == "Titular fuerte y al grano."
     # Titulo derivado de la 1a linea de la nota (no se paso titulo).
     assert primera["titulo"] == "Mi nota importante"
@@ -332,9 +331,8 @@ def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno, monkeypatch):
     assert len(_listar_publicaciones(cli)) == 2
 
 
-def test_ejecutar_usa_titulo_dado_si_viene(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
+def test_ejecutar_usa_titulo_dado_si_viene(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     r = cli.post(
         "/api/skills/ejecutar",
         json={
@@ -346,27 +344,25 @@ def test_ejecutar_usa_titulo_dado_si_viene(entorno, monkeypatch):
         },
     )
     assert r.status_code == 200
-    pubs = r.json()["publicaciones"]
+    pubs = _resultado(r)["publicaciones"]
     assert pubs[0]["titulo"] == "Mi titulo a mano"
 
 
-def test_ejecutar_sin_piezas_no_crea_publicaciones(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_SIN_JSON_NI_ENCABEZADOS))
-    cli = _cliente()
+def test_ejecutar_sin_piezas_no_crea_publicaciones(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SIN_JSON_NI_ENCABEZADOS))
     r = cli.post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "una nota"},
     )
     assert r.status_code == 200
-    cuerpo = r.json()
-    assert cuerpo["piezas"] == []
-    assert cuerpo["publicaciones"] == []
+    res = _resultado(r)
+    assert res["piezas"] == []
+    assert res["publicaciones"] == []
     assert _listar_publicaciones(cli) == []
 
 
-def test_ejecutar_archivo_autocrea_publicaciones(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
+def test_ejecutar_archivo_autocrea_publicaciones(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     r = cli.post(
         "/api/skills/ejecutar-archivo",
         data={"skill": "copy-desde-nota", "marca": "unotv", "redes": "x,instagram",
@@ -374,7 +370,7 @@ def test_ejecutar_archivo_autocrea_publicaciones(entorno, monkeypatch):
         files={"archivo": ("nota.txt", b"contenido de la nota", "text/plain")},
     )
     assert r.status_code == 200
-    pubs = r.json()["publicaciones"]
+    pubs = _resultado(r)["publicaciones"]
     assert len(pubs) == 2
     assert all(p["titulo"] == "Desde archivo" for p in pubs)
     assert len(_listar_publicaciones(cli)) == 2
@@ -385,15 +381,14 @@ def test_ejecutar_archivo_autocrea_publicaciones(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 
-def test_historial_listado_y_detalle_incluyen_piezas_y_titulo(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
+def test_historial_listado_y_detalle_incluyen_piezas_y_titulo(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     gen = cli.post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
               "redes": ["x", "instagram"]},
-    ).json()
-    hid = gen["historial_id"]
+    )
+    hid = _resultado(gen)["historial_id"]
 
     lista = cli.get("/api/skills/historial").json()["historial"]
     assert lista[0]["titulo"] == "Una nota"
@@ -409,15 +404,14 @@ def test_historial_listado_y_detalle_incluyen_piezas_y_titulo(entorno, monkeypat
 # --------------------------------------------------------------------------- #
 
 
-def test_historial_guardar_con_piezas_crea_una_por_pieza(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
+def test_historial_guardar_con_piezas_crea_una_por_pieza(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     gen = cli.post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
               "redes": ["x", "instagram"]},
-    ).json()
-    hid = gen["historial_id"]
+    )
+    hid = _resultado(gen)["historial_id"]
     antes = len(_listar_publicaciones(cli))
 
     r = cli.post(f"/api/skills/historial/{hid}/guardar", json={})
@@ -430,14 +424,13 @@ def test_historial_guardar_con_piezas_crea_una_por_pieza(entorno, monkeypatch):
     assert len(_listar_publicaciones(cli)) == antes + 2
 
 
-def test_historial_guardar_con_piezas_filtra_a_redes(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
-    hid = cli.post(
+def test_historial_guardar_con_piezas_filtra_a_redes(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
+    hid = _resultado(cli.post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
               "redes": ["x", "instagram"]},
-    ).json()["historial_id"]
+    ))["historial_id"]
 
     r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"redes": ["instagram"]})
     assert r.status_code == 200
@@ -445,14 +438,13 @@ def test_historial_guardar_con_piezas_filtra_a_redes(entorno, monkeypatch):
     assert [p["red"] for p in pubs] == ["instagram"]
 
 
-def test_historial_guardar_usa_titulo_param(entorno, monkeypatch):
-    monkeypatch.setattr(skills, "_runner", _mock_runner(_SALIDA_CON_JSON))
-    cli = _cliente()
-    hid = cli.post(
+def test_historial_guardar_usa_titulo_param(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
+    hid = _resultado(cli.post(
         "/api/skills/ejecutar",
         json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
               "redes": ["x"]},
-    ).json()["historial_id"]
+    ))["historial_id"]
 
     r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"titulo": "Recuperado"})
     assert r.json()["publicaciones"][0]["titulo"] == "Recuperado"

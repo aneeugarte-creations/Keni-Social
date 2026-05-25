@@ -52,7 +52,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import generaciones, marcas, redes, repos
 from .._http_json import leer_json
 from .publicaciones import _publicacion_a_dict
 
@@ -445,18 +445,28 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
 class AcumuladorStream:
     """Acumula el progreso de un run `--output-format stream-json --verbose`.
 
-    El stream emite UN objeto JSON por linea (NDJSON):
-      - `system`/`init`  -> arranque (modelo/sesion); marca `iniciado`.
-      - `assistant`      -> un turno del agente; suma tokens PARCIALES de su
-                            `message.usage` (input/output) y cuenta el turno.
-      - `result`         -> objeto FINAL (misma forma que `--output-format json`):
-                            texto en `result`, metricas finales, estado terminal.
+    El stream emite UN objeto JSON por linea (NDJSON). Hay DOS modos segun se pase o no
+    `--include-partial-messages`:
+
+      - SIN parciales (modo agente clasico):
+          `system`/`init`  -> arranque (modelo/sesion); marca `iniciado`.
+          `assistant`      -> un turno; suma tokens de su `message.usage` y cuenta turno.
+          `result`         -> objeto FINAL: texto en `result`, metricas finales, terminal.
+
+      - CON parciales (`--include-partial-messages`, lo que usamos para STREAMING en vivo):
+          `stream_event` con `message_start`        -> nuevo turno (cuenta turno + modelo).
+          `stream_event` `content_block_delta`/`text_delta` -> texto del ASISTENTE token a
+            token: se ACUMULA en `texto` para que la UI lo muestre en vivo (el `thinking`
+            NO se acumula: es ruido para el copy).
+          `stream_event` `message_delta`/`usage`    -> tokens PARCIALES del turno.
+          `assistant`/`result` siguen llegando igual; en modo parcial NO recontamos turnos
+            ni tokens desde `assistant` (lo hacen los `stream_event`), via `_vio_stream`.
 
     `procesar_linea` consume una linea cruda y actualiza el estado. Es PURO respecto a
     I/O (no toca disco ni subprocess); el hilo lector lo alimenta y, tras cada avance,
-    persiste `metricas_parciales()` en el YAML del run. Tolerante: lineas vacias o no
-    JSON se ignoran. Si llega un `result` de error, deja `error=True` y `mensaje_error`
-    (en espanol) para que el llamante marque el run en error.
+    persiste `texto` + `metricas_parciales()`. Tolerante: lineas vacias o no JSON se
+    ignoran. Si llega un `result` de error, deja `error=True` y `mensaje_error` (en
+    espanol) para que el llamante marque el run en error.
     """
 
     iniciado: bool = False
@@ -470,6 +480,9 @@ class AcumuladorStream:
     terminado: bool = False
     error: bool = False
     mensaje_error: str = ""
+    # True en cuanto llega un `stream_event` (modo `--include-partial-messages`): a partir
+    # de ahi turnos/tokens se cuentan desde los `stream_event`, no desde `assistant`.
+    _vio_stream: bool = False
 
     def procesar_linea(self, linea: str) -> None:
         """Consume UNA linea NDJSON del stream y actualiza el estado acumulado."""
@@ -491,10 +504,19 @@ class AcumuladorStream:
             sid = evento.get("session_id")
             if isinstance(sid, str) and sid:
                 self.session_id = sid
+        elif tipo == "stream_event":
+            self._procesar_stream_event(evento.get("event"))
         elif tipo == "assistant":
             self.iniciado = True
-            self.turnos += 1
             mensaje = evento.get("message")
+            modelo = mensaje.get("model") if isinstance(mensaje, dict) else None
+            if isinstance(modelo, str) and modelo and self.modelo is None:
+                self.modelo = modelo
+            # En modo parcial los turnos/tokens los cuentan los `stream_event`; aqui solo
+            # tomamos el modelo (arriba). Sin parciales, contamos turno + tokens del usage.
+            if self._vio_stream:
+                return
+            self.turnos += 1
             if isinstance(mensaje, dict):
                 uso = mensaje.get("usage")
                 if isinstance(uso, dict):
@@ -504,9 +526,6 @@ class AcumuladorStream:
                         self.tokens_in += ti
                     if to is not None:
                         self.tokens_out += to
-                modelo = mensaje.get("model")
-                if isinstance(modelo, str) and modelo and self.modelo is None:
-                    self.modelo = modelo
         elif tipo == "result":
             self.terminado = True
             try:
@@ -517,6 +536,42 @@ class AcumuladorStream:
                 return
             self.texto = texto
             self.final = metricas
+
+    def _procesar_stream_event(self, evt: object) -> None:
+        """Procesa un `stream_event` (modo `--include-partial-messages`): texto + turnos.
+
+        - `message_start`        -> nuevo turno (y modelo si aun no se conocia).
+        - `content_block_delta`  -> si es `text_delta`, ACUMULA el texto del asistente
+                                     en `texto` (streaming en vivo); ignora `thinking_delta`.
+        - `message_delta`        -> suma tokens parciales (`usage.input/output_tokens`).
+        """
+        self.iniciado = True
+        self._vio_stream = True
+        if not isinstance(evt, dict):
+            return
+        et = evt.get("type")
+        if et == "message_start":
+            self.turnos += 1
+            msg = evt.get("message")
+            if isinstance(msg, dict):
+                m = msg.get("model")
+                if isinstance(m, str) and m and self.modelo is None:
+                    self.modelo = m
+        elif et == "content_block_delta":
+            delta = evt.get("delta")
+            if isinstance(delta, dict) and delta.get("type") == "text_delta":
+                t = delta.get("text")
+                if isinstance(t, str):
+                    self.texto += t
+        elif et == "message_delta":
+            uso = evt.get("usage")
+            if isinstance(uso, dict):
+                ti = _entero(uso.get("input_tokens"))
+                to = _entero(uso.get("output_tokens"))
+                if ti is not None:
+                    self.tokens_in += ti
+                if to is not None:
+                    self.tokens_out += to
 
     def metricas_parciales(self) -> MetricasRun | None:
         """Metricas PARCIALES acumuladas hasta ahora (turnos/tokens), o None si aun nada."""
@@ -1077,7 +1132,91 @@ def _responder_generacion(
     )
 
 
+def construir_procesar_copy(
+    skill: str,
+    marca: str,
+    *,
+    redes_ids: list[str],
+    titulo_dado: str,
+    texto_base: str,
+) -> generaciones.Procesar:
+    """Devuelve el callback de post-procesado de una generacion de copy/RSS.
+
+    El callback `procesar(salida, metricas) -> dict` corre al COMPLETARSE el trabajo:
+    parsea la salida cruda en piezas/verdicto, registra el historial (con sus metricas),
+    AUTO-GUARDA una publicacion (borrador) por pieza y devuelve la MISMA forma que antes
+    entregaba la generacion sincrona: `{resultado, historial_id, verdicto, piezas,
+    publicaciones}`. Es lo que se guarda como `resultado` del registro de generacion.
+    """
+
+    def procesar(salida: str, metricas: MetricasRun | None) -> dict[str, object]:
+        parsed = parsear_salida(salida, redes_ids)
+        titulo = titulo_dado or derivar_titulo(texto_base or str(parsed["resultado"]))
+        historial_id = repos.registrar_historial_skill(
+            skill, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
+            metricas=metricas_a_dict(metricas),
+        )
+        publicaciones = _crear_publicaciones_desde_piezas(
+            parsed["piezas"], marca=marca, titulo=titulo,
+            verdicto=parsed["verdicto"], origen=historial_id,
+        )
+        return {
+            "resultado": parsed["resultado"],
+            "historial_id": historial_id,
+            "verdicto": parsed["verdicto"],
+            "piezas": parsed["piezas"],
+            "publicaciones": publicaciones,
+        }
+
+    return procesar
+
+
+def etiqueta_generacion(skill: str, marca: str) -> str:
+    """Etiqueta legible de una generacion (para el progreso y la lista de actividad)."""
+    return f"{_SKILL_NOMBRE.get(skill, skill)} · {_MARCA_NOMBRE.get(marca, marca)}"
+
+
+def lanzar_generacion_copy(
+    *,
+    tipo: str,
+    skill: str,
+    marca: str,
+    prompt: str,
+    redes_ids: list[str],
+    titulo_dado: str,
+    texto_base: str,
+    dir_temporal: Path | None = None,
+) -> dict[str, object]:
+    """Crea el registro de generacion, lanza el trabajo de claude EN BACKGROUND y
+    devuelve el registro ACTUAL (puede haber avanzado ya si el lanzador es una fake)."""
+    gen = generaciones.crear(
+        {"tipo": tipo, "marca": marca, "etiqueta": etiqueta_generacion(skill, marca)}
+    )
+    procesar = construir_procesar_copy(
+        skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base
+    )
+    try:
+        generaciones.lanzar_job_claude(
+            gen["id"], prompt=prompt, cwd=_cwd_skills(), procesar=procesar,
+            dir_temporal=dir_temporal,
+        )
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
+        if dir_temporal is not None:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+    return generaciones.obtener(gen["id"]) or gen
+
+
 async def ejecutar(request: Request) -> Response:
+    """Lanza la generacion de copy EN SEGUNDO PLANO -> `{generacion}` (estado ejecutando).
+
+    No bloquea: el frontend sondea `GET /api/generaciones/{id}` para seguir el streaming
+    y, al completarse, recoge `resultado` (piezas + publicaciones ya creadas).
+    """
     datos = await leer_json(request)
     skill = datos.get("skill")
     marca = datos.get("marca")
@@ -1090,25 +1229,31 @@ async def ejecutar(request: Request) -> Response:
         return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
     if marca not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    texto = texto.strip()
+    if not texto:
+        return JSONResponse(
+            {"error": "Falta la nota o transcripción para generar el borrador."}, status_code=400
+        )
+    if len(texto) > _MAX_TEXTO:
+        return JSONResponse(
+            {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."},
+            status_code=400,
+        )
     crudas = datos.get("redes")
     redes_ids = normalizar_redes(crudas if isinstance(crudas, list) else None)
     titulo_dado = datos.get("titulo")
     titulo_dado = titulo_dado.strip() if isinstance(titulo_dado, str) else ""
-    try:
-        salida, metricas = ejecutar_skill(skill, marca, texto, redes_ids=redes_ids)
-    except SkillError as e:
-        mensaje = str(e)
-        codigo = 400 if mensaje in _ERRORES_VALIDACION else 500
-        return JSONResponse({"error": mensaje}, status_code=codigo)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
-        return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
-    return _responder_generacion(
-        skill, marca, texto, parsear_salida(salida, redes_ids), titulo_dado, metricas
+
+    prompt = construir_prompt(skill, marca, texto, redes_ids)
+    gen = lanzar_generacion_copy(
+        tipo="copy", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
+        titulo_dado=titulo_dado, texto_base=texto,
     )
+    return JSONResponse({"generacion": gen})
 
 
 async def ejecutar_archivo(request: Request) -> Response:
-    """Genera un borrador a partir de un archivo SUBIDO (multipart)."""
+    """Genera un borrador a partir de un archivo SUBIDO (multipart), EN SEGUNDO PLANO."""
     try:
         form = await request.form()
     except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro, sin traza
@@ -1133,30 +1278,45 @@ async def ejecutar_archivo(request: Request) -> Response:
     titulo_form = form.get("titulo")
     titulo_dado = titulo_form.strip() if isinstance(titulo_form, str) else ""
 
-    texto_nota = ""
-    dir_temporal: Path | None = None
-    metricas: MetricasRun | None = None
+    # Guardado seguro del archivo a un temporal (puede fallar por tamano/E-S => 400/500).
     try:
         ruta, dir_temporal = await _guardar_subida_segura(archivo, limite=_max_subida(skill))
-        if skill in _SKILLS_MEDIA:
-            salida, metricas = ejecutar_skill_ruta(skill, marca, str(ruta), redes_ids=redes_ids)
-        else:
-            texto_nota = _leer_texto_archivo(ruta)
-            salida, metricas = ejecutar_skill(skill, marca, texto_nota, redes_ids=redes_ids)
     except SkillError as e:
         mensaje = str(e)
-        es_validacion = mensaje in _ERRORES_VALIDACION_ARCHIVO or mensaje in _ERRORES_VALIDACION
-        codigo = 400 if es_validacion else 500
+        codigo = 400 if mensaje in _ERRORES_VALIDACION_ARCHIVO else 500
         return JSONResponse({"error": mensaje}, status_code=codigo)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
-        return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
+
+    if skill in _SKILLS_MEDIA:
+        # MEDIA: el temporal debe vivir hasta que termine el trabajo (la skill transcribe
+        # en local). El lanzador lo borra al finalizar (`dir_temporal`).
+        prompt = construir_prompt_ruta(skill, marca, str(ruta), redes_ids)
+        gen = lanzar_generacion_copy(
+            tipo="copy", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
+            titulo_dado=titulo_dado, texto_base="", dir_temporal=dir_temporal,
+        )
+        return JSONResponse({"generacion": gen})
+
+    # TEXTO: leemos el contenido ya (rapido) y borramos el temporal de inmediato.
+    try:
+        texto_nota = _leer_texto_archivo(ruta)
+    except OSError:
+        shutil.rmtree(dir_temporal, ignore_errors=True)
+        return JSONResponse({"error": "No se pudo leer el archivo subido."}, status_code=400)
     finally:
-        if dir_temporal is not None:
-            shutil.rmtree(dir_temporal, ignore_errors=True)
-    parsed = parsear_salida(salida, redes_ids)
-    # Para skills de media no hay nota de texto; el titulo se deriva del resultado.
-    base_titulo = texto_nota or parsed["resultado"]
-    return _responder_generacion(skill, marca, base_titulo, parsed, titulo_dado, metricas)
+        shutil.rmtree(dir_temporal, ignore_errors=True)
+    if not texto_nota.strip():
+        return JSONResponse({"error": "El archivo está vacío."}, status_code=400)
+    if len(texto_nota) > _MAX_TEXTO:
+        return JSONResponse(
+            {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."},
+            status_code=400,
+        )
+    prompt = construir_prompt(skill, marca, texto_nota, redes_ids)
+    gen = lanzar_generacion_copy(
+        tipo="copy", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
+        titulo_dado=titulo_dado, texto_base=texto_nota,
+    )
+    return JSONResponse({"generacion": gen})
 
 
 async def historial(request: Request) -> Response:
