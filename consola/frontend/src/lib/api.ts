@@ -9,6 +9,7 @@
  * - Soporta JSON, multipart (FormData) y descargas (abre la URL en el navegador).
  */
 import type {
+  AgenteDetalle,
   CompararMetricas,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPlantilla,
@@ -17,6 +18,7 @@ import type {
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
+  CuerpoCrearRun,
   CuerpoCrearFuenteRss,
   CuerpoCrearPlantilla,
   CuerpoCrearProyecto,
@@ -29,6 +31,7 @@ import type {
   CuerpoGenerarMedia,
   CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
+  CuerpoGuardarContexto,
   CuerpoGuardarHistorial,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarConfig,
@@ -40,6 +43,7 @@ import type {
   OpcionesMetricas,
   OpcionesPublicaciones,
   ReporteMetricas,
+  RespuestaAgentes,
   RespuestaCarpetas,
   RespuestaConectarRed,
   RespuestaConexionesRedes,
@@ -68,9 +72,13 @@ import type {
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaReciclarPublicacion,
+  RespuestaRun,
+  RespuestaRuns,
   RespuestaSkills,
+  RespuestaSubContextos,
   RespuestaSugerirHashtags,
   RespuestaTareas,
+  Run,
 } from "@/types";
 
 export const BASE_API = "/api";
@@ -198,6 +206,39 @@ export const api = {
   carpetas: (signal?: AbortSignal) => peticion<RespuestaCarpetas>("/carpetas", { signal }),
   crearCarpeta: (cuerpo: CuerpoCrearCarpeta) =>
     peticion<RespuestaCrearCarpeta>("/carpetas", { metodo: "POST", json: cuerpo }),
+
+  // --- Agentes (marca = carpeta con CLAUDE.md, sub-contextos y runs) ---
+  agentes: (signal?: AbortSignal) => peticion<RespuestaAgentes>("/agentes", { signal }),
+  agente: (id: string, signal?: AbortSignal) =>
+    peticion<AgenteDetalle>(`/agentes/${encodeURIComponent(id)}`, { signal }),
+  guardarClaudeMdAgente: (id: string, cuerpo: CuerpoGuardarClaudeMd) =>
+    peticion<RespuestaMensaje>(`/agentes/${encodeURIComponent(id)}/claude-md`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  contextosAgente: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaSubContextos>(`/agentes/${encodeURIComponent(id)}/contextos`, { signal }),
+  guardarContextoAgente: (id: string, nombre: string, cuerpo: CuerpoGuardarContexto) =>
+    peticion<RespuestaMensaje>(
+      `/agentes/${encodeURIComponent(id)}/contextos/${encodeURIComponent(nombre)}`,
+      { metodo: "PUT", json: cuerpo },
+    ),
+  eliminarContextoAgente: (id: string, nombre: string) =>
+    peticion<RespuestaMensaje>(
+      `/agentes/${encodeURIComponent(id)}/contextos/${encodeURIComponent(nombre)}`,
+      { metodo: "DELETE" },
+    ),
+  crearRunAgente: (id: string, cuerpo: CuerpoCrearRun) =>
+    peticion<RespuestaRun>(`/agentes/${encodeURIComponent(id)}/runs`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  runsAgente: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaRuns>(`/agentes/${encodeURIComponent(id)}/runs`, { signal }),
+  runAgente: (id: string, runId: string, signal?: AbortSignal): Promise<Run> =>
+    peticion<Run>(`/agentes/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, {
+      signal,
+    }),
 
   // --- Skills (Generar copy) ---
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),

@@ -1,8 +1,6 @@
 import {
   BarChart3,
-  FolderPlus,
-  FolderTree,
-  ListTodo,
+  Bot,
   Rss,
   Send,
   Settings2,
@@ -56,28 +54,16 @@ export const NAVEGACION: GrupoNav[] = [
         descripcion: "Reportes y comparativas de tus cuentas.",
       },
       {
-        ruta: "/tareas",
-        etiqueta: "Tareas",
-        icono: ListTodo,
-        descripcion: "Pendientes por proyecto.",
+        ruta: "/agentes",
+        etiqueta: "Agentes",
+        icono: Bot,
+        descripcion: "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones.",
       },
     ],
   },
   {
     etiqueta: "Ajustes",
     items: [
-      {
-        ruta: "/proyectos",
-        etiqueta: "Proyectos",
-        icono: FolderTree,
-        descripcion: "Carpetas conectadas y su CLAUDE.md.",
-      },
-      {
-        ruta: "/carpetas",
-        etiqueta: "Nueva carpeta",
-        icono: FolderPlus,
-        descripcion: "Crea una carpeta a partir de una plantilla.",
-      },
       {
         ruta: "/configuracion",
         etiqueta: "Configuración",

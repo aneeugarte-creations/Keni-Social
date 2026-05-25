@@ -11,9 +11,8 @@ const GenerarCopy = lazy(() => import("@/pages/GenerarCopy"));
 const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
-const Tareas = lazy(() => import("@/pages/Tareas"));
-const Proyectos = lazy(() => import("@/pages/Proyectos"));
-const Carpetas = lazy(() => import("@/pages/Carpetas"));
+const Agentes = lazy(() => import("@/pages/Agentes"));
+const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 
 /**
@@ -31,15 +30,18 @@ export const router = createBrowserRouter([
       { path: "publicaciones", element: <Publicaciones /> },
       { path: "fuentes", element: <Fuentes /> },
       { path: "metricas", element: <Metricas /> },
-      { path: "tareas", element: <Tareas /> },
+      { path: "agentes", element: <Agentes /> },
+      { path: "agentes/:id", element: <DetalleAgente /> },
       // Ajustes
-      { path: "proyectos", element: <Proyectos /> },
-      { path: "carpetas", element: <Carpetas /> },
       { path: "configuracion", element: <Configuracion /> },
       // Redirecciones de páginas fusionadas/retiradas (issues #87, #88):
       // Conexiones se fusionó en Configuración; Estado pasó a la topbar.
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
+      // Proyectos, Tareas y Nueva carpeta se unificaron en Agentes (#85).
+      { path: "proyectos", element: <Navigate to="/agentes" replace /> },
+      { path: "tareas", element: <Navigate to="/agentes" replace /> },
+      { path: "carpetas", element: <Navigate to="/agentes" replace /> },
       // Cualquier otra ruta: de vuelta al inicio.
       { path: "*", element: <Navigate to="/generar-copy" replace /> },
     ],
