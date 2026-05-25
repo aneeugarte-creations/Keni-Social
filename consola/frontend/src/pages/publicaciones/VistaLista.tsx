@@ -7,11 +7,14 @@ import {
   ImageIcon,
   Loader2,
   Pencil,
+  RefreshCw,
+  Sprout,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -23,6 +26,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api, ApiError, urlMedia } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
@@ -87,6 +91,41 @@ function TarjetaPublicacion({
     },
   });
 
+  const reciclar = useMutation({
+    mutationFn: () => api.reciclarPublicacion(publicacion.id),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      const fecha = res?.publicacion?.fecha_programada;
+      toast.success(
+        res?.encolado
+          ? `Reciclada y encolada${fecha ? ` para ${formatearFechaHora(fecha)}` : ""}`
+          : "Reciclada como nuevo borrador",
+      );
+    },
+    onError: (e) => {
+      // 400 = sin franjas para encolar: avisamos y ofrecemos abrir las franjas.
+      if (e instanceof ApiError && e.status === 400) {
+        toast.error(e.message, {
+          action: { label: "Gestionar franjas", onClick: onGestionarFranjas },
+        });
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const alternarEvergreen = useMutation({
+    mutationFn: () =>
+      api.actualizarPublicacion(publicacion.id, { evergreen: !publicacion.evergreen }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      toast.success(
+        publicacion.evergreen ? "Ya no es perenne" : "Marcada como perenne",
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const borrar = useMutation({
     mutationFn: () => api.eliminarPublicacion(publicacion.id),
     onSuccess: (res) => {
@@ -112,6 +151,15 @@ function TarjetaPublicacion({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{publicacion.titulo}</span>
               <BadgeEstado estado={publicacion.estado} />
+              {publicacion.evergreen && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-emerald-500/40 font-normal text-emerald-700 dark:text-emerald-300"
+                >
+                  <Sprout className="h-3 w-3" />
+                  Perenne
+                </Badge>
+              )}
               {imagen && (
                 <ImageIcon
                   className="h-3.5 w-3.5 text-muted-foreground"
@@ -166,6 +214,41 @@ function TarjetaPublicacion({
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <CalendarPlus className="h-4 w-4" />
+            )}
+          </Button>
+          {(publicacion.estado === "publicado" || publicacion.evergreen) && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Reciclar publicación"
+              title="Reciclar (volver a publicar)"
+              onClick={() => reciclar.mutate()}
+              disabled={reciclar.isPending}
+            >
+              {reciclar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={publicacion.evergreen ? "Quitar perenne" : "Marcar perenne"}
+            title={publicacion.evergreen ? "Quitar de perennes" : "Marcar como perenne"}
+            className={cn(
+              publicacion.evergreen
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-muted-foreground",
+            )}
+            onClick={() => alternarEvergreen.mutate()}
+            disabled={alternarEvergreen.isPending}
+          >
+            {alternarEvergreen.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sprout className="h-4 w-4" />
             )}
           </Button>
           <Button

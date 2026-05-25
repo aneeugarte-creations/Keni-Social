@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, Loader2, Pencil } from "lucide-react";
+import { Eye, Link2, Loader2, Pencil, Sprout } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
+import { SelectorPlantilla } from "@/components/plantillas/SelectorPlantilla";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
+import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +37,7 @@ import { CLAVE_PUBLICACIONES } from "./claves";
 import { GestionHashtags } from "./GestionHashtags";
 import { EtiquetaRed } from "./insignias";
 import { datetimeLocalAIso, isoADatetimeLocal, metaRed } from "./meta";
+import { agregarEnlace } from "./plantillas";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -55,12 +59,14 @@ export function DialogoEditar({
   const [titulo, setTitulo] = React.useState("");
   const [contenido, setContenido] = React.useState("");
   const [estado, setEstado] = React.useState<EstadoPublicacion>("borrador");
+  const [evergreen, setEvergreen] = React.useState(false);
   const [fechaLocal, setFechaLocal] = React.useState("");
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
   const [vista, setVista] = React.useState<"editar" | "previa">("editar");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
+  const [utmAbierto, setUtmAbierto] = React.useState(false);
 
   // Catálogo de marcas para la gestión de grupos de hashtags.
   const opcionesQuery = useQuery({
@@ -76,6 +82,7 @@ export function DialogoEditar({
     setTitulo(publicacion.titulo);
     setContenido(publicacion.contenido);
     setEstado(publicacion.estado);
+    setEvergreen(publicacion.evergreen ?? false);
     setFechaLocal(isoADatetimeLocal(publicacion.fecha_programada));
     setImagen(publicacion.imagen ?? "");
     setImagenUrl(publicacion.imagen_url ?? "");
@@ -93,6 +100,7 @@ export function DialogoEditar({
         titulo: titulo.trim(),
         contenido,
         estado,
+        evergreen,
         // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
         fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
         imagen,
@@ -168,6 +176,25 @@ export function DialogoEditar({
                 onChange={(e) => setContenido(e.target.value)}
                 className="min-h-[10rem] font-mono text-sm"
               />
+              {publicacion && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <SelectorPlantilla
+                    marca={publicacion.marca}
+                    red={publicacion.red}
+                    onUsar={setContenido}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setUtmAbierto(true)}
+                  >
+                    <Link2 className="h-4 w-4" />
+                    Enlace UTM
+                  </Button>
+                </div>
+              )}
             </div>
 
             {publicacion && (
@@ -224,6 +251,29 @@ export function DialogoEditar({
                 </div>
               )}
             </div>
+
+            <div className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
+              <Checkbox
+                id="editar-evergreen"
+                checked={evergreen}
+                onCheckedChange={setEvergreen}
+                aria-label="Marcar como perenne"
+                className="mt-0.5"
+              />
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="editar-evergreen"
+                  className="flex cursor-pointer items-center gap-1.5 font-normal"
+                >
+                  <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  Contenido perenne
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Marca esta publicación como reutilizable para reciclarla y volver a publicarla
+                  más adelante.
+                </p>
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="previa">
@@ -252,6 +302,12 @@ export function DialogoEditar({
           abierto={gestionHashtags}
           onCerrar={() => setGestionHashtags(false)}
           marcas={marcas}
+        />
+
+        <ConstructorUtm
+          abierto={utmAbierto}
+          onCerrar={() => setUtmAbierto(false)}
+          onInsertar={(enlace) => setContenido((prev) => agregarEnlace(prev, enlace))}
         />
       </DialogContent>
     </Dialog>
