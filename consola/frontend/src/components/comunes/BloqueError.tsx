@@ -26,18 +26,16 @@ export function BloqueError({
   className?: string;
 }) {
   return (
-    <Card className={cn("border-destructive/40", className)}>
+    <Card className={className}>
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <AlertCircle className="h-6 w-6" />
-        </div>
+        <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
         <div className="space-y-1">
-          <p className="font-medium">{titulo}</p>
+          <p className="text-sm font-medium text-foreground">{titulo}</p>
           <p className="max-w-md text-sm text-muted-foreground">
             {mensaje ?? "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento."}
           </p>
         </div>
-        <Button onClick={onReintentar} disabled={cargando}>
+        <Button variant="outline" onClick={onReintentar} disabled={cargando}>
           <RefreshCw className={cn("h-4 w-4", cargando && "animate-spin")} />
           Reintentar
         </Button>

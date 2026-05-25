@@ -63,11 +63,12 @@ export default {
         // Paleta Tremor mapeada a tokens (modo claro).
         tremor: {
           brand: {
-            faint: "#fff3ed",
-            muted: "#ffc2a8",
-            subtle: "#ff9670",
-            DEFAULT: "#ff5a1f",
-            emphasis: "#d12d07",
+            // ACENTO charts (variante: MONOCROMO).
+            faint: "#f5f5f5",
+            muted: "#d4d4d4",
+            subtle: "#a3a3a3",
+            DEFAULT: "#404040",
+            emphasis: "#171717",
             inverted: "#ffffff",
           },
           background: {
@@ -76,11 +77,11 @@ export default {
             DEFAULT: "#ffffff",
             emphasis: "#374151",
           },
-          border: { DEFAULT: "#e5e7eb" },
-          ring: { DEFAULT: "#e5e7eb" },
+          border: { DEFAULT: "#f0f0f0" },
+          ring: { DEFAULT: "#f0f0f0" },
           content: {
-            subtle: "#9ca3af",
-            DEFAULT: "#6b7280",
+            subtle: "#b4b4b4",
+            DEFAULT: "#8f8f8f",
             emphasis: "#374151",
             strong: "#111827",
             inverted: "#ffffff",
@@ -89,11 +90,12 @@ export default {
         // Paleta Tremor (modo oscuro).
         "dark-tremor": {
           brand: {
-            faint: "#0b1729",
-            muted: "#711b11",
-            subtle: "#ad2009",
-            DEFAULT: "#ff5a1f",
-            emphasis: "#ff9670",
+            // ACENTO charts (variante: MONOCROMO) — modo oscuro.
+            faint: "#1a1a1a",
+            muted: "#404040",
+            subtle: "#737373",
+            DEFAULT: "#d4d4d4",
+            emphasis: "#fafafa",
             inverted: "#0b0f17",
           },
           background: {
@@ -102,8 +104,8 @@ export default {
             DEFAULT: "#111827",
             emphasis: "#d1d5db",
           },
-          border: { DEFAULT: "#1f2937" },
-          ring: { DEFAULT: "#1f2937" },
+          border: { DEFAULT: "#262626" },
+          ring: { DEFAULT: "#262626" },
           content: {
             subtle: "#6b7280",
             DEFAULT: "#9ca3af",
@@ -121,7 +123,25 @@ export default {
         "tremor-default": "0.5rem",
         "tremor-full": "9999px",
       },
+      fontFamily: {
+        // Tipografia del sistema de diseno (estilo Vercel/Geist, cargada en index.html).
+        sans: [
+          "Geist",
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Roboto",
+          "Helvetica Neue",
+          "Arial",
+          "sans-serif",
+        ],
+        mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
       fontSize: {
+        // Label de seccion guia Keni: mayusculas + tracking amplio + peso medio.
+        label: ["0.75rem", { lineHeight: "1rem", letterSpacing: "0.15em", fontWeight: "500" }],
         "tremor-label": ["0.75rem", { lineHeight: "1rem" }],
         "tremor-default": ["0.875rem", { lineHeight: "1.25rem" }],
         "tremor-title": ["1.125rem", { lineHeight: "1.75rem" }],

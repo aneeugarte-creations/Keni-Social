@@ -1,10 +1,31 @@
 <!doctype html>
-<html lang="es-MX" class="dark">
+<html lang="es-MX">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
+    <!--
+      Tema aplicado antes de pintar para evitar parpadeo. Respeta lo guardado en
+      localStorage (clave keni-consola-tema, que persiste el TemaProvider) y si no
+      hay nada cae a la preferencia del SO. Debe coincidir con `temaInicial()`.
+    -->
+    <script>
+      try {
+        var t = window.localStorage.getItem("keni-consola-tema");
+        var oscuro =
+          t === "oscuro" ||
+          (t !== "claro" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        if (oscuro) document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
+    <!-- Geist: tipografia del sistema de diseno (estilo Vercel). -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <title>KENI · Consola</title>
   </head>
   <body>

@@ -1,15 +1,12 @@
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+
 import { iconoRed } from "../publicaciones/meta";
 
-/** id de red usado en `htmlFor`/`id` (sin colisiones con otros campos). */
-function idCheck(red: string): string {
-  return `red-${red}`;
-}
-
 /**
- * Grupo de checkboxes para elegir las redes objetivo de la generación.
- * Las opciones (id + nombre) vienen del backend; el icono lo añade `meta.ts`.
+ * Selector de redes objetivo como chips (pastillas) de selección múltiple.
+ * Sobrio, sin casillas: seleccionada = relleno gris sutil + texto en foreground;
+ * sin seleccionar = solo contorno + gris. Las opciones vienen del backend.
  */
 export function SelectorRedes({
   opciones,
@@ -23,29 +20,33 @@ export function SelectorRedes({
   disabled?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-2">
       <Label>Redes</Label>
-      <div className="flex flex-wrap gap-x-5 gap-y-2.5">
+      <div className="flex flex-wrap gap-2">
         {opciones.map((red) => {
           const Icono = iconoRed(red.id);
-          const id = idCheck(red.id);
+          const activa = seleccionadas.has(red.id);
           return (
-            <div key={red.id} className="flex items-center gap-2">
-              <Checkbox
-                id={id}
-                checked={seleccionadas.has(red.id)}
-                onCheckedChange={(v) => onCambio(red.id, v)}
-                disabled={disabled}
-                aria-label={red.nombre}
+            <button
+              key={red.id}
+              type="button"
+              role="checkbox"
+              aria-checked={activa}
+              aria-label={red.nombre}
+              disabled={disabled}
+              onClick={() => onCambio(red.id, !activa)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                activa
+                  ? "border-foreground/20 bg-accent font-medium text-foreground"
+                  : "border-border font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
+            >
+              <Icono
+                className={cn("h-4 w-4", activa ? "text-foreground" : "text-muted-foreground")}
               />
-              <Label
-                htmlFor={id}
-                className="flex cursor-pointer items-center gap-1.5 font-normal"
-              >
-                <Icono className="h-4 w-4 text-muted-foreground" />
-                {red.nombre}
-              </Label>
-            </div>
+              {red.nombre}
+            </button>
           );
         })}
       </div>

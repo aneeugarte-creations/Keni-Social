@@ -259,13 +259,11 @@ export default function GenerarCopy() {
           titulo="Generar copy"
           descripcion="Crea borradores de publicaciones con las skills editoriales para cada marca."
         />
-        <Card className="border-destructive/40">
+        <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertCircle className="h-6 w-6" />
-            </div>
+            <AlertCircle className="h-6 w-6 text-destructive" aria-hidden="true" />
             <div className="space-y-1">
-              <p className="font-medium">No se pudieron cargar las skills</p>
+              <p className="text-sm font-medium text-foreground">No se pudieron cargar las skills</p>
               <p className="max-w-md text-sm text-muted-foreground">
                 {skillsQuery.error instanceof Error
                   ? skillsQuery.error.message
@@ -273,6 +271,7 @@ export default function GenerarCopy() {
               </p>
             </div>
             <Button
+              variant="outline"
               onClick={() => void skillsQuery.refetch()}
               disabled={skillsQuery.isFetching}
             >
