@@ -5,6 +5,26 @@ Todos los cambios relevantes de este proyecto se documentan en este archivo.
 El formato se basa en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
+## [No publicado]
+
+### Verificación de procedencia de video (experimental)
+
+- Nueva skill **`verifica-video`**: pega el enlace de un video viral (X, TikTok,
+  Facebook, Instagram, YouTube o un archivo local) y dice si **parece nuevo o si
+  ya circulaba desde antes** (material reciclado / re-viralizado), antes de
+  decidir si retomarlo. Resuelve el "me como 20 minutos comprobando si el video
+  es de verdad de hoy o salió hace años".
+- Motor local y **gratis** (`analiza-video.py`, solo stdlib + binarios): fecha de
+  subida con `yt-dlp`, fotogramas con `ffmpeg`, lectura de **fechas/años en
+  pantalla** (timestamp de cámara, marcas de agua) con OCR (`tesseract`), y
+  **enlaces de búsqueda inversa listos para un clic** (TinEye ordenado por más
+  antiguo, Google Lens, Yandex, Bing) sobre la miniatura pública. Consulta la
+  Google Fact Check API si hay `GOOGLE_FACTCHECK_API_KEY` (opcional).
+- **Privacidad por diseño:** no sube los fotogramas a ningún servicio ni scrapea
+  buscadores; la búsqueda inversa la confirma el humano con un clic. Abre con el
+  bloque veredicto + leyenda como el resto de skills y **el humano decide**.
+- Disponible también en la **Consola** (grupo *experimentales*) vía `keni.yaml`.
+
 ## [0.2.0] - 2026-05-24
 
 Primera versión presentable como producto: el flujo completo de producción de
