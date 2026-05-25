@@ -90,8 +90,12 @@ import type {
   RespuestaSkillMd,
   RespuestaSkills,
   RespuestaSubContextos,
+  RespuestaSugerencia,
+  RespuestaSugerencias,
   RespuestaTareas,
   RespuestaVistaPromptSkill,
+  CuerpoActualizarSugerencia,
+  CuerpoCrearSugerencia,
   Run,
 } from "@/types";
 
@@ -479,4 +483,17 @@ export const api = {
     peticion<RespuestaMensaje>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
       metodo: "DELETE",
     }),
+
+  // --- Buzón de sugerencias ---
+  sugerencias: (signal?: AbortSignal) =>
+    peticion<RespuestaSugerencias>("/sugerencias", { signal }),
+  crearSugerencia: (cuerpo: CuerpoCrearSugerencia) =>
+    peticion<RespuestaSugerencia>("/sugerencias", { metodo: "POST", json: cuerpo }),
+  actualizarSugerencia: (id: string, cuerpo: CuerpoActualizarSugerencia) =>
+    peticion<RespuestaSugerencia>(`/sugerencias/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarSugerencia: (id: string) =>
+    peticion<RespuestaMensaje>(`/sugerencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 };

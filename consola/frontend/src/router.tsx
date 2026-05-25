@@ -16,6 +16,7 @@ const Agentes = lazy(() => import("@/pages/Agentes"));
 const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
+const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
       { path: "monitor", element: <Monitor /> },
       // Ajustes
       { path: "configuracion", element: <Configuracion /> },
+      { path: "sugerencias", element: <Sugerencias /> },
       // Redirecciones de páginas fusionadas/retiradas (issues #87, #88):
       // Conexiones se fusionó en Configuración; Estado pasó a la topbar.
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
