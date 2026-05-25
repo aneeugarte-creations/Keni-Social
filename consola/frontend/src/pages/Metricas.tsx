@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
@@ -14,6 +16,38 @@ import { Descargas } from "./metricas/Descargas";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { Kpis } from "./metricas/Kpis";
 import { TablaCuentas } from "./metricas/TablaCuentas";
+
+/** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
+const ETIQUETA_TODAS = "Todas las marcas";
+
+/**
+ * Badge de la fuente de datos activa. Avisa de un vistazo si lo que se ve es
+ * una muestra de demostración (ámbar) o datos reales (verde), para que nunca se
+ * confunda una demo con producción. Consume `GET /api/config` (`fuente`).
+ */
+function BadgeFuente() {
+  const { data } = useQuery({
+    queryKey: ["config"],
+    queryFn: ({ signal }) => api.config(signal),
+    // El badge es informativo: si /api/config falla, no estorbamos al dashboard.
+    retry: false,
+  });
+
+  if (!data) return null;
+  const esMuestra = data.fuente === "muestra";
+  return (
+    <Badge
+      variant={esMuestra ? "aviso" : "ok"}
+      title={
+        esMuestra
+          ? "Estás viendo datos de muestra (demostración), no métricas reales."
+          : "Estás viendo métricas reales de tus cuentas conectadas."
+      }
+    >
+      {esMuestra ? "Datos de muestra" : "Datos reales"}
+    </Badge>
+  );
+}
 
 /**
  * Dashboard de Métricas multi-marca.
@@ -70,9 +104,32 @@ function CabeceraMetricas({ acciones }: { acciones?: React.ReactNode }) {
 /** Cuerpo del dashboard una vez que tenemos las opciones disponibles. */
 function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   const { marcas, rangos } = opciones;
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  const [marca, setMarca] = React.useState(MARCA_TODAS);
+  // Marca preseleccionada al llegar desde otra página (p. ej. "Ver métricas"
+  // desde Publicaciones). El id viaja en forma `id_metricas` por el `state` del
+  // router o por `?marca=`; solo lo aceptamos si existe en el catálogo, si no,
+  // caemos a "Todas".
+  const marcaInicial = React.useMemo(() => {
+    const estado = location.state as { marca?: string } | null;
+    const desdeQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
+    const candidata = estado?.marca ?? desdeQuery;
+    return candidata && marcas.some((m) => m.id === candidata) ? candidata : MARCA_TODAS;
+  }, [location.state, location.search, marcas]);
+
+  const [marca, setMarca] = React.useState(marcaInicial);
   const [rango, setRango] = React.useState(rangos[0]?.id ?? "");
+
+  // Limpiamos el `state` de navegación tras consumirlo, para que no reaparezca
+  // al volver atrás o refrescar (la query, si la hubiera, se deja intacta).
+  React.useEffect(() => {
+    if ((location.state as { marca?: string } | null)?.marca != null) {
+      navigate(location.pathname + location.search, { replace: true, state: null });
+    }
+    // Solo al montar / cambiar el state de navegación.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   const marca_ = marcaParam(marca);
 
@@ -84,6 +141,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   const acciones = (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <BadgeFuente />
       <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} />
       <SelectorRango rangos={rangos} valor={rango} onCambio={setRango} />
     </div>
@@ -108,7 +166,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Mostrando <span className="font-medium text-foreground">{reporteQuery.data.marca}</span>{" "}
+              Mostrando{" "}
+              <span className="font-medium text-foreground">
+                {reporteQuery.data.marca || ETIQUETA_TODAS}
+              </span>{" "}
               · {reporteQuery.data.etiqueta_rango}
             </p>
             <Descargas rango={rango} marca={marca_} />
@@ -117,7 +178,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <Kpis total={reporteQuery.data.total} />
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
           <TablaCuentas cuentas={reporteQuery.data.cuentas} />
-          <CompararPeriodos opciones={opciones} />
+          <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>
       )}
     </>

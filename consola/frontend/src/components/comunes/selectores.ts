@@ -38,3 +38,27 @@ export function redParam(valor: string): string | undefined {
 export function desdeRed(red: string | null | undefined): string {
   return red ? red : RED_TODAS;
 }
+
+/**
+ * Traduce un id de marca del catálogo de Métricas (forma `id_metricas`, con
+ * guion_bajo, p. ej. `claro_sports`) al `id` CANÓNICO que usa el resto de la
+ * consola (slug-guion, p. ej. `claro-sports`).
+ *
+ * La frontera de Métricas habla en `id_metricas`, mientras que Generar copy y
+ * Publicaciones trabajan con el id canónico (ver `keni_consola/marcas.py`). La
+ * única diferencia entre ambas formas es el separador, así que basta cambiar
+ * `_` por `-`. La página destino valida el id contra su propio catálogo: si no
+ * existe, su selector simplemente no preselecciona nada (sin inventar datos).
+ */
+export function marcaCanonicaDesdeMetricas(idMetricas: string): string {
+  return idMetricas.replace(/_/g, "-");
+}
+
+/**
+ * Traducción inversa de `marcaCanonicaDesdeMetricas`: del `id` canónico
+ * (slug-guion) al `id_metricas` (guion_bajo) que usa el catálogo de Métricas.
+ * Útil para enlazar desde Publicaciones (id canónico) hacia Métricas.
+ */
+export function marcaMetricasDesdeCanonica(idCanonico: string): string {
+  return idCanonico.replace(/-/g, "_");
+}

@@ -117,19 +117,30 @@ export default function GenerarCopy() {
   const [respuesta, setRespuesta] = React.useState<RespuestaEjecutarSkill | null>(null);
   const inputArchivoRef = React.useRef<HTMLInputElement>(null);
 
-  // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes).
-  // Volcamos el texto del `state` de navegación y lo limpiamos para que no
-  // reaparezca al volver atrás o refrescar.
+  // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes,
+  // o "Generar copy" desde Métricas con una marca preseleccionada).
+  // Aceptamos `texto` y `marca` por el `state` del router y, como alternativa,
+  // `?marca=` en la query (enlaces directos). Limpiamos el `state` para que no
+  // reaparezca al volver atrás o refrescar; la query se deja intacta.
   React.useEffect(() => {
-    const prefill = (location.state as { texto?: string } | null)?.texto;
-    if (typeof prefill === "string" && prefill.length > 0) {
+    const estado = location.state as { texto?: string; marca?: string } | null;
+    const prefillTexto = estado?.texto;
+    const marcaQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
+    const prefillMarca = estado?.marca ?? marcaQuery;
+
+    if (typeof prefillTexto === "string" && prefillTexto.length > 0) {
       setModo("texto");
-      setTexto(prefill);
+      setTexto(prefillTexto);
+    }
+    if (typeof prefillMarca === "string" && prefillMarca.length > 0) {
+      setMarcaId(prefillMarca);
+    }
+    if (estado?.texto != null || estado?.marca != null) {
       navigate(location.pathname, { replace: true, state: null });
     }
-    // Solo al montar / cambiar el state de navegación.
+    // Solo al montar / cambiar el state o la query de navegación.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state]);
+  }, [location.state, location.search]);
 
   // Por defecto, todas las redes marcadas (en cuanto conocemos el catálogo).
   React.useEffect(() => {

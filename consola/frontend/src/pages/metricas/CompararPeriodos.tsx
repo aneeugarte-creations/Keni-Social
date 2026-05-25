@@ -42,12 +42,38 @@ function deltaType(variacionPct: number): DeltaType {
   return "unchanged";
 }
 
-export function CompararPeriodos({ opciones }: { opciones: OpcionesMetricas }) {
+export function CompararPeriodos({
+  opciones,
+  marcaActual = MARCA_TODAS,
+  rangoActual,
+}: {
+  opciones: OpcionesMetricas;
+  /** Marca seleccionada arriba en el dashboard: se hereda como punto de partida. */
+  marcaActual?: string;
+  /** Rango seleccionado arriba: se usa como rango B (comparado) por defecto. */
+  rangoActual?: string;
+}) {
   const rangos = opciones.rangos;
-  // Por defecto: comparar los dos primeros rangos disponibles (B = más reciente).
-  const [rangoA, setRangoA] = React.useState(rangos[1]?.id ?? rangos[0]?.id ?? "");
-  const [rangoB, setRangoB] = React.useState(rangos[0]?.id ?? "");
-  const [marca, setMarca] = React.useState(MARCA_TODAS);
+  // B (comparado) hereda el rango que se está viendo arriba; A (origen) parte de
+  // otro rango distinto para que la comparativa tenga sentido por defecto.
+  const rangoBInicial = rangoActual ?? rangos[0]?.id ?? "";
+  const rangoAInicial =
+    rangos.find((r) => r.id !== rangoBInicial)?.id ?? rangos[0]?.id ?? "";
+  const [rangoA, setRangoA] = React.useState(rangoAInicial);
+  const [rangoB, setRangoB] = React.useState(rangoBInicial);
+  // La marca hereda la selección del dashboard; el usuario puede cambiarla aquí.
+  const [marca, setMarca] = React.useState(marcaActual);
+
+  // Si arriba cambia la marca, la comparativa la sigue (sin perder los rangos A/B
+  // que el usuario haya ajustado a mano).
+  React.useEffect(() => {
+    setMarca(marcaActual);
+  }, [marcaActual]);
+
+  // Si arriba cambia el rango visible, lo reflejamos como rango B (comparado).
+  React.useEffect(() => {
+    if (rangoActual) setRangoB(rangoActual);
+  }, [rangoActual]);
 
   const habilitado = Boolean(rangoA && rangoB);
   const marca_ = marcaParam(marca);
