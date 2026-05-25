@@ -79,11 +79,16 @@ export interface CuerpoGuardarClaudeMd {
 
 // --- Agentes (marca = carpeta con CLAUDE.md, sub-contextos y runs) ---
 
-/** Resumen de un agente (una marca = su carpeta) en el listado. */
+/** Resumen de un agente (carpeta con CLAUDE.md, sub-contextos y runs) en el listado. */
 export interface AgenteResumen {
   id: string;
   nombre: string;
   ruta: string;
+  /**
+   * `true` para las 5 marcas de serie (no se pueden renombrar ni borrar);
+   * `false` para los agentes genéricos (creados/conectados, gestionables).
+   */
+  es_marca: boolean;
   tiene_claude_md: boolean;
   n_publicaciones: number;
   n_runs: number;
@@ -91,6 +96,34 @@ export interface AgenteResumen {
 
 export interface RespuestaAgentes {
   agentes: AgenteResumen[];
+}
+
+/** Una plantilla de CLAUDE.md disponible al crear un agente genérico. */
+export interface PlantillaAgente {
+  id: string;
+  nombre: string;
+}
+
+/** Cuerpo para crear un agente genérico. */
+export interface CuerpoCrearAgente {
+  nombre: string;
+  /** Plantilla de CLAUDE.md (p. ej. general/noticias/deportes/podcast/social). */
+  tipo?: string;
+}
+
+/** Cuerpo para registrar (conectar) una subcarpeta existente de la raíz. */
+export interface CuerpoConectarAgente {
+  carpeta: string;
+}
+
+/** Cuerpo para renombrar el nombre visible de un agente genérico. */
+export interface CuerpoRenombrarAgente {
+  nombre: string;
+}
+
+/** Respuesta al crear o conectar un agente. */
+export interface RespuestaAgente {
+  agente: AgenteResumen;
 }
 
 /** Un sub-contexto del agente: un archivo `contexto/*.md`. */

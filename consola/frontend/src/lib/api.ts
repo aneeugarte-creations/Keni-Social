@@ -11,6 +11,9 @@
 import type {
   AgenteDetalle,
   CompararMetricas,
+  CuerpoConectarAgente,
+  CuerpoCrearAgente,
+  CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPlantilla,
   CuerpoActualizarPublicacion,
@@ -43,6 +46,7 @@ import type {
   OpcionesMetricas,
   OpcionesPublicaciones,
   ReporteMetricas,
+  RespuestaAgente,
   RespuestaAgentes,
   RespuestaCarpetas,
   RespuestaConectarRed,
@@ -208,10 +212,23 @@ export const api = {
   crearCarpeta: (cuerpo: CuerpoCrearCarpeta) =>
     peticion<RespuestaCrearCarpeta>("/carpetas", { metodo: "POST", json: cuerpo }),
 
-  // --- Agentes (marca = carpeta con CLAUDE.md, sub-contextos y runs) ---
+  // --- Agentes (carpeta con CLAUDE.md, sub-contextos y runs) ---
+  // Conjunto abierto: 5 marcas de serie (es_marca) + agentes genéricos
+  // (crear/conectar/renombrar/borrar).
   agentes: (signal?: AbortSignal) => peticion<RespuestaAgentes>("/agentes", { signal }),
   agente: (id: string, signal?: AbortSignal) =>
     peticion<AgenteDetalle>(`/agentes/${encodeURIComponent(id)}`, { signal }),
+  crearAgente: (cuerpo: CuerpoCrearAgente) =>
+    peticion<RespuestaAgente>("/agentes", { metodo: "POST", json: cuerpo }),
+  conectarAgente: (cuerpo: CuerpoConectarAgente) =>
+    peticion<RespuestaAgente>("/agentes/conectar", { metodo: "POST", json: cuerpo }),
+  renombrarAgente: (id: string, cuerpo: CuerpoRenombrarAgente) =>
+    peticion<RespuestaAgente>(`/agentes/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarAgente: (id: string) =>
+    peticion<RespuestaMensaje>(`/agentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   guardarClaudeMdAgente: (id: string, cuerpo: CuerpoGuardarClaudeMd) =>
     peticion<RespuestaMensaje>(`/agentes/${encodeURIComponent(id)}/claude-md`, {
       metodo: "PUT",
