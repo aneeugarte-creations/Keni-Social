@@ -1,13 +1,11 @@
-import { Loader2, Menu, Moon, Sun, X } from "lucide-react";
+import { Loader2, Menu, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
-import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NAVEGACION } from "@/components/layout/navegacion";
 import { Button } from "@/components/ui/button";
-import { useTema } from "@/hooks/tema-contexto";
 import { cn } from "@/lib/utils";
 
 /** Fallback mientras se descarga el chunk de una pagina (lazy/Suspense). */
@@ -30,11 +28,10 @@ function tituloDeRuta(pathname: string): string {
 
 /**
  * Cascaron de la aplicacion: sidebar a la izquierda, topbar con el titulo de la
- * seccion y el toggle de modo oscuro, y el area de contenido (Outlet del router).
- * En pantallas chicas el sidebar se vuelve un panel deslizable.
+ * seccion, y el area de contenido (Outlet del router). En pantallas chicas el
+ * sidebar se vuelve un panel deslizable.
  */
 export function AppShell() {
-  const { esOscuro, alternar } = useTema();
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
 
@@ -83,19 +80,6 @@ export function AppShell() {
           </div>
 
           <h1 className="hidden text-sm font-medium text-foreground md:block">{titulo}</h1>
-
-          <div className="ml-auto flex items-center gap-1">
-            <IndicadorEstado />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={alternar}
-              aria-label={esOscuro ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
-              title={esOscuro ? "Modo claro" : "Modo oscuro"}
-            >
-              {esOscuro ? <Sun /> : <Moon />}
-            </Button>
-          </div>
         </header>
 
         <main className={cn("flex-1 overflow-y-auto")}>

@@ -1,14 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
+import { PanelEstado } from "@/components/layout/PanelEstado";
 import type { RespuestaEstado } from "@/types";
 
 /**
- * Test del indicador de salud de la topbar (antes página "Estado").
- * Cubre el camino feliz (datos en el popover) y el de error, y verifica que
- * whisper/ffmpeg se agrupan bajo "Herramientas locales".
+ * Test del panel de autodiagnóstico (antes el popover "Estado" de la topbar,
+ * ahora una sección de Configuración). Cubre el camino feliz (chequeos, resumen
+ * y siguiente paso visibles) y el de error, y verifica que whisper/ffmpeg se
+ * agrupan bajo "Herramientas locales".
  */
 
 const DATOS: RespuestaEstado = {
@@ -35,24 +36,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("IndicadorEstado", () => {
-  it("muestra los chequeos, el resumen y el siguiente paso al abrir el popover", async () => {
+describe("PanelEstado", () => {
+  it("muestra los chequeos, el resumen y el siguiente paso", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify(DATOS), { status: 200 })),
     );
 
-    renderConQuery(<IndicadorEstado />);
+    renderConQuery(<PanelEstado />);
 
-    // Resumen visible en el botón (aria-label/title) en cuanto cargan los datos.
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Casi listo: revisa un detalle." }),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Casi listo: revisa un detalle.")).toBeInTheDocument();
     });
-
-    // Abre el popover.
-    fireEvent.click(screen.getByRole("button", { name: "Casi listo: revisa un detalle." }));
 
     expect(screen.getByText("Python")).toBeInTheDocument();
     expect(screen.getByText("Credenciales Meta")).toBeInTheDocument();
@@ -62,6 +57,8 @@ describe("IndicadorEstado", () => {
     expect(
       screen.getByText("Configura tus credenciales en Configuración."),
     ).toBeInTheDocument();
+    // Botón para volver a comprobar.
+    expect(screen.getByRole("button", { name: "Volver a comprobar" })).toBeInTheDocument();
   });
 
   it("muestra un estado de error si la API falla", async () => {
@@ -73,16 +70,12 @@ describe("IndicadorEstado", () => {
       ),
     );
 
-    renderConQuery(<IndicadorEstado />);
+    renderConQuery(<PanelEstado />);
 
     await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "No se pudo comprobar el estado" }),
-      ).toBeInTheDocument();
+      expect(screen.getByText("No se pudo ejecutar el autodiagnóstico.")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "No se pudo comprobar el estado" }));
-
-    expect(screen.getByText("No se pudo ejecutar el autodiagnóstico.")).toBeInTheDocument();
+    expect(screen.getByText("Vuelve a intentarlo en un momento.")).toBeInTheDocument();
   });
 });

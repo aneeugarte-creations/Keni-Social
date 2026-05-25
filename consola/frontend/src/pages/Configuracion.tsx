@@ -14,10 +14,12 @@ import {
   Check,
   Info,
   Loader2,
+  Moon,
   Plug,
   RefreshCw,
   Save,
   ShieldCheck,
+  Sun,
   Trash2,
   X,
 } from "lucide-react";
@@ -26,6 +28,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PanelEstado } from "@/components/layout/PanelEstado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +50,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useTema } from "@/hooks/tema-contexto";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { RedConexion } from "@/types";
@@ -655,6 +659,74 @@ function SeccionImagen() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sección: Apariencia (tema claro/oscuro)                            */
+/* ------------------------------------------------------------------ */
+
+/** Selector de tema claro/oscuro. El tema se guarda en este equipo. */
+function SeccionApariencia() {
+  const { esOscuro, fijar } = useTema();
+
+  const opciones: { id: "claro" | "oscuro"; etiqueta: string; icono: typeof Sun }[] = [
+    { id: "claro", etiqueta: "Claro", icono: Sun },
+    { id: "oscuro", etiqueta: "Oscuro", icono: Moon },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Apariencia</CardTitle>
+        <CardDescription>
+          Elige el tema de la consola. La preferencia se guarda{" "}
+          <strong>solo en este equipo</strong>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div role="radiogroup" aria-label="Tema" className="flex flex-wrap gap-2">
+          {opciones.map((opcion) => {
+            const Icono = opcion.icono;
+            const activa = opcion.id === "oscuro" ? esOscuro : !esOscuro;
+            return (
+              <Button
+                key={opcion.id}
+                type="button"
+                role="radio"
+                aria-checked={activa}
+                variant={activa ? "default" : "outline"}
+                onClick={() => fijar(opcion.id)}
+              >
+                <Icono className="h-4 w-4" />
+                {opcion.etiqueta}
+              </Button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sección: Estado del sistema                                        */
+/* ------------------------------------------------------------------ */
+
+/** Autodiagnóstico del sistema (antes en la topbar) como sección de página. */
+function SeccionEstado() {
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">Estado del sistema</CardTitle>
+        <CardDescription>
+          Revisamos si tu equipo está listo para trabajar. Las herramientas locales son opcionales.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <PanelEstado />
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Página                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -697,6 +769,8 @@ export default function Configuracion() {
         <SeccionDatos />
         <SeccionRedes />
         <SeccionImagen />
+        <SeccionApariencia />
+        <SeccionEstado />
       </div>
     </>
   );
