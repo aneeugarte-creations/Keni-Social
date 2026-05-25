@@ -36,11 +36,13 @@ Leyenda: ✅ = listo · ⚠️ = revísalo tú antes de publicar · ❌ = proble
    |---|---|---|
    | Recortar a formato (9:16 / 4:5 / 1:1 / 16:9), "las 3 medidas" | Determinista | `python3 editar.py recortar --foto F --formato feed` (o `--todos`) |
    | Cambiar tamaño / peso | Determinista | `python3 editar.py redimensionar --foto F --max 1080` |
+   | Placa / tarjeta de texto (cita o dato) en marca, con o sin foto | Determinista | `python3 editar.py placa --texto "..." --marca M --formato feed [--fuente-cita "— Autor"] [--foto F]` |
    | Logo + pleca + archivo de breaking sobre una foto | Determinista | `python3 ../breaking-express/componer.py --foto F --marca M --overlay <breaking.png>` |
    | Generar una **ilustración/fondo/gráfico** (no documental) | Generativo (IA) | `python3 generar.py --prompt "..." --marca M --formato feed` |
    | "Altera/recrea/quita-pon con IA" sobre una **foto real** | ❌ **Ninguno** | Niégate (§3) y propón la vía determinista |
 
    - Si la ruta de un script no resuelve, localízala con `Glob` (`**/estudio-imagen/editar.py`, `**/breaking-express/componer.py`).
+   - **Entradas de `placa`:** `--texto` (la cita o el dato) y `--marca` son obligatorios; opcionales `--formato` (vertical/feed/cuadrado/horizontal), `--fuente-cita` ("— Autor", va debajo más pequeña), `--foto` (fondo: recorte + degradado + texto) y `--salida`. Lee color/estilo de `../breaking-express/marcas.json` (UnoTV sobrio; Claro Sports en mayúsculas y condensada).
    - **Generativo sin API key:** `generar.py` no falla: te da el **prompt de dirección de arte** para pegar en tu herramienta (Nano Banana/Gemini, etc.) y cómo configurar la key. Trasládalo al usuario.
    - **Generativo sobre foto real:** llama a `generar.py` con `--foto-real` para que aplique el guardrail (se niega y te redirige).
 
