@@ -441,6 +441,96 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
     return texto, metricas
 
 
+@dataclass
+class AcumuladorStream:
+    """Acumula el progreso de un run `--output-format stream-json --verbose`.
+
+    El stream emite UN objeto JSON por linea (NDJSON):
+      - `system`/`init`  -> arranque (modelo/sesion); marca `iniciado`.
+      - `assistant`      -> un turno del agente; suma tokens PARCIALES de su
+                            `message.usage` (input/output) y cuenta el turno.
+      - `result`         -> objeto FINAL (misma forma que `--output-format json`):
+                            texto en `result`, metricas finales, estado terminal.
+
+    `procesar_linea` consume una linea cruda y actualiza el estado. Es PURO respecto a
+    I/O (no toca disco ni subprocess); el hilo lector lo alimenta y, tras cada avance,
+    persiste `metricas_parciales()` en el YAML del run. Tolerante: lineas vacias o no
+    JSON se ignoran. Si llega un `result` de error, deja `error=True` y `mensaje_error`
+    (en espanol) para que el llamante marque el run en error.
+    """
+
+    iniciado: bool = False
+    turnos: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    modelo: str | None = None
+    session_id: str | None = None
+    final: MetricasRun | None = None
+    texto: str = ""
+    terminado: bool = False
+    error: bool = False
+    mensaje_error: str = ""
+
+    def procesar_linea(self, linea: str) -> None:
+        """Consume UNA linea NDJSON del stream y actualiza el estado acumulado."""
+        crudo = (linea or "").strip()
+        if not crudo:
+            return
+        try:
+            evento = json.loads(crudo)
+        except (json.JSONDecodeError, ValueError):
+            return  # ruido en el stream: lo ignoramos (degradacion robusta)
+        if not isinstance(evento, dict):
+            return
+        tipo = evento.get("type")
+        if tipo == "system" and evento.get("subtype") == "init":
+            self.iniciado = True
+            m = evento.get("model")
+            if isinstance(m, str) and m and self.modelo is None:
+                self.modelo = m
+            sid = evento.get("session_id")
+            if isinstance(sid, str) and sid:
+                self.session_id = sid
+        elif tipo == "assistant":
+            self.iniciado = True
+            self.turnos += 1
+            mensaje = evento.get("message")
+            if isinstance(mensaje, dict):
+                uso = mensaje.get("usage")
+                if isinstance(uso, dict):
+                    ti = _entero(uso.get("input_tokens"))
+                    to = _entero(uso.get("output_tokens"))
+                    if ti is not None:
+                        self.tokens_in += ti
+                    if to is not None:
+                        self.tokens_out += to
+                modelo = mensaje.get("model")
+                if isinstance(modelo, str) and modelo and self.modelo is None:
+                    self.modelo = modelo
+        elif tipo == "result":
+            self.terminado = True
+            try:
+                texto, metricas = parsear_resultado_json(crudo)
+            except SkillError as e:
+                self.error = True
+                self.mensaje_error = str(e)
+                return
+            self.texto = texto
+            self.final = metricas
+
+    def metricas_parciales(self) -> MetricasRun | None:
+        """Metricas PARCIALES acumuladas hasta ahora (turnos/tokens), o None si aun nada."""
+        if not (self.turnos or self.tokens_in or self.tokens_out):
+            return None
+        return MetricasRun(
+            tokens_in=self.tokens_in or None,
+            tokens_out=self.tokens_out or None,
+            num_turns=self.turnos or None,
+            modelo=self.modelo,
+            session_id=self.session_id,
+        )
+
+
 def _runner(prompt: str, *, cwd: Path, timeout: int) -> tuple[str, MetricasRun | None]:
     """Llama a `claude -p "<prompt>" --output-format json` por subprocess.
 

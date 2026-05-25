@@ -102,8 +102,11 @@ export interface SubContexto {
 /** Modo de ejecución de un run del agente. */
 export type ModoRun = "headless" | "interactivo";
 
-/** Estado del ciclo de vida de un run. */
-export type EstadoRun = "completado" | "error" | "lanzado" | string;
+/**
+ * Estado del ciclo de vida de un run. `ejecutando` = corriendo en segundo plano
+ * (se sondea hasta `completado`/`error`); `lanzado` = run interactivo abierto.
+ */
+export type EstadoRun = "completado" | "error" | "ejecutando" | "lanzado" | string;
 
 /**
  * Métricas de monitorización de un run IA, tal y como las reporta el CLI cuando

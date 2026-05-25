@@ -201,6 +201,8 @@ def test_metricas_a_dict_omite_none_y_extras():
 
 
 def _runner_con_metricas(texto: str, metricas: skills.MetricasRun):
+    """Runner SINCRONO para la generacion de copy (skills.ejecutar sigue siendo sincrona)."""
+
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         return texto, metricas
 
@@ -213,18 +215,33 @@ _METRICAS_DEMO = skills.MetricasRun(
 )
 
 
+def _lanzador_con_metricas(texto: str, metricas: skills.MetricasRun):
+    """Fake del lanzador background: completa el run con `texto` + metricas (sin Popen)."""
+
+    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+        agentes.actualizar_run(
+            marca_id, run_id,
+            {
+                "estado": "completado",
+                "salida": texto,
+                "metricas": skills.metricas_a_dict(metricas),
+                "fecha_fin": agentes.ahora_iso(),
+            },
+        )
+
+    return lanzar
+
+
 # --------------------------------------------------------------------------- #
 # Persistencia: metricas en el run YAML del agente                            #
 # --------------------------------------------------------------------------- #
 
 
-def test_run_headless_guarda_metricas_en_yaml(entorno, monkeypatch):
-    monkeypatch.setattr(
-        skills, "_runner", _runner_con_metricas("salida con metricas", _METRICAS_DEMO)
-    )
-    c = _cliente()
+def test_run_headless_guarda_metricas_en_yaml(entorno):
+    c = _cliente(lanzar_run=_lanzador_con_metricas("salida con metricas", _METRICAS_DEMO))
     run = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]
-    # El run devuelto trae las metricas.
+    # El run devuelto trae las metricas (el lanzador fake ya completo el run).
+    assert run["estado"] == "completado"
     assert run["metricas"]["tokens_in"] == 130
     assert run["metricas"]["total_cost_usd"] == pytest.approx(0.0123)
     assert run["metricas"]["modelo"] == "claude-opus-4-7"
@@ -234,12 +251,15 @@ def test_run_headless_guarda_metricas_en_yaml(entorno, monkeypatch):
     assert detalle["metricas"]["duration_ms"] == 4200
 
 
-def test_run_headless_error_no_tiene_metricas(entorno, monkeypatch):
-    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        raise skills.SkillError("El asistente terminó con error: x")
+def test_run_headless_error_no_tiene_metricas(entorno):
+    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
+        agentes.actualizar_run(
+            marca_id, run_id,
+            {"estado": "error", "salida": "El asistente terminó con error: x",
+             "fecha_fin": agentes.ahora_iso()},
+        )
 
-    monkeypatch.setattr(skills, "_runner", runner)
-    c = _cliente()
+    c = _cliente(lanzar_run=lanzar)
     run = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]
     assert run["estado"] == "error"
     assert run["metricas"] is None
@@ -292,11 +312,8 @@ def test_historial_skill_sin_metricas_devuelve_none(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_runs_globales_agrega_de_varios_agentes(entorno, monkeypatch):
-    monkeypatch.setattr(
-        skills, "_runner", _runner_con_metricas("ok", _METRICAS_DEMO)
-    )
-    c = _cliente()
+def test_runs_globales_agrega_de_varios_agentes(entorno):
+    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
     c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "uno"})
     c.post("/api/agentes/claro-sports/runs", json={"prompt": "dos"})
 
@@ -307,16 +324,14 @@ def test_runs_globales_agrega_de_varios_agentes(entorno, monkeypatch):
     assert agentes_vistos == {_MARCA, "claro-sports"}
     primero = runs[0]
     assert set(primero) == {
-        "id", "agente", "agente_nombre", "prompt", "modo", "estado", "fecha_inicio", "metricas"
+        "id", "agente", "agente_nombre", "prompt", "modo", "estado", "motivo",
+        "fecha_inicio", "metricas",
     }
     assert primero["metricas"]["tokens_in"] == 130
 
 
-def test_runs_agregados_totales_por_agente_y_dia(entorno, monkeypatch):
-    monkeypatch.setattr(
-        skills, "_runner", _runner_con_metricas("ok", _METRICAS_DEMO)
-    )
-    c = _cliente()
+def test_runs_agregados_totales_por_agente_y_dia(entorno):
+    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
     c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "uno"})
     c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "dos"})
     c.post("/api/agentes/claro-sports/runs", json={"prompt": "tres"})

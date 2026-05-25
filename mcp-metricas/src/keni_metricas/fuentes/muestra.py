@@ -13,7 +13,7 @@ contrastados en redes publicas):
   ~120-150M con engagement esperado 5-6%.
 - UnoTV: prioriza alcance/distribucion sobre engagement (noticias = poca
   interaccion), por eso su factor de engagement es el mas bajo.
-- Claro Sports Golf y otras verticales: en fase de crecimiento (cifras menores).
+- Nacion Gamer, Piso 15 y Fundacion: verticales menores en crecimiento.
 El engagement por marca se modula con `_ENG_FACTOR` (no todas interactuan igual).
 """
 
@@ -47,12 +47,6 @@ _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
         120_000_000,
         [Plataforma.facebook, Plataforma.instagram, Plataforma.x, Plataforma.tiktok, Plataforma.youtube],
         "noticias",
-    ),
-    "claro_sports_golf": (
-        "Claro Sports Golf",
-        6_000_000,
-        [Plataforma.facebook, Plataforma.instagram, Plataforma.x, Plataforma.youtube],
-        "deportes",
     ),
     "nacion_gamer": (
         "Nacion Gamer",
@@ -98,7 +92,6 @@ _ENG = {
 _ENG_FACTOR: dict[str, float] = {
     "claro_sports": 0.62,
     "unotv": 0.30,
-    "claro_sports_golf": 0.70,
     "nacion_gamer": 0.85,
     "piso_15": 0.90,
     "fundacion": 0.55,

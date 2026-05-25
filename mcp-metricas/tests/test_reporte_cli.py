@@ -17,9 +17,9 @@ import pytest
 from keni_metricas import reporte
 
 # Nº esperado de filas marca x plataforma en la fuente de muestra. Cada marca
-# aporta tantas filas como plataformas tenga configuradas (5+5+4+5+4+3 = 26).
-FILAS_PLATAFORMA_MUESTRA = 5 + 5 + 4 + 5 + 4 + 3
-MARCAS_MUESTRA = 6
+# aporta tantas filas como plataformas tenga configuradas (5+5+5+4+3 = 22).
+FILAS_PLATAFORMA_MUESTRA = 5 + 5 + 5 + 4 + 3
+MARCAS_MUESTRA = 5
 
 
 @pytest.fixture(autouse=True)

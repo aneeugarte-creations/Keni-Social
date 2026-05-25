@@ -2,8 +2,8 @@
 
 Historicamente convivian DOS catalogos incompatibles (uno con ids `guion_bajo`
 para Metricas/Config y otro con `slug-guion` para el contenido), por lo que la
-misma marca tenia dos identidades y `claro_sports_golf` era invisible en el copy.
-Este modulo unifica todo en un solo catalogo con un `id` CANONICO publico.
+misma marca tenia dos identidades. Este modulo unifica todo en un solo catalogo
+con un `id` CANONICO publico.
 
 Cada marca tiene tres campos:
 
@@ -18,8 +18,8 @@ Cada marca tiene tres campos:
                   FRONTERA con metricas (api/metricas.py, api/config.py); el resto
                   de la consola trabaja siempre con el `id` canonico.
 
-`claro-sports-golf` (vertical en crecimiento) YA tiene id canonico y, por tanto,
-es visible en copy/publicaciones igual que las demas.
+El catalogo tiene 5 marcas de primer nivel. El golf NO es una marca propia: es
+un matiz/sub-vertical editorial dentro del contexto de Claro Sports.
 
 No tiene estado ni I/O: solo datos y funciones puras.
 
@@ -30,7 +30,7 @@ USO TIPICO:
     # Contenido (id canonico):
     marcas.opciones()                         # -> [("unotv", "UnoTV"), ...]
     marcas.etiqueta_de("claro-sports")        # -> "Claro Sports"
-    marcas.es_marca("claro-sports-golf")      # -> True
+    marcas.es_marca("claro-sports")           # -> True
     marcas.id_metricas_de("claro-sports")     # -> "claro_sports"  (frontera)
 
     # Frontera con metricas (id_metricas, guion_bajo):
@@ -54,11 +54,11 @@ class Marca:
 
 # Orden de presentacion estable (el que ya usaban Skills/Metricas en su UI).
 # `id` es la forma canonica (slug-guion); `id_metricas` la forma guion_bajo que
-# espera keni_metricas. Golf YA es una marca de pleno derecho con su `id` propio.
+# espera keni_metricas. Son 5 marcas de primer nivel: el golf es un sub-vertical
+# editorial de Claro Sports, NO una marca propia.
 MARCAS: tuple[Marca, ...] = (
     Marca(id="unotv", etiqueta="UnoTV", id_metricas="unotv"),
     Marca(id="claro-sports", etiqueta="Claro Sports", id_metricas="claro_sports"),
-    Marca(id="claro-sports-golf", etiqueta="Claro Sports Golf", id_metricas="claro_sports_golf"),
     Marca(id="nacion-gamer", etiqueta="Nación Gamer", id_metricas="nacion_gamer"),
     Marca(id="piso-15", etiqueta="Piso 15", id_metricas="piso_15"),
     Marca(id="fundacion", etiqueta="Fundación", id_metricas="fundacion"),
