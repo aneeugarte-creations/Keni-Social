@@ -1,0 +1,6 @@
+import{n as l,y as o,k as n}from"./index-CSS3-WO8.js";import{L as d}from"./input-EwONjHqg.js";import{i as m}from"./tooltip-gfmq3vma.js";/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const u=[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m9 12 2 2 4-4",key:"dzmm74"}]],p=l("CircleCheck",u);function g({opciones:c,seleccionadas:t,onCambio:i,disabled:s}){return o.jsxs("div",{className:"space-y-2",children:[o.jsx(d,{children:"Redes"}),o.jsx("div",{className:"flex flex-wrap gap-2",children:c.map(e=>{const a=m(e.id),r=t.has(e.id);return o.jsxs("button",{type:"button",role:"checkbox","aria-checked":r,"aria-label":e.nombre,disabled:s,onClick:()=>i(e.id,!r),className:n("inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",r?"border-foreground/20 bg-accent font-medium text-foreground":"border-border font-normal text-muted-foreground hover:bg-accent hover:text-foreground"),children:[o.jsx(a,{className:n("h-4 w-4",r?"text-foreground":"text-muted-foreground")}),e.nombre]},e.id)})})]})}export{p as C,g as S};

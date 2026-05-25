@@ -43,6 +43,7 @@ import type {
   CuerpoGuardarEsfuerzo,
   CuerpoMarcarItemUsado,
   CuerpoSugerirHashtags,
+  CuerpoVerificar,
   CuerpoVistaPromptSkill,
   DetalleHistorial,
   ErrorApi,
@@ -378,6 +379,12 @@ export const api = {
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
     peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
+
+  // --- Verificación de video (workflow propio, independiente de Generar copy) ---
+  // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier
+  // generación (GET /api/generaciones/{id}) y completa con `resultado.verificacion`.
+  verificar: (cuerpo: CuerpoVerificar) =>
+    peticion<RespuestaGeneracion>("/verificar", { metodo: "POST", json: cuerpo }),
 
   // --- Hashtags ---
   hashtags: (signal?: AbortSignal) => peticion<RespuestaHashtags>("/hashtags", { signal }),
