@@ -148,6 +148,43 @@ export function formatearHora(iso: string | null | undefined): string {
 }
 
 /**
+ * Tiempo relativo legible en es-MX (p. ej. "hace 5 min", "en 2 h"). Usa
+ * `Intl.RelativeTimeFormat`; tolera valores vacíos/inválidos devolviendo "".
+ */
+export function tiempoRelativo(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const seg = Math.round((d.getTime() - Date.now()) / 1000);
+  const abs = Math.abs(seg);
+  const rtf = new Intl.RelativeTimeFormat("es-MX", { numeric: "auto" });
+  const divisiones: [number, Intl.RelativeTimeFormatUnit][] = [
+    [60, "second"],
+    [3600, "minute"],
+    [86400, "hour"],
+    [604800, "day"],
+    [2629800, "week"],
+    [31557600, "month"],
+    [Infinity, "year"],
+  ];
+  const factores: Record<string, number> = {
+    second: 1,
+    minute: 60,
+    hour: 3600,
+    day: 86400,
+    week: 604800,
+    month: 2629800,
+    year: 31557600,
+  };
+  for (const [umbral, unidad] of divisiones) {
+    if (abs < umbral) {
+      return rtf.format(Math.round(seg / factores[unidad]), unidad);
+    }
+  }
+  return rtf.format(Math.round(seg / factores.year), "year");
+}
+
+/**
  * Convierte un ISO a un valor para `<input type="datetime-local">`
  * (`YYYY-MM-DDTHH:mm`) en hora local. Cadena vacía si no hay fecha válida.
  */

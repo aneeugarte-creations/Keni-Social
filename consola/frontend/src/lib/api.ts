@@ -10,6 +10,7 @@
  */
 import type {
   CompararMetricas,
+  CuerpoActualizarFuenteRss,
   CuerpoActualizarPlantilla,
   CuerpoActualizarPublicacion,
   CuerpoActualizarTarea,
@@ -24,12 +25,14 @@ import type {
   CuerpoCrearTarea,
   CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
+  CuerpoGenerarDesdeItem,
   CuerpoGenerarMedia,
   CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
   CuerpoGuardarHistorial,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarConfig,
+  CuerpoMarcarItemUsado,
   CuerpoSugerirHashtags,
   DetalleHistorial,
   ErrorApi,
@@ -50,6 +53,7 @@ import type {
   RespuestaFranjas,
   RespuestaFuenteRss,
   RespuestaFuentesRss,
+  RespuestaGenerarDesdeItem,
   RespuestaGrupoHashtags,
   RespuestaHashtags,
   RespuestaHistorial,
@@ -295,10 +299,22 @@ export const api = {
   fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),
   crearFuenteRss: (cuerpo: CuerpoCrearFuenteRss) =>
     peticion<RespuestaFuenteRss>("/rss/fuentes", { metodo: "POST", json: cuerpo }),
+  actualizarFuenteRss: (id: string, cuerpo: CuerpoActualizarFuenteRss) =>
+    peticion<RespuestaFuenteRss>(`/rss/fuentes/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
   eliminarFuenteRss: (id: string) =>
     peticion<RespuestaMensaje>(`/rss/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  itemsRss: (fuente?: string, signal?: AbortSignal) =>
-    peticion<RespuestaItemsRss>(`/rss/items${query({ fuente })}`, { signal }),
+  itemsRss: (fuente?: string, ocultarUsados?: boolean, signal?: AbortSignal) =>
+    peticion<RespuestaItemsRss>(
+      `/rss/items${query({ fuente, ocultar_usados: ocultarUsados ? "1" : undefined })}`,
+      { signal },
+    ),
+  marcarItemRssUsado: (cuerpo: CuerpoMarcarItemUsado) =>
+    peticion<RespuestaMensaje>("/rss/items/usado", { metodo: "POST", json: cuerpo }),
+  generarDesdeItemRss: (cuerpo: CuerpoGenerarDesdeItem) =>
+    peticion<RespuestaGenerarDesdeItem>("/rss/generar", { metodo: "POST", json: cuerpo }),
 
   // --- Franjas (colas) ---
   franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),
