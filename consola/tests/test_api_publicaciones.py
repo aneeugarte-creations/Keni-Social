@@ -67,11 +67,12 @@ def test_crear_marca_invalida_400(cliente):
     assert "marca" in r.json()["error"].lower()
 
 
-def test_crear_marca_golf_visible(cliente):
-    # Catalogo unico: golf YA es marca de pleno derecho, visible como destino de copy.
+def test_crear_marca_golf_rechazada_400(cliente):
+    # El golf NO es marca de primer nivel (es un sub-vertical editorial de Claro
+    # Sports): no se acepta como destino de copy.
     r = _crear(cliente, marca="claro-sports-golf")
-    assert r.status_code == 200
-    assert r.json()["publicacion"]["marca_nombre"] == "Claro Sports Golf"
+    assert r.status_code == 400
+    assert "marca" in r.json()["error"].lower()
 
 
 def test_crear_id_metricas_no_es_id_canonico_400(cliente):

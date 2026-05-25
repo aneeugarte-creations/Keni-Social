@@ -1,7 +1,8 @@
 """Tests del catalogo UNICO de marcas (#82). Solo datos puros; sin I/O ni red.
 
-Cubre: un solo catalogo (no dos), golf visible con id canonico, traduccion
-id canonico <-> id_metricas, y los helpers de la frontera con metricas.
+Cubre: un solo catalogo (no dos) con 5 marcas (el golf NO es marca, es un
+sub-vertical editorial de Claro Sports), traduccion id canonico <-> id_metricas,
+y los helpers de la frontera con metricas.
 """
 
 from __future__ import annotations
@@ -14,10 +15,10 @@ def test_catalogo_unico_sin_duplicados():
     ids = marcas.ids()
     assert len(ids) == len(set(ids))
     # El orden de presentacion es estable y conocido (slug-guion como id canonico).
+    # Son 5 marcas: el golf NO es marca de primer nivel.
     assert ids == [
         "unotv",
         "claro-sports",
-        "claro-sports-golf",
         "nacion-gamer",
         "piso-15",
         "fundacion",
@@ -32,11 +33,14 @@ def test_opciones_son_id_canonico_y_etiqueta_humana():
     assert opts["fundacion"] == "Fundación"
 
 
-def test_golf_es_marca_visible():
-    # Golf YA es una marca de pleno derecho con id canonico (antes invisible).
-    assert marcas.es_marca("claro-sports-golf")
-    assert ("claro-sports-golf", "Claro Sports Golf") in marcas.opciones()
-    assert marcas.etiqueta_de("claro-sports-golf") == "Claro Sports Golf"
+def test_golf_no_es_marca():
+    # El golf NO es una marca de primer nivel: es un sub-vertical editorial de
+    # Claro Sports. No esta en el catalogo ni en las opciones.
+    assert not marcas.es_marca("claro-sports-golf")
+    ids_opciones = [mid for mid, _ in marcas.opciones()]
+    assert "claro-sports-golf" not in ids_opciones
+    # Helper tolerante: id desconocido cae al propio id (no rompe la UI).
+    assert marcas.etiqueta_de("claro-sports-golf") == "claro-sports-golf"
 
 
 def test_es_marca_distingue_id_canonico_de_id_metricas():
@@ -49,7 +53,6 @@ def test_es_marca_distingue_id_canonico_de_id_metricas():
 def test_traduccion_id_canonico_a_id_metricas():
     # La frontera con metricas: id canonico -> id_metricas (guion_bajo).
     assert marcas.id_metricas_de("claro-sports") == "claro_sports"
-    assert marcas.id_metricas_de("claro-sports-golf") == "claro_sports_golf"
     assert marcas.id_metricas_de("nacion-gamer") == "nacion_gamer"
     assert marcas.id_metricas_de("piso-15") == "piso_15"
     assert marcas.id_metricas_de("unotv") == "unotv"
@@ -60,7 +63,6 @@ def test_id_metricas_cubre_toda_la_fuente_muestra():
     esperados = {
         "unotv",
         "claro_sports",
-        "claro_sports_golf",
         "nacion_gamer",
         "piso_15",
         "fundacion",
@@ -72,7 +74,7 @@ def test_helpers_frontera_metricas():
     # opciones_metricas devuelve (id_metricas, etiqueta), no el id canonico.
     opts = dict(marcas.opciones_metricas())
     assert opts["claro_sports"] == "Claro Sports"
-    assert opts["claro_sports_golf"] == "Claro Sports Golf"
+    assert "claro_sports_golf" not in opts  # golf NO es marca
     assert "claro-sports" not in opts  # nunca el id canonico en esta frontera
     # Resolucion de etiqueta y de Marca por id_metricas.
     assert marcas.etiqueta_por_id_metricas("nacion_gamer") == "Nación Gamer"

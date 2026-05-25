@@ -15,7 +15,7 @@ def test_cuentas_listadas(fuente: FuenteMuestra):
     cuentas = fuente.cuentas()
     ids = {c.id for c in cuentas}
     assert {"claro_sports", "unotv", "nacion_gamer", "fundacion"} <= ids
-    assert len(cuentas) == 6
+    assert len(cuentas) == 5
 
 
 def test_resumen_determinista(fuente: FuenteMuestra):

@@ -52,7 +52,6 @@ from . import ficheros, marcas
 _PLANTILLA_POR_MARCA: dict[str, str] = {
     "unotv": "noticias",
     "claro-sports": "deportes",
-    "claro-sports-golf": "deportes",
     "piso-15": "podcast",
     "fundacion": "social",
 }
@@ -262,6 +261,7 @@ def _parsear_run(datos: dict[str, Any], run_id: str) -> dict[str, Any]:
         "modo": datos.get("modo", "") or "",
         "estado": datos.get("estado", "") or "",
         "salida": datos.get("salida", "") or "",
+        "motivo": datos.get("motivo", "") or "",
         "fecha_inicio": datos.get("fecha_inicio", "") or "",
         "fecha_fin": datos.get("fecha_fin", "") or "",
         "metricas": _metricas_run(datos),
@@ -273,7 +273,8 @@ def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
 
     Si el run no trae `id`, se genera uno. El cuerpo YAML no repite el `id` (es
     implicito por el nombre de fichero). `metricas` (tokens/turnos/coste/duracion/
-    modelo) se incluye solo si viene presente (None => ausente en el YAML).
+    modelo) se incluye solo si viene presente (None => ausente en el YAML). `motivo`
+    (p.ej. "timeout") se incluye solo si trae valor.
     """
     run_id = run.get("id") or nuevo_run_id()
     cuerpo: dict[str, Any] = {
@@ -284,12 +285,31 @@ def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
         "fecha_inicio": run.get("fecha_inicio", "") or "",
         "fecha_fin": run.get("fecha_fin", "") or "",
     }
+    motivo = run.get("motivo", "") or ""
+    if motivo:
+        cuerpo["motivo"] = motivo
     metricas = _metricas_run(run)
     if metricas is not None:
         cuerpo["metricas"] = metricas
     ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
     _escribir_yaml_atomico(ruta, cuerpo)
-    return {"id": run_id, **cuerpo, "metricas": metricas}
+    return {"id": run_id, "motivo": motivo, **cuerpo, "metricas": metricas}
+
+
+def actualizar_run(marca_id: str, run_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
+    """Mezcla `cambios` sobre el run `runs/<id>.yaml` existente y lo reescribe ATOMICO.
+
+    Lee el YAML actual (si falta, parte de un cuerpo vacio), aplica los `cambios` por
+    clave (sobre `prompt/modo/estado/salida/motivo/fecha_inicio/fecha_fin/metricas`) y
+    reescribe via `guardar_run` (que ya escribe de forma atomica). Es la primitiva del
+    SONDEO en vivo: el hilo lector la usa para avanzar `estado`/`metricas` parciales y,
+    al final, fijar el estado terminal. `metricas` se reemplaza por completo cuando
+    viene en `cambios` (parciales o finales); las claves ausentes se conservan.
+    """
+    ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
+    actual = _leer_yaml(ruta) or {}
+    fusion: dict[str, Any] = {"id": run_id, **actual, **cambios}
+    return guardar_run(marca_id, fusion)
 
 
 def listar_runs(marca_id: str) -> list[dict[str, Any]]:
