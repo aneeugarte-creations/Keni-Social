@@ -1,0 +1,28 @@
+nombre: Calendario editorial
+explicacion: Propone un calendario de contenidos día x plataforma a partir de los eventos de la semana.
+grupo: experimentales
+aplica_redes: false
+salida: documento
+media: false
+orden: 70
+campos:
+  - id: eventos
+    etiqueta: Eventos, notas y temas
+    tipo: textarea
+    requerido: true
+    placeholder: Pega aquí los eventos, notas o temas próximos…
+    ayuda: Cada pieza puede traer fecha (evento confirmado) o no (tema en agenda).
+    opciones: []
+    media_tipos: ""
+  - id: ventana
+    etiqueta: Ventana
+    tipo: texto
+    requerido: false
+    placeholder: p. ej. esta semana
+    ayuda: La semana o el rango a planear. Por defecto, la semana en curso.
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa calendario-editorial, marca {marca}. Ventana: {ventana}. Eventos y temas:
+
+  {eventos}

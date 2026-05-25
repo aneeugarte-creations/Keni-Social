@@ -8,6 +8,7 @@ import { AppShell } from "@/components/layout/AppShell";
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const GenerarCopy = lazy(() => import("@/pages/GenerarCopy"));
+const Skills = lazy(() => import("@/pages/Skills"));
 const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to="/generar-copy" replace /> },
       // Trabajo
       { path: "generar-copy", element: <GenerarCopy /> },
+      { path: "skills", element: <Skills /> },
       { path: "publicaciones", element: <Publicaciones /> },
       { path: "fuentes", element: <Fuentes /> },
       { path: "metricas", element: <Metricas /> },

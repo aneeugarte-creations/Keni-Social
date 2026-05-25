@@ -176,13 +176,13 @@ def test_normalizar_redes_dedup():
 # --------------------------------------------------------------------------- #
 
 
-def test_prompt_sin_redes_no_anade_instruccion():
+def test_prompt_sin_redes_no_anade_instruccion(entorno):
     p = skills.construir_prompt("copy-desde-nota", "unotv", "una nota")
     assert "json" not in p.lower()
     assert "una nota" in p
 
 
-def test_prompt_con_redes_anade_bloque_json_y_redes():
+def test_prompt_con_redes_anade_bloque_json_y_redes(entorno):
     p = skills.construir_prompt("copy-desde-nota", "unotv", "una nota", ["x", "instagram"])
     assert "una nota" in p  # el copy base no cambia
     assert "```json" in p
@@ -226,7 +226,7 @@ def test_endpoint_ejecutar_devuelve_piezas_y_verdicto(entorno):
         json={
             "skill": "copy-desde-nota",
             "marca": "unotv",
-            "texto": "una nota",
+            "valores": {"fuente": "una nota"},
             "redes": ["x", "instagram"],
         },
     )
@@ -242,7 +242,7 @@ def test_endpoint_ejecutar_sin_redes_usa_las_cinco(entorno):
     lanzar, capturado = _captura_prompt(_SALIDA_SIN_JSON_NI_ENCABEZADOS)
     r = _cliente(lanzar_generacion=lanzar).post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "una nota"},
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {"fuente": "una nota"}},
     )
     assert r.status_code == 200
     # el prompt debe mencionar las 5 redes por nombre
@@ -304,7 +304,7 @@ def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno):
         json={
             "skill": "copy-desde-nota",
             "marca": "unotv",
-            "texto": "Mi nota importante\nsegunda linea",
+            "valores": {"fuente": "Mi nota importante\nsegunda linea"},
             "redes": ["x", "instagram"],
         },
     )
@@ -325,34 +325,35 @@ def test_ejecutar_autocrea_una_publicacion_por_pieza(entorno):
     # origen = historial_id
     assert primera["origen"] == res["historial_id"]
     assert primera["contenido"] == "Titular fuerte y al grano."
-    # Titulo derivado de la 1a linea de la nota (no se paso titulo).
+    # Titulo SIEMPRE derivado de la 1a linea del campo de texto (nunca lo da el cliente).
     assert primera["titulo"] == "Mi nota importante"
     # Persistidas de verdad: el listado las devuelve.
     assert len(_listar_publicaciones(cli)) == 2
 
 
-def test_ejecutar_usa_titulo_dado_si_viene(entorno):
+def test_ejecutar_titulo_siempre_derivado_no_del_cliente(entorno):
+    """El titulo se deriva del primer campo de texto; un `titulo` del cliente se IGNORA."""
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     r = cli.post(
         "/api/skills/ejecutar",
         json={
             "skill": "copy-desde-nota",
             "marca": "unotv",
-            "texto": "una nota",
+            "valores": {"fuente": "Primera linea de la fuente"},
             "redes": ["x"],
-            "titulo": "  Mi titulo a mano  ",
+            "titulo": "Mi titulo a mano",  # se ignora: el titulo es derivado
         },
     )
     assert r.status_code == 200
     pubs = _resultado(r)["publicaciones"]
-    assert pubs[0]["titulo"] == "Mi titulo a mano"
+    assert pubs[0]["titulo"] == "Primera linea de la fuente"
 
 
 def test_ejecutar_sin_piezas_no_crea_publicaciones(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SIN_JSON_NI_ENCABEZADOS))
     r = cli.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "una nota"},
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {"fuente": "una nota"}},
     )
     assert r.status_code == 200
     res = _resultado(r)
@@ -365,15 +366,97 @@ def test_ejecutar_archivo_autocrea_publicaciones(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     r = cli.post(
         "/api/skills/ejecutar-archivo",
-        data={"skill": "copy-desde-nota", "marca": "unotv", "redes": "x,instagram",
-              "titulo": "Desde archivo"},
-        files={"archivo": ("nota.txt", b"contenido de la nota", "text/plain")},
+        data={"skill": "copy-desde-nota", "marca": "unotv", "redes": "x,instagram"},
+        files={"archivo": ("nota.txt", b"Contenido de la nota\nsegunda linea", "text/plain")},
     )
     assert r.status_code == 200
     pubs = _resultado(r)["publicaciones"]
     assert len(pubs) == 2
-    assert all(p["titulo"] == "Desde archivo" for p in pubs)
+    # Titulo derivado del texto leido del archivo (1a linea).
+    assert all(p["titulo"] == "Contenido de la nota" for p in pubs)
     assert len(_listar_publicaciones(cli)) == 2
+
+
+def test_ejecutar_campo_requerido_faltante_da_400(entorno):
+    """Un campo requerido ausente => 400 con mensaje claro, sin lanzar generacion."""
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {}, "redes": ["x"]},
+    )
+    assert r.status_code == 400
+    assert "obligatorio" in r.json()["error"].lower()
+
+
+def test_ejecutar_skill_inexistente_da_400(entorno):
+    cli = _cliente()
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "no-existe", "marca": "unotv", "valores": {"fuente": "x"}},
+    )
+    assert r.status_code == 400
+
+
+def test_ejecutar_marca_no_permitida_da_400(entorno):
+    cli = _cliente()
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "copy-desde-nota", "marca": "marca-pirata", "valores": {"fuente": "x"}},
+    )
+    assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Salida `documento`: resultado con `documento`, SIN publicaciones            #
+# --------------------------------------------------------------------------- #
+
+_SALIDA_DOCUMENTO = """⚠️ REVISAR ANTES DE PUBLICAR
+
+# Brief del tema
+- Punto uno con su dato.
+- Punto dos.
+
+Recomendacion: cubrir en unotv primero.
+"""
+
+
+def test_ejecutar_documento_devuelve_documento_sin_publicaciones(entorno):
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_DOCUMENTO))
+    r = cli.post(
+        "/api/skills/ejecutar",
+        json={"skill": "resumen-tendencia", "marca": "unotv",
+              "valores": {"fuentes": "Tema X\ncon contexto"}},
+    )
+    assert r.status_code == 200
+    res = _resultado(r)
+    # Forma de salida documento.
+    assert "documento" in res
+    assert res["verdicto"] == "revisar"  # del ⚠️ inicial
+    assert res["piezas"] == []
+    assert res["publicaciones"] == []
+    assert res["historial_id"]
+    # El documento sale SIN emojis (el ⚠️ se quito).
+    assert "⚠" not in res["documento"]
+    assert "Brief del tema" in res["documento"]
+    # NO se auto-creo ninguna publicacion.
+    assert _listar_publicaciones(cli) == []
+    # El historial guarda el documento como resultado, sin piezas.
+    detalle = cli.get(f"/api/skills/historial/{res['historial_id']}").json()
+    assert detalle["piezas"] == []
+
+
+def test_ejecutar_documento_ignora_redes(entorno):
+    """Una skill con aplica_redes=false NO mete la instruccion de redes en el prompt."""
+    lanzar, capturado = _captura_prompt(_SALIDA_DOCUMENTO)
+    r = _cliente(lanzar_generacion=lanzar).post(
+        "/api/skills/ejecutar",
+        json={"skill": "resumen-tendencia", "marca": "unotv",
+              "valores": {"fuentes": "Tema X"}, "redes": ["x", "instagram"]},
+    )
+    assert r.status_code == 200
+    # Aunque se pasaron redes, la skill no aplica_redes => sin bloque json ni "SOLO para estas redes".
+    assert "```json" not in capturado["prompt"]
+    assert "SOLO para estas redes" not in capturado["prompt"]
 
 
 # --------------------------------------------------------------------------- #
@@ -385,7 +468,7 @@ def test_historial_listado_y_detalle_incluyen_piezas_y_titulo(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     gen = cli.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {"fuente": "Una nota"},
               "redes": ["x", "instagram"]},
     )
     hid = _resultado(gen)["historial_id"]
@@ -408,7 +491,7 @@ def test_historial_guardar_con_piezas_crea_una_por_pieza(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     gen = cli.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {"fuente": "Una nota"},
               "redes": ["x", "instagram"]},
     )
     hid = _resultado(gen)["historial_id"]
@@ -428,7 +511,7 @@ def test_historial_guardar_con_piezas_filtra_a_redes(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     hid = _resultado(cli.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {"fuente": "Una nota"},
               "redes": ["x", "instagram"]},
     ))["historial_id"]
 
@@ -442,7 +525,7 @@ def test_historial_guardar_usa_titulo_param(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_CON_JSON))
     hid = _resultado(cli.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": "unotv", "texto": "Una nota",
+        json={"skill": "copy-desde-nota", "marca": "unotv", "valores": {"fuente": "Una nota"},
               "redes": ["x"]},
     ))["historial_id"]
 
@@ -669,11 +752,11 @@ def test_json_valido_tiene_prioridad_sobre_encabezados():
 # --------------------------------------------------------------------------- #
 
 
-def test_prompt_incluye_instruccion_sin_emojis():
+def test_prompt_incluye_instruccion_sin_emojis(entorno):
     p = skills.construir_prompt("copy-desde-nota", "unotv", "una nota", ["x"])
     assert "No uses emojis en el copy." in p
 
 
-def test_prompt_ruta_incluye_instruccion_sin_emojis():
+def test_prompt_ruta_incluye_instruccion_sin_emojis(entorno):
     p = skills.construir_prompt_ruta("clip-a-copy", "unotv", "/tmp/clip.mp4")
     assert "No uses emojis en el copy." in p

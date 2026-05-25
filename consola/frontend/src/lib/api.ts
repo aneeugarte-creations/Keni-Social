@@ -17,6 +17,7 @@ import type {
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPlantilla,
   CuerpoActualizarPublicacion,
+  CuerpoActualizarSkill,
   CuerpoActualizarTarea,
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
@@ -27,6 +28,7 @@ import type {
   CuerpoCrearProyecto,
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
+  CuerpoCrearSkill,
   CuerpoCrearTarea,
   CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
@@ -40,6 +42,7 @@ import type {
   CuerpoGuardarConfig,
   CuerpoMarcarItemUsado,
   CuerpoSugerirHashtags,
+  CuerpoVistaPromptSkill,
   DetalleHistorial,
   ErrorApi,
   FiltrosPublicaciones,
@@ -73,15 +76,20 @@ import type {
   RespuestaProyectos,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
+  RespuestaCatalogoSkills,
+  RespuestaDetalleSkillDef,
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaReciclarPublicacion,
   RespuestaRun,
   RespuestaRuns,
   RespuestaRunsAgregados,
+  RespuestaSkillDef,
+  RespuestaSkillMd,
   RespuestaSkills,
   RespuestaSubContextos,
   RespuestaTareas,
+  RespuestaVistaPromptSkill,
   Run,
 } from "@/types";
 
@@ -278,18 +286,44 @@ export const api = {
     skill: string,
     marca: string,
     archivo: File,
+    valores: Record<string, string>,
     redes?: string[],
-    titulo?: string,
   ) => {
     const form = new FormData();
     form.set("skill", skill);
     form.set("marca", marca);
     form.set("archivo", archivo);
-    if (titulo) form.set("titulo", titulo);
+    // El resto de campos de texto van como campos de formulario con su id.
+    for (const [id, valor] of Object.entries(valores)) form.set(id, valor);
     // Cada red va como un campo `redes` repetido (multivalor).
     for (const red of redes ?? []) form.append("redes", red);
     return peticion<RespuestaGeneracion>("/skills/ejecutar-archivo", { metodo: "POST", form });
   },
+
+  // --- Skills (catálogo editable: CRUD + vista previa del prompt) ---
+  catalogoSkills: (signal?: AbortSignal) =>
+    peticion<RespuestaCatalogoSkills>("/skills/catalogo", { signal }),
+  crearSkill: (cuerpo: CuerpoCrearSkill) =>
+    peticion<RespuestaSkillDef>("/skills/catalogo", { metodo: "POST", json: cuerpo }),
+  skillCatalogo: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaDetalleSkillDef>(`/skills/catalogo/${encodeURIComponent(id)}`, { signal }),
+  actualizarSkill: (id: string, cuerpo: CuerpoActualizarSkill) =>
+    peticion<RespuestaSkillDef>(`/skills/catalogo/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  guardarSkillMd: (id: string, contenido: string) =>
+    peticion<RespuestaSkillMd>(`/skills/catalogo/${encodeURIComponent(id)}/skill-md`, {
+      metodo: "PUT",
+      json: { contenido },
+    }),
+  eliminarSkill: (id: string) =>
+    peticion<RespuestaMensaje>(`/skills/catalogo/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  vistaPromptSkill: (id: string, cuerpo: CuerpoVistaPromptSkill, signal?: AbortSignal) =>
+    peticion<RespuestaVistaPromptSkill>(
+      `/skills/catalogo/${encodeURIComponent(id)}/vista-prompt`,
+      { metodo: "POST", json: cuerpo, signal },
+    ),
   historial: (signal?: AbortSignal) => peticion<RespuestaHistorial>("/skills/historial", { signal }),
   detalleHistorial: (id: string, signal?: AbortSignal) =>
     peticion<DetalleHistorial>(`/skills/historial/${encodeURIComponent(id)}`, { signal }),

@@ -273,7 +273,8 @@ def test_historial_skill_guarda_y_expone_metricas(entorno):
     c = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL, _METRICAS_DEMO))
     gen = c.post(
         "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": _MARCA, "texto": "una nota", "redes": ["x"]},
+        json={"skill": "copy-desde-nota", "marca": _MARCA, "valores": {"fuente": "una nota"},
+              "redes": ["x"]},
     ).json()
     hid = gen["generacion"]["resultado"]["historial_id"]
 

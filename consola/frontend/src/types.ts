@@ -270,10 +270,47 @@ export interface RespuestaCrearCarpeta {
 
 // --- Skills (Generar copy) ---
 
+/** Tipo de control de un campo del formulario dinámico de una skill. */
+export type TipoCampo = "textarea" | "texto" | "archivo" | "select" | "fecha";
+
+/** Forma de la salida de una skill: piezas por red o un documento único. */
+export type SalidaSkill = "piezas" | "documento";
+
+/**
+ * Un campo del formulario de una skill. El frontend renderiza el control según
+ * `tipo` y valida `requerido`. `opciones` solo aplica a `select`; `media_tipos`
+ * (accept) solo a `archivo`.
+ */
+export interface Campo {
+  id: string;
+  etiqueta: string;
+  tipo: TipoCampo;
+  requerido: boolean;
+  placeholder?: string;
+  ayuda?: string;
+  /** Opciones para `tipo === "select"`. */
+  opciones?: string[];
+  /** Valor `accept` del input para `tipo === "archivo"` (p. ej. "video/*,audio/*"). */
+  media_tipos?: string;
+}
+
+/**
+ * Una skill editorial, tal y como la expone `GET /api/skills` para el formulario
+ * de Generar copy. Cada skill tiene su PROPIO formulario (definido por `campos`).
+ */
 export interface Skill {
   id: string;
   nombre: string;
-  descripcion: string;
+  /** Explicación breve mostrada bajo el selector. */
+  explicacion: string;
+  /** `true` si la skill genera piezas por red (muestra el selector de redes). */
+  aplica_redes: boolean;
+  /** Forma del resultado: piezas por red o un documento Markdown. */
+  salida: SalidaSkill;
+  /** `true` si algún campo es de tipo archivo (envío multipart). */
+  media: boolean;
+  /** Campos del formulario dinámico. */
+  campos: Campo[];
 }
 
 export interface GrupoSkills {
@@ -285,16 +322,90 @@ export interface GrupoSkills {
 export interface RespuestaSkills {
   grupos: GrupoSkills[];
   marcas: MarcaDisponible[];
+  /** Catálogo de redes para el selector. */
+  redes: MarcaDisponible[];
   skills_media: string[];
 }
 
+/**
+ * Definición completa de una skill (catálogo editable). Extiende `Skill` con los
+ * metadatos de gestión: grupo, orden y la plantilla de invocación.
+ */
+export interface SkillDef extends Skill {
+  grupo: "validadas" | "experimentales";
+  orden: number;
+  /** Plantilla del prompt de invocación (con marcadores de campos). */
+  plantilla_invocacion: string;
+}
+
+export interface RespuestaCatalogoSkills {
+  skills: SkillDef[];
+}
+
+export interface RespuestaSkillDef {
+  skill: SkillDef;
+}
+
+/** Respuesta de `GET /api/skills/catalogo/{id}` (def + cuerpo SKILL.md). */
+export interface RespuestaDetalleSkillDef {
+  skill: SkillDef;
+  skill_md: string;
+}
+
+/** Cuerpo para crear una skill en el catálogo. */
+export interface CuerpoCrearSkill {
+  nombre: string;
+  explicacion?: string;
+  grupo?: "validadas" | "experimentales";
+  aplica_redes?: boolean;
+  salida?: SalidaSkill;
+  media?: boolean;
+  campos?: Campo[];
+  plantilla_invocacion?: string;
+}
+
+/** Cuerpo (parcial) para actualizar los metadatos de una skill. */
+export interface CuerpoActualizarSkill {
+  nombre?: string;
+  explicacion?: string;
+  grupo?: "validadas" | "experimentales";
+  aplica_redes?: boolean;
+  salida?: SalidaSkill;
+  media?: boolean;
+  campos?: Campo[];
+  plantilla_invocacion?: string;
+  orden?: number;
+}
+
+/** Cuerpo para guardar el cuerpo SKILL.md de una skill. */
+export interface CuerpoGuardarSkillMd {
+  contenido: string;
+}
+
+/** Respuesta de guardar el SKILL.md. */
+export interface RespuestaSkillMd {
+  mensaje: string;
+}
+
+/** Cuerpo para previsualizar el prompt de invocación (sin llamar a Claude). */
+export interface CuerpoVistaPromptSkill {
+  marca: string;
+  valores: Record<string, string>;
+  redes: string[];
+}
+
+/** Respuesta de la vista previa del prompt. */
+export interface RespuestaVistaPromptSkill {
+  prompt: string;
+}
+
+/** Cuerpo para ejecutar una skill (JSON, sin archivo). */
 export interface CuerpoEjecutarSkill {
   skill: string;
   marca: string;
-  texto: string;
-  /** Título opcional para las publicaciones creadas a partir del copy. */
-  titulo?: string;
-  /** Redes para las que generar piezas. Si se omite, el backend decide. */
+  /** Valores del formulario dinámico: id de campo -> valor. */
+  valores: Record<string, string>;
+  /** Redes para las que generar piezas. Solo si la skill `aplica_redes`. */
   redes?: string[];
 }
 
@@ -341,6 +452,8 @@ export interface ResultadoGeneracion {
   verdicto?: Veredicto;
   piezas?: PiezaGenerada[];
   publicaciones?: Publicacion[];
+  /** Documento Markdown completo (skills con `salida === "documento"`). */
+  documento?: string;
   // hashtags
   hashtags?: string[];
   // imagen

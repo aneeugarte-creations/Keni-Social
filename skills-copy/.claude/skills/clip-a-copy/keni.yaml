@@ -1,0 +1,20 @@
+nombre: Clip a copy
+explicacion: De un video o audio saca el copy listo para publicar por red, transcribiendo en local.
+grupo: validadas
+aplica_redes: true
+salida: piezas
+media: true
+orden: 20
+campos:
+  - id: archivo
+    etiqueta: Video o audio
+    tipo: archivo
+    requerido: true
+    placeholder: ""
+    ayuda: Un video o audio (entrevista, declaración, podcast). Se transcribe en local; el audio no sale de tu equipo.
+    opciones: []
+    media_tipos: video/*,audio/*
+plantilla_invocacion: |
+  usa clip-a-copy con el archivo en esta ruta, marca {marca}:
+
+  {archivo}

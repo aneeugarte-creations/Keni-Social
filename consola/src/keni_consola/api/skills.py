@@ -10,7 +10,9 @@ AUTO-GUARDA una publicacion (borrador) por pieza; eso queda en el `resultado` de
 trabajo. Nada se publica: solo borradores.
 
 SEGURIDAD (resumen):
-  - La lista de skills es una ALLOWLIST fija (`SKILLS`); las marcas tambien (`MARCAS`).
+  - Las skills viven en ARCHIVOS (`skills_catalogo`): una carpeta por skill con su
+    `SKILL.md` + `keni.yaml`. La pertenencia se valida contra el catalogo; las marcas
+    contra su allowlist fija (`MARCAS`).
   - El texto del usuario viaja como ARGUMENTO de subprocess (lista argv), nunca por
     shell: sin `shell=True`, sin inyeccion de shell (ver `consola.generaciones`).
   - El trabajo corre con wall-timeout; los errores (binario no encontrado, timeout,
@@ -55,7 +57,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, redes, repos
+from .. import generaciones, marcas, redes, repos, skills_catalogo
 from .._http_json import leer_json
 from .publicaciones import _publicacion_a_dict
 
@@ -64,68 +66,42 @@ from .publicaciones import _publicacion_a_dict
 # --------------------------------------------------------------------------- #
 
 
-@dataclass(frozen=True)
-class _SkillInfo:
-    id: str
-    nombre: str
-    descripcion: str  # una linea, para no tecnicos
-
-
-@dataclass(frozen=True)
-class _GrupoSkills:
-    etiqueta: str  # titulo visible del grupo
-    experimental: bool  # True => se etiqueta como experimental en la UI
-    skills: tuple[_SkillInfo, ...]
-
-
-GRUPOS_SKILLS: tuple[_GrupoSkills, ...] = (
-    _GrupoSkills(
-        etiqueta="Validadas con el equipo",
-        experimental=False,
-        skills=(
-            _SkillInfo("copy-desde-nota", "Copy desde nota", "Convierte una nota en copy para redes."),
-            _SkillInfo("clip-a-copy", "Clip a copy", "De la transcripción de un clip a copy listo para publicar."),
-            _SkillInfo("nota-a-formato", "Nota a formato", "Adapta una nota al formato de una plataforma concreta."),
-            _SkillInfo("resumen-tendencia", "Resumen de tendencia", "Resume una tendencia a partir de varias fuentes."),
-            _SkillInfo(
-                "youtube-metadata",
-                "Metadatos de YouTube",
-                "Arma título, descripción, etiquetas y capítulos para un video de YouTube.",
-            ),
-        ),
-    ),
-    _GrupoSkills(
-        etiqueta="Experimentales (no validadas con el piloto)",
-        experimental=True,
-        skills=(
-            _SkillInfo("nota-a-hilo", "Nota a hilo", "Convierte una nota en un hilo encadenado para redes."),
-            _SkillInfo(
-                "calendario-editorial",
-                "Calendario editorial",
-                "Arma un calendario editorial desde el material dado.",
-            ),
-            _SkillInfo(
-                "responde-comentarios",
-                "Responde comentarios",
-                "Propone respuestas a comentarios de la comunidad.",
-            ),
-        ),
-    ),
-)
-
-# Vista PLANA de todas las skills curadas (de todos los grupos), en orden de grupo.
-SKILLS: tuple[_SkillInfo, ...] = tuple(s for g in GRUPOS_SKILLS for s in g.skills)
+# Las SKILLS ya no son una allowlist fija en codigo: viven en ARCHIVOS y se gestionan
+# via `skills_catalogo` (carpeta por skill con `SKILL.md` + `keni.yaml`). La pertenencia
+# se resuelve dinamicamente (`_AllowlistSkills`) y los metadatos para la UI salen de
+# `skills_catalogo.listar()` (ver `opciones`).
 
 # Marcas editoriales permitidas: TODAS las del catalogo unico. VALUE interno = id
 # canonico (slug-guion); etiqueta visible = nombre humano con acentos.
 MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 
-_SKILLS_IDS = {s.id for s in SKILLS}
 _MARCAS_IDS = {m[0] for m in MARCAS}
 
-# Mapas id->nombre para enriquecer el historial con nombres humanos.
-_SKILL_NOMBRE = {s.id: s.nombre for s in SKILLS}
+# Mapa id->nombre de marca para enriquecer el historial con nombres humanos.
 _MARCA_NOMBRE = dict(MARCAS)
+
+
+class _AllowlistSkills:
+    """Proxy `x in _SKILLS_IDS` que consulta el CATALOGO DE ARCHIVOS en cada uso.
+
+    Antes `_SKILLS_IDS` era un set fijo de skills hardcodeadas; ahora las skills son
+    editables en disco, asi que la pertenencia se resuelve dinamicamente contra
+    `skills_catalogo.existe`. Mantiene la misma sintaxis (`in`) que usan `ejecutar`,
+    `ejecutar_archivo` y `api.rss`.
+    """
+
+    def __contains__(self, skill_id: object) -> bool:
+        return isinstance(skill_id, str) and skills_catalogo.existe(skill_id)
+
+
+# Allowlist de skills: pertenencia dinamica contra el catalogo de archivos.
+_SKILLS_IDS = _AllowlistSkills()
+
+
+def _nombre_skill(skill_id: str) -> str:
+    """Nombre humano de una skill desde el catalogo de archivos; cae al id si no existe."""
+    skill = skills_catalogo.obtener(skill_id)
+    return skill.nombre if skill is not None else skill_id
 
 # Instruccion ADITIVA de estilo que se anade a TODO prompt de generacion: el copy
 # no debe llevar emojis. Es defensa en profundidad; ademas `quitar_emojis` los borra
@@ -263,29 +239,48 @@ def _instruccion_redes(redes_ids: list[str]) -> str:
     )
 
 
-def construir_prompt(skill: str, marca: str, texto: str, redes_ids: list[str] | None = None) -> str:
-    """Construye el prompt de invocacion headless para una skill+marca+texto.
-
-    El texto viaja como argumento de subprocess (no por shell), asi que no hay
-    inyeccion. Marca y skill ya estan validadas contra sus allowlists. Si se pasan
-    `redes_ids`, se anade una instruccion ADITIVA (redes + bloque json de piezas).
-    """
-    base = f"usa {skill} con la siguiente nota, marca {marca}:\n\n{texto}"
+def _prompt_generico(verbo: str, skill: str, marca: str, contenido: str, redes_ids: list[str] | None) -> str:
+    """Construye un prompt cuando la skill NO esta en el catalogo (back-compat puro)."""
+    base = f"usa {skill} con {verbo}, marca {marca}:\n\n{contenido}"
     base = f"{base}\n\n{_INSTRUCCION_SIN_EMOJIS}"
     if redes_ids:
         return f"{base}\n\n{_instruccion_redes(redes_ids)}"
     return base
+
+
+def construir_prompt(skill: str, marca: str, texto: str, redes_ids: list[str] | None = None) -> str:
+    """Construye el prompt de invocacion headless para una skill+marca+texto (BACK-COMPAT).
+
+    Mapea `texto` al PRIMER campo de texto de la skill y delega en
+    `skills_catalogo.render_invocacion` (la via dinamica de archivos). Si la skill no
+    esta en el catalogo (caso raro / legado), cae a un prompt generico equivalente al
+    de antes. Lo usa `api.rss.generar` sin cambios. El texto viaja como argumento de
+    subprocess (no por shell): sin inyeccion. La instruccion ADITIVA de redes solo se
+    anade si la skill `aplica_redes`.
+    """
+    skilldef = skills_catalogo.obtener(skill)
+    if skilldef is None:
+        return _prompt_generico("la siguiente nota", skill, marca, texto, redes_ids)
+    campo = skilldef.primer_campo_texto()
+    valores = {campo.id: texto} if campo is not None else {}
+    return skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
 
 
 def construir_prompt_ruta(
     skill: str, marca: str, ruta: str, redes_ids: list[str] | None = None
 ) -> str:
-    """Construye el prompt para una skill de MEDIA que parte de una RUTA de archivo."""
-    base = f"usa {skill} con el archivo en esta ruta, marca {marca}:\n\n{ruta}"
-    base = f"{base}\n\n{_INSTRUCCION_SIN_EMOJIS}"
-    if redes_ids:
-        return f"{base}\n\n{_instruccion_redes(redes_ids)}"
-    return base
+    """Construye el prompt para una skill de MEDIA que parte de una RUTA de archivo.
+
+    Mapea `ruta` al campo de tipo archivo de la skill (o, si no hay, al primer campo) y
+    delega en `render_invocacion`. Cae a un prompt generico si la skill no esta en el
+    catalogo (back-compat).
+    """
+    skilldef = skills_catalogo.obtener(skill)
+    if skilldef is None:
+        return _prompt_generico("el archivo en esta ruta", skill, marca, ruta, redes_ids)
+    campo = skilldef.campo_archivo() or skilldef.primer_campo_texto()
+    valores = {campo.id: ruta} if campo is not None else {}
+    return skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
 
 
 # Extension de la ruta saneada: sin punto, [a-z0-9] hasta 8 chars.
@@ -945,31 +940,67 @@ def _crear_publicaciones_desde_piezas(
     return creadas
 
 
+# Orden de presentacion de los grupos en `opciones` (validadas primero).
+_ORDEN_GRUPOS: tuple[str, ...] = ("validadas", "experimentales")
+
+
+def _skill_para_opciones(skill: skills_catalogo.SkillDef) -> dict[str, object]:
+    """Forma reducida de una skill para el formulario de generacion del SPA.
+
+    Incluye lo que el frontend necesita para pintar el formulario dinamico (campos,
+    si aplica a redes, tipo de salida, si es media). NO incluye la plantilla de
+    invocacion (eso es de la pagina de gestion / `vista-prompt`).
+    """
+    return {
+        "id": skill.id,
+        "nombre": skill.nombre,
+        "explicacion": skill.explicacion,
+        "aplica_redes": skill.aplica_redes,
+        "salida": skill.salida,
+        "media": skill.media,
+        "campos": [c.a_dict() for c in skill.campos],
+    }
+
+
 async def opciones(request: Request) -> Response:
-    """Grupos de skills + marcas + ids de skills de media (para el SPA)."""
-    grupos = [
-        {
-            "etiqueta": g.etiqueta,
-            "experimental": g.experimental,
-            "skills": [
-                {"id": s.id, "nombre": s.nombre, "descripcion": s.descripcion} for s in g.skills
-            ],
-        }
-        for g in GRUPOS_SKILLS
-    ]
+    """Catalogo de skills (agrupado) + marcas + redes + ids de skills de media (para el SPA).
+
+    Las skills salen del CATALOGO DE ARCHIVOS (`skills_catalogo.listar()`), agrupadas por
+    `grupo` con su etiqueta humana y la bandera `experimental`. Cada skill trae lo necesario
+    para el formulario dinamico (`campos`, `aplica_redes`, `salida`, `media`). `marcas` y
+    `redes` (id+nombre) permiten poblar los selectores. `skills_media` se deriva del catalogo.
+    """
+    todas = skills_catalogo.listar()
+    por_grupo: dict[str, list[skills_catalogo.SkillDef]] = {}
+    for skill in todas:
+        por_grupo.setdefault(skill.grupo, []).append(skill)
+
+    # Grupos en orden fijo (validadas, experimentales) y, al final, cualquier grupo extra.
+    nombres_grupo = list(_ORDEN_GRUPOS) + [g for g in por_grupo if g not in _ORDEN_GRUPOS]
+    grupos = []
+    for grupo in nombres_grupo:
+        if grupo not in por_grupo:
+            continue
+        etiqueta, experimental = skills_catalogo.ETIQUETA_GRUPO.get(grupo, (grupo, False))
+        grupos.append({
+            "grupo": grupo,
+            "etiqueta": etiqueta,
+            "experimental": experimental,
+            "skills": [_skill_para_opciones(s) for s in por_grupo[grupo]],
+        })
+
     marcas_lista = [{"id": mid, "nombre": nombre} for mid, nombre in MARCAS]
+    redes_lista = [{"id": r["id"], "nombre": r["nombre"]} for r in redes.opciones()]
+    skills_media = sorted(s.id for s in todas if s.media)
     return JSONResponse(
-        {"grupos": grupos, "marcas": marcas_lista, "skills_media": sorted(_SKILLS_MEDIA)}
+        {
+            "grupos": grupos,
+            "marcas": marcas_lista,
+            "redes": redes_lista,
+            "skills_media": skills_media,
+        }
     )
 
-
-# Mensajes de SkillError que son fallos de VALIDACION de entrada (=> 400).
-_ERRORES_VALIDACION = frozenset({
-    "Falta la nota o transcripción para generar el borrador.",
-    "El texto es demasiado largo; acórtalo e inténtalo de nuevo.",
-    "Tipo de contenido no permitido.",
-    "Marca no permitida.",
-})
 
 # Errores de subida que son de VALIDACION de entrada (=> 400).
 _ERRORES_VALIDACION_ARCHIVO = frozenset({
@@ -1035,29 +1066,58 @@ def construir_procesar_copy(
     return procesar
 
 
+def construir_procesar_documento(
+    skill: str,
+    marca: str,
+    *,
+    titulo_base: str,
+    titulo_dado: str = "",
+) -> generaciones.Procesar:
+    """Callback de post-procesado de una skill de salida `documento` (sin piezas).
+
+    El callback `procesar(salida, metricas) -> dict` corre al COMPLETARSE el trabajo:
+    limpia emojis del documento, deriva el verdicto de la primera linea ✅/⚠️/❌, deriva
+    un titulo (del primer campo de texto o del documento), registra el historial SIN
+    piezas y NO auto-crea publicaciones. Devuelve
+    `{documento, verdicto, historial_id, piezas: [], publicaciones: []}`.
+    """
+
+    def procesar(salida: str, metricas: MetricasRun | None) -> dict[str, object]:
+        doc = quitar_emojis(salida)
+        verdicto = _derivar_verdicto(salida)
+        titulo = titulo_dado or derivar_titulo(titulo_base or doc)
+        historial_id = repos.registrar_historial_skill(
+            skill, marca, doc, piezas=[], titulo=titulo, metricas=metricas_a_dict(metricas),
+        )
+        return {
+            "documento": doc,
+            "verdicto": verdicto,
+            "historial_id": historial_id,
+            "piezas": [],
+            "publicaciones": [],
+        }
+
+    return procesar
+
+
 def etiqueta_generacion(skill: str, marca: str) -> str:
     """Etiqueta legible de una generacion (para el progreso y la lista de actividad)."""
-    return f"{_SKILL_NOMBRE.get(skill, skill)} · {_MARCA_NOMBRE.get(marca, marca)}"
+    return f"{_nombre_skill(skill)} · {_MARCA_NOMBRE.get(marca, marca)}"
 
 
-def lanzar_generacion_copy(
+def _lanzar_con_procesar(
     *,
     tipo: str,
     skill: str,
     marca: str,
     prompt: str,
-    redes_ids: list[str],
-    titulo_dado: str,
-    texto_base: str,
+    procesar: generaciones.Procesar,
     dir_temporal: Path | None = None,
 ) -> dict[str, object]:
     """Crea el registro de generacion, lanza el trabajo de claude EN BACKGROUND y
     devuelve el registro ACTUAL (puede haber avanzado ya si el lanzador es una fake)."""
     gen = generaciones.crear(
         {"tipo": tipo, "marca": marca, "etiqueta": etiqueta_generacion(skill, marca)}
-    )
-    procesar = construir_procesar_copy(
-        skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base
     )
     try:
         generaciones.lanzar_job_claude(
@@ -1075,49 +1135,150 @@ def lanzar_generacion_copy(
     return generaciones.obtener(gen["id"]) or gen
 
 
-async def ejecutar(request: Request) -> Response:
-    """Lanza la generacion de copy EN SEGUNDO PLANO -> `{generacion}` (estado ejecutando).
+def lanzar_generacion_copy(
+    *,
+    tipo: str,
+    skill: str,
+    marca: str,
+    prompt: str,
+    redes_ids: list[str],
+    titulo_dado: str,
+    texto_base: str,
+    dir_temporal: Path | None = None,
+) -> dict[str, object]:
+    """Lanza una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS."""
+    procesar = construir_procesar_copy(
+        skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base
+    )
+    return _lanzar_con_procesar(
+        tipo=tipo, skill=skill, marca=marca, prompt=prompt, procesar=procesar,
+        dir_temporal=dir_temporal,
+    )
 
-    No bloquea: el frontend sondea `GET /api/generaciones/{id}` para seguir el streaming
-    y, al completarse, recoge `resultado` (piezas + publicaciones ya creadas).
+
+def lanzar_generacion_skill(
+    *,
+    skilldef: skills_catalogo.SkillDef,
+    marca: str,
+    prompt: str,
+    redes_ids: list[str],
+    titulo_base: str,
+    dir_temporal: Path | None = None,
+) -> dict[str, object]:
+    """Lanza una generacion en background eligiendo el post-procesado segun `salida`.
+
+    - `salida == "piezas"`: parsea piezas por red + auto-crea publicaciones (comportamiento
+      de copy). El titulo SIEMPRE se deriva (nunca lo da el cliente).
+    - `salida == "documento"`: limpia el documento, deriva verdicto/titulo, registra el
+      historial SIN piezas y NO crea publicaciones.
+    """
+    if skilldef.salida == "piezas":
+        procesar = construir_procesar_copy(
+            skilldef.id, marca, redes_ids=redes_ids, titulo_dado="", texto_base=titulo_base,
+        )
+    else:
+        procesar = construir_procesar_documento(skilldef.id, marca, titulo_base=titulo_base)
+    return _lanzar_con_procesar(
+        tipo="copy", skill=skilldef.id, marca=marca, prompt=prompt, procesar=procesar,
+        dir_temporal=dir_temporal,
+    )
+
+
+class _ValidacionCampos(SkillError):
+    """Un campo requerido falta o un valor es invalido (=> 400 con mensaje en espanol)."""
+
+
+def _valores_validados(
+    skilldef: skills_catalogo.SkillDef,
+    crudos: dict[str, object],
+    *,
+    saltar_campos: frozenset[str] = frozenset(),
+) -> dict[str, str]:
+    """Extrae y valida los valores de los campos de TEXTO de la skill.
+
+    `crudos` mapea `campo_id -> valor`. Para cada campo (salvo los de `saltar_campos`,
+    p.ej. el `archivo` que ya se guardo aparte): exige los requeridos, recorta el texto,
+    y acota el tamano total. Los campos `archivo` se ignoran aqui (su valor es una ruta
+    que pone el endpoint). Lanza `_ValidacionCampos` (=> 400) si falta un requerido o el
+    texto es demasiado largo.
+    """
+    valores: dict[str, str] = {}
+    total = 0
+    for campo in skilldef.campos:
+        if campo.id in saltar_campos or campo.tipo == "archivo":
+            continue
+        crudo = crudos.get(campo.id)
+        valor = crudo.strip() if isinstance(crudo, str) else ""
+        if campo.requerido and not valor:
+            raise _ValidacionCampos(f"Falta el campo obligatorio: {campo.etiqueta}.")
+        total += len(valor)
+        valores[campo.id] = valor
+    if total > _MAX_TEXTO:
+        raise _ValidacionCampos("El texto es demasiado largo; acórtalo e inténtalo de nuevo.")
+    return valores
+
+
+def _titulo_base_de_valores(skilldef: skills_catalogo.SkillDef, valores: dict[str, str]) -> str:
+    """Texto del primer campo de texto (para derivar un titulo legible)."""
+    campo = skilldef.primer_campo_texto()
+    if campo is None:
+        return ""
+    return valores.get(campo.id, "")
+
+
+async def ejecutar(request: Request) -> Response:
+    """Lanza la generacion de una skill EN SEGUNDO PLANO -> `{generacion}` (estado ejecutando).
+
+    Cuerpo JSON: `{skill, marca, valores: {campo_id: valor}, redes?}` (sin `titulo`: el
+    titulo se deriva siempre). Valida skill∈catalogo, marca∈catalogo y los campos
+    requeridos. Renderiza la invocacion via `skills_catalogo.render_invocacion` y lanza el
+    trabajo, eligiendo el post-procesado segun `salida` (piezas | documento). No bloquea:
+    el frontend sondea `GET /api/generaciones/{id}` y recoge `resultado` al completarse.
     """
     datos = await leer_json(request)
     skill = datos.get("skill")
     marca = datos.get("marca")
-    texto = datos.get("texto")
-    if not isinstance(skill, str) or not isinstance(marca, str) or not isinstance(texto, str):
+    if not isinstance(skill, str) or not isinstance(marca, str):
         return JSONResponse(
-            {"error": "Faltan el tipo de contenido, la marca o el texto."}, status_code=400
+            {"error": "Faltan el tipo de contenido o la marca."}, status_code=400
         )
-    if skill not in _SKILLS_IDS:
+    skilldef = skills_catalogo.obtener(skill)
+    if skilldef is None:
         return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
     if marca not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
-    texto = texto.strip()
-    if not texto:
-        return JSONResponse(
-            {"error": "Falta la nota o transcripción para generar el borrador."}, status_code=400
-        )
-    if len(texto) > _MAX_TEXTO:
-        return JSONResponse(
-            {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."},
-            status_code=400,
-        )
+
+    crudos = datos.get("valores")
+    if not isinstance(crudos, dict):
+        crudos = {}
+    try:
+        valores = _valores_validados(skilldef, crudos)
+    except _ValidacionCampos as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
     crudas = datos.get("redes")
     redes_ids = normalizar_redes(crudas if isinstance(crudas, list) else None)
-    titulo_dado = datos.get("titulo")
-    titulo_dado = titulo_dado.strip() if isinstance(titulo_dado, str) else ""
 
-    prompt = construir_prompt(skill, marca, texto, redes_ids)
-    gen = lanzar_generacion_copy(
-        tipo="copy", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
-        titulo_dado=titulo_dado, texto_base=texto,
+    prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
+    gen = lanzar_generacion_skill(
+        skilldef=skilldef, marca=marca, prompt=prompt, redes_ids=redes_ids,
+        titulo_base=_titulo_base_de_valores(skilldef, valores),
     )
     return JSONResponse({"generacion": gen})
 
 
 async def ejecutar_archivo(request: Request) -> Response:
-    """Genera un borrador a partir de un archivo SUBIDO (multipart), EN SEGUNDO PLANO."""
+    """Genera un borrador a partir de un archivo SUBIDO (multipart), EN SEGUNDO PLANO.
+
+    Form: `skill`, `marca`, `archivo` (el binario), los demas valores de campos de TEXTO
+    como campos del form (`<campo_id>=<valor>`) y `redes` (repetido o CSV). El archivo se
+    guarda en un temporal saneado y se sustituye su valor en el campo de la skill:
+      - Si la skill tiene un campo `archivo` (skill de media: clip-a-copy / revisa-imagen),
+        se sustituye su RUTA temporal y el temporal vive hasta que termina el trabajo (la
+        skill lo lee/transcribe en local); el lanzador lo borra al finalizar.
+      - Si la skill NO tiene campo `archivo` (skill de texto usada con subida), se LEE el
+        texto del archivo, se asigna al primer campo de texto y el temporal se borra ya.
+    """
     try:
         form = await request.form()
     except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro, sin traza
@@ -1128,7 +1289,8 @@ async def ejecutar_archivo(request: Request) -> Response:
 
     if not isinstance(skill, str) or not isinstance(marca, str):
         return JSONResponse({"error": "Faltan el tipo de contenido o la marca."}, status_code=400)
-    if skill not in _SKILLS_IDS:
+    skilldef = skills_catalogo.obtener(skill)
+    if skilldef is None:
         return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
     if marca not in _MARCAS_IDS:
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
@@ -1139,8 +1301,19 @@ async def ejecutar_archivo(request: Request) -> Response:
 
     redes_crudas = _redes_desde_form(form)
     redes_ids = normalizar_redes(redes_crudas or None)
-    titulo_form = form.get("titulo")
-    titulo_dado = titulo_form.strip() if isinstance(titulo_form, str) else ""
+
+    # Valores de los campos de TEXTO desde el form (cada campo.id). El campo que recibe el
+    # archivo subido se SALTA en la validacion (lo rellena el endpoint):
+    #   - skill con campo `archivo`: ese campo (su valor sera la RUTA temporal).
+    #   - skill de texto: el primer campo de texto (su valor sera el TEXTO leido del archivo).
+    campo_archivo = skilldef.campo_archivo()
+    campo_destino = campo_archivo or skilldef.primer_campo_texto()
+    saltar = frozenset({campo_destino.id}) if campo_destino is not None else frozenset()
+    crudos = {campo.id: form.get(campo.id) for campo in skilldef.campos}
+    try:
+        valores = _valores_validados(skilldef, crudos, saltar_campos=saltar)
+    except _ValidacionCampos as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
 
     # Guardado seguro del archivo a un temporal (puede fallar por tamano/E-S => 400/500).
     try:
@@ -1150,17 +1323,19 @@ async def ejecutar_archivo(request: Request) -> Response:
         codigo = 400 if mensaje in _ERRORES_VALIDACION_ARCHIVO else 500
         return JSONResponse({"error": mensaje}, status_code=codigo)
 
-    if skill in _SKILLS_MEDIA:
-        # MEDIA: el temporal debe vivir hasta que termine el trabajo (la skill transcribe
-        # en local). El lanzador lo borra al finalizar (`dir_temporal`).
-        prompt = construir_prompt_ruta(skill, marca, str(ruta), redes_ids)
-        gen = lanzar_generacion_copy(
-            tipo="copy", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
-            titulo_dado=titulo_dado, texto_base="", dir_temporal=dir_temporal,
+    if campo_archivo is not None:
+        # MEDIA / RUTA: el campo de archivo recibe la RUTA temporal; el temporal vive hasta
+        # que termine el trabajo (la skill lo lee/transcribe en local). El lanzador lo borra.
+        valores[campo_archivo.id] = str(ruta)
+        prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
+        gen = lanzar_generacion_skill(
+            skilldef=skilldef, marca=marca, prompt=prompt, redes_ids=redes_ids,
+            titulo_base=_titulo_base_de_valores(skilldef, valores), dir_temporal=dir_temporal,
         )
         return JSONResponse({"generacion": gen})
 
-    # TEXTO: leemos el contenido ya (rapido) y borramos el temporal de inmediato.
+    # TEXTO: leemos el contenido ya (rapido), lo ponemos en el primer campo de texto y
+    # borramos el temporal de inmediato.
     try:
         texto_nota = _leer_texto_archivo(ruta)
     except OSError:
@@ -1175,10 +1350,13 @@ async def ejecutar_archivo(request: Request) -> Response:
             {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."},
             status_code=400,
         )
-    prompt = construir_prompt(skill, marca, texto_nota, redes_ids)
-    gen = lanzar_generacion_copy(
-        tipo="copy", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
-        titulo_dado=titulo_dado, texto_base=texto_nota,
+    campo_texto = skilldef.primer_campo_texto()
+    if campo_texto is not None:
+        valores[campo_texto.id] = texto_nota
+    prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
+    gen = lanzar_generacion_skill(
+        skilldef=skilldef, marca=marca, prompt=prompt, redes_ids=redes_ids,
+        titulo_base=_titulo_base_de_valores(skilldef, valores),
     )
     return JSONResponse({"generacion": gen})
 
@@ -1190,7 +1368,7 @@ async def historial(request: Request) -> Response:
         {
             "id": e["id"],
             "skill": e["skill"],
-            "skill_nombre": _SKILL_NOMBRE.get(e["skill"], e["skill"]),
+            "skill_nombre": _nombre_skill(e["skill"]),
             "marca": e["marca"],
             "marca_nombre": _MARCA_NOMBRE.get(e["marca"], e["marca"]),
             "fecha": e["fecha"],
@@ -1288,10 +1466,132 @@ async def historial_guardar(request: Request) -> Response:
     return JSONResponse({"publicaciones": [_publicacion_a_dict(pub)]})
 
 
+# --------------------------------------------------------------------------- #
+# CRUD del CATALOGO de skills (pagina de gestion) + visor de prompt            #
+# --------------------------------------------------------------------------- #
+
+
+async def catalogo_listar(request: Request) -> Response:
+    """`GET /api/skills/catalogo` -> `{skills: [definicion completa]}` (orden, id)."""
+    return JSONResponse({"skills": [s.a_dict() for s in skills_catalogo.listar()]})
+
+
+async def catalogo_crear(request: Request) -> Response:
+    """`POST /api/skills/catalogo` -> crea una skill `{nombre, ...}` -> `{skill}` (400 dup/invalida)."""
+    datos = await leer_json(request)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str) or not nombre.strip():
+        return JSONResponse({"error": "El nombre de la skill es obligatorio."}, status_code=400)
+    kwargs: dict[str, object] = {}
+    for clave in ("explicacion", "grupo", "salida"):
+        valor = datos.get(clave)
+        if isinstance(valor, str) and valor:
+            kwargs[clave] = valor
+    if isinstance(datos.get("aplica_redes"), bool):
+        kwargs["aplica_redes"] = datos["aplica_redes"]
+    try:
+        skill = skills_catalogo.crear(nombre, **kwargs)
+    except skills_catalogo.SkillCatalogoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"skill": skill.a_dict()})
+
+
+async def catalogo_obtener(request: Request) -> Response:
+    """`GET /api/skills/catalogo/{id}` -> `{skill: {...metadata...}, skill_md: "<SKILL.md>"}` (404)."""
+    skill_id = request.path_params["skill_id"]
+    skill = skills_catalogo.obtener(skill_id)
+    if skill is None:
+        return JSONResponse({"error": "Esa skill no existe."}, status_code=404)
+    try:
+        skill_md = skills_catalogo.leer_skill_md(skill_id)
+    except skills_catalogo.SkillCatalogoError:
+        skill_md = ""
+    return JSONResponse({"skill": skill.a_dict(), "skill_md": skill_md})
+
+
+async def catalogo_actualizar(request: Request) -> Response:
+    """`PUT /api/skills/catalogo/{id}` -> reescribe metadatos -> `{skill}` (404/400)."""
+    skill_id = request.path_params["skill_id"]
+    if not skills_catalogo.existe(skill_id):
+        return JSONResponse({"error": "Esa skill no existe."}, status_code=404)
+    datos = await leer_json(request)
+    if not isinstance(datos, dict):
+        return JSONResponse({"error": "Los metadatos de la skill no son válidos."}, status_code=400)
+    try:
+        skill = skills_catalogo.actualizar(skill_id, datos)
+    except skills_catalogo.SkillCatalogoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"skill": skill.a_dict()})
+
+
+async def catalogo_skill_md(request: Request) -> Response:
+    """`PUT /api/skills/catalogo/{id}/skill-md` -> `{contenido}` -> `{mensaje}` (404/400)."""
+    skill_id = request.path_params["skill_id"]
+    if not skills_catalogo.existe(skill_id):
+        return JSONResponse({"error": "Esa skill no existe."}, status_code=404)
+    datos = await leer_json(request)
+    contenido = datos.get("contenido")
+    try:
+        skills_catalogo.guardar_skill_md(skill_id, contenido)
+    except skills_catalogo.SkillCatalogoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"mensaje": "SKILL.md guardado."})
+
+
+async def catalogo_borrar(request: Request) -> Response:
+    """`DELETE /api/skills/catalogo/{id}` -> `{mensaje}` (404; defensivo dentro de la raiz)."""
+    skill_id = request.path_params["skill_id"]
+    if not skills_catalogo.existe(skill_id):
+        return JSONResponse({"error": "Esa skill no existe."}, status_code=404)
+    try:
+        skills_catalogo.borrar(skill_id)
+    except skills_catalogo.SkillCatalogoError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"mensaje": "Skill eliminada."})
+
+
+async def catalogo_vista_prompt(request: Request) -> Response:
+    """`POST /api/skills/catalogo/{id}/vista-prompt` -> `{marca, valores, redes}` -> `{prompt}`.
+
+    Renderiza la invocacion EXACTA que recibiria Claude (sin llamarlo): util para el
+    visor de prompt del frontend. Aplica la misma logica que `ejecutar`: sustituye los
+    valores en la plantilla, anade la instruccion de "sin emojis" y, si la skill
+    `aplica_redes`, la instruccion de redes. No valida campos requeridos (es solo vista
+    previa). 404 si la skill no existe.
+    """
+    skill_id = request.path_params["skill_id"]
+    skilldef = skills_catalogo.obtener(skill_id)
+    if skilldef is None:
+        return JSONResponse({"error": "Esa skill no existe."}, status_code=404)
+    datos = await leer_json(request)
+    marca = datos.get("marca")
+    marca = marca if isinstance(marca, str) else ""
+    crudos = datos.get("valores")
+    valores: dict[str, str] = {}
+    if isinstance(crudos, dict):
+        for campo in skilldef.campos:
+            v = crudos.get(campo.id)
+            valores[campo.id] = v if isinstance(v, str) else ""
+    crudas = datos.get("redes")
+    redes_ids = normalizar_redes(crudas if isinstance(crudas, list) else None)
+    prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
+    return JSONResponse({"prompt": prompt})
+
+
+# Rutas: las que tienen segmento ESTATICO (`ejecutar`, `ejecutar-archivo`, `historial`,
+# `catalogo`) van ANTES que las de parametro (`/catalogo/{id}`, `/historial/{id}`) para
+# que Starlette las case primero y no las trague la ruta parametrica.
 RUTAS = [
     Route("/api/skills", opciones, methods=["GET"]),
     Route("/api/skills/ejecutar", ejecutar, methods=["POST"]),
     Route("/api/skills/ejecutar-archivo", ejecutar_archivo, methods=["POST"]),
+    Route("/api/skills/catalogo", catalogo_listar, methods=["GET"]),
+    Route("/api/skills/catalogo", catalogo_crear, methods=["POST"]),
+    Route("/api/skills/catalogo/{skill_id}/skill-md", catalogo_skill_md, methods=["PUT"]),
+    Route("/api/skills/catalogo/{skill_id}/vista-prompt", catalogo_vista_prompt, methods=["POST"]),
+    Route("/api/skills/catalogo/{skill_id}", catalogo_obtener, methods=["GET"]),
+    Route("/api/skills/catalogo/{skill_id}", catalogo_actualizar, methods=["PUT"]),
+    Route("/api/skills/catalogo/{skill_id}", catalogo_borrar, methods=["DELETE"]),
     Route("/api/skills/historial", historial, methods=["GET"]),
     Route("/api/skills/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
     Route("/api/skills/historial/{historial_id}", historial_detalle, methods=["GET"]),
