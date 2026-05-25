@@ -19,7 +19,10 @@ Tablas:
   - `grupos_hashtags`(id, nombre, marca, hashtags)  [hashtags = JSON list]
   - `franjas`(id, marca, red, dia_semana, hora)  [dia 0=lunes..6=domingo, "HH:MM"]
   - `plantillas`(id, nombre, marca, red, contenido, fecha)
-  - `fuentes_rss`(id, nombre, url, marca, fecha)
+  - `fuentes_rss`(id, nombre, url, marca, fecha, activo, incluir, excluir,
+    redes_def, ultima_actualizacion, ultimo_error, ultimo_conteo)
+    [incluir/excluir = CSV de terminos; redes_def = JSON de ids de red]
+  - `rss_items_vistos`(id, fuente_id, clave, fecha)  [UNIQUE(fuente_id, clave)]
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
@@ -129,11 +132,20 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             marca   TEXT NOT NULL DEFAULT '',
             fecha   TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS rss_items_vistos (
+            id          TEXT PRIMARY KEY,
+            fuente_id   TEXT NOT NULL,
+            clave       TEXT NOT NULL,
+            fecha       TEXT NOT NULL DEFAULT ''
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_rss_items_vistos_fuente_clave
+            ON rss_items_vistos (fuente_id, clave);
         """
     )
     _migrar_columna_imagen(con)
     _migrar_columna_evergreen(con)
     _migrar_columnas_historial(con)
+    _migrar_columnas_fuentes_rss(con)
     con.commit()
 
 
@@ -174,6 +186,35 @@ def _migrar_columnas_historial(con: sqlite3.Connection) -> None:
         con.execute("ALTER TABLE skill_historial ADD COLUMN piezas TEXT NOT NULL DEFAULT ''")
     if "titulo" not in cols:
         con.execute("ALTER TABLE skill_historial ADD COLUMN titulo TEXT NOT NULL DEFAULT ''")
+
+
+# Columnas nuevas de `fuentes_rss` (RSS v2): (nombre, definicion del ADD COLUMN).
+# `activo` arranca en 1 (toda fuente preexistente queda activa); filtros y salud en ''.
+_COLS_NUEVAS_FUENTES_RSS: tuple[tuple[str, str], ...] = (
+    ("activo", "INTEGER NOT NULL DEFAULT 1"),
+    ("incluir", "TEXT NOT NULL DEFAULT ''"),
+    ("excluir", "TEXT NOT NULL DEFAULT ''"),
+    ("redes_def", "TEXT NOT NULL DEFAULT ''"),
+    ("ultima_actualizacion", "TEXT NOT NULL DEFAULT ''"),
+    ("ultimo_error", "TEXT NOT NULL DEFAULT ''"),
+    ("ultimo_conteo", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_fuentes_rss(con: sqlite3.Connection) -> None:
+    """Anade las columnas de RSS v2 a `fuentes_rss` si una base antigua no las tiene.
+
+    Misma estrategia idempotente que el resto de migraciones: `CREATE TABLE IF NOT
+    EXISTS` no toca tablas ya creadas, asi que una base previa solo tendria
+    `id/nombre/url/marca/fecha`. Aqui se anaden con `ALTER TABLE ... ADD COLUMN`
+    (PRAGMA antes para no repetir). Cubre: activo (on/off), filtros incluir/excluir,
+    redes por defecto (JSON) y los tres campos de salud (ultima_actualizacion,
+    ultimo_error, ultimo_conteo).
+    """
+    cols = {fila["name"] for fila in con.execute("PRAGMA table_info(fuentes_rss)")}
+    for nombre, definicion in _COLS_NUEVAS_FUENTES_RSS:
+        if nombre not in cols:
+            con.execute(f"ALTER TABLE fuentes_rss ADD COLUMN {nombre} {definicion}")
 
 
 # --------------------------------------------------------------------------- #
@@ -979,18 +1020,54 @@ def borrar_plantilla(plantilla_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Fuentes RSS (nombre + url + marca opcional)                                  #
+# Fuentes RSS (nombre + url + marca + activo + filtros + redes_def + salud)     #
 # --------------------------------------------------------------------------- #
+
+# Columnas de `fuentes_rss` en orden de declaracion (base + RSS v2).
+_COLS_FUENTE_RSS = (
+    "id",
+    "nombre",
+    "url",
+    "marca",
+    "fecha",
+    "activo",
+    "incluir",
+    "excluir",
+    "redes_def",
+    "ultima_actualizacion",
+    "ultimo_error",
+    "ultimo_conteo",
+)
+_SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
+
+# Campos que la edicion parcial puede tocar (el resto es inmutable desde la API).
+# `incluir`/`excluir` son CSV de terminos; `redes_def` un JSON de ids de red.
+_CAMPOS_EDITABLES_FUENTE_RSS = (
+    "nombre",
+    "url",
+    "marca",
+    "activo",
+    "incluir",
+    "excluir",
+    "redes_def",
+)
 
 
 def _fila_a_fuente_rss(fila: sqlite3.Row) -> dict[str, Any]:
-    """Convierte una fila de `fuentes_rss` en un dict simple."""
+    """Convierte una fila de `fuentes_rss` en un dict simple (`activo` como bool)."""
     return {
         "id": fila["id"],
         "nombre": fila["nombre"],
         "url": fila["url"],
         "marca": fila["marca"],
         "fecha": fila["fecha"],
+        "activo": bool(fila["activo"]),
+        "incluir": fila["incluir"],
+        "excluir": fila["excluir"],
+        "redes_def": fila["redes_def"],
+        "ultima_actualizacion": fila["ultima_actualizacion"],
+        "ultimo_error": fila["ultimo_error"],
+        "ultimo_conteo": fila["ultimo_conteo"],
     }
 
 
@@ -999,8 +1076,7 @@ def listar_fuentes_rss() -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, nombre, url, marca, fecha FROM fuentes_rss "
-            "ORDER BY fecha DESC, rowid DESC"
+            f"{_SELECT_FUENTE_RSS} ORDER BY fecha DESC, rowid DESC"
         ).fetchall()
     finally:
         con.close()
@@ -1012,28 +1088,62 @@ def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT id, nombre, url, marca, fecha FROM fuentes_rss WHERE id = ?",
-            (fuente_id,),
+            f"{_SELECT_FUENTE_RSS} WHERE id = ?", (fuente_id,)
         ).fetchone()
     finally:
         con.close()
     return _fila_a_fuente_rss(fila) if fila is not None else None
 
 
-def crear_fuente_rss(nombre: str, url: str, marca: str = "") -> dict[str, Any]:
-    """Inserta una fuente RSS y la devuelve. NO valida url/marca (lo hace la API)."""
+def crear_fuente_rss(
+    nombre: str,
+    url: str,
+    marca: str = "",
+    *,
+    incluir: str = "",
+    excluir: str = "",
+    redes_def: str = "",
+) -> dict[str, Any]:
+    """Inserta una fuente RSS (activa) y la devuelve. NO valida url/marca (lo hace la API).
+
+    `incluir`/`excluir` son CSV de terminos; `redes_def` un JSON de ids de red por
+    defecto. La fuente nace `activo=1` y con la salud vacia.
+    """
     fuente = {
         "id": uuid.uuid4().hex[:12],
         "nombre": nombre,
         "url": url,
         "marca": marca,
         "fecha": date.today().isoformat(),
+        "activo": True,
+        "incluir": incluir,
+        "excluir": excluir,
+        "redes_def": redes_def,
+        "ultima_actualizacion": "",
+        "ultimo_error": "",
+        "ultimo_conteo": 0,
     }
     con = _conectar()
     try:
         con.execute(
-            "INSERT INTO fuentes_rss (id, nombre, url, marca, fecha) VALUES (?, ?, ?, ?, ?)",
-            (fuente["id"], fuente["nombre"], fuente["url"], fuente["marca"], fuente["fecha"]),
+            "INSERT INTO fuentes_rss "
+            "(id, nombre, url, marca, fecha, activo, incluir, excluir, redes_def, "
+            "ultima_actualizacion, ultimo_error, ultimo_conteo) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                fuente["id"],
+                fuente["nombre"],
+                fuente["url"],
+                fuente["marca"],
+                fuente["fecha"],
+                1,
+                fuente["incluir"],
+                fuente["excluir"],
+                fuente["redes_def"],
+                "",
+                "",
+                0,
+            ),
         )
         con.commit()
     finally:
@@ -1041,12 +1151,108 @@ def crear_fuente_rss(nombre: str, url: str, marca: str = "") -> dict[str, Any]:
     return fuente
 
 
-def borrar_fuente_rss(fuente_id: str) -> bool:
-    """Borra una fuente RSS; True si existia, False si no."""
+def actualizar_fuente_rss(
+    fuente_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una fuente (nombre/url/marca/activo/incluir/excluir/redes_def).
+
+    Ignora cualquier otra clave del dict. `activo` se persiste como 0/1. Sin campos
+    editables, devuelve la fuente tal cual. Devuelve la fuente actualizada, o None si
+    el id no existe. NO valida url/marca/redes (lo hace la API).
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_FUENTE_RSS}
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    if not cambios:
+        return obtener_fuente_rss(fuente_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = list(cambios.values())
+    params.append(fuente_id)
     con = _conectar()
     try:
+        cur = con.execute(
+            f"UPDATE fuentes_rss SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_FUENTE_RSS} WHERE id = ?", (fuente_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_fuente_rss(fila) if fila is not None else None
+
+
+def registrar_salud_fuente_rss(
+    fuente_id: str, *, conteo: int, error: str = ""
+) -> None:
+    """Anota la salud de una fuente tras un fetch: fecha de hoy, conteo y ultimo error.
+
+    `error=''` significa fetch correcto. Best-effort: si el id no existe, no hace nada.
+    """
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE fuentes_rss SET ultima_actualizacion = ?, ultimo_conteo = ?, "
+            "ultimo_error = ? WHERE id = ?",
+            (date.today().isoformat(), int(conteo), error, fuente_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def borrar_fuente_rss(fuente_id: str) -> bool:
+    """Borra una fuente RSS (y sus items vistos); True si existia, False si no."""
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM rss_items_vistos WHERE fuente_id = ?", (fuente_id,))
         cur = con.execute("DELETE FROM fuentes_rss WHERE id = ?", (fuente_id,))
         con.commit()
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Items RSS vistos (dedup / marcar usado): (fuente_id, clave) unico            #
+# --------------------------------------------------------------------------- #
+
+
+def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
+    """Marca (`usado=True`) o desmarca (`usado=False`) un item de un feed.
+
+    La identidad de un item es `(fuente_id, clave)` (clave estable del feed o el
+    enlace). Marcar inserta una fila (idempotente por el indice UNICO); desmarcar
+    borra la fila si existe. Operaciones parametrizadas.
+    """
+    con = _conectar()
+    try:
+        if usado:
+            con.execute(
+                "INSERT OR IGNORE INTO rss_items_vistos (id, fuente_id, clave, fecha) "
+                "VALUES (?, ?, ?, ?)",
+                (uuid.uuid4().hex[:12], fuente_id, clave, date.today().isoformat()),
+            )
+        else:
+            con.execute(
+                "DELETE FROM rss_items_vistos WHERE fuente_id = ? AND clave = ?",
+                (fuente_id, clave),
+            )
+        con.commit()
+    finally:
+        con.close()
+
+
+def claves_vistas(fuente_id: str) -> set[str]:
+    """Conjunto de `clave` ya marcadas como usadas para una fuente (vacio si ninguna)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT clave FROM rss_items_vistos WHERE fuente_id = ?", (fuente_id,)
+        ).fetchall()
+    finally:
+        con.close()
+    return {f["clave"] for f in filas}
