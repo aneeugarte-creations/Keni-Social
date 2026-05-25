@@ -61,6 +61,10 @@ export default function DetalleAgente() {
   });
   const resumen = listaQuery.data?.agentes.find((a) => a.id === id);
   const nPublicaciones = resumen?.n_publicaciones ?? 0;
+  // Una marca de serie no puede tener publicaciones genéricas vacías "por
+  // diseño"; un genérico sí. Si el resumen no está en caché, asumimos marca
+  // (comportamiento previo) para no mostrar avisos espurios.
+  const esMarca = resumen?.es_marca ?? true;
 
   if (isPending) {
     return (
@@ -118,6 +122,9 @@ export default function DetalleAgente() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Badge variant={esMarca ? "secondary" : "outline"}>
+          {esMarca ? "Marca" : "Genérico"}
+        </Badge>
         <Badge variant={data.claude_md.trim() !== "" ? "ok" : "aviso"}>
           {data.claude_md.trim() !== "" ? "Con CLAUDE.md" : "Sin CLAUDE.md"}
         </Badge>
@@ -148,7 +155,7 @@ export default function DetalleAgente() {
           <PestanaRuns agente={data} />
         </TabsContent>
         <TabsContent value="contenido" className="mt-4">
-          <PestanaContenido agente={data} nPublicaciones={nPublicaciones} />
+          <PestanaContenido agente={data} nPublicaciones={nPublicaciones} esMarca={esMarca} />
         </TabsContent>
       </Tabs>
     </>

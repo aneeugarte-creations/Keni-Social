@@ -51,7 +51,12 @@ def test_listar_agentes_son_las_marcas(cliente):
     ids = [a["id"] for a in datos["agentes"]]
     assert ids == marcas.ids()
     for a in datos["agentes"]:
-        assert set(a) == {"id", "nombre", "ruta", "tiene_claude_md", "n_publicaciones", "n_runs"}
+        assert set(a) == {
+            "id", "nombre", "ruta", "es_marca", "tiene_claude_md",
+            "n_publicaciones", "n_runs",
+        }
+        # De serie, todos los agentes son marcas (no hay genericos aun).
+        assert a["es_marca"] is True
 
 
 def test_listar_no_materializa_carpetas(entorno):
