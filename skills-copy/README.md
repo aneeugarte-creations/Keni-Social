@@ -12,6 +12,8 @@ Sistema de producción de copy para el equipo de redes de AMX, como **Agent Skil
 | **nota-a-formato** | Nota cruda → normalizada a la voz de la casa (limpia giros españoles). Paso previo opcional. |
 | **publica-preview** | Copy ya aprobado → pre-vuelo final en **dry-run**: muestra EXACTO qué se publicaría por plataforma (texto, conteo, hashtags, hilo/carrusel, media referenciada) + avisos + checklist humana. **No publica.** |
 | **revisa-imagen** | **Imagen/arte propuesto** → repaso legal antes de publicar: bandera con/sin escudo, menores/víctimas y rostros identificables, datos personales visibles (matrículas, documentos), marcas/copyright, texto con errores o cifras sin fuente. Checklist ✅/⚠️/❌ + veredicto (APTA solo si todo ✅). **No genera ni edita: solo revisa; el humano decide.** |
+| **responde-comentarios** | **Comentarios** bajo una publicación → clasifica cada uno (pregunta/queja/elogio/duda de dato/troll/sensible), fija tono por marca y redacta la respuesta en voz de marca es-MX con auto-verificación. **Dry-run: no responde; el humano aprueba.** |
+| **modera-en-vivo** | **Chat/comentarios EN VIVO** (eventos como México Siglo XXI de la Fundación) → clasifica cada mensaje (ok/pregunta/grosería/tóxico/spam-bot/sensible) y **propone** la acción (dejar pasar, ocultar/borrar, expulsar, escalar) con veredicto ✅/⚠️/❌; separa las preguntas legítimas en una **bandeja** para `responde-comentarios`. Conservadora con lo legítimo. **Dry-run: no borra ni expulsa, no toca la API de YouTube; el humano modera.** |
 
 ## Layout
 
@@ -61,6 +63,14 @@ Cuando tienes un **arte o imagen propuesto** y quieres un **repaso legal antes d
 ```
 
 Claude **lee la imagen** (no la genera ni la edita), carga `contexto-editorial/reglas-legales.md` y la revisa punto por punto: **bandera con escudo** (prohibida) vs sin escudo (OK), menores/víctimas y rostros identificables, datos personales visibles (matrículas, documentos, domicilios), marcas/logos de terceros o copyright, y texto sobreimpreso con errores o cifras sin fuente. Devuelve un **checklist ✅/⚠️/❌** y un veredicto (**APTA solo si todo es ✅**, si no, exactamente qué corregir). El **juicio visual puede fallar** (sobre todo en la bandera/escudo): ante la duda lo marca para **confirmación humana**. **Solo revisa; tú decides publicar, corregir o descartar.**
+
+Cuando tienes un **directo con chat en vivo** (un evento como **México Siglo XXI** de la Fundación) y quieres **moderar** el flujo de mensajes:
+
+```
+> usa modera-en-vivo con ejemplos/chat-en-vivo-mexico-siglo-xxi.md, marca fundacion
+```
+
+Clasifica cada mensaje (ok / pregunta / grosería / tóxico-acoso / spam-bot / riesgo legal o sensible) y **propone una acción** (dejar pasar, ocultar/borrar, expulsar, marcar para revisión) con veredicto ✅/⚠️/❌, y **separa las preguntas legítimas en una bandeja** lista para `responde-comentarios` — así el mismo sistema **modera el ruido y contesta lo legítimo**. Es conservadora: ante la duda en un mensaje legítimo no propone borrar, lo marca para revisar (un falso positivo en una Fundación es mal PR). Es **dry-run puro**: no borra, no expulsa, no toca la API de YouTube; **la moderación real (leer/borrar/expulsar vía API, OAuth del canal y cuota) es una fase futura, como la publicación**. El humano aprueba y actúa.
 
 ## Personaliza tu voz (5 minutos)
 

@@ -25,6 +25,21 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
   bloque veredicto + leyenda como el resto de skills y **el humano decide**.
 - Disponible también en la **Consola** (grupo *experimentales*) vía `keni.yaml`.
 
+### Moderación en vivo (experimental)
+
+- Nueva skill **`modera-en-vivo`**: modera un chat/comentarios **en vivo** de YouTube para
+  eventos como **México Siglo XXI** de la Fundación. Clasifica cada mensaje (ok / pregunta /
+  grosería / tóxico-acoso / spam-bot / riesgo legal o sensible) y **propone** una acción
+  (dejar pasar, ocultar/borrar, expulsar, escalar) con veredicto ✅/⚠️/❌, y **separa las
+  preguntas legítimas en una bandeja** para la skill `responde-comentarios` — el mismo sistema
+  modera el ruido y contesta lo legítimo. Conservadora con lo legítimo (ante la duda, revisar,
+  nunca autoborrar) y prudente con datos personales / menores (reglas legales).
+- Feed de muestra **`ejemplos/chat-en-vivo-mexico-siglo-xxi.md`** (mezcla de legítimos,
+  preguntas, groserías, spam/bots y casos sensibles) para probar la skill sin tocar la red.
+- **Dry-run, como el resto de la suite:** no borra, no expulsa, no llama a la API de YouTube.
+  La moderación real (leer/borrar/expulsar vía API, OAuth del canal y ampliación de cuota)
+  queda como fase futura, igual que la publicación real.
+
 ## [0.2.0] - 2026-05-24
 
 Primera versión presentable como producto: el flujo completo de producción de
