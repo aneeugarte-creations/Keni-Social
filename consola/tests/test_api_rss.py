@@ -14,10 +14,28 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola.api import rss
+from keni_consola.api import rss, skills
 
 # IP publica literal: pasa el guard SSRF sin tocar DNS. example.com no se resuelve aqui.
 _URL_OK = "https://93.184.216.34/feed.xml"
+
+# Salida mock del runner de skills: ✅ + bloque json con dos piezas (sin red real).
+_SALIDA_SKILL = """✅ Copy listo.
+
+```json
+{"piezas": [{"red": "x", "texto": "Tweet desde el item."},
+            {"red": "instagram", "texto": "IG desde el item."}]}
+```
+"""
+
+
+def _mock_runner_skills(salida=_SALIDA_SKILL):
+    """Runner que ignora el prompt y devuelve `salida` (NUNCA llama a claude real)."""
+
+    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
+        return salida
+
+    return runner
 
 
 # --------------------------------------------------------------------------- #
@@ -318,3 +336,310 @@ def test_items_excepcion_inesperada_se_omite(cliente, monkeypatch):
     assert len(datos["errores"]) == 1
     # mensaje generico en espanol, sin el traceback crudo
     assert datos["errores"][0]["error"] == "No se pudo leer el feed."
+
+
+# --------------------------------------------------------------------------- #
+# clave estable + filtros (funciones puras)                                   #
+# --------------------------------------------------------------------------- #
+
+# Feed con <guid> explicito (clave estable) y temas distintos para filtrar.
+_RSS_GUID_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Avance de IA y agentes</title>
+      <link>https://example.com/ia</link>
+      <guid>guid-ia</guid>
+      <description>Nuevos agentes autonomos</description>
+    </item>
+    <item>
+      <title>Resultado del partido</title>
+      <link>https://example.com/gol</link>
+      <guid>guid-gol</guid>
+      <description>Un gol de ultimo minuto</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+def test_clave_usa_guid_y_fallback_enlace():
+    items = rss.parsear_feed(_RSS_GUID_XML)
+    assert items[0]["clave"] == "guid-ia"
+    # _RSS_XML no trae guid: clave cae al enlace
+    sin_guid = rss.parsear_feed(_RSS_XML)
+    assert sin_guid[0]["clave"] == "https://example.com/1"
+
+
+def test_clave_atom_usa_id():
+    items = rss.parsear_feed(_ATOM_XML)
+    # _ATOM_XML no tiene <id>: clave cae al enlace
+    assert items[0]["clave"] == "https://example.com/a"
+
+
+def test_item_pasa_filtros_incluir():
+    items = rss.parsear_feed(_RSS_GUID_XML)
+    # solo el de IA pasa con incluir="ia, agentes"
+    pasa = [i for i in items if rss.item_pasa_filtros(i, "ia, agentes", "")]
+    assert [i["clave"] for i in pasa] == ["guid-ia"]
+
+
+def test_item_pasa_filtros_excluir():
+    items = rss.parsear_feed(_RSS_GUID_XML)
+    # excluir "gol" deja fuera el partido
+    pasa = [i for i in items if rss.item_pasa_filtros(i, "", "gol")]
+    assert [i["clave"] for i in pasa] == ["guid-ia"]
+
+
+def test_item_pasa_filtros_incluir_y_excluir():
+    items = rss.parsear_feed(_RSS_GUID_XML)
+    # incluir agentes pero excluir "autonomos" => ninguno
+    pasa = [i for i in items if rss.item_pasa_filtros(i, "agentes", "autonomos")]
+    assert pasa == []
+
+
+def test_item_pasa_filtros_vacios_pasan_todo():
+    items = rss.parsear_feed(_RSS_GUID_XML)
+    assert all(rss.item_pasa_filtros(i, "", "") for i in items)
+
+
+# --------------------------------------------------------------------------- #
+# Fuentes: crear con filtros/redes + PUT parcial + re-SSRF al cambiar url      #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_fuente_con_filtros_y_redes(cliente):
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={
+            "nombre": "Diario",
+            "url": _URL_OK,
+            "incluir": ["ia", "agentes"],
+            "excluir": "rumor",
+            "redes_def": ["instagram", "x"],
+        },
+    )
+    assert r.status_code == 200
+    f = r.json()["fuente"]
+    assert f["activo"] is True
+    assert "ia" in f["incluir"] and "agentes" in f["incluir"]
+    assert f["excluir"] == "rumor"
+    # redes_def sale como lista en orden fijo (x antes que instagram)
+    assert f["redes_def"] == ["x", "instagram"]
+
+
+def test_crear_fuente_redes_def_invalida_400(cliente):
+    r = cliente.post(
+        "/api/rss/fuentes", json={"nombre": "X", "url": _URL_OK, "redes_def": ["myspace"]}
+    )
+    assert r.status_code == 400
+
+
+def test_put_fuente_parcial(cliente):
+    f = _fuente(cliente, "Original")
+    r = cliente.put(
+        f"/api/rss/fuentes/{f['id']}",
+        json={"nombre": "Renombrada", "activo": False, "incluir": "gol"},
+    )
+    assert r.status_code == 200
+    act = r.json()["fuente"]
+    assert act["nombre"] == "Renombrada"
+    assert act["activo"] is False
+    assert act["incluir"] == "gol"
+    assert act["url"] == _URL_OK  # intacto
+
+
+def test_put_fuente_inexistente_404(cliente):
+    assert cliente.put("/api/rss/fuentes/noexiste", json={"nombre": "X"}).status_code == 404
+
+
+def test_put_fuente_reSSRF_al_cambiar_url(cliente):
+    f = _fuente(cliente, "Original")
+    # cambiar a una URL que apunta a una IP privada => bloqueada por el guard SSRF
+    r = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"url": "http://127.0.0.1/feed.xml"})
+    assert r.status_code == 400
+    assert "permitida" in r.json()["error"].lower()
+
+
+def test_put_fuente_url_valida_se_actualiza(cliente):
+    f = _fuente(cliente, "Original")
+    nueva = "https://93.184.216.35/otro.xml"
+    r = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"url": nueva})
+    assert r.status_code == 200
+    assert r.json()["fuente"]["url"] == nueva
+
+
+def test_put_fuente_marca_invalida_400(cliente):
+    f = _fuente(cliente, "Original")
+    r = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"marca": "marca_falsa"})
+    assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Items: filtros del feed + usado + ocultar_usados + inactivas + salud         #
+# --------------------------------------------------------------------------- #
+
+
+def test_items_aplica_filtros_del_feed(cliente, monkeypatch):
+    f = cliente.post(
+        "/api/rss/fuentes", json={"nombre": "Filtrada", "url": _URL_OK, "incluir": "ia"}
+    ).json()["fuente"]
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    datos = cliente.get(f"/api/rss/items?fuente={f['id']}").json()
+    assert [i["clave"] for i in datos["items"]] == ["guid-ia"]
+
+
+def test_items_marca_usado_y_ocultar(cliente, monkeypatch):
+    f = _fuente(cliente, "Diario")
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    # marca guid-gol como usado
+    r = cliente.post("/api/rss/items/usado", json={"fuente_id": f["id"], "clave": "guid-gol"})
+    assert r.status_code == 200
+    # sin ocultar: aparece con usado=True
+    datos = cliente.get(f"/api/rss/items?fuente={f['id']}").json()
+    por_clave = {i["clave"]: i for i in datos["items"]}
+    assert por_clave["guid-gol"]["usado"] is True
+    assert por_clave["guid-ia"]["usado"] is False
+    # ocultar_usados=1: desaparece el usado
+    datos = cliente.get(f"/api/rss/items?fuente={f['id']}&ocultar_usados=1").json()
+    assert [i["clave"] for i in datos["items"]] == ["guid-ia"]
+
+
+def test_items_usado_desmarcar(cliente, monkeypatch):
+    f = _fuente(cliente, "Diario")
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cliente.post("/api/rss/items/usado", json={"fuente_id": f["id"], "clave": "guid-ia"})
+    cliente.post(
+        "/api/rss/items/usado", json={"fuente_id": f["id"], "clave": "guid-ia", "usado": False}
+    )
+    datos = cliente.get(f"/api/rss/items?fuente={f['id']}&ocultar_usados=1").json()
+    assert {i["clave"] for i in datos["items"]} == {"guid-ia", "guid-gol"}
+
+
+def test_items_usado_fuente_inexistente_404(cliente):
+    r = cliente.post("/api/rss/items/usado", json={"fuente_id": "noexiste", "clave": "k"})
+    assert r.status_code == 404
+
+
+def test_items_usado_falta_clave_400(cliente):
+    f = _fuente(cliente, "Diario")
+    r = cliente.post("/api/rss/items/usado", json={"fuente_id": f["id"]})
+    assert r.status_code == 400
+
+
+def test_items_inactivas_ocultas_salvo_flag(cliente, monkeypatch):
+    f = _fuente(cliente, "Diario")
+    cliente.put(f"/api/rss/fuentes/{f['id']}", json={"activo": False})
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    # por defecto, la inactiva no aporta items
+    assert cliente.get("/api/rss/items").json()["items"] == []
+    # con incluir_inactivas=1 si
+    datos = cliente.get("/api/rss/items?incluir_inactivas=1").json()
+    assert len(datos["items"]) == 2
+
+
+def test_items_actualiza_salud_ok(cliente, monkeypatch):
+    f = _fuente(cliente, "Diario")
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cliente.get(f"/api/rss/items?fuente={f['id']}")
+    actual = next(x for x in cliente.get("/api/rss/fuentes").json()["fuentes"] if x["id"] == f["id"])
+    assert actual["ultimo_conteo"] == 2
+    assert actual["ultimo_error"] == ""
+    assert actual["ultima_actualizacion"]  # fecha registrada
+
+
+def test_items_actualiza_salud_error(cliente, monkeypatch):
+    f = _fuente(cliente, "Diario")
+
+    def revienta(url):  # noqa: ANN001
+        raise rss.RSSError("No se pudo contactar con el feed.")
+
+    monkeypatch.setattr(rss, "_DESCARGADOR", revienta)
+    cliente.get(f"/api/rss/items?fuente={f['id']}")
+    actual = next(x for x in cliente.get("/api/rss/fuentes").json()["fuentes"] if x["id"] == f["id"])
+    assert actual["ultimo_conteo"] == 0
+    assert actual["ultimo_error"] == "No se pudo contactar con el feed."
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/rss/generar: reutiliza el auto-guardado de Skills (runner mockeado) #
+# --------------------------------------------------------------------------- #
+
+
+def test_generar_autocrea_publicaciones_y_marca_usado(cliente, monkeypatch):
+    f = _fuente(cliente, "Diario", marca="unotv")
+    monkeypatch.setattr(skills, "_runner", _mock_runner_skills())
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+
+    r = cliente.post(
+        "/api/rss/generar",
+        json={
+            "titulo": "Avance de IA y agentes",
+            "resumen": "Nuevos agentes autonomos",
+            "enlace": "https://example.com/ia",
+            "marca": "unotv",
+            "redes": ["x", "instagram"],
+            "fuente_id": f["id"],
+            "clave": "guid-ia",
+        },
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    # Misma forma que /api/skills/ejecutar
+    for clave in ("resultado", "historial_id", "verdicto", "piezas", "publicaciones"):
+        assert clave in cuerpo
+    assert cuerpo["verdicto"] == "listo"
+    assert [p["red"] for p in cuerpo["publicaciones"]] == ["x", "instagram"]
+    assert all(p["estado"] == "borrador" for p in cuerpo["publicaciones"])
+    # Persistidas de verdad
+    assert len(cliente.get("/api/publicaciones").json()["publicaciones"]) == 2
+    # El item quedo marcado como usado (no aparece con ocultar_usados=1)
+    items = cliente.get(f"/api/rss/items?fuente={f['id']}&ocultar_usados=1").json()["items"]
+    assert "guid-ia" not in {i["clave"] for i in items}
+
+
+def test_generar_sin_fuente_no_marca_pero_genera(cliente, monkeypatch):
+    monkeypatch.setattr(skills, "_runner", _mock_runner_skills())
+    r = cliente.post(
+        "/api/rss/generar",
+        json={"titulo": "Solo titulo", "marca": "unotv", "redes": ["x"]},
+    )
+    assert r.status_code == 200
+    assert len(r.json()["publicaciones"]) == 1
+
+
+def test_generar_marca_invalida_400(cliente):
+    r = cliente.post(
+        "/api/rss/generar", json={"titulo": "T", "marca": "marca_falsa", "redes": ["x"]}
+    )
+    assert r.status_code == 400
+
+
+def test_generar_skill_invalida_400(cliente):
+    r = cliente.post(
+        "/api/rss/generar",
+        json={"titulo": "T", "marca": "unotv", "skill": "skill-pirata", "redes": ["x"]},
+    )
+    assert r.status_code == 400
+
+
+def test_generar_titulo_obligatorio_400(cliente):
+    r = cliente.post("/api/rss/generar", json={"marca": "unotv", "redes": ["x"]})
+    assert r.status_code == 400
+
+
+def test_generar_skill_por_defecto(cliente, monkeypatch):
+    capturado = {}
+
+    def runner(prompt, *, cwd, timeout):  # noqa: ANN001
+        capturado["prompt"] = prompt
+        return _SALIDA_SKILL
+
+    monkeypatch.setattr(skills, "_runner", runner)
+    r = cliente.post(
+        "/api/rss/generar", json={"titulo": "T", "resumen": "R", "marca": "unotv", "redes": ["x"]}
+    )
+    assert r.status_code == 200
+    # skill por defecto: copy-desde-nota; la nota concatena titulo + resumen
+    assert "copy-desde-nota" in capturado["prompt"]
+    assert "T" in capturado["prompt"] and "R" in capturado["prompt"]
