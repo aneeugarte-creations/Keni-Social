@@ -14,13 +14,15 @@ contrastados en redes publicas):
 - UnoTV: prioriza alcance/distribucion sobre engagement (noticias = poca
   interaccion), por eso su factor de engagement es el mas bajo.
 - Nacion Gamer, Piso 15 y Fundacion: verticales menores en crecimiento.
+- Claro Sports TV y Csport Golf: cuentas hermanas de Claro Sports (canal de TV y
+  vertical de golf) que el equipo promociona aparte; ordenes de magnitud menores.
 El engagement por marca se modula con `_ENG_FACTOR` (no todas interactuan igual).
 """
 
 from __future__ import annotations
 
 import hashlib
-from datetime import timedelta
+from datetime import date, timedelta
 
 from ..schema import (
     Cobertura,
@@ -66,6 +68,21 @@ _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
         [Plataforma.facebook, Plataforma.instagram, Plataforma.x],
         "social",
     ),
+    # Cuentas hermanas de Claro Sports (el equipo de redes las promociona en su
+    # reporte semanal). El canal de TV reparte parecido a Claro Sports; el
+    # vertical de golf es de nicho (pocas visualizaciones, audiencia fiel).
+    "claro_sports_tv": (
+        "Claro Sports TV",
+        12_000_000,
+        [Plataforma.facebook, Plataforma.instagram, Plataforma.tiktok, Plataforma.youtube],
+        "deportes",
+    ),
+    "csport_golf": (
+        "Csport Golf",
+        3_000_000,
+        [Plataforma.facebook, Plataforma.instagram, Plataforma.x, Plataforma.youtube],
+        "deportes",
+    ),
 }
 
 # peso de cada plataforma en el reparto de visualizaciones
@@ -95,6 +112,8 @@ _ENG_FACTOR: dict[str, float] = {
     "nacion_gamer": 0.85,
     "piso_15": 0.90,
     "fundacion": 0.55,
+    "claro_sports_tv": 0.60,  # misma audiencia deportiva que Claro Sports
+    "csport_golf": 0.90,  # nicho de golf: pocas vistas pero audiencia fiel
 }
 
 _TITULOS: dict[str, list[str]] = {
@@ -162,6 +181,43 @@ def _rand(*parts) -> float:
 
 def _entre(r: float, a: float, b: float) -> float:
     return a + (b - a) * r
+
+
+def _pieza(
+    cuenta_id: str,
+    rango: str,
+    plat: Plataforma,
+    idx: int,
+    base_mes: int,
+    dias: int,
+    desde: date,
+    titulo: str,
+) -> Pieza:
+    """Construye una pieza sembrada y determinista para (cuenta, rango, plataforma, idx).
+
+    Las "mejores piezas" baten la media de engagement de su plataforma. La semilla
+    incluye la plataforma para que dos piezas con el mismo idx en plataformas
+    distintas no compartan cifras.
+    """
+    factor = _ENG_FACTOR.get(cuenta_id, 1.0)
+    eng_min, eng_max = _ENG[plat]
+    eng = round(
+        _entre(_rand(cuenta_id, rango, "pe", plat, idx), (eng_min + eng_max) / 2, eng_max * 1.4) * factor, 1
+    )
+    vistas = int(base_mes * _PESO[plat] * (dias / 30) * _entre(_rand(cuenta_id, rango, "pv", plat, idx), 0.04, 0.22))
+    inter = int(vistas * eng / 100)
+    dia = desde + timedelta(days=int(_rand(cuenta_id, rango, "pd", plat, idx) * dias))
+    pid = hashlib.sha256(f"{cuenta_id}{rango}{plat}{idx}".encode()).hexdigest()[:11]
+    return Pieza(
+        id=f"p_{pid}",
+        plataforma=plat,
+        titulo=titulo,
+        publicado=dia,
+        visualizaciones=vistas,
+        interacciones=inter,
+        engagement_pct=eng,
+        url=_URL_BASE[plat].format(cuenta=cuenta_id, pid=pid),
+    )
 
 
 class FuenteMuestra:
@@ -246,37 +302,50 @@ class FuenteMuestra:
         # con n<0 devolveria casi todas las candidatas): lo acotamos a 0.
         n = max(n, 0)
         _, base_mes, plats, tema = self._marca(cuenta_id)
-        desde, hasta, dias = resolver_rango(rango)
+        desde, _hasta, dias = resolver_rango(rango)
         titulos = _TITULOS[tema]
-
-        candidatas: list[Pieza] = []
-        factor = _ENG_FACTOR.get(cuenta_id, 1.0)
-        # genera un pool amplio y se queda con las n mejores por engagement
-        for i in range(max(n, 12)):
-            plat = plats[int(_rand(cuenta_id, rango, "p", i) * len(plats))]
-            eng_min, eng_max = _ENG[plat]
-            # las "mejores piezas" baten la media de la plataforma
-            eng = round(
-                _entre(_rand(cuenta_id, rango, "pe", i), (eng_min + eng_max) / 2, eng_max * 1.4) * factor, 1
+        # genera un pool amplio (plataforma elegida al azar por candidata) y se
+        # queda con las n mejores por engagement.
+        candidatas = [
+            _pieza(
+                cuenta_id,
+                rango,
+                plats[int(_rand(cuenta_id, rango, "p", i) * len(plats))],
+                i,
+                base_mes,
+                dias,
+                desde,
+                titulos[i % len(titulos)],
             )
-            vistas = int(
-                base_mes * _PESO[plat] * (dias / 30) * _entre(_rand(cuenta_id, rango, "pv", i), 0.04, 0.22)
-            )
-            inter = int(vistas * eng / 100)
-            dia = desde + timedelta(days=int(_rand(cuenta_id, rango, "pd", i) * dias))
-            pid = hashlib.sha256(f"{cuenta_id}{rango}{i}".encode()).hexdigest()[:11]
-            candidatas.append(
-                Pieza(
-                    id=f"p_{pid}",
-                    plataforma=plat,
-                    titulo=titulos[i % len(titulos)],
-                    publicado=dia,
-                    visualizaciones=vistas,
-                    interacciones=inter,
-                    engagement_pct=eng,
-                    url=_URL_BASE[plat].format(cuenta=cuenta_id, pid=pid),
-                )
-            )
-
+            for i in range(max(n, 12))
+        ]
         candidatas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return candidatas[:n]
+
+    def mejores_por_plataforma(
+        self, cuenta_id: str, rango: str, plataformas: list[Plataforma], n: int
+    ) -> dict[Plataforma, list[Pieza]]:
+        """Las n mejores piezas de CADA plataforma pedida, ordenadas por
+        visualizaciones + interacciones (el criterio del reporte semanal de deportes).
+
+        A diferencia de `mejores_piezas` (top-N global por engagement), garantiza
+        hasta n piezas POR plataforma. Solo considera plataformas que la cuenta
+        tiene configuradas; las demas salen con lista vacia.
+        """
+        n = max(n, 0)
+        _, base_mes, plats, tema = self._marca(cuenta_id)
+        desde, _hasta, dias = resolver_rango(rango)
+        titulos = _TITULOS[tema]
+        activas = set(plats)
+        resultado: dict[Plataforma, list[Pieza]] = {}
+        for plat in plataformas:
+            if plat not in activas:
+                resultado[plat] = []
+                continue
+            pool = [
+                _pieza(cuenta_id, rango, plat, i, base_mes, dias, desde, titulos[i % len(titulos)])
+                for i in range(max(n, 6))
+            ]
+            pool.sort(key=lambda p: p.visualizaciones + p.interacciones, reverse=True)
+            resultado[plat] = pool[:n]
+        return resultado
