@@ -246,6 +246,14 @@ def ahora_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _metricas_run(datos: dict[str, Any]) -> dict[str, Any] | None:
+    """Normaliza el campo `metricas` de un run: dict no vacio o None."""
+    metricas = datos.get("metricas")
+    if not isinstance(metricas, dict) or not metricas:
+        return None
+    return metricas
+
+
 def _parsear_run(datos: dict[str, Any], run_id: str) -> dict[str, Any]:
     """Reconstruye el dict publico de un run (id implicito = nombre de fichero)."""
     return {
@@ -256,6 +264,7 @@ def _parsear_run(datos: dict[str, Any], run_id: str) -> dict[str, Any]:
         "salida": datos.get("salida", "") or "",
         "fecha_inicio": datos.get("fecha_inicio", "") or "",
         "fecha_fin": datos.get("fecha_fin", "") or "",
+        "metricas": _metricas_run(datos),
     }
 
 
@@ -263,10 +272,11 @@ def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
     """Escribe `runs/<id>.yaml` (atomico) y devuelve el run con su `id`.
 
     Si el run no trae `id`, se genera uno. El cuerpo YAML no repite el `id` (es
-    implicito por el nombre de fichero).
+    implicito por el nombre de fichero). `metricas` (tokens/turnos/coste/duracion/
+    modelo) se incluye solo si viene presente (None => ausente en el YAML).
     """
     run_id = run.get("id") or nuevo_run_id()
-    cuerpo = {
+    cuerpo: dict[str, Any] = {
         "prompt": run.get("prompt", "") or "",
         "modo": run.get("modo", "") or "",
         "estado": run.get("estado", "") or "",
@@ -274,9 +284,12 @@ def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
         "fecha_inicio": run.get("fecha_inicio", "") or "",
         "fecha_fin": run.get("fecha_fin", "") or "",
     }
+    metricas = _metricas_run(run)
+    if metricas is not None:
+        cuerpo["metricas"] = metricas
     ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
     _escribir_yaml_atomico(ruta, cuerpo)
-    return {"id": run_id, **cuerpo}
+    return {"id": run_id, **cuerpo, "metricas": metricas}
 
 
 def listar_runs(marca_id: str) -> list[dict[str, Any]]:
@@ -351,6 +364,90 @@ def resumen_agente(marca_id: str) -> dict[str, Any]:
 def listar_agentes() -> list[dict[str, Any]]:
     """Todos los agentes = todas las marcas del catalogo (orden de presentacion)."""
     return [resumen_agente(mid) for mid, _etiqueta in marcas.opciones()]
+
+
+# --------------------------------------------------------------------------- #
+# Monitorizacion: runs de TODOS los agentes + agregados                       #
+# --------------------------------------------------------------------------- #
+
+
+def listar_runs_globales() -> list[dict[str, Any]]:
+    """Runs de TODOS los agentes (recorriendo las carpetas de marca), recientes primero.
+
+    Cada run incluye su agente (`agente`/`agente_nombre`) ademas de sus campos. No
+    materializa carpetas que no existan. Orden: por `fecha_inicio` desc, luego id.
+    """
+    todos: list[dict[str, Any]] = []
+    for marca_id, etiqueta in marcas.opciones():
+        carpeta = carpeta_agente(marca_id, crear=False) / _DIR_RUNS
+        if not carpeta.is_dir():
+            continue
+        for run in listar_runs(marca_id):
+            todos.append({**run, "agente": marca_id, "agente_nombre": etiqueta})
+    todos.sort(key=lambda r: (r["fecha_inicio"], r["id"]), reverse=True)
+    return todos
+
+
+def _sumar_metrica(metricas: dict[str, Any] | None, clave: str) -> float:
+    """Devuelve `metricas[clave]` como numero (0 si ausente/no numerico/None)."""
+    if not isinstance(metricas, dict):
+        return 0.0
+    valor = metricas.get(clave)
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        return 0.0
+    return float(valor)
+
+
+def agregados_runs() -> dict[str, Any]:
+    """Totales de coste/tokens/runs: global, por agente y por dia.
+
+    - `total`: `{coste_usd, tokens, runs}` sumando TODOS los runs.
+    - `por_agente`: una entrada por agente con runs (`{agente, agente_nombre, coste_usd,
+      tokens, runs}`), de mayor a menor coste.
+    - `por_dia`: una entrada por fecha (YYYY-MM-DD del `fecha_inicio`), recientes primero.
+    Tokens = tokens_in + tokens_out de cada run con metricas.
+    """
+    runs = listar_runs_globales()
+    total_coste = 0.0
+    total_tokens = 0.0
+    por_agente: dict[str, dict[str, Any]] = {}
+    por_dia: dict[str, dict[str, Any]] = {}
+    for run in runs:
+        metricas = run.get("metricas")
+        coste = _sumar_metrica(metricas, "total_cost_usd")
+        tokens = _sumar_metrica(metricas, "tokens_in") + _sumar_metrica(metricas, "tokens_out")
+        total_coste += coste
+        total_tokens += tokens
+
+        ag = run["agente"]
+        entrada = por_agente.setdefault(
+            ag,
+            {"agente": ag, "agente_nombre": run["agente_nombre"], "coste_usd": 0.0,
+             "tokens": 0, "runs": 0},
+        )
+        entrada["coste_usd"] += coste
+        entrada["tokens"] += int(tokens)
+        entrada["runs"] += 1
+
+        dia = (run["fecha_inicio"] or "")[:10]
+        dentrada = por_dia.setdefault(
+            dia, {"dia": dia, "coste_usd": 0.0, "tokens": 0, "runs": 0}
+        )
+        dentrada["coste_usd"] += coste
+        dentrada["tokens"] += int(tokens)
+        dentrada["runs"] += 1
+
+    agentes_lista = sorted(por_agente.values(), key=lambda e: e["coste_usd"], reverse=True)
+    dias_lista = sorted(por_dia.values(), key=lambda e: e["dia"], reverse=True)
+    return {
+        "total": {
+            "coste_usd": round(total_coste, 6),
+            "tokens": int(total_tokens),
+            "runs": len(runs),
+        },
+        "por_agente": [{**e, "coste_usd": round(e["coste_usd"], 6)} for e in agentes_lista],
+        "por_dia": [{**e, "coste_usd": round(e["coste_usd"], 6)} for e in dias_lista],
+    }
 
 
 # --------------------------------------------------------------------------- #

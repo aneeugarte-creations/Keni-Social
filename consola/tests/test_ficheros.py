@@ -106,9 +106,22 @@ def test_historial_round_trip_y_layout_por_fecha(base):
     leido = repos.obtener_historial_skill(hid)
     assert leido["skill"] == "copy-desde-nota"
     assert leido["piezas"][0]["red"] == "x"
+    # Sin metricas => None.
+    assert leido["metricas"] is None
     # Vive bajo historial/<YYYY>/<MM>/<id>.yaml
     encontrados = list((base / "datos" / "unotv" / "historial").rglob(f"{hid}.yaml"))
     assert len(encontrados) == 1
+
+
+def test_historial_guarda_y_devuelve_metricas(base):
+    metricas = {"tokens_in": 10, "tokens_out": 5, "num_turns": 1,
+                "total_cost_usd": 0.02, "duration_ms": 99, "modelo": "m"}
+    hid = repos.registrar_historial_skill(
+        "copy-desde-nota", "unotv", "RES", metricas=metricas
+    )
+    leido = repos.obtener_historial_skill(hid)
+    assert leido["metricas"] == metricas
+    assert repos.listar_historial_skills()[0]["metricas"] == metricas
 
 
 # --------------------------------------------------------------------------- #
