@@ -49,6 +49,33 @@ def test_argv_con_esfuerzo_pasa_effort(entorno):
     assert argv[i + 1] == "high"
 
 
+def test_argv_add_dir_para_dirs_permitidos(entorno):
+    from pathlib import Path
+
+    argv = generaciones._argv_claude("hola", [Path("/tmp/x")])
+    # `--add-dir` y la ruta deben ir CONSECUTIVOS (par flag+valor).
+    i = argv.index("--add-dir")
+    assert argv[i + 1] == "/tmp/x"
+
+
+def test_argv_sin_dirs_no_anade_add_dir(entorno):
+    # Retrocompat: la firma de un solo argumento NO debe meter `--add-dir`.
+    argv = generaciones._argv_claude("hola")
+    assert "--add-dir" not in argv
+
+
+# --------------------------------------------------------------------------- #
+# cwd de EJECUCION de skills: el dir que CONTIENE .claude/skills              #
+# --------------------------------------------------------------------------- #
+
+
+def test_cwd_ejecucion_skills_apunta_a_skills_copy(monkeypatch, tmp_path):
+    # Estructura tipica del repo: las skills viven en `skills-copy/.claude/skills`.
+    (tmp_path / "skills-copy" / ".claude" / "skills").mkdir(parents=True)
+    monkeypatch.setattr(skills, "_cwd_skills", lambda: tmp_path)
+    assert skills._cwd_ejecucion_skills() == tmp_path / "skills-copy"
+
+
 # --------------------------------------------------------------------------- #
 # AcumuladorStream: streaming token a token (eventos `stream_event`)          #
 # --------------------------------------------------------------------------- #

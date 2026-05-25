@@ -219,6 +219,24 @@ def _cwd_skills() -> Path:
     return Path.cwd()
 
 
+def _cwd_ejecucion_skills() -> Path:
+    """Directorio desde el que EJECUTAMOS `claude` para correr una skill.
+
+    Debe ser el dir que CONTIENE `.claude/skills`, no la raiz del repo: solo asi `claude`
+    descubre las skills como TOOLS del proyecto y resuelven sus rutas relativas
+    (`contexto-editorial/...`, `.claude/skills/.../componer.py`). En keni-social las skills
+    viven en `skills-copy/.claude/skills`, por eso el cwd correcto es `skills-copy/` (no la
+    raiz, que es lo que devuelve `_cwd_skills()`; ese se reserva para el catalogo, que le
+    anade `skills-copy/.claude/skills`). Se distingue de `_cwd_skills()` a proposito.
+    """
+    base = _cwd_skills()
+    if (base / "skills-copy" / ".claude" / "skills").is_dir():
+        return base / "skills-copy"
+    if (base / ".claude" / "skills").is_dir():
+        return base
+    return base
+
+
 def _instruccion_redes(redes_ids: list[str]) -> str:
     """Instruccion ADITIVA: limita las redes y pide un bloque json con las piezas.
 
@@ -1196,7 +1214,7 @@ def _lanzar_con_procesar(
     )
     try:
         generaciones.lanzar_job_claude(
-            gen["id"], prompt=prompt, cwd=_cwd_skills(), procesar=procesar,
+            gen["id"], prompt=prompt, cwd=_cwd_ejecucion_skills(), procesar=procesar,
             dir_temporal=dir_temporal,
         )
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro

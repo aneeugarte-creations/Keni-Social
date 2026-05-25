@@ -264,22 +264,28 @@ def listar(limite: int = _LISTADO_MAX) -> list[dict[str, Any]]:
 Procesar = Callable[[str, Any], dict[str, Any]]
 
 
-def _argv_claude(prompt: str) -> list[str]:
+def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list[str]:
     """argv de `claude -p <prompt> --output-format stream-json --verbose
-    --include-partial-messages [--effort N] [--max-budget-usd N]`.
+    --include-partial-messages [--effort N] [--max-budget-usd N] [--add-dir D ...]`.
 
     `--include-partial-messages` es lo que habilita el STREAMING token a token (eventos
     `stream_event`/`text_delta`). `--verbose` es obligatorio para stream-json. `--effort`
     se añade solo si hay un nivel guardado en preferencias (si no, el predeterminado del
-    modelo). Sin shell.
+    modelo). Por cada dir en `dirs_permitidos` se añade `--add-dir <dir>` para que claude
+    pueda LEER archivos fuera de su cwd (p.ej. la foto subida, que vive en un temporal del
+    SO). El default `None` mantiene la retrocompat (sin `--add-dir`). Sin shell.
     """
     from .api import skills  # import local: evita el ciclo generaciones<->api.skills
 
+    extra: list[str] = []
+    for d in dirs_permitidos or []:
+        extra += ["--add-dir", str(d)]
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         *preferencias.arg_esfuerzo(),
         *skills._arg_presupuesto(),
+        *extra,
     ]
 
 
@@ -388,7 +394,7 @@ def lanzar_job_claude(
 
     try:
         proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell; prompt como argumento
-            _argv_claude(prompt),
+            _argv_claude(prompt, [dir_temporal] if dir_temporal else None),
             cwd=str(cwd),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
