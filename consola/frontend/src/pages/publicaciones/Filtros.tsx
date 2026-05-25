@@ -1,3 +1,7 @@
+import { Sprout } from "lucide-react";
+
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -10,23 +14,27 @@ import type { OpcionesPublicaciones } from "@/types";
 /** Valor que representa "todos" en cada filtro (sin filtrar). */
 export const FILTRO_TODOS = "__todos__";
 
-/** Filtros de marca, red y estado. Notifica los cambios hacia arriba. */
+/** Filtros de marca, red, estado y "solo perennes". Notifica los cambios hacia arriba. */
 export function FiltrosPublicaciones({
   opciones,
   marca,
   red,
   estado,
+  soloPerennes,
   onMarca,
   onRed,
   onEstado,
+  onSoloPerennes,
 }: {
   opciones: OpcionesPublicaciones;
   marca: string;
   red: string;
   estado: string;
+  soloPerennes: boolean;
   onMarca: (v: string) => void;
   onRed: (v: string) => void;
   onEstado: (v: string) => void;
+  onSoloPerennes: (v: boolean) => void;
 }) {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -71,6 +79,22 @@ export function FiltrosPublicaciones({
           ))}
         </SelectContent>
       </Select>
+
+      <Label
+        htmlFor="filtro-perennes"
+        className="flex cursor-pointer items-center gap-2 whitespace-nowrap text-sm font-normal"
+      >
+        <Checkbox
+          id="filtro-perennes"
+          checked={soloPerennes}
+          onCheckedChange={onSoloPerennes}
+          aria-label="Mostrar solo publicaciones perennes"
+        />
+        <span className="inline-flex items-center gap-1">
+          <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          Solo perennes
+        </span>
+      </Label>
     </div>
   );
 }

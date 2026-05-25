@@ -1,12 +1,14 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, Copy, Eye, ExternalLink, Loader2, Pencil, Save } from "lucide-react";
+import { Check, Copy, Eye, ExternalLink, Link2, Loader2, Pencil, Save } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
+import { SelectorPlantilla } from "@/components/plantillas/SelectorPlantilla";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
+import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +20,7 @@ import type { PiezaGenerada, RespuestaEjecutarSkill, Veredicto } from "@/types";
 
 import { GestionHashtags } from "../publicaciones/GestionHashtags";
 import { iconoRed, metaRed, metaVeredicto, nombreRed } from "../publicaciones/meta";
+import { agregarEnlace } from "../publicaciones/plantillas";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -90,6 +93,7 @@ function PanelRed({
 }) {
   const [copiado, setCopiado] = React.useState(false);
   const [modo, setModo] = React.useState<"editar" | "previa">("editar");
+  const [utmAbierto, setUtmAbierto] = React.useState(false);
   const limite = metaRed(red).limite;
   const caracteres = contenido.length;
 
@@ -146,6 +150,19 @@ function PanelRed({
 
       {modo === "editar" ? (
         <>
+          <div className="flex flex-wrap items-center gap-2">
+            <SelectorPlantilla marca={marca} red={red} onUsar={onCambio} />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => setUtmAbierto(true)}
+            >
+              <Link2 className="h-4 w-4" />
+              Enlace UTM
+            </Button>
+          </div>
           <Textarea
             value={contenido}
             onChange={(e) => onCambio(e.target.value)}
@@ -188,6 +205,12 @@ function PanelRed({
           Guardar como publicación
         </Button>
       </div>
+
+      <ConstructorUtm
+        abierto={utmAbierto}
+        onCerrar={() => setUtmAbierto(false)}
+        onInsertar={(enlace) => onCambio(agregarEnlace(contenido, enlace))}
+      />
     </div>
   );
 }

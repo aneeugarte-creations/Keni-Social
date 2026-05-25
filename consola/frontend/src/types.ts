@@ -309,6 +309,8 @@ export interface Publicacion {
   fecha_programada: string | null;
   /** Origen (p. ej. `historial_id` de la generación). */
   origen: string | null;
+  /** Marcada como contenido perenne (reutilizable indefinidamente). */
+  evergreen: boolean;
   /** Nombre del archivo de imagen adjunto; `""` si no hay imagen. */
   imagen: string;
   /** URL para servir la imagen (`/api/media/...`); `""` si no hay imagen. */
@@ -347,8 +349,17 @@ export interface CuerpoActualizarPublicacion {
   contenido?: string;
   estado?: EstadoPublicacion;
   fecha_programada?: string | null;
+  /** Marca/desmarca la publicación como perenne. */
+  evergreen?: boolean;
   /** Nombre del archivo de imagen adjunto (`""` para quitarla). */
   imagen?: string;
+}
+
+/** Respuesta al reciclar una publicación perenne. */
+export interface RespuestaReciclarPublicacion {
+  publicacion: Publicacion;
+  /** `true` si quedó encolada (con fecha); `false` si quedó como borrador. */
+  encolado: boolean;
 }
 
 /** Cuerpo opcional para duplicar una publicación (red/marca/título destino). */
@@ -356,6 +367,89 @@ export interface CuerpoDuplicarPublicacion {
   red?: string;
   marca?: string;
   titulo?: string;
+}
+
+// --- Plantillas de post (copy reutilizable) ---
+
+/** Una plantilla de copy guardada. */
+export interface Plantilla {
+  id: string;
+  nombre: string;
+  /** Marca asociada (`""` si es general). */
+  marca: string;
+  marca_nombre: string;
+  /** Red asociada (`""` si aplica a cualquier red). */
+  red: string;
+  red_nombre: string;
+  contenido: string;
+}
+
+export interface RespuestaPlantillas {
+  plantillas: Plantilla[];
+}
+
+export interface RespuestaPlantilla {
+  plantilla: Plantilla;
+}
+
+/** Cuerpo para crear una plantilla. */
+export interface CuerpoCrearPlantilla {
+  nombre: string;
+  /** Marca asociada (opcional). */
+  marca?: string;
+  /** Red asociada (opcional). */
+  red?: string;
+  contenido: string;
+}
+
+/** Cuerpo parcial para actualizar una plantilla. */
+export interface CuerpoActualizarPlantilla {
+  nombre?: string;
+  marca?: string;
+  red?: string;
+  contenido?: string;
+}
+
+// --- RSS (fuentes y elementos para Generar copy) ---
+
+/** Una fuente RSS dada de alta. */
+export interface FuenteRss {
+  id: string;
+  nombre: string;
+  url: string;
+  /** Marca asociada (`""` si es general). */
+  marca: string;
+  marca_nombre: string;
+}
+
+export interface RespuestaFuentesRss {
+  fuentes: FuenteRss[];
+}
+
+export interface RespuestaFuenteRss {
+  fuente: FuenteRss;
+}
+
+/** Cuerpo para dar de alta una fuente RSS. */
+export interface CuerpoCrearFuenteRss {
+  nombre: string;
+  url: string;
+  /** Marca asociada (opcional). */
+  marca?: string;
+}
+
+/** Un elemento (item) de un feed RSS. */
+export interface ItemRss {
+  titulo: string;
+  resumen: string;
+  enlace: string;
+  fecha: string;
+  fuente_id: string;
+  fuente_nombre: string;
+}
+
+export interface RespuestaItemsRss {
+  items: ItemRss[];
 }
 
 // --- Media (imágenes) ---
@@ -448,6 +542,8 @@ export interface FiltrosPublicaciones {
   marca?: string;
   red?: string;
   estado?: string;
+  /** "1" para mostrar solo publicaciones perennes. */
+  evergreen?: string;
   /** Permite pasarse a `query()` (Record<string, string | undefined>). */
   [clave: string]: string | undefined;
 }
