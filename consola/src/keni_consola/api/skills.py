@@ -884,6 +884,68 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
     return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
 
 
+# --------------------------------------------------------------------------- #
+# Cosecha de IMAGENES de salida (skills de imagen: estudio-imagen)             #
+# --------------------------------------------------------------------------- #
+#
+# Las skills de imagen (estudio-imagen) producen ARCHIVOS .png con las herramientas
+# deterministas (editar.py/componer.py) o el adaptador generativo (generar.py). La
+# salida de Claude es texto (el documento del revisor) que MENCIONA las rutas de esos
+# archivos. Para PREVISUALIZARLOS en la Consola, tras completar la generacion
+# localizamos esas rutas, las importamos al almacen de media (`/api/media/...`) y las
+# devolvemos como `imagenes` en el `resultado`.
+
+# Extensiones de imagen que reconocemos en la salida (las que producen las herramientas).
+_EXT_IMAGEN = ("png", "jpg", "jpeg", "webp", "gif")
+
+# Ruta a un archivo de imagen dentro del texto: una ruta absoluta (POSIX) o relativa con
+# separadores, terminada en una extension de imagen. Tolera comillas/parentesis alrededor.
+_RE_RUTA_IMAGEN = re.compile(
+    r"(/?(?:[^\s\"'`<>|]+/)+[^\s\"'`<>|]+\.(?:" + "|".join(_EXT_IMAGEN) + r"))",
+    re.IGNORECASE,
+)
+
+# Tope defensivo de imagenes que importamos de una sola salida (evita abusos).
+_MAX_IMAGENES = 12
+
+
+def _rutas_imagen_en_texto(salida: str) -> list[str]:
+    """Extrae rutas de archivos de imagen mencionadas en la salida (orden, sin duplicar)."""
+    if not salida:
+        return []
+    vistas: list[str] = []
+    for m in _RE_RUTA_IMAGEN.finditer(salida):
+        ruta = m.group(1)
+        if ruta not in vistas:
+            vistas.append(ruta)
+    return vistas
+
+
+def cosechar_imagenes(salida: str) -> list[dict[str, str]]:
+    """Importa al almacen de media las imagenes que la salida menciona por ruta.
+
+    Localiza rutas de archivos de imagen en `salida`, importa al media (copia) las que
+    existan y sean imagenes validas, y devuelve `[{nombre, url}]` para previsualizarlas.
+    Tolerante: una ruta que no exista o no se pueda importar simplemente se OMITE (la
+    previsualizacion es un extra, nunca debe romper la generacion). Limita a
+    `_MAX_IMAGENES` para no abusar del almacen.
+    """
+    from .. import media
+
+    imagenes: list[dict[str, str]] = []
+    for ruta in _rutas_imagen_en_texto(salida):
+        if len(imagenes) >= _MAX_IMAGENES:
+            break
+        try:
+            nombre = media.importar_imagen(ruta)
+        except media.MediaError:
+            continue  # ruta inexistente / no es imagen / demasiado grande: se omite
+        except Exception:  # noqa: BLE001 -- la previsualizacion nunca rompe la generacion
+            continue
+        imagenes.append({"nombre": nombre, "url": f"/api/media/{nombre}"})
+    return imagenes
+
+
 # Largo maximo del titulo derivado de la nota (chars).
 _MAX_TITULO = 80
 
@@ -1034,6 +1096,7 @@ def construir_procesar_copy(
     redes_ids: list[str],
     titulo_dado: str,
     texto_base: str,
+    con_imagenes: bool = False,
 ) -> generaciones.Procesar:
     """Devuelve el callback de post-procesado de una generacion de copy/RSS.
 
@@ -1042,6 +1105,8 @@ def construir_procesar_copy(
     AUTO-GUARDA una publicacion (borrador) por pieza y devuelve la MISMA forma que antes
     entregaba la generacion sincrona: `{resultado, historial_id, verdicto, piezas,
     publicaciones}`. Es lo que se guarda como `resultado` del registro de generacion.
+    Si `con_imagenes` (skill de imagen), ademas importa las imagenes producidas al media
+    y las anade como `imagenes` para previsualizarlas.
     """
 
     def procesar(salida: str, metricas: MetricasRun | None) -> dict[str, object]:
@@ -1055,13 +1120,16 @@ def construir_procesar_copy(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=parsed["verdicto"], origen=historial_id,
         )
-        return {
+        resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
             "historial_id": historial_id,
             "verdicto": parsed["verdicto"],
             "piezas": parsed["piezas"],
             "publicaciones": publicaciones,
         }
+        if con_imagenes:
+            resultado["imagenes"] = cosechar_imagenes(salida)
+        return resultado
 
     return procesar
 
@@ -1072,6 +1140,7 @@ def construir_procesar_documento(
     *,
     titulo_base: str,
     titulo_dado: str = "",
+    con_imagenes: bool = False,
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una skill de salida `documento` (sin piezas).
 
@@ -1079,7 +1148,9 @@ def construir_procesar_documento(
     limpia emojis del documento, deriva el verdicto de la primera linea ✅/⚠️/❌, deriva
     un titulo (del primer campo de texto o del documento), registra el historial SIN
     piezas y NO auto-crea publicaciones. Devuelve
-    `{documento, verdicto, historial_id, piezas: [], publicaciones: []}`.
+    `{documento, verdicto, historial_id, piezas: [], publicaciones: []}`. Si
+    `con_imagenes` (skill de imagen, p.ej. estudio-imagen), ademas importa las imagenes
+    producidas al media y las anade como `imagenes` para previsualizarlas.
     """
 
     def procesar(salida: str, metricas: MetricasRun | None) -> dict[str, object]:
@@ -1089,13 +1160,17 @@ def construir_procesar_documento(
         historial_id = repos.registrar_historial_skill(
             skill, marca, doc, piezas=[], titulo=titulo, metricas=metricas_a_dict(metricas),
         )
-        return {
+        resultado: dict[str, object] = {
             "documento": doc,
             "verdicto": verdicto,
             "historial_id": historial_id,
             "piezas": [],
             "publicaciones": [],
         }
+        if con_imagenes:
+            # La cosecha lee las RUTAS de la salida CRUDA (no del documento sin emojis).
+            resultado["imagenes"] = cosechar_imagenes(salida)
+        return resultado
 
     return procesar
 
@@ -1175,9 +1250,12 @@ def lanzar_generacion_skill(
     if skilldef.salida == "piezas":
         procesar = construir_procesar_copy(
             skilldef.id, marca, redes_ids=redes_ids, titulo_dado="", texto_base=titulo_base,
+            con_imagenes=skilldef.media,
         )
     else:
-        procesar = construir_procesar_documento(skilldef.id, marca, titulo_base=titulo_base)
+        procesar = construir_procesar_documento(
+            skilldef.id, marca, titulo_base=titulo_base, con_imagenes=skilldef.media,
+        )
     return _lanzar_con_procesar(
         tipo="copy", skill=skilldef.id, marca=marca, prompt=prompt, procesar=procesar,
         dir_temporal=dir_temporal,

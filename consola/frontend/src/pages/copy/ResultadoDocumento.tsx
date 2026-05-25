@@ -7,7 +7,7 @@
  * `POST /api/skills/historial/{id}/guardar`.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, FileText, Loader2, Save } from "lucide-react";
+import { Check, Copy, Download, ExternalLink, FileText, ImageIcon, Loader2, Save } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -24,7 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, urlMedia } from "@/lib/api";
+import type { ImagenGenerada } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "../publicaciones/claves";
 
@@ -43,12 +44,57 @@ function EnlacePublicaciones() {
   );
 }
 
+/**
+ * Galería de imágenes producidas por una skill de imagen (estudio-imagen). Cada
+ * imagen ya está en el almacén de media; aquí se PREVISUALIZA con un enlace para
+ * abrirla/descargarla a tamaño completo. No renderiza nada si no hay imágenes.
+ */
+function PreviewImagenes({ imagenes }: { imagenes: ImagenGenerada[] }) {
+  if (imagenes.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <ImageIcon className="h-4 w-4 text-muted-foreground" />
+        {imagenes.length === 1 ? "Imagen generada" : `Imágenes generadas (${imagenes.length})`}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {imagenes.map((img) => {
+          const src = urlMedia(img.url || img.nombre);
+          return (
+            <a
+              key={img.nombre}
+              href={src}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group relative block overflow-hidden rounded-md border border-border bg-muted/20"
+              title="Abrir a tamaño completo"
+            >
+              <img
+                src={src}
+                alt="Imagen generada por el Estudio de imagen"
+                loading="lazy"
+                className="aspect-square w-full object-contain"
+              />
+              <span className="absolute right-1.5 top-1.5 rounded bg-background/80 p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
+                <Download className="h-3.5 w-3.5" />
+              </span>
+            </a>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ResultadoDocumento({
   documento,
   historialId,
+  imagenes = [],
 }: {
   documento: string;
   historialId: string;
+  /** Imágenes producidas (skills de imagen); vacío para documentos de solo texto. */
+  imagenes?: ImagenGenerada[];
 }) {
   const queryClient = useQueryClient();
   const [red, setRed] = React.useState("");
@@ -96,6 +142,8 @@ export function ResultadoDocumento({
         <Badge variant="aviso">Borrador · no guardado</Badge>
       </CardHeader>
       <CardContent className="space-y-3">
+        <PreviewImagenes imagenes={imagenes} />
+
         <div className="max-h-[32rem] overflow-auto rounded-md border border-border bg-muted/20 p-4 leading-relaxed">
           {documento.trim() ? (
             <Markdown>{documento}</Markdown>

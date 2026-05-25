@@ -185,17 +185,11 @@ export default function GenerarCopy() {
       const limpio = valoresRecortados(valores);
       const redesSel = skillSeleccionada.aplica_redes ? [...redes] : undefined;
 
-      if (esSkillConArchivo(skillSeleccionada)) {
-        // archivo no nulo: garantizado por la guarda de `puedeGenerar` cuando el
-        // campo archivo es requerido. (Si fuera opcional y no hay archivo, el
-        // backend lo aceptaría; aquí lo exigimos por contrato del formulario.)
-        return api.ejecutarSkillArchivo(
-          skillId,
-          marcaId,
-          archivo as File,
-          limpio,
-          redesSel,
-        );
+      // Vía multipart SOLO si de verdad hay archivo. Una skill con campo archivo
+      // OPCIONAL (p. ej. estudio-imagen, que puede generar sin foto) cae a la vía
+      // JSON cuando el usuario no subió ninguno; el backend valida el resto de campos.
+      if (esSkillConArchivo(skillSeleccionada) && archivo !== null) {
+        return api.ejecutarSkillArchivo(skillId, marcaId, archivo, limpio, redesSel);
       }
       return api.ejecutarSkill({
         skill: skillId,
@@ -236,7 +230,11 @@ export default function GenerarCopy() {
     if (!generacion || generacion.estado !== "completado" || !generacion.resultado) return null;
     const r = generacion.resultado;
     if (r.documento === undefined) return null;
-    return { documento: r.documento, historialId: r.historial_id ?? "" };
+    return {
+      documento: r.documento,
+      historialId: r.historial_id ?? "",
+      imagenes: r.imagenes ?? [],
+    };
   }, [generacion]);
 
   // Efectos secundarios al alcanzar el estado terminal (una sola vez por generación).
@@ -458,6 +456,7 @@ export default function GenerarCopy() {
             <ResultadoDocumento
               documento={resultadoDocumento.documento}
               historialId={resultadoDocumento.historialId}
+              imagenes={resultadoDocumento.imagenes}
             />
           )}
         </div>

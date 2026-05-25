@@ -2,7 +2,7 @@ nombre: Estudio de imagen
 explicacion: "Enruta una tarea de imagen al motor correcto: herramientas deterministas para lo exacto sobre fotos reales (recortar, redimensionar, logo + pleca + breaking) e IA solo para ilustraciones, fondos y gráficos. No altera fotos de noticia reales con IA. Cierra revisando lo legal/editorial. Dry-run, no publica."
 grupo: experimentales
 aplica_redes: false
-salida: piezas
+salida: documento
 media: true
 orden: 36
 campos:

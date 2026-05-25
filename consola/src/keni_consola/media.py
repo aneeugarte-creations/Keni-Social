@@ -193,6 +193,35 @@ def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
     return nombre
 
 
+def importar_imagen(ruta) -> str:  # noqa: ANN001 -- acepta str | Path
+    """COPIA una imagen que ya está en disco (ruta absoluta) al almacén de media.
+
+    Pensado para la salida de las skills de imagen (estudio-imagen): las
+    herramientas deterministas/generativas escriben los .png en disco y aquí los
+    importamos al almacén de media para poder PREVISUALIZARLOS por `/api/media/...`.
+    El NOMBRE en disco lo generamos (uuid), nunca el de origen. Valida que sea un
+    archivo de imagen real (extensión conocida) y respeta el límite de tamaño.
+
+    Devuelve el NOMBRE de archivo del media importado. Lanza `MediaError` (en
+    español) si la ruta no existe, no es imagen o es demasiado grande.
+    """
+    origen = Path(ruta)
+    ext = _ext_desde_nombre(origen.name)
+    if ext is None:
+        raise MediaError("El archivo no es una imagen reconocible (PNG, JPG, GIF o WEBP).")
+    try:
+        if not origen.is_file():
+            raise MediaError("No se encontró la imagen generada para previsualizarla.")
+        datos = origen.read_bytes()
+    except MediaError:
+        raise
+    except OSError as e:
+        raise MediaError("No se pudo leer la imagen generada.") from e
+    if not datos:
+        raise MediaError("La imagen generada está vacía.")
+    return guardar_bytes(datos, ext=ext)
+
+
 # --------------------------------------------------------------------------- #
 # Generacion por IA — abstraccion de proveedor (inyectable / mockeable)        #
 # --------------------------------------------------------------------------- #
