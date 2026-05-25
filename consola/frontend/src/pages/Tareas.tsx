@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
-  CheckCircle2,
+  Check,
   FolderOpen,
   ListTodo,
   Plus,
@@ -186,13 +186,11 @@ export default function Tareas() {
       {isPending ? (
         <EsqueletoTareas />
       ) : isError ? (
-        <Card className="border-destructive/40">
-          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertCircle className="h-6 w-6" />
-            </div>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+            <AlertCircle className="h-6 w-6 text-muted-foreground" />
             <div className="space-y-1">
-              <p className="font-medium">No se pudieron cargar las tareas</p>
+              <p className="text-sm font-medium">No se pudieron cargar las tareas</p>
               <p className="max-w-md text-sm text-muted-foreground">{mensajeError(error)}</p>
             </div>
             <Button onClick={() => void refetch()} disabled={isFetching}>
@@ -203,12 +201,10 @@ export default function Tareas() {
         </Card>
       ) : !tieneTareas ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <ListTodo className="h-6 w-6" />
-            </div>
+          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+            <ListTodo className="h-6 w-6 text-muted-foreground" />
             <div className="space-y-1">
-              <p className="font-medium">Aún no hay tareas</p>
+              <p className="text-sm font-medium">Aún no hay tareas</p>
               <p className="max-w-md text-sm text-muted-foreground">
                 Crea tu primera tarea y ábrela en Claude Code dentro de la carpeta de su proyecto.
               </p>
@@ -253,14 +249,14 @@ function GrupoProyecto({ grupo }: { grupo: Grupo }) {
             {hechas}/{grupo.tareas.length} {grupo.tareas.length === 1 ? "hecha" : "hechas"}
           </Badge>
           {grupo.huerfano && (
-            <Badge variant="aviso" className="gap-1">
-              <TriangleAlert className="h-3 w-3" />
+            <Badge variant="secondary" className="gap-1 font-normal">
+              <TriangleAlert className="h-3 w-3 text-amber-600 dark:text-amber-400" />
               Proyecto no configurado
             </Badge>
           )}
           {carpetaPerdida && (
-            <Badge variant="aviso" className="gap-1">
-              <TriangleAlert className="h-3 w-3" />
+            <Badge variant="secondary" className="gap-1 font-normal">
+              <TriangleAlert className="h-3 w-3 text-amber-600 dark:text-amber-400" />
               Carpeta no encontrada
             </Badge>
           )}
@@ -327,25 +323,17 @@ function FilaTarea({ tarea, bloqueada }: { tarea: Tarea; bloqueada: boolean }) {
         className={cn(
           "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50",
           hecha
-            ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            ? "border-foreground bg-foreground text-background"
             : "border-input hover:bg-accent",
         )}
       >
-        {hecha && <CheckCircle2 className="h-4 w-4" />}
+        {hecha && <Check className="h-3.5 w-3.5" />}
       </button>
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "font-medium",
-              hecha && "text-muted-foreground line-through",
-            )}
-          >
-            {tarea.titulo}
-          </span>
-          <Badge variant={hecha ? "ok" : "secondary"}>{hecha ? "Hecha" : "Pendiente"}</Badge>
-        </div>
+        <p className={cn("text-sm font-medium", hecha && "text-muted-foreground line-through")}>
+          {tarea.titulo}
+        </p>
         {tarea.detalle && (
           <p className="mt-0.5 whitespace-pre-wrap text-sm text-muted-foreground">
             {tarea.detalle}
