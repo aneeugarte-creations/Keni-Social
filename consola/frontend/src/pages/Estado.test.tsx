@@ -46,7 +46,9 @@ describe("Estado", () => {
       expect(screen.getByText("Python")).toBeInTheDocument();
     });
     expect(screen.getByText("Credenciales Meta")).toBeInTheDocument();
-    expect(screen.getByText("Casi listo: revisa un detalle.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Hay 1 problema que resolver antes de empezar."),
+    ).toBeInTheDocument();
     expect(
       screen.getByText("Configura tus credenciales en Configuración."),
     ).toBeInTheDocument();
