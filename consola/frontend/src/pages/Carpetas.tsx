@@ -118,13 +118,11 @@ export default function Carpetas() {
       {isPending ? (
         <EsqueletoCarpetas />
       ) : isError ? (
-        <Card className="border-destructive/40">
+        <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertCircle className="h-6 w-6" />
-            </div>
+            <AlertCircle className="h-6 w-6 text-muted-foreground" />
             <div className="space-y-1">
-              <p className="font-medium">No se pudieron cargar las plantillas</p>
+              <p className="text-sm font-medium">No se pudieron cargar las plantillas</p>
               <p className="max-w-md text-sm text-muted-foreground">{mensajeError(error)}</p>
             </div>
             <Button onClick={() => void refetch()} disabled={isFetching}>

@@ -33,9 +33,21 @@ import type { Proyecto } from "@/types";
 
 const CLAVE_PROYECTOS = ["proyectos"];
 
+/**
+ * Limpia emojis de estado (❌ ✅ ⚠️ …) y espacios sobrantes del texto que llega
+ * del backend, para mostrarlo de forma sobria en la interfaz.
+ */
+function limpiarTexto(texto: string): string {
+  return texto
+    .replace(/[✅❌⚠️✔✖✗✘]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 /** Texto legible del error de la API (o un fallback en español). */
 function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
+  if (error instanceof ApiError || error instanceof Error) return limpiarTexto(error.message);
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
 }
 
@@ -80,7 +92,7 @@ function DialogoClaudeMd({
   const guardar = useMutation({
     mutationFn: () => api.guardarClaudeMd(proyecto.id, { contenido }),
     onSuccess: (res) => {
-      toast.success(res.mensaje || "CLAUDE.md guardado.");
+      toast.success(limpiarTexto(res.mensaje) || "CLAUDE.md guardado.");
       void queryClient.invalidateQueries({ queryKey: CLAVE_PROYECTOS });
       onAbiertoChange(false);
     },
@@ -128,7 +140,8 @@ function TarjetaProyecto({ proyecto }: { proyecto: Proyecto }) {
 
   const abrir = useMutation({
     mutationFn: () => api.abrirProyecto(proyecto.id),
-    onSuccess: (res) => toast.success(res.mensaje || "Proyecto abierto en Claude Code."),
+    onSuccess: (res) =>
+      toast.success(limpiarTexto(res.mensaje) || "Proyecto abierto en Claude Code."),
     onError: (error) => toast.error(mensajeError(error)),
   });
 
@@ -146,12 +159,24 @@ function TarjetaProyecto({ proyecto }: { proyecto: Proyecto }) {
             </p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-            <Badge variant={proyecto.existe ? "ok" : "error"}>
+            <Badge variant="secondary" className="gap-1.5">
+              <span
+                className={cn(
+                  "h-2 w-2 rounded-full",
+                  proyecto.existe ? "bg-emerald-500" : "bg-red-500",
+                )}
+                aria-hidden="true"
+              />
               {proyecto.existe ? "Existe" : "No existe"}
             </Badge>
-            <Badge variant={proyecto.tiene_claude_md ? "ok" : "aviso"}>
-              {proyecto.tiene_claude_md ? "Con CLAUDE.md" : "Sin CLAUDE.md"}
-            </Badge>
+            {proyecto.tiene_claude_md ? (
+              <Badge variant="secondary">Con CLAUDE.md</Badge>
+            ) : (
+              <Badge variant="secondary" className="gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+                Sin CLAUDE.md
+              </Badge>
+            )}
           </div>
         </div>
       </CardHeader>
@@ -198,7 +223,7 @@ function DialogoNuevoProyecto({
   const crear = useMutation({
     mutationFn: () => api.crearProyecto({ nombre: nombre.trim(), ruta: ruta.trim() }),
     onSuccess: (res) => {
-      toast.success(res.mensaje || "Proyecto añadido.");
+      toast.success(limpiarTexto(res.mensaje) || "Proyecto añadido.");
       void queryClient.invalidateQueries({ queryKey: CLAVE_PROYECTOS });
       onAbiertoChange(false);
     },
@@ -305,13 +330,11 @@ export default function Proyectos() {
       {isPending ? (
         <EsqueletoProyectos />
       ) : isError ? (
-        <Card className="border-destructive/40">
+        <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertCircle className="h-6 w-6" />
-            </div>
+            <AlertCircle className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
             <div className="space-y-1">
-              <p className="font-medium">No se pudieron cargar los proyectos</p>
+              <p className="text-sm font-medium">No se pudieron cargar los proyectos</p>
               <p className="max-w-md text-sm text-muted-foreground">{mensajeError(error)}</p>
             </div>
             <Button onClick={() => void refetch()} disabled={isFetching}>
@@ -323,11 +346,9 @@ export default function Proyectos() {
       ) : data.proyectos.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <FolderGit2 className="h-6 w-6" />
-            </div>
+            <FolderGit2 className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
             <div className="space-y-1">
-              <p className="font-medium">Aún no hay proyectos</p>
+              <p className="text-sm font-medium">Aún no hay proyectos</p>
               <p className="max-w-md text-sm text-muted-foreground">
                 Añade una carpeta para conectarla con la consola y empezar a trabajar con Claude
                 Code.

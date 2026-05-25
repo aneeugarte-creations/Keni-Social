@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Check, RefreshCw, Save, X } from "lucide-react";
+import { AlertCircle, RefreshCw, Save } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/layout/PageHeader";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,9 +14,21 @@ import type { CredencialesPresentes } from "@/types";
 
 const CLAVE_CONFIG = ["config"];
 
+/**
+ * Limpia emojis de estado (❌ ✅ ⚠️ …) que pueda traer el backend y normaliza
+ * espacios y puntuación, para mostrar un texto sobrio en la consola.
+ */
+function limpiarMensaje(texto: string): string {
+  return texto
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️]/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 /** Texto legible del error de la API (o un fallback en español). */
 function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
+  if (error instanceof ApiError || error instanceof Error) return limpiarMensaje(error.message);
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
 }
 
@@ -91,7 +104,7 @@ export default function Configuracion() {
   const guardar = useMutation({
     mutationFn: () => api.guardarConfig({ fuente, marcas }),
     onSuccess: (res) => {
-      toast.success(res.mensaje || "Configuración guardada.");
+      toast.success(res.mensaje ? limpiarMensaje(res.mensaje) : "Configuración guardada.");
       void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG });
     },
     onError: (errorGuardar) => toast.error(mensajeError(errorGuardar)),
@@ -126,13 +139,11 @@ export default function Configuracion() {
       {isPending ? (
         <EsqueletoConfig />
       ) : isError ? (
-        <Card className="border-destructive/40">
+        <Card>
           <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-              <AlertCircle className="h-6 w-6" />
-            </div>
+            <AlertCircle className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
             <div className="space-y-1">
-              <p className="font-medium">No se pudo cargar la configuración</p>
+              <p className="text-sm font-medium">No se pudo cargar la configuración</p>
               <p className="max-w-md text-sm text-muted-foreground">{mensajeError(error)}</p>
             </div>
             <Button onClick={() => void refetch()} disabled={isFetching}>
@@ -148,15 +159,17 @@ export default function Configuracion() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Fuente de datos</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 pt-0">
+            <CardContent className="space-y-2.5 pt-0">
               {data.fuentes_validas.map((f) => {
                 const seleccionada = fuente === f;
                 return (
                   <label
                     key={f}
                     className={cn(
-                      "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-                      seleccionada ? "border-primary bg-primary/5" : "border-border hover:bg-accent",
+                      "flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition-colors",
+                      seleccionada
+                        ? "border-foreground/30 bg-muted/50"
+                        : "border-border hover:bg-accent",
                     )}
                   >
                     <input
@@ -194,15 +207,17 @@ export default function Configuracion() {
               {data.marcas_disponibles.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No hay marcas disponibles.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2.5">
                   {data.marcas_disponibles.map((marca) => {
                     const marcada = marcas.includes(marca.id);
                     return (
                       <label
                         key={marca.id}
                         className={cn(
-                          "flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors",
-                          marcada ? "border-primary bg-primary/5" : "border-border hover:bg-accent",
+                          "flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors",
+                          marcada
+                            ? "border-foreground/30 bg-muted/50"
+                            : "border-border hover:bg-accent",
                         )}
                       >
                         <input
@@ -242,19 +257,25 @@ export default function Configuracion() {
                   return (
                     <li
                       key={clave}
-                      className="flex items-center justify-between gap-3 px-3 py-2.5"
+                      className="flex items-center justify-between gap-3 px-3 py-3"
                     >
                       <span className="text-sm font-medium">{NOMBRE_CREDENCIAL[clave]}</span>
                       {presente ? (
-                        <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
-                          <Check className="h-4 w-4" aria-hidden="true" />
+                        <Badge variant="secondary" className="gap-1.5">
+                          <span
+                            className="h-2 w-2 rounded-full bg-emerald-500"
+                            aria-hidden="true"
+                          />
                           Configurada
-                        </span>
+                        </Badge>
                       ) : (
-                        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                          <X className="h-4 w-4" aria-hidden="true" />
+                        <Badge variant="outline" className="gap-1.5 text-muted-foreground">
+                          <span
+                            className="h-2 w-2 rounded-full bg-muted-foreground/40"
+                            aria-hidden="true"
+                          />
                           Sin configurar
-                        </span>
+                        </Badge>
                       )}
                     </li>
                   );

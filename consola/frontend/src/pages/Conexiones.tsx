@@ -13,7 +13,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
-  Check,
   Info,
   Loader2,
   Plug,
@@ -21,13 +20,11 @@ import {
   Save,
   ShieldCheck,
   Trash2,
-  X,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -58,9 +55,21 @@ const CLAVE_REDES = ["conexiones", "redes"];
 /** Proveedores de imagen IA disponibles (por ahora solo OpenAI). */
 const PROVEEDORES = [{ id: "openai", nombre: "OpenAI (gpt-image-1)" }];
 
-/** Texto legible del error de la API (o un fallback en español). */
+/**
+ * Limpia mensajes del backend para la vista: quita emojis de estado (❌ ✅ ⚠️)
+ * y demás símbolos decorativos, normaliza espacios y ordena la puntuación.
+ */
+function limpiarMensaje(texto: string): string {
+  return texto
+    .replace(/[☀-➿\u{1F000}-\u{1FAFF}️]/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
+/** Texto legible del error de la API (o un fallback en español), ya saneado. */
 function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
+  if (error instanceof ApiError || error instanceof Error) return limpiarMensaje(error.message);
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
 }
 
@@ -77,16 +86,14 @@ function TarjetaError({
   reintentando: boolean;
 }) {
   return (
-    <Card className="border-destructive/40">
+    <Card>
       <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <AlertCircle className="h-6 w-6" />
-        </div>
+        <AlertCircle className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
         <div className="space-y-1">
-          <p className="font-medium">{titulo}</p>
+          <p className="text-sm font-medium">{titulo}</p>
           <p className="max-w-md text-sm text-muted-foreground">{mensaje}</p>
         </div>
-        <Button onClick={onReintentar} disabled={reintentando}>
+        <Button variant="outline" onClick={onReintentar} disabled={reintentando}>
           <RefreshCw className={cn("h-4 w-4", reintentando && "animate-spin")} />
           Reintentar
         </Button>
@@ -187,16 +194,22 @@ function SeccionImagen() {
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2.5">
               <span className="text-sm font-medium">Estado</span>
               {data.configurado ? (
-                <span className="flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
-                  <Check className="h-4 w-4" aria-hidden="true" />
+                <span className="flex items-center gap-2 text-sm">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+                    aria-hidden="true"
+                  />
                   Configurada
                   {data.pista && (
                     <span className="font-mono text-xs text-muted-foreground">({data.pista})</span>
                   )}
                 </span>
               ) : (
-                <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <X className="h-4 w-4" aria-hidden="true" />
+                <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40"
+                    aria-hidden="true"
+                  />
                   Sin configurar
                 </span>
               )}
@@ -239,20 +252,15 @@ function SeccionImagen() {
 
             {/* Resultado de la prueba */}
             {resultadoPrueba && (
-              <p
-                className={cn(
-                  "flex items-center gap-1.5 text-sm",
-                  resultadoPrueba.ok
-                    ? "text-emerald-600 dark:text-emerald-400"
-                    : "text-destructive",
-                )}
-              >
-                {resultadoPrueba.ok ? (
-                  <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
-                ) : (
-                  <X className="h-4 w-4 shrink-0" aria-hidden="true" />
-                )}
-                {resultadoPrueba.mensaje}
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span
+                  className={cn(
+                    "h-2 w-2 shrink-0 rounded-full",
+                    resultadoPrueba.ok ? "bg-emerald-500" : "bg-red-500",
+                  )}
+                  aria-hidden="true"
+                />
+                {limpiarMensaje(resultadoPrueba.mensaje)}
               </p>
             )}
 
@@ -359,9 +367,18 @@ function TarjetaRed({ red }: { red: RedConexion }) {
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">{red.nombre}</span>
         {red.conectado ? (
-          <Badge variant="ok">Conectado</Badge>
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+            Conectado
+          </span>
         ) : (
-          <Badge variant="secondary">Sin conectar</Badge>
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span
+              className="h-2 w-2 shrink-0 rounded-full bg-muted-foreground/40"
+              aria-hidden="true"
+            />
+            Sin conectar
+          </span>
         )}
       </div>
 
@@ -451,8 +468,8 @@ function SeccionRedes() {
       </CardHeader>
       <CardContent className="space-y-4 pt-0">
         {/* Aviso honesto */}
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-primary/5 p-3">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/40 p-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
             El token se guarda <strong>solo en esta máquina</strong> y es <strong>revocable</strong>
             ; alimenta las métricas (y la publicación cuando se habilite). La conexión de un clic
