@@ -5,6 +5,7 @@ import {
   FolderTree,
   ListTodo,
   Plug,
+  Rss,
   Send,
   Settings2,
   Sparkles,
@@ -43,6 +44,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Publicaciones",
         icono: Send,
         descripcion: "Gestiona borradores, aprueba, programa y publica.",
+      },
+      {
+        ruta: "/fuentes",
+        etiqueta: "Fuentes",
+        icono: Rss,
+        descripcion: "Feeds RSS para alimentar Generar copy.",
       },
       {
         ruta: "/metricas",

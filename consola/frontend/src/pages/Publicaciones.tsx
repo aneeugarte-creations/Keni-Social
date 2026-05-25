@@ -1,5 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CalendarClock, CalendarDays, Hash, List, RefreshCw, Send } from "lucide-react";
+import {
+  AlertCircle,
+  CalendarClock,
+  CalendarDays,
+  FileText,
+  Hash,
+  List,
+  RefreshCw,
+  Send,
+} from "lucide-react";
 import * as React from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -17,6 +26,7 @@ import { DialogoEditar } from "./publicaciones/DialogoEditar";
 import { FILTRO_TODOS, FiltrosPublicaciones } from "./publicaciones/Filtros";
 import { GestionFranjas } from "./publicaciones/GestionFranjas";
 import { GestionHashtags } from "./publicaciones/GestionHashtags";
+import { GestionPlantillas } from "./publicaciones/GestionPlantillas";
 import { VistaCalendario } from "./publicaciones/VistaCalendario";
 import { VistaLista } from "./publicaciones/VistaLista";
 
@@ -122,20 +132,30 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   const [marca, setMarca] = React.useState(FILTRO_TODOS);
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [estado, setEstado] = React.useState(FILTRO_TODOS);
+  const [soloPerennes, setSoloPerennes] = React.useState(false);
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
   const [gestionFranjas, setGestionFranjas] = React.useState(false);
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
+  const [gestionPlantillas, setGestionPlantillas] = React.useState(false);
 
   const filtros = {
     marca: marca === FILTRO_TODOS ? undefined : marca,
     red: red === FILTRO_TODOS ? undefined : red,
     // En vista calendario ignoramos el filtro de estado (solo programadas).
     estado: vista === "calendario" || estado === FILTRO_TODOS ? undefined : estado,
+    evergreen: soloPerennes ? "1" : undefined,
   };
 
   const query = useQuery({
-    queryKey: [...CLAVE_PUBLICACIONES, "lista", filtros.marca ?? "", filtros.red ?? "", filtros.estado ?? ""],
+    queryKey: [
+      ...CLAVE_PUBLICACIONES,
+      "lista",
+      filtros.marca ?? "",
+      filtros.red ?? "",
+      filtros.estado ?? "",
+      filtros.evergreen ?? "",
+    ],
     queryFn: ({ signal }) => api.publicaciones(filtros, signal),
   });
 
@@ -146,11 +166,22 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
         marca={marca}
         red={red}
         estado={estado}
+        soloPerennes={soloPerennes}
         onMarca={setMarca}
         onRed={setRed}
         onEstado={setEstado}
+        onSoloPerennes={setSoloPerennes}
       />
       <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setGestionPlantillas(true)}
+          title="Gestionar plantillas de post"
+        >
+          <FileText className="h-4 w-4" />
+          Plantillas
+        </Button>
         <Button
           variant="outline"
           size="sm"
@@ -186,7 +217,8 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   );
 
   const publicaciones = query.data?.publicaciones ?? [];
-  const filtrando = marca !== FILTRO_TODOS || red !== FILTRO_TODOS || estado !== FILTRO_TODOS;
+  const filtrando =
+    marca !== FILTRO_TODOS || red !== FILTRO_TODOS || estado !== FILTRO_TODOS || soloPerennes;
 
   return (
     <>
@@ -254,6 +286,13 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
         abierto={gestionHashtags}
         onCerrar={() => setGestionHashtags(false)}
         marcas={opciones.marcas}
+      />
+
+      <GestionPlantillas
+        abierto={gestionPlantillas}
+        onCerrar={() => setGestionPlantillas(false)}
+        marcas={opciones.marcas}
+        redes={opciones.redes}
       />
     </>
   );

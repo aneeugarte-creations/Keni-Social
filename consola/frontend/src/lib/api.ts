@@ -10,11 +10,14 @@
  */
 import type {
   CompararMetricas,
+  CuerpoActualizarPlantilla,
   CuerpoActualizarPublicacion,
   CuerpoActualizarTarea,
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
+  CuerpoCrearFuenteRss,
+  CuerpoCrearPlantilla,
   CuerpoCrearProyecto,
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
@@ -44,16 +47,22 @@ import type {
   RespuestaEstado,
   RespuestaFranja,
   RespuestaFranjas,
+  RespuestaFuenteRss,
+  RespuestaFuentesRss,
   RespuestaGrupoHashtags,
   RespuestaHashtags,
   RespuestaHistorial,
+  RespuestaItemsRss,
   RespuestaMedia,
   RespuestaMensaje,
+  RespuestaPlantilla,
+  RespuestaPlantillas,
   RespuestaProyectos,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
   RespuestaPublicacion,
   RespuestaPublicaciones,
+  RespuestaReciclarPublicacion,
   RespuestaSkills,
   RespuestaSugerirHashtags,
   RespuestaTareas,
@@ -229,6 +238,10 @@ export const api = {
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/encolar`, {
       metodo: "POST",
     }),
+  reciclarPublicacion: (id: string) =>
+    peticion<RespuestaReciclarPublicacion>(`/publicaciones/${encodeURIComponent(id)}/reciclar`, {
+      metodo: "POST",
+    }),
 
   // --- Media (imágenes) ---
   subirMedia: (archivo: File) => {
@@ -252,6 +265,27 @@ export const api = {
     peticion<RespuestaMensaje>(`/hashtags/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
     peticion<RespuestaSugerirHashtags>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
+
+  // --- Plantillas de post ---
+  plantillas: (signal?: AbortSignal) => peticion<RespuestaPlantillas>("/plantillas", { signal }),
+  crearPlantilla: (cuerpo: CuerpoCrearPlantilla) =>
+    peticion<RespuestaPlantilla>("/plantillas", { metodo: "POST", json: cuerpo }),
+  actualizarPlantilla: (id: string, cuerpo: CuerpoActualizarPlantilla) =>
+    peticion<RespuestaPlantilla>(`/plantillas/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarPlantilla: (id: string) =>
+    peticion<RespuestaMensaje>(`/plantillas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- RSS (fuentes + items) ---
+  fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),
+  crearFuenteRss: (cuerpo: CuerpoCrearFuenteRss) =>
+    peticion<RespuestaFuenteRss>("/rss/fuentes", { metodo: "POST", json: cuerpo }),
+  eliminarFuenteRss: (id: string) =>
+    peticion<RespuestaMensaje>(`/rss/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  itemsRss: (fuente?: string, signal?: AbortSignal) =>
+    peticion<RespuestaItemsRss>(`/rss/items${query({ fuente })}`, { signal }),
 
   // --- Franjas (colas) ---
   franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),

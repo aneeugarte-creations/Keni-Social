@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -84,6 +85,8 @@ function EsqueletoFormulario() {
 
 export default function GenerarCopy() {
   const queryClient = useQueryClient();
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const skillsQuery = useQuery({
     queryKey: ["skills"],
@@ -118,6 +121,20 @@ export default function GenerarCopy() {
     marca: string;
   } | null>(null);
   const inputArchivoRef = React.useRef<HTMLInputElement>(null);
+
+  // Prellenado desde otra página (p. ej. "Usar en Generar copy" desde Fuentes).
+  // Volcamos el texto del `state` de navegación y lo limpiamos para que no
+  // reaparezca al volver atrás o refrescar.
+  React.useEffect(() => {
+    const prefill = (location.state as { texto?: string } | null)?.texto;
+    if (typeof prefill === "string" && prefill.length > 0) {
+      setModo("texto");
+      setTexto(prefill);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+    // Solo al montar / cambiar el state de navegación.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state]);
 
   // Por defecto, todas las redes marcadas (en cuanto conocemos el catálogo).
   React.useEffect(() => {
