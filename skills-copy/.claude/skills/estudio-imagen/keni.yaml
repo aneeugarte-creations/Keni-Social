@@ -34,6 +34,27 @@ campos:
       - cuadrado
       - horizontal
     media_tipos: ""
+  - id: ajuste
+    etiqueta: Si no cabe en el formato
+    tipo: select
+    requerido: false
+    placeholder: ""
+    ayuda: 'Cómo encajar la foto. "recortar" rellena el formato (puede cortar al sujeto). "extender fondo" añade cielo/negro por el borde uniforme SIN cortar al sujeto; si el fondo no es uniforme, te avisa para revisión. Vacío = el enrutador decide.'
+    opciones:
+      - recortar
+      - extender fondo
+    media_tipos: ""
+  - id: peso
+    etiqueta: Peso del archivo (formato "full")
+    tipo: select
+    requerido: false
+    placeholder: ""
+    ayuda: 'Para subir en el internet malo de un evento. Comprime conservando el tamaño hasta el peso elegido. Vacío = sin comprimir (original).'
+    opciones:
+      - "≤ 3 MB"
+      - "≤ 2 MB"
+      - "≤ 1 MB"
+    media_tipos: ""
 plantilla_invocacion: |
   usa estudio-imagen, marca {marca}.
 
@@ -43,3 +64,7 @@ plantilla_invocacion: |
   {peticion}
 
   Formato (vacío = no forzar): {formato}
+
+  Si no cabe en el formato (vacío = decides tú): {ajuste}
+
+  Peso del archivo "full" (vacío = sin comprimir): {peso}

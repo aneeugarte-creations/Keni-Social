@@ -116,4 +116,42 @@ Es la misma tesis de keni-social aplicada a la imagen: *la IA diseña el proceso
 
 ---
 
+## 8. Estado (2026-05-25): formatos de entrega del fotógrafo — full + 4:5
+
+Sugerencia del fotógrafo del equipo de redes AMX: entregar cada foto en dos formatos.
+**(1) "Full"** = casi el original, con un resize pequeño, pero ajustando el **peso** del
+archivo porque en eventos masivos el internet rudimentario no sube el original.
+**(2) 4:5** para Instagram, donde a veces el sujeto no cabe y, si lo que falta es solo
+cielo o el negro del fondo, se quiere **extender ese fondo** sin tocar a los jugadores.
+
+Decisiones (sesión 2026-05-25): extensión **híbrida** (determinista por defecto, IA solo
+como excepción aprobada); peso = **dropdown seleccionable** (no valor fijo); 4:5 =
+**automático con vista previa** (detecta cuando el recorte cortaría al sujeto y propone el
+encaje; el humano aprueba). Contexto en `07-innovacion/keni-social/notas/2026-05-25-formatos-entrega-foto-full-y-4-5.md`.
+
+Hecho en el repo, rama `feat/formatos-foto`:
+- `editar.py comprimir`: baja el peso a un objetivo (`--peso-max-mb`) conservando el tamaño
+  (resize pequeño opcional con `--max`); si ni la calidad mínima cabe, reduce el tamaño y lo
+  anota. Salida jpg/webp.
+- `editar.py extender`: encaja en un formato extendiendo **solo el borde uniforme**
+  (cielo/negro) estirando el borde — no inventa contenido, **respeta §3**. Reparte el lienzo
+  añadido solo por el lado uniforme (p. ej. solo arriba = cielo). Si ningún borde es uniforme
+  o haría falta extender más de `--max-ext` (25%), **no inventa**: cae al recorte cubriente y
+  marca `extension_segura: false` (ahí entraría, con aprobación editorial, la vía de IA).
+- `SKILL.md`: enrutado de ambas operaciones + flujo auto/vista previa.
+- `keni.yaml`: dropdowns en la Consola — **Peso** (≤1/2/3 MB) y **Ajuste** (recortar /
+  extender fondo). Declarativos: no requieren tocar el frontend.
+- Tests Pillow en `estudio-imagen/test_editar.py` (locales; el CI estático de skills no
+  instala Pillow).
+
+Pendiente:
+1. Validar con el responsable editorial de AMX el criterio de "extender solo fondo uniforme"
+   frente a §3, y el umbral máximo de extensión por lado.
+2. Vía de IA (outpainting con máscara) como **excepción** cuando el fondo no es uniforme:
+   adaptador por API (Gemini/OpenAI) reutilizando el patrón de `generar.py`/`consola/media.py`.
+3. Detección del sujeto para automatizar al 100% el disparador "el recorte cortaría al sujeto"
+   (hoy el heurístico es la uniformidad del borde + el ratio).
+
+---
+
 *Documento de exploración. Siguiente paso natural: construir el enrutador `estudio-imagen` (Fase 1) sobre el compositor ya existente, con el guardrail §3, y validar con el equipo el flujo "subo foto → arte de la casa → copy" que pidió Tescu.*
