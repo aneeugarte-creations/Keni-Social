@@ -1,15 +1,18 @@
-"""API Agentes: un agente = una marca = su carpeta (contexto + runs).
+"""API Agentes: conjunto ABIERTO de agentes (marcas de serie + genericos).
 
 La Ola 2a dejo el contenido por MARCA en `<KENI_CONSOLA_RAIZ>/<marca>/`. Esta API
-expone ese mismo espacio como un AGENTE: la lista de agentes ES la lista de marcas
-del catalogo unico (`marcas.opciones()`); cada agente tiene su `CLAUDE.md`
-(contexto principal), sub-contextos opcionales (`contexto/*.md`) y RUNS
-(ejecuciones de un prompt en su carpeta, `runs/<id>.yaml`). La logica de dominio
-(localizar/crear la carpeta, leer/escribir contexto y runs, todo DEFENSIVO) vive en
+expone ese espacio como AGENTES y abre el conjunto: las 5 MARCAS vienen de serie
+(`es_marca=True`; producen copy/publicaciones/metricas; NO se borran ni se
+renombran) y, ademas, se pueden CREAR/CONECTAR/RENOMBRAR/BORRAR agentes GENERICOS
+(carpeta + manifiesto `.keni/agente.yaml` + CLAUDE.md + runs; `es_marca=False`).
+Cada agente tiene su `CLAUDE.md` (contexto principal), sub-contextos opcionales
+(`contexto/*.md`) y RUNS (`runs/<id>.yaml`). La logica de dominio (descubrir, crear,
+conectar, renombrar, borrar, leer/escribir contexto y runs, todo DEFENSIVO) vive en
 `consola.agentes`; aqui solo se orquestan los endpoints JSON.
 
-NO hay "crear agente" arbitrario: los agentes SON las marcas. Cada endpoint valida
-el `marca_id` contra el catalogo (404 si no existe); nunca se aceptan rutas crudas.
+Cada endpoint resuelve el `agente_id` contra el conjunto vivo (marca del catalogo O
+generico con manifiesto): 404 si no resuelve. Nunca se aceptan rutas crudas; el slug
+de un generico se deriva/valida en el dominio (anti-escape de `api.carpetas`).
 
 RUNS:
   - `headless`: corre `claude -p <prompt> --output-format stream-json --verbose` con
@@ -39,7 +42,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agentes, lanzador, marcas
+from .. import agentes, lanzador
 from .._http_json import leer_json
 from . import skills
 
@@ -66,13 +69,18 @@ _HANDLES_LOCK = threading.Lock()
 # --------------------------------------------------------------------------- #
 
 
-def _agente_o_404(marca_id: object) -> str | JSONResponse:
-    """Valida el `marca_id` contra el catalogo; 404 JSON si no es una marca."""
-    if not isinstance(marca_id, str) or not marca_id:
+def _agente_o_404(agente_id: object) -> str | JSONResponse:
+    """Resuelve el `agente_id` contra el conjunto vivo (marca O generico); 404 JSON si no.
+
+    Acepta TANTO un id de marca del catalogo COMO el slug de un agente generico ya
+    registrado (con manifiesto `.keni/agente.yaml`). Nunca acepta rutas crudas: el
+    dominio (`agentes.es_agente`) hace la validacion anti-escape contra la raiz.
+    """
+    if not isinstance(agente_id, str) or not agente_id:
         return JSONResponse({"error": "Falta el identificador del agente."}, status_code=404)
-    if not marcas.es_marca(marca_id):
-        return JSONResponse({"error": "Agente (marca) no encontrado."}, status_code=404)
-    return marca_id
+    if not agentes.es_agente(agente_id):
+        return JSONResponse({"error": "Agente no encontrado."}, status_code=404)
+    return agente_id
 
 
 # --------------------------------------------------------------------------- #
@@ -81,19 +89,93 @@ def _agente_o_404(marca_id: object) -> str | JSONResponse:
 
 
 async def listar(request: Request) -> Response:
-    """Lista los agentes (= marcas) con su resumen (sin materializar carpetas)."""
+    """Lista los agentes (marcas + genericos) con su resumen (sin materializar carpetas)."""
     return JSONResponse({"agentes": agentes.listar_agentes()})
 
 
+async def crear(request: Request) -> Response:
+    """Crea un agente GENERICO. JSON `{nombre, tipo?}` -> `{agente}` (400 si nombre/slug invalido).
+
+    Deriva un slug seguro del nombre, crea la carpeta + manifiesto + CLAUDE.md desde la
+    plantilla `tipo` (def "general"). 400 si el nombre esta vacio / no da slug valido o
+    si el slug choca con una marca o con un agente/carpeta existente.
+    """
+    datos = await leer_json(request)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str):
+        return JSONResponse({"error": "Falta el nombre del agente."}, status_code=400)
+    tipo = datos.get("tipo")
+    tipo = tipo if isinstance(tipo, str) else "general"
+    try:
+        agente = agentes.crear_agente(nombre, tipo)
+    except (agentes.NombreAgenteInvalido, agentes.AgenteExistente) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except OSError:
+        return JSONResponse({"error": "No se pudo crear el agente."}, status_code=400)
+    return JSONResponse({"agente": agente})
+
+
+async def conectar(request: Request) -> Response:
+    """Conecta una subcarpeta EXISTENTE de la raiz como agente generico.
+
+    JSON `{carpeta}` -> `{agente}`. 400 si no existe bajo la raiz, ya es agente/marca,
+    o si `carpeta` intenta escapar (solo el nombre de una subcarpeta, anti-traversal).
+    """
+    datos = await leer_json(request)
+    carpeta = datos.get("carpeta")
+    if not isinstance(carpeta, str):
+        return JSONResponse({"error": "Falta la carpeta a conectar."}, status_code=400)
+    try:
+        agente = agentes.conectar_agente(carpeta)
+    except (agentes.NombreAgenteInvalido, agentes.AgenteExistente) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except OSError:
+        return JSONResponse({"error": "No se pudo conectar la carpeta."}, status_code=400)
+    return JSONResponse({"agente": agente})
+
+
+async def renombrar(request: Request) -> Response:
+    """Renombra el DISPLAY de un agente GENERICO. JSON `{nombre}` -> `{agente}`.
+
+    400 si el agente es una marca, no existe, o el nombre queda vacio.
+    """
+    agente_id = request.path_params.get("agente_id")
+    datos = await leer_json(request)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str):
+        return JSONResponse({"error": "Falta el nuevo nombre del agente."}, status_code=400)
+    try:
+        agente = agentes.renombrar_agente(agente_id, nombre)
+    except (agentes.OperacionNoPermitida, agentes.AgenteInvalido, agentes.NombreAgenteInvalido) as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except OSError:
+        return JSONResponse({"error": "No se pudo renombrar el agente."}, status_code=400)
+    return JSONResponse({"agente": agente})
+
+
+async def borrar(request: Request) -> Response:
+    """Borra un agente GENERICO (su carpeta). -> `{mensaje}`. 400 si es marca; 404 si no existe."""
+    agente_id = request.path_params.get("agente_id")
+    try:
+        agentes.borrar_agente(agente_id)
+    except agentes.OperacionNoPermitida as e:  # es una marca de serie -> 400
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except agentes.AgenteInvalido:  # no es un generico registrado -> 404
+        return JSONResponse({"error": "Agente no encontrado."}, status_code=404)
+    except OSError:
+        return JSONResponse({"error": "No se pudo borrar el agente."}, status_code=400)
+    return JSONResponse({"mensaje": "Agente borrado."})
+
+
 async def detalle(request: Request) -> Response:
-    """Detalle de un agente: CLAUDE.md + sub-contextos + runs recientes. 404 si no es marca."""
-    marca_id = _agente_o_404(request.path_params.get("agente_id"))
-    if isinstance(marca_id, JSONResponse):
-        return marca_id
-    resumen = agentes.resumen_agente(marca_id)
-    claude_md = agentes.leer_claude_md(marca_id)
-    sub_contextos = agentes.listar_contextos(marca_id)  # nombre + contenido (la UI edita desde aquí)
-    runs = agentes.listar_runs(marca_id)[:_RUNS_EN_DETALLE]
+    """Detalle de un agente: CLAUDE.md + sub-contextos + runs recientes. 404 si no resuelve."""
+    agente_id = _agente_o_404(request.path_params.get("agente_id"))
+    if isinstance(agente_id, JSONResponse):
+        return agente_id
+    resumen = agentes.resumen_agente(agente_id)
+    claude_md = agentes.leer_claude_md(agente_id)
+    sub_contextos = agentes.listar_contextos(agente_id)  # nombre + contenido (la UI edita desde aquí)
+    runs = agentes.listar_runs(agente_id)[:_RUNS_EN_DETALLE]
     runs_breves = [
         {
             "id": r["id"],
@@ -108,9 +190,10 @@ async def detalle(request: Request) -> Response:
     ]
     return JSONResponse(
         {
-            "id": marca_id,
+            "id": agente_id,
             "nombre": resumen["nombre"],
             "ruta": resumen["ruta"],
+            "es_marca": resumen["es_marca"],
             "claude_md": claude_md,
             "sub_contextos": sub_contextos,
             "runs": runs_breves,
@@ -493,7 +576,12 @@ RUTAS = [
     Route("/api/runs", listar_runs_globales, methods=["GET"]),
     Route("/api/runs/agregados", agregados_runs, methods=["GET"]),
     Route("/api/agentes", listar, methods=["GET"]),
+    Route("/api/agentes", crear, methods=["POST"]),
+    # `conectar` ANTES de `/{agente_id}` para que no lo capture el comodin del detalle.
+    Route("/api/agentes/conectar", conectar, methods=["POST"]),
     Route("/api/agentes/{agente_id}", detalle, methods=["GET"]),
+    Route("/api/agentes/{agente_id}", renombrar, methods=["PATCH"]),
+    Route("/api/agentes/{agente_id}", borrar, methods=["DELETE"]),
     Route("/api/agentes/{agente_id}/claude-md", guardar_claude_md, methods=["PUT"]),
     Route("/api/agentes/{agente_id}/contextos", listar_contextos, methods=["GET"]),
     Route("/api/agentes/{agente_id}/contextos/{nombre}", guardar_contexto, methods=["PUT"]),
