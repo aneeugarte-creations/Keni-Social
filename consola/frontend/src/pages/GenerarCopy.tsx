@@ -289,7 +289,7 @@ export default function GenerarCopy() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Nuevo borrador</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-6">
               {/* Selectores */}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
