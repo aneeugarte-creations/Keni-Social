@@ -8,8 +8,10 @@ import {
   List,
   RefreshCw,
   Send,
+  Sparkles,
 } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -237,7 +239,7 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
         <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} />
       ) : publicaciones.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+          <CardContent className="flex flex-col items-center gap-4 py-16 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary">
               <Send className="h-6 w-6" />
             </div>
@@ -251,6 +253,14 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
                   : "Genera un copy y guárdalo como publicación para empezar a gestionarlo aquí."}
               </p>
             </div>
+            {!filtrando && (
+              <Button asChild size="sm">
+                <Link to="/generar-copy">
+                  <Sparkles className="h-4 w-4" />
+                  Generar copy
+                </Link>
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (
