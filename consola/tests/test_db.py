@@ -123,6 +123,55 @@ def test_historial_recientes_primero(base):
     assert ids[1] == h1
 
 
+def test_historial_guarda_y_devuelve_piezas_y_titulo(base):
+    piezas = [
+        {"red": "x", "contenido": "tw", "caracteres": 2},
+        {"red": "instagram", "contenido": "ig", "caracteres": 2},
+    ]
+    hid = db.registrar_historial_skill(
+        "copy-desde-nota", "unotv", "RES", piezas=piezas, titulo="Mi titulo"
+    )
+    entrada = db.obtener_historial_skill(hid)
+    assert entrada["titulo"] == "Mi titulo"
+    assert entrada["piezas"] == piezas
+    # El listado tambien las devuelve (parseadas a lista).
+    listado = db.listar_historial_skills()
+    assert listado[0]["piezas"] == piezas
+    assert listado[0]["titulo"] == "Mi titulo"
+
+
+def test_historial_sin_piezas_devuelve_lista_vacia(base):
+    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "RES")
+    entrada = db.obtener_historial_skill(hid)
+    assert entrada["piezas"] == []
+    assert entrada["titulo"] == ""
+
+
+def test_historial_filas_antiguas_sin_columnas_devuelven_defaults(base):
+    """Una fila preexistente sin piezas/titulo (base antigua) no debe romper la lectura."""
+    # Simula una base antigua: tabla sin las columnas nuevas + una fila.
+    ruta = db.ruta_db()
+    con = sqlite3.connect(str(ruta))
+    try:
+        con.execute(
+            "CREATE TABLE skill_historial ("
+            "id TEXT PRIMARY KEY, skill TEXT NOT NULL, marca TEXT NOT NULL, "
+            "fecha TEXT NOT NULL DEFAULT '', resultado TEXT NOT NULL DEFAULT '')"
+        )
+        con.execute(
+            "INSERT INTO skill_historial (id, skill, marca, fecha, resultado) "
+            "VALUES ('viejo1', 'copy-desde-nota', 'unotv', '2020-01-01', 'antiguo')"
+        )
+        con.commit()
+    finally:
+        con.close()
+    # La primera conexion via db.* migra las columnas (idempotente) y lee defaults.
+    entrada = db.obtener_historial_skill("viejo1")
+    assert entrada["resultado"] == "antiguo"
+    assert entrada["piezas"] == []
+    assert entrada["titulo"] == ""
+
+
 # --------------------------------------------------------------------------- #
 # Migracion del viejo tareas.json                                              #
 # --------------------------------------------------------------------------- #

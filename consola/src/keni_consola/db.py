@@ -12,7 +12,8 @@ SEGURIDAD:
 
 Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha)
-  - `skill_historial`(id, skill, marca, fecha, resultado)
+  - `skill_historial`(id, skill, marca, fecha, resultado, piezas, titulo)
+    [piezas = JSON list de {red, contenido, caracteres}]
   - `publicaciones`(id, titulo, marca, red, contenido, estado, veredicto,
     fecha_creacion, fecha_actualizacion, fecha_programada, origen, imagen, evergreen)
   - `grupos_hashtags`(id, nombre, marca, hashtags)  [hashtags = JSON list]
@@ -82,7 +83,9 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             skill      TEXT NOT NULL,
             marca      TEXT NOT NULL,
             fecha      TEXT NOT NULL DEFAULT '',
-            resultado  TEXT NOT NULL DEFAULT ''
+            resultado  TEXT NOT NULL DEFAULT '',
+            piezas     TEXT NOT NULL DEFAULT '',
+            titulo     TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS publicaciones (
             id                    TEXT PRIMARY KEY,
@@ -130,6 +133,7 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
     )
     _migrar_columna_imagen(con)
     _migrar_columna_evergreen(con)
+    _migrar_columnas_historial(con)
     con.commit()
 
 
@@ -155,6 +159,21 @@ def _migrar_columna_evergreen(con: sqlite3.Connection) -> None:
     cols = {fila["name"] for fila in con.execute("PRAGMA table_info(publicaciones)")}
     if "evergreen" not in cols:
         con.execute("ALTER TABLE publicaciones ADD COLUMN evergreen INTEGER NOT NULL DEFAULT 0")
+
+
+def _migrar_columnas_historial(con: sqlite3.Connection) -> None:
+    """Anade `piezas` y `titulo` a `skill_historial` si una base antigua no las tiene.
+
+    Misma estrategia idempotente que `_migrar_columna_imagen`: `CREATE TABLE IF NOT
+    EXISTS` no toca tablas ya creadas, asi que una base de una version previa no
+    tendria estas columnas. Se anaden con `ALTER TABLE ... ADD COLUMN` (PRAGMA antes).
+    `piezas` guarda un JSON de la lista de piezas; `titulo` el titulo derivado/dado.
+    """
+    cols = {fila["name"] for fila in con.execute("PRAGMA table_info(skill_historial)")}
+    if "piezas" not in cols:
+        con.execute("ALTER TABLE skill_historial ADD COLUMN piezas TEXT NOT NULL DEFAULT ''")
+    if "titulo" not in cols:
+        con.execute("ALTER TABLE skill_historial ADD COLUMN titulo TEXT NOT NULL DEFAULT ''")
 
 
 # --------------------------------------------------------------------------- #
@@ -344,15 +363,56 @@ def borrar_tarea(tarea_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def registrar_historial_skill(skill: str, marca: str, resultado: str) -> str:
-    """Guarda una ejecucion de skill en el historial y devuelve su id."""
+def _parsear_piezas_historial(crudo: str | None) -> list[dict[str, Any]]:
+    """Convierte el JSON guardado en `piezas` a lista; `[]` si vacio/antiguo/invalido.
+
+    Solo conserva piezas que sean dicts (tolerante con entradas antiguas o corruptas).
+    """
+    if not crudo:
+        return []
+    try:
+        datos = json.loads(crudo)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(datos, list):
+        return []
+    return [p for p in datos if isinstance(p, dict)]
+
+
+def _fila_a_historial(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `skill_historial` en un dict (`piezas` ya como lista)."""
+    return {
+        "id": fila["id"],
+        "skill": fila["skill"],
+        "marca": fila["marca"],
+        "fecha": fila["fecha"],
+        "resultado": fila["resultado"],
+        "piezas": _parsear_piezas_historial(fila["piezas"]),
+        "titulo": fila["titulo"] or "",
+    }
+
+
+def registrar_historial_skill(
+    skill: str,
+    marca: str,
+    resultado: str,
+    *,
+    piezas: list[dict[str, Any]] | None = None,
+    titulo: str = "",
+) -> str:
+    """Guarda una ejecucion de skill en el historial y devuelve su id.
+
+    `piezas` (lista de `{red, contenido, caracteres}`) se serializa a JSON; `titulo`
+    es el titulo dado o derivado. Ambos son opcionales (entradas sin piezas guardan '').
+    """
     hid = uuid.uuid4().hex[:12]
+    piezas_json = json.dumps(piezas) if piezas else ""
     con = _conectar()
     try:
         con.execute(
-            "INSERT INTO skill_historial (id, skill, marca, fecha, resultado) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (hid, skill, marca, date.today().isoformat(), resultado),
+            "INSERT INTO skill_historial (id, skill, marca, fecha, resultado, piezas, titulo) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (hid, skill, marca, date.today().isoformat(), resultado, piezas_json, titulo),
         )
         con.commit()
     finally:
@@ -361,46 +421,32 @@ def registrar_historial_skill(skill: str, marca: str, resultado: str) -> str:
 
 
 def listar_historial_skills() -> list[dict[str, Any]]:
-    """Historial completo (sin el resultado entero, solo metadatos), recientes primero."""
+    """Historial completo (metadatos + resultado + piezas + titulo), recientes primero."""
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, skill, marca, fecha, resultado FROM skill_historial "
+            "SELECT id, skill, marca, fecha, resultado, piezas, titulo FROM skill_historial "
             "ORDER BY rowid DESC"
         ).fetchall()
     finally:
         con.close()
-    return [
-        {
-            "id": f["id"],
-            "skill": f["skill"],
-            "marca": f["marca"],
-            "fecha": f["fecha"],
-            "resultado": f["resultado"],
-        }
-        for f in filas
-    ]
+    return [_fila_a_historial(f) for f in filas]
 
 
 def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
-    """Una entrada del historial por id, con el resultado completo (None si no existe)."""
+    """Una entrada del historial por id (resultado + piezas + titulo); None si no existe."""
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT id, skill, marca, fecha, resultado FROM skill_historial WHERE id = ?",
+            "SELECT id, skill, marca, fecha, resultado, piezas, titulo FROM skill_historial "
+            "WHERE id = ?",
             (historial_id,),
         ).fetchone()
     finally:
         con.close()
     if fila is None:
         return None
-    return {
-        "id": fila["id"],
-        "skill": fila["skill"],
-        "marca": fila["marca"],
-        "fecha": fila["fecha"],
-        "resultado": fila["resultado"],
-    }
+    return _fila_a_historial(fila)
 
 
 # --------------------------------------------------------------------------- #
