@@ -56,6 +56,7 @@ import { cn } from "@/lib/utils";
 import type { RedConexion } from "@/types";
 
 const CLAVE_CONFIG = ["config"];
+const CLAVE_ESFUERZO = ["config", "esfuerzo"];
 const CLAVE_IMAGEN = ["conexiones", "imagen"];
 const CLAVE_REDES = ["conexiones", "redes"];
 
@@ -259,6 +260,108 @@ function SeccionDatos() {
         )}
       </div>
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sección: Esfuerzo de generación (claude --effort)                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Nivel de esfuerzo de razonamiento que la IA usa al generar (copy, RSS,
+ * hashtags y agentes). Más esfuerzo = mejor calidad pero más lento; menos =
+ * más rápido. El valor "" es el predeterminado del modelo. Se guarda local.
+ */
+function SeccionEsfuerzo() {
+  const queryClient = useQueryClient();
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    queryKey: CLAVE_ESFUERZO,
+    queryFn: ({ signal }) => api.esfuerzo(signal),
+  });
+
+  const [esfuerzo, setEsfuerzo] = React.useState("");
+
+  // Sincroniza el estado local con el nivel cargado del servidor.
+  React.useEffect(() => {
+    if (data) setEsfuerzo(data.esfuerzo);
+  }, [data]);
+
+  const guardar = useMutation({
+    mutationFn: () => api.guardarEsfuerzo({ esfuerzo }),
+    onSuccess: (res) => {
+      toast.success(res.mensaje || "Esfuerzo guardado.");
+      void queryClient.invalidateQueries({ queryKey: CLAVE_ESFUERZO });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const hayCambios = data !== undefined && esfuerzo !== data.esfuerzo;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Esfuerzo de generación</CardTitle>
+        <CardDescription>
+          Cuánto «piensa» la IA al generar copy, RSS, hashtags y agentes. Más esfuerzo mejora la
+          calidad pero tarda más; menos responde antes. Se guarda{" "}
+          <strong>solo en esta máquina</strong>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 pt-0">
+        {isPending ? (
+          <div className="space-y-2">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : isError ? (
+          <BloqueError
+            titulo="No se pudo cargar el esfuerzo"
+            mensaje={mensajeError(error)}
+            onReintentar={() => void refetch()}
+            cargando={isFetching}
+          />
+        ) : (
+          <>
+            {data.opciones.map((opcion) => {
+              const seleccionada = esfuerzo === opcion.id;
+              return (
+                <label
+                  key={opcion.id || "predeterminado"}
+                  className={cn(
+                    "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+                    seleccionada ? "border-primary bg-primary/5" : "border-border hover:bg-accent",
+                  )}
+                >
+                  <input
+                    type="radio"
+                    name="esfuerzo"
+                    value={opcion.id}
+                    checked={seleccionada}
+                    onChange={() => setEsfuerzo(opcion.id)}
+                    disabled={guardar.isPending}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  />
+                  <span className="space-y-0.5">
+                    <span className="block text-sm font-medium">{opcion.etiqueta}</span>
+                    <span className="block text-xs text-muted-foreground">{opcion.descripcion}</span>
+                  </span>
+                </label>
+              );
+            })}
+            <div className="flex items-center gap-3 pt-1">
+              <Button onClick={() => guardar.mutate()} disabled={guardar.isPending || !hayCambios}>
+                <Save className={cn("h-4 w-4", guardar.isPending && "animate-pulse")} />
+                {guardar.isPending ? "Guardando…" : "Guardar cambios"}
+              </Button>
+              {!hayCambios && !guardar.isPending && (
+                <span className="text-xs text-muted-foreground">No hay cambios sin guardar.</span>
+              )}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -747,6 +850,7 @@ export default function Configuracion() {
       variant="outline"
       onClick={() => {
         void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG });
+        void queryClient.invalidateQueries({ queryKey: CLAVE_ESFUERZO });
         void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
         void queryClient.invalidateQueries({ queryKey: CLAVE_REDES });
       }}
@@ -767,6 +871,7 @@ export default function Configuracion() {
 
       <div className="space-y-6">
         <SeccionDatos />
+        <SeccionEsfuerzo />
         <SeccionRedes />
         <SeccionImagen />
         <SeccionApariencia />

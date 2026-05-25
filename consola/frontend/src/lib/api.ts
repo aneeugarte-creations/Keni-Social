@@ -40,6 +40,7 @@ import type {
   CuerpoGuardarHistorial,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarConfig,
+  CuerpoGuardarEsfuerzo,
   CuerpoMarcarItemUsado,
   CuerpoSugerirHashtags,
   CuerpoVistaPromptSkill,
@@ -58,6 +59,7 @@ import type {
   RespuestaConfig,
   RespuestaCrearCarpeta,
   RespuestaCrearTarea,
+  RespuestaEsfuerzo,
   RespuestaEstado,
   RespuestaFranja,
   RespuestaFranjas,
@@ -201,6 +203,9 @@ export const api = {
   config: (signal?: AbortSignal) => peticion<RespuestaConfig>("/config", { signal }),
   guardarConfig: (cuerpo: CuerpoGuardarConfig) =>
     peticion<RespuestaMensaje>("/config", { metodo: "POST", json: cuerpo }),
+  esfuerzo: (signal?: AbortSignal) => peticion<RespuestaEsfuerzo>("/config/esfuerzo", { signal }),
+  guardarEsfuerzo: (cuerpo: CuerpoGuardarEsfuerzo) =>
+    peticion<RespuestaMensaje>("/config/esfuerzo", { metodo: "POST", json: cuerpo }),
 
   // --- Proyectos ---
   proyectos: (signal?: AbortSignal) => peticion<RespuestaProyectos>("/proyectos", { signal }),

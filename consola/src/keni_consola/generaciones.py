@@ -45,6 +45,8 @@ from typing import Any
 
 import yaml
 
+from . import preferencias
+
 # Estados terminales e intermedio de un trabajo.
 ESTADO_EJECUTANDO = "ejecutando"
 ESTADO_COMPLETADO = "completado"
@@ -264,16 +266,19 @@ Procesar = Callable[[str, Any], dict[str, Any]]
 
 def _argv_claude(prompt: str) -> list[str]:
     """argv de `claude -p <prompt> --output-format stream-json --verbose
-    --include-partial-messages [--max-budget-usd N]`.
+    --include-partial-messages [--effort N] [--max-budget-usd N]`.
 
     `--include-partial-messages` es lo que habilita el STREAMING token a token (eventos
-    `stream_event`/`text_delta`). `--verbose` es obligatorio para stream-json. Sin shell.
+    `stream_event`/`text_delta`). `--verbose` es obligatorio para stream-json. `--effort`
+    se añade solo si hay un nivel guardado en preferencias (si no, el predeterminado del
+    modelo). Sin shell.
     """
     from .api import skills  # import local: evita el ciclo generaciones<->api.skills
 
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        *preferencias.arg_esfuerzo(),
         *skills._arg_presupuesto(),
     ]
 
