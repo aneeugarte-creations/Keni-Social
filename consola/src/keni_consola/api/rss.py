@@ -48,7 +48,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import generaciones, marcas, redes, repos
 from .._http_json import leer_json
 from . import skills
 
@@ -655,16 +655,16 @@ def _nota_desde_item(titulo: str, resumen: str, enlace: str) -> str:
 
 
 async def generar(request: Request) -> Response:
-    """Genera copy DIRECTO desde un item y auto-guarda publicaciones (reutiliza Skills).
+    """Genera copy DIRECTO desde un item, EN SEGUNDO PLANO -> `{generacion}` (tipo "rss").
 
     `{titulo, resumen?, enlace?, marca, redes:[..], skill?, fuente_id?, clave?}`:
-      - Construye la nota (`titulo + "\\n\\n" + resumen + "\\n\\n" + enlace`).
-      - Corre la generacion que AUTO-GUARDA publicaciones reutilizando el mismo helper
-        de `api/skills.py` (`_responder_generacion` -> historial + N publicaciones).
-      - Si llegan `fuente_id` + `clave`, marca el item como usado.
+      - Construye la nota (`titulo + "\\n\\n" + resumen + "\\n\\n" + enlace`) y lanza un
+        trabajo de claude en background (no bloquea). El frontend sondea
+        `GET /api/generaciones/{id}` y, al completarse, recoge `resultado` (misma forma
+        que copy: `{resultado, historial_id, verdicto, piezas, publicaciones}`).
+      - El item se marca como USADO solo si la generacion completa con exito (en el
+        post-procesado), no al lanzar.
       - Skill por defecto `copy-desde-nota`. Valida marca/redes/skill contra allowlists.
-    -> misma forma que `/api/skills/ejecutar`:
-       `{resultado, historial_id, verdicto, piezas, publicaciones:[Publicacion]}`.
     """
     datos = await leer_json(request)
     titulo = datos.get("titulo")
@@ -685,26 +685,38 @@ async def generar(request: Request) -> Response:
 
     crudas = datos.get("redes")
     redes_ids = skills.normalizar_redes(crudas if isinstance(crudas, list) else None)
-
     nota = _nota_desde_item(titulo, resumen, enlace)
-    try:
-        salida, metricas = skills.ejecutar_skill(skill, marca, nota, redes_ids=redes_ids)
-    except skills.SkillError as e:
-        mensaje = str(e)
-        codigo = 400 if mensaje in skills._ERRORES_VALIDACION else 500
-        return JSONResponse({"error": mensaje}, status_code=codigo)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
-        return JSONResponse({"error": "No se pudo generar el borrador."}, status_code=500)
-
-    # Marca el item como usado si tenemos su identidad (fuente + clave).
     fuente_id = datos.get("fuente_id")
     clave = datos.get("clave")
-    if isinstance(fuente_id, str) and fuente_id and isinstance(clave, str) and clave.strip():
-        if repos.obtener_fuente_rss(fuente_id) is not None:
-            repos.marcar_item(fuente_id, clave.strip(), True)
 
-    parsed = skills.parsear_salida(salida, redes_ids)
-    return skills._responder_generacion(skill, marca, nota, parsed, titulo.strip(), metricas)
+    # El post-procesado de copy (parsear + historial + N publicaciones) se reutiliza tal
+    # cual; lo envolvemos para marcar el item como usado SOLO si completa con exito.
+    procesar_copy = skills.construir_procesar_copy(
+        skill, marca, redes_ids=redes_ids, titulo_dado=titulo.strip(), texto_base=nota
+    )
+
+    def procesar(salida: str, metricas: object) -> dict[str, object]:
+        resultado = procesar_copy(salida, metricas)
+        if isinstance(fuente_id, str) and fuente_id and isinstance(clave, str) and clave.strip():
+            if repos.obtener_fuente_rss(fuente_id) is not None:
+                repos.marcar_item(fuente_id, clave.strip(), True)
+        return resultado
+
+    gen = generaciones.crear(
+        {"tipo": "rss", "marca": marca, "etiqueta": skills.etiqueta_generacion(skill, marca)}
+    )
+    prompt = skills.construir_prompt(skill, marca, nota, redes_ids)
+    try:
+        generaciones.lanzar_job_claude(
+            gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar
+        )
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
 
 
 RUTAS = [

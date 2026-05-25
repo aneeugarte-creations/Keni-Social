@@ -1,29 +1,33 @@
-"""API Skills: lanzador de skills headless (Claude por debajo) + historial.
+"""API Skills: generacion de copy (Claude por debajo) EN SEGUNDO PLANO + historial.
 
 El SPA elige una skill de una ALLOWLIST curada, una marca, pega una nota/transcripcion
-(o sube un archivo) y pide "Generar". La consola construye el prompt de invocacion
-y corre `claude -p "<prompt>" --output-format json` POR DEBAJO, captura el texto del
-campo `result` Y las METRICAS del run (tokens/turnos/coste/duracion via
-`parsear_resultado_json`), lo persiste en `skill_historial` y lo devuelve. Nada se
-publica: solo borradores. `_runner` devuelve `(texto, MetricasRun | None)`.
+(o sube un archivo) y pide "Generar". La consola construye el prompt y lanza un TRABAJO
+de IA en background via `consola.generaciones` (stream-json, seguible token a token); el
+endpoint responde de INMEDIATO con `{generacion}` (estado "ejecutando"). El frontend
+sondea `GET /api/generaciones/{id}` hasta el estado terminal. Al COMPLETARSE, el callback
+`construir_procesar_copy` parsea el `result`, registra el historial (con metricas) y
+AUTO-GUARDA una publicacion (borrador) por pieza; eso queda en el `resultado` del
+trabajo. Nada se publica: solo borradores.
 
 SEGURIDAD (resumen):
   - La lista de skills es una ALLOWLIST fija (`SKILLS`); las marcas tambien (`MARCAS`).
   - El texto del usuario viaja como ARGUMENTO de subprocess (lista argv), nunca por
-    shell: sin `shell=True`, sin inyeccion de shell.
-  - `claude` corre con `timeout=`; los errores (binario no encontrado, timeout,
-    rc!=0) salen como mensajes en espanol, sin tracebacks.
+    shell: sin `shell=True`, sin inyeccion de shell (ver `consola.generaciones`).
+  - El trabajo corre con wall-timeout; los errores (binario no encontrado, timeout,
+    presupuesto) quedan como `estado="error"` con mensaje en espanol, sin tracebacks.
 
 SUBIR ARCHIVO: el endpoint multipart `/api/skills/ejecutar-archivo` recibe el
 archivo, lo guarda en un dir TEMPORAL del SO con NOMBRE SANEADO (nunca el del
 cliente), aplicando un LIMITE DE TAMANO por tipo y comprobandolo MIENTRAS lee (en
-trozos). Tras procesar, BORRA el temporal (siempre, incluso ante error).
-  - `clip-a-copy` (media): su ruta temporal va al PROMPT (la skill transcribe en
-    local). El resto son skills de texto: se LEE el texto del archivo como `texto`.
+trozos).
+  - `clip-a-copy` (media): su ruta temporal va al PROMPT (la skill transcribe en local)
+    y el temporal se borra al TERMINAR el trabajo. El resto son skills de texto: se LEE
+    el texto del archivo y el temporal se borra de inmediato.
 
-INYECCION/MOCKEO: `ejecutar_skill`/`ejecutar_skill_ruta` delegan en `_runner`
-(modulo-nivel), que es lo unico que toca el binario `claude`. Los tests parchean
-`_runner`/`ejecutar_skill` para NUNCA llamar a `claude` real en CI.
+INYECCION/MOCKEO: el unico punto que toca el binario `claude` es
+`generaciones.lanzar_job_claude` (inyectable). Los tests lo reemplazan por una fake
+(`lanzador_generacion_completa`) que corre el `procesar` real con una salida canned,
+para NUNCA llamar a `claude` real en CI.
 
 GENERACION POR RED: ambos endpoints aceptan `redes` (ids de `consola.redes`; en
 multipart como campo repetido o CSV). Si no llegan, se usan las 5. Se anade al
@@ -39,10 +43,9 @@ import json
 import os
 import re
 import shutil
-import subprocess
 import tempfile
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -131,8 +134,6 @@ _INSTRUCCION_SIN_EMOJIS = "No uses emojis en el copy."
 
 # Tope de tamano del texto de entrada (evita prompts gigantes accidentales).
 _MAX_TEXTO = 60_000
-# Timeout por defecto para la invocacion de Claude (segundos).
-_TIMEOUT_DEF = 180
 
 # Skills que parten de un MEDIA (video/audio): su archivo subido se referencia por
 # RUTA en el prompt (la skill lo transcribe en local). El resto son de texto.
@@ -586,47 +587,6 @@ class AcumuladorStream:
         )
 
 
-def _runner(prompt: str, *, cwd: Path, timeout: int) -> tuple[str, MetricasRun | None]:
-    """Llama a `claude -p "<prompt>" --output-format json` por subprocess.
-
-    Devuelve `(texto, metricas)` (texto = campo `result`; metricas parseadas, o None si
-    la salida no es el JSON de resultado esperado). Esta es LA funcion que toca el
-    binario real; los tests la parchean. Sin shell. Aplica `--max-budget-usd` desde
-    `KENI_CLAUDE_MAX_USD` si esta configurado.
-    """
-    if shutil.which("claude") is None:
-        raise SkillError(
-            "No se encontró el asistente en este equipo. Instala Claude Code para "
-            "poder generar borradores desde la consola."
-        )
-    argv = ["claude", "-p", prompt, "--output-format", "json", *_arg_presupuesto()]
-    try:
-        proc = subprocess.run(
-            argv,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-    except FileNotFoundError as e:  # carrera: el binario desaparecio entre which y run
-        raise SkillError("No se encontró el asistente en este equipo.") from e
-    except subprocess.TimeoutExpired as e:
-        raise SkillError(
-            f"El asistente tardó demasiado (más de {timeout} s) y se canceló. "
-            "Prueba con una nota más corta."
-        ) from e
-    if proc.returncode != 0:
-        # Aun con rc!=0, el stdout puede traer el JSON de resultado con el error
-        # (p.ej. tope de presupuesto): si es asi, `parsear_resultado_json` lo
-        # convierte en un SkillError especifico. Si no, usamos stderr.
-        salida = (proc.stdout or "").strip()
-        if salida:
-            return parsear_resultado_json(salida)
-        detalle = (proc.stderr or "").strip() or "error desconocido al generar el borrador"
-        raise SkillError(f"El asistente terminó con error: {detalle}")
-    return parsear_resultado_json(proc.stdout)
-
-
 def normalizar_redes(crudas: Iterable[str] | None) -> list[str]:
     """Filtra/ordena ids de red contra las canonicas; sin entradas validas => las 5.
 
@@ -640,66 +600,6 @@ def normalizar_redes(crudas: Iterable[str] | None) -> list[str]:
     if not pedidas:
         return redes.ids()
     return [r for r in redes.ids() if r in pedidas]
-
-
-def ejecutar_skill(
-    skill: str,
-    marca: str,
-    texto: str,
-    *,
-    redes_ids: list[str] | None = None,
-    timeout: int = _TIMEOUT_DEF,
-    runner: Callable[..., tuple[str, MetricasRun | None]] | None = None,
-) -> tuple[str, MetricasRun | None]:
-    """Valida entradas, construye el prompt y corre Claude por debajo (headless).
-
-    Devuelve `(texto, metricas)`: el copy generado y las metricas del run (None si la
-    salida no trajo el JSON de resultado esperado).
-    """
-    if skill not in _SKILLS_IDS:
-        raise SkillError("Tipo de contenido no permitido.")
-    if marca not in _MARCAS_IDS:
-        raise SkillError("Marca no permitida.")
-    texto = (texto or "").strip()
-    if not texto:
-        raise SkillError("Falta la nota o transcripción para generar el borrador.")
-    if len(texto) > _MAX_TEXTO:
-        raise SkillError("El texto es demasiado largo; acórtalo e inténtalo de nuevo.")
-
-    prompt = construir_prompt(skill, marca, texto, redes_ids)
-    ejecutor = runner if runner is not None else _runner
-    salida, metricas = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
-    if not salida:
-        raise SkillError("El asistente no devolvió ningún contenido.")
-    return salida, metricas
-
-
-def ejecutar_skill_ruta(
-    skill: str,
-    marca: str,
-    ruta: str,
-    *,
-    redes_ids: list[str] | None = None,
-    timeout: int = _TIMEOUT_DEF,
-    runner: Callable[..., tuple[str, MetricasRun | None]] | None = None,
-) -> tuple[str, MetricasRun | None]:
-    """Como `ejecutar_skill` pero para skills de MEDIA: pasa la RUTA al prompt.
-
-    Devuelve `(texto, metricas)` igual que `ejecutar_skill`.
-    """
-    if skill not in _SKILLS_IDS:
-        raise SkillError("Tipo de contenido no permitido.")
-    if marca not in _MARCAS_IDS:
-        raise SkillError("Marca no permitida.")
-    if not ruta:
-        raise SkillError("Falta el archivo para generar el borrador.")
-
-    prompt = construir_prompt_ruta(skill, marca, ruta, redes_ids)
-    ejecutor = runner if runner is not None else _runner
-    salida, metricas = ejecutor(prompt, cwd=_cwd_skills(), timeout=timeout)
-    if not salida:
-        raise SkillError("El asistente no devolvió ningún contenido.")
-    return salida, metricas
 
 
 # --------------------------------------------------------------------------- #
@@ -1094,42 +994,6 @@ def _redes_desde_form(form) -> list[str]:  # noqa: ANN001 -- starlette FormData
         if isinstance(valor, str):
             crudas.extend(parte.strip() for parte in valor.split(",") if parte.strip())
     return crudas
-
-
-def _responder_generacion(
-    skill: str,
-    marca: str,
-    texto_nota: str,
-    parsed: dict[str, object],
-    titulo_dado: str,
-    metricas: MetricasRun | None = None,
-) -> Response:
-    """Registra el historial (con piezas+titulo+metricas), AUTO-GUARDA publicaciones y responde.
-
-    - Deriva el `titulo` (del dado o de la nota) y lo registra junto a las piezas.
-    - Guarda las `metricas` del run (tokens/turnos/coste/duracion) en el historial.
-    - Crea UNA publicacion (borrador) por pieza con `origen = historial_id`. Si no hay
-      piezas (no se pudo partir por red), no crea ninguna y devuelve `publicaciones: []`.
-    """
-    resultado = parsed["resultado"]
-    piezas = parsed["piezas"]
-    verdicto = parsed["verdicto"]
-    titulo = titulo_dado or derivar_titulo(texto_nota)
-    historial_id = repos.registrar_historial_skill(
-        skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas_a_dict(metricas)
-    )
-    publicaciones = _crear_publicaciones_desde_piezas(
-        piezas, marca=marca, titulo=titulo, verdicto=verdicto, origen=historial_id
-    )
-    return JSONResponse(
-        {
-            "resultado": resultado,
-            "historial_id": historial_id,
-            "verdicto": verdicto,
-            "piezas": piezas,
-            "publicaciones": publicaciones,
-        }
-    )
 
 
 def construir_procesar_copy(

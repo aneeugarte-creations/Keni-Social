@@ -122,6 +122,33 @@ def lanzador_imagen_completa(resultado: dict):
     return lanzar
 
 
+def lanzador_imagen_ejecuta():
+    """Fake del lanzador de imagen que EJECUTA `generar` SINCRONAMENTE (sin hilo).
+
+    Corre el `generar` real del endpoint (con su proveedor MOCK) y fija el estado segun
+    el resultado. Asi se cubre el pipeline real (generar -> guardar -> servir) sin red.
+    """
+    from keni_consola import generaciones
+
+    def lanzar(gen_id, *, generar):  # noqa: ANN001
+        try:
+            resultado = generar()
+        except Exception as e:  # noqa: BLE001 -- reflejamos el error como la generacion real
+            generaciones.actualizar(
+                gen_id,
+                {"estado": generaciones.ESTADO_ERROR, "error": str(e) or "error",
+                 "fecha_fin": generaciones.ahora_iso()},
+            )
+            return
+        generaciones.actualizar(
+            gen_id,
+            {"estado": generaciones.ESTADO_COMPLETADO, "resultado": resultado,
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+
+    return lanzar
+
+
 def _cliente(abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None) -> TestClient:
     """TestClient de la app. Ningun lanzador toca nada real (mocks).
 

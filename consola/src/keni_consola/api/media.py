@@ -19,7 +19,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 from starlette.routing import Route
 
-from .. import media
+from .. import generaciones, media
 from .._http_json import leer_json
 
 
@@ -51,7 +51,12 @@ async def servir(request: Request) -> Response:
 
 
 async def generar(request: Request) -> Response:
-    """Genera una imagen con IA (JSON `{prompt}`) -> `{id, url}`; 400 si no hay proveedor."""
+    """Genera una imagen con IA EN SEGUNDO PLANO (JSON `{prompt}`) -> `{generacion}`.
+
+    400 inmediato si no hay proveedor configurado (no se crea trabajo). Si lo hay, lanza
+    un trabajo (tipo "imagen") que no bloquea; el frontend sondea
+    `GET /api/generaciones/{id}` y, al completarse, recoge `resultado = {id, url}`.
+    """
     datos = await leer_json(request)
     prompt = datos.get("prompt")
     if not isinstance(prompt, str) or not prompt.strip():
@@ -64,14 +69,25 @@ async def generar(request: Request) -> Response:
             },
             status_code=400,
         )
-    try:
+    prompt = prompt.strip()
+
+    def _generar() -> dict[str, object]:
         crudos = media.generar_imagen(prompt)
         nombre = media.guardar_bytes(crudos, ext="png")
-    except media.MediaError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
-        return JSONResponse({"error": "No se pudo generar la imagen."}, status_code=500)
-    return JSONResponse({"id": nombre, "url": f"/api/media/{nombre}"})
+        return {"id": nombre, "url": f"/api/media/{nombre}"}
+
+    gen = generaciones.crear(
+        {"tipo": "imagen", "marca": "", "etiqueta": f"Imagen · {prompt[:40]}"}
+    )
+    try:
+        generaciones.lanzar_job_imagen(gen["id"], generar=_generar)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo generar la imagen.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
 
 
 RUTAS = [
