@@ -27,6 +27,7 @@ import type {
   CuerpoGenerarMedia,
   CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
+  CuerpoGuardarHistorial,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarConfig,
   CuerpoSugerirHashtags,
@@ -198,11 +199,18 @@ export const api = {
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),
   ejecutarSkill: (cuerpo: CuerpoEjecutarSkill) =>
     peticion<RespuestaEjecutarSkill>("/skills/ejecutar", { metodo: "POST", json: cuerpo }),
-  ejecutarSkillArchivo: (skill: string, marca: string, archivo: File, redes?: string[]) => {
+  ejecutarSkillArchivo: (
+    skill: string,
+    marca: string,
+    archivo: File,
+    redes?: string[],
+    titulo?: string,
+  ) => {
     const form = new FormData();
     form.set("skill", skill);
     form.set("marca", marca);
     form.set("archivo", archivo);
+    if (titulo) form.set("titulo", titulo);
     // Cada red va como un campo `redes` repetido (multivalor).
     for (const red of redes ?? []) form.append("redes", red);
     return peticion<RespuestaEjecutarSkill>("/skills/ejecutar-archivo", { metodo: "POST", form });
@@ -210,6 +218,11 @@ export const api = {
   historial: (signal?: AbortSignal) => peticion<RespuestaHistorial>("/skills/historial", { signal }),
   detalleHistorial: (id: string, signal?: AbortSignal) =>
     peticion<DetalleHistorial>(`/skills/historial/${encodeURIComponent(id)}`, { signal }),
+  guardarHistorial: (id: string, cuerpo: CuerpoGuardarHistorial = {}) =>
+    peticion<RespuestaPublicaciones>(`/skills/historial/${encodeURIComponent(id)}/guardar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
 
   // --- Publicaciones ---
   publicacionesOpciones: (signal?: AbortSignal) =>
