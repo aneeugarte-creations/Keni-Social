@@ -25,7 +25,7 @@ export function PageHeader({
         <h2 className="text-xl font-semibold tracking-tight">{titulo}</h2>
         {descripcion && <p className="text-sm text-muted-foreground">{descripcion}</p>}
       </div>
-      {acciones && <div className="flex items-center gap-2">{acciones}</div>}
+      {acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
     </div>
   );
 }

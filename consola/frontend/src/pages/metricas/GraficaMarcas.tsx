@@ -7,7 +7,7 @@
  * Los ejes y tooltips usan los formateadores es-MX para que los números grandes
  * se lean como "221.6 M" en lugar de notación cruda.
  */
-import { BarChart, type CustomTooltipProps, DonutChart, Legend } from "@tremor/react";
+import { BarChart, type CustomTooltipProps } from "@tremor/react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CuentaMetrica } from "@/types";
@@ -22,10 +22,14 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
     Interacciones: c.interacciones,
   }));
 
-  const datosDona = cuentas.map((c) => ({
-    marca: c.marca,
-    visualizaciones: c.visualizaciones,
-  }));
+  const totalVis = cuentas.reduce((suma, c) => suma + c.visualizaciones, 0);
+  const datosReparto = [...cuentas]
+    .sort((a, b) => b.visualizaciones - a.visualizaciones)
+    .map((c) => ({
+      marca: c.marca,
+      visualizaciones: c.visualizaciones,
+      pct: totalVis > 0 ? Math.round((c.visualizaciones / totalVis) * 100) : 0,
+    }));
 
   if (cuentas.length === 0) {
     return (
@@ -69,21 +73,25 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
           <CardTitle className="text-base">Reparto de visualizaciones</CardTitle>
         </CardHeader>
         <CardContent>
-          <DonutChart
-            className="mx-auto h-52"
-            data={datosDona}
-            category="visualizaciones"
-            index="marca"
-            colors={["blue", "sky", "cyan", "indigo", "slate", "zinc"]}
-            valueFormatter={numeroCompacto}
-            showAnimation
-            noDataText="Sin datos para este rango."
-          />
-          <Legend
-            className="mt-4 justify-center"
-            categories={datosDona.map((d) => d.marca)}
-            colors={["blue", "sky", "cyan", "indigo", "slate", "zinc"]}
-          />
+          <ul className="space-y-4">
+            {datosReparto.map((it) => (
+              <li key={it.marca}>
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="truncate text-sm text-foreground">{it.marca}</span>
+                  <span className="shrink-0 text-sm tabular-nums text-muted-foreground">
+                    {numeroCompacto(it.visualizaciones)}
+                    <span className="ml-1.5 text-xs text-muted-foreground/70">{it.pct}%</span>
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-blue-500/20">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${it.pct}%` }}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
         </CardContent>
       </Card>
     </div>

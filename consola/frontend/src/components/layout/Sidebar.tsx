@@ -53,7 +53,7 @@ export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
       aria-label="Navegación principal"
       className="flex h-full w-64 flex-col border-r border-border bg-background"
     >
-      <div className="flex h-14 items-center border-b border-border px-4">
+      <div className="flex h-12 items-center border-b border-border px-4">
         <Wordmark />
       </div>
 

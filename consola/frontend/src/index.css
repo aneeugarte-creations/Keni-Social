@@ -40,7 +40,7 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 92%; /* #eaeaea hairline */
+    --border: 0 0% 94%; /* #f0f0f0 lineas divisorias mas claras (como Vercel) */
     --input: 0 0% 92%;
 
     --radius: 0.625rem; /* botones/inputs ~8px; tarjetas usan rounded-xl (12px) */
@@ -72,7 +72,7 @@
     --destructive: 0 63% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 16%; /* #292929 */
+    --border: 0 0% 14%; /* lineas divisorias mas sutiles */
     --input: 0 0% 16%;
   }
 }
