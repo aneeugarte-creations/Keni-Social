@@ -119,6 +119,7 @@ def crear_app(abrir=None) -> Starlette:
     (Proyectos y Tareas).
     """
     if abrir is not None:
+        from .api import agentes as api_agentes
         from .api import proyectos as api_proyectos
         from .api import tareas as api_tareas
 
@@ -126,6 +127,9 @@ def crear_app(abrir=None) -> Starlette:
         # Tareas usa su propio wrapper (con detalle como prompt). Lo envolvemos para
         # que tambien dependa del `abrir` inyectado, ignorando el detalle (mock simple).
         api_tareas.abrir_tarea_en_claude_code = lambda ruta, detalle="": abrir(ruta)
+        # Agentes (runs interactivos) abre con `prompt=`; lo envolvemos para que use el
+        # `abrir` inyectado ignorando el prompt (el mock simple solo recibe la ruta).
+        api_agentes.abrir_en_claude_code = lambda ruta, prompt=None: abrir(ruta)
 
     # Aseguramos que existe el consola.toml (best-effort; no rompe si falla).
     try:
