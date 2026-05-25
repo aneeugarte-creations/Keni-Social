@@ -43,6 +43,7 @@ ESPERADAS = {
     "responde-comentarios",
     "calendario-editorial",
     "nota-a-hilo",
+    "brief-matutino",
 }
 
 

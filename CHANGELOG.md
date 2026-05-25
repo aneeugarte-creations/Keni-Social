@@ -7,6 +7,17 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Brief matutino (experimental)
+
+- Nueva skill **`brief-matutino`**: el brief de la mañana para la mesa editorial de
+  AMX. Reúne las noticias y tendencias del día (Google News + Google Trends, en
+  vivo, vía `buscar.py` — solo stdlib, sin claves) más lo que el community ya vio a
+  mano en X/TikTok, las **jerarquiza** por frescura, relevancia y agenda del día
+  (mañanera), y **sugiere un formato por pieza** (tuit / imagen / carrusel / video).
+  Es un brief para **decidir qué cubrir**, no copy final.
+- Abre con el bloque estado + leyenda (✅/⚠️/❌) y marca riesgo legal por pieza.
+  Disponible también en la **Consola** (grupo *experimentales*) vía `keni.yaml`.
+
 ### Verificación de procedencia de video (experimental)
 
 - Nueva skill **`verifica-video`**: pega el enlace de un video viral (X, TikTok,

@@ -1,0 +1,53 @@
+nombre: Brief matutino
+explicacion: Reúne las noticias y tendencias del día (Google News + Trends, en vivo) más lo que viste en redes, las jerarquiza por tus reglas y sugiere un formato por pieza. Es un brief para decidir, no copy final.
+grupo: experimentales
+aplica_redes: false
+salida: documento
+media: false
+orden: 45
+campos:
+  - id: temas
+    etiqueta: Temas a vigilar
+    tipo: textarea
+    requerido: true
+    placeholder: "Uno por línea o separados por ; — p. ej.: selección mexicana; mañanera; estreno videojuego"
+    ayuda: Las palabras clave de hoy. El script trae noticias recientes de Google News por cada tema, más las tendencias de Google Trends del país.
+    opciones: []
+    media_tipos: ""
+  - id: senales_redes
+    etiqueta: Señales que ya viste en redes
+    tipo: textarea
+    requerido: false
+    placeholder: "Pega aquí lo que viste a mano en X, TikTok o las cuentas que sigues (titulares, links o una descripción)."
+    ayuda: El ojo humano manda. Lo que pegues aquí pesa tanto o más que lo automático y puede reordenar el top.
+    opciones: []
+    media_tipos: ""
+  - id: agenda_dia
+    etiqueta: Agenda del día / mañanera
+    tipo: textarea
+    requerido: false
+    placeholder: "Temas que hay que retomar sí o sí hoy (lo dicho en la mañanera, una efeméride, una cobertura programada)."
+    ayuda: Sube la prioridad. Lo que esté aquí entra al brief aunque supere la ventana de frescura.
+    opciones: []
+    media_tipos: ""
+  - id: ventana_horas
+    etiqueta: Ventana de frescura (horas)
+    tipo: texto
+    requerido: false
+    placeholder: "36"
+    ayuda: Antigüedad máxima para retomar algo. Normal 24–36. Si lo dejas vacío, se usan 36.
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa brief-matutino para la mesa matutina, marca {marca}.
+
+  Temas a vigilar:
+  {temas}
+
+  Ventana de frescura (horas, vacío = 36): {ventana_horas}
+
+  Señales que ya vi en redes (X, TikTok, cuentas que sigo):
+  {senales_redes}
+
+  Agenda del día / mañanera (retomar sí o sí):
+  {agenda_dia}
