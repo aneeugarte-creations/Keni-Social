@@ -65,6 +65,7 @@ def _publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "origen": pub["origen"],
         "imagen": imagen,
         "imagen_url": f"/api/media/{imagen}" if imagen else "",
+        "evergreen": bool(pub.get("evergreen")),
     }
 
 
@@ -136,13 +137,30 @@ async def opciones(request: Request) -> Response:
     )
 
 
+def _parsear_bool_query(valor: str | None) -> bool | None:
+    """Interpreta un parametro de query como bool: '1'/'true' -> True, '0'/'false' -> False.
+
+    Devuelve None si el parametro no viene (sin filtrar). Cualquier otro valor se trata
+    como no presente para no filtrar de forma sorpresiva.
+    """
+    if valor is None:
+        return None
+    bajo = valor.strip().lower()
+    if bajo in ("1", "true", "si", "sí"):
+        return True
+    if bajo in ("0", "false", "no"):
+        return False
+    return None
+
+
 async def listar(request: Request) -> Response:
-    """Listado de publicaciones con filtros opcionales `?marca=&red=&estado=`."""
+    """Listado de publicaciones con filtros opcionales `?marca=&red=&estado=&evergreen=`."""
     qp = request.query_params
     marca = qp.get("marca") or None
     red = qp.get("red") or None
     estado = qp.get("estado") or None
-    pubs = db.listar_publicaciones(marca=marca, red=red, estado=estado)
+    evergreen = _parsear_bool_query(qp.get("evergreen"))
+    pubs = db.listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
     return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
 
 
@@ -228,10 +246,20 @@ async def actualizar(request: Request) -> Response:
         if not isinstance(imagen, str):
             return JSONResponse({"error": "La imagen debe ser texto."}, status_code=400)
         campos["imagen"] = imagen.strip()
+    if "evergreen" in datos:
+        evergreen = datos.get("evergreen")
+        if not isinstance(evergreen, bool):
+            return JSONResponse({"error": "El campo evergreen debe ser verdadero o falso."}, status_code=400)
+        campos["evergreen"] = evergreen
 
     if not campos:
         return JSONResponse(
-            {"error": "No hay nada que actualizar (título, contenido, estado, fecha o imagen)."},
+            {
+                "error": (
+                    "No hay nada que actualizar (título, contenido, estado, fecha, "
+                    "imagen o evergreen)."
+                )
+            },
             status_code=400,
         )
 
@@ -342,6 +370,46 @@ async def duplicar(request: Request) -> Response:
     return JSONResponse({"publicacion": _publicacion_a_dict(copia)})
 
 
+async def reciclar(request: Request) -> Response:
+    """Recicla (evergreen) una publicacion: la DUPLICA y la encola si hay franjas.
+
+    `POST /api/publicaciones/{id}/reciclar` -> `{publicacion, encolado}` | 404.
+    La copia nace como `borrador` con `evergreen=1`, copiando contenido/imagen/
+    veredicto/red/marca de la original. Si hay franjas aplicables a su (marca, red),
+    se ENCOLA al proximo hueco (reusa `calcular_hueco_para`): pasa a `programado` con
+    `fecha_programada` puesta y `encolado=true`. Si no hay franjas, se queda en
+    `borrador` con `encolado=false`.
+    """
+    publicacion_id = request.path_params["publicacion_id"]
+    original = db.obtener_publicacion(publicacion_id)
+    if original is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    copia = db.crear_publicacion(
+        original["marca"],
+        original["red"],
+        titulo=original["titulo"],
+        contenido=original["contenido"],
+        estado="borrador",
+        veredicto=original["veredicto"],
+        fecha_programada="",
+        origen=original["origen"],
+        imagen=original["imagen"],
+        evergreen=True,
+    )
+
+    hueco = calcular_hueco_para(copia)
+    if hueco is not None:
+        actualizada = db.actualizar_publicacion(
+            copia["id"], {"estado": "programado", "fecha_programada": hueco}
+        )
+        if actualizada is not None:
+            return JSONResponse(
+                {"publicacion": _publicacion_a_dict(actualizada), "encolado": True}
+            )
+    return JSONResponse({"publicacion": _publicacion_a_dict(copia), "encolado": False})
+
+
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
@@ -349,6 +417,7 @@ RUTAS = [
     Route("/api/publicaciones/lote", crear_lote, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/reciclar", reciclar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),

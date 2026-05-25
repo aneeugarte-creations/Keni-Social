@@ -14,9 +14,11 @@ Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha)
   - `skill_historial`(id, skill, marca, fecha, resultado)
   - `publicaciones`(id, titulo, marca, red, contenido, estado, veredicto,
-    fecha_creacion, fecha_actualizacion, fecha_programada, origen, imagen)
+    fecha_creacion, fecha_actualizacion, fecha_programada, origen, imagen, evergreen)
   - `grupos_hashtags`(id, nombre, marca, hashtags)  [hashtags = JSON list]
   - `franjas`(id, marca, red, dia_semana, hora)  [dia 0=lunes..6=domingo, "HH:MM"]
+  - `plantillas`(id, nombre, marca, red, contenido, fecha)
+  - `fuentes_rss`(id, nombre, url, marca, fecha)
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
@@ -109,9 +111,25 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             dia_semana  INTEGER NOT NULL DEFAULT 0,
             hora        TEXT NOT NULL DEFAULT ''
         );
+        CREATE TABLE IF NOT EXISTS plantillas (
+            id         TEXT PRIMARY KEY,
+            nombre     TEXT NOT NULL,
+            marca      TEXT NOT NULL DEFAULT '',
+            red        TEXT NOT NULL DEFAULT '',
+            contenido  TEXT NOT NULL DEFAULT '',
+            fecha      TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS fuentes_rss (
+            id      TEXT PRIMARY KEY,
+            nombre  TEXT NOT NULL,
+            url     TEXT NOT NULL,
+            marca   TEXT NOT NULL DEFAULT '',
+            fecha   TEXT NOT NULL DEFAULT ''
+        );
         """
     )
     _migrar_columna_imagen(con)
+    _migrar_columna_evergreen(con)
     con.commit()
 
 
@@ -125,6 +143,18 @@ def _migrar_columna_imagen(con: sqlite3.Connection) -> None:
     cols = {fila["name"] for fila in con.execute("PRAGMA table_info(publicaciones)")}
     if "imagen" not in cols:
         con.execute("ALTER TABLE publicaciones ADD COLUMN imagen TEXT NOT NULL DEFAULT ''")
+
+
+def _migrar_columna_evergreen(con: sqlite3.Connection) -> None:
+    """Anade la columna `evergreen` a `publicaciones` si una base antigua no la tiene.
+
+    Misma estrategia que `_migrar_columna_imagen`: `CREATE TABLE IF NOT EXISTS` no toca
+    tablas ya creadas, asi que una base de una version previa no tendria `evergreen`.
+    Se anade con `ALTER TABLE ... ADD COLUMN` de forma idempotente (PRAGMA antes).
+    """
+    cols = {fila["name"] for fila in con.execute("PRAGMA table_info(publicaciones)")}
+    if "evergreen" not in cols:
+        con.execute("ALTER TABLE publicaciones ADD COLUMN evergreen INTEGER NOT NULL DEFAULT 0")
 
 
 # --------------------------------------------------------------------------- #
@@ -391,16 +421,26 @@ _COLS_PUBLICACION = (
     "fecha_programada",
     "origen",
     "imagen",
+    "evergreen",
 )
 _SELECT_PUBLICACION = f"SELECT {', '.join(_COLS_PUBLICACION)} FROM publicaciones"
 
 # Campos que la edicion parcial puede tocar (el resto es inmutable desde la API).
-_CAMPOS_EDITABLES_PUBLICACION = ("titulo", "contenido", "estado", "fecha_programada", "imagen")
+_CAMPOS_EDITABLES_PUBLICACION = (
+    "titulo",
+    "contenido",
+    "estado",
+    "fecha_programada",
+    "imagen",
+    "evergreen",
+)
 
 
 def _fila_a_publicacion(fila: sqlite3.Row) -> dict[str, Any]:
-    """Convierte una fila de `publicaciones` en un dict simple."""
-    return {col: fila[col] for col in _COLS_PUBLICACION}
+    """Convierte una fila de `publicaciones` en un dict simple (`evergreen` como bool)."""
+    pub = {col: fila[col] for col in _COLS_PUBLICACION}
+    pub["evergreen"] = bool(fila["evergreen"])
+    return pub
 
 
 def _normalizar_publicacion_entrada(datos: dict[str, Any]) -> dict[str, Any]:
@@ -424,7 +464,15 @@ def _normalizar_publicacion_entrada(datos: dict[str, Any]) -> dict[str, Any]:
         "fecha_programada": datos.get("fecha_programada") or "",
         "origen": datos.get("origen") or "",
         "imagen": datos.get("imagen") or "",
+        "evergreen": bool(datos.get("evergreen")),
     }
+
+
+def _valor_columna_publicacion(fila: dict[str, Any], col: str) -> Any:
+    """Valor de `col` listo para SQLite (`evergreen` bool -> 0/1; el resto tal cual)."""
+    if col == "evergreen":
+        return 1 if fila["evergreen"] else 0
+    return fila[col]
 
 
 def _insertar_publicacion(con: sqlite3.Connection, fila: dict[str, Any]) -> None:
@@ -432,7 +480,7 @@ def _insertar_publicacion(con: sqlite3.Connection, fila: dict[str, Any]) -> None
     marcadores = ", ".join("?" for _ in _COLS_PUBLICACION)
     con.execute(
         f"INSERT INTO publicaciones ({', '.join(_COLS_PUBLICACION)}) VALUES ({marcadores})",
-        tuple(fila[col] for col in _COLS_PUBLICACION),
+        tuple(_valor_columna_publicacion(fila, col) for col in _COLS_PUBLICACION),
     )
 
 
@@ -447,6 +495,7 @@ def crear_publicacion(
     fecha_programada: str = "",
     origen: str = "",
     imagen: str = "",
+    evergreen: bool = False,
 ) -> dict[str, Any]:
     """Inserta una publicacion nueva y la devuelve. NO valida marca/red/estado (lo hace la API)."""
     fila = _normalizar_publicacion_entrada(
@@ -460,6 +509,7 @@ def crear_publicacion(
             "fecha_programada": fecha_programada,
             "origen": origen,
             "imagen": imagen,
+            "evergreen": evergreen,
         }
     )
     con = _conectar()
@@ -494,8 +544,9 @@ def listar_publicaciones(
     marca: str | None = None,
     red: str | None = None,
     estado: str | None = None,
+    evergreen: bool | None = None,
 ) -> list[dict[str, Any]]:
-    """Publicaciones (mas recientes primero), con filtros opcionales por marca/red/estado."""
+    """Publicaciones (mas recientes primero), con filtros opcionales por marca/red/estado/evergreen."""
     clausulas: list[str] = []
     params: list[Any] = []
     if marca:
@@ -507,6 +558,9 @@ def listar_publicaciones(
     if estado:
         clausulas.append("estado = ?")
         params.append(estado)
+    if evergreen is not None:
+        clausulas.append("evergreen = ?")
+        params.append(1 if evergreen else 0)
     sql = _SELECT_PUBLICACION
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)
@@ -540,6 +594,8 @@ def actualizar_publicacion(
     Devuelve la publicacion actualizada, o None si el id no existe.
     """
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PUBLICACION}
+    if "evergreen" in cambios:
+        cambios["evergreen"] = 1 if cambios["evergreen"] else 0
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("fecha_actualizacion = ?")
     params: list[Any] = list(cambios.values())
@@ -751,6 +807,199 @@ def borrar_franja(franja_id: str) -> bool:
     con = _conectar()
     try:
         cur = con.execute("DELETE FROM franjas WHERE id = ?", (franja_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Plantillas de post (nombre + marca/red opcionales + contenido reutilizable)  #
+# --------------------------------------------------------------------------- #
+
+
+def _fila_a_plantilla(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `plantillas` en un dict simple."""
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"],
+        "marca": fila["marca"],
+        "red": fila["red"],
+        "contenido": fila["contenido"],
+        "fecha": fila["fecha"],
+    }
+
+
+def listar_plantillas() -> list[dict[str, Any]]:
+    """Todas las plantillas (mas recientes primero por fecha y luego rowid)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, nombre, marca, red, contenido, fecha FROM plantillas "
+            "ORDER BY fecha DESC, rowid DESC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_plantilla(f) for f in filas]
+
+
+def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
+    """Una plantilla por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT id, nombre, marca, red, contenido, fecha FROM plantillas WHERE id = ?",
+            (plantilla_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_plantilla(fila) if fila is not None else None
+
+
+def crear_plantilla(
+    nombre: str, marca: str = "", red: str = "", contenido: str = ""
+) -> dict[str, Any]:
+    """Inserta una plantilla y la devuelve. NO valida marca/red (lo hace la API)."""
+    plantilla = {
+        "id": uuid.uuid4().hex[:12],
+        "nombre": nombre,
+        "marca": marca,
+        "red": red,
+        "contenido": contenido,
+        "fecha": date.today().isoformat(),
+    }
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO plantillas (id, nombre, marca, red, contenido, fecha) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                plantilla["id"],
+                plantilla["nombre"],
+                plantilla["marca"],
+                plantilla["red"],
+                plantilla["contenido"],
+                plantilla["fecha"],
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return plantilla
+
+
+def actualizar_plantilla(
+    plantilla_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una plantilla (nombre/marca/red/contenido); None si no existe.
+
+    Ignora cualquier otra clave del dict. Sin campos editables, devuelve la plantilla
+    tal cual (no falla).
+    """
+    editables = ("nombre", "marca", "red", "contenido")
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if not cambios:
+        return obtener_plantilla(plantilla_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = list(cambios.values())
+    params.append(plantilla_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE plantillas SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            "SELECT id, nombre, marca, red, contenido, fecha FROM plantillas WHERE id = ?",
+            (plantilla_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_plantilla(fila) if fila is not None else None
+
+
+def borrar_plantilla(plantilla_id: str) -> bool:
+    """Borra una plantilla; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM plantillas WHERE id = ?", (plantilla_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Fuentes RSS (nombre + url + marca opcional)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _fila_a_fuente_rss(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `fuentes_rss` en un dict simple."""
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"],
+        "url": fila["url"],
+        "marca": fila["marca"],
+        "fecha": fila["fecha"],
+    }
+
+
+def listar_fuentes_rss() -> list[dict[str, Any]]:
+    """Todas las fuentes RSS (mas recientes primero por fecha y luego rowid)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, nombre, url, marca, fecha FROM fuentes_rss "
+            "ORDER BY fecha DESC, rowid DESC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_fuente_rss(f) for f in filas]
+
+
+def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
+    """Una fuente RSS por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT id, nombre, url, marca, fecha FROM fuentes_rss WHERE id = ?",
+            (fuente_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_fuente_rss(fila) if fila is not None else None
+
+
+def crear_fuente_rss(nombre: str, url: str, marca: str = "") -> dict[str, Any]:
+    """Inserta una fuente RSS y la devuelve. NO valida url/marca (lo hace la API)."""
+    fuente = {
+        "id": uuid.uuid4().hex[:12],
+        "nombre": nombre,
+        "url": url,
+        "marca": marca,
+        "fecha": date.today().isoformat(),
+    }
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO fuentes_rss (id, nombre, url, marca, fecha) VALUES (?, ?, ?, ?, ?)",
+            (fuente["id"], fuente["nombre"], fuente["url"], fuente["marca"], fuente["fecha"]),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fuente
+
+
+def borrar_fuente_rss(fuente_id: str) -> bool:
+    """Borra una fuente RSS; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM fuentes_rss WHERE id = ?", (fuente_id,))
         con.commit()
         return cur.rowcount > 0
     finally:
