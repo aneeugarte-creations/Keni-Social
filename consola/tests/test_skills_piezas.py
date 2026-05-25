@@ -455,10 +455,10 @@ def test_historial_guardar_usa_titulo_param(entorno, monkeypatch):
 
 
 def test_historial_guardar_sin_piezas_requiere_red(entorno):
-    # Entrada antigua sin piezas: la insertamos directo via db.
-    from keni_consola import db
+    # Entrada antigua sin piezas: la insertamos via repos (backend activo).
+    from keni_consola import repos
 
-    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "✅ texto plano")
+    hid = repos.registrar_historial_skill("copy-desde-nota", "unotv", "✅ texto plano")
     cli = _cliente()
     # Sin red => 400 claro.
     r = cli.post(f"/api/skills/historial/{hid}/guardar", json={})
@@ -467,9 +467,9 @@ def test_historial_guardar_sin_piezas_requiere_red(entorno):
 
 
 def test_historial_guardar_sin_piezas_con_red_crea_una(entorno):
-    from keni_consola import db
+    from keni_consola import repos
 
-    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "✅ contenido viejo")
+    hid = repos.registrar_historial_skill("copy-desde-nota", "unotv", "✅ contenido viejo")
     cli = _cliente()
     r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"red": "facebook"})
     assert r.status_code == 200
@@ -482,9 +482,9 @@ def test_historial_guardar_sin_piezas_con_red_crea_una(entorno):
 
 
 def test_historial_guardar_red_invalida_da_400(entorno):
-    from keni_consola import db
+    from keni_consola import repos
 
-    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "texto viejo")
+    hid = repos.registrar_historial_skill("copy-desde-nota", "unotv", "texto viejo")
     cli = _cliente()
     r = cli.post(f"/api/skills/historial/{hid}/guardar", json={"red": "myspace"})
     assert r.status_code == 400
