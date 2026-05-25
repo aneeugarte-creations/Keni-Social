@@ -108,12 +108,12 @@ def test_crear_listar_y_borrar_contexto(entorno):
     archivo = entorno / "datos" / _MARCA / "contexto" / "guia.md"
     assert archivo.is_file()
 
-    listado = c.get(f"/api/agentes/{_MARCA}/contextos").json()["contextos"]
+    listado = c.get(f"/api/agentes/{_MARCA}/contextos").json()["sub_contextos"]
     assert listado == [{"nombre": "guia.md", "contenido": "# Guía\nApuntes.\n"}]
 
-    # El detalle expone solo los nombres.
+    # El detalle expone nombre + contenido (la UI edita desde el detalle).
     sub = c.get(f"/api/agentes/{_MARCA}").json()["sub_contextos"]
-    assert sub == [{"nombre": "guia.md"}]
+    assert sub == [{"nombre": "guia.md", "contenido": "# Guía\nApuntes.\n"}]
 
     r_del = c.delete(f"/api/agentes/{_MARCA}/contextos/guia.md")
     assert r_del.status_code == 200

@@ -74,7 +74,7 @@ async def detalle(request: Request) -> Response:
         return marca_id
     resumen = agentes.resumen_agente(marca_id)
     claude_md = agentes.leer_claude_md(marca_id)
-    sub_contextos = [{"nombre": c["nombre"]} for c in agentes.listar_contextos(marca_id)]
+    sub_contextos = agentes.listar_contextos(marca_id)  # nombre + contenido (la UI edita desde aquí)
     runs = agentes.listar_runs(marca_id)[:_RUNS_EN_DETALLE]
     runs_breves = [
         {
@@ -127,11 +127,11 @@ async def guardar_claude_md(request: Request) -> Response:
 
 
 async def listar_contextos(request: Request) -> Response:
-    """Sub-contextos del agente con su contenido. -> `{contextos:[{nombre, contenido}]}`."""
+    """Sub-contextos del agente con su contenido. -> `{sub_contextos:[{nombre, contenido}]}`."""
     marca_id = _agente_o_404(request.path_params.get("agente_id"))
     if isinstance(marca_id, JSONResponse):
         return marca_id
-    return JSONResponse({"contextos": agentes.listar_contextos(marca_id)})
+    return JSONResponse({"sub_contextos": agentes.listar_contextos(marca_id)})
 
 
 async def guardar_contexto(request: Request) -> Response:

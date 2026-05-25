@@ -1,0 +1,31 @@
+import{o as a,z as m,v as s,l}from"./index-DpNWmALD.js";import{C as p}from"./select-YMYR4aN1.js";/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const g=[["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["path",{d:"M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8",key:"7n84p3"}]],h=a("AtSign",g);/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const y=[["path",{d:"M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z",key:"1jg4f8"}]],x=a("Facebook",y);/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const k=[["rect",{width:"20",height:"20",x:"2",y:"2",rx:"5",ry:"5",key:"2e1cvw"}],["path",{d:"M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z",key:"9exkf1"}],["line",{x1:"17.5",x2:"17.51",y1:"6.5",y2:"6.5",key:"r4j83e"}]],N=a("Instagram",k);/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const v=[["circle",{cx:"8",cy:"18",r:"4",key:"1fc0mg"}],["path",{d:"M12 18V2l7 4",key:"g04rme"}]],w=a("Music2",v);/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const T=[["path",{d:"M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z",key:"pff0z6"}]],M=a("Twitter",T);/**
+ * @license lucide-react v0.475.0 - ISC
+ *
+ * This source code is licensed under the ISC license.
+ * See the LICENSE file in the root directory of this source tree.
+ */const E=[["path",{d:"M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17",key:"1q2vi4"}],["path",{d:"m10 15 5-3-5-3z",key:"1jp15x"}]],_=a("Youtube",E),D={x:{nombre:"X",limite:280,icono:M},instagram:{nombre:"Instagram",limite:2200,icono:N},facebook:{nombre:"Facebook",limite:null,icono:x},tiktok:{nombre:"TikTok",limite:2200,icono:w},youtube:{nombre:"YouTube",limite:null,icono:_}},$=["x","instagram","facebook","tiktok","youtube"];function b(e){return D[e]??{nombre:e,limite:null,icono:h}}function C(e){return b(e).nombre}function F(e){return b(e).icono}const u=["borrador","aprobado","programado","publicado"],S={borrador:{nombre:"Borrador",clase:"border-transparent bg-muted text-muted-foreground"},aprobado:{nombre:"Aprobado",clase:"border-transparent bg-blue-500/15 text-blue-700 dark:text-blue-300"},programado:{nombre:"Programado",clase:"border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300"},publicado:{nombre:"Publicado",clase:"border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"}};function z(e){return S[e]??{nombre:e,clase:"border-transparent bg-muted text-muted-foreground"}}function V(e){const t=u.indexOf(e);return t<0||t>=u.length-1?null:u[t+1]}const A={listo:{nombre:"Listo",variante:"ok"},revisar:{nombre:"Revisar",variante:"aviso"},no_publicar:{nombre:"No publicar",variante:"error"}};function H(e){return e?A[e]??null:null}function L(e){if(!e)return"";const t=new Date(e);return Number.isNaN(t.getTime())?e:new Intl.DateTimeFormat("es-MX",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(t)}function X(e){if(!e)return"";const t=new Date(e);return Number.isNaN(t.getTime())?"":new Intl.DateTimeFormat("es-MX",{hour:"2-digit",minute:"2-digit"}).format(t)}function Y(e){if(!e)return"";const t=new Date(e);if(Number.isNaN(t.getTime()))return"";const o=Math.round((t.getTime()-Date.now())/1e3),r=Math.abs(o),n=new Intl.RelativeTimeFormat("es-MX",{numeric:"auto"}),c=[[60,"second"],[3600,"minute"],[86400,"hour"],[604800,"day"],[2629800,"week"],[31557600,"month"],[1/0,"year"]],i={second:1,minute:60,hour:3600,day:86400,week:604800,month:2629800,year:31557600};for(const[f,d]of c)if(r<f)return n.format(Math.round(o/i[d]),d);return n.format(Math.round(o/i.year),"year")}function P(e){if(!e)return"";const t=new Date(e);if(Number.isNaN(t.getTime()))return"";const o=r=>String(r).padStart(2,"0");return`${t.getFullYear()}-${o(t.getMonth()+1)}-${o(t.getDate())}T${o(t.getHours())}:${o(t.getMinutes())}`}function q(e){if(!e)return null;const t=new Date(e);return Number.isNaN(t.getTime())?null:t.toISOString()}const I={top:"bottom-full left-1/2 mb-1.5 -translate-x-1/2",bottom:"top-full left-1/2 mt-1.5 -translate-x-1/2",left:"right-full top-1/2 mr-1.5 -translate-y-1/2",right:"left-full top-1/2 ml-1.5 -translate-y-1/2"};function B({label:e,side:t="top",children:o,className:r}){if(!e)return o;const n=m.isValidElement(o)?m.cloneElement(o,{"aria-label":o.props["aria-label"]??e}):o;return s.jsxs("span",{className:l("group/tooltip relative inline-flex",r),children:[n,s.jsx("span",{role:"tooltip",className:l("pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border bg-popover px-2 py-1 text-xs font-medium text-popover-foreground opacity-0 shadow-md transition-opacity duration-150","group-hover/tooltip:opacity-100 group-focus-within/tooltip:opacity-100",I[t]),children:e})]})}const R=m.forwardRef(({checked:e,onCheckedChange:t,id:o,disabled:r,className:n,...c},i)=>s.jsx("button",{ref:i,type:"button",role:"checkbox",id:o,"aria-checked":e,disabled:r,onClick:()=>t(!e),className:l("flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50",e?"border-primary bg-primary text-primary-foreground":"border-input hover:bg-accent",n),...c,children:e&&s.jsx(p,{className:"h-3.5 w-3.5"})}));R.displayName="Checkbox";export{R as C,w as M,$ as O,B as T,X as a,P as b,b as c,q as d,H as e,L as f,F as i,z as m,C as n,V as s,Y as t};
