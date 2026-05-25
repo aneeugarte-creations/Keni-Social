@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { EstadoMensaje } from "@/components/layout/EstadoMensaje";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -157,22 +157,16 @@ function BloqueError({
   cargando: boolean;
 }) {
   return (
-    <Card className="border-destructive/40">
-      <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <AlertCircle className="h-6 w-6" />
-        </div>
-        <div className="space-y-1">
-          <p className="font-medium">{titulo}</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            {mensaje ?? "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento."}
-          </p>
-        </div>
-        <Button onClick={onReintentar} disabled={cargando}>
+    <EstadoMensaje
+      icono={AlertCircle}
+      titulo={titulo}
+      mensaje={mensaje ?? "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento."}
+      accion={
+        <Button variant="outline" size="sm" onClick={onReintentar} disabled={cargando}>
           <RefreshCw className={cn("h-4 w-4", cargando && "animate-spin")} />
           Reintentar
         </Button>
-      </CardContent>
-    </Card>
+      }
+    />
   );
 }
