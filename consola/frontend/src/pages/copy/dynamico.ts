@@ -6,7 +6,7 @@
  * es multipart (cuando hay un campo de tipo archivo). Se mantiene aparte para
  * poder testearla sin montar componentes.
  */
-import type { Campo, Skill } from "@/types";
+import type { Campo, GrupoSkills, Skill } from "@/types";
 
 /** Devuelve el primer campo de tipo archivo de la skill, o `undefined`. */
 export function campoArchivo(skill: Skill | undefined): Campo | undefined {
@@ -16,6 +16,32 @@ export function campoArchivo(skill: Skill | undefined): Campo | undefined {
 /** `true` si la skill se envía como multipart (tiene un campo archivo). */
 export function esSkillConArchivo(skill: Skill | undefined): boolean {
   return campoArchivo(skill) !== undefined;
+}
+
+/**
+ * `true` si la skill es de IMAGEN: tiene un campo de tipo archivo cuyo
+ * `media_tipos` (accept) incluye "image" (p. ej. estudio-imagen, breaking-express,
+ * revisa-imagen). Las de video/audio (clip-a-copy: "video/*,audio/*") NO lo son.
+ * Es la condición que separa la pestaña "Imágenes" de "Generar copy".
+ */
+export function esSkillDeImagen(skill: Skill | undefined): boolean {
+  const campo = campoArchivo(skill);
+  if (!campo) return false;
+  return (campo.media_tipos ?? "").includes("image");
+}
+
+/**
+ * Filtra los grupos de skills dejando solo las que cumplen `predicado` y
+ * descartando los grupos que se quedan vacíos. Es la base del reparto entre las
+ * pestañas "Generar copy" (skills NO de imagen) e "Imágenes" (skills de imagen).
+ */
+export function filtrarGrupos(
+  grupos: GrupoSkills[],
+  predicado: (skill: Skill) => boolean,
+): GrupoSkills[] {
+  return grupos
+    .map((grupo) => ({ ...grupo, skills: grupo.skills.filter(predicado) }))
+    .filter((grupo) => grupo.skills.length > 0);
 }
 
 /**

@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import type { Skill } from "@/types";
+import type { GrupoSkills, Skill } from "@/types";
 
 import {
   campoArchivo,
   camposTextoCompletos,
   esSkillConArchivo,
+  esSkillDeImagen,
+  filtrarGrupos,
   puedeGenerarSkill,
   valoresIniciales,
   valoresRecortados,
@@ -52,6 +54,20 @@ const SKILL_MEDIA: Skill = {
   media: true,
   campos: [
     { id: "archivo", etiqueta: "Audio", tipo: "archivo", requerido: true, media_tipos: "audio/*" },
+  ],
+};
+
+/** Skill de IMAGEN: campo archivo (opcional) que acepta imágenes. */
+const SKILL_IMAGEN: Skill = {
+  id: "estudio-imagen",
+  nombre: "Estudio de imagen",
+  explicacion: "Recorta, redimensiona o genera ilustraciones.",
+  aplica_redes: false,
+  salida: "documento",
+  media: true,
+  campos: [
+    { id: "archivo", etiqueta: "Imagen", tipo: "archivo", requerido: false, media_tipos: "image/*" },
+    { id: "instruccion", etiqueta: "Instrucción", tipo: "textarea", requerido: true },
   ],
 };
 
@@ -141,5 +157,47 @@ describe("puedeGenerarSkill", () => {
 describe("valoresRecortados", () => {
   it("recorta los espacios de cada valor", () => {
     expect(valoresRecortados({ a: "  hola  ", b: "x" })).toEqual({ a: "hola", b: "x" });
+  });
+});
+
+describe("esSkillDeImagen", () => {
+  it("detecta un campo archivo que acepta imágenes", () => {
+    expect(esSkillDeImagen(SKILL_IMAGEN)).toBe(true);
+  });
+
+  it("NO considera de imagen a las skills de audio/video", () => {
+    // SKILL_MEDIA acepta "audio/*": tiene archivo pero no es de imagen.
+    expect(esSkillDeImagen(SKILL_MEDIA)).toBe(false);
+  });
+
+  it("NO considera de imagen a las skills solo de texto ni a undefined", () => {
+    expect(esSkillDeImagen(SKILL_PIEZAS)).toBe(false);
+    expect(esSkillDeImagen(SKILL_DOCUMENTO)).toBe(false);
+    expect(esSkillDeImagen(undefined)).toBe(false);
+  });
+});
+
+describe("filtrarGrupos", () => {
+  const grupos: GrupoSkills[] = [
+    { etiqueta: "Validadas", experimental: false, skills: [SKILL_PIEZAS, SKILL_DOCUMENTO] },
+    { etiqueta: "Experimentales", experimental: true, skills: [SKILL_IMAGEN, SKILL_MEDIA] },
+  ];
+
+  it("reparte el catálogo entre Imágenes (de imagen) y Generar copy (resto)", () => {
+    const soloImagen = filtrarGrupos(grupos, esSkillDeImagen);
+    expect(soloImagen).toHaveLength(1);
+    expect(soloImagen[0].etiqueta).toBe("Experimentales");
+    expect(soloImagen[0].skills.map((s) => s.id)).toEqual(["estudio-imagen"]);
+
+    const sinImagen = filtrarGrupos(grupos, (s) => !esSkillDeImagen(s));
+    expect(sinImagen.map((g) => g.etiqueta)).toEqual(["Validadas", "Experimentales"]);
+    expect(sinImagen[0].skills.map((s) => s.id)).toEqual(["nota", "brief"]);
+    // El grupo experimental conserva solo la skill de audio (no de imagen).
+    expect(sinImagen[1].skills.map((s) => s.id)).toEqual(["audio"]);
+  });
+
+  it("descarta los grupos que quedan vacíos tras el filtro", () => {
+    const ninguna = filtrarGrupos(grupos, () => false);
+    expect(ninguna).toEqual([]);
   });
 });

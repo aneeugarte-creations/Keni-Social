@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Bot,
+  ImagePlus,
   Lightbulb,
   Rss,
   ScanSearch,
@@ -38,6 +39,13 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Generar copy",
         icono: Sparkles,
         descripcion: "Crea publicaciones con las skills editoriales.",
+      },
+      {
+        ruta: "/imagenes",
+        etiqueta: "Imágenes",
+        icono: ImagePlus,
+        descripcion:
+          "Estudio de imagen: recorta, pon el breaking en marca o genera ilustraciones.",
       },
       {
         ruta: "/skills",
