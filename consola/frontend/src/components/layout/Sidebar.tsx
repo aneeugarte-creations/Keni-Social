@@ -64,7 +64,7 @@ export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
       <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
         {NAVEGACION.map((grupo) => (
           <div key={grupo.etiqueta}>
-            <p className="px-3 pb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {grupo.etiqueta}
             </p>
             <ul className="space-y-0.5">

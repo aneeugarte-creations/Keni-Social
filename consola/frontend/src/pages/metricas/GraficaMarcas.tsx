@@ -54,7 +54,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
             data={datosBarras}
             index="marca"
             categories={["Visualizaciones", "Interacciones"]}
-            colors={["orange", "violet"]}
+            colors={["blue", "slate"]}
             valueFormatter={numeroCompacto}
             yAxisWidth={56}
             showAnimation
@@ -74,7 +74,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
             data={datosDona}
             category="visualizaciones"
             index="marca"
-            colors={["orange", "sky", "violet", "emerald", "amber", "rose"]}
+            colors={["blue", "sky", "cyan", "indigo", "slate", "zinc"]}
             valueFormatter={numeroCompacto}
             showAnimation
             noDataText="Sin datos para este rango."
@@ -82,7 +82,7 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
           <Legend
             className="mt-4 justify-center"
             categories={datosDona.map((d) => d.marca)}
-            colors={["orange", "sky", "violet", "emerald", "amber", "rose"]}
+            colors={["blue", "sky", "cyan", "indigo", "slate", "zinc"]}
           />
         </CardContent>
       </Card>
@@ -118,9 +118,9 @@ function TooltipBarras({ payload, active, label }: CustomTooltipProps) {
 function colorTooltip(dataKey: string): string {
   switch (dataKey) {
     case "Visualizaciones":
-      return "#f97316";
+      return "#3b82f6";
     case "Interacciones":
-      return "#8b5cf6";
+      return "#64748b";
     default:
       return "#9ca3af";
   }

@@ -107,7 +107,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           cargando={reporteQuery.isFetching}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm text-muted-foreground">
               Mostrando <span className="font-medium text-foreground">{reporteQuery.data.marca}</span>{" "}

@@ -22,7 +22,7 @@ export function PageHeader({
       )}
     >
       <div className="space-y-1">
-        <h2 className="text-2xl font-semibold tracking-tight">{titulo}</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{titulo}</h2>
         {descripcion && <p className="text-sm text-muted-foreground">{descripcion}</p>}
       </div>
       {acciones && <div className="flex items-center gap-2">{acciones}</div>}
