@@ -23,7 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, lanzador, proyectos
+from .. import lanzador, proyectos, repos
 from .._http_json import leer_json
 
 
@@ -65,7 +65,7 @@ def _tarea_a_dict(tarea: dict, por_id: dict[str, proyectos.Proyecto]) -> dict:
 
 async def listar(request: Request) -> Response:
     por_id = _nombres_proyecto()
-    tareas = db.listar_tareas()
+    tareas = repos.listar_tareas()
     return JSONResponse(
         {
             "tareas": [_tarea_a_dict(t, por_id) for t in tareas],
@@ -91,7 +91,7 @@ async def crear(request: Request) -> Response:
     if proyectos.proyecto_por_id(proyecto_id) is None:
         return JSONResponse({"error": "Proyecto no permitido o inexistente."}, status_code=400)
 
-    tarea = db.crear_tarea(proyecto_id, titulo.strip(), detalle.strip())
+    tarea = repos.crear_tarea(proyecto_id, titulo.strip(), detalle.strip())
     return JSONResponse({"tarea": _tarea_a_dict(tarea, _nombres_proyecto())})
 
 
@@ -99,10 +99,10 @@ async def actualizar(request: Request) -> Response:
     tarea_id = request.path_params["tarea_id"]
     datos = await leer_json(request)
     estado = datos.get("estado")
-    if estado not in db.ESTADOS_TAREA:
-        validos = " o ".join(f'"{e}"' for e in db.ESTADOS_TAREA)
+    if estado not in repos.ESTADOS_TAREA:
+        validos = " o ".join(f'"{e}"' for e in repos.ESTADOS_TAREA)
         return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
-    tarea = db.actualizar_estado_tarea(tarea_id, estado)
+    tarea = repos.actualizar_estado_tarea(tarea_id, estado)
     if tarea is None:
         return JSONResponse({"error": "La tarea ya no existe."}, status_code=404)
     return JSONResponse({"tarea": _tarea_a_dict(tarea, _nombres_proyecto())})
@@ -110,14 +110,14 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     tarea_id = request.path_params["tarea_id"]
-    if not db.borrar_tarea(tarea_id):
+    if not repos.borrar_tarea(tarea_id):
         return JSONResponse({"error": "La tarea ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Tarea borrada."})
 
 
 async def abrir(request: Request) -> Response:
     tarea_id = request.path_params["tarea_id"]
-    tarea = db.obtener_tarea(tarea_id)
+    tarea = repos.obtener_tarea(tarea_id)
     if tarea is None:
         return JSONResponse({"error": "La tarea ya no existe."}, status_code=400)
     # Allowlist: la carpeta solo se resuelve desde consola.proyectos por id estable.

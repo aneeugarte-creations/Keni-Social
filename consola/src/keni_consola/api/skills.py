@@ -50,7 +50,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas, redes
+from .. import marcas, redes, repos
 from .._http_json import leer_json
 from .publicaciones import _publicacion_a_dict
 
@@ -111,9 +111,9 @@ GRUPOS_SKILLS: tuple[_GrupoSkills, ...] = (
 # Vista PLANA de todas las skills curadas (de todos los grupos), en orden de grupo.
 SKILLS: tuple[_SkillInfo, ...] = tuple(s for g in GRUPOS_SKILLS for s in g.skills)
 
-# Marcas editoriales permitidas: las que tienen `slug` (curadas como destino de
-# copy). VALUE interno = slug-guion; etiqueta visible = nombre humano con acentos.
-MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
+# Marcas editoriales permitidas: TODAS las del catalogo unico. VALUE interno = id
+# canonico (slug-guion); etiqueta visible = nombre humano con acentos.
+MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 
 _SKILLS_IDS = {s.id for s in SKILLS}
 _MARCAS_IDS = {m[0] for m in MARCAS}
@@ -677,7 +677,7 @@ def _crear_publicaciones_desde_piezas(
             continue
         if not isinstance(contenido, str):
             contenido = ""
-        pub = db.crear_publicacion(
+        pub = repos.crear_publicacion(
             marca,
             red,
             titulo=titulo,
@@ -758,7 +758,7 @@ def _responder_generacion(
     piezas = parsed["piezas"]
     verdicto = parsed["verdicto"]
     titulo = titulo_dado or derivar_titulo(texto_nota)
-    historial_id = db.registrar_historial_skill(
+    historial_id = repos.registrar_historial_skill(
         skill, marca, resultado, piezas=piezas, titulo=titulo
     )
     publicaciones = _crear_publicaciones_desde_piezas(
@@ -856,7 +856,7 @@ async def ejecutar_archivo(request: Request) -> Response:
 
 async def historial(request: Request) -> Response:
     """Listado del historial (metadatos + preview), recientes primero."""
-    entradas = db.listar_historial_skills()
+    entradas = repos.listar_historial_skills()
     salida = [
         {
             "id": e["id"],
@@ -877,7 +877,7 @@ async def historial(request: Request) -> Response:
 async def historial_detalle(request: Request) -> Response:
     """Una entrada del historial con el resultado completo (404 si no existe)."""
     historial_id = request.path_params["historial_id"]
-    entrada = db.obtener_historial_skill(historial_id)
+    entrada = repos.obtener_historial_skill(historial_id)
     if entrada is None:
         return JSONResponse({"error": "No se encontró ese borrador en el historial."}, status_code=404)
     return JSONResponse(
@@ -904,7 +904,7 @@ async def historial_guardar(request: Request) -> Response:
     -> `{publicaciones:[Publicacion]}` | 404 si la entrada no existe.
     """
     historial_id = request.path_params["historial_id"]
-    entrada = db.obtener_historial_skill(historial_id)
+    entrada = repos.obtener_historial_skill(historial_id)
     if entrada is None:
         return JSONResponse(
             {"error": "No se encontró ese borrador en el historial."}, status_code=404
@@ -945,7 +945,7 @@ async def historial_guardar(request: Request) -> Response:
         return JSONResponse(
             {"error": "La red indicada no está entre las redes pedidas."}, status_code=400
         )
-    pub = db.crear_publicacion(
+    pub = repos.crear_publicacion(
         marca,
         red,
         titulo=titulo,

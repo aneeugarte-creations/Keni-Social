@@ -6,10 +6,10 @@ Persistencia en SQLite (`consola.db`, via `consola.db`). Nada se publica de verd
 aqui: solo se administra el estado editorial.
 
 SEGURIDAD / VALIDACION (no duplica logica; reusa las fuentes de verdad):
-  - `marca` SOLO puede ser una marca de la allowlist de Skills (`consola.marcas`,
-    las que tienen slug, mismo `value` que usa la generacion de copy).
+  - `marca` SOLO puede ser una marca del catalogo unico (`consola.marcas`), por
+    su `id` canonico (slug-guion), el mismo `value` que usa la generacion de copy.
   - `red` SOLO puede ser una red canonica (`consola.redes`).
-  - `estado` SOLO puede ser uno de `db.ESTADOS_PUBLICACION`.
+  - `estado` SOLO puede ser uno de `repos.ESTADOS_PUBLICACION`.
   - SQL parametrizado en `consola.db`; los errores salen como JSON en espanol, sin
     tracebacks crudos.
 
@@ -25,7 +25,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas, redes
+from .. import marcas, redes, repos
 from .._http_json import leer_json
 from . import franjas as api_franjas
 
@@ -37,8 +37,9 @@ _ESTADO_NOMBRE: dict[str, str] = {
     "publicado": "Publicado",
 }
 
-# Marcas validas como destino de copy: las de Skills (con slug). value interno=slug.
-_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
+# Marcas validas como destino de copy: TODAS las del catalogo unico. value
+# interno = id canonico (slug-guion); etiqueta visible = nombre humano con acentos.
+_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 
@@ -53,7 +54,7 @@ def _publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "id": pub["id"],
         "titulo": pub["titulo"],
         "marca": pub["marca"],
-        "marca_nombre": marcas.etiqueta_por_slug(pub["marca"]),
+        "marca_nombre": marcas.etiqueta_de(pub["marca"]),
         "red": pub["red"],
         "red_nombre": redes.nombre_por_id(pub["red"]),
         "contenido": pub["contenido"],
@@ -85,7 +86,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
     estado = datos.get("estado", "borrador")
     if estado is None or estado == "":
         estado = "borrador"
-    if not isinstance(estado, str) or estado not in db.ESTADOS_PUBLICACION:
+    if not isinstance(estado, str) or estado not in repos.ESTADOS_PUBLICACION:
         return None, "Estado no permitido."
 
     titulo = datos.get("titulo", "")
@@ -131,7 +132,7 @@ async def opciones(request: Request) -> Response:
     return JSONResponse(
         {
             "redes": redes.opciones(),
-            "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in db.ESTADOS_PUBLICACION],
+            "estados": [{"id": e, "nombre": _ESTADO_NOMBRE[e]} for e in repos.ESTADOS_PUBLICACION],
             "marcas": [{"id": mid, "nombre": nombre} for mid, nombre in _MARCAS],
         }
     )
@@ -160,7 +161,7 @@ async def listar(request: Request) -> Response:
     red = qp.get("red") or None
     estado = qp.get("estado") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
-    pubs = db.listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    pubs = repos.listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
     return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
 
 
@@ -169,7 +170,7 @@ async def crear(request: Request) -> Response:
     entrada, error = _validar_nueva(datos)
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
-    pub = db.crear_publicacion(
+    pub = repos.crear_publicacion(
         entrada["marca"],
         entrada["red"],
         titulo=entrada["titulo"],
@@ -201,13 +202,13 @@ async def crear_lote(request: Request) -> Response:
         if error is not None:
             return JSONResponse({"error": f"Publicación {i}: {error}"}, status_code=400)
         entradas.append(entrada)
-    pubs = db.crear_publicaciones(entradas)
+    pubs = repos.crear_publicaciones(entradas)
     return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
 
 
 async def detalle(request: Request) -> Response:
     publicacion_id = request.path_params["publicacion_id"]
-    pub = db.obtener_publicacion(publicacion_id)
+    pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
@@ -231,7 +232,7 @@ async def actualizar(request: Request) -> Response:
         campos["contenido"] = contenido
     if "estado" in datos:
         estado = datos.get("estado")
-        if not isinstance(estado, str) or estado not in db.ESTADOS_PUBLICACION:
+        if not isinstance(estado, str) or estado not in repos.ESTADOS_PUBLICACION:
             return JSONResponse({"error": "Estado no permitido."}, status_code=400)
         campos["estado"] = estado
     if "fecha_programada" in datos:
@@ -263,7 +264,7 @@ async def actualizar(request: Request) -> Response:
             status_code=400,
         )
 
-    pub = db.actualizar_publicacion(publicacion_id, campos)
+    pub = repos.actualizar_publicacion(publicacion_id, campos)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
@@ -271,7 +272,7 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     publicacion_id = request.path_params["publicacion_id"]
-    if not db.borrar_publicacion(publicacion_id):
+    if not repos.borrar_publicacion(publicacion_id):
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Publicación borrada."})
 
@@ -288,13 +289,13 @@ def calcular_hueco_para(
     """
     if ahora is None:
         ahora = datetime.now()
-    franjas = db.listar_franjas()
+    franjas = repos.listar_franjas()
     aplican = api_franjas.franjas_aplicables(franjas, pub["marca"], pub["red"])
     if not aplican:
         return None
     ocupados = {
         otra["fecha_programada"]
-        for otra in db.listar_publicaciones(estado="programado")
+        for otra in repos.listar_publicaciones(estado="programado")
         if otra["id"] != pub["id"] and otra["fecha_programada"]
     }
     return api_franjas.proximo_hueco(aplican, ahora, ocupados)
@@ -308,7 +309,7 @@ async def encolar(request: Request) -> Response:
     aplicables a su (marca, red).
     """
     publicacion_id = request.path_params["publicacion_id"]
-    pub = db.obtener_publicacion(publicacion_id)
+    pub = repos.obtener_publicacion(publicacion_id)
     if pub is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
     hueco = calcular_hueco_para(pub)
@@ -316,7 +317,7 @@ async def encolar(request: Request) -> Response:
         return JSONResponse(
             {"error": "No hay franjas configuradas para esta marca/red."}, status_code=400
         )
-    actualizada = db.actualizar_publicacion(
+    actualizada = repos.actualizar_publicacion(
         publicacion_id, {"estado": "programado", "fecha_programada": hueco}
     )
     if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
@@ -332,7 +333,7 @@ async def duplicar(request: Request) -> Response:
     -> `{publicacion}` | 404.
     """
     publicacion_id = request.path_params["publicacion_id"]
-    original = db.obtener_publicacion(publicacion_id)
+    original = repos.obtener_publicacion(publicacion_id)
     if original is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
@@ -356,7 +357,7 @@ async def duplicar(request: Request) -> Response:
             return JSONResponse({"error": "El título debe ser texto."}, status_code=400)
         titulo = nuevo_titulo.strip()
 
-    copia = db.crear_publicacion(
+    copia = repos.crear_publicacion(
         marca,
         red,
         titulo=titulo,
@@ -381,11 +382,11 @@ async def reciclar(request: Request) -> Response:
     `borrador` con `encolado=false`.
     """
     publicacion_id = request.path_params["publicacion_id"]
-    original = db.obtener_publicacion(publicacion_id)
+    original = repos.obtener_publicacion(publicacion_id)
     if original is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
 
-    copia = db.crear_publicacion(
+    copia = repos.crear_publicacion(
         original["marca"],
         original["red"],
         titulo=original["titulo"],
@@ -400,7 +401,7 @@ async def reciclar(request: Request) -> Response:
 
     hueco = calcular_hueco_para(copia)
     if hueco is not None:
-        actualizada = db.actualizar_publicacion(
+        actualizada = repos.actualizar_publicacion(
             copia["id"], {"estado": "programado", "fecha_programada": hueco}
         )
         if actualizada is not None:

@@ -1,33 +1,41 @@
-"""Fuente UNICA de verdad de las marcas editoriales de la Consola Keni.
+"""Catalogo UNICO de las marcas editoriales de la Consola Keni.
 
-Distintas partes de la consola se refieren a la misma marca con identificadores
-distintos por razones historicas:
+Historicamente convivian DOS catalogos incompatibles (uno con ids `guion_bajo`
+para Metricas/Config y otro con `slug-guion` para el contenido), por lo que la
+misma marca tenia dos identidades y `claro_sports_golf` era invisible en el copy.
+Este modulo unifica todo en un solo catalogo con un `id` CANONICO publico.
 
-  - `id`       identificador con guion_BAJO que usan Metricas y Configuracion
-               (coincide con los ids de la fuente de datos, p.ej. `claro_sports`).
-  - `slug`     identificador con guion-MEDIO que usa Skills al invocar Claude
-               (p.ej. `claro-sports`). NO todas las marcas tienen slug en Skills:
-               las verticales en crecimiento (p.ej. Claro Sports Golf) tienen id
-               y etiqueta pero todavia no estan curadas como destino de copy.
-  - `etiqueta` nombre HUMANO legible, con acentos (p.ej. "Nación Gamer"). Es lo
-               unico que ve la persona; debe ser identico en TODA la consola.
+Cada marca tiene tres campos:
 
-Este modulo centraliza ese mapeo para que las features (Skills, Metricas,
-Configuracion...) dejen de declarar sus propias listas y consuman estos helpers.
+  - `id`          identificador CANONICO y publico, en forma `slug-guion`
+                  (p.ej. `claro-sports`). Es la forma que ya usaba casi todo el
+                  contenido (Publicaciones, Skills, RSS, Franjas, Plantillas,
+                  Hashtags) y la que viaja por la API. UNA marca = UN id.
+  - `etiqueta`    nombre HUMANO legible, con acentos (p.ej. "Nación Gamer"). Es lo
+                  unico que ve la persona; identico en TODA la consola.
+  - `id_metricas` identificador con `guion_bajo` que necesita `keni_metricas` para
+                  hablar con sus cuentas (p.ej. `claro_sports`). Solo se usa en la
+                  FRONTERA con metricas (api/metricas.py, api/config.py); el resto
+                  de la consola trabaja siempre con el `id` canonico.
+
+`claro-sports-golf` (vertical en crecimiento) YA tiene id canonico y, por tanto,
+es visible en copy/publicaciones igual que las demas.
+
 No tiene estado ni I/O: solo datos y funciones puras.
 
-USO TIPICO (lo consumiran las features en otra ola):
+USO TIPICO:
 
     from .. import marcas
 
-    # Etiqueta humana desde el id de Metricas/Config:
-    marcas.etiqueta_por_id("claro_sports")        # -> "Claro Sports"
-    # Etiqueta humana desde el slug de Skills:
-    marcas.etiqueta_por_slug("nacion-gamer")      # -> "Nación Gamer"
-    # Poblar un <select> de Metricas/Config (id, etiqueta):
-    marcas.opciones_por_id()                      # -> [("unotv", "UnoTV"), ...]
-    # Poblar un <select> de Skills (slug, etiqueta), solo marcas con slug:
-    marcas.opciones_por_slug()                    # -> [("unotv", "UnoTV"), ...]
+    # Contenido (id canonico):
+    marcas.opciones()                         # -> [("unotv", "UnoTV"), ...]
+    marcas.etiqueta_de("claro-sports")        # -> "Claro Sports"
+    marcas.es_marca("claro-sports-golf")      # -> True
+    marcas.id_metricas_de("claro-sports")     # -> "claro_sports"  (frontera)
+
+    # Frontera con metricas (id_metricas, guion_bajo):
+    marcas.opciones_metricas()                # -> [("unotv", "UnoTV"), ...]
+    marcas.etiqueta_por_id_metricas("nacion_gamer")  # -> "Nación Gamer"
 """
 
 from __future__ import annotations
@@ -37,69 +45,86 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Marca:
-    """Una marca editorial. Ver el docstring del modulo para los tres campos.
-
-    `slug` es `None` cuando la marca todavia no esta curada como destino en Skills
-    (tiene id/etiqueta para Metricas y Config, pero no se le genera copy aun).
-    """
+    """Una marca editorial. Ver el docstring del modulo para los tres campos."""
 
     id: str
     etiqueta: str
-    slug: str | None = None
+    id_metricas: str
 
 
 # Orden de presentacion estable (el que ya usaban Skills/Metricas en su UI).
+# `id` es la forma canonica (slug-guion); `id_metricas` la forma guion_bajo que
+# espera keni_metricas. Golf YA es una marca de pleno derecho con su `id` propio.
 MARCAS: tuple[Marca, ...] = (
-    Marca(id="unotv", etiqueta="UnoTV", slug="unotv"),
-    Marca(id="claro_sports", etiqueta="Claro Sports", slug="claro-sports"),
-    Marca(id="claro_sports_golf", etiqueta="Claro Sports Golf", slug=None),
-    Marca(id="nacion_gamer", etiqueta="Nación Gamer", slug="nacion-gamer"),
-    Marca(id="piso_15", etiqueta="Piso 15", slug="piso-15"),
-    Marca(id="fundacion", etiqueta="Fundación", slug="fundacion"),
+    Marca(id="unotv", etiqueta="UnoTV", id_metricas="unotv"),
+    Marca(id="claro-sports", etiqueta="Claro Sports", id_metricas="claro_sports"),
+    Marca(id="claro-sports-golf", etiqueta="Claro Sports Golf", id_metricas="claro_sports_golf"),
+    Marca(id="nacion-gamer", etiqueta="Nación Gamer", id_metricas="nacion_gamer"),
+    Marca(id="piso-15", etiqueta="Piso 15", id_metricas="piso_15"),
+    Marca(id="fundacion", etiqueta="Fundación", id_metricas="fundacion"),
 )
 
 # Indices para acceso O(1). Construidos una sola vez al importar el modulo.
 _POR_ID: dict[str, Marca] = {m.id: m for m in MARCAS}
-_POR_SLUG: dict[str, Marca] = {m.slug: m for m in MARCAS if m.slug is not None}
+_POR_ID_METRICAS: dict[str, Marca] = {m.id_metricas: m for m in MARCAS}
 
 
-def marca_por_id(marca_id: str) -> Marca | None:
-    """Devuelve la `Marca` con ese `id` (guion_bajo), o `None` si no existe."""
+# --------------------------------------------------------------------------- #
+# API canonica: el resto de la consola trabaja SIEMPRE con el `id` canonico    #
+# --------------------------------------------------------------------------- #
+
+
+def marca_de(marca_id: str) -> Marca | None:
+    """Devuelve la `Marca` con ese `id` canonico, o `None` si no existe."""
     return _POR_ID.get(marca_id)
 
 
-def marca_por_slug(slug: str) -> Marca | None:
-    """Devuelve la `Marca` con ese `slug` (guion-medio), o `None` si no existe."""
-    return _POR_SLUG.get(slug)
+def es_marca(marca_id: str) -> bool:
+    """True si `marca_id` es un id canonico conocido."""
+    return marca_id in _POR_ID
 
 
-def etiqueta_por_id(marca_id: str) -> str:
-    """Nombre humano (con acentos) desde el `id`; cae al propio id si no se conoce."""
+def etiqueta_de(marca_id: str) -> str:
+    """Nombre humano (con acentos) desde el `id` canonico; cae al propio id si no se conoce."""
     marca = _POR_ID.get(marca_id)
     return marca.etiqueta if marca is not None else marca_id
 
 
-def etiqueta_por_slug(slug: str) -> str:
-    """Nombre humano (con acentos) desde el `slug`; cae al propio slug si no se conoce."""
-    marca = _POR_SLUG.get(slug)
-    return marca.etiqueta if marca is not None else slug
+def id_metricas_de(marca_id: str) -> str:
+    """Traduce el `id` canonico al `id_metricas` (guion_bajo) que espera keni_metricas.
+
+    Es la traduccion de la FRONTERA con metricas. Cae al propio id si no se conoce.
+    """
+    marca = _POR_ID.get(marca_id)
+    return marca.id_metricas if marca is not None else marca_id
 
 
 def ids() -> list[str]:
-    """Lista de `id` (guion_bajo) de todas las marcas, en orden de presentacion."""
+    """Lista de `id` canonicos de todas las marcas, en orden de presentacion."""
     return [m.id for m in MARCAS]
 
 
-def slugs() -> list[str]:
-    """Lista de `slug` (guion-medio) de las marcas que tienen slug (Skills)."""
-    return [m.slug for m in MARCAS if m.slug is not None]
-
-
-def opciones_por_id() -> list[tuple[str, str]]:
-    """Pares `(id, etiqueta)` para poblar un <select> de Metricas/Config."""
+def opciones() -> list[tuple[str, str]]:
+    """Pares `(id, etiqueta)` para poblar un <select> de la consola (todas las marcas)."""
     return [(m.id, m.etiqueta) for m in MARCAS]
 
 
-def opciones_por_slug() -> list[tuple[str, str]]:
-    """Pares `(slug, etiqueta)` para poblar un <select> de Skills (solo con slug)."""
-    return [(m.slug, m.etiqueta) for m in MARCAS if m.slug is not None]
+# --------------------------------------------------------------------------- #
+# Frontera con metricas: helpers que hablan en `id_metricas` (guion_bajo)      #
+# --------------------------------------------------------------------------- #
+
+
+def marca_por_id_metricas(id_metricas: str) -> Marca | None:
+    """Devuelve la `Marca` con ese `id_metricas` (guion_bajo), o `None` si no existe."""
+    return _POR_ID_METRICAS.get(id_metricas)
+
+
+def etiqueta_por_id_metricas(id_metricas: str) -> str:
+    """Nombre humano (con acentos) desde el `id_metricas`; cae al propio id si no se conoce."""
+    marca = _POR_ID_METRICAS.get(id_metricas)
+    return marca.etiqueta if marca is not None else id_metricas
+
+
+def opciones_metricas() -> list[tuple[str, str]]:
+    """Pares `(id_metricas, etiqueta)` para los selects de Metricas/Config (frontera)."""
+    return [(m.id_metricas, m.etiqueta) for m in MARCAS]
