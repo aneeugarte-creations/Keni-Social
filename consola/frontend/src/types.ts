@@ -444,6 +444,20 @@ export interface FuenteRss {
   /** Marca asociada (`""` si es general). */
   marca: string;
   marca_nombre: string;
+  /** `true` si el feed está activo (se incluye al refrescar items). */
+  activo: boolean;
+  /** Palabra(s) clave que deben aparecer para incluir un item (`""` = todos). */
+  incluir: string;
+  /** Palabra(s) clave que excluyen un item si aparecen (`""` = ninguno). */
+  excluir: string;
+  /** Redes por defecto al generar copy desde un item de este feed. */
+  redes_def: string[];
+  /** ISO de la última vez que se refrescó el feed; `""`/`null` si nunca. */
+  ultima_actualizacion: string | null;
+  /** Mensaje del último error al refrescar; `""`/`null` si todo fue bien. */
+  ultimo_error: string | null;
+  /** Nº de items obtenidos en el último refresco. */
+  ultimo_conteo: number;
 }
 
 export interface RespuestaFuentesRss {
@@ -460,6 +474,23 @@ export interface CuerpoCrearFuenteRss {
   url: string;
   /** Marca asociada (opcional). */
   marca?: string;
+  /** Palabra(s) clave de inclusión (opcional). */
+  incluir?: string;
+  /** Palabra(s) clave de exclusión (opcional). */
+  excluir?: string;
+  /** Redes por defecto (opcional). */
+  redes_def?: string[];
+}
+
+/** Cuerpo parcial para actualizar una fuente RSS. */
+export interface CuerpoActualizarFuenteRss {
+  nombre?: string;
+  url?: string;
+  marca?: string;
+  activo?: boolean;
+  incluir?: string;
+  excluir?: string;
+  redes_def?: string[];
 }
 
 /** Un elemento (item) de un feed RSS. */
@@ -470,10 +501,47 @@ export interface ItemRss {
   fecha: string;
   fuente_id: string;
   fuente_nombre: string;
+  /** Clave estable del item dentro de su feed (para marcar usado/dedup). */
+  clave: string;
+  /** `true` si el item ya se marcó como usado. */
+  usado: boolean;
 }
 
 export interface RespuestaItemsRss {
   items: ItemRss[];
+  /** Errores por feed al refrescar (mensajes legibles en español). */
+  errores: string[];
+}
+
+/** Cuerpo para marcar un item como usado / no usado. */
+export interface CuerpoMarcarItemUsado {
+  fuente_id: string;
+  clave: string;
+  /** `true` (por defecto) marca usado; `false` lo desmarca. */
+  usado?: boolean;
+}
+
+/** Cuerpo para generar copy directamente desde un item de feed. */
+export interface CuerpoGenerarDesdeItem {
+  titulo: string;
+  resumen?: string;
+  enlace?: string;
+  marca: string;
+  redes: string[];
+  fuente_id?: string;
+  clave?: string;
+}
+
+/**
+ * Respuesta de generar copy desde un item (auto-guarda como Publicaciones).
+ * Misma forma que ejecutar una skill.
+ */
+export interface RespuestaGenerarDesdeItem {
+  resultado: string;
+  historial_id: string;
+  verdicto: Veredicto;
+  piezas: PiezaGenerada[];
+  publicaciones: Publicacion[];
 }
 
 // --- Media (imágenes) ---
