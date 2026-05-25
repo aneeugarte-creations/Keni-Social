@@ -29,11 +29,11 @@ _SALIDA_SKILL = """✅ Copy listo.
 """
 
 
-def _mock_runner_skills(salida=_SALIDA_SKILL):
-    """Runner que ignora el prompt y devuelve `salida` (NUNCA llama a claude real)."""
+def _mock_runner_skills(salida=_SALIDA_SKILL, metricas=None):
+    """Runner que ignora el prompt y devuelve `(salida, metricas)` (NUNCA llama a claude real)."""
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida
+        return salida, metricas
 
     return runner
 
@@ -633,7 +633,7 @@ def test_generar_skill_por_defecto(cliente, monkeypatch):
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         capturado["prompt"] = prompt
-        return _SALIDA_SKILL
+        return _SALIDA_SKILL, None
 
     monkeypatch.setattr(skills, "_runner", runner)
     r = cliente.post(

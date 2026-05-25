@@ -209,7 +209,9 @@ async def sugerir(request: Request) -> Response:
 
     prompt = construir_prompt_sugerencia(texto.strip(), marca, red)
     try:
-        salida = skills._runner(prompt, cwd=skills._cwd_skills(), timeout=skills._TIMEOUT_DEF)
+        salida, _metricas = skills._runner(
+            prompt, cwd=skills._cwd_skills(), timeout=skills._TIMEOUT_DEF
+        )
     except skills.SkillError as e:
         return JSONResponse({"error": str(e)}, status_code=500)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente

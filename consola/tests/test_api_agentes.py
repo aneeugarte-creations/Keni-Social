@@ -18,11 +18,11 @@ from .conftest import _cliente
 _MARCA = "unotv"
 
 
-def _mock_runner(salida: str):
-    """Runner que ignora el prompt y devuelve `salida` fija (como en los tests de skills)."""
+def _mock_runner(salida: str, metricas=None):
+    """Runner que ignora el prompt y devuelve `(salida, metricas)` (nuevo contrato tupla)."""
 
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
-        return salida
+        return salida, metricas
 
     return runner
 
@@ -179,7 +179,7 @@ def test_run_headless_corre_en_la_carpeta_del_agente(entorno, monkeypatch):
     def runner(prompt, *, cwd, timeout):  # noqa: ANN001
         capturado["cwd"] = Path(cwd)
         capturado["prompt"] = prompt
-        return "ok"
+        return "ok", None
 
     monkeypatch.setattr(skills, "_runner", runner)
     _cliente().post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p", "modo": "headless"})
@@ -269,7 +269,11 @@ def test_obtener_run_completo(entorno, monkeypatch):
     run = r.json()["run"]
     assert run["id"] == run_id
     assert run["salida"] == "contenido completo"
-    assert set(run) == {"id", "prompt", "modo", "estado", "salida", "fecha_inicio", "fecha_fin"}
+    assert set(run) == {
+        "id", "prompt", "modo", "estado", "salida", "fecha_inicio", "fecha_fin", "metricas"
+    }
+    # Sin metricas (el mock devolvio None).
+    assert run["metricas"] is None
 
 
 def test_obtener_run_inexistente_404(entorno):
