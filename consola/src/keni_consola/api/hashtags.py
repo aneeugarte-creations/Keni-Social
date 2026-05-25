@@ -4,7 +4,7 @@ El SPA gestiona grupos reutilizables de hashtags por marca y, opcionalmente, pid
 sugerencias de hashtags a partir de un texto. Persistencia en SQLite (`consola.db`).
 
 SEGURIDAD / VALIDACION (reusa las fuentes de verdad):
-  - `marca` (si viene) SOLO de la allowlist de Skills (`consola.marcas` con slug).
+  - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`, por su id canonico).
   - `red` (en sugerir, si viene) SOLO una red canonica (`consola.redes`).
   - Cada hashtag se normaliza con `#` inicial; SQL parametrizado en `consola.db`.
   - La sugerencia corre el MISMO runner mockeable que Skills: en tests NUNCA se llama
@@ -20,12 +20,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas, redes
+from .. import marcas, redes, repos
 from .._http_json import leer_json
 from . import skills
 
-# Marcas validas: las de Skills (con slug). Mismo criterio que publicaciones.
-_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
+# Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
+# que publicaciones.
+_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 # Caracteres validos dentro de un hashtag (letras Unicode, digitos y _). Sin espacios.
@@ -71,7 +72,7 @@ def _grupo_a_dict(grupo: dict[str, Any]) -> dict[str, Any]:
         "id": grupo["id"],
         "nombre": grupo["nombre"],
         "marca": grupo["marca"],
-        "marca_nombre": marcas.etiqueta_por_slug(grupo["marca"]) if grupo["marca"] else "",
+        "marca_nombre": marcas.etiqueta_de(grupo["marca"]) if grupo["marca"] else "",
         "hashtags": grupo["hashtags"],
     }
 
@@ -122,7 +123,7 @@ def parsear_hashtags(salida: str) -> list[str]:
 
 async def listar(request: Request) -> Response:
     """Listado de grupos de hashtags."""
-    grupos = db.listar_grupos_hashtags()
+    grupos = repos.listar_grupos_hashtags()
     return JSONResponse({"grupos": [_grupo_a_dict(g) for g in grupos]})
 
 
@@ -143,7 +144,7 @@ async def crear(request: Request) -> Response:
     tags = _normalizar_lista_tags(crudas)
     if tags is None:
         return JSONResponse({"error": "Los hashtags deben ser una lista de texto."}, status_code=400)
-    grupo = db.crear_grupo_hashtags(nombre.strip(), marca=marca, hashtags=tags)
+    grupo = repos.crear_grupo_hashtags(nombre.strip(), marca=marca, hashtags=tags)
     return JSONResponse({"grupo": _grupo_a_dict(grupo)})
 
 
@@ -177,7 +178,7 @@ async def actualizar(request: Request) -> Response:
         return JSONResponse(
             {"error": "No hay nada que actualizar (nombre, marca o hashtags)."}, status_code=400
         )
-    grupo = db.actualizar_grupo_hashtags(grupo_id, campos)
+    grupo = repos.actualizar_grupo_hashtags(grupo_id, campos)
     if grupo is None:
         return JSONResponse({"error": "Ese grupo de hashtags ya no existe."}, status_code=404)
     return JSONResponse({"grupo": _grupo_a_dict(grupo)})
@@ -185,7 +186,7 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     grupo_id = request.path_params["grupo_id"]
-    if not db.borrar_grupo_hashtags(grupo_id):
+    if not repos.borrar_grupo_hashtags(grupo_id):
         return JSONResponse({"error": "Ese grupo de hashtags ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Grupo de hashtags borrado."})
 

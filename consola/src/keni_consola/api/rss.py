@@ -21,7 +21,7 @@ SEGURIDAD / VALIDACION:
     se aplica al crear la fuente, al cambiar la url en el PUT, Y antes de cada descarga
     (defensa en profundidad: una IP puede cambiar de resolucion entre el alta y la
     lectura).
-  - `marca` (si viene) SOLO de la allowlist de Skills (`consola.marcas` con slug);
+  - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`, por su id canonico);
     `redes_def`/`redes` solo redes canonicas; `skill` solo de la allowlist de Skills.
   - SQL parametrizado en `consola.db`; errores en espanol, sin tracebacks crudos.
 
@@ -48,12 +48,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas, redes
+from .. import marcas, redes, repos
 from .._http_json import leer_json
 from . import skills
 
-# Marcas validas: las de Skills (con slug). Mismo criterio que publicaciones.
-_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
+# Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
+# que publicaciones.
+_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 # Limites de descarga (defensa frente a feeds maliciosos o gigantes).
@@ -434,7 +435,7 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
         "nombre": fuente["nombre"],
         "url": fuente["url"],
         "marca": fuente["marca"],
-        "marca_nombre": marcas.etiqueta_por_slug(fuente["marca"]) if fuente["marca"] else "",
+        "marca_nombre": marcas.etiqueta_de(fuente["marca"]) if fuente["marca"] else "",
         "activo": bool(fuente.get("activo", True)),
         "incluir": fuente.get("incluir", ""),
         "excluir": fuente.get("excluir", ""),
@@ -447,7 +448,7 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
 
 async def listar_fuentes(request: Request) -> Response:
     """Listado de fuentes RSS."""
-    fuentes = db.listar_fuentes_rss()
+    fuentes = repos.listar_fuentes_rss()
     return JSONResponse({"fuentes": [_fuente_a_dict(f) for f in fuentes]})
 
 
@@ -477,7 +478,7 @@ async def crear_fuente(request: Request) -> Response:
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
 
-    fuente = db.crear_fuente_rss(
+    fuente = repos.crear_fuente_rss(
         nombre.strip(), url, marca=marca, incluir=incluir, excluir=excluir, redes_def=redes_def
     )
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
@@ -490,7 +491,7 @@ async def actualizar_fuente(request: Request) -> Response:
     en profundidad). Solo se tocan los campos presentes en el cuerpo.
     """
     fuente_id = request.path_params["fuente_id"]
-    if db.obtener_fuente_rss(fuente_id) is None:
+    if repos.obtener_fuente_rss(fuente_id) is None:
         return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
@@ -530,7 +531,7 @@ async def actualizar_fuente(request: Request) -> Response:
             return JSONResponse({"error": error}, status_code=400)
         campos["redes_def"] = redes_def
 
-    fuente = db.actualizar_fuente_rss(fuente_id, campos)
+    fuente = repos.actualizar_fuente_rss(fuente_id, campos)
     if fuente is None:
         return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
@@ -538,7 +539,7 @@ async def actualizar_fuente(request: Request) -> Response:
 
 async def borrar_fuente(request: Request) -> Response:
     fuente_id = request.path_params["fuente_id"]
-    if not db.borrar_fuente_rss(fuente_id):
+    if not repos.borrar_fuente_rss(fuente_id):
         return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Fuente borrada."})
 
@@ -562,7 +563,7 @@ def _items_de_fuente(fuente: dict[str, Any], *, ocultar_usados: bool) -> list[di
     Propaga `RSSError` (la maneja el llamante para anotar el error y la salud).
     """
     crudos = leer_items_fuente(fuente)
-    vistas = db.claves_vistas(fuente["id"])
+    vistas = repos.claves_vistas(fuente["id"])
     incluir = fuente.get("incluir", "")
     excluir = fuente.get("excluir", "")
     resultado: list[dict[str, Any]] = []
@@ -591,12 +592,12 @@ async def listar_items(request: Request) -> Response:
 
     fuente_id = request.query_params.get("fuente") or None
     if fuente_id:
-        fuente = db.obtener_fuente_rss(fuente_id)
+        fuente = repos.obtener_fuente_rss(fuente_id)
         if fuente is None:
             return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
         fuentes = [fuente]
     else:
-        fuentes = db.listar_fuentes_rss()
+        fuentes = repos.listar_fuentes_rss()
 
     if not incluir_inactivas:
         fuentes = [f for f in fuentes if f.get("activo", True)]
@@ -607,13 +608,13 @@ async def listar_items(request: Request) -> Response:
         try:
             propios = _items_de_fuente(fuente, ocultar_usados=ocultar_usados)
             items.extend(propios)
-            db.registrar_salud_fuente_rss(fuente["id"], conteo=len(propios), error="")
+            repos.registrar_salud_fuente_rss(fuente["id"], conteo=len(propios), error="")
         except RSSError as e:
-            db.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=str(e))
+            repos.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=str(e))
             errores.append({"fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"], "error": str(e)})
         except Exception:  # noqa: BLE001 -- nunca un traceback crudo; se omite la fuente
             mensaje = "No se pudo leer el feed."
-            db.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=mensaje)
+            repos.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=mensaje)
             errores.append(
                 {
                     "fuente_id": fuente["id"],
@@ -636,10 +637,10 @@ async def marcar_item_usado(request: Request) -> Response:
         return JSONResponse({"error": "Falta la fuente del item."}, status_code=400)
     if not isinstance(clave, str) or not clave.strip():
         return JSONResponse({"error": "Falta la clave del item."}, status_code=400)
-    if db.obtener_fuente_rss(fuente_id) is None:
+    if repos.obtener_fuente_rss(fuente_id) is None:
         return JSONResponse({"error": "Esa fuente ya no existe."}, status_code=404)
     usado = datos.get("usado", True)
-    db.marcar_item(fuente_id, clave.strip(), bool(usado))
+    repos.marcar_item(fuente_id, clave.strip(), bool(usado))
     return JSONResponse({"mensaje": "Item marcado como usado." if usado else "Item desmarcado."})
 
 
@@ -699,8 +700,8 @@ async def generar(request: Request) -> Response:
     fuente_id = datos.get("fuente_id")
     clave = datos.get("clave")
     if isinstance(fuente_id, str) and fuente_id and isinstance(clave, str) and clave.strip():
-        if db.obtener_fuente_rss(fuente_id) is not None:
-            db.marcar_item(fuente_id, clave.strip(), True)
+        if repos.obtener_fuente_rss(fuente_id) is not None:
+            repos.marcar_item(fuente_id, clave.strip(), True)
 
     parsed = skills.parsear_salida(salida, redes_ids)
     return skills._responder_generacion(skill, marca, nota, parsed, titulo.strip())

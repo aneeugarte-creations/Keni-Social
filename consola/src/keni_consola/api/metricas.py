@@ -31,9 +31,13 @@ ETIQUETAS_RANGO = {"semana": "Semana", "mes": "Mes", "7d": "7 días", "30d": "30
 
 
 def _nombre_marca_id(cuenta_id: str, nombres: dict[str, str]) -> str:
-    """Nombre legible: prioriza la fuente UNICA de marcas, cae al nombre de la
-    fuente de datos y luego al propio id."""
-    etiqueta = marcas.etiqueta_por_id(cuenta_id)
+    """Nombre legible: prioriza el catalogo unico de marcas, cae al nombre de la
+    fuente de datos y luego al propio id.
+
+    `cuenta_id` viene de la fuente de metricas, asi que esta en forma `id_metricas`
+    (guion_bajo): se resuelve por esa frontera, no por el id canonico.
+    """
+    etiqueta = marcas.etiqueta_por_id_metricas(cuenta_id)
     if etiqueta != cuenta_id:
         return etiqueta
     return nombres.get(cuenta_id) or cuenta_id
@@ -156,7 +160,9 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
 
 
 async def opciones(request: Request) -> Response:
-    marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in marcas.opciones_por_id()]
+    # La frontera con metricas habla en `id_metricas` (guion_bajo): este `id` es el
+    # que viaja como `?marca=` y acota la fuente (FuenteScoped), no el id canonico.
+    marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in marcas.opciones_metricas()]
     rangos = [{"id": r, "etiqueta": ETIQUETAS_RANGO.get(r, r)} for r in RANGOS_VALIDOS]
     return JSONResponse({"marcas": marcas_lista, "rangos": rangos})
 

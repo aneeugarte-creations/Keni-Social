@@ -9,7 +9,7 @@ dia_semana: 0=lunes .. 6=domingo (igual que `datetime.weekday()`).
 hora:       "HH:MM" en 24h.
 
 SEGURIDAD / VALIDACION:
-  - `marca` (si viene) SOLO de la allowlist de Skills (con slug); `red` (si viene)
+  - `marca` (si viene) SOLO del catalogo unico (por su id canonico); `red` (si viene)
     SOLO una red canonica. dia_semana 0..6; hora "HH:MM" valida.
   - SQL parametrizado en `consola.db`; errores en espanol, sin tracebacks.
 """
@@ -24,11 +24,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import db, marcas, redes
+from .. import marcas, redes, repos
 from .._http_json import leer_json
 
-# Marcas validas: las de Skills (con slug). Mismo criterio que publicaciones.
-_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones_por_slug())
+# Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
+# que publicaciones.
+_MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 # "HH:MM" 24h: 00:00..23:59.
@@ -50,7 +51,7 @@ def _franja_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": franja["id"],
         "marca": franja["marca"],
-        "marca_nombre": marcas.etiqueta_por_slug(franja["marca"]) if franja["marca"] else "",
+        "marca_nombre": marcas.etiqueta_de(franja["marca"]) if franja["marca"] else "",
         "red": franja["red"],
         "red_nombre": redes.nombre_por_id(franja["red"]) if franja["red"] else "",
         "dia_semana": franja["dia_semana"],
@@ -139,7 +140,7 @@ def proximo_hueco(
 
 async def listar(request: Request) -> Response:
     """Listado de franjas."""
-    franjas = db.listar_franjas()
+    franjas = repos.listar_franjas()
     return JSONResponse({"franjas": [_franja_a_dict(f) for f in franjas]})
 
 
@@ -172,13 +173,13 @@ async def crear(request: Request) -> Response:
     if red and not redes.es_red(red):
         return JSONResponse({"error": "Red no permitida."}, status_code=400)
 
-    franja = db.crear_franja(dia, hora, marca=marca, red=red)
+    franja = repos.crear_franja(dia, hora, marca=marca, red=red)
     return JSONResponse({"franja": _franja_a_dict(franja)})
 
 
 async def borrar(request: Request) -> Response:
     franja_id = request.path_params["franja_id"]
-    if not db.borrar_franja(franja_id):
+    if not repos.borrar_franja(franja_id):
         return JSONResponse({"error": "Esa franja ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Franja borrada."})
 

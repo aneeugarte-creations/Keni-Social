@@ -76,8 +76,12 @@ def _presencia_credenciales(cfg) -> dict[str, bool]:  # noqa: ANN001
 
 
 def _etiqueta_humana(marca_id: str, nombre: str) -> str:
-    """Nombre legible (con acentos) de una marca; cae al nombre del config o al id."""
-    marca = marcas.marca_por_id(marca_id)
+    """Nombre legible (con acentos) de una marca; cae al nombre del config o al id.
+
+    Las marcas del config/fuente vienen en forma `id_metricas` (guion_bajo): se
+    resuelven por esa frontera, no por el id canonico.
+    """
+    marca = marcas.marca_por_id_metricas(marca_id)
     if marca is not None:
         return marca.etiqueta
     return nombre or marca_id
@@ -150,7 +154,7 @@ async def guardar_config(request: Request) -> Response:
     alcance_ids = asistente.normalizar_alcance(marcas_crudas, ids_validos=ids_validos)
     desconocidas = [m for m in marcas_crudas if m.strip() and m.strip() not in ids_validos]
     if desconocidas:
-        etiquetas = ", ".join(marcas.etiqueta_por_id(m) for m in desconocidas)
+        etiquetas = ", ".join(marcas.etiqueta_por_id_metricas(m) for m in desconocidas)
         return JSONResponse(
             {"error": f"Marcas desconocidas: {etiquetas}."}, status_code=400
         )
@@ -163,7 +167,7 @@ async def guardar_config(request: Request) -> Response:
         )
 
     alcance = (
-        ", ".join(marcas.etiqueta_por_id(mid) for mid in alcance_ids)
+        ", ".join(marcas.etiqueta_por_id_metricas(mid) for mid in alcance_ids)
         if alcance_ids
         else "todas las marcas"
     )
