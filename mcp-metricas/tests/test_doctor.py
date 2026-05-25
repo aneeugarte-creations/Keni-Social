@@ -364,7 +364,7 @@ def test_cierre_accionable_con_errores_remite_a_las_lineas_error():
     rotos = [comprobar_python(version=(3, 9, 0))]  # un ❌
     cierre = cierre_accionable(rotos)
     assert "Que hacer ahora" in cierre
-    assert "❌" in cierre
+    assert "marcada" in cierre
     # No debe sugerir el asistente cuando hay errores que resolver primero.
     assert "asistente" not in cierre
 
