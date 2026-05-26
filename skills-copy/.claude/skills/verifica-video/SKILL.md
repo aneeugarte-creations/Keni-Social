@@ -38,6 +38,7 @@ Leyenda: ✅ = no hay pistas de que sea viejo (pero confírmalo) · ⚠️ = se�
 - **No descarga contenido privado** ni detrás de login; si el enlace no es público, lo dice y para.
 - **No es un detector de deepfakes** ni un juez de veracidad del hecho: responde **"¿es nuevo o ya circulaba?"**, que es el filtro de procedencia. La veracidad del contenido se revisa con el resto del criterio editorial.
 - **No da por buena su propia lectura como verdad.** El OCR se equivoca (un marcador, un dorsal o una placa pueden parecer un año); cuando hay duda, lo marca y deja la confirmación al humano.
+- **No garantiza detectar vídeo generado con IA.** Lee señales pasivas (metadatos C2PA/EXIF, watermarks visibles en OCR) pero **la ausencia de señales NO confirma autenticidad**. Los generadores modernos de alta calidad (Veo 3, Kling 2.5, Runway Gen-4) no dejan huellas detectables con herramientas locales cuando se distribuyen sin watermark. La detección de IA es intrínsecamente limitada y no sustituye al criterio editorial.
 
 ## Pasos
 
@@ -47,12 +48,13 @@ Leyenda: ✅ = no hay pistas de que sea viejo (pero confírmalo) · ⚠️ = se�
    ```
    - Imprime el progreso en stderr y, en la última línea, `REPORTE=<ruta del reporte.json>`. **Lee ese `reporte.json`** con `Read`.
    - Si falla por falta de **yt-dlp** (`brew install yt-dlp` o `pipx install yt-dlp`), **ffmpeg** o **tesseract**, dilo claro y para: el usuario debe instalarlos. No inventes metadatos ni fechas.
-   - El reporte trae: `metadatos` (incluida la **fecha de subida** y la **miniatura**), `ocr` (años/fechas/horas leídos en pantalla), `busqueda_inversa` (enlaces y carpeta de fotogramas), `fact_check` (si había key) y `senales` (pistas ya clasificadas alto/medio/bajo).
+   - El reporte trae: `metadatos` (incluida la **fecha de subida** y la **miniatura**), `ocr` (años/fechas/horas leídos en pantalla), `busqueda_inversa` (enlaces y carpeta de fotogramas), `fact_check` (si había key), `senales` (pistas de recirculación clasificadas alto/medio/bajo), `ia_generativa` (metadatos extendidos de IA) y `senales_ia` (pistas de origen de IA generativa).
 
 2. **Mira los fotogramas tú mismo.** El reporte lista `fotogramas` (rutas locales). **Léelos con `Read`** (ves imágenes de forma nativa) y busca lo que el equipo busca a mano:
    - **Marca de cámara de seguridad / fecha-hora incrustada** (p. ej. `2013-05-12 03:14:07`).
    - **Logos o moscas de canal antiguos**, watermarks de apps que ya no se usan, calidad/relación de aspecto de otra época (4:3, 360p) que no cuadre con "grabado hoy con un celular".
    - **Texto en pantalla** con fechas, nombres o eventos. Confirma o descarta los años que sacó el OCR: si el "2013" era en realidad un marcador o un dorsal, dilo.
+   - **Señales de IA generativa en los fotogramas:** busca también watermarks de herramientas de IA (esquina inferior: "Runway", "Pika", "Made with Kling"…), fondos con inconsistencias (objetos que aparecen/desaparecen, bordes de personas borrosos), física irreal (agua, fuego, multitudes con movimiento sincronizado), blur de movimiento demasiado uniforme, o resolución alta con ausencia de ruido de sensor. Estos son **indicios no concluyentes** — los generadores modernos de alta calidad no dejan artefactos detectables. Si ves algo, repórtalo como ⚠️ a confirmar; no como prueba.
 
 3. **Compara fechas.** Con `date` si necesitas "hoy". Cruza tres cosas:
    - La **fecha de subida** (`metadatos.subido_iso`) — cuándo se publicó ESTA copia (no necesariamente cuándo se grabó).
@@ -73,6 +75,7 @@ Leyenda: ✅ = no hay pistas de que sea viejo (pero confírmalo) · ⚠️ = se�
    - **Fechas/años en pantalla**: ¿confirmaste mirando el fotograma que son reales y no ruido de OCR?
    - **Coherencia** entre lo que se afirma del video y lo que ves.
    - **Búsqueda inversa**: ¿abierta/confirmada? Si nadie hizo clic, dilo y mantén el veredicto en ⚠️.
+   - **Señales de IA generativa**: ¿qué encontró el paso 6 del reporte (`senales_ia`)? ¿Hay C2PA, metadatos de software, watermarks en OCR, o artefactos visuales? Si hay señales → ⚠️ con descripción. Si no hay → ⚠️ con nota de que la ausencia no confirma autenticidad. Nunca ✅ en este punto solo por ausencia de señales.
    - **Veredicto:** `❌ RECICLADO` solo con evidencia que tú puedas señalar; `✅` solo si todo sale limpio incluida la búsqueda inversa; si no, `⚠️` con la lista corta de qué confirmar.
 
 ## Formato de salida (plantilla)
@@ -102,9 +105,10 @@ Se afirma que: <contexto | no indicado>
 - [✅/⚠️/❌] Años/fechas en pantalla confirmados contra el fotograma (no ruido de OCR) — <detalle>
 - [✅/⚠️/❌] Coherencia entre lo afirmado y lo que se ve — <detalle>
 - [✅/⚠️/❌] Búsqueda inversa abierta/confirmada — <detalle o "pendiente: haz clic">
+- [⚠️] Señales de IA generativa — <resumen de senales_ia: metadatos, C2PA, watermarks, artefactos visuales. Si no hay señales: "no se encontraron señales automáticas; la ausencia no confirma autenticidad">
 Veredicto: <❌ RECICLADO — evidencia / ✅ SIN SEÑALES — todo limpio / ⚠️ REVISAR — qué confirmar>
 
-⚠️ Nada se ha publicado ni subido. Esto ASISTE tu decisión; la búsqueda inversa la confirmas tú con un clic y el OCR puede equivocarse. La decisión de retomar o descartar es tuya.
+⚠️ Nada se ha publicado ni subido. Esto ASISTE tu decisión; la búsqueda inversa la confirmas tú con un clic, el OCR puede equivocarse, y la detección de IA es limitada (la ausencia de señales no confirma autenticidad). La decisión de retomar o descartar es tuya.
 ```
 
 ## Reglas
