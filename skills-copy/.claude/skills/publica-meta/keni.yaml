@@ -1,0 +1,20 @@
+nombre: Publica Meta
+explicacion: Muestra exactamente qué se publicaría en cada red, con conteos y avisos, antes de publicar.
+grupo: produccion
+aplica_redes: true
+salida: documento
+media: false
+orden: 90
+campos:
+  - id: copy_aprobado
+    etiqueta: Copy aprobado
+    tipo: textarea
+    requerido: true
+    placeholder: Pega aquí el copy ya aprobado (una o varias variantes por red)…
+    ayuda: El copy llega aprobado; esta skill solo lo presenta y verifica formato y límites, no lo reescribe.
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa publica-meta, marca {marca}. Este es el copy aprobado a previsualizar:
+
+  {copy_aprobado}

@@ -1,0 +1,28 @@
+nombre: Voces marca
+explicacion: Analiza publicaciones reales de una persona y genera su ficha de voz en contexto-editorial/voces/. La ficha resultante puede usarse con cualquier skill de copy.
+grupo: produccion
+aplica_redes: false
+salida: documento
+media: false
+orden: 25
+campos:
+  - id: historial
+    etiqueta: Historial de publicaciones
+    tipo: textarea
+    requerido: true
+    placeholder: Pega aquí las publicaciones (separa cada una con ---). Mínimo 5 para resultados fiables.
+    ayuda: Textos reales de la persona. Cuantos más posts, más precisa la ficha de voz.
+    opciones: []
+    media_tipos: ""
+  - id: nombre_voz
+    etiqueta: Nombre / slug
+    tipo: texto
+    requerido: true
+    placeholder: p. ej. ana-ugarte
+    ayuda: Se usará como nombre del archivo (contexto-editorial/voces/nombre.md). Sin espacios ni acentos.
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa voces-marca, marca {marca}. Nombre/slug de la persona: {nombre_voz}. Historial de publicaciones:
+
+  {historial}

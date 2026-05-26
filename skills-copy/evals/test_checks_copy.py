@@ -317,6 +317,7 @@ SKILLS_DE_COPY = (
     "nota-a-formato",
     "resumen-tendencia",
     "publica-preview",
+    "publica-meta",        # #106: alias con nombre alineado a la demo
     "responde-comentarios",
     "calendario-editorial",
     "nota-a-hilo",

@@ -39,6 +39,8 @@ ESPERADAS = {
     "resumen-tendencia",
     "nota-a-formato",
     "publica-preview",
+    "publica-meta",       # #106: nombre alineado con la demo (mantiene publica-preview como alias)
+    "voces-marca",        # #105: ingeniería inversa de voz de marca
     "revisa-imagen",
     "responde-comentarios",
     "calendario-editorial",

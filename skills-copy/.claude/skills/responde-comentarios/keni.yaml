@@ -1,6 +1,6 @@
 nombre: Responde comentarios
-explicacion: Clasifica comentarios de la comunidad y propone una respuesta en la voz de la marca.
-grupo: experimentales
+explicacion: Clasifica y responde comentarios de publicaciones en la voz de la marca. Triaje y redacción; no modera transmisiones en vivo.
+grupo: comunidad
 aplica_redes: false
 salida: documento
 media: false
