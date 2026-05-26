@@ -316,8 +316,7 @@ SKILLS_DE_COPY = (
     "clip-a-copy",
     "nota-a-formato",
     "resumen-tendencia",
-    "publica-preview",
-    "publica-meta",        # #106: alias con nombre alineado a la demo
+    "publica-meta",        # #106: renombrada desde publica-preview (Ola 3); zombie eliminado en Ola 4
     "responde-comentarios",
     "calendario-editorial",
     "nota-a-hilo",

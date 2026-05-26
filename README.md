@@ -61,7 +61,7 @@ Listo. Cierra y vuelve a abrir Claude Code (o ejecuta `/reload-plugins`). Despu�
 - `/keni-social:clip-a-copy` — de un video/audio a copy (transcribe en local) con las mejores citas y su marca de tiempo.
 - `/keni-social:nota-a-formato` — normaliza una nota cruda al estilo editorial de la casa (paso previo opcional).
 - `/keni-social:resumen-tendencia` — brief corto de un tema: qué pasa, ángulo por marca y riesgos legales.
-- `/keni-social:publica-preview` — pre-vuelo en dry-run: muestra exacto qué se publicaría en cada red, sin publicar.
+- `/keni-social:publica-meta` — pre-vuelo en dry-run: prepara y previsualiza la publicación en cada red (copy final, conteos, hashtags, media), sin publicar.
 - `/keni-social:revisa-imagen` — repaso legal y editorial de un arte propuesto (bandera/escudo, menores, datos personales, marcas) antes de publicar.
 - `/keni-social:verifica-video` — pega el enlace de un video viral y dice si parece **nuevo o ya circulaba desde antes** (reciclado), antes de decidir si retomarlo. Análisis local y gratis (fecha de subida, fechas en pantalla por OCR, enlaces de búsqueda inversa para un clic). Requiere `yt-dlp`, `ffmpeg` y `tesseract`. *Experimental.*
 - `/keni-social:responde-comentarios` — clasifica un comentario y redacta la respuesta en voz de marca tropicalizada, con auto-verificación. **Nunca publica:** tú apruebas y respondes. Para el día a día, ver [`docs/guia-community-manager.md`](docs/guia-community-manager.md).
@@ -76,7 +76,7 @@ Además de las skills, el plugin trae **comandos `/`** que envuelven los flujos 
 - `/keni-social:keni-reporte` — genera y **explica en claro** el reporte consolidado multi-marca con picos/anomalías (acepta rango, p. ej. `mes` o `semana`).
 - `/keni-social:keni-dashboard` — genera el **dashboard HTML** autocontenido (reporte + picos) y te dice dónde quedó y qué contiene.
 - `/keni-social:keni-doctor` — corre el **autodiagnóstico** del entorno de métricas y explica cada ❌ con el paso para arreglarlo.
-- `/keni-social:keni-preview` — guía el **pre-vuelo (dry-run)** de una publicación con la skill `publica-preview`: muestra exacto qué se publicaría, sin publicar.
+- `/keni-social:keni-preview` — guía el **pre-vuelo (dry-run)** de una publicación con la skill `publica-meta`: muestra exacto qué se publicaría, sin publicar.
 
 ### Actualizar
 

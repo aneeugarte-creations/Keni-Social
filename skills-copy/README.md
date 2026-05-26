@@ -10,7 +10,7 @@ Sistema de producción de copy para el equipo de redes de AMX, como **Agent Skil
 | **clip-a-copy** | **Video/audio** (entrevista, declaración, podcast) → copy por plataforma + **citas con marca de tiempo** para cortar el clip. Transcribe en **local** (whisper.cpp, el audio no sale de la máquina). |
 | **resumen-tendencia** | Tema/fuentes → brief interno: qué pasa + ángulo por marca + riesgos legales. |
 | **nota-a-formato** | Nota cruda → normalizada a la voz de la casa (limpia giros españoles). Paso previo opcional. |
-| **publica-preview** | Copy ya aprobado → pre-vuelo final en **dry-run**: muestra EXACTO qué se publicaría por plataforma (texto, conteo, hashtags, hilo/carrusel, media referenciada) + avisos + checklist humana. **No publica.** |
+| **publica-meta** | Copy ya aprobado → pre-vuelo final en **dry-run**: prepara y previsualiza la publicación (texto, conteo, hashtags, hilo/carrusel, media referenciada) + avisos + checklist humana. **No publica.** |
 | **revisa-imagen** | **Imagen/arte propuesto** → repaso legal antes de publicar: bandera con/sin escudo, menores/víctimas y rostros identificables, datos personales visibles (matrículas, documentos), marcas/copyright, texto con errores o cifras sin fuente. Checklist ✅/⚠️/❌ + veredicto (APTA solo si todo ✅). **No genera ni edita: solo revisa; el humano decide.** |
 
 ## Layout
@@ -49,7 +49,7 @@ Transcribe el archivo **en local** (no sube nada), saca las mejores citas con su
 Cuando el copy ya está aprobado y quieres el **último vistazo antes de publicar**:
 
 ```
-> usa publica-preview con este copy para X e Instagram, media reel-jugada.mp4
+> usa publica-meta con este copy para X e Instagram, media reel-jugada.mp4
 ```
 
 Muestra plataforma por plataforma **exactamente qué se publicaría** (texto final, conteo con `contar.py`, hashtags, desglose de hilo/carrusel y qué media acompaña — solo referenciada, nunca subida), avisos por red (Instagram exige media, un enlace en X cuesta caracteres extra, último repaso legal) y cierra con una **checklist** que marcas tú. Es dry-run puro: **nada se publica; la publicación real llega en una fase futura.**

@@ -38,8 +38,7 @@ ESPERADAS = {
     "clip-a-copy",
     "resumen-tendencia",
     "nota-a-formato",
-    "publica-preview",
-    "publica-meta",       # #106: nombre alineado con la demo (mantiene publica-preview como alias)
+    "publica-meta",       # #106: renombrada desde publica-preview (Ola 3); directorio zombie eliminado en Ola 4
     "voces-marca",        # #105: ingeniería inversa de voz de marca
     "revisa-imagen",
     "responde-comentarios",
