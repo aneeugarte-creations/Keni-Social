@@ -36,13 +36,13 @@ import httpx
 
 # NO se modifica `_http.py`: se importa de solo lectura.
 from ..fuentes._http import cliente_http, log, post_json
+
+# Fuente unica de verdad de la version de Graph API y del tipo de token de
+# System User: viven en el adaptador de LECTURA (`fuentes.meta`) y se reexportan
+# aqui para no duplicar la version del endpoint ni la constante de credenciales.
+from ..fuentes.meta import BASE, TIPO_SYSTEM_USER
 from ..schema import Plataforma
 from .modelos import Borrador, TipoMedia
-
-BASE = "https://graph.facebook.com/v21.0"
-
-# Igual que en el adaptador de lectura: System User token no caduca.
-TIPO_SYSTEM_USER = "system_user"
 
 
 @dataclass
