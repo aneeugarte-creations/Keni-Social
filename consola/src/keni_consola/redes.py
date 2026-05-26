@@ -7,8 +7,10 @@ Cada red tiene:
   - `nombre`  nombre HUMANO legible (p.ej. "X", "Instagram"). Lo unico que ve la
               persona en la UI.
   - `limite`  limite DURO de caracteres de la red, o `None` cuando no hay un tope
-              tecnico practico (Facebook/YouTube). Coincide con
-              `skills-copy/contexto-editorial/plataformas.md`.
+              tecnico practico (Facebook/YouTube). NO se redefine aqui: viene de
+              la fuente unica `limites_plataforma.LIMITES` (#112), de donde tambien
+              la lee el frontend (`GET /api/limites`) y la verifica el guard de
+              skills. Coincide con `skills-copy/contexto-editorial/plataformas.md`.
 
 Sin estado ni I/O: solo datos y funciones puras. El orden de `REDES` es FIJO y se
 respeta en toda la consola (UI, opciones, generacion por red).
@@ -17,6 +19,8 @@ respeta en toda la consola (UI, opciones, generacion por red).
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from . import limites_plataforma
 
 
 @dataclass(frozen=True)
@@ -28,13 +32,14 @@ class Red:
     limite: int | None
 
 
-# Orden de presentacion estable (X, Instagram, Facebook, TikTok, YouTube).
+# Orden de presentacion estable (X, Instagram, Facebook, TikTok, YouTube). Los
+# nombres viven aqui; el `limite` se toma de la fuente unica `limites_plataforma`.
 REDES: tuple[Red, ...] = (
-    Red(id="x", nombre="X", limite=280),
-    Red(id="instagram", nombre="Instagram", limite=2200),
-    Red(id="facebook", nombre="Facebook", limite=None),
-    Red(id="tiktok", nombre="TikTok", limite=2200),
-    Red(id="youtube", nombre="YouTube", limite=None),
+    Red(id="x", nombre="X", limite=limites_plataforma.limite_de("x")),
+    Red(id="instagram", nombre="Instagram", limite=limites_plataforma.limite_de("instagram")),
+    Red(id="facebook", nombre="Facebook", limite=limites_plataforma.limite_de("facebook")),
+    Red(id="tiktok", nombre="TikTok", limite=limites_plataforma.limite_de("tiktok")),
+    Red(id="youtube", nombre="YouTube", limite=limites_plataforma.limite_de("youtube")),
 )
 
 # Indice id->Red para acceso O(1). Construido una sola vez al importar.

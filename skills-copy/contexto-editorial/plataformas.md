@@ -24,7 +24,7 @@ Reglas de formato, largo y tono de cada red. La skill produce **una variante por
 - **Enlace** a la nota cuando aplique (sin acortadores raros); Facebook penaliza el contenido que solo manda fuera, así que da valor en el propio post.
 
 ## TikTok
-- **Caption: límite alto (~2.200 caracteres / ~4.000 en publicaciones recientes), pero úsalo corto y coloquial.** Lo que engancha es el **texto en pantalla** (hook de ≤2 líneas para los primeros 3 segundos), no el caption largo.
+- **Caption: límite duro 4.000 caracteres** (la red amplió el caption a 4.000 en 2023-24, desde un tope anterior mucho menor), **pero úsalo corto y coloquial.** Lo que engancha es el **texto en pantalla** (hook de ≤2 líneas para los primeros 3 segundos), no el caption largo.
 - **Formato de salida:** entrega **dos cosas** — (1) hook/texto en pantalla y (2) caption corto.
 - **Tono:** el más **mexicano y desenfadado** de todos (según marca; la Fundación se mantiene sobria).
 - **Hashtags: 3–5**, mezcla de **tema + tendencia** (no abuses de #fyp/#parati solos; combínalos con hashtags del tema). 
