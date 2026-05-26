@@ -20,10 +20,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import tempfile
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from keni_shared.io_atomico import escribir_atomico
 
 # Plataformas soportadas, en el orden en que se preguntan. Se replica aqui (en vez
 # de importar el StrEnum de schema.py) para no acoplar el asistente al esquema y
@@ -439,22 +440,14 @@ def escribir_config_atomico(ruta: Path, datos: dict, cabecera: str = CABECERA) -
 
     Crea el directorio padre si falta. No hay condicion de carrera donde quede un
     archivo a medias: se escribe a un temporal en el mismo dir y luego se renombra.
-    """
-    ruta = Path(ruta)
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    contenido = cabecera + "\n" + serializar_toml(datos)
 
-    fd, tmp_nombre = tempfile.mkstemp(dir=str(ruta.parent), prefix=".config-", suffix=".toml.tmp")
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(contenido)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, ruta)
-    except BaseException:
-        # limpia el temporal si algo falla antes del replace
-        tmp.unlink(missing_ok=True)
-        raise
+    La escritura atomica se delega en `keni_shared.io_atomico.escribir_atomico`
+    (H3/E1: fuente UNICA del patron, antes copiado aqui y en ~10 modulos de la
+    consola). Este modulo sigue siendo dueno del FORMATO (cabecera + TOML) y de los
+    permisos 0600 del config local de credenciales.
+    """
+    contenido = cabecera + "\n" + serializar_toml(datos)
+    escribir_atomico(Path(ruta), contenido, modo=0o600, prefijo=".config-", sufijo=".toml.tmp")
 
 
 def construir_y_fusionar(plan: PlanConfig, ruta: Path) -> dict:

@@ -7,6 +7,9 @@ requires-python = ">=3.11"
 license = { text = "Proprietary" }
 authors = [{ name = "Keni Engineering" }]
 dependencies = [
+    # Capa mas baja: definiciones canonicas compartidas (marca, limites, io_atomico,
+    # engagement_pct). La consola y keni-metricas importan de aqui la MISMA fuente (H3/E1).
+    "keni-shared",
     "keni-metricas",
     # Pila ASGI propia de la consola. keni-metricas ya no las arrastra: el server
     # MCP usa la pila que trae el SDK `mcp`. Floors alineados con los de `mcp`.

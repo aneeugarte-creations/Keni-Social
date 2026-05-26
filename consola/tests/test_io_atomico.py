@@ -1,8 +1,13 @@
-"""Util común de escritura atómica (`io_atomico.escribir_atomico`) — H7/N2.
+"""Util común de escritura atómica (`io_atomico.escribir_atomico`) — H7/N2 · H3/E1.
 
 Verifica las garantías que antes estaban copiadas en ~10 módulos: el destino nunca
 queda a medias, el padre se crea, el temporal se borra al fallar, y `modo` aplica
 permisos (p.ej. 0600 para secretos).
+
+La implementación vive ahora en `keni_shared.io_atomico` (H3/E1); `keni_consola`
+la reexporta. Este test importa por el reexport de la consola (que es como la usan
+los módulos de dominio) y monkeypatchea sobre `keni_shared.io_atomico`, que es
+donde está la función real.
 """
 
 from __future__ import annotations
@@ -63,7 +68,7 @@ def test_sufijo_por_defecto_es_la_extension_del_destino(tmp_path: Path, monkeypa
         capturado["prefix"] = kwargs.get("prefix", "")
         return real_mkstemp(*args, **kwargs)
 
-    monkeypatch.setattr("keni_consola.io_atomico.tempfile.mkstemp", fake_mkstemp)
+    monkeypatch.setattr("keni_shared.io_atomico.tempfile.mkstemp", fake_mkstemp)
     escribir_atomico(tmp_path / "doc.md", "# hola")
     assert capturado["suffix"] == ".md"
     assert capturado["prefix"] == ".tmp-"
@@ -76,12 +81,12 @@ def test_fallo_de_escritura_borra_temporal_y_no_toca_destino(tmp_path: Path, mon
     # Forzamos un fallo durante la escritura (replace nunca llega a ejecutarse).
     original_replace = os.replace
     monkeypatch.setattr(
-        "keni_consola.io_atomico.os.replace",
+        "keni_shared.io_atomico.os.replace",
         lambda *a, **k: (_ for _ in ()).throw(OSError("boom")),
     )
     with pytest.raises(OSError):
         escribir_atomico(destino, "nuevo")
-    monkeypatch.setattr("keni_consola.io_atomico.os.replace", original_replace)
+    monkeypatch.setattr("keni_shared.io_atomico.os.replace", original_replace)
 
     # El destino queda intacto y no hay temporales huerfanos.
     assert destino.read_text(encoding="utf-8") == "intacto"

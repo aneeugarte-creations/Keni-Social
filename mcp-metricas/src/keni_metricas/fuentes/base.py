@@ -6,9 +6,11 @@
 - `FuenteCompuesta` (en `agregador.py`), que combina varios `AdaptadorPlataforma`
   reales por marca.
 
-`engagement_pct()` es el ÚNICO sitio donde se define la fórmula de engagement;
-toda métrica/pieza (real, de muestra, agregada o de reporte) la usa. Antes estaba
-copiada en 10 sitios (ver issue #97 / H4).
+`engagement_pct()` es la fórmula única de engagement; toda métrica/pieza (real, de
+muestra, agregada o de reporte) la usa. La definición vive AHORA en
+`keni_shared.metricas` (H3/E1), la capa más baja del monorepo, para que la consola
+también la importe de la misma fuente; aquí se reexporta para no tocar los ~10
+sitios de keni-metricas que ya la importan de `.fuentes.base` (antes #97 / H4).
 
 `AdaptadorBase` centraliza el boilerplate que los 4 adaptadores reales
 (meta/youtube/x/tiktok) repetían: el guard `disponible()`, el header `Bearer`,
@@ -24,20 +26,12 @@ from datetime import date
 from typing import Protocol, TypeVar, runtime_checkable
 
 import httpx
+from keni_shared.metricas import engagement_pct  # noqa: F401  (reexport: la fuente es keni_shared)
 
 from ..schema import Cuenta, MetricaPlataforma, Pieza, Plataforma, ResumenMetricas
 from ._http import cliente_http, con_refresh, log
 
 T = TypeVar("T")
-
-
-def engagement_pct(interacciones: int, visualizaciones: int) -> float:
-    """Porcentaje de engagement = interacciones / visualizaciones * 100 (1 decimal).
-
-    Fórmula única de todo el paquete. Si no hay visualizaciones devuelve 0.0 (no
-    se divide por cero). Ver issue #97 / H4: antes estaba duplicada en 10 sitios.
-    """
-    return round(interacciones / visualizaciones * 100, 1) if visualizaciones else 0.0
 
 
 @runtime_checkable
