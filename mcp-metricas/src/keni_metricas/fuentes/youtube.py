@@ -11,29 +11,17 @@ from __future__ import annotations
 
 from datetime import date
 
-import httpx
-
 from ..schema import MetricaPlataforma, Pieza, Plataforma
-from ._http import cliente_http, con_refresh, get_json, log, post_json
+from ._http import get_json, log, post_json
+from .base import AdaptadorBase, engagement_pct
 
 ANALYTICS = "https://youtubeanalytics.googleapis.com/v2/reports"
 DATA = "https://www.googleapis.com/youtube/v3/videos"
 TOKEN = "https://oauth2.googleapis.com/token"
 
 
-class AdaptadorYouTube:
+class AdaptadorYouTube(AdaptadorBase):
     plataforma = Plataforma.youtube
-
-    def __init__(self, creds: dict, cliente: httpx.Client | None = None):
-        self._creds = creds
-        self._token = creds.get("access_token")
-        self._cli = cliente or cliente_http()
-
-    def disponible(self) -> bool:
-        return bool(self._token)
-
-    def _headers(self) -> dict:
-        return {"Authorization": f"Bearer {self._token}"}
 
     def _refrescar(self) -> bool:
         cid, secret, rt = (
@@ -62,13 +50,11 @@ class AdaptadorYouTube:
         return False
 
     def metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma | None:
-        if not self.disponible():
-            return None
-        try:
-            return con_refresh(lambda: self._metricas(handle, desde, hasta), self._refrescar)
-        except Exception as e:  # noqa: BLE001
-            log.warning("YouTube falló para %s: %s", handle, e)
-            return None
+        return self._intentar(
+            lambda: self._metricas(handle, desde, hasta),
+            defecto=None,
+            contexto=f"YouTube para {handle}",
+        )
 
     def _metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma:
         datos = get_json(
@@ -80,7 +66,7 @@ class AdaptadorYouTube:
                 "endDate": hasta.isoformat(),
                 "metrics": "views,likes,comments,shares",
             },
-            headers=self._headers(),
+            headers=self._headers_bearer(),
         )
         filas = datos.get("rows") or [[0, 0, 0, 0]]
         vis, likes, coments, shares = (int(x) for x in filas[0][:4])
@@ -90,17 +76,15 @@ class AdaptadorYouTube:
             visualizaciones=vis,
             alcance=0,
             interacciones=inter,
-            engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
+            engagement_pct=engagement_pct(inter, vis),
         )
 
     def piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
-        if not self.disponible():
-            return []
-        try:
-            return con_refresh(lambda: self._piezas(handle, desde, hasta, n), self._refrescar)
-        except Exception as e:  # noqa: BLE001
-            log.warning("YouTube piezas falló para %s: %s", handle, e)
-            return []
+        return self._intentar(
+            lambda: self._piezas(handle, desde, hasta, n),
+            defecto=[],
+            contexto=f"YouTube piezas para {handle}",
+        )
 
     def _piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
         rep = get_json(
@@ -115,7 +99,7 @@ class AdaptadorYouTube:
                 "sort": "-views",
                 "maxResults": max(n, 10),
             },
-            headers=self._headers(),
+            headers=self._headers_bearer(),
         )
         filas = rep.get("rows") or []
         titulos = self._titulos([f[0] for f in filas])
@@ -131,7 +115,7 @@ class AdaptadorYouTube:
                     publicado=hasta,
                     visualizaciones=vis,
                     interacciones=inter,
-                    engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
+                    engagement_pct=engagement_pct(inter, vis),
                     url=f"https://youtube.com/watch?v={vid}",
                 )
             )
@@ -146,7 +130,7 @@ class AdaptadorYouTube:
                 self._cli,
                 DATA,
                 params={"part": "snippet", "id": ",".join(ids)},
-                headers=self._headers(),
+                headers=self._headers_bearer(),
             )
             return {it["id"]: it.get("snippet", {}).get("title", it["id"]) for it in datos.get("items", [])}
         except Exception:  # noqa: BLE001

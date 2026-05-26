@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .formato import etiqueta_marca, miles, partes_cobertura, signo
-from .fuentes.base import FuenteMetricas
+from .fuentes.base import FuenteMetricas, engagement_pct
 
 if TYPE_CHECKING:
     from .historico import Historico
@@ -66,7 +66,7 @@ def construir_reporte(
             "visualizaciones": tot_vis,
             "alcance": tot_alc,
             "interacciones": tot_inter,
-            "engagement_pct": round(tot_inter / tot_vis * 100, 1) if tot_vis else 0.0,
+            "engagement_pct": engagement_pct(tot_inter, tot_vis),
             "cuentas": len(filas),
         },
         # cobertura global: marcas con datos parciales. Vacio = todas completas.

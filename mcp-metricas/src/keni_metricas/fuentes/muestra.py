@@ -34,7 +34,7 @@ from ..schema import (
     ResumenMetricas,
     resolver_rango,
 )
-from .base import CuentaNoEncontrada
+from .base import CuentaNoEncontrada, engagement_pct
 
 # Claves de marca EDITORIAL: son el `id_metricas` (guion_bajo) del catalogo UNICO
 # de marca que define `consola/src/keni_consola/marcas.py` (#82/#102). Una sola
@@ -293,7 +293,7 @@ class FuenteMuestra:
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
         alc = sum(m.alcance for m in por_plataforma)
-        eng = round(inter / vis * 100, 1) if vis else 0.0
+        eng = engagement_pct(inter, vis)
         seg = int(vis * _entre(_rand(cuenta_id, rango, "seg"), 0.0006, 0.0012))
 
         return ResumenMetricas(

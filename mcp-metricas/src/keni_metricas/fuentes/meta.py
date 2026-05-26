@@ -20,7 +20,8 @@ from datetime import date
 import httpx
 
 from ..schema import MetricaPlataforma, Pieza, Plataforma
-from ._http import MAX_PAGINAS, cliente_http, con_refresh, get_json, log
+from ._http import MAX_PAGINAS, get_json, log
+from .base import AdaptadorBase, engagement_pct
 
 BASE = "https://graph.facebook.com/v21.0"
 
@@ -38,22 +39,17 @@ def _suma_valores(datos: dict) -> dict[str, int]:
     return out
 
 
-class AdaptadorMeta:
+class AdaptadorMeta(AdaptadorBase):
     def __init__(
         self,
         creds: dict,
         plataforma: Plataforma = Plataforma.facebook,
         cliente: httpx.Client | None = None,
     ):
+        super().__init__(creds, cliente)
         self.plataforma = plataforma
-        self._creds = creds
-        self._token = creds.get("access_token")
         # System User tokens (Business Manager) no caducan: refresh es no-op.
         self._es_system_user = creds.get("tipo_token") == TIPO_SYSTEM_USER
-        self._cli = cliente or cliente_http()
-
-    def disponible(self) -> bool:
-        return bool(self._token)
 
     def _refrescar(self) -> bool:
         if self._es_system_user:
@@ -82,13 +78,11 @@ class AdaptadorMeta:
 
     # --- métricas -----------------------------------------------------------
     def metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma | None:
-        if not self.disponible():
-            return None
-        try:
-            return con_refresh(lambda: self._metricas(handle, desde, hasta), self._refrescar)
-        except Exception as e:  # noqa: BLE001
-            log.warning("Meta %s falló para %s: %s", self.plataforma.value, handle, e)
-            return None
+        return self._intentar(
+            lambda: self._metricas(handle, desde, hasta),
+            defecto=None,
+            contexto=f"Meta {self.plataforma.value} para {handle}",
+        )
 
     def _metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma:
         if self.plataforma is Plataforma.facebook:
@@ -115,18 +109,16 @@ class AdaptadorMeta:
             visualizaciones=vis,
             alcance=alc,
             interacciones=inter,
-            engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
+            engagement_pct=engagement_pct(inter, vis),
         )
 
     # --- piezas (con paginación) -------------------------------------------
     def piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
-        if not self.disponible():
-            return []
-        try:
-            return con_refresh(lambda: self._piezas(handle, desde, hasta, n), self._refrescar)
-        except Exception as e:  # noqa: BLE001
-            log.warning("Meta %s piezas falló para %s: %s", self.plataforma.value, handle, e)
-            return []
+        return self._intentar(
+            lambda: self._piezas(handle, desde, hasta, n),
+            defecto=[],
+            contexto=f"Meta {self.plataforma.value} piezas para {handle}",
+        )
 
     def _piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
         es_fb = self.plataforma is Plataforma.facebook
@@ -162,7 +154,7 @@ class AdaptadorMeta:
                         publicado=date.fromisoformat(fecha) if fecha else hasta,
                         visualizaciones=vis,
                         interacciones=inter,
-                        engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
+                        engagement_pct=engagement_pct(inter, vis),
                         url=it.get("permalink_url"),
                     )
                 )

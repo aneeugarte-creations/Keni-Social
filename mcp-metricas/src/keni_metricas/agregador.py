@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 
 from .config import Config, CuentaConfig
-from .fuentes.base import AdaptadorPlataforma, CuentaNoEncontrada
+from .fuentes.base import AdaptadorPlataforma, CuentaNoEncontrada, engagement_pct
 from .presupuesto import Presupuesto, PresupuestoExcedido
 from .schema import (
     Cobertura,
@@ -130,7 +130,7 @@ class FuenteCompuesta:
             visualizaciones=vis,
             alcance=alc,
             interacciones=inter,
-            engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
+            engagement_pct=engagement_pct(inter, vis),
             seguidores_netos=0,  # requiere historico; no se calcula en v1
             variacion_vs_anterior={},  # idem
             por_plataforma=por_plataforma,

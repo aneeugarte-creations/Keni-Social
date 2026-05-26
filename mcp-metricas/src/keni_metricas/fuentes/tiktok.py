@@ -11,26 +11,17 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-import httpx
-
 from ..schema import MetricaPlataforma, Pieza, Plataforma
-from ._http import MAX_PAGINAS, cliente_http, con_refresh, log, post_json
+from ._http import MAX_PAGINAS, log, post_json
+from .base import AdaptadorBase, engagement_pct
 
 VIDEO_LIST = "https://open.tiktokapis.com/v2/video/list/"
 TOKEN = "https://open.tiktokapis.com/v2/oauth/token/"
 CAMPOS = "id,title,view_count,like_count,comment_count,share_count,create_time"
 
 
-class AdaptadorTikTok:
+class AdaptadorTikTok(AdaptadorBase):
     plataforma = Plataforma.tiktok
-
-    def __init__(self, creds: dict, cliente: httpx.Client | None = None):
-        self._creds = creds
-        self._token = creds.get("access_token")
-        self._cli = cliente or cliente_http()
-
-    def disponible(self) -> bool:
-        return bool(self._token)
 
     def _refrescar(self) -> bool:
         ck, secret, rt = (
@@ -71,7 +62,7 @@ class AdaptadorTikTok:
                 self._cli,
                 VIDEO_LIST,
                 params={"fields": CAMPOS},
-                headers={"Authorization": f"Bearer {self._token}"},
+                headers=self._headers_bearer(),
                 json=cuerpo,
             )
             data = datos.get("data") or {}
@@ -93,49 +84,50 @@ class AdaptadorTikTok:
         return int(v.get("like_count", 0)) + int(v.get("comment_count", 0)) + int(v.get("share_count", 0))
 
     def metricas(self, handle: str, desde: date, hasta: date) -> MetricaPlataforma | None:
-        if not self.disponible():
-            return None
-        try:
-            videos = con_refresh(lambda: self._videos(desde, hasta), self._refrescar)
-            vis = sum(int(v.get("view_count", 0)) for v in videos)
-            inter = sum(self._inter(v) for v in videos)
-            return MetricaPlataforma(
-                plataforma=self.plataforma,
-                visualizaciones=vis,
-                alcance=0,
-                interacciones=inter,
-                engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
-            )
-        except Exception as e:  # noqa: BLE001
-            log.warning("TikTok falló: %s", e)
-            return None
+        return self._intentar(
+            lambda: self._metricas(desde, hasta),
+            defecto=None,
+            contexto="TikTok",
+        )
+
+    def _metricas(self, desde: date, hasta: date) -> MetricaPlataforma:
+        videos = self._videos(desde, hasta)
+        vis = sum(int(v.get("view_count", 0)) for v in videos)
+        inter = sum(self._inter(v) for v in videos)
+        return MetricaPlataforma(
+            plataforma=self.plataforma,
+            visualizaciones=vis,
+            alcance=0,
+            interacciones=inter,
+            engagement_pct=engagement_pct(inter, vis),
+        )
 
     def piezas(self, handle: str, desde: date, hasta: date, n: int) -> list[Pieza]:
-        if not self.disponible():
-            return []
-        try:
-            videos = con_refresh(lambda: self._videos(desde, hasta), self._refrescar)
-            piezas: list[Pieza] = []
-            for v in videos:
-                vis = int(v.get("view_count", 0))
-                inter = self._inter(v)
-                ct = v.get("create_time")
-                pub = datetime.fromtimestamp(int(ct), tz=UTC).date() if ct else hasta
-                vid = str(v.get("id", ""))
-                piezas.append(
-                    Pieza(
-                        id=vid,
-                        plataforma=self.plataforma,
-                        titulo=(v.get("title") or "(sin titulo)")[:120],
-                        publicado=pub,
-                        visualizaciones=vis,
-                        interacciones=inter,
-                        engagement_pct=round(inter / vis * 100, 1) if vis else 0.0,
-                        url=f"https://tiktok.com/video/{vid}",
-                    )
+        return self._intentar(
+            lambda: self._piezas(desde, hasta, n),
+            defecto=[],
+            contexto="TikTok piezas",
+        )
+
+    def _piezas(self, desde: date, hasta: date, n: int) -> list[Pieza]:
+        piezas: list[Pieza] = []
+        for v in self._videos(desde, hasta):
+            vis = int(v.get("view_count", 0))
+            inter = self._inter(v)
+            ct = v.get("create_time")
+            pub = datetime.fromtimestamp(int(ct), tz=UTC).date() if ct else hasta
+            vid = str(v.get("id", ""))
+            piezas.append(
+                Pieza(
+                    id=vid,
+                    plataforma=self.plataforma,
+                    titulo=(v.get("title") or "(sin titulo)")[:120],
+                    publicado=pub,
+                    visualizaciones=vis,
+                    interacciones=inter,
+                    engagement_pct=engagement_pct(inter, vis),
+                    url=f"https://tiktok.com/video/{vid}",
                 )
-            piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
-            return piezas[:n]
-        except Exception as e:  # noqa: BLE001
-            log.warning("TikTok piezas falló: %s", e)
-            return []
+            )
+        piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
+        return piezas[:n]
