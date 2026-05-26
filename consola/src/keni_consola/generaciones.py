@@ -289,6 +289,29 @@ def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list
     ]
 
 
+def _entorno_skill() -> dict[str, str]:
+    """Entorno del subproceso de la skill.
+
+    Hereda `os.environ` y, si hay una clave de imagen en el ALMACEN (secretos.toml, la
+    UNICA fuente de verdad) y la variable correspondiente no esta ya puesta, la inyecta:
+    la skill es un plugin independiente que solo lee variables de entorno, asi que este
+    es el canal por el que recibe la clave. NO duplica el almacen: solo lo transporta al
+    subproceso. Una variable ya presente en el entorno tiene prioridad (no se pisa).
+    """
+    from . import secretos
+
+    entorno = dict(os.environ)
+    clave = secretos.obtener_clave_imagen()
+    if not clave:
+        return entorno
+    var = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(
+        secretos.obtener_proveedor_imagen()
+    )
+    if var and not entorno.get(var):
+        entorno[var] = clave
+    return entorno
+
+
 def lanzar_job_claude(
     gen_id: str,
     *,
@@ -396,6 +419,7 @@ def lanzar_job_claude(
         proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell; prompt como argumento
             _argv_claude(prompt, [dir_temporal] if dir_temporal else None),
             cwd=str(cwd),
+            env=_entorno_skill(),
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,

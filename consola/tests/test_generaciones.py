@@ -65,6 +65,49 @@ def test_argv_sin_dirs_no_anade_add_dir(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Entorno del subproceso: transporta la clave de imagen del ALMACEN (secretos) #
+# --------------------------------------------------------------------------- #
+
+
+def test_entorno_skill_inyecta_clave_de_imagen_del_almacen(entorno, monkeypatch):
+    # secretos.toml es la unica fuente; la skill (plugin) la recibe por variable de entorno.
+    from keni_consola import secretos
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    secretos.guardar_clave_imagen("openai", "sk-almacen")
+    env = generaciones._entorno_skill()
+    assert env["OPENAI_API_KEY"] == "sk-almacen"
+
+
+def test_entorno_skill_mapea_proveedor_a_su_variable(entorno, monkeypatch):
+    from keni_consola import secretos
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    secretos.guardar_clave_imagen("gemini", "g-almacen")
+    env = generaciones._entorno_skill()
+    assert env["GEMINI_API_KEY"] == "g-almacen"
+    assert "OPENAI_API_KEY" not in env  # no inventa otras variables
+
+
+def test_entorno_skill_no_pisa_una_variable_ya_puesta(entorno, monkeypatch):
+    from keni_consola import secretos
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-del-entorno")
+    secretos.guardar_clave_imagen("openai", "sk-almacen")
+    env = generaciones._entorno_skill()
+    assert env["OPENAI_API_KEY"] == "sk-del-entorno"  # prioridad de lo ya presente
+
+
+def test_entorno_skill_sin_clave_no_anade_nada(entorno, monkeypatch):
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    env = generaciones._entorno_skill()  # almacen vacio (entorno aislado en tmp)
+    assert "OPENAI_API_KEY" not in env
+    assert "GEMINI_API_KEY" not in env
+
+
+# --------------------------------------------------------------------------- #
 # cwd de EJECUCION de skills: el dir que CONTIENE .claude/skills              #
 # --------------------------------------------------------------------------- #
 
