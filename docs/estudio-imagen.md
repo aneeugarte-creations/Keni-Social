@@ -151,15 +151,18 @@ Hecho en el repo, rama `feat/formatos-foto`:
   extender fondo / extender fondo con IA). Declarativos: no requieren tocar el frontend.
 - Tests Pillow en `estudio-imagen/test_editar.py` y `test_expandir.py` (locales, con el
   proveedor de IA mockeado; el CI estático de skills no instala Pillow).
+- **Credenciales: un solo almacén.** La clave de imagen vive SOLO en `secretos.toml`
+  (gestionado por la UI, `0600`). Las skills son un plugin independiente y solo leen
+  variables de entorno, así que al lanzar la skill la Consola **exporta** esa clave del
+  almacén al entorno del subproceso (`generaciones._entorno_skill`: mapea proveedor →
+  `OPENAI_API_KEY` / `GEMINI_API_KEY`, sin pisar una variable ya puesta). No hay segundo
+  almacén: `secretos.toml` es la única fuente y solo se transporta al subproceso.
 
 Pendiente:
 1. Validar con el responsable editorial de AMX el criterio de "extender solo fondo uniforme"
    frente a §3, el umbral máximo de extensión por lado, y **cuándo** se permite la excepción
    de IA (`expandir.py`). La capacidad está, pero el permiso de uso es decisión editorial.
-2. Puente de credenciales Consola→skill: hoy `expandir.py` lee la clave del **entorno**; la
-   clave de imagen de la Consola vive en `secretos.toml`. Falta exponerla al subproceso de la
-   skill (o que la Consola llame al proveedor por su capa `media.py`).
-3. Detección del sujeto para automatizar al 100% el disparador "el recorte cortaría al sujeto"
+2. Detección del sujeto para automatizar al 100% el disparador "el recorte cortaría al sujeto"
    (hoy el heurístico es la uniformidad del borde + el ratio).
 
 ---
