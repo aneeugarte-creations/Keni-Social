@@ -5,7 +5,7 @@ from datetime import date
 import httpx
 import respx
 
-from keni_metricas.fuentes.meta import AdaptadorMeta
+from keni_metricas.fuentes.meta import BASE, AdaptadorMeta
 from keni_metricas.schema import Plataforma
 
 DESDE = date(2026, 5, 16)
@@ -25,7 +25,7 @@ def test_sin_token_no_llama_red():
 
 @respx.mock
 def test_metricas_facebook_parsea_insights():
-    respx.get("https://graph.facebook.com/v21.0/PAGE/insights").mock(
+    respx.get(f"{BASE}/PAGE/insights").mock(
         return_value=httpx.Response(
             200,
             json={
@@ -48,7 +48,7 @@ def test_metricas_facebook_parsea_insights():
 
 @respx.mock
 def test_metricas_degrada_en_error():
-    respx.get("https://graph.facebook.com/v21.0/PAGE/insights").mock(
+    respx.get(f"{BASE}/PAGE/insights").mock(
         return_value=httpx.Response(403, json={"error": {"message": "sin permiso"}})
     )
     ad = AdaptadorMeta({"access_token": "tok"}, Plataforma.facebook)
@@ -59,10 +59,10 @@ def test_metricas_degrada_en_error():
 def test_system_user_no_llama_token_exchange_en_401():
     """Token de System User no caduca: ante un 401 NO se intenta fb_exchange_token."""
     # Aunque haya app_id/app_secret, el tipo system_user manda: refresh = no-op.
-    ruta_insights = respx.get("https://graph.facebook.com/v21.0/PAGE/insights").mock(
+    ruta_insights = respx.get(f"{BASE}/PAGE/insights").mock(
         return_value=httpx.Response(401, json={"error": {"message": "token"}})
     )
-    ruta_exchange = respx.get("https://graph.facebook.com/v21.0/oauth/access_token").mock(
+    ruta_exchange = respx.get(f"{BASE}/oauth/access_token").mock(
         return_value=httpx.Response(200, json={"access_token": "nuevo"})
     )
     ad = AdaptadorMeta(

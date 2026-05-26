@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime
 import httpx
 import respx
 
+from keni_metricas.fuentes.meta import BASE as META_BASE
 from keni_metricas.fuentes.meta import AdaptadorMeta
 from keni_metricas.fuentes.tiktok import AdaptadorTikTok
 from keni_metricas.fuentes.x import AdaptadorX
@@ -74,9 +75,10 @@ def test_meta_piezas_pagina_via_paging_next():
             },
         }
 
-    respx.get("https://graph.facebook.com/v21.0/PAGE/posts").mock(
+    siguiente = f"{META_BASE}/PAGE/posts?after=X"
+    respx.get(f"{META_BASE}/PAGE/posts").mock(
         side_effect=[
-            httpx.Response(200, json={"data": [post("p1", 1000, 50, "20")], "paging": {"next": "https://graph.facebook.com/v21.0/PAGE/posts?after=X"}}),
+            httpx.Response(200, json={"data": [post("p1", 1000, 50, "20")], "paging": {"next": siguiente}}),
             httpx.Response(200, json={"data": [post("p2", 2000, 40, "21")]}),
         ]
     )
