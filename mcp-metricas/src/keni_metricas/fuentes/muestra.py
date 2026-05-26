@@ -24,6 +24,9 @@ from __future__ import annotations
 import hashlib
 from datetime import date, timedelta
 
+from keni_shared import cuentas as _cuentas
+from keni_shared import marcas as _marcas
+
 from ..schema import (
     Cobertura,
     Cuenta,
@@ -95,14 +98,14 @@ _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
 }
 
 # `id_metricas` de las MARCAS editoriales del catalogo unico (sin las cuentas
-# hermanas de Claro Sports, que se promocionan aparte). Debe coincidir 1:1 con
-# `{m.id_metricas for m in keni_consola.marcas.MARCAS}` (#82/#102). El resto de
-# claves de `_MARCAS` (claro_sports_tv, csport_golf) son cuentas hermanas, no marcas.
-IDS_METRICAS_MARCAS: frozenset[str] = frozenset(
-    {"unotv", "claro_sports", "nacion_gamer", "piso_15", "fundacion"}
-)
-# Cuentas hermanas de Claro Sports (canal de TV + sub-vertical de golf): NO son marcas.
-IDS_CUENTAS_HERMANAS: frozenset[str] = frozenset({"claro_sports_tv", "csport_golf"})
+# hermanas de Claro Sports, que se promocionan aparte). Ya NO se redefine aqui: se
+# DERIVA de `keni_shared.marcas` (H3/E1, fuente unica). Antes era un espejo con
+# guard (#82/#102); ahora es la misma fuente, asi que `_MARCAS` no puede divergir
+# del catalogo sin que el test estatico lo cace.
+IDS_METRICAS_MARCAS: frozenset[str] = frozenset(m.id_metricas for m in _marcas.MARCAS)
+# Cuentas hermanas de Claro Sports (canal de TV + sub-vertical de golf): NO son
+# marcas. Derivadas tambien de la fuente unica `keni_shared.cuentas`.
+IDS_CUENTAS_HERMANAS: frozenset[str] = frozenset(_cuentas.CUENTAS_DEPORTES_HERMANAS)
 
 # peso de cada plataforma en el reparto de visualizaciones
 _PESO = {

@@ -25,16 +25,22 @@ def test_ids_marca_muestra_anclados_al_catalogo_canonico(fuente: FuenteMuestra):
     """Las cuentas de la muestra son exactamente las 5 marcas editoriales (en su
     `id_metricas` guion_bajo) MAS las 2 cuentas hermanas de Claro Sports.
 
-    Ancla los ids al catalogo UNICO de marca (keni_consola.marcas, #82/#102): si
-    alguien renombra o anade una marca aqui sin tocar el catalogo, este test lo caza.
-    keni_consola no es dependencia de keni_metricas (la direccion es consola->metricas),
-    asi que el espejo canonico se declara en `IDS_METRICAS_MARCAS` y la consola, que SI
-    importa keni_metricas, verifica la igualdad cruzada en `consola/tests/test_marcas.py`.
+    Ancla los ids al catalogo UNICO de marca, que vive AHORA en `keni_shared.marcas`
+    (H3/E1): `IDS_METRICAS_MARCAS` se DERIVA de ese catalogo (no es ya un espejo),
+    asi que si alguien renombra o anade una marca en el `_MARCAS` de la muestra sin
+    actualizar la fuente, este test lo caza.
     """
+    from keni_shared import cuentas as ks_cuentas
+    from keni_shared import marcas as ks_marcas
+
     from keni_metricas.fuentes.muestra import (
         IDS_CUENTAS_HERMANAS,
         IDS_METRICAS_MARCAS,
     )
+
+    # La fuente es UNICA: los conjuntos de la muestra se derivan de keni_shared.
+    assert IDS_METRICAS_MARCAS == {m.id_metricas for m in ks_marcas.MARCAS}
+    assert IDS_CUENTAS_HERMANAS == set(ks_cuentas.CUENTAS_DEPORTES_HERMANAS)
 
     ids_cuentas = {c.id for c in fuente.cuentas()}
     # Toda cuenta de la muestra es marca editorial o cuenta hermana; nada mas.

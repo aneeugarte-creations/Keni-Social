@@ -1,13 +1,15 @@
-"""Tests del catalogo UNICO de marcas (#82). Solo datos puros; sin I/O ni red.
+"""Tests del catalogo UNICO de marcas (#82 · H3/E1). Solo datos puros; sin I/O ni red.
 
 Cubre: un solo catalogo (no dos) con 5 marcas (el golf NO es marca, es un
 sub-vertical editorial de Claro Sports), traduccion id canonico <-> id_metricas,
 y los helpers de la frontera con metricas.
 
-Ademas (#102): guards de NO-DIVERGENCIA que anclan a este catalogo unico las otras
-fuentes de identidad de marca del monorepo (la fuente `muestra` de keni_metricas y
-los artefactos de skills-copy), que keni_consola NO puede importar pero SI puede
-leer porque el job de CI hace checkout de todo el monorepo e instala keni_metricas.
+FUENTE UNICA (H3/E1): el catalogo canonico vive AHORA en `keni_shared.marcas`;
+`keni_consola.marcas` lo REEXPORTA y `keni_metricas` tambien lo importa. Antes
+keni_consola era la fuente y los demas la espejaban con guards; ahora todos
+importan de la misma fuente. Estos tests verifican via el reexport de la consola
+(que es como lo usa su codigo) y, ademas, que la fuente es UNICA de verdad: un
+cambio en keni_shared se ve en consola y en keni_metricas sin tocar espejos.
 """
 
 from __future__ import annotations
@@ -106,6 +108,29 @@ def test_caidas_a_id_cuando_desconocido():
     assert marcas.id_metricas_de("zzz") == "zzz"
     assert marcas.marca_de("zzz") is None
     assert marcas.marca_por_id_metricas("zzz") is None
+
+
+# --------------------------------------------------------------------------- #
+# H3/E1: la fuente es UNICA e IMPORTABLE (keni_shared), no espejada.            #
+# --------------------------------------------------------------------------- #
+
+
+def test_la_fuente_es_keni_shared_no_un_espejo():
+    # `keni_consola.marcas` REEXPORTA `keni_shared.marcas`: es el MISMO objeto, no
+    # una copia. Un cambio en keni_shared se refleja en la consola sin tocar nada.
+    from keni_shared import marcas as ks_marcas
+
+    assert marcas.MARCAS is ks_marcas.MARCAS
+    assert marcas.id_metricas_de is ks_marcas.id_metricas_de
+
+
+def test_metricas_deriva_de_la_misma_fuente_unica():
+    # keni_metricas (muestra) DERIVA sus ids del catalogo de keni_shared, no de un
+    # espejo: el conjunto coincide exactamente con el catalogo canonico.
+    from keni_metricas.fuentes.muestra import IDS_METRICAS_MARCAS
+    from keni_shared import marcas as ks_marcas
+
+    assert IDS_METRICAS_MARCAS == {m.id_metricas for m in ks_marcas.MARCAS}
 
 
 # --------------------------------------------------------------------------- #

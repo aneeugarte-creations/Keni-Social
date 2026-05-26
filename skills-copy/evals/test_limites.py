@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Guard ESTATICO de los LIMITES de caracteres por plataforma (#112, CI-safe).
+"""Guard ESTATICO de los LIMITES de caracteres por plataforma (#112, H3/E1, CI-safe).
 
-Mismo estilo que el guard de marcas (`test_static.test_fichas_marca_*`): ancla
-una tabla canonica y verifica que `contexto-editorial/plataformas.md` la respeta,
-para que la prosa de la skill NO diverja del backend.
+Mismo estilo que el guard de marcas (`test_static.test_fichas_marca_*`): ancla el
+catalogo canonico de limites y verifica que `contexto-editorial/plataformas.md` lo
+respeta, para que la prosa de la skill NO diverja del backend.
 
-skills-copy NO puede importar `keni_consola` (es otro paquete), asi que el guard
-se ancla a esta tabla CANONICA, espejo de
-`consola/src/keni_consola/limites_plataforma.LIMITES`. Si el backend cambia un
-tope, este guard avisa (debe actualizarse plataformas.md y esta tabla a la vez),
-igual que el guard de marcas (`MARCAS_ID_METRICAS`).
+FUENTE UNICA (H3/E1): la tabla canonica se DERIVA de
+`keni_shared.limites_plataforma.LIMITES`, la capa mas baja del monorepo, que la
+consola y keni-metricas tambien importan. Antes este guard mantenia un ESPEJO
+hardcodeado de los limites de la consola (#112); ahora se ancla a la fuente real.
+El runner de CI de skills instala keni-shared en el mismo venv (Python puro, sin
+dependencias). Si no estuviera (corrida aislada de skills-copy), se cae a un
+respaldo para que el guard estatico siga corriendo; el caso normal usa la fuente.
 
 No usa el modelo ni la red: solo lee el repo. Corre en un runner limpio con solo
 Python + pytest (o como script: `python3 test_limites.py`).
@@ -29,16 +31,26 @@ EVALS_DIR = Path(__file__).resolve().parent
 SKILLS_COPY_DIR = EVALS_DIR.parent
 PLATAFORMAS_MD = SKILLS_COPY_DIR / "contexto-editorial" / "plataformas.md"
 
-# Tabla CANONICA de limites de caracteres por red, ESPEJO de
-# `consola/src/keni_consola/limites_plataforma.LIMITES`. `None` = sin tope tecnico
-# practico (Facebook / descripcion de YouTube). El orden es el fijo de la consola.
-LIMITES_CANONICOS: dict[str, int | None] = {
-    "x": 280,
-    "instagram": 2200,
-    "facebook": None,
-    "tiktok": 4000,
-    "youtube": None,
-}
+
+# Tabla CANONICA de limites de caracteres por red. FUENTE UNICA: se deriva de
+# `keni_shared.limites_plataforma.LIMITES`. `None` = sin tope tecnico practico
+# (Facebook / descripcion de YouTube). El orden es el fijo del catalogo.
+def _cargar_limites_canonicos() -> dict[str, int | None]:
+    try:
+        from keni_shared.limites_plataforma import LIMITES
+    except ImportError:
+        # Respaldo: corrida aislada de skills-copy sin keni-shared instalado.
+        return {
+            "x": 280,
+            "instagram": 2200,
+            "facebook": None,
+            "tiktok": 4000,
+            "youtube": None,
+        }
+    return dict(LIMITES)
+
+
+LIMITES_CANONICOS: dict[str, int | None] = _cargar_limites_canonicos()
 
 # Limite del TITULO de YouTube (campo distinto del cuerpo; lo documenta la skill).
 LIMITE_YT_TITULO = 100

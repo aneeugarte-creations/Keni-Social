@@ -27,6 +27,8 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from keni_shared import cuentas as _cuentas
+
 from .formato import miles
 from .fuentes.base import CuentaNoEncontrada
 from .schema import Pieza, Plataforma
@@ -35,8 +37,10 @@ if TYPE_CHECKING:
     from .fuentes.base import FuenteMetricas
 
 # La marca del reporte y sus cuentas hermanas (las que se promocionan aparte).
-CUENTA_PRINCIPAL = "claro_sports"
-CUENTAS_HERMANAS: tuple[str, ...] = ("claro_sports_tv", "csport_golf")
+# Se DERIVAN de `keni_shared.cuentas` (H3/E1, fuente unica): antes vivian aqui y
+# la consola las reexportaba via `servicio`; ahora ambos las leen del mismo sitio.
+CUENTA_PRINCIPAL = _cuentas.CUENTA_DEPORTES_PRINCIPAL
+CUENTAS_HERMANAS: tuple[str, ...] = _cuentas.CUENTAS_DEPORTES_HERMANAS
 # Las tres plataformas que el reporte destaca, en el orden en que salen.
 PLATAFORMAS_DESTACADAS: tuple[Plataforma, ...] = (
     Plataforma.instagram,

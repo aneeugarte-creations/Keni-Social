@@ -45,6 +45,14 @@ def test_redes_consume_la_fuente_unica_de_limites():
         assert r.limite == limites_plataforma.limite_de(r.id)
 
 
+def test_la_fuente_de_limites_es_keni_shared_no_un_espejo():
+    # H3/E1: `keni_consola.limites_plataforma` REEXPORTA `keni_shared`. Es la MISMA
+    # tabla: un cambio en keni_shared se ve en la consola sin tocar nada.
+    from keni_shared import limites_plataforma as ks_limites
+
+    assert limites_plataforma.LIMITES is ks_limites.LIMITES
+
+
 def test_tiktok_reconciliado_a_4000():
     # La divergencia de #112 (meta.ts=2200 vs plataformas.md "2200/4000") se
     # reconcilia al maximo tecnico actual: 4000.

@@ -33,29 +33,55 @@ CONTEXTO_DIR = SKILLS_COPY_DIR / "contexto-editorial"
 CONTAR_PY = SKILLS_DIR / "copy-desde-nota" / "contar.py"
 MARCAS_JSON_BREAKING = SKILLS_DIR / "breaking-express" / "marcas.json"
 
-# Limites duros (de contexto-editorial/plataformas.md).
-LIMITE_X = 280
-LIMITE_TUIT = 280
+# Limite DURO del cuerpo de X/tuit. FUENTE UNICA (H3/E1): se deriva de
+# `keni_shared.limites_plataforma.LIMITES["x"]`; respaldo a 280 en corrida aislada
+# sin keni-shared instalado (mismo patron que el catalogo de marca).
+def _limite_x() -> int:
+    try:
+        from keni_shared.limites_plataforma import LIMITES as _LIM
+    except ImportError:
+        return 280
+    return _LIM.get("x") or 280
+
+
+LIMITE_X = _limite_x()
+LIMITE_TUIT = LIMITE_X
+# Tope EDITORIAL del titulo de YouTube para el copy (recomendacion de la skill, NO
+# el limite tecnico de la plataforma; ese lo cubre el guard de test_limites.py).
 LIMITE_YT_TITULO = 70
 
 # Claves de frontmatter obligatorias en cada SKILL.md.
 FRONTMATTER_OBLIGATORIO = ("name", "description", "allowed-tools")
 
-# Catalogo UNICO de marca, espejo del canonico de la consola
-# (consola/src/keni_consola/marcas.py, #82/#102). Son los `id` canonicos
-# (slug-guion); cada uno tiene su ficha editorial `marcas/<id>.md`. El golf NO es
-# marca: es un sub-vertical editorial de Claro Sports. `id_metricas` (guion_bajo)
-# es la forma que espera keni_metricas, identica a la del catalogo canonico; las
-# fichas y marcas.json la declaran y aqui la verificamos contra esta tabla.
-# Skills-copy no puede importar keni_consola (es otro paquete), asi que el guard
-# se ancla a esta tabla y la consola comprueba la igualdad cruzada real.
-MARCAS_ID_METRICAS: dict[str, str] = {
-    "unotv": "unotv",
-    "claro-sports": "claro_sports",
-    "nacion-gamer": "nacion_gamer",
-    "piso-15": "piso_15",
-    "fundacion": "fundacion",
-}
+# Catalogo UNICO de marca (id canonico slug-guion -> id_metricas guion_bajo). Cada
+# `id` tiene su ficha editorial `marcas/<id>.md`. El golf NO es marca: es un
+# sub-vertical editorial de Claro Sports.
+#
+# FUENTE UNICA (H3/E1): se DERIVA de `keni_shared.marcas`, la capa mas baja del
+# monorepo, que keni-metricas y la consola tambien importan. Antes este guard
+# mantenia un ESPEJO hardcodeado (#82/#102); ahora se ancla a la fuente real, asi
+# que las fichas y `marcas.json` se verifican contra el catalogo canonico de verdad.
+#
+# El runner de CI de skills instala keni-shared en el mismo venv (es Python puro,
+# sin dependencias). Si por alguna razon no estuviera disponible (corrida aislada
+# de skills-copy sin instalar nada), se cae a un espejo de respaldo para que el
+# guard estatico siga corriendo; el caso normal usa la fuente unica.
+def _cargar_marcas_id_metricas() -> dict[str, str]:
+    try:
+        from keni_shared import marcas as _ks_marcas
+    except ImportError:
+        # Respaldo: corrida aislada de skills-copy sin keni-shared instalado.
+        return {
+            "unotv": "unotv",
+            "claro-sports": "claro_sports",
+            "nacion-gamer": "nacion_gamer",
+            "piso-15": "piso_15",
+            "fundacion": "fundacion",
+        }
+    return {m.id: m.id_metricas for m in _ks_marcas.MARCAS}
+
+
+MARCAS_ID_METRICAS: dict[str, str] = _cargar_marcas_id_metricas()
 
 # Ficheros que deben existir en contexto-editorial (la skill los carga). Son los
 # `id` canonicos del catalogo unico, ordenados alfabeticamente.
