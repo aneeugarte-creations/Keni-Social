@@ -20,6 +20,32 @@ def test_cuentas_listadas(fuente: FuenteMuestra):
     assert len(cuentas) == 7
 
 
+# --- #102: identidad UNICA de marca (guard de no-divergencia) ---------------
+def test_ids_marca_muestra_anclados_al_catalogo_canonico(fuente: FuenteMuestra):
+    """Las cuentas de la muestra son exactamente las 5 marcas editoriales (en su
+    `id_metricas` guion_bajo) MAS las 2 cuentas hermanas de Claro Sports.
+
+    Ancla los ids al catalogo UNICO de marca (keni_consola.marcas, #82/#102): si
+    alguien renombra o anade una marca aqui sin tocar el catalogo, este test lo caza.
+    keni_consola no es dependencia de keni_metricas (la direccion es consola->metricas),
+    asi que el espejo canonico se declara en `IDS_METRICAS_MARCAS` y la consola, que SI
+    importa keni_metricas, verifica la igualdad cruzada en `consola/tests/test_marcas.py`.
+    """
+    from keni_metricas.fuentes.muestra import (
+        IDS_CUENTAS_HERMANAS,
+        IDS_METRICAS_MARCAS,
+    )
+
+    ids_cuentas = {c.id for c in fuente.cuentas()}
+    # Toda cuenta de la muestra es marca editorial o cuenta hermana; nada mas.
+    assert ids_cuentas == IDS_METRICAS_MARCAS | IDS_CUENTAS_HERMANAS
+    # Marcas y cuentas hermanas son conjuntos disjuntos (el golf NO es marca).
+    assert not (IDS_METRICAS_MARCAS & IDS_CUENTAS_HERMANAS)
+    # Esquema guion_bajo en TODAS las claves (nunca el id canonico slug-guion).
+    assert all("-" not in cid for cid in ids_cuentas)
+    assert "claro-sports" not in ids_cuentas
+
+
 def test_resumen_determinista(fuente: FuenteMuestra):
     a = fuente.resumen("claro_sports", "semana")
     b = fuente.resumen("claro_sports", "semana")

@@ -110,6 +110,21 @@ def test_contexto_editorial_completo():
 
 
 # ---------------------------------------------------------------------------
+# 2b) Identidad UNICA de marca (#102): los artefactos de skills declaran y
+#     respetan el catalogo canonico (consola/src/keni_consola/marcas.py).
+# ---------------------------------------------------------------------------
+
+def test_fichas_marca_declaran_identidad_canonica():
+    errores = checks.errores_identidad_fichas_marca()
+    assert not errores, "identidad de marca divergente en las fichas:\n" + "\n".join(errores)
+
+
+def test_marcas_json_breaking_usa_ids_canonicos():
+    errores = checks.errores_identidad_marcas_json()
+    assert not errores, "marcas.json divergente del catalogo canonico:\n" + "\n".join(errores)
+
+
+# ---------------------------------------------------------------------------
 # 3) Unit test de contar.py
 # ---------------------------------------------------------------------------
 

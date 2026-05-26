@@ -1,3 +1,11 @@
+---
+# Identidad UNICA de marca (catalogo canonico: consola/src/keni_consola/marcas.py, #82/#102).
+# `id` = id canonico (slug-guion, = nombre de este fichero). `id_metricas` = forma guion_bajo de keni_metricas.
+id: piso-15
+etiqueta: Piso 15
+id_metricas: piso_15
+---
+
 # Voz de marca — Piso 15
 
 > **Punto de partida editorial; el equipo de la marca lo afina.** Línea institucional basada en el sector/rol de la marca. No reemplaza la voz personal (`voces/`) ni duplica `tropicalizacion.md` / `reglas-legales.md`: amplía la guía de marca.

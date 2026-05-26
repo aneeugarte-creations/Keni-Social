@@ -31,6 +31,7 @@ SKILLS_COPY_DIR = EVALS_DIR.parent
 SKILLS_DIR = SKILLS_COPY_DIR / ".claude" / "skills"
 CONTEXTO_DIR = SKILLS_COPY_DIR / "contexto-editorial"
 CONTAR_PY = SKILLS_DIR / "copy-desde-nota" / "contar.py"
+MARCAS_JSON_BREAKING = SKILLS_DIR / "breaking-express" / "marcas.json"
 
 # Limites duros (de contexto-editorial/plataformas.md).
 LIMITE_X = 280
@@ -40,14 +41,25 @@ LIMITE_YT_TITULO = 70
 # Claves de frontmatter obligatorias en cada SKILL.md.
 FRONTMATTER_OBLIGATORIO = ("name", "description", "allowed-tools")
 
-# Ficheros que deben existir en contexto-editorial (la skill los carga).
-MARCAS_ESPERADAS = (
-    "claro-sports",
-    "fundacion",
-    "nacion-gamer",
-    "piso-15",
-    "unotv",
-)
+# Catalogo UNICO de marca, espejo del canonico de la consola
+# (consola/src/keni_consola/marcas.py, #82/#102). Son los `id` canonicos
+# (slug-guion); cada uno tiene su ficha editorial `marcas/<id>.md`. El golf NO es
+# marca: es un sub-vertical editorial de Claro Sports. `id_metricas` (guion_bajo)
+# es la forma que espera keni_metricas, identica a la del catalogo canonico; las
+# fichas y marcas.json la declaran y aqui la verificamos contra esta tabla.
+# Skills-copy no puede importar keni_consola (es otro paquete), asi que el guard
+# se ancla a esta tabla y la consola comprueba la igualdad cruzada real.
+MARCAS_ID_METRICAS: dict[str, str] = {
+    "unotv": "unotv",
+    "claro-sports": "claro_sports",
+    "nacion-gamer": "nacion_gamer",
+    "piso-15": "piso_15",
+    "fundacion": "fundacion",
+}
+
+# Ficheros que deben existir en contexto-editorial (la skill los carga). Son los
+# `id` canonicos del catalogo unico, ordenados alfabeticamente.
+MARCAS_ESPERADAS = tuple(sorted(MARCAS_ID_METRICAS))
 CONTEXTO_RAIZ_ESPERADO = (
     "plataformas.md",
     "tropicalizacion.md",
@@ -125,6 +137,65 @@ def ficheros_contexto_faltantes() -> list[str]:
     if not (CONTEXTO_DIR / "voces" / "_plantilla.md").is_file():
         faltan.append("voces/_plantilla.md")
     return faltan
+
+
+def errores_identidad_fichas_marca() -> list[str]:
+    """#102: cada ficha `marcas/<id>.md` declara su identidad UNICA y coincide.
+
+    Comprueba que el frontmatter de cada ficha tiene `id` (= nombre del fichero),
+    `etiqueta` y un `id_metricas` que cuadra con la tabla canonica. [] = ok.
+    """
+    errores: list[str] = []
+    for marca in MARCAS_ESPERADAS:
+        ruta = CONTEXTO_DIR / "marcas" / f"{marca}.md"
+        if not ruta.is_file():
+            continue  # lo reporta ficheros_contexto_faltantes()
+        fm = parsear_frontmatter(ruta.read_text(encoding="utf-8"))
+        if fm is None:
+            errores.append(f"{marca}.md: sin frontmatter de identidad")
+            continue
+        if fm.get("id") != marca:
+            errores.append(f"{marca}.md: id='{fm.get('id')}' != nombre de fichero")
+        if not fm.get("etiqueta"):
+            errores.append(f"{marca}.md: falta 'etiqueta'")
+        esperado = MARCAS_ID_METRICAS[marca]
+        if fm.get("id_metricas") != esperado:
+            errores.append(
+                f"{marca}.md: id_metricas='{fm.get('id_metricas')}' != '{esperado}' (catalogo canonico)"
+            )
+    return errores
+
+
+def errores_identidad_marcas_json() -> list[str]:
+    """#102: las claves de breaking-express/marcas.json son ids canonicos y su
+    `id_metricas` coincide con la tabla canonica. [] = ok.
+
+    Requiere que `marcas.json` exista (lo crea breaking-express). Solo valida la
+    seccion `marcas` (los tokens de diseño). Las claves son un SUBCONJUNTO de las
+    marcas canonicas: breaking solo tiene tokens para algunas, no inventa ids.
+    """
+    import json
+
+    errores: list[str] = []
+    if not MARCAS_JSON_BREAKING.is_file():
+        return ["breaking-express/marcas.json no existe"]
+    try:
+        datos = json.loads(MARCAS_JSON_BREAKING.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        return [f"marcas.json no parsea: {e}"]
+    bloque = datos.get("marcas", {})
+    if not isinstance(bloque, dict) or not bloque:
+        return ["marcas.json sin seccion 'marcas'"]
+    for clave, tokens in bloque.items():
+        if clave not in MARCAS_ID_METRICAS:
+            errores.append(f"marcas.json: clave '{clave}' no es una marca canonica")
+            continue
+        esperado = MARCAS_ID_METRICAS[clave]
+        if tokens.get("id_metricas") != esperado:
+            errores.append(
+                f"marcas.json[{clave}]: id_metricas='{tokens.get('id_metricas')}' != '{esperado}'"
+            )
+    return errores
 
 
 # ---------------------------------------------------------------------------

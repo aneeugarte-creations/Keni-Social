@@ -36,6 +36,15 @@ from ..schema import (
 )
 from .base import CuentaNoEncontrada
 
+# Claves de marca EDITORIAL: son el `id_metricas` (guion_bajo) del catalogo UNICO
+# de marca que define `consola/src/keni_consola/marcas.py` (#82/#102). Una sola
+# identidad de marca, dos formas: `id` canonico (slug-guion) para el contenido y
+# `id_metricas` (guion_bajo) en la frontera con metricas; aqui usamos esta ultima.
+# Las 5 marcas editoriales son: unotv, claro_sports, nacion_gamer, piso_15, fundacion.
+# `claro_sports_tv` y `csport_golf` NO son marcas editoriales: son cuentas hermanas
+# de Claro Sports que el equipo promociona en su reporte (el golf es un sub-vertical,
+# no una marca). El guard `tests/test_muestra.py` ancla estos ids al catalogo canonico.
+#
 # marca -> (nombre, visualizaciones/mes, plataformas, tema)
 _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
     "claro_sports": (
@@ -84,6 +93,16 @@ _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
         "deportes",
     ),
 }
+
+# `id_metricas` de las MARCAS editoriales del catalogo unico (sin las cuentas
+# hermanas de Claro Sports, que se promocionan aparte). Debe coincidir 1:1 con
+# `{m.id_metricas for m in keni_consola.marcas.MARCAS}` (#82/#102). El resto de
+# claves de `_MARCAS` (claro_sports_tv, csport_golf) son cuentas hermanas, no marcas.
+IDS_METRICAS_MARCAS: frozenset[str] = frozenset(
+    {"unotv", "claro_sports", "nacion_gamer", "piso_15", "fundacion"}
+)
+# Cuentas hermanas de Claro Sports (canal de TV + sub-vertical de golf): NO son marcas.
+IDS_CUENTAS_HERMANAS: frozenset[str] = frozenset({"claro_sports_tv", "csport_golf"})
 
 # peso de cada plataforma en el reparto de visualizaciones
 _PESO = {

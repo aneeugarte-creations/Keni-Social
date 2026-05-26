@@ -1,5 +1,6 @@
 {
   "_nota": "Tokens de diseño para el ensamblado de breaking. Los valores de marca vienen del sistema de diseño de 07-innovacion (diseno-redes-amx) y están marcados [VERIFICAR] hasta confirmarlos contra el manual oficial de AMX. Sustituye 'logo' por la ruta real del PNG del logo cuando el cliente lo aporte. Para usar los artes de la casa precargados, pon en 'marca_agua' y 'overlay_breaking' la ruta del PNG transparente correspondiente: se superponen a tamaño completo y, cuando existen, el compositor NO dibuja su propia pleca/logo.",
+  "_identidad": "Las CLAVES de 'marcas' son el id CANONICO de marca (slug-guion), la MISMA identidad unica que define `consola/src/keni_consola/marcas.py` (catalogo unico, #82/#102). Solo aparecen aqui las marcas con sistema de diseño de breaking (unotv, claro-sports); las demas del catalogo (nacion-gamer, piso-15, fundacion) no tienen tokens propios todavia. El campo 'id_metricas' (guion_bajo) es la forma que espera keni_metricas; debe coincidir con `marcas.py`. NO inventes ids nuevos: usa los del catalogo canonico.",
   "formatos": {
     "vertical": { "w": 1080, "h": 1920, "safe_top": 220, "safe_bottom": 420, "_uso": "Reels / TikTok / Shorts 9:16" },
     "feed": { "w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96, "_uso": "Post IG / Facebook 4:5" },
@@ -8,6 +9,7 @@
   "marcas": {
     "unotv": {
       "nombre": "UnoTV",
+      "id_metricas": "unotv",
       "rojo": "#E30613",
       "tinta": "#111315",
       "blanco": "#FFFFFF",
@@ -23,6 +25,7 @@
     },
     "claro-sports": {
       "nombre": "Claro Sports",
+      "id_metricas": "claro_sports",
       "rojo": "#CF2E2E",
       "tinta": "#0A0A0A",
       "blanco": "#FFFFFF",
