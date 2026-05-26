@@ -107,6 +107,9 @@ import type {
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
+  CuerpoFlagAutodesarrollo,
+  CuerpoImplementarSugerencia,
+  EstadoAutodesarrollo,
   CuerpoActualizarComercial,
   CuerpoCrearComercial,
   FiltrosComercial,
@@ -574,6 +577,16 @@ export const api = {
     }),
   eliminarSugerencia: (id: string) =>
     peticion<RespuestaMensaje>(`/sugerencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Auto-desarrollo del buzón (#109): PELIGROSO, default OFF ---
+  // El lazo implementa Y mergea sugerencias solo (con sandbox + gates). Estado, flag
+  // (activar exige confirmar el riesgo) y disparo de la implementación en background.
+  autodesarrollo: (signal?: AbortSignal) =>
+    peticion<EstadoAutodesarrollo>("/autodesarrollo", { signal }),
+  flagAutodesarrollo: (cuerpo: CuerpoFlagAutodesarrollo) =>
+    peticion<EstadoAutodesarrollo>("/autodesarrollo/flag", { metodo: "POST", json: cuerpo }),
+  implementarSugerencia: (cuerpo: CuerpoImplementarSugerencia) =>
+    peticion<RespuestaMensaje>("/autodesarrollo/implementar", { metodo: "POST", json: cuerpo }),
 
   // --- Comercial (seguimiento de publicaciones comerciales) ---
   comercialOpciones: (signal?: AbortSignal) =>
