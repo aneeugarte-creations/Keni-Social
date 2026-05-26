@@ -1,7 +1,8 @@
 """API Reporte de deportes: el deck semanal de Claro Sports (PPTX).
 
-Reutiliza `keni_metricas.reporte_deck` (no reimplementa nada): top-3 por plataforma
-por visualizaciones + interacciones, promocion de las cuentas hermanas y la agenda
+Consume la fachada estable `keni_metricas.servicio` (SOLO LECTURA); ya no importa
+internals (`config`/`reporte_deck`/`schema`/`fuentes`): top-3 por plataforma por
+visualizaciones + interacciones, promocion de las cuentas hermanas y la agenda
 editorial de la proxima semana. La agenda es curaduria manual: la pagina la manda
 en el cuerpo del POST (por eso preview/export son POST, no GET).
 
@@ -15,20 +16,15 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from keni_metricas.config import cargar_config, construir_fuente
-from keni_metricas.fuentes.base import CuentaNoEncontrada
-from keni_metricas.reporte_deck import (
-    CUENTA_PRINCIPAL,
-    CUENTAS_HERMANAS,
-    construir_reporte_deportes,
-    render_pptx,
-)
-from keni_metricas.schema import RANGOS_DIAS
+from keni_metricas import servicio
+from keni_metricas.servicio import CuentaNoEncontrada
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-RANGOS_VALIDOS = tuple(RANGOS_DIAS.keys())
+CUENTA_PRINCIPAL = servicio.CUENTA_DEPORTES_PRINCIPAL
+CUENTAS_HERMANAS = servicio.CUENTAS_DEPORTES_HERMANAS
+RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
 ETIQUETAS_RANGO = {"semana": "Semana", "mes": "Mes", "7d": "7 días", "30d": "30 días"}
 
 # Media type oficial de un .pptx (Open XML).
@@ -84,16 +80,11 @@ async def _reporte_desde_request(request: Request) -> dict:
     rango = _validar_rango(body.get("rango"))
     top = _top(body.get("top", 3))
     agenda = _agenda_desde_body(body)
-    fuente = construir_fuente(cargar_config())
-    return construir_reporte_deportes(fuente, rango=rango, n_por_plataforma=top, agenda=agenda)
+    return servicio.construir_reporte_deportes(rango=rango, top=top, agenda=agenda)
 
 
 async def opciones(request: Request) -> Response:
-    fuente = construir_fuente(cargar_config())
-    try:
-        nombres = {c.id: c.nombre for c in fuente.cuentas()}
-    except Exception:  # noqa: BLE001
-        nombres = {}
+    nombres = dict(servicio.cuentas_disponibles())
     rangos = [{"id": r, "etiqueta": ETIQUETAS_RANGO.get(r, r)} for r in RANGOS_VALIDOS]
     return JSONResponse(
         {
@@ -117,9 +108,9 @@ async def preview(request: Request) -> Response:
 async def export_pptx(request: Request) -> Response:
     try:
         rep = await _reporte_desde_request(request)
-        # render_pptx escribe a disco; usamos un temporal y devolvemos los bytes.
+        # render escribe a disco; usamos un temporal y devolvemos los bytes.
         with tempfile.TemporaryDirectory() as tmp:
-            ruta = render_pptx(rep, Path(tmp) / "reporte-deportes.pptx")
+            ruta = servicio.render_reporte_deportes_pptx(rep, Path(tmp) / "reporte-deportes.pptx")
             datos = ruta.read_bytes()
     except (ValueError, CuentaNoEncontrada) as e:
         return JSONResponse({"error": str(e)}, status_code=400)

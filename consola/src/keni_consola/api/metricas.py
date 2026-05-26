@@ -1,8 +1,8 @@
 """API Metricas: opciones, reporte consolidado, comparativa de rangos y export.
 
-Reutiliza las funciones de metricas ya existentes (`config`, `reporte`); no
-reimplementa nada. El SPA dibuja el dashboard a partir de `/api/metricas/reporte`
-(ya no hay endpoint HTML de dashboard).
+Consume la fachada estable `keni_metricas.servicio` (SOLO LECTURA); ya no importa
+internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
+`/api/metricas/reporte` (ya no hay endpoint HTML de dashboard).
 
   - `/api/metricas/opciones`: marcas + rangos para poblar los selectores.
   - `/api/metricas/reporte`: total consolidado + por cuenta (nombres resueltos).
@@ -12,19 +12,15 @@ reimplementa nada. El SPA dibuja el dashboard a partir de `/api/metricas/reporte
 
 from __future__ import annotations
 
-import json
-
-from keni_metricas.config import cargar_config, construir_fuente
-from keni_metricas.reporte import construir_reporte, render_csv, render_markdown
-from keni_metricas.schema import RANGOS_DIAS
+from keni_metricas import servicio
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
 from .. import marcas
 
-# Rangos validos (misma fuente de verdad que el schema).
-RANGOS_VALIDOS = tuple(RANGOS_DIAS.keys())
+# Rangos validos: contrato de la fachada (no se importa el schema directamente).
+RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
 
 # Etiquetas legibles de cada rango.
 ETIQUETAS_RANGO = {"semana": "Semana", "mes": "Mes", "7d": "7 días", "30d": "30 días"}
@@ -41,16 +37,6 @@ def _nombre_marca_id(cuenta_id: str, nombres: dict[str, str]) -> str:
     if etiqueta != cuenta_id:
         return etiqueta
     return nombres.get(cuenta_id) or cuenta_id
-
-
-def _fuente_para(marca: str | None):
-    """Fuente activa, opcionalmente acotada a UNA marca."""
-    from keni_metricas.config import FuenteScoped
-
-    fuente = construir_fuente(cargar_config())
-    if marca:
-        return FuenteScoped(fuente, [marca])
-    return fuente
 
 
 def _validar_rango(rango: str) -> str:
@@ -144,6 +130,10 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
         "rango": rango,
         "etiqueta_rango": ETIQUETAS_RANGO.get(rango, rango),
         "marca": marca or "",
+        # Fuente de los datos: "muestra" (ficticios) o "real". La UI pinta un badge
+        # de advertencia con esto para que no se confundan datos de muestra con
+        # reales (riesgo operativo del piloto AMX). Cae a "muestra" por prudencia.
+        "fuente": rep.get("fuente") or "muestra",
         "total": {
             "visualizaciones": t.get("visualizaciones", 0),
             "alcance": t.get("alcance", 0),
@@ -171,8 +161,7 @@ async def reporte(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        fuente = _fuente_para(marca)
-        rep = construir_reporte(fuente, rango)
+        rep = servicio.construir_reporte(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -185,9 +174,8 @@ async def comparar(request: Request) -> Response:
     rango_b = _validar_rango(request.query_params.get("rango_b", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        fuente = _fuente_para(marca)
-        rep_a = construir_reporte(fuente, rango_a)
-        rep_b = construir_reporte(fuente, rango_b)
+        rep_a = servicio.construir_reporte(rango_a, marca)
+        rep_b = servicio.construir_reporte(rango_b, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -219,8 +207,7 @@ async def export_csv(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        fuente = _fuente_para(marca)
-        texto = render_csv(construir_reporte(fuente, rango))
+        texto = servicio.reporte_csv(rango, marca)
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001
@@ -232,8 +219,7 @@ async def export_md(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        fuente = _fuente_para(marca)
-        texto = render_markdown(construir_reporte(fuente, rango))
+        texto = servicio.reporte_markdown(rango, marca)
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001
@@ -245,8 +231,7 @@ async def export_json(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        fuente = _fuente_para(marca)
-        texto = json.dumps(construir_reporte(fuente, rango), ensure_ascii=False, indent=2)
+        texto = servicio.reporte_json(rango, marca)
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001

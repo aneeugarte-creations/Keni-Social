@@ -1,78 +1,25 @@
 """API Configuracion: leer y cambiar la fuente de datos y el alcance (marcas).
 
-Reutiliza la logica de `keni_metricas.config` (lectura) y `keni_metricas.asistente`
-(merge no destructivo + escritura atomica 0600). NO edita esos modulos: solo
-orquesta + serializa a JSON.
+Consume la fachada estable `keni_metricas.servicio`: lee el estado del config
+(fuente, alcance, marcas elegibles, presencia de credenciales) y escribe SOLO
+`fuente` + `marcas` (la fachada hace el merge no destructivo + escritura atomica).
+Ya no importa internals (`config`/`asistente`).
 
 Las credenciales NUNCA se editan ni se muestran por la API: solo se reporta su
-PRESENCIA/AUSENCIA por bloque (meta/youtube/x/tiktok).
+PRESENCIA/AUSENCIA por bloque (meta/youtube/x/tiktok). La ESCRITURA de tokens vive
+en `api/conexiones.py`, no aqui.
 """
 
 from __future__ import annotations
 
-import dataclasses
-from pathlib import Path
-
-from keni_metricas import asistente
-from keni_metricas.config import (
-    FUENTES_VALIDAS,
-    ConfigInvalida,
-    cargar_config,
-    construir_fuente,
-    ruta_config,
-)
+from keni_metricas import servicio
+from keni_metricas.servicio import FUENTES_DISPONIBLES, ConfigInvalida
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, preferencias
 from .._http_json import leer_json
-
-# Bloques de credenciales que el sistema reconoce (mismo mapa que el asistente),
-# en orden estable. Aqui solo informamos presencia/ausencia, nunca el valor.
-_BLOQUES_CREDENCIALES: tuple[str, ...] = ("meta", "youtube", "x", "tiktok")
-
-
-def _marcas_disponibles(cfg) -> list[tuple[str, str]]:  # noqa: ANN001 -- Config del paquete
-    """Marcas elegibles para el alcance: las declaradas en el config + las de la
-    fuente activa. Devuelve pares (id, nombre) sin duplicados, orden estable.
-    """
-    pares: list[tuple[str, str]] = []
-    vistos: set[str] = set()
-
-    for c in cfg.cuentas:
-        if c.id not in vistos:
-            vistos.add(c.id)
-            pares.append((c.id, c.nombre))
-
-    # Sin el alcance actual (marcas=[]) listamos TODAS las marcas de la fuente, asi
-    # el usuario puede ampliar su alcance aunque ya lo tenga acotado.
-    try:
-        cfg_sin_alcance = dataclasses.replace(cfg, marcas=[])
-        fuente = construir_fuente(cfg_sin_alcance)
-        for c in fuente.cuentas():
-            if c.id not in vistos:
-                vistos.add(c.id)
-                pares.append((c.id, c.nombre))
-    except Exception:  # noqa: BLE001 -- sin fuente valida seguimos con lo del config
-        pass
-
-    return pares
-
-
-def _presencia_credenciales(cfg) -> dict[str, bool]:  # noqa: ANN001
-    """Por cada bloque conocido: True si trae un token real (no vacio ni placeholder).
-
-    Nunca devuelve el valor; solo presencia/ausencia.
-    """
-    creds = cfg.credenciales if isinstance(cfg.credenciales, dict) else {}
-    salida: dict[str, bool] = {}
-    for bloque in _BLOQUES_CREDENCIALES:
-        valores = creds.get(bloque) if isinstance(creds.get(bloque), dict) else {}
-        campo = asistente.CAMPO_TOKEN.get(bloque)
-        token = valores.get(campo) if campo else None
-        salida[bloque] = bool(token) and token != asistente.PLACEHOLDER_TOKEN
-    return salida
 
 
 def _etiqueta_humana(marca_id: str, nombre: str) -> str:
@@ -87,18 +34,6 @@ def _etiqueta_humana(marca_id: str, nombre: str) -> str:
     return nombre or marca_id
 
 
-def _guardar_fuente_y_marcas(ruta: Path, fuente: str, marcas_ids: list[str]) -> None:
-    """Escribe SOLO `fuente` y `marcas` preservando el resto del config (merge atomico)."""
-    existente = asistente.leer_config_existente(ruta)
-    nuevo: dict = {"fuente": fuente}
-    if marcas_ids:
-        nuevo["marcas"] = list(marcas_ids)
-    fusionado = asistente.fusionar_config(existente, nuevo)
-    if not marcas_ids:
-        fusionado.pop("marcas", None)
-    asistente.escribir_config_atomico(ruta, fusionado)
-
-
 # --------------------------------------------------------------------------- #
 # Endpoints                                                                    #
 # --------------------------------------------------------------------------- #
@@ -106,23 +41,22 @@ def _guardar_fuente_y_marcas(ruta: Path, fuente: str, marcas_ids: list[str]) -> 
 
 async def obtener_config(request: Request) -> Response:
     try:
-        cfg = cargar_config()
+        estado = servicio.instantanea_config()
     except ConfigInvalida as e:
         return JSONResponse(
             {"error": f"No se pudo leer tu configuración: {e}"}, status_code=400
         )
 
-    disponibles = _marcas_disponibles(cfg)
     return JSONResponse(
         {
-            "fuente": cfg.fuente,
-            "fuentes_validas": sorted(FUENTES_VALIDAS),
-            "marcas": list(cfg.marcas),
+            "fuente": estado["fuente"],
+            "fuentes_validas": list(FUENTES_DISPONIBLES),
+            "marcas": estado["marcas"],
             "marcas_disponibles": [
                 {"id": mid, "nombre": _etiqueta_humana(mid, nombre)}
-                for mid, nombre in disponibles
+                for mid, nombre in estado["marcas_disponibles"]
             ],
-            "credenciales_presentes": _presencia_credenciales(cfg),
+            "credenciales_presentes": estado["credenciales_presentes"],
         }
     )
 
@@ -131,8 +65,8 @@ async def guardar_config(request: Request) -> Response:
     datos = await leer_json(request)
 
     fuente = datos.get("fuente")
-    if not isinstance(fuente, str) or fuente not in FUENTES_VALIDAS:
-        validas = ", ".join(sorted(FUENTES_VALIDAS))
+    if not isinstance(fuente, str) or fuente not in FUENTES_DISPONIBLES:
+        validas = ", ".join(FUENTES_DISPONIBLES)
         return JSONResponse(
             {"error": f"Fuente inválida. Usa una de: {validas}."}, status_code=400
         )
@@ -144,14 +78,14 @@ async def guardar_config(request: Request) -> Response:
         )
 
     try:
-        cfg = cargar_config()
+        estado = servicio.instantanea_config()
     except ConfigInvalida as e:
         return JSONResponse(
             {"error": f"No se pudo leer tu configuración: {e}"}, status_code=400
         )
 
-    ids_validos = [mid for mid, _ in _marcas_disponibles(cfg)]
-    alcance_ids = asistente.normalizar_alcance(marcas_crudas, ids_validos=ids_validos)
+    ids_validos = [mid for mid, _ in estado["marcas_disponibles"]]
+    alcance_ids = servicio.normalizar_alcance(marcas_crudas, ids_validos)
     desconocidas = [m for m in marcas_crudas if m.strip() and m.strip() not in ids_validos]
     if desconocidas:
         etiquetas = ", ".join(marcas.etiqueta_por_id_metricas(m) for m in desconocidas)
@@ -160,7 +94,7 @@ async def guardar_config(request: Request) -> Response:
         )
 
     try:
-        _guardar_fuente_y_marcas(ruta_config(), fuente, alcance_ids)
+        servicio.guardar_fuente_y_alcance(fuente, alcance_ids)
     except OSError as e:
         return JSONResponse(
             {"error": f"No se pudo guardar la configuración: {e}"}, status_code=400
