@@ -774,6 +774,62 @@ export interface CompararMetricas {
   por_marca: ComparativaPorMarca[];
 }
 
+// --- Reporte de deportes (deck semanal de Claro Sports) ---
+
+export interface OpcionesReporteDeportes {
+  rangos: RangoMetrica[];
+  cuenta: { id: string; nombre: string };
+  hermanas: { id: string; nombre: string }[];
+}
+
+/** Un evento de la agenda editorial (curaduría manual). */
+export interface EventoAgenda {
+  nombre: string;
+  plan: string;
+}
+
+export interface AgendaReporte {
+  principales: EventoAgenda[];
+  propios: EventoAgenda[];
+}
+
+export interface CuerpoReporteDeportes {
+  rango: string;
+  top?: number;
+  agenda?: AgendaReporte;
+}
+
+export interface PiezaReporte {
+  plataforma: string;
+  titulo: string;
+  visualizaciones: number;
+  interacciones: number;
+  url: string | null;
+  publicado: string;
+}
+
+export interface BloquePlataforma {
+  plataforma: string;
+  piezas: PiezaReporte[];
+}
+
+export interface PromocionHermana {
+  cuenta: string;
+  nombre: string;
+  piezas: PiezaReporte[];
+}
+
+export interface ReporteDeportes {
+  tipo: string;
+  rango: string;
+  generado: string;
+  fuente: string;
+  cuenta: { id: string; nombre: string };
+  mejores_por_plataforma: BloquePlataforma[];
+  promocion_hermanas: PromocionHermana[];
+  agenda: { principales: EventoAgenda[]; propios: EventoAgenda[]; nota?: string };
+}
+
 // --- Publicaciones ---
 
 /** Estados del ciclo de vida de una publicación, en orden de avance. */

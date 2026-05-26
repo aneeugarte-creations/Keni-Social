@@ -44,6 +44,7 @@ import type {
   CuerpoGuardarConfig,
   CuerpoGuardarEsfuerzo,
   CuerpoMarcarItemUsado,
+  CuerpoReporteDeportes,
   CuerpoSugerirHashtags,
   CuerpoVerificar,
   CuerpoVistaPromptSkill,
@@ -52,6 +53,8 @@ import type {
   FiltrosPublicaciones,
   OpcionesMetricas,
   OpcionesPublicaciones,
+  OpcionesReporteDeportes,
+  ReporteDeportes,
   ReporteMetricas,
   RespuestaAgente,
   RespuestaAgentes,
@@ -202,6 +205,37 @@ function query(params: Record<string, string | undefined>): string {
 /** Dispara la descarga de un archivo abriendo su URL (CSV/MD/JSON). */
 function descargar(ruta: string): void {
   window.open(`${BASE_API}${ruta}`, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * Descarga un archivo binario devuelto por un POST (envia JSON en el cuerpo).
+ * Necesario cuando los parametros no caben en la URL (p. ej. el deck lleva la
+ * agenda). Lanza `ApiError` con el mensaje del backend si el status no es OK.
+ */
+async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_API}${ruta}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(json),
+    });
+  } catch {
+    throw new ApiError("No se pudo contactar con la consola. ¿Está corriendo el servidor local?", 0);
+  }
+  if (!res.ok) throw new ApiError(await mensajeDeError(res), res.status);
+
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") ?? "";
+  const nombre = /filename="?([^"]+)"?/.exec(cd)?.[1] ?? nombrePorDefecto;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 export const api = {
@@ -477,6 +511,14 @@ export const api = {
   ) => peticion<CompararMetricas>(`/metricas/comparar${query(params)}`, { signal }),
   exportarMetricas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/export.${formato}${query(params)}`),
+
+  // --- Reporte de deportes (deck semanal de Claro Sports) ---
+  reporteDeportesOpciones: (signal?: AbortSignal) =>
+    peticion<OpcionesReporteDeportes>("/reporte-deportes/opciones", { signal }),
+  reporteDeportesPreview: (cuerpo: CuerpoReporteDeportes, signal?: AbortSignal) =>
+    peticion<ReporteDeportes>("/reporte-deportes/preview", { metodo: "POST", json: cuerpo, signal }),
+  descargarReporteDeportes: (cuerpo: CuerpoReporteDeportes) =>
+    descargarPost("/reporte-deportes/export.pptx", cuerpo, `reporte-deportes-${cuerpo.rango}.pptx`),
 
   // --- Conexiones (imagen IA + tokens de redes) ---
   // Los secretos son write-only: solo se envían (PUT); del servidor llega

@@ -15,7 +15,9 @@ def test_cuentas_listadas(fuente: FuenteMuestra):
     cuentas = fuente.cuentas()
     ids = {c.id for c in cuentas}
     assert {"claro_sports", "unotv", "nacion_gamer", "fundacion"} <= ids
-    assert len(cuentas) == 5
+    # cuentas hermanas de Claro Sports que el equipo promociona aparte
+    assert {"claro_sports_tv", "csport_golf"} <= ids
+    assert len(cuentas) == 7
 
 
 def test_resumen_determinista(fuente: FuenteMuestra):

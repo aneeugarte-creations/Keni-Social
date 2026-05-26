@@ -17,7 +17,7 @@ from keni_metricas.reporte import (
 
 def test_reporte_recorre_todas_las_cuentas():
     rep = construir_reporte(FuenteMuestra(), "mes", top=3)
-    assert rep["total"]["cuentas"] == 5
+    assert rep["total"]["cuentas"] == 7
     assert rep["total"]["visualizaciones"] > 0
     assert 1.0 <= rep["total"]["engagement_pct"] <= 12.0
     # total = suma de las marcas

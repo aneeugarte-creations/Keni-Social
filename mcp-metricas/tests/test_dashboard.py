@@ -150,15 +150,18 @@ def test_dashboard_engagement_ranking_ordenado_desc():
     nombres = {c.id: c.nombre for c in fuente.cuentas()}
     html = construir_html(rep, picos, nombres, "mes")
 
-    # posicion de cada nombre en el ranking, por el orden en que aparece su <li>
+    # engagement de cada marca por su nombre legible
     ranking_html = html.split('class="ranking"', 1)[1].split("</ul>", 1)[0]
-    engs = sorted(
-        ((f["resumen"]["engagement_pct"], nombres[f["resumen"]["cuenta"]]) for f in rep["cuentas"]),
-        reverse=True,
-    )
-    posiciones = [ranking_html.find(f">{nombre}<") for _, nombre in engs]
-    assert all(p != -1 for p in posiciones)
-    assert posiciones == sorted(posiciones)  # aparecen en orden de engagement desc
+    eng_por_nombre = {
+        nombres[f["resumen"]["cuenta"]]: f["resumen"]["engagement_pct"] for f in rep["cuentas"]
+    }
+    assert all(ranking_html.find(f">{nombre}<") != -1 for nombre in eng_por_nombre)
+    # ordena los nombres por la posicion en que aparecen en el ranking HTML y
+    # verifica que su engagement no crece (el dashboard ordena por engagement
+    # desc; ante empates respeta el orden de entrada, sin desempate por nombre).
+    por_posicion = sorted(eng_por_nombre, key=lambda nom: ranking_html.find(f">{nom}<"))
+    engs_en_orden = [eng_por_nombre[nom] for nom in por_posicion]
+    assert engs_en_orden == sorted(engs_en_orden, reverse=True)
 
 
 def test_dashboard_sin_historico_omite_tendencia():
