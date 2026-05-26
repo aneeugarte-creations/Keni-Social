@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del outpainting generativo expandir.py.
+"""Tests del outpainting generativo expandir.py (OpenRouter).
 
 Pillow real, SIN red: el proveedor (`_PROVEEDOR_EXPANDIR`) se parchea para no llamar
 a ninguna API. No corre en el CI estático de skills (que no instala Pillow); se
@@ -25,7 +25,7 @@ import expandir  # noqa: E402
 
 
 def _args(foto, **kw):
-    base = dict(foto=foto, formato="feed", proveedor="auto",
+    base = dict(foto=foto, formato="feed", modelo=None, strength=0.4,
                 lado="auto", marca=None, prompt=None, salida=None)
     base.update(kw)
     return SimpleNamespace(**base)
@@ -37,11 +37,11 @@ def _guardar(img, ruta):
 
 
 def _mock_relleno(color):
-    """Devuelve un proveedor falso que rellena TODO el lienzo con `color` (PNG)."""
+    """Devuelve un proveedor OpenRouter falso que rellena TODO el lienzo con `color`."""
     llamado = {}
 
-    def _fake(canvas, mask, prompt, *, proveedor, clave, size):
-        llamado.update(proveedor=proveedor, clave=clave, size=size, prompt=prompt)
+    def _fake(canvas, prompt, *, clave, modelo, strength):
+        llamado.update(clave=clave, modelo=modelo, strength=strength, prompt=prompt)
         w, h = Image.open(io.BytesIO(canvas)).size
         buf = io.BytesIO()
         Image.new("RGB", (w, h), color).save(buf, "PNG")
@@ -56,8 +56,7 @@ def _mock_relleno(color):
 # --------------------------------------------------------------------------- #
 
 def test_sin_key_cae_a_direccion_de_arte(tmp_path, monkeypatch):
-    for var in ("OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
-        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     # Si por accidente llamara al proveedor, que truene el test:
     monkeypatch.setattr(expandir, "_PROVEEDOR_EXPANDIR",
                         lambda *a, **k: pytest.fail("no debió llamar al proveedor sin key"))
@@ -71,8 +70,8 @@ def test_sin_key_cae_a_direccion_de_arte(tmp_path, monkeypatch):
 # --------------------------------------------------------------------------- #
 
 def test_expandir_recompone_sujeto_y_rellena_banda(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    fake = _mock_relleno((200, 0, 0))  # IA "rellena" de rojo
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake = _mock_relleno((200, 0, 0))  # la IA "rellena" de rojo
     monkeypatch.setattr(expandir, "_PROVEEDOR_EXPANDIR", fake)
 
     # Sujeto verde, cuadrado -> feed añade alto (banda arriba+abajo).
@@ -80,8 +79,8 @@ def test_expandir_recompone_sujeto_y_rellena_banda(tmp_path, monkeypatch):
     info = expandir.expandir(_args(foto, salida=str(tmp_path / "out.png")))
 
     assert info["aplicado"] == "expandir-ia"
-    assert info["proveedor"] == "openai"
-    assert fake.llamado["proveedor"] == "openai" and fake.llamado["clave"] == "sk-test"
+    assert fake.llamado["clave"] == "sk-or-test"
+    assert info["modelo"] == expandir._MODELO_DEFECTO  # default cuando no se fuerza
     assert info["salidas"][0]["tamano"] == "1080x1350"
 
     with Image.open(info["salidas"][0]["salida"]) as out:
@@ -93,19 +92,19 @@ def test_expandir_recompone_sujeto_y_rellena_banda(tmp_path, monkeypatch):
     assert arriba[0] > arriba[1] and arriba[0] > arriba[2]   # rojo domina -> banda de IA
 
 
-def test_proveedor_auto_elige_gemini_si_solo_hay_clave_google(tmp_path, monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setenv("GEMINI_API_KEY", "g-test")
-    fake = _mock_relleno((200, 0, 0))
+def test_modelo_configurable(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    fake = _mock_relleno((10, 10, 10))
     monkeypatch.setattr(expandir, "_PROVEEDOR_EXPANDIR", fake)
     foto = _guardar(Image.new("RGB", (1000, 1000), (0, 200, 0)), tmp_path / "f.png")
-    info = expandir.expandir(_args(foto))
-    assert info["proveedor"] == "gemini"
-    assert fake.llamado["proveedor"] == "gemini"
+    info = expandir.expandir(_args(foto, modelo="bytedance/seedream-4.5"))
+    assert info["modelo"] == "bytedance/seedream-4.5"
+    assert fake.llamado["modelo"] == "bytedance/seedream-4.5"
+    assert fake.llamado["strength"] == 0.4
 
 
 def test_ya_en_proporcion_solo_redimensiona(tmp_path, monkeypatch):
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setattr(expandir, "_PROVEEDOR_EXPANDIR",
                         lambda *a, **k: pytest.fail("no debió llamar al proveedor"))
     foto = _guardar(Image.new("RGB", (800, 1000), (0, 200, 0)), tmp_path / "f.png")

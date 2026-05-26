@@ -293,9 +293,11 @@ def _entorno_skill() -> dict[str, str]:
     clave = secretos.obtener_clave_imagen()
     if not clave:
         return entorno
-    var = {"openai": "OPENAI_API_KEY", "gemini": "GEMINI_API_KEY"}.get(
-        secretos.obtener_proveedor_imagen()
-    )
+    var = {
+        "openrouter": "OPENROUTER_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "gemini": "GEMINI_API_KEY",
+    }.get(secretos.obtener_proveedor_imagen())
     if var and not entorno.get(var):
         entorno[var] = clave
     return entorno

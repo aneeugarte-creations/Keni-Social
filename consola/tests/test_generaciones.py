@@ -90,6 +90,15 @@ def test_entorno_skill_mapea_proveedor_a_su_variable(entorno, monkeypatch):
     assert "OPENAI_API_KEY" not in env  # no inventa otras variables
 
 
+def test_entorno_skill_mapea_openrouter(entorno, monkeypatch):
+    from keni_consola import secretos
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    secretos.guardar_clave_imagen("openrouter", "sk-or-almacen")
+    env = generaciones._entorno_skill()
+    assert env["OPENROUTER_API_KEY"] == "sk-or-almacen"
+
+
 def test_entorno_skill_no_pisa_una_variable_ya_puesta(entorno, monkeypatch):
     from keni_consola import secretos
 
