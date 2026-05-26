@@ -45,11 +45,23 @@ def ruta_indice() -> Path:
 
 
 def _conectar() -> sqlite3.Connection:
-    """Abre la conexion al indice y crea el esquema on-demand (idempotente)."""
+    """Abre la conexion al indice y crea el esquema on-demand (idempotente).
+
+    Concurrencia: la consola lanza jobs en hilos de fondo que escriben contenido
+    (y por tanto el indice) mientras la UI lee. Para no caer en `database is
+    locked` se abre en WAL (lectores y un escritor conviven) con `busy_timeout`
+    (espera acotada ante contencion en vez de fallar al instante). El esquema se
+    asegura en cada conexion a proposito: el indice es REGENERABLE y puede
+    borrarse en caliente, asi que `CREATE TABLE IF NOT EXISTS` debe sobrevivir a
+    que el fichero desaparezca entre operaciones.
+    """
     ruta = ruta_indice()
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(ruta))
+    con = sqlite3.connect(str(ruta), timeout=5.0)
     con.row_factory = sqlite3.Row
+    con.execute("PRAGMA busy_timeout = 5000")
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA synchronous = NORMAL")
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS entradas (

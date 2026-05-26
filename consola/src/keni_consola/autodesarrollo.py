@@ -57,7 +57,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .io_atomico import escribir_atomico
+from .io_atomico import bloqueo_archivo, escribir_atomico
 
 # --------------------------------------------------------------------------- #
 # Estados de un intento de auto-desarrollo                                     #
@@ -353,12 +353,13 @@ def registrar_auditoria(entrada: dict[str, Any]) -> dict[str, Any]:
         **entrada,
     }
     ruta = ruta_auditoria()
-    previas = leer_auditoria()
-    lineas = [json.dumps(e, ensure_ascii=False) for e in previas]
-    lineas.append(json.dumps(completa, ensure_ascii=False))
-    escribir_atomico(
-        ruta, "\n".join(lineas) + "\n", prefijo=".auditoria-", sufijo=".jsonl.tmp"
-    )
+    with bloqueo_archivo(ruta):
+        previas = leer_auditoria()
+        lineas = [json.dumps(e, ensure_ascii=False) for e in previas]
+        lineas.append(json.dumps(completa, ensure_ascii=False))
+        escribir_atomico(
+            ruta, "\n".join(lineas) + "\n", prefijo=".auditoria-", sufijo=".jsonl.tmp"
+        )
     return completa
 
 

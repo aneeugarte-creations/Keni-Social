@@ -23,7 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .io_atomico import escribir_atomico
+from .io_atomico import bloqueo_archivo, escribir_atomico
 
 # Categorías y estados válidos (la UI los pinta con etiquetas legibles).
 CATEGORIAS: tuple[str, ...] = ("idea", "producto", "mejora", "bug")
@@ -156,9 +156,10 @@ def crear(
         "autor": (autor or "").strip()[:_MAX_AUTOR],
         "creada": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
     }
-    lista = listar()
-    lista.insert(0, sugerencia)
-    _escribir(lista)
+    with bloqueo_archivo(ruta_sugerencias()):
+        lista = listar()
+        lista.insert(0, sugerencia)
+        _escribir(lista)
     return sugerencia
 
 
@@ -166,20 +167,22 @@ def actualizar_estado(sugerencia_id: str, estado: str) -> dict[str, Any] | None:
     """Cambia el estado de una sugerencia. None si no existe; `ValueError` si estado inválido."""
     if estado not in ESTADOS:
         raise ValueError("estado")
-    lista = listar()
-    for s in lista:
-        if s["id"] == sugerencia_id:
-            s["estado"] = estado
-            _escribir(lista)
-            return s
+    with bloqueo_archivo(ruta_sugerencias()):
+        lista = listar()
+        for s in lista:
+            if s["id"] == sugerencia_id:
+                s["estado"] = estado
+                _escribir(lista)
+                return s
     return None
 
 
 def borrar(sugerencia_id: str) -> bool:
     """Borra una sugerencia por id. True si existía. NO vuelve a sembrar al vaciarse."""
-    lista = listar()
-    restantes = [s for s in lista if s["id"] != sugerencia_id]
-    if len(restantes) == len(lista):
-        return False
-    _escribir(restantes)
+    with bloqueo_archivo(ruta_sugerencias()):
+        lista = listar()
+        restantes = [s for s in lista if s["id"] != sugerencia_id]
+        if len(restantes) == len(lista):
+            return False
+        _escribir(restantes)
     return True

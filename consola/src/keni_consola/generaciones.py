@@ -46,7 +46,7 @@ import yaml
 
 from . import preferencias
 from .dominio import stream
-from .io_atomico import escribir_atomico
+from .io_atomico import bloqueo_archivo, escribir_atomico
 
 # Estados terminales e intermedio de un trabajo.
 ESTADO_EJECUTANDO = "ejecutando"
@@ -195,10 +195,11 @@ def crear(datos: dict[str, Any]) -> dict[str, Any]:
 def actualizar(gen_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
     """Mezcla `cambios` sobre el registro existente y lo reescribe (atomico)."""
     ruta_fichero = _ruta(gen_id)
-    actual = _leer_yaml(ruta_fichero) or {}
-    fusion = {**actual, **cambios}
-    pub = _publico(fusion, gen_id)
-    _escribir_yaml_atomico(ruta_fichero, _cuerpo(pub))
+    with bloqueo_archivo(ruta_fichero):
+        actual = _leer_yaml(ruta_fichero) or {}
+        fusion = {**actual, **cambios}
+        pub = _publico(fusion, gen_id)
+        _escribir_yaml_atomico(ruta_fichero, _cuerpo(pub))
     return pub
 
 

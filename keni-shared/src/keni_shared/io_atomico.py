@@ -26,7 +26,46 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+
+# Locks por-ruta (en proceso) para serializar read-modify-write. `escribir_atomico`
+# garantiza que el FICHERO nunca queda a medias, pero NO que dos hilos que
+# leen-modifican-escriben el mismo fichero no se pisen (last-write-wins -> entradas
+# perdidas). La consola es un solo proceso con hilos de fondo, asi que un lock en
+# memoria por ruta basta. Se cachean en un dict protegido por `_guard_locks`.
+_locks: dict[str, threading.RLock] = {}
+_guard_locks = threading.Lock()
+
+
+def _lock_para(ruta: str | os.PathLike[str]) -> threading.RLock:
+    clave = os.fspath(ruta)
+    with _guard_locks:
+        lk = _locks.get(clave)
+        if lk is None:
+            lk = threading.RLock()
+            _locks[clave] = lk
+        return lk
+
+
+@contextmanager
+def bloqueo_archivo(ruta: str | os.PathLike[str]) -> Iterator[None]:
+    """Serializa read-modify-write sobre `ruta` DENTRO del proceso.
+
+    Uso: envolver toda la secuencia leer -> modificar -> `escribir_atomico` para que
+    dos hilos concurrentes no pierdan la escritura del otro. RLock (re-entrante por
+    si la seccion critica re-entra). REGLA anti-deadlock: secciones CORTAS y NUNCA
+    anidar locks de rutas distintas. El llamante debe pasar SIEMPRE la misma ruta
+    canonica (p.ej. la que devuelve su `ruta_X()`).
+    """
+    lk = _lock_para(ruta)
+    lk.acquire()
+    try:
+        yield
+    finally:
+        lk.release()
 
 
 def escribir_atomico(

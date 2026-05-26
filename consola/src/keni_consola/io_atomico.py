@@ -11,6 +11,9 @@ No define NADA propio.
 
 from __future__ import annotations
 
-from keni_shared.io_atomico import escribir_atomico  # noqa: F401  (reexport)
+from keni_shared.io_atomico import (  # noqa: F401  (reexport)
+    bloqueo_archivo,
+    escribir_atomico,
+)
 
-__all__ = ["escribir_atomico"]
+__all__ = ["bloqueo_archivo", "escribir_atomico"]
