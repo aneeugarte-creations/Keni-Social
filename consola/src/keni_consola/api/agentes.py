@@ -42,9 +42,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agentes, lanzador, preferencias
+from .. import agentes, lanzador
 from .._http_json import leer_json
-from . import skills
+from ..dominio import runner, stream
 
 # Inyectable: el lanzador interactivo (como en `api.proyectos`). `crear_app(abrir=...)`
 # lo reasigna; los tests pasan un mock para NO lanzar nada real.
@@ -288,12 +288,9 @@ def _argv_stream(prompt: str) -> list[str]:
     `skills._arg_presupuesto` para `--max-budget-usd` (de `KENI_CLAUDE_MAX_USD`). Sin
     shell: el prompt viaja como argumento de la lista argv.
     """
-    return [
-        "claude", "-p", prompt,
-        "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-        *preferencias.arg_esfuerzo(),
-        *skills._arg_presupuesto(),
-    ]
+    # Fuente UNICA del argv en dominio.runner: asi los runs aplican SIEMPRE --max-turns
+    # (antes no lo ponian) y --max-budget-usd/--effort, sin depender de api.skills.
+    return runner.argv_claude(prompt)
 
 
 # Cada cuanto (s) persistimos el avance: con parciales llegan muchos eventos por segundo;
@@ -302,7 +299,7 @@ _THROTTLE_S = 0.4
 
 
 def _leer_stream(
-    marca_id: str, run_id: str, proc: subprocess.Popen, acumulador: skills.AcumuladorStream
+    marca_id: str, run_id: str, proc: subprocess.Popen, acumulador: stream.AcumuladorStream
 ) -> None:
     """Hilo lector: parsea el NDJSON de `proc.stdout` linea a linea y avanza el YAML.
 
@@ -332,7 +329,7 @@ def _leer_stream(
                     {
                         "estado": "ejecutando",
                         "salida": acumulador.texto,
-                        "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
+                        "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                     },
                 )
     except Exception:  # noqa: BLE001 -- el lector nunca debe propagar; el cierre fija el estado
@@ -340,7 +337,7 @@ def _leer_stream(
 
 
 def _finalizar_run(
-    marca_id: str, run_id: str, proc: subprocess.Popen, acumulador: skills.AcumuladorStream
+    marca_id: str, run_id: str, proc: subprocess.Popen, acumulador: stream.AcumuladorStream
 ) -> None:
     """Espera a que el Popen termine (con wall-timeout) y fija el estado TERMINAL del run.
 
@@ -349,19 +346,9 @@ def _finalizar_run(
     - rc != 0 sin `result` -> `estado="error"` generico.
     - exito -> `estado="completado"`, `salida` = texto del `result`, metricas finales.
     """
-    timed_out = False
-    try:
-        proc.wait(timeout=_TIMEOUT_RUN_DEF)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        proc.kill()
-        try:
-            proc.wait(timeout=10)
-        except Exception:  # noqa: BLE001 -- best-effort; ya marcamos error por timeout
-            pass
-    finally:
-        with _HANDLES_LOCK:
-            _HANDLES.pop(run_id, None)
+    # Espera con wall-timeout + kill (mecanica compartida en dominio.runner). El handle
+    # se suelta en el `finally` de `_ciclo` (lanzar_run_background), no aqui.
+    timed_out = runner.esperar(proc, _TIMEOUT_RUN_DEF)
 
     fecha_fin = agentes.ahora_iso()
     if timed_out:
@@ -371,7 +358,7 @@ def _finalizar_run(
                 "estado": "error",
                 "motivo": "timeout",
                 "salida": f"El asistente tardó demasiado (más de {_TIMEOUT_RUN_DEF} s) y se canceló.",
-                "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
+                "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                 "fecha_fin": fecha_fin,
             },
         )
@@ -390,7 +377,7 @@ def _finalizar_run(
             {
                 "estado": "completado",
                 "salida": acumulador.texto or "",
-                "metricas": skills.metricas_a_dict(acumulador.final),
+                "metricas": stream.metricas_a_dict(acumulador.final),
                 "fecha_fin": fecha_fin,
             },
         )
@@ -404,8 +391,9 @@ def _finalizar_run(
         marca_id, run_id,
         {
             "estado": "error",
-            "salida": detalle,
-            "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
+            # A4: conservar el texto ya acumulado si lo hay (no descartarlo en truncado).
+            "salida": acumulador.texto or detalle,
+            "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
             "fecha_fin": fecha_fin,
         },
     )
@@ -419,48 +407,54 @@ def lanzar_run_background(marca_id: str, run_id: str, prompt: str, *, cwd: Path)
     puede lanzar, degrada: marca el run en error (en espanol) sin romper. El hilo lee el
     NDJSON, persiste metricas parciales y, al cerrar, fija el estado terminal del run.
     """
-    if shutil.which("claude") is None:
-        agentes.actualizar_run(
-            marca_id, run_id,
-            {
-                "estado": "error",
-                "salida": (
-                    "No se encontró el asistente en este equipo. Instala Claude Code para "
-                    "ejecutar runs desde la consola."
-                ),
-                "fecha_fin": agentes.ahora_iso(),
-            },
-        )
-        return
-    try:
-        proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell; prompt como argumento
-            _argv_stream(prompt),
-            cwd=str(cwd),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        )
-    except (OSError, ValueError):
-        agentes.actualizar_run(
-            marca_id, run_id,
-            {
-                "estado": "error",
-                "salida": "No se pudo iniciar el run.",
-                "fecha_fin": agentes.ahora_iso(),
-            },
-        )
-        return
-
-    acumulador = skills.AcumuladorStream()
+    acumulador = stream.AcumuladorStream()
 
     def _ciclo() -> None:
-        _leer_stream(marca_id, run_id, proc, acumulador)
-        _finalizar_run(marca_id, run_id, proc, acumulador)
+        # Semaforo de concurrencia (#116) + spawn DENTRO del slot (igual que las
+        # generaciones); cada run tiene wall-timeout, asi que los slots se liberan.
+        try:
+            with runner.slot():
+                if shutil.which("claude") is None:
+                    agentes.actualizar_run(
+                        marca_id, run_id,
+                        {
+                            "estado": "error",
+                            "salida": (
+                                "No se encontró el asistente en este equipo. Instala "
+                                "Claude Code para ejecutar runs desde la consola."
+                            ),
+                            "fecha_fin": agentes.ahora_iso(),
+                        },
+                    )
+                    return
+                try:
+                    proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
+                        _argv_stream(prompt),
+                        cwd=str(cwd),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,
+                        text=True,
+                        bufsize=1,
+                    )
+                except (OSError, ValueError):
+                    agentes.actualizar_run(
+                        marca_id, run_id,
+                        {
+                            "estado": "error",
+                            "salida": "No se pudo iniciar el run.",
+                            "fecha_fin": agentes.ahora_iso(),
+                        },
+                    )
+                    return
+                with _HANDLES_LOCK:
+                    _HANDLES[run_id] = {"proc": proc}
+                _leer_stream(marca_id, run_id, proc, acumulador)
+                _finalizar_run(marca_id, run_id, proc, acumulador)
+        finally:
+            with _HANDLES_LOCK:
+                _HANDLES.pop(run_id, None)
 
     hilo = threading.Thread(target=_ciclo, name=f"run-{run_id}", daemon=True)
-    with _HANDLES_LOCK:
-        _HANDLES[run_id] = {"proc": proc, "hilo": hilo}
     hilo.start()
 
 

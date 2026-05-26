@@ -45,7 +45,7 @@ from typing import Any
 import yaml
 
 from . import preferencias
-from .dominio import stream
+from .dominio import runner, stream
 from .io_atomico import bloqueo_archivo, escribir_atomico
 
 # Estados terminales e intermedio de un trabajo.
@@ -389,6 +389,8 @@ def lanzar_job_claude(
                 detalle = "El asistente terminó con error."
             actualizar(gen_id, {
                 "estado": ESTADO_ERROR, "error": detalle,
+                # A4: conservar el texto ya acumulado (no descartarlo en stream truncado).
+                "salida": acumulador.texto,
                 "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                 "fecha_fin": fecha_fin,
             })
@@ -399,50 +401,54 @@ def lanzar_job_claude(
             if dir_temporal is not None:
                 shutil.rmtree(dir_temporal, ignore_errors=True)
 
-    if shutil.which("claude") is None:
-        if dir_temporal is not None:
-            shutil.rmtree(dir_temporal, ignore_errors=True)
-        actualizar(gen_id, {
-            "estado": ESTADO_ERROR,
-            "error": (
-                "No se encontró el asistente en este equipo. Instala Claude Code para "
-                "generar desde la consola."
-            ),
-            "fecha_fin": ahora_iso(),
-        })
-        return
-
-    try:
-        proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell; prompt como argumento
-            _argv_claude(prompt, [dir_temporal] if dir_temporal else None),
-            cwd=str(cwd),
-            env=_entorno_skill(),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            bufsize=1,
-        )
-    except (OSError, ValueError):
-        if dir_temporal is not None:
-            shutil.rmtree(dir_temporal, ignore_errors=True)
-        actualizar(gen_id, {
-            "estado": ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
-            "fecha_fin": ahora_iso(),
-        })
-        return
-
     def _ciclo() -> None:
-        _leer_stream(proc, acumulador, _avance)
-        timed_out = _esperar(proc, timeout)
-        # Fijamos el estado terminal ANTES de soltar el handle: asi un sondeo que ya no ve
-        # el handle nunca lee un estado "ejecutando" obsoleto.
-        _finalizar(timed_out, proc.returncode)
-        with _HANDLES_LOCK:
-            _HANDLES.pop(gen_id, None)
+        # Semaforo de concurrencia (#116): si no hay slot libre, ESPERA (job en cola).
+        # El spawn ocurre DENTRO del slot para que el tope limite procesos `claude`
+        # reales. Cada job tiene wall-timeout, asi que los slots siempre se liberan.
+        try:
+            with runner.slot():
+                if shutil.which("claude") is None:
+                    if dir_temporal is not None:
+                        shutil.rmtree(dir_temporal, ignore_errors=True)
+                    actualizar(gen_id, {
+                        "estado": ESTADO_ERROR,
+                        "error": (
+                            "No se encontró el asistente en este equipo. Instala Claude "
+                            "Code para generar desde la consola."
+                        ),
+                        "fecha_fin": ahora_iso(),
+                    })
+                    return
+                try:
+                    proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
+                        _argv_claude(prompt, [dir_temporal] if dir_temporal else None),
+                        cwd=str(cwd),
+                        env=_entorno_skill(),
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL,
+                        text=True,
+                        bufsize=1,
+                    )
+                except (OSError, ValueError):
+                    if dir_temporal is not None:
+                        shutil.rmtree(dir_temporal, ignore_errors=True)
+                    actualizar(gen_id, {
+                        "estado": ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
+                        "fecha_fin": ahora_iso(),
+                    })
+                    return
+                with _HANDLES_LOCK:
+                    _HANDLES[gen_id] = {"proc": proc}
+                _leer_stream(proc, acumulador, _avance)
+                timed_out = _esperar(proc, timeout)
+                # Estado terminal ANTES de soltar el handle: un sondeo que ya no ve el
+                # handle nunca lee un "ejecutando" obsoleto.
+                _finalizar(timed_out, proc.returncode)
+        finally:
+            with _HANDLES_LOCK:
+                _HANDLES.pop(gen_id, None)
 
     hilo = threading.Thread(target=_ciclo, name=f"gen-{gen_id}", daemon=True)
-    with _HANDLES_LOCK:
-        _HANDLES[gen_id] = {"proc": proc, "hilo": hilo}
     hilo.start()
 
 

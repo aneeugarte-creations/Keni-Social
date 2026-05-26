@@ -1,0 +1,92 @@
+"""dominio.runner: argv unico (con --max-turns) + semaforo de concurrencia (#116).
+
+Antes habia dos lanzadores `claude -p` duplicados; los runs de agente NO aplicaban
+`--max-turns` y nada topaba la concurrencia. Estos tests fijan ese contrato.
+
+ANTI-CUELGUE: todo acotado (Barrier/Event/Timer/join con timeout) + `pytest-timeout`
+de backstop. Nada puede esperar para siempre.
+"""
+
+from __future__ import annotations
+
+import threading
+import time
+
+import pytest
+
+from keni_consola.dominio import runner
+
+
+@pytest.mark.timeout(15)
+def test_argv_incluye_max_turns_y_presupuesto(monkeypatch):
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "5")
+    monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "1.5")
+    argv = runner.argv_claude("hola mundo")
+    assert argv[:3] == ["claude", "-p", "hola mundo"]
+    assert "--max-turns" in argv and argv[argv.index("--max-turns") + 1] == "5"
+    assert "--max-budget-usd" in argv
+    assert "--output-format" in argv and "stream-json" in argv and "--verbose" in argv
+
+
+@pytest.mark.timeout(15)
+def test_argv_add_dir_por_cada_permitido():
+    argv = runner.argv_claude("p", dirs_permitidos=[__import__("pathlib").Path("/tmp/a")])
+    assert "--add-dir" in argv and "/tmp/a" in argv
+
+
+@pytest.mark.timeout(20)
+def test_slot_nunca_supera_el_limite(monkeypatch):
+    monkeypatch.setenv("KENI_MAX_JOBS", "2")
+    activos = 0
+    pico = 0
+    lock = threading.Lock()
+    suelta = threading.Event()
+    arranque = threading.Barrier(3, timeout=5)
+
+    def trabajo():
+        nonlocal activos, pico
+        arranque.wait()
+        with runner.slot():
+            with lock:
+                activos += 1
+                pico = max(pico, activos)
+            assert suelta.wait(timeout=5)  # mantiene ocupado el slot
+            with lock:
+                activos -= 1
+
+    hilos = [threading.Thread(target=trabajo) for _ in range(3)]
+    for h in hilos:
+        h.start()
+    time.sleep(0.5)  # margen para que 2 entren y el 3o quede en cola
+    with lock:
+        assert pico <= 2, f"se superó el limite de concurrencia: {pico}"
+        assert activos == 2, f"esperaba 2 dentro y 1 en cola, hay {activos}"
+    suelta.set()  # liberamos: el 3o ya puede entrar
+    for h in hilos:
+        h.join(timeout=5)
+        assert not h.is_alive(), "hilo colgado"
+    assert pico == 2  # llegó a 2, nunca a 3
+
+
+@pytest.mark.timeout(15)
+def test_on_encolado_se_llama_si_hay_cola(monkeypatch):
+    monkeypatch.setenv("KENI_MAX_JOBS", "1")
+    encolado: list[int] = []
+    dentro = threading.Event()
+    suelta = threading.Event()
+
+    def ocupa():
+        with runner.slot():
+            dentro.set()
+            suelta.wait(timeout=5)
+
+    h = threading.Thread(target=ocupa)
+    h.start()
+    assert dentro.wait(timeout=5)  # el unico slot esta ocupado
+    # Liberamos el slot tras un instante, MIENTRAS el main espera en slot().
+    threading.Timer(0.3, suelta.set).start()
+    with runner.slot(on_encolado=lambda: encolado.append(1)):
+        pass  # entra cuando `ocupa` suelta
+    h.join(timeout=5)
+    assert not h.is_alive()
+    assert encolado == [1], "on_encolado debia llamarse una vez (habia cola)"

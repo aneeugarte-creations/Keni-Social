@@ -214,6 +214,20 @@ def test_finalizador_sin_result_y_rc_no_cero_es_error(entorno):
     assert run["estado"] == "error"
 
 
+def _esperar_hasta(cond, *, timeout=5.0, intervalo=0.02):
+    """Sondea `cond()` hasta True o `timeout`. Los lanzadores ahora spawnean ASYNC
+    (Popen dentro del slot de concurrencia, #116), asi que no se puede leer el estado
+    justo tras llamar. Acotado: nunca espera para siempre."""
+    import time
+
+    fin = time.monotonic() + timeout
+    while time.monotonic() < fin:
+        if cond():
+            return True
+        time.sleep(intervalo)
+    return bool(cond())
+
+
 def test_lanzar_background_degrada_si_no_hay_claude(entorno, monkeypatch):
     """Si `claude` no esta en el PATH, el run se marca en error (en espanol), sin Popen."""
     monkeypatch.setattr(api_agentes.shutil, "which", lambda _: None)
@@ -228,6 +242,8 @@ def test_lanzar_background_degrada_si_no_hay_claude(entorno, monkeypatch):
     # Llamamos a la implementacion REAL (otros tests pudieron inyectar una fake en el modulo).
     _LANZADOR_REAL(_MARCA, run_id, "p", cwd=carpeta)
 
+    # Spawn async (dentro del slot): sondeamos el estado terminal.
+    _esperar_hasta(lambda: (agentes.obtener_run(_MARCA, run_id) or {}).get("estado") == "error")
     run = agentes.obtener_run(_MARCA, run_id)
     assert run["estado"] == "error"
     assert "asistente" in run["salida"].lower()
@@ -258,11 +274,8 @@ def test_lanzar_background_usa_stream_json_y_verbose(entorno, monkeypatch):
 
     # Implementacion REAL (otros tests pudieron inyectar una fake en el atributo de modulo).
     _LANZADOR_REAL(_MARCA, run_id, "haz algo", cwd=carpeta)
-    # El hilo es daemon; esperamos a que termine para inspeccionar el estado final.
-    with api_agentes._HANDLES_LOCK:
-        handle = api_agentes._HANDLES.get(run_id)
-    if handle is not None:
-        handle["hilo"].join(timeout=5)
+    # Spawn async (dentro del slot): sondeamos a que el Popen se haya invocado.
+    _esperar_hasta(lambda: "argv" in capturado)
 
     argv = capturado["argv"]
     assert argv[:2] == ["claude", "-p"]
