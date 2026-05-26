@@ -138,17 +138,27 @@ Hecho en el repo, rama `feat/formatos-foto`:
   añadido solo por el lado uniforme (p. ej. solo arriba = cielo). Si ningún borde es uniforme
   o haría falta extender más de `--max-ext` (25%), **no inventa**: cae al recorte cubriente y
   marca `extension_segura: false` (ahí entraría, con aprobación editorial, la vía de IA).
-- `SKILL.md`: enrutado de ambas operaciones + flujo auto/vista previa.
+- `expandir.py` (motor generativo): **outpainting de fondo como EXCEPCIÓN a §3** cuando el
+  fondo NO es uniforme y la vía determinista no aplica. **Denegado por defecto**: solo actúa
+  con `--excepcion-aprobada`. Proveedor **intercambiable** (`auto|openai|gemini`, elige según
+  la clave del entorno): OpenAI por edición con máscara (gpt-image-1) o Gemini por
+  imagen+instrucción. **Garantía clave**: pase lo que pase el proveedor, al final se
+  RE-COMPONE la foto original sobre su región exacta → el sujeto queda intacto pixel a pixel;
+  la IA solo aporta la banda. Modo sin key = dirección de arte (no falla).
+- `SKILL.md`: enrutado de las tres vías (recortar / extender / expandir-IA) + flujo auto/vista
+  previa, con la IA marcada como excepción aprobada.
 - `keni.yaml`: dropdowns en la Consola — **Peso** (≤1/2/3 MB) y **Ajuste** (recortar /
-  extender fondo). Declarativos: no requieren tocar el frontend.
-- Tests Pillow en `estudio-imagen/test_editar.py` (locales; el CI estático de skills no
-  instala Pillow).
+  extender fondo / extender fondo con IA). Declarativos: no requieren tocar el frontend.
+- Tests Pillow en `estudio-imagen/test_editar.py` y `test_expandir.py` (locales, con el
+  proveedor de IA mockeado; el CI estático de skills no instala Pillow).
 
 Pendiente:
 1. Validar con el responsable editorial de AMX el criterio de "extender solo fondo uniforme"
-   frente a §3, y el umbral máximo de extensión por lado.
-2. Vía de IA (outpainting con máscara) como **excepción** cuando el fondo no es uniforme:
-   adaptador por API (Gemini/OpenAI) reutilizando el patrón de `generar.py`/`consola/media.py`.
+   frente a §3, el umbral máximo de extensión por lado, y **cuándo** se permite la excepción
+   de IA (`expandir.py`). La capacidad está, pero el permiso de uso es decisión editorial.
+2. Puente de credenciales Consola→skill: hoy `expandir.py` lee la clave del **entorno**; la
+   clave de imagen de la Consola vive en `secretos.toml`. Falta exponerla al subproceso de la
+   skill (o que la Consola llame al proveedor por su capa `media.py`).
 3. Detección del sujeto para automatizar al 100% el disparador "el recorte cortaría al sujeto"
    (hoy el heurístico es la uniformidad del borde + el ratio).
 
