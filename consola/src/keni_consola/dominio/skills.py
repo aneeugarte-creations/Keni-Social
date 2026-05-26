@@ -1,10 +1,12 @@
-"""Dominio SKILLS: construccion de prompts, cosecha de imagenes y post-procesado de copy.
+"""Dominio SKILLS: prompts, cwd de ejecucion, cosecha de imagenes, post-procesado y lanzamiento.
 
 Logica de negocio PURA (sin HTTP) extraida de `api/skills.py` (hallazgo H6): el handler
 HTTP se queda solo orquestando peticiones; aqui vive lo que NO depende del transporte:
 
   - Construccion del prompt de invocacion de una skill (`construir_prompt*`), incluida la
     instruccion aditiva de "sin emojis".
+  - Resolucion del DIRECTORIO desde el que corre `claude` para que descubra las skills
+    (`cwd_skills` / `cwd_ejecucion_skills`).
   - Cosecha de las imagenes que una skill de imagen menciona por ruta en su salida, para
     previsualizarlas en la consola (`cosechar_imagenes`).
   - Creacion de las publicaciones (borrador) por pieza generada
@@ -12,17 +14,25 @@ HTTP se queda solo orquestando peticiones; aqui vive lo que NO depende del trans
   - Los callbacks de post-procesado (`construir_procesar_copy` / `_documento`) que corren
     al COMPLETARSE una generacion: parsean la salida, registran el historial y crean los
     artefactos. Son fabricas de callbacks puras (no tocan HTTP).
+  - El LANZAMIENTO de un trabajo de IA en segundo plano (`lanzar_generacion_copy` /
+    `lanzar_generacion_skill` / `_lanzar_con_procesar`): crean el registro de generacion,
+    eligen el post-procesado y disparan `generaciones.lanzar_job_claude`. Devuelven el
+    registro; el handler HTTP solo lo envuelve en JSON.
 
 Depende del DOMINIO (`stream`, `publicaciones`) y de los modulos hoja de la consola
-(`redes`, `repos`, `skills_catalogo`, `media`): NO importa de `api/`. `generaciones` solo
-importa `dominio.stream`, asi que `dominio.skills -> generaciones` no crea ciclo.
+(`generaciones`, `marcas`, `redes`, `repos`, `skills_catalogo`, `media`): NO importa de
+`api/`. `generaciones` solo importa `dominio.stream`, asi que `dominio.skills ->
+generaciones` no crea ciclo. `skills_catalogo` importa estas funciones de cwd de forma
+PEREZOSA (dentro de `dir_skills`), asi que tampoco hay ciclo a nivel de modulo.
 """
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 
-from .. import generaciones, redes, repos, skills_catalogo
+from .. import generaciones, marcas, redes, repos, skills_catalogo
 from . import stream
 from .publicaciones import publicacion_a_dict
 
@@ -295,3 +305,153 @@ def construir_procesar_documento(
         return resultado
 
     return procesar
+
+
+# --------------------------------------------------------------------------- #
+# Directorio de ejecucion de `claude` (cwd) — comun a la web y al cron          #
+# --------------------------------------------------------------------------- #
+#
+# Vive aqui (dominio) y no en `api/skills.py` para que el CLI (`termometro_cli`) y el
+# catalogo (`skills_catalogo.dir_skills`) puedan resolver el cwd SIN importar de `api/`
+# (hallazgo N13). `skills_catalogo` lo importa de forma perezosa para no crear ciclo.
+
+
+def cwd_skills() -> Path:
+    """Directorio desde el que corremos `claude` para que las skills esten a mano.
+
+    Preferencia: env `KENI_SKILLS_CWD` -> repo keni-social conocido -> cwd actual.
+    """
+    env = os.environ.get("KENI_SKILLS_CWD")
+    if env:
+        candidato = Path(env)
+        if candidato.is_dir():
+            return candidato
+    repo = Path.home() / "projects" / "keni-social"
+    if repo.is_dir():
+        return repo
+    return Path.cwd()
+
+
+def cwd_ejecucion_skills() -> Path:
+    """Directorio desde el que EJECUTAMOS `claude` para correr una skill.
+
+    Debe ser el dir que CONTIENE `.claude/skills`, no la raiz del repo: solo asi `claude`
+    descubre las skills como TOOLS del proyecto y resuelven sus rutas relativas
+    (`contexto-editorial/...`, `.claude/skills/.../componer.py`). En keni-social las skills
+    viven en `skills-copy/.claude/skills`, por eso el cwd correcto es `skills-copy/` (no la
+    raiz, que es lo que devuelve `cwd_skills()`; ese se reserva para el catalogo, que le
+    anade `skills-copy/.claude/skills`). Se distingue de `cwd_skills()` a proposito.
+
+    Resuelve la base via el ATRIBUTO de modulo `cwd_skills` (no por referencia capturada)
+    para que un monkeypatch de `cwd_skills` en los tests siga surtiendo efecto.
+    """
+    base = cwd_skills()
+    if (base / "skills-copy" / ".claude" / "skills").is_dir():
+        return base / "skills-copy"
+    if (base / ".claude" / "skills").is_dir():
+        return base
+    return base
+
+
+# --------------------------------------------------------------------------- #
+# Lanzamiento de una generacion en segundo plano                               #
+# --------------------------------------------------------------------------- #
+
+# Mapa id->nombre de marca para enriquecer las etiquetas con nombres humanos. Las marcas
+# permitidas son TODAS las del catalogo unico (`keni_shared.marcas`).
+_MARCA_NOMBRE: dict[str, str] = dict(marcas.opciones())
+
+
+def nombre_skill(skill_id: str) -> str:
+    """Nombre humano de una skill desde el catalogo de archivos; cae al id si no existe."""
+    skill = skills_catalogo.obtener(skill_id)
+    return skill.nombre if skill is not None else skill_id
+
+
+def etiqueta_generacion(skill: str, marca: str) -> str:
+    """Etiqueta legible de una generacion (para el progreso y la lista de actividad)."""
+    return f"{nombre_skill(skill)} · {_MARCA_NOMBRE.get(marca, marca)}"
+
+
+def _lanzar_con_procesar(
+    *,
+    tipo: str,
+    skill: str,
+    marca: str,
+    prompt: str,
+    procesar: generaciones.Procesar,
+    dir_temporal: Path | None = None,
+) -> dict[str, object]:
+    """Crea el registro de generacion, lanza el trabajo de claude EN BACKGROUND y
+    devuelve el registro ACTUAL (puede haber avanzado ya si el lanzador es una fake)."""
+    import shutil
+
+    gen = generaciones.crear(
+        {"tipo": tipo, "marca": marca, "etiqueta": etiqueta_generacion(skill, marca)}
+    )
+    try:
+        generaciones.lanzar_job_claude(
+            gen["id"], prompt=prompt, cwd=cwd_ejecucion_skills(), procesar=procesar,
+            dir_temporal=dir_temporal,
+        )
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
+        if dir_temporal is not None:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+    return generaciones.obtener(gen["id"]) or gen
+
+
+def lanzar_generacion_copy(
+    *,
+    tipo: str,
+    skill: str,
+    marca: str,
+    prompt: str,
+    redes_ids: list[str],
+    titulo_dado: str,
+    texto_base: str,
+    dir_temporal: Path | None = None,
+) -> dict[str, object]:
+    """Lanza una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS."""
+    procesar = construir_procesar_copy(
+        skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base
+    )
+    return _lanzar_con_procesar(
+        tipo=tipo, skill=skill, marca=marca, prompt=prompt, procesar=procesar,
+        dir_temporal=dir_temporal,
+    )
+
+
+def lanzar_generacion_skill(
+    *,
+    skilldef: skills_catalogo.SkillDef,
+    marca: str,
+    prompt: str,
+    redes_ids: list[str],
+    titulo_base: str,
+    dir_temporal: Path | None = None,
+) -> dict[str, object]:
+    """Lanza una generacion en background eligiendo el post-procesado segun `salida`.
+
+    - `salida == "piezas"`: parsea piezas por red + auto-crea publicaciones (comportamiento
+      de copy). El titulo SIEMPRE se deriva (nunca lo da el cliente).
+    - `salida == "documento"`: limpia el documento, deriva verdicto/titulo, registra el
+      historial SIN piezas y NO crea publicaciones.
+    """
+    if skilldef.salida == "piezas":
+        procesar = construir_procesar_copy(
+            skilldef.id, marca, redes_ids=redes_ids, titulo_dado="", texto_base=titulo_base,
+            con_imagenes=skilldef.media,
+        )
+    else:
+        procesar = construir_procesar_documento(
+            skilldef.id, marca, titulo_base=titulo_base, con_imagenes=skilldef.media,
+        )
+    return _lanzar_con_procesar(
+        tipo="copy", skill=skilldef.id, marca=marca, prompt=prompt, procesar=procesar,
+        dir_temporal=dir_temporal,
+    )

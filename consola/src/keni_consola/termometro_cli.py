@@ -32,10 +32,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from . import preferencias, repos, skills_catalogo, termometro
+from . import preferencias, redes, repos, skills_catalogo, termometro
 from .api import rss
-from .api import skills as api_skills
 from .api.termometro import SKILL_ID, titulo_termometro
+from .dominio import skills as dom_skills
+from .dominio import stream
 
 # Wall-timeout (s) de la generacion programada. Mas holgado que la web porque corre sola.
 _TIMEOUT_DEF = 600
@@ -52,13 +53,13 @@ def _argv_claude_json(prompt: str) -> list[str]:
     """argv de `claude -p <prompt> --output-format json [--effort N] [--max-budget-usd N]`.
 
     A diferencia de la web (stream-json para el progreso en vivo), aqui basta `json`:
-    la salida se parsea de una vez con `skills.parsear_resultado_json`. Sin shell.
+    la salida se parsea de una vez con `stream.parsear_resultado_json`. Sin shell.
     """
     return [
         "claude", "-p", prompt,
         "--output-format", "json",
         *preferencias.arg_esfuerzo(),
-        *api_skills._arg_presupuesto(),
+        *stream.arg_presupuesto(),
     ]
 
 
@@ -156,20 +157,20 @@ def generar_termometro(
             "La skill del termómetro no está instalada. Actualiza el plugin de skills de Keni."
         )
     valores = {"noticias": noticias, "numero": numero, "regiones": regiones, "fecha": fecha}
-    redes_ids = api_skills.normalizar_redes(None)
+    redes_ids = stream.normalizar_redes(None, canonicas=redes.ids())
     prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
     if dry_run:
         return {"prompt": prompt, "dry_run": True}
 
-    stdout = _ejecutar_claude(prompt, cwd=api_skills._cwd_ejecucion_skills(), timeout=timeout)
+    stdout = _ejecutar_claude(prompt, cwd=dom_skills.cwd_ejecucion_skills(), timeout=timeout)
     try:
-        texto, metricas = api_skills.parsear_resultado_json(stdout)
-    except api_skills.SkillError as e:
+        texto, metricas = stream.parsear_resultado_json(stdout)
+    except stream.SkillError as e:
         raise TermometroCronError(str(e)) from e
     if not texto.strip():
         raise TermometroCronError("El asistente terminó sin devolver un termómetro.")
 
-    procesar = api_skills.construir_procesar_documento(
+    procesar = dom_skills.construir_procesar_documento(
         SKILL_ID, marca, titulo_base=titulo_termometro(fecha)
     )
     return procesar(texto, metricas)

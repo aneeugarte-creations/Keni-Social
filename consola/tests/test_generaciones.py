@@ -18,6 +18,7 @@ import json
 
 from keni_consola import generaciones, preferencias
 from keni_consola.api import skills
+from keni_consola.dominio import skills as dom_skills
 
 from .conftest import _cliente
 
@@ -155,8 +156,11 @@ def test_entorno_skill_sin_clave_no_anade_nada(entorno, monkeypatch):
 
 def test_cwd_ejecucion_skills_apunta_a_skills_copy(monkeypatch, tmp_path):
     # Estructura tipica del repo: las skills viven en `skills-copy/.claude/skills`.
+    # El cwd vive en el dominio (`dominio.skills`); `api.skills` solo lo reexporta.
     (tmp_path / "skills-copy" / ".claude" / "skills").mkdir(parents=True)
-    monkeypatch.setattr(skills, "_cwd_skills", lambda: tmp_path)
+    monkeypatch.setattr(dom_skills, "cwd_skills", lambda: tmp_path)
+    assert dom_skills.cwd_ejecucion_skills() == tmp_path / "skills-copy"
+    # La fachada reexpone el mismo resultado.
     assert skills._cwd_ejecucion_skills() == tmp_path / "skills-copy"
 
 

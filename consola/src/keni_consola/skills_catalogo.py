@@ -162,9 +162,11 @@ def dir_skills() -> Path:
     env = os.environ.get("KENI_SKILLS_DIR")
     if env:
         return Path(env)
-    from .api import skills  # reutiliza la logica de cwd ya existente
+    # Import PEREZOSO del dominio (no de `api/`, hallazgo N13) para reutilizar la logica de
+    # cwd sin crear ciclo: `dominio.skills` importa `skills_catalogo` a nivel de modulo.
+    from .dominio import skills as dom_skills
 
-    return skills._cwd_skills() / _SUBDIR_SKILLS
+    return dom_skills.cwd_skills() / _SUBDIR_SKILLS
 
 
 def _ruta_carpeta(skill_id: str) -> Path:
