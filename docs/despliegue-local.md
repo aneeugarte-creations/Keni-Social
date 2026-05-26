@@ -10,19 +10,21 @@ El MCP corre en la máquina/entorno de cada persona. Aquí están las formas de 
 # instalar uv una vez (espacio de usuario)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# correr el MCP directamente desde el repo
-uvx --from /ruta/a/keni-social/mcp-metricas keni-metricas
+# correr el MCP directamente desde el repo (keni-shared es dependencia local)
+uvx --with /ruta/a/keni-social/keni-shared --from /ruta/a/keni-social/mcp-metricas keni-metricas
 
 # registrarlo en Claude Code
-claude mcp add keni-metricas -- uvx --from /ruta/a/keni-social/mcp-metricas keni-metricas
+claude mcp add keni-metricas -- uvx --with /ruta/a/keni-social/keni-shared --from /ruta/a/keni-social/mcp-metricas keni-metricas
 ```
 
 ## Opción 2 — entorno virtual
 
 ```bash
-cd /ruta/a/keni-social/mcp-metricas
-python3 -m venv .venv && .venv/bin/pip install -e .
-claude mcp add keni-metricas -- /ruta/a/keni-social/mcp-metricas/.venv/bin/keni-metricas
+cd /ruta/a/keni-social
+python3 -m venv .venv
+.venv/bin/pip install -e ./keni-shared   # dependencia local (no está en PyPI)
+.venv/bin/pip install -e ./mcp-metricas
+claude mcp add keni-metricas -- /ruta/a/keni-social/.venv/bin/keni-metricas
 ```
 
 O en `.mcp.json` del proyecto:

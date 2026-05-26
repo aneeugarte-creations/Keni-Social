@@ -25,17 +25,22 @@ Cada lectura de `metricas_resumen` se guarda en un SQLite local (`~/.local/share
 
 ## Instalación y uso (local por persona)
 
+`keni-metricas` **depende de `keni-shared`** (la capa más baja del monorepo:
+catálogo de marca, límites de plataforma, `io_atomico`, `engagement_pct`). Como
+`keni-shared` no está publicado, instálalo antes desde la ruta del monorepo.
+
 Sin permisos de admin, vía `uv` (recomendado):
 
 ```bash
-uvx --from /ruta/a/keni-social/mcp-metricas keni-metricas   # ejecuta el servidor
+uvx --with /ruta/a/keni-social/keni-shared --from /ruta/a/keni-social/mcp-metricas keni-metricas
 ```
 
-O con un entorno virtual:
+O con un entorno virtual (instala primero la dependencia local):
 
 ```bash
-cd mcp-metricas
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv
+.venv/bin/pip install -e ./keni-shared    # ruta del monorepo
+.venv/bin/pip install -e ./mcp-metricas
 .venv/bin/keni-metricas
 ```
 

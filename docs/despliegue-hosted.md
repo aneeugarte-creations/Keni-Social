@@ -22,8 +22,10 @@ El valor se normaliza (mayúsculas/espacios son indiferentes). Un `KENI_MCP_PORT
 ## Correrlo en HTTP
 
 ```bash
-cd /ruta/a/keni-social/mcp-metricas
-python3 -m venv .venv && .venv/bin/pip install -e .
+cd /ruta/a/keni-social
+python3 -m venv .venv
+.venv/bin/pip install -e ./keni-shared   # dependencia local (no está en PyPI)
+.venv/bin/pip install -e ./mcp-metricas
 
 KENI_MCP_TRANSPORT=http \
 KENI_MCP_HOST=0.0.0.0 \

@@ -10,10 +10,13 @@ Claude Code y `keni-metricas`.
 
 ## Instalación (local, editable)
 
-La consola **depende de `keni-metricas`**. Instala primero la dependencia y
-luego la consola:
+La consola **depende de `keni-shared`** (capa más baja: catálogo de marca,
+límites de plataforma, `io_atomico`, `engagement_pct`) **y de `keni-metricas`**.
+Instala primero las dependencias y luego la consola (las rutas son las del
+monorepo, así pip resuelve los paquetes locales):
 
 ```
+pip install -e ./keni-shared
 pip install -e ./mcp-metricas
 pip install -e ./consola          # o ./consola[dev] para los tests
 ```

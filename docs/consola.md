@@ -62,9 +62,10 @@ Agrupadas en **Trabajo** (lo del día a día) y **Ajustes** (configuración):
 
 ## Instalación
 
-La consola es su propio paquete (`keni-consola`) y **depende de `keni-metricas`**. Instala primero la dependencia y luego la consola:
+La consola es su propio paquete (`keni-consola`) y **depende de `keni-shared`** (la capa más baja del monorepo: catálogo de marca, límites de plataforma, utilidades canónicas) **y de `keni-metricas`**. Instala primero las dependencias y luego la consola:
 
 ```
+pip install -e ./keni-shared
 pip install -e ./mcp-metricas
 pip install -e ./consola
 ```
