@@ -89,7 +89,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Instalar pytest
-        run: pip install pytest
-      - name: Chequeos estaticos (frontmatter, contexto-editorial, contar.py)
+        run: pip install pytest pyyaml
+      - name: Chequeos estaticos (frontmatter, keni.yaml, contexto-editorial, contar.py)
         working-directory: skills-copy/evals
         run: pytest -q test_static.py test_checks_copy.py

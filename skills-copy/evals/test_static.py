@@ -44,6 +44,7 @@ ESPERADAS = {
     "calendario-editorial",
     "nota-a-hilo",
     "brief-matutino",
+    "termometro-mundial",
 }
 
 
@@ -75,6 +76,28 @@ def test_name_del_frontmatter_coincide_con_carpeta():
         if fm.get("name") != ruta.parent.name:
             errores.append(f"{ruta.parent.name}: name='{fm.get('name')}'")
     assert not errores, "name no coincide con la carpeta: " + "; ".join(errores)
+
+
+def test_keni_yaml_parsea_como_mapa():
+    # Cada `keni.yaml` (metadatos para la Consola) DEBE parsear como un mapa con
+    # `nombre`. Un YAML inválido (p.ej. un ': ' sin comillas en un texto) hace que el
+    # catálogo lo SALTE en silencio y la skill no aparezca en la consola: este test lo
+    # caza. Requiere PyYAML; sin él (mini-runner pelado) el chequeo se omite (lo cubre
+    # CI, que instala pyyaml, y los tests de la consola).
+    try:
+        import yaml
+    except ImportError:
+        return
+    errores = []
+    for ruta in checks.SKILLS_DIR.glob("*/keni.yaml"):
+        try:
+            datos = yaml.safe_load(ruta.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            errores.append(f"{ruta.parent.name}: no parsea ({e})")
+            continue
+        if not isinstance(datos, dict) or not datos.get("nombre"):
+            errores.append(f"{ruta.parent.name}: keni.yaml no es un mapa con 'nombre'")
+    assert not errores, "keni.yaml inválido:\n" + "\n".join(errores)
 
 
 # ---------------------------------------------------------------------------
