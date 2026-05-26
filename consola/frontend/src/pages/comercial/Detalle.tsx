@@ -36,7 +36,8 @@ import type {
   PublicacionComercial,
 } from "@/types";
 
-import { numeroCompacto, numeroCompleto, porcentaje } from "../metricas/formato";
+import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { numeroCompacto, numeroCompleto, porcentaje } from "@/lib/formato";
 import { CLAVE_COMERCIAL } from "./claves";
 import { etiquetaMetrica, fechaDia, fechaHora, presentacionEstado } from "./formato";
 import { GraficaSerie } from "./GraficaSerie";
@@ -44,17 +45,6 @@ import { GraficaSerie } from "./GraficaSerie";
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
-}
-
-function TarjetaKpi({ etiqueta, valor, titulo }: { etiqueta: string; valor: string; titulo?: string }) {
-  return (
-    <div className="rounded-lg border border-border p-4">
-      <p className="text-sm text-muted-foreground">{etiqueta}</p>
-      <p className="truncate text-xl font-semibold tabular-nums" title={titulo ?? valor}>
-        {valor}
-      </p>
-    </div>
-  );
 }
 
 export function Detalle({

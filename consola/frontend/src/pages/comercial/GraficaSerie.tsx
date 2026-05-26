@@ -10,7 +10,7 @@ import { AreaChart } from "@tremor/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SnapshotComercial } from "@/types";
 
-import { numeroCompacto, numeroCompleto } from "../metricas/formato";
+import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import { fechaCorta } from "./formato";
 
 export function GraficaSerie({

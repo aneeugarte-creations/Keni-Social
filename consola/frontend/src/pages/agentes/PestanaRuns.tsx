@@ -19,7 +19,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { costeUsd, duracion, numeroCompleto } from "@/pages/metricas/formato";
+import { costeUsd, duracion, numeroCompleto } from "@/lib/formato";
 import type { AgenteDetalle, EstadoRun, MetricasRun, ModoRun, Run } from "@/types";
 
 import { claveAgente, claveRuns, formatearFecha, mensajeError } from "./claves";

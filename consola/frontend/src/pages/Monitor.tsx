@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/table";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/pages/metricas/formato";
+import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type {
   AgregadoPorAgente,
   AgregadoPorDia,
