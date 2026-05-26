@@ -26,6 +26,14 @@ function descargarTexto(texto: string, extension: "txt" | "md") {
  */
 export function Resultado({ resultado }: { resultado: string }) {
   const [copiado, setCopiado] = React.useState(false);
+  // A-4: guardamos el id del timer para cancelarlo si el componente se desmonta.
+  const timerRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
 
   React.useEffect(() => {
     // Si llega un resultado nuevo, reseteamos el estado "copiado".
@@ -37,7 +45,8 @@ export function Resultado({ resultado }: { resultado: string }) {
       await navigator.clipboard.writeText(resultado);
       setCopiado(true);
       toast.success("Copiado al portapapeles");
-      window.setTimeout(() => setCopiado(false), 2000);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopiado(false), 2000);
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto y cópialo a mano.");
     }

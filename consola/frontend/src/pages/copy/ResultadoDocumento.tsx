@@ -99,6 +99,13 @@ export function ResultadoDocumento({
   const queryClient = useQueryClient();
   const [red, setRed] = React.useState("");
   const [copiado, setCopiado] = React.useState(false);
+  // A-4: timer de reset de 'copiado' con cleanup al desmontar.
+  const timerRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const opcionesQuery = useQuery({
     queryKey: ["publicaciones", "opciones"],
@@ -124,7 +131,8 @@ export function ResultadoDocumento({
       await navigator.clipboard.writeText(documento);
       setCopiado(true);
       toast.success("Copiado al portapapeles");
-      window.setTimeout(() => setCopiado(false), 2000);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => setCopiado(false), 2000);
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto y cópialo a mano.");
     }

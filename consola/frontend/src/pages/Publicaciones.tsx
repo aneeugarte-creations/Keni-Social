@@ -98,20 +98,16 @@ export default function Publicaciones() {
 function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   const location = useLocation();
 
-  // Marca preseleccionada al llegar desde otra página (p. ej. «Ver
-  // publicaciones» desde el detalle de un agente). El id canónico viaja por
-  // `?marca=`; solo lo aceptamos si existe en el catálogo, si no, "Todas".
-  const marcaInicial = React.useMemo(() => {
+  // A-5: usamos useState con inicializador lazy en vez de useMemo(fn, [])
+  // para garantizar ejecución exactamente una vez (incluso en StrictMode).
+  const [marca, setMarca] = React.useState(() => {
     const desdeQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
     return desdeQuery && opciones.marcas.some((m) => m.id === desdeQuery)
       ? desdeQuery
       : FILTRO_TODOS;
-    // Solo al montar (la query no cambia dentro de esta página).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  });
 
   const [vista, setVista] = React.useState<Vista>("lista");
-  const [marca, setMarca] = React.useState(marcaInicial);
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [estado, setEstado] = React.useState(FILTRO_TODOS);
   const [soloPerennes, setSoloPerennes] = React.useState(false);

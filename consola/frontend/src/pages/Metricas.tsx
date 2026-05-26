@@ -78,18 +78,14 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Marca preseleccionada al llegar desde otra página (p. ej. "Ver métricas"
-  // desde Publicaciones). El id viaja en forma `id_metricas` por el `state` del
-  // router o por `?marca=`; solo lo aceptamos si existe en el catálogo, si no,
-  // caemos a "Todas".
-  const marcaInicial = React.useMemo(() => {
+  // A-5: usamos useState con inicializador lazy en vez de useMemo para capturar
+  // la marca inicial exactamente una vez al montar, sin recalcular en re-renders.
+  const [marca, setMarca] = React.useState(() => {
     const estado = location.state as { marca?: string } | null;
     const desdeQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
     const candidata = estado?.marca ?? desdeQuery;
     return candidata && marcas.some((m) => m.id === candidata) ? candidata : MARCA_TODAS;
-  }, [location.state, location.search, marcas]);
-
-  const [marca, setMarca] = React.useState(marcaInicial);
+  });
   const [rango, setRango] = React.useState(rangos[0]?.id ?? "");
 
   // Limpiamos el `state` de navegación tras consumirlo, para que no reaparezca

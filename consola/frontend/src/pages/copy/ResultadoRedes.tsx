@@ -144,6 +144,13 @@ function PanelPublicacion({
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const [copiado, setCopiado] = React.useState(false);
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
+  // A-4: timer de reset de 'copiado' con cleanup al desmontar.
+  const timerCopiadoRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (timerCopiadoRef.current !== null) window.clearTimeout(timerCopiadoRef.current);
+    };
+  }, []);
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const red = publicacion.red;
@@ -219,7 +226,8 @@ function PanelPublicacion({
       await navigator.clipboard.writeText(contenido);
       setCopiado(true);
       toast.success("Copiado al portapapeles");
-      window.setTimeout(() => setCopiado(false), 2000);
+      if (timerCopiadoRef.current !== null) window.clearTimeout(timerCopiadoRef.current);
+      timerCopiadoRef.current = window.setTimeout(() => setCopiado(false), 2000);
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto y cópialo a mano.");
     }
@@ -459,6 +467,14 @@ function PanelManual({
   const [red, setRed] = React.useState("");
   const [copiado, setCopiado] = React.useState(false);
 
+  // A-4: timer de reset de 'copiado' con cleanup al desmontar.
+  const timerCopiadoRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    return () => {
+      if (timerCopiadoRef.current !== null) window.clearTimeout(timerCopiadoRef.current);
+    };
+  }, []);
+
   const guardar = useMutation({
     mutationFn: () => api.guardarHistorial(historialId, { red }),
     onSuccess: (data) => {
@@ -476,7 +492,8 @@ function PanelManual({
       await navigator.clipboard.writeText(resultado);
       setCopiado(true);
       toast.success("Copiado al portapapeles");
-      window.setTimeout(() => setCopiado(false), 2000);
+      if (timerCopiadoRef.current !== null) window.clearTimeout(timerCopiadoRef.current);
+      timerCopiadoRef.current = window.setTimeout(() => setCopiado(false), 2000);
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto y cópialo a mano.");
     }
@@ -556,11 +573,13 @@ export function ResultadoRedes({
   const redes =
     opcionesQuery.data?.redes.map((r) => ({ id: r.id, nombre: r.nombre })) ?? [];
 
-  const [activa, setActiva] = React.useState(publicaciones[0]?.red ?? "");
+  // A-2: 'activa' almacena el id de la publicación (no la red) para que dos
+  // publicaciones de la misma red no colisionen en las tabs.
+  const [activa, setActiva] = React.useState(publicaciones[0]?.id ?? "");
 
   React.useEffect(() => {
-    if (publicaciones.length > 0 && !publicaciones.some((p) => p.red === activa)) {
-      setActiva(publicaciones[0].red);
+    if (publicaciones.length > 0 && !publicaciones.some((p) => p.id === activa)) {
+      setActiva(publicaciones[0].id);
     }
   }, [publicaciones, activa]);
 
@@ -609,7 +628,7 @@ export function ResultadoRedes({
               {publicaciones.map((p) => {
                 const Icono = iconoRed(p.red);
                 return (
-                  <TabsTrigger key={p.id} value={p.red} className="gap-1.5">
+                  <TabsTrigger key={p.id} value={p.id} className="gap-1.5">
                     <Icono className="h-4 w-4" />
                     {nombreRed(p.red)}
                   </TabsTrigger>
@@ -617,7 +636,7 @@ export function ResultadoRedes({
               })}
             </TabsList>
             {publicaciones.map((p) => (
-              <TabsContent key={p.id} value={p.red}>
+              <TabsContent key={p.id} value={p.id}>
                 <PanelPublicacion
                   publicacion={p}
                   estados={estados}

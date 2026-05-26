@@ -47,16 +47,23 @@ export function useGeneracion(persistKey?: string) {
     };
   }, [persistKey]);
 
+  // A-1: la query de sondeo NO usa initialData para evitar que React Query marque
+  // la entrada como ya-fresca y salte el primer refetch cuando el POST responde
+  // directamente con estado "completado" (completado-inmediato). El fallback al
+  // estado local se aplica solo para el primer render (antes del primer fetch).
   const habilitado = generacion !== null && estaEjecutando(generacion.estado);
 
   const { data } = useQuery({
     queryKey: ["generacion", generacion?.id],
     queryFn: ({ signal }) => api.generacion(generacion!.id, signal).then((r) => r.generacion),
     enabled: habilitado,
-    initialData: generacion ?? undefined,
-    refetchInterval: (q) => (estaEjecutando(q.state.data?.estado) ? INTERVALO_MS : false),
+    // Sin initialData: la query parte de undefined y sondea desde la 1ª llamada.
+    refetchInterval: (q) =>
+      estaEjecutando(q.state.data?.estado ?? generacion?.estado) ? INTERVALO_MS : false,
   });
 
+  // Si la query ya obtuvo datos los preferimos; si no, usamos el estado local
+  // (cubre el caso completado-inmediato antes del primer fetch y el estado inicial).
   const actual = data ?? generacion;
   const actualId = actual?.id;
   const actualEstado = actual?.estado;

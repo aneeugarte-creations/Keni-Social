@@ -219,6 +219,14 @@ export function FlujoGeneracion({
     });
   }
 
+  // C-1: terminalRef se limpia en onSuccess de la mutación, para que la 2ª
+  // generación (y sucesivas) disparen el toast y la invalidación correctamente.
+  const terminalRef = React.useRef<string | null>(null);
+  // A-3: captura la skill en el momento de lanzar la generación para que
+  // resultadoCopy no dependa del selector UI (skillSeleccionada puede cambiar
+  // mientras la generación corre en background).
+  const skillGeneracionRef = React.useRef<Skill | undefined>(undefined);
+
   const mutacion = useMutation<RespuestaGeneracion, Error>({
     mutationFn: () => {
       if (!skillSeleccionada) throw new Error("Elige una skill.");
@@ -239,6 +247,11 @@ export function FlujoGeneracion({
       });
     },
     onSuccess: (data) => {
+      // C-1: limpiar terminalRef antes de iniciar para que el useEffect terminal
+      // se dispare también en la 2ª generación (y sucesivas) con el mismo id.
+      terminalRef.current = null;
+      // A-3: fijar la skill usada en el momento de lanzar.
+      skillGeneracionRef.current = skillSeleccionada ?? undefined;
       // No bloquea: seguimos la generación en vivo y reaccionamos al completarse.
       iniciar(data.generacion);
       toast.success("Generación en curso. Puedes seguirla aquí o cambiar de pestaña.");
@@ -252,7 +265,11 @@ export function FlujoGeneracion({
   // y la skill es de salida "piezas".
   const resultadoCopy: RespuestaEjecutarSkill | null = React.useMemo(() => {
     if (!generacion || generacion.estado !== "completado" || !generacion.resultado) return null;
-    if (skillSeleccionada && skillSeleccionada.salida !== "piezas") return null;
+    // A-3: usamos skillGeneracionRef (capturada al lanzar) en vez de skillSeleccionada
+    // (selector UI), para que cambiar de skill durante la generación en background
+    // no oculte el resultado.
+    const skillUsada = skillGeneracionRef.current;
+    if (skillUsada && skillUsada.salida !== "piezas") return null;
     const r = generacion.resultado;
     // Las skills de documento no traen `resultado`/`piezas`; las descartamos arriba.
     if (r.documento !== undefined && (r.piezas?.length ?? 0) === 0) return null;
@@ -263,7 +280,7 @@ export function FlujoGeneracion({
       piezas: r.piezas ?? [],
       publicaciones: r.publicaciones ?? [],
     };
-  }, [generacion, skillSeleccionada]);
+  }, [generacion]);
 
   // Resultado de documento cuando la generación completa y la skill es "documento".
   const resultadoDocumento = React.useMemo(() => {
@@ -278,7 +295,6 @@ export function FlujoGeneracion({
   }, [generacion]);
 
   // Efectos secundarios al alcanzar el estado terminal (una sola vez por generación).
-  const terminalRef = React.useRef<string | null>(null);
   React.useEffect(() => {
     if (!generacion || generacion.id === terminalRef.current) return;
     if (generacion.estado === "completado") {
