@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from .io_atomico import escribir_atomico
 
 # Categorías y estados válidos (la UI los pinta con etiquetas legibles).
 CATEGORIAS: tuple[str, ...] = ("idea", "producto", "mejora", "bug")
@@ -113,21 +114,10 @@ def _leer() -> list[dict[str, Any]]:
 
 def _escribir(lista: list[dict[str, Any]]) -> None:
     """Escribe la lista como JSON de forma atómica (temp + os.replace)."""
-    ruta = ruta_sugerencias()
-    ruta.parent.mkdir(parents=True, exist_ok=True)
     contenido = json.dumps({"sugerencias": lista}, ensure_ascii=False, indent=2)
-
-    fd, tmp_nombre = tempfile.mkstemp(
-        dir=str(ruta.parent), prefix=".sugerencias-", suffix=".json.tmp"
+    escribir_atomico(
+        ruta_sugerencias(), contenido, prefijo=".sugerencias-", sufijo=".json.tmp"
     )
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(contenido)
-        os.replace(tmp, ruta)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
 
 
 # --------------------------------------------------------------------------- #

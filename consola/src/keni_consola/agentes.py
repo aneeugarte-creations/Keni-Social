@@ -47,10 +47,8 @@ como en `ficheros.py`/`secretos.py`. Sin shell. Errores en espanol.
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
-import tempfile
 import unicodedata
 import uuid
 from datetime import datetime
@@ -60,6 +58,7 @@ from typing import Any
 import yaml
 
 from . import ficheros, marcas
+from .io_atomico import escribir_atomico
 
 # --------------------------------------------------------------------------- #
 # Plantilla de CLAUDE.md por marca (reutiliza las plantillas de api.carpetas)  #
@@ -796,22 +795,13 @@ def agregados_runs() -> dict[str, Any]:
 
 
 # --------------------------------------------------------------------------- #
-# Escritura atomica (mismo patron que ficheros.py / secretos.py)              #
+# Escritura atomica (delega en `io_atomico.escribir_atomico`, util comun)      #
 # --------------------------------------------------------------------------- #
 
 
 def _escribir_texto_atomico(ruta: Path, contenido: str) -> None:
     """Escribe texto en `ruta` de forma ATOMICA (tmp en el mismo dir + os.replace)."""
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_nombre = tempfile.mkstemp(dir=str(ruta.parent), prefix=".tmp-", suffix=ruta.suffix)
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(contenido)
-        os.replace(tmp, ruta)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    escribir_atomico(ruta, contenido)
 
 
 def _escribir_yaml_atomico(ruta: Path, datos: dict[str, Any]) -> None:

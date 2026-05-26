@@ -35,7 +35,6 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-import tempfile
 import threading
 import uuid
 from collections.abc import Callable
@@ -46,6 +45,7 @@ from typing import Any
 import yaml
 
 from . import preferencias
+from .io_atomico import escribir_atomico
 
 # Estados terminales e intermedio de un trabajo.
 ESTADO_EJECUTANDO = "ejecutando"
@@ -118,21 +118,10 @@ def _ruta(gen_id: str) -> Path:
 
 def _escribir_yaml_atomico(ruta_fichero: Path, datos: dict[str, Any]) -> None:
     """Escribe un dict como YAML de forma ATOMICA (tmp en el mismo dir + os.replace)."""
-    ruta_fichero.parent.mkdir(parents=True, exist_ok=True)
     texto = yaml.safe_dump(
         datos, default_flow_style=False, allow_unicode=True, sort_keys=False, width=4096
     )
-    fd, tmp_nombre = tempfile.mkstemp(
-        dir=str(ruta_fichero.parent), prefix=".tmp-", suffix=".yaml"
-    )
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(texto)
-        os.replace(tmp, ruta_fichero)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    escribir_atomico(ruta_fichero, texto, sufijo=".yaml")
 
 
 def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:

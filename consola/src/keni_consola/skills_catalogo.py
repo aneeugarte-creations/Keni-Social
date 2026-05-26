@@ -28,11 +28,12 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+from .io_atomico import escribir_atomico
 
 # --------------------------------------------------------------------------- #
 # Constantes y errores                                                        #
@@ -184,17 +185,8 @@ def _ruta_carpeta(skill_id: str) -> Path:
 
 
 def _escribir_atomico(ruta: Path, texto: str) -> None:
-    """Escribe `texto` en `ruta` de forma ATOMICA (tmp en el mismo dir + os.replace)."""
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_nombre = tempfile.mkstemp(dir=str(ruta.parent), prefix=".tmp-", suffix=ruta.suffix)
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(texto)
-        os.replace(tmp, ruta)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    """Escribe `texto` en `ruta` de forma ATOMICA (delega en `io_atomico`)."""
+    escribir_atomico(ruta, texto)
 
 
 def _leer_yaml(ruta: Path) -> dict[str, object] | None:

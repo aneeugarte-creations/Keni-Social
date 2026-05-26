@@ -14,9 +14,10 @@ mismo patron defensivo que `secretos.py`. NO contiene secretos.
 from __future__ import annotations
 
 import os
-import tempfile
 import tomllib
 from pathlib import Path
+
+from .io_atomico import escribir_atomico
 
 # Niveles validos de `claude --effort` (ver `claude --help`), de menor a mayor
 # esfuerzo. La UI respeta este orden al pintar el selector.
@@ -68,21 +69,10 @@ def _serializar(datos: dict) -> str:
 
 def _escribir(datos: dict) -> None:
     """Escribe las preferencias como TOML de forma atomica (temp + os.replace)."""
-    ruta = ruta_preferencias()
-    ruta.parent.mkdir(parents=True, exist_ok=True)
     contenido = _CABECERA + _serializar(datos)
-
-    fd, tmp_nombre = tempfile.mkstemp(
-        dir=str(ruta.parent), prefix=".preferencias-", suffix=".toml.tmp"
+    escribir_atomico(
+        ruta_preferencias(), contenido, prefijo=".preferencias-", sufijo=".toml.tmp"
     )
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(contenido)
-        os.replace(tmp, ruta)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
 
 
 # --------------------------------------------------------------------------- #

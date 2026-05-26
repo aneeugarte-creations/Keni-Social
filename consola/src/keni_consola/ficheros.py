@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import logging
 import os
-import tempfile
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -49,6 +48,7 @@ import yaml
 
 from . import db, indice, marcas, redes
 from .db import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
+from .io_atomico import escribir_atomico
 
 _log = logging.getLogger("keni_consola.ficheros")
 
@@ -168,7 +168,6 @@ def _escribir_yaml(ruta: Path, datos: dict[str, Any]) -> None:
     (acentos sin escapar), `sort_keys=False` (respeta el orden dado), y bloque `|`
     para textos multilinea (via `_DumperBloque`).
     """
-    ruta.parent.mkdir(parents=True, exist_ok=True)
     texto = yaml.dump(
         datos,
         Dumper=_DumperBloque,
@@ -177,15 +176,7 @@ def _escribir_yaml(ruta: Path, datos: dict[str, Any]) -> None:
         sort_keys=False,
         width=4096,
     )
-    fd, tmp_nombre = tempfile.mkstemp(dir=str(ruta.parent), prefix=".tmp-", suffix=".yaml")
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(texto)
-        os.replace(tmp, ruta)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    escribir_atomico(ruta, texto, sufijo=".yaml")
 
 
 def _leer_yaml(ruta: Path) -> dict[str, Any] | None:

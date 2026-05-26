@@ -16,9 +16,10 @@ SEGURIDAD MAXIMA:
 from __future__ import annotations
 
 import os
-import tempfile
 import tomllib
 from pathlib import Path
+
+from .io_atomico import escribir_atomico
 
 # Proveedor de imagen por defecto (no se cambia el motor: OpenAI gpt-image-1).
 PROVEEDOR_DEFECTO = "openai"
@@ -66,20 +67,11 @@ def _escribir(datos: dict) -> None:
     Mismo patron que `keni_metricas.asistente.escribir_config_atomico`: temporal en
     el mismo directorio + `os.chmod(0600)` + `os.replace` (sin archivo a medias).
     """
-    ruta = ruta_secretos()
-    ruta.parent.mkdir(parents=True, exist_ok=True)
     contenido = _CABECERA + _serializar(datos)
-
-    fd, tmp_nombre = tempfile.mkstemp(dir=str(ruta.parent), prefix=".secretos-", suffix=".toml.tmp")
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(contenido)
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, ruta)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    # modo=0o600: el fichero final nace con permisos de solo-dueno (contiene claves).
+    escribir_atomico(
+        ruta_secretos(), contenido, modo=0o600, prefijo=".secretos-", sufijo=".toml.tmp"
+    )
 
 
 def _toml_str(valor: str) -> str:

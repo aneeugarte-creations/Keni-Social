@@ -19,11 +19,11 @@ from __future__ import annotations
 import json
 import os
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 
 from . import marcas
+from .io_atomico import escribir_atomico
 
 # Limites del numero de slides de noticia (mas la portada). Coinciden con la skill.
 NUMERO_MIN = 5
@@ -67,18 +67,8 @@ def _leer() -> dict[str, Any]:
 
 def _escribir(datos: dict[str, Any]) -> None:
     """Escribe la config como JSON de forma atomica (temp + os.replace)."""
-    archivo = ruta()
-    archivo.parent.mkdir(parents=True, exist_ok=True)
     contenido = json.dumps(datos, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
-    fd, tmp_nombre = tempfile.mkstemp(dir=str(archivo.parent), prefix=".termometro-", suffix=".json.tmp")
-    tmp = Path(tmp_nombre)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.write(contenido)
-        os.replace(tmp, archivo)
-    except BaseException:
-        tmp.unlink(missing_ok=True)
-        raise
+    escribir_atomico(ruta(), contenido, prefijo=".termometro-", sufijo=".json.tmp")
 
 
 class TermometroConfigError(ValueError):
