@@ -1,18 +1,15 @@
 #!/usr/bin/env python3
-"""Outpainting GENERATIVO del Estudio de imagen — EXCEPCIÓN a la regla §3.
+"""Outpainting GENERATIVO del Estudio de imagen.
 
-Encaja una foto en un formato (p. ej. 4:5) EXTENDIENDO el fondo con IA cuando el
-borde NO es uniforme y la vía determinista (`editar.py extender`) no puede hacerlo
-sin inventar. Es la "última milla" del encaje 4:5: rellena solo la BANDA añadida.
+Encaja una foto en un formato (p. ej. 4:5) EXTENDIENDO el fondo con IA. Es la "última
+milla" del encaje cuando el fondo NO es uniforme y la vía determinista
+(`editar.py extender`) no puede hacerlo: rellena solo la BANDA añadida.
 
-GARANTÍAS (ver docs/estudio-imagen.md §3):
-  1. §3 denegado por DEFECTO. Alterar una foto de noticia real con IA es una línea
-     roja editorial. Este script SOLO actúa con --excepcion-aprobada (aprobación
-     explícita y registrable). Sin esa bandera se NIEGA y propone la vía determinista.
-  2. El SUJETO no se toca. La banda a rellenar va por MÁSCARA (OpenAI) y, pase lo
-     que pase, al final RE-COMPONEMOS la foto original encima de su región exacta:
-     el sujeto queda intacto pixel a pixel; la IA solo aporta la banda de fondo.
-  3. La llave vive en tu máquina (variables de entorno), nunca en el código.
+CÓMO FUNCIONA:
+  - El SUJETO no se toca. La banda a rellenar va por MÁSCARA (OpenAI) y, pase lo que
+    pase, al final RE-COMPONEMOS la foto original sobre su región exacta: el sujeto
+    queda intacto pixel a pixel; la IA solo aporta la banda de fondo.
+  - La llave vive en tu máquina (variables de entorno), nunca en el código.
 
 PROVEEDOR INTERCAMBIABLE: elige según la clave disponible (o --proveedor):
   - openai: endpoint de EDICIÓN con máscara (gpt-image-1). La API regenera solo la
@@ -24,7 +21,7 @@ MODO SIN KEY (degradado, no falla): explica cómo configurar la llave y entrega 
 prompt de dirección de arte para rellenar la banda en tu herramienta.
 
 Uso:
-  python3 expandir.py --foto FOTO --formato feed --excepcion-aprobada \
+  python3 expandir.py --foto FOTO --formato feed \
       [--proveedor auto|openai|gemini] [--lado auto|arriba|abajo|izquierda|derecha] \
       [--marca claro-sports] [--prompt "..."] [--salida SAL]
 """
@@ -239,7 +236,7 @@ def _prompt(args, geo: dict) -> str:
     partes = [
         "Extiende SOLO el fondo de esta foto hacia la zona añadida (la banda),",
         "como continuación fotorrealista del fondo ya existente (cielo, gradas, escenario).",
-        "NO añadas ni alteres personas, jugadores, rostros, texto, logotipos ni objetos.",
+        "NO añadas ni cambies personas, jugadores, rostros, texto, logotipos ni objetos.",
         "Sin marcas de agua. Coherencia de luz y color con la foto.",
     ]
     if args.prompt:
@@ -254,16 +251,6 @@ def _prompt(args, geo: dict) -> str:
     return " ".join(partes)
 
 
-def _bloqueo_s3() -> int:
-    print("BLOQUEADO (regla editorial §3): la IA no altera fotos de noticia reales por defecto.")
-    print("Extender el fondo con IA es una EXCEPCIÓN que un humano debe aprobar.")
-    print("Vías sin IA (recomendadas primero):")
-    print("  · editar.py extender   -> extiende el fondo UNIFORME (cielo/negro) sin inventar")
-    print("  · editar.py recortar   -> recorte cubriente normal")
-    print("Si de verdad apruebas la excepción, repite con --excepcion-aprobada.")
-    return 3
-
-
 def _fallback_sin_key(prompt: str) -> int:
     print("Outpainting IA: no hay API key configurada (modo dirección de arte).\n")
     print("Configura UNA llave (no se guarda en archivos):")
@@ -276,9 +263,6 @@ def _fallback_sin_key(prompt: str) -> int:
 
 
 def expandir(args) -> dict | int:
-    if not args.excepcion_aprobada:
-        return _bloqueo_s3()
-
     fclave = (args.formato or "feed").strip().lower()
     if fclave not in FORMATOS:
         raise SystemExit(f"ERROR: formato '{args.formato}' desconocido. Opciones: {', '.join(FORMATOS)}")
@@ -310,7 +294,7 @@ def expandir(args) -> dict | int:
                                   proveedor=proveedor, clave=clave, size=_size_openai(geo))
 
     res = Image.open(io.BytesIO(relleno)).convert("RGB").resize((geo["fw"], geo["fh"]), Image.LANCZOS)
-    # SEGURIDAD §3: re-componemos la foto original encima -> el sujeto queda intacto.
+    # Fidelidad: re-componemos la foto original encima -> el sujeto no se toca.
     res.paste(img, (geo["ox"], geo["oy"]))
     res.resize((tw, th), Image.LANCZOS).save(destino, "PNG")
 
@@ -319,18 +303,15 @@ def expandir(args) -> dict | int:
         "formato": fclave,
         "aplicado": "expandir-ia",
         "proveedor": proveedor,
-        "excepcion_s3": True,
         "bandas": [{"lado": l, "px": p} for l, p in geo["bandas"]],
         "salidas": [{"formato": fclave, "tamano": f"{tw}x{th}", "salida": str(destino)}],
     }
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Outpainting generativo del Estudio de imagen (excepción §3).")
+    p = argparse.ArgumentParser(description="Outpainting generativo del Estudio de imagen.")
     p.add_argument("--foto", required=True)
     p.add_argument("--formato", default="feed", help="vertical | feed | cuadrado | horizontal")
-    p.add_argument("--excepcion-aprobada", dest="excepcion_aprobada", action="store_true",
-                   help="Aprueba explícitamente la excepción a §3 (sin esto, se niega).")
     p.add_argument("--proveedor", default="auto", help="auto | openai | gemini")
     p.add_argument("--lado", default="auto", help="auto | arriba | abajo | izquierda | derecha")
     p.add_argument("--marca", default=None, help="unotv | claro-sports (nota de estilo).")
@@ -339,12 +320,12 @@ def main() -> int:
     args = p.parse_args()
 
     info = expandir(args)
-    if isinstance(info, int):  # bloqueo §3 o fallback sin key
+    if isinstance(info, int):  # modo sin key (dirección de arte)
         return info
 
     if info["aplicado"] == "expandir-ia":
-        print(f"IA (excepción §3 APROBADA) · proveedor {info['proveedor']}: solo se rellenó la banda de fondo.")
-        print("  El sujeto se re-compuso encima (intacto). Pásalo por la revisión legal/editorial.")
+        print(f"IA · proveedor {info['proveedor']}: se rellenó la banda de fondo (el sujeto no se toca).")
+        print("  Pásalo por la revisión legal/editorial antes de publicar.")
         bandas = ", ".join(f"{b['lado']} +{b['px']}px" for b in info["bandas"])
         print(f"  Banda: {bandas}")
     else:

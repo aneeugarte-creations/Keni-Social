@@ -11,7 +11,7 @@ campos:
     tipo: archivo
     requerido: true
     placeholder: ""
-    ayuda: "La foto de la noticia (jpg/png/webp). No se reinventa con IA: se le superpone el logo, la pleca de breaking y el titular. Antes se revisa contra las reglas legales (escudo, menores, datos personales)."
+    ayuda: "La foto de la noticia (jpg/png/webp). Se le superpone (de forma determinista) el logo, la pleca de breaking y el titular. Antes se revisa contra las reglas legales (escudo, menores, datos personales)."
     opciones: []
     media_tipos: image/*
   - id: hecho

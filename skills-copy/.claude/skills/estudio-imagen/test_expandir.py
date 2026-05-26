@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tests del outpainting generativo expandir.py (excepción §3).
+"""Tests del outpainting generativo expandir.py.
 
 Pillow real, SIN red: el proveedor (`_PROVEEDOR_EXPANDIR`) se parchea para no llamar
 a ninguna API. No corre en el CI estático de skills (que no instala Pillow); se
@@ -25,7 +25,7 @@ import expandir  # noqa: E402
 
 
 def _args(foto, **kw):
-    base = dict(foto=foto, formato="feed", excepcion_aprobada=True, proveedor="auto",
+    base = dict(foto=foto, formato="feed", proveedor="auto",
                 lado="auto", marca=None, prompt=None, salida=None)
     base.update(kw)
     return SimpleNamespace(**base)
@@ -52,15 +52,8 @@ def _mock_relleno(color):
 
 
 # --------------------------------------------------------------------------- #
-# Guardrail §3                                                                 #
+# Sin API key: modo dirección de arte (no falla)                              #
 # --------------------------------------------------------------------------- #
-
-def test_bloqueo_s3_sin_aprobacion(tmp_path, monkeypatch):
-    monkeypatch.setattr(expandir, "_PROVEEDOR_EXPANDIR", _mock_relleno((200, 0, 0)))
-    foto = _guardar(Image.new("RGB", (1000, 1000), (0, 200, 0)), tmp_path / "f.png")
-    rc = expandir.expandir(_args(foto, excepcion_aprobada=False))
-    assert rc == 3  # se niega, no toca el proveedor
-
 
 def test_sin_key_cae_a_direccion_de_arte(tmp_path, monkeypatch):
     for var in ("OPENAI_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY"):
