@@ -28,7 +28,6 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PanelEstado } from "@/components/layout/PanelEstado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -809,27 +808,6 @@ function SeccionApariencia() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Sección: Estado del sistema                                        */
-/* ------------------------------------------------------------------ */
-
-/** Autodiagnóstico del sistema (antes en la topbar) como sección de página. */
-function SeccionEstado() {
-  return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">Estado del sistema</CardTitle>
-        <CardDescription>
-          Revisamos si tu equipo está listo para trabajar. Las herramientas locales son opcionales.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
-        <PanelEstado />
-      </CardContent>
-    </Card>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /* Página                                                             */
 /* ------------------------------------------------------------------ */
 
@@ -875,7 +853,6 @@ export default function Configuracion() {
         <SeccionRedes />
         <SeccionImagen />
         <SeccionApariencia />
-        <SeccionEstado />
       </div>
     </>
   );

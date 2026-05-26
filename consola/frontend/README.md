@@ -67,8 +67,8 @@ src/
     use-tema.tsx        Tema claro/oscuro persistido en localStorage
   components/
     ui/                 Componentes shadcn (button, card, input, ...)
-    layout/             AppShell, Sidebar, Wordmark, PageHeader, EnConstruccion
-  pages/                Estado (referencia, completa) + 6 stubs
+    layout/             AppShell, Sidebar, Wordmark, PageHeader, IndicadorEstado
+  pages/                páginas de trabajo y ajustes (Configuración, Métricas, ...)
 ```
 
 ## Estado de las páginas

@@ -2,6 +2,7 @@ import { Loader2, Menu, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
+import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NAVEGACION } from "@/components/layout/navegacion";
@@ -80,6 +81,11 @@ export function AppShell() {
           </div>
 
           <h1 className="hidden text-sm font-medium text-foreground md:block">{titulo}</h1>
+
+          {/* Indicador de salud del sistema, alineado a la derecha de la topbar. */}
+          <div className="ml-auto flex items-center">
+            <IndicadorEstado />
+          </div>
         </header>
 
         <main className={cn("flex-1 overflow-y-auto")}>
