@@ -3,7 +3,7 @@
 Aisla en `tmp_path` (env vars) toda la persistencia y configuracion para que
 ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_CONFIG`  -> consola.toml (allowlist de proyectos)
-  - `KENI_CONSOLA_DB`      -> consola.db (SQLite: tareas + historial de skills)
+  - `KENI_CONSOLA_DB`      -> consola.db (SQLite: tareas + comercial)
   - `KENI_CONSOLA_RAIZ`    -> raiz de datos del backend de ficheros (YAML por marca)
   - `KENI_CONSOLA_INDICE`  -> indice SQLite regenerable del backend de ficheros
   - `KENI_CONSOLA_TAREAS`  -> tareas.json (solo para probar la migracion)

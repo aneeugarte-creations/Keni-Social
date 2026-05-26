@@ -47,7 +47,7 @@ from typing import Any
 import yaml
 
 from . import db, indice, marcas, redes
-from .db import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
+from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
 from .io_atomico import escribir_atomico
 
 _log = logging.getLogger("keni_consola.ficheros")

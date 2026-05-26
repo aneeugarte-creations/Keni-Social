@@ -1,7 +1,12 @@
-"""Tests de la capa SQLite (`keni_consola.db`). Todo OFFLINE, base en tmp.
+"""Tests de la capa SQLite (`keni_consola.db`): dato OPERACIONAL. OFFLINE, base en tmp.
 
-Cubre: creacion on-demand del esquema, CRUD de tareas, CRUD del historial de
-skills, y la migracion idempotente del viejo tareas.json a SQLite.
+Tras la consolidacion de persistencia (E5/H2), SQLite solo guarda lo operacional:
+`tareas` y el apartado `comercial`. El CONTENIDO editorial (publicaciones, historial
+de skills, etc.) vive en YAML (`ficheros.py`) y se prueba en `test_ficheros.py`.
+
+Aqui se cubre: creacion on-demand del esquema, CRUD de tareas y la migracion
+idempotente del viejo tareas.json a SQLite. El comercial tiene su propio test
+(`test_comercial.py`, `test_api_comercial.py`).
 """
 
 from __future__ import annotations
@@ -28,7 +33,7 @@ def base(monkeypatch, tmp_path):
 
 
 def test_esquema_se_crea_on_demand(base):
-    # Una primera operacion crea el archivo y las tablas.
+    # Una primera operacion crea el archivo y las tablas operacionales.
     assert db.listar_tareas() == []
     ruta = db.ruta_db()
     assert ruta.is_file()
@@ -37,7 +42,11 @@ def test_esquema_se_crea_on_demand(base):
         tablas = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     finally:
         con.close()
-    assert {"tareas", "skill_historial"} <= tablas
+    # Solo dato operacional: tareas + comercial. El contenido ya NO vive en SQLite.
+    assert {"tareas", "comercial_publicaciones", "comercial_snapshots"} <= tablas
+    # Las tablas de CONTENIDO se retiraron del esquema (viven en YAML).
+    assert "publicaciones" not in tablas
+    assert "skill_historial" not in tablas
 
 
 def test_ruta_db_respeta_env(base, tmp_path):
@@ -90,103 +99,6 @@ def test_sql_parametrizado_no_inyectable(base):
     # La tabla sigue viva y el titulo se guardo tal cual.
     assert db.obtener_tarea(t["id"])["titulo"] == malicioso
     assert len(db.listar_tareas()) == 1
-
-
-# --------------------------------------------------------------------------- #
-# Historial de skills                                                          #
-# --------------------------------------------------------------------------- #
-
-
-def test_registrar_y_listar_historial(base):
-    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "BORRADOR")
-    assert hid
-    entradas = db.listar_historial_skills()
-    assert len(entradas) == 1
-    assert entradas[0]["skill"] == "copy-desde-nota"
-    assert entradas[0]["marca"] == "unotv"
-    assert entradas[0]["resultado"] == "BORRADOR"
-
-
-def test_obtener_historial_por_id(base):
-    hid = db.registrar_historial_skill("clip-a-copy", "piso-15", "RESULTADO completo")
-    entrada = db.obtener_historial_skill(hid)
-    assert entrada["resultado"] == "RESULTADO completo"
-    assert db.obtener_historial_skill("noexiste") is None
-
-
-def test_historial_recientes_primero(base):
-    h1 = db.registrar_historial_skill("copy-desde-nota", "unotv", "primero")
-    h2 = db.registrar_historial_skill("copy-desde-nota", "unotv", "segundo")
-    ids = [e["id"] for e in db.listar_historial_skills()]
-    # El mas reciente (h2) va primero.
-    assert ids[0] == h2
-    assert ids[1] == h1
-
-
-def test_historial_guarda_y_devuelve_piezas_y_titulo(base):
-    piezas = [
-        {"red": "x", "contenido": "tw", "caracteres": 2},
-        {"red": "instagram", "contenido": "ig", "caracteres": 2},
-    ]
-    hid = db.registrar_historial_skill(
-        "copy-desde-nota", "unotv", "RES", piezas=piezas, titulo="Mi titulo"
-    )
-    entrada = db.obtener_historial_skill(hid)
-    assert entrada["titulo"] == "Mi titulo"
-    assert entrada["piezas"] == piezas
-    # El listado tambien las devuelve (parseadas a lista).
-    listado = db.listar_historial_skills()
-    assert listado[0]["piezas"] == piezas
-    assert listado[0]["titulo"] == "Mi titulo"
-
-
-def test_historial_sin_piezas_devuelve_lista_vacia(base):
-    hid = db.registrar_historial_skill("copy-desde-nota", "unotv", "RES")
-    entrada = db.obtener_historial_skill(hid)
-    assert entrada["piezas"] == []
-    assert entrada["titulo"] == ""
-    assert entrada["metricas"] is None
-
-
-def test_historial_guarda_y_devuelve_metricas(base):
-    metricas = {
-        "tokens_in": 130, "tokens_out": 50, "num_turns": 3,
-        "total_cost_usd": 0.0123, "duration_ms": 4200, "modelo": "claude-opus-4-7",
-    }
-    hid = db.registrar_historial_skill(
-        "copy-desde-nota", "unotv", "RES", metricas=metricas
-    )
-    entrada = db.obtener_historial_skill(hid)
-    assert entrada["metricas"] == metricas
-    # El listado tambien las devuelve (parseadas a dict).
-    assert db.listar_historial_skills()[0]["metricas"] == metricas
-
-
-def test_historial_filas_antiguas_sin_columnas_devuelven_defaults(base):
-    """Una fila preexistente sin piezas/titulo (base antigua) no debe romper la lectura."""
-    # Simula una base antigua: tabla sin las columnas nuevas + una fila.
-    ruta = db.ruta_db()
-    con = sqlite3.connect(str(ruta))
-    try:
-        con.execute(
-            "CREATE TABLE skill_historial ("
-            "id TEXT PRIMARY KEY, skill TEXT NOT NULL, marca TEXT NOT NULL, "
-            "fecha TEXT NOT NULL DEFAULT '', resultado TEXT NOT NULL DEFAULT '')"
-        )
-        con.execute(
-            "INSERT INTO skill_historial (id, skill, marca, fecha, resultado) "
-            "VALUES ('viejo1', 'copy-desde-nota', 'unotv', '2020-01-01', 'antiguo')"
-        )
-        con.commit()
-    finally:
-        con.close()
-    # La primera conexion via db.* migra las columnas (idempotente) y lee defaults.
-    entrada = db.obtener_historial_skill("viejo1")
-    assert entrada["resultado"] == "antiguo"
-    assert entrada["piezas"] == []
-    assert entrada["titulo"] == ""
-    # La columna `metricas` se migra (idempotente) y una fila vieja la lee como None.
-    assert entrada["metricas"] is None
 
 
 # --------------------------------------------------------------------------- #

@@ -48,7 +48,7 @@ Agrupadas en **Trabajo** (lo del día a día) y **Ajustes** (configuración):
 ## Qué hay por debajo (arquitectura)
 
 - La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), las skills de copy (vía `claude -p`) y el lanzador de Claude Code.
-- Lo que necesita **recordar** (tus tareas y el historial de copy) vive en una pequeña base de datos local **SQLite** (`~/.config/keni-social/consola.db`). La configuración de marcas/fuente sigue en los `.toml` de siempre.
+- El **contenido editorial** (publicaciones, plantillas, fuentes RSS, hashtags, franjas y el historial de copy) vive en **ficheros YAML por marca** (`~/keni-proyectos/<marca>/…`): es la **fuente de verdad**, editable a mano. Una pequeña base **SQLite** (`~/.config/keni-social/consola.db`) guarda solo lo **operacional** (tus tareas y el seguimiento Comercial con su serie temporal); un **índice SQLite regenerable** acelera las búsquedas sobre los YAML (se puede borrar y se reconstruye). La configuración de marcas/fuente sigue en los `.toml` de siempre.
 - El frontend viaja **ya compilado** dentro del paquete, así que para **usar** la consola **no hace falta Node** ni instalar nada de JavaScript.
 
 ---

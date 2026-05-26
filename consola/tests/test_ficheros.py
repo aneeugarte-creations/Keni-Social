@@ -27,7 +27,6 @@ def base(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_CONSOLA_INDICE", str(tmp_path / "indice.sqlite"))
     monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
     monkeypatch.setenv("KENI_CONSOLA_TAREAS", str(tmp_path / "tareas.json"))
-    monkeypatch.setenv("KENI_CONSOLA_BACKEND", "ficheros")
     return tmp_path
 
 

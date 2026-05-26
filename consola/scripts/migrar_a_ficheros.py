@@ -1,19 +1,22 @@
-"""Migracion ONE-SHOT del contenido de SQLite (`consola.db`) a ficheros YAML.
+"""[ARCHIVADO] Migracion ONE-SHOT del contenido de SQLite (`consola.db`) a YAML.
 
-Lee cada fila de las tablas de CONTENIDO del `consola.db` y la vuelca a su YAML en
-el backend de ficheros (`ficheros.py`), CONSERVANDO el `id` original. Convierte
-CSV/JSON->listas, 0/1->bool, preserva `publicacion.origen` (-> historial) e
-`imagen` (-> media), agrupa franjas por marca y traslada los items RSS vistos.
+Script HISTORICO y fuera del paquete (`consola/scripts/`, NO se empaqueta en el
+wheel ni se importa desde el codigo vivo). Se ejecuto una sola vez para volcar el
+contenido que aun vivia en `consola.db` al backend de ficheros YAML, cuando ambos
+almacenes coexistian. Hoy el almacen de CONTENIDO es YAML FIJO (`ficheros.py`) y
+SQLite (`db.py`) ya solo guarda dato operacional (tareas + comercial); este script
+NO se necesita en operacion normal y se conserva solo como referencia/recuperacion.
 
-`tareas` NO se migra (sigue viviendo en SQLite). Al terminar, renombra
-`consola.db` -> `consola.db.bak` (las tareas se quedan; ver nota mas abajo).
+Uso (excepcional, desde el monorepo con el paquete instalado):
 
-IDEMPOTENTE y BEST-EFFORT: si una fila ya esta en disco (mismo id) no se duplica;
-cualquier fila corrupta se omite con log y NO rompe la migracion ni el arranque.
+    python consola/scripts/migrar_a_ficheros.py
 
-NOTA sobre el .bak: como las tareas siguen en SQLite, NO borramos `consola.db`;
-solo dejamos una COPIA `.bak` como respaldo del estado pre-migracion. El propio
-`consola.db` permanece operativo para las tareas.
+Lee cada fila de las tablas de CONTENIDO del `consola.db` y la vuelca a su YAML
+CONSERVANDO el `id` original. Convierte CSV/JSON->listas, 0/1->bool, preserva
+`publicacion.origen` e `imagen`, agrupa franjas por marca y traslada items RSS
+vistos. `tareas` y `comercial` NO se migran (viven en SQLite). IDEMPOTENTE y
+BEST-EFFORT: una fila ya en disco (mismo id) no se duplica; una fila corrupta se
+omite con log. Deja una COPIA `consola.db.bak` como respaldo (no borra `consola.db`).
 """
 
 from __future__ import annotations
@@ -26,9 +29,27 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import db, ficheros, indice
+from keni_consola import db, ficheros, indice
 
 _log = logging.getLogger("keni_consola.migracion")
+
+
+def _parsear_piezas_historial(crudo: str | None) -> list[dict[str, Any]]:
+    """Convierte el JSON guardado en `piezas` a lista; `[]` si vacio/antiguo/invalido.
+
+    Copia local del helper que antes vivia en `db.py` (cuando SQLite guardaba el
+    historial). Aqui se inlinea para que este script archivado no dependa de detalles
+    internos del `db.py` adelgazado.
+    """
+    if not crudo:
+        return []
+    try:
+        datos = json.loads(crudo)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(datos, list):
+        return []
+    return [p for p in datos if isinstance(p, dict)]
 
 
 def _con_lectura(ruta: Path) -> sqlite3.Connection | None:
@@ -235,7 +256,7 @@ def _migrar_historial(con: sqlite3.Connection) -> int:
         marca = f["marca"] or ""
         fecha = f["fecha"] or ""
         piezas_crudo = f["piezas"] if "piezas" in f.keys() else ""
-        piezas = db._parsear_piezas_historial(piezas_crudo)
+        piezas = _parsear_piezas_historial(piezas_crudo)
         cuerpo = {
             "skill": f["skill"] or "",
             "fecha": fecha,
@@ -344,3 +365,7 @@ def _texto_resumen(conteos: dict[str, int]) -> str:
     for entidad, n in conteos.items():
         lineas.append(f"  - {entidad}: {n}")
     return "\n".join(lineas)
+
+
+if __name__ == "__main__":  # pragma: no cover -- script archivado, uso excepcional
+    print(_texto_resumen(migrar_a_ficheros()))

@@ -1,60 +1,52 @@
-"""Capa REPOSITORIO de la Consola Keni: fachada de persistencia.
+"""Capa REPOSITORIO de la Consola Keni: fachada UNICA de persistencia.
 
-Esta capa existe para DESACOPLAR los `api/*.py` del backend concreto de
-persistencia. Re-exporta TODAS las funciones publicas con firmas IDENTICAS a
-`db.py`; cada `api/*.py` consume SIEMPRE a traves de `repos`, sin saber que hay
-debajo.
+Esta capa existe para DESACOPLAR los `api/*.py` del almacen concreto. Cada
+`api/*.py` consume SIEMPRE a traves de `repos`, sin saber que hay debajo. La fachada
+enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
 
-BACKENDS (conmutables con la env `KENI_CONSOLA_BACKEND`):
-  - `ficheros` (DEFECTO): el CONTENIDO vive en ficheros YAML por marca
-    (`ficheros.py`), con un indice SQLite regenerable (`indice.py`). Fuente de
-    verdad = los YAML.
-  - `sqlite`: el contenido vive en SQLite (`db.py`), comportamiento historico.
+  - CONTENIDO editorial (editable a mano, fuente de verdad) -> ficheros YAML por
+    marca (`ficheros.py`), con un indice SQLite regenerable (`indice.py`):
+    publicaciones, plantillas, fuentes RSS + items vistos + salud, grupos de
+    hashtags, franjas e historial de skills.
+  - OPERACIONAL (no editorial, no encaja en un fichero por entidad) -> SQLite
+    (`db.py`): `tareas` y el apartado `comercial` (piezas + su serie temporal de
+    snapshots, append-only).
 
-En AMBOS backends las `tareas` viven en SQLite (via `db.py`): se reencuadran en la
-Ola 2b/Agentes; aqui la fachada de tareas delega SIEMPRE en `db.py`.
+Las firmas publicas son ESTABLES: ningun `api/*.py` cambia aunque cambie el almacen.
 
 Uso en las features:
 
     from .. import repos
 
-    repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")
-    repos.listar_franjas()
+    repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> YAML
+    repos.crear_tarea("proy", "Revisar copy")                       # -> SQLite
 """
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
 from . import db, ficheros
 
-# Constantes publicas (re-exportadas tal cual desde db; identicas en ambos backends).
-ESTADOS_TAREA: tuple[str, ...] = db.ESTADOS_TAREA
-ESTADOS_PUBLICACION: tuple[str, ...] = db.ESTADOS_PUBLICACION
-ESTADOS_COMERCIAL: tuple[str, ...] = db.ESTADOS_COMERCIAL
-ESTADO_COMERCIAL_ACTIVA: str = db.ESTADO_COMERCIAL_ACTIVA
-METRICAS_COMERCIAL: tuple[str, ...] = db.METRICAS_COMERCIAL
-
-
-def _backend():
-    """Modulo de backend de CONTENIDO segun `KENI_CONSOLA_BACKEND` (def `ficheros`).
-
-    Se resuelve en CADA llamada (no se cachea) para que los tests puedan conmutar
-    el backend con `monkeypatch.setenv` sin reimportar el modulo.
-    """
-    elegido = (os.environ.get("KENI_CONSOLA_BACKEND") or "ficheros").strip().lower()
-    return db if elegido == "sqlite" else ficheros
+# Re-export de las constantes neutras de dominio (los `api/*.py` las leen via `repos`,
+# p. ej. `repos.ESTADOS_PUBLICACION`). Viven en `estados.py`, fuera de los almacenes.
+from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publica
+    ESTADO_COMERCIAL_ACTIVA,
+    ESTADOS_COMERCIAL,
+    ESTADOS_PUBLICACION,
+    ESTADOS_TAREA,
+    METRICAS_COMERCIAL,
+)
 
 
 def ruta_db() -> Path:
-    """Ruta del fichero SQLite (delega en `db.ruta_db`; las tareas siempre viven ahi)."""
+    """Ruta del fichero SQLite (delega en `db.ruta_db`; tareas/comercial viven ahi)."""
     return db.ruta_db()
 
 
 # --------------------------------------------------------------------------- #
-# Tareas (SIEMPRE en SQLite via db.py, en ambos backends)                      #
+# Tareas (OPERACIONAL: SQLite via db.py)                                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -79,7 +71,7 @@ def borrar_tarea(tarea_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Historial de skills                                                          #
+# Historial de skills (CONTENIDO: ficheros YAML via ficheros.py)               #
 # --------------------------------------------------------------------------- #
 
 
@@ -92,21 +84,21 @@ def registrar_historial_skill(
     titulo: str = "",
     metricas: dict[str, Any] | None = None,
 ) -> str:
-    return _backend().registrar_historial_skill(
+    return ficheros.registrar_historial_skill(
         skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas
     )
 
 
 def listar_historial_skills() -> list[dict[str, Any]]:
-    return _backend().listar_historial_skills()
+    return ficheros.listar_historial_skills()
 
 
 def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
-    return _backend().obtener_historial_skill(historial_id)
+    return ficheros.obtener_historial_skill(historial_id)
 
 
 # --------------------------------------------------------------------------- #
-# Publicaciones                                                                #
+# Publicaciones (CONTENIDO: ficheros YAML via ficheros.py)                     #
 # --------------------------------------------------------------------------- #
 
 
@@ -123,7 +115,7 @@ def crear_publicacion(
     imagen: str = "",
     evergreen: bool = False,
 ) -> dict[str, Any]:
-    return _backend().crear_publicacion(
+    return ficheros.crear_publicacion(
         marca,
         red,
         titulo=titulo,
@@ -138,7 +130,7 @@ def crear_publicacion(
 
 
 def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return _backend().crear_publicaciones(lista)
+    return ficheros.crear_publicaciones(lista)
 
 
 def listar_publicaciones(
@@ -147,111 +139,111 @@ def listar_publicaciones(
     estado: str | None = None,
     evergreen: bool | None = None,
 ) -> list[dict[str, Any]]:
-    return _backend().listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    return ficheros.listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
 
 
 def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
-    return _backend().obtener_publicacion(publicacion_id)
+    return ficheros.obtener_publicacion(publicacion_id)
 
 
 def actualizar_publicacion(
     publicacion_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return _backend().actualizar_publicacion(publicacion_id, campos)
+    return ficheros.actualizar_publicacion(publicacion_id, campos)
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:
-    return _backend().borrar_publicacion(publicacion_id)
+    return ficheros.borrar_publicacion(publicacion_id)
 
 
 # --------------------------------------------------------------------------- #
-# Grupos de hashtags                                                           #
+# Grupos de hashtags (CONTENIDO: ficheros YAML via ficheros.py)                #
 # --------------------------------------------------------------------------- #
 
 
 def listar_grupos_hashtags() -> list[dict[str, Any]]:
-    return _backend().listar_grupos_hashtags()
+    return ficheros.listar_grupos_hashtags()
 
 
 def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
-    return _backend().obtener_grupo_hashtags(grupo_id)
+    return ficheros.obtener_grupo_hashtags(grupo_id)
 
 
 def crear_grupo_hashtags(
     nombre: str, marca: str = "", hashtags: list[str] | None = None
 ) -> dict[str, Any]:
-    return _backend().crear_grupo_hashtags(nombre, marca=marca, hashtags=hashtags)
+    return ficheros.crear_grupo_hashtags(nombre, marca=marca, hashtags=hashtags)
 
 
 def actualizar_grupo_hashtags(
     grupo_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return _backend().actualizar_grupo_hashtags(grupo_id, campos)
+    return ficheros.actualizar_grupo_hashtags(grupo_id, campos)
 
 
 def borrar_grupo_hashtags(grupo_id: str) -> bool:
-    return _backend().borrar_grupo_hashtags(grupo_id)
+    return ficheros.borrar_grupo_hashtags(grupo_id)
 
 
 # --------------------------------------------------------------------------- #
-# Franjas                                                                      #
+# Franjas (CONTENIDO: ficheros YAML via ficheros.py)                           #
 # --------------------------------------------------------------------------- #
 
 
 def listar_franjas() -> list[dict[str, Any]]:
-    return _backend().listar_franjas()
+    return ficheros.listar_franjas()
 
 
 def crear_franja(
     dia_semana: int, hora: str, marca: str = "", red: str = ""
 ) -> dict[str, Any]:
-    return _backend().crear_franja(dia_semana, hora, marca=marca, red=red)
+    return ficheros.crear_franja(dia_semana, hora, marca=marca, red=red)
 
 
 def borrar_franja(franja_id: str) -> bool:
-    return _backend().borrar_franja(franja_id)
+    return ficheros.borrar_franja(franja_id)
 
 
 # --------------------------------------------------------------------------- #
-# Plantillas                                                                   #
+# Plantillas (CONTENIDO: ficheros YAML via ficheros.py)                        #
 # --------------------------------------------------------------------------- #
 
 
 def listar_plantillas() -> list[dict[str, Any]]:
-    return _backend().listar_plantillas()
+    return ficheros.listar_plantillas()
 
 
 def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
-    return _backend().obtener_plantilla(plantilla_id)
+    return ficheros.obtener_plantilla(plantilla_id)
 
 
 def crear_plantilla(
     nombre: str, marca: str = "", red: str = "", contenido: str = ""
 ) -> dict[str, Any]:
-    return _backend().crear_plantilla(nombre, marca=marca, red=red, contenido=contenido)
+    return ficheros.crear_plantilla(nombre, marca=marca, red=red, contenido=contenido)
 
 
 def actualizar_plantilla(
     plantilla_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return _backend().actualizar_plantilla(plantilla_id, campos)
+    return ficheros.actualizar_plantilla(plantilla_id, campos)
 
 
 def borrar_plantilla(plantilla_id: str) -> bool:
-    return _backend().borrar_plantilla(plantilla_id)
+    return ficheros.borrar_plantilla(plantilla_id)
 
 
 # --------------------------------------------------------------------------- #
-# Fuentes RSS + items vistos + salud                                           #
+# Fuentes RSS + items vistos + salud (CONTENIDO: ficheros YAML via ficheros.py) #
 # --------------------------------------------------------------------------- #
 
 
 def listar_fuentes_rss() -> list[dict[str, Any]]:
-    return _backend().listar_fuentes_rss()
+    return ficheros.listar_fuentes_rss()
 
 
 def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
-    return _backend().obtener_fuente_rss(fuente_id)
+    return ficheros.obtener_fuente_rss(fuente_id)
 
 
 def crear_fuente_rss(
@@ -263,7 +255,7 @@ def crear_fuente_rss(
     excluir: str = "",
     redes_def: str = "",
 ) -> dict[str, Any]:
-    return _backend().crear_fuente_rss(
+    return ficheros.crear_fuente_rss(
         nombre, url, marca=marca, incluir=incluir, excluir=excluir, redes_def=redes_def
     )
 
@@ -271,32 +263,32 @@ def crear_fuente_rss(
 def actualizar_fuente_rss(
     fuente_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return _backend().actualizar_fuente_rss(fuente_id, campos)
+    return ficheros.actualizar_fuente_rss(fuente_id, campos)
 
 
 def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
-    return _backend().registrar_salud_fuente_rss(fuente_id, conteo=conteo, error=error)
+    return ficheros.registrar_salud_fuente_rss(fuente_id, conteo=conteo, error=error)
 
 
 def borrar_fuente_rss(fuente_id: str) -> bool:
-    return _backend().borrar_fuente_rss(fuente_id)
+    return ficheros.borrar_fuente_rss(fuente_id)
 
 
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
-    return _backend().marcar_item(fuente_id, clave, usado)
+    return ficheros.marcar_item(fuente_id, clave, usado)
 
 
 def claves_vistas(fuente_id: str) -> set[str]:
-    return _backend().claves_vistas(fuente_id)
+    return ficheros.claves_vistas(fuente_id)
 
 
 # --------------------------------------------------------------------------- #
-# Publicaciones comerciales (SIEMPRE en SQLite via db.py: serie temporal)      #
+# Publicaciones comerciales (OPERACIONAL: SQLite via db.py; serie temporal)    #
 # --------------------------------------------------------------------------- #
 #
-# Como las tareas, este apartado vive SIEMPRE en SQLite (los snapshots son una serie
-# temporal append-only; no encajan en el backend de ficheros). La fachada delega 1:1
-# en db.py en ambos backends.
+# El apartado comercial es una serie temporal append-only (snapshots de
+# interacciones/alcance); no encaja en un fichero por entidad. La fachada delega 1:1
+# en db.py.
 
 
 def crear_publicacion_comercial(
