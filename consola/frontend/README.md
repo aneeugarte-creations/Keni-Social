@@ -51,6 +51,8 @@ sin necesidad de Node: el paquete Python lo sirve desde el mismo origen.
 | `npm run typecheck` | `tsc --noEmit` (chequeo de tipos).                  |
 | `npm run preview`   | Sirve el bundle compilado localmente.               |
 | `npm run test`      | Tests con Vitest (incluye el de la página Estado).  |
+| `npm run gen:types` | Regenera `src/types.gen.ts` desde el backend.       |
+| `npm run gen:types:check` | Falla si `types.gen.ts` está desincronizado.  |
 
 ## Estructura
 
@@ -70,6 +72,47 @@ src/
     layout/             AppShell, Sidebar, Wordmark, PageHeader, IndicadorEstado
   pages/                páginas de trabajo y ajustes (Configuración, Métricas, ...)
 ```
+
+## Tipos derivados del backend (`types.gen.ts`)
+
+El contrato tipado de la API vive en `src/types.ts`. Un **subconjunto estable**
+(estado, configuración, límites/redes, métricas y las respuestas genéricas) ya
+**no se mantiene a mano**: se **genera** desde el backend para que no se
+desincronice en silencio (era el hallazgo H5/E6, #101).
+
+- **Fuente única**: `keni_consola.esquema_api` (Python) define esas formas como
+  `TypedDict` y emite su **JSON Schema** (`python -m keni_consola.esquema_api`).
+- **Generación**: `scripts/gen-types.mjs` toma ese esquema y produce
+  `src/types.gen.ts` con `json-schema-to-typescript`. `types.ts` lo **re-exporta**,
+  así que el resto del código sigue importando todo desde `@/types` sin cambios.
+- El **resto** de `types.ts` sigue a mano: la mayoría de los ~50 handlers construyen
+  sus respuestas como dicts ad-hoc (no como modelos), y generarlos todos sería
+  frágil. Se eligió un subset robusto y reproducible.
+
+### Regenerar
+
+Necesitas el backend instalado en un Python (p. ej. un venv con `keni-consola`):
+
+```bash
+# Con el python por defecto (debe importar keni_consola):
+npm run gen:types
+
+# O apuntando a un venv concreto:
+KENI_PYTHON=/ruta/al/venv/bin/python npm run gen:types
+```
+
+Commitea `src/types.gen.ts` (es un artefacto versionado, como el bundle).
+
+### Guard anti-divergencia
+
+Dos pruebas evitan que el TS generado se separe del backend:
+
+- **Frontend** (`src/types.gen.test.ts`, Vitest): el archivo existe, está marcado
+  como GENERADO y todas sus interfaces se re-exportan desde `types.ts`. No necesita
+  Python.
+- **Backend** (`consola/tests/test_esquema_api.py`, pytest): compara el esquema
+  actual del backend contra el `types.gen.ts` comiteado (interfaces y **campos**).
+  Si cambias un `TypedDict` y olvidas `npm run gen:types`, **falla**.
 
 ## Estado de las páginas
 

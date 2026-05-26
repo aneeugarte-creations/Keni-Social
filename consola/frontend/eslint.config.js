@@ -5,7 +5,8 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "../src/keni_consola/webapp"] },
+  // `types.gen.ts` se genera desde el backend (`npm run gen:types`); no se lint-ea.
+  { ignores: ["dist", "../src/keni_consola/webapp", "src/types.gen.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

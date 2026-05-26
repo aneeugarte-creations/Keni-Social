@@ -7,51 +7,47 @@
  *
  * Todo el texto orientado al usuario (nombres, detalles, mensajes) llega ya en
  * espanol desde el backend.
+ *
+ * ── Tipos DERIVADOS del backend (#101 / H5/E6) ──────────────────────────────
+ * Un SUBCONJUNTO ESTABLE del contrato (estado, config, límites/redes, métricas y
+ * las respuestas genéricas) ya NO se mantiene a mano aquí: se GENERA desde el
+ * backend (`keni_consola.esquema_api`) a `types.gen.ts` con `npm run gen:types`,
+ * y se re-exporta abajo. Así esos tipos no se desincronizan en silencio (el guard
+ * `npm run gen:types:check` falla si divergen). El RESTO sigue a mano en este
+ * archivo porque sus handlers construyen dicts ad-hoc, no modelos. Ver README.
  */
+
+// Re-export de los tipos generados desde el backend (NO editar `types.gen.ts`).
+export type {
+  ResultadoEstado,
+  RespuestaEstado,
+  MarcaDisponible,
+  CredencialesPresentes,
+  RespuestaConfig,
+  CuerpoGuardarConfig,
+  LimiteRed,
+  RespuestaLimites,
+  RangoMetrica,
+  OpcionesMetricas,
+  TotalMetricas,
+  CuentaMetrica,
+  ReporteMetricas,
+  ComparativaMetrica,
+  ComparativaPorMarca,
+  TotalComparativa,
+  CompararMetricas,
+  RespuestaMensaje,
+  ErrorApi,
+} from "./types.gen";
+
+// Import LOCAL de los tipos generados que usan otras interfaces de este archivo
+// (un `export type { … } from` re-exporta pero NO crea binding local utilizable aquí).
+import type { MarcaDisponible, RangoMetrica, ResultadoEstado } from "./types.gen";
 
 // --- Estado (autodiagnostico del sistema) ---
 
-export type NivelEstado = "ok" | "aviso" | "error";
-
-export interface ResultadoEstado {
-  estado: NivelEstado;
-  nombre: string;
-  detalle: string;
-  icono: string;
-}
-
-export interface RespuestaEstado {
-  resultados: ResultadoEstado[];
-  resumen: string;
-  siguiente_paso: string;
-}
-
-// --- Configuracion ---
-
-export interface MarcaDisponible {
-  id: string;
-  nombre: string;
-}
-
-export interface CredencialesPresentes {
-  meta: boolean;
-  youtube: boolean;
-  x: boolean;
-  tiktok: boolean;
-}
-
-export interface RespuestaConfig {
-  fuente: string;
-  fuentes_validas: string[];
-  marcas: string[];
-  marcas_disponibles: MarcaDisponible[];
-  credenciales_presentes: CredencialesPresentes;
-}
-
-export interface CuerpoGuardarConfig {
-  fuente: string;
-  marcas: string[];
-}
+/** Nivel de un chequeo del autodiagnóstico (derivado del tipo generado). */
+export type NivelEstado = ResultadoEstado["estado"];
 
 /** Una opción del selector de esfuerzo de generación (`claude --effort`). */
 export interface OpcionEsfuerzo {
@@ -713,78 +709,11 @@ export interface CuerpoActualizarTarea {
 }
 
 // --- Metricas ---
-
-export interface RangoMetrica {
-  id: string;
-  etiqueta: string;
-}
-
-export interface OpcionesMetricas {
-  marcas: MarcaDisponible[];
-  rangos: RangoMetrica[];
-}
-
-export interface TotalMetricas {
-  visualizaciones: number;
-  alcance: number;
-  interacciones: number;
-  engagement_pct: number;
-}
-
-export interface CuentaMetrica {
-  marca_id: string;
-  marca: string;
-  visualizaciones: number;
-  alcance: number;
-  interacciones: number;
-  engagement_pct: number;
-}
-
-export interface ReporteMetricas {
-  rango: string;
-  etiqueta_rango: string;
-  marca: string;
-  total: TotalMetricas;
-  cuentas: CuentaMetrica[];
-  /**
-   * Nombre de la fuente de datos activa: `"muestra"` para datos ficticios o el
-   * nombre de la fuente real (p. ej. `"meta"`). OPCIONAL: el backend lo está
-   * añadiendo; el frontend lo lee de forma defensiva (si falta, no hay badge).
-   */
-  fuente?: string;
-}
-
-export interface ComparativaMetrica {
-  metrica: string;
-  a: number;
-  b: number;
-  diferencia: number;
-  variacion_pct: number;
-}
-
-export interface ComparativaPorMarca {
-  marca_id: string;
-  marca: string;
-  comparativa: ComparativaMetrica[];
-}
-
-export interface CompararMetricas {
-  marca: string;
-  rango_a: string;
-  rango_b: string;
-  etiqueta_a: string;
-  etiqueta_b: string;
-  total: {
-    metricas: ComparativaMetrica[];
-  };
-  por_marca: ComparativaPorMarca[];
-  /**
-   * Procedencia de los datos comparados (`"muestra"` = ficticios). OPCIONAL: el
-   * backend de `/api/metricas/comparar` lo añade en paralelo (otro agente); se
-   * lee de forma defensiva con `<BadgeFuente>`. Si falta, no se afirma nada.
-   */
-  fuente?: string;
-}
+//
+// Los tipos de métricas (`RangoMetrica`, `OpcionesMetricas`, `TotalMetricas`,
+// `CuentaMetrica`, `ReporteMetricas`, `ComparativaMetrica`, `ComparativaPorMarca`,
+// `CompararMetricas`) se GENERAN desde el backend y se re-exportan arriba. Ver #101.
+// NOTA: `fuente` ahora es REQUERIDO (el backend siempre lo emite, cae a "muestra").
 
 // --- Reporte de deportes (deck semanal de Claro Sports) ---
 
@@ -867,22 +796,8 @@ export interface OpcionesPublicaciones {
   marcas: MarcaDisponible[];
 }
 
-/**
- * Límite de caracteres canónico de una red (fuente única en el backend,
- * `GET /api/limites`). El frontend lo consume para hidratar `META_REDES` en
- * `pages/publicaciones/meta.ts` en vez de hardcodear los topes. Ver #112.
- */
-export interface LimiteRed {
-  id: string;
-  nombre: string;
-  /** Límite de caracteres; `null` si la red no tiene tope técnico. */
-  limite: number | null;
-}
-
-/** Respuesta de GET /api/limites: los límites por red, en orden fijo. */
-export interface RespuestaLimites {
-  limites: LimiteRed[];
-}
+// `LimiteRed` y `RespuestaLimites` (`GET /api/limites`, fuente única de los topes
+// de caracteres; ver #112) se GENERAN desde el backend y se re-exportan arriba (#101).
 
 export interface Publicacion {
   id: string;
@@ -1297,16 +1212,9 @@ export interface CuerpoActualizarSugerencia {
 }
 
 // --- Respuesta generica con mensaje ---
-
-export interface RespuestaMensaje {
-  mensaje: string;
-}
-
-/** Forma de error que devuelve el backend (uno u otro campo, en espanol). */
-export interface ErrorApi {
-  error?: string;
-  mensaje?: string;
-}
+//
+// `RespuestaMensaje` y `ErrorApi` se GENERAN desde el backend y se re-exportan
+// arriba. Ver #101.
 
 // --- Comercial (seguimiento de publicaciones comerciales) ---
 
