@@ -4,6 +4,7 @@ import {
   Bot,
   ImagePlus,
   Lightbulb,
+  Megaphone,
   Presentation,
   Rss,
   ScanSearch,
@@ -77,6 +78,13 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Métricas",
         icono: BarChart3,
         descripcion: "Reportes y comparativas de tus cuentas.",
+      },
+      {
+        ruta: "/comercial",
+        etiqueta: "Comercial",
+        icono: Megaphone,
+        descripcion:
+          "Monitorea publicaciones comerciales por su enlace y entrega su reporte al llegar el KPI.",
       },
       {
         ruta: "/reporte-deportes",

@@ -1234,3 +1234,163 @@ export interface ErrorApi {
   error?: string;
   mensaje?: string;
 }
+
+// --- Comercial (seguimiento de publicaciones comerciales) ---
+
+export type EstadoComercial = "activa" | "pausada" | "cerrada";
+export type MetricaComercial = "interacciones" | "alcance";
+
+/** Un punto de la serie temporal de una pieza (acumulado en ese instante). */
+export interface SnapshotComercial {
+  ts: string;
+  interacciones: number;
+  alcance: number;
+}
+
+/** Valor actual consultable de una pieza (del ultimo snapshot). */
+export interface ActualComercial {
+  ts: string;
+  interacciones: number;
+  alcance: number;
+  engagement_pct: number;
+}
+
+/** Una publicacion comercial monitoreada, con su valor actual y progreso. */
+export interface PublicacionComercial {
+  id: string;
+  url: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  cliente: string;
+  campania: string;
+  red: string;
+  red_nombre: string;
+  metrica_objetivo: MetricaComercial;
+  objetivo: number;
+  estado: EstadoComercial;
+  publicado: string;
+  notas: string;
+  /** ISO del instante en que alcanzo el objetivo; `""` si aun no. */
+  aviso_en: string;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+  actual: ActualComercial;
+  progreso_pct: number;
+  alcanzado: boolean;
+  /** Serie temporal completa (solo en el detalle / al crear). */
+  serie?: SnapshotComercial[];
+}
+
+export interface OpcionComercial {
+  id: string;
+  nombre: string;
+}
+
+export interface RedComercial {
+  id: string;
+  nombre: string;
+  limite?: number;
+}
+
+export interface OpcionesComercial {
+  marcas: MarcaDisponible[];
+  redes: RedComercial[];
+  estados: OpcionComercial[];
+  metricas: OpcionComercial[];
+}
+
+export interface RespuestaPublicacionesComercial {
+  publicaciones: PublicacionComercial[];
+}
+
+export interface RespuestaPublicacionComercial {
+  publicacion: PublicacionComercial;
+}
+
+export interface RespuestaRefrescarComercial {
+  actualizadas: number;
+}
+
+export interface CuerpoCrearComercial {
+  url: string;
+  titulo?: string;
+  marca?: string;
+  cliente?: string;
+  campania?: string;
+  red?: string;
+  metrica_objetivo?: MetricaComercial;
+  objetivo?: number;
+  estado?: EstadoComercial;
+  publicado?: string;
+  notas?: string;
+}
+
+export type CuerpoActualizarComercial = Partial<Omit<CuerpoCrearComercial, "url">>;
+
+export interface FiltrosComercial {
+  estado?: string;
+  cliente?: string;
+  campania?: string;
+  /** Permite pasarse a `query()` (Record<string, string | undefined>). */
+  [clave: string]: string | undefined;
+}
+
+/** Datos de una pieza dentro de un reporte (nombres ya resueltos en servidor). */
+export interface PiezaReporteComercial {
+  id: string;
+  titulo: string;
+  url: string;
+  cliente: string;
+  campania: string;
+  marca: string;
+  marca_nombre: string;
+  red: string;
+  red_nombre: string;
+  publicado: string;
+  estado: EstadoComercial;
+}
+
+export interface ObjetivoReporteComercial {
+  metrica: MetricaComercial;
+  valor: number;
+  progreso_pct: number;
+  alcanzado: boolean;
+  aviso_en: string;
+}
+
+export interface ReportePublicacionComercial {
+  tipo: "publicacion";
+  generado: string;
+  publicacion: PiezaReporteComercial;
+  periodo: { desde: string; hasta: string };
+  actual: ActualComercial;
+  objetivo: ObjetivoReporteComercial;
+  puntos: number;
+}
+
+export interface FilaReporteCampania {
+  publicacion: PiezaReporteComercial;
+  actual: ActualComercial;
+  objetivo: ObjetivoReporteComercial;
+}
+
+export interface ReporteCampaniaComercial {
+  tipo: "campania";
+  generado: string;
+  campania: string;
+  cliente: string;
+  piezas: FilaReporteCampania[];
+  total: {
+    interacciones: number;
+    alcance: number;
+    engagement_pct: number;
+    piezas: number;
+  };
+}
+
+export type ReporteComercial = ReportePublicacionComercial | ReporteCampaniaComercial;
+
+export interface RespuestaReporteComercial {
+  reporte: ReporteComercial;
+}

@@ -100,6 +100,14 @@ import type {
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
+  CuerpoActualizarComercial,
+  CuerpoCrearComercial,
+  FiltrosComercial,
+  OpcionesComercial,
+  RespuestaPublicacionComercial,
+  RespuestaPublicacionesComercial,
+  RespuestaRefrescarComercial,
+  RespuestaReporteComercial,
   Run,
 } from "@/types";
 
@@ -545,4 +553,43 @@ export const api = {
     }),
   eliminarSugerencia: (id: string) =>
     peticion<RespuestaMensaje>(`/sugerencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Comercial (seguimiento de publicaciones comerciales) ---
+  comercialOpciones: (signal?: AbortSignal) =>
+    peticion<OpcionesComercial>("/comercial/opciones", { signal }),
+  comerciales: (filtros: FiltrosComercial = {}, signal?: AbortSignal) =>
+    peticion<RespuestaPublicacionesComercial>(`/comercial/publicaciones${query(filtros)}`, {
+      signal,
+    }),
+  comercial: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaPublicacionComercial>(`/comercial/publicaciones/${encodeURIComponent(id)}`, {
+      signal,
+    }),
+  crearComercial: (cuerpo: CuerpoCrearComercial) =>
+    peticion<RespuestaPublicacionComercial>("/comercial/publicaciones", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  actualizarComercial: (id: string, cuerpo: CuerpoActualizarComercial) =>
+    peticion<RespuestaPublicacionComercial>(`/comercial/publicaciones/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarComercial: (id: string) =>
+    peticion<RespuestaMensaje>(`/comercial/publicaciones/${encodeURIComponent(id)}`, {
+      metodo: "DELETE",
+    }),
+  refrescarComercial: (id: string) =>
+    peticion<RespuestaPublicacionComercial>(
+      `/comercial/publicaciones/${encodeURIComponent(id)}/refrescar`,
+      { metodo: "POST" },
+    ),
+  refrescarComerciales: () =>
+    peticion<RespuestaRefrescarComercial>("/comercial/refrescar", { metodo: "POST" }),
+  reporteComercial: (
+    params: { publicacion?: string; campania?: string; cliente?: string },
+    signal?: AbortSignal,
+  ) => peticion<RespuestaReporteComercial>(`/comercial/reporte${query(params)}`, { signal }),
+  descargarReporteComercial: (params: { publicacion?: string; campania?: string; cliente?: string }) =>
+    descargar(`/comercial/reporte${query({ ...params, formato: "md" })}`),
 };

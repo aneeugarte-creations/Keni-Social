@@ -33,6 +33,9 @@ from . import db, ficheros
 # Constantes publicas (re-exportadas tal cual desde db; identicas en ambos backends).
 ESTADOS_TAREA: tuple[str, ...] = db.ESTADOS_TAREA
 ESTADOS_PUBLICACION: tuple[str, ...] = db.ESTADOS_PUBLICACION
+ESTADOS_COMERCIAL: tuple[str, ...] = db.ESTADOS_COMERCIAL
+ESTADO_COMERCIAL_ACTIVA: str = db.ESTADO_COMERCIAL_ACTIVA
+METRICAS_COMERCIAL: tuple[str, ...] = db.METRICAS_COMERCIAL
 
 
 def _backend():
@@ -285,3 +288,81 @@ def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
 
 def claves_vistas(fuente_id: str) -> set[str]:
     return _backend().claves_vistas(fuente_id)
+
+
+# --------------------------------------------------------------------------- #
+# Publicaciones comerciales (SIEMPRE en SQLite via db.py: serie temporal)      #
+# --------------------------------------------------------------------------- #
+#
+# Como las tareas, este apartado vive SIEMPRE en SQLite (los snapshots son una serie
+# temporal append-only; no encajan en el backend de ficheros). La fachada delega 1:1
+# en db.py en ambos backends.
+
+
+def crear_publicacion_comercial(
+    url: str,
+    *,
+    titulo: str = "",
+    marca: str = "",
+    cliente: str = "",
+    campania: str = "",
+    red: str = "",
+    metrica_objetivo: str = "interacciones",
+    objetivo: int = 0,
+    estado: str = "activa",
+    publicado: str = "",
+    notas: str = "",
+) -> dict[str, Any]:
+    return db.crear_publicacion_comercial(
+        url,
+        titulo=titulo,
+        marca=marca,
+        cliente=cliente,
+        campania=campania,
+        red=red,
+        metrica_objetivo=metrica_objetivo,
+        objetivo=objetivo,
+        estado=estado,
+        publicado=publicado,
+        notas=notas,
+    )
+
+
+def listar_publicaciones_comerciales(
+    estado: str | None = None,
+    cliente: str | None = None,
+    campania: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_publicaciones_comerciales(estado=estado, cliente=cliente, campania=campania)
+
+
+def obtener_publicacion_comercial(publicacion_id: str) -> dict[str, Any] | None:
+    return db.obtener_publicacion_comercial(publicacion_id)
+
+
+def actualizar_publicacion_comercial(
+    publicacion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_publicacion_comercial(publicacion_id, campos)
+
+
+def marcar_aviso_comercial(publicacion_id: str, ts: str) -> None:
+    return db.marcar_aviso_comercial(publicacion_id, ts)
+
+
+def borrar_publicacion_comercial(publicacion_id: str) -> bool:
+    return db.borrar_publicacion_comercial(publicacion_id)
+
+
+def registrar_snapshot_comercial(
+    publicacion_id: str, ts: str, interacciones: int, alcance: int
+) -> bool:
+    return db.registrar_snapshot_comercial(publicacion_id, ts, interacciones, alcance)
+
+
+def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
+    return db.listar_snapshots_comerciales(publicacion_id)
+
+
+def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
+    return db.ultimo_snapshot_comercial(publicacion_id)
