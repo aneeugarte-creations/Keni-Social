@@ -177,6 +177,31 @@ def test_arg_presupuesto_invalido_o_ausente_se_ignora(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# arg_max_turns: --max-turns desde KENI_CLAUDE_MAX_TURNS (#103, F-T-01)         #
+# --------------------------------------------------------------------------- #
+
+
+def test_arg_max_turns_valido(monkeypatch):
+    from keni_consola.dominio import stream
+
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "12")
+    assert stream.arg_max_turns() == ["--max-turns", "12"]
+
+
+def test_arg_max_turns_invalido_o_ausente_se_ignora(monkeypatch):
+    from keni_consola.dominio import stream
+
+    monkeypatch.delenv("KENI_CLAUDE_MAX_TURNS", raising=False)
+    assert stream.arg_max_turns() == []
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "no-numero")
+    assert stream.arg_max_turns() == []
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "0")
+    assert stream.arg_max_turns() == []
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "1.5")  # float no es entero de turnos
+    assert stream.arg_max_turns() == []
+
+
+# --------------------------------------------------------------------------- #
 # metricas_a_dict: solo el subconjunto persistido, sin claves None            #
 # --------------------------------------------------------------------------- #
 

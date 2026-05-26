@@ -65,6 +65,38 @@ def test_argv_sin_dirs_no_anade_add_dir(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# argv de claude: --max-turns desde KENI_CLAUDE_MAX_TURNS (#103, F-T-01)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_argv_sin_max_turns_no_pasa_la_bandera(entorno, monkeypatch):
+    # Sin el env (caso por defecto del piloto), no se topa por turnos.
+    monkeypatch.delenv("KENI_CLAUDE_MAX_TURNS", raising=False)
+    argv = generaciones._argv_claude("hola")
+    assert "--max-turns" not in argv
+
+
+def test_argv_con_max_turns_pasa_la_bandera_al_subproceso(entorno, monkeypatch):
+    # El env valido llega al COMANDO `claude -p` como `--max-turns <n>` (par flag+valor).
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "8")
+    argv = generaciones._argv_claude("hola")
+    i = argv.index("--max-turns")
+    assert argv[i + 1] == "8"
+    # Sigue siendo un comando de streaming valido.
+    assert argv[:2] == ["claude", "-p"]
+
+
+def test_argv_max_turns_invalido_o_cero_se_ignora(entorno, monkeypatch):
+    # Tolerante: no numerico o <= 0 no debe meter la bandera (sin tope de turnos).
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "no-numero")
+    assert "--max-turns" not in generaciones._argv_claude("hola")
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "0")
+    assert "--max-turns" not in generaciones._argv_claude("hola")
+    monkeypatch.setenv("KENI_CLAUDE_MAX_TURNS", "-3")
+    assert "--max-turns" not in generaciones._argv_claude("hola")
+
+
+# --------------------------------------------------------------------------- #
 # Entorno del subproceso: transporta la clave de imagen del ALMACEN (secretos) #
 # --------------------------------------------------------------------------- #
 
