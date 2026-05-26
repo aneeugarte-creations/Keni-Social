@@ -10,6 +10,9 @@ import { Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRed } from "@/components/comunes/SelectorRed";
+import { NINGUNA, ningunaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,8 +36,6 @@ import { api, ApiError } from "@/lib/api";
 import type { CuerpoCrearComercial, MetricaComercial, OpcionesComercial } from "@/types";
 
 import { CLAVE_COMERCIAL } from "./claves";
-
-const NINGUNA = "__ninguna__";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -88,8 +89,8 @@ export function DialogoNueva({
         titulo: titulo.trim(),
         cliente: cliente.trim(),
         campania: campania.trim(),
-        marca: marca === NINGUNA ? "" : marca,
-        red: red === NINGUNA ? "" : red,
+        marca: ningunaParam(marca),
+        red: ningunaParam(red),
         publicado,
         metrica_objetivo: metrica,
         objetivo: objetivo ? Number(objetivo) : 0,
@@ -169,35 +170,27 @@ export function DialogoNueva({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="nueva-marca">Marca</Label>
-              <Select value={marca} onValueChange={setMarca}>
-                <SelectTrigger id="nueva-marca">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NINGUNA}>Sin marca</SelectItem>
-                  {opciones.marcas.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectorMarca
+                id="nueva-marca"
+                className="w-full"
+                marcas={opciones.marcas}
+                valor={marca}
+                onCambio={setMarca}
+                incluirTodas={false}
+                incluirNinguna
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="nueva-red">Red</Label>
-              <Select value={red} onValueChange={setRed}>
-                <SelectTrigger id="nueva-red">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NINGUNA}>Sin red</SelectItem>
-                  {opciones.redes.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SelectorRed
+                id="nueva-red"
+                className="w-full"
+                redes={opciones.redes}
+                valor={red}
+                onCambio={setRed}
+                incluirTodas={false}
+                incluirNinguna
+              />
             </div>
           </div>
 

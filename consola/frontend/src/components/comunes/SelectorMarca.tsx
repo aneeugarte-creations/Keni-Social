@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { MarcaDisponible } from "@/types";
 
-import { MARCA_TODAS } from "./selectores";
+import { MARCA_TODAS, NINGUNA } from "./selectores";
 
 export function SelectorMarca({
   marcas,
@@ -30,6 +30,8 @@ export function SelectorMarca({
   onCambio,
   incluirTodas = true,
   etiquetaTodas = "Todas las marcas",
+  incluirNinguna = false,
+  etiquetaNinguna = "Sin marca",
   placeholder = "Marca",
   ariaLabel = "Marca",
   id,
@@ -43,6 +45,13 @@ export function SelectorMarca({
   incluirTodas?: boolean;
   /** Texto de la opción "Todas" (p. ej. "Todas las marcas"). */
   etiquetaTodas?: string;
+  /**
+   * Añade la opción "Sin marca" (centinela `NINGUNA`), para campos OPCIONALES
+   * donde se puede dejar sin valor. Distinto de `incluirTodas` (no filtrar).
+   */
+  incluirNinguna?: boolean;
+  /** Texto de la opción "Sin marca". */
+  etiquetaNinguna?: string;
   placeholder?: string;
   ariaLabel?: string;
   id?: string;
@@ -56,6 +65,7 @@ export function SelectorMarca({
       </SelectTrigger>
       <SelectContent>
         {incluirTodas && <SelectItem value={MARCA_TODAS}>{etiquetaTodas}</SelectItem>}
+        {incluirNinguna && <SelectItem value={NINGUNA}>{etiquetaNinguna}</SelectItem>}
         {marcas.map((m) => (
           <SelectItem key={m.id} value={m.id}>
             {m.nombre}

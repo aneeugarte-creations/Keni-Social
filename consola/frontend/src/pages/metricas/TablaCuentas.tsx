@@ -8,6 +8,7 @@
 import { Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { marcaCanonicaDesdeMetricas } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,11 +24,21 @@ import type { CuentaMetrica } from "@/types";
 
 import { METRICAS, valorMetrica } from "./metricas-meta";
 
-export function TablaCuentas({ cuentas }: { cuentas: CuentaMetrica[] }) {
+export function TablaCuentas({
+  cuentas,
+  fuente,
+}: {
+  cuentas: CuentaMetrica[];
+  /** Fuente de datos activa para el badge muestra/real. Opcional (defensivo). */
+  fuente?: string;
+}) {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Detalle por cuenta</CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base">Detalle por cuenta</CardTitle>
+          <BadgeFuente fuente={fuente} />
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <Table>

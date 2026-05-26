@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { EstadoMensaje } from "@/components/layout/EstadoMensaje";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -40,7 +41,6 @@ import {
 import { Historial } from "./Historial";
 import { ResultadoDocumento } from "./ResultadoDocumento";
 import { ResultadoRedes } from "./ResultadoRedes";
-import { SelectorRedes } from "./SelectorRedes";
 import { VistaPrompt } from "./VistaPrompt";
 import { ORDEN_REDES } from "../publicaciones/meta";
 
@@ -439,7 +439,7 @@ export function FlujoGeneracion({
 
                   {/* Redes: solo si la skill genera piezas por red. */}
                   {skillSeleccionada.aplica_redes && (
-                    <SelectorRedes
+                    <SelectorRedMultiple
                       opciones={opcionesRedes}
                       seleccionadas={redes}
                       onCambio={alternarRed}

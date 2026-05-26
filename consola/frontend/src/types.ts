@@ -746,6 +746,12 @@ export interface ReporteMetricas {
   marca: string;
   total: TotalMetricas;
   cuentas: CuentaMetrica[];
+  /**
+   * Nombre de la fuente de datos activa: `"muestra"` para datos ficticios o el
+   * nombre de la fuente real (p. ej. `"meta"`). OPCIONAL: el backend lo está
+   * añadiendo; el frontend lo lee de forma defensiva (si falta, no hay badge).
+   */
+  fuente?: string;
 }
 
 export interface ComparativaMetrica {

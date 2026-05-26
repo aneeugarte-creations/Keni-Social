@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -134,19 +135,22 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
       ) : (
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground">
-              Mostrando{" "}
-              <span className="font-medium text-foreground">
-                {reporteQuery.data.marca || ETIQUETA_TODAS}
-              </span>{" "}
-              · {reporteQuery.data.etiqueta_rango}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                Mostrando{" "}
+                <span className="font-medium text-foreground">
+                  {reporteQuery.data.marca || ETIQUETA_TODAS}
+                </span>{" "}
+                · {reporteQuery.data.etiqueta_rango}
+              </p>
+              <BadgeFuente fuente={reporteQuery.data.fuente} />
+            </div>
             <Descargas rango={rango} marca={marca_} />
           </div>
 
           <Kpis total={reporteQuery.data.total} />
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
-          <TablaCuentas cuentas={reporteQuery.data.cuentas} />
+          <TablaCuentas cuentas={reporteQuery.data.cuentas} fuente={reporteQuery.data.fuente} />
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>
       )}

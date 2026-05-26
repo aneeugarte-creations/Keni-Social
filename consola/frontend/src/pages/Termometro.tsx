@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { NINGUNA } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -333,18 +334,18 @@ function SelectorMarca({
   /** Si `true`, ofrece "Sin fijar" (valor ""), útil para la config por defecto. */
   conNinguna?: boolean;
 }) {
-  // Radix Select no admite value="" en un item; usamos un centinela para "sin fijar".
-  const SIN = "__ninguna__";
+  // Radix Select no admite value="" en un item; usamos el centinela canónico
+  // `NINGUNA` (de `comunes/selectores`) para "sin fijar".
   return (
     <Select
-      value={valor === "" ? (conNinguna ? SIN : "") : valor}
-      onValueChange={(v) => onCambio(v === SIN ? "" : v)}
+      value={valor === "" ? (conNinguna ? NINGUNA : "") : valor}
+      onValueChange={(v) => onCambio(v === NINGUNA ? "" : v)}
     >
       <SelectTrigger id={id}>
         <SelectValue placeholder="Elige una marca" />
       </SelectTrigger>
       <SelectContent>
-        {conNinguna && <SelectItem value={SIN}>Sin fijar</SelectItem>}
+        {conNinguna && <SelectItem value={NINGUNA}>Sin fijar</SelectItem>}
         {marcas.map((m) => (
           <SelectItem key={m.id} value={m.id}>
             {m.nombre}

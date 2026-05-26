@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +56,6 @@ import type {
   RedPublicacion,
 } from "@/types";
 
-import { SelectorRedes } from "./copy/SelectorRedes";
 import {
   formatearFechaHora,
   ORDEN_REDES,
@@ -491,7 +491,7 @@ function FormularioFuente({
           />
         </div>
       </div>
-      <SelectorRedes
+      <SelectorRedMultiple
         opciones={opcionesRedes}
         seleccionadas={redesDef}
         onCambio={alternarRed}
@@ -942,7 +942,7 @@ function DialogoGenerar({
             </Select>
           </div>
 
-          <SelectorRedes
+          <SelectorRedMultiple
             opciones={opcionesRedes}
             seleccionadas={seleccionadas}
             onCambio={alternarRed}
