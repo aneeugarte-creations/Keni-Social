@@ -48,6 +48,21 @@ def _variacion_pct(a: int | float, b: int | float) -> float:
     return round((a - b) / b * 100, 1) if b else 0.0
 
 
+def _fuente_combinada(rep_a: dict, rep_b: dict) -> str:
+    """Fuente de una comparativa A vs B: "muestra" si CUALQUIERA de los dos lo es.
+
+    La comparativa cruza dos reportes; basta con que uno sea de datos de muestra para
+    que el resultado deba advertirse como muestra (no se mezclan datos ficticios con
+    reales sin que la UI lo marque). Cae a "muestra" por prudencia si falta el campo
+    (riesgo operativo del piloto AMX), igual que `/reporte`.
+    """
+    fuente_a = rep_a.get("fuente") or "muestra"
+    fuente_b = rep_b.get("fuente") or "muestra"
+    if "muestra" in (fuente_a, fuente_b):
+        return "muestra"
+    return fuente_a
+
+
 def _comparar_totales(total_a: dict, total_b: dict) -> dict:
     """Comparativa del total consolidado de dos reportes (4 metricas)."""
     metricas = []
@@ -187,6 +202,10 @@ async def comparar(request: Request) -> Response:
             "rango_b": rango_b,
             "etiqueta_a": ETIQUETAS_RANGO.get(rango_a, rango_a),
             "etiqueta_b": ETIQUETAS_RANGO.get(rango_b, rango_b),
+            # Fuente de los datos de la comparativa: "muestra" si cualquiera de los dos
+            # reportes lo es. La UI pinta un badge de advertencia con esto (N6, igual que
+            # /reporte) para no confundir datos de muestra con reales (piloto AMX).
+            "fuente": _fuente_combinada(rep_a, rep_b),
             "total": _comparar_totales(rep_a["total"], rep_b["total"]),
             "por_marca": _comparar_por_marca(rep_a, rep_b),
         }

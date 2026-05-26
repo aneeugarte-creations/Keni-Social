@@ -69,3 +69,17 @@ def test_comparar_total_y_por_marca(cliente):
     data = r.json()
     assert "total" in data
     assert "por_marca" in data
+
+
+def test_comparar_expone_fuente_muestra(cliente):
+    # N6: la comparativa A vs B tambien lleva `fuente` para el badge de muestra,
+    # igual que `/reporte`. Con la fuente offline de `entorno`, ambos lados son muestra.
+    r = cliente.get("/api/metricas/comparar?rango_a=semana&rango_b=mes")
+    assert r.status_code == 200
+    assert r.json()["fuente"] == "muestra"
+
+
+def test_comparar_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
+    r = cliente.get("/api/metricas/comparar?rango_a=7d&rango_b=30d&marca=unotv")
+    assert r.status_code == 200
+    assert r.json()["fuente"] == "muestra"
