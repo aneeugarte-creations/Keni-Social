@@ -27,6 +27,7 @@ from starlette.routing import Route
 
 from .. import marcas, redes, repos
 from .._http_json import leer_json
+from ..dominio.publicaciones import publicacion_a_dict
 from . import franjas as api_franjas
 
 # Nombres legibles de los estados (para poblar selects de la UI), en orden de flujo.
@@ -43,31 +44,10 @@ _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
 
-def _publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
-    """Serializa una publicacion resolviendo nombres legibles de marca y red.
-
-    Anade `imagen` (nombre de archivo en el dir de media, o "") y `imagen_url`
-    (`/api/media/{imagen}` o "" si no hay imagen) para que la UI la pueda mostrar.
-    """
-    imagen = pub.get("imagen") or ""
-    return {
-        "id": pub["id"],
-        "titulo": pub["titulo"],
-        "marca": pub["marca"],
-        "marca_nombre": marcas.etiqueta_de(pub["marca"]),
-        "red": pub["red"],
-        "red_nombre": redes.nombre_por_id(pub["red"]),
-        "contenido": pub["contenido"],
-        "estado": pub["estado"],
-        "veredicto": pub["veredicto"],
-        "fecha_creacion": pub["fecha_creacion"],
-        "fecha_actualizacion": pub["fecha_actualizacion"],
-        "fecha_programada": pub["fecha_programada"],
-        "origen": pub["origen"],
-        "imagen": imagen,
-        "imagen_url": f"/api/media/{imagen}" if imagen else "",
-        "evergreen": bool(pub.get("evergreen")),
-    }
+# Alias local para los handlers de este modulo. La serializacion vive en el dominio
+# (`dominio.publicaciones.publicacion_a_dict`): asi `api/skills.py` la consume desde un
+# sitio comun y publico, sin importar un simbolo privado de este handler (H6/N7).
+_publicacion_a_dict = publicacion_a_dict
 
 
 def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:

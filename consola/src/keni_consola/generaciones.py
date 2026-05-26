@@ -45,6 +45,7 @@ from typing import Any
 import yaml
 
 from . import preferencias
+from .dominio import stream
 from .io_atomico import escribir_atomico
 
 # Estados terminales e intermedio de un trabajo.
@@ -255,17 +256,22 @@ Procesar = Callable[[str, Any], dict[str, Any]]
 
 def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list[str]:
     """argv de `claude -p <prompt> --output-format stream-json --verbose
-    --include-partial-messages [--effort N] [--max-budget-usd N] [--add-dir D ...]`.
+    --include-partial-messages [--effort N] [--max-budget-usd N] [--max-turns N]
+    [--add-dir D ...]`.
 
     `--include-partial-messages` es lo que habilita el STREAMING token a token (eventos
     `stream_event`/`text_delta`). `--verbose` es obligatorio para stream-json. `--effort`
     se añade solo si hay un nivel guardado en preferencias (si no, el predeterminado del
-    modelo). Por cada dir en `dirs_permitidos` se añade `--add-dir <dir>` para que claude
-    pueda LEER archivos fuera de su cwd (p.ej. la foto subida, que vive en un temporal del
-    SO). El default `None` mantiene la retrocompat (sin `--add-dir`). Sin shell.
-    """
-    from .api import skills  # import local: evita el ciclo generaciones<->api.skills
+    modelo). `--max-budget-usd`/`--max-turns` se añaden solo si hay un tope valido en el
+    entorno (`KENI_CLAUDE_MAX_USD`/`KENI_CLAUDE_MAX_TURNS`): topan el run por coste y por
+    turnos de agente (complementan al wall-timeout, que topa por tiempo). Por cada dir en
+    `dirs_permitidos` se añade `--add-dir <dir>` para que claude pueda LEER archivos fuera
+    de su cwd (p.ej. la foto subida, que vive en un temporal del SO). El default `None`
+    mantiene la retrocompat (sin `--add-dir`). Sin shell.
 
+    El presupuesto/max-turns salen del DOMINIO (`dominio.stream`), no de `api.skills`:
+    asi `generaciones` ya no necesita el import perezoso que rompia el ciclo dominio↔API.
+    """
     extra: list[str] = []
     for d in dirs_permitidos or []:
         extra += ["--add-dir", str(d)]
@@ -273,7 +279,8 @@ def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
         *preferencias.arg_esfuerzo(),
-        *skills._arg_presupuesto(),
+        *stream.arg_presupuesto(),
+        *stream.arg_max_turns(),
         *extra,
     ]
 
@@ -320,9 +327,7 @@ def lanzar_job_claude(
     Si `dir_temporal` viene (archivo subido), se borra al terminar. INYECTABLE: los tests
     reemplazan esta funcion por una fake que llama a `procesar` con una salida canned.
     """
-    from .api import skills  # import local (ver _argv_claude)
-
-    acumulador = skills.AcumuladorStream()
+    acumulador = stream.AcumuladorStream()
     timeout = _timeout()
 
     def _avance() -> None:
@@ -332,7 +337,7 @@ def lanzar_job_claude(
                 {
                     "estado": ESTADO_EJECUTANDO,
                     "salida": acumulador.texto,
-                    "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
+                    "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                 },
             )
         except Exception:  # noqa: BLE001 -- el avance nunca debe romper el hilo
@@ -350,7 +355,7 @@ def lanzar_job_claude(
                 actualizar(gen_id, {
                     "estado": ESTADO_ERROR, "motivo": "timeout",
                     "error": f"El asistente tardó demasiado (más de {timeout} s) y se canceló.",
-                    "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
+                    "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                     "fecha_fin": fecha_fin,
                 })
                 return
@@ -368,13 +373,13 @@ def lanzar_job_claude(
                         "estado": ESTADO_ERROR,
                         "error": "Se generó el contenido pero no se pudo procesar el resultado.",
                         "salida": acumulador.texto,
-                        "metricas": skills.metricas_a_dict(acumulador.final),
+                        "metricas": stream.metricas_a_dict(acumulador.final),
                         "fecha_fin": fecha_fin,
                     })
                     return
                 actualizar(gen_id, {
                     "estado": ESTADO_COMPLETADO, "salida": acumulador.texto,
-                    "metricas": skills.metricas_a_dict(acumulador.final),
+                    "metricas": stream.metricas_a_dict(acumulador.final),
                     "resultado": resultado, "fecha_fin": fecha_fin,
                 })
                 return
@@ -383,7 +388,7 @@ def lanzar_job_claude(
                 detalle = "El asistente terminó con error."
             actualizar(gen_id, {
                 "estado": ESTADO_ERROR, "error": detalle,
-                "metricas": skills.metricas_a_dict(acumulador.metricas_parciales()),
+                "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                 "fecha_fin": fecha_fin,
             })
         except Exception:  # noqa: BLE001 -- el cierre nunca debe propagar

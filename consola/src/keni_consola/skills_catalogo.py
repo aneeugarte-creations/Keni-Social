@@ -14,7 +14,7 @@ La GENERACION es DINAMICA: el formulario y la invocacion salen de `keni.yaml`, n
 "pega texto + elige redes" fijo. `render_invocacion` materializa la `plantilla_invocacion`
 sustituyendo `{marca}` y `{<campo_id>}`, anade la instruccion de "sin emojis" y, solo si
 la skill `aplica_redes` y se pidieron redes, la instruccion ADITIVA de redes (reutilizada
-de `api.skills._instruccion_redes`).
+de `dominio.skills._instruccion_redes`).
 
 SEGURIDAD: el `id`/slug se sanea contra traversal (`[a-z0-9-]`, reutilizando el slug de
 `agentes`); las rutas se resuelven y se comprueba que caen ESTRICTAMENTE dentro de
@@ -565,7 +565,10 @@ def render_invocacion(
     `aplica_redes` y hay `redes_ids`, la instruccion ADITIVA de redes (bloque json).
     Para campos `archivo`, el valor substituido es la RUTA del temporal guardado.
     """
-    from .api import skills as api_skills
+    # Import local (no a nivel de modulo) para evitar el ciclo
+    # `dominio.skills -> skills_catalogo -> dominio.skills`. La instruccion de "sin
+    # emojis" y la de redes viven ya en el DOMINIO (antes en `api.skills`, H6).
+    from .dominio import skills as dom_skills
 
     plantilla = skill.plantilla_invocacion or ""
     texto = plantilla.replace("{marca}", marca)
@@ -575,7 +578,7 @@ def render_invocacion(
             valor = ""
         texto = texto.replace("{" + campo.id + "}", valor)
 
-    texto = f"{texto}\n\n{api_skills._INSTRUCCION_SIN_EMOJIS}"
+    texto = f"{texto}\n\n{dom_skills._INSTRUCCION_SIN_EMOJIS}"
     if skill.aplica_redes and redes_ids:
-        texto = f"{texto}\n\n{api_skills._instruccion_redes(redes_ids)}"
+        texto = f"{texto}\n\n{dom_skills._instruccion_redes(redes_ids)}"
     return texto
