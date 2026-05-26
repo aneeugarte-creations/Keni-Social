@@ -125,6 +125,7 @@ def _probar_openai(clave: str) -> tuple[bool, str]:
             "https://api.openai.com/v1/models",
             headers={"Authorization": f"Bearer {clave}"},
             timeout=30,
+            follow_redirects=False,
         )
     except Exception:  # noqa: BLE001 -- cualquier fallo de red: mensaje en espanol
         return False, "No se pudo contactar al proveedor de imagen."

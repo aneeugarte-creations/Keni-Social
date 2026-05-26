@@ -271,6 +271,7 @@ def _proveedor_openai(prompt: str) -> bytes:
             headers={"Authorization": f"Bearer {clave}"},
             json={"model": _OPENAI_MODELO, "prompt": prompt, "n": 1, "size": "1024x1024"},
             timeout=_TIMEOUT_GEN,
+            follow_redirects=False,
         )
     except httpx.TimeoutException as e:
         raise MediaError("El proveedor de imagen tardó demasiado y se canceló.") from e
