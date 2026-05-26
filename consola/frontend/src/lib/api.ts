@@ -90,6 +90,8 @@ import type {
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaReciclarPublicacion,
+  RespuestaSugerenciasReciclaje,
+  FiltrosReciclaje,
   RespuestaRun,
   RespuestaRuns,
   RespuestaRunsAgregados,
@@ -431,6 +433,10 @@ export const api = {
     peticion<RespuestaReciclarPublicacion>(`/publicaciones/${encodeURIComponent(id)}/reciclar`, {
       metodo: "POST",
     }),
+
+  // --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
+  sugerenciasReciclaje: (filtros: FiltrosReciclaje = {}, signal?: AbortSignal) =>
+    peticion<RespuestaSugerenciasReciclaje>(`/reciclaje/sugerencias${query(filtros)}`, { signal }),
 
   // --- Media (imágenes) ---
   subirMedia: (archivo: File) => {

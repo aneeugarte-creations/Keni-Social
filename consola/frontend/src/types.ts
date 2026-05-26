@@ -875,6 +875,50 @@ export interface CuerpoDuplicarPublicacion {
   titulo?: string;
 }
 
+// --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
+
+/** Motivo por el que el archivo sugiere retomar una pieza (heurística explicable). */
+export type MotivoReciclaje = "efemeride" | "perenne" | "recurrente";
+
+/** Una pieza de archivo que la heurística propone reciclar, con su motivo. */
+export interface SugerenciaReciclaje {
+  id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  red: string;
+  red_nombre: string;
+  fecha_creacion: string;
+  fecha_actualizacion: string;
+  /** Tipo de señal que la hizo candidata. */
+  motivo: MotivoReciclaje;
+  /** Frase en es-MX que explica POR QUÉ retomarla ahora. */
+  motivo_detalle: string;
+  /** Puntuación interna para ordenar (mayor = más prioritaria). */
+  puntuacion: number;
+}
+
+/** Parámetros (días) de la heurística, para que la UI los pueda mostrar. */
+export interface ParametrosReciclaje {
+  ventana_efemeride_dias: number;
+  edad_minima_perenne_dias: number;
+  edad_minima_antiguedad_dias: number;
+}
+
+/** Respuesta de `GET /api/reciclaje/sugerencias`. */
+export interface RespuestaSugerenciasReciclaje {
+  sugerencias: SugerenciaReciclaje[];
+  parametros: ParametrosReciclaje;
+}
+
+/** Filtros opcionales para pedir sugerencias de reciclaje. */
+export interface FiltrosReciclaje {
+  marca?: string;
+  red?: string;
+  /** Permite pasarse a `query()` (Record<string, string | undefined>). */
+  [clave: string]: string | undefined;
+}
+
 // --- Plantillas de post (copy reutilizable) ---
 
 /** Una plantilla de copy guardada. */

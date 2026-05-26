@@ -27,6 +27,7 @@ import { FILTRO_TODOS, FiltrosPublicaciones } from "./publicaciones/Filtros";
 import { GestionFranjas } from "./publicaciones/GestionFranjas";
 import { GestionHashtags } from "./publicaciones/GestionHashtags";
 import { GestionPlantillas } from "./publicaciones/GestionPlantillas";
+import { PanelReciclaje } from "./publicaciones/PanelReciclaje";
 import { VistaCalendario } from "./publicaciones/VistaCalendario";
 import { VistaLista } from "./publicaciones/VistaLista";
 
@@ -212,6 +213,13 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
       <PageHeader {...CABECERA} acciones={acciones} />
 
       {barraHerramientas}
+
+      {/* Sugerencias proactivas de reciclaje de archivo (#110): se ocultan solas
+          si no hay candidatas. Respetan los filtros de marca/red activos. */}
+      <PanelReciclaje
+        filtros={{ marca: filtros.marca, red: filtros.red }}
+        onGestionarFranjas={() => setGestionFranjas(true)}
+      />
 
       {query.isPending ? (
         <EsqueletoLista />
