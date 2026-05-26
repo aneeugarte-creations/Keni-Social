@@ -59,6 +59,14 @@ def main(argv: list[str] | None = None) -> int:
         pass
 
     app = crear_app()
+
+    # Captura programada del apartado Comercial: un hilo demonio que va tomando
+    # snapshots de las piezas activas (interacciones/alcance) aunque nadie mire.
+    # Vive aqui (servidor real) y NO en `crear_app`, para no arrancarlo en los tests.
+    from .comercial import iniciar_captura_programada
+
+    iniciar_captura_programada()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

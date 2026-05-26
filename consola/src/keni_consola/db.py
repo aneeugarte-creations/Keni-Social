@@ -24,6 +24,12 @@ Tablas:
     redes_def, ultima_actualizacion, ultimo_error, ultimo_conteo)
     [incluir/excluir = CSV de terminos; redes_def = JSON de ids de red]
   - `rss_items_vistos`(id, fuente_id, clave, fecha)  [UNIQUE(fuente_id, clave)]
+  - `comercial_publicaciones`(id, url, titulo, marca, cliente, campania, red,
+    metrica_objetivo, objetivo, estado, publicado, notas, aviso_en,
+    fecha_creacion, fecha_actualizacion)
+    [seguimiento de UNA publicacion comercial por su link; estado activa|pausada|cerrada]
+  - `comercial_snapshots`(id, publicacion_id, ts, interacciones, alcance)
+    [serie temporal de cada publicacion; UNIQUE(publicacion_id, ts)]
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
@@ -37,7 +43,7 @@ import json
 import os
 import sqlite3
 import uuid
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -142,6 +148,34 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
         );
         CREATE UNIQUE INDEX IF NOT EXISTS idx_rss_items_vistos_fuente_clave
             ON rss_items_vistos (fuente_id, clave);
+        CREATE TABLE IF NOT EXISTS comercial_publicaciones (
+            id                   TEXT PRIMARY KEY,
+            url                  TEXT NOT NULL,
+            titulo               TEXT NOT NULL DEFAULT '',
+            marca                TEXT NOT NULL DEFAULT '',
+            cliente              TEXT NOT NULL DEFAULT '',
+            campania             TEXT NOT NULL DEFAULT '',
+            red                  TEXT NOT NULL DEFAULT '',
+            metrica_objetivo     TEXT NOT NULL DEFAULT 'interacciones',
+            objetivo             INTEGER NOT NULL DEFAULT 0,
+            estado               TEXT NOT NULL DEFAULT 'activa',
+            publicado            TEXT NOT NULL DEFAULT '',
+            notas                TEXT NOT NULL DEFAULT '',
+            aviso_en             TEXT NOT NULL DEFAULT '',
+            fecha_creacion       TEXT NOT NULL DEFAULT '',
+            fecha_actualizacion  TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS comercial_snapshots (
+            id              TEXT PRIMARY KEY,
+            publicacion_id  TEXT NOT NULL,
+            ts              TEXT NOT NULL,
+            interacciones   INTEGER NOT NULL DEFAULT 0,
+            alcance         INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_comercial_snapshots_pub_ts
+            ON comercial_snapshots (publicacion_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub
+            ON comercial_snapshots (publicacion_id);
         """
     )
     _migrar_columna_imagen(con)
@@ -1279,3 +1313,280 @@ def claves_vistas(fuente_id: str) -> set[str]:
     finally:
         con.close()
     return {f["clave"] for f in filas}
+
+
+# --------------------------------------------------------------------------- #
+# Publicaciones comerciales (seguimiento de UNA pieza por su link)             #
+# --------------------------------------------------------------------------- #
+#
+# A diferencia de `publicaciones` (flujo editorial), esto monitoriza el rendimiento
+# de una pieza ya publicada: se registra su link, se le toman snapshots periodicos de
+# interacciones/alcance (serie temporal) y, al llegar el KPI, se arma su reporte. Es
+# un apartado SEPARADO del rendimiento diario para que no se mezcle la informacion.
+
+# Estados del seguimiento: activa (se captura), pausada (se detuvo la pauta), cerrada
+# (KPI entregado / reporte hecho).
+ESTADOS_COMERCIAL: tuple[str, ...] = ("activa", "pausada", "cerrada")
+# Solo las activas entran en la captura programada.
+ESTADO_COMERCIAL_ACTIVA = "activa"
+# Metricas que un objetivo/umbral puede seguir (misma forma que el resto del producto).
+METRICAS_COMERCIAL: tuple[str, ...] = ("interacciones", "alcance")
+
+# Columnas de `comercial_publicaciones` en orden de declaracion (reusadas en SELECT/INSERT).
+_COLS_COMERCIAL = (
+    "id",
+    "url",
+    "titulo",
+    "marca",
+    "cliente",
+    "campania",
+    "red",
+    "metrica_objetivo",
+    "objetivo",
+    "estado",
+    "publicado",
+    "notas",
+    "aviso_en",
+    "fecha_creacion",
+    "fecha_actualizacion",
+)
+_SELECT_COMERCIAL = f"SELECT {', '.join(_COLS_COMERCIAL)} FROM comercial_publicaciones"
+
+# Campos que la edicion parcial puede tocar (url y fechas/aviso son inmutables desde la API).
+_CAMPOS_EDITABLES_COMERCIAL = (
+    "titulo",
+    "marca",
+    "cliente",
+    "campania",
+    "red",
+    "metrica_objetivo",
+    "objetivo",
+    "estado",
+    "publicado",
+    "notas",
+)
+
+
+def _fila_a_comercial(fila: sqlite3.Row) -> dict[str, Any]:
+    """Convierte una fila de `comercial_publicaciones` en un dict (`objetivo` como int)."""
+    pub = {col: fila[col] for col in _COLS_COMERCIAL}
+    pub["objetivo"] = int(fila["objetivo"] or 0)
+    return pub
+
+
+def crear_publicacion_comercial(
+    url: str,
+    *,
+    titulo: str = "",
+    marca: str = "",
+    cliente: str = "",
+    campania: str = "",
+    red: str = "",
+    metrica_objetivo: str = "interacciones",
+    objetivo: int = 0,
+    estado: str = "activa",
+    publicado: str = "",
+    notas: str = "",
+) -> dict[str, Any]:
+    """Inserta una publicacion comercial a monitorear y la devuelve.
+
+    NO valida marca/red/estado/metrica (lo hace la API contra sus allowlists). `aviso_en`
+    nace vacio; se rellena la primera vez que el valor supera el objetivo.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "url": url,
+        "titulo": titulo,
+        "marca": marca,
+        "cliente": cliente,
+        "campania": campania,
+        "red": red,
+        "metrica_objetivo": metrica_objetivo or "interacciones",
+        "objetivo": int(objetivo or 0),
+        "estado": estado or "activa",
+        "publicado": publicado or date.today().isoformat(),
+        "notas": notas,
+        "aviso_en": "",
+        "fecha_creacion": ahora,
+        "fecha_actualizacion": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_COMERCIAL)
+        con.execute(
+            f"INSERT INTO comercial_publicaciones ({', '.join(_COLS_COMERCIAL)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_COMERCIAL),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def listar_publicaciones_comerciales(
+    estado: str | None = None,
+    cliente: str | None = None,
+    campania: str | None = None,
+) -> list[dict[str, Any]]:
+    """Publicaciones comerciales (mas recientes primero), con filtros opcionales."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if estado:
+        clausulas.append("estado = ?")
+        params.append(estado)
+    if cliente:
+        clausulas.append("cliente = ?")
+        params.append(cliente)
+    if campania:
+        clausulas.append("campania = ?")
+        params.append(campania)
+    sql = _SELECT_COMERCIAL
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY fecha_creacion DESC, rowid DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_comercial(f) for f in filas]
+
+
+def obtener_publicacion_comercial(publicacion_id: str) -> dict[str, Any] | None:
+    """Una publicacion comercial por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_COMERCIAL} WHERE id = ?", (publicacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_comercial(fila) if fila is not None else None
+
+
+def actualizar_publicacion_comercial(
+    publicacion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una publicacion comercial; None si el id no existe.
+
+    Solo toca los campos de `_CAMPOS_EDITABLES_COMERCIAL`; ignora el resto. Pone
+    `fecha_actualizacion` a ahora. NO valida (lo hace la API).
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_COMERCIAL}
+    if "objetivo" in cambios:
+        cambios["objetivo"] = int(cambios["objetivo"] or 0)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("fecha_actualizacion = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(publicacion_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE comercial_publicaciones SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_COMERCIAL} WHERE id = ?", (publicacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_comercial(fila) if fila is not None else None
+
+
+def marcar_aviso_comercial(publicacion_id: str, ts: str) -> None:
+    """Marca el instante en que la pieza alcanzo su objetivo (solo la PRIMERA vez).
+
+    El `WHERE aviso_en = ''` lo hace idempotente: una vez avisada, no se re-marca.
+    """
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE comercial_publicaciones SET aviso_en = ? WHERE id = ? AND aviso_en = ''",
+            (ts, publicacion_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def borrar_publicacion_comercial(publicacion_id: str) -> bool:
+    """Borra una publicacion comercial y sus snapshots; True si existia, False si no."""
+    con = _conectar()
+    try:
+        con.execute(
+            "DELETE FROM comercial_snapshots WHERE publicacion_id = ?", (publicacion_id,)
+        )
+        cur = con.execute(
+            "DELETE FROM comercial_publicaciones WHERE id = ?", (publicacion_id,)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --- Snapshots (serie temporal de interacciones/alcance por publicacion) ------
+
+
+def registrar_snapshot_comercial(
+    publicacion_id: str, ts: str, interacciones: int, alcance: int
+) -> bool:
+    """Inserta un snapshot (idempotente por `(publicacion_id, ts)`).
+
+    Devuelve True si inserto una fila nueva, False si ya habia un snapshot en ese `ts`
+    (el indice UNICO lo evita; asi re-capturar en el mismo minuto no duplica puntos).
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "INSERT OR IGNORE INTO comercial_snapshots "
+            "(id, publicacion_id, ts, interacciones, alcance) VALUES (?, ?, ?, ?, ?)",
+            (uuid.uuid4().hex[:12], publicacion_id, ts, int(interacciones), int(alcance)),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
+    """Serie temporal de una publicacion (mas antiguo primero), lista para graficar."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT ts, interacciones, alcance FROM comercial_snapshots "
+            "WHERE publicacion_id = ? ORDER BY ts ASC",
+            (publicacion_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [
+        {"ts": f["ts"], "interacciones": int(f["interacciones"]), "alcance": int(f["alcance"])}
+        for f in filas
+    ]
+
+
+def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
+    """El snapshot mas reciente de una publicacion (None si aun no tiene)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT ts, interacciones, alcance FROM comercial_snapshots "
+            "WHERE publicacion_id = ? ORDER BY ts DESC LIMIT 1",
+            (publicacion_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return None
+    return {
+        "ts": fila["ts"],
+        "interacciones": int(fila["interacciones"]),
+        "alcance": int(fila["alcance"]),
+    }

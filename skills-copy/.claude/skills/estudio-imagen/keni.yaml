@@ -39,10 +39,11 @@ campos:
     tipo: select
     requerido: false
     placeholder: ""
-    ayuda: 'Cómo encajar la foto. "recortar" rellena el formato (puede cortar al sujeto). "extender fondo" añade cielo/negro por el borde uniforme SIN cortar al sujeto; si el fondo no es uniforme, te avisa para revisión. Vacío = el enrutador decide.'
+    ayuda: 'Cómo encajar la foto. "recortar" rellena el formato (puede cortar al sujeto). "extender fondo" añade cielo/negro por el borde uniforme SIN cortar al sujeto (sin IA). "extender fondo con IA" rellena la banda con IA cuando el fondo no es uniforme: es una EXCEPCIÓN editorial que tú apruebas; el sujeto queda intacto. Vacío = el enrutador decide.'
     opciones:
       - recortar
       - extender fondo
+      - extender fondo con IA (excepción)
     media_tipos: ""
   - id: peso
     etiqueta: Peso del archivo (formato "full")
