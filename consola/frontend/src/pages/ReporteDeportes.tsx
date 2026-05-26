@@ -3,6 +3,7 @@ import { Download, Eye, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -225,9 +226,14 @@ function EditorAgenda({
 function Previsualizacion({ rep }: { rep: ReporteDeportes }) {
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold tracking-tight">
-        Vista previa — {rep.cuenta.nombre} ({rep.rango})
-      </h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-lg font-semibold tracking-tight">
+          Vista previa — {rep.cuenta.nombre} ({rep.rango})
+        </h3>
+        {/* Procedencia de los datos: muestra (ficticios) vs reales. Lectura
+            defensiva: si `fuente` falta no se afirma nada (#90/residuo Ola 2). */}
+        <BadgeFuente fuente={rep.fuente} />
+      </div>
       <div className="grid gap-4 md:grid-cols-3">
         {rep.mejores_por_plataforma.map((b) => (
           <Card key={b.plataforma}>

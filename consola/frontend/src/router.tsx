@@ -20,6 +20,7 @@ const ReporteDeportes = lazy(() => import("@/pages/ReporteDeportes"));
 const Agentes = lazy(() => import("@/pages/Agentes"));
 const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
+const Tareas = lazy(() => import("@/pages/Tareas"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 
@@ -46,6 +47,7 @@ export const router = createBrowserRouter([
       { path: "reporte-deportes", element: <ReporteDeportes /> },
       { path: "agentes", element: <Agentes /> },
       { path: "agentes/:id", element: <DetalleAgente /> },
+      { path: "tareas", element: <Tareas /> },
       { path: "monitor", element: <Monitor /> },
       // Ajustes
       { path: "configuracion", element: <Configuracion /> },
@@ -54,9 +56,9 @@ export const router = createBrowserRouter([
       // Conexiones se fusionó en Configuración; Estado pasó a la topbar.
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
-      // Proyectos, Tareas y Nueva carpeta se unificaron en Agentes (#85).
+      // Proyectos y Nueva carpeta se unificaron en Agentes (#85). Tareas vuelve a
+      // tener su propia vista de pendientes (#104), por encima.
       { path: "proyectos", element: <Navigate to="/agentes" replace /> },
-      { path: "tareas", element: <Navigate to="/agentes" replace /> },
       { path: "carpetas", element: <Navigate to="/agentes" replace /> },
       // Cualquier otra ruta: de vuelta al inicio.
       { path: "*", element: <Navigate to="/generar-copy" replace /> },

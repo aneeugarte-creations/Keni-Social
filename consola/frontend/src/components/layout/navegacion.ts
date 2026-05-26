@@ -5,6 +5,7 @@ import {
   Globe,
   ImagePlus,
   Lightbulb,
+  ListTodo,
   Megaphone,
   Presentation,
   Rss,
@@ -104,6 +105,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Agentes",
         icono: Bot,
         descripcion: "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones.",
+      },
+      {
+        ruta: "/tareas",
+        etiqueta: "Pendientes",
+        icono: ListTodo,
+        descripcion: "Tareas por proyecto, con su estado; ábrelas en el asistente.",
       },
       {
         ruta: "/monitor",

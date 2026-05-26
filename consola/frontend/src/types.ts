@@ -778,6 +778,12 @@ export interface CompararMetricas {
     metricas: ComparativaMetrica[];
   };
   por_marca: ComparativaPorMarca[];
+  /**
+   * Procedencia de los datos comparados (`"muestra"` = ficticios). OPCIONAL: el
+   * backend de `/api/metricas/comparar` lo añade en paralelo (otro agente); se
+   * lee de forma defensiva con `<BadgeFuente>`. Si falta, no se afirma nada.
+   */
+  fuente?: string;
 }
 
 // --- Reporte de deportes (deck semanal de Claro Sports) ---
@@ -859,6 +865,23 @@ export interface OpcionesPublicaciones {
   redes: RedPublicacion[];
   estados: EstadoOpcion[];
   marcas: MarcaDisponible[];
+}
+
+/**
+ * Límite de caracteres canónico de una red (fuente única en el backend,
+ * `GET /api/limites`). El frontend lo consume para hidratar `META_REDES` en
+ * `pages/publicaciones/meta.ts` en vez de hardcodear los topes. Ver #112.
+ */
+export interface LimiteRed {
+  id: string;
+  nombre: string;
+  /** Límite de caracteres; `null` si la red no tiene tope técnico. */
+  limite: number | null;
+}
+
+/** Respuesta de GET /api/limites: los límites por red, en orden fijo. */
+export interface RespuestaLimites {
+  limites: LimiteRed[];
 }
 
 export interface Publicacion {

@@ -1,14 +1,21 @@
 /**
  * Metadatos compartidos de redes y estados de publicación.
  *
- * Fuente única de verdad para iconos, nombres canónicos, límites de caracteres
- * y estilos de badge, reutilizada por "Generar copy" y "Publicaciones". El
- * catálogo real (qué redes/estados/marcas hay) llega del backend vía
- * `/api/publicaciones/opciones`; aquí solo añadimos la capa visual.
+ * Capa VISUAL (iconos, nombres legibles, estilos de badge) reutilizada por
+ * "Generar copy" y "Publicaciones". El catálogo real (qué redes/estados/marcas
+ * hay) llega del backend vía `/api/publicaciones/opciones`; aquí solo añadimos
+ * lo visual.
+ *
+ * LÍMITES DE CARACTERES (#112): la fuente ÚNICA de verdad de los topes es el
+ * backend (`GET /api/limites`, módulo `limites_plataforma`). Este módulo NO los
+ * define: mantiene una semilla (`_LIMITES_SEMILLA`, espejo del backend) para que
+ * `metaRed().limite` funcione síncronamente antes de que la app hidrate, y se
+ * corrige al arrancar con `hidratarLimites(...)` (lo llama el `AppShell`). Así un
+ * cambio de tope se edita en un solo sitio (el backend) sin tocar este archivo.
  */
 import { AtSign, Facebook, Instagram, Music2, Youtube, type LucideIcon } from "lucide-react";
 
-import type { EstadoPublicacion, Veredicto } from "@/types";
+import type { EstadoPublicacion, LimiteRed, Veredicto } from "@/types";
 
 import { IconoX } from "./IconoX";
 
@@ -21,24 +28,69 @@ export interface MetaRed {
   icono: LucideIcon;
 }
 
-/**
- * Catálogo canónico de redes (id -> metadatos). Los límites siguen el contrato:
- * x=280, instagram=2200, facebook=∞, tiktok=2200, youtube=∞.
- */
-export const META_REDES: Record<string, MetaRed> = {
-  x: { nombre: "X", limite: 280, icono: IconoX as unknown as LucideIcon },
-  instagram: { nombre: "Instagram", limite: 2200, icono: Instagram },
-  facebook: { nombre: "Facebook", limite: null, icono: Facebook },
-  tiktok: { nombre: "TikTok", limite: 2200, icono: Music2 },
-  youtube: { nombre: "YouTube", limite: null, icono: Youtube },
+/** Solo la capa VISUAL de cada red (nombre por defecto + icono). */
+interface VisualRed {
+  nombre: string;
+  icono: LucideIcon;
+}
+
+/** Capa visual canónica (id -> nombre + icono). Sin límites: esos van aparte. */
+const _VISUAL_REDES: Record<string, VisualRed> = {
+  x: { nombre: "X", icono: IconoX as unknown as LucideIcon },
+  instagram: { nombre: "Instagram", icono: Instagram },
+  facebook: { nombre: "Facebook", icono: Facebook },
+  tiktok: { nombre: "TikTok", icono: Music2 },
+  youtube: { nombre: "YouTube", icono: Youtube },
 };
+
+/**
+ * Semilla de límites, ESPEJO de `limites_plataforma.LIMITES` en el backend. Solo
+ * sirve antes de que `hidratarLimites()` traiga los valores reales de la API. Es
+ * la copia que el guard de CI mantiene alineada con el backend.
+ */
+const _LIMITES_SEMILLA: Record<string, number | null> = {
+  x: 280,
+  instagram: 2200,
+  facebook: null,
+  tiktok: 4000,
+  youtube: null,
+};
+
+/**
+ * Caché mutable de límites (se hidrata desde `GET /api/limites` al arrancar).
+ * Empieza con la semilla para que `metaRed().limite` no sea nunca incorrecto por
+ * defecto; al hidratar, queda exactamente lo que diga el backend.
+ */
+const _limites: Record<string, number | null> = { ..._LIMITES_SEMILLA };
+
+/**
+ * Sobrescribe la caché de límites con lo que devuelve `GET /api/limites`.
+ * Idempotente: lo llama el `AppShell` una vez al arrancar la app. Tolera redes
+ * nuevas que el backend añada sin tocar este archivo.
+ */
+export function hidratarLimites(limites: LimiteRed[]): void {
+  for (const l of limites) {
+    _limites[l.id] = l.limite;
+  }
+}
+
+/** Límite de caracteres de una red (de la caché hidratada); `null` si no tiene. */
+export function limiteRed(id: string): number | null {
+  return _limites[id] ?? null;
+}
 
 /** Orden canónico de las redes para selección y pestañas. */
 export const ORDEN_REDES = ["x", "instagram", "facebook", "tiktok", "youtube"] as const;
 
-/** Devuelve los metadatos de una red, con un fallback razonable. */
+/**
+ * Devuelve los metadatos de una red (visual + límite vigente), con un fallback
+ * razonable. El `limite` proviene de la caché hidratada desde el backend (fuente
+ * única, #112), no de un valor hardcodeado en este archivo.
+ */
 export function metaRed(id: string): MetaRed {
-  return META_REDES[id] ?? { nombre: id, limite: null, icono: AtSign };
+  const visual = _VISUAL_REDES[id];
+  if (!visual) return { nombre: id, limite: limiteRed(id), icono: AtSign };
+  return { ...visual, limite: limiteRed(id) };
 }
 
 /** Nombre legible de una red (con fallback al id). */

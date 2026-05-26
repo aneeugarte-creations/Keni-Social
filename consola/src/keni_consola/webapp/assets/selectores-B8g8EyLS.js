@@ -1,1 +1,0 @@
-const a="__todas__",e="__todas__",r="__ninguna__";function t(n){return n===r?"":n}function s(n){return n===a?void 0:n}function c(n){return n||a}function u(n){return n===e?void 0:n}function _(n){return n||e}function i(n){return n.replace(/_/g,"-")}function o(n){return n.replace(/-/g,"_")}export{a as M,r as N,e as R,_ as a,o as b,s as c,c as d,i as m,t as n,u as r};

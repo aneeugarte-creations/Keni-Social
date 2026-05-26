@@ -54,6 +54,7 @@ import type {
   OpcionesMetricas,
   OpcionesPublicaciones,
   OpcionesReporteDeportes,
+  RespuestaLimites,
   ReporteDeportes,
   ReporteMetricas,
   RespuestaAgente,
@@ -395,6 +396,9 @@ export const api = {
       metodo: "POST",
       json: cuerpo,
     }),
+
+  // --- Límites de caracteres por red (fuente única backend, #112) ---
+  limites: (signal?: AbortSignal) => peticion<RespuestaLimites>("/limites", { signal }),
 
   // --- Publicaciones ---
   publicacionesOpciones: (signal?: AbortSignal) =>

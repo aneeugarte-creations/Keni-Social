@@ -1,3 +1,4 @@
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, Menu, X } from "lucide-react";
 import * as React from "react";
 import { Outlet, useLocation } from "react-router-dom";
@@ -7,7 +8,9 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { NAVEGACION } from "@/components/layout/navegacion";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { hidratarLimites } from "@/pages/publicaciones/meta";
 
 /** Fallback mientras se descarga el chunk de una pagina (lazy/Suspense). */
 function CargandoPagina() {
@@ -35,6 +38,18 @@ function tituloDeRuta(pathname: string): string {
 export function AppShell() {
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
+
+  // Hidrata la caché de límites de caracteres desde la fuente única del backend
+  // (`GET /api/limites`, #112). Mientras carga, `metaRed().limite` usa la semilla
+  // (espejo del backend). Si falla, la semilla sigue siendo válida (sin romper).
+  const limitesQuery = useQuery({
+    queryKey: ["limites"],
+    queryFn: ({ signal }) => api.limites(signal),
+    staleTime: Infinity,
+  });
+  React.useEffect(() => {
+    if (limitesQuery.data) hidratarLimites(limitesQuery.data.limites);
+  }, [limitesQuery.data]);
 
   // Cierra el menu movil al cambiar de ruta.
   React.useEffect(() => {

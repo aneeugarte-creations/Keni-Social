@@ -10,6 +10,7 @@ import { BadgeDelta, type DeltaType } from "@tremor/react";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import * as React from "react";
 
+import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -137,6 +138,10 @@ export function CompararPeriodos({
               <span className="font-medium text-foreground">{data.etiqueta_a}</span>
               <span aria-hidden="true">→</span>
               <span className="font-medium text-foreground">{data.etiqueta_b}</span>
+              {/* Procedencia de los datos comparados (muestra vs reales). Lectura
+                  defensiva: `fuente` es opcional (lo añade /comparar en paralelo,
+                  N6 de la re-auditoría). Si falta, BadgeFuente no renderiza nada. */}
+              <BadgeFuente fuente={data.fuente} className="ml-1" />
             </div>
 
             {/* Totales: una tarjeta por métrica con A, B y variación. */}

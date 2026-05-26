@@ -5,7 +5,8 @@ import { toast } from "sonner";
 
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { NINGUNA } from "@/components/comunes/selectores";
+import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { desdeNinguna, ningunaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
-import type { ItemRss, MarcaDisponible, RespuestaTermometro } from "@/types";
+import type { ItemRss, RespuestaTermometro } from "@/types";
 
 import { ResultadoDocumento } from "./copy/ResultadoDocumento";
 
@@ -125,7 +126,20 @@ function PanelConfig({ datos }: { datos: RespuestaTermometro }) {
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="term-marca">Marca por defecto</Label>
-          <SelectorMarca id="term-marca" marcas={datos.marcas} valor={marca} onCambio={setMarca} conNinguna />
+          {/* Marca OPCIONAL ("" = sin fijar): el centinela NINGUNA se traduce a
+              "" en el estado con `ningunaParam`/`desdeNinguna`. Sin "Todas". */}
+          <SelectorMarca
+            id="term-marca"
+            marcas={datos.marcas}
+            valor={desdeNinguna(marca)}
+            onCambio={(v) => setMarca(ningunaParam(v))}
+            incluirTodas={false}
+            incluirNinguna
+            etiquetaNinguna="Sin fijar"
+            placeholder="Elige una marca"
+            ariaLabel="Marca por defecto"
+            className="w-full"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="term-numero">Número de slides</Label>
@@ -243,7 +257,17 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="gen-marca">Marca</Label>
-              <SelectorMarca id="gen-marca" marcas={datos.marcas} valor={marca} onCambio={setMarca} />
+              {/* Marca OBLIGATORIA: sin "Todas" ni "Sin marca". */}
+              <SelectorMarca
+                id="gen-marca"
+                marcas={datos.marcas}
+                valor={marca}
+                onCambio={setMarca}
+                incluirTodas={false}
+                placeholder="Elige una marca"
+                ariaLabel="Marca"
+                className="w-full"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="gen-numero">Slides</Label>
@@ -318,40 +342,3 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   );
 }
 
-// --- Selector de marca (reutilizable dentro de la página) ------------------
-
-function SelectorMarca({
-  id,
-  marcas,
-  valor,
-  onCambio,
-  conNinguna = false,
-}: {
-  id: string;
-  marcas: MarcaDisponible[];
-  valor: string;
-  onCambio: (v: string) => void;
-  /** Si `true`, ofrece "Sin fijar" (valor ""), útil para la config por defecto. */
-  conNinguna?: boolean;
-}) {
-  // Radix Select no admite value="" en un item; usamos el centinela canónico
-  // `NINGUNA` (de `comunes/selectores`) para "sin fijar".
-  return (
-    <Select
-      value={valor === "" ? (conNinguna ? NINGUNA : "") : valor}
-      onValueChange={(v) => onCambio(v === NINGUNA ? "" : v)}
-    >
-      <SelectTrigger id={id}>
-        <SelectValue placeholder="Elige una marca" />
-      </SelectTrigger>
-      <SelectContent>
-        {conNinguna && <SelectItem value={NINGUNA}>Sin fijar</SelectItem>}
-        {marcas.map((m) => (
-          <SelectItem key={m.id} value={m.id}>
-            {m.nombre}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
