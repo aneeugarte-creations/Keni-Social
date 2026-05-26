@@ -1,6 +1,6 @@
 /**
  * Badge que indica la procedencia de los datos de Métricas: datos de MUESTRA
- * (ficticios, para demo / piloto) frente a datos REALES (de la API de cada red).
+ * (ficticios, pendientes de credenciales reales) frente a datos REALES (de la API de cada red).
  *
  * Lee el campo `fuente` de la respuesta de métricas de forma DEFENSIVA: es
  * opcional (el backend lo añade en paralelo). Si llega `undefined`/`""` no se

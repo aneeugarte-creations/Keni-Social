@@ -143,8 +143,8 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
   una CLI dry-run del payload de Meta: `python -m keni_metricas.publicacion ...` (solo imprime la
   petición exacta; no publica).
 - **Publicación real: pendiente.** El andamiaje de publicación a Meta existe
-  (`publicar(..., dry_run=False)`) pero queda gateado por aprobaciones de plataforma. Para la
-  demo no se usa; el trabajo externo está **pausado** y se sigue en los issues de GitHub
+  (`publicar(..., dry_run=False)`) pero queda gateado por aprobaciones de plataforma. En beta
+  no se usa todavía; el trabajo externo está **pausado** y se sigue en los issues de GitHub
   (#5 Meta App Review, #6 auditoría TikTok, #7 cuota YouTube / coste X).
 
 ---
@@ -182,7 +182,7 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
 - **Qué vigilar.**
   - **Caducidad de tokens** de usuario (la causa #1 de "se desconectó"): migrar a System User.
   - **Bloqueos externos** que habilitarían datos reales (Meta App Review, auditoría de TikTok,
-    coste de X, cuota de YouTube): **pausados** para la demo; se siguen en los issues #5/#6/#7.
+    coste de X, cuota de YouTube): **pausados en beta**; se siguen en los issues #5/#6/#7.
   - **`cron.log`** del reporte programado (en `KENI_REPORTE_DIR`): revisar `FALLO` (no reintenta
     solo). El reporte es solo lectura: un fallo nunca rompe nada, solo no entrega ese informe.
   - **Auto-verificación:** recordar al equipo que ⚠️ significa "revísalo tú" (típico en nombres y

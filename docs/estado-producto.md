@@ -4,16 +4,15 @@ Panorama honesto para dirección. Complementa el
 [`resumen-para-direccion.md`](resumen-para-direccion.md) con el detalle de qué está construido,
 qué está pausado por causas externas, y qué falta para tener un producto vendible a AMX.
 
-> **Marco de honestidad.** keni-social está **en validación**: en piloto con AMX Contenido
-> (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación). **Hasta cerrar el piloto no hay
-> producto consolidado**, hay hipótesis bajo prueba. Lo que sigue distingue con cuidado lo
-> construido y verificado de lo que aún no.
+> **Marco de honestidad.** keni-social está en **beta**: producto real en uso con AMX Contenido
+> (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación). Lo que sigue distingue con cuidado lo
+> construido y verificado de lo que aún no (bloqueado por aprobaciones externas de plataforma).
 
 ---
 
 ## 1. Qué está LISTO hoy
 
-Construido, probado y demostrable, sin depender de ninguna aprobación externa.
+Construido, probado y en uso, sin depender de ninguna aprobación externa.
 
 - **Copy desde texto con tropicalización es-MX y auto-verificación.** A partir de una nota o
   varios cables, una variante por plataforma (X, Instagram, Facebook, TikTok, YouTube) con conteo
@@ -110,5 +109,5 @@ el flujo en su día a día y el método queda documentado para replicarlo con el
 
 ---
 
-*Documento de estado. Honesto sobre lo que está construido y verificado frente a lo que aún es
-hipótesis bajo prueba. Se actualiza conforme caen los hitos de la §2.*
+*Documento de estado. Honesto sobre lo que está construido y verificado frente a lo que aún está
+bloqueado por gating externo. Se actualiza conforme caen los hitos de la §2.*

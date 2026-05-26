@@ -209,7 +209,7 @@ Listo y sin dependencias externas:
 - **Métricas-insight** (MCP): reporte consolidado multi-marca, mejores piezas, comparación de
   periodos, picos/anomalías, surfacing de cobertura. Funciona ya con **datos de muestra**; los datos
   reales por plataforma se encienden conforme caen los permisos externos.
-- **Preview de publicación en dry-run** (`publica-preview` / skill demo): prepara y previsualiza la
+- **Preview de publicación en dry-run** (`publica-meta` / pre-vuelo beta): prepara y previsualiza la
   publicación con gate humano. **No publica de verdad** — es el ensayo previo a la publicación real.
 
 Esta fase ya justifica la **opción de entrada** y la **suite sin publicación**.

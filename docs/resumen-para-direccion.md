@@ -1,6 +1,6 @@
 # keni-social — resumen para dirección
 
-Una página, sin tecnicismos. Estado: **piloto con AMX en validación** (ver
+Una página, sin tecnicismos. Estado: **beta — en uso con AMX** (ver
 [`estado-producto.md`](estado-producto.md) para el panorama honesto de qué está listo y qué no).
 
 ## Qué es
@@ -77,9 +77,8 @@ publicaría, sin publicar).
 
 ## Estado
 
-En **piloto con AMX, en validación**: hasta cerrar el piloto no hay producto consolidado, son
-hipótesis bajo prueba. El copy desde texto y desde video ya funciona hoy, y las métricas
-funcionan con datos de muestra. Los datos reales de cada plataforma se van encendiendo conforme
+En **beta, en uso con AMX**: el producto es real y opera en el flujo del equipo. El copy desde
+texto y desde video ya funciona hoy, y las métricas funcionan con datos de muestra. Los datos reales de cada plataforma se van encendiendo conforme
 caen los permisos externos de cada red (revisiones de Meta, auditoría de TikTok, coste de X). El
 panorama completo —qué está listo, qué está pausado y el camino a producto vendible— está en
 [`estado-producto.md`](estado-producto.md).
