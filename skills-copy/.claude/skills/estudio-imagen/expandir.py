@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
-"""Outpainting GENERATIVO del Estudio de imagen.
+"""Outpainting GENERATIVO del Estudio de imagen (vía OpenRouter).
 
 Encaja una foto en un formato (p. ej. 4:5) EXTENDIENDO el fondo con IA. Es la "última
 milla" del encaje cuando el fondo NO es uniforme y la vía determinista
 (`editar.py extender`) no puede hacerlo: rellena solo la BANDA añadida.
 
-CÓMO FUNCIONA:
-  - El SUJETO no se toca. La banda a rellenar va por MÁSCARA (OpenAI) y, pase lo que
-    pase, al final RE-COMPONEMOS la foto original sobre su región exacta: el sujeto
-    queda intacto pixel a pixel; la IA solo aporta la banda de fondo.
-  - La llave vive en tu máquina (variables de entorno), nunca en el código.
+UN SOLO PROVEEDOR — OpenRouter (gateway compatible con OpenAI):
+  - Endpoint: POST https://openrouter.ai/api/v1/chat/completions (estilo chat).
+  - La foto va como imagen de entrada (data URL base64) en `messages`; `modalities`
+    pide salida de imagen; `image_config.strength` (0-1, bajo = más fiel al original)
+    controla cuánto cambia. El modelo se elige por id (`--modelo`), sin tocar código:
+    Gemini Flash Image, Seedream, FLUX, etc.
+  - Clave única: OPENROUTER_API_KEY. Modelo por defecto: OPENROUTER_IMAGE_MODEL o
+    el de abajo.
 
-PROVEEDOR INTERCAMBIABLE: elige según la clave disponible (o --proveedor):
-  - openai: endpoint de EDICIÓN con máscara (gpt-image-1). La API regenera solo la
-    banda enmascarada. Clave: OPENAI_API_KEY.
-  - gemini: edición por imagen+instrucción ("Nano Banana"). Clave: GEMINI_API_KEY /
-    GOOGLE_API_KEY.
+EL SUJETO NO SE TOCA: pase lo que pase el modelo, al final RE-COMPONEMOS la foto
+original sobre su región exacta; el sujeto queda intacto pixel a pixel y la IA solo
+aporta la banda de fondo.
 
 MODO SIN KEY (degradado, no falla): explica cómo configurar la llave y entrega el
 prompt de dirección de arte para rellenar la banda en tu herramienta.
 
 Uso:
   python3 expandir.py --foto FOTO --formato feed \
-      [--proveedor auto|openai|gemini] [--lado auto|arriba|abajo|izquierda|derecha] \
-      [--marca claro-sports] [--prompt "..."] [--salida SAL]
+      [--modelo google/gemini-2.5-flash-image] [--strength 0.4] \
+      [--lado auto|arriba|abajo|izquierda|derecha] [--marca claro-sports] \
+      [--prompt "..."] [--salida SAL]
 """
 
 from __future__ import annotations
@@ -56,9 +58,11 @@ ESTILO_MARCA = {
     "claro": "Estilo Claro Sports: deportivo, energía, alto contraste.",
 }
 
-_OPENAI_URL = "https://api.openai.com/v1/images/edits"
-_OPENAI_MODELO = "gpt-image-1"
-_GEMINI_MODELO = "gemini-2.5-flash-image"
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Modelo de imagen por defecto (editable por --modelo o OPENROUTER_IMAGE_MODEL).
+# Otros: bytedance/seedream-4.5 (preserva sujeto), black-forest-labs/flux..., etc.
+_MODELO_DEFECTO = "google/gemini-2.5-flash-image"
+_STRENGTH_DEFECTO = 0.4  # bajo = más fiel al original; afinar en la primera prueba real
 _TIMEOUT = 120
 
 
@@ -98,24 +102,12 @@ def geometria(w0: int, h0: int, tw: int, th: int, lado: str = "auto") -> dict | 
             "bandas": [(l, p) for l, p in bandas if p > 0]}
 
 
-def _banda_caja(lado: str, geo: dict) -> tuple[int, int, int, int]:
-    fw, fh = geo["fw"], geo["fh"]
-    px = dict(geo["bandas"])[lado]
-    if lado == "arriba":
-        return (0, 0, fw, px)
-    if lado == "abajo":
-        return (0, fh - px, fw, fh)
-    if lado == "izquierda":
-        return (0, 0, px, fh)
-    return (fw - px, 0, fw, fh)
-
-
 def _lienzo_base(img: "Image.Image", geo: dict) -> "Image.Image":
     """Lienzo extendido con la foto pegada y la banda rellena con el borde estirado.
 
-    Es solo una BASE: con OpenAI la banda se regenera por máscara; con Gemini sirve
-    de contexto. El sujeto se re-compone al final, así que esta base nunca contamina
-    la foto original.
+    Es solo la BASE que se le manda al modelo (la foto + una banda continuada del
+    borde); el modelo la mejora y, al final, re-componemos el sujeto original encima,
+    así que esta base nunca contamina la foto.
     """
     w0, h0 = img.size
     canvas = Image.new("RGB", (geo["fw"], geo["fh"]))
@@ -132,93 +124,54 @@ def _lienzo_base(img: "Image.Image", geo: dict) -> "Image.Image":
     return canvas
 
 
-def _mascara(geo: dict) -> "Image.Image":
-    """Máscara RGBA: TRANSPARENTE en la banda (la IA edita ahí), OPACA en el resto."""
-    mask = Image.new("RGBA", (geo["fw"], geo["fh"]), (0, 0, 0, 255))
-    for lado, _ in geo["bandas"]:
-        mask.paste((0, 0, 0, 0), _banda_caja(lado, geo))
-    return mask
-
-
 def _png_bytes(img: "Image.Image") -> bytes:
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return buf.getvalue()
 
 
-def _size_openai(geo: dict) -> str:
-    fw, fh = geo["fw"], geo["fh"]
-    if fh > fw * 1.05:
-        return "1024x1536"
-    if fw > fh * 1.05:
-        return "1536x1024"
-    return "1024x1024"
-
-
 # --------------------------------------------------------------------------- #
-# Proveedores (intercambiables) — punto INYECTABLE para los tests             #
+# Proveedor (OpenRouter) — punto INYECTABLE para los tests                    #
 # --------------------------------------------------------------------------- #
 
-def _openai_edit(canvas: bytes, mask: bytes, prompt: str, clave: str, size: str) -> bytes:
+def _openrouter_edit(canvas: bytes, prompt: str, *, clave: str, modelo: str, strength: float) -> bytes:
+    """Edita la imagen con OpenRouter (chat/completions, imagen de entrada + strength).
+
+    Los tests parchean `_PROVEEDOR_EXPANDIR`, así que esto NUNCA toca la red en CI.
+    """
     import base64
 
     try:
         import httpx
     except ImportError as e:  # pragma: no cover
-        raise SystemExit("ERROR: falta httpx para el proveedor OpenAI.") from e
+        raise SystemExit("ERROR: falta httpx para OpenRouter.") from e
+    data_url = "data:image/png;base64," + base64.b64encode(canvas).decode("ascii")
     resp = httpx.post(
-        _OPENAI_URL,
-        headers={"Authorization": f"Bearer {clave}"},
-        data={"model": _OPENAI_MODELO, "prompt": prompt, "n": "1", "size": size},
-        files={"image": ("canvas.png", canvas, "image/png"),
-               "mask": ("mask.png", mask, "image/png")},
+        _OPENROUTER_URL,
+        headers={"Authorization": f"Bearer {clave}", "Content-Type": "application/json"},
+        json={
+            "model": modelo,
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": data_url}},
+            ]}],
+            "modalities": ["image", "text"],
+            "image_config": {"strength": strength},
+        },
         timeout=_TIMEOUT,
     )
     if resp.status_code != 200:
-        raise SystemExit(f"ERROR: OpenAI devolvió {resp.status_code} al expandir.")
-    return base64.b64decode(resp.json()["data"][0]["b64_json"])
-
-
-def _gemini_edit(canvas: bytes, prompt: str, clave: str) -> bytes:
+        raise SystemExit(f"ERROR: OpenRouter devolvió {resp.status_code} al expandir.")
     try:
-        from google import genai
-    except ImportError as e:  # pragma: no cover
-        raise SystemExit("ERROR: falta google-genai. Instálalo: pip install google-genai") from e
-    client = genai.Client(api_key=clave)
-    imagen = Image.open(io.BytesIO(canvas))
-    resp = client.models.generate_content(model=_GEMINI_MODELO, contents=[prompt, imagen])
-    for cand in getattr(resp, "candidates", []) or []:
-        for part in getattr(cand.content, "parts", []) or []:
-            datos = getattr(part, "inline_data", None)
-            if datos and getattr(datos, "data", None):
-                return datos.data
-    raise SystemExit("ERROR: el modelo no devolvió imagen al expandir.")
-
-
-def _generar_relleno_real(canvas: bytes, mask: bytes, prompt: str, *,
-                          proveedor: str, clave: str, size: str) -> bytes:
-    """Despacho real al proveedor. Los tests parchean `_PROVEEDOR_EXPANDIR`."""
-    if proveedor == "openai":
-        return _openai_edit(canvas, mask, prompt, clave, size)
-    return _gemini_edit(canvas, prompt, clave)
+        url = resp.json()["choices"][0]["message"]["images"][0]["image_url"]["url"]
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        raise SystemExit("ERROR: OpenRouter no devolvió imagen (¿modelo sin salida de imagen?).") from e
+    b64 = url.split(",", 1)[1] if "," in url else url
+    return base64.b64decode(b64)
 
 
 # Punto INYECTABLE: lo único que toca la red. Los tests lo reemplazan.
-_PROVEEDOR_EXPANDIR = _generar_relleno_real
-
-
-def _elegir_proveedor(forzado: str) -> tuple[str | None, str | None]:
-    """(proveedor, clave) según --proveedor y las claves del entorno; (None,None) si no hay."""
-    if forzado == "openai":
-        return ("openai", os.environ.get("OPENAI_API_KEY"))
-    if forzado == "gemini":
-        return ("gemini", os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
-    if os.environ.get("OPENAI_API_KEY"):
-        return ("openai", os.environ["OPENAI_API_KEY"])
-    g = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-    if g:
-        return ("gemini", g)
-    return (None, None)
+_PROVEEDOR_EXPANDIR = _openrouter_edit
 
 
 # --------------------------------------------------------------------------- #
@@ -252,10 +205,9 @@ def _prompt(args, geo: dict) -> str:
 
 
 def _fallback_sin_key(prompt: str) -> int:
-    print("Outpainting IA: no hay API key configurada (modo dirección de arte).\n")
-    print("Configura UNA llave (no se guarda en archivos):")
-    print('  export OPENAI_API_KEY="..."     # edición con máscara (gpt-image-1)')
-    print('  export GEMINI_API_KEY="..."     # o Gemini "Nano Banana"\n')
+    print("Outpainting IA: no hay clave de OpenRouter configurada (modo dirección de arte).\n")
+    print("Configura tu llave (no se guarda en archivos):")
+    print('  export OPENROUTER_API_KEY="..."\n')
     print("Mientras tanto, extiende la banda de fondo en tu herramienta con este PROMPT:\n")
     print("  " + prompt + "\n")
     print("Luego pásame el resultado y lo reviso (legal/editorial) antes de publicar.")
@@ -266,10 +218,10 @@ def expandir(args) -> dict | int:
     fclave = (args.formato or "feed").strip().lower()
     if fclave not in FORMATOS:
         raise SystemExit(f"ERROR: formato '{args.formato}' desconocido. Opciones: {', '.join(FORMATOS)}")
-    if args.proveedor not in ("auto", "openai", "gemini"):
-        raise SystemExit("ERROR: --proveedor debe ser auto | openai | gemini.")
     if args.lado not in ("auto", "arriba", "abajo", "izquierda", "derecha"):
         raise SystemExit("ERROR: --lado inválido.")
+    if not 0.0 <= args.strength <= 1.0:
+        raise SystemExit("ERROR: --strength debe estar entre 0.0 y 1.0.")
 
     img = _abrir(args.foto)
     tw, th = FORMATOS[fclave]
@@ -281,17 +233,17 @@ def expandir(args) -> dict | int:
     # Ya está en proporción: nada que expandir (ni IA), solo redimensiona.
     if geo is None:
         img.resize((tw, th), Image.LANCZOS).save(destino, "PNG")
-        return {"op": "expandir", "formato": fclave, "aplicado": "resize", "proveedor": None,
+        return {"op": "expandir", "formato": fclave, "aplicado": "resize", "modelo": None,
                 "bandas": [], "salidas": [{"formato": fclave, "tamano": f"{tw}x{th}", "salida": str(destino)}]}
 
     prompt = _prompt(args, geo)
-    proveedor, clave = _elegir_proveedor(args.proveedor)
-    if proveedor is None or clave is None:
+    clave = os.environ.get("OPENROUTER_API_KEY")
+    if not clave:
         return _fallback_sin_key(prompt)
+    modelo = args.modelo or os.environ.get("OPENROUTER_IMAGE_MODEL") or _MODELO_DEFECTO
 
     canvas = _lienzo_base(img, geo)
-    relleno = _PROVEEDOR_EXPANDIR(_png_bytes(canvas), _png_bytes(_mascara(geo)), prompt,
-                                  proveedor=proveedor, clave=clave, size=_size_openai(geo))
+    relleno = _PROVEEDOR_EXPANDIR(_png_bytes(canvas), prompt, clave=clave, modelo=modelo, strength=args.strength)
 
     res = Image.open(io.BytesIO(relleno)).convert("RGB").resize((geo["fw"], geo["fh"]), Image.LANCZOS)
     # Fidelidad: re-componemos la foto original encima -> el sujeto no se toca.
@@ -302,17 +254,18 @@ def expandir(args) -> dict | int:
         "op": "expandir",
         "formato": fclave,
         "aplicado": "expandir-ia",
-        "proveedor": proveedor,
+        "modelo": modelo,
         "bandas": [{"lado": l, "px": p} for l, p in geo["bandas"]],
         "salidas": [{"formato": fclave, "tamano": f"{tw}x{th}", "salida": str(destino)}],
     }
 
 
 def main() -> int:
-    p = argparse.ArgumentParser(description="Outpainting generativo del Estudio de imagen.")
+    p = argparse.ArgumentParser(description="Outpainting generativo del Estudio de imagen (OpenRouter).")
     p.add_argument("--foto", required=True)
     p.add_argument("--formato", default="feed", help="vertical | feed | cuadrado | horizontal")
-    p.add_argument("--proveedor", default="auto", help="auto | openai | gemini")
+    p.add_argument("--modelo", default=None, help=f"Modelo de imagen en OpenRouter (def. {_MODELO_DEFECTO}).")
+    p.add_argument("--strength", type=float, default=_STRENGTH_DEFECTO, help="0-1: cuánto cambia respecto al original (bajo = más fiel).")
     p.add_argument("--lado", default="auto", help="auto | arriba | abajo | izquierda | derecha")
     p.add_argument("--marca", default=None, help="unotv | claro-sports (nota de estilo).")
     p.add_argument("--prompt", default=None, help="Guía extra opcional para el relleno.")
@@ -324,7 +277,7 @@ def main() -> int:
         return info
 
     if info["aplicado"] == "expandir-ia":
-        print(f"IA · proveedor {info['proveedor']}: se rellenó la banda de fondo (el sujeto no se toca).")
+        print(f"IA · {info['modelo']} (OpenRouter): se rellenó la banda de fondo (el sujeto no se toca).")
         print("  Pásalo por la revisión legal/editorial antes de publicar.")
         bandas = ", ".join(f"{b['lado']} +{b['px']}px" for b in info["bandas"])
         print(f"  Banda: {bandas}")

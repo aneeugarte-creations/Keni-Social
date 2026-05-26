@@ -38,7 +38,7 @@ Es la misma tesis de keni-social aplicada a la imagen: *la IA diseña el proceso
                  └───────────────┬───────────────┬───────────┘
                                  ▼               ▼
         Motor DETERMINISTA (scripts)     Motor GENERATIVO (IA por API)
-        Pillow / ffmpeg                  modelo de imagen (def. Gemini)
+        Pillow / ffmpeg                  modelo de imagen (vía OpenRouter)
         · overlay (breaking + marca       · generar ilustración/fondo
           de agua de la casa)             · extender (outpaint) el fondo
         · recortar / redimensionar          de una foto (expandir.py)
@@ -96,9 +96,9 @@ Regla práctica: si la vía determinista resuelve el caso, úsala; la IA es para
 
 ---
 
-## 6. Motor generativo por API (decisión: por API)
+## 6. Motor generativo por API (decisión: OpenRouter, un solo gateway)
 
-- **Proveedor por defecto:** **Google Gemini (imagen, "Nano Banana")**, ya recomendado en `07-innovacion/diseno-redes-amx`. Adaptador con interfaz simple para poder cambiar/añadir proveedor. `expandir.py` admite además OpenAI (`gpt-image-1`, edición con máscara) y elige según la clave disponible.
+- **Proveedor único: OpenRouter** (gateway compatible con OpenAI). Una sola clave y un solo endpoint (`/api/v1/chat/completions`) para CUALQUIER modelo de imagen/vídeo — se elige por id sin tocar código (Gemini Flash Image, Seedream, FLUX… y vídeo: Sora/Veo/Kling/Seedance). Así evitamos mantener varios SDKs/proveedores. `generar.py` (ilustración) y `expandir.py` (outpaint de fondo) van por aquí.
 - **Credenciales (estándar keni-social):** API key en **variable de entorno / gestor de credenciales**, **nunca** en el código ni en archivos versionados. Mismo principio que `mcp-metricas` (la llave vive en la máquina, no en la IA).
 - **Modo sin key (degradado):** si no hay key, el adaptador **no falla**: explica cómo configurarla y, como alternativa de cero coste, ofrece la vía **"director de arte"** (Claude da el prompt en marca y el usuario genera en su herramienta) — el patrón que ya existe en `diseno-redes-amx`.
 - **Coste:** la generación por API tiene **coste por imagen**; conviene reservarla a lo que de verdad la necesita (ilustraciones/fondos, outpaint de fondo no uniforme) y medir el volumen.
@@ -108,7 +108,7 @@ Regla práctica: si la vía determinista resuelve el caso, úsala; la IA es para
 ## 7. Decisiones abiertas / a verificar
 
 1. **Assets reales de la casa:** rutas/archivos de `logo`, `marca_agua` y `overlay_breaking` por marca (los aporta AMX). Mientras falten, el modo sintético y el wordmark de respaldo cubren la demo.
-2. **Proveedor generativo definitivo** y su coste por imagen (Gemini por defecto; confirmar).
+2. **Modelo de imagen por defecto en OpenRouter** (Gemini Flash Image vs Seedream 4.5 vs FLUX) y su coste por imagen — afinar con pruebas reales cuando haya clave.
 3. **Catálogo en la Consola:** cómo se listan las operaciones del Estudio (¿reusar el patrón `keni.yaml` de skills, o un catálogo de operaciones propio?).
 4. **Multi-formato de salida** desde una sola imagen (9:16 + 4:5 + 1:1 de un tiro).
 
@@ -138,11 +138,12 @@ Hecho en el repo:
   extender más de `--max-ext` (25%), cae al recorte cubriente y marca
   `extension_segura: false`: ahí pasa a `expandir.py`.
 - `expandir.py` (motor generativo): **outpainting de fondo** cuando el fondo NO es uniforme.
-  Proveedor **intercambiable** (`auto|openai|gemini`, elige según la clave del entorno):
-  OpenAI por edición con máscara (gpt-image-1) o Gemini por imagen+instrucción. Pase lo que
-  pase el proveedor, al final se **RE-COMPONE** la foto original sobre su región exacta → el
-  sujeto queda intacto pixel a pixel; la IA solo aporta la banda. Modo sin key = dirección de
-  arte (no falla).
+  Un solo proveedor: **OpenRouter** (gateway compatible con OpenAI; clave única
+  `OPENROUTER_API_KEY`). El modelo se elige por id (`--modelo`, def.
+  `google/gemini-2.5-flash-image`; otros: Seedream 4.5, FLUX…) y `--strength` controla cuánto
+  cambia respecto al original. Pase lo que pase el modelo, al final se **RE-COMPONE** la foto
+  original sobre su región exacta → el sujeto queda intacto pixel a pixel; la IA solo aporta la
+  banda. Modo sin key = dirección de arte (no falla).
 - `SKILL.md`: enrutado de las tres vías (recortar / extender / expandir) + flujo auto/vista
   previa.
 - `keni.yaml`: dropdowns en la Consola — **Peso** (≤1/2/3 MB) y **Ajuste** (recortar /
@@ -153,8 +154,9 @@ Hecho en el repo:
   (gestionado por la UI, `0600`). Las skills son un plugin independiente y solo leen
   variables de entorno, así que al lanzar la skill la Consola **exporta** esa clave del
   almacén al entorno del subproceso (`generaciones._entorno_skill`: mapea proveedor →
-  `OPENAI_API_KEY` / `GEMINI_API_KEY`, sin pisar una variable ya puesta). No hay segundo
-  almacén: `secretos.toml` es la única fuente y solo se transporta al subproceso.
+  `OPENROUTER_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`, sin pisar una variable ya
+  puesta). No hay segundo almacén: `secretos.toml` es la única fuente y solo se transporta al
+  subproceso.
 
 Pendiente:
 1. Detección del sujeto para automatizar al 100% el disparador "el recorte cortaría al sujeto"
