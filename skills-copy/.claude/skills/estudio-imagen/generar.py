@@ -1,23 +1,20 @@
 #!/usr/bin/env python3
 """Adaptador GENERATIVO del Estudio de imagen (IA por API).
 
-Genera imágenes NO documentales (ilustraciones, fondos, gráficos, conceptos) con
-un modelo de imagen. Proveedor por defecto: Google Gemini ("Nano Banana").
+Genera imágenes (ilustraciones, fondos, gráficos, conceptos) con un modelo de imagen.
+Proveedor por defecto: Google Gemini ("Nano Banana").
 
-DOS LÍNEAS ROJAS (ver docs/estudio-imagen.md §3):
-  1. NO altera fotos de noticia reales. Con --foto-real se NIEGA y propone la vía
-     determinista (editar.py / componer.py). Es una regla editorial de credibilidad.
-  2. La llave vive en tu máquina: la API key se lee de una variable de entorno
-     (GEMINI_API_KEY / GOOGLE_API_KEY), NUNCA del código ni de un archivo versionado.
+La llave vive en tu máquina: la API key se lee de una variable de entorno
+(GEMINI_API_KEY / GOOGLE_API_KEY), NUNCA del código ni de un archivo versionado.
 
 MODO SIN KEY (degradado, no falla): si no hay key, explica cómo configurarla y
 entrega el "prompt de dirección de arte" listo para pegar en tu herramienta
-(Nano Banana/Gemini, DALL·E, Ideogram, Sora…), que es el patrón de cero coste de
-07-innovacion/diseno-redes-amx. Así la herramienta es útil aun sin API conectada.
+(Nano Banana/Gemini, DALL·E, Ideogram, Sora…). Así la herramienta es útil aun sin
+API conectada.
 
 Uso:
   python3 generar.py --prompt "..." [--marca claro-sports] [--formato feed] \
-      [--modelo gemini-2.5-flash-image] [--salida SAL] [--foto-real]
+      [--modelo gemini-2.5-flash-image] [--salida SAL]
 """
 
 from __future__ import annotations
@@ -56,7 +53,6 @@ def construir_prompt(args) -> str:
             partes.append(nota)
     if args.formato in ASPECTOS:
         partes.append(f"Relación de aspecto {ASPECTOS[args.formato]}.")
-    partes.append("Ilustración/gráfico, NO una foto realista de un hecho noticioso real.")
     return " ".join(partes)
 
 
@@ -102,19 +98,7 @@ def main() -> int:
     p.add_argument("--formato", default="feed", help="vertical | feed | cuadrado | horizontal")
     p.add_argument("--modelo", default=MODELO_DEFECTO, help=f"Modelo de imagen (def. {MODELO_DEFECTO}).")
     p.add_argument("--salida", default=None, help="Ruta de salida PNG.")
-    p.add_argument("--foto-real", dest="foto_real", action="store_true",
-                   help="Marca que la entrada es una foto de noticia real (activa el guardrail).")
     args = p.parse_args()
-
-    # GUARDRAIL editorial: la IA no altera fotos de noticia reales.
-    if args.foto_real:
-        print("BLOQUEADO (regla editorial §3): la IA no altera fotos de noticia reales.")
-        print("Una foto de noticia se respeta, no se reinventa (credibilidad de UnoTV/Claro Sports).")
-        print("Para tratar la foto usa la vía DETERMINISTA:")
-        print("  · recortar/redimensionar  -> editar.py")
-        print("  · logo + pleca + breaking -> ../breaking-express/componer.py")
-        print("Si necesitas una ILUSTRACIÓN nueva (no la foto), vuelve a llamarme sin --foto-real.")
-        return 3
 
     prompt = construir_prompt(args)
     api_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")

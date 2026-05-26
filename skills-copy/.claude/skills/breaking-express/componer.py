@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Compositor DETERMINISTA de piezas de "última hora" (breaking) para AMX.
 
-Toma una FOTO real y le superpone, de forma reproducible (no generativa), la
+Toma una FOTO y le superpone, de forma reproducible (no generativa), la
 identidad de marca: degradado de legibilidad + pleca/etiqueta de breaking +
-titular + logo (o wordmark de respaldo). NO usa IA para la imagen: una foto de
-noticia se respeta, no se reinventa — justo lo que pide el equipo (evitar los
-"detalles que delatan que es IA"). El copy lo redacta la skill aparte.
+titular + logo (o wordmark de respaldo). Es determinista: no usa un modelo de
+imagen. El copy lo redacta la skill aparte.
 
 Por qué un script y no un prompt: el logo, la pleca y las zonas seguras son
 SIEMPRE iguales por marca/formato. Codificarlos una vez = software determinista
@@ -360,7 +359,7 @@ def main() -> int:
 
     info = componer(args)
 
-    print("Pieza de breaking compuesta (determinista, la foto no se reinventa).\n")
+    print("Pieza de breaking compuesta (determinista).\n")
     print(f"  Archivo : {info['salida']}")
     print(f"  Marca   : {info['marca']}  ·  Formato: {info['formato']} ({info['tamano']})")
     print(f"  Pleca   : {info['etiqueta'] or '(sin pleca sintética)'}")

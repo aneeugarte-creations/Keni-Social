@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Caja de herramientas DETERMINISTA del Estudio de imagen (sin IA).
 
-Operaciones exactas y reproducibles sobre una imagen, con Pillow. No reinventan
-la imagen: la recortan, redimensionan o componen texto de marca. Pensado para
-fotos de noticia, donde la regla editorial es respetar el hecho (ver
-docs/estudio-imagen.md §3).
+Operaciones exactas y reproducibles sobre una imagen, con Pillow: la recortan,
+redimensionan, comprimen o componen texto de marca.
 
 Subcomandos:
   recortar       recorte cubriente (object-fit:cover) a un formato de red, o a todos
@@ -392,10 +390,10 @@ def extender(args) -> dict:
 
     Cuando la foto no cabe completa en el formato (p. ej. 4:5) y lo que falta es solo
     cielo o solo el negro del fondo, se AÑADE lienzo por ese lado (no se recorta al
-    sujeto). El relleno estira el borde uniforme: no inventa contenido, así respeta la
-    regla editorial §3. Si ningún borde es uniforme o haría falta extender demasiado,
-    NO inventa: cae al recorte cubriente normal y lo marca para revisión (ahí entraría,
-    como excepción aprobada, la vía de IA). --forzar omite ese guardrail.
+    sujeto). El relleno estira el borde uniforme: no inventa contenido. Si ningún borde
+    es uniforme o haría falta extender demasiado, cae al recorte cubriente normal y lo
+    marca (`extension_segura: false`): ahí pasa a `expandir.py`, que rellena el fondo con
+    IA. --forzar extiende igualmente aunque el borde no sea uniforme.
     """
     img = abrir(args.foto)
     w0, h0 = img.size
@@ -649,7 +647,7 @@ def main() -> int:
     pe.add_argument("--metodo", default="borde", help="borde (estira el borde) | color (color sólido del borde)")
     pe.add_argument("--max-ext", dest="max_ext", type=float, default=0.25, help="Fracción máxima del lado que se permite extender (default 0.25).")
     pe.add_argument("--umbral-uniforme", dest="umbral_uniforme", type=float, default=16.0, help="Desviación estándar máx. para considerar un borde uniforme (0-255).")
-    pe.add_argument("--forzar", action="store_true", help="Extiende aunque el borde no sea uniforme o supere el máximo (excepción explícita).")
+    pe.add_argument("--forzar", action="store_true", help="Extiende aunque el borde no sea uniforme o supere el máximo.")
     pe.add_argument("--salida", default=None)
     pe.set_defaults(func=extender)
 
@@ -665,7 +663,7 @@ def main() -> int:
     args = p.parse_args()
     info = args.func(args)
 
-    print(f"Operación determinista: {info['op']} (la imagen no se reinventa).\n")
+    print(f"Operación determinista: {info['op']}.\n")
     if info["op"] == "placa":
         print(f"  Marca   : {info['marca']}  ·  Formato: {info['formato']}")
         print(f"  Fondo   : {'foto + degradado' if info['con_foto'] else 'marca (sin foto)'}")
@@ -678,7 +676,7 @@ def main() -> int:
             print("  Nota    : se redujo el tamaño para alcanzar el peso objetivo.")
     if info["op"] == "extender":
         encaje = {"extension": "fondo extendido", "recorte": "recorte cubriente (no se pudo extender)", "resize": "ya estaba en proporción"}.get(info["aplicado"], info["aplicado"])
-        sello = "seguro (§3 respetado)" if info["extension_segura"] else "⚠️ REVISAR"
+        sello = "fondo uniforme" if info["extension_segura"] else "⚠️ borde no uniforme (usa expandir.py / IA)"
         print(f"  Encaje  : {encaje}  ·  {sello}")
         if info["lados"]:
             print("  Extendido: " + ", ".join(f"{ll['lado']} +{ll['px']}px" for ll in info["lados"]) + f"  (método {info['metodo']})")

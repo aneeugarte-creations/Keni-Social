@@ -1,5 +1,5 @@
 nombre: Estudio de imagen
-explicacion: "Enruta una tarea de imagen al motor correcto: herramientas deterministas para lo exacto sobre fotos reales (recortar, redimensionar, logo + pleca + breaking) e IA solo para ilustraciones, fondos y gráficos. No altera fotos de noticia reales con IA. Cierra revisando lo legal/editorial. Dry-run, no publica."
+explicacion: "Enruta una tarea de imagen al motor correcto: herramientas deterministas para lo exacto (recortar, redimensionar, comprimir, extender fondo, logo + pleca + breaking) e IA para ilustraciones, fondos, gráficos y para extender el fondo de una foto. Cierra revisando lo legal/editorial. Dry-run, no publica."
 grupo: experimentales
 aplica_redes: false
 salida: documento
@@ -19,7 +19,7 @@ campos:
     tipo: textarea
     requerido: true
     placeholder: "P. ej.: recórtame esta foto a 4:5 y ponle el breaking de Claro Sports; o saca las 3 medidas; o genérame un fondo abstracto rojo para una placa."
-    ayuda: El enrutador decide la herramienta. Sobre una foto real solo hace operaciones deterministas; la IA generativa es para ilustraciones, fondos y gráficos.
+    ayuda: El enrutador decide la herramienta (recortar, redimensionar, comprimir, extender fondo, placa, breaking, generar ilustración/fondo, o extender el fondo con IA).
     opciones: []
     media_tipos: ""
   - id: formato
@@ -39,11 +39,11 @@ campos:
     tipo: select
     requerido: false
     placeholder: ""
-    ayuda: 'Cómo encajar la foto. "recortar" rellena el formato (puede cortar al sujeto). "extender fondo" añade cielo/negro por el borde uniforme SIN cortar al sujeto (sin IA). "extender fondo con IA" rellena la banda con IA cuando el fondo no es uniforme: es una EXCEPCIÓN editorial que tú apruebas; el sujeto queda intacto. Vacío = el enrutador decide.'
+    ayuda: 'Cómo encajar la foto. "recortar" rellena el formato (puede cortar al sujeto). "extender fondo" añade cielo/negro por el borde uniforme SIN cortar al sujeto (sin IA). "extender fondo con IA" rellena la banda con IA cuando el fondo no es uniforme; el sujeto queda intacto. Vacío = el enrutador decide.'
     opciones:
       - recortar
       - extender fondo
-      - extender fondo con IA (excepción)
+      - extender fondo con IA
     media_tipos: ""
   - id: peso
     etiqueta: Peso del archivo (formato "full")
