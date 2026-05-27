@@ -62,6 +62,18 @@ además de keni-social:
 
 ---
 
+## Conexión al servidor
+
+```bash
+ssh -i ~/.ssh/ai-learning ubuntu@162.43.191.103
+```
+- Usuario `ubuntu` (sudo NOPASSWD). Llave SSH `ai-learning` (la sirve el agente de
+  1Password; el privado **no** está en el repo). Origen del acceso: `keni/code-kenitech/infra/deploy.sh`.
+- El stack vive en `/home/ubuntu/keni-social/deploy`. Operar desde ahí:
+  `docker compose ps` · `docker compose logs -f back` · `docker compose up -d`.
+- Rollback de emergencia (restaura code/api bajo Caddy):
+  `docker compose stop traefik && sudo systemctl start caddy`.
+
 ## Requisitos en el host
 
 ```bash
