@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from starlette.testclient import TestClient
 
 from keni_consola import api
 from keni_consola import app as app_modulo
@@ -180,10 +181,34 @@ def test_asset_path_traversal_rechazado(entorno, con_build, tmp_path):
 # --------------------------------------------------------------------------- #
 
 
-def test_bind_solo_localhost():
+def test_bind_default_localhost(monkeypatch):
+    """Sin `KENI_CONSOLA_HOST`, el bind por defecto sigue siendo 127.0.0.1 (local)."""
+    import importlib
+
     from keni_consola import __main__ as entry
 
-    assert entry.HOST == "127.0.0.1"
+    monkeypatch.delenv("KENI_CONSOLA_HOST", raising=False)
+    importlib.reload(entry)
+    try:
+        assert entry.HOST == "127.0.0.1"
+    finally:
+        monkeypatch.delenv("KENI_CONSOLA_HOST", raising=False)
+        importlib.reload(entry)
+
+
+def test_bind_configurable_por_env(monkeypatch):
+    """`KENI_CONSOLA_HOST` cambia el bind (en contenedor se pone 0.0.0.0 tras un proxy)."""
+    import importlib
+
+    from keni_consola import __main__ as entry
+
+    monkeypatch.setenv("KENI_CONSOLA_HOST", "0.0.0.0")
+    importlib.reload(entry)
+    try:
+        assert entry.HOST == "0.0.0.0"
+    finally:
+        monkeypatch.delenv("KENI_CONSOLA_HOST", raising=False)
+        importlib.reload(entry)
 
 
 def test_puerto_configurable_por_env(monkeypatch):
@@ -195,12 +220,37 @@ def test_puerto_configurable_por_env(monkeypatch):
     assert entry._puerto() == entry.PUERTO_DEF
 
 
+# --------------------------------------------------------------------------- #
+# Healthcheck de liveness: 200 SIN credencial y NO cae al SPA                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_healthz_responde_200_sin_credencial(entorno):
+    """`/healthz` responde 200 JSON simple SIN token (lo deja pasar el middleware)."""
+    from .conftest import TOKEN_PRUEBA
+
+    # Cliente que NO manda credencial: la liveness no la exige.
+    c = TestClient(app_modulo.crear_app(token=TOKEN_PRUEBA))
+    r = c.get("/healthz")
+    assert r.status_code == 200
+    assert r.json() == {"estado": "ok"}
+
+
+def test_healthz_no_cae_al_spa(entorno, sin_build):
+    """`/healthz` es su propia ruta (JSON), no el fallback del SPA (placeholder HTML)."""
+    c = _cliente()
+    r = c.get("/healthz")
+    assert r.status_code == 200
+    assert "application/json" in r.headers["content-type"]
+    assert "La interfaz aún no está construida" not in r.text
+
+
 def test_landing_es_la_raiz():
     """La URL de landing pasa a ser la raiz (la SPA), no /proyectos."""
     import keni_consola.__main__ as entry
 
     fuente = Path(entry.__file__).read_text(encoding="utf-8")
-    assert 'f"http://{HOST}:{puerto}/"' in fuente
+    assert 'f"http://{host_url}:{puerto}/"' in fuente
 
 
 def test_lanzador_no_macos_devuelve_aviso(monkeypatch):

@@ -121,6 +121,29 @@ def test_login_ok_devuelve_usuario_y_cookie(entorno):
     assert "path=/" in set_cookie
 
 
+def test_login_cookie_sesion_sin_secure_por_defecto(entorno, monkeypatch):
+    """Por defecto (local HTTP) la cookie de sesion NO lleva `Secure`."""
+    monkeypatch.delenv("KENI_CONSOLA_COOKIE_SECURE", raising=False)
+    monkeypatch.delenv("KENI_CONSOLA_HTTPS", raising=False)
+    _crear("ana", CLAVE, "admin")
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200
+    assert "secure" not in r.headers.get("set-cookie", "").lower()
+
+
+def test_login_cookie_sesion_con_secure_por_env(entorno, monkeypatch):
+    """`KENI_CONSOLA_COOKIE_SECURE=1` marca la cookie de sesion como `Secure`."""
+    monkeypatch.setenv("KENI_CONSOLA_COOKIE_SECURE", "1")
+    _crear("ana", CLAVE, "admin")
+    c = _cli()
+    r = _login(c, "ana", CLAVE)
+    assert r.status_code == 200
+    set_cookie = r.headers.get("set-cookie", "").lower()
+    assert auth.COOKIE_SESION in set_cookie
+    assert "secure" in set_cookie
+
+
 def test_login_password_incorrecta_da_401_generico(entorno):
     _crear("ana", CLAVE, "admin")
     c = _cli()

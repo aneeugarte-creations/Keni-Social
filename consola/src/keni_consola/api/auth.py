@@ -23,7 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth
+from .. import auth, seguridad
 from .._http_json import leer_json
 
 # Mensaje GENERICO de login fallido: NO revela si el usuario existe (anti enumeracion).
@@ -35,12 +35,14 @@ def _set_cookie_sesion(resp: Response, token: str) -> None:
 
     `max_age` acompana a la expiracion server-side para que el navegador la descarte
     cuando caduca. HttpOnly: el JS no la lee (defensa anti-XSS de robo de sesion).
+    `Secure` (cuando va detras de un proxy TLS, #130): la cookie no viaja por HTTP plano.
     """
     resp.set_cookie(
         auth.COOKIE_SESION,
         token,
         httponly=True,
         samesite="strict",
+        secure=seguridad.cookie_secure(),
         path="/",
         max_age=auth.horas_sesion() * 3600,
     )
