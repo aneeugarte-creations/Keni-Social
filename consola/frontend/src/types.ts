@@ -45,6 +45,15 @@ export type {
   Publicacion,
   RespuestaPublicaciones,
   RespuestaPublicacion,
+  RespuestaColaAprobacion,
+  TotalPanel,
+  PicoPanel,
+  MetricasPanel,
+  ColaPanel,
+  ProximaPanel,
+  ProximasPanel,
+  GatingPanel,
+  RespuestaPanel,
   Run,
   RespuestaRun,
   RespuestaRuns,
@@ -905,8 +914,12 @@ export interface ReporteDeportes {
 
 // --- Publicaciones ---
 
-/** Estados del ciclo de vida de una publicación, en orden de avance. */
-export type EstadoPublicacion = "borrador" | "aprobado" | "programado" | "publicado";
+/** Estados del ciclo de vida de una publicación, en orden de avance.
+ *
+ * Se DERIVA del tipo generado `Publicacion["estado"]` para no driftar del backend
+ * (el flujo de aprobación de equipo, #9, añadió `en_revision`): si el backend cambia
+ * el set de estados, este alias lo sigue solo. */
+export type EstadoPublicacion = Publicacion["estado"];
 
 /** Una red social del catálogo (id canónico + límite de caracteres). */
 export interface RedPublicacion {

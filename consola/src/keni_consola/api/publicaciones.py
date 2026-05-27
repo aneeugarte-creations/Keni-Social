@@ -32,8 +32,10 @@ from ..seguridad import autor_de_peticion
 from . import franjas as api_franjas
 
 # Nombres legibles de los estados (para poblar selects de la UI), en orden de flujo.
+# `en_revision` (cola de aprobacion de equipo, #9) se intercala tras el borrador.
 _ESTADO_NOMBRE: dict[str, str] = {
     "borrador": "Borrador",
+    "en_revision": "En revisión",
     "aprobado": "Aprobado",
     "programado": "Programado",
     "publicado": "Publicado",

@@ -99,6 +99,15 @@ def main() -> int:
 
     iniciar_captura_programada()
 
+    # Programador de publicaciones (#9, Fase 3): un hilo demonio que, al vencer la
+    # `fecha_programada` de una pieza `programado`, la PREPARA en dry-run (estampa
+    # `preparado_en`). NO publica en ninguna plataforma: el posteo real esta gated por
+    # #5/#8 ("el humano aprueba; el sistema no publica solo"). Vive aqui (servidor real),
+    # NO en `crear_app`, para no arrancarlo en los tests.
+    from .programador import iniciar_programador
+
+    iniciar_programador()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

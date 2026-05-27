@@ -96,6 +96,8 @@ import type {
   RespuestaDetalleSkillDef,
   RespuestaPublicacion,
   RespuestaPublicaciones,
+  RespuestaColaAprobacion,
+  RespuestaPanel,
   RespuestaReciclarPublicacion,
   RespuestaSugerenciasReciclaje,
   FiltrosReciclaje,
@@ -560,6 +562,34 @@ export const api = {
     peticion<RespuestaReciclarPublicacion>(`/publicaciones/${encodeURIComponent(id)}/reciclar`, {
       metodo: "POST",
     }),
+
+  // --- Aprobación de equipo (#9): cola de revisión + programación dry-run ---
+  // El flujo se monta sobre las publicaciones: borrador -> en_revisión -> aprobado
+  // -> programado. Quien aprueba no puede ser el autor (salvo admin). Programar NO
+  // publica de verdad: el posteo real está gated por #5/#8.
+  colaAprobacion: (signal?: AbortSignal) =>
+    peticion<RespuestaColaAprobacion>("/aprobacion/cola", { signal }),
+  enviarARevision: (id: string) =>
+    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/enviar-a-revision`, {
+      metodo: "POST",
+    }),
+  aprobarPublicacion: (id: string) =>
+    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/aprobar`, {
+      metodo: "POST",
+    }),
+  rechazarPublicacion: (id: string) =>
+    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/rechazar`, {
+      metodo: "POST",
+    }),
+  programarPublicacion: (id: string, fecha: string) =>
+    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/programar`, {
+      metodo: "POST",
+      json: { fecha },
+    }),
+
+  // --- Panel ligero (#9): dashboard de un vistazo (métricas + cola + próximas) ---
+  panel: (params: { rango?: string; marca?: string } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaPanel>(`/panel${query(params)}`, { signal }),
 
   // --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
   sugerenciasReciclaje: (filtros: FiltrosReciclaje = {}, signal?: AbortSignal) =>

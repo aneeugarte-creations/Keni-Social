@@ -31,6 +31,7 @@ def test_opciones(cliente):
     estados = {e["id"]: e["nombre"] for e in datos["estados"]}
     assert estados == {
         "borrador": "Borrador",
+        "en_revision": "En revisión",
         "aprobado": "Aprobado",
         "programado": "Programado",
         "publicado": "Publicado",

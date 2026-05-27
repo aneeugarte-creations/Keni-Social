@@ -7,6 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 // y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
+const Panel = lazy(() => import("@/pages/Panel"));
 const GenerarCopy = lazy(() => import("@/pages/GenerarCopy"));
 const Imagenes = lazy(() => import("@/pages/Imagenes"));
 const Verificacion = lazy(() => import("@/pages/Verificacion"));
@@ -38,6 +39,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/generar-copy" replace /> },
       // Trabajo
+      { path: "panel", element: <Panel /> },
       { path: "generar-copy", element: <GenerarCopy /> },
       { path: "imagenes", element: <Imagenes /> },
       { path: "verificacion", element: <Verificacion /> },

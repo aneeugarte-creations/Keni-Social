@@ -199,6 +199,12 @@ export interface MetricasRun {
  * archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
  * `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
  * creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
+ *
+ * Flujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/
+ * `revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; "" mientras
+ * no haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca
+ * DRY-RUN del programador (instante en que quedo "lista para publicar"; el posteo real
+ * esta gated por #5/#8); "" hasta que vence su `fecha_programada`.
  */
 export interface Publicacion {
   id: string;
@@ -208,10 +214,15 @@ export interface Publicacion {
   red: string;
   red_nombre: string;
   contenido: string;
-  estado: "borrador" | "aprobado" | "programado" | "publicado";
+  estado: "borrador" | "en_revision" | "aprobado" | "programado" | "publicado";
   veredicto: "listo" | "revisar" | "no_publicar" | "";
   autor_id: string;
   autor_nombre: string;
+  enviado_a_revision_en: string;
+  revisor_id: string;
+  revisor_nombre: string;
+  revisado_en: string;
+  preparado_en: string;
   fecha_creacion: string;
   fecha_actualizacion: string;
   fecha_programada: string;
@@ -232,6 +243,98 @@ export interface RespuestaPublicaciones {
  */
 export interface RespuestaPublicacion {
   publicacion: Publicacion;
+}
+/**
+ * Cola de aprobacion (`GET /api/aprobacion/cola`): piezas en revision, FIFO.
+ *
+ * Cada item es una `Publicacion` completa (incluye `autor_nombre`/
+ * `enviado_a_revision_en`: quien la envio y desde cuando espera). `total` = nº en cola.
+ */
+export interface RespuestaColaAprobacion {
+  cola: Publicacion[];
+  total: number;
+}
+/**
+ * Total consolidado de metricas para el panel (mismas 4 metricas que el reporte).
+ */
+export interface TotalPanel {
+  visualizaciones: number;
+  alcance: number;
+  interacciones: number;
+  engagement_pct: number;
+}
+/**
+ * Un movimiento destacado ('pico') del periodo en el panel.
+ */
+export interface PicoPanel {
+  marca: string;
+  direccion: string;
+  variacion_vis_pct: number;
+  visualizaciones: number;
+  pieza_titulo: string;
+}
+/**
+ * Resumen de metricas del panel (REUSA `keni_metricas.servicio`, solo lectura).
+ *
+ * `disponible` es False si la fuente de metricas falló (el resto del panel sigue útil);
+ * en ese caso `total` es `null` y `picos` viene vacío. `rango` solo está cuando hay
+ * datos, por eso es `NotRequired`. `fuente` marca muestra vs real (badge en la UI).
+ */
+export interface MetricasPanel {
+  disponible: boolean;
+  fuente: string;
+  total: TotalPanel | null;
+  picos: PicoPanel[];
+  rango?: string;
+}
+/**
+ * Bloque 'cola de aprobacion' del panel: cuántas piezas esperan revisión.
+ */
+export interface ColaPanel {
+  total: number;
+}
+/**
+ * Una pieza programada próxima (vista mínima del panel, nombres resueltos).
+ *
+ * `preparado_en` viene con el instante DRY-RUN si el programador ya la preparó (venció);
+ * "" si aún no vence. El posteo real está gated por #5/#8.
+ */
+export interface ProximaPanel {
+  id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  red: string;
+  red_nombre: string;
+  fecha_programada: string;
+  preparado_en: string;
+}
+/**
+ * Bloque 'próximas programadas' del panel: las más inminentes + el total.
+ */
+export interface ProximasPanel {
+  items: ProximaPanel[];
+  total: number;
+}
+/**
+ * Aviso de frontera del producto: el sistema NO publica solo (gated por #5/#8).
+ */
+export interface GatingPanel {
+  publicacion_real_activa: boolean;
+  nota: string;
+}
+/**
+ * Respuesta de `GET /api/panel`: dashboard ligero de un vistazo (#9, Fase 3).
+ *
+ * Agrega métricas/picos (reusa los caminos de lectura de Metricas, sin tocar su
+ * página), el contador de la cola de aprobación y las próximas piezas programadas.
+ * `gating` recuerda que el posteo real está pendiente de #5/#8.
+ */
+export interface RespuestaPanel {
+  metricas: MetricasPanel;
+  cola: ColaPanel;
+  proximas: ProximasPanel;
+  gating: GatingPanel;
 }
 /**
  * Un run (ejecucion) de un agente, en su forma publica.

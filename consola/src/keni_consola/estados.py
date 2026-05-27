@@ -14,8 +14,28 @@ from __future__ import annotations
 # Estados validos de una tarea (operacional; vive en SQLite).
 ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "hecha")
 
-# Estados validos de una publicacion (flujo editorial borrador -> publicado; YAML).
-ESTADOS_PUBLICACION: tuple[str, ...] = ("borrador", "aprobado", "programado", "publicado")
+# Estados validos de una publicacion (flujo editorial; YAML). El flujo de aprobacion
+# de equipo (#9, Fase 3) intercala `en_revision` entre el borrador y el aprobado:
+#
+#   borrador -> en_revision -> aprobado -> programado -> publicado
+#                   |
+#                   +-> (rechazo) -> borrador
+#
+# `en_revision` se anadio DESPUES del set original; un YAML legado nunca lo trae, asi
+# que la lectura sigue siendo retrocompatible (los 4 estados originales validan igual).
+ESTADOS_PUBLICACION: tuple[str, ...] = (
+    "borrador",
+    "en_revision",
+    "aprobado",
+    "programado",
+    "publicado",
+)
+
+# Estado intermedio del flujo de aprobacion de equipo (#9): el autor envia su pieza a
+# revision; un revisor/admin la aprueba o la devuelve a borrador.
+ESTADO_EN_REVISION = "en_revision"
+ESTADO_APROBADO = "aprobado"
+ESTADO_PROGRAMADO = "programado"
 
 # Estados del seguimiento comercial: activa (se captura), pausada (se detuvo la
 # pauta), cerrada (KPI entregado / reporte hecho). Operacional; vive en SQLite.

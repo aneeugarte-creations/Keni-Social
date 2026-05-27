@@ -4,6 +4,7 @@ import {
   Bot,
   Globe,
   ImagePlus,
+  LayoutDashboard,
   Lightbulb,
   ListTodo,
   Megaphone,
@@ -43,6 +44,13 @@ export const NAVEGACION: GrupoNav[] = [
   {
     etiqueta: "Trabajo",
     items: [
+      {
+        ruta: "/panel",
+        etiqueta: "Panel",
+        icono: LayoutDashboard,
+        descripcion:
+          "Un vistazo: rendimiento del periodo, cola de aprobación y próximas publicaciones programadas.",
+      },
       {
         ruta: "/generar-copy",
         etiqueta: "Generar copy",
