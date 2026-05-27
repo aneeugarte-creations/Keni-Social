@@ -18,8 +18,10 @@ dependencies = [
     # Backend de ficheros: el contenido vive en YAML por marca (fuente de verdad).
     "PyYAML>=6",
     # Render del deck semanal de deportes (reporte_deck). En keni-metricas es un
-    # extra opcional; la consola SI lo necesita, asi que lo fija como dependencia.
+    # extra opcional; la consola SI lo necesita, asi que lo fija como dependencia:
+    # python-pptx para el .pptx y reportlab para el PDF NATIVO (sin LibreOffice, #141).
     "python-pptx>=0.6.23",
+    "reportlab>=4.0",
 ]
 
 [project.optional-dependencies]

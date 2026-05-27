@@ -31,6 +31,18 @@ const NOMBRE_PLATAFORMA: Record<string, string> = {
 
 const fmt = new Intl.NumberFormat("es-MX");
 
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/** Texto legible del periodo del reporte: "18 may — 24 may 2026". */
+function textoPeriodo(periodo?: { desde: string; hasta: string }): string | null {
+  if (!periodo?.desde || !periodo?.hasta) return null;
+  const d = new Date(`${periodo.desde}T00:00:00`);
+  const h = new Date(`${periodo.hasta}T00:00:00`);
+  if (Number.isNaN(d.getTime()) || Number.isNaN(h.getTime())) return null;
+  const fechaCorta = (x: Date) => `${x.getDate()} ${MESES[x.getMonth()]}`;
+  return `${fechaCorta(d)} — ${fechaCorta(h)} ${h.getFullYear()}`;
+}
+
 /** Recorta y descarta eventos sin nombre antes de mandarlos al backend. */
 function limpiar(items: EventoAgenda[]): EventoAgenda[] {
   return items
@@ -44,11 +56,12 @@ export default function ReporteDeportes() {
     queryFn: ({ signal }) => api.reporteDeportesOpciones(signal),
   });
 
-  const [rango, setRango] = useState("semana");
+  // Por defecto la semana cerrada (lun→dom, domingo incluido): el reporte del lunes (#141).
+  const [rango, setRango] = useState("semana_cerrada");
   const [top, setTop] = useState(3);
   const [principales, setPrincipales] = useState<EventoAgenda[]>([]);
   const [propios, setPropios] = useState<EventoAgenda[]>([]);
-  const [descargando, setDescargando] = useState(false);
+  const [descargando, setDescargando] = useState<null | "pptx" | "pdf">(null);
 
   const cuerpo = (): CuerpoReporteDeportes => ({
     rango,
@@ -61,15 +74,19 @@ export default function ReporteDeportes() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo previsualizar."),
   });
 
-  async function descargar() {
-    setDescargando(true);
+  async function descargar(formato: "pptx" | "pdf") {
+    setDescargando(formato);
     try {
-      await api.descargarReporteDeportes(cuerpo());
-      toast.success("Presentación generada.");
+      if (formato === "pdf") {
+        await api.descargarReporteDeportesPdf(cuerpo());
+      } else {
+        await api.descargarReporteDeportes(cuerpo());
+      }
+      toast.success(formato === "pdf" ? "PDF generado." : "Presentación generada.");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "No se pudo descargar la presentación.");
+      toast.error(e instanceof ApiError ? e.message : "No se pudo descargar el reporte.");
     } finally {
-      setDescargando(false);
+      setDescargando(null);
     }
   }
 
@@ -157,9 +174,25 @@ export default function ReporteDeportes() {
             {preview.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
             Previsualizar
           </Button>
-          <Button onClick={descargar} disabled={descargando}>
-            {descargando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          <Button onClick={() => descargar("pptx")} disabled={descargando !== null}>
+            {descargando === "pptx" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
             Descargar .pptx
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => descargar("pdf")}
+            disabled={descargando !== null}
+          >
+            {descargando === "pdf" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Descargar .pdf
           </Button>
         </div>
 
@@ -224,11 +257,13 @@ function EditorAgenda({
 }
 
 function Previsualizacion({ rep }: { rep: ReporteDeportes }) {
+  const periodo = textoPeriodo(rep.periodo);
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-lg font-semibold tracking-tight">
-          Vista previa — {rep.cuenta.nombre} ({rep.rango})
+          Vista previa — {rep.cuenta.nombre}
+          {periodo ? ` (${periodo})` : ` (${rep.rango})`}
         </h3>
         {/* Procedencia de los datos: muestra (ficticios) vs reales. Lectura
             defensiva: si `fuente` falta no se afirma nada (#90/residuo Ola 2). */}
@@ -282,14 +317,33 @@ function Previsualizacion({ rep }: { rep: ReporteDeportes }) {
           {rep.promocion_hermanas.map((h) => (
             <div key={h.cuenta}>
               <p className="font-medium">{h.nombre}</p>
-              {h.piezas.length === 0 ? (
+              {h.datos === "sin_datos_reales" ? (
+                // Honestidad (#141): cuenta no conectada todavía; no se inventan cifras.
+                <p className="text-sm text-muted-foreground">
+                  Sin datos reales (cuenta no conectada todavía).
+                </p>
+              ) : h.piezas.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Sin posteos en el periodo.</p>
               ) : (
                 <ul className="ml-4 list-disc text-sm text-muted-foreground">
                   {h.piezas.map((p, i) => (
                     <li key={i}>
                       {p.titulo} ({NOMBRE_PLATAFORMA[p.plataforma] ?? p.plataforma},{" "}
-                      {fmt.format(p.visualizaciones)} vistas)
+                      {fmt.format(p.visualizaciones)} vistas · {fmt.format(p.interacciones)}{" "}
+                      interacciones)
+                      {p.url && (
+                        <>
+                          {" — "}
+                          <a
+                            href={p.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary underline"
+                          >
+                            ver
+                          </a>
+                        </>
+                      )}
                     </li>
                   ))}
                 </ul>

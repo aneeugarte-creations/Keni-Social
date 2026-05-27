@@ -37,7 +37,9 @@ COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
 COPY skills-copy/ ./skills-copy/
-RUN pip install ./keni-shared ./mcp-metricas ./consola \
+# El extra [deck] (python-pptx + reportlab) habilita el reporte del lunes: la
+# Consola exporta .pptx y PDF NATIVO (sin LibreOffice) desde la API (#141).
+RUN pip install ./keni-shared "./mcp-metricas[deck]" ./consola \
  && pip install "uvicorn[standard]>=0.31.1"
 
 EXPOSE 8765

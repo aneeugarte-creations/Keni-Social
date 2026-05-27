@@ -20,7 +20,10 @@ def test_opciones_trae_rangos_y_cuenta(cliente):
     assert r.status_code == 200
     data = r.json()
     ids_rango = {x["id"] for x in data["rangos"]}
-    assert {"semana", "mes"} <= ids_rango
+    # el reporte del lunes ofrece la semana cerrada (lun->dom) ademas de los rodantes
+    assert {"semana_cerrada", "semana", "mes"} <= ids_rango
+    # la semana cerrada va primero: es el rango por defecto (#141)
+    assert data["rangos"][0]["id"] == "semana_cerrada"
     assert data["cuenta"]["id"] == "claro_sports"
     assert data["cuenta"]["nombre"] == "Claro Sports"
     ids_herm = {h["id"] for h in data["hermanas"]}
@@ -54,18 +57,40 @@ def test_preview_refleja_agenda(cliente):
     assert [e["nombre"] for e in ag["propios"]] == ["Camino al Mundial"]
 
 
-def test_preview_rango_invalido_cae_a_semana(cliente):
-    # como en /api/metricas, un rango invalido no rompe: cae al rango por defecto.
+def test_preview_rango_invalido_cae_a_semana_cerrada(cliente):
+    # un rango invalido no rompe: cae al rango por defecto (la semana cerrada, #141).
     r = cliente.post("/api/reporte-deportes/preview", json={"rango": "trimestre"})
     assert r.status_code == 200
-    assert r.json()["rango"] == "semana"
+    assert r.json()["rango"] == "semana_cerrada"
 
 
-def test_preview_sin_cuerpo(cliente):
-    # POST sin JSON: usa defaults (semana, top 3).
+def test_preview_sin_cuerpo_usa_semana_cerrada(cliente):
+    # POST sin JSON: usa defaults (semana cerrada lun->dom, top 3).
     r = cliente.post("/api/reporte-deportes/preview")
     assert r.status_code == 200
-    assert r.json()["rango"] == "semana"
+    assert r.json()["rango"] == "semana_cerrada"
+
+
+def test_preview_semana_cerrada_periodo_lunes_a_domingo(cliente):
+    # El periodo por defecto cubre 7 dias naturales lun->dom (domingo incluido, #141).
+    from datetime import date
+
+    r = cliente.post("/api/reporte-deportes/preview", json={"rango": "semana_cerrada"})
+    assert r.status_code == 200
+    periodo = r.json()["periodo"]
+    desde = date.fromisoformat(periodo["desde"])
+    hasta = date.fromisoformat(periodo["hasta"])
+    assert desde.weekday() == 0  # lunes
+    assert hasta.weekday() == 6  # domingo
+    assert (hasta - desde).days == 6  # 7 dias inclusive
+
+
+def test_preview_hermanas_rotulan_procedencia(cliente):
+    # Con la fuente muestra, cada cuenta hermana se rotula como "muestra" (honestidad #141).
+    r = cliente.post("/api/reporte-deportes/preview", json={"rango": "semana_cerrada"})
+    assert r.status_code == 200
+    hermanas = r.json()["promocion_hermanas"]
+    assert hermanas and all(h.get("datos") == "muestra" for h in hermanas)
 
 
 def test_export_pptx_descarga_binario(cliente):
@@ -91,3 +116,16 @@ def test_export_pptx_es_zip_valido(cliente):
     prs = pptx.Presentation(io.BytesIO(r.content))
     # portada + 3 plataformas + hermanas + 2 de agenda = 7 laminas
     assert len(prs.slides) == 7
+
+
+def test_export_pdf_descarga_binario(cliente):
+    # PDF NATIVO (reportlab, sin LibreOffice, #141).
+    pytest.importorskip("reportlab")
+    r = cliente.post("/api/reporte-deportes/export.pdf", json={"rango": "semana_cerrada"})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert "attachment" in r.headers["content-disposition"]
+    assert "reporte-deportes-semana_cerrada.pdf" in r.headers["content-disposition"]
+    # un PDF empieza por "%PDF"
+    assert r.content[:4] == b"%PDF"
+    assert len(r.content) > 1000
