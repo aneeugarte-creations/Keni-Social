@@ -33,7 +33,16 @@ from pathlib import Path
 from typing import Any
 
 # Tipos de entidad indexados (cada uno tiene su sub-carpeta por marca).
-TIPOS: tuple[str, ...] = ("publicacion", "plantilla", "fuente_rss", "grupo_hashtags", "historial")
+#
+# `run` es un tipo ESPECIAL: ademas de localizar el YAML (`runs/<id>.yaml` por
+# agente), DENORMALIZA las metricas de coste/tokens y el agente/fecha para que el
+# monitor agregue (SUM/GROUP BY) SIN leer cuerpos. La fila de un run usa
+# `id = "<agente>:<run_id>"` (unico bajo `tipo="run"` entre agentes), `marca` = el
+# agente, mas las columnas extra (`agente`, `coste_usd`, `tokens_in`, `tokens_out`,
+# `fecha_inicio`, `dia`). El resto de tipos no usa esas columnas (quedan a 0/'').
+TIPOS: tuple[str, ...] = (
+    "publicacion", "plantilla", "fuente_rss", "grupo_hashtags", "historial", "run",
+)
 
 
 def ruta_indice() -> Path:
@@ -75,13 +84,42 @@ def _conectar() -> sqlite3.Connection:
             evergreen       INTEGER NOT NULL DEFAULT 0,
             fecha           TEXT NOT NULL DEFAULT '',
             fecha_creacion  TEXT NOT NULL DEFAULT '',
+            agente          TEXT NOT NULL DEFAULT '',
+            coste_usd       REAL NOT NULL DEFAULT 0,
+            tokens_in       INTEGER NOT NULL DEFAULT 0,
+            tokens_out      INTEGER NOT NULL DEFAULT 0,
+            fecha_inicio    TEXT NOT NULL DEFAULT '',
+            dia             TEXT NOT NULL DEFAULT '',
             PRIMARY KEY (tipo, id)
         )
         """
     )
     con.execute("CREATE INDEX IF NOT EXISTS idx_entradas_tipo_marca ON entradas (tipo, marca)")
+    _migrar_columnas(con)
     con.commit()
     return con
+
+
+# Columnas anadidas DESPUES del esquema original (denormalizacion de runs). Una BD
+# de indice creada antes de #121 no las tiene; las anadimos en caliente con un
+# `ALTER TABLE ADD COLUMN` idempotente (el indice es regenerable, asi que poblarlas
+# lo hace el reindexado de runs; aqui solo garantizamos que la columna existe).
+_COLS_EXTRA: tuple[tuple[str, str], ...] = (
+    ("agente", "TEXT NOT NULL DEFAULT ''"),
+    ("coste_usd", "REAL NOT NULL DEFAULT 0"),
+    ("tokens_in", "INTEGER NOT NULL DEFAULT 0"),
+    ("tokens_out", "INTEGER NOT NULL DEFAULT 0"),
+    ("fecha_inicio", "TEXT NOT NULL DEFAULT ''"),
+    ("dia", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas(con: sqlite3.Connection) -> None:
+    """Anade las columnas de denormalizacion de runs si una BD vieja no las tiene."""
+    presentes = {fila["name"] for fila in con.execute("PRAGMA table_info(entradas)")}
+    for nombre, definicion in _COLS_EXTRA:
+        if nombre not in presentes:
+            con.execute(f"ALTER TABLE entradas ADD COLUMN {nombre} {definicion}")
 
 
 # --------------------------------------------------------------------------- #
@@ -89,7 +127,10 @@ def _conectar() -> sqlite3.Connection:
 # --------------------------------------------------------------------------- #
 
 
-_COLS = ("id", "tipo", "marca", "ruta", "mtime", "red", "estado", "evergreen", "fecha", "fecha_creacion")
+_COLS = (
+    "id", "tipo", "marca", "ruta", "mtime", "red", "estado", "evergreen", "fecha",
+    "fecha_creacion", "agente", "coste_usd", "tokens_in", "tokens_out", "fecha_inicio", "dia",
+)
 
 
 def upsert(entrada: dict[str, Any]) -> None:
@@ -115,6 +156,12 @@ def _upsert_con(con: sqlite3.Connection, entrada: dict[str, Any]) -> None:
         1 if entrada.get("evergreen") else 0,
         entrada.get("fecha", ""),
         entrada.get("fecha_creacion", ""),
+        entrada.get("agente", ""),
+        float(entrada.get("coste_usd", 0) or 0),
+        int(entrada.get("tokens_in", 0) or 0),
+        int(entrada.get("tokens_out", 0) or 0),
+        entrada.get("fecha_inicio", ""),
+        entrada.get("dia", ""),
     )
     marcadores = ", ".join("?" for _ in _COLS)
     con.execute(
@@ -151,6 +198,12 @@ def _fila_a_dict(fila: sqlite3.Row) -> dict[str, Any]:
         "evergreen": bool(fila["evergreen"]),
         "fecha": fila["fecha"],
         "fecha_creacion": fila["fecha_creacion"],
+        "agente": fila["agente"],
+        "coste_usd": fila["coste_usd"],
+        "tokens_in": fila["tokens_in"],
+        "tokens_out": fila["tokens_out"],
+        "fecha_inicio": fila["fecha_inicio"],
+        "dia": fila["dia"],
     }
 
 
@@ -166,18 +219,30 @@ def obtener(tipo: str, entidad_id: str) -> dict[str, Any] | None:
     return _fila_a_dict(fila) if fila is not None else None
 
 
-def listar(tipo: str, *, filtros: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    """Lista entradas indexadas de un `tipo`, con filtros opcionales.
+# Orden DETERMINISTA por tipo. Los runs (denormalizados) se ordenan por
+# `fecha_inicio` desc (paridad con `agentes.listar_runs`/`listar_runs_globales`); el
+# resto por su `fecha_creacion`/`fecha`. El `id` desc desempata siempre.
+_ORDEN_RUN = "fecha_inicio DESC, id DESC"
+_ORDEN_DEF = "fecha_creacion DESC, fecha DESC, id DESC"
+
+
+def _orden_de(tipo: str) -> str:
+    """Clausula ORDER BY (sin el prefijo) para un `tipo`."""
+    return _ORDEN_RUN if tipo == "run" else _ORDEN_DEF
+
+
+def _where(tipo: str, filtros: dict[str, Any] | None) -> tuple[str, list[Any]]:
+    """Construye `(clausula_where, params)` para un `tipo` y unos filtros opcionales.
 
     Filtros soportados (igual semantica que el backend SQLite): `marca`, `red`,
-    `estado` (igualdad exacta de strings) y `evergreen` (bool). El orden es
-    DETERMINISTA: `fecha_creacion DESC, fecha DESC, id DESC` (cae a `id` para los
-    tipos sin fecha_creacion). El llamante carga luego el YAML por la `ruta`.
+    `estado`, `agente` (igualdad exacta de strings) y `evergreen` (bool). Es el
+    chokepoint UNICO compartido por `listar` y `contar` para que paginar y contar
+    apliquen EXACTAMENTE los mismos filtros.
     """
     filtros = filtros or {}
     clausulas = ["tipo = ?"]
     params: list[Any] = [tipo]
-    for clave in ("marca", "red", "estado"):
+    for clave in ("marca", "red", "estado", "agente"):
         valor = filtros.get(clave)
         if valor:
             clausulas.append(f"{clave} = ?")
@@ -185,17 +250,119 @@ def listar(tipo: str, *, filtros: dict[str, Any] | None = None) -> list[dict[str
     if filtros.get("evergreen") is not None:
         clausulas.append("evergreen = ?")
         params.append(1 if filtros["evergreen"] else 0)
-    sql = (
-        "SELECT * FROM entradas WHERE "
-        + " AND ".join(clausulas)
-        + " ORDER BY fecha_creacion DESC, fecha DESC, id DESC"
-    )
+    return " AND ".join(clausulas), params
+
+
+def listar(
+    tipo: str,
+    *,
+    filtros: dict[str, Any] | None = None,
+    limite: int | None = None,
+    desplazamiento: int | None = None,
+) -> list[dict[str, Any]]:
+    """Lista entradas indexadas de un `tipo`, con filtros y paginacion opcionales.
+
+    Filtros soportados (igual semantica que el backend SQLite): `marca`, `red`,
+    `estado`, `agente` (igualdad exacta de strings) y `evergreen` (bool). El orden es
+    DETERMINISTA (ver `_orden_de`). El llamante carga luego el YAML por la `ruta`.
+
+    `limite`/`desplazamiento` (offset-based): si `limite` es None se devuelve TODO el
+    conjunto filtrado (comportamiento previo, retrocompatible); si viene, se aplica
+    `LIMIT ? OFFSET ?` en SQL (la pagina sale SIN leer los cuerpos restantes).
+    """
+    where, params = _where(tipo, filtros)
+    sql = f"SELECT * FROM entradas WHERE {where} ORDER BY {_orden_de(tipo)}"
+    if limite is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params.append(max(0, int(limite)))
+        params.append(max(0, int(desplazamiento or 0)))
     con = _conectar()
     try:
         filas = con.execute(sql, tuple(params)).fetchall()
     finally:
         con.close()
     return [_fila_a_dict(f) for f in filas]
+
+
+def contar(tipo: str, filtros: dict[str, Any] | None = None) -> int:
+    """Cuenta entradas indexadas de un `tipo` con los MISMOS filtros que `listar`.
+
+    Es el `total` del envelope de paginacion: el numero de filas que existirian sin
+    `LIMIT/OFFSET`, para que el cliente sepa cuantas paginas hay. No lee cuerpos.
+    """
+    where, params = _where(tipo, filtros)
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"SELECT COUNT(*) AS n FROM entradas WHERE {where}", tuple(params)
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+# --------------------------------------------------------------------------- #
+# Agregacion de runs en SQL (SUM/GROUP BY sobre la denormalizacion)           #
+# --------------------------------------------------------------------------- #
+
+
+def agregados_runs() -> dict[str, Any]:
+    """Agrega coste/tokens/runs de los runs INDEXADOS via SQL (SUM/GROUP BY).
+
+    Devuelve `{total, por_agente, por_dia}` con la MISMA forma y orden que el
+    full-scan de `agentes.agregados_runs` (paridad exacta de numeros):
+      - `total`: `{coste_usd, tokens, runs}` global.
+      - `por_agente`: `[{agente, coste_usd, tokens, runs}]`, de mayor a menor coste.
+      - `por_dia`: `[{dia, coste_usd, tokens, runs}]`, dias recientes primero.
+    `tokens = tokens_in + tokens_out`. El llamante completa `agente_nombre` (el
+    nombre legible no se denormaliza: cambia al renombrar y se resuelve barato).
+    """
+    con = _conectar()
+    try:
+        total = con.execute(
+            "SELECT COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, COUNT(*) AS runs "
+            "FROM entradas WHERE tipo = 'run'"
+        ).fetchone()
+        por_agente = con.execute(
+            "SELECT agente, COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, COUNT(*) AS runs "
+            "FROM entradas WHERE tipo = 'run' GROUP BY agente "
+            "ORDER BY coste DESC, agente ASC"
+        ).fetchall()
+        por_dia = con.execute(
+            "SELECT dia, COALESCE(SUM(coste_usd), 0) AS coste, "
+            "COALESCE(SUM(tokens_in + tokens_out), 0) AS tokens, COUNT(*) AS runs "
+            "FROM entradas WHERE tipo = 'run' GROUP BY dia "
+            "ORDER BY dia DESC"
+        ).fetchall()
+    finally:
+        con.close()
+    return {
+        "total": {
+            "coste_usd": float(total["coste"]),
+            "tokens": int(total["tokens"]),
+            "runs": int(total["runs"]),
+        },
+        "por_agente": [
+            {
+                "agente": f["agente"],
+                "coste_usd": float(f["coste"]),
+                "tokens": int(f["tokens"]),
+                "runs": int(f["runs"]),
+            }
+            for f in por_agente
+        ],
+        "por_dia": [
+            {
+                "dia": f["dia"],
+                "coste_usd": float(f["coste"]),
+                "tokens": int(f["tokens"]),
+                "runs": int(f["runs"]),
+            }
+            for f in por_dia
+        ],
+    }
 
 
 def reemplazar_tipo(tipo: str, entradas: list[dict[str, Any]]) -> None:

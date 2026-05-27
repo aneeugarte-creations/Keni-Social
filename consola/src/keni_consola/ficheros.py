@@ -307,9 +307,19 @@ def _reindexar_tipo(tipo: str) -> None:
 
 
 def reconstruir_indice() -> None:
-    """Reconstruye el indice COMPLETO desde los ficheros (todas las entidades indexadas)."""
+    """Reconstruye el indice COMPLETO desde los ficheros (todas las entidades indexadas).
+
+    Los tipos de CONTENIDO editorial (publicacion/plantilla/fuente_rss/grupo_hashtags/
+    historial) los reconstruye este modulo; el tipo `run` lo posee `agentes.py` (los
+    runs viven en `runs/<id>.yaml` por agente, no en sub-carpetas de contenido), asi
+    que se delega ahi para no acoplar `ficheros` al layout de runs.
+    """
     for tipo in indice.TIPOS:
+        if tipo == "run":
+            continue
         _reindexar_tipo(tipo)
+    from . import agentes  # import local: evita ciclo a nivel de modulo
+    agentes.reindexar_runs()
 
 
 def _listar_validado(
@@ -317,17 +327,24 @@ def _listar_validado(
     *,
     filtros: dict[str, Any] | None,
     parsear,  # noqa: ANN001 -- callable(datos, marca, id) -> dict | None
+    limite: int | None = None,
+    desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Lista entidades indexadas de un tipo, cargando+validando cada YAML.
+    """Lista entidades indexadas de un tipo, cargando+validando SOLO la pagina pedida.
 
     Si el indice esta vacio para ese tipo pero hay ficheros en disco, primero lo
     reconstruye (cubre el caso de indice borrado). Las entradas cuyo YAML ya no
     existe o no valida se OMITEN (degradado), sin romper el listado.
+
+    `limite`/`desplazamiento` se EMPUJAN al indice (`LIMIT/OFFSET`): asi solo se leen
+    los cuerpos YAML de la PAGINA, no de todas las coincidencias. `limite=None`
+    devuelve el conjunto completo (retrocompat). Para que la reconstruccion perezosa
+    no se salte por un OFFSET mas alla del final, el chequeo de "indice vacio" mira el
+    conteo SIN paginar.
     """
-    entradas = indice.listar(tipo, filtros=filtros)
-    if not entradas and _rutas_de_tipo(tipo):
+    if indice.contar(tipo, filtros) == 0 and _rutas_de_tipo(tipo):
         _reindexar_tipo(tipo)
-        entradas = indice.listar(tipo, filtros=filtros)
+    entradas = indice.listar(tipo, filtros=filtros, limite=limite, desplazamiento=desplazamiento)
     salida: list[dict[str, Any]] = []
     for entrada in entradas:
         ruta = Path(entrada["ruta"])
@@ -474,13 +491,35 @@ def listar_publicaciones(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
+    *,
+    limite: int | None = None,
+    desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Publicaciones (mas recientes primero), con filtros opcionales por marca/red/estado/evergreen."""
+    """Publicaciones (mas recientes primero), con filtros y paginacion opcionales.
+
+    `limite=None` (def) devuelve todas (retrocompat); con `limite`/`desplazamiento`
+    solo se lee el cuerpo YAML de la pagina pedida.
+    """
     return _listar_validado(
         "publicacion",
         filtros={"marca": marca, "red": red, "estado": estado, "evergreen": evergreen},
         parsear=_parsear_publicacion,
+        limite=limite,
+        desplazamiento=desplazamiento,
     )
+
+
+def contar_publicaciones(
+    marca: str | None = None,
+    red: str | None = None,
+    estado: str | None = None,
+    evergreen: bool | None = None,
+) -> int:
+    """Total de publicaciones que casan los filtros (para el `total` de paginacion)."""
+    filtros = {"marca": marca, "red": red, "estado": estado, "evergreen": evergreen}
+    if indice.contar("publicacion", filtros) == 0 and _rutas_de_tipo("publicacion"):
+        _reindexar_tipo("publicacion")
+    return indice.contar("publicacion", filtros)
 
 
 def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
@@ -550,9 +589,24 @@ def _guardar_grupo(grupo: dict[str, Any]) -> None:
     _indexar("grupo_hashtags", grupo["marca"], ruta, cuerpo)
 
 
-def listar_grupos_hashtags() -> list[dict[str, Any]]:
-    """Todos los grupos de hashtags (mas recientes primero)."""
-    return _listar_validado("grupo_hashtags", filtros=None, parsear=_parsear_grupo)
+def listar_grupos_hashtags(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    """Grupos de hashtags (mas recientes primero), con paginacion opcional."""
+    return _listar_validado(
+        "grupo_hashtags",
+        filtros=None,
+        parsear=_parsear_grupo,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def contar_grupos_hashtags() -> int:
+    """Total de grupos de hashtags (para el `total` de paginacion)."""
+    if indice.contar("grupo_hashtags", None) == 0 and _rutas_de_tipo("grupo_hashtags"):
+        _reindexar_tipo("grupo_hashtags")
+    return indice.contar("grupo_hashtags", None)
 
 
 def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
@@ -764,9 +818,24 @@ def _guardar_plantilla(plantilla: dict[str, Any]) -> None:
     _indexar("plantilla", plantilla["marca"], ruta, cuerpo)
 
 
-def listar_plantillas() -> list[dict[str, Any]]:
-    """Todas las plantillas (mas recientes primero)."""
-    return _listar_validado("plantilla", filtros=None, parsear=_parsear_plantilla)
+def listar_plantillas(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    """Plantillas (mas recientes primero), con paginacion opcional."""
+    return _listar_validado(
+        "plantilla",
+        filtros=None,
+        parsear=_parsear_plantilla,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def contar_plantillas() -> int:
+    """Total de plantillas (para el `total` de paginacion)."""
+    if indice.contar("plantilla", None) == 0 and _rutas_de_tipo("plantilla"):
+        _reindexar_tipo("plantilla")
+    return indice.contar("plantilla", None)
 
 
 def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
@@ -894,9 +963,24 @@ def _guardar_fuente(fuente: dict[str, Any]) -> None:
     _indexar("fuente_rss", fuente["marca"], ruta, cuerpo)
 
 
-def listar_fuentes_rss() -> list[dict[str, Any]]:
-    """Todas las fuentes RSS (mas recientes primero)."""
-    return _listar_validado("fuente_rss", filtros=None, parsear=_parsear_fuente)
+def listar_fuentes_rss(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    """Fuentes RSS (mas recientes primero), con paginacion opcional."""
+    return _listar_validado(
+        "fuente_rss",
+        filtros=None,
+        parsear=_parsear_fuente,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def contar_fuentes_rss() -> int:
+    """Total de fuentes RSS (para el `total` de paginacion)."""
+    if indice.contar("fuente_rss", None) == 0 and _rutas_de_tipo("fuente_rss"):
+        _reindexar_tipo("fuente_rss")
+    return indice.contar("fuente_rss", None)
 
 
 def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
@@ -1144,9 +1228,24 @@ def registrar_historial_skill(
     return hid
 
 
-def listar_historial_skills() -> list[dict[str, Any]]:
-    """Historial completo (recientes primero por fecha_creacion)."""
-    return _listar_validado("historial", filtros=None, parsear=_parsear_historial)
+def listar_historial_skills(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    """Historial (recientes primero por fecha_creacion), con paginacion opcional."""
+    return _listar_validado(
+        "historial",
+        filtros=None,
+        parsear=_parsear_historial,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def contar_historial_skills() -> int:
+    """Total de entradas de historial (para el `total` de paginacion)."""
+    if indice.contar("historial", None) == 0 and _rutas_de_tipo("historial"):
+        _reindexar_tipo("historial")
+    return indice.contar("historial", None)
 
 
 def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:

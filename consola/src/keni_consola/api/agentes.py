@@ -43,7 +43,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import agentes, lanzador
-from .._http_json import leer_json
+from .._http_json import envoltura_paginacion, leer_json, paginacion_query
 from ..dominio import runner, stream
 
 # Inyectable: el lanzador interactivo (como en `api.proyectos`). `crear_app(abrir=...)`
@@ -541,10 +541,14 @@ async def obtener_run(request: Request) -> Response:
 
 
 async def listar_runs_globales(request: Request) -> Response:
-    """Runs de TODOS los agentes, recientes primero. -> `{runs:[...]}`.
+    """Runs de TODOS los agentes, recientes primero, con paginacion. -> `{runs, paginacion}`.
 
     Cada run: `{id, agente, agente_nombre, prompt, modo, estado, fecha_inicio, metricas}`.
+    Envelope RETROCOMPATIBLE: mantiene la clave `runs` y AÑADE `paginacion`. Sin
+    `?limite=` devuelve todos (igual que antes) con `total` exacto; con
+    `?limite=&desplazamiento=` pagina via el indice de runs (sin escanear cuerpos).
     """
+    limite, desplazamiento = paginacion_query(request)
     runs = [
         {
             "id": r["id"],
@@ -557,9 +561,12 @@ async def listar_runs_globales(request: Request) -> Response:
             "fecha_inicio": r["fecha_inicio"],
             "metricas": r.get("metricas"),
         }
-        for r in agentes.listar_runs_globales()
+        for r in agentes.listar_runs_globales(limite=limite, desplazamiento=desplazamiento)
     ]
-    return JSONResponse({"runs": runs})
+    total = agentes.contar_runs_globales()
+    return JSONResponse(
+        {"runs": runs, "paginacion": envoltura_paginacion(total, limite, desplazamiento)}
+    )
 
 
 async def agregados_runs(request: Request) -> Response:

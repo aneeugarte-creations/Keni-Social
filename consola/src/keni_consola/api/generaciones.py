@@ -20,11 +20,29 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import generaciones
+from .._http_json import envoltura_paginacion, paginacion_query
 
 
 async def listar(request: Request) -> Response:
-    """Generaciones recientes (recientes primero). -> `{generaciones:[...]}`."""
-    return JSONResponse({"generaciones": generaciones.listar()})
+    """Generaciones recientes (recientes primero) con paginacion.
+
+    Envelope RETROCOMPATIBLE: mantiene la clave `generaciones` y AÑADE `paginacion`.
+    Sin `?limite=`, preserva el comportamiento previo (las N mas recientes, def 50) con
+    un `total` exacto; con `?limite=&desplazamiento=` pagina el conjunto completo.
+    """
+    limite, desplazamiento = paginacion_query(request)
+    if limite is None:
+        # Sin parametros: comportamiento previo (las `_LISTADO_MAX` mas recientes).
+        items = generaciones.listar()
+    else:
+        items = generaciones.listar(limite=limite, desplazamiento=desplazamiento)
+    total = generaciones.contar()
+    return JSONResponse(
+        {
+            "generaciones": items,
+            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+        }
+    )
 
 
 async def obtener(request: Request) -> Response:

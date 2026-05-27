@@ -221,8 +221,23 @@ export interface RespuestaRun {
   run: Run;
 }
 
+/**
+ * Envelope ADITIVO de paginacion (offset-based, #121). Lo añaden los listados
+ * pesados junto a su clave de lista, sin romper a quien solo lea esa clave.
+ * `total` = filas que existen sin paginar; `limite` = tamaño de pagina efectivo
+ * (igual a `total` si no se paginó); `desplazamiento` = offset aplicado. El
+ * envelope queda listo para añadir `cursor` (keyset) en el futuro.
+ */
+export interface Paginacion {
+  total: number;
+  limite: number;
+  desplazamiento: number;
+}
+
 export interface RespuestaRuns {
   runs: Run[];
+  /** Presente en los listados paginados (`/api/runs`); opcional para retrocompat. */
+  paginacion?: Paginacion;
 }
 
 // --- Monitorización de actividad IA (runs globales + agregados) ---
@@ -584,6 +599,8 @@ export interface RespuestaGeneracion {
 
 export interface RespuestaGeneraciones {
   generaciones: Generacion[];
+  /** Envelope de paginacion (#121); opcional para retrocompat. */
+  paginacion?: Paginacion;
 }
 
 // --- Termómetro mundial (galería diaria de noticias internacionales) ---
@@ -825,6 +842,8 @@ export interface Publicacion {
 
 export interface RespuestaPublicaciones {
   publicaciones: Publicacion[];
+  /** Envelope de paginacion (#121); opcional para retrocompat. */
+  paginacion?: Paginacion;
 }
 
 export interface RespuestaPublicacion {
@@ -1162,6 +1181,10 @@ export interface FiltrosPublicaciones {
   estado?: string;
   /** "1" para mostrar solo publicaciones perennes. */
   evergreen?: string;
+  /** Paginacion offset-based (#121): tamaño de pagina; ausente = conjunto completo. */
+  limite?: string;
+  /** Paginacion offset-based (#121): offset; ausente = 0. */
+  desplazamiento?: string;
   /** Permite pasarse a `query()` (Record<string, string | undefined>). */
   [clave: string]: string | undefined;
 }

@@ -94,8 +94,14 @@ def registrar_historial_skill(
     )
 
 
-def listar_historial_skills() -> list[dict[str, Any]]:
-    return ficheros.listar_historial_skills()
+def listar_historial_skills(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    return ficheros.listar_historial_skills(limite=limite, desplazamiento=desplazamiento)
+
+
+def contar_historial_skills() -> int:
+    return ficheros.contar_historial_skills()
 
 
 def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
@@ -143,8 +149,27 @@ def listar_publicaciones(
     red: str | None = None,
     estado: str | None = None,
     evergreen: bool | None = None,
+    *,
+    limite: int | None = None,
+    desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
-    return ficheros.listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    return ficheros.listar_publicaciones(
+        marca=marca,
+        red=red,
+        estado=estado,
+        evergreen=evergreen,
+        limite=limite,
+        desplazamiento=desplazamiento,
+    )
+
+
+def contar_publicaciones(
+    marca: str | None = None,
+    red: str | None = None,
+    estado: str | None = None,
+    evergreen: bool | None = None,
+) -> int:
+    return ficheros.contar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
 
 
 def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
@@ -166,8 +191,14 @@ def borrar_publicacion(publicacion_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def listar_grupos_hashtags() -> list[dict[str, Any]]:
-    return ficheros.listar_grupos_hashtags()
+def listar_grupos_hashtags(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    return ficheros.listar_grupos_hashtags(limite=limite, desplazamiento=desplazamiento)
+
+
+def contar_grupos_hashtags() -> int:
+    return ficheros.contar_grupos_hashtags()
 
 
 def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
@@ -214,8 +245,14 @@ def borrar_franja(franja_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def listar_plantillas() -> list[dict[str, Any]]:
-    return ficheros.listar_plantillas()
+def listar_plantillas(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    return ficheros.listar_plantillas(limite=limite, desplazamiento=desplazamiento)
+
+
+def contar_plantillas() -> int:
+    return ficheros.contar_plantillas()
 
 
 def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
@@ -243,8 +280,14 @@ def borrar_plantilla(plantilla_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def listar_fuentes_rss() -> list[dict[str, Any]]:
-    return ficheros.listar_fuentes_rss()
+def listar_fuentes_rss(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    return ficheros.listar_fuentes_rss(limite=limite, desplazamiento=desplazamiento)
+
+
+def contar_fuentes_rss() -> int:
+    return ficheros.contar_fuentes_rss()
 
 
 def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:

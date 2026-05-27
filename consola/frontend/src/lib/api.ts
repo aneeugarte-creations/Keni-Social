@@ -328,7 +328,17 @@ export const api = {
     }),
 
   // --- Monitor (actividad IA: runs de todos los agentes + agregados) ---
-  runs: (signal?: AbortSignal) => peticion<RespuestaRuns>("/runs", { signal }),
+  // `runs` admite paginacion offset-based (#121); sin params devuelve el conjunto
+  // completo (retrocompat) y el backend igual incluye `paginacion`.
+  runs: (params: { limite?: number; desplazamiento?: number } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaRuns>(
+      `/runs${query({
+        limite: params.limite != null ? String(params.limite) : undefined,
+        desplazamiento:
+          params.desplazamiento != null ? String(params.desplazamiento) : undefined,
+      })}`,
+      { signal },
+    ),
   runsAgregados: (signal?: AbortSignal) =>
     peticion<RespuestaRunsAgregados>("/runs/agregados", { signal }),
 

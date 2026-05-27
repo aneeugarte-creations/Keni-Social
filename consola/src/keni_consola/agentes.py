@@ -58,7 +58,7 @@ from typing import Any
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
-from . import marcas, repos
+from . import indice, marcas, repos
 from .io_atomico import escribir_atomico
 
 # --------------------------------------------------------------------------- #
@@ -406,6 +406,9 @@ def borrar_agente(agente_id: str) -> None:
     if carpeta == raiz or not carpeta.is_relative_to(raiz) or not carpeta.is_dir():
         raise AgenteInvalido("Agente no encontrado.")
     shutil.rmtree(carpeta)
+    # Los runs del agente borrado salen del disco: reindexamos para que el indice (y
+    # por tanto los agregados del monitor) no conserve filas huerfanas de coste/tokens.
+    reindexar_runs()
 
 
 def _tipo_plantilla(tipo: object) -> str:
@@ -573,12 +576,18 @@ def _parsear_run(datos: dict[str, Any], run_id: str) -> dict[str, Any]:
 
 
 def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
-    """Escribe `runs/<id>.yaml` (atomico) y devuelve el run con su `id`.
+    """Escribe `runs/<id>.yaml` (atomico), INDEXA el run y lo devuelve con su `id`.
 
     Si el run no trae `id`, se genera uno. El cuerpo YAML no repite el `id` (es
     implicito por el nombre de fichero). `metricas` (tokens/turnos/coste/duracion/
     modelo) se incluye solo si viene presente (None => ausente en el YAML). `motivo`
     (p.ej. "timeout") se incluye solo si trae valor.
+
+    Tras escribir, hace UPSERT en el indice de runs (denormalizando coste/tokens/
+    agente/fecha) para que el monitor agregue sin escanear cuerpos. El upsert por
+    (tipo, id) es idempotente: el SONDEO en vivo llama a `actualizar_run` muchas veces
+    y siempre refleja el ultimo estado (metricas parciales -> finales). Best-effort: si
+    el indice falla, NO rompe la escritura del run (el agregado cae a disco+reindex).
     """
     run_id = run.get("id") or nuevo_run_id()
     cuerpo: dict[str, Any] = {
@@ -597,7 +606,73 @@ def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
         cuerpo["metricas"] = metricas
     ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
     _escribir_yaml_atomico(ruta, cuerpo, tipo="run")
+    _indexar_run(marca_id, run_id, ruta, cuerpo)
     return {"id": run_id, "motivo": motivo, **cuerpo, "metricas": metricas}
+
+
+# --------------------------------------------------------------------------- #
+# Indice de runs (denormaliza coste/tokens; lo usa el monitor para agregar)    #
+# --------------------------------------------------------------------------- #
+
+
+def _id_indice_run(agente_id: str, run_id: str) -> str:
+    """Clave de indice de un run: `<agente>:<run_id>` (unica bajo tipo='run')."""
+    return f"{agente_id}:{run_id}"
+
+
+def _entrada_indice_run(
+    agente_id: str, run_id: str, ruta: Path, cuerpo: dict[str, Any]
+) -> dict[str, Any]:
+    """Construye la fila de indice de un run (denormaliza coste/tokens/agente/fecha)."""
+    try:
+        mtime = ruta.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    metricas = _metricas_run(cuerpo)
+    fecha_inicio = cuerpo.get("fecha_inicio", "") or ""
+    return {
+        "id": _id_indice_run(agente_id, run_id),
+        "tipo": "run",
+        "marca": agente_id,
+        "agente": agente_id,
+        "ruta": str(ruta),
+        "mtime": mtime,
+        "coste_usd": _sumar_metrica(metricas, "total_cost_usd"),
+        "tokens_in": int(_sumar_metrica(metricas, "tokens_in")),
+        "tokens_out": int(_sumar_metrica(metricas, "tokens_out")),
+        "fecha_inicio": fecha_inicio,
+        "dia": fecha_inicio[:10],
+    }
+
+
+def _indexar_run(agente_id: str, run_id: str, ruta: Path, cuerpo: dict[str, Any]) -> None:
+    """UPSERT de un run en el indice (best-effort: el error nunca rompe la escritura)."""
+    try:
+        indice.upsert(_entrada_indice_run(agente_id, run_id, ruta, cuerpo))
+    except Exception:  # noqa: BLE001 -- el indice es regenerable; degradar a disco+reindex
+        pass
+
+
+def reindexar_runs() -> None:
+    """Reconstruye en el indice TODOS los runs leyendo el disco (regenerable).
+
+    Recorre los `runs/<id>.yaml` de cada agente (marca o generico) y reemplaza el
+    tipo `run` en el indice de una tacada. Es el backfill (mirror de
+    `ficheros._reindexar_tipo`) y el camino de recuperacion ante un indice vacio/stale.
+    """
+    entradas: list[dict[str, Any]] = []
+    for agente_id, _nombre in _agentes_para_runs():
+        carpeta = carpeta_agente(agente_id, crear=False) / _DIR_RUNS
+        if not carpeta.is_dir():
+            continue
+        for ruta in carpeta.glob("*.yaml"):
+            if ruta.name.startswith(".tmp-"):
+                continue
+            datos = _leer_yaml(ruta, tipo="run")
+            if datos is None:
+                continue
+            entradas.append(_entrada_indice_run(agente_id, ruta.stem, ruta, datos))
+    indice.reemplazar_tipo("run", entradas)
 
 
 def actualizar_run(marca_id: str, run_id: str, cambios: dict[str, Any]) -> dict[str, Any]:
@@ -718,21 +793,64 @@ def _agentes_para_runs() -> list[tuple[str, str]]:
     return pares
 
 
-def listar_runs_globales() -> list[dict[str, Any]]:
+def _mapa_nombres_agentes() -> dict[str, str]:
+    """Mapa `agente_id -> nombre legible` (marcas + genericos) para enriquecer runs."""
+    return {agente_id: nombre for agente_id, nombre in _agentes_para_runs()}
+
+
+def _runs_en_disco() -> bool:
+    """True si HAY algun `runs/<id>.yaml` en disco (para decidir reindex perezoso)."""
+    for agente_id, _nombre in _agentes_para_runs():
+        carpeta = carpeta_agente(agente_id, crear=False) / _DIR_RUNS
+        if carpeta.is_dir() and any(
+            p.name for p in carpeta.glob("*.yaml") if not p.name.startswith(".tmp-")
+        ):
+            return True
+    return False
+
+
+def _asegurar_indice_runs() -> None:
+    """Reindexa los runs si el indice esta vacio pero hay runs en disco (stale/borrado).
+
+    Garantiza que el monitor (listado paginado + agregados) NUNCA sub-cuente por un
+    indice ausente: si `contar('run')==0` y hay ficheros, se reconstruye desde disco.
+    """
+    if indice.contar("run", None) == 0 and _runs_en_disco():
+        reindexar_runs()
+
+
+def listar_runs_globales(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
     """Runs de TODOS los agentes (marcas + genericos), recientes primero.
 
     Cada run incluye su agente (`agente`/`agente_nombre`) ademas de sus campos. No
     materializa carpetas que no existan. Orden: por `fecha_inicio` desc, luego id.
+
+    Pagina via el INDICE de runs (`LIMIT/OFFSET`): solo se lee el cuerpo YAML de la
+    pagina pedida, no de todos los runs. `limite=None` (def) devuelve todos
+    (retrocompat). Si el indice esta vacio pero hay runs en disco, se reconstruye antes.
     """
+    _asegurar_indice_runs()
+    nombres = _mapa_nombres_agentes()
     todos: list[dict[str, Any]] = []
-    for agente_id, nombre in _agentes_para_runs():
-        carpeta = carpeta_agente(agente_id, crear=False) / _DIR_RUNS
-        if not carpeta.is_dir():
-            continue
-        for run in listar_runs(agente_id):
-            todos.append({**run, "agente": agente_id, "agente_nombre": nombre})
-    todos.sort(key=lambda r: (r["fecha_inicio"], r["id"]), reverse=True)
+    for entrada in indice.listar("run", limite=limite, desplazamiento=desplazamiento):
+        ruta = Path(entrada["ruta"])
+        datos = _leer_yaml(ruta, tipo="run")
+        if datos is None:
+            continue  # YAML borrado/corrupto: se omite (degradado)
+        agente_id = entrada["agente"]
+        run = _parsear_run(datos, ruta.stem)
+        todos.append(
+            {**run, "agente": agente_id, "agente_nombre": nombres.get(agente_id, agente_id)}
+        )
     return todos
+
+
+def contar_runs_globales() -> int:
+    """Total de runs indexados de TODOS los agentes (para el `total` de paginacion)."""
+    _asegurar_indice_runs()
+    return indice.contar("run", None)
 
 
 def _sumar_metrica(metricas: dict[str, Any] | None, clave: str) -> float:
@@ -746,54 +864,43 @@ def _sumar_metrica(metricas: dict[str, Any] | None, clave: str) -> float:
 
 
 def agregados_runs() -> dict[str, Any]:
-    """Totales de coste/tokens/runs: global, por agente y por dia.
+    """Totales de coste/tokens/runs: global, por agente y por dia (via SQL en el indice).
 
     - `total`: `{coste_usd, tokens, runs}` sumando TODOS los runs.
     - `por_agente`: una entrada por agente con runs (`{agente, agente_nombre, coste_usd,
       tokens, runs}`), de mayor a menor coste.
     - `por_dia`: una entrada por fecha (YYYY-MM-DD del `fecha_inicio`), recientes primero.
     Tokens = tokens_in + tokens_out de cada run con metricas.
+
+    Agrega con SUM/GROUP BY sobre la denormalizacion del indice (sin escanear cuerpos).
+    El `agente_nombre` (no denormalizado: cambia al renombrar) se resuelve aqui. Cae a
+    disco+reindex si el indice esta vacio/stale para no sub-contar. Los numeros son
+    IDENTICOS al viejo full-scan: misma suma, mismo orden y mismo redondeo a 6 decimales.
     """
-    runs = listar_runs_globales()
-    total_coste = 0.0
-    total_tokens = 0.0
-    por_agente: dict[str, dict[str, Any]] = {}
-    por_dia: dict[str, dict[str, Any]] = {}
-    for run in runs:
-        metricas = run.get("metricas")
-        coste = _sumar_metrica(metricas, "total_cost_usd")
-        tokens = _sumar_metrica(metricas, "tokens_in") + _sumar_metrica(metricas, "tokens_out")
-        total_coste += coste
-        total_tokens += tokens
-
-        ag = run["agente"]
-        entrada = por_agente.setdefault(
-            ag,
-            {"agente": ag, "agente_nombre": run["agente_nombre"], "coste_usd": 0.0,
-             "tokens": 0, "runs": 0},
-        )
-        entrada["coste_usd"] += coste
-        entrada["tokens"] += int(tokens)
-        entrada["runs"] += 1
-
-        dia = (run["fecha_inicio"] or "")[:10]
-        dentrada = por_dia.setdefault(
-            dia, {"dia": dia, "coste_usd": 0.0, "tokens": 0, "runs": 0}
-        )
-        dentrada["coste_usd"] += coste
-        dentrada["tokens"] += int(tokens)
-        dentrada["runs"] += 1
-
-    agentes_lista = sorted(por_agente.values(), key=lambda e: e["coste_usd"], reverse=True)
-    dias_lista = sorted(por_dia.values(), key=lambda e: e["dia"], reverse=True)
+    _asegurar_indice_runs()
+    agg = indice.agregados_runs()
+    nombres = _mapa_nombres_agentes()
     return {
         "total": {
-            "coste_usd": round(total_coste, 6),
-            "tokens": int(total_tokens),
-            "runs": len(runs),
+            "coste_usd": round(agg["total"]["coste_usd"], 6),
+            "tokens": agg["total"]["tokens"],
+            "runs": agg["total"]["runs"],
         },
-        "por_agente": [{**e, "coste_usd": round(e["coste_usd"], 6)} for e in agentes_lista],
-        "por_dia": [{**e, "coste_usd": round(e["coste_usd"], 6)} for e in dias_lista],
+        "por_agente": [
+            {
+                "agente": e["agente"],
+                "agente_nombre": nombres.get(e["agente"], e["agente"]),
+                "coste_usd": round(e["coste_usd"], 6),
+                "tokens": e["tokens"],
+                "runs": e["runs"],
+            }
+            for e in agg["por_agente"]
+        ],
+        "por_dia": [
+            {"dia": e["dia"], "coste_usd": round(e["coste_usd"], 6), "tokens": e["tokens"],
+             "runs": e["runs"]}
+            for e in agg["por_dia"]
+        ],
     }
 
 

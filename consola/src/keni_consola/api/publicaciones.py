@@ -26,7 +26,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, redes, repos
-from .._http_json import leer_json
+from .._http_json import envoltura_paginacion, leer_json, paginacion_query
 from ..dominio.publicaciones import publicacion_a_dict
 from . import franjas as api_franjas
 
@@ -135,14 +135,31 @@ def _parsear_bool_query(valor: str | None) -> bool | None:
 
 
 async def listar(request: Request) -> Response:
-    """Listado de publicaciones con filtros opcionales `?marca=&red=&estado=&evergreen=`."""
+    """Listado de publicaciones con filtros `?marca=&red=&estado=&evergreen=` y paginacion.
+
+    Envelope RETROCOMPATIBLE: mantiene la clave `publicaciones` (las paginas que solo
+    desestructuran esa clave siguen funcionando) y AÑADE `paginacion:{total, limite,
+    desplazamiento}`. Sin `?limite=` se devuelve el conjunto completo (igual que antes),
+    con un `total` exacto. Con `?limite=&desplazamiento=` se pagina en el indice (solo
+    se leen los cuerpos YAML de la pagina).
+    """
     qp = request.query_params
     marca = qp.get("marca") or None
     red = qp.get("red") or None
     estado = qp.get("estado") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))
-    pubs = repos.listar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
-    return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
+    limite, desplazamiento = paginacion_query(request)
+    pubs = repos.listar_publicaciones(
+        marca=marca, red=red, estado=estado, evergreen=evergreen,
+        limite=limite, desplazamiento=desplazamiento,
+    )
+    total = repos.contar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    return JSONResponse(
+        {
+            "publicaciones": [_publicacion_a_dict(p) for p in pubs],
+            "paginacion": envoltura_paginacion(total, limite, desplazamiento),
+        }
+    )
 
 
 async def crear(request: Request) -> Response:

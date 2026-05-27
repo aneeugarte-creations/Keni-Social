@@ -244,8 +244,13 @@ def obtener(gen_id: str) -> dict[str, Any] | None:
     return _publico(datos, gen_id)
 
 
-def listar(limite: int = _LISTADO_MAX) -> list[dict[str, Any]]:
-    """Generaciones recientes primero (por `fecha_inicio` desc, luego id)."""
+def _todas_ordenadas() -> list[dict[str, Any]]:
+    """Todas las generaciones (publicas) ordenadas recientes primero (sin recortar).
+
+    Las generaciones NO viven en el indice SQLite (son estado efimero de ejecucion en
+    su propio almacen), asi que el orden/recorte se hace en memoria sobre el glob. El
+    volumen es bajo (trabajos en vuelo + recientes), por eso basta este escaneo.
+    """
     base = raiz()
     if not base.is_dir():
         return []
@@ -258,7 +263,27 @@ def listar(limite: int = _LISTADO_MAX) -> list[dict[str, Any]]:
             continue
         items.append(_publico(datos, ruta_fichero.stem))
     items.sort(key=lambda g: (g["fecha_inicio"], g["id"]), reverse=True)
-    return items[: max(0, limite)]
+    return items
+
+
+def listar(
+    limite: int | None = _LISTADO_MAX, desplazamiento: int = 0
+) -> list[dict[str, Any]]:
+    """Generaciones recientes primero (por `fecha_inicio` desc, luego id), paginadas.
+
+    `limite=None` devuelve TODAS (sin recortar); por defecto recorta a `_LISTADO_MAX`
+    (retrocompat con la UI de actividad). `desplazamiento` salta las N primeras.
+    """
+    items = _todas_ordenadas()
+    inicio = max(0, int(desplazamiento or 0))
+    if limite is None:
+        return items[inicio:]
+    return items[inicio : inicio + max(0, int(limite))]
+
+
+def contar() -> int:
+    """Total de generaciones almacenadas (para el `total` del envelope de paginacion)."""
+    return len(_todas_ordenadas())
 
 
 # --------------------------------------------------------------------------- #

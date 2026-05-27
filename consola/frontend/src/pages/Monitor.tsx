@@ -44,6 +44,9 @@ const AGENTE_TODOS = "__todos__";
 /** Sondeo suave del Monitor mientras haya algún run en curso. */
 const INTERVALO_SONDEO_MS = 3000;
 
+/** Tamaño de pagina de la tabla de runs (cuántos suma cada "Cargar más", #121). */
+const TAM_PAGINA_RUNS = 50;
+
 /** Texto legible del error de la API (o un fallback en español). */
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -255,8 +258,22 @@ function DesglosePorDia({ filas }: { filas: AgregadoPorDia[] }) {
 }
 
 /** Tabla principal de runs (recientes primero), con filtro por agente. */
-function TablaRuns({ runs }: { runs: Run[] }) {
+function TablaRuns({
+  runs,
+  total,
+  cargando,
+  onCargarMas,
+}: {
+  runs: Run[];
+  total: number;
+  cargando: boolean;
+  onCargarMas: () => void;
+}) {
   const [agente, setAgente] = React.useState<string>(AGENTE_TODOS);
+  // Hay mas paginas en el servidor si aun no hemos traido todos los runs. El filtro
+  // por agente es solo del lado cliente sobre lo ya cargado, asi que paginamos sobre
+  // el conjunto SIN filtrar (lo que de verdad falta por traer del servidor).
+  const hayMas = runs.length < total;
 
   // Catálogo de agentes presentes en la lista (id → nombre legible).
   const agentes = React.useMemo(() => {
@@ -366,6 +383,16 @@ function TablaRuns({ runs }: { runs: Run[] }) {
             )}
           </TableBody>
         </Table>
+        {hayMas && (
+          <div className="flex flex-col items-center gap-1 border-t border-border py-4">
+            <Button variant="outline" size="sm" onClick={onCargarMas} disabled={cargando}>
+              {cargando ? "Cargando…" : "Cargar más"}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Mostrando {runs.length} de {total}
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -398,12 +425,18 @@ function EsqueletoMonitor() {
  * un error en cualquiera de las dos consultas se muestra como bloque de error.
  */
 export default function Monitor() {
+  // Paginacion offset-based real (#121): pedimos las primeras `paginas * TAM_PAGINA`
+  // (offset 0) y "Cargar más" sube `paginas`. `limite` entra en la queryKey para no
+  // colisionar entre tamaños de pagina.
+  const [paginas, setPaginas] = React.useState(1);
+  const limite = paginas * TAM_PAGINA_RUNS;
+
   // Sondeo suave mientras haya algún run en curso: la lista se refresca y, si
   // hay actividad en vivo, también los agregados. Sin runs ejecutando, no hay
   // polling (devolvemos `false`).
   const runsQuery = useQuery({
-    queryKey: ["runs", "lista"],
-    queryFn: ({ signal }) => api.runs(signal),
+    queryKey: ["runs", "lista", limite],
+    queryFn: ({ signal }) => api.runs({ limite }, signal),
     refetchInterval: (query) =>
       (query.state.data?.runs ?? []).some((r) => estaEjecutando(r.estado))
         ? INTERVALO_SONDEO_MS
@@ -450,7 +483,13 @@ export default function Monitor() {
           cargando={refrescando}
         />
       ) : (
-        <Contenido agregados={agregadosQuery.data} runs={runsQuery.data.runs} />
+        <Contenido
+          agregados={agregadosQuery.data}
+          runs={runsQuery.data.runs}
+          total={runsQuery.data.paginacion?.total ?? runsQuery.data.runs.length}
+          cargando={runsQuery.isFetching}
+          onCargarMas={() => setPaginas((p) => p + 1)}
+        />
       )}
     </>
   );
@@ -460,9 +499,15 @@ export default function Monitor() {
 function Contenido({
   agregados,
   runs,
+  total,
+  cargando,
+  onCargarMas,
 }: {
   agregados: RespuestaRunsAgregados;
   runs: Run[];
+  total: number;
+  cargando: boolean;
+  onCargarMas: () => void;
 }) {
   const sinDatos = agregados.total.runs === 0 && runs.length === 0;
   if (sinDatos) {
@@ -490,7 +535,7 @@ function Contenido({
         <DesglosePorAgente filas={agregados.por_agente} />
         <DesglosePorDia filas={agregados.por_dia} />
       </div>
-      <TablaRuns runs={runs} />
+      <TablaRuns runs={runs} total={total} cargando={cargando} onCargarMas={onCargarMas} />
     </div>
   );
 }

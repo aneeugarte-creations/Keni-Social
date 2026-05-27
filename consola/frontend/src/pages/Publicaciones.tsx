@@ -55,6 +55,9 @@ const CABECERA = {
   descripcion: "Gestiona tus borradores: aprueba, programa y publica por red.",
 };
 
+/** Tamaño de pagina del listado (cuántas publicaciones suma cada "Cargar más"). */
+const TAM_PAGINA = 30;
+
 /**
  * Página de Publicaciones: gestión del contenido por estado.
  *
@@ -111,11 +114,20 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   const [red, setRed] = React.useState(FILTRO_TODOS);
   const [estado, setEstado] = React.useState(FILTRO_TODOS);
   const [soloPerennes, setSoloPerennes] = React.useState(false);
+  // Paginacion offset-based real (#121): pedimos las primeras `paginas * TAM_PAGINA`
+  // (offset 0) y "Cargar más" sube `paginas`. La vista calendario no pagina (necesita
+  // todas las programadas para llenar la rejilla), asi que ahi pedimos el conjunto
+  // completo (sin `limite`). Reseteamos a 1 pagina al cambiar de filtro.
+  const [paginas, setPaginas] = React.useState(1);
   const [editando, setEditando] = React.useState<Publicacion | null>(null);
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
   const [gestionFranjas, setGestionFranjas] = React.useState(false);
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [gestionPlantillas, setGestionPlantillas] = React.useState(false);
+
+  // En vista lista paginamos; en calendario pedimos el conjunto completo.
+  const paginar = vista === "lista";
+  const limite = paginar ? paginas * TAM_PAGINA : undefined;
 
   const filtros = {
     marca: marca === FILTRO_TODOS ? undefined : marca,
@@ -123,7 +135,16 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
     // En vista calendario ignoramos el filtro de estado (solo programadas).
     estado: vista === "calendario" || estado === FILTRO_TODOS ? undefined : estado,
     evergreen: soloPerennes ? "1" : undefined,
+    // Offset-based: pedimos siempre desde 0 hasta `limite` (acumulativo).
+    limite: limite != null ? String(limite) : undefined,
+    desplazamiento: undefined,
   };
+
+  // Al cambiar cualquier filtro o de vista, volvemos a la primera pagina (evita
+  // pedir un offset que ya no aplica al conjunto filtrado).
+  React.useEffect(() => {
+    setPaginas(1);
+  }, [marca, red, estado, soloPerennes, vista]);
 
   const query = useQuery({
     queryKey: [
@@ -133,6 +154,9 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
       filtros.red ?? "",
       filtros.estado ?? "",
       filtros.evergreen ?? "",
+      // Incluimos limite/desplazamiento en la key para no colisionar entre paginas.
+      filtros.limite ?? "",
+      filtros.desplazamiento ?? "",
     ],
     queryFn: ({ signal }) => api.publicaciones(filtros, signal),
   });
@@ -201,6 +225,9 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   );
 
   const publicaciones = query.data?.publicaciones ?? [];
+  const total = query.data?.paginacion?.total ?? publicaciones.length;
+  // Hay mas paginas si paginamos y aun no hemos traido todo el conjunto filtrado.
+  const hayMas = paginar && publicaciones.length < total;
   const filtrando =
     marca !== FILTRO_TODOS || red !== FILTRO_TODOS || estado !== FILTRO_TODOS || soloPerennes;
 
@@ -249,12 +276,29 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
           }
         />
       ) : (
-        <VistaLista
-          publicaciones={publicaciones}
-          onEditar={setEditando}
-          onDuplicar={setDuplicando}
-          onGestionarFranjas={() => setGestionFranjas(true)}
-        />
+        <>
+          <VistaLista
+            publicaciones={publicaciones}
+            onEditar={setEditando}
+            onDuplicar={setDuplicando}
+            onGestionarFranjas={() => setGestionFranjas(true)}
+          />
+          {hayMas && (
+            <div className="mt-4 flex flex-col items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPaginas((p) => p + 1)}
+                disabled={query.isFetching}
+              >
+                {query.isFetching ? "Cargando…" : "Cargar más"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Mostrando {publicaciones.length} de {total}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       <DialogoEditar
