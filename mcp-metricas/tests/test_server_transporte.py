@@ -70,7 +70,7 @@ def test_crear_servidor_fija_host_y_puerto(monkeypatch):
     assert capturado["port"] == 9123
 
 
-# --- registro real de las 7 tools ------------------------------------------
+# --- registro real de las 8 tools ------------------------------------------
 
 TOOLS_ESPERADAS = {
     "listar_cuentas",
@@ -80,6 +80,7 @@ TOOLS_ESPERADAS = {
     "tendencia_historica",
     "reporte_consolidado",
     "picos",
+    "analisis_diario",
 }
 
 
@@ -90,8 +91,8 @@ def _tools_registradas(mcp) -> set[str]:
     return {t.name for t in asyncio.run(mcp.list_tools())}
 
 
-def test_crear_servidor_registra_las_siete_tools(monkeypatch):
-    """crear_servidor construye un FastMCP REAL con las 7 tools registradas.
+def test_crear_servidor_registra_las_ocho_tools(monkeypatch):
+    """crear_servidor construye un FastMCP REAL con las 8 tools registradas.
 
     No se parchea `registrar`: se verifica el efecto observable (las tools
     quedan disponibles). Se usa la fuente de muestra para no tocar red/credenciales.
@@ -108,7 +109,7 @@ def test_crear_servidor_registra_las_siete_tools(monkeypatch):
 
 
 def test_crear_servidor_registra_tools_con_historico_activo(monkeypatch):
-    """Con historico activo se siguen registrando las mismas 7 tools."""
+    """Con historico activo se siguen registrando las mismas 8 tools."""
     monkeypatch.delenv("KENI_MCP_TRANSPORT", raising=False)
     with (
         patch.object(server, "construir_fuente", return_value=FuenteMuestra()),
@@ -122,11 +123,11 @@ def test_crear_servidor_registra_tools_con_historico_activo(monkeypatch):
 
 
 def test_main_construye_servidor_real_y_arranca_stdio(monkeypatch):
-    """main() en stdio: construye el servidor REAL (7 tools) y llama run() sin args.
+    """main() en stdio: construye el servidor REAL (8 tools) y llama run() sin args.
 
     Se parchea solo el arranque del transporte (FastMCP.run) para no abrir stdio,
     pero NO se parchea la construccion: se observa que el servidor real queda con
-    las 7 tools antes de arrancar.
+    las 8 tools antes de arrancar.
     """
     monkeypatch.delenv("KENI_MCP_TRANSPORT", raising=False)
     capturado = {}

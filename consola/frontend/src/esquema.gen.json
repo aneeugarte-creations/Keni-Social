@@ -434,6 +434,194 @@
         "por_marca"
       ]
     },
+    "PiezaAnalisis": {
+      "type": "object",
+      "title": "PiezaAnalisis",
+      "properties": {
+        "titulo": {
+          "type": "string"
+        },
+        "plataforma": {
+          "type": "string"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Pieza que explica un movimiento (o que apuntala el siguiente paso).",
+      "required": [
+        "titulo",
+        "plataforma",
+        "engagement_pct",
+        "url"
+      ]
+    },
+    "MovimientoAnalisis": {
+      "type": "object",
+      "title": "MovimientoAnalisis",
+      "properties": {
+        "marca_id": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "variacion_vis_pct": {
+          "type": "number"
+        },
+        "direccion": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pieza": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PiezaAnalisis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Un movimiento del periodo: qué se movió y la pieza que lo explica.",
+      "required": [
+        "marca_id",
+        "marca",
+        "variacion_vis_pct",
+        "direccion",
+        "visualizaciones",
+        "engagement_pct",
+        "pieza"
+      ]
+    },
+    "SiguientePasoAnalisis": {
+      "type": "object",
+      "title": "SiguientePasoAnalisis",
+      "properties": {
+        "marca_id": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "engagement_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pieza": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PiezaAnalisis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "texto": {
+          "type": "string"
+        }
+      },
+      "description": "Sugerencia accionable que cierra el loop a la acción (UX-roadmap #11).",
+      "required": [
+        "marca_id",
+        "marca",
+        "engagement_pct",
+        "pieza",
+        "texto"
+      ]
+    },
+    "AnalisisDiario": {
+      "type": "object",
+      "title": "AnalisisDiario",
+      "properties": {
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "es_muestra": {
+          "type": "boolean"
+        },
+        "movimientos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MovimientoAnalisis"
+          }
+        },
+        "movimientos_resto": {
+          "type": "integer"
+        },
+        "marcas_estables": {
+          "type": "integer"
+        },
+        "cobertura_parcial": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "siguiente_paso": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SiguientePasoAnalisis"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los\ndatos son de muestra y no reales (issue #131).",
+      "required": [
+        "rango",
+        "etiqueta_rango",
+        "marca",
+        "fuente",
+        "es_muestra",
+        "movimientos",
+        "movimientos_resto",
+        "marcas_estables",
+        "cobertura_parcial",
+        "siguiente_paso"
+      ]
+    },
     "Paginacion": {
       "type": "object",
       "title": "Paginacion",
@@ -1077,6 +1265,18 @@
     },
     {
       "$ref": "#/$defs/CompararMetricas"
+    },
+    {
+      "$ref": "#/$defs/PiezaAnalisis"
+    },
+    {
+      "$ref": "#/$defs/MovimientoAnalisis"
+    },
+    {
+      "$ref": "#/$defs/SiguientePasoAnalisis"
+    },
+    {
+      "$ref": "#/$defs/AnalisisDiario"
     },
     {
       "$ref": "#/$defs/Paginacion"

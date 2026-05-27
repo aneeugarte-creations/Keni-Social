@@ -120,3 +120,17 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             return detectar_picos(fuente, rango, max(1, int(umbral_pct)), historico)
         except (CuentaNoEncontrada, ValueError) as e:
             return {"error": str(e)}
+
+    @mcp.tool()
+    def analisis_diario(rango: str = "semana", marca: str = "") -> dict:
+        """Lectura accionable del periodo: NO solo cifras, sino qué subió/bajó, la(s)
+        pieza(s) que lo explican y el siguiente paso ("pide copy/clip de lo que
+        rinde"). Ensambla comparar_periodos + picos + mejores_piezas en una
+        narrativa corta. Marca cuando los datos son de muestra. Responde el día a
+        día de '¿qué números tuvimos y por qué, y qué hago con eso?'."""
+        from .analisis_diario import construir_analisis
+
+        try:
+            return construir_analisis(fuente, rango, marca or None, historico)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}

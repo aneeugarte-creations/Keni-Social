@@ -7,6 +7,8 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
   - `/api/metricas/opciones`: marcas + rangos para poblar los selectores.
   - `/api/metricas/reporte`: total consolidado + por cuenta (nombres resueltos).
   - `/api/metricas/comparar`: comparativa A vs B (total + por marca).
+  - `/api/metricas/analisis`: análisis diario con narrativa "qué cambió y por qué"
+    + siguiente paso (F6/#146); ensambla reporte + picos en una lectura accionable.
   - `/api/metricas/export.{csv,md,json}`: descargas (misma serializacion que el CLI).
 """
 
@@ -223,6 +225,87 @@ async def comparar(request: Request) -> Response:
     )
 
 
+def _pieza_serializable(pieza: dict | None) -> dict | None:
+    """Forma JSON mínima de una pieza para el SPA (la que explica un movimiento)."""
+    if not pieza:
+        return None
+    return {
+        "titulo": pieza.get("titulo", ""),
+        "plataforma": pieza.get("plataforma", ""),
+        "engagement_pct": pieza.get("engagement_pct", 0.0),
+        "url": pieza.get("url"),
+    }
+
+
+def _movimiento_serializable(mov: dict, nombres: dict[str, str]) -> dict:
+    """Un movimiento (qué se movió y la pieza que lo explica) con nombre resuelto."""
+    cid = mov.get("marca_id", "")
+    return {
+        "marca_id": cid,
+        # El catálogo de marcas de la Consola tiene prioridad sobre el nombre de la
+        # fuente (mismo criterio que /reporte): resuelve el id_metricas a etiqueta.
+        "marca": _nombre_marca_id(cid, nombres),
+        "variacion_vis_pct": mov.get("variacion_vis_pct", 0.0),
+        "direccion": mov.get("direccion", "estable"),
+        "visualizaciones": mov.get("visualizaciones", 0),
+        "engagement_pct": mov.get("engagement_pct"),
+        "pieza": _pieza_serializable(mov.get("pieza")),
+    }
+
+
+def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dict:
+    """Forma JSON del análisis diario para el SPA: lectura + movimientos + paso.
+
+    Resuelve los nombres de marca con el catálogo de la Consola y mantiene
+    `fuente`/`es_muestra` para que la UI marque cuando los datos son de muestra
+    (issue #131). El texto narrativo (render Markdown) NO se incluye: el SPA pinta
+    su propia tarjeta a partir de los campos estructurados.
+    """
+    nombres = analisis.get("nombres") or {}
+    paso = analisis.get("siguiente_paso")
+    paso_out = None
+    if paso is not None:
+        cid = paso.get("marca_id", "")
+        paso_out = {
+            "marca_id": cid,
+            "marca": _nombre_marca_id(cid, nombres),
+            "engagement_pct": paso.get("engagement_pct"),
+            "pieza": _pieza_serializable(paso.get("pieza")),
+            "texto": paso.get("texto", ""),
+        }
+    return {
+        "rango": rango,
+        "etiqueta_rango": ETIQUETAS_RANGO.get(rango, rango),
+        "marca": marca or "",
+        # Procedencia: "muestra" (ficticios) o nombre de la fuente real. La UI pinta
+        # un badge de advertencia y un aviso con esto (issue #131).
+        "fuente": analisis.get("fuente") or "muestra",
+        "es_muestra": bool(analisis.get("es_muestra")),
+        "movimientos": [
+            _movimiento_serializable(m, nombres) for m in analisis.get("movimientos", [])
+        ],
+        "movimientos_resto": analisis.get("movimientos_resto", 0),
+        "marcas_estables": analisis.get("marcas_estables", 0),
+        "cobertura_parcial": [
+            _nombre_marca_id(c, nombres)
+            for c in (analisis.get("cobertura") or {}).get("cuentas_parciales", [])
+        ],
+        "siguiente_paso": paso_out,
+    }
+
+
+async def analisis(request: Request) -> Response:
+    rango = _validar_rango(request.query_params.get("rango", "semana"))
+    marca = request.query_params.get("marca") or None
+    try:
+        a = servicio.construir_analisis_diario(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse({"error": "No se pudo generar el análisis."}, status_code=500)
+    return JSONResponse(_analisis_serializable(a, rango, marca))
+
+
 def _nombre_descarga(rango: str, marca: str | None, ext: str) -> str:
     sufijo = f"-{marca}" if marca else ""
     return f"metricas-{rango}{sufijo}.{ext}"
@@ -273,6 +356,7 @@ RUTAS = [
     Route("/api/metricas/opciones", opciones, methods=["GET"]),
     Route("/api/metricas/reporte", reporte, methods=["GET"]),
     Route("/api/metricas/comparar", comparar, methods=["GET"]),
+    Route("/api/metricas/analisis", analisis, methods=["GET"]),
     Route("/api/metricas/export.csv", export_csv, methods=["GET"]),
     Route("/api/metricas/export.md", export_md, methods=["GET"]),
     Route("/api/metricas/export.json", export_json, methods=["GET"]),

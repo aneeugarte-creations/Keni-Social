@@ -24,6 +24,7 @@ import dataclasses
 import json
 from pathlib import Path
 
+from . import analisis_diario as _analisis
 from . import asistente
 from . import config as _config
 from . import reporte as _reporte
@@ -71,6 +72,8 @@ __all__ = [
     "reporte_csv",
     "reporte_markdown",
     "reporte_json",
+    "construir_analisis_diario",
+    "analisis_diario_markdown",
     "construir_reporte_deportes",
     "render_reporte_deportes_pptx",
     "render_reporte_deportes_pdf",
@@ -137,6 +140,39 @@ def reporte_markdown(rango: str = "mes", marca: str | None = None) -> str:
 def reporte_json(rango: str = "mes", marca: str | None = None) -> str:
     """Reporte consolidado serializado a JSON indentado (crudo, sin reformatear)."""
     return json.dumps(construir_reporte(rango, marca), ensure_ascii=False, indent=2)
+
+
+def _historico_lectura():
+    """Histórico SOLO LECTURA si está activado, o None.
+
+    El análisis diario usa el histórico para leer la variación REAL vs. el periodo
+    anterior cuando hay datos previos. Es best-effort: si no se puede abrir (disco,
+    permisos), seguimos sin él en vez de romper la lectura.
+    """
+    from .historico import Historico, historico_activo
+
+    if not historico_activo():
+        return None
+    try:
+        return Historico()
+    except Exception:  # noqa: BLE001 -- el histórico es complementario, nunca obligatorio
+        return None
+
+
+def construir_analisis_diario(rango: str = "semana", marca: str | None = None) -> dict:
+    """Análisis diario con narrativa (F6/#146) como dict JSON-serializable.
+
+    Lectura accionable del periodo: qué se movió, la(s) pieza(s) que lo explican y
+    el siguiente paso. Incluye `fuente`/`es_muestra` para que la UI marque cuando
+    los datos son de muestra (issue #131). Propaga `ValueError` (rango inválido) y
+    `CuentaNoEncontrada` (marca fuera de alcance).
+    """
+    return _analisis.construir_analisis(_fuente(marca), rango, marca, _historico_lectura())
+
+
+def analisis_diario_markdown(rango: str = "semana", marca: str | None = None) -> str:
+    """Análisis diario renderizado a Markdown (misma narrativa que el MCP/CLI)."""
+    return _analisis.render_markdown(construir_analisis_diario(rango, marca))
 
 
 def construir_reporte_deportes(

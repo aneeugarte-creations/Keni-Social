@@ -10,6 +10,7 @@
  */
 import type {
   AgenteDetalle,
+  AnalisisDiario,
   CompararMetricas,
   CuerpoConectarAgente,
   CuerpoCrearAgente,
@@ -649,6 +650,8 @@ export const api = {
     params: { rango_a?: string; rango_b?: string; marca?: string },
     signal?: AbortSignal,
   ) => peticion<CompararMetricas>(`/metricas/comparar${query(params)}`, { signal }),
+  metricasAnalisis: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<AnalisisDiario>(`/metricas/analisis${query(params)}`, { signal }),
   exportarMetricas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/export.${formato}${query(params)}`),
 

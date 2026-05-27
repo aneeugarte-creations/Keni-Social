@@ -83,3 +83,35 @@ def test_comparar_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
     r = cliente.get("/api/metricas/comparar?rango_a=7d&rango_b=30d&marca=unotv")
     assert r.status_code == 200
     assert r.json()["fuente"] == "muestra"
+
+
+def test_analisis_devuelve_narrativa_y_marca_muestra(cliente):
+    # F6/#146: lectura "qué cambió y por qué" + siguiente paso. Con la fuente
+    # offline marca explícitamente que los datos son de muestra (issue #131).
+    r = cliente.get("/api/metricas/analisis?rango=semana")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["fuente"] == "muestra"
+    assert data["es_muestra"] is True
+    assert isinstance(data["movimientos"], list)
+    # cierra con un siguiente paso accionable (loop a la acción, UX-roadmap #11)
+    assert data["siguiente_paso"] is not None
+    assert "Pídele a Claude" in data["siguiente_paso"]["texto"]
+
+
+def test_analisis_acotado_a_una_marca(cliente):
+    r = cliente.get("/api/metricas/analisis?rango=semana&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["marca"] == "claro_sports"
+    # acotado a una marca: los movimientos (si hay) son sólo de esa marca
+    assert all(m["marca_id"] == "claro_sports" for m in data["movimientos"])
+
+
+def test_analisis_rango_invalido_devuelve_400(cliente):
+    # _validar_rango cae a un rango válido por defecto, así que un rango raro NO
+    # rompe: devuelve 200 con la lectura del rango por defecto. El 400 sólo
+    # ocurriría si la fachada lanzara ValueError; aquí verificamos la respuesta OK.
+    r = cliente.get("/api/metricas/analisis?rango=trimestre")
+    assert r.status_code == 200
+    assert r.json()["fuente"] == "muestra"

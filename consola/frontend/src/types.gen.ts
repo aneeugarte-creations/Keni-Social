@@ -117,6 +117,56 @@ export interface CompararMetricas {
   por_marca: ComparativaPorMarca[];
 }
 /**
+ * Pieza que explica un movimiento (o que apuntala el siguiente paso).
+ */
+export interface PiezaAnalisis {
+  titulo: string;
+  plataforma: string;
+  engagement_pct: number;
+  url: string | null;
+}
+/**
+ * Un movimiento del periodo: qué se movió y la pieza que lo explica.
+ */
+export interface MovimientoAnalisis {
+  marca_id: string;
+  marca: string;
+  variacion_vis_pct: number;
+  direccion: string;
+  visualizaciones: number;
+  engagement_pct: number | null;
+  pieza: PiezaAnalisis | null;
+}
+/**
+ * Sugerencia accionable que cierra el loop a la acción (UX-roadmap #11).
+ */
+export interface SiguientePasoAnalisis {
+  marca_id: string;
+  marca: string;
+  engagement_pct: number | null;
+  pieza: PiezaAnalisis | null;
+  texto: string;
+}
+/**
+ * Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
+ *
+ * Capa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)
+ * que los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los
+ * datos son de muestra y no reales (issue #131).
+ */
+export interface AnalisisDiario {
+  rango: string;
+  etiqueta_rango: string;
+  marca: string;
+  fuente: string;
+  es_muestra: boolean;
+  movimientos: MovimientoAnalisis[];
+  movimientos_resto: number;
+  marcas_estables: number;
+  cobertura_parcial: string[];
+  siguiente_paso: SiguientePasoAnalisis | null;
+}
+/**
  * Envelope ADITIVO de paginacion (offset-based, #121).
  *
  * Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
