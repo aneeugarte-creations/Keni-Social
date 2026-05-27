@@ -1,0 +1,1142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContratoApiKeni",
+  "$comment": "Generado desde keni_consola.esquema_api. NO editar a mano. Subconjunto estable del contrato /api/* (#101).",
+  "$defs": {
+    "ResultadoEstado": {
+      "type": "object",
+      "title": "ResultadoEstado",
+      "properties": {
+        "estado": {
+          "enum": [
+            "ok",
+            "aviso",
+            "error"
+          ]
+        },
+        "nombre": {
+          "type": "string"
+        },
+        "detalle": {
+          "type": "string"
+        },
+        "icono": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "estado",
+        "nombre",
+        "detalle",
+        "icono"
+      ]
+    },
+    "RespuestaEstado": {
+      "type": "object",
+      "title": "RespuestaEstado",
+      "properties": {
+        "resultados": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResultadoEstado"
+          }
+        },
+        "resumen": {
+          "type": "string"
+        },
+        "siguiente_paso": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "resultados",
+        "resumen",
+        "siguiente_paso"
+      ]
+    },
+    "MarcaDisponible": {
+      "type": "object",
+      "title": "MarcaDisponible",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "nombre": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "nombre"
+      ]
+    },
+    "CredencialesPresentes": {
+      "type": "object",
+      "title": "CredencialesPresentes",
+      "properties": {
+        "meta": {
+          "type": "boolean"
+        },
+        "youtube": {
+          "type": "boolean"
+        },
+        "x": {
+          "type": "boolean"
+        },
+        "tiktok": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "meta",
+        "youtube",
+        "x",
+        "tiktok"
+      ]
+    },
+    "RespuestaConfig": {
+      "type": "object",
+      "title": "RespuestaConfig",
+      "properties": {
+        "fuente": {
+          "type": "string"
+        },
+        "fuentes_validas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "marcas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "marcas_disponibles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarcaDisponible"
+          }
+        },
+        "credenciales_presentes": {
+          "$ref": "#/$defs/CredencialesPresentes"
+        }
+      },
+      "required": [
+        "fuente",
+        "fuentes_validas",
+        "marcas",
+        "marcas_disponibles",
+        "credenciales_presentes"
+      ]
+    },
+    "CuerpoGuardarConfig": {
+      "type": "object",
+      "title": "CuerpoGuardarConfig",
+      "properties": {
+        "fuente": {
+          "type": "string"
+        },
+        "marcas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "fuente",
+        "marcas"
+      ]
+    },
+    "LimiteRed": {
+      "type": "object",
+      "title": "LimiteRed",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "nombre": {
+          "type": "string"
+        },
+        "limite": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Limite de caracteres canonico de una red (fuente unica, `GET /api/limites`).\n\n`limite` es `null` si la red no tiene tope tecnico practico (Facebook/YouTube).",
+      "required": [
+        "id",
+        "nombre",
+        "limite"
+      ]
+    },
+    "RespuestaLimites": {
+      "type": "object",
+      "title": "RespuestaLimites",
+      "properties": {
+        "limites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LimiteRed"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/limites`: los limites por red, en orden fijo.",
+      "required": [
+        "limites"
+      ]
+    },
+    "RangoMetrica": {
+      "type": "object",
+      "title": "RangoMetrica",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "etiqueta": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "etiqueta"
+      ]
+    },
+    "OpcionesMetricas": {
+      "type": "object",
+      "title": "OpcionesMetricas",
+      "properties": {
+        "marcas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarcaDisponible"
+          }
+        },
+        "rangos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RangoMetrica"
+          }
+        }
+      },
+      "required": [
+        "marcas",
+        "rangos"
+      ]
+    },
+    "TotalMetricas": {
+      "type": "object",
+      "title": "TotalMetricas",
+      "properties": {
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "alcance": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "visualizaciones",
+        "alcance",
+        "interacciones",
+        "engagement_pct"
+      ]
+    },
+    "CuentaMetrica": {
+      "type": "object",
+      "title": "CuentaMetrica",
+      "properties": {
+        "marca_id": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "alcance": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "marca_id",
+        "marca",
+        "visualizaciones",
+        "alcance",
+        "interacciones",
+        "engagement_pct"
+      ]
+    },
+    "ReporteMetricas": {
+      "type": "object",
+      "title": "ReporteMetricas",
+      "properties": {
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "total": {
+          "$ref": "#/$defs/TotalMetricas"
+        },
+        "cuentas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CuentaMetrica"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/reporte`.",
+      "required": [
+        "rango",
+        "etiqueta_rango",
+        "marca",
+        "fuente",
+        "total",
+        "cuentas"
+      ]
+    },
+    "ComparativaMetrica": {
+      "type": "object",
+      "title": "ComparativaMetrica",
+      "properties": {
+        "metrica": {
+          "type": "string"
+        },
+        "a": {
+          "type": "number"
+        },
+        "b": {
+          "type": "number"
+        },
+        "diferencia": {
+          "type": "number"
+        },
+        "variacion_pct": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "metrica",
+        "a",
+        "b",
+        "diferencia",
+        "variacion_pct"
+      ]
+    },
+    "ComparativaPorMarca": {
+      "type": "object",
+      "title": "ComparativaPorMarca",
+      "properties": {
+        "marca_id": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "comparativa": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComparativaMetrica"
+          }
+        }
+      },
+      "required": [
+        "marca_id",
+        "marca",
+        "comparativa"
+      ]
+    },
+    "TotalComparativa": {
+      "type": "object",
+      "title": "TotalComparativa",
+      "properties": {
+        "metricas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComparativaMetrica"
+          }
+        }
+      },
+      "required": [
+        "metricas"
+      ]
+    },
+    "CompararMetricas": {
+      "type": "object",
+      "title": "CompararMetricas",
+      "properties": {
+        "marca": {
+          "type": "string"
+        },
+        "rango_a": {
+          "type": "string"
+        },
+        "rango_b": {
+          "type": "string"
+        },
+        "etiqueta_a": {
+          "type": "string"
+        },
+        "etiqueta_b": {
+          "type": "string"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "total": {
+          "$ref": "#/$defs/TotalComparativa"
+        },
+        "por_marca": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComparativaPorMarca"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/comparar`: comparativa A vs B.",
+      "required": [
+        "marca",
+        "rango_a",
+        "rango_b",
+        "etiqueta_a",
+        "etiqueta_b",
+        "fuente",
+        "total",
+        "por_marca"
+      ]
+    },
+    "Paginacion": {
+      "type": "object",
+      "title": "Paginacion",
+      "properties": {
+        "total": {
+          "type": "integer"
+        },
+        "limite": {
+          "type": "integer"
+        },
+        "desplazamiento": {
+          "type": "integer"
+        }
+      },
+      "description": "Envelope ADITIVO de paginacion (offset-based, #121).\n\nLo añaden los listados pesados (publicaciones/runs/generaciones) junto a su\nclave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de\npagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.",
+      "required": [
+        "total",
+        "limite",
+        "desplazamiento"
+      ]
+    },
+    "MetricasRun": {
+      "type": "object",
+      "title": "MetricasRun",
+      "properties": {
+        "tokens_in": {
+          "type": "integer"
+        },
+        "tokens_out": {
+          "type": "integer"
+        },
+        "num_turns": {
+          "type": "integer"
+        },
+        "total_cost_usd": {
+          "type": "number"
+        },
+        "duration_ms": {
+          "type": "integer"
+        },
+        "modelo": {
+          "type": "string"
+        }
+      },
+      "description": "Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).\n\nEl handler las omite (clave a `null`) si el run no produjo metricas (interactivo\no CLI sin JSON). Cuando vienen, traen estos seis campos.",
+      "required": [
+        "tokens_in",
+        "tokens_out",
+        "num_turns",
+        "total_cost_usd",
+        "duration_ms",
+        "modelo"
+      ]
+    },
+    "Publicacion": {
+      "type": "object",
+      "title": "Publicacion",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "marca_nombre": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "red_nombre": {
+          "type": "string"
+        },
+        "contenido": {
+          "type": "string"
+        },
+        "estado": {
+          "enum": [
+            "borrador",
+            "aprobado",
+            "programado",
+            "publicado"
+          ]
+        },
+        "veredicto": {
+          "enum": [
+            "listo",
+            "revisar",
+            "no_publicar",
+            ""
+          ]
+        },
+        "fecha_creacion": {
+          "type": "string"
+        },
+        "fecha_actualizacion": {
+          "type": "string"
+        },
+        "fecha_programada": {
+          "type": "string"
+        },
+        "origen": {
+          "type": "string"
+        },
+        "imagen": {
+          "type": "string"
+        },
+        "imagen_url": {
+          "type": "string"
+        },
+        "evergreen": {
+          "type": "boolean"
+        }
+      },
+      "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).",
+      "required": [
+        "id",
+        "titulo",
+        "marca",
+        "marca_nombre",
+        "red",
+        "red_nombre",
+        "contenido",
+        "estado",
+        "veredicto",
+        "fecha_creacion",
+        "fecha_actualizacion",
+        "fecha_programada",
+        "origen",
+        "imagen",
+        "imagen_url",
+        "evergreen"
+      ]
+    },
+    "RespuestaPublicaciones": {
+      "type": "object",
+      "title": "RespuestaPublicaciones",
+      "properties": {
+        "publicaciones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Publicacion"
+          }
+        },
+        "paginacion": {
+          "$ref": "#/$defs/Paginacion"
+        }
+      },
+      "description": "Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).",
+      "required": [
+        "publicaciones",
+        "paginacion"
+      ]
+    },
+    "RespuestaPublicacion": {
+      "type": "object",
+      "title": "RespuestaPublicacion",
+      "properties": {
+        "publicacion": {
+          "$ref": "#/$defs/Publicacion"
+        }
+      },
+      "description": "Respuesta de los endpoints que devuelven UNA publicacion (`{publicacion}`).",
+      "required": [
+        "publicacion"
+      ]
+    },
+    "Run": {
+      "type": "object",
+      "title": "Run",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        },
+        "modo": {
+          "type": "string"
+        },
+        "estado": {
+          "type": "string"
+        },
+        "motivo": {
+          "type": "string"
+        },
+        "fecha_inicio": {
+          "type": "string"
+        },
+        "metricas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricasRun"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "salida": {
+          "type": "string"
+        },
+        "fecha_fin": {
+          "type": "string"
+        },
+        "agente": {
+          "type": "string"
+        },
+        "agente_nombre": {
+          "type": "string"
+        }
+      },
+      "description": "Un run (ejecucion) de un agente, en su forma publica.\n\nForma CANONICA: la de `agentes._parsear_run` (`GET .../runs/{id}` y el listado\n`GET .../runs`): `id/prompt/modo/estado/motivo/fecha_inicio/metricas` + la\n`salida` y `fecha_fin` del run completo. El LISTADO GLOBAL (`GET /api/runs`) y\nel detalle del agente omiten `salida`/`fecha_fin` y, el global, AÑADE\n`agente`/`agente_nombre`: por eso esos cuatro van como `NotRequired`. `metricas`\nes `null` si el run no produjo metricas.",
+      "required": [
+        "id",
+        "prompt",
+        "modo",
+        "estado",
+        "motivo",
+        "fecha_inicio",
+        "metricas"
+      ]
+    },
+    "RespuestaRun": {
+      "type": "object",
+      "title": "RespuestaRun",
+      "properties": {
+        "run": {
+          "$ref": "#/$defs/Run"
+        },
+        "mensaje": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de los endpoints que devuelven UN run (`{run}`).\n\n`mensaje` solo lo añade el lanzamiento INTERACTIVO (`POST .../runs` con modo\n`interactivo`): el texto legible del lanzamiento; ausente en el resto.",
+      "required": [
+        "run"
+      ]
+    },
+    "RespuestaRuns": {
+      "type": "object",
+      "title": "RespuestaRuns",
+      "properties": {
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Run"
+          }
+        },
+        "paginacion": {
+          "$ref": "#/$defs/Paginacion"
+        }
+      },
+      "description": "Listado de runs. El global (`GET /api/runs`) trae `paginacion`; el del agente\n(`GET /api/agentes/{id}/runs`) no, por eso es `NotRequired`.",
+      "required": [
+        "runs"
+      ]
+    },
+    "TotalRuns": {
+      "type": "object",
+      "title": "TotalRuns",
+      "properties": {
+        "coste_usd": {
+          "type": "number"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "runs": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "coste_usd",
+        "tokens",
+        "runs"
+      ]
+    },
+    "AgregadoPorAgente": {
+      "type": "object",
+      "title": "AgregadoPorAgente",
+      "properties": {
+        "agente": {
+          "type": "string"
+        },
+        "agente_nombre": {
+          "type": "string"
+        },
+        "coste_usd": {
+          "type": "number"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "runs": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "agente",
+        "agente_nombre",
+        "coste_usd",
+        "tokens",
+        "runs"
+      ]
+    },
+    "AgregadoPorDia": {
+      "type": "object",
+      "title": "AgregadoPorDia",
+      "properties": {
+        "dia": {
+          "type": "string"
+        },
+        "coste_usd": {
+          "type": "number"
+        },
+        "tokens": {
+          "type": "integer"
+        },
+        "runs": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "dia",
+        "coste_usd",
+        "tokens",
+        "runs"
+      ]
+    },
+    "RespuestaRunsAgregados": {
+      "type": "object",
+      "title": "RespuestaRunsAgregados",
+      "properties": {
+        "total": {
+          "$ref": "#/$defs/TotalRuns"
+        },
+        "por_agente": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgregadoPorAgente"
+          }
+        },
+        "por_dia": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgregadoPorDia"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/runs/agregados`: totales de coste/tokens/runs.",
+      "required": [
+        "total",
+        "por_agente",
+        "por_dia"
+      ]
+    },
+    "ActualComercial": {
+      "type": "object",
+      "title": "ActualComercial",
+      "properties": {
+        "ts": {
+          "type": "string"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "alcance": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        }
+      },
+      "description": "Valor actual de una pieza comercial (del ultimo snapshot).",
+      "required": [
+        "ts",
+        "interacciones",
+        "alcance",
+        "engagement_pct"
+      ]
+    },
+    "SnapshotComercial": {
+      "type": "object",
+      "title": "SnapshotComercial",
+      "properties": {
+        "ts": {
+          "type": "string"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "alcance": {
+          "type": "integer"
+        }
+      },
+      "description": "Un punto de la serie temporal de una pieza comercial (acumulado).",
+      "required": [
+        "ts",
+        "interacciones",
+        "alcance"
+      ]
+    },
+    "PublicacionComercial": {
+      "type": "object",
+      "title": "PublicacionComercial",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "marca_nombre": {
+          "type": "string"
+        },
+        "cliente": {
+          "type": "string"
+        },
+        "campania": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "red_nombre": {
+          "type": "string"
+        },
+        "metrica_objetivo": {
+          "enum": [
+            "interacciones",
+            "alcance"
+          ]
+        },
+        "objetivo": {
+          "type": "integer"
+        },
+        "estado": {
+          "enum": [
+            "activa",
+            "pausada",
+            "cerrada"
+          ]
+        },
+        "publicado": {
+          "type": "string"
+        },
+        "notas": {
+          "type": "string"
+        },
+        "aviso_en": {
+          "type": "string"
+        },
+        "fecha_creacion": {
+          "type": "string"
+        },
+        "fecha_actualizacion": {
+          "type": "string"
+        },
+        "actual": {
+          "$ref": "#/$defs/ActualComercial"
+        },
+        "progreso_pct": {
+          "type": "number"
+        },
+        "alcanzado": {
+          "type": "boolean"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "es_muestra": {
+          "type": "boolean"
+        },
+        "serie": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SnapshotComercial"
+          }
+        }
+      },
+      "description": "Una pieza comercial monitoreada (`api/comercial._a_dict`).\n\n`fuente`/`es_muestra` (#124) marcan la procedencia de las cifras. `serie` solo\nviene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.",
+      "required": [
+        "id",
+        "url",
+        "titulo",
+        "marca",
+        "marca_nombre",
+        "cliente",
+        "campania",
+        "red",
+        "red_nombre",
+        "metrica_objetivo",
+        "objetivo",
+        "estado",
+        "publicado",
+        "notas",
+        "aviso_en",
+        "fecha_creacion",
+        "fecha_actualizacion",
+        "actual",
+        "progreso_pct",
+        "alcanzado",
+        "fuente",
+        "es_muestra"
+      ]
+    },
+    "RespuestaPublicacionesComercial": {
+      "type": "object",
+      "title": "RespuestaPublicacionesComercial",
+      "properties": {
+        "publicaciones": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PublicacionComercial"
+          }
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "es_muestra": {
+          "type": "boolean"
+        }
+      },
+      "description": "Listado de `GET /api/comercial/publicaciones` con procedencia comun (#124).",
+      "required": [
+        "publicaciones",
+        "fuente",
+        "es_muestra"
+      ]
+    },
+    "RespuestaPublicacionComercial": {
+      "type": "object",
+      "title": "RespuestaPublicacionComercial",
+      "properties": {
+        "publicacion": {
+          "$ref": "#/$defs/PublicacionComercial"
+        }
+      },
+      "description": "Respuesta de los endpoints que devuelven UNA pieza comercial (`{publicacion}`).",
+      "required": [
+        "publicacion"
+      ]
+    },
+    "RespuestaRefrescarComercial": {
+      "type": "object",
+      "title": "RespuestaRefrescarComercial",
+      "properties": {
+        "actualizadas": {
+          "type": "integer"
+        }
+      },
+      "description": "Respuesta de `POST /api/comercial/refrescar`: nº de piezas actualizadas.",
+      "required": [
+        "actualizadas"
+      ]
+    },
+    "RespuestaMensaje": {
+      "type": "object",
+      "title": "RespuestaMensaje",
+      "properties": {
+        "mensaje": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "mensaje"
+      ]
+    },
+    "ErrorApi": {
+      "type": "object",
+      "title": "ErrorApi",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "mensaje": {
+          "type": "string"
+        }
+      },
+      "description": "Forma de error que devuelve el backend (uno u otro campo, en espanol)."
+    }
+  },
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ResultadoEstado"
+    },
+    {
+      "$ref": "#/$defs/RespuestaEstado"
+    },
+    {
+      "$ref": "#/$defs/MarcaDisponible"
+    },
+    {
+      "$ref": "#/$defs/CredencialesPresentes"
+    },
+    {
+      "$ref": "#/$defs/RespuestaConfig"
+    },
+    {
+      "$ref": "#/$defs/CuerpoGuardarConfig"
+    },
+    {
+      "$ref": "#/$defs/LimiteRed"
+    },
+    {
+      "$ref": "#/$defs/RespuestaLimites"
+    },
+    {
+      "$ref": "#/$defs/RangoMetrica"
+    },
+    {
+      "$ref": "#/$defs/OpcionesMetricas"
+    },
+    {
+      "$ref": "#/$defs/TotalMetricas"
+    },
+    {
+      "$ref": "#/$defs/CuentaMetrica"
+    },
+    {
+      "$ref": "#/$defs/ReporteMetricas"
+    },
+    {
+      "$ref": "#/$defs/ComparativaMetrica"
+    },
+    {
+      "$ref": "#/$defs/ComparativaPorMarca"
+    },
+    {
+      "$ref": "#/$defs/TotalComparativa"
+    },
+    {
+      "$ref": "#/$defs/CompararMetricas"
+    },
+    {
+      "$ref": "#/$defs/Paginacion"
+    },
+    {
+      "$ref": "#/$defs/MetricasRun"
+    },
+    {
+      "$ref": "#/$defs/Publicacion"
+    },
+    {
+      "$ref": "#/$defs/RespuestaPublicaciones"
+    },
+    {
+      "$ref": "#/$defs/RespuestaPublicacion"
+    },
+    {
+      "$ref": "#/$defs/Run"
+    },
+    {
+      "$ref": "#/$defs/RespuestaRun"
+    },
+    {
+      "$ref": "#/$defs/RespuestaRuns"
+    },
+    {
+      "$ref": "#/$defs/TotalRuns"
+    },
+    {
+      "$ref": "#/$defs/AgregadoPorAgente"
+    },
+    {
+      "$ref": "#/$defs/AgregadoPorDia"
+    },
+    {
+      "$ref": "#/$defs/RespuestaRunsAgregados"
+    },
+    {
+      "$ref": "#/$defs/ActualComercial"
+    },
+    {
+      "$ref": "#/$defs/SnapshotComercial"
+    },
+    {
+      "$ref": "#/$defs/PublicacionComercial"
+    },
+    {
+      "$ref": "#/$defs/RespuestaPublicacionesComercial"
+    },
+    {
+      "$ref": "#/$defs/RespuestaPublicacionComercial"
+    },
+    {
+      "$ref": "#/$defs/RespuestaRefrescarComercial"
+    },
+    {
+      "$ref": "#/$defs/RespuestaMensaje"
+    },
+    {
+      "$ref": "#/$defs/ErrorApi"
+    }
+  ]
+}

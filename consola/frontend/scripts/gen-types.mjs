@@ -25,6 +25,10 @@ import { compile } from "json-schema-to-typescript";
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const SALIDA = resolve(AQUI, "../src/types.gen.ts");
+// Artefacto JSON Schema BUNDLEADO para la validacion en runtime (#120): el mismo
+// esquema que emite el backend, sin segunda fuente de verdad (un Zod paralelo
+// volveria a driftar). `lib/api.ts` lo carga y valida el body contra su `$def`.
+const SALIDA_ESQUEMA = resolve(AQUI, "../src/esquema.gen.json");
 const PYTHON = process.env.KENI_PYTHON || "python3";
 const MODULO = "keni_consola.esquema_api";
 
@@ -38,11 +42,10 @@ const CABECERA = `/**
  */
 `;
 
-/** Pide al backend el JSON Schema del subconjunto estable. */
-function obtenerEsquema() {
-  let salida;
+/** Pide al backend el JSON Schema del subconjunto estable (texto crudo). */
+function obtenerEsquemaTexto() {
   try {
-    salida = execFileSync(PYTHON, ["-m", MODULO], {
+    return execFileSync(PYTHON, ["-m", MODULO], {
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
     });
@@ -54,7 +57,14 @@ function obtenerEsquema() {
         `venv correcto).${detalle}`,
     );
   }
-  return JSON.parse(salida);
+}
+
+/**
+ * Serializa el esquema de forma DETERMINISTA para escribirlo/compararlo (mismo
+ * formato que el emisor del backend: `indent=2`, sin reordenar claves).
+ */
+function esquemaSerializado(esquema) {
+  return JSON.stringify(esquema, null, 2) + "\n";
 }
 
 /**
@@ -86,32 +96,44 @@ async function generarTs(esquema) {
   return CABECERA + "\n" + sinRaiz.trimEnd() + "\n";
 }
 
+/** Lee un artefacto si existe; cadena vacía si falta (ausente => divergencia). */
+function leerSiExiste(ruta) {
+  try {
+    return readFileSync(ruta, "utf8");
+  } catch {
+    return "";
+  }
+}
+
 async function main() {
   const modoCheck = process.argv.includes("--check");
-  const esquema = obtenerEsquema();
+  const esquema = JSON.parse(obtenerEsquemaTexto());
   const ts = await generarTs(esquema);
+  const json = esquemaSerializado(esquema);
 
   if (modoCheck) {
-    let actual = "";
-    try {
-      actual = readFileSync(SALIDA, "utf8");
-    } catch {
-      // archivo ausente -> divergencia
-    }
-    if (actual !== ts) {
+    const tsActual = leerSiExiste(SALIDA);
+    const jsonActual = leerSiExiste(SALIDA_ESQUEMA);
+    const tsOk = tsActual === ts;
+    const jsonOk = jsonActual === json;
+    if (!tsOk || !jsonOk) {
+      const cuales = [!tsOk && "types.gen.ts", !jsonOk && "esquema.gen.json"]
+        .filter(Boolean)
+        .join(" y ");
       console.error(
-        "✗ types.gen.ts está desincronizado del backend.\n" +
+        `✗ ${cuales} está(n) desincronizado(s) del backend.\n` +
           "  Regenéralo con:  npm run gen:types\n" +
-          "  (los tipos del subconjunto estable se DERIVAN del backend, no se editan a mano).",
+          "  (los tipos y el esquema del subconjunto estable se DERIVAN del backend, no se editan a mano).",
       );
       process.exit(1);
     }
-    console.log("✓ types.gen.ts coincide con el esquema del backend.");
+    console.log("✓ types.gen.ts y esquema.gen.json coinciden con el esquema del backend.");
     return;
   }
 
   writeFileSync(SALIDA, ts, "utf8");
-  console.log(`✓ Generado ${SALIDA} desde ${MODULO}.`);
+  writeFileSync(SALIDA_ESQUEMA, json, "utf8");
+  console.log(`✓ Generado ${SALIDA} y ${SALIDA_ESQUEMA} desde ${MODULO}.`);
 }
 
 main().catch((err) => {

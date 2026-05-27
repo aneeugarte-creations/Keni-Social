@@ -60,6 +60,14 @@ def _esquema_de_tipo(tp: Any) -> dict[str, Any]:
     if tp is type(None):
         return {"type": "null"}
 
+    # `dict`/`list` SIN parametrizar: objeto/array LIBRE (p. ej. `resultado: dict`
+    # de una generacion, cuyos campos dependen del tipo y no se modelan). Coherente
+    # con `additionalProperties` abierto: el contrato no restringe su forma interna.
+    if tp is dict:
+        return {"type": "object"}
+    if tp is list:
+        return {"type": "array"}
+
     origen = get_origin(tp)
 
     # Literal[...] -> enum de sus valores.

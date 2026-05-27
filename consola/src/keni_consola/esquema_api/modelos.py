@@ -167,6 +167,268 @@ class CompararMetricas(TypedDict):
 
 
 # --------------------------------------------------------------------------- #
+# Paginacion — envelope aditivo comun a los listados pesados (#121)            #
+# --------------------------------------------------------------------------- #
+
+
+class Paginacion(TypedDict):
+    """Envelope ADITIVO de paginacion (offset-based, #121).
+
+    Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su
+    clave de lista. `total` = filas existentes sin paginar; `limite` = tamaño de
+    pagina efectivo (igual a `total` si no se paginó); `desplazamiento` = offset.
+    """
+
+    total: int
+    limite: int
+    desplazamiento: int
+
+
+# --------------------------------------------------------------------------- #
+# Metricas de un run/generacion — emitidas por el CLI cuando devuelve JSON     #
+# --------------------------------------------------------------------------- #
+
+
+class MetricasRun(TypedDict):
+    """Metricas de monitorizacion de un run/generacion IA (las que reporta el CLI).
+
+    El handler las omite (clave a `null`) si el run no produjo metricas (interactivo
+    o CLI sin JSON). Cuando vienen, traen estos seis campos.
+    """
+
+    tokens_in: int
+    tokens_out: int
+    num_turns: int
+    total_cost_usd: float
+    duration_ms: int
+    modelo: str
+
+
+# --------------------------------------------------------------------------- #
+# Publicaciones — dominio/publicaciones.py (publicacion_a_dict) + api          #
+# --------------------------------------------------------------------------- #
+
+EstadoPublicacion = Literal["borrador", "aprobado", "programado", "publicado"]
+# Veredicto editorial de una pieza. "" = sin veredicto.
+Veredicto = Literal["listo", "revisar", "no_publicar", ""]
+
+
+class Publicacion(TypedDict):
+    """Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).
+
+    `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
+    archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
+    """
+
+    id: str
+    titulo: str
+    marca: str
+    marca_nombre: str
+    red: str
+    red_nombre: str
+    contenido: str
+    estado: EstadoPublicacion
+    veredicto: Veredicto
+    fecha_creacion: str
+    fecha_actualizacion: str
+    fecha_programada: str
+    origen: str
+    imagen: str
+    imagen_url: str
+    evergreen: bool
+
+
+class RespuestaPublicaciones(TypedDict):
+    """Listado de `GET /api/publicaciones` con el envelope de paginacion (#121)."""
+
+    publicaciones: list[Publicacion]
+    paginacion: Paginacion
+
+
+class RespuestaPublicacion(TypedDict):
+    """Respuesta de los endpoints que devuelven UNA publicacion (`{publicacion}`)."""
+
+    publicacion: Publicacion
+
+
+# --------------------------------------------------------------------------- #
+# Runs — agentes._parsear_run + api/agentes.py (listado global y por agente)   #
+# --------------------------------------------------------------------------- #
+
+# Estado del ciclo de vida de un run. La forma publica conserva el valor crudo
+# del YAML, asi que se modela abierto (str) en vez de un Literal cerrado.
+EstadoRun = str
+
+
+class Run(TypedDict):
+    """Un run (ejecucion) de un agente, en su forma publica.
+
+    Forma CANONICA: la de `agentes._parsear_run` (`GET .../runs/{id}` y el listado
+    `GET .../runs`): `id/prompt/modo/estado/motivo/fecha_inicio/metricas` + la
+    `salida` y `fecha_fin` del run completo. El LISTADO GLOBAL (`GET /api/runs`) y
+    el detalle del agente omiten `salida`/`fecha_fin` y, el global, AÑADE
+    `agente`/`agente_nombre`: por eso esos cuatro van como `NotRequired`. `metricas`
+    es `null` si el run no produjo metricas.
+    """
+
+    id: str
+    prompt: str
+    modo: str
+    estado: EstadoRun
+    motivo: str
+    fecha_inicio: str
+    metricas: MetricasRun | None
+    salida: NotRequired[str]
+    fecha_fin: NotRequired[str]
+    # Solo en el listado global `GET /api/runs` (denormalizados).
+    agente: NotRequired[str]
+    agente_nombre: NotRequired[str]
+
+
+class RespuestaRun(TypedDict):
+    """Respuesta de los endpoints que devuelven UN run (`{run}`).
+
+    `mensaje` solo lo añade el lanzamiento INTERACTIVO (`POST .../runs` con modo
+    `interactivo`): el texto legible del lanzamiento; ausente en el resto.
+    """
+
+    run: Run
+    mensaje: NotRequired[str]
+
+
+class RespuestaRuns(TypedDict):
+    """Listado de runs. El global (`GET /api/runs`) trae `paginacion`; el del agente
+    (`GET /api/agentes/{id}/runs`) no, por eso es `NotRequired`."""
+
+    runs: list[Run]
+    paginacion: NotRequired[Paginacion]
+
+
+# --- Agregados de runs: `GET /api/runs/agregados` -------------------------- #
+
+
+class TotalRuns(TypedDict):
+    coste_usd: float
+    tokens: int
+    runs: int
+
+
+class AgregadoPorAgente(TypedDict):
+    agente: str
+    agente_nombre: str
+    coste_usd: float
+    tokens: int
+    runs: int
+
+
+class AgregadoPorDia(TypedDict):
+    dia: str
+    coste_usd: float
+    tokens: int
+    runs: int
+
+
+class RespuestaRunsAgregados(TypedDict):
+    """Respuesta de `GET /api/runs/agregados`: totales de coste/tokens/runs."""
+
+    total: TotalRuns
+    por_agente: list[AgregadoPorAgente]
+    por_dia: list[AgregadoPorDia]
+
+
+# --------------------------------------------------------------------------- #
+# Generaciones — DEFERIDO del subconjunto generado (#120).                     #
+#                                                                              #
+# `Generacion` y sus envelopes NO se modelan aqui a proposito: su campo        #
+# `resultado` es un dict LIBRE cuya forma depende del `tipo` (copy/rss/        #
+# hashtags/imagen/verificacion) y el frontend lo tipa de forma RICA            #
+# (`ResultadoGeneracion`, con `piezas`/`publicaciones`/`verificacion`...). Un  #
+# `$def` con `resultado: object` regresaria ese tipado a `{}`, perdiendo       #
+# seguridad de tipos en ~14 consumidores. Mejor mantener `Generacion` a mano   #
+# en `types.ts` (rico) que forzar un contrato generado mas pobre. El sondeo    #
+# de generaciones tampoco se valida en runtime por la misma razon.            #
+# --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# Comercial — api/comercial.py (_a_dict) + comercial.py. Procedencia (#124):   #
+# `fuente`/`es_muestra` marcan cifras de muestra (sinteticas) vs reales.       #
+# --------------------------------------------------------------------------- #
+
+EstadoComercial = Literal["activa", "pausada", "cerrada"]
+MetricaComercial = Literal["interacciones", "alcance"]
+
+
+class ActualComercial(TypedDict):
+    """Valor actual de una pieza comercial (del ultimo snapshot)."""
+
+    ts: str
+    interacciones: int
+    alcance: int
+    engagement_pct: float
+
+
+class SnapshotComercial(TypedDict):
+    """Un punto de la serie temporal de una pieza comercial (acumulado)."""
+
+    ts: str
+    interacciones: int
+    alcance: int
+
+
+class PublicacionComercial(TypedDict):
+    """Una pieza comercial monitoreada (`api/comercial._a_dict`).
+
+    `fuente`/`es_muestra` (#124) marcan la procedencia de las cifras. `serie` solo
+    viene en el detalle / al crear (`con_serie=True`), por eso es `NotRequired`.
+    """
+
+    id: str
+    url: str
+    titulo: str
+    marca: str
+    marca_nombre: str
+    cliente: str
+    campania: str
+    red: str
+    red_nombre: str
+    metrica_objetivo: MetricaComercial
+    objetivo: int
+    estado: EstadoComercial
+    publicado: str
+    notas: str
+    aviso_en: str
+    fecha_creacion: str
+    fecha_actualizacion: str
+    actual: ActualComercial
+    progreso_pct: float
+    alcanzado: bool
+    fuente: str
+    es_muestra: bool
+    serie: NotRequired[list[SnapshotComercial]]
+
+
+class RespuestaPublicacionesComercial(TypedDict):
+    """Listado de `GET /api/comercial/publicaciones` con procedencia comun (#124)."""
+
+    publicaciones: list[PublicacionComercial]
+    fuente: str
+    es_muestra: bool
+
+
+class RespuestaPublicacionComercial(TypedDict):
+    """Respuesta de los endpoints que devuelven UNA pieza comercial (`{publicacion}`)."""
+
+    publicacion: PublicacionComercial
+
+
+class RespuestaRefrescarComercial(TypedDict):
+    """Respuesta de `POST /api/comercial/refrescar`: nº de piezas actualizadas."""
+
+    actualizadas: int
+
+
+# --------------------------------------------------------------------------- #
 # Respuestas genericas comunes                                                 #
 # --------------------------------------------------------------------------- #
 
@@ -203,6 +465,29 @@ MODELOS = [
     ComparativaPorMarca,
     TotalComparativa,
     CompararMetricas,
+    # Envelope/auxiliares compartidos.
+    Paginacion,
+    MetricasRun,
+    # Publicaciones (#101 ampliacion churn).
+    Publicacion,
+    RespuestaPublicaciones,
+    RespuestaPublicacion,
+    # Runs (canonico + listado global + agregados).
+    Run,
+    RespuestaRun,
+    RespuestaRuns,
+    TotalRuns,
+    AgregadoPorAgente,
+    AgregadoPorDia,
+    RespuestaRunsAgregados,
+    # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
+    # Comercial (#124: fuente/es_muestra).
+    ActualComercial,
+    SnapshotComercial,
+    PublicacionComercial,
+    RespuestaPublicacionesComercial,
+    RespuestaPublicacionComercial,
+    RespuestaRefrescarComercial,
     RespuestaMensaje,
     ErrorApi,
 ]

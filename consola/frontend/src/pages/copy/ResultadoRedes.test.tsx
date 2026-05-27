@@ -29,10 +29,10 @@ function mkPublicacion(overrides: Partial<Publicacion> = {}): Publicacion {
     veredicto: "",
     imagen: "",
     imagen_url: "",
-    fecha_programada: null,
+    fecha_programada: "",
     fecha_creacion: "2026-05-25T10:00:00",
     fecha_actualizacion: "2026-05-25T10:00:00",
-    origen: null,
+    origen: "",
     ...overrides,
   };
 }

@@ -121,7 +121,21 @@ import type {
   Run,
 } from "@/types";
 
+import { type NombreContrato, validarContrato } from "./contrato";
+
 export const BASE_API = "/api";
+
+/**
+ * Muestreo de validación para endpoints SONDEADOS (listas grandes que se refrescan
+ * en bucle): en PROD validamos solo una fracción de las respuestas para que el coste
+ * no se acumule en cada poll; en DEV validamos SIEMPRE (queremos cazar el drift). El
+ * resultado de la validación es no fatal en PROD igualmente.
+ */
+const _MUESTREO_PROD = 0.1;
+
+function _debeValidar(): boolean {
+  return import.meta.env.DEV || Math.random() < _MUESTREO_PROD;
+}
 
 /**
  * URL para servir una imagen del almacén de medios. Acepta tanto el nombre del
@@ -162,7 +176,18 @@ async function mensajeDeError(res: Response): Promise<string> {
   return `Algo salió mal (código ${res.status}). Vuelve a intentarlo.`;
 }
 
-async function parsear<T>(res: Response): Promise<T> {
+/**
+ * Parsea el body de una respuesta OK como JSON. Si se pasa `validador` (nombre de
+ * un `$def` del contrato), valida el body contra ese esquema en el borde de fetch
+ * (#120): DEV lanza ante mismatch; PROD avisa y devuelve igual. NUNCA transforma el
+ * body. `muestrear` (def `true`) deja que los endpoints sondeados solo validen una
+ * fracción en PROD; pásalo a `false` para validar siempre.
+ */
+async function parsear<T>(
+  res: Response,
+  validador?: NombreContrato,
+  muestrear = true,
+): Promise<T> {
   if (!res.ok) {
     throw new ApiError(await mensajeDeError(res), res.status);
   }
@@ -170,7 +195,11 @@ async function parsear<T>(res: Response): Promise<T> {
   if (res.status === 204) return undefined as T;
   const texto = await res.text();
   if (!texto) return undefined as T;
-  return JSON.parse(texto) as T;
+  const datos = JSON.parse(texto) as T;
+  if (validador && (!muestrear || _debeValidar())) {
+    return validarContrato(validador, datos);
+  }
+  return datos;
 }
 
 interface OpcionesPeticion {
@@ -180,11 +209,21 @@ interface OpcionesPeticion {
   /** Cuerpo multipart (FormData) para subir archivos. */
   form?: FormData;
   signal?: AbortSignal;
+  /**
+   * Nombre del `$def` del contrato contra el que validar el body (opt-in, #120).
+   * Solo se valida si el modelo existe en `esquema.gen.json`.
+   */
+  validador?: NombreContrato;
+  /**
+   * `false` para validar SIEMPRE (ignora el muestreo de PROD). Útil en endpoints de
+   * detalle/escritura (no sondeados). Def `true` (muestrea en PROD).
+   */
+  muestrear?: boolean;
 }
 
 /** Petición base: arma la URL, serializa el cuerpo y delega en `parsear`. */
 async function peticion<T>(ruta: string, opciones: OpcionesPeticion = {}): Promise<T> {
-  const { metodo = "GET", json, form, signal } = opciones;
+  const { metodo = "GET", json, form, signal, validador, muestrear } = opciones;
   const headers: HeadersInit = {};
   let body: BodyInit | undefined;
 
@@ -203,7 +242,7 @@ async function peticion<T>(ruta: string, opciones: OpcionesPeticion = {}): Promi
     if (e instanceof DOMException && e.name === "AbortError") throw e;
     throw new ApiError("No se pudo contactar con la consola. ¿Está corriendo el servidor local?", 0);
   }
-  return parsear<T>(res);
+  return parsear<T>(res, validador, muestrear);
 }
 
 /** Construye una query string a partir de pares clave/valor (omite vacios). */
@@ -321,10 +360,14 @@ export const api = {
       json: cuerpo,
     }),
   runsAgente: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaRuns>(`/agentes/${encodeURIComponent(id)}/runs`, { signal }),
+    peticion<RespuestaRuns>(`/agentes/${encodeURIComponent(id)}/runs`, {
+      signal,
+      validador: "RespuestaRuns",
+    }),
   runAgente: (id: string, runId: string, signal?: AbortSignal): Promise<Run> =>
     peticion<Run>(`/agentes/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, {
       signal,
+      validador: "Run",
     }),
 
   // --- Monitor (actividad IA: runs de todos los agentes + agregados) ---
@@ -337,10 +380,13 @@ export const api = {
         desplazamiento:
           params.desplazamiento != null ? String(params.desplazamiento) : undefined,
       })}`,
-      { signal },
+      { signal, validador: "RespuestaRuns" },
     ),
   runsAgregados: (signal?: AbortSignal) =>
-    peticion<RespuestaRunsAgregados>("/runs/agregados", { signal }),
+    peticion<RespuestaRunsAgregados>("/runs/agregados", {
+      signal,
+      validador: "RespuestaRunsAgregados",
+    }),
 
   // --- Generaciones (sondeo de trabajos de IA en segundo plano) ---
   // Toda generación (copy/RSS/hashtags/imagen) responde de inmediato con `{generacion}`
@@ -419,9 +465,16 @@ export const api = {
   publicacionesOpciones: (signal?: AbortSignal) =>
     peticion<OpcionesPublicaciones>("/publicaciones/opciones", { signal }),
   publicaciones: (filtros: FiltrosPublicaciones = {}, signal?: AbortSignal) =>
-    peticion<RespuestaPublicaciones>(`/publicaciones${query(filtros)}`, { signal }),
+    peticion<RespuestaPublicaciones>(`/publicaciones${query(filtros)}`, {
+      signal,
+      validador: "RespuestaPublicaciones",
+    }),
   publicacion: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, { signal }),
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, {
+      signal,
+      validador: "RespuestaPublicacion",
+      muestrear: false,
+    }),
   crearPublicacion: (cuerpo: CuerpoCrearPublicacion) =>
     peticion<RespuestaPublicacion>("/publicaciones", { metodo: "POST", json: cuerpo }),
   crearPublicacionesLote: (cuerpo: CuerpoCrearPublicacionesLote) =>
@@ -604,10 +657,13 @@ export const api = {
   comerciales: (filtros: FiltrosComercial = {}, signal?: AbortSignal) =>
     peticion<RespuestaPublicacionesComercial>(`/comercial/publicaciones${query(filtros)}`, {
       signal,
+      validador: "RespuestaPublicacionesComercial",
     }),
   comercial: (id: string, signal?: AbortSignal) =>
     peticion<RespuestaPublicacionComercial>(`/comercial/publicaciones/${encodeURIComponent(id)}`, {
       signal,
+      validador: "RespuestaPublicacionComercial",
+      muestrear: false,
     }),
   crearComercial: (cuerpo: CuerpoCrearComercial) =>
     peticion<RespuestaPublicacionComercial>("/comercial/publicaciones", {

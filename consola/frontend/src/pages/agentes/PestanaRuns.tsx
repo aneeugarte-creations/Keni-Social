@@ -24,8 +24,15 @@ import type { AgenteDetalle, EstadoRun, MetricasRun, ModoRun, Run } from "@/type
 
 import { claveAgente, claveRuns, formatearFecha, mensajeError } from "./claves";
 
-/** Etiqueta legible (es-MX) del modo de un run. */
-function etiquetaModo(modo: ModoRun): string {
+/**
+ * Run con el `mensaje` de lanzamiento INTERACTIVO. El backend lo devuelve en el
+ * envelope (`{run, mensaje}`), NO dentro del run; lo adjuntamos en local solo para
+ * mostrarlo en la tarjeta del último lanzamiento (el contrato `Run` no lo lleva).
+ */
+type RunConMensaje = Run & { mensaje?: string };
+
+/** Etiqueta legible (es-MX) del modo de un run. El contrato `Run.modo` es `string`. */
+function etiquetaModo(modo: string): string {
   return modo === "interactivo" ? "Interactivo" : "Headless";
 }
 
@@ -165,8 +172,11 @@ function useSondeoRun(agenteId: string, runInicial: Run): Run {
 }
 
 /** Bloque de resultado del último lanzamiento (en vivo mientras corre). */
-function ResultadoRun({ agenteId, runInicial }: { agenteId: string; runInicial: Run }) {
-  const run = useSondeoRun(agenteId, runInicial);
+function ResultadoRun({ agenteId, runInicial }: { agenteId: string; runInicial: RunConMensaje }) {
+  const sondeado = useSondeoRun(agenteId, runInicial);
+  // El sondeo trae el run del backend (sin `mensaje`): conservamos el `mensaje` de
+  // lanzamiento del run inicial para que la tarjeta lo siga mostrando.
+  const run: RunConMensaje = { ...sondeado, mensaje: sondeado.salida ? undefined : runInicial.mensaje };
   const ejecutando = estaEjecutando(run.estado);
 
   return (
@@ -198,17 +208,19 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = React.useState("");
   const [modo, setModo] = React.useState<ModoRun>("headless");
-  const [ultimo, setUltimo] = React.useState<Run | null>(null);
+  const [ultimo, setUltimo] = React.useState<RunConMensaje | null>(null);
 
   const ejecutar = useMutation({
     mutationFn: () => api.crearRunAgente(agente.id, { prompt: prompt.trim(), modo }),
     onSuccess: (res) => {
-      setUltimo(res.run);
+      // El `mensaje` (lanzamiento interactivo) viaja en el envelope, no en el run:
+      // lo adjuntamos al run en local para poder mostrarlo en la tarjeta.
+      setUltimo({ ...res.run, mensaje: res.mensaje });
       void queryClient.invalidateQueries({ queryKey: claveAgente(agente.id) });
       if (res.run.estado === "error") {
         toast.error("El run terminó con error.");
       } else if (res.run.modo === "interactivo") {
-        toast.success(res.run.mensaje || "Run interactivo lanzado.");
+        toast.success(res.mensaje || "Run interactivo lanzado.");
       } else if (estaEjecutando(res.run.estado)) {
         toast.success("Run lanzado. Sigue el progreso aquí abajo.");
       } else {
@@ -277,7 +289,7 @@ function FormularioRun({ agente }: { agente: AgenteDetalle }) {
 }
 
 /** Fila del historial: cabecera con metadatos + salida expandible. */
-function FilaRun({ run }: { run: Run }) {
+function FilaRun({ run }: { run: RunConMensaje }) {
   const [abierto, setAbierto] = React.useState(false);
   const tieneDetalle = Boolean(run.salida || run.mensaje);
 

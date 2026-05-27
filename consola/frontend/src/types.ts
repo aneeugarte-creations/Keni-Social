@@ -36,13 +36,40 @@ export type {
   ComparativaPorMarca,
   TotalComparativa,
   CompararMetricas,
+  Paginacion,
+  MetricasRun,
+  Publicacion,
+  RespuestaPublicaciones,
+  RespuestaPublicacion,
+  Run,
+  RespuestaRun,
+  RespuestaRuns,
+  TotalRuns,
+  AgregadoPorAgente,
+  AgregadoPorDia,
+  RespuestaRunsAgregados,
+  ActualComercial,
+  SnapshotComercial,
+  PublicacionComercial,
+  RespuestaPublicacionesComercial,
+  RespuestaPublicacionComercial,
+  RespuestaRefrescarComercial,
   RespuestaMensaje,
   ErrorApi,
 } from "./types.gen";
 
 // Import LOCAL de los tipos generados que usan otras interfaces de este archivo
 // (un `export type { … } from` re-exporta pero NO crea binding local utilizable aquí).
-import type { MarcaDisponible, RangoMetrica, ResultadoEstado } from "./types.gen";
+import type {
+  ActualComercial,
+  MarcaDisponible,
+  MetricasRun,
+  Paginacion,
+  Publicacion,
+  RangoMetrica,
+  ResultadoEstado,
+  Run,
+} from "./types.gen";
 
 // --- Estado (autodiagnostico del sistema) ---
 
@@ -153,44 +180,11 @@ export type ModoRun = "headless" | "interactivo";
  */
 export type EstadoRun = "completado" | "error" | "ejecutando" | "lanzado" | string;
 
-/**
- * Métricas de monitorización de un run IA, tal y como las reporta el CLI cuando
- * devuelve JSON. Puede venir `null` (p. ej. un run interactivo o un CLI que no
- * emitió JSON), en cuyo caso la UI no muestra cifras.
- */
-export interface MetricasRun {
-  /** Tokens de entrada (prompt) consumidos. */
-  tokens_in: number;
-  /** Tokens de salida (respuesta) generados. */
-  tokens_out: number;
-  /** Número de turnos del run. */
-  num_turns: number;
-  /** Coste total en dólares estadounidenses. */
-  total_cost_usd: number;
-  /** Duración del run en milisegundos. */
-  duration_ms: number;
-  /** Identificador del modelo usado. */
-  modelo: string;
-}
-
-/** Un run (ejecución) del agente. */
-export interface Run {
-  id: string;
-  prompt: string;
-  modo: ModoRun;
-  estado: EstadoRun;
-  fecha_inicio: string;
-  /** Salida del run headless (puede venir vacía mientras corre o si es interactivo). */
-  salida?: string;
-  /** Mensaje legible (p. ej. al lanzar uno interactivo). */
-  mensaje?: string;
-  /** Métricas de monitorización (tokens, coste, duración…); `null` si no hay. */
-  metricas?: MetricasRun | null;
-  /** Id del agente dueño del run (presente en el listado global `/api/runs`). */
-  agente?: string;
-  /** Nombre legible del agente (presente en el listado global `/api/runs`). */
-  agente_nombre?: string;
-}
+// `MetricasRun` y `Run` (`agentes._parsear_run` + listado global `/api/runs`) se
+// GENERAN desde el backend y se re-exportan arriba (#101/#120). El `Run` canónico
+// trae `salida`/`fecha_fin` (run completo) y, en el listado global, `agente`/
+// `agente_nombre`; el `mensaje` de lanzamiento interactivo viaja en el envelope
+// `RespuestaRun`, no en el run.
 
 /** Detalle completo de un agente. */
 export interface AgenteDetalle {
@@ -217,61 +211,10 @@ export interface CuerpoCrearRun {
   modo: ModoRun;
 }
 
-export interface RespuestaRun {
-  run: Run;
-}
-
-/**
- * Envelope ADITIVO de paginacion (offset-based, #121). Lo añaden los listados
- * pesados junto a su clave de lista, sin romper a quien solo lea esa clave.
- * `total` = filas que existen sin paginar; `limite` = tamaño de pagina efectivo
- * (igual a `total` si no se paginó); `desplazamiento` = offset aplicado. El
- * envelope queda listo para añadir `cursor` (keyset) en el futuro.
- */
-export interface Paginacion {
-  total: number;
-  limite: number;
-  desplazamiento: number;
-}
-
-export interface RespuestaRuns {
-  runs: Run[];
-  /** Presente en los listados paginados (`/api/runs`); opcional para retrocompat. */
-  paginacion?: Paginacion;
-}
-
-// --- Monitorización de actividad IA (runs globales + agregados) ---
-
-/** Totales acumulados de toda la actividad IA del periodo disponible. */
-export interface TotalRuns {
-  coste_usd: number;
-  tokens: number;
-  runs: number;
-}
-
-/** Agregado de actividad IA por agente. */
-export interface AgregadoPorAgente {
-  agente: string;
-  agente_nombre: string;
-  coste_usd: number;
-  tokens: number;
-  runs: number;
-}
-
-/** Agregado de actividad IA por día (clave `dia` en ISO `YYYY-MM-DD`). */
-export interface AgregadoPorDia {
-  dia: string;
-  coste_usd: number;
-  tokens: number;
-  runs: number;
-}
-
-/** Respuesta de `GET /api/runs/agregados`. */
-export interface RespuestaRunsAgregados {
-  total: TotalRuns;
-  por_agente: AgregadoPorAgente[];
-  por_dia: AgregadoPorDia[];
-}
+// `RespuestaRun`/`RespuestaRuns` (con `paginacion`), `Paginacion` (#121) y los
+// agregados de Monitor (`TotalRuns`/`AgregadoPorAgente`/`AgregadoPorDia`/
+// `RespuestaRunsAgregados`) se GENERAN desde el backend y se re-exportan arriba
+// (#101/#120). `RespuestaRun` lleva `mensaje?` (lanzamiento interactivo).
 
 // --- Carpetas ---
 
@@ -816,39 +759,10 @@ export interface OpcionesPublicaciones {
 // `LimiteRed` y `RespuestaLimites` (`GET /api/limites`, fuente única de los topes
 // de caracteres; ver #112) se GENERAN desde el backend y se re-exportan arriba (#101).
 
-export interface Publicacion {
-  id: string;
-  titulo: string;
-  marca: string;
-  marca_nombre: string;
-  red: string;
-  red_nombre: string;
-  contenido: string;
-  estado: EstadoPublicacion;
-  veredicto: Veredicto;
-  fecha_creacion: string;
-  fecha_actualizacion: string;
-  /** ISO de la fecha/hora programada; `null` si no aplica. */
-  fecha_programada: string | null;
-  /** Origen (p. ej. `historial_id` de la generación). */
-  origen: string | null;
-  /** Marcada como contenido perenne (reutilizable indefinidamente). */
-  evergreen: boolean;
-  /** Nombre del archivo de imagen adjunto; `""` si no hay imagen. */
-  imagen: string;
-  /** URL para servir la imagen (`/api/media/...`); `""` si no hay imagen. */
-  imagen_url: string;
-}
-
-export interface RespuestaPublicaciones {
-  publicaciones: Publicacion[];
-  /** Envelope de paginacion (#121); opcional para retrocompat. */
-  paginacion?: Paginacion;
-}
-
-export interface RespuestaPublicacion {
-  publicacion: Publicacion;
-}
+// `Publicacion` (`dominio.publicaciones.publicacion_a_dict`), `RespuestaPublicaciones`
+// (con `paginacion`, #121) y `RespuestaPublicacion` se GENERAN desde el backend y se
+// re-exportan arriba (#101/#120). OJO: el backend SIEMPRE emite `fecha_programada`/
+// `origen` como cadena ("" si no aplica), nunca `null` — el tipo generado lo refleja.
 
 /** Cuerpo para crear una publicación. */
 export interface CuerpoCrearPublicacion {
@@ -1335,54 +1249,12 @@ export interface CuerpoImplementarSugerencia {
 export type EstadoComercial = "activa" | "pausada" | "cerrada";
 export type MetricaComercial = "interacciones" | "alcance";
 
-/** Un punto de la serie temporal de una pieza (acumulado en ese instante). */
-export interface SnapshotComercial {
-  ts: string;
-  interacciones: number;
-  alcance: number;
-}
-
-/** Valor actual consultable de una pieza (del ultimo snapshot). */
-export interface ActualComercial {
-  ts: string;
-  interacciones: number;
-  alcance: number;
-  engagement_pct: number;
-}
-
-/** Una publicacion comercial monitoreada, con su valor actual y progreso. */
-export interface PublicacionComercial {
-  id: string;
-  url: string;
-  titulo: string;
-  marca: string;
-  marca_nombre: string;
-  cliente: string;
-  campania: string;
-  red: string;
-  red_nombre: string;
-  metrica_objetivo: MetricaComercial;
-  objetivo: number;
-  estado: EstadoComercial;
-  publicado: string;
-  notas: string;
-  /** ISO del instante en que alcanzo el objetivo; `""` si aun no. */
-  aviso_en: string;
-  fecha_creacion: string;
-  fecha_actualizacion: string;
-  actual: ActualComercial;
-  progreso_pct: number;
-  alcanzado: boolean;
-  /**
-   * Procedencia de las cifras. `"muestra"` = sintéticas (modelo determinista,
-   * aún sin APIs reales). El frontend lo pasa a `BadgeFuente`.
-   */
-  fuente?: string;
-  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
-  es_muestra?: boolean;
-  /** Serie temporal completa (solo en el detalle / al crear). */
-  serie?: SnapshotComercial[];
-}
+// `SnapshotComercial`, `ActualComercial`, `PublicacionComercial` (`api/comercial._a_dict`)
+// y las respuestas `RespuestaPublicacionesComercial`/`RespuestaPublicacionComercial`/
+// `RespuestaRefrescarComercial` se GENERAN desde el backend y se re-exportan arriba
+// (#101/#120). `fuente`/`es_muestra` (#124) son REQUERIDOS (el backend siempre los
+// emite). El reporte (`RespuestaReporteComercial`, unión publicación|campaña) sigue a
+// mano: su forma es polimórfica y aún no se modela en el subconjunto estable.
 
 export interface OpcionComercial {
   id: string;
@@ -1400,22 +1272,6 @@ export interface OpcionesComercial {
   redes: RedComercial[];
   estados: OpcionComercial[];
   metricas: OpcionComercial[];
-}
-
-export interface RespuestaPublicacionesComercial {
-  publicaciones: PublicacionComercial[];
-  /** Procedencia común a todas (`"muestra"` = sintéticas). */
-  fuente?: string;
-  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
-  es_muestra?: boolean;
-}
-
-export interface RespuestaPublicacionComercial {
-  publicacion: PublicacionComercial;
-}
-
-export interface RespuestaRefrescarComercial {
-  actualizadas: number;
 }
 
 export interface CuerpoCrearComercial {

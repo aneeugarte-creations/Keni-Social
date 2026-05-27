@@ -69,6 +69,74 @@ def test_limite_red_es_nullable():
 
 
 # --------------------------------------------------------------------------- #
+# Areas de churn ampliadas (#120): publicaciones, runs, comercial             #
+# --------------------------------------------------------------------------- #
+
+
+def test_churn_modelos_presentes():
+    """Las entidades de churn y sus envelopes estan en el subconjunto generado."""
+    defs = set(esquema_json()["$defs"].keys())
+    esperados = {
+        "Paginacion", "MetricasRun",
+        "Publicacion", "RespuestaPublicaciones", "RespuestaPublicacion",
+        "Run", "RespuestaRun", "RespuestaRuns", "RespuestaRunsAgregados",
+        "PublicacionComercial", "RespuestaPublicacionesComercial",
+        "RespuestaPublicacionComercial", "RespuestaRefrescarComercial",
+    }
+    assert esperados <= defs
+
+
+def test_generacion_deferida_no_esta_en_el_subconjunto():
+    """`Generacion` NO se genera (resultado libre, frontend la tipa rico). Ver #120."""
+    defs = set(esquema_json()["$defs"].keys())
+    assert "Generacion" not in defs
+    assert "RespuestaGeneraciones" not in defs
+
+
+def test_paginacion_envelope_requerido_en_listados():
+    """Los listados pesados (publicaciones) traen `paginacion` REQUERIDA (#121)."""
+    defs = esquema_json()["$defs"]
+    assert "paginacion" in defs["RespuestaPublicaciones"]["required"]
+    assert set(defs["Paginacion"]["required"]) == {"total", "limite", "desplazamiento"}
+
+
+def test_run_campos_opcionales_por_endpoint():
+    """`Run`: requeridos comunes a todos los endpoints; los especificos son opcionales.
+
+    `salida`/`fecha_fin` solo van en el run completo; `agente`/`agente_nombre` solo en
+    el listado global. El `mensaje` (interactivo) va en el ENVELOPE, no en el run.
+    """
+    defs = esquema_json()["$defs"]
+    requeridos = set(defs["Run"]["required"])
+    assert requeridos == {"id", "prompt", "modo", "estado", "motivo", "fecha_inicio", "metricas"}
+    opcionales = set(defs["Run"]["properties"]) - requeridos
+    assert {"salida", "fecha_fin", "agente", "agente_nombre"} == opcionales
+    assert "mensaje" not in defs["Run"]["properties"]
+    assert "mensaje" in defs["RespuestaRun"]["properties"]
+    assert "mensaje" not in defs["RespuestaRun"].get("required", [])
+
+
+def test_comercial_fuente_y_es_muestra_requeridos():
+    """#124: `fuente`/`es_muestra` son REQUERIDOS (el backend siempre los emite)."""
+    defs = esquema_json()["$defs"]
+    pub = defs["PublicacionComercial"]
+    assert {"fuente", "es_muestra"} <= set(pub["required"])
+    # `serie` solo en detalle/alta => opcional.
+    assert "serie" not in pub.get("required", [])
+    resp = defs["RespuestaPublicacionesComercial"]
+    assert {"publicaciones", "fuente", "es_muestra"} == set(resp["required"])
+
+
+def test_version_interno_no_aparece_en_ningun_modelo():
+    """El `version` de almacenamiento (#125) es INTERNO: nunca en los dicts de la API."""
+    defs = esquema_json()["$defs"]
+    for nombre, esquema in defs.items():
+        assert "version" not in esquema.get("properties", {}), (
+            f"`{nombre}` expone `version` (campo interno de #125, no de la API)"
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Guard cruzado: `types.gen.ts` comiteado <-> esquema actual del backend        #
 # --------------------------------------------------------------------------- #
 #
