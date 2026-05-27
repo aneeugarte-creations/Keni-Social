@@ -596,7 +596,18 @@ function SeccionImagen() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
+  // Selector de modelo: el cambio persiste de inmediato (PUT) y refresca el estado.
+  const guardarModelo = useMutation({
+    mutationFn: (modelo: string) => api.guardarModeloImagen({ modelo }),
+    onSuccess: () => {
+      toast.success("Modelo de imagen actualizado.");
+      void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const ocupado =
+    guardar.isPending || probar.isPending || quitar.isPending || guardarModelo.isPending;
 
   return (
     <Card>
@@ -659,6 +670,31 @@ function SeccionImagen() {
               </Select>
             </div>
 
+            {/* Modelo de imagen (lista curada; el cambio se guarda al instante) */}
+            <div className="space-y-2">
+              <Label htmlFor="imagen-modelo">Modelo de imagen</Label>
+              <Select
+                value={data.modelo}
+                onValueChange={(modelo) => guardarModelo.mutate(modelo)}
+                disabled={ocupado}
+              >
+                <SelectTrigger id="imagen-modelo">
+                  <SelectValue placeholder="Elige un modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {data.modelos.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Elige modelos económicos para posts sin foto de persona; los GPT-5 generan
+                personas.
+              </p>
+            </div>
+
             {/* Clave (write-only) */}
             <div className="space-y-2">
               <Label htmlFor="imagen-api-key">Clave de API</Label>
@@ -668,7 +704,7 @@ function SeccionImagen() {
                 autoComplete="off"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
-                placeholder={data.configurado ? "•••••••••• (escribe para reemplazar)" : "sk-…"}
+                placeholder={data.configurado ? "•••••••••• (escribe para reemplazar)" : "sk-or-…"}
                 disabled={ocupado}
               />
               <p className="text-xs text-muted-foreground">

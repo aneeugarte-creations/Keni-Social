@@ -1265,13 +1265,32 @@ export interface FiltrosPublicaciones {
 // recibe el estado (`configurado`/`conectado`) y, para la imagen IA, una
 // `pista` no sensible (p. ej. los últimos caracteres de la clave).
 
+/** Un modelo de imagen IA de la lista curada (id + etiqueta legible para el dropdown). */
+export interface ModeloImagen {
+  id: string;
+  etiqueta: string;
+}
+
 /** Estado de la configuración del proveedor de imagen con IA. */
 export interface RespuestaConexionImagen {
   proveedor: string;
+  /** Modelo de imagen EN USO (con su precedencia: almacén > env > por defecto). */
   modelo: string;
+  /** Lista curada de modelos disponibles para el dropdown del selector. */
+  modelos: ModeloImagen[];
   configurado: boolean;
   /** Pista no sensible de la clave (nunca el valor completo). */
   pista: string;
+}
+
+/** Cuerpo para fijar el modelo de imagen IA. */
+export interface CuerpoGuardarModeloImagen {
+  modelo: string;
+}
+
+/** Respuesta al fijar el modelo de imagen IA (devuelve el modelo guardado). */
+export interface RespuestaGuardarModeloImagen {
+  modelo: string;
 }
 
 /** Cuerpo para guardar la clave del proveedor de imagen IA. */

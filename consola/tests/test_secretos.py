@@ -92,3 +92,44 @@ def test_archivo_corrupto_no_lanza(almacen):
     almacen.write_text("esto no es toml valido [[[", encoding="utf-8")
     assert secretos.obtener_clave_imagen() is None
     assert secretos.estado_imagen()["configurado"] is False
+
+
+# --------------------------------------------------------------------------- #
+# Modelo de imagen elegido por la UI                                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_modelo_ausente_por_defecto(almacen):
+    assert secretos.obtener_modelo_imagen() is None
+
+
+def test_guardar_obtener_modelo(almacen):
+    secretos.guardar_modelo_imagen("openai/gpt-5-image")
+    assert secretos.obtener_modelo_imagen() == "openai/gpt-5-image"
+
+
+def test_modelo_vacio_se_trata_como_ausente(almacen):
+    secretos.guardar_modelo_imagen("   ")
+    assert secretos.obtener_modelo_imagen() is None
+
+
+def test_guardar_modelo_preserva_clave_y_proveedor(almacen):
+    """Guardar el modelo NO debe pisar la clave ni el proveedor ya guardados."""
+    secretos.guardar_clave_imagen("openrouter", _CLAVE)
+    secretos.guardar_modelo_imagen("openai/gpt-5-image")
+    assert secretos.obtener_clave_imagen() == _CLAVE
+    assert secretos.obtener_proveedor_imagen() == "openrouter"
+    assert secretos.obtener_modelo_imagen() == "openai/gpt-5-image"
+
+
+def test_guardar_clave_preserva_modelo(almacen):
+    """Reguardar la clave NO debe borrar el modelo ya elegido por la UI."""
+    secretos.guardar_modelo_imagen("openai/gpt-5-image")
+    secretos.guardar_clave_imagen("openrouter", _CLAVE)
+    assert secretos.obtener_modelo_imagen() == "openai/gpt-5-image"
+    assert secretos.obtener_clave_imagen() == _CLAVE
+
+
+def test_guardar_modelo_mantiene_0600(almacen):
+    secretos.guardar_modelo_imagen("openai/gpt-5-image")
+    assert (almacen.stat().st_mode & 0o777) == 0o600

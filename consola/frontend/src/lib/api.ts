@@ -43,6 +43,7 @@ import type {
   CuerpoGuardarContexto,
   CuerpoGuardarHistorial,
   CuerpoGuardarConexionImagen,
+  CuerpoGuardarModeloImagen,
   CuerpoGuardarConfig,
   CuerpoGuardarEsfuerzo,
   CuerpoMarcarItemUsado,
@@ -90,6 +91,7 @@ import type {
   RespuestaRadar,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
+  RespuestaGuardarModeloImagen,
   RespuestaCatalogoSkills,
   RespuestaDetalleSkillDef,
   RespuestaPublicacion,
@@ -690,6 +692,11 @@ export const api = {
     peticion<RespuestaConexionImagen>("/conexiones/imagen", { signal }),
   guardarConexionImagen: (cuerpo: CuerpoGuardarConexionImagen) =>
     peticion<RespuestaGuardarConexionImagen>("/conexiones/imagen", { metodo: "PUT", json: cuerpo }),
+  guardarModeloImagen: (cuerpo: CuerpoGuardarModeloImagen) =>
+    peticion<RespuestaGuardarModeloImagen>("/conexiones/imagen/modelo", {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
   probarConexionImagen: () =>
     peticion<RespuestaProbarConexionImagen>("/conexiones/imagen/probar", { metodo: "POST" }),
   eliminarConexionImagen: () =>

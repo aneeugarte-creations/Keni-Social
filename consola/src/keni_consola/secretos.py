@@ -3,8 +3,9 @@
 El archivo cuelga de la raiz de estado unica (`rutas.dir_config()`): local
 `${XDG_CONFIG_HOME:-~/.config}/keni-social/secretos.toml`, o `<KENI_DATA_DIR>/
 keni-social/secretos.toml` en contenedor. `KENI_CONSOLA_SECRETOS` lo sobreescribe
-(override de maxima prioridad; util en tests). Solo contiene la clave del proveedor de
-imagen y el nombre del proveedor. Escritura ATOMICA con permisos `0600`
+(override de maxima prioridad; util en tests). Contiene la clave del proveedor de
+imagen, el nombre del proveedor y, opcionalmente, el modelo de imagen elegido por la
+UI. Escritura ATOMICA con permisos `0600`
 (temp + os.replace + os.chmod), mismo patron defensivo que el config de metricas.
 
 SECRETOS POR ENTORNO (#130, servicio en contenedor): ademas del fichero, la clave del
@@ -116,12 +117,12 @@ def _toml_str(valor: str) -> str:
 
 
 def _serializar(datos: dict) -> str:
-    """Serializa el bloque `[imagen]` a TOML (estructura fija: proveedor + api_key)."""
+    """Serializa el bloque `[imagen]` a TOML (campos fijos: proveedor + api_key + modelo)."""
     bloque = _bloque_imagen(datos)
     if not bloque:
         return ""
     lineas = ["[imagen]"]
-    for clave in ("proveedor", "api_key"):
+    for clave in ("proveedor", "api_key", "modelo"):
         valor = bloque.get(clave)
         if isinstance(valor, str) and valor:
             lineas.append(f"{clave} = {_toml_str(valor)}")
@@ -142,7 +143,10 @@ def guardar_clave_imagen(proveedor: str, api_key: str) -> None:
     proveedor = (proveedor or "").strip().lower() or PROVEEDOR_DEFECTO
     api_key = (api_key or "").strip()
     datos = _leer()
-    datos["imagen"] = {"proveedor": proveedor, "api_key": api_key}
+    bloque = dict(_bloque_imagen(datos))  # preserva otros campos (p.ej. `modelo`)
+    bloque["proveedor"] = proveedor
+    bloque["api_key"] = api_key
+    datos["imagen"] = bloque
     _escribir(datos)
 
 
@@ -194,6 +198,34 @@ def obtener_proveedor_imagen() -> str:
     if isinstance(env, str) and env.strip():
         return env.strip().lower()
     return PROVEEDOR_DEFECTO
+
+
+def obtener_modelo_imagen() -> str | None:
+    """Devuelve el modelo de imagen GUARDADO por la UI, o None si no hay.
+
+    Solo lee el FICHERO de secretos (campo `[imagen].modelo`). La precedencia frente al
+    env y al por defecto la resuelve `media._modelo()`; aqui no hay fallback. Una cadena
+    vacia se trata como ausente (None).
+    """
+    modelo = _bloque_imagen(_leer()).get("modelo")
+    if isinstance(modelo, str) and modelo.strip():
+        return modelo.strip()
+    return None
+
+
+def guardar_modelo_imagen(modelo: str) -> None:
+    """Guarda SOLO el campo `modelo` del bloque `[imagen]` (preserva clave y proveedor).
+
+    Escritura ATOMICA con permisos `0600`, igual que el resto del almacen. NO toca
+    `api_key` ni `proveedor`. La VALIDACION del id (que sea uno de la lista curada) la
+    hace el endpoint; aqui se persiste tal cual (normalizando espacios).
+    """
+    modelo = (modelo or "").strip()
+    datos = _leer()
+    bloque = dict(_bloque_imagen(datos))
+    bloque["modelo"] = modelo
+    datos["imagen"] = bloque
+    _escribir(datos)
 
 
 def _pista(clave: str | None) -> str:
