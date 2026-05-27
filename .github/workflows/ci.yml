@@ -1,5 +1,11 @@
 # CI de keni-social (#136).
 #
+# DESACTIVADO (2026-05-27): la CI real corre en Woodpecker self-hosted
+# (https://ci-social.kenitech.io, pipelines en `.woodpecker/`, espejo de este
+# fichero). GitHub Actions seguia bloqueado por facturacion y producia checks
+# rojos en cada push, asi que aqui el trigger es MANUAL (workflow_dispatch).
+# Para reactivarlo, restaura `push:` y `pull_request:` en `on:`.
+#
 # Red de seguridad real que la documentacion ya prometia: corre en cada push y en
 # cada pull_request, sobre todas las ramas. Tres jobs en paralelo:
 #
@@ -15,8 +21,7 @@
 name: CI
 
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 
 # Cancela ejecuciones viejas de la misma rama cuando llega un push nuevo.
 concurrency:
