@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import formato
-from .formato import etiqueta_marca, miles, partes_cobertura, signo
+from .formato import es_fuente_muestra, etiqueta_marca, miles, partes_cobertura, signo
 from .fuentes.base import FuenteMetricas
 from .picos import detectar_picos
 from .reporte import construir_reporte
@@ -200,6 +200,14 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
   border-radius: 8px; padding: 10px 14px; font-size: 0.82rem; margin: 8px 0 0;
 }
 .aviso strong { color: var(--aviso-tinta); }
+/* Banner CRITICO de datos de muestra (issue #131): rojo, alto contraste, no
+   confundible con la realidad. Distinto de .aviso (amarillo, cobertura). */
+.muestra-banner {
+  background: #fdecea; border: 2px solid var(--baja); color: var(--baja);
+  border-radius: 8px; padding: 12px 16px; font-size: 0.9rem; font-weight: 600;
+  margin: 0 0 18px;
+}
+.muestra-banner strong { color: var(--baja); }
 .alertas { margin: 0; padding: 0; list-style: none; }
 .alertas li {
   border: 1px solid var(--gris-claro); border-radius: 8px;
@@ -799,6 +807,17 @@ def construir_html(
     generado = escape(_fecha_legible(str(rep.get("generado", ""))))
     fuente = escape(str(rep.get("fuente", "")))
 
+    # Banner CRITICO si son datos de muestra: visible arriba del todo, no solo en
+    # la linea "fuente:" del encabezado (issue #131). Vacio si la fuente es real.
+    es_muestra = es_fuente_muestra(rep.get("fuente"))
+    banner_muestra = (
+        '<p class="muestra-banner"><strong>⚠️ Datos de muestra — NO son cifras reales.</strong> '
+        "Generados de forma sintetica para demo/pruebas. No tomes decisiones ni publiques con "
+        "estos numeros; configura una fuente real para ver datos de produccion.</p>"
+        if es_muestra
+        else ""
+    )
+
     tarjetas = "".join(_render_tarjeta(f, nombres) for f in rep.get("cuentas", []))
     engagement = _render_engagement(rep, nombres, rango_serie, historico)
     estrella = _render_estrella(rep, nombres)
@@ -823,7 +842,7 @@ def construir_html(
 <h1>Dashboard de metricas — {rango_txt}</h1>
 <p class="meta">Generado {generado} · fuente: {fuente}</p>
 </header>
-
+{banner_muestra}
 <main>
 <section aria-labelledby="titulo-total">
 <h2 class="seccion" id="titulo-total">Total</h2>
@@ -856,7 +875,7 @@ def construir_html(
 <span class="chip nivel eng-medio">ok {bajo}–{alto}%</span>\
 <span class="chip nivel eng-bajo">bajo &lt; {bajo}%</span>\
 <span>· 🔥 pieza con mayor engagement del periodo</span></div>
-Generado en tu máquina · datos de muestra · sin red. \
+Generado en tu máquina · {"datos de muestra" if es_muestra else f"fuente: {fuente}"} · sin red. \
 Keni AI · dashboard de metricas · HTML estatico autocontenido (sin JS externo).</footer>
 </div>
 </body>

@@ -161,6 +161,38 @@ def test_render_pptx_genera_deck(fuente: FuenteMuestra, tmp_path):
     assert len(prs.slides) == 7
 
 
+def test_render_pptx_portada_avisa_datos_de_muestra(fuente: FuenteMuestra, tmp_path):
+    # #131: la portada del deck (lo que ve un humano) debe avisar de forma
+    # destacada que son datos de muestra cuando la fuente es la muestra.
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+
+    rep = reporte_deck.construir_reporte_deportes(fuente, rango="semana")
+    destino = reporte_deck.render_pptx(rep, tmp_path / "reporte.pptx")
+    prs = Presentation(str(destino))
+    portada = prs.slides[0]
+    textos = " ".join(
+        s.text_frame.text for s in portada.shapes if s.has_text_frame
+    ).upper()
+    assert "DATOS DE MUESTRA" in textos
+
+
+def test_render_pptx_portada_fuente_real_sin_aviso_de_muestra(fuente: FuenteMuestra, tmp_path):
+    # #131: con fuente real la portada NO debe avisar de muestra.
+    pytest.importorskip("pptx")
+    from pptx import Presentation
+
+    rep = reporte_deck.construir_reporte_deportes(fuente, rango="semana")
+    rep["fuente"] = "real"
+    destino = reporte_deck.render_pptx(rep, tmp_path / "reporte_real.pptx")
+    prs = Presentation(str(destino))
+    portada = prs.slides[0]
+    textos = " ".join(
+        s.text_frame.text for s in portada.shapes if s.has_text_frame
+    ).upper()
+    assert "DATOS DE MUESTRA" not in textos
+
+
 # --- CLI (keni-reporte-deck) ------------------------------------------------
 
 

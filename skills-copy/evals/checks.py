@@ -521,36 +521,214 @@ _RE_NUMERO = re.compile(r"\d[\d.,]*")
 #   - contadores: "Caracteres: 230"
 # Los excluimos para no marcar falsos positivos.
 
+# --- normalizacion de MAGNITUDES (anti-invencion robusto) ---------------------
+#
+# El check ya no compara solo cadenas de digitos: compara el VALOR NUMERICO
+# canonico de cada cifra. Asi:
+#   - "40 millones" (fuente) == "40,000,000" / "40.000.000" (copy)  -> NO falso positivo
+#   - "cuarenta millones" inventado (no esta en la fuente)           -> SI se caza
+# Para eso normalizamos separadores de miles y aplicamos el multiplicador de la
+# palabra de magnitud que sigue al numero ("mil", "millon/millones", etc.), y
+# parseamos numeros escritos EN PALABRAS (cardinales en es-MX hasta millones).
+
+# Multiplicadores de magnitud (forma ya normalizada: minusculas, sin acentos).
+_MAGNITUDES: dict[str, int] = {
+    "mil": 1_000,
+    "millon": 1_000_000,
+    "millones": 1_000_000,
+    "millardo": 1_000_000_000,
+    "millardos": 1_000_000_000,
+}
+
+# Cardinales en palabra (es-MX). Mapa CERRADO y conservador: cubre lo habitual
+# en una nota de noticias (unidades, decenas, centenas y sus combinaciones con
+# "y"). La forma guardada es la normalizada (sin acentos).
+_UNIDADES: dict[str, int] = {
+    "cero": 0, "un": 1, "uno": 1, "una": 1, "dos": 2, "tres": 3, "cuatro": 4,
+    "cinco": 5, "seis": 6, "siete": 7, "ocho": 8, "nueve": 9, "diez": 10,
+    "once": 11, "doce": 12, "trece": 13, "catorce": 14, "quince": 15,
+    "dieciseis": 16, "diecisiete": 17, "dieciocho": 18, "diecinueve": 19,
+    "veinte": 20, "veintiun": 21, "veintiuno": 21, "veintiuna": 21,
+    "veintidos": 22, "veintitres": 23, "veinticuatro": 24, "veinticinco": 25,
+    "veintiseis": 26, "veintisiete": 27, "veintiocho": 28, "veintinueve": 29,
+}
+_DECENAS: dict[str, int] = {
+    "treinta": 30, "cuarenta": 40, "cincuenta": 50, "sesenta": 60,
+    "setenta": 70, "ochenta": 80, "noventa": 90,
+}
+_CENTENAS: dict[str, int] = {
+    "cien": 100, "ciento": 100, "doscientos": 200, "doscientas": 200,
+    "trescientos": 300, "trescientas": 300, "cuatrocientos": 400,
+    "cuatrocientas": 400, "quinientos": 500, "quinientas": 500,
+    "seiscientos": 600, "seiscientas": 600, "setecientos": 700,
+    "setecientas": 700, "ochocientos": 800, "ochocientas": 800,
+    "novecientos": 900, "novecientas": 900,
+}
+# Palabras que pueden formar parte de un numero en palabras (incluye conector "y").
+_PALABRAS_NUMERO = set(_UNIDADES) | set(_DECENAS) | set(_CENTENAS) | set(_MAGNITUDES) | {"y"}
+
+_RE_PALABRA_NUM = re.compile(r"[a-z]+")
+
+
+def _valor_grupo_palabras(tokens: list[str]) -> int | None:
+    """Suma un grupo de palabras-numero (sin magnitudes) a su valor. None si vacio.
+
+    Soporta combinaciones es-MX: "cuarenta", "cuarenta y cinco", "ciento veinte",
+    "doscientos treinta y cuatro". Ignora el conector "y".
+    """
+    total = 0
+    visto = False
+    for t in tokens:
+        if t == "y":
+            continue
+        if t in _CENTENAS:
+            total += _CENTENAS[t]
+            visto = True
+        elif t in _DECENAS:
+            total += _DECENAS[t]
+            visto = True
+        elif t in _UNIDADES:
+            total += _UNIDADES[t]
+            visto = True
+        else:
+            return None
+    return total if visto else None
+
+
+def _numeros_en_palabras(texto: str) -> list[int]:
+    """Valores de los numeros escritos EN PALABRAS dentro del texto (es-MX).
+
+    Recorre las palabras y agrupa secuencias de cardinales (+ conector "y" +
+    palabra de magnitud final tipo "millones"/"mil"). "cuarenta millones" -> 40000000;
+    "cinco" -> 5; "ciento veinte mil" -> 120000. Conservador: solo reconoce el
+    vocabulario del mapa cerrado.
+    """
+    palabras = _RE_PALABRA_NUM.findall(_normaliza(texto))
+    valores: list[int] = []
+    i = 0
+    n = len(palabras)
+    while i < n:
+        if palabras[i] not in _PALABRAS_NUMERO or palabras[i] in ("y", *_MAGNITUDES):
+            i += 1
+            continue
+        # acumula el grupo de cardinales
+        grupo: list[str] = []
+        while i < n and palabras[i] in _PALABRAS_NUMERO and palabras[i] not in _MAGNITUDES:
+            grupo.append(palabras[i])
+            i += 1
+        # quita un conector "y" colgando al final del grupo
+        while grupo and grupo[-1] == "y":
+            grupo.pop()
+        base = _valor_grupo_palabras(grupo)
+        if base is None:
+            continue
+        # magnitud que sigue al grupo ("millones", "mil"...)
+        magnitud = 1
+        if i < n and palabras[i] in _MAGNITUDES:
+            magnitud = _MAGNITUDES[palabras[i]]
+            i += 1
+        # "un"/"uno"/"una" sueltos son ARTICULO, no dato ("una negociacion"): solo
+        # cuentan como numero si llevan magnitud ("un millon") o forman compuesto.
+        if magnitud == 1 and grupo in (["un"], ["uno"], ["una"]):
+            continue
+        valores.append(base * magnitud)
+    return valores
+
+
+def _magnitud_tras(texto: str, fin: int) -> int:
+    """Multiplicador de la palabra de magnitud que sigue a una cifra (1 si no hay).
+
+    `fin` es el indice donde termina el numero en `texto`. Salta espacios y, si la
+    primera palabra siguiente es una magnitud ("millones", "mil"...), devuelve su
+    multiplicador. Asi "40 millones" -> 1_000_000.
+    """
+    resto = texto[fin:]
+    m = re.match(r"\s+([a-zA-ZáéíóúñÁÉÍÓÚÑ]+)", resto)
+    if not m:
+        return 1
+    return _MAGNITUDES.get(_normaliza(m.group(1)), 1)
+
+
+def _valor_cifra(tok: str, magnitud: int) -> int | None:
+    """Valor canonico de una cifra en digitos aplicando su magnitud. None si vacia.
+
+    Normaliza separadores de miles (`.` `,` y espacios) antes de multiplicar, de
+    modo que "40,000,000" y "40.000.000" valen lo mismo que "40 millones".
+    """
+    d = _digitos(tok)
+    if not d:
+        return None
+    return int(d) * magnitud
+
+
+def _valores_fuente(fuente: str) -> set[int]:
+    """Conjunto de valores numericos canonicos presentes en la fuente.
+
+    Incluye cifras en digitos (con su magnitud, p.ej. "40 millones"=40000000) y
+    numeros escritos en palabras. Tambien guarda el valor "crudo" sin magnitud
+    (int(digitos)) para no marcar falsos positivos cuando el copy repite la cifra
+    base sin la palabra de magnitud.
+    """
+    valores: set[int] = set()
+    for m in _RE_NUMERO.finditer(fuente):
+        crudo = int(_digitos(m.group())) if _digitos(m.group()) else None
+        if crudo is None:
+            continue
+        valores.add(crudo)
+        valores.add(crudo * _magnitud_tras(fuente, m.end()))
+    valores.update(_numeros_en_palabras(fuente))
+    return valores
+
 
 def numeros_inventados(salida: str, fuente: str, *, ignorar: set[str] | None = None) -> list[str]:
     """Numeros en el copy que NO aparecen en la fuente. [] = ok.
 
     Recorre la salida (excluyendo el bloque de auto-verificacion y las lineas de
-    conteo/numeracion) y comprueba que cada numero "de contenido" exista en la
-    fuente. Comparacion por dígitos normalizados (ignora separadores . , y
-    espacios) para que "40 millones" case con "40.000.000" no aplique pero "40"
-    si case con "40". Conservador: pensado para cazar cifras claramente ausentes.
+    conteo/numeracion) y comprueba que el VALOR de cada numero "de contenido"
+    exista en la fuente. La comparacion es por valor canonico, no por cadena de
+    digitos: normaliza separadores de miles (`.` `,`), aplica la palabra de
+    magnitud que sigue ("mil", "millon/millones") y parsea numeros escritos EN
+    PALABRAS ("cuarenta millones", "cinco"). Asi:
+      - fuente "40 millones" vs copy "40,000,000"  -> NO es invencion (mismo valor);
+      - copy "cuarenta millones" sin estar en la fuente -> SI se caza.
+    `ignorar` recibe cadenas de digitos (compatibilidad): se ignora el numero cuyo
+    `_digitos` coincide. Conservador: pensado para cazar cifras claramente ausentes.
     """
     ignorar = ignorar or set()
-    fuente_digitos = set(_digitos(t) for t in _RE_NUMERO.findall(fuente))
+    fuente_valores = _valores_fuente(fuente)
     cuerpo = _quita_bloque_verificacion(salida)
     problemas: list[str] = []
-    vistos: set[str] = set()
+    vistos: set[int] = set()
     for linea in cuerpo.splitlines():
         if _es_linea_meta(linea):
             continue
         # quita numeracion de hilo/slide al principio ("1/5", "2/7")
         sin_num = re.sub(r"^\s*\d+\s*/\s*\d+", "", linea)
-        for tok in _RE_NUMERO.findall(sin_num):
+        # 1) cifras en digitos (con su magnitud)
+        for m in _RE_NUMERO.finditer(sin_num):
+            tok = m.group()
             d = _digitos(tok)
             if not d or d in ignorar:
                 continue
-            if d in vistos:
+            valor = int(d) * _magnitud_tras(sin_num, m.end())
+            if valor in vistos:
                 continue
-            if d not in fuente_digitos:
-                vistos.add(d)
+            if valor not in fuente_valores:
+                vistos.add(valor)
                 problemas.append(f'numero "{tok}" no esta en la fuente')
+        # 2) numeros escritos en palabras
+        for valor in _numeros_en_palabras(sin_num):
+            if valor in vistos:
+                continue
+            if valor not in fuente_valores:
+                vistos.add(valor)
+                problemas.append(f'numero "{_etiqueta_valor(valor)}" no esta en la fuente')
     return problemas
+
+
+def _etiqueta_valor(valor: int) -> str:
+    """Texto legible para reportar un numero en palabras inventado."""
+    return f"{valor:,}".replace(",", ".") + " (en palabras)"
 
 
 def citas_inventadas(salida: str, fuente: str) -> list[str]:

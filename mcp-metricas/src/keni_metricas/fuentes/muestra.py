@@ -27,6 +27,7 @@ from datetime import date, timedelta
 from keni_shared import cuentas as _cuentas
 from keni_shared import marcas as _marcas
 
+from ..formato import FUENTE_MUESTRA as _FUENTE_MUESTRA
 from ..schema import (
     Cobertura,
     Cuenta,
@@ -245,7 +246,10 @@ def _pieza(
 class FuenteMuestra:
     """Implementa FuenteMetricas con datos sembrados deterministas."""
 
-    nombre = "muestra"
+    # UNICA fuente de verdad del nombre: `formato.FUENTE_MUESTRA`. Los renders
+    # comparan `fuente.nombre` contra ese valor para anteponer el aviso de
+    # datos de muestra (issue #131), en vez de buscar el literal "muestra".
+    nombre = _FUENTE_MUESTRA
 
     def cuentas(self) -> list[Cuenta]:
         return [
