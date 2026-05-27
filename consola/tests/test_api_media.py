@@ -249,3 +249,39 @@ def test_proveedor_openrouter_no_reenvio_bearer_en_redirect(monkeypatch):
     url_llamada = mock_post.call_args[0][0]
     assert "openrouter.ai" in url_llamada
     assert "evil.example.com" not in url_llamada
+
+
+# --------------------------------------------------------------------------- #
+# Observabilidad del error: el motivo REAL viaja al mensaje (toast)            #
+# --------------------------------------------------------------------------- #
+
+
+def test_proveedor_openrouter_200_sin_imagen_muestra_el_texto(monkeypatch):
+    """200 pero sin imagen: el modelo respondió TEXTO (rechazo/aclaración). El error
+    debe MOSTRAR ese texto en vez del genérico 'respuesta inesperada'."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-1234")
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.json.return_value = {
+        "choices": [{"finish_reason": "stop", "message": {"content": "No puedo generar esa imagen."}}]
+    }
+    with patch("httpx.post", return_value=resp):
+        try:
+            media._proveedor_openrouter("foto de algo")
+            raise AssertionError("debió lanzar MediaError")
+        except media.MediaError as e:
+            assert "No puedo generar esa imagen." in str(e)
+
+
+def test_proveedor_openrouter_error_muestra_el_motivo(monkeypatch):
+    """status != 200: el mensaje incluye el código y el motivo del cuerpo (error.message)."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-1234")
+    resp = MagicMock()
+    resp.status_code = 400
+    resp.json.return_value = {"error": {"message": "modelo no disponible"}}
+    with patch("httpx.post", return_value=resp):
+        try:
+            media._proveedor_openrouter("foto de algo")
+            raise AssertionError("debió lanzar MediaError")
+        except media.MediaError as e:
+            assert "400" in str(e) and "modelo no disponible" in str(e)
