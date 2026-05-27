@@ -39,6 +39,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from .. import config
 from . import stream
 
 _log = logging.getLogger("keni_consola.runner")
@@ -186,11 +187,7 @@ def esperar(proc: subprocess.Popen, timeout: int) -> bool:
 
 def max_jobs() -> int:
     """Maximo de jobs `claude` simultaneos (`KENI_MAX_JOBS`, def 4, minimo 1)."""
-    try:
-        n = int(os.environ.get("KENI_MAX_JOBS", "4"))
-    except (TypeError, ValueError):
-        n = 4
-    return max(1, n)
+    return config.max_jobs()
 
 
 def max_cola() -> int:
@@ -201,11 +198,7 @@ def max_cola() -> int:
     vez de apilar otro hilo bloqueado. 0 = no se admite NINGUN job en cola (solo los
     que entran sin esperar). El default (16) deja holgura para picos del piloto.
     """
-    try:
-        n = int(os.environ.get("KENI_MAX_COLA", "16"))
-    except (TypeError, ValueError):
-        n = 16
-    return max(0, n)
+    return config.max_cola()
 
 
 # Un semaforo por VALOR de limite: en produccion el limite es constante (1 semaforo);

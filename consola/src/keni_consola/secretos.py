@@ -35,12 +35,13 @@ import os
 import tomllib
 from pathlib import Path
 
-from . import rutas
+from . import config, rutas
 from .io_atomico import escribir_atomico
 
 # Variables de entorno que pueden INYECTAR el secreto de imagen (ver docstring, #130).
-ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
-ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
+# Nombres canonicos en `config` (fuente unica); re-exportados aqui (tests los referencian).
+ENV_IMAGEN_API_KEY = config.ENV_IMAGEN_API_KEY
+ENV_IMAGEN_PROVEEDOR = config.ENV_IMAGEN_PROVEEDOR
 # Clave de OpenRouter por entorno: gateway de IA por defecto (#130).
 ENV_OPENROUTER_API_KEY = "OPENROUTER_API_KEY"
 # Fallback historico: clave de OpenAI por entorno.
@@ -64,8 +65,8 @@ def ruta_secretos() -> Path:
     cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/secretos.toml`, o bajo `KENI_DATA_DIR`.
     """
-    if (p := os.environ.get("KENI_CONSOLA_SECRETOS")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_SECRETOS)) is not None:
+        return p
     return rutas.dir_config() / "secretos.toml"
 
 

@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import contextvars
 import logging
-import os
 import time
 import uuid
 
@@ -47,13 +46,16 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from . import config
+
 # Nombre del logger raiz del paquete. Todo el logging de la consola cuelga de aqui,
 # asi un unico `configurar_logging()` fija nivel y handler para todo el paquete.
 NOMBRE_LOGGER = "keni_consola"
 
 # Env var que controla el nivel de log. Acepta nombres estandar (DEBUG, INFO,
-# WARNING, ERROR, CRITICAL); cualquier otro valor cae a INFO.
-ENV_NIVEL = "KENI_CONSOLA_LOG_LEVEL"
+# WARNING, ERROR, CRITICAL); cualquier otro valor cae a INFO. Nombre canonico en `config`
+# (fuente unica); re-exportado aqui porque los tests referencian `observabilidad.ENV_NIVEL`.
+ENV_NIVEL = config.ENV_LOG_LEVEL
 
 # Cabecera estandar del id de correlacion (entrada desde un proxy, salida al cliente).
 CABECERA_REQUEST_ID = "X-Request-ID"
@@ -90,8 +92,7 @@ def restaurar_request_id(token: contextvars.Token) -> None:
 
 def _nivel_desde_env() -> int:
     """Devuelve el nivel de logging segun `KENI_CONSOLA_LOG_LEVEL` (def: INFO)."""
-    crudo = os.environ.get(ENV_NIVEL, "INFO").strip().upper()
-    nivel = logging.getLevelName(crudo)
+    nivel = logging.getLevelName(config.log_level())
     # getLevelName devuelve un int para nombres validos y un str ("Level X") si no.
     return nivel if isinstance(nivel, int) else logging.INFO
 

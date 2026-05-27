@@ -36,7 +36,7 @@ import re
 import uuid
 from pathlib import Path
 
-from . import rutas
+from . import config, rutas
 
 # Logger del módulo (#123): los fallos del proveedor de imagen se LOGUEAN con el motivo
 # real (status + cuerpo recortado) en vez de tragarlo, y el motivo viaja al mensaje de
@@ -133,8 +133,8 @@ def dir_media() -> Path:
     cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/media`, o bajo `KENI_DATA_DIR`.
     """
-    if (p := os.environ.get("KENI_CONSOLA_MEDIA")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_MEDIA)) is not None:
+        return p
     return rutas.dir_config() / "media"
 
 

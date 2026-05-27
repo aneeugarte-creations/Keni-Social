@@ -59,7 +59,7 @@ from typing import Any
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
-from . import preferencias, rutas
+from . import config, preferencias, rutas
 from .dominio import runner, stream
 from .dominio.runner import ColaLlenaError  # noqa: F401  (re-export; ver nota abajo)
 from .io_atomico import bloqueo_archivo, escribir_atomico
@@ -87,8 +87,8 @@ MOTIVO_CANCELADO = "cancelado"
 TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial")
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
-# `KENI_CLAUDE_TIMEOUT`. Sustituye al viejo timeout de 180 s de la peticion sincrona.
-_TIMEOUT_DEF = 600
+# `KENI_CLAUDE_TIMEOUT` (centralizado en `config.claude_timeout`). Sustituye al viejo
+# timeout de 180 s de la peticion sincrona.
 
 # Registro EN MEMORIA de trabajos en vuelo (id -> handle). El YAML es la fuente de
 # verdad para el sondeo; esto solo permite inspeccionar/cancelar localmente.
@@ -101,15 +101,7 @@ _LISTADO_MAX = 50
 
 def _timeout() -> int:
     """Wall-timeout (s) de un trabajo de claude; `KENI_CLAUDE_TIMEOUT` lo sobreescribe."""
-    crudo = (os.environ.get("KENI_CLAUDE_TIMEOUT") or "").strip()
-    if crudo:
-        try:
-            valor = int(crudo)
-        except ValueError:
-            return _TIMEOUT_DEF
-        if valor > 0:
-            return valor
-    return _TIMEOUT_DEF
+    return config.claude_timeout()
 
 
 def nuevo_id() -> str:
@@ -130,18 +122,18 @@ def ahora_iso() -> str:
 def raiz() -> Path:
     """Dir donde viven los registros de generacion.
 
-    `KENI_CONSOLA_GENERACIONES` lo fija (override de maxima prioridad; tests). Si no:
-      - con `KENI_DATA_DIR`: `<data_dir>/keni-social/generaciones` (todo bajo el volumen).
-      - en local (sin `KENI_DATA_DIR`): `~/.config/keni-social/generaciones`, EXACTAMENTE
-        como antes (este recurso NO honraba `XDG_CONFIG_HOME`; se preserva para no
-        orfanar registros locales existentes).
+    `KENI_CONSOLA_GENERACIONES` lo fija (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.dir_config()`), igual que el resto de
+    recursos de config: local `${XDG_CONFIG_HOME:-~/.config}/keni-social/generaciones`,
+    o `<KENI_DATA_DIR>/keni-social/generaciones` en contenedor.
+
+    XDG (#126): antes este recurso IGNORABA `XDG_CONFIG_HOME` (siempre `~/.config`); ahora
+    lo respeta como los demas. Con XDG SIN fijar el default es IDENTICO al historico
+    (`~/.config/keni-social/generaciones`), asi no se orfanan registros locales existentes.
     """
-    env = os.environ.get("KENI_CONSOLA_GENERACIONES")
-    if env:
-        return Path(env)
-    if (raiz_datos := os.environ.get(rutas.ENV_DATA_DIR)):
-        return Path(raiz_datos).expanduser() / rutas.SUBDIR_CONFIG / "generaciones"
-    return Path.home() / ".config" / "keni-social" / "generaciones"
+    if (p := config.override_ruta(config.ENV_GENERACIONES)) is not None:
+        return p
+    return rutas.dir_config() / "generaciones"
 
 
 def _ruta(gen_id: str) -> Path:

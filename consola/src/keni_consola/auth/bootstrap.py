@@ -8,19 +8,20 @@ token de #134). Nace con `debe_cambiar_password=True`: debe cambiarla al primer 
 from __future__ import annotations
 
 import logging
-import os
 import secrets
 
+from .. import config
 from ..estados import ROL_ADMIN
 from ..observabilidad import NOMBRE_LOGGER
 from .usuarios import crear_usuario
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
-# Env vars del bootstrap del primer admin.
-ENV_ADMIN_USER = "KENI_CONSOLA_ADMIN_USER"
-ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
-ADMIN_POR_DEFECTO = "admin"
+# Env vars del bootstrap del primer admin. Nombres/default canonicos en `config` (fuente
+# unica); re-exportados aqui por compat de referencias.
+ENV_ADMIN_USER = config.ENV_ADMIN_USER
+ENV_ADMIN_PASS = config.ENV_ADMIN_PASS
+ADMIN_POR_DEFECTO = config.ADMIN_USER_DEF
 
 
 def hay_usuarios() -> bool:
@@ -46,8 +47,8 @@ def bootstrap_admin() -> None:
     if hay_usuarios():
         return
 
-    usuario = os.environ.get(ENV_ADMIN_USER, "").strip() or ADMIN_POR_DEFECTO
-    pass_env = os.environ.get(ENV_ADMIN_PASS, "")
+    usuario = config.admin_user()
+    pass_env = config.admin_pass()
     generada = not pass_env
     password = pass_env or secrets.token_urlsafe(12)
 

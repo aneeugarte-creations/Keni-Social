@@ -26,7 +26,6 @@ apuntan a un tmp con skills falsas, para NO tocar el `skills-copy/` real del rep
 
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +33,7 @@ from pathlib import Path
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
+from . import config
 from .io_atomico import escribir_atomico
 
 # --------------------------------------------------------------------------- #
@@ -167,7 +167,7 @@ def dir_skills() -> Path:
     Preferencia: env `KENI_SKILLS_DIR` (apunta directo a la carpeta de skills; lo usan
     los tests con un tmp) -> `<KENI_SKILLS_CWD|repo|cwd>/skills-copy/.claude/skills`.
     """
-    env = os.environ.get("KENI_SKILLS_DIR")
+    env = config.skills_dir()
     if env:
         return Path(env)
     # Import PEREZOSO del dominio (no de `api/`, hallazgo N13) para reutilizar la logica de

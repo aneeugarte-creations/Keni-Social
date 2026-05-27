@@ -40,7 +40,6 @@ ADITIVA por red y el reparto en piezas viven en el dominio (`dominio.skills` /
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import tempfile
@@ -52,7 +51,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import redes, repos, skills_catalogo
+from .. import config, redes, repos, skills_catalogo
 from .._http_json import leer_json
 from ..dominio import extraccion_url
 from ..dominio import skills as dom_skills
@@ -91,14 +90,9 @@ def _max_subida(skill: str) -> int:
     `KENI_SKILLS_MAX_SUBIDA_MB` (entero, en MB) lo sobreescribe; si no es valido, se ignora.
     """
     base = _MAX_SUBIDA_MEDIA if skill in _SKILLS_MEDIA else _MAX_SUBIDA_TEXTO
-    env = os.environ.get("KENI_SKILLS_MAX_SUBIDA_MB")
-    if env:
-        try:
-            mb = int(env)
-        except ValueError:
-            return base
-        if mb > 0:
-            return mb * 1024 * 1024
+    mb = config.skills_max_subida_mb()
+    if mb is not None:
+        return mb * 1024 * 1024
     return base
 
 

@@ -17,28 +17,25 @@ un subcomando: el backend de contenido es YAML fijo).
 
 from __future__ import annotations
 
-import os
 import sys
 import webbrowser
 
 import uvicorn
 
+from . import config
 from .app import crear_app
 
 # Bind por defecto a localhost. Configurable con `KENI_CONSOLA_HOST` (#130): en
 # contenedor se pone `0.0.0.0` para que un reverse-proxy de confianza la exponga. Es
 # seguro porque YA hay auth (login multiusuario + token, #130/#134); NO la pongas en
-# `0.0.0.0` sin un proxy delante.
-HOST = os.environ.get("KENI_CONSOLA_HOST", "127.0.0.1")
-PUERTO_DEF = 8765
+# `0.0.0.0` sin un proxy delante. El nombre/default de la var vive en `config`.
+HOST = config.host()
+# Puerto por defecto (re-exportado de `config`; algunos tests lo referencian aqui).
+PUERTO_DEF = config.PORT_DEF
 
 
 def _puerto() -> int:
-    crudo = os.environ.get("KENI_CONSOLA_PORT", str(PUERTO_DEF))
-    try:
-        return int(crudo)
-    except ValueError:
-        return PUERTO_DEF
+    return config.port()
 
 
 def main() -> int:

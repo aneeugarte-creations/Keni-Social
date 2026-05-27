@@ -38,7 +38,6 @@ determinista (antes el orden se apoyaba en el `rowid` de SQLite).
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 from datetime import date, datetime
 from pathlib import Path
@@ -47,7 +46,7 @@ from typing import Any
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
-from . import indice, marcas, redes, rutas
+from . import config, indice, marcas, redes, rutas
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
 from .io_atomico import escribir_atomico
 
@@ -89,8 +88,8 @@ def raiz_datos() -> Path:
     cuelga de la raiz de estado unica (`rutas.raiz_proyectos()`): local `~/keni-proyectos`
     EXACTAMENTE como antes, o `<KENI_DATA_DIR>/keni-proyectos` en contenedor.
     """
-    if (p := os.environ.get("KENI_CONSOLA_RAIZ")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_RAIZ)) is not None:
+        return p
     return rutas.raiz_proyectos()
 
 

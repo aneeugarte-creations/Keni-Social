@@ -26,13 +26,12 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
-import os
 import threading
 import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from . import marcas, redes, repos
+from . import config, marcas, redes, repos
 
 _log = logging.getLogger("keni_consola.comercial")
 
@@ -450,18 +449,12 @@ def _intervalo_segundos() -> float:
     `KENI_COMERCIAL_INTERVALO_SEGUNDOS` (util para demo/tests) tiene prioridad sobre
     `KENI_COMERCIAL_INTERVALO_HORAS`. Por defecto, `INTERVALO_HORAS_DEF` horas.
     """
-    seg = os.environ.get("KENI_COMERCIAL_INTERVALO_SEGUNDOS")
-    if seg:
-        try:
-            return max(1.0, float(seg))
-        except ValueError:
-            pass
-    horas = os.environ.get("KENI_COMERCIAL_INTERVALO_HORAS")
-    if horas:
-        try:
-            return max(60.0, float(horas) * 3600.0)
-        except ValueError:
-            pass
+    seg = config.comercial_intervalo_segundos()
+    if seg is not None:
+        return seg
+    horas = config.comercial_intervalo_horas()
+    if horas is not None:
+        return max(60.0, horas * 3600.0)
     return INTERVALO_HORAS_DEF * 3600.0
 
 

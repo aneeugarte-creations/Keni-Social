@@ -7,12 +7,14 @@ deslizante). Vive aparte para que esos dos no se importen entre si por una fecha
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 
-# Env var (opcional) para la duracion de la sesion en horas (def 12h).
-ENV_SESION_HORAS = "KENI_CONSOLA_SESION_HORAS"
-SESION_HORAS_DEF = 12
+from .. import config
+
+# Env var (opcional) para la duracion de la sesion en horas (def 12h). Nombre/default
+# canonicos en `config` (fuente unica); re-exportados aqui por compat de referencias.
+ENV_SESION_HORAS = config.ENV_SESION_HORAS
+SESION_HORAS_DEF = config.SESION_HORAS_DEF
 
 
 def ahora() -> datetime:
@@ -40,11 +42,4 @@ def parsear_iso(texto: str) -> datetime | None:
 
 def horas_sesion() -> int:
     """Duracion de la sesion en horas (env `KENI_CONSOLA_SESION_HORAS`, def 12)."""
-    crudo = os.environ.get(ENV_SESION_HORAS, "").strip()
-    if not crudo:
-        return SESION_HORAS_DEF
-    try:
-        horas = int(crudo)
-    except ValueError:
-        return SESION_HORAS_DEF
-    return horas if horas > 0 else SESION_HORAS_DEF
+    return config.sesion_horas()

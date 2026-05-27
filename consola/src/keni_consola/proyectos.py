@@ -22,12 +22,11 @@ resueltas). Nunca se opera sobre una ruta arbitraria venida del navegador.
 
 from __future__ import annotations
 
-import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import rutas
+from . import config, rutas
 
 
 class ConsolaConfigInvalida(ValueError):
@@ -41,8 +40,8 @@ def ruta_config_consola() -> Path:
     cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/consola.toml`, o bajo `KENI_DATA_DIR`.
     """
-    if (p := os.environ.get("KENI_CONSOLA_CONFIG")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_CONFIG)) is not None:
+        return p
     return rutas.dir_config() / "consola.toml"
 
 
