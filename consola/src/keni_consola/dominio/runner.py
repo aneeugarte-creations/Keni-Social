@@ -13,11 +13,24 @@ a la vez (CPU/RAM/rate-limit/coste). `slot()` aplica un semaforo (`KENI_MAX_JOBS
 def 4): los jobs que no caben ESPERAN un hueco (quedan en cola). No hay espera
 infinita: cada job tiene wall-timeout (mata el proceso), asi que los slots SIEMPRE
 se liberan.
+
+ENDURECIMIENTO INTERINO (#137): este modulo recibe medidas de robustez TRANSITORIAS
+mientras llega el SERVICIO COMPARTIDO (#130), que reemplazara el subprocess `claude -p`
+por la API de Claude. NO es la solucion definitiva; es contencion para el piloto:
+  - Cola con TOPE (`KENI_MAX_COLA`): antes `slot()` solo limitaba procesos CONCURRENTES,
+    no la COLA. N peticiones = N hilos daemon bloqueados en `sem.acquire()` sin limite
+    superior. Ahora `slot()` rechaza con `ColaLlenaError` cuando ya hay demasiados jobs
+    esperando (el llamante lo traduce a 429) en vez de apilar hilos indefinidamente.
+  - GRUPO DE PROCESOS: `lanzar_proc()` arranca `claude` con `start_new_session=True`
+    (lider de su propio grupo). Al timeout/cancel `matar_arbol()` mata el GRUPO entero,
+    no solo el padre: evita herramientas hijas zombis que `claude` haya lanzado.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -26,6 +39,17 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import stream
+
+_log = logging.getLogger("keni_consola.runner")
+
+
+class ColaLlenaError(RuntimeError):
+    """La cola de jobs `claude` esta al tope: rechazar (429) en vez de encolar mas.
+
+    INTERINO (#137): mientras no exista el servicio compartido (#130), un pico de
+    peticiones no debe traducirse en una pila ilimitada de hilos bloqueados. El
+    llamante captura esta excepcion y devuelve una respuesta clara (429) al cliente.
+    """
 
 # Cada cuanto (s) se persiste el avance: con parciales llegan muchos eventos por
 # segundo; throttlear evita martillear el disco sin perder la sensacion de "en vivo".
@@ -88,17 +112,66 @@ def leer_stream(
         pass
 
 
+def lanzar_proc(
+    argv: list[str],
+    *,
+    cwd: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.Popen:
+    """Arranca `claude` en SU PROPIO grupo de procesos (lider de sesion).
+
+    INTERINO (#137): `start_new_session=True` hace al hijo lider de un grupo nuevo, asi
+    `matar_arbol()` puede senalizar al GRUPO entero (padre + herramientas hijas que
+    `claude` lance). Sin esto, un `proc.kill()` mataba SOLO el padre y dejaba zombis.
+    En Windows no hay grupos POSIX, pero el piloto corre en macOS/Linux. argv como lista
+    (sin shell). El llamante elige stdout/stderr/text via los kwargs fijos de aqui.
+    """
+    return subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
+        argv,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        bufsize=1,
+        start_new_session=True,
+    )
+
+
+def matar_arbol(proc: subprocess.Popen, *, espera: float = 10.0) -> None:
+    """Mata el ARBOL COMPLETO del subproceso (su grupo de procesos), no solo el padre.
+
+    INTERINO (#137): manda SIGKILL al GRUPO (`os.killpg(getpgid(pid), SIGKILL)`) para
+    arrastrar a las herramientas hijas que `claude` haya lanzado. Si el grupo ya no
+    existe (carrera con la salida) o la plataforma no soporta `killpg`, degrada a
+    `proc.kill()`. Best-effort: nunca propaga. Tras matar, espera al padre para reapear.
+    """
+    try:
+        pgid = os.getpgid(proc.pid)
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError, AttributeError):
+        # Sin grupo (ya muerto) o plataforma sin killpg: matar al menos el padre.
+        try:
+            proc.kill()
+        except Exception:  # noqa: BLE001 -- best-effort; ya intentamos el grupo
+            pass
+    try:
+        proc.wait(timeout=espera)
+    except Exception:  # noqa: BLE001 -- best-effort; reapeo del padre
+        pass
+
+
 def esperar(proc: subprocess.Popen, timeout: int) -> bool:
-    """Espera al proceso con wall-timeout; si lo supera lo MATA y devuelve True (timeout)."""
+    """Espera al proceso con wall-timeout; si lo supera mata el ARBOL y devuelve True.
+
+    INTERINO (#137): el timeout ahora mata el GRUPO de procesos (via `matar_arbol`), no
+    solo el padre, para no dejar herramientas hijas huerfanas.
+    """
     try:
         proc.wait(timeout=timeout)
         return False
     except subprocess.TimeoutExpired:
-        proc.kill()
-        try:
-            proc.wait(timeout=10)
-        except Exception:  # noqa: BLE001 -- best-effort; ya marcamos timeout
-            pass
+        matar_arbol(proc)
         return True
 
 
@@ -116,11 +189,34 @@ def max_jobs() -> int:
     return max(1, n)
 
 
+def max_cola() -> int:
+    """Maximo de jobs ESPERANDO un slot (`KENI_MAX_COLA`, def 16, minimo 0).
+
+    INTERINO (#137): TOPE de la cola, distinto del de concurrencia. Cuando hay este
+    numero de jobs ya en espera, `slot()` rechaza el siguiente con `ColaLlenaError` en
+    vez de apilar otro hilo bloqueado. 0 = no se admite NINGUN job en cola (solo los
+    que entran sin esperar). El default (16) deja holgura para picos del piloto.
+    """
+    try:
+        n = int(os.environ.get("KENI_MAX_COLA", "16"))
+    except (TypeError, ValueError):
+        n = 16
+    return max(0, n)
+
+
 # Un semaforo por VALOR de limite: en produccion el limite es constante (1 semaforo);
 # en tests, cambiar `KENI_MAX_JOBS` da un semaforo distinto -> aislamiento sin estado
 # global pegajoso. BoundedSemaphore: un release de mas es un bug y revienta (lo veriamos).
 _sems: dict[int, threading.BoundedSemaphore] = {}
 _sems_lock = threading.Lock()
+
+# ADMISION (#137): contador de jobs ADMITIDOS (esperando un slot + corriendo). Es la
+# cuenta autoritativa para el tope total = max_jobs() + max_cola(). `admitir()` lo sube
+# de forma ATOMICA (rechaza si se pasaria del tope) y cada job lo baja al terminar. Asi
+# el rechazo por cola llena es SINCRONO (el llamante responde 429) y NO se apilan hilos
+# daemon bloqueados sin limite, que era el bug original.
+_admitidos = 0
+_admision_lock = threading.Lock()
 
 
 def _semaforo() -> threading.BoundedSemaphore:
@@ -133,23 +229,72 @@ def _semaforo() -> threading.BoundedSemaphore:
         return sem
 
 
+def admitir() -> None:
+    """Admite SINCRONAMENTE un job en el sistema, o lo rechaza con `ColaLlenaError`.
+
+    INTERINO (#137): se llama ANTES de lanzar el hilo del job. El tope total es
+    `max_jobs()` (procesos concurrentes) + `max_cola()` (espera). Si admitir este job
+    superaria ese tope, lanza `ColaLlenaError` (-> 429) y NO se encola otro hilo. Si
+    admite, incrementa el contador; el job DEBE llamar a `liberar_admision()` al
+    terminar (lo hace `slot()` por el, ver abajo).
+    """
+    global _admitidos
+    tope = max_jobs() + max_cola()
+    with _admision_lock:
+        if _admitidos >= tope:
+            raise ColaLlenaError(
+                "La cola de generaciones está llena; inténtalo de nuevo en unos segundos."
+            )
+        _admitidos += 1
+
+
+def liberar_admision() -> None:
+    """Libera la admision de un job (lo decrementa). Idempotencia: nunca baja de 0."""
+    global _admitidos
+    with _admision_lock:
+        if _admitidos > 0:
+            _admitidos -= 1
+
+
+def admitidos() -> int:
+    """Jobs admitidos ahora mismo (esperando + corriendo). Para tests/inspeccion."""
+    with _admision_lock:
+        return _admitidos
+
+
 @contextmanager
-def slot(on_encolado: Callable[[], None] | None = None) -> Iterator[None]:
+def slot(
+    on_encolado: Callable[[], None] | None = None,
+    *,
+    ya_admitido: bool = False,
+) -> Iterator[None]:
     """Reserva un hueco de ejecucion; si no hay, ESPERA (job en cola).
 
     `on_encolado()` (opcional) se llama UNA vez si hubo que esperar (para reflejar la
     cola en el estado). La espera no es infinita: cada job tiene wall-timeout, asi que
     los slots siempre acaban liberandose.
+
+    TOPE DE COLA INTERINO (#137): la admision se decide ANTES en `admitir()` (rechazo
+    sincrono -> 429). Aqui `slot()` solo bloquea hasta tener un proceso concurrente
+    libre. `ya_admitido=True` indica que el llamante YA pidio `admitir()` (asi `slot()`
+    se encarga de `liberar_admision()` al salir, pase lo que pase). Si `ya_admitido` es
+    False (camino legado/tests del semaforo puro), `slot()` admite el job el mismo: si
+    la cola esta al tope, rechaza con `ColaLlenaError`.
     """
+    if not ya_admitido:
+        admitir()  # puede lanzar ColaLlenaError
     sem = _semaforo()
-    if not sem.acquire(blocking=False):
-        if on_encolado is not None:
-            try:
-                on_encolado()
-            except Exception:  # noqa: BLE001 -- reflejar la cola nunca debe romper el job
-                pass
-        sem.acquire()
     try:
-        yield
+        if not sem.acquire(blocking=False):
+            if on_encolado is not None:
+                try:
+                    on_encolado()
+                except Exception:  # noqa: BLE001 -- reflejar la cola nunca rompe el job
+                    pass
+            sem.acquire()  # espera acotada por el wall-timeout de los jobs en curso
+        try:
+            yield
+        finally:
+            sem.release()
     finally:
-        sem.release()
+        liberar_admision()

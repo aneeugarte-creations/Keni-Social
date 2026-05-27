@@ -224,6 +224,16 @@ async def sugerir(request: Request) -> Response:
         generaciones.lanzar_job_claude(
             gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar
         )
+    except generaciones.ColaLlenaError:
+        # Cola al tope (#137): marcamos el registro y RE-LANZAMOS para que el manejador
+        # central responda 429 (backpressure) en vez de un error generico.
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
+             "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+        raise
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
         generaciones.actualizar(
             gen["id"],

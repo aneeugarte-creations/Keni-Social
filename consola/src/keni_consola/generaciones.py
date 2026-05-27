@@ -28,10 +28,22 @@ red (NUNCA se llama a `claude` ni a un proveedor de imagen real en tests). El
 
 SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se sanea contra
 traversal al leer; sin shell (argv como lista). Errores en espanol, sin tracebacks.
+
+ENDURECIMIENTO INTERINO (#137): este lanzador recibe medidas TRANSITORIAS de robustez
+mientras llega el SERVICIO COMPARTIDO (#130), que sustituira el subprocess `claude -p`
+por la API de Claude. NO es la solucion final:
+  - GRUPO DE PROCESOS: el subprocess arranca con su propio grupo (`runner.lanzar_proc`)
+    y al timeout/cancel se mata el ARBOL entero (`runner.matar_arbol`), no solo el padre.
+  - TOPE DE COLA: `runner.slot()` rechaza con `ColaLlenaError` si la cola esta al tope;
+    aqui se refleja como `error`/`motivo="cola_llena"` y el llamante lo traduce a 429.
+  - CANCELACION: `cancelar(gen_id)` mata el arbol del job y lo marca cancelado.
+  - SIN TRAGAR EXCEPCIONES: los fallos del hilo se LOGUEAN con el job-id (#123), ya no
+    se silencian con un `except: pass` opaco.
 """
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import subprocess
@@ -47,12 +59,26 @@ from keni_shared.esquema_yaml import migrar, sellar
 
 from . import preferencias
 from .dominio import runner, stream
+from .dominio.runner import ColaLlenaError  # noqa: F401  (re-export; ver nota abajo)
 from .io_atomico import bloqueo_archivo, escribir_atomico
+
+# `ColaLlenaError` se RE-EXPORTA aqui (tope de cola, #137): los endpoints capturan
+# `generaciones.ColaLlenaError` sin acoplarse al modulo `dominio.runner`. Lo usan otros
+# modulos, no este, de ahi el `noqa: F401` en el import de arriba.
+
+# Logger del lanzador de generaciones: cuelga del logger raiz del paquete (#123), asi
+# `configurar_logging()` fija nivel/handler para todo. Aqui logueamos los fallos del hilo
+# de generacion CON el job-id en vez de tragarlos (antes `except Exception: pass`).
+_log = logging.getLogger("keni_consola.generaciones")
 
 # Estados terminales e intermedio de un trabajo.
 ESTADO_EJECUTANDO = "ejecutando"
 ESTADO_COMPLETADO = "completado"
 ESTADO_ERROR = "error"
+# Motivos terminales (campo `motivo`): para que el llamante/UI distingan el porque.
+MOTIVO_TIMEOUT = "timeout"
+MOTIVO_COLA_LLENA = "cola_llena"
+MOTIVO_CANCELADO = "cancelado"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
 TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion")
@@ -368,9 +394,20 @@ def lanzar_job_claude(
       - error/budget/timeout -> `error` (mensaje en espanol).
     Si `dir_temporal` viene (archivo subido), se borra al terminar. INYECTABLE: los tests
     reemplazan esta funcion por una fake que llama a `procesar` con una salida canned.
+
+    TOPE DE COLA INTERINO (#137): la admision se decide AQUI, SINCRONAMENTE, antes de
+    arrancar el hilo: si el sistema esta saturado (`runner.admitir()` lanza
+    `ColaLlenaError`) propagamos la excepcion al llamante, que responde 429. Asi no se
+    apilan hilos daemon bloqueados sin limite (el bug original). El hilo hereda esa
+    admision (`slot(ya_admitido=True)`) y la libera al terminar.
     """
     acumulador = stream.AcumuladorStream()
     timeout = _timeout()
+
+    # Admision SINCRONA: si la cola esta al tope, NO lanzamos el hilo; el llamante
+    # recibe ColaLlenaError y responde 429 (INTERINO #137; lo reemplaza el servicio
+    # compartido #130). El hilo, ya admitido, libera el cupo al terminar via `slot`.
+    runner.admitir()
 
     def _avance() -> None:
         try:
@@ -383,9 +420,11 @@ def lanzar_job_claude(
                 },
             )
         except Exception:  # noqa: BLE001 -- el avance nunca debe romper el hilo
-            pass
+            # Persistir un parcial es best-effort (el cierre fija el estado), pero ya no
+            # lo silenciamos en mudo: dejamos rastro con el job-id (#123, #137).
+            _log.warning("generacion %s: fallo al persistir avance parcial", gen_id, exc_info=True)
 
-    def _finalizar(timed_out: bool, returncode: int | None) -> None:
+    def _finalizar(timed_out: bool, returncode: int | None, cancelado: bool) -> None:
         # OJO: el `dir_temporal` se borra al FINAL (no aqui), porque el post-procesado
         # `procesar` puede necesitar los ARCHIVOS que la skill dejo ahi: las skills de
         # imagen (estudio-imagen) escriben los .png derivados junto a la foto subida y
@@ -393,9 +432,19 @@ def lanzar_job_claude(
         # perderia. La limpieza va en el `finally`, asi corre pase lo que pase.
         fecha_fin = ahora_iso()
         try:
+            if cancelado:
+                # Cancelacion del usuario (#137): se mato el arbol; estado terminal claro.
+                actualizar(gen_id, {
+                    "estado": ESTADO_ERROR, "motivo": MOTIVO_CANCELADO,
+                    "error": "La generación fue cancelada.",
+                    "salida": acumulador.texto,
+                    "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
+                    "fecha_fin": fecha_fin,
+                })
+                return
             if timed_out:
                 actualizar(gen_id, {
-                    "estado": ESTADO_ERROR, "motivo": "timeout",
+                    "estado": ESTADO_ERROR, "motivo": MOTIVO_TIMEOUT,
                     "error": f"El asistente tardó demasiado (más de {timeout} s) y se canceló.",
                     "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                     "fecha_fin": fecha_fin,
@@ -411,6 +460,9 @@ def lanzar_job_claude(
                 try:
                     resultado = procesar(acumulador.texto, acumulador.final)
                 except Exception:  # noqa: BLE001 -- fallo del post-procesado -> error claro
+                    # El cliente ve un mensaje generico (sin traceback), pero el fallo
+                    # queda CORRELACIONADO al job en el log del servidor (#123, #137).
+                    _log.exception("generacion %s: fallo el post-procesado (procesar)", gen_id)
                     actualizar(gen_id, {
                         "estado": ESTADO_ERROR,
                         "error": "Se generó el contenido pero no se pudo procesar el resultado.",
@@ -436,18 +488,35 @@ def lanzar_job_claude(
                 "fecha_fin": fecha_fin,
             })
         except Exception:  # noqa: BLE001 -- el cierre nunca debe propagar
-            pass
+            # Antes era `pass` mudo: un fallo del cierre se volvia un job atascado en
+            # "ejecutando" sin rastro. Ahora lo LOGUEAMOS con el job-id (#123, #137) y,
+            # best-effort, intentamos dejarlo en error (no propagamos: el hilo es daemon).
+            _log.exception("generacion %s: fallo al fijar el estado terminal", gen_id)
+            try:
+                actualizar(gen_id, {
+                    "estado": ESTADO_ERROR,
+                    "error": "Ocurrió un error al finalizar la generación.",
+                    "fecha_fin": fecha_fin,
+                })
+            except Exception:  # noqa: BLE001 -- ya logueamos; no hay mas que hacer
+                _log.error("generacion %s: tampoco se pudo marcar el error de cierre", gen_id)
         finally:
             # Limpieza del temporal de la subida: DESPUES de `procesar` (ver nota arriba).
             if dir_temporal is not None:
                 shutil.rmtree(dir_temporal, ignore_errors=True)
 
+    # Evento de cancelacion del job (lo arma `cancelar()`). Se guarda en el handle para
+    # que `cancelar()` pueda matar el arbol y para que `_finalizar` sepa el porque.
+    cancelado = threading.Event()
+
     def _ciclo() -> None:
-        # Semaforo de concurrencia (#116): si no hay slot libre, ESPERA (job en cola).
-        # El spawn ocurre DENTRO del slot para que el tope limite procesos `claude`
-        # reales. Cada job tiene wall-timeout, asi que los slots siempre se liberan.
+        # Concurrencia (#116) + admision/tope de cola (#137): el job YA fue admitido en
+        # `lanzar_job_claude` (sincronicamente), asi que aqui solo esperamos un proceso
+        # concurrente libre. `slot(ya_admitido=True)` libera el cupo al salir. El spawn
+        # ocurre DENTRO del slot para que el tope limite procesos `claude` reales. Cada
+        # job tiene wall-timeout, asi que los slots siempre se liberan.
         try:
-            with runner.slot():
+            with runner.slot(ya_admitido=True):
                 if shutil.which("claude") is None:
                     if dir_temporal is not None:
                         shutil.rmtree(dir_temporal, ignore_errors=True)
@@ -461,14 +530,12 @@ def lanzar_job_claude(
                     })
                     return
                 try:
-                    proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
+                    # Subproceso en SU PROPIO grupo (#137): al timeout/cancel matamos el
+                    # ARBOL entero (`runner.matar_arbol`), no solo el padre.
+                    proc = runner.lanzar_proc(
                         _argv_claude(prompt, [dir_temporal] if dir_temporal else None),
                         cwd=str(cwd),
                         env=_entorno_skill(),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.DEVNULL,
-                        text=True,
-                        bufsize=1,
                     )
                 except (OSError, ValueError):
                     if dir_temporal is not None:
@@ -479,32 +546,52 @@ def lanzar_job_claude(
                     })
                     return
                 with _HANDLES_LOCK:
-                    _HANDLES[gen_id] = {"proc": proc}
+                    _HANDLES[gen_id] = {"proc": proc, "cancelado": cancelado}
+                # Si ya pidieron cancelar entre el spawn y registrar el handle, matamos ya.
+                if cancelado.is_set():
+                    runner.matar_arbol(proc)
                 runner.leer_stream(proc, acumulador, _avance)
-                timed_out = _esperar(proc, timeout)
+                # `runner.esperar` mata el ARBOL si supera el wall-timeout (#137).
+                timed_out = runner.esperar(proc, timeout)
                 # Estado terminal ANTES de soltar el handle: un sondeo que ya no ve el
                 # handle nunca lee un "ejecutando" obsoleto.
-                _finalizar(timed_out, proc.returncode)
+                _finalizar(timed_out, proc.returncode, cancelado.is_set())
         finally:
             with _HANDLES_LOCK:
                 _HANDLES.pop(gen_id, None)
 
+    # El hilo (via `slot(ya_admitido=True)`) libera la admision al terminar. Si el
+    # arranque del hilo fallara ANTES de entrar al slot, liberamos aqui para no fugar el
+    # cupo de `admitir()` (defensa; en la practica `start()` casi nunca falla).
     hilo = threading.Thread(target=_ciclo, name=f"gen-{gen_id}", daemon=True)
-    hilo.start()
-
-
-def _esperar(proc: subprocess.Popen, timeout: int) -> bool:
-    """Espera al proceso con wall-timeout; si lo supera lo mata y devuelve True (timeout)."""
     try:
-        proc.wait(timeout=timeout)
-        return False
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        try:
-            proc.wait(timeout=10)
-        except Exception:  # noqa: BLE001 -- best-effort; ya marcamos timeout
-            pass
+        hilo.start()
+    except Exception:  # noqa: BLE001 -- el cupo admitido no debe quedar colgado
+        runner.liberar_admision()
+        raise
+
+
+def cancelar(gen_id: str) -> bool:
+    """Cancela un job de claude EN VUELO: mata el ARBOL del subproceso. (#137, INTERINO).
+
+    Devuelve True si habia un job en vuelo (proceso) que se senalizo/mato; False si no
+    hay nada que cancelar (ya terminó o no es un job con proceso). Arma el evento de
+    cancelacion (para que `_finalizar` lo marque como cancelado) y, si ya hay proceso,
+    le manda el kill al GRUPO. La limpieza del estado terminal la hace el hilo en
+    `_finalizar`. Es contencion mientras llega el servicio compartido (#130).
+    """
+    with _HANDLES_LOCK:
+        handle = _HANDLES.get(gen_id)
+        if handle is None:
+            return False
+        ev = handle.get("cancelado")
+        proc = handle.get("proc")
+    if isinstance(ev, threading.Event):
+        ev.set()
+    if isinstance(proc, subprocess.Popen):
+        runner.matar_arbol(proc)
         return True
+    return ev is not None
 
 
 # --------------------------------------------------------------------------- #

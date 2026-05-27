@@ -15,12 +15,24 @@ Cubre:
 from __future__ import annotations
 
 import json
+import logging
+import os
+import sys
+import time
+
+import pytest
 
 from keni_consola import generaciones, preferencias
 from keni_consola.api import skills
+from keni_consola.dominio import runner
 from keni_consola.dominio import skills as dom_skills
 
 from .conftest import _cliente
+
+# Referencia GENUINA al lanzador de claude real (los tests de cancelacion/log lo usan).
+# Otros tests crean la app con un lanzador FAKE inyectado (crear_app reasigna el atributo
+# de modulo), que persistiria; aqui invocamos el REAL por esta referencia capturada.
+_LANZAR_CLAUDE_REAL = generaciones.lanzar_job_claude
 
 _MARCA = "unotv"
 
@@ -312,3 +324,201 @@ def test_lanzar_job_imagen_error(entorno):
     g = generaciones.obtener(gid)
     assert g["estado"] == "error"
     assert "proveedor" in g["error"].lower()
+
+
+# --------------------------------------------------------------------------- #
+# #137 INTERINO: tope de cola, cancelacion (mata el arbol), log sin tragar      #
+# --------------------------------------------------------------------------- #
+
+
+def _vivo(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+def _esperar_terminal(gid: str, timeout: float = 8.0) -> str:
+    """Espera a que la generacion `gid` alcance un estado TERMINAL (no `ejecutando`).
+
+    Mas robusto que mirar el handle: el handle se registra DENTRO del slot (puede tardar)
+    y se suelta tras fijar el estado, asi que esperar el estado terminal evita carreras.
+    """
+    fin = time.monotonic() + timeout
+    while time.monotonic() < fin:
+        g = generaciones.obtener(gid)
+        if g is not None and g["estado"] != generaciones.ESTADO_EJECUTANDO:
+            return g["estado"]
+        time.sleep(0.05)
+    return (generaciones.obtener(gid) or {}).get("estado", "")
+
+
+@pytest.mark.timeout(20)
+def test_lanzar_job_claude_rechaza_cuando_la_cola_esta_llena(entorno, monkeypatch):
+    """Cola al tope -> `lanzar_job_claude` lanza ColaLlenaError SINCRONAMENTE (-> 429).
+
+    La admision se decide ANTES de arrancar el hilo: con el cupo agotado, el llamante
+    recibe la excepcion (que la API traduce a 429) en vez de apilar otro hilo daemon.
+    """
+    monkeypatch.setenv("KENI_MAX_JOBS", "1")
+    monkeypatch.setenv("KENI_MAX_COLA", "0")
+    # Saturamos la admision manualmente (1 slot, 0 cola -> tope 1).
+    runner.admitir()
+    try:
+        gid = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})["id"]
+        with pytest.raises(runner.ColaLlenaError):
+            _LANZAR_CLAUDE_REAL(
+                gid, prompt="hola", cwd=entorno, procesar=lambda s, m: {"ok": True}
+            )
+        # NO se creo ningun hilo de job extra para este gid (no se encolo).
+        with generaciones._HANDLES_LOCK:
+            assert gid not in generaciones._HANDLES
+    finally:
+        runner.liberar_admision()
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="grupos de procesos POSIX")
+def test_cancelar_mata_el_arbol_y_marca_cancelado(entorno, monkeypatch):
+    """`cancelar` mata el ARBOL del subproceso y deja el registro en `cancelado`.
+
+    Sustituimos `runner.lanzar_proc` por uno que arranca un arbol REAL (padre python +
+    hijo que duerme, en su propio grupo) que emite una linea NDJSON y se queda vivo.
+    Cancelamos: el arbol debe morir (incluido el hijo) y el estado quedar terminal."""
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+
+    pids: dict[str, int] = {}
+    # El padre imprime el PID del hijo, emite una linea NDJSON valida y se queda vivo.
+    guion = (
+        "import subprocess, sys, time\n"
+        "h = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)'])\n"
+        "sys.stderr.write(str(h.pid) + '\\n'); sys.stderr.flush()\n"
+        '''print('{"type": "stream_event", "event": {"type": "message_start", "message": {}}}', flush=True)\n'''
+        "time.sleep(300)\n"
+    )
+
+    import subprocess as _sp
+
+    def _fake_lanzar(argv, *, cwd, env=None):  # noqa: ANN001
+        proc = _sp.Popen(
+            [sys.executable, "-c", guion],
+            cwd=cwd,
+            stdout=_sp.PIPE,
+            stderr=_sp.PIPE,
+            text=True,
+            bufsize=1,
+            start_new_session=True,
+        )
+        pids["hijo"] = int(proc.stderr.readline().strip())
+        return proc
+
+    monkeypatch.setattr(generaciones.runner, "lanzar_proc", _fake_lanzar)
+
+    gid = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Cancelable"})["id"]
+    _LANZAR_CLAUDE_REAL(gid, prompt="hola", cwd=entorno, procesar=lambda s, m: {"ok": True})
+
+    # Esperamos a que el proceso este registrado en el handle.
+    fin = time.monotonic() + 5
+    while time.monotonic() < fin and "hijo" not in pids:
+        time.sleep(0.05)
+    assert "hijo" in pids and _vivo(pids["hijo"]), "el hijo deberia estar vivo antes de cancelar"
+
+    assert generaciones.cancelar(gid) is True
+    assert _esperar_terminal(gid) == generaciones.ESTADO_ERROR
+
+    # El arbol (incluido el hijo) debe haber muerto.
+    for _ in range(50):
+        if not _vivo(pids["hijo"]):
+            break
+        time.sleep(0.1)
+    assert not _vivo(pids["hijo"]), "cancelar debio matar el arbol entero (incluido el hijo)"
+
+    g = generaciones.obtener(gid)
+    assert g["estado"] == generaciones.ESTADO_ERROR
+    assert g["motivo"] == generaciones.MOTIVO_CANCELADO
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.skipif(os.name != "posix", reason="subproceso real")
+def test_excepcion_en_hilo_de_post_procesado_se_loggea_no_se_traga(entorno, monkeypatch, caplog):
+    """Si `procesar` revienta, el fallo se LOGUEA con el job-id (#123) y NO se silencia.
+
+    Antes era `except Exception: pass` opaco. Ahora deja traza correlacionable al job y
+    el registro queda en `error` (mensaje claro, sin traceback al cliente).
+    """
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+
+    import subprocess as _sp
+
+    # Subproceso que emite un stream COMPLETO (terminado) para que corra `procesar`.
+    lineas = [
+        '{"type": "stream_event", "event": {"type": "message_start", "message": {}}}',
+        '{"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, '
+        '"delta": {"type": "text_delta", "text": "hola"}}}',
+        '{"type": "result", "subtype": "success", "result": "hola", '
+        '"usage": {"input_tokens": 1, "output_tokens": 1}}',
+    ]
+    guion = "import sys\n" + "".join(f"print({ln!r}, flush=True)\n" for ln in lineas)
+
+    def _fake_lanzar(argv, *, cwd, env=None):  # noqa: ANN001
+        return _sp.Popen(
+            [sys.executable, "-c", guion],
+            cwd=cwd, stdout=_sp.PIPE, stderr=_sp.DEVNULL, text=True, bufsize=1,
+            start_new_session=True,
+        )
+
+    monkeypatch.setattr(generaciones.runner, "lanzar_proc", _fake_lanzar)
+
+    def _procesar_revienta(_salida, _metricas):  # noqa: ANN001
+        raise RuntimeError("el post-procesado fallo a proposito")
+
+    gid = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Falla"})["id"]
+    with caplog.at_level(logging.ERROR, logger="keni_consola.generaciones"):
+        _LANZAR_CLAUDE_REAL(gid, prompt="hola", cwd=entorno, procesar=_procesar_revienta)
+        assert _esperar_terminal(gid) == generaciones.ESTADO_ERROR
+
+    g = generaciones.obtener(gid)
+    assert g["estado"] == generaciones.ESTADO_ERROR
+    assert "no se pudo procesar" in g["error"].lower()
+    # El fallo NO se trago: hay un log de ERROR correlacionado al job-id.
+    correlacionados = [r for r in caplog.records if gid in r.getMessage()]
+    assert correlacionados, "el fallo del post-procesado debe loguearse con el job-id"
+
+
+# --------------------------------------------------------------------------- #
+# #137 API: 429 cuando la cola esta llena + endpoint de cancelacion           #
+# --------------------------------------------------------------------------- #
+
+
+def test_endpoint_responde_429_si_la_cola_esta_llena(entorno):
+    """Un endpoint que lanza claude responde 429 (no 500) cuando la cola esta al tope.
+
+    Inyectamos un lanzador que SIEMPRE lanza ColaLlenaError; el manejador central de la
+    app lo traduce a 429 + Retry-After (backpressure), en vez de un error generico.
+    """
+    def _lanzador_cola_llena(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
+        raise runner.ColaLlenaError("La cola de generaciones está llena.")
+
+    cli = _cliente(lanzar_generacion=_lanzador_cola_llena)
+    r = cli.post(
+        "/api/hashtags/sugerir",
+        json={"texto": "una nota larga para sugerir", "marca": _MARCA},
+    )
+    assert r.status_code == 429
+    assert "Retry-After" in r.headers
+    assert "error" in r.json()
+
+
+def test_endpoint_cancelar_404_si_no_existe(entorno):
+    r = _cliente().post("/api/generaciones/noexiste/cancelar")
+    assert r.status_code == 404
+
+
+def test_endpoint_cancelar_sin_job_en_vuelo_devuelve_el_registro(entorno):
+    """Cancelar una generacion ya terminada es idempotente: devuelve el registro tal cual."""
+    g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})
+    generaciones.actualizar(g["id"], {"estado": generaciones.ESTADO_COMPLETADO})
+    r = _cliente().post(f"/api/generaciones/{g['id']}/cancelar")
+    assert r.status_code == 200
+    assert r.json()["generacion"]["id"] == g["id"]
