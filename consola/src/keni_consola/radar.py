@@ -44,7 +44,6 @@ from dataclasses import dataclass, field
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from . import marcas
 from .api import rss
 
 # --------------------------------------------------------------------------- #
@@ -122,7 +121,7 @@ class Tema:
     enlaces: list[Enlace] = field(default_factory=list)
     _claves_enlace: set[str] = field(default_factory=set, repr=False)
 
-    def fusionar(self, otro: "Tema") -> None:
+    def fusionar(self, otro: Tema) -> None:
         """Funde `otro` en este tema (mismo asunto detectado por clave normalizada)."""
         self.redes |= otro.redes
         self.fuentes |= otro.fuentes
