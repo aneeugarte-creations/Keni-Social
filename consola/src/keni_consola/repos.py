@@ -69,8 +69,14 @@ def listar_tareas() -> list[dict[str, Any]]:
     return db.listar_tareas()
 
 
-def crear_tarea(proyecto_id: str, titulo: str, detalle: str = "") -> dict[str, Any]:
-    return db.crear_tarea(proyecto_id, titulo, detalle)
+def crear_tarea(
+    proyecto_id: str,
+    titulo: str,
+    detalle: str = "",
+    *,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    return db.crear_tarea(proyecto_id, titulo, detalle, autor=autor)
 
 
 def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
@@ -98,9 +104,10 @@ def registrar_historial_skill(
     piezas: list[dict[str, Any]] | None = None,
     titulo: str = "",
     metricas: dict[str, Any] | None = None,
+    autor: dict[str, str] | None = None,
 ) -> str:
     return ficheros.registrar_historial_skill(
-        skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas
+        skill, marca, resultado, piezas=piezas, titulo=titulo, metricas=metricas, autor=autor
     )
 
 
@@ -135,6 +142,7 @@ def crear_publicacion(
     origen: str = "",
     imagen: str = "",
     evergreen: bool = False,
+    autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     return ficheros.crear_publicacion(
         marca,
@@ -147,6 +155,7 @@ def crear_publicacion(
         origen=origen,
         imagen=imagen,
         evergreen=evergreen,
+        autor=autor,
     )
 
 

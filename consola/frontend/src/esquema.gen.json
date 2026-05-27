@@ -717,6 +717,12 @@
             ""
           ]
         },
+        "autor_id": {
+          "type": "string"
+        },
+        "autor_nombre": {
+          "type": "string"
+        },
         "fecha_creacion": {
           "type": "string"
         },
@@ -739,7 +745,7 @@
           "type": "boolean"
         }
       },
-      "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).",
+      "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").",
       "required": [
         "id",
         "titulo",
@@ -750,6 +756,8 @@
         "contenido",
         "estado",
         "veredicto",
+        "autor_id",
+        "autor_nombre",
         "fecha_creacion",
         "fecha_actualizacion",
         "fecha_programada",

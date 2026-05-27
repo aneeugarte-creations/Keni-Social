@@ -28,6 +28,7 @@ from starlette.routing import Route
 from .. import marcas, redes, repos
 from .._http_json import envoltura_paginacion, leer_json, paginacion_query
 from ..dominio.publicaciones import publicacion_a_dict
+from ..seguridad import autor_de_peticion
 from . import franjas as api_franjas
 
 # Nombres legibles de los estados (para poblar selects de la UI), en orden de flujo.
@@ -177,6 +178,7 @@ async def crear(request: Request) -> Response:
         fecha_programada=entrada["fecha_programada"],
         origen=entrada["origen"],
         imagen=entrada["imagen"],
+        autor=autor_de_peticion(request),
     )
     return JSONResponse({"publicacion": _publicacion_a_dict(pub)})
 
@@ -189,6 +191,7 @@ async def crear_lote(request: Request) -> Response:
         return JSONResponse(
             {"error": "Envía una lista de publicaciones a crear."}, status_code=400
         )
+    autor = autor_de_peticion(request) or {}
     entradas: list[dict[str, Any]] = []
     for i, cruda in enumerate(crudas, start=1):
         if not isinstance(cruda, dict):
@@ -198,6 +201,9 @@ async def crear_lote(request: Request) -> Response:
         entrada, error = _validar_nueva(cruda)
         if error is not None:
             return JSONResponse({"error": f"Publicación {i}: {error}"}, status_code=400)
+        # Atribucion por usuario (#130 Fase 1): el lote lo crea el usuario de la peticion.
+        entrada["autor_id"] = autor.get("id", "")
+        entrada["autor_nombre"] = autor.get("usuario", "")
         entradas.append(entrada)
     pubs = repos.crear_publicaciones(entradas)
     return JSONResponse({"publicaciones": [_publicacion_a_dict(p) for p in pubs]})
@@ -364,6 +370,7 @@ async def duplicar(request: Request) -> Response:
         fecha_programada="",
         origen=original["origen"],
         imagen=original["imagen"],
+        autor=autor_de_peticion(request),
     )
     return JSONResponse({"publicacion": _publicacion_a_dict(copia)})
 
@@ -394,6 +401,7 @@ async def reciclar(request: Request) -> Response:
         origen=original["origen"],
         imagen=original["imagen"],
         evergreen=True,
+        autor=autor_de_peticion(request),
     )
 
     hueco = calcular_hueco_para(copia)

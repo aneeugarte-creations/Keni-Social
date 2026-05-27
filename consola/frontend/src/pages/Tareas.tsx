@@ -12,6 +12,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Autor } from "@/components/comunes/Autor";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -349,7 +350,10 @@ function TarjetaTarea({ tarea, proyectos }: { tarea: Tarea; proyectos: ProyectoT
                 {etiquetaEstado(tarea.estado)}
               </Badge>
             </div>
-            {fecha && <p className="text-xs text-muted-foreground">{fecha}</p>}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {fecha && <span>{fecha}</span>}
+              <Autor nombre={tarea.autor_nombre} className="text-xs" />
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
             <Tooltip label={hecha ? "Marcar como pendiente" : "Marcar como hecha"}>

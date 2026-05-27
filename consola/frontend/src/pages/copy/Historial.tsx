@@ -4,6 +4,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Autor } from "@/components/comunes/Autor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -88,6 +89,7 @@ function FilaHistorial({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{entrada.skill_nombre}</span>
           <Badge variant="secondary">{entrada.marca_nombre}</Badge>
+          <Autor nombre={entrada.autor_nombre} className="text-xs" />
           <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
             <Clock className="h-3 w-3" />
             {formatearFecha(entrada.fecha)}

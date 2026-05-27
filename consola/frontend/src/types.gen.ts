@@ -197,6 +197,8 @@ export interface MetricasRun {
  *
  * `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
  * archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
+ * `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
+ * creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
  */
 export interface Publicacion {
   id: string;
@@ -208,6 +210,8 @@ export interface Publicacion {
   contenido: string;
   estado: "borrador" | "aprobado" | "programado" | "publicado";
   veredicto: "listo" | "revisar" | "no_publicar" | "";
+  autor_id: string;
+  autor_nombre: string;
   fecha_creacion: string;
   fecha_actualizacion: string;
   fecha_programada: string;

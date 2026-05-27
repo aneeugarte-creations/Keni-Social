@@ -37,6 +37,7 @@ from .. import generaciones, repos, skills_catalogo
 from .._http_json import leer_json
 from ..dominio import skills as dom_skills
 from ..dominio import stream
+from ..seguridad import autor_de_peticion
 from . import skills
 
 # Id de la skill que hace el QA (vive en skills-copy/.claude/skills/).
@@ -170,18 +171,21 @@ def parsear_informe(salida: str) -> dict[str, object]:
     }
 
 
-def _construir_procesar(marca: str, titulo: str) -> generaciones.Procesar:
+def _construir_procesar(
+    marca: str, titulo: str, autor: dict[str, str] | None = None
+) -> generaciones.Procesar:
     """Callback de post-procesado: parsea el informe y registra el historial (sin piezas).
 
     NO auto-crea publicaciones (esto SEÑALA, no publica). Devuelve `{informe, verdicto,
-    historial_id, piezas: [], publicaciones: []}` para el sondeo del frontend.
+    historial_id, piezas: [], publicaciones: []}` para el sondeo del frontend. `autor`
+    (atribucion por usuario, #130 Fase 1) se propaga al historial.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
         informe = parsear_informe(salida)
         historial_id = repos.registrar_historial_skill(
             SKILL_ID, marca, informe["informe_texto"], piezas=[], titulo=titulo,
-            metricas=stream.metricas_a_dict(metricas),
+            metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         return {
             "informe": informe,
@@ -258,12 +262,15 @@ async def revisar(request: Request) -> Response:
     prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
     titulo = stream.derivar_titulo(texto)
 
+    # Atribucion por usuario (#130 Fase 1): el QA lo dispara el usuario de la peticion.
+    autor = autor_de_peticion(request)
     gen = dom_skills._lanzar_con_procesar(
         tipo="qa-editorial",
         skill=SKILL_ID,
         marca=marca,
         prompt=prompt,
-        procesar=_construir_procesar(marca, titulo),
+        procesar=_construir_procesar(marca, titulo, autor),
+        autor=autor,
     )
     return JSONResponse({"generacion": gen})
 

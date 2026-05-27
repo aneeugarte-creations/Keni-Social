@@ -378,13 +378,20 @@ _CAMPOS_EDITABLES_PUBLICACION = (
 
 
 def _publicacion_yaml(pub: dict[str, Any]) -> dict[str, Any]:
-    """Cuerpo YAML de una publicacion (sin `id` ni `marca`: implicitos por fichero/carpeta)."""
+    """Cuerpo YAML de una publicacion (sin `id` ni `marca`: implicitos por fichero/carpeta).
+
+    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) se persisten como
+    campos mas; vacios en creaciones anonimas o legadas (retrocompat: un YAML sin estas
+    claves se lee como "sin autor", ver `_parsear_publicacion`).
+    """
     return {
         "titulo": pub["titulo"],
         "red": pub["red"],
         "estado": pub["estado"],
         "veredicto": pub["veredicto"],
         "evergreen": bool(pub["evergreen"]),
+        "autor_id": pub.get("autor_id", "") or "",
+        "autor_nombre": pub.get("autor_nombre", "") or "",
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],
@@ -412,6 +419,10 @@ def _parsear_publicacion(datos: dict[str, Any], marca: str, pub_id: str) -> dict
         "contenido": datos.get("contenido", "") or "",
         "estado": estado,
         "veredicto": datos.get("veredicto", "") or "",
+        # Atribucion por usuario (#130 Fase 1). Ausente en publicaciones legadas/anonimas
+        # => "" (la UI lo muestra como "desconocido"); nunca rompe la lectura.
+        "autor_id": datos.get("autor_id", "") or "",
+        "autor_nombre": datos.get("autor_nombre", "") or "",
         "fecha_creacion": datos.get("fecha_creacion", "") or "",
         "fecha_actualizacion": datos.get("fecha_actualizacion", "") or "",
         "fecha_programada": datos.get("fecha_programada", "") or "",
@@ -432,6 +443,8 @@ def _construir_publicacion(datos: dict[str, Any]) -> dict[str, Any]:
         "contenido": datos.get("contenido") or "",
         "estado": datos.get("estado") or "borrador",
         "veredicto": datos.get("veredicto") or "",
+        "autor_id": datos.get("autor_id") or "",
+        "autor_nombre": datos.get("autor_nombre") or "",
         "fecha_creacion": ahora,
         "fecha_actualizacion": ahora,
         "fecha_programada": datos.get("fecha_programada") or "",
@@ -461,8 +474,14 @@ def crear_publicacion(
     origen: str = "",
     imagen: str = "",
     evergreen: bool = False,
+    autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Crea una publicacion (un YAML en `<marca>/publicaciones/`) y la devuelve."""
+    """Crea una publicacion (un YAML en `<marca>/publicaciones/`) y la devuelve.
+
+    `autor` (atribucion por usuario, #130 Fase 1) es `{"id", "usuario"}` o `None`
+    (creacion anonima / por token de mantenimiento). Se persiste en el YAML.
+    """
+    autor = autor or {}
     pub = _construir_publicacion(
         {
             "titulo": titulo,
@@ -475,6 +494,8 @@ def crear_publicacion(
             "origen": origen,
             "imagen": imagen,
             "evergreen": evergreen,
+            "autor_id": autor.get("id", ""),
+            "autor_nombre": autor.get("usuario", ""),
         }
     )
     _guardar_publicacion(pub)
@@ -1196,6 +1217,9 @@ def _parsear_historial(datos: dict[str, Any], marca: str, hid: str) -> dict[str,
         "resultado": datos.get("resultado", "") or "",
         "piezas": [p for p in piezas if isinstance(p, dict)],
         "titulo": datos.get("titulo", "") or "",
+        # Atribucion por usuario (#130 Fase 1). Ausente en historial legado => "".
+        "autor_id": datos.get("autor_id", "") or "",
+        "autor_nombre": datos.get("autor_nombre", "") or "",
         "metricas": metricas,
     }
 
@@ -1208,12 +1232,15 @@ def registrar_historial_skill(
     piezas: list[dict[str, Any]] | None = None,
     titulo: str = "",
     metricas: dict[str, Any] | None = None,
+    autor: dict[str, str] | None = None,
 ) -> str:
     """Guarda una ejecucion de skill (un YAML en `<marca>/historial/<YYYY>/<MM>/`) y devuelve su id.
 
     `metricas` (tokens/turnos/coste/duracion/modelo del run) se guarda como un mapa en
-    el YAML, o se omite si es None.
+    el YAML, o se omite si es None. `autor` (atribucion por usuario, #130 Fase 1) es
+    `{"id", "usuario"}` o `None`; se persiste (vacio si anonimo / por token).
     """
+    autor = autor or {}
     hid = _nuevo_id()
     ahora = datetime.now()
     cuerpo: dict[str, Any] = {
@@ -1221,6 +1248,8 @@ def registrar_historial_skill(
         "fecha": date.today().isoformat(),
         "fecha_creacion": ahora.isoformat(timespec="seconds"),
         "titulo": titulo,
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
         "piezas": [dict(p) for p in (piezas or [])],
         "resultado": resultado,
     }

@@ -309,6 +309,29 @@ async def _rechazar(scope: Scope, receive: Receive, send: Send, mensaje: str, st
     await respuesta(scope, receive, send)
 
 
+def autor_de_peticion(request: object) -> dict[str, str] | None:
+    """Autor (forma de atribucion) de una peticion autenticada, o None (#130 Fase 1).
+
+    Devuelve `{"id": <id estable>, "usuario": <nombre>}` cuando la peticion se autentico
+    con una SESION de usuario (el middleware deja el usuario en `request.state.usuario`);
+    `None` cuando se entro por el TOKEN de bootstrap (mantenimiento, sin usuario) o no hay
+    sesion. Ese `None` se persiste como atribucion vacia: el registro queda "sin autor"
+    (legado / anonimo), nunca rompe la creacion.
+
+    Se queda con SOLO el id (estable) y el nombre (para mostrar), espejo del modelo de
+    usuario (`auth._fila_a_usuario_publico`); no arrastra rol ni mas estado mutable.
+    Es el UNICO accesor de atribucion: los handlers no leen `request.state` a mano.
+    """
+    usuario = getattr(getattr(request, "state", None), "usuario", None)
+    if not isinstance(usuario, dict):
+        return None
+    uid = usuario.get("id")
+    nombre = usuario.get("usuario")
+    if not isinstance(uid, str) or not uid:
+        return None
+    return {"id": uid, "usuario": nombre if isinstance(nombre, str) else ""}
+
+
 def resolver_token() -> tuple[str, bool]:
     """Devuelve `(token, generado)`: el de la env var o uno nuevo si no estaba.
 

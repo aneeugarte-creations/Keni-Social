@@ -23,6 +23,7 @@ from starlette.routing import Route
 
 from .. import generaciones, marcas, redes, repos
 from .._http_json import leer_json
+from ..seguridad import autor_de_peticion
 from . import skills
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
@@ -217,8 +218,16 @@ async def sugerir(request: Request) -> Response:
     def procesar(salida: str, _metricas: object) -> dict[str, object]:
         return {"hashtags": parsear_hashtags(salida)}
 
+    # Atribucion por usuario (#130 Fase 1): la generacion la dispara el usuario actual.
+    autor = autor_de_peticion(request) or {}
     gen = generaciones.crear(
-        {"tipo": "hashtags", "marca": marca, "etiqueta": f"Hashtags · {marcas.etiqueta_de(marca)}"}
+        {
+            "tipo": "hashtags",
+            "marca": marca,
+            "etiqueta": f"Hashtags · {marcas.etiqueta_de(marca)}",
+            "autor_id": autor.get("id", ""),
+            "autor_nombre": autor.get("usuario", ""),
+        }
     )
     try:
         generaciones.lanzar_job_claude(
