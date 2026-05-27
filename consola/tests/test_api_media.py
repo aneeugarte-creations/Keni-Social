@@ -146,6 +146,57 @@ def test_media_almacen_tiene_prioridad_sobre_env(monkeypatch, entorno):
 
 
 # --------------------------------------------------------------------------- #
+# Modelo de imagen: lista curada + precedencia de _modelo()                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_modelos_disponibles_lista_curada():
+    """`modelos_disponibles()` devuelve la lista curada {id, etiqueta}; copia, no la fuente."""
+    modelos = media.modelos_disponibles()
+    assert modelos == media.MODELOS_IMAGEN  # mismo contenido
+    assert modelos is not media.MODELOS_IMAGEN  # pero es una copia
+    assert all(set(m) == {"id", "etiqueta"} for m in modelos)
+    assert modelos[0]["id"] == media._MODELO_DEFECTO == "openai/gpt-5-image-mini"
+
+
+def test_modelo_valido():
+    assert media.modelo_valido("openai/gpt-5-image-mini") is True
+    assert media.modelo_valido("google/gemini-2.5-flash-image") is True
+    assert media.modelo_valido("inventado/foo") is False
+    assert media.modelo_valido("") is False
+
+
+def test_modelo_por_defecto_sin_almacen_ni_env(monkeypatch, entorno):
+    """Sin modelo guardado y sin env => el por defecto (GPT-5 Image Mini)."""
+    monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
+    assert media._modelo() == "openai/gpt-5-image-mini"
+
+
+def test_modelo_env_gana_al_defecto(monkeypatch, entorno):
+    """Con env y sin almacen => gana el env."""
+    monkeypatch.setenv("OPENROUTER_IMAGE_MODEL", "openai/gpt-5-image")
+    assert media._modelo() == "openai/gpt-5-image"
+
+
+def test_modelo_almacen_gana_al_env_y_defecto(monkeypatch, entorno):
+    """El modelo guardado por la UI gana al env y al por defecto (precedencia)."""
+    from keni_consola import secretos
+
+    monkeypatch.setenv("OPENROUTER_IMAGE_MODEL", "openai/gpt-5-image")
+    secretos.guardar_modelo_imagen("openai/gpt-5.4-image-2")
+    assert media._modelo() == "openai/gpt-5.4-image-2"
+
+
+def test_modelo_almacen_vacio_cae_al_env(monkeypatch, entorno):
+    """Un modelo guardado vacio se trata como ausente => cae al env."""
+    from keni_consola import secretos
+
+    monkeypatch.setenv("OPENROUTER_IMAGE_MODEL", "openai/gpt-5-image")
+    secretos.guardar_modelo_imagen("   ")
+    assert media._modelo() == "openai/gpt-5-image"
+
+
+# --------------------------------------------------------------------------- #
 # Seguridad: follow_redirects=False en _proveedor_openrouter (#117)           #
 # --------------------------------------------------------------------------- #
 

@@ -20,9 +20,11 @@ GENERACION POR IA (inyectable / mockeable):
   - `generar_imagen(prompt)` delega en `_PROVEEDOR` (modulo-nivel). Los tests lo
     parchean para NUNCA tocar la red: ni se llama a OpenAI ni se necesita httpx real.
   - Proveedor por defecto: OpenRouter (gateway compatible con OpenAI; el modelo de
-    imagen se elige por id, def. `openai/gpt-5.4-image-2`, editable con
-    `OPENROUTER_IMAGE_MODEL`). La clave se toma del almacen de secretos
-    (`keni_consola.secretos`) y, si no, del env `OPENROUTER_API_KEY`.
+    imagen se elige por id de una lista curada `MODELOS_IMAGEN`, def.
+    `openai/gpt-5-image-mini`). El modelo se resuelve por precedencia en `_modelo()`:
+    almacen de secretos (UI) > env `OPENROUTER_IMAGE_MODEL` > por defecto. La clave se
+    toma del almacen de secretos (`keni_consola.secretos`) y, si no, del env
+    `OPENROUTER_API_KEY`.
 """
 
 from __future__ import annotations
@@ -66,7 +68,47 @@ _TIMEOUT_GEN = 120
 # Endpoint y modelo por defecto en OpenRouter (gateway compatible con OpenAI; el modelo
 # de imagen se elige por id y se puede cambiar con OPENROUTER_IMAGE_MODEL).
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_MODELO_DEFECTO = "openai/gpt-5.4-image-2"
+# Por defecto el modelo ECONOMICO que SI genera personas reales (GPT-5 Image Mini). Las
+# alternativas tipo Nano Banana (Gemini) son aun mas baratas pero BLOQUEAN personas.
+_MODELO_DEFECTO = "openai/gpt-5-image-mini"
+
+# Lista curada de modelos de imagen ofrecidos en la UI (FUENTE UNICA de verdad: alimenta
+# tanto el dropdown de Ajustes como la validacion del PUT en `api/conexiones.py`). El
+# orden es el orden de presentacion; el primero es el por defecto.
+MODELOS_IMAGEN: list[dict[str, str]] = [
+    {
+        "id": "openai/gpt-5-image-mini",
+        "etiqueta": "GPT-5 Image Mini — económico · personas ✓",
+    },
+    {
+        "id": "openai/gpt-5-image",
+        "etiqueta": "GPT-5 Image — equilibrado · personas ✓",
+    },
+    {
+        "id": "openai/gpt-5.4-image-2",
+        "etiqueta": "GPT-5.4 Image 2 — máxima calidad, caro · personas ✓",
+    },
+    {
+        "id": "google/gemini-2.5-flash-image",
+        "etiqueta": "Nano Banana — el más barato · SIN personas",
+    },
+]
+
+# Conjunto de ids validos (derivado de MODELOS_IMAGEN; no se duplica la lista).
+_IDS_MODELO: frozenset[str] = frozenset(m["id"] for m in MODELOS_IMAGEN)
+
+
+def modelos_disponibles() -> list[dict[str, str]]:
+    """Lista curada de modelos de imagen `[{id, etiqueta}, ...]` para poblar el dropdown.
+
+    Devuelve una COPIA para que nadie mute la fuente unica `MODELOS_IMAGEN`.
+    """
+    return [dict(m) for m in MODELOS_IMAGEN]
+
+
+def modelo_valido(modelo: str) -> bool:
+    """True si `modelo` es uno de los ids de la lista curada (`MODELOS_IMAGEN`)."""
+    return modelo in _IDS_MODELO
 
 
 class MediaError(RuntimeError):
@@ -255,7 +297,17 @@ def proveedor_configurado() -> bool:
 
 
 def _modelo() -> str:
-    """Modelo de imagen en OpenRouter: `OPENROUTER_IMAGE_MODEL` o el por defecto."""
+    """Modelo de imagen en OpenRouter, con esta PRECEDENCIA (cadena vacia = ausente):
+
+    1. el modelo GUARDADO en el almacen de secretos (elegido por la UI),
+    2. la env `OPENROUTER_IMAGE_MODEL`,
+    3. el por defecto `_MODELO_DEFECTO` (GPT-5 Image Mini: barato y con personas).
+    """
+    from . import secretos
+
+    guardado = secretos.obtener_modelo_imagen()
+    if guardado:
+        return guardado
     return os.environ.get("OPENROUTER_IMAGE_MODEL") or _MODELO_DEFECTO
 
 

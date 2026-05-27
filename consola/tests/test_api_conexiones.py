@@ -23,15 +23,20 @@ _CLAVE = "sk-test-PISTA1234"
 
 
 def test_imagen_estado_sin_clave(cliente):
+    from keni_consola import media
+
     r = cliente.get("/api/conexiones/imagen")
     assert r.status_code == 200
     cuerpo = r.json()
     assert cuerpo == {
         "proveedor": "openrouter",
-        "modelo": "openai/gpt-5.4-image-2",
+        "modelo": "openai/gpt-5-image-mini",
+        "modelos": media.modelos_disponibles(),
         "configurado": False,
         "pista": "",
     }
+    # el primer modelo de la lista curada es el por defecto (economico, con personas)
+    assert cuerpo["modelos"][0]["id"] == "openai/gpt-5-image-mini"
 
 
 def test_imagen_guardar_y_estado(cliente):
@@ -43,7 +48,7 @@ def test_imagen_guardar_y_estado(cliente):
 
     estado = cliente.get("/api/conexiones/imagen").json()
     assert estado["configurado"] is True
-    assert estado["modelo"] == "openai/gpt-5.4-image-2"
+    assert estado["modelo"] == "openai/gpt-5-image-mini"
     assert estado["pista"] == "····" + _CLAVE[-4:]
     # el estado NUNCA expone la clave entera
     assert _CLAVE not in cliente.get("/api/conexiones/imagen").text
@@ -106,6 +111,61 @@ def test_imagen_clave_activa_generacion_en_media(cliente, monkeypatch):
     assert media.proveedor_configurado() is False
     cliente.put("/api/conexiones/imagen", json={"api_key": _CLAVE})
     assert media.proveedor_configurado() is True
+
+
+# --------------------------------------------------------------------------- #
+# Imagen IA: selector de modelo                                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_imagen_estado_trae_lista_de_modelos(cliente):
+    """El GET incluye `modelos` (lista curada {id, etiqueta}) para poblar el dropdown."""
+    cuerpo = cliente.get("/api/conexiones/imagen").json()
+    modelos = cuerpo["modelos"]
+    assert isinstance(modelos, list) and modelos
+    # cada entrada tiene id + etiqueta
+    assert all(set(m) == {"id", "etiqueta"} for m in modelos)
+    ids = [m["id"] for m in modelos]
+    assert "openai/gpt-5-image-mini" in ids
+    assert "google/gemini-2.5-flash-image" in ids
+
+
+def test_imagen_modelo_guardar_valido_y_persiste(cliente):
+    """PUT /imagen/modelo con un id valido lo guarda y el GET lo refleja como `modelo`."""
+    r = cliente.put(
+        "/api/conexiones/imagen/modelo", json={"modelo": "google/gemini-2.5-flash-image"}
+    )
+    assert r.status_code == 200
+    assert r.json() == {"modelo": "google/gemini-2.5-flash-image"}
+    # el estado refleja el modelo guardado (gana al por defecto)
+    estado = cliente.get("/api/conexiones/imagen").json()
+    assert estado["modelo"] == "google/gemini-2.5-flash-image"
+
+
+def test_imagen_modelo_invalido_400(cliente):
+    """Un id fuera de la lista curada => 400 con mensaje en espanol; no cambia nada."""
+    r = cliente.put("/api/conexiones/imagen/modelo", json={"modelo": "inventado/foo"})
+    assert r.status_code == 400
+    assert "modelo" in r.json()["error"].lower()
+    # el modelo en uso sigue siendo el por defecto
+    assert cliente.get("/api/conexiones/imagen").json()["modelo"] == "openai/gpt-5-image-mini"
+
+
+def test_imagen_modelo_vacio_400(cliente):
+    r = cliente.put("/api/conexiones/imagen/modelo", json={"modelo": "  "})
+    assert r.status_code == 400
+    r2 = cliente.put("/api/conexiones/imagen/modelo", json={})
+    assert r2.status_code == 400
+
+
+def test_imagen_modelo_no_borra_la_clave(cliente):
+    """Guardar el modelo NO debe tocar la clave ya configurada (se preserva)."""
+    cliente.put("/api/conexiones/imagen", json={"api_key": _CLAVE})
+    cliente.put("/api/conexiones/imagen/modelo", json={"modelo": "openai/gpt-5-image"})
+    estado = cliente.get("/api/conexiones/imagen").json()
+    assert estado["configurado"] is True
+    assert estado["modelo"] == "openai/gpt-5-image"
+    assert estado["pista"] == "····" + _CLAVE[-4:]
 
 
 # --------------------------------------------------------------------------- #

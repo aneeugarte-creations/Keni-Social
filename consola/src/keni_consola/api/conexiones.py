@@ -4,8 +4,9 @@ Dos areas, una misma regla de oro: los SECRETOS no salen nunca al navegador. Sol
 se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
 
   IMAGEN IA (almacen de secretos de la consola, `keni_consola.secretos`):
-    GET    /api/conexiones/imagen          -> estado (sin la clave)
+    GET    /api/conexiones/imagen          -> estado (sin la clave) + modelos disponibles
     PUT    /api/conexiones/imagen          -> guarda la clave (no la devuelve)
+    PUT    /api/conexiones/imagen/modelo   -> fija el modelo de imagen (lista curada)
     POST   /api/conexiones/imagen/probar   -> valida la clave con una llamada BARATA
     DELETE /api/conexiones/imagen          -> borra la clave
 
@@ -56,15 +57,18 @@ def _nombre_red(plataforma: str) -> str:
 
 
 async def imagen_estado(request: Request) -> Response:
-    """GET: estado del proveedor de imagen (proveedor, modelo, configurado, pista).
+    """GET: estado del proveedor de imagen (proveedor, modelo, modelos, configurado, pista).
 
-    NUNCA devuelve la clave: solo presencia y la pista `····last4`.
+    `modelo` es el modelo de imagen EN USO (`media._modelo()`, con su precedencia) y
+    `modelos` la lista curada para poblar el dropdown. NUNCA devuelve la clave: solo
+    presencia y la pista `····last4`.
     """
     estado = secretos.estado_imagen()
     return JSONResponse(
         {
             "proveedor": estado["proveedor"],
             "modelo": media._modelo(),
+            "modelos": media.modelos_disponibles(),
             "configurado": estado["configurado"],
             "pista": estado["pista"],
         }
@@ -92,6 +96,32 @@ async def imagen_guardar(request: Request) -> Response:
             status_code=500,
         )
     return JSONResponse({"configurado": True, "mensaje": "Clave de imagen guardada."})
+
+
+async def imagen_modelo_guardar(request: Request) -> Response:
+    """PUT: fija el modelo de imagen elegido por la UI (JSON `{modelo}`).
+
+    VALIDA que el id este en la lista curada (`media.MODELOS_IMAGEN`); si no, 400 en
+    espanol. Persiste SOLO el campo modelo (preserva clave/proveedor). Mismo patron de
+    auth que el resto de conexiones: la barrera de sesion + CSRF la aplica el middleware
+    `SeguridadConsola`; este handler no anade un gate de rol propio.
+    """
+    datos = await leer_json(request)
+    modelo = datos.get("modelo")
+    if not isinstance(modelo, str) or not modelo.strip():
+        return JSONResponse({"error": "Falta el modelo de imagen."}, status_code=400)
+    modelo = modelo.strip()
+    if not media.modelo_valido(modelo):
+        return JSONResponse(
+            {"error": "Modelo de imagen no reconocido."}, status_code=400
+        )
+    try:
+        secretos.guardar_modelo_imagen(modelo)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar el modelo de imagen."}, status_code=500
+        )
+    return JSONResponse({"modelo": modelo})
 
 
 async def imagen_borrar(request: Request) -> Response:
@@ -242,6 +272,7 @@ RUTAS = [
     Route("/api/conexiones/imagen", imagen_estado, methods=["GET"]),
     Route("/api/conexiones/imagen", imagen_guardar, methods=["PUT"]),
     Route("/api/conexiones/imagen", imagen_borrar, methods=["DELETE"]),
+    Route("/api/conexiones/imagen/modelo", imagen_modelo_guardar, methods=["PUT"]),
     Route("/api/conexiones/imagen/probar", imagen_probar, methods=["POST"]),
     Route("/api/conexiones/redes", redes_estado, methods=["GET"]),
     Route("/api/conexiones/redes/{plataforma}", redes_guardar, methods=["PUT"]),
