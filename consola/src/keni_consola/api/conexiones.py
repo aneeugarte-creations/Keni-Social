@@ -106,12 +106,12 @@ async def imagen_borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Clave de imagen eliminada."})
 
 
-def _probar_openai(clave: str) -> tuple[bool, str]:
-    """Valida una clave de OpenAI con una llamada BARATA: `GET /v1/models`.
+def _probar_openrouter(clave: str) -> tuple[bool, str]:
+    """Valida una clave de OpenRouter con una llamada BARATA: `GET /api/v1/auth/key`.
 
-    NO genera ninguna imagen (sin coste). Punto INYECTABLE/mockeable: los tests
-    parchean `_PROBADOR` para NUNCA tocar la red. La clave nunca aparece en los
-    mensajes de salida.
+    NO genera ninguna imagen (sin coste): solo consulta los datos de la propia clave
+    (requiere Bearer). Punto INYECTABLE/mockeable: los tests parchean `_PROBADOR` para
+    NUNCA tocar la red. La clave nunca aparece en los mensajes de salida.
     """
     try:
         import httpx
@@ -119,7 +119,7 @@ def _probar_openai(clave: str) -> tuple[bool, str]:
         return False, "Falta la librería para probar la conexión en este equipo."
     try:
         respuesta = httpx.get(
-            "https://api.openai.com/v1/models",
+            "https://openrouter.ai/api/v1/auth/key",
             headers={"Authorization": f"Bearer {clave}"},
             timeout=30,
             follow_redirects=False,
@@ -127,14 +127,14 @@ def _probar_openai(clave: str) -> tuple[bool, str]:
     except Exception:  # noqa: BLE001 -- cualquier fallo de red: mensaje en espanol
         return False, "No se pudo contactar al proveedor de imagen."
     if respuesta.status_code == 200:
-        return True, "La clave funciona."
+        return True, "La clave de OpenRouter funciona."
     if respuesta.status_code in (401, 403):
-        return False, "La clave fue rechazada por el proveedor."
-    return False, "El proveedor de imagen devolvió un error al validar la clave."
+        return False, "La clave fue rechazada por OpenRouter."
+    return False, "OpenRouter devolvió un error al validar la clave."
 
 
 # Punto INYECTABLE: lo unico que toca la red al "probar". Los tests lo parchean.
-_PROBADOR = _probar_openai
+_PROBADOR = _probar_openrouter
 
 
 async def imagen_probar(request: Request) -> Response:

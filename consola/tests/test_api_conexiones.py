@@ -2,7 +2,7 @@
 
 Cubre la clave de imagen IA (estado/guardar/probar-mockeado/borrar, incl. "no
 configurada") y los tokens de redes (estado/set/remove sobre un config.toml de
-metricas temporal). En "probar" se parchea `_PROBADOR`: jamas se llama a OpenAI.
+metricas temporal). En "probar" se parchea `_PROBADOR`: jamas se llama a OpenRouter.
 La clave nunca debe aparecer en ninguna respuesta de la API.
 """
 
@@ -190,25 +190,25 @@ def test_redes_config_0600(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Seguridad: follow_redirects=False en _probar_openai (#117)                  #
+# Seguridad: follow_redirects=False en _probar_openrouter (#117)              #
 # --------------------------------------------------------------------------- #
 
 
-def test_probar_openai_no_sigue_redirects_a_otro_host():
-    """_probar_openai pasa follow_redirects=False a httpx.get.
+def test_probar_openrouter_no_sigue_redirects_a_otro_host():
+    """_probar_openrouter pasa follow_redirects=False a httpx.get.
 
-    Un redirect 302 de OpenAI a un host distinto NO debe reenviar el Bearer.
-    Con follow_redirects=False httpx devuelve la respuesta 3xx directamente
-    sin seguirla, por lo que el header Authorization nunca llega al host externo.
-    Verificamos que el kwarg llega a httpx.get y que un 302 se trata como error.
+    Un redirect 302 a un host distinto NO debe reenviar el Bearer. Con
+    follow_redirects=False httpx devuelve la respuesta 3xx directamente sin seguirla,
+    por lo que el header Authorization nunca llega al host externo. Verificamos que el
+    kwarg llega a httpx.get y que un 302 se trata como error.
     """
-    from keni_consola.api.conexiones import _probar_openai
+    from keni_consola.api.conexiones import _probar_openrouter
 
     mock_resp = MagicMock()
     mock_resp.status_code = 302
 
     with patch("httpx.get", return_value=mock_resp) as mock_get:
-        ok, _ = _probar_openai("sk-test-1234")
+        ok, _ = _probar_openrouter("sk-or-test-1234")
 
     # follow_redirects=False debe estar en los kwargs de la llamada
     _, kwargs = mock_get.call_args
@@ -219,25 +219,25 @@ def test_probar_openai_no_sigue_redirects_a_otro_host():
     assert ok is False
 
 
-def test_probar_openai_no_reenvio_bearer_en_redirect():
+def test_probar_openrouter_no_reenvio_bearer_en_redirect():
     """Simula un redirect 302 a otro host y verifica que el Bearer no se reenvía.
 
     Con follow_redirects=False httpx NO llama al host de destino del redirect,
     así que la clave nunca llega a un servidor externo. El mock confirma que
     httpx.get se invocó UNA SOLA VEZ (solo la URL original, no la de redirect).
     """
-    from keni_consola.api.conexiones import _probar_openai
+    from keni_consola.api.conexiones import _probar_openrouter
 
     redirect_resp = MagicMock()
     redirect_resp.status_code = 302
     redirect_resp.headers = {"location": "https://evil.example.com/captura"}
 
     with patch("httpx.get", return_value=redirect_resp) as mock_get:
-        ok, mensaje = _probar_openai("sk-secreto-5678")
+        ok, mensaje = _probar_openrouter("sk-or-secreto-5678")
 
     # httpx.get llamado SOLO UNA vez (no siguió el redirect)
     assert mock_get.call_count == 1
     url_llamada = mock_get.call_args[0][0]
-    assert "openai.com" in url_llamada
+    assert "openrouter.ai" in url_llamada
     assert "evil.example.com" not in url_llamada
     assert ok is False
