@@ -24,6 +24,15 @@ export function estaEjecutando(estado: string | undefined): boolean {
  * se guarda en `sessionStorage`; al montar de nuevo (cambiar de pestaña y volver) el
  * hook REANUDA el sondeo de esa generación. El trabajo nunca se detiene (corre en el
  * servidor); esto solo recupera la vista en vivo. Al terminar, se limpia la clave.
+ *
+ * SONDEO vs SSE (#137): se MANTIENE el sondeo (cada ~1.2 s) y se le añade cancelación.
+ * Es el cambio más pequeño y robusto: el registro YAML en disco ya es la fuente de verdad
+ * (el backend persiste el texto en vivo token a token), el sondeo SOBREVIVE a recargas y
+ * cambios de pestaña sin reconexión, y reaprovecha React Query (reintentos, dedupe). Mover
+ * a SSE obligaría a mantener una conexión abierta por trabajo, reconectar al navegar y un
+ * endpoint de streaming nuevo, sin un pago de UX que lo justifique (el desfase de ~1.2 s es
+ * imperceptible). La pieza que faltaba —parar un trabajo colgado— se resuelve con `cancelar`
+ * (un POST), no con streaming.
  */
 export function useGeneracion(persistKey?: string) {
   const [generacion, setGeneracion] = React.useState<Generacion | null>(null);
@@ -81,14 +90,37 @@ export function useGeneracion(persistKey?: string) {
     if (persistKey) sessionStorage.removeItem(persistKey);
   }, [persistKey]);
 
+  // CANCELACIÓN (#137): pide al backend matar el árbol del subproceso `claude` del job en
+  // vuelo. El backend responde con el registro en estado terminal; lo fijamos en el estado
+  // local para CORTAR el sondeo de inmediato (en vez de esperar al siguiente tick). El
+  // trabajo corre en el servidor; esto solo lo detiene y refleja el resultado. Best-effort:
+  // si la llamada falla (p. ej. ya terminó), el sondeo normal converge igual.
+  const [cancelando, setCancelando] = React.useState(false);
+  const cancelar = React.useCallback(async () => {
+    if (!actualId) return;
+    setCancelando(true);
+    try {
+      const r = await api.cancelarGeneracion(actualId);
+      setGeneracion(r.generacion);
+    } catch {
+      // Ignorado a propósito: el job ya pudo terminar; el sondeo refleja el estado real.
+    } finally {
+      setCancelando(false);
+    }
+  }, [actualId]);
+
   return {
     /** La generación más reciente conocida (en vivo mientras corre), o `null`. */
     generacion: actual,
     /** `true` mientras corre en segundo plano. */
     ejecutando: estaEjecutando(actual?.estado),
+    /** `true` mientras está en curso la petición de cancelación. */
+    cancelando,
     /** Arranca el seguimiento de una generación recién lanzada. */
     iniciar,
     /** Olvida la generación actual (limpia la vista y el sessionStorage). */
     limpiar,
+    /** Cancela el trabajo en vuelo (mata el subproceso en el servidor). */
+    cancelar,
   };
 }

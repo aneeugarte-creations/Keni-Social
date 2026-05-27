@@ -513,7 +513,8 @@ def _lanzar_con_procesar(
         )
     except generaciones.ColaLlenaError:
         # Cola al tope (#137): limpiamos el temporal, marcamos el registro y RE-LANZAMOS
-        # para que el manejador central responda 429 (backpressure). INTERINO hasta #130.
+        # para que el manejador central responda 429 (backpressure). Deuda PERMANENTE:
+        # la generacion sigue siendo subprocess `claude -p` (ADR 0001).
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)
         generaciones.actualizar(

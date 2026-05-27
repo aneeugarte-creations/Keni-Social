@@ -14,9 +14,10 @@ def 4): los jobs que no caben ESPERAN un hueco (quedan en cola). No hay espera
 infinita: cada job tiene wall-timeout (mata el proceso), asi que los slots SIEMPRE
 se liberan.
 
-ENDURECIMIENTO INTERINO (#137): este modulo recibe medidas de robustez TRANSITORIAS
-mientras llega el SERVICIO COMPARTIDO (#130), que reemplazara el subprocess `claude -p`
-por la API de Claude. NO es la solucion definitiva; es contencion para el piloto:
+ENDURECIMIENTO PERMANENTE (#137): la generacion se hace —y se SEGUIRA haciendo— con el
+subprocess `claude -p` (ahora en un sandbox por usuario; ver ADR 0001), NO con la API de
+Claude. Por tanto este runner de subprocesos NO desaparece: las medidas de robustez son
+deuda PERMANENTE, no contencion transitoria. Hay que tenerlas bien:
   - Cola con TOPE (`KENI_MAX_COLA`): antes `slot()` solo limitaba procesos CONCURRENTES,
     no la COLA. N peticiones = N hilos daemon bloqueados en `sem.acquire()` sin limite
     superior. Ahora `slot()` rechaza con `ColaLlenaError` cuando ya hay demasiados jobs
@@ -46,8 +47,8 @@ _log = logging.getLogger("keni_consola.runner")
 class ColaLlenaError(RuntimeError):
     """La cola de jobs `claude` esta al tope: rechazar (429) en vez de encolar mas.
 
-    INTERINO (#137): mientras no exista el servicio compartido (#130), un pico de
-    peticiones no debe traducirse en una pila ilimitada de hilos bloqueados. El
+    PERMANENTE (#137): como la generacion es subprocess `claude -p` (ADR 0001), un pico
+    de peticiones no debe traducirse en una pila ilimitada de hilos bloqueados. El
     llamante captura esta excepcion y devuelve una respuesta clara (429) al cliente.
     """
 
@@ -123,7 +124,7 @@ def lanzar_proc(
 ) -> subprocess.Popen:
     """Arranca `claude` en SU PROPIO grupo de procesos (lider de sesion).
 
-    INTERINO (#137): `start_new_session=True` hace al hijo lider de un grupo nuevo, asi
+    PERMANENTE (#137): `start_new_session=True` hace al hijo lider de un grupo nuevo, asi
     `matar_arbol()` puede senalizar al GRUPO entero (padre + herramientas hijas que
     `claude` lance). Sin esto, un `proc.kill()` mataba SOLO el padre y dejaba zombis.
     En Windows no hay grupos POSIX, pero el piloto corre en macOS/Linux. argv como lista
@@ -144,7 +145,7 @@ def lanzar_proc(
 def matar_arbol(proc: subprocess.Popen, *, espera: float = 10.0) -> None:
     """Mata el ARBOL COMPLETO del subproceso (su grupo de procesos), no solo el padre.
 
-    INTERINO (#137): manda SIGKILL al GRUPO (`os.killpg(getpgid(pid), SIGKILL)`) para
+    PERMANENTE (#137): manda SIGKILL al GRUPO (`os.killpg(getpgid(pid), SIGKILL)`) para
     arrastrar a las herramientas hijas que `claude` haya lanzado. Si el grupo ya no
     existe (carrera con la salida) o la plataforma no soporta `killpg`, degrada a
     `proc.kill()`. Best-effort: nunca propaga. Tras matar, espera al padre para reapear.
@@ -167,7 +168,7 @@ def matar_arbol(proc: subprocess.Popen, *, espera: float = 10.0) -> None:
 def esperar(proc: subprocess.Popen, timeout: int) -> bool:
     """Espera al proceso con wall-timeout; si lo supera mata el ARBOL y devuelve True.
 
-    INTERINO (#137): el timeout ahora mata el GRUPO de procesos (via `matar_arbol`), no
+    PERMANENTE (#137): el timeout ahora mata el GRUPO de procesos (via `matar_arbol`), no
     solo el padre, para no dejar herramientas hijas huerfanas.
     """
     try:
@@ -195,7 +196,7 @@ def max_jobs() -> int:
 def max_cola() -> int:
     """Maximo de jobs ESPERANDO un slot (`KENI_MAX_COLA`, def 16, minimo 0).
 
-    INTERINO (#137): TOPE de la cola, distinto del de concurrencia. Cuando hay este
+    PERMANENTE (#137): TOPE de la cola, distinto del de concurrencia. Cuando hay este
     numero de jobs ya en espera, `slot()` rechaza el siguiente con `ColaLlenaError` en
     vez de apilar otro hilo bloqueado. 0 = no se admite NINGUN job en cola (solo los
     que entran sin esperar). El default (16) deja holgura para picos del piloto.
@@ -235,7 +236,7 @@ def _semaforo() -> threading.BoundedSemaphore:
 def admitir() -> None:
     """Admite SINCRONAMENTE un job en el sistema, o lo rechaza con `ColaLlenaError`.
 
-    INTERINO (#137): se llama ANTES de lanzar el hilo del job. El tope total es
+    PERMANENTE (#137): se llama ANTES de lanzar el hilo del job. El tope total es
     `max_jobs()` (procesos concurrentes) + `max_cola()` (espera). Si admitir este job
     superaria ese tope, lanza `ColaLlenaError` (-> 429) y NO se encola otro hilo. Si
     admite, incrementa el contador; el job DEBE llamar a `liberar_admision()` al
@@ -277,7 +278,7 @@ def slot(
     cola en el estado). La espera no es infinita: cada job tiene wall-timeout, asi que
     los slots siempre acaban liberandose.
 
-    TOPE DE COLA INTERINO (#137): la admision se decide ANTES en `admitir()` (rechazo
+    TOPE DE COLA PERMANENTE (#137): la admision se decide ANTES en `admitir()` (rechazo
     sincrono -> 429). Aqui `slot()` solo bloquea hasta tener un proceso concurrente
     libre. `ya_admitido=True` indica que el llamante YA pidio `admitir()` (asi `slot()`
     se encarga de `liberar_admision()` al salir, pase lo que pase). Si `ya_admitido` es

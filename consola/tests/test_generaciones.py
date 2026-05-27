@@ -710,6 +710,52 @@ def test_excepcion_en_hilo_de_post_procesado_se_loggea_no_se_traga(entorno, monk
     assert correlacionados, "el fallo del post-procesado debe loguearse con el job-id"
 
 
+def test_fallo_del_job_se_correlaciona_con_el_request_id(entorno, monkeypatch, caplog):
+    """El log del fallo del job lleva el job-id Y el request-id de quien lo lanzo (#123+#137).
+
+    `lanzar_job_claude` captura `request_id_actual()` al lanzarse (sincronicamente, dentro
+    de la peticion); el hilo corre fuera de ese contexto, asi que el id viaja en el mensaje
+    de log. Asi un fallo del trabajo se rastrea hasta la peticion HTTP que lo origino.
+    """
+    from keni_consola import observabilidad
+
+    monkeypatch.setattr(generaciones.shutil, "which", lambda _n: "/usr/bin/claude")
+
+    import subprocess as _sp
+
+    lineas = [
+        '{"type": "stream_event", "event": {"type": "message_start", "message": {}}}',
+        '{"type": "result", "subtype": "success", "result": "hola", '
+        '"usage": {"input_tokens": 1, "output_tokens": 1}}',
+    ]
+    guion = "import sys\n" + "".join(f"print({ln!r}, flush=True)\n" for ln in lineas)
+
+    def _fake_lanzar(argv, *, cwd, env=None):  # noqa: ANN001
+        return _sp.Popen(
+            [sys.executable, "-c", guion],
+            cwd=cwd, stdout=_sp.PIPE, stderr=_sp.DEVNULL, text=True, bufsize=1,
+            start_new_session=True,
+        )
+
+    monkeypatch.setattr(generaciones.runner, "lanzar_proc", _fake_lanzar)
+
+    def _procesar_revienta(_salida, _metricas):  # noqa: ANN001
+        raise RuntimeError("falla a proposito")
+
+    gid = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Req"})["id"]
+    # Simulamos el contexto de peticion: fijamos un request-id como lo haria el middleware.
+    token = observabilidad.fijar_request_id("rid-job-123")
+    try:
+        with caplog.at_level(logging.ERROR, logger="keni_consola.generaciones"):
+            _LANZAR_CLAUDE_REAL(gid, prompt="hola", cwd=entorno, procesar=_procesar_revienta)
+            assert _esperar_terminal(gid) == generaciones.ESTADO_ERROR
+    finally:
+        observabilidad.restaurar_request_id(token)
+
+    correlacionados = [r for r in caplog.records if gid in r.getMessage() and "rid-job-123" in r.getMessage()]
+    assert correlacionados, "el log del job debe llevar el job-id Y el request-id"
+
+
 # --------------------------------------------------------------------------- #
 # #137 API: 429 cuando la cola esta llena + endpoint de cancelacion           #
 # --------------------------------------------------------------------------- #
