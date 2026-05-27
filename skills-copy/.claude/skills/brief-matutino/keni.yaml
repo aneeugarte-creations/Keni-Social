@@ -1,5 +1,5 @@
-nombre: Brief matutino
-explicacion: Reúne las noticias y tendencias del día (Google News + Trends, en vivo) más lo que viste en redes, las jerarquiza por tus reglas y sugiere un formato por pieza. Es un brief para decidir, no copy final.
+nombre: Brief de la mañana / junta 11:30
+explicacion: Reúne las noticias y tendencias del día (Google News + Trends, en vivo) más lo que viste en redes, las cruza contra el historial de publicaciones de la marca para separar lo YA TRABAJADO de lo PENDIENTE, lista las coberturas/entrevistas con horario que le pases y sugiere un formato por pieza. Es un brief para llegar a la junta con la foto armada, no copy final ni la parrilla del día.
 grupo: experimentales
 aplica_redes: false
 salida: documento
@@ -30,6 +30,14 @@ campos:
     ayuda: Sube la prioridad. Lo que esté aquí entra al brief aunque supere la ventana de frescura.
     opciones: []
     media_tipos: ""
+  - id: coberturas
+    etiqueta: Coberturas y entrevistas de hoy (con horario)
+    tipo: textarea
+    requerido: false
+    placeholder: "Una por línea, con su hora si la sabes. P. ej.: 13:00 partido América vs Cruz Azul (reportero Juan); 18:30 entrevista al DT."
+    ayuda: Los horarios conocidos de coberturas de reporteros, partidos, transmisiones y entrevistas. Sirve para anticiparse en la junta. Solo se lista lo que pongas aquí; no se inventan horarios.
+    opciones: []
+    media_tipos: ""
   - id: ventana_horas
     etiqueta: Ventana de frescura (horas)
     tipo: texto
@@ -39,7 +47,9 @@ campos:
     opciones: []
     media_tipos: ""
 plantilla_invocacion: |
-  usa brief-matutino para la mesa matutina, marca {marca}.
+  usa brief-matutino para la mesa matutina y la junta de las 11:30, marca {marca}.
+  Cruza los temas contra el historial de publicaciones de {marca} (publicado.py)
+  para separar lo YA TRABAJADO de lo PENDIENTE.
 
   Temas a vigilar:
   {temas}
@@ -51,3 +61,6 @@ plantilla_invocacion: |
 
   Agenda del día / mañanera (retomar sí o sí):
   {agenda_dia}
+
+  Coberturas y entrevistas de hoy (con horario, solo lo informado):
+  {coberturas}
