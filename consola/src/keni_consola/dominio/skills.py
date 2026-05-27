@@ -24,6 +24,45 @@ Depende del DOMINIO (`stream`, `publicaciones`) y de los modulos hoja de la cons
 `api/`. `generaciones` solo importa `dominio.stream`, asi que `dominio.skills ->
 generaciones` no crea ciclo. `skills_catalogo` importa estas funciones de cwd de forma
 PEREZOSA (dentro de `dir_skills`), asi que tampoco hay ciclo a nivel de modulo.
+
+------------------------------------------------------------------------------- #
+LAYOUT EN CONTENEDOR (#130) y ENV VARS QUE GOBIERNAN EL CWD                      #
+------------------------------------------------------------------------------- #
+
+En la IMAGEN no existe ni el repo de dev (`~/projects/keni-social`) ni la cache del
+plugin de Claude Code (`~/.claude/plugins`): la imagen COPIA el plugin (skills +
+contexto editorial) a una ruta FIJA y bundleada. El arbol esperado conserva la
+estructura del plugin (la misma que declara `.claude-plugin/plugin.json`):
+
+    <raiz_bundle>/                      # p.ej. /app/keni-social  (KENI_SKILLS_CWD)
+      skills-copy/
+        .claude/skills/<id>/{SKILL.md, keni.yaml}   # las skills como tools
+        contexto-editorial/                          # voces/marcas/reglas-legales...
+          marcas/  voces/  tropicalizacion.md  plataformas.md  reglas-legales.md
+
+El CORPUS EDITORIAL se resuelve RELATIVO al cwd de EJECUCION: las skills cargan
+`contexto-editorial/...` con rutas relativas, y `claude` corre con cwd `skills-copy/`,
+asi que esas rutas caen DENTRO de `skills-copy/contexto-editorial/`. Por eso el cwd de
+ejecucion DEBE ser el dir que contiene a la vez `.claude/skills` y `contexto-editorial/`
+(ambos cuelgan de `skills-copy/`): NO se puede separar "donde corre claude" de "donde
+viven las skills y el corpus" sin romper ese descubrimiento.
+
+Env vars (todas opcionales; el orden de abajo es el de precedencia real):
+
+  - `KENI_SKILLS_CWD`  (override de DESCUBRIMIENTO, maxima prioridad): RAIZ del arbol
+    bundleado. Apuntala a `<raiz_bundle>` (que contiene `skills-copy/.claude/skills`) o
+    directamente a un `skills-copy/` (que contiene `.claude/skills`). De aqui salen TANTO
+    el catalogo (`skills_catalogo.dir_skills` le anade `skills-copy/.claude/skills`) COMO
+    —por defecto— el cwd de ejecucion. En contenedor es la unica que hace falta poner.
+  - `KENI_SKILLS_EJECUCION_CWD`  (override del cwd de EJECUCION, maxima prioridad para
+    `cwd_ejecucion_skills`): el dir DETERMINISTA y ESCRIBIBLE desde el que se lanza
+    `claude -p`. Solo necesaria si el `skills-copy/` bundleado es de SOLO LECTURA (capas
+    de imagen) y `claude` necesita escribir en su cwd: la imagen monta una COPIA escribible
+    del `skills-copy/` (con sus `.claude/skills` y `contexto-editorial/`) y se apunta aqui.
+    Debe contener `.claude/skills` (directo o via `skills-copy/`) para que el corpus
+    relativo siga resolviendo. Si no se define, el cwd de ejecucion se DERIVA de
+    `KENI_SKILLS_CWD` (el caso normal, tambien valido en contenedor si el bundle es
+    escribible).
 """
 
 from __future__ import annotations
@@ -366,7 +405,9 @@ def cwd_skills() -> Path:
     `skills-copy/`) de esta lista de preferencia:
 
       1. env `KENI_SKILLS_CWD` (override explicito): si apunta a un dir EXISTENTE se
-         respeta tal cual, contenga o no skills (compat: lo usan tests/operadores).
+         respeta tal cual, contenga o no skills (compat: lo usan tests/operadores). Es la
+         via del CONTENEDOR (#130): la imagen lo apunta al arbol bundleado del plugin,
+         sin necesidad de repo de dev ni de cache de Claude Code.
       2. repo de desarrollo conocido (`~/projects/keni-social`) — flujo de dev intacto.
       3. FALLBACK de distribucion (#133): la cache del plugin de Claude Code, via
          `CLAUDE_PLUGIN_ROOT` y `~/.claude/plugins/**/keni-social`, para que un community
@@ -386,6 +427,20 @@ def cwd_skills() -> Path:
     return Path.cwd()
 
 
+def _dir_que_contiene_skills(base: Path) -> Path:
+    """Normaliza `base` al dir que CONTIENE `.claude/skills` (directo o via `skills-copy/`).
+
+    Acepta las dos formas de raiz —igual que `_contiene_skills`— y devuelve el dir desde el
+    que `claude` descubre las skills y resuelve `contexto-editorial/...` relativo. Si `base`
+    no encaja en ninguna forma, la devuelve tal cual (ultimo recurso, como antes).
+    """
+    if (base / "skills-copy" / ".claude" / "skills").is_dir():
+        return base / "skills-copy"
+    if (base / ".claude" / "skills").is_dir():
+        return base
+    return base
+
+
 def cwd_ejecucion_skills() -> Path:
     """Directorio desde el que EJECUTAMOS `claude` para correr una skill.
 
@@ -396,15 +451,23 @@ def cwd_ejecucion_skills() -> Path:
     raiz, que es lo que devuelve `cwd_skills()`; ese se reserva para el catalogo, que le
     anade `skills-copy/.claude/skills`). Se distingue de `cwd_skills()` a proposito.
 
-    Resuelve la base via el ATRIBUTO de modulo `cwd_skills` (no por referencia capturada)
-    para que un monkeypatch de `cwd_skills` en los tests siga surtiendo efecto.
+    Precedencia:
+      1. env `KENI_SKILLS_EJECUCION_CWD` (override del cwd de EJECUCION, p.ej. CONTENEDOR
+         #130): el dir DETERMINISTA y ESCRIBIBLE desde el que se lanza `claude`. Se respeta
+         si es un dir existente; se normaliza al dir que contiene `.claude/skills` (directo
+         o via `skills-copy/`) para que el corpus editorial relativo siga resolviendo. Util
+         cuando el `skills-copy/` bundleado es de SOLO LECTURA y la imagen monta una copia
+         escribible en otra ruta.
+      2. derivado de `cwd_skills()`: el caso normal (dev, plugin instalado, o contenedor
+         con bundle escribible). Resuelve la base via el ATRIBUTO de modulo `cwd_skills`
+         (no por referencia capturada) para que un monkeypatch en los tests siga aplicando.
     """
-    base = cwd_skills()
-    if (base / "skills-copy" / ".claude" / "skills").is_dir():
-        return base / "skills-copy"
-    if (base / ".claude" / "skills").is_dir():
-        return base
-    return base
+    env = os.environ.get("KENI_SKILLS_EJECUCION_CWD")
+    if env:
+        candidato = Path(env)
+        if candidato.is_dir():
+            return _dir_que_contiene_skills(candidato)
+    return _dir_que_contiene_skills(cwd_skills())
 
 
 # --------------------------------------------------------------------------- #

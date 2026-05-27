@@ -190,6 +190,7 @@ def _aislar_cwd_skills(monkeypatch, home: Path):
     """Aisla cwd_skills del entorno real: HOME -> tmp y limpia los envs implicados."""
     monkeypatch.setattr(dom_skills.Path, "home", classmethod(lambda cls: home))
     monkeypatch.delenv("KENI_SKILLS_CWD", raising=False)
+    monkeypatch.delenv("KENI_SKILLS_EJECUCION_CWD", raising=False)
     monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
 
 
@@ -272,6 +273,119 @@ def test_cwd_skills_env_explicito_se_respeta_aunque_sin_skills(monkeypatch, tmp_
     _aislar_cwd_skills(monkeypatch, home)
     monkeypatch.setenv("KENI_SKILLS_CWD", str(override))
     assert dom_skills.cwd_skills() == override
+
+
+# --------------------------------------------------------------------------- #
+# CONTENEDOR (#130): descubrir y ejecutar desde un arbol BUNDLEADO, sin repo   #
+# de dev ni cache del plugin de Claude Code.                                   #
+# --------------------------------------------------------------------------- #
+#
+# En la imagen solo existe el arbol bundleado (KENI_SKILLS_CWD -> `<raiz>` con
+# `skills-copy/.claude/skills` + `skills-copy/contexto-editorial/`). NO hay
+# `~/projects/keni-social` ni `~/.claude/plugins`. Debe: (a) DESCUBRIR las skills,
+# (b) que el cwd de EJECUCION sea el `skills-copy/` correcto (donde resuelve el corpus
+# editorial relativo) y sea ESCRIBIBLE.
+
+
+def _crear_bundle_contenedor(raiz: Path) -> Path:
+    """Crea el arbol bundleado de la imagen: skills + contexto-editorial bajo `skills-copy/`."""
+    base = _crear_skills(raiz)  # `<raiz>/skills-copy/.claude/skills`
+    (base / "skills-copy" / "contexto-editorial" / "marcas").mkdir(parents=True)
+    (base / "skills-copy" / "contexto-editorial" / "tropicalizacion.md").write_text(
+        "tropicalizacion MX", encoding="utf-8"
+    )
+    return base
+
+
+def test_contenedor_solo_skills_cwd_descubre_y_ejecuta(monkeypatch, tmp_path):
+    # SOLO KENI_SKILLS_CWD definido (sin repo de dev ni cache del plugin):
+    #   - cwd_skills() resuelve la raiz bundleada,
+    #   - el cwd de EJECUCION es `skills-copy/` (donde resuelve `contexto-editorial/`),
+    #   - ese cwd es ESCRIBIBLE.
+    home = tmp_path / "home"
+    home.mkdir(parents=True)  # NO hay ~/projects/keni-social ni ~/.claude/plugins
+    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
+
+    assert dom_skills.cwd_skills() == bundle
+    ejecucion = dom_skills.cwd_ejecucion_skills()
+    assert ejecucion == bundle / "skills-copy"
+    # El corpus editorial se resuelve RELATIVO al cwd de ejecucion.
+    assert (ejecucion / "contexto-editorial" / "tropicalizacion.md").is_file()
+    # El cwd de ejecucion es ESCRIBIBLE (claude escribe en su cwd).
+    assert os.access(ejecucion, os.W_OK)
+    (ejecucion / ".keni_escritura_ok").write_text("ok", encoding="utf-8")
+
+
+def test_contenedor_catalogo_descubre_skills_via_skills_cwd(monkeypatch, tmp_path):
+    # El CATALOGO descubre las skills end-to-end desde KENI_SKILLS_CWD (sin KENI_SKILLS_DIR,
+    # sin repo de dev ni cache): `dir_skills()` resuelve `<raiz>/skills-copy/.claude/skills`
+    # y `listar()` ve la skill bundleada.
+    from keni_consola import skills_catalogo
+
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")
+    base_skills = bundle / "skills-copy" / ".claude" / "skills"
+    (base_skills / "copy-demo").mkdir(parents=True)
+    (base_skills / "copy-demo" / "keni.yaml").write_text("nombre: Copy Demo\n", encoding="utf-8")
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.delenv("KENI_SKILLS_DIR", raising=False)  # forzar la cadena via cwd_skills
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
+
+    assert skills_catalogo.dir_skills() == base_skills
+    assert "copy-demo" in {s.id for s in skills_catalogo.listar()}
+
+
+def test_contenedor_skills_cwd_apunta_directo_a_skills_copy(monkeypatch, tmp_path):
+    # La imagen tambien puede bundlear apuntando KENI_SKILLS_CWD directo a `skills-copy/`
+    # (raiz que contiene `.claude/skills` sin el nivel intermedio). El cwd de ejecucion es
+    # esa misma raiz y el corpus editorial sigue resolviendo.
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    skills_copy = tmp_path / "app" / "skills-copy"
+    (skills_copy / ".claude" / "skills").mkdir(parents=True)
+    (skills_copy / "contexto-editorial").mkdir(parents=True)
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(skills_copy))
+
+    assert dom_skills.cwd_skills() == skills_copy
+    assert dom_skills.cwd_ejecucion_skills() == skills_copy
+    assert (dom_skills.cwd_ejecucion_skills() / "contexto-editorial").is_dir()
+
+
+def test_ejecucion_cwd_override_escribible(monkeypatch, tmp_path):
+    # KENI_SKILLS_EJECUCION_CWD separa "donde corre claude" (copia ESCRIBIBLE) de la raiz
+    # de descubrimiento (KENI_SKILLS_CWD), para el caso de bundle de SOLO LECTURA.
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")  # descubrimiento
+    escribible = _crear_bundle_contenedor(tmp_path / "rw" / "ejecucion")  # copia rw
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
+    monkeypatch.setenv("KENI_SKILLS_EJECUCION_CWD", str(escribible))
+
+    # El descubrimiento sigue saliendo de KENI_SKILLS_CWD.
+    assert dom_skills.cwd_skills() == bundle
+    # El cwd de ejecucion sale del override y se normaliza a su `skills-copy/`.
+    ejecucion = dom_skills.cwd_ejecucion_skills()
+    assert ejecucion == escribible / "skills-copy"
+    assert (ejecucion / "contexto-editorial" / "tropicalizacion.md").is_file()
+    assert os.access(ejecucion, os.W_OK)
+
+
+def test_ejecucion_cwd_override_inexistente_cae_a_skills_cwd(monkeypatch, tmp_path):
+    # Si KENI_SKILLS_EJECUCION_CWD no existe, se ignora y el cwd de ejecucion se DERIVA de
+    # cwd_skills() (no se rompe ni se devuelve una ruta inexistente).
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
+    monkeypatch.setenv("KENI_SKILLS_EJECUCION_CWD", str(tmp_path / "no_existe"))
+
+    assert dom_skills.cwd_ejecucion_skills() == bundle / "skills-copy"
 
 
 # --------------------------------------------------------------------------- #
