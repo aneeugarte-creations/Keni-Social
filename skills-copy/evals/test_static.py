@@ -46,6 +46,7 @@ ESPERADAS = {
     "nota-a-hilo",
     "brief-matutino",
     "termometro-mundial",
+    "qa-editorial",       # #143 (ficha F3): QA editorial del copy del community (señala, no reescribe)
 }
 
 

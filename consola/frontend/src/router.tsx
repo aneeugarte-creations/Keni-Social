@@ -10,6 +10,7 @@ import { AppShell } from "@/components/layout/AppShell";
 const GenerarCopy = lazy(() => import("@/pages/GenerarCopy"));
 const Imagenes = lazy(() => import("@/pages/Imagenes"));
 const Verificacion = lazy(() => import("@/pages/Verificacion"));
+const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
 const Skills = lazy(() => import("@/pages/Skills"));
 const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: "generar-copy", element: <GenerarCopy /> },
       { path: "imagenes", element: <Imagenes /> },
       { path: "verificacion", element: <Verificacion /> },
+      { path: "revision-editorial", element: <RevisionEditorial /> },
       { path: "skills", element: <Skills /> },
       { path: "publicaciones", element: <Publicaciones /> },
       { path: "fuentes", element: <Fuentes /> },

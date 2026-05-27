@@ -45,6 +45,7 @@ import type {
   CuerpoGuardarEsfuerzo,
   CuerpoMarcarItemUsado,
   CuerpoReporteDeportes,
+  CuerpoRevisarQaEditorial,
   CuerpoSugerirHashtags,
   CuerpoVerificar,
   CuerpoVistaPromptSkill,
@@ -53,6 +54,7 @@ import type {
   FiltrosPublicaciones,
   OpcionesMetricas,
   OpcionesPublicaciones,
+  OpcionesQaEditorial,
   OpcionesReporteDeportes,
   RespuestaLimites,
   ReporteDeportes,
@@ -564,6 +566,14 @@ export const api = {
   // generación (GET /api/generaciones/{id}) y completa con `resultado.verificacion`.
   verificar: (cuerpo: CuerpoVerificar) =>
     peticion<RespuestaGeneracion>("/verificar", { metodo: "POST", json: cuerpo }),
+
+  // --- QA editorial (revisar el copy ya escrito por el community, ficha F3 / #143) ---
+  // Lanza la revisión en segundo plano; se sondea como cualquier generación
+  // (GET /api/generaciones/{id}) y completa con `resultado.informe`. NO publica ni reescribe.
+  qaEditorialOpciones: (signal?: AbortSignal) =>
+    peticion<OpcionesQaEditorial>("/qa-editorial", { signal }),
+  revisarQaEditorial: (cuerpo: CuerpoRevisarQaEditorial) =>
+    peticion<RespuestaGeneracion>("/qa-editorial/revisar", { metodo: "POST", json: cuerpo }),
 
   // --- Hashtags ---
   hashtags: (signal?: AbortSignal) => peticion<RespuestaHashtags>("/hashtags", { signal }),

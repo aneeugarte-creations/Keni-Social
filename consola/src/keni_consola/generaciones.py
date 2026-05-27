@@ -82,7 +82,7 @@ MOTIVO_COLA_LLENA = "cola_llena"
 MOTIVO_CANCELADO = "cancelado"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
-TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion")
+TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial")
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
 # `KENI_CLAUDE_TIMEOUT`. Sustituye al viejo timeout de 180 s de la peticion sincrona.
