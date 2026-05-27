@@ -54,6 +54,7 @@ from starlette.routing import Route
 
 from .. import redes, repos, skills_catalogo
 from .._http_json import leer_json
+from ..dominio import extraccion_url
 from ..dominio import skills as dom_skills
 from . import skills
 
@@ -245,6 +246,7 @@ def _skill_para_opciones(skill: skills_catalogo.SkillDef) -> dict[str, object]:
         "aplica_redes": skill.aplica_redes,
         "salida": skill.salida,
         "media": skill.media,
+        "ingesta": skill.ingesta,
         "campos": [c.a_dict() for c in skill.campos],
     }
 
@@ -441,6 +443,85 @@ async def ejecutar_archivo(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
+# Endpoint: ejecutar-url (F9 / #149) — generar copy desde un LINK              #
+# --------------------------------------------------------------------------- #
+
+# Skill a la que se delega la generacion tras extraer el texto del link: el atajo desde
+# URL REUTILIZA la pipeline de `copy-desde-nota` (piezas por red + veredicto + borradores
+# autoguardados). La skill `ingesta=url` es solo la PUERTA de entrada en la UI; el copy lo
+# hace `copy-desde-nota` sobre el texto YA EXTRAÍDO (no la URL).
+_SKILL_COPY_DESDE_NOTA = "copy-desde-nota"
+
+
+async def ejecutar_url(request: Request) -> Response:
+    """Genera copy DESDE UNA URL (F9): extrae el texto del link y lo pasa a copy.
+
+    Cuerpo JSON: `{skill, marca, url, redes?}`. La `skill` debe existir y declarar
+    `ingesta == "url"` (catalogo de archivos); la URL es el ÚNICO insumo. El paso de
+    EXTRACCIÓN ocurre AQUÍ, en el servidor (la skill de copy es dry-run y no hace red):
+      1. valida la URL (esquema http/https + guard SSRF, igual que `api.rss`);
+      2. la descarga y extrae su texto legible (`dominio.extraccion_url`);
+      3. envuelve el texto con un AVISO de CONTENIDO NO VERIFICADO (nombres/cifras del
+         link no son de fiar) y lo pasa a `copy-desde-nota` por la pipeline normal.
+
+    Degradación honesta: si la URL no se puede leer (video/streaming, 4xx/5xx, timeout,
+    sin texto, SSRF), responde 400/502 con un mensaje en español; NUNCA inventa contenido.
+    No bloquea: responde `{generacion}` (estado "ejecutando") y el frontend sondea
+    `GET /api/generaciones/{id}`. PRIVACIDAD: solo viaja TEXTO a Anthropic; el HTML/video
+    no sale del servidor.
+    """
+    datos = await leer_json(request)
+    skill = datos.get("skill")
+    marca = datos.get("marca")
+    if not isinstance(skill, str) or not isinstance(marca, str):
+        return JSONResponse({"error": "Faltan el tipo de contenido o la marca."}, status_code=400)
+    skilldef = skills_catalogo.obtener(skill)
+    if skilldef is None:
+        return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
+    if skilldef.ingesta != "url":
+        return JSONResponse(
+            {"error": "Este tipo de contenido no admite generar desde un enlace."},
+            status_code=400,
+        )
+    if marca not in _MARCAS_IDS:
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    # La skill de destino (copy-desde-nota) debe existir en el catalogo.
+    if not skills_catalogo.existe(_SKILL_COPY_DESDE_NOTA):
+        return JSONResponse(
+            {"error": "No está disponible la skill de copy para generar desde el enlace."},
+            status_code=400,
+        )
+
+    crudas = datos.get("redes")
+    redes_ids = normalizar_redes(crudas if isinstance(crudas, list) else None)
+
+    # 1) Validar la URL (esquema + SSRF) ANTES de tocar la red.
+    url_limpia, error = extraccion_url.validar_url(datos.get("url"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+
+    # 2) Extraer el texto legible del link, en el servidor. Degradación honesta si falla.
+    try:
+        titulo, cuerpo = extraccion_url.extraer_texto(url_limpia)
+    except extraccion_url.ExtraccionError as e:
+        # Fallo de lectura del link (video, 4xx/5xx, timeout, sin texto): 502 (es un
+        # problema con el recurso externo, no con la petición del usuario).
+        return JSONResponse({"error": str(e)}, status_code=502)
+
+    # 3) Envolver como NOTA NO VERIFICADA y lanzar la pipeline de copy normal.
+    nota = extraccion_url.componer_nota_no_verificada(url_limpia, titulo, cuerpo)
+    if len(nota) > _MAX_TEXTO:
+        nota = nota[:_MAX_TEXTO]
+    prompt = dom_skills.construir_prompt(_SKILL_COPY_DESDE_NOTA, marca, nota, redes_ids)
+    titulo_base = titulo or url_limpia
+    gen = dom_skills.lanzar_generacion_copy(
+        tipo="copy", skill=_SKILL_COPY_DESDE_NOTA, marca=marca, prompt=prompt,
+        redes_ids=redes_ids, titulo_dado=titulo_base, texto_base=nota,
+    )
+    return JSONResponse({"generacion": gen})
+
+
+# --------------------------------------------------------------------------- #
 # Endpoints: historial                                                         #
 # --------------------------------------------------------------------------- #
 
@@ -567,6 +648,7 @@ RUTAS = [
     Route("/api/skills", opciones, methods=["GET"]),
     Route("/api/skills/ejecutar", ejecutar, methods=["POST"]),
     Route("/api/skills/ejecutar-archivo", ejecutar_archivo, methods=["POST"]),
+    Route("/api/skills/ejecutar-url", ejecutar_url, methods=["POST"]),
     Route("/api/skills/historial", historial, methods=["GET"]),
     Route("/api/skills/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
     Route("/api/skills/historial/{historial_id}", historial_detalle, methods=["GET"]),
