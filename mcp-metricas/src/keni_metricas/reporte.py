@@ -17,7 +17,17 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .formato import cifra, etiqueta_marca, miles, partes_cobertura, pct, signo
+from .formato import (
+    AVISO_MUESTRA_TXT,
+    aviso_muestra_md,
+    cifra,
+    es_fuente_muestra,
+    etiqueta_marca,
+    miles,
+    partes_cobertura,
+    pct,
+    signo,
+)
 from .fuentes.base import FuenteMetricas
 
 if TYPE_CHECKING:
@@ -61,7 +71,7 @@ def construir_reporte(
         if r.cobertura is not None and r.cobertura.omitidas:
             cuentas_parciales.append(c.id)
 
-    return {
+    rep: dict = {
         "rango": rango,
         "generado": datetime.now(UTC).isoformat(timespec="seconds"),
         "fuente": fuente.nombre,
@@ -86,6 +96,12 @@ def construir_reporte(
         "nombres": nombres,
         "cuentas": filas,
     }
+    # Campo `aviso` de PRIMER nivel cuando son datos de muestra: hace que el
+    # estado "no es real" viaje en la estructura misma (no solo en `fuente`),
+    # asi cualquier consumidor —tool JSON, agente, render— lo ve (issue #131).
+    if es_fuente_muestra(fuente.nombre):
+        rep["aviso"] = AVISO_MUESTRA_TXT
+    return rep
 
 
 def _nota_cobertura(cob: dict | None) -> str | None:
@@ -101,6 +117,10 @@ def render_markdown(rep: dict) -> str:
     nombres = rep.get("nombres") or {}
     out: list[str] = []
     out.append(f"# Reporte de redes — {rep['rango']}")
+    # Aviso DESTACADO si son datos de muestra (no solo el campo `fuente`): hace
+    # imposible confundir cifras sinteticas con reales (issue #131).
+    if (aviso := aviso_muestra_md(rep.get("fuente"))) is not None:
+        out.append(aviso + "\n")
     out.append(f"*Generado {rep['generado']} · fuente: {rep['fuente']}*\n")
     out.append("## Total")
     out.append(f"- **Visualizaciones:** {miles(t['visualizaciones'])}")

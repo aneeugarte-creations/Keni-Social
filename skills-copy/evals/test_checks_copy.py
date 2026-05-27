@@ -265,6 +265,28 @@ def test_numero_de_la_verificacion_no_cuenta():
     assert checks.numeros_inventados(s, FUENTE) == []
 
 
+def test_numero_en_palabras_inventado_se_caza():
+    # "ochenta millones" no esta en la fuente (que dice "40 millones"): debe cazarse
+    # aunque vaya escrito en palabras, no en digitos.
+    s = "## X\nEl delantero llega al club por ochenta millones de euros.\n\nVeredicto: ✅"
+    problemas = checks.numeros_inventados(s, FUENTE)
+    assert problemas, "no detecto el numero en palabras inventado (ochenta millones)"
+    assert any("80.000.000" in p for p in problemas)
+
+
+def test_magnitud_equivalente_texto_vs_digitos_no_es_falso_positivo():
+    # la fuente dice "40 millones"; el copy escribe "40,000,000" (mismo valor).
+    # Tras normalizar separadores y magnitudes NO debe marcarse como inventado.
+    s = "## X\nEl delantero llega al club por 40,000,000 de euros. Firma por 5 temporadas.\n\nVeredicto: ✅"
+    assert checks.numeros_inventados(s, FUENTE) == []
+
+
+def test_numero_en_palabras_de_la_fuente_no_es_falso_positivo():
+    # "cuarenta millones" (palabras) == "40 millones" de la fuente: mismo valor.
+    s = "## X\nEl club paga cuarenta millones de euros por el delantero.\n\nVeredicto: ✅"
+    assert checks.numeros_inventados(s, FUENTE) == []
+
+
 # --- citas inventadas ---
 
 def test_cita_real_no_se_marca():

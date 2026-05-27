@@ -30,6 +30,25 @@ def test_dashboard_es_html_autocontenido():
     assert "cdn" not in html.lower()
 
 
+def test_dashboard_muestra_banner_destacado():
+    # #131: el dashboard de la muestra debe llevar un banner CRITICO visible
+    # (clase muestra-banner), no solo la linea "fuente: muestra".
+    html = generar_dashboard(FuenteMuestra(), "mes", top=3)
+    assert 'class="muestra-banner"' in html
+    assert "Datos de muestra" in html
+
+
+def test_dashboard_fuente_real_sin_banner_de_muestra():
+    # #131: con fuente real el banner critico NO aparece (no cambia el real).
+    rep = construir_reporte(FuenteMuestra(), "mes", top=3)
+    rep["fuente"] = "real"
+    rep.pop("aviso", None)
+    picos = detectar_picos(FuenteMuestra(), "mes", 50)
+    nombres = {c.id: c.nombre for c in FuenteMuestra().cuentas()}
+    html = construir_html(rep, picos, nombres)
+    assert 'class="muestra-banner"' not in html
+
+
 def test_dashboard_contiene_nombres_de_marca():
     html = generar_dashboard(FuenteMuestra(), "mes", top=3)
     # nombres legibles de las 5 marcas de la muestra

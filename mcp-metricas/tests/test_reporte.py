@@ -35,6 +35,27 @@ def test_render_markdown():
     assert "## Total" in md
 
 
+def test_reporte_muestra_lleva_aviso_destacado():
+    # #131: con fuente de muestra, el reporte debe AVISAR de forma destacada que
+    # los datos son sinteticos, no solo en el campo `fuente`.
+    rep = construir_reporte(FuenteMuestra(), "mes", top=1)
+    assert "aviso" in rep and "MUESTRA" in rep["aviso"].upper()
+    md = render_markdown(rep)
+    # el banner va al inicio (antes de la linea de "Generado")
+    assert "DATOS DE MUESTRA" in md
+    assert md.index("DATOS DE MUESTRA") < md.index("Generado")
+
+
+def test_reporte_fuente_real_sin_aviso_de_muestra():
+    # #131: una fuente real (nombre != "muestra") NO debe llevar el aviso ni el
+    # banner; el comportamiento de datos reales no cambia.
+    rep = construir_reporte(FuenteMuestra(), "mes", top=1)
+    rep["fuente"] = "real"
+    rep.pop("aviso", None)
+    md = render_markdown(rep)
+    assert "DATOS DE MUESTRA" not in md
+
+
 def test_reporte_expone_nombres_legibles():
     # el reporte debe traer el mapa id->nombre legible (mismo origen que el
     # dashboard) para que el render no imprima el id crudo.

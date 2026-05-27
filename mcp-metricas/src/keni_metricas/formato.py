@@ -23,6 +23,40 @@ _MOTIVO_TEXTO: dict[str, str] = {
 }
 
 
+# Nombre canonico de la fuente offline de datos sinteticos. UNICA fuente de
+# verdad: `FuenteMuestra.nombre` usa este mismo valor y los renders comparan
+# contra el (no contra el literal "muestra" disperso) para decidir si avisar.
+FUENTE_MUESTRA = "muestra"
+
+# Aviso DESTACADO de datos de muestra. Va al inicio de cada reporte/salida de
+# texto (no solo en el campo `fuente`) para que sea IMPOSIBLE confundir cifras
+# sinteticas con reales: el miedo #1 del cliente es publicar datos inventados
+# (issue #131). Variantes Markdown y texto plano; el HTML tiene su propio banner.
+AVISO_MUESTRA_MD = (
+    "> ⚠️ **DATOS DE MUESTRA — NO SON CIFRAS REALES.** Generados de forma "
+    "sintetica para demo/pruebas. **No tomar decisiones ni publicar con estos "
+    "numeros.** Configura una fuente real para obtener datos de produccion."
+)
+AVISO_MUESTRA_TXT = (
+    "⚠️ DATOS DE MUESTRA — NO SON CIFRAS REALES. Generados de forma sintetica "
+    "para demo/pruebas. No tomar decisiones ni publicar con estos numeros."
+)
+
+
+def es_fuente_muestra(fuente: str | None) -> bool:
+    """True si la fuente del reporte es la muestra sintetica (no datos reales)."""
+    return (fuente or "").strip().lower() == FUENTE_MUESTRA
+
+
+def aviso_muestra_md(fuente: str | None) -> str | None:
+    """Banner Markdown de datos de muestra, o None si la fuente es real.
+
+    Pensado para anteponerlo a cualquier reporte de texto consolidado: hace
+    visible (no solo en el campo `fuente`) que las cifras son sinteticas.
+    """
+    return AVISO_MUESTRA_MD if es_fuente_muestra(fuente) else None
+
+
 def signo(pct: float) -> str:
     """Devuelve el porcentaje con signo explicito (+/-)."""
     return f"+{pct}" if pct > 0 else f"{pct}"

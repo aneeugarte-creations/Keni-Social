@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 
 from keni_shared import cuentas as _cuentas
 
-from .formato import miles
+from .formato import AVISO_MUESTRA_TXT, es_fuente_muestra, miles
 from .fuentes.base import CuentaNoEncontrada
 from .schema import Pieza, Plataforma
 
@@ -274,12 +274,18 @@ def render_pptx(rep: dict, ruta: str | Path) -> Path:
     # 1. Portada
     sub = f"{rep['rango']} — generado {rep['generado'][:10]} · fuente: {rep['fuente']}"
     s = diapo(f"Reporte semanal · {rep['cuenta']['nombre']}", sub)
+    tf_portada = cuerpo(s)
+    # Aviso DESTACADO si son datos de muestra (no solo el campo `fuente` del
+    # subtitulo): rojo y en negrita para que sea imposible confundir cifras
+    # sinteticas con reales en un deck que ve un humano (issue #131).
+    if es_fuente_muestra(rep.get("fuente")):
+        parrafo(tf_portada, AVISO_MUESTRA_TXT, size=16, bold=True, color=rojo, antes=0)
     parrafo(
-        cuerpo(s),
+        tf_portada,
         "Mejores piezas por plataforma · promocion de cuentas hermanas · agenda de la proxima semana.",
         size=15,
         color=gris,
-        antes=0,
+        antes=0 if not es_fuente_muestra(rep.get("fuente")) else 10,
     )
 
     # 2. Mejores piezas, una lamina por plataforma
