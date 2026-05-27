@@ -32,6 +32,7 @@ import type {
   CuerpoCrearTarea,
   CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
+  CuerpoEjecutarSkillUrl,
   CuerpoGenerarDesdeItem,
   CuerpoGenerarMedia,
   CuerpoGenerarTermometro,
@@ -453,6 +454,8 @@ export const api = {
   skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),
   ejecutarSkill: (cuerpo: CuerpoEjecutarSkill) =>
     peticion<RespuestaGeneracion>("/skills/ejecutar", { metodo: "POST", json: cuerpo }),
+  ejecutarSkillUrl: (cuerpo: CuerpoEjecutarSkillUrl) =>
+    peticion<RespuestaGeneracion>("/skills/ejecutar-url", { metodo: "POST", json: cuerpo }),
   ejecutarSkillArchivo: (
     skill: string,
     marca: string,

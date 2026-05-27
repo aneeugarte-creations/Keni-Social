@@ -4,9 +4,11 @@ import type { GrupoSkills, Skill } from "@/types";
 
 import {
   campoArchivo,
+  campoUrl,
   camposTextoCompletos,
   esSkillConArchivo,
   esSkillDeImagen,
+  esSkillDesdeUrl,
   filtrarGrupos,
   puedeGenerarSkill,
   valoresIniciales,
@@ -69,6 +71,18 @@ const SKILL_IMAGEN: Skill = {
     { id: "archivo", etiqueta: "Imagen", tipo: "archivo", requerido: false, media_tipos: "image/*" },
     { id: "instruccion", etiqueta: "Instrucción", tipo: "textarea", requerido: true },
   ],
+};
+
+/** Skill de ingesta por URL (F9): un campo de texto con el enlace. */
+const SKILL_URL: Skill = {
+  id: "url-a-copy",
+  nombre: "Copy desde un enlace",
+  explicacion: "Pega el link de una nota y genera copy por red.",
+  aplica_redes: true,
+  salida: "piezas",
+  media: false,
+  ingesta: "url",
+  campos: [{ id: "url", etiqueta: "Enlace de la nota", tipo: "texto", requerido: true }],
 };
 
 const archivoFalso = new File(["x"], "audio.mp3", { type: "audio/mpeg" });
@@ -174,6 +188,19 @@ describe("esSkillDeImagen", () => {
     expect(esSkillDeImagen(SKILL_PIEZAS)).toBe(false);
     expect(esSkillDeImagen(SKILL_DOCUMENTO)).toBe(false);
     expect(esSkillDeImagen(undefined)).toBe(false);
+  });
+});
+
+describe("esSkillDesdeUrl / campoUrl", () => {
+  it("detecta una skill de ingesta por URL y devuelve su campo de enlace", () => {
+    expect(esSkillDesdeUrl(SKILL_URL)).toBe(true);
+    expect(campoUrl(SKILL_URL)?.id).toBe("url");
+  });
+
+  it("NO considera de URL a skills normales ni a undefined", () => {
+    expect(esSkillDesdeUrl(SKILL_PIEZAS)).toBe(false);
+    expect(esSkillDesdeUrl(undefined)).toBe(false);
+    expect(campoUrl(SKILL_PIEZAS)).toBeUndefined();
   });
 });
 
