@@ -162,6 +162,12 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    # Claves/proveedor de imagen por entorno: fuera, para que "sin clave" y el proveedor
+    # por defecto sean deterministas (secretos lee OPENROUTER_API_KEY/KENI_IMAGEN_API_KEY).
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("KENI_IMAGEN_API_KEY", raising=False)
+    monkeypatch.delenv("KENI_IMAGEN_PROVEEDOR", raising=False)
+    monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
     monkeypatch.setenv("KENI_SKILLS_CWD", str(tmp_path))
     # Catalogo de skills aislado en tmp (NO toca el `skills-copy/` real) + sembrado.

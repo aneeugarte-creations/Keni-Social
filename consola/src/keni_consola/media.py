@@ -4,7 +4,7 @@ Las imagenes adjuntas a las publicaciones viven en un directorio local
 (`KENI_CONSOLA_MEDIA`; por defecto cuelga de la raiz de estado unica, p.ej.
 `${XDG_CONFIG_HOME:-~/.config}/keni-social/media` en local o `<KENI_DATA_DIR>/
 keni-social/media` en contenedor). Nada sale de la maquina salvo, opcionalmente, el
-prompt de generacion hacia el proveedor de imagen configurado (OpenAI Images por
+prompt de generacion hacia el proveedor de imagen configurado (OpenRouter por
 defecto), que SOLO se invoca si hay clave.
 
 SEGURIDAD:
@@ -19,8 +19,10 @@ GENERACION POR IA (inyectable / mockeable):
     endpoint responde 400 con un mensaje claro en espanol.
   - `generar_imagen(prompt)` delega en `_PROVEEDOR` (modulo-nivel). Los tests lo
     parchean para NUNCA tocar la red: ni se llama a OpenAI ni se necesita httpx real.
-  - Proveedor por defecto: OpenAI Images (`gpt-image-1`). La clave se toma del
-    almacen de secretos (`keni_consola.secretos`) y, si no, del env `OPENAI_API_KEY`.
+  - Proveedor por defecto: OpenRouter (gateway compatible con OpenAI; el modelo de
+    imagen se elige por id, def. `google/gemini-2.5-flash-image`, editable con
+    `OPENROUTER_IMAGE_MODEL`). La clave se toma del almacen de secretos
+    (`keni_consola.secretos`) y, si no, del env `OPENROUTER_API_KEY`.
 """
 
 from __future__ import annotations
@@ -61,9 +63,10 @@ _RE_EXT = re.compile(r"^[a-z0-9]{1,8}$")
 # Timeout (segundos) de la llamada al proveedor de imagen.
 _TIMEOUT_GEN = 120
 
-# Modelo y endpoint por defecto de OpenAI Images.
-_OPENAI_MODELO = "gpt-image-1"
-_OPENAI_URL = "https://api.openai.com/v1/images/generations"
+# Endpoint y modelo por defecto en OpenRouter (gateway compatible con OpenAI; el modelo
+# de imagen se elige por id y se puede cambiar con OPENROUTER_IMAGE_MODEL).
+_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+_MODELO_DEFECTO = "google/gemini-2.5-flash-image"
 
 
 class MediaError(RuntimeError):
@@ -235,34 +238,36 @@ def importar_imagen(ruta) -> str:  # noqa: ANN001 -- acepta str | Path
 # --------------------------------------------------------------------------- #
 
 
-def _clave_openai() -> str | None:
-    """Clave de OpenAI: primero del almacen de secretos, si no, del env.
+def _clave_imagen() -> str | None:
+    """Clave del proveedor de imagen (almacen de secretos o entorno). NUNCA se loguea.
 
-    Configurarla por la UI (almacen `secretos.toml`) activa la generacion. Se
-    mantiene el fallback al entorno (`OPENAI_API_KEY`) para no romper despliegues
-    que ya la pasan por variable. NUNCA se loguea aqui.
+    La resuelve `secretos.obtener_clave_imagen()`: gana el fichero `0600` (configurado por
+    la UI); si no, el entorno (`OPENROUTER_API_KEY`/`KENI_IMAGEN_API_KEY`, fallback OpenAI).
     """
     from . import secretos
 
-    if (clave := secretos.obtener_clave_imagen()):
-        return clave
-    clave = os.environ.get("OPENAI_API_KEY")
-    return clave if clave else None
+    return secretos.obtener_clave_imagen()
 
 
 def proveedor_configurado() -> bool:
     """True si HAY un proveedor de imagen configurado (clave presente)."""
-    return _clave_openai() is not None
+    return _clave_imagen() is not None
 
 
-def _proveedor_openai(prompt: str) -> bytes:
-    """Genera una imagen con OpenAI Images (`gpt-image-1`) y devuelve los bytes PNG.
+def _modelo() -> str:
+    """Modelo de imagen en OpenRouter: `OPENROUTER_IMAGE_MODEL` o el por defecto."""
+    return os.environ.get("OPENROUTER_IMAGE_MODEL") or _MODELO_DEFECTO
 
-    Usa `httpx` (dependencia transitiva via keni-metricas). Importacion diferida para
-    que el modulo siga siendo importable aunque httpx no este; los tests NUNCA llegan
-    aqui (parchean `_PROVEEDOR`).
+
+def _proveedor_openrouter(prompt: str) -> bytes:
+    """Genera una imagen vía OpenRouter (gateway compatible con OpenAI) y devuelve bytes.
+
+    Mismo camino que la skill `estudio-imagen`: endpoint chat/completions con
+    `modalities:["image","text"]`; el modelo se elige por id (`OPENROUTER_IMAGE_MODEL`).
+    `follow_redirects=False`: un 3xx a otro host no debe reenviar el Bearer (anti-SSRF).
+    Importacion diferida de httpx; los tests NUNCA llegan aqui (parchean `_PROVEEDOR`).
     """
-    clave = _clave_openai()
+    clave = _clave_imagen()
     if clave is None:
         raise MediaError(
             "La generación de imagen no está configurada. Añade una clave de "
@@ -275,9 +280,13 @@ def _proveedor_openai(prompt: str) -> bytes:
 
     try:
         respuesta = httpx.post(
-            _OPENAI_URL,
-            headers={"Authorization": f"Bearer {clave}"},
-            json={"model": _OPENAI_MODELO, "prompt": prompt, "n": 1, "size": "1024x1024"},
+            _OPENROUTER_URL,
+            headers={"Authorization": f"Bearer {clave}", "Content-Type": "application/json"},
+            json={
+                "model": _modelo(),
+                "messages": [{"role": "user", "content": prompt}],
+                "modalities": ["image", "text"],
+            },
             timeout=_TIMEOUT_GEN,
             follow_redirects=False,
         )
@@ -289,15 +298,15 @@ def _proveedor_openai(prompt: str) -> bytes:
     if respuesta.status_code != 200:
         raise MediaError("El proveedor de imagen devolvió un error al generar.")
     try:
-        cuerpo = respuesta.json()
-        b64 = cuerpo["data"][0]["b64_json"]
+        url = respuesta.json()["choices"][0]["message"]["images"][0]["image_url"]["url"]
+        b64 = url.split(",", 1)[1] if "," in url else url
         return base64.b64decode(b64)
     except (KeyError, IndexError, ValueError, TypeError) as e:
         raise MediaError("El proveedor de imagen devolvió una respuesta inesperada.") from e
 
 
 # Punto INYECTABLE: lo unico que toca el proveedor real. Los tests lo parchean.
-_PROVEEDOR = _proveedor_openai
+_PROVEEDOR = _proveedor_openrouter
 
 
 def generar_imagen(prompt: str) -> bytes:

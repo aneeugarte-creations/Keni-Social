@@ -56,7 +56,7 @@ def test_proveedor_por_defecto_si_vacio(almacen):
 
 
 def test_proveedor_por_defecto_sin_archivo(almacen):
-    assert secretos.obtener_proveedor_imagen() == "openai"
+    assert secretos.obtener_proveedor_imagen() == "openrouter"
 
 
 def test_estado_pista_solo_ultimos_4(almacen):

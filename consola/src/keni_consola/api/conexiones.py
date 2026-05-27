@@ -27,11 +27,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import secretos
+from .. import media, secretos
 from .._http_json import leer_json
-
-# Modelo de imagen (no se cambia el motor por defecto: OpenAI gpt-image-1).
-_MODELO_IMAGEN = "gpt-image-1"
 
 # Nombres legibles por plataforma de redes (las plataformas se DERIVAN de
 # `asistente.CAMPO_TOKEN`, no se hardcodean aparte).
@@ -67,7 +64,7 @@ async def imagen_estado(request: Request) -> Response:
     return JSONResponse(
         {
             "proveedor": estado["proveedor"],
-            "modelo": _MODELO_IMAGEN,
+            "modelo": media._modelo(),
             "configurado": estado["configurado"],
             "pista": estado["pista"],
         }

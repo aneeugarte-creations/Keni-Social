@@ -59,8 +59,8 @@ const CLAVE_ESFUERZO = ["config", "esfuerzo"];
 const CLAVE_IMAGEN = ["conexiones", "imagen"];
 const CLAVE_REDES = ["conexiones", "redes"];
 
-/** Proveedores de imagen IA disponibles (por ahora solo OpenAI). */
-const PROVEEDORES = [{ id: "openai", nombre: "OpenAI (gpt-image-1)" }];
+/** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
+const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
 /** Texto legible del error de la API (o un fallback en español). */
 function mensajeError(error: unknown): string {
