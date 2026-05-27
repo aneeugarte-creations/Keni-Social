@@ -25,6 +25,7 @@ from starlette.routing import Route
 
 from .. import lanzador, proyectos, repos
 from .._http_json import leer_json
+from ..seguridad import autor_de_peticion
 
 
 def abrir_tarea_en_claude_code(ruta: Path, detalle: str = "") -> str:
@@ -55,6 +56,10 @@ def _tarea_a_dict(tarea: dict, por_id: dict[str, proyectos.Proyecto]) -> dict:
         "detalle": tarea["detalle"],
         "estado": tarea["estado"],
         "fecha": tarea["fecha"],
+        # Atribucion por usuario (#130 Fase 1): quien creo la tarea. "" en tareas
+        # legadas/anonimas (la UI lo muestra como "desconocido").
+        "autor_id": tarea.get("autor_id", "") or "",
+        "autor_nombre": tarea.get("autor_nombre", "") or "",
     }
 
 
@@ -91,7 +96,9 @@ async def crear(request: Request) -> Response:
     if proyectos.proyecto_por_id(proyecto_id) is None:
         return JSONResponse({"error": "Proyecto no permitido o inexistente."}, status_code=400)
 
-    tarea = repos.crear_tarea(proyecto_id, titulo.strip(), detalle.strip())
+    tarea = repos.crear_tarea(
+        proyecto_id, titulo.strip(), detalle.strip(), autor=autor_de_peticion(request)
+    )
     return JSONResponse({"tarea": _tarea_a_dict(tarea, _nombres_proyecto())})
 
 

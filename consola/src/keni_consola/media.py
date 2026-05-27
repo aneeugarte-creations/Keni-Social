@@ -30,12 +30,18 @@ GENERACION POR IA (inyectable / mockeable):
 from __future__ import annotations
 
 import base64
+import logging
 import os
 import re
 import uuid
 from pathlib import Path
 
 from . import rutas
+
+# Logger del módulo (#123): los fallos del proveedor de imagen se LOGUEAN con el motivo
+# real (status + cuerpo recortado) en vez de tragarlo, y el motivo viaja al mensaje de
+# error (toast) para que el usuario sepa POR QUÉ (p.ej. el modelo respondió texto/rechazo).
+_log = logging.getLogger("keni_consola.media")
 
 # Extensiones de imagen permitidas (sin punto) -> mime de salida al servir/guardar.
 _EXT_A_MIME: dict[str, str] = {
@@ -311,6 +317,44 @@ def _modelo() -> str:
     return os.environ.get("OPENROUTER_IMAGE_MODEL") or _MODELO_DEFECTO
 
 
+def _json_seguro(respuesta) -> dict:  # noqa: ANN001
+    """`respuesta.json()` tolerante: {} si el cuerpo no es JSON (no rompe el manejo de error)."""
+    try:
+        data = respuesta.json()
+    except (ValueError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _recortar(texto: str, n: int = 300) -> str:
+    """Normaliza espacios y recorta a `n` caracteres (para mensajes/toasts)."""
+    texto = " ".join((texto or "").split())
+    return texto if len(texto) <= n else texto[: n - 1] + "…"
+
+
+def _texto_respuesta(data: dict) -> str:
+    """Motivo legible de una respuesta de OpenRouter, SIN exponer la clave.
+
+    Prioriza: error explícito (`error.message`) > el TEXTO que devolvió el modelo
+    (`choices[0].message.content`, p.ej. un rechazo/aclaración) > `finish_reason`.
+    Devuelve "" si no hay nada útil que mostrar.
+    """
+    err = data.get("error")
+    if isinstance(err, dict) and err.get("message"):
+        return str(err["message"])
+    if isinstance(err, str) and err.strip():
+        return err
+    choices = data.get("choices")
+    if isinstance(choices, list) and choices and isinstance(choices[0], dict):
+        msg = choices[0].get("message")
+        if isinstance(msg, dict) and isinstance(msg.get("content"), str) and msg["content"].strip():
+            return msg["content"]
+        fr = choices[0].get("finish_reason")
+        if fr:
+            return f"finish_reason={fr}"
+    return ""
+
+
 def _proveedor_openrouter(prompt: str) -> bytes:
     """Genera una imagen vía OpenRouter (gateway compatible con OpenAI) y devuelve bytes.
 
@@ -330,12 +374,13 @@ def _proveedor_openrouter(prompt: str) -> bytes:
     except ImportError as e:  # pragma: no cover -- httpx es dependencia transitiva
         raise MediaError("Falta la librería para generar imágenes en este equipo.") from e
 
+    modelo = _modelo()
     try:
         respuesta = httpx.post(
             _OPENROUTER_URL,
             headers={"Authorization": f"Bearer {clave}", "Content-Type": "application/json"},
             json={
-                "model": _modelo(),
+                "model": modelo,
                 "messages": [{"role": "user", "content": prompt}],
                 "modalities": ["image", "text"],
             },
@@ -348,13 +393,31 @@ def _proveedor_openrouter(prompt: str) -> bytes:
         raise MediaError("No se pudo contactar al proveedor de imagen.") from e
 
     if respuesta.status_code != 200:
-        raise MediaError("El proveedor de imagen devolvió un error al generar.")
+        motivo = _recortar(_texto_respuesta(_json_seguro(respuesta)))
+        _log.warning(
+            "generar_imagen: OpenRouter %s [%s] -> %s",
+            respuesta.status_code, modelo, motivo or "(sin cuerpo)",
+        )
+        sufijo = f": {motivo}" if motivo else ""
+        raise MediaError(
+            f"El proveedor de imagen devolvió un error ({respuesta.status_code}){sufijo}"
+        )
+
+    data = _json_seguro(respuesta)
     try:
-        url = respuesta.json()["choices"][0]["message"]["images"][0]["image_url"]["url"]
+        url = data["choices"][0]["message"]["images"][0]["image_url"]["url"]
         b64 = url.split(",", 1)[1] if "," in url else url
         return base64.b64decode(b64)
     except (KeyError, IndexError, ValueError, TypeError) as e:
-        raise MediaError("El proveedor de imagen devolvió una respuesta inesperada.") from e
+        # 200 sin imagen: casi siempre el modelo respondió TEXTO (rechazo/aclaración) en
+        # vez de imagen. Mostramos ese texto (recortado) para que se vea el PORQUÉ.
+        motivo = _recortar(_texto_respuesta(data))
+        _log.warning("generar_imagen: 200 sin imagen [%s] -> %s", modelo, motivo or "(sin texto)")
+        if motivo:
+            raise MediaError(f"El modelo no devolvió una imagen. Respondió: {motivo}") from e
+        raise MediaError(
+            "El proveedor de imagen devolvió una respuesta inesperada (sin imagen)."
+        ) from e
 
 
 # Punto INYECTABLE: lo unico que toca el proveedor real. Los tests lo parchean.

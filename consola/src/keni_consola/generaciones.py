@@ -221,6 +221,9 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         "motivo": _str("motivo"),
         "salida": _str("salida"),
         "error": _str("error"),
+        # Atribucion por usuario (#130 Fase 1). Ausente en registros legados/anonimos => "".
+        "autor_id": _str("autor_id"),
+        "autor_nombre": _str("autor_nombre"),
         "metricas": metricas,
         "resultado": resultado,
         "fecha_inicio": _str("fecha_inicio"),

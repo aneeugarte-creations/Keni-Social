@@ -1,0 +1,35 @@
+/**
+ * Atribución por usuario (#130 Fase 1): muestra "por <usuario>" de quien creó un
+ * registro (publicación, entrada de historial, tarea, generación). El estado es
+ * COMPARTIDO entre el equipo y cada registro lleva su autor.
+ *
+ * RETROCOMPATIBLE: los registros legados/anónimos (creados antes de la atribución, o
+ * por el token de mantenimiento) no traen autor (`autor_nombre === ""`); se muestran
+ * como "desconocido" sin romper nada. La lógica de etiqueta vive en `./atribucion` para
+ * no romper el fast-refresh (y evita la colisión de nombre con `Autor.tsx` en FS
+ * insensibles a mayúsculas).
+ */
+import { User } from "lucide-react";
+
+import { cn } from "@/lib/utils";
+
+import { etiquetaAutor } from "./atribucion";
+
+export function Autor({
+  nombre,
+  className,
+}: {
+  /** Nombre del autor (`autor_nombre`). "" / undefined => "desconocido". */
+  nombre: string | null | undefined;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 text-muted-foreground", className)}
+      title="Quién creó este registro"
+    >
+      <User className="h-3.5 w-3.5" />
+      {etiquetaAutor(nombre)}
+    </span>
+  );
+}

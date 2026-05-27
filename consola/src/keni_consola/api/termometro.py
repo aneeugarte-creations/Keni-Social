@@ -30,6 +30,7 @@ from starlette.routing import Route
 
 from .. import skills_catalogo, termometro
 from .._http_json import leer_json
+from ..seguridad import autor_de_peticion
 from . import skills
 
 # Id de la skill que arma el termometro (vive en skills-copy/.claude/skills/).
@@ -137,6 +138,7 @@ async def generar(request: Request) -> Response:
         prompt=prompt,
         redes_ids=redes_ids,
         titulo_base=titulo_termometro(valores["fecha"]),
+        autor=autor_de_peticion(request),
     )
     return JSONResponse({"generacion": gen})
 

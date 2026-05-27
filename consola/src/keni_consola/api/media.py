@@ -21,6 +21,7 @@ from starlette.routing import Route
 
 from .. import generaciones, media
 from .._http_json import leer_json
+from ..seguridad import autor_de_peticion
 
 
 async def subir(request: Request) -> Response:
@@ -76,8 +77,16 @@ async def generar(request: Request) -> Response:
         nombre = media.guardar_bytes(crudos, ext="png")
         return {"id": nombre, "url": f"/api/media/{nombre}"}
 
+    # Atribucion por usuario (#130 Fase 1): la imagen la genera el usuario de la peticion.
+    autor = autor_de_peticion(request) or {}
     gen = generaciones.crear(
-        {"tipo": "imagen", "marca": "", "etiqueta": f"Imagen · {prompt[:40]}"}
+        {
+            "tipo": "imagen",
+            "marca": "",
+            "etiqueta": f"Imagen · {prompt[:40]}",
+            "autor_id": autor.get("id", ""),
+            "autor_nombre": autor.get("usuario", ""),
+        }
     )
     try:
         generaciones.lanzar_job_imagen(gen["id"], generar=_generar)

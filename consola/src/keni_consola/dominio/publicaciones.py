@@ -33,6 +33,10 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "contenido": pub["contenido"],
         "estado": pub["estado"],
         "veredicto": pub["veredicto"],
+        # Atribucion por usuario (#130 Fase 1): quien creo la pieza. "" en piezas
+        # legadas/anonimas (la UI lo muestra como "desconocido").
+        "autor_id": pub.get("autor_id") or "",
+        "autor_nombre": pub.get("autor_nombre") or "",
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],

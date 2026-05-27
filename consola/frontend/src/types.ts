@@ -615,6 +615,10 @@ export interface Generacion {
   metricas: MetricasRun | null;
   /** Payload al completar; `null` mientras corre o si falla. */
   resultado: ResultadoGeneracion | null;
+  /** Atribución por usuario (#130 Fase 1): id estable de quien lanzó. "" si legado/anónimo. */
+  autor_id: string;
+  /** Nombre de quien lanzó (para mostrar). "" si legado/anónimo. */
+  autor_nombre: string;
   fecha_inicio: string;
   fecha_fin: string;
 }
@@ -749,6 +753,10 @@ export interface EntradaHistorial {
   marca_nombre: string;
   fecha: string;
   preview: string;
+  /** Atribución por usuario (#130 Fase 1): id estable de quien generó. "" si legado/anónimo. */
+  autor_id: string;
+  /** Nombre de quien generó (para mostrar). "" si legado/anónimo. */
+  autor_nombre: string;
 }
 
 export interface RespuestaHistorial {
@@ -765,6 +773,10 @@ export interface DetalleHistorial {
   titulo: string;
   /** Piezas por red (pueden venir vacías en entradas antiguas). */
   piezas: PiezaGenerada[];
+  /** Atribución por usuario (#130 Fase 1): id estable de quien generó. "" si legado/anónimo. */
+  autor_id: string;
+  /** Nombre de quien generó (para mostrar). "" si legado/anónimo. */
+  autor_nombre: string;
 }
 
 /**
@@ -792,6 +804,10 @@ export interface Tarea {
   detalle: string;
   estado: EstadoTarea;
   fecha: string;
+  /** Atribución por usuario (#130 Fase 1): id estable de quien creó. "" si legado/anónimo. */
+  autor_id: string;
+  /** Nombre de quien creó (para mostrar). "" si legado/anónimo. */
+  autor_nombre: string;
 }
 
 export interface ProyectoTarea {
