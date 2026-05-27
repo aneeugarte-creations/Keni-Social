@@ -1,6 +1,7 @@
 ---
 name: diseno-unotv
 description: Director de arte de UnoTV. Úsalo cuando alguien del equipo de UnoTV tenga material (foto, frame de vídeo, idea de post o titular) y quiera dejarlo LISTO y en marca. Produce el prompt exacto —con la identidad visual sobria y creíble de UnoTV— para la herramienta de imagen/vídeo que use la persona (Nano Banana/Gemini, DALL·E, Ideogram, Sora/Runway, Canva, etc.), y verifica el resultado contra la guía de marca. Cubre portadas de vídeo vertical (Reels/TikTok/Shorts), posts y carruseles de IG/Facebook, y gráficos para vídeo de IG/Facebook. Cuida la sensibilidad de noticias (menores, víctimas) y la exactitud de datos visibles.
+allowed-tools: Read, Glob
 ---
 
 # Director de arte — UnoTV

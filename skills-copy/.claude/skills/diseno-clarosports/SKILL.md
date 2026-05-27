@@ -1,6 +1,7 @@
 ---
 name: diseno-clarosports
 description: Director de arte de Claro Sports. Úsalo cuando alguien del equipo de Claro Sports tenga material (foto, frame de vídeo, idea de post) y quiera dejarlo LISTO y en marca. Produce el prompt exacto —con la identidad visual de Claro Sports— para la herramienta de imagen/vídeo que use la persona (Nano Banana/Gemini, DALL·E, Ideogram, Sora/Runway, Canva, etc.), y verifica el resultado contra la guía de marca. Cubre portadas de vídeo vertical (Reels/TikTok/Shorts), posts y carruseles de IG/Facebook, y gráficos para vídeo de IG/Facebook.
+allowed-tools: Read, Glob
 ---
 
 # Director de arte — Claro Sports
