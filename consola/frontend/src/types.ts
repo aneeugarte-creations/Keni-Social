@@ -1317,3 +1317,67 @@ export type ReporteComercial = ReportePublicacionComercial | ReporteCampaniaCome
 export interface RespuestaReporteComercial {
   reporte: ReporteComercial;
 }
+
+// --- Autenticación y usuarios (#auth) --------------------------------------
+//
+// Auth por usuario/contraseña sobre cookie de sesión (la pone el backend). El
+// login devuelve el usuario actual; `GET /api/auth/me` lo recupera al cargar la
+// app. La gestión de usuarios (`/api/usuarios`) es solo para el rol admin.
+
+/** Rol de un usuario de la consola. `admin` ve además la gestión de usuarios. */
+export type RolUsuario = "admin" | "editor";
+
+/** Usuario autenticado (lo que devuelven login y `/api/auth/me`). */
+export interface UsuarioSesion {
+  id: string;
+  usuario: string;
+  rol: RolUsuario;
+  /** `true` => hay que forzar el cambio de contraseña antes de usar la app. */
+  debe_cambiar_password: boolean;
+}
+
+/** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */
+export interface RespuestaSesion {
+  usuario: UsuarioSesion;
+}
+
+/** Cuerpo de `POST /api/auth/login`. */
+export interface CuerpoLogin {
+  usuario: string;
+  password: string;
+}
+
+/** Cuerpo de `POST /api/auth/cambiar-password`. */
+export interface CuerpoCambiarPassword {
+  password_actual: string;
+  password_nueva: string;
+}
+
+/** Fila del listado `GET /api/usuarios` (solo admin). */
+export interface UsuarioAdmin {
+  id: string;
+  usuario: string;
+  rol: RolUsuario;
+  /** ISO 8601 de creación. */
+  creado: string;
+  /** ISO 8601 del último acceso, o `null` si nunca entró. */
+  ultimo_acceso: string | null;
+}
+
+export type RespuestaUsuarios = UsuarioAdmin[];
+
+/** Cuerpo de `POST /api/usuarios` (alta de usuario). */
+export interface CuerpoCrearUsuario {
+  usuario: string;
+  password: string;
+  rol: RolUsuario;
+}
+
+/**
+ * Cuerpo de `PATCH /api/usuarios/{id}`: cambiar rol y/o resetear contraseña.
+ * Ambos campos son opcionales (se manda solo lo que cambia).
+ */
+export interface CuerpoActualizarUsuario {
+  rol?: RolUsuario;
+  password?: string;
+}

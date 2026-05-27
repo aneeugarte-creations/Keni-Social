@@ -1,14 +1,19 @@
 import { NavLink } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
-import { NAVEGACION } from "@/components/layout/navegacion";
+import { navegacionParaRol } from "@/components/layout/navegacion";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
 
 /**
  * Barra lateral fija con el wordmark, los grupos de navegacion (Trabajo /
- * Ajustes) y un pie discreto. Resalta la ruta activa con el color de marca.
+ * Ajustes) y un pie discreto. Resalta la ruta activa con el color de marca. La
+ * sección "Usuarios" (gestión de cuentas) solo aparece para el rol admin.
  */
 export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
+  const { usuario } = useSesion();
+  const navegacion = navegacionParaRol(usuario?.rol === "admin");
+
   return (
     <nav
       aria-label="Navegación principal"
@@ -19,7 +24,7 @@ export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
-        {NAVEGACION.map((grupo) => (
+        {navegacion.map((grupo) => (
           <div key={grupo.etiqueta}>
             <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {grupo.etiqueta}

@@ -3,7 +3,9 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
+import { PuertaSesion } from "@/components/auth/PuertaSesion";
 import { Toaster } from "@/components/ui/sonner";
+import { SesionProvider } from "@/hooks/use-sesion";
 import { TemaProvider } from "@/hooks/use-tema";
 import { ApiError } from "@/lib/api";
 import { router } from "@/router";
@@ -29,7 +31,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <TemaProvider>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        <SesionProvider>
+          <PuertaSesion>
+            <RouterProvider router={router} />
+          </PuertaSesion>
+        </SesionProvider>
         <Toaster />
       </QueryClientProvider>
     </TemaProvider>
