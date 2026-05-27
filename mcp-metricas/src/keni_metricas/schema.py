@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from enum import StrEnum
 
+from keni_shared.metricas import engagement_pct
 from pydantic import BaseModel, Field
 
 
@@ -16,6 +17,14 @@ class Plataforma(StrEnum):
     youtube = "youtube"
 
 
+# Plataformas que exponen "alcance" (usuarios únicos). Solo Meta (FB/IG) lo da
+# en su API de insights; YouTube/X/TikTok NO lo miden y lo reportan AUSENTE
+# (None). Fuente única de esta clasificación (#138).
+PLATAFORMAS_CON_ALCANCE: frozenset[Plataforma] = frozenset(
+    {Plataforma.facebook, Plataforma.instagram}
+)
+
+
 class Cuenta(BaseModel):
     """Una marca/cuenta y las plataformas en las que tiene presencia configurada."""
 
@@ -25,11 +34,62 @@ class Cuenta(BaseModel):
 
 
 class MetricaPlataforma(BaseModel):
+    """Métricas normalizadas de UNA plataforma para un periodo.
+
+    Semántica de agregación entre plataformas (#138) — qué se puede sumar y qué no:
+
+    - `interacciones` es la ÚNICA magnitud comparable entre redes: es la misma
+      cuenta (likes + comentarios + compartidos + …) en todas. Se AGREGA.
+    - `visualizaciones` NO es homogénea entre redes: agrupa conceptos distintos
+      (impresiones en FB/IG/X, reproducciones en YouTube/TikTok). Tiene sentido
+      por plataforma, pero su suma cruzada es "peras con manzanas". El agregador
+      la suma solo como total informativo SEGREGADO, y NO la usa como base de un
+      engagement global (ver `agregador.py`).
+    - `alcance` (usuarios únicos alcanzados) solo lo expone Meta (FB/IG). En
+      YouTube/X/TikTok NO existe: se representa AUSENTE (`None`), nunca 0. Un 0
+      sería un dato falso; `None` dice "esta plataforma no mide alcance" y queda
+      EXCLUIDO del agregado en vez de hundir el total.
+    - `engagement_pct` se calcula contra la base propia de cada plataforma, que
+      sí es coherente dentro de ella.
+    """
+
     plataforma: Plataforma
     visualizaciones: int
-    alcance: int
+    # alcance (usuarios únicos): None = la plataforma NO lo mide (YouTube/X/TikTok),
+    # distinto de 0 (Meta lo mide y dio 0). Ver docstring de la clase.
+    alcance: int | None = None
     interacciones: int
     engagement_pct: float
+
+
+def agregar_alcance(por_plataforma: list[MetricaPlataforma]) -> int | None:
+    """Suma el alcance SOLO de las plataformas que lo miden (#138).
+
+    Las plataformas que no miden alcance lo reportan AUSENTE (`None`) y quedan
+    excluidas del total. Devuelve `None` si NINGUNA plataforma lo mide (ausencia
+    de dato), para no inventar un 0 que hundiría el agregado.
+    """
+    valores = [m.alcance for m in por_plataforma if m.alcance is not None]
+    return sum(valores) if valores else None
+
+
+def agregar_engagement(
+    por_plataforma: list[MetricaPlataforma], interacciones: int
+) -> float | None:
+    """Engagement global defendible: NO divide sobre bases de visualización
+    heterogéneas (#138).
+
+    - 0 plataformas → `None` (no hay nada que medir).
+    - 1 plataforma  → su engagement (base homogénea, coherente).
+    - >1 plataforma → `None`: sumar impresiones de unas con reproducciones de
+      otras y dividir las interacciones entre ese total da un número sin
+      significado. El engagement coherente vive por plataforma en `por_plataforma`.
+    """
+    if not por_plataforma:
+        return None
+    if len(por_plataforma) == 1:
+        return engagement_pct(interacciones, por_plataforma[0].visualizaciones)
+    return None
 
 
 class MotivoOmision(StrEnum):
@@ -65,13 +125,29 @@ class Periodo(BaseModel):
 
 
 class ResumenMetricas(BaseModel):
+    """Resumen agregado de una cuenta sobre todas sus plataformas.
+
+    Sobre la agregación entre plataformas heterogéneas (#138):
+
+    - `visualizaciones`: suma de las visualizaciones de cada plataforma. Es un
+      total INFORMATIVO (mezcla impresiones y reproducciones); el desglose real
+      vive en `por_plataforma`. NO se usa como base de `engagement_pct` global.
+    - `alcance`: suma SOLO de las plataformas que miden alcance (Meta). Es `None`
+      si NINGUNA plataforma del resumen lo mide: ausencia de dato, no 0.
+    - `engagement_pct`: `None` cuando el resumen combina plataformas con bases de
+      visualización heterogéneas (no se divide sobre bases incomparables). Con una
+      sola plataforma se conserva su engagement, que sí es coherente.
+    """
+
     cuenta: str
     rango: str
     periodo: Periodo
     visualizaciones: int
-    alcance: int
+    # alcance: None = ninguna plataforma del resumen mide alcance (no es 0 real).
+    alcance: int | None = None
     interacciones: int
-    engagement_pct: float
+    # engagement_pct: None = no es comparable (bases de visualización heterogéneas).
+    engagement_pct: float | None = None
     seguidores_netos: int
     variacion_vs_anterior: dict[str, float] = Field(default_factory=dict)
     por_plataforma: list[MetricaPlataforma] = Field(default_factory=list)

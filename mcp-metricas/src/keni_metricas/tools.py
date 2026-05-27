@@ -61,16 +61,21 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
         def pct(x: int, y: int) -> float:
             return round((x - y) / y * 100, 1) if y else 0.0
 
+        diferencia: dict = {
+            "visualizaciones_pct": pct(a.visualizaciones, b.visualizaciones),
+        }
+        # delta de engagement en PUNTOS. Misma clave que historico.variacion y
+        # variacion_vs_anterior del esquema: una sola convencion en todo el MCP.
+        # Si alguno de los engagement es None (no comparable entre plataformas,
+        # #138) no hay delta defendible: se omite la clave.
+        if a.engagement_pct is not None and b.engagement_pct is not None:
+            diferencia["engagement_pct"] = round(a.engagement_pct - b.engagement_pct, 1)
+
         return {
             "cuenta": cuenta,
             "a": a.model_dump(mode="json"),
             "b": b.model_dump(mode="json"),
-            "diferencia": {
-                "visualizaciones_pct": pct(a.visualizaciones, b.visualizaciones),
-                # delta de engagement en PUNTOS. Misma clave que historico.variacion
-                # y variacion_vs_anterior del esquema: una sola convencion en todo el MCP.
-                "engagement_pct": round(a.engagement_pct - b.engagement_pct, 1),
-            },
+            "diferencia": diferencia,
         }
 
     @mcp.tool()

@@ -50,14 +50,22 @@ def historico_activo() -> bool:
     return os.environ.get("KENI_METRICAS_HISTORICO", "1") not in ("0", "false", "no")
 
 
-def variacion(actual: ResumenMetricas, vis_anterior: int, eng_anterior: float) -> dict[str, float]:
-    """Delta vs. periodo anterior: visualizaciones en %, engagement en puntos."""
-    return {
+def variacion(
+    actual: ResumenMetricas, vis_anterior: int, eng_anterior: float | None
+) -> dict[str, float]:
+    """Delta vs. periodo anterior: visualizaciones en %, engagement en puntos.
+
+    El engagement global puede ser None (no comparable entre plataformas, #138):
+    en ese caso, o si no hay engagement anterior, se omite el delta de engagement.
+    """
+    var: dict[str, float] = {
         "visualizaciones_pct": round((actual.visualizaciones - vis_anterior) / vis_anterior * 100, 1)
         if vis_anterior
         else 0.0,
-        "engagement_pct": round(actual.engagement_pct - eng_anterior, 1),
     }
+    if actual.engagement_pct is not None and eng_anterior is not None:
+        var["engagement_pct"] = round(actual.engagement_pct - eng_anterior, 1)
+    return var
 
 
 class Historico:

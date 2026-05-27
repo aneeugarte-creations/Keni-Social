@@ -28,6 +28,7 @@ from keni_shared import cuentas as _cuentas
 from keni_shared import marcas as _marcas
 
 from ..schema import (
+    PLATAFORMAS_CON_ALCANCE,
     Cobertura,
     Cuenta,
     MetricaPlataforma,
@@ -35,6 +36,7 @@ from ..schema import (
     Pieza,
     Plataforma,
     ResumenMetricas,
+    agregar_alcance,
     resolver_rango,
 )
 from .base import CuentaNoEncontrada, engagement_pct
@@ -271,7 +273,13 @@ class FuenteMuestra:
         factor = _ENG_FACTOR.get(cuenta_id, 1.0)
         eng = round(_entre(_rand(cuenta_id, plat, rango, "e"), eng_min, eng_max) * factor, 1)
         interacciones = int(vistas * eng / 100)
-        alcance = int(vistas * _entre(_rand(cuenta_id, plat, rango, "a"), 0.55, 0.75))
+        # solo las plataformas que realmente miden alcance (Meta) lo traen; el
+        # resto AUSENTE (None), igual que los adaptadores reales (#138).
+        alcance = (
+            int(vistas * _entre(_rand(cuenta_id, plat, rango, "a"), 0.55, 0.75))
+            if plat in PLATAFORMAS_CON_ALCANCE
+            else None
+        )
         return MetricaPlataforma(
             plataforma=plat,
             visualizaciones=vistas,
@@ -295,7 +303,11 @@ class FuenteMuestra:
 
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
-        alc = sum(m.alcance for m in por_plataforma)
+        alc = agregar_alcance(por_plataforma)  # solo suma el alcance medido (#138)
+        # engagement combinado: la muestra es una fuente única y determinista, su
+        # modelo de engagement por marca es coherente (calibrado a la realidad del
+        # cliente); a diferencia del agregado de fuentes reales heterogéneas, aquí
+        # sí es un número con significado de demo. Ver `agregador.py` para el real.
         eng = engagement_pct(inter, vis)
         seg = int(vis * _entre(_rand(cuenta_id, rango, "seg"), 0.0006, 0.0012))
 

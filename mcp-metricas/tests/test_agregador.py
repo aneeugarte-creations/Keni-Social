@@ -10,12 +10,17 @@ from keni_metricas.schema import MetricaPlataforma, Pieza, Plataforma
 
 
 class AdaptadorFalso:
-    """Adaptador en memoria para probar la agregacion sin red."""
+    """Adaptador en memoria para probar la agregacion sin red.
 
-    def __init__(self, plataforma: Plataforma, vis: int, inter: int):
+    `alcance` por defecto es None (la mayoria de plataformas no lo miden, #138);
+    se puede fijar explicitamente para simular Meta (que si lo mide).
+    """
+
+    def __init__(self, plataforma: Plataforma, vis: int, inter: int, alcance: int | None = None):
         self.plataforma = plataforma
         self._vis = vis
         self._inter = inter
+        self._alcance = alcance
 
     def disponible(self) -> bool:
         return True
@@ -24,7 +29,7 @@ class AdaptadorFalso:
         return MetricaPlataforma(
             plataforma=self.plataforma,
             visualizaciones=self._vis,
-            alcance=int(self._vis * 0.7),
+            alcance=self._alcance,
             interacciones=self._inter,
             engagement_pct=round(self._inter / self._vis * 100, 1),
         )
@@ -56,13 +61,78 @@ def _fuente() -> FuenteCompuesta:
     return FuenteCompuesta([cuenta], adaptadores)
 
 
-def test_resumen_suma_plataformas():
+def test_resumen_suma_solo_lo_comparable():
+    """interacciones SE suma (homogenea); visualizaciones se suma como total
+    informativo; pero el engagement global NO se divide sobre bases heterogeneas
+    (FB impresiones + TikTok reproducciones): es None (#138)."""
     r = _fuente().resumen("marca", "semana")
-    assert r.visualizaciones == 5000
-    assert r.interacciones == 340
-    assert r.engagement_pct == 6.8  # 340/5000*100
+    assert r.interacciones == 340  # 20 + 320: misma magnitud en ambas redes
+    assert r.visualizaciones == 5000  # total informativo (no se usa como base)
+    # con 2 plataformas de base heterogenea, el engagement global no es comparable
+    assert r.engagement_pct is None
     assert r.fuente == "real"
     assert {m.plataforma for m in r.por_plataforma} == {Plataforma.facebook, Plataforma.tiktok}
+
+
+def test_engagement_una_sola_plataforma_si_se_calcula():
+    """Con una unica plataforma, la base es homogenea: el engagement SI se calcula."""
+    cuenta = CuentaConfig(id="m", nombre="M", plataformas={Plataforma.tiktok: "h"})
+    fuente = FuenteCompuesta(
+        [cuenta], {Plataforma.tiktok: AdaptadorFalso(Plataforma.tiktok, 4000, 320)}
+    )
+    r = fuente.resumen("m", "semana")
+    assert r.engagement_pct == 8.0  # 320/4000*100, base homogenea
+
+
+def test_alcance_no_disponible_es_none_no_cero():
+    """Las plataformas que no miden alcance lo reportan None (AUSENTE), nunca 0.
+    El agregado suma SOLO las que lo miden; un 0 falso hundiria el total (#138)."""
+    cuenta = CuentaConfig(
+        id="m",
+        nombre="M",
+        plataformas={Plataforma.facebook: "h1", Plataforma.tiktok: "h2"},
+    )
+    fuente = FuenteCompuesta(
+        [cuenta],
+        {
+            # Meta mide alcance (700); TikTok no lo mide (None, no 0).
+            Plataforma.facebook: AdaptadorFalso(Plataforma.facebook, 1000, 20, alcance=700),
+            Plataforma.tiktok: AdaptadorFalso(Plataforma.tiktok, 4000, 320),
+        },
+    )
+    r = fuente.resumen("m", "semana")
+    # el alcance agregado es SOLO el de Meta; TikTok (None) queda excluido, no suma 0
+    assert r.alcance == 700
+    por_plat = {m.plataforma: m.alcance for m in r.por_plataforma}
+    assert por_plat[Plataforma.facebook] == 700
+    assert por_plat[Plataforma.tiktok] is None  # AUSENTE, no 0
+
+
+def test_alcance_es_none_si_ninguna_plataforma_lo_mide():
+    """Si NINGUNA plataforma mide alcance, el agregado es None (ausencia), no 0."""
+    cuenta = CuentaConfig(
+        id="m",
+        nombre="M",
+        plataformas={Plataforma.youtube: "h1", Plataforma.tiktok: "h2"},
+    )
+    fuente = FuenteCompuesta(
+        [cuenta],
+        {
+            Plataforma.youtube: AdaptadorFalso(Plataforma.youtube, 2000, 100),
+            Plataforma.tiktok: AdaptadorFalso(Plataforma.tiktok, 4000, 320),
+        },
+    )
+    r = fuente.resumen("m", "semana")
+    assert r.alcance is None  # ni YouTube ni TikTok miden alcance: AUSENTE, no 0
+
+
+def test_visualizaciones_no_es_base_del_engagement_global():
+    """Aunque visualizaciones se sume como total, NO se usa como denominador del
+    engagement global cuando hay >1 plataforma (no se divide sobre bases mixtas)."""
+    r = _fuente().resumen("marca", "semana")
+    # si se dividiera (mal) sobre el total seria 340/5000*100 = 6.8; ahora es None
+    assert r.engagement_pct is None
+    assert r.engagement_pct != 6.8
 
 
 def test_mejores_piezas_ordena_entre_plataformas():

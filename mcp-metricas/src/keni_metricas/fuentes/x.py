@@ -70,7 +70,7 @@ class AdaptadorX(AdaptadorBase):
         return MetricaPlataforma(
             plataforma=self.plataforma,
             visualizaciones=vis,
-            alcance=0,
+            alcance=None,  # X no expone alcance/usuarios únicos: AUSENTE, no 0 (#138)
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
         )

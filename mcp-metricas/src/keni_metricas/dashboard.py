@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from . import formato
-from .formato import etiqueta_marca, miles, partes_cobertura, signo
+from .formato import cifra, etiqueta_marca, miles, partes_cobertura, pct, signo
 from .fuentes.base import FuenteMetricas
 from .picos import detectar_picos
 from .reporte import construir_reporte
@@ -54,8 +54,15 @@ _ENG_UMBRAL_BAJO = 1.5
 _ENG_TREND_N = 6
 
 
-def _clase_engagement(pct: float) -> str:
-    """Clase CSS segun el nivel de engagement (north-star)."""
+def _eng_sortable(pct: float | None) -> float:
+    """Clave de orden para engagement: None (no comparable, #138) cae al final."""
+    return -1.0 if pct is None else pct
+
+
+def _clase_engagement(pct: float | None) -> str:
+    """Clase CSS segun el nivel de engagement (north-star). None = no comparable."""
+    if pct is None:
+        return "eng-nd"
     if pct >= _ENG_UMBRAL_ALTO:
         return "eng-alto"
     if pct < _ENG_UMBRAL_BAJO:
@@ -63,8 +70,10 @@ def _clase_engagement(pct: float) -> str:
     return "eng-medio"
 
 
-def _etiqueta_engagement(pct: float) -> str:
-    """Etiqueta legible del nivel de engagement."""
+def _etiqueta_engagement(pct: float | None) -> str:
+    """Etiqueta legible del nivel de engagement. None = no comparable (#138)."""
+    if pct is None:
+        return "n/d"
     if pct >= _ENG_UMBRAL_ALTO:
         return "alto"
     if pct < _ENG_UMBRAL_BAJO:
@@ -284,12 +293,15 @@ h2.seccion { font-size: 1.15rem; margin: 36px 0 14px; padding-bottom: 6px; borde
 .eng-alto { color: var(--sube); }
 .eng-medio { color: var(--aviso-tinta); }
 .eng-bajo { color: var(--baja); }
+.eng-nd { color: var(--gris); }  /* no comparable entre plataformas (#138) */
 .nivel.eng-alto { background: #e7f6ec; }
 .nivel.eng-medio { background: var(--aviso-fondo); }
 .nivel.eng-bajo { background: #fbeaea; }
+.nivel.eng-nd { background: var(--gris-claro); }
 .barra .eng-alto { background: var(--sube); }
 .barra .eng-medio { background: var(--aviso-borde); }
 .barra .eng-bajo { background: var(--baja); }
+.barra .eng-nd { background: var(--gris-claro); }
 .tendencia { margin: 10px 0 0; }
 .tendencia summary {
   cursor: pointer; color: var(--gris); font-size: 0.78rem;
@@ -422,9 +434,10 @@ footer .leyenda .chip {
 def _render_kpis(total: dict) -> str:
     kpis = [
         ("Visualizaciones", miles(total["visualizaciones"])),
-        ("Alcance", miles(total["alcance"])),
+        # alcance/engagement pueden ser None (no medible / no comparable, #138): "n/d".
+        ("Alcance", cifra(total.get("alcance"))),
         ("Interacciones", miles(total["interacciones"])),
-        ("Engagement", f"{total['engagement_pct']}%"),
+        ("Engagement", pct(total.get("engagement_pct"))),
         ("Cuentas", miles(total["cuentas"])),
     ]
     items = "".join(
@@ -452,8 +465,8 @@ def _render_tarjeta(fila: dict, nombres: dict[str, str]) -> str:
     cifras = (
         '<div class="cifras">'
         f'<div><span class="n">{miles(r["visualizaciones"])}</span><span class="l">Visualizaciones</span></div>'
-        f'<div><span class="n">{miles(r["alcance"])}</span><span class="l">Alcance</span></div>'
-        f'<div><span class="n">{escape(str(r["engagement_pct"]))}%</span><span class="l">Engagement</span></div>'
+        f'<div><span class="n">{escape(cifra(r.get("alcance")))}</span><span class="l">Alcance</span></div>'
+        f'<div><span class="n">{escape(pct(r.get("engagement_pct")))}</span><span class="l">Engagement</span></div>'
         "</div>"
     )
 
@@ -634,8 +647,11 @@ def _render_engagement(
 ) -> str:
     """Seccion north-star: engagement global + ranking por marca, color-coded."""
     total = rep.get("total") or {}
-    eng_global = total.get("engagement_pct", 0.0)
+    # engagement global = None (no comparable entre plataformas heterogeneas, #138):
+    # se muestra "n/d", no un numero engañoso.
+    eng_global = total.get("engagement_pct")
     clase_global = _clase_engagement(eng_global)
+    eng_global_txt = "n/d" if eng_global is None else f"{eng_global}%"
 
     # UX-5: leyenda del north-star como chips de color (no como frase larga gris).
     leyenda = (
@@ -649,57 +665,62 @@ def _render_engagement(
     # a11y: el hero comunica un valor clave; lo exponemos como figura con etiqueta
     # legible para lectores de pantalla (el <br> visual no se lee bien si no).
     hero_label = escape(
-        f"Engagement global {eng_global}%, nivel {_etiqueta_engagement(eng_global)}"
+        f"Engagement global {eng_global_txt}, nivel {_etiqueta_engagement(eng_global)}"
     )
     partes = [
         '<h2 class="seccion" id="titulo-engagement">Engagement (north-star)</h2>',
         f'<div class="ns-hero" role="img" aria-label="{hero_label}">',
-        f'<span class="ns-valor {clase_global}">{escape(str(eng_global))}%</span>',
+        f'<span class="ns-valor {clase_global}">{escape(eng_global_txt)}</span>',
         '<span class="ns-etiqueta" aria-hidden="true">Engagement global<br>'
         f'nivel {escape(_etiqueta_engagement(eng_global))}</span>',
         leyenda,
         "</div>",
     ]
 
-    # Ranking por marca, ordenado por engagement descendente.
+    # Ranking por marca, ordenado por engagement descendente. Las marcas sin
+    # engagement comparable (None, #138) van al final con su sentinel -1.0.
     filas = rep.get("cuentas") or []
     ordenadas = sorted(
         filas,
-        key=lambda f: f["resumen"].get("engagement_pct", 0.0),
+        key=lambda f: _eng_sortable(f["resumen"].get("engagement_pct")),
         reverse=True,
     )
     if not ordenadas:
         partes.append('<p class="vacio">Sin marcas en el periodo.</p>')
         return "".join(partes)
 
-    max_eng = max((f["resumen"].get("engagement_pct", 0.0) for f in ordenadas), default=0.0)
+    max_eng = max(
+        (_eng_sortable(f["resumen"].get("engagement_pct")) for f in ordenadas),
+        default=0.0,
+    )
 
     lis = []
     for pos, fila in enumerate(ordenadas, start=1):
         r = fila["resumen"]
         cuenta_id = r["cuenta"]
         nombre = etiqueta_marca(cuenta_id, nombres)
-        eng = r.get("engagement_pct", 0.0)
+        eng = r.get("engagement_pct")
+        eng_txt = "n/d" if eng is None else f"{eng}%"
         clase = _clase_engagement(eng)
-        ancho = round(eng / max_eng * 100, 1) if max_eng else 0.0
+        ancho = round(eng / max_eng * 100, 1) if (max_eng and eng is not None) else 0.0
         # UX-3: sparkline inline (siempre visible) + tabla detallada plegada.
         spark_inline, tabla_detalle = _tendencia_engagement(cuenta_id, rango, historico)
         # a11y: la barra comunica el valor visualmente -> role="img" + aria-label
         # con el dato exacto; el % superpuesto es decorativo (aria-hidden) porque
         # ya lo dice la etiqueta de la barra y el .pct contiguo.
         barra_label = escape(
-            f"{nombre}: {eng}% de engagement, nivel {_etiqueta_engagement(eng)}"
+            f"{nombre}: {eng_txt} de engagement, nivel {_etiqueta_engagement(eng)}"
         )
         lis.append(
             "<li>"
             f'<span class="pos" aria-hidden="true">{pos}</span>'
             f'<span class="marca">{escape(nombre)}{spark_inline}</span>'
             f'<span class="nivel {clase}">{escape(_etiqueta_engagement(eng))}</span>'
-            f'<span class="pct {clase}">{escape(str(eng))}%</span>'
+            f'<span class="pct {clase}">{escape(eng_txt)}</span>'
             # UX-10: barra mas alta con el % visible dentro.
             f'<span class="barra" role="img" aria-label="{barra_label}">'
             f'<span class="relleno {clase}" style="width: {ancho}%"></span>'
-            f'<span class="barra-pct" aria-hidden="true">{escape(str(eng))}%</span>'
+            f'<span class="barra-pct" aria-hidden="true">{escape(eng_txt)}</span>'
             f"</span>"
             f"{tabla_detalle}"
             "</li>"
@@ -757,7 +778,7 @@ def _marca_top_engagement(rep: dict, nombres: dict[str, str]) -> str | None:
     filas = rep.get("cuentas") or []
     if not filas:
         return None
-    mejor = max(filas, key=lambda f: f["resumen"].get("engagement_pct", 0.0))
+    mejor = max(filas, key=lambda f: _eng_sortable(f["resumen"].get("engagement_pct")))
     return etiqueta_marca(mejor["resumen"]["cuenta"], nombres)
 
 

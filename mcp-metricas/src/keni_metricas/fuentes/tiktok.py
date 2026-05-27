@@ -4,7 +4,8 @@ Requiere auditoría de TikTok para acceso completo (ver docs/credenciales.md).
 - paginación: sigue `data.cursor` mientras `data.has_more` (con tope MAX_PAGINAS).
 - refresh: si hay client_key/client_secret/refresh_token, renueva el access_token
   ante un 401.
-- TikTok no expone "alcance": queda en 0. `handle` no se usa (va por el token).
+- TikTok no expone "alcance": se reporta AUSENTE (None), no 0 (#138). `handle` no
+  se usa (va por el token).
 """
 
 from __future__ import annotations
@@ -97,7 +98,7 @@ class AdaptadorTikTok(AdaptadorBase):
         return MetricaPlataforma(
             plataforma=self.plataforma,
             visualizaciones=vis,
-            alcance=0,
+            alcance=None,  # TikTok Display API no expone alcance: AUSENTE, no 0 (#138)
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
         )

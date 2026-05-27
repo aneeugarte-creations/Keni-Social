@@ -43,6 +43,25 @@ def miles(n: int | float) -> str:
         return escape(str(n))
 
 
+# Texto para una métrica AUSENTE (None): la plataforma/conjunto no la mide. Es
+# distinto de 0 (medido y resultó 0). Ver #138.
+NO_DISPONIBLE = "n/d"
+
+
+def cifra(n: int | float | None) -> str:
+    """Formatea una cifra con separador de miles; `None` (no medible) -> "n/d"."""
+    if n is None:
+        return NO_DISPONIBLE
+    return miles(n)
+
+
+def pct(valor: float | None) -> str:
+    """Formatea un porcentaje; `None` (base incomparable) -> "n/d". Ver #138."""
+    if valor is None:
+        return NO_DISPONIBLE
+    return f"{valor}%"
+
+
 def etiqueta_marca(cuenta_id: str, nombres: Mapping[str, str] | None = None) -> str:
     """Nombre legible de una marca a partir de su id interno.
 

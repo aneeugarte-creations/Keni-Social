@@ -19,7 +19,9 @@ def test_reporte_recorre_todas_las_cuentas():
     rep = construir_reporte(FuenteMuestra(), "mes", top=3)
     assert rep["total"]["cuentas"] == 7
     assert rep["total"]["visualizaciones"] > 0
-    assert 1.0 <= rep["total"]["engagement_pct"] <= 12.0
+    # engagement global = None: combina marcas y plataformas con bases de
+    # visualizacion heterogeneas; no se divide sobre bases incomparables (#138).
+    assert rep["total"]["engagement_pct"] is None
     # total = suma de las marcas
     suma = sum(f["resumen"]["visualizaciones"] for f in rep["cuentas"])
     assert rep["total"]["visualizaciones"] == suma

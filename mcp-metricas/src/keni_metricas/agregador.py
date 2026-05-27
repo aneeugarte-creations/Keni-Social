@@ -1,5 +1,22 @@
 """FuenteCompuesta: combina los adaptadores reales por plataforma en metricas
 multi-marca/multi-plataforma. Implementa FuenteMetricas a partir de la config.
+
+Semántica de agregación entre plataformas (#138)
+-------------------------------------------------
+Las redes NO miden lo mismo, así que no todo se puede sumar entre ellas. La regla
+explícita que aplica el agregador (ver `agregar_resumen`):
+
+- `interacciones`  → SE SUMA. Es la única magnitud homogénea (likes + comentarios
+  + compartidos + …): la misma cuenta en todas las plataformas.
+- `visualizaciones`→ se suma solo como TOTAL INFORMATIVO. Mezcla impresiones
+  (FB/IG/X) con reproducciones (YouTube/TikTok), que no son lo mismo; el desglose
+  fiable está en `por_plataforma`. No se usa como base del engagement global.
+- `alcance`        → se suma SOLO entre las plataformas que lo miden (Meta). Las
+  que no lo miden lo reportan AUSENTE (`None`), no 0, y quedan EXCLUIDAS. Si
+  ninguna lo mide, el total es `None` (ausencia de dato, no 0 real).
+- `engagement_pct` → NO se divide sobre la suma de visualizaciones heterogéneas.
+  Si el resumen combina más de una plataforma con bases distintas, el engagement
+  global es `None` (no comparable); con una sola plataforma se conserva el suyo.
 """
 
 from __future__ import annotations
@@ -7,7 +24,7 @@ from __future__ import annotations
 import logging
 
 from .config import Config, CuentaConfig
-from .fuentes.base import AdaptadorPlataforma, CuentaNoEncontrada, engagement_pct
+from .fuentes.base import AdaptadorPlataforma, CuentaNoEncontrada
 from .presupuesto import Presupuesto, PresupuestoExcedido
 from .schema import (
     Cobertura,
@@ -18,6 +35,8 @@ from .schema import (
     Pieza,
     Plataforma,
     ResumenMetricas,
+    agregar_alcance,
+    agregar_engagement,
     resolver_rango,
 )
 
@@ -120,17 +139,19 @@ class FuenteCompuesta:
                 detalle,
             )
 
+        # Agregación según la semántica de #138 (ver módulo): interacciones se
+        # suman; visualizaciones solo como total informativo; alcance solo entre
+        # plataformas que lo miden; engagement no se divide sobre bases mixtas.
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
-        alc = sum(m.alcance for m in por_plataforma)
         return ResumenMetricas(
             cuenta=cuenta_id,
             rango=rango,
             periodo=Periodo(desde=desde, hasta=hasta),
             visualizaciones=vis,
-            alcance=alc,
+            alcance=agregar_alcance(por_plataforma),
             interacciones=inter,
-            engagement_pct=engagement_pct(inter, vis),
+            engagement_pct=agregar_engagement(por_plataforma, inter),
             seguidores_netos=0,  # requiere historico; no se calcula en v1
             variacion_vs_anterior={},  # idem
             por_plataforma=por_plataforma,
