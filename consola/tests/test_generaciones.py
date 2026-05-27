@@ -78,6 +78,18 @@ def test_argv_sin_dirs_no_anade_add_dir(entorno):
     assert "--add-dir" not in argv
 
 
+def test_argv_incluye_skip_permissions_por_defecto(entorno, monkeypatch):
+    # Headless (-p): sin --dangerously-skip-permissions `claude` no carga las skills del
+    # proyecto ni usa WebFetch (no hay forma de aprobar el trust/permiso). Por defecto va.
+    monkeypatch.delenv("KENI_CLAUDE_SKIP_PERMISSIONS", raising=False)
+    assert "--dangerously-skip-permissions" in generaciones._argv_claude("hola")
+
+
+def test_argv_skip_permissions_desactivable_por_env(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_CLAUDE_SKIP_PERMISSIONS", "0")
+    assert "--dangerously-skip-permissions" not in generaciones._argv_claude("hola")
+
+
 # --------------------------------------------------------------------------- #
 # argv de claude: --max-turns desde KENI_CLAUDE_MAX_TURNS (#103, F-T-01)        #
 # --------------------------------------------------------------------------- #

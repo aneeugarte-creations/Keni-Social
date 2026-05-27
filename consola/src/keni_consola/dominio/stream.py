@@ -88,6 +88,10 @@ _ENV_MAX_USD = "KENI_CLAUDE_MAX_USD"
 # Env opcional: tope de turnos del agente que se pasa a `claude` como `--max-turns`.
 _ENV_MAX_TURNS = "KENI_CLAUDE_MAX_TURNS"
 
+# Env opcional: saltar permisos de `claude -p` (def. ON). Ver `arg_skip_permisos`.
+_ENV_SKIP_PERMISOS = "KENI_CLAUDE_SKIP_PERMISSIONS"
+_FALSY = frozenset({"0", "false", "no", "off", ""})
+
 # Subtipos de error conocidos del campo `result` que conviene reportar especificamente.
 _SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
 
@@ -128,6 +132,20 @@ def arg_max_turns() -> list[str]:
     if valor <= 0:
         return []
     return ["--max-turns", str(valor)]
+
+
+def arg_skip_permisos() -> list[str]:
+    """`['--dangerously-skip-permissions']` salvo `KENI_CLAUDE_SKIP_PERMISSIONS` falsy (def. ON).
+
+    En modo `-p` (headless) NO hay forma interactiva de aprobar el "trust" de la carpeta
+    ni el permiso de una herramienta. SIN esto, `claude` no carga las skills del proyecto
+    (`.claude/skills`) —y la skill se ejecuta "a mano"— ni puede usar WebFetch/Bash (se
+    cuelga pidiendo un permiso que nadie puede conceder). El subproceso corre ACOTADO (cwd
+    de skills, tope de turnos/coste/wall-timeout y, en hosted, dentro del contenedor), por
+    lo que se saltan los permisos por defecto. Desactivable con
+    `KENI_CLAUDE_SKIP_PERMISSIONS=0` (p.ej. para depurar qué permiso falta)."""
+    crudo = os.environ.get(_ENV_SKIP_PERMISOS, "1").strip().lower()
+    return [] if crudo in _FALSY else ["--dangerously-skip-permissions"]
 
 
 # --------------------------------------------------------------------------- #

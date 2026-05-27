@@ -356,6 +356,9 @@ def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+        # Headless: sin esto `claude` no carga las skills del proyecto ni usa WebFetch/Bash
+        # (no hay forma de aprobar el "trust"/permiso en `-p`). Acotado por cwd + topes.
+        *stream.arg_skip_permisos(),
         *preferencias.arg_esfuerzo(),
         *stream.arg_presupuesto(),
         *stream.arg_max_turns(),
