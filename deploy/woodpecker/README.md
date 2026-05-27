@@ -69,19 +69,21 @@ Ademas de los 3 pipelines de CI (tests), hay un pipeline de **despliegue**:
 monta el `docker.sock`, el step construye las imagenes desde el checkout del pipeline
 (sin rsync) y recrea el stack via `deploy/deploy.sh`.
 
-- **Disparo MANUAL** (`when: event: manual`): se lanza desde la UI (boton *Run
-  pipeline*/manual) sobre `main`. A proposito NO se despliega en cada push (piloto en
-  vivo).
+- **Disparo manual** (`when: event: [manual, deployment]`): lanzalo como *manual* o desde
+  la pestana *Deployments* sobre `main`. A proposito NO se despliega en cada push (piloto
+  en vivo).
 - **Hace:** `docker compose build` -> `stop back` -> chown del volumen a uid 10001 (los
   contenedores corren no-root) -> `migracion --solo-db` (cutover SQLite->Postgres,
   idempotente y no destructivo) -> `up -d`. Detalle en `deploy/deploy.sh`.
 
 ### Requisitos (una vez) para que el deploy funcione
 
-1. **Marca el repo como TRUSTED** en Woodpecker (Repo Settings -> *Trusted*). Sin eso,
-   Woodpecker **bloquea** el montaje del `docker.sock` y del `.env` que el step necesita.
-   (Alternativa si no quieres confiar el repo: fija en el agente
-   `WOODPECKER_BACKEND_DOCKER_VOLUMES=/var/run/docker.sock:/var/run/docker.sock,/home/ubuntu/keni-social/deploy/.env:/secrets/env:ro`
+1. **Activa "Volumenes" en la seccion "Confiado"** del repo (Repo Settings -> General ->
+   *Confiado* -> *Volumenes*: "Pipeline containers are allowed to mount volumes"). En
+   Woodpecker v3.13 el antiguo flag "Trusted" es **granular**; con "Volumenes" basta para
+   que el step monte el `docker.sock` + el `.env` (deja "Network" y "Seguridad" en off).
+   Para disparar por la pestana *Deployments*, activa ademas **"Permitir despliegues"**.
+   (Alternativa global, menos segura: fija `WOODPECKER_BACKEND_DOCKER_VOLUMES` en el agente
    — pero eso expone el socket a TODOS los steps, incluidos los de test.)
 2. **`.env` de secretos** en `/home/ubuntu/keni-social/deploy/.env` (el del stack
    principal; ya existe). Hasta bootstrapear Garage, deja las `S3_*` **vacias** ahi: la
