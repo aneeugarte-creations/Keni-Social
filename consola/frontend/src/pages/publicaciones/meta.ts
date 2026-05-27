@@ -105,9 +105,14 @@ export function iconoRed(id: string): LucideIcon {
 
 // --- Estados ---
 
-/** Orden de avance del ciclo de vida de una publicación. */
+/** Orden de avance del ciclo de vida de una publicación.
+ *
+ * El flujo de aprobación de equipo (#9) intercala `en_revision` entre el borrador y
+ * el aprobado: borrador → en revisión → aprobado → programado → publicado.
+ */
 export const ORDEN_ESTADOS: EstadoPublicacion[] = [
   "borrador",
+  "en_revision",
   "aprobado",
   "programado",
   "publicado",
@@ -123,6 +128,10 @@ export const META_ESTADOS: Record<EstadoPublicacion, MetaEstado> = {
   borrador: {
     nombre: "Borrador",
     clase: "border-transparent bg-muted text-muted-foreground",
+  },
+  en_revision: {
+    nombre: "En revisión",
+    clase: "border-transparent bg-violet-500/15 text-violet-700 dark:text-violet-300",
   },
   aprobado: {
     nombre: "Aprobado",

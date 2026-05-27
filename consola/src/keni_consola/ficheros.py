@@ -366,7 +366,9 @@ def _listar_validado(
 # Publicaciones                                                                #
 # --------------------------------------------------------------------------- #
 
-# Campos que la edicion parcial puede tocar (igual que `db.py`).
+# Campos que la edicion parcial puede tocar (igual que `db.py`). Incluye los del flujo
+# de aprobacion de equipo (#9, Fase 3: revisor/marcas de tiempo) y la preparacion del
+# programador (`preparado_en`), todos ADITIVOS y retrocompatibles.
 _CAMPOS_EDITABLES_PUBLICACION = (
     "titulo",
     "contenido",
@@ -374,6 +376,13 @@ _CAMPOS_EDITABLES_PUBLICACION = (
     "fecha_programada",
     "imagen",
     "evergreen",
+    # Flujo de aprobacion de equipo (#9).
+    "enviado_a_revision_en",
+    "revisor_id",
+    "revisor_nombre",
+    "revisado_en",
+    # Preparacion por el programador (#9): marca dry-run "lista para publicar".
+    "preparado_en",
 )
 
 
@@ -392,6 +401,15 @@ def _publicacion_yaml(pub: dict[str, Any]) -> dict[str, Any]:
         "evergreen": bool(pub["evergreen"]),
         "autor_id": pub.get("autor_id", "") or "",
         "autor_nombre": pub.get("autor_nombre", "") or "",
+        # Flujo de aprobacion de equipo (#9, Fase 3). Aditivos: una pieza legada no los
+        # trae y se leen como "" (ver `_parsear_publicacion`); nunca rompen el round-trip.
+        "enviado_a_revision_en": pub.get("enviado_a_revision_en", "") or "",
+        "revisor_id": pub.get("revisor_id", "") or "",
+        "revisor_nombre": pub.get("revisor_nombre", "") or "",
+        "revisado_en": pub.get("revisado_en", "") or "",
+        # Marca dry-run del programador (#9): instante en que se preparo "lista para
+        # publicar" (NO publica de verdad; gating en #5/#8). "" hasta que vence.
+        "preparado_en": pub.get("preparado_en", "") or "",
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],
@@ -423,6 +441,14 @@ def _parsear_publicacion(datos: dict[str, Any], marca: str, pub_id: str) -> dict
         # => "" (la UI lo muestra como "desconocido"); nunca rompe la lectura.
         "autor_id": datos.get("autor_id", "") or "",
         "autor_nombre": datos.get("autor_nombre", "") or "",
+        # Flujo de aprobacion de equipo (#9, Fase 3). Ausentes en piezas legadas => ""
+        # (la pieza simplemente no ha pasado por revision aun); nunca rompe la lectura.
+        "enviado_a_revision_en": datos.get("enviado_a_revision_en", "") or "",
+        "revisor_id": datos.get("revisor_id", "") or "",
+        "revisor_nombre": datos.get("revisor_nombre", "") or "",
+        "revisado_en": datos.get("revisado_en", "") or "",
+        # Marca dry-run del programador (#9): "" hasta que el programador la prepara.
+        "preparado_en": datos.get("preparado_en", "") or "",
         "fecha_creacion": datos.get("fecha_creacion", "") or "",
         "fecha_actualizacion": datos.get("fecha_actualizacion", "") or "",
         "fecha_programada": datos.get("fecha_programada", "") or "",
@@ -445,6 +471,12 @@ def _construir_publicacion(datos: dict[str, Any]) -> dict[str, Any]:
         "veredicto": datos.get("veredicto") or "",
         "autor_id": datos.get("autor_id") or "",
         "autor_nombre": datos.get("autor_nombre") or "",
+        # Flujo de aprobacion de equipo (#9): una pieza nueva nace sin revision.
+        "enviado_a_revision_en": datos.get("enviado_a_revision_en") or "",
+        "revisor_id": datos.get("revisor_id") or "",
+        "revisor_nombre": datos.get("revisor_nombre") or "",
+        "revisado_en": datos.get("revisado_en") or "",
+        "preparado_en": datos.get("preparado_en") or "",
         "fecha_creacion": ahora,
         "fecha_actualizacion": ahora,
         "fecha_programada": datos.get("fecha_programada") or "",

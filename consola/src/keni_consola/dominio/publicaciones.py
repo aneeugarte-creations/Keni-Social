@@ -37,6 +37,16 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # legadas/anonimas (la UI lo muestra como "desconocido").
         "autor_id": pub.get("autor_id") or "",
         "autor_nombre": pub.get("autor_nombre") or "",
+        # Flujo de aprobacion de equipo (#9, Fase 3): quien la reviso/aprobo y cuando.
+        # "" mientras la pieza no haya pasado por revision (incluidas las legadas).
+        "enviado_a_revision_en": pub.get("enviado_a_revision_en") or "",
+        "revisor_id": pub.get("revisor_id") or "",
+        "revisor_nombre": pub.get("revisor_nombre") or "",
+        "revisado_en": pub.get("revisado_en") or "",
+        # Marca dry-run del programador (#9): instante en que quedo "lista para publicar"
+        # (preparada, NO publicada de verdad: el posteo real esta GATED por #5/#8). ""
+        # hasta que el programador la prepara al vencer su `fecha_programada`.
+        "preparado_en": pub.get("preparado_en") or "",
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],

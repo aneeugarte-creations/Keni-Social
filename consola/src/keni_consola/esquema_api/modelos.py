@@ -267,7 +267,9 @@ class MetricasRun(TypedDict):
 # Publicaciones — dominio/publicaciones.py (publicacion_a_dict) + api          #
 # --------------------------------------------------------------------------- #
 
-EstadoPublicacion = Literal["borrador", "aprobado", "programado", "publicado"]
+# El flujo de aprobacion de equipo (#9, Fase 3) intercala `en_revision` entre el
+# borrador y el aprobado.
+EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado", "publicado"]
 # Veredicto editorial de una pieza. "" = sin veredicto.
 Veredicto = Literal["listo", "revisar", "no_publicar", ""]
 
@@ -279,6 +281,12 @@ class Publicacion(TypedDict):
     archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
     `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
     creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
+
+    Flujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/
+    `revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; "" mientras
+    no haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca
+    DRY-RUN del programador (instante en que quedo "lista para publicar"; el posteo real
+    esta gated por #5/#8); "" hasta que vence su `fecha_programada`.
     """
 
     id: str
@@ -292,6 +300,11 @@ class Publicacion(TypedDict):
     veredicto: Veredicto
     autor_id: str
     autor_nombre: str
+    enviado_a_revision_en: str
+    revisor_id: str
+    revisor_nombre: str
+    revisado_en: str
+    preparado_en: str
     fecha_creacion: str
     fecha_actualizacion: str
     fecha_programada: str
@@ -312,6 +325,108 @@ class RespuestaPublicacion(TypedDict):
     """Respuesta de los endpoints que devuelven UNA publicacion (`{publicacion}`)."""
 
     publicacion: Publicacion
+
+
+# --------------------------------------------------------------------------- #
+# Aprobacion de equipo + panel ligero — api/aprobacion.py + api/panel.py (#9)  #
+# --------------------------------------------------------------------------- #
+
+
+class RespuestaColaAprobacion(TypedDict):
+    """Cola de aprobacion (`GET /api/aprobacion/cola`): piezas en revision, FIFO.
+
+    Cada item es una `Publicacion` completa (incluye `autor_nombre`/
+    `enviado_a_revision_en`: quien la envio y desde cuando espera). `total` = nº en cola.
+    """
+
+    cola: list[Publicacion]
+    total: int
+
+
+class TotalPanel(TypedDict):
+    """Total consolidado de metricas para el panel (mismas 4 metricas que el reporte)."""
+
+    visualizaciones: int
+    alcance: int
+    interacciones: int
+    engagement_pct: float
+
+
+class PicoPanel(TypedDict):
+    """Un movimiento destacado ('pico') del periodo en el panel."""
+
+    marca: str
+    # direccion: "sube" | "baja" | "estable".
+    direccion: str
+    variacion_vis_pct: float
+    visualizaciones: int
+    pieza_titulo: str
+
+
+class MetricasPanel(TypedDict):
+    """Resumen de metricas del panel (REUSA `keni_metricas.servicio`, solo lectura).
+
+    `disponible` es False si la fuente de metricas falló (el resto del panel sigue útil);
+    en ese caso `total` es `null` y `picos` viene vacío. `rango` solo está cuando hay
+    datos, por eso es `NotRequired`. `fuente` marca muestra vs real (badge en la UI).
+    """
+
+    disponible: bool
+    fuente: str
+    total: TotalPanel | None
+    picos: list[PicoPanel]
+    rango: NotRequired[str]
+
+
+class ColaPanel(TypedDict):
+    """Bloque 'cola de aprobacion' del panel: cuántas piezas esperan revisión."""
+
+    total: int
+
+
+class ProximaPanel(TypedDict):
+    """Una pieza programada próxima (vista mínima del panel, nombres resueltos).
+
+    `preparado_en` viene con el instante DRY-RUN si el programador ya la preparó (venció);
+    "" si aún no vence. El posteo real está gated por #5/#8.
+    """
+
+    id: str
+    titulo: str
+    marca: str
+    marca_nombre: str
+    red: str
+    red_nombre: str
+    fecha_programada: str
+    preparado_en: str
+
+
+class ProximasPanel(TypedDict):
+    """Bloque 'próximas programadas' del panel: las más inminentes + el total."""
+
+    items: list[ProximaPanel]
+    total: int
+
+
+class GatingPanel(TypedDict):
+    """Aviso de frontera del producto: el sistema NO publica solo (gated por #5/#8)."""
+
+    publicacion_real_activa: bool
+    nota: str
+
+
+class RespuestaPanel(TypedDict):
+    """Respuesta de `GET /api/panel`: dashboard ligero de un vistazo (#9, Fase 3).
+
+    Agrega métricas/picos (reusa los caminos de lectura de Metricas, sin tocar su
+    página), el contador de la cola de aprobación y las próximas piezas programadas.
+    `gating` recuerda que el posteo real está pendiente de #5/#8.
+    """
+
+    metricas: MetricasPanel
+    cola: ColaPanel
+    proximas: ProximasPanel
+    gating: GatingPanel
 
 
 # --------------------------------------------------------------------------- #
@@ -540,6 +655,16 @@ MODELOS = [
     Publicacion,
     RespuestaPublicaciones,
     RespuestaPublicacion,
+    # Aprobacion de equipo + panel ligero (#9, Fase 3).
+    RespuestaColaAprobacion,
+    TotalPanel,
+    PicoPanel,
+    MetricasPanel,
+    ColaPanel,
+    ProximaPanel,
+    ProximasPanel,
+    GatingPanel,
+    RespuestaPanel,
     # Runs (canonico + listado global + agregados).
     Run,
     RespuestaRun,
