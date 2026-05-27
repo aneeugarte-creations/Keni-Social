@@ -163,13 +163,16 @@ async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response
 
 def crear_app(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
-    token=None,
+    token=None, bootstrap=True,
 ) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
     `token`: token de sesion para la API (#134). Si es None, se resuelve de
     `KENI_CONSOLA_TOKEN` o se genera uno aleatorio (que se loguea). Los tests pasan
-    uno conocido. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
+    uno conocido. `bootstrap`: si True (def), crea el admin inicial si la BD no tiene
+    usuarios (#130, idempotente). Los tests lo desactivan por defecto (la mayoria usan
+    el token y no quieren pagar el coste del hash); los de auth lo activan o crean el
+    usuario a mano. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
     por defecto la real. `lanzar_run`: funcion opcional
     `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background.
     `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
@@ -209,6 +212,17 @@ def crear_app(
         proyectos.crear_config_si_falta()
     except OSError:
         pass
+
+    # Bootstrap del admin inicial (#130): si la BD no tiene usuarios, crea uno desde
+    # las env vars (o con pass aleatoria logueada). Idempotente; best-effort para no
+    # impedir el arranque si la BD no esta disponible (la auth por token sigue valiendo).
+    if bootstrap:
+        from . import auth
+
+        try:
+            auth.bootstrap_admin()
+        except Exception:  # noqa: BLE001 -- el arranque no debe romper por el bootstrap
+            _logger.warning("No se pudo ejecutar el bootstrap del admin inicial.", exc_info=True)
 
     rutas: list[Route] = list(api.descubrir(refresco=True))
 

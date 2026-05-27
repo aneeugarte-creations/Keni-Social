@@ -27,3 +27,9 @@ ESTADO_COMERCIAL_ACTIVA = "activa"
 # Metricas que un objetivo/umbral comercial puede seguir (misma forma que el resto
 # del producto).
 METRICAS_COMERCIAL: tuple[str, ...] = ("interacciones", "alcance")
+
+# Roles de usuario (auth multiusuario, #130). `admin` gestiona usuarios y todo lo
+# demas; `editor` usa la consola pero NO toca /api/usuarios.
+ROLES_USUARIO: tuple[str, ...] = ("admin", "editor")
+ROL_ADMIN = "admin"
+ROL_EDITOR = "editor"
