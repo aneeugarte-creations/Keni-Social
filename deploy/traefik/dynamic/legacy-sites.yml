@@ -1,0 +1,83 @@
+# Routers Traefik que REPRODUCEN los 3 sitios que hoy sirve el Caddy de sistema de
+# learn-01: learn / api / code .kenitech.io. Existen para el CUTOVER Caddy -> Traefik
+# (opcion de ingress elegida). Mientras Caddy siga dueño de :80/:443 son INERTES
+# (esos hostnames resuelven a la misma IP pero el que contesta es Caddy).
+#
+# Traducido 1:1 del Caddyfile (/etc/caddy/Caddyfile). Backends en el HOST vía
+# host.docker.internal (mapeado en docker-compose.yml con host-gateway).
+#
+# NOTA DE VERIFICACION antes del cutover:
+#   - api.kenitech.io lleva CORS hecho a mano en Caddy (preflight + credenciales,
+#     allowlist = learn.kenitech.io). Aqui se replica con el middleware `headers`
+#     de Traefik; PRUEBALO contra el frontend de learn antes de parar Caddy.
+#   - WebSocket/PTY (code) y streaming: el idle-timeout va a 0 en el entrypoint
+#     websecure (ver docker-compose.yml), equivalente a read/write_timeout 0 de Caddy.
+
+http:
+  routers:
+    learn-cp:
+      # API del control plane + WS PTY + auth (mismas rutas que el @cp de Caddy).
+      rule: "Host(`learn.kenitech.io`) && (PathPrefix(`/sessions`) || Path(`/healthz`) || Path(`/metrics`) || PathPrefix(`/login`) || PathPrefix(`/logout`) || PathPrefix(`/auth`))"
+      priority: 100
+      entryPoints: [websecure]
+      service: learn-cp
+      middlewares: [sec-headers]
+      tls:
+        certResolver: le
+    learn-front:
+      rule: "Host(`learn.kenitech.io`)"
+      priority: 1
+      entryPoints: [websecure]
+      service: learn-front
+      middlewares: [sec-headers]
+      tls:
+        certResolver: le
+    api:
+      rule: "Host(`api.kenitech.io`)"
+      entryPoints: [websecure]
+      service: api-cp
+      middlewares: [api-cors, sec-headers]
+      tls:
+        certResolver: le
+    code:
+      rule: "Host(`code.kenitech.io`)"
+      entryPoints: [websecure]
+      service: code-launcher
+      middlewares: [sec-headers]
+      tls:
+        certResolver: le
+
+  services:
+    learn-cp:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8080"
+    learn-front:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:3000"
+    api-cp:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:8080"
+    code-launcher:
+      loadBalancer:
+        servers:
+          - url: "http://host.docker.internal:9001"
+
+  middlewares:
+    sec-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        referrerPolicy: strict-origin-when-cross-origin
+    api-cors:
+      headers:
+        accessControlAllowOriginList:
+          - "https://learn.kenitech.io"
+        accessControlAllowCredentials: true
+        accessControlAllowMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"]
+        accessControlAllowHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+        accessControlMaxAge: 600
+        addVaryHeader: true

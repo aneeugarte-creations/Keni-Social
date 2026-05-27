@@ -1,0 +1,69 @@
+# Override para PROBAR keni-social SIN tocar el Caddy de sistema de learn-01.
+#
+# Uso:
+#   docker compose -f docker-compose.yml -f docker-compose.behind-caddy.yml up -d
+#
+# Que cambia respecto al compose base (modo ingress/migrate):
+#   - Traefik NO toma :80/:443 (los tiene Caddy). Publica su entrypoint `web` solo
+#     en 127.0.0.1:8090 del host; el Caddy de sistema termina TLS y le reenvia.
+#   - Sin ACME ni TLS en Traefik (Caddy ya da el cert de social.kenitech.io).
+#   - Sin provider de fichero: NO se migran learn/api/code (los sigue dando Caddy).
+#
+# Lado Caddy (anadir al /etc/caddy/Caddyfile y `systemctl reload caddy`):
+#
+#   social.kenitech.io {
+#       encode zstd gzip
+#       reverse_proxy 127.0.0.1:8090 {
+#           transport http { read_timeout 0; write_timeout 0 }
+#       }
+#       header {
+#           Strict-Transport-Security "max-age=31536000; includeSubDomains"
+#           X-Content-Type-Options nosniff
+#           Referrer-Policy strict-origin-when-cross-origin
+#       }
+#   }
+#
+# (Requiere el A record social.kenitech.io -> 162.43.191.103 para que Caddy saque
+#  el cert por ACME.)
+
+services:
+  traefik:
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=keni-social_edge
+      # Solo HTTP plano detras de Caddy; sin TLS ni ACME en Traefik.
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.transport.respondingTimeouts.idleTimeout=0
+      # - --log.level=DEBUG
+    # !override REEMPLAZA la lista de ports del base (que publicaba 80/443):
+    # aqui Traefik solo es accesible desde el propio host (Caddy), no desde la red.
+    ports: !override
+      - "127.0.0.1:8090:80"
+
+  # En este modo front/back se enrutan por el entrypoint `web` (HTTP), no websecure.
+  # OJO: compose FUSIONA las labels con las del base; por eso usamos routers con
+  # NOMBRE NUEVO (`*-http`) en vez de reusar `front`/`back`: si reusaramos el nombre,
+  # heredarian el `tls.certresolver=le` del base y quedarian como routers TLS-only
+  # (no atenderian HTTP plano en :8090 -> 404). Los routers `front`/`back` del base
+  # siguen existiendo pero apuntan al entrypoint `websecure`, que aqui no existe, asi
+  # que Traefik los ignora.
+  front:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=keni-social_edge
+      - traefik.http.routers.front-http.rule=Host(`${KENI_HOST}`)
+      - traefik.http.routers.front-http.priority=1
+      - traefik.http.routers.front-http.entrypoints=web
+      - traefik.http.routers.front-http.service=front
+      - traefik.http.services.front.loadbalancer.server.port=80
+
+  back:
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=keni-social_edge
+      - traefik.http.routers.back-http.rule=Host(`${KENI_HOST}`) && PathPrefix(`/api`)
+      - traefik.http.routers.back-http.priority=10
+      - traefik.http.routers.back-http.entrypoints=web
+      - traefik.http.routers.back-http.service=back
+      - traefik.http.services.back.loadbalancer.server.port=8765

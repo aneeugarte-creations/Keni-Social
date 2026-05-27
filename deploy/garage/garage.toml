@@ -1,0 +1,32 @@
+# Garage (object storage S3-compatible) en un solo nodo, para media de keni-social.
+# Garage sustituye a MinIO (cuya edicion open-source quedo recortada en 2025).
+#
+# Secretos por ENV, NO aqui: el contenedor recibe GARAGE_RPC_SECRET y
+# GARAGE_ADMIN_TOKEN desde el .env (ver deploy/.env.example). Por eso este fichero
+# es commiteable sin filtrar nada.
+#
+# IMPORTANTE: tras el primer arranque hay un bootstrap MANUAL de una sola vez
+# (asignar layout + crear bucket y clave de acceso). Ver deploy/README.md.
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# Un solo nodo: una copia de cada objeto.
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.internal"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage.internal"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"

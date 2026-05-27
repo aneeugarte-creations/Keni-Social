@@ -1,0 +1,22 @@
+# Contexto de build de las imagenes de deploy/. El contexto es la RAIZ del repo
+# (las imagenes necesitan keni-shared/ + mcp-metricas/ + consola/ + skills-copy/),
+# asi que recortamos lo que no debe viajar a las imagenes.
+**/.venv
+.venv-*
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/node_modules
+.git
+.github
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+# El bundle del SPA lo construye la imagen `front` desde cero; no metas uno vendorizado.
+consola/src/keni_consola/webapp
+consola/frontend/dist
+dist
+**/.DS_Store
+# Nunca metas .env reales en una imagen.
+deploy/.env
+**/.env.local
