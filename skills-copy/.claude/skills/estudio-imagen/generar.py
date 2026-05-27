@@ -31,7 +31,8 @@ ASPECTOS = {
     "horizontal": "16:9",
 }
 
-# Nota de estilo por marca (referencia; la guía completa está en diseno-redes-amx).
+# Nota de estilo por marca (referencia; la guía completa está en
+# skills-copy/.claude/skills/diseno-<marca>/guia-diseno.md).
 ESTILO_MARCA = {
     "unotv": "Estilo UnoTV: noticias, sobrio, creíble, alto contraste, rojo #E30613 como acento puntual.",
     "claro-sports": "Estilo Claro Sports: deportivo, energía, alto contraste, rojo #CF2E2E de marca.",

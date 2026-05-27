@@ -75,7 +75,7 @@ Regla práctica: si la vía determinista resuelve el caso, úsala; la IA es para
 |---|---|
 | Compositor determinista (`breaking-express/componer.py`, Pillow) | ✅ existe |
 | **Modo overlay** (usar el archivo de breaking + marca de agua de la casa) | ✅ añadido (2026-05-25) |
-| Director de arte por marca (prompts en marca, `07-innovacion/diseno-redes-amx`) | ✅ existe (para la vía "prompt") |
+| Director de arte por marca (prompts en marca, `skills-copy/.claude/skills/diseno-unotv` y `diseno-clarosports`; decisión en `docs/diseno-redes.md`) | ✅ existe (para la vía "prompt") |
 | Revisor legal/editorial (`revisa-imagen`) | ✅ existe |
 | **Enrutador** `estudio-imagen` que une todo | ✅ Fase 1 |
 | Operaciones deterministas (recortar, redimensionar, comprimir, extender, placa) | ✅ Fase 1 |
@@ -100,7 +100,7 @@ Regla práctica: si la vía determinista resuelve el caso, úsala; la IA es para
 
 - **Proveedor único: OpenRouter** (gateway compatible con OpenAI). Una sola clave y un solo endpoint (`/api/v1/chat/completions`) para CUALQUIER modelo de imagen/vídeo — se elige por id sin tocar código (Gemini Flash Image, Seedream, FLUX… y vídeo: Sora/Veo/Kling/Seedance). Así evitamos mantener varios SDKs/proveedores. `generar.py` (ilustración) y `expandir.py` (outpaint de fondo) van por aquí.
 - **Credenciales (estándar keni-social):** API key en **variable de entorno / gestor de credenciales**, **nunca** en el código ni en archivos versionados. Mismo principio que `mcp-metricas` (la llave vive en la máquina, no en la IA).
-- **Modo sin key (degradado):** si no hay key, el adaptador **no falla**: explica cómo configurarla y, como alternativa de cero coste, ofrece la vía **"director de arte"** (Claude da el prompt en marca y el usuario genera en su herramienta) — el patrón que ya existe en `diseno-redes-amx`.
+- **Modo sin key (degradado):** si no hay key, el adaptador **no falla**: explica cómo configurarla y, como alternativa de cero coste, ofrece la vía **"director de arte"** (Claude da el prompt en marca y el usuario genera en su herramienta) — el patrón que ya existe en `skills-copy/.claude/skills/diseno-unotv` y `diseno-clarosports`.
 - **Coste:** la generación por API tiene **coste por imagen**; conviene reservarla a lo que de verdad la necesita (ilustraciones/fondos, outpaint de fondo no uniforme) y medir el volumen.
 
 ---
@@ -126,7 +126,7 @@ Decisiones (sesión 2026-05-25): extensión **híbrida** (determinista para fond
 para el resto); peso = **dropdown seleccionable** (no valor fijo); 4:5 = **automático con
 vista previa** (detecta cuando el recorte cortaría al sujeto y propone el encaje; el humano
 aprueba antes de publicar). Contexto en
-`07-innovacion/keni-social/notas/2026-05-25-formatos-entrega-foto-full-y-4-5.md`.
+`docs/contexto/2026-05-25-formatos-entrega-foto-full-y-4-5.md`.
 
 Hecho en el repo:
 - `editar.py comprimir`: baja el peso a un objetivo (`--peso-max-mb`) conservando el tamaño

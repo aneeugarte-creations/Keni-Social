@@ -6,7 +6,7 @@ mano cada semana en Canva. Lo genera desde las métricas y lo entrega como una
 métricas y escribe un archivo local; nunca publica.
 
 Origen: sesión con Elias (equipo de redes), 2026-05-25. Ver la nota de contexto en
-`07-innovacion/keni-social/notas/` (Drive).
+`docs/contexto/2026-05-25-elias-reporte-semanal-deportes.md`.
 
 ## Qué lleva el reporte
 
