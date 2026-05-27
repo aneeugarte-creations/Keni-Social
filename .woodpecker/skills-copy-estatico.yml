@@ -1,0 +1,21 @@
+# Woodpecker: evals ESTATICOS de skills-copy (sin modelo, sin whisper, sin red).
+# Espejo del job `skills-copy-estatico` de .github/workflows/ci.yml.
+# Se instala keni-shared para que test_limites use la FUENTE UNICA de limites.
+when:
+  - event: [push, pull_request, manual]
+
+steps:
+  - name: evals-estaticos
+    image: python:3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - python -m pip install pytest PyYAML
+      - python -m pip install -e ./keni-shared
+      - cd skills-copy/evals
+      - >-
+        python -m pytest -q
+        test_static.py
+        test_checks_copy.py
+        test_limites.py
+        test_wave3_skills.py
+        test_brief_junta.py

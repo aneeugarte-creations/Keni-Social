@@ -22,12 +22,18 @@
 
 Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume entera:
 
-- **Postgres (`db`) y Garage (`files`) están provisionados por adelantado.** Hoy el
-  back persiste en **SQLite** (`/data/keni-social/consola.db`) y guarda media en
-  **disco** (`/data/keni-social/media`), ambos en el volumen `keni-data`. Las vars
-  `DATABASE_URL` y `S3_*` quedan cableadas para cuando `db.py`/`media.py` migren
-  (parte del trabajo multiusuario en curso, rama `feat/auth-backend`). Mientras
-  tanto los contenedores `db`/`files` corren pero el back **no** los usa.
+- **Postgres (`db`) y Garage (`files`) ya los CONSUME el back (#130).** El backend de la
+  persistencia operacional lo elige el entorno:
+  - **Con `DATABASE_URL`** (este stack la cablea) → la DB operacional (tareas, comercial,
+    rota, usuarios/sesiones) va a **Postgres**. **Sin** `DATABASE_URL` (perfil local/privado)
+    → SQLite, como siempre (ADR 0001/0002): el modo local NO cambia.
+  - **Con `S3_*`** (endpoint + credenciales) → la media va al **bucket Garage/S3**. Sin S3
+    → disco (`/data/keni-social/media`), como siempre.
+  El cutover de los datos que hoy viven en SQLite+disco se hace UNA vez con
+  `python -m keni_consola.migracion` (idempotente; ver "Cutover a Postgres + S3" abajo).
+  **FUERA de alcance (#130):** el contenido editorial YAML (`ficheros.py`,
+  `/data/keni-proyectos/<marca>/...`) y su índice regenerable (`indice.py`) **siguen en el
+  volumen** (`keni-data`/`KENI_DATA_DIR`); migrarlos a object storage es trabajo futuro.
 - **La imagen `back` es interina.** Incluye Node + la CLI `claude` porque la
   generación corre con `claude -p` en proceso (ADR 0001, Fase 0). ADR 0002 Fase B
   extrae un **worker** que llamará a la API de Claude y dejará la imagen sin Node.
@@ -139,7 +145,56 @@ $G key create keni-back                     # apunta Key ID + Secret
 $G bucket allow --read --write keni-media --key keni-back
 ```
 Pon el Key ID/Secret en `.env` (`S3_ACCESS_KEY`/`S3_SECRET_KEY`) y `docker compose up -d`.
-(No urge: el back aún no usa S3; ver "estado honesto".)
+Con esas vars puestas, el back ya **guarda y sirve la media desde el bucket** (#130).
+
+---
+
+## Cutover a Postgres + S3 (#130) — secuencia EXACTA, una sola vez
+
+El back arranca con un **guardia de seguridad**: si `DATABASE_URL` apunta a un Postgres
+**vacío** pero existe un `consola.db` SQLite **con datos** en el volumen, **REHÚSA arrancar**
+(no sirve en blanco "perdiendo" los datos) y te apunta al comando de migración. Por eso el
+cutover sigue este orden — **hazlo en una ventana de mantenimiento**:
+
+```bash
+cd /home/ubuntu/keni-social/deploy
+
+# 0) Para el back (que nadie escriba durante el copiado). Postgres/Garage siguen vivos.
+docker compose stop back
+
+# 1) BACKUP de lo que existe HOY (recuperable si algo sale mal):
+#    - el volumen del back (SQLite + media en disco): keni-social_keni-data
+#    - el volumen de Postgres (por si ya tuviera algo): keni-social_pgdata
+docker run --rm -v keni-social_keni-data:/d -v "$PWD":/b alpine \
+  tar czf /b/backup-keni-data-$(date +%F).tgz -C /d .
+docker run --rm -v keni-social_pgdata:/d -v "$PWD":/b alpine \
+  tar czf /b/backup-pgdata-$(date +%F).tgz -C /d .
+
+# 2) Bootstrap de Garage (si no se hizo ya) y S3_* puestas en .env (sección anterior).
+
+# 3) DRY-RUN: cuenta lo que migraría, SIN escribir. Revisa los números.
+docker compose run --rm \
+  -e DATABASE_URL -e S3_ENDPOINT -e S3_REGION -e S3_BUCKET -e S3_ACCESS_KEY -e S3_SECRET_KEY \
+  back python -m keni_consola.migracion --dry-run
+
+# 4) MIGRACIÓN real (idempotente: SQLite -> Postgres y media de disco -> bucket S3).
+docker compose run --rm \
+  -e DATABASE_URL -e S3_ENDPOINT -e S3_REGION -e S3_BUCKET -e S3_ACCESS_KEY -e S3_SECRET_KEY \
+  back python -m keni_consola.migracion
+
+# 5) Arranca el back. Con Postgres ya CON datos, el guardia es transparente.
+docker compose up -d back
+docker compose logs -f back     # sin "Arranque INSEGURO"; entra por https://social.kenitech.io
+
+# 6) VERIFICA: entra, comprueba usuarios/tareas/comercial y que las imágenes se ven.
+#    docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\dt'  # tablas
+#    docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'SELECT count(*) FROM usuarios;'
+```
+
+El comando es **idempotente**: si se interrumpe, vuelve a correrlo sin miedo (las filas se
+insertan con conflicto→no-op y los objetos S3 ya presentes se saltan). `--solo-db` /
+`--solo-media` migran una sola mitad. **No migra el YAML editorial** (fuera de alcance):
+ese viaja con el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
 
 ## Exponer el MCP (opcional)
 
@@ -174,7 +229,12 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
 
 - [ ] Terminar auth multiusuario (#130) y validar `Origin`/CSRF tras Traefik.
 - [ ] `config.toml` real (System User token de Meta) para `KENI_METRICAS_FUENTE=real`.
-- [ ] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage.
+- [x] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage **(#130, HECHO)**. El
+      back consume Postgres (`DATABASE_URL`) y S3 (`S3_*`) cuando están puestas; sin ellas,
+      sigue en SQLite+disco (perfil local). Cutover one-shot con
+      `python -m keni_consola.migracion` (ver "Cutover a Postgres + S3"). Pendiente solo el
+      **YAML editorial** (`ficheros.py`/`indice.py`), fuera de alcance de #130.
 - [ ] Extraer el worker de generación (ADR 0002 Fase B) → quitar Node de `back`.
-- [ ] Backups de `pgdata` y `keni-data`. Hardening del contenedor `back` (no-root).
+- [ ] Backups de `pgdata` y `keni-data` (el cutover ya los respalda; falta automatizarlo).
+      Hardening del contenedor `back` (no-root).
 - [ ] Decidir/ejecutar el ingress (migrar Caddy) en ventana de mantenimiento.

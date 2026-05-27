@@ -5,8 +5,8 @@
 #   front    SPA React servido por nginx.            (Traefik: TODO menos /api)
 #   back     gateway Starlette + generacion in-proc. (Traefik: /api)
 #   mcp      keni-metricas por HTTP (interno; expon con bearer si lo necesitas).
-#   db       Postgres 16  (PROVISIONADO POR ADELANTADO: el codigo usa SQLite hoy).
-#   files    Garage S3     (PROVISIONADO POR ADELANTADO: media va a disco hoy).
+#   db       Postgres 16  (CONSUMIDO por el back si DATABASE_URL; si no, SQLite local).
+#   files    Garage S3     (CONSUMIDO por el back si S3_*; si no, media a disco local).
 #
 # El contexto de build de las imagenes propias es la RAIZ del repo (`..`).
 #
@@ -101,7 +101,9 @@ services:
       KENI_MAX_JOBS: ${KENI_MAX_JOBS}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN}
-      # Provisionado por adelantado (el codigo aun no los consume):
+      # Persistencia hosted (#130): el back consume Postgres si DATABASE_URL esta puesta y
+      # S3/Garage si S3_* lo estan; vacias => SQLite + disco (perfil local). Cutover de datos
+      # existentes: `python -m keni_consola.migracion` (ver deploy/README.md).
       DATABASE_URL: ${DATABASE_URL}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}

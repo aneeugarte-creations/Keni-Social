@@ -32,7 +32,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from . import api, proyectos, seguridad
+from . import api, db, proyectos, seguridad
 from .dominio.runner import ColaLlenaError
 from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
 
@@ -225,6 +225,12 @@ def crear_app(
         proyectos.crear_config_si_falta()
     except OSError:
         pass
+
+    # SEGURIDAD del cutover (#130): crea el esquema y, en hosted (Postgres), REHUSA arrancar
+    # si el Postgres esta vacio pero hay un SQLite local CON datos (evita orfanar datos
+    # vivos). El error SE PROPAGA a proposito (no lo tragamos): un cutover pendiente debe
+    # PARAR el arranque, no servir en blanco. En el perfil local es casi no-op.
+    db.arrancar_persistencia()
 
     # Bootstrap del admin inicial (#130): si la BD no tiene usuarios, crea uno desde
     # las env vars (o con pass aleatoria logueada). Idempotente; best-effort para no

@@ -1,17 +1,18 @@
-"""Almacenamiento LOCAL de media (imagenes) de la Consola Keni + generacion por IA.
+"""Almacenamiento de media (imagenes) de la Consola Keni + generacion por IA.
 
-Las imagenes adjuntas a las publicaciones viven en un directorio local
-(`KENI_CONSOLA_MEDIA`; por defecto cuelga de la raiz de estado unica, p.ej.
-`${XDG_CONFIG_HOME:-~/.config}/keni-social/media` en local o `<KENI_DATA_DIR>/
-keni-social/media` en contenedor). Nada sale de la maquina salvo, opcionalmente, el
-prompt de generacion hacia el proveedor de imagen configurado (OpenRouter por
-defecto), que SOLO se invoca si hay clave.
+Las imagenes adjuntas a las publicaciones viven en el ALMACEN DE OBJETOS (`almacen_media`),
+que elige backend segun la config S3:
+  - SIN S3 cableado  -> disco local (`KENI_CONSOLA_MEDIA`; por defecto bajo la raiz de
+    estado unica). Perfil privado/local: nada sale de la maquina.
+  - CON S3 cableado  -> bucket S3/Garage (perfil hosted; el stack `deploy/` lo cablea).
+Nada de eso cambia el flujo de IA: el prompt de generacion solo sale hacia el proveedor de
+imagen configurado (OpenRouter por defecto), y SOLO si hay clave.
 
 SEGURIDAD:
-  - El NOMBRE en disco SIEMPRE lo generamos nosotros (uuid + extension saneada);
-    NUNCA el del cliente. Asi un nombre malicioso (`../../etc/passwd`) jamas se usa.
-  - `resolver_media` valida ANTI-TRAVERSAL que el archivo pedido caiga DENTRO del
-    directorio de media (mismo patron que `_resolver_dentro` de `app.py`).
+  - El NOMBRE del objeto SIEMPRE lo generamos nosotros (uuid + extension saneada); NUNCA el
+    del cliente. Asi un nombre malicioso (`../../etc/passwd`) jamas se usa.
+  - En disco, `resolver_media` valida ANTI-TRAVERSAL que el archivo caiga DENTRO del dir; en
+    S3 el almacen rechaza cualquier nombre con separadores (defensa en profundidad).
   - Limite de tamano para subidas de imagen (15 MB) y solo mimes de imagen.
 
 GENERACION POR IA (inyectable / mockeable):
@@ -36,7 +37,7 @@ import re
 import uuid
 from pathlib import Path
 
-from . import config, rutas
+from . import almacen_media
 
 # Logger del módulo (#123): los fallos del proveedor de imagen se LOGUEAN con el motivo
 # real (status + cuerpo recortado) en vez de tragarlo, y el motivo viaja al mensaje de
@@ -127,39 +128,29 @@ class MediaError(RuntimeError):
 
 
 def dir_media() -> Path:
-    """Directorio de media.
+    """Directorio de media en disco (delega en `almacen_media.dir_media`; perfil local).
 
-    `KENI_CONSOLA_MEDIA` lo sobreescribe (override de maxima prioridad; tests). Si no,
-    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
-    `${XDG_CONFIG_HOME:-~/.config}/keni-social/media`, o bajo `KENI_DATA_DIR`.
+    Solo aplica al backend de DISCO. En S3 no se usa (los objetos viven en el bucket).
     """
-    if (p := config.override_ruta(config.ENV_MEDIA)) is not None:
-        return p
-    return rutas.dir_config() / "media"
-
-
-def _asegurar_dir() -> Path:
-    """Crea (si falta) y devuelve el directorio de media."""
-    d = dir_media()
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return almacen_media.dir_media()
 
 
 def resolver_media(nombre: str) -> Path | None:
-    """Resuelve `nombre` DENTRO del dir de media; None si escaparia (anti-traversal).
+    """Resuelve `nombre` DENTRO del dir de media (disco); None si escaparia (anti-traversal).
 
-    Mismo patron defensivo que `app._resolver_dentro`: cualquier nombre que se salga
-    del directorio (`..`, ruta absoluta, symlink fuera) se rechaza con None.
+    Delega en `almacen_media.resolver_media`. Solo aplica al backend de DISCO; el serving
+    backend-neutral pasa por `leer_media` (que en S3 lee del bucket).
     """
-    base = _asegurar_dir()
-    try:
-        destino = (base / nombre).resolve()
-    except (OSError, ValueError):
-        return None
-    base_res = base.resolve()
-    if destino == base_res or not destino.is_relative_to(base_res):
-        return None
-    return destino
+    return almacen_media.resolver_media(nombre)
+
+
+def leer_media(nombre: str) -> bytes | None:
+    """Bytes de una imagen por nombre, sea cual sea el backend; None si no existe.
+
+    Es el camino backend-NEUTRAL de servir (lo usa `api/media.py:servir`): en disco aplica
+    el anti-traversal de `resolver_media`; en S3 lee la key del bucket.
+    """
+    return almacen_media.leer_objeto(nombre)
 
 
 def mime_de(nombre: str) -> str:
@@ -193,15 +184,16 @@ def _ext_desde_nombre(nombre_cliente: str | None) -> str | None:
 
 
 async def guardar_subida(archivo, *, content_type: str | None = None) -> str:  # noqa: ANN001
-    """Vuelca un `UploadFile` de imagen al dir de media de forma segura.
+    """Vuelca un `UploadFile` de imagen al almacen de media (disco o S3) de forma segura.
 
     - Acepta SOLO mimes de imagen (por content-type o, en su defecto, por la
-      extension del nombre del cliente). El NOMBRE en disco lo generamos (uuid +
+      extension del nombre del cliente). El NOMBRE del objeto lo generamos (uuid +
       extension canonica); NUNCA el del cliente.
-    - Mide el tamano MIENTRAS escribe en trozos; si supera `LIMITE_IMAGEN`, aborta
-      y borra el archivo a medio escribir.
+    - Lee en trozos MIDIENDO el tamano; si supera `LIMITE_IMAGEN`, aborta antes de
+      escribir nada. Se bufferea en memoria (acotado por el limite de 15 MB) para tener
+      UN solo camino de guardado valido en disco y en S3 (S3 no escribe en streaming).
 
-    Devuelve el NOMBRE de archivo (no la ruta). Lanza `MediaError` (en espanol) ante
+    Devuelve el NOMBRE del objeto (no la ruta). Lanza `MediaError` (en espanol) ante
     mime no permitido, archivo vacio o demasiado grande.
     """
     ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
@@ -209,36 +201,38 @@ async def guardar_subida(archivo, *, content_type: str | None = None) -> str:  #
     if ext is None:
         raise MediaError("Solo se aceptan imágenes (PNG, JPG, GIF o WEBP).")
 
-    destino_dir = _asegurar_dir()
-    nombre = f"{uuid.uuid4().hex}.{ext}"
-    destino = destino_dir / nombre
+    trozos: list[bytes] = []
     total = 0
     try:
-        with destino.open("wb") as salida:
-            while True:
-                trozo = await archivo.read(_TROZO)
-                if not trozo:
-                    break
-                total += len(trozo)
-                if total > LIMITE_IMAGEN:
-                    raise MediaError(
-                        "La imagen es demasiado grande (máximo 15 MB); sube una más pequeña."
-                    )
-                salida.write(trozo)
+        while True:
+            trozo = await archivo.read(_TROZO)
+            if not trozo:
+                break
+            total += len(trozo)
+            if total > LIMITE_IMAGEN:
+                raise MediaError(
+                    "La imagen es demasiado grande (máximo 15 MB); sube una más pequeña."
+                )
+            trozos.append(trozo)
     except MediaError:
-        destino.unlink(missing_ok=True)
         raise
-    except Exception as e:  # noqa: BLE001 -- cualquier fallo de E/S: limpia y reporta en espanol
-        destino.unlink(missing_ok=True)
+    except Exception as e:  # noqa: BLE001 -- cualquier fallo de E/S: reporta en espanol
         raise MediaError("No se pudo guardar la imagen subida.") from e
     if total == 0:
-        destino.unlink(missing_ok=True)
         raise MediaError("La imagen está vacía.")
+    datos = b"".join(trozos)
+    nombre = f"{uuid.uuid4().hex}.{ext}"
+    try:
+        almacen_media.guardar_objeto(nombre, datos, content_type=_EXT_A_MIME[ext])
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
+        raise MediaError("No se pudo guardar la imagen subida.") from e
     return nombre
 
 
 def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
-    """Guarda `datos` (una imagen ya generada) en el dir de media y devuelve su nombre."""
+    """Guarda `datos` (una imagen ya generada) en el almacen de media y devuelve su nombre."""
     ext = ext.lower().lstrip(".")
     if ext == "jpeg":
         ext = "jpg"
@@ -246,9 +240,8 @@ def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:
         ext = "png"
     if len(datos) > LIMITE_IMAGEN:
         raise MediaError("La imagen generada es demasiado grande.")
-    destino_dir = _asegurar_dir()
     nombre = f"{uuid.uuid4().hex}.{ext}"
-    (destino_dir / nombre).write_bytes(datos)
+    almacen_media.guardar_objeto(nombre, datos, content_type=_EXT_A_MIME[ext])
     return nombre
 
 

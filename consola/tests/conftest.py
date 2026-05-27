@@ -31,6 +31,11 @@ from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
 
+# Plugin con la fixture/ayuda del backend POSTGRES (skip si no hay Postgres). Registrarlo
+# aqui hace que la fixture `pg` se AUTODESCUBRA por nombre en los tests (sin importarla, lo
+# que evita falsos F811 de "redefinicion"). Ver `_postgres.py`.
+pytest_plugins = ["tests._postgres"]
+
 # --------------------------------------------------------------------------- #
 # Catalogo de skills FALSO, aislado en tmp (env KENI_SKILLS_DIR)              #
 # --------------------------------------------------------------------------- #

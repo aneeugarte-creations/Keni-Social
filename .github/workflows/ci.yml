@@ -34,6 +34,25 @@ jobs:
   tests-python:
     name: Tests Python (keni-shared / keni-metricas / keni-consola)
     runs-on: ubuntu-latest
+    # Postgres efimero para los tests del backend Postgres (#130). El service expone 5432;
+    # los tests lo usan via KENI_TEST_DATABASE_URL. Si por lo que sea no estuviera, los
+    # tests de Postgres se SALTAN (no fallan): la suite SQLite/local sigue verde igual.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: keni
+          POSTGRES_PASSWORD: keni
+          POSTGRES_DB: keni_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U keni -d keni_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      # Apunta los tests de Postgres al service. Quita esta var (o el service) y los tests
+      # de Postgres se saltan en vez de fallar — el resto de la suite no se entera.
+      KENI_TEST_DATABASE_URL: postgresql://keni:keni@localhost:5432/keni_test
     steps:
       - uses: actions/checkout@v4
 
@@ -52,6 +71,8 @@ jobs:
       - name: pytest keni-metricas
         run: python -m pytest mcp-metricas/tests -q
 
+      # consola: incluye los tests del backend Postgres (KENI_TEST_DATABASE_URL apunta al
+      # service) y los de S3 (moto, sin red). Sin el service, esos se saltarian.
       - name: pytest keni-consola
         run: python -m pytest consola/tests -q
 

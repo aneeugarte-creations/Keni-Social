@@ -1,0 +1,16 @@
+# Woodpecker: tests de los tres paquetes Python del monorepo.
+# Espejo del job `tests-python` de .github/workflows/ci.yml.
+# keni-metricas depende de keni-shared, y consola de ambos; se instalan editables
+# en orden de dependencia para que pip resuelva el grafo local.
+when:
+  - event: [push, pull_request, manual]
+
+steps:
+  - name: pytest
+    image: python:3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
+      - python -m pytest keni-shared/tests -q
+      - python -m pytest mcp-metricas/tests -q
+      - python -m pytest consola/tests -q
