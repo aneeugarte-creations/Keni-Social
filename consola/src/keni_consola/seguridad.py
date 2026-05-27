@@ -33,7 +33,21 @@ QUE SE PROTEGE Y QUE NO
 
 El SPA tambien manda el token por cabecera (`api.ts` lo lee de `window.__KENI_TOKEN__`,
 inyectado en el index), de modo que la cookie es defensa en profundidad y no el unico
-camino. En hosted (#130) la auth real (multiusuario) sustituira a este token unico.
+camino.
+
+AUTH MULTIUSUARIO (#130)
+========================
+Sobre la barrera de token unico se monta el login user/pass + roles (ver `auth.py`).
+El middleware ahora acepta para `/api` CUALQUIERA de estas dos credenciales:
+
+  1) Una SESION valida: cookie `keni_consola_sesion` con un token de sesion vigente
+     (tabla `sesiones`). Es el camino del multiusuario real.
+  2) El TOKEN de bootstrap de #134 (cabecera Bearer/X-Keni-Token o cookie
+     `keni_consola_token`). SIGUE VALIENDO para no romper clientes/tests existentes.
+
+`/api/auth/login` es PUBLICO (no exige credencial previa) pero pasa por la verificacion
+Origin/CSRF de las mutaciones. Las rutas `/api/usuarios/*` exigen ADEMAS rol admin (lo
+comprueba el propio handler leyendo `request.state.usuario`, que este middleware fija).
 """
 
 from __future__ import annotations
@@ -46,6 +60,7 @@ from urllib.parse import urlsplit
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from . import auth
 from .observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -105,6 +120,17 @@ def _token_de_la_peticion(scope: Scope) -> str | None:
     return None
 
 
+def _cookie(scope: Scope, nombre: str) -> str | None:
+    """Lee el valor de una cookie de la peticion por su `nombre` (None si no esta)."""
+    cabeceras = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
+    cookie = cabeceras.get("cookie", "")
+    for parte in cookie.split(";"):
+        clave, _, valor = parte.strip().partition("=")
+        if clave == nombre and valor:
+            return valor.strip()
+    return None
+
+
 def _host_esperado(scope: Scope) -> str | None:
     """Host:puerto al que se dirigio la peticion (cabecera Host)."""
     for k, v in scope.get("headers", []):
@@ -150,14 +176,26 @@ def _host_de_url(url: str) -> str | None:
     return netloc.lower()
 
 
-class SeguridadConsola:
-    """Middleware ASGI: token de sesion para `/api` + CSRF en mutaciones.
+# Rutas /api PUBLICAS (no exigen credencial previa). El login crea la sesion; aun
+# asi pasa por la verificacion Origin/CSRF de las mutaciones (es un POST).
+_RUTAS_API_PUBLICAS = frozenset({"/api/auth/login"})
 
-    - Las rutas que NO empiezan por `/api` (SPA, assets, favicons) pasan SIN token:
+
+class SeguridadConsola:
+    """Middleware ASGI: sesion/token para `/api` + CSRF en mutaciones (#134 + #130).
+
+    - Las rutas que NO empiezan por `/api` (SPA, assets, favicons) pasan SIN credencial:
       hay que poder cargar la pagina. El index siembra la cookie del token.
-    - `/api/...`: exige token valido (cabecera o cookie). Si falta o no coincide -> 401.
+    - `/api/auth/login` es PUBLICO (crea la sesion) pero pasa por el chequeo CSRF.
+    - El resto de `/api/...`: exige UNA sesion valida (cookie `keni_consola_sesion`) O
+      el token de bootstrap (cabecera/cookie). Si falta o no vale -> 401.
     - Mutaciones (`POST/PUT/PATCH/DELETE`) sobre `/api`: exigen ADEMAS que el
       `Origin`/`Referer` sea del mismo host -> si no, 403 (CSRF).
+
+    Cuando autentica por sesion, deja el usuario en `scope["state"]["usuario"]` (lo lee
+    `request.state.usuario`) para que los handlers comprueben el rol. Si autentica por
+    token de bootstrap, NO hay usuario asociado: cuenta como acceso de mantenimiento con
+    plenos permisos (equivalente a admin para las rutas que solo miran el rol).
 
     El token se compara con `secrets.compare_digest` (tiempo constante). Solo actua
     sobre `scope["type"] == "http"`; el resto pasa intacto.
@@ -174,23 +212,47 @@ class SeguridadConsola:
 
         ruta = scope.get("path", "")
         if not ruta.startswith("/api"):
-            # SPA / estaticos: sin token. (El index siembra la cookie aparte.)
+            # SPA / estaticos: sin credencial. (El index siembra la cookie aparte.)
             await self.app(scope, receive, send)
             return
 
-        # 1) Token de sesion (lectura y mutacion).
-        presentado = _token_de_la_peticion(scope)
-        if presentado is None or not secrets.compare_digest(presentado, self._token):
-            await _rechazar(scope, receive, send, _MSG_NO_AUTORIZADO, 401)
-            return
-
-        # 2) CSRF en mutaciones: Origin/Referer del mismo host.
         metodo = scope.get("method", "GET").upper()
+
+        # Estado de la peticion: por defecto, sin usuario de sesion (acceso por token).
+        estado = scope.setdefault("state", {})
+        estado["usuario"] = None
+        estado["auth_por_token"] = False
+
+        publica = ruta in _RUTAS_API_PUBLICAS
+        if not publica:
+            # 1) Credencial: sesion valida (cookie) O token de bootstrap.
+            usuario = self._usuario_de_sesion(scope)
+            if usuario is not None:
+                estado["usuario"] = usuario
+            elif self._token_valido(scope):
+                estado["auth_por_token"] = True
+            else:
+                await _rechazar(scope, receive, send, _MSG_NO_AUTORIZADO, 401)
+                return
+
+        # 2) CSRF en mutaciones: Origin/Referer del mismo host (tambien en el login).
         if metodo in _METODOS_MUTANTES and not _origen_mismo_host(scope):
             await _rechazar(scope, receive, send, _MSG_CSRF, 403)
             return
 
         await self.app(scope, receive, send)
+
+    def _token_valido(self, scope: Scope) -> bool:
+        """True si la peticion trae el token de bootstrap correcto (tiempo constante)."""
+        presentado = _token_de_la_peticion(scope)
+        return presentado is not None and secrets.compare_digest(presentado, self._token)
+
+    def _usuario_de_sesion(self, scope: Scope) -> dict | None:
+        """Usuario (forma publica) si la cookie de sesion es valida y vigente; si no, None."""
+        token_sesion = _cookie(scope, auth.COOKIE_SESION)
+        if not token_sesion:
+            return None
+        return auth.sesion_valida(token_sesion)
 
 
 async def _rechazar(scope: Scope, receive: Receive, send: Send, mensaje: str, status: int) -> None:

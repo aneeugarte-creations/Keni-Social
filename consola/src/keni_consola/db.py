@@ -24,6 +24,16 @@ Tablas:
     [seguimiento de UNA publicacion comercial por su link; estado activa|pausada|cerrada]
   - `comercial_snapshots`(id, publicacion_id, ts, interacciones, alcance)
     [serie temporal de cada publicacion; UNIQUE(publicacion_id, ts)]
+  - `usuarios`(id, usuario UNICO, rol, salt, hash, debe_cambiar_password,
+    intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso)
+    [auth multiusuario (#130): el `salt`/`hash` son scrypt; NUNCA texto plano]
+  - `sesiones`(token, usuario_id, creada, ultimo_uso, expira)
+    [sesion server-side por cookie; el token es el de la cookie del navegador]
+
+  La logica de auth (hashing, login, sesiones, bootstrap) vive en `auth.py`, que
+  reutiliza la conexion de este modulo (`conectar`). El esquema de `usuarios`/
+  `sesiones` se crea aqui (on-demand, idempotente) para que exista por cualquier
+  via de arranque.
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
@@ -58,6 +68,7 @@ __all__ = [
     "actualizar_publicacion_comercial",
     "borrar_publicacion_comercial",
     "borrar_tarea",
+    "conectar",
     "crear_publicacion_comercial",
     "crear_tarea",
     "listar_publicaciones_comerciales",
@@ -92,6 +103,16 @@ def _conectar() -> sqlite3.Connection:
     _crear_esquema(con)
     _migrar_tareas_json(con)
     return con
+
+
+def conectar() -> sqlite3.Connection:
+    """Conexion publica a la base (mismo `_conectar`, expuesto para `auth.py`).
+
+    El esquema de `usuarios`/`sesiones` se crea aqui igual que el resto de tablas,
+    de modo que `auth.py` puede operar sin duplicar la creacion del esquema. Cada
+    operacion abre/cierra su propia conexion (la app es local y de poca concurrencia).
+    """
+    return _conectar()
 
 
 def _crear_esquema(con: sqlite3.Connection) -> None:
@@ -134,6 +155,27 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             ON comercial_snapshots (publicacion_id, ts);
         CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub
             ON comercial_snapshots (publicacion_id);
+        CREATE TABLE IF NOT EXISTS usuarios (
+            id                     TEXT PRIMARY KEY,
+            usuario                TEXT NOT NULL UNIQUE,
+            rol                    TEXT NOT NULL DEFAULT 'editor',
+            salt                   TEXT NOT NULL,
+            hash                   TEXT NOT NULL,
+            debe_cambiar_password  INTEGER NOT NULL DEFAULT 0,
+            intentos_fallidos      INTEGER NOT NULL DEFAULT 0,
+            bloqueo_hasta          TEXT NOT NULL DEFAULT '',
+            creado                 TEXT NOT NULL DEFAULT '',
+            ultimo_acceso          TEXT NOT NULL DEFAULT ''
+        );
+        CREATE TABLE IF NOT EXISTS sesiones (
+            token       TEXT PRIMARY KEY,
+            usuario_id  TEXT NOT NULL,
+            creada      TEXT NOT NULL,
+            ultimo_uso  TEXT NOT NULL,
+            expira      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_sesiones_usuario
+            ON sesiones (usuario_id);
         """
     )
     con.commit()

@@ -24,6 +24,7 @@ Uso en las features:
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,15 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
 def ruta_db() -> Path:
     """Ruta del fichero SQLite (delega en `db.ruta_db`; tareas/comercial viven ahi)."""
     return db.ruta_db()
+
+
+def conectar() -> sqlite3.Connection:
+    """Conexion a la base SQLite (delega en `db.conectar`).
+
+    La usa la capa de auth (`auth.py`) para operar sobre `usuarios`/`sesiones`, igual
+    que el resto de funciones de `db` se consumen via esta fachada.
+    """
+    return db.conectar()
 
 
 def raiz_datos() -> Path:

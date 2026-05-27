@@ -289,7 +289,7 @@ TOKEN_PRUEBA = "token-de-prueba-1234567890"
 
 def _cliente(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
-    token=TOKEN_PRUEBA, autenticar=True,
+    token=TOKEN_PRUEBA, autenticar=True, bootstrap=False,
 ) -> TestClient:
     """TestClient de la app. Ningun lanzador toca nada real (mocks).
 
@@ -302,6 +302,10 @@ def _cliente(
     manda `Authorization: Bearer <token>` por defecto en cada peticion para que los tests
     de API existentes pasen la auth sin cambios. Pasa `autenticar=False` para probar el
     rechazo sin token.
+
+    `bootstrap` (def False): los tests que NO prueban la auth multiusuario (#130) no
+    crean el admin inicial, asi evitan el coste del hash scrypt y siguen pasando por la
+    via del TOKEN. Los tests de auth/usuarios lo activan (o crean usuarios a mano).
     """
     if abrir is None:
         def abrir(_ruta):  # noqa: ANN001
@@ -321,6 +325,7 @@ def _cliente(
             lanzar_generacion=lanzar_generacion,
             lanzar_imagen=lanzar_imagen,
             token=token,
+            bootstrap=bootstrap,
         ),
         headers=cabeceras,
     )
