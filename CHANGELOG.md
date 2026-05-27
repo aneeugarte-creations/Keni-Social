@@ -7,6 +7,27 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Generar copy desde una URL (#149, ficha F9)
+
+- Nuevo atajo en **Generar copy**: pegas el **enlace** de una nota y obtienes copy por
+  plataforma con su veredicto (✅/⚠️/❌), sin copiar el texto a mano. Es un *enhance* de
+  Generar copy, no una app nueva: reutiliza la pipeline de `copy-desde-nota` (piezas por
+  red + autoguardado de borradores). Solo produce el borrador; **el humano aprueba**.
+- **El paso de extracción ocurre en el servidor** (`dominio.extraccion_url`), no en la
+  skill (las skills de copy son *dry-run* y no hacen peticiones de red): se valida la URL
+  (solo `http`/`https`, guard **SSRF** igual que `api.rss`), se descarga con `httpx` (en
+  trozos, con timeout y tope de tamaño) y se extrae el texto legible con la stdlib
+  (`html.parser`). El texto extraído se envuelve con un aviso de **CONTENIDO NO
+  VERIFICADO** y se pasa a la skill para que marque nombres/cifras/fechas «a verificar».
+- **Degradación honesta**: si el enlace es de **video/transmisión** (YouTube, TikTok,
+  Instagram, etc.), responde con error y sugiere `clip-a-copy` (transcripción **local**
+  con whisper, el audio/video no sale del equipo); igual ante 4xx/5xx, timeout, SSRF o
+  páginas sin texto útil. Nunca inventa contenido. A Anthropic solo viaja **texto**.
+- **Backend**: nuevo metadato `ingesta` (`""` | `"url"`) en `SkillDef`/`keni.yaml`
+  (round-trip en catálogo y opciones), endpoint `POST /api/skills/ejecutar-url` y la skill
+  `url-a-copy` como puerta de entrada en el catálogo. **Frontend**: el formulario dinámico
+  rinde el campo de enlace y enruta las skills `ingesta === "url"` al nuevo endpoint.
+
 ### Normalización de métricas: no sumar magnitudes incomparables (#138)
 
 - La agregación entre plataformas dejaba un **número combinado engañoso**: sumaba
