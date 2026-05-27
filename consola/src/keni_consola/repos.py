@@ -45,6 +45,11 @@ def ruta_db() -> Path:
     return db.ruta_db()
 
 
+def raiz_datos() -> Path:
+    """Raiz de datos de ficheros (delega en `ficheros.raiz_datos`; CONTENIDO editorial vive ahi)."""
+    return ficheros.raiz_datos()
+
+
 # --------------------------------------------------------------------------- #
 # Tareas (OPERACIONAL: SQLite via db.py)                                       #
 # --------------------------------------------------------------------------- #

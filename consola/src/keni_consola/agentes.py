@@ -57,7 +57,7 @@ from typing import Any
 
 import yaml
 
-from . import ficheros, marcas
+from . import marcas, repos
 from .io_atomico import escribir_atomico
 
 # --------------------------------------------------------------------------- #
@@ -130,8 +130,8 @@ def _render_claude_md(marca_id: str) -> str:
 
 
 def _raiz() -> Path:
-    """Raiz resuelta donde viven TODOS los agentes (misma que `ficheros.raiz_datos`)."""
-    return ficheros.raiz_datos().resolve()
+    """Raiz resuelta donde viven TODOS los agentes (misma que `repos.raiz_datos`)."""
+    return repos.raiz_datos().resolve()
 
 
 def _ruta_dentro_raiz(slug: str) -> Path:
