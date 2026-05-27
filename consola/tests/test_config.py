@@ -40,6 +40,12 @@ _TODAS = (
     config.ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     config.ENV_COMERCIAL_INTERVALO_HORAS,
     config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
+    config.ENV_DATABASE_URL,
+    config.ENV_S3_ENDPOINT,
+    config.ENV_S3_REGION,
+    config.ENV_S3_BUCKET,
+    config.ENV_S3_ACCESS_KEY,
+    config.ENV_S3_SECRET_KEY,
 )
 
 
@@ -73,6 +79,50 @@ def test_nombres_son_la_fuente_unica():
     assert config.ENV_SKILLS_CWD == "KENI_SKILLS_CWD"
     assert config.ENV_DATA_DIR == "KENI_DATA_DIR"
     assert config.ENV_GENERACIONES == "KENI_CONSOLA_GENERACIONES"
+    # Persistencia hosted (#130): NOMBRES EXACTOS de deploy/.env.example (no se renombran).
+    assert config.ENV_DATABASE_URL == "DATABASE_URL"
+    assert config.ENV_S3_ENDPOINT == "S3_ENDPOINT"
+    assert config.ENV_S3_REGION == "S3_REGION"
+    assert config.ENV_S3_BUCKET == "S3_BUCKET"
+    assert config.ENV_S3_ACCESS_KEY == "S3_ACCESS_KEY"
+    assert config.ENV_S3_SECRET_KEY == "S3_SECRET_KEY"
+
+
+# --------------------------------------------------------------------------- #
+# Persistencia hosted: DATABASE_URL + S3_* (#130)                              #
+# --------------------------------------------------------------------------- #
+
+
+def test_database_url_ausente_es_none(limpio):
+    assert config.database_url() is None
+
+
+def test_database_url_presente(limpio, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@db:5432/keni")
+    assert config.database_url() == "postgresql://u:p@db:5432/keni"
+
+
+def test_database_url_vacia_es_none(limpio, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "   ")
+    assert config.database_url() is None
+
+
+def test_s3_defaults(limpio):
+    assert config.s3_endpoint() is None
+    assert config.s3_access_key() is None
+    assert config.s3_secret_key() is None
+    assert config.s3_region() == "garage"
+    assert config.s3_bucket() == "keni-media"
+    assert config.s3_configurado() is False
+
+
+def test_s3_configurado_exige_endpoint_y_credenciales(limpio, monkeypatch):
+    monkeypatch.setenv("S3_ENDPOINT", "http://files:3900")
+    assert config.s3_configurado() is False  # faltan credenciales
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    assert config.s3_configurado() is False  # falta el secret
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    assert config.s3_configurado() is True
 
 
 def test_reexports_apuntan_a_config(limpio):

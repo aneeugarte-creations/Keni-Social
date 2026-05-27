@@ -39,7 +39,9 @@ COPY consola/ ./consola/
 COPY skills-copy/ ./skills-copy/
 # El extra [deck] (python-pptx + reportlab) habilita el reporte del lunes: la
 # Consola exporta .pptx y PDF NATIVO (sin LibreOffice) desde la API (#141).
-RUN pip install ./keni-shared "./mcp-metricas[deck]" ./consola \
+# Extras de persistencia HOSTED (#130): [postgres] (psycopg) y [s3] (boto3), porque en el
+# back las vars DATABASE_URL/S3_* estan cableadas y db.py/almacen_media.py las consumen.
+RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]" \
  && pip install "uvicorn[standard]>=0.31.1"
 
 EXPOSE 8765

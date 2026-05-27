@@ -24,7 +24,6 @@ Uso en las features:
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 from typing import Any
 
@@ -49,13 +48,23 @@ def ruta_db() -> Path:
     return db.ruta_db()
 
 
-def conectar() -> sqlite3.Connection:
-    """Conexion a la base SQLite (delega en `db.conectar`).
+def conectar() -> Any:
+    """Conexion al backend operacional (delega en `db.conectar`; SQLite o Postgres).
 
-    La usa la capa de auth (`auth.py`) para operar sobre `usuarios`/`sesiones`, igual
-    que el resto de funciones de `db` se consumen via esta fachada.
+    La usa la capa de auth (`auth/`) para operar sobre `usuarios`/`sesiones`, igual que el
+    resto de funciones de `db` se consumen via esta fachada. El backend lo elige `motor_db`
+    segun `DATABASE_URL` (transparente para los call sites).
     """
     return db.conectar()
+
+
+def arrancar_persistencia() -> None:
+    """Guardia de arranque de la persistencia operacional (delega en `db.arrancar_persistencia`).
+
+    Crea el esquema y, en hosted (Postgres), rehusa arrancar si arrancar orfanaria datos
+    locales (cutover pendiente). Lo llama `crear_app` en el arranque. Ver `db.py`.
+    """
+    return db.arrancar_persistencia()
 
 
 def raiz_datos() -> Path:

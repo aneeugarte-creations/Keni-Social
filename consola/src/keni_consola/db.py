@@ -1,20 +1,28 @@
-"""Persistencia local SQLite de la Consola Keni: dato OPERACIONAL (no editorial).
+"""Persistencia OPERACIONAL de la Consola Keni: SQLite (local) o Postgres (hosted).
 
-SQLite cubre lo que NO es contenido editable a mano: las `tareas` y el apartado
-`comercial` (seguimiento de piezas + su serie temporal de snapshots). El CONTENIDO
-editorial (publicaciones, plantillas, fuentes RSS, hashtags, franjas, historial de
-skills) vive en ficheros YAML por marca (`ficheros.py`), con un indice SQLite
-regenerable (`indice.py`). La fachada `repos.py` enruta cada cosa a su almacen.
+Cubre lo que NO es contenido editable a mano: las `tareas`, el apartado `comercial`
+(seguimiento de piezas + su serie temporal de snapshots), la `rota` y, via `auth/`, los
+`usuarios`/`sesiones`. El CONTENIDO editorial (publicaciones, plantillas, fuentes RSS,
+hashtags, franjas, historial de skills) vive en ficheros YAML por marca (`ficheros.py`),
+con un indice SQLite regenerable (`indice.py`). La fachada `repos.py` enruta cada cosa a
+su almacen.
 
-La base vive en `~/.config/keni-social/consola.db` (o la ruta de la env var
-`KENI_CONSOLA_DB`, util para tests). El esquema se crea ON-DEMAND en la primera
-conexion (idempotente). En el primer arranque, si existe el viejo
-`~/.config/keni-social/tareas.json`, sus tareas se MIGRAN a SQLite una sola vez
-(best-effort, idempotente: si una tarea con ese id ya esta, no se duplica).
+BACKEND (#130): lo elige `motor_db` segun `DATABASE_URL` (ver `motor_db.py`):
+  - SIN `DATABASE_URL`  -> SQLite local en `~/.config/keni-social/consola.db` (o la ruta
+    de `KENI_CONSOLA_DB`, util para tests). Es el perfil PRIVADO/LOCAL (ADR 0001/0002):
+    ninguna fila sale de la maquina. Comportamiento HISTORICO intacto.
+  - CON `DATABASE_URL`  -> Postgres (perfil hosted multiusuario; el stack `deploy/` lo
+    cablea). El cutover de datos lo hace `migracion.py` (one-shot).
+
+El esquema se crea ON-DEMAND en la primera conexion (idempotente, en ambos backends). En
+el perfil SQLite, si existe el viejo `~/.config/keni-social/tareas.json`, sus tareas se
+MIGRAN una sola vez (best-effort, idempotente). Las funciones publicas y la fachada
+`repos.py` son ESTABLES: ningun call site cambia al cambiar de backend.
 
 SEGURIDAD:
-  - SIEMPRE consultas PARAMETRIZADAS (`?`), NUNCA f-strings con datos en el SQL.
-  - La base es local; ninguna fila sale de la maquina.
+  - SIEMPRE consultas PARAMETRIZADAS (`?`), NUNCA f-strings con datos en el SQL. El
+    `motor_db` traduce `?`->`%s` en Postgres sin tocar los datos.
+  - En el perfil local la base es local; ninguna fila sale de la maquina.
 
 Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre,
@@ -33,39 +41,34 @@ Tablas:
   - `sesiones`(token, usuario_id, creada, ultimo_uso, expira)
     [sesion server-side por cookie; el token es el de la cookie del navegador]
 
-  La logica de auth (hashing, login, sesiones, bootstrap) vive en `auth.py`, que
+  La logica de auth (hashing, login, sesiones, bootstrap) vive en `auth/`, que
   reutiliza la conexion de este modulo (`conectar`). El esquema de `usuarios`/
   `sesiones` se crea aqui (on-demand, idempotente) para que exista por cualquier
   via de arranque.
 
-Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
-sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
-poca concurrencia; mantenerlo simple evita estado global y problemas de hilos con
-el `TestClient`).
+Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API al
+backend. Cada operacion abre y cierra su propia conexion (mantenerlo simple evita estado
+global y problemas de hilos con el `TestClient`; en Postgres es una conexion por op).
 
-CONCURRENCIA (servicio compartido de una replica, #130): cada conexion abre en WAL
-(`PRAGMA journal_mode=WAL`) para que lectores y un escritor convivan sin bloquearse, y
-con `PRAGMA busy_timeout` para que la contencion espere (acotada) en vez de fallar al
-instante con `database is locked`. Sirve para un servicio multiusuario de UNA replica.
+CONCURRENCIA (servicio compartido, #130): en SQLite cada conexion abre en WAL
+(`journal_mode=WAL`) con `busy_timeout` para una replica (lo configura `motor_db`). En
+Postgres la concurrencia multiusuario/multi-replica es nativa: ese es el motivo de migrar.
 
-FUTURO BACKEND POSTGRES (#130): para escalar a varias replicas SQLite no basta (un solo
-fichero, un escritor). El plan es sustituir esta capa por Postgres. La capa esta acotada
-(toda la persistencia operacional pasa por `conectar()` y consultas parametrizadas), asi
-que el cambio se localiza aqui SIN tocar las firmas publicas. NO se implementa todavia:
-solo se deja la nota y el punto de extension (`conectar()`).
+BACKEND POSTGRES (#130): toda la persistencia operacional pasa por `conectar()` y
+consultas parametrizadas, asi que el cambio de backend se localiza en `motor_db`
+(SQLite/Postgres) SIN tocar las firmas publicas. `conectar()` es el punto de extension.
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
 import uuid
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-# Allowlists de dominio (neutras, sin acoplar a SQLite): viven en `estados.py`.
-from . import config, rutas
+# Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
+from . import config, motor_db, rutas
 from .estados import (
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
@@ -90,6 +93,7 @@ __all__ = [
     "actualizar_tarea",
     "actualizar_turno_rota",
     "aprobar_semana_rota",
+    "arrancar_persistencia",
     "borrar_evento_rota",
     "borrar_publicacion_comercial",
     "borrar_tarea",
@@ -116,150 +120,244 @@ __all__ = [
 
 
 def ruta_db() -> Path:
-    """Ruta del consola.db.
+    """Ruta del consola.db (SQLite). Solo aplica en el perfil local (sin `DATABASE_URL`).
 
-    `KENI_CONSOLA_DB` la sobreescribe (override de maxima prioridad; tests). Si no,
-    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
-    `${XDG_CONFIG_HOME:-~/.config}/keni-social/consola.db`, o bajo `KENI_DATA_DIR`.
+    Delega en `motor_db.ruta_db`: `KENI_CONSOLA_DB` la sobreescribe (override de maxima
+    prioridad; tests); si no, cuelga de la raiz de estado unica (`rutas.dir_config()`).
+    En el perfil Postgres no se usa (la conexion va por `DATABASE_URL`).
     """
-    if (p := config.override_ruta(config.ENV_DB)) is not None:
-        return p
-    return rutas.dir_config() / "consola.db"
+    return motor_db.ruta_db()
 
 
-# Espera (ms) ante contencion antes de fallar con `database is locked` (#130).
-_BUSY_TIMEOUT_MS = 5000
+def _conectar() -> Any:
+    """Abre la conexion al backend, crea el esquema on-demand y migra el JSON viejo.
 
+    El backend (SQLite o Postgres) lo elige `motor_db.conectar_cruda()` segun
+    `DATABASE_URL`. La conexion devuelta IMITA la API de `sqlite3.Connection` que usan los
+    call sites (`execute(sql, params)` con `?`, filas por nombre, `rowcount`, commit/close).
 
-def _conectar() -> sqlite3.Connection:
-    """Abre la conexion a la base, crea el esquema on-demand y migra el JSON viejo.
-
-    `row_factory = sqlite3.Row` para poder leer filas como mapeos por nombre.
-
-    CONCURRENCIA (#130): WAL (`journal_mode=WAL`) deja convivir varios lectores con un
-    escritor sin `database is locked`, y `busy_timeout` hace que la contencion espere
-    (acotada) en vez de fallar al instante. Necesario para un servicio multiusuario de
-    una replica. El WAL es persistente (queda fijado en el fichero), pero lo reafirmamos
-    en cada conexion por idempotencia (la base es local y puede recrearse).
+    El esquema se crea aqui (idempotente, en ambos backends) para que exista por cualquier
+    via de arranque. La migracion del viejo `tareas.json` solo aplica en SQLite local.
     """
-    ruta = ruta_db()
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(ruta), timeout=_BUSY_TIMEOUT_MS / 1000)
-    con.row_factory = sqlite3.Row
-    con.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
-    con.execute("PRAGMA journal_mode = WAL")
-    con.execute("PRAGMA synchronous = NORMAL")
+    con = motor_db.conectar_cruda()
     _crear_esquema(con)
-    _migrar_tareas_json(con)
+    if not motor_db.es_postgres():
+        _migrar_tareas_json(con)
     return con
 
 
-def conectar() -> sqlite3.Connection:
-    """Conexion publica a la base (mismo `_conectar`, expuesto para `auth.py`).
+def conectar() -> Any:
+    """Conexion publica al backend (mismo `_conectar`, expuesto para `auth/`).
 
-    El esquema de `usuarios`/`sesiones` se crea aqui igual que el resto de tablas,
-    de modo que `auth.py` puede operar sin duplicar la creacion del esquema. Cada
-    operacion abre/cierra su propia conexion (la app es local y de poca concurrencia).
+    El esquema de `usuarios`/`sesiones` se crea aqui igual que el resto de tablas, de modo
+    que `auth/` puede operar sin duplicar la creacion del esquema. Cada operacion
+    abre/cierra su propia conexion.
     """
     return _conectar()
 
 
-def _crear_esquema(con: sqlite3.Connection) -> None:
-    """Crea las tablas operacionales si no existen (idempotente)."""
-    con.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS tareas (
-            id                  TEXT PRIMARY KEY,
-            proyecto            TEXT NOT NULL,
-            titulo              TEXT NOT NULL,
-            detalle             TEXT NOT NULL DEFAULT '',
-            estado              TEXT NOT NULL DEFAULT 'pendiente',
-            fecha               TEXT NOT NULL DEFAULT '',
-            autor_id            TEXT NOT NULL DEFAULT '',
-            autor_nombre        TEXT NOT NULL DEFAULT '',
-            responsable_id      TEXT NOT NULL DEFAULT '',
-            responsable_nombre  TEXT NOT NULL DEFAULT '',
-            enlace              TEXT NOT NULL DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS comercial_publicaciones (
-            id                   TEXT PRIMARY KEY,
-            url                  TEXT NOT NULL,
-            titulo               TEXT NOT NULL DEFAULT '',
-            marca                TEXT NOT NULL DEFAULT '',
-            cliente              TEXT NOT NULL DEFAULT '',
-            campania             TEXT NOT NULL DEFAULT '',
-            red                  TEXT NOT NULL DEFAULT '',
-            metrica_objetivo     TEXT NOT NULL DEFAULT 'interacciones',
-            objetivo             INTEGER NOT NULL DEFAULT 0,
-            estado               TEXT NOT NULL DEFAULT 'activa',
-            publicado            TEXT NOT NULL DEFAULT '',
-            notas                TEXT NOT NULL DEFAULT '',
-            aviso_en             TEXT NOT NULL DEFAULT '',
-            fecha_creacion       TEXT NOT NULL DEFAULT '',
-            fecha_actualizacion  TEXT NOT NULL DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS comercial_snapshots (
-            id              TEXT PRIMARY KEY,
-            publicacion_id  TEXT NOT NULL,
-            ts              TEXT NOT NULL,
-            interacciones   INTEGER NOT NULL DEFAULT 0,
-            alcance         INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_comercial_snapshots_pub_ts
-            ON comercial_snapshots (publicacion_id, ts);
-        CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub
-            ON comercial_snapshots (publicacion_id);
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id                     TEXT PRIMARY KEY,
-            usuario                TEXT NOT NULL UNIQUE,
-            rol                    TEXT NOT NULL DEFAULT 'editor',
-            salt                   TEXT NOT NULL,
-            hash                   TEXT NOT NULL,
-            debe_cambiar_password  INTEGER NOT NULL DEFAULT 0,
-            intentos_fallidos      INTEGER NOT NULL DEFAULT 0,
-            bloqueo_hasta          TEXT NOT NULL DEFAULT '',
-            creado                 TEXT NOT NULL DEFAULT '',
-            ultimo_acceso          TEXT NOT NULL DEFAULT ''
-        );
-        CREATE TABLE IF NOT EXISTS sesiones (
-            token       TEXT PRIMARY KEY,
-            usuario_id  TEXT NOT NULL,
-            creada      TEXT NOT NULL,
-            ultimo_uso  TEXT NOT NULL,
-            expira      TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_sesiones_usuario
-            ON sesiones (usuario_id);
-        CREATE TABLE IF NOT EXISTS rota_eventos (
-            id          TEXT PRIMARY KEY,
-            titulo      TEXT NOT NULL,
-            fecha       TEXT NOT NULL DEFAULT '',
-            hora        TEXT NOT NULL DEFAULT '',
-            contenido   TEXT NOT NULL DEFAULT '',
-            nota        TEXT NOT NULL DEFAULT '',
-            creado      TEXT NOT NULL DEFAULT ''
-        );
-        CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha
-            ON rota_eventos (fecha);
-        CREATE TABLE IF NOT EXISTS rota_turnos (
-            id            TEXT PRIMARY KEY,
-            semana        TEXT NOT NULL,
-            evento_id     TEXT NOT NULL,
-            miembro_id    TEXT NOT NULL DEFAULT '',
-            miembro_nombre TEXT NOT NULL DEFAULT '',
-            estado        TEXT NOT NULL DEFAULT 'propuesto',
-            override      INTEGER NOT NULL DEFAULT 0,
-            motivo        TEXT NOT NULL DEFAULT '',
-            creado        TEXT NOT NULL DEFAULT '',
-            actualizado   TEXT NOT NULL DEFAULT ''
-        );
-        CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana
-            ON rota_turnos (semana);
-        CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro
-            ON rota_turnos (miembro_id);
-        """
+# --------------------------------------------------------------------------- #
+# Guardia de arranque: NUNCA arrancar hosted vacio orfanando datos locales      #
+# --------------------------------------------------------------------------- #
+#
+# Tablas cuya PRESENCIA de filas indica "ya hay datos" en un backend. `usuarios` es la
+# critica (perder cuentas en un servicio multiusuario es lo peor); incluimos tambien las
+# operacionales de negocio. `sesiones` se omite a proposito: son efimeras (caducan), su
+# ausencia no significa "base vacia".
+_TABLAS_CON_DATOS: tuple[str, ...] = (
+    "usuarios",
+    "tareas",
+    "comercial_publicaciones",
+    "comercial_snapshots",
+    "rota_eventos",
+    "rota_turnos",
+)
+
+
+class PersistenciaError(RuntimeError):
+    """Error de arranque de la persistencia (p.ej. cutover pendiente). Mensaje en espanol."""
+
+
+def _hay_filas(con: Any) -> bool:
+    """True si CUALQUIERA de las tablas de negocio tiene al menos una fila (en `con`)."""
+    for tabla in _TABLAS_CON_DATOS:
+        try:
+            fila = con.execute(f"SELECT 1 FROM {tabla} LIMIT 1").fetchone()  # noqa: S608 -- tabla de allowlist
+        except Exception:  # noqa: BLE001 -- tabla inexistente en un origen viejo: cuenta como vacia
+            continue
+        if fila is not None:
+            return True
+    return False
+
+
+def _sqlite_local_tiene_datos() -> bool:
+    """True si existe un `consola.db` SQLite local con datos de negocio (origen del cutover)."""
+    ruta = motor_db.ruta_db()
+    if not ruta.is_file():
+        return False
+    import sqlite3 as _sqlite3
+
+    con = _sqlite3.connect(str(ruta))
+    con.row_factory = _sqlite3.Row
+    try:
+        return _hay_filas(con)
+    finally:
+        con.close()
+
+
+def arrancar_persistencia() -> None:
+    """Comprueba en el arranque que un deploy hosted NO orfana datos locales (SEGURIDAD).
+
+    Crea el esquema on-demand (idempotente, ambos backends) y, en el perfil POSTGRES,
+    aplica el guardia: si el Postgres esta VACIO (sin filas de negocio) PERO existe un
+    `consola.db` SQLite local CON datos, REHUSA arrancar con un error claro que apunta a la
+    migracion (`python -m keni_consola.migracion`). Asi un deploy nunca arranca en blanco
+    "perdiendo" silenciosamente los datos que aun viven en el SQLite del volumen.
+
+    En el perfil SQLite local es practicamente no-op (no hay nada que orfanar): solo crea el
+    esquema. Idempotente: una vez migrado (Postgres con datos), el guardia es transparente.
+    """
+    con = _conectar()  # crea el esquema on-demand
+    try:
+        if not motor_db.es_postgres():
+            return  # perfil local: nada que orfanar
+        if _hay_filas(con):
+            return  # Postgres ya tiene datos: cutover hecho (o nativo). Transparente.
+    finally:
+        con.close()
+
+    # Postgres vacio: solo es seguro arrancar si NO hay un SQLite local con datos que migrar.
+    if _sqlite_local_tiene_datos():
+        raise PersistenciaError(
+            "Arranque INSEGURO: DATABASE_URL apunta a un Postgres VACIO, pero existe un "
+            f"consola.db SQLite local CON datos ({motor_db.ruta_db()}). Arrancar ahora "
+            "dejaria esos datos huerfanos. Ejecuta el cutover ANTES de servir:\n"
+            "    python -m keni_consola.migracion\n"
+            "(idempotente; ver deploy/README.md, seccion 'Cutover a Postgres + S3')."
+        )
+
+
+# DDL del esquema operacional, como sentencias INDIVIDUALES (no un script multi-sentencia)
+# para ser PORTABLE entre SQLite y Postgres: `executescript` es exclusivo de sqlite3, asi
+# que ejecutamos una a una via `con.execute` (soportado por ambos backends). Los tipos
+# (`TEXT`/`INTEGER`), `PRIMARY KEY`, `UNIQUE`, `NOT NULL DEFAULT ''` y
+# `CREATE [UNIQUE] INDEX IF NOT EXISTS` son comunes a SQLite y Postgres 16, asi que el
+# mismo DDL crea el esquema en ambos. Los ids son TEXT generados por la app (uuid), no
+# autoincrementales: no hay `AUTOINCREMENT`/`SERIAL` que diverja.
+_DDL_ESQUEMA: tuple[str, ...] = (
+    """
+    CREATE TABLE IF NOT EXISTS tareas (
+        id                  TEXT PRIMARY KEY,
+        proyecto            TEXT NOT NULL,
+        titulo              TEXT NOT NULL,
+        detalle             TEXT NOT NULL DEFAULT '',
+        estado              TEXT NOT NULL DEFAULT 'pendiente',
+        fecha               TEXT NOT NULL DEFAULT '',
+        autor_id            TEXT NOT NULL DEFAULT '',
+        autor_nombre        TEXT NOT NULL DEFAULT '',
+        responsable_id      TEXT NOT NULL DEFAULT '',
+        responsable_nombre  TEXT NOT NULL DEFAULT '',
+        enlace              TEXT NOT NULL DEFAULT ''
     )
-    _migrar_columnas_tareas(con)
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS comercial_publicaciones (
+        id                   TEXT PRIMARY KEY,
+        url                  TEXT NOT NULL,
+        titulo               TEXT NOT NULL DEFAULT '',
+        marca                TEXT NOT NULL DEFAULT '',
+        cliente              TEXT NOT NULL DEFAULT '',
+        campania             TEXT NOT NULL DEFAULT '',
+        red                  TEXT NOT NULL DEFAULT '',
+        metrica_objetivo     TEXT NOT NULL DEFAULT 'interacciones',
+        objetivo             INTEGER NOT NULL DEFAULT 0,
+        estado               TEXT NOT NULL DEFAULT 'activa',
+        publicado            TEXT NOT NULL DEFAULT '',
+        notas                TEXT NOT NULL DEFAULT '',
+        aviso_en             TEXT NOT NULL DEFAULT '',
+        fecha_creacion       TEXT NOT NULL DEFAULT '',
+        fecha_actualizacion  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS comercial_snapshots (
+        id              TEXT PRIMARY KEY,
+        publicacion_id  TEXT NOT NULL,
+        ts              TEXT NOT NULL,
+        interacciones   INTEGER NOT NULL DEFAULT 0,
+        alcance         INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_comercial_snapshots_pub_ts "
+    "ON comercial_snapshots (publicacion_id, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
+    "ON comercial_snapshots (publicacion_id)",
+    """
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id                     TEXT PRIMARY KEY,
+        usuario                TEXT NOT NULL UNIQUE,
+        rol                    TEXT NOT NULL DEFAULT 'editor',
+        salt                   TEXT NOT NULL,
+        hash                   TEXT NOT NULL,
+        debe_cambiar_password  INTEGER NOT NULL DEFAULT 0,
+        intentos_fallidos      INTEGER NOT NULL DEFAULT 0,
+        bloqueo_hasta          TEXT NOT NULL DEFAULT '',
+        creado                 TEXT NOT NULL DEFAULT '',
+        ultimo_acceso          TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS sesiones (
+        token       TEXT PRIMARY KEY,
+        usuario_id  TEXT NOT NULL,
+        creada      TEXT NOT NULL,
+        ultimo_uso  TEXT NOT NULL,
+        expira      TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
+    """
+    CREATE TABLE IF NOT EXISTS rota_eventos (
+        id          TEXT PRIMARY KEY,
+        titulo      TEXT NOT NULL,
+        fecha       TEXT NOT NULL DEFAULT '',
+        hora        TEXT NOT NULL DEFAULT '',
+        contenido   TEXT NOT NULL DEFAULT '',
+        nota        TEXT NOT NULL DEFAULT '',
+        creado      TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
+    """
+    CREATE TABLE IF NOT EXISTS rota_turnos (
+        id            TEXT PRIMARY KEY,
+        semana        TEXT NOT NULL,
+        evento_id     TEXT NOT NULL,
+        miembro_id    TEXT NOT NULL DEFAULT '',
+        miembro_nombre TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'propuesto',
+        override      INTEGER NOT NULL DEFAULT 0,
+        motivo        TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
+)
+
+
+def _crear_esquema(con: Any) -> None:
+    """Crea las tablas operacionales si no existen (idempotente, ambos backends).
+
+    Ejecuta el DDL sentencia a sentencia (portable SQLite/Postgres). La migracion de
+    columnas ampliadas de `tareas` solo aplica en SQLite (bases viejas en disco); en
+    Postgres el `CREATE TABLE` ya declara el esquema completo.
+    """
+    for sentencia in _DDL_ESQUEMA:
+        con.execute(sentencia)
+    if not motor_db.es_postgres():
+        _migrar_columnas_tareas(con)
     con.commit()
 
 
@@ -277,7 +375,7 @@ _COLUMNAS_TAREAS_AMPLIADAS: tuple[str, ...] = (
 )
 
 
-def _migrar_columnas_tareas(con: sqlite3.Connection) -> None:
+def _migrar_columnas_tareas(con: Any) -> None:
     """Anade a `tareas` las columnas ampliadas que una BD vieja no tuviera (idempotente).
 
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
@@ -307,7 +405,7 @@ def _ruta_tareas_json() -> Path:
     return rutas.dir_config() / "tareas.json"
 
 
-def _migrar_tareas_json(con: sqlite3.Connection) -> None:
+def _migrar_tareas_json(con: Any) -> None:
     """Si existe el viejo tareas.json, vuelca sus tareas a SQLite (idempotente).
 
     Best-effort: cualquier fallo de lectura/parseo se ignora en silencio (no debe
@@ -385,7 +483,7 @@ _SELECT_TAREA = (
 )
 
 
-def _fila_a_tarea(fila: sqlite3.Row) -> dict[str, Any]:
+def _fila_a_tarea(fila: Any) -> dict[str, Any]:
     """Convierte una fila de `tareas` en un dict simple.
 
     `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) y
@@ -607,7 +705,7 @@ _CAMPOS_EDITABLES_COMERCIAL = (
 )
 
 
-def _fila_a_comercial(fila: sqlite3.Row) -> dict[str, Any]:
+def _fila_a_comercial(fila: Any) -> dict[str, Any]:
     """Convierte una fila de `comercial_publicaciones` en un dict (`objetivo` como int)."""
     pub = {col: fila[col] for col in _COLS_COMERCIAL}
     pub["objetivo"] = int(fila["objetivo"] or 0)
@@ -685,7 +783,10 @@ def listar_publicaciones_comerciales(
     sql = _SELECT_COMERCIAL
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)
-    sql += " ORDER BY fecha_creacion DESC, rowid DESC"
+    # Desempate por `id` (uuid, PK presente en ambos backends) en vez del `rowid` de
+    # SQLite (que Postgres no tiene). Solo influye cuando dos piezas comparten
+    # `fecha_creacion` (mismo segundo): un orden estable y portable, no autoritativo.
+    sql += " ORDER BY fecha_creacion DESC, id DESC"
     con = _conectar()
     try:
         filas = con.execute(sql, tuple(params)).fetchall()
@@ -863,11 +964,11 @@ _COLS_TURNO_ROTA = (
 _SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
 
 
-def _fila_a_evento_rota(fila: sqlite3.Row) -> dict[str, Any]:
+def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
     return {col: fila[col] for col in _COLS_EVENTO_ROTA}
 
 
-def _fila_a_turno_rota(fila: sqlite3.Row) -> dict[str, Any]:
+def _fila_a_turno_rota(fila: Any) -> dict[str, Any]:
     turno = {col: fila[col] for col in _COLS_TURNO_ROTA}
     turno["override"] = bool(fila["override"])
     return turno
