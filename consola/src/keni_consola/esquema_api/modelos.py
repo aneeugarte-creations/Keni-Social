@@ -277,6 +277,8 @@ class Publicacion(TypedDict):
 
     `marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de
     archivo ("" si no hay) e `imagen_url` su ruta servible ("" si no hay).
+    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien
+    creo la pieza; "" en piezas legadas/anonimas (la UI las muestra como "desconocido").
     """
 
     id: str
@@ -288,6 +290,8 @@ class Publicacion(TypedDict):
     contenido: str
     estado: EstadoPublicacion
     veredicto: Veredicto
+    autor_id: str
+    autor_nombre: str
     fecha_creacion: str
     fecha_actualizacion: str
     fecha_programada: str

@@ -31,6 +31,7 @@ from starlette.routing import Route
 
 from .. import generaciones, skills_catalogo
 from .._http_json import leer_json
+from ..seguridad import autor_de_peticion
 
 # Wall-timeout del motor (descargar el video + OCR pueden tardar). Generoso pero acotado.
 _TIMEOUT_S = 420
@@ -102,8 +103,16 @@ async def verificar(request: Request) -> Response:
     def _generar() -> dict[str, object]:
         return analizar(enlace, contexto)
 
+    # Atribucion por usuario (#130 Fase 1): la verificacion la dispara el usuario actual.
+    autor = autor_de_peticion(request) or {}
     gen = generaciones.crear(
-        {"tipo": "verificacion", "marca": "", "etiqueta": f"Verificación · {enlace[:48]}"}
+        {
+            "tipo": "verificacion",
+            "marca": "",
+            "etiqueta": f"Verificación · {enlace[:48]}",
+            "autor_id": autor.get("id", ""),
+            "autor_nombre": autor.get("usuario", ""),
+        }
     )
     try:
         generaciones.lanzar_job_imagen(gen["id"], generar=_generar)

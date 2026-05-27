@@ -149,12 +149,14 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
     con.executescript(
         """
         CREATE TABLE IF NOT EXISTS tareas (
-            id        TEXT PRIMARY KEY,
-            proyecto  TEXT NOT NULL,
-            titulo    TEXT NOT NULL,
-            detalle   TEXT NOT NULL DEFAULT '',
-            estado    TEXT NOT NULL DEFAULT 'pendiente',
-            fecha     TEXT NOT NULL DEFAULT ''
+            id            TEXT PRIMARY KEY,
+            proyecto      TEXT NOT NULL,
+            titulo        TEXT NOT NULL,
+            detalle       TEXT NOT NULL DEFAULT '',
+            estado        TEXT NOT NULL DEFAULT 'pendiente',
+            fecha         TEXT NOT NULL DEFAULT '',
+            autor_id      TEXT NOT NULL DEFAULT '',
+            autor_nombre  TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS comercial_publicaciones (
             id                   TEXT PRIMARY KEY,
@@ -207,7 +209,22 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             ON sesiones (usuario_id);
         """
     )
+    _migrar_atribucion_tareas(con)
     con.commit()
+
+
+def _migrar_atribucion_tareas(con: sqlite3.Connection) -> None:
+    """Anade `autor_id`/`autor_nombre` a `tareas` si una BD vieja no las tenia (#130 Fase 1).
+
+    El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
+    ANTES de la atribucion no las tiene. `ALTER TABLE ... ADD COLUMN` con `DEFAULT ''` es
+    retrocompatible: las tareas existentes quedan con autor vacio (= "desconocido" en la
+    UI) y no se pierde ni reescribe nada. Idempotente: solo anade la columna que falte.
+    """
+    columnas = {fila["name"] for fila in con.execute("PRAGMA table_info(tareas)").fetchall()}
+    for columna in ("autor_id", "autor_nombre"):
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
 
 
 # --------------------------------------------------------------------------- #
@@ -297,8 +314,18 @@ def _normalizar_tarea_json(cruda: object) -> dict[str, Any] | None:
 # --------------------------------------------------------------------------- #
 
 
+# Columnas de `tareas` en el SELECT (incluye la atribucion por usuario, #130 Fase 1).
+_SELECT_TAREA = (
+    "SELECT id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre FROM tareas"
+)
+
+
 def _fila_a_tarea(fila: sqlite3.Row) -> dict[str, Any]:
-    """Convierte una fila de `tareas` en un dict simple."""
+    """Convierte una fila de `tareas` en un dict simple.
+
+    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) salen "" en tareas
+    legadas / anonimas; la UI las muestra como "desconocido".
+    """
     return {
         "id": fila["id"],
         "proyecto": fila["proyecto"],
@@ -306,6 +333,8 @@ def _fila_a_tarea(fila: sqlite3.Row) -> dict[str, Any]:
         "detalle": fila["detalle"],
         "estado": fila["estado"],
         "fecha": fila["fecha"],
+        "autor_id": fila["autor_id"] or "",
+        "autor_nombre": fila["autor_nombre"] or "",
     }
 
 
@@ -314,16 +343,26 @@ def listar_tareas() -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT id, proyecto, titulo, detalle, estado, fecha FROM tareas "
-            "ORDER BY fecha DESC, id DESC"
+            f"{_SELECT_TAREA} ORDER BY fecha DESC, id DESC"
         ).fetchall()
     finally:
         con.close()
     return [_fila_a_tarea(f) for f in filas]
 
 
-def crear_tarea(proyecto_id: str, titulo: str, detalle: str = "") -> dict[str, Any]:
-    """Inserta una tarea nueva y la devuelve. NO valida el proyecto (lo hace la API)."""
+def crear_tarea(
+    proyecto_id: str,
+    titulo: str,
+    detalle: str = "",
+    *,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Inserta una tarea nueva y la devuelve. NO valida el proyecto (lo hace la API).
+
+    `autor` (atribucion por usuario, #130 Fase 1) es `{"id", "usuario"}` o `None`
+    (creacion anonima / por token de mantenimiento); se persiste vacio en ese caso.
+    """
+    autor = autor or {}
     tarea = {
         "id": uuid.uuid4().hex[:12],
         "proyecto": proyecto_id,
@@ -331,12 +370,14 @@ def crear_tarea(proyecto_id: str, titulo: str, detalle: str = "") -> dict[str, A
         "detalle": detalle,
         "estado": "pendiente",
         "fecha": date.today().isoformat(),
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
     }
     con = _conectar()
     try:
         con.execute(
-            "INSERT INTO tareas (id, proyecto, titulo, detalle, estado, fecha) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tareas (id, proyecto, titulo, detalle, estado, fecha, "
+            "autor_id, autor_nombre) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 tarea["id"],
                 tarea["proyecto"],
@@ -344,6 +385,8 @@ def crear_tarea(proyecto_id: str, titulo: str, detalle: str = "") -> dict[str, A
                 tarea["detalle"],
                 tarea["estado"],
                 tarea["fecha"],
+                tarea["autor_id"],
+                tarea["autor_nombre"],
             ),
         )
         con.commit()
@@ -357,7 +400,7 @@ def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT id, proyecto, titulo, detalle, estado, fecha FROM tareas WHERE id = ?",
+            f"{_SELECT_TAREA} WHERE id = ?",
             (tarea_id,),
         ).fetchone()
     finally:
@@ -376,7 +419,7 @@ def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None
         if cur.rowcount == 0:
             return None
         fila = con.execute(
-            "SELECT id, proyecto, titulo, detalle, estado, fecha FROM tareas WHERE id = ?",
+            f"{_SELECT_TAREA} WHERE id = ?",
             (tarea_id,),
         ).fetchone()
     finally:

@@ -16,6 +16,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Autor } from "@/components/comunes/Autor";
 import { marcaMetricasDesdeCanonica } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,6 +175,7 @@ function TarjetaPublicacion({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <EtiquetaRed red={publicacion.red} nombre={publicacion.red_nombre} />
               <span>· {publicacion.marca_nombre}</span>
+              <Autor nombre={publicacion.autor_nombre} />
               {publicacion.estado === "programado" && publicacion.fecha_programada && (
                 <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
                   <CalendarClock className="h-3.5 w-3.5" />

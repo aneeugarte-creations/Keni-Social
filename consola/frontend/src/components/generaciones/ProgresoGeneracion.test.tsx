@@ -22,6 +22,8 @@ function base(parcial: Partial<Generacion>): Generacion {
     error: "",
     metricas: null,
     resultado: null,
+    autor_id: "",
+    autor_nombre: "",
     fecha_inicio: "2026-05-24T23:00:00",
     fecha_fin: "",
     ...parcial,

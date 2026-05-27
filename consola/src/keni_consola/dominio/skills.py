@@ -225,12 +225,14 @@ def crear_publicaciones_desde_piezas(
     verdicto: str,
     origen: str,
     redes_filtro: set[str] | None = None,
+    autor: dict[str, str] | None = None,
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
     Cada pieza aporta `red` y `contenido`. Si `redes_filtro` no es None, solo se
     crean las piezas cuya red este en el filtro. `marca`/`titulo`/`verdicto`/`origen`
-    son comunes a todas. El estado siempre nace como `borrador`.
+    son comunes a todas. El estado siempre nace como `borrador`. `autor` (atribucion
+    por usuario, #130 Fase 1) se propaga a cada publicacion creada.
     """
     creadas: list[dict[str, object]] = []
     for pieza in piezas:
@@ -250,6 +252,7 @@ def crear_publicaciones_desde_piezas(
             estado="borrador",
             veredicto=verdicto,
             origen=origen,
+            autor=autor,
         )
         creadas.append(publicacion_a_dict(pub))
     return creadas
@@ -268,6 +271,7 @@ def construir_procesar_copy(
     titulo_dado: str,
     texto_base: str,
     con_imagenes: bool = False,
+    autor: dict[str, str] | None = None,
 ) -> generaciones.Procesar:
     """Devuelve el callback de post-procesado de una generacion de copy/RSS.
 
@@ -277,7 +281,8 @@ def construir_procesar_copy(
     entregaba la generacion sincrona: `{resultado, historial_id, verdicto, piezas,
     publicaciones}`. Es lo que se guarda como `resultado` del registro de generacion.
     Si `con_imagenes` (skill de imagen), ademas importa las imagenes producidas al media
-    y las anade como `imagenes` para previsualizarlas.
+    y las anade como `imagenes` para previsualizarlas. `autor` (atribucion por usuario,
+    #130 Fase 1) se propaga al historial y a cada publicacion creada en background.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -285,11 +290,11 @@ def construir_procesar_copy(
         titulo = titulo_dado or stream.derivar_titulo(texto_base or str(parsed["resultado"]))
         historial_id = repos.registrar_historial_skill(
             skill, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
-            metricas=stream.metricas_a_dict(metricas),
+            metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
-            verdicto=parsed["verdicto"], origen=historial_id,
+            verdicto=parsed["verdicto"], origen=historial_id, autor=autor,
         )
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
@@ -312,6 +317,7 @@ def construir_procesar_documento(
     titulo_base: str,
     titulo_dado: str = "",
     con_imagenes: bool = False,
+    autor: dict[str, str] | None = None,
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una skill de salida `documento` (sin piezas).
 
@@ -321,7 +327,8 @@ def construir_procesar_documento(
     piezas y NO auto-crea publicaciones. Devuelve
     `{documento, verdicto, historial_id, piezas: [], publicaciones: []}`. Si
     `con_imagenes` (skill de imagen, p.ej. estudio-imagen), ademas importa las imagenes
-    producidas al media y las anade como `imagenes` para previsualizarlas.
+    producidas al media y las anade como `imagenes` para previsualizarlas. `autor`
+    (atribucion por usuario, #130 Fase 1) se propaga al historial.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -329,7 +336,8 @@ def construir_procesar_documento(
         verdicto = stream.derivar_verdicto(salida)
         titulo = titulo_dado or stream.derivar_titulo(titulo_base or doc)
         historial_id = repos.registrar_historial_skill(
-            skill, marca, doc, piezas=[], titulo=titulo, metricas=stream.metricas_a_dict(metricas),
+            skill, marca, doc, piezas=[], titulo=titulo,
+            metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
         resultado: dict[str, object] = {
             "documento": doc,
@@ -490,6 +498,16 @@ def etiqueta_generacion(skill: str, marca: str) -> str:
     return f"{nombre_skill(skill)} · {_MARCA_NOMBRE.get(marca, marca)}"
 
 
+def _autor_campos(autor: dict[str, str] | None) -> dict[str, str]:
+    """Campos de atribucion (`autor_id`/`autor_nombre`) para el registro de generacion.
+
+    `autor` es `{"id", "usuario"}` (sesion) o `None` (anonimo / token); en ambos casos
+    devuelve las dos claves (vacias si no hay autor) para estamparlas en el registro.
+    """
+    autor = autor or {}
+    return {"autor_id": autor.get("id", "") or "", "autor_nombre": autor.get("usuario", "") or ""}
+
+
 def _lanzar_con_procesar(
     *,
     tipo: str,
@@ -498,13 +516,22 @@ def _lanzar_con_procesar(
     prompt: str,
     procesar: generaciones.Procesar,
     dir_temporal: Path | None = None,
+    autor: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """Crea el registro de generacion, lanza el trabajo de claude EN BACKGROUND y
-    devuelve el registro ACTUAL (puede haber avanzado ya si el lanzador es una fake)."""
+    devuelve el registro ACTUAL (puede haber avanzado ya si el lanzador es una fake).
+
+    `autor` (atribucion por usuario, #130 Fase 1) se estampa en el registro de generacion.
+    """
     import shutil
 
     gen = generaciones.crear(
-        {"tipo": tipo, "marca": marca, "etiqueta": etiqueta_generacion(skill, marca)}
+        {
+            "tipo": tipo,
+            "marca": marca,
+            "etiqueta": etiqueta_generacion(skill, marca),
+            **_autor_campos(autor),
+        }
     )
     try:
         generaciones.lanzar_job_claude(
@@ -545,14 +572,20 @@ def lanzar_generacion_copy(
     titulo_dado: str,
     texto_base: str,
     dir_temporal: Path | None = None,
+    autor: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    """Lanza una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS."""
+    """Lanza una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS.
+
+    `autor` (atribucion por usuario, #130 Fase 1) se propaga al registro, al historial y
+    a las publicaciones que el post-procesado crea en background.
+    """
     procesar = construir_procesar_copy(
-        skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base
+        skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base,
+        autor=autor,
     )
     return _lanzar_con_procesar(
         tipo=tipo, skill=skill, marca=marca, prompt=prompt, procesar=procesar,
-        dir_temporal=dir_temporal,
+        dir_temporal=dir_temporal, autor=autor,
     )
 
 
@@ -564,6 +597,7 @@ def lanzar_generacion_skill(
     redes_ids: list[str],
     titulo_base: str,
     dir_temporal: Path | None = None,
+    autor: dict[str, str] | None = None,
 ) -> dict[str, object]:
     """Lanza una generacion en background eligiendo el post-procesado segun `salida`.
 
@@ -571,17 +605,21 @@ def lanzar_generacion_skill(
       de copy). El titulo SIEMPRE se deriva (nunca lo da el cliente).
     - `salida == "documento"`: limpia el documento, deriva verdicto/titulo, registra el
       historial SIN piezas y NO crea publicaciones.
+
+    `autor` (atribucion por usuario, #130 Fase 1) se propaga al registro, al historial y
+    (en `piezas`) a las publicaciones creadas en background.
     """
     if skilldef.salida == "piezas":
         procesar = construir_procesar_copy(
             skilldef.id, marca, redes_ids=redes_ids, titulo_dado="", texto_base=titulo_base,
-            con_imagenes=skilldef.media,
+            con_imagenes=skilldef.media, autor=autor,
         )
     else:
         procesar = construir_procesar_documento(
             skilldef.id, marca, titulo_base=titulo_base, con_imagenes=skilldef.media,
+            autor=autor,
         )
     return _lanzar_con_procesar(
         tipo="copy", skill=skilldef.id, marca=marca, prompt=prompt, procesar=procesar,
-        dir_temporal=dir_temporal,
+        dir_temporal=dir_temporal, autor=autor,
     )

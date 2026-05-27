@@ -56,6 +56,7 @@ from .. import redes, repos, skills_catalogo
 from .._http_json import leer_json
 from ..dominio import extraccion_url
 from ..dominio import skills as dom_skills
+from ..seguridad import autor_de_peticion
 from . import skills
 
 # Reutilizamos la FACHADA `api.skills` para las allowlists/constantes y el dominio para la
@@ -344,6 +345,7 @@ async def ejecutar(request: Request) -> Response:
     gen = dom_skills.lanzar_generacion_skill(
         skilldef=skilldef, marca=marca, prompt=prompt, redes_ids=redes_ids,
         titulo_base=_titulo_base_de_valores(skilldef, valores),
+        autor=autor_de_peticion(request),
     )
     return JSONResponse({"generacion": gen})
 
@@ -412,6 +414,7 @@ async def ejecutar_archivo(request: Request) -> Response:
         gen = dom_skills.lanzar_generacion_skill(
             skilldef=skilldef, marca=marca, prompt=prompt, redes_ids=redes_ids,
             titulo_base=_titulo_base_de_valores(skilldef, valores), dir_temporal=dir_temporal,
+            autor=autor_de_peticion(request),
         )
         return JSONResponse({"generacion": gen})
 
@@ -438,6 +441,7 @@ async def ejecutar_archivo(request: Request) -> Response:
     gen = dom_skills.lanzar_generacion_skill(
         skilldef=skilldef, marca=marca, prompt=prompt, redes_ids=redes_ids,
         titulo_base=_titulo_base_de_valores(skilldef, valores),
+        autor=autor_de_peticion(request),
     )
     return JSONResponse({"generacion": gen})
 
@@ -517,6 +521,7 @@ async def ejecutar_url(request: Request) -> Response:
     gen = dom_skills.lanzar_generacion_copy(
         tipo="copy", skill=_SKILL_COPY_DESDE_NOTA, marca=marca, prompt=prompt,
         redes_ids=redes_ids, titulo_dado=titulo_base, texto_base=nota,
+        autor=autor_de_peticion(request),
     )
     return JSONResponse({"generacion": gen})
 
@@ -549,6 +554,9 @@ async def historial(request: Request) -> Response:
             "preview": _preview(e["resultado"]),
             "piezas": e["piezas"],
             "metricas": e.get("metricas"),
+            # Atribucion por usuario (#130 Fase 1). "" en entradas legadas/anonimas.
+            "autor_id": e.get("autor_id", "") or "",
+            "autor_nombre": e.get("autor_nombre", "") or "",
         }
         for e in entradas
     ]
@@ -571,6 +579,9 @@ async def historial_detalle(request: Request) -> Response:
             "resultado": entrada["resultado"],
             "piezas": entrada["piezas"],
             "metricas": entrada.get("metricas"),
+            # Atribucion por usuario (#130 Fase 1). "" en entradas legadas/anonimas.
+            "autor_id": entrada.get("autor_id", "") or "",
+            "autor_nombre": entrada.get("autor_nombre", "") or "",
         }
     )
 
@@ -605,6 +616,7 @@ async def historial_guardar(request: Request) -> Response:
     titulo = titulo_dado or entrada["titulo"] or skills.derivar_titulo(entrada["resultado"])
     piezas = entrada["piezas"]
 
+    autor = autor_de_peticion(request)
     if piezas:
         publicaciones = skills._crear_publicaciones_desde_piezas(
             piezas,
@@ -613,6 +625,7 @@ async def historial_guardar(request: Request) -> Response:
             verdicto=verdicto,
             origen=historial_id,
             redes_filtro=redes_filtro,
+            autor=autor,
         )
         return JSONResponse({"publicaciones": publicaciones})
 
@@ -635,6 +648,7 @@ async def historial_guardar(request: Request) -> Response:
         estado="borrador",
         veredicto=verdicto,
         origen=historial_id,
+        autor=autor,
     )
     return JSONResponse({"publicaciones": [skills._publicacion_a_dict(pub)]})
 

@@ -27,6 +27,8 @@ function mkPublicacion(overrides: Partial<Publicacion> = {}): Publicacion {
     estado: "borrador",
     evergreen: false,
     veredicto: "",
+    autor_id: "",
+    autor_nombre: "",
     imagen: "",
     imagen_url: "",
     fecha_programada: "",

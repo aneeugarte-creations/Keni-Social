@@ -50,6 +50,7 @@ from starlette.routing import Route
 
 from .. import generaciones, marcas, redes, repos
 from .._http_json import leer_json
+from ..seguridad import autor_de_peticion
 from . import skills
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
@@ -689,10 +690,15 @@ async def generar(request: Request) -> Response:
     fuente_id = datos.get("fuente_id")
     clave = datos.get("clave")
 
+    # Atribucion por usuario (#130 Fase 1): el item lo genera el usuario de la peticion.
+    # Se propaga al registro, al historial y a las publicaciones creadas en background.
+    autor = autor_de_peticion(request)
+
     # El post-procesado de copy (parsear + historial + N publicaciones) se reutiliza tal
     # cual; lo envolvemos para marcar el item como usado SOLO si completa con exito.
     procesar_copy = skills.construir_procesar_copy(
-        skill, marca, redes_ids=redes_ids, titulo_dado=titulo.strip(), texto_base=nota
+        skill, marca, redes_ids=redes_ids, titulo_dado=titulo.strip(), texto_base=nota,
+        autor=autor,
     )
 
     def procesar(salida: str, metricas: object) -> dict[str, object]:
@@ -703,7 +709,13 @@ async def generar(request: Request) -> Response:
         return resultado
 
     gen = generaciones.crear(
-        {"tipo": "rss", "marca": marca, "etiqueta": skills.etiqueta_generacion(skill, marca)}
+        {
+            "tipo": "rss",
+            "marca": marca,
+            "etiqueta": skills.etiqueta_generacion(skill, marca),
+            "autor_id": (autor or {}).get("id", ""),
+            "autor_nombre": (autor or {}).get("usuario", ""),
+        }
     )
     prompt = skills.construir_prompt(skill, marca, nota, redes_ids)
     try:
