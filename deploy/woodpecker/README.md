@@ -69,9 +69,9 @@ Ademas de los 3 pipelines de CI (tests), hay un pipeline de **despliegue**:
 monta el `docker.sock`, el step construye las imagenes desde el checkout del pipeline
 (sin rsync) y recrea el stack via `deploy/deploy.sh`.
 
-- **Disparo manual** (`when: event: [manual, deployment]`): lanzalo como *manual* o desde
-  la pestana *Deployments* sobre `main`. A proposito NO se despliega en cada push (piloto
-  en vivo).
+- **Auto-deploy en push a `main`** (`when: event: push, branch: main`), DESPUES de los 3
+  pipelines de test (via `depends_on`); tambien disparable como *manual*. Un push con
+  tests en rojo NO despliega; NO despliega en PRs ni otras ramas.
 - **Hace:** `docker compose build` -> `stop back` -> chown del volumen a uid 10001 (los
   contenedores corren no-root) -> `migracion --solo-db` (cutover SQLite->Postgres,
   idempotente y no destructivo) -> `up -d`. Detalle en `deploy/deploy.sh`.
