@@ -1,37 +1,21 @@
-# Routers Traefik que REPRODUCEN los 3 sitios que hoy sirve el Caddy de sistema de
-# learn-01: learn / api / code .kenitech.io. Existen para el CUTOVER Caddy -> Traefik
-# (opcion de ingress elegida). Mientras Caddy siga dueño de :80/:443 son INERTES
-# (esos hostnames resuelven a la misma IP pero el que contesta es Caddy).
+# Routers Traefik para los sitios que learn-01 SÍ sirve además de keni-social:
+#   - code.kenitech.io  -> code-launcher (127.0.0.1:9001), browser Claude Code.
+#   - api.kenitech.io   -> learn-control-plane (127.0.0.1:8080), API del piloto learn.
 #
-# Traducido 1:1 del Caddyfile (/etc/caddy/Caddyfile). Backends en el HOST vía
-# host.docker.internal (mapeado en docker-compose.yml con host-gateway).
+# NOTA: learn.kenitech.io NO vive en esta máquina — su DNS apunta a 187.124.247.53
+# (el VPS viejo, `vps_ip` del terraform). Por eso NO hay router learn aquí: tenerlo
+# solo provocaba fallos de ACME en bucle (el challenge se resuelve en el otro host).
 #
-# NOTA DE VERIFICACION antes del cutover:
-#   - api.kenitech.io lleva CORS hecho a mano en Caddy (preflight + credenciales,
-#     allowlist = learn.kenitech.io). Aqui se replica con el middleware `headers`
-#     de Traefik; PRUEBALO contra el frontend de learn antes de parar Caddy.
-#   - WebSocket/PTY (code) y streaming: el idle-timeout va a 0 en el entrypoint
-#     websecure (ver docker-compose.yml), equivalente a read/write_timeout 0 de Caddy.
+# Traefik corre en network_mode: host (ver docker-compose.yml), así que llega a esos
+# servicios por 127.0.0.1. El idle-timeout 0 del entrypoint websecure preserva el
+# WebSocket/PTY de code y el streaming, equivalente a read/write_timeout 0 de Caddy.
+#
+# VERIFICAR: api.kenitech.io llevaba CORS hecho a mano en Caddy (preflight + creds,
+# allowlist = learn.kenitech.io). Aquí se replica con el middleware `headers`;
+# pruébalo contra el frontend de learn (en 187.x) cuando esté operativo.
 
 http:
   routers:
-    learn-cp:
-      # API del control plane + WS PTY + auth (mismas rutas que el @cp de Caddy).
-      rule: "Host(`learn.kenitech.io`) && (PathPrefix(`/sessions`) || Path(`/healthz`) || Path(`/metrics`) || PathPrefix(`/login`) || PathPrefix(`/logout`) || PathPrefix(`/auth`))"
-      priority: 100
-      entryPoints: [websecure]
-      service: learn-cp
-      middlewares: [sec-headers]
-      tls:
-        certResolver: le
-    learn-front:
-      rule: "Host(`learn.kenitech.io`)"
-      priority: 1
-      entryPoints: [websecure]
-      service: learn-front
-      middlewares: [sec-headers]
-      tls:
-        certResolver: le
     api:
       rule: "Host(`api.kenitech.io`)"
       entryPoints: [websecure]
@@ -48,22 +32,14 @@ http:
         certResolver: le
 
   services:
-    learn-cp:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:8080"
-    learn-front:
-      loadBalancer:
-        servers:
-          - url: "http://host.docker.internal:3000"
     api-cp:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:8080"
+          - url: "http://127.0.0.1:8080"
     code-launcher:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:9001"
+          - url: "http://127.0.0.1:9001"
 
   middlewares:
     sec-headers:

@@ -10,10 +10,9 @@
 #
 # El contexto de build de las imagenes propias es la RAIZ del repo (`..`).
 #
-# AVISO DE INGRESS: en el box compartido learn-01 ya hay un Caddy de sistema
-# dueño de :80/:443 (sirve learn/api/code.kenitech.io). Traefik NO puede tomar
-# esos puertos a la vez. Antes de `up`, lee deploy/README.md ("Ingress y el
-# Caddy de learn-01"): hay que migrar/retirar Caddy o poner Traefik detras.
+# INGRESS: Traefik es el ingress unico (network_mode: host, dueño de :80/:443).
+# En learn-01 el Caddy de sistema fue retirado (systemctl disable --now caddy).
+# Traefik sirve tambien code/api.kenitech.io via traefik/dynamic/legacy-sites.yml.
 
 name: keni-social
 
@@ -47,19 +46,16 @@ services:
       - --entrypoints.websecure.transport.respondingTimeouts.idleTimeout=0
       # - --api.dashboard=true   # opcional: protege con middleware antes de exponer
       # - --log.level=DEBUG
-    ports:
-      - "80:80"
-      - "443:443"
+    # network_mode: host — necesario porque los servicios legados del host
+    # (learn-control-plane 127.0.0.1:8080, code-launcher 127.0.0.1:9001) escuchan
+    # SOLO en loopback y un Traefik en bridge no los alcanza. En host mode Traefik
+    # comparte la loopback del host (llega a esos :8080/:9001) y ademas alcanza a
+    # front/back por su IP de la red bridge keni-social_edge. Bind 80/443 directo.
+    network_mode: host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik-acme:/acme
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
-    networks:
-      - edge
-    # Para que los routers legados alcancen los servicios del HOST (learn :8080/:3000,
-    # code :9001) desde dentro del contenedor Traefik.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
 
   front:
     build:

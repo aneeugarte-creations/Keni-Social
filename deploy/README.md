@@ -6,7 +6,7 @@
 
 | Servicio | Imagen | Rol | Expuesto |
 |---|---|---|---|
-| `traefik` | `traefik:v3.1` | Reverse proxy + TLS (Let's Encrypt) | **:80/:443** |
+| `traefik` | `traefik:v3` | Reverse proxy + TLS (Let's Encrypt), `network_mode: host` | **:80/:443** |
 | `front` | build `front/` | SPA React (nginx) | vía Traefik (todo menos `/api`) |
 | `back` | build `back/` | Gateway Starlette + generación | vía Traefik (`/api`) |
 | `mcp` | build `mcp/` | `keni-metricas` por HTTP | interno (ver abajo) |
@@ -33,33 +33,32 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   extrae un **worker** que llamará a la API de Claude y dejará la imagen sin Node.
 - **whisper (clip→copy) NO está en hosted.** Por privacidad (el audio no sale de la
   máquina), la transcripción es del perfil local. El gateway hosted no transcribe.
-- **No exponer públicamente hasta cerrar la auth multiusuario (#130).** Hoy `/api`
-  va protegido por el token interino (`KENI_CONSOLA_TOKEN`) + CSRF por `Origin`, y
-  el login user/pass (#130) ya existe pero no está terminado. El bind `0.0.0.0` del
-  back es seguro **solo** porque no publica puertos: únicamente Traefik lo alcanza.
+- **Expuesto públicamente tras auth.** `/api` va protegido por el token interino
+  (`KENI_CONSOLA_TOKEN`) + CSRF por `Origin`, más el login multiusuario user/pass
+  (#130). El admin inicial se crea desde `KENI_CONSOLA_ADMIN_USER/PASS` (o pass
+  aleatoria logueada). El bind `0.0.0.0` del back solo lo alcanza Traefik.
+- **Claude (generación) usa el OAuth token de la máquina**, no una API key: el back
+  recibe `CLAUDE_CODE_OAUTH_TOKEN` desde `/etc/learn-platform/claude-oauth-token`.
 
 ---
 
-## Ingress y el Caddy de learn-01 (decisión obligatoria)
+## Ingress (estado actual: Traefik único, Caddy retirado)
 
-El servidor destino (`learn-01`, 162.43.191.103) **ya tiene un Caddy de sistema**
-dueño de `:80/:443` sirviendo 3 sitios vivos: `learn.kenitech.io`,
-`api.kenitech.io` y `code.kenitech.io`. **Traefik y Caddy no pueden compartir 80/443.**
-Tres caminos (decididos en la conversación: migrar Caddy → Traefik):
+**HECHO.** En `learn-01` (162.43.191.103) Traefik es el **ingress único**
+(`network_mode: host`, dueño de `:80/:443`, ACME Let's Encrypt). El Caddy de sistema
+fue **parado y deshabilitado** (`sudo systemctl disable --now caddy`). Traefik sirve,
+además de keni-social:
 
-1. **Migrar a Traefik (elegido).** Traefik pasa a ser el ingress único. Hay que:
-   recrear los 3 sitios de Caddy como routers Traefik (incluido `code.kenitech.io`
-   con su **WebSocket/PTY y timeouts a 0**), parar y deshabilitar Caddy
-   (`sudo systemctl disable --now caddy`), y recién entonces `docker compose up`.
-   **Blast radius alto**: un fallo tumba learn/api/code. Hazlo en ventana y con
-   los routers de esos 3 sitios ya escritos y probados.
-2. **Traefik detrás de Caddy** (más seguro, no elegido): Traefik en un puerto
-   interno y un bloque `social.kenitech.io` en el Caddyfile que le reenvía.
-3. **Otro host/VM**: keni-social aparte; Traefik dueño de 80/443 sin tocar learn-01.
+- `social.kenitech.io` → front / back (este stack). **LIVE.**
+- `code.kenitech.io`   → `127.0.0.1:9001` (code-launcher), router en `traefik/dynamic/legacy-sites.yml`.
+- `api.kenitech.io`    → `127.0.0.1:8080` (learn-control-plane) + CORS replicado.
 
-> Estos Dockerfiles + compose valen para **cualquiera** de las tres. Lo único que
-> cambia es si Traefik publica `80:80/443:443` (opción 1/3) o un puerto interno
-> (opción 2) y quién hace el ACME.
+`network_mode: host` es necesario porque code/api escuchan **solo en `127.0.0.1`**
+(un Traefik en bridge no los alcanza). `learn.kenitech.io` **no vive en este box**
+(su DNS apunta a `187.124.247.53`), por eso no tiene router aquí.
+
+**Rollback de emergencia** (restaura code/api bajo Caddy):
+`docker compose stop traefik && sudo systemctl start caddy`.
 
 ---
 
