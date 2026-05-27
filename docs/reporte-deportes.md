@@ -8,37 +8,53 @@ métricas y escribe un archivo local; nunca publica.
 Origen: sesión con Elias (equipo de redes), 2026-05-25. Ver la nota de contexto en
 `docs/contexto/2026-05-25-elias-reporte-semanal-deportes.md`.
 
+## Qué rango cubre (el reporte del lunes)
+
+Por defecto el deck cubre la **semana natural cerrada**: **lunes → domingo** de la
+semana inmediatamente anterior, **domingo incluido**. Es el rango `semana_cerrada` y
+**no depende del día** en que se corra: el lunes a las 10:00 da exactamente la semana
+que acaba de cerrar (issue #141). El deck muestra el periodo concreto (p. ej. "18 may
+— 24 may 2026") en la portada y la previsualización. Quedan disponibles los rangos
+rodantes (`semana`/`7d`/`mes`/`30d`, que terminan **hoy**) por si se quiere otra ventana.
+
 ## Qué lleva el reporte
 
 1. **Mejores piezas de la semana**, una lámina por plataforma:
    - Top 3 de **Instagram**, top 3 de **TikTok**, top 3 de **Facebook**.
    - Criterio de orden: **visualizaciones + interacciones**.
    - Por cada pieza: visualizaciones, interacciones y el **link**.
-2. **Promoción de cuentas hermanas**: algunos posteos de la semana de **Claro Sports
-   TV** y **Csport Golf**, para seguir dándoles difusión.
+2. **Promoción de cuentas hermanas**: posteos de la semana de **Claro Sports TV** y
+   **Csport Golf**, para seguir dándoles difusión. Cada cuenta se **rotula** por
+   procedencia: `muestra` (datos sintéticos), `real`, o **`sin datos reales`** si la
+   fuente real no tiene esa cuenta todavía (faltan permisos Meta/TikTok) — en ese caso
+   **no se inventan cifras** (honestidad, regla de producto).
 3. **Agenda editorial de la próxima semana**:
    - **Eventos principales** (externos que cubrimos): qué son y qué vamos a hacer.
    - **Transmisiones propias**: qué vamos a tener y cómo lo vamos a hacer.
 
 ## Cómo se usa
 
-Requiere el extra `deck` (trae `python-pptx`):
+Requiere el extra `deck` (trae `python-pptx` para el `.pptx` y `reportlab` para el PDF):
 
 ```bash
 pip install "keni-metricas[deck]"
 
-# deck completo de la semana, con la agenda curada a mano
-keni-reporte-deck --rango semana --agenda agenda-editorial.toml --salida reporte-semana.pptx
+# deck del lunes (semana cerrada lun->dom por defecto), con la agenda curada a mano
+keni-reporte-deck --agenda agenda-editorial.toml --salida reporte-semana.pptx
 
 # datos estructurados (sin render), p. ej. para depurar o integrar
-keni-reporte-deck --formato json --rango semana
+keni-reporte-deck --formato json
 
-# además del pptx, intenta exportar PDF (si hay LibreOffice instalado)
-keni-reporte-deck --rango semana --agenda agenda-editorial.toml --pdf
+# PDF NATIVO (reportlab, sin LibreOffice)
+keni-reporte-deck --formato pdf --salida reporte-semana.pdf
+
+# pptx + PDF nativo de una vez
+keni-reporte-deck --agenda agenda-editorial.toml --pdf
 ```
 
-Opciones: `--rango` (`semana`|`mes`|`7d`|`30d`, def. `semana`), `--top` (piezas por
-plataforma, def. 3), `--agenda`, `--salida`, `--formato` (`pptx`|`json`), `--pdf`.
+Opciones: `--rango` (`semana_cerrada` def. | `semana` | `mes` | `7d` | `30d`), `--top`
+(piezas por plataforma, def. 3), `--agenda`, `--salida`, `--formato` (`pptx` | `pdf` |
+`json`), `--pdf` (genera además el PDF nativo junto al `.pptx`).
 
 ## La agenda (curaduría manual)
 
@@ -74,17 +90,21 @@ pasa `--agenda`, el deck se genera igual con la sección de agenda como pendient
 
 ## Diseño
 
-- El núcleo vive en `mcp-metricas/src/keni_metricas/reporte_deck.py`. `python-pptx` es una
-  dependencia **opcional** (`[deck]`) e importada de forma **perezosa** en el MCP.
-- `construir_reporte_deportes(...)` arma un dict JSON-serializable (sirve para JSON o
-  para alimentar otro render); `render_pptx(...)` produce la presentación.
+- El núcleo vive en `mcp-metricas/src/keni_metricas/reporte_deck.py`. `python-pptx` y
+  `reportlab` son dependencias **opcionales** (`[deck]`) e importadas de forma
+  **perezosa** en el MCP.
+- `construir_reporte_deportes(...)` arma un dict JSON-serializable (con `periodo` y la
+  procedencia de cada cuenta hermana); `render_pptx(...)` produce la presentación y
+  `render_pdf(...)` el **PDF nativo** (reportlab, Python puro, sin binarios externos),
+  ambos con la misma estructura de láminas y la línea visual roja de Claro Sports.
+- El rango `semana_cerrada` se resuelve en `schema.semana_cerrada(...)`: lunes→domingo
+  de la última semana natural cerrada, anclado al calendario (no relativo a hoy).
 - **Integrado en la Consola** (página "Reporte deportes"): backend
   `consola/src/keni_consola/api/reporte_deportes.py` (`GET /opciones`, `POST /preview`,
-  `POST /export.pptx`) + frontend `frontend/src/pages/ReporteDeportes.tsx` (selector de rango,
-  editor de agenda, previsualización por plataforma y descarga del `.pptx`). El equipo no necesita
-  la CLI.
+  `POST /export.pptx`, `POST /export.pdf`) + frontend `frontend/src/pages/ReporteDeportes.tsx`
+  (selector de rango, editor de agenda, previsualización por plataforma y descarga del
+  `.pptx` o `.pdf`). El equipo no necesita la CLI.
 
 ## Pendiente / siguientes pasos
 
-- Exportación PDF nativa sin depender de LibreOffice.
 - Plantilla(s) de imagen para la línea visual de Claro Sports (ver `estudio-imagen.md`).

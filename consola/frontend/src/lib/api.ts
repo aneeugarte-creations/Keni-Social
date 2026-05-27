@@ -649,6 +649,8 @@ export const api = {
     peticion<ReporteDeportes>("/reporte-deportes/preview", { metodo: "POST", json: cuerpo, signal }),
   descargarReporteDeportes: (cuerpo: CuerpoReporteDeportes) =>
     descargarPost("/reporte-deportes/export.pptx", cuerpo, `reporte-deportes-${cuerpo.rango}.pptx`),
+  descargarReporteDeportesPdf: (cuerpo: CuerpoReporteDeportes) =>
+    descargarPost("/reporte-deportes/export.pdf", cuerpo, `reporte-deportes-${cuerpo.rango}.pdf`),
 
   // --- Conexiones (imagen IA + tokens de redes) ---
   // Los secretos son write-only: solo se envían (PUT); del servidor llega

@@ -17,11 +17,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# `deck` habilita el reporte semanal de deportes en PPTX (keni-reporte-deck).
-# Es opcional: el MCP/servidor no lo necesita y no debe cargar python-pptx.
-deck = ["python-pptx>=0.6.23"]
-# dev incluye python-pptx para que CI ejercite el render del deck.
-dev = ["pytest>=8", "pytest-cov>=5", "respx>=0.21", "anyio>=4", "ruff>=0.6", "python-pptx>=0.6.23"]
+# `deck` habilita el reporte semanal de deportes (keni-reporte-deck): PPTX con
+# python-pptx y PDF NATIVO/portable con reportlab (sin LibreOffice, #141). Es
+# opcional: el MCP/servidor no lo necesita y no debe cargar estas dependencias.
+deck = ["python-pptx>=0.6.23", "reportlab>=4.0"]
+# dev incluye python-pptx + reportlab para que CI ejercite el render del deck.
+dev = ["pytest>=8", "pytest-cov>=5", "respx>=0.21", "anyio>=4", "ruff>=0.6", "python-pptx>=0.6.23", "reportlab>=4.0"]
 
 [project.scripts]
 keni-metricas = "keni_metricas.server:main"

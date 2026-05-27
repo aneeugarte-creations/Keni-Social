@@ -718,11 +718,16 @@ export interface PromocionHermana {
   cuenta: string;
   nombre: string;
   piezas: PiezaReporte[];
+  /** Procedencia: `"muestra"` (sintéticos), `"real"` o `"sin_datos_reales"`
+   *  (cuenta no conectada todavía: no se inventan cifras, #141). */
+  datos?: "muestra" | "real" | "sin_datos_reales";
 }
 
 export interface ReporteDeportes {
   tipo: string;
   rango: string;
+  /** Periodo concreto del reporte (lun→dom de la semana cerrada por defecto). */
+  periodo?: { desde: string; hasta: string };
   generado: string;
   fuente: string;
   cuenta: { id: string; nombre: string };

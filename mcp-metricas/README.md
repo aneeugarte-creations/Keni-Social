@@ -73,17 +73,18 @@ KENI_REPORTE_RANGO=semana KENI_REPORTE_DIR="$HOME/keni-reportes" scripts/cron-re
 
 ## Reporte semanal de deportes (deck PPTX)
 
-`keni-reporte-deck` reproduce el reporte que el equipo de redes de **Claro Sports** arma a mano cada semana en Canva, pero generado automático: top-3 por plataforma (Instagram, TikTok, Facebook) por **visualizaciones + interacciones** con su link, promoción de las cuentas hermanas (Claro Sports TV y Csport Golf) y la **agenda editorial** de la próxima semana. Sale como presentación `.pptx` con la línea visual de la marca. Solo lee; nunca publica.
+`keni-reporte-deck` reproduce el reporte del **lunes** que el equipo de redes de **Claro Sports** arma a mano cada semana en Canva, pero generado automático: cubre por defecto la **semana cerrada** (lunes→domingo, domingo incluido), con top-3 por plataforma (Instagram, TikTok, Facebook) por **visualizaciones + interacciones** con su link, promoción de las cuentas hermanas (Claro Sports TV y Csport Golf) y la **agenda editorial** de la próxima semana. Sale como `.pptx` o **PDF nativo** con la línea visual de la marca. Solo lee; nunca publica.
 
-Requiere el extra `deck` (trae `python-pptx`):
+Requiere el extra `deck` (trae `python-pptx` y `reportlab`):
 
 ```bash
 pip install "keni-metricas[deck]"
-keni-reporte-deck --rango semana --agenda agenda-editorial.toml --salida reporte-semana.pptx
-keni-reporte-deck --formato json --rango semana    # datos estructurados a stdout (sin render)
+keni-reporte-deck --agenda agenda-editorial.toml --salida reporte-semana.pptx   # semana cerrada por defecto
+keni-reporte-deck --formato pdf --salida reporte-semana.pdf                      # PDF nativo (sin LibreOffice)
+keni-reporte-deck --formato json                                                 # datos estructurados a stdout (sin render)
 ```
 
-La **agenda** (eventos principales y transmisiones propias, con qué/cómo se cubren) es curaduría manual: se escribe en un TOML — ver `agenda-editorial.ejemplo.toml`. Con `--pdf` intenta además exportar a PDF si hay LibreOffice instalado. Ver `docs/reporte-deportes.md`.
+La **agenda** (eventos principales y transmisiones propias, con qué/cómo se cubren) es curaduría manual: se escribe en un TOML — ver `agenda-editorial.ejemplo.toml`. El PDF es **nativo** (reportlab, sin LibreOffice); `--pdf` lo genera junto al `.pptx`. Ver `docs/reporte-deportes.md`.
 
 ## Desarrollo
 

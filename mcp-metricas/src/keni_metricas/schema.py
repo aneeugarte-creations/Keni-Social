@@ -170,14 +170,50 @@ class Pieza(BaseModel):
 
 # --- Rangos -----------------------------------------------------------------
 
+# Rangos RODANTES: ventana de N dias que TERMINA hoy (incluido). El mapa da los
+# dias de cada uno; `resolver_rango` los resuelve como (hoy-(N-1), hoy).
 RANGOS_DIAS: dict[str, int] = {"semana": 7, "7d": 7, "mes": 30, "30d": 30}
+
+# Rango ANCLADO al calendario: la ultima semana natural CERRADA (lunes->domingo
+# inmediatamente anterior a la semana en curso, domingo incluido). A diferencia de
+# "semana" (rodante, termina hoy), este NO depende del dia en que se corra: el
+# lunes a las 10 da exactamente la semana que acaba de cerrar. Lo usa el reporte
+# del lunes (issue #141). Son tambien 7 dias, pero su ventana no es relativa a hoy.
+RANGO_SEMANA_CERRADA = "semana_cerrada"
+
+# Todos los rangos validos como entrada (rodantes + anclados). El reporte de
+# deportes y la API los validan contra este conjunto.
+RANGOS_VALIDOS: tuple[str, ...] = (*RANGOS_DIAS.keys(), RANGO_SEMANA_CERRADA)
+
+
+def semana_cerrada(hoy: date | None = None) -> tuple[date, date]:
+    """Lunes->domingo de la ultima semana NATURAL cerrada (domingo incluido).
+
+    Devuelve `(lunes, domingo)` de la semana inmediatamente anterior a la que
+    contiene `hoy`. Ejemplo: cualquier dia de la semana del 25-31 may 2026 ->
+    (2026-05-18, 2026-05-24). Independiente del dia en que se corra (issue #141).
+    """
+    hoy = hoy or date.today()
+    lunes_de_esta_semana = hoy - timedelta(days=hoy.weekday())  # lunes=0 .. domingo=6
+    domingo_cerrado = lunes_de_esta_semana - timedelta(days=1)
+    lunes_cerrado = domingo_cerrado - timedelta(days=6)
+    return lunes_cerrado, domingo_cerrado
 
 
 def resolver_rango(rango: str, hoy: date | None = None) -> tuple[date, date, int]:
-    """Convierte un rango ('semana'|'mes'|'7d'|'30d') en (desde, hasta, dias)."""
+    """Convierte un rango en `(desde, hasta, dias)`.
+
+    Rangos rodantes ('semana'|'7d'|'mes'|'30d'): ventana de N dias que termina
+    HOY. Rango anclado ('semana_cerrada'): la ultima semana natural cerrada
+    (lunes->domingo, domingo incluido), independiente del dia en que se corra.
+    """
     hoy = hoy or date.today()
-    dias = RANGOS_DIAS.get((rango or "").lower().strip())
+    clave = (rango or "").lower().strip()
+    if clave == RANGO_SEMANA_CERRADA:
+        desde, hasta = semana_cerrada(hoy)
+        return desde, hasta, (hasta - desde).days + 1
+    dias = RANGOS_DIAS.get(clave)
     if dias is None:
-        validos = ", ".join(sorted(set(RANGOS_DIAS)))
+        validos = ", ".join(sorted(RANGOS_VALIDOS))
         raise ValueError(f"Rango no valido: {rango!r}. Usa uno de: {validos}.")
     return hoy - timedelta(days=dias - 1), hoy, dias

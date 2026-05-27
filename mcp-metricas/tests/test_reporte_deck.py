@@ -85,6 +85,57 @@ def test_agenda_por_defecto_es_placeholder(fuente: FuenteMuestra):
     assert "nota" in rep["agenda"]
 
 
+# --- rango por defecto: semana cerrada lun->dom (incl. domingo, #141) -------
+
+
+def test_rango_por_defecto_es_semana_cerrada(fuente: FuenteMuestra):
+    rep = reporte_deck.construir_reporte_deportes(fuente)
+    assert rep["rango"] == "semana_cerrada"
+
+
+def test_periodo_por_defecto_cubre_lunes_a_domingo(fuente: FuenteMuestra):
+    from datetime import date
+
+    rep = reporte_deck.construir_reporte_deportes(fuente)
+    desde = date.fromisoformat(rep["periodo"]["desde"])
+    hasta = date.fromisoformat(rep["periodo"]["hasta"])
+    assert desde.weekday() == 0  # lunes
+    assert hasta.weekday() == 6  # domingo (incluido)
+    assert (hasta - desde).days == 6  # 7 dias naturales inclusive
+
+
+def test_hermanas_muestra_rotuladas_como_muestra(fuente: FuenteMuestra):
+    rep = reporte_deck.construir_reporte_deportes(fuente)
+    assert rep["promocion_hermanas"]
+    assert all(h["datos"] == "muestra" for h in rep["promocion_hermanas"])
+
+
+def test_hermanas_sin_datos_reales_no_inventa_cifras():
+    # Fuente real-like donde la cuenta hermana NO existe: se rotula sin datos
+    # reales y NO se fabrican piezas (honestidad, #141).
+    from keni_metricas.fuentes.base import CuentaNoEncontrada
+
+    class _FuenteRealSinHermanas:
+        nombre = "real"
+
+        def cuentas(self):
+            return list(FuenteMuestra().cuentas())
+
+        def mejores_por_plataforma(self, cuenta_id, rango, plataformas, n):
+            return FuenteMuestra().mejores_por_plataforma(cuenta_id, rango, plataformas, n)
+
+        def mejores_piezas(self, cuenta_id, rango, n):
+            if cuenta_id in reporte_deck.CUENTAS_HERMANAS:
+                raise CuentaNoEncontrada(cuenta_id)
+            return FuenteMuestra().mejores_piezas(cuenta_id, rango, n)
+
+    rep = reporte_deck.construir_reporte_deportes(_FuenteRealSinHermanas())
+    assert rep["promocion_hermanas"]
+    for h in rep["promocion_hermanas"]:
+        assert h["datos"] == "sin_datos_reales"
+        assert h["piezas"] == []  # no se inventan cifras
+
+
 def test_agenda_pasada_se_refleja(fuente: FuenteMuestra):
     agenda = {"principales": [{"nombre": "Champions", "plan": "en vivo"}], "propios": []}
     rep = reporte_deck.construir_reporte_deportes(fuente, agenda=agenda)
@@ -191,6 +242,32 @@ def test_render_pptx_portada_fuente_real_sin_aviso_de_muestra(fuente: FuenteMues
         s.text_frame.text for s in portada.shapes if s.has_text_frame
     ).upper()
     assert "DATOS DE MUESTRA" not in textos
+
+
+# --- render PDF nativo (reportlab, sin LibreOffice, #141) -------------------
+
+
+def test_render_pdf_genera_pdf_valido(fuente: FuenteMuestra, tmp_path):
+    pytest.importorskip("reportlab")
+    rep = reporte_deck.construir_reporte_deportes(fuente)
+    destino = reporte_deck.render_pdf(rep, tmp_path / "reporte.pdf")
+    assert destino.exists() and destino.stat().st_size > 1000
+    datos = destino.read_bytes()
+    # un PDF valido empieza por "%PDF" y trae el marcador de fin de fichero.
+    assert datos[:4] == b"%PDF"
+    assert b"%%EOF" in datos[-1024:]
+
+
+def test_render_pdf_tiene_una_pagina_por_lamina(fuente: FuenteMuestra, tmp_path):
+    pytest.importorskip("reportlab")
+    import re
+
+    rep = reporte_deck.construir_reporte_deportes(fuente)
+    destino = reporte_deck.render_pdf(rep, tmp_path / "reporte.pdf")
+    # cuenta los objetos `/Type /Page` (no `/Pages`) sin depender de un lector externo.
+    # portada + 3 plataformas + hermanas + 2 de agenda = 7 paginas (igual que el pptx).
+    paginas = len(re.findall(rb"/Type\s*/Page[^s]", destino.read_bytes()))
+    assert paginas == 7
 
 
 # --- CLI (keni-reporte-deck) ------------------------------------------------
