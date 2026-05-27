@@ -23,6 +23,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import rutas
 from .io_atomico import bloqueo_archivo, escribir_atomico
 
 # Categorías y estados válidos (la UI los pinta con etiquetas legibles).
@@ -64,11 +65,15 @@ _SEMILLA: list[dict[str, Any]] = [
 
 
 def ruta_sugerencias() -> Path:
-    """Ruta del archivo. `KENI_CONSOLA_SUGERENCIAS` la sobreescribe (tests)."""
+    """Ruta del archivo de sugerencias.
+
+    `KENI_CONSOLA_SUGERENCIAS` la sobreescribe (override de maxima prioridad; tests). Si
+    no, cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/sugerencias.json`, o bajo `KENI_DATA_DIR`.
+    """
     if p := os.environ.get("KENI_CONSOLA_SUGERENCIAS"):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "sugerencias.json"
+    return rutas.dir_config() / "sugerencias.json"
 
 
 # --------------------------------------------------------------------------- #

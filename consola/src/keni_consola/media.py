@@ -1,9 +1,11 @@
 """Almacenamiento LOCAL de media (imagenes) de la Consola Keni + generacion por IA.
 
 Las imagenes adjuntas a las publicaciones viven en un directorio local
-(`KENI_CONSOLA_MEDIA`, por defecto `~/.config/keni-social/media`). Nada sale de la
-maquina salvo, opcionalmente, el prompt de generacion hacia el proveedor de imagen
-configurado (OpenAI Images por defecto), que SOLO se invoca si hay clave.
+(`KENI_CONSOLA_MEDIA`; por defecto cuelga de la raiz de estado unica, p.ej.
+`${XDG_CONFIG_HOME:-~/.config}/keni-social/media` en local o `<KENI_DATA_DIR>/
+keni-social/media` en contenedor). Nada sale de la maquina salvo, opcionalmente, el
+prompt de generacion hacia el proveedor de imagen configurado (OpenAI Images por
+defecto), que SOLO se invoca si hay clave.
 
 SEGURIDAD:
   - El NOMBRE en disco SIEMPRE lo generamos nosotros (uuid + extension saneada);
@@ -28,6 +30,8 @@ import os
 import re
 import uuid
 from pathlib import Path
+
+from . import rutas
 
 # Extensiones de imagen permitidas (sin punto) -> mime de salida al servir/guardar.
 _EXT_A_MIME: dict[str, str] = {
@@ -72,11 +76,15 @@ class MediaError(RuntimeError):
 
 
 def dir_media() -> Path:
-    """Directorio de media. `KENI_CONSOLA_MEDIA` lo sobreescribe (tests)."""
+    """Directorio de media.
+
+    `KENI_CONSOLA_MEDIA` lo sobreescribe (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/media`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_MEDIA")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "media"
+    return rutas.dir_config() / "media"
 
 
 def _asegurar_dir() -> Path:

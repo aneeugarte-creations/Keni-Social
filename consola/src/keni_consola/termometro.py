@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from . import marcas
+from . import marcas, rutas
 from .io_atomico import escribir_atomico
 
 # Limites del numero de slides de noticia (mas la portada). Coinciden con la skill.
@@ -41,11 +41,15 @@ _RE_HORA = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
 def ruta() -> Path:
-    """Ruta del archivo de config. `KENI_CONSOLA_TERMOMETRO` la sobreescribe (tests)."""
+    """Ruta del archivo de config del Termometro.
+
+    `KENI_CONSOLA_TERMOMETRO` la sobreescribe (override de maxima prioridad; tests). Si
+    no, cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/termometro.json`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_TERMOMETRO")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "termometro.json"
+    return rutas.dir_config() / "termometro.json"
 
 
 def defectos() -> dict[str, Any]:

@@ -27,17 +27,23 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import rutas
+
 
 class ConsolaConfigInvalida(ValueError):
     """El consola.toml existe pero no se puede leer/parsear (mensaje en espanol)."""
 
 
 def ruta_config_consola() -> Path:
-    """Ruta del consola.toml. `KENI_CONSOLA_CONFIG` la sobreescribe (tests)."""
+    """Ruta del consola.toml.
+
+    `KENI_CONSOLA_CONFIG` la sobreescribe (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/consola.toml`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_CONFIG")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "consola.toml"
+    return rutas.dir_config() / "consola.toml"
 
 
 @dataclass(frozen=True)

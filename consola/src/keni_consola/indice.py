@@ -32,6 +32,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from . import rutas
+
 # Tipos de entidad indexados (cada uno tiene su sub-carpeta por marca).
 #
 # `run` es un tipo ESPECIAL: ademas de localizar el YAML (`runs/<id>.yaml` por
@@ -46,11 +48,15 @@ TIPOS: tuple[str, ...] = (
 
 
 def ruta_indice() -> Path:
-    """Ruta del SQLite de indice. `KENI_CONSOLA_INDICE` la sobreescribe (tests)."""
+    """Ruta del SQLite de indice.
+
+    `KENI_CONSOLA_INDICE` la sobreescribe (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/indice.sqlite`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_INDICE")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "indice.sqlite"
+    return rutas.dir_config() / "indice.sqlite"
 
 
 def _conectar() -> sqlite3.Connection:

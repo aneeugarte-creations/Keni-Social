@@ -47,7 +47,7 @@ from typing import Any
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
-from . import indice, marcas, redes
+from . import indice, marcas, redes, rutas
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
 from .io_atomico import escribir_atomico
 
@@ -83,10 +83,15 @@ _TIPO_ESQUEMA = {
 
 
 def raiz_datos() -> Path:
-    """Raiz de datos de ficheros. `KENI_CONSOLA_RAIZ` la sobreescribe (def `~/keni-proyectos`)."""
+    """Raiz de datos de ficheros (CONTENIDO editorial por marca).
+
+    `KENI_CONSOLA_RAIZ` la sobreescribe (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.raiz_proyectos()`): local `~/keni-proyectos`
+    EXACTAMENTE como antes, o `<KENI_DATA_DIR>/keni-proyectos` en contenedor.
+    """
     if (p := os.environ.get("KENI_CONSOLA_RAIZ")):
         return Path(p).expanduser()
-    return Path.home() / "keni-proyectos"
+    return rutas.raiz_proyectos()
 
 
 def _slug_marca(marca: str) -> str:

@@ -18,7 +18,8 @@ de skills, publicaciones, imagenes) se guardan en su sitio de siempre; el regist
 generacion es estado de ejecucion (efimero, inspeccionable), por eso vive aparte de los
 datos editoriales:
 
-    <KENI_CONSOLA_GENERACIONES>/<id>.yaml         (def ~/.config/keni-social/generaciones)
+    <KENI_CONSOLA_GENERACIONES>/<id>.yaml         (def local ~/.config/keni-social/
+    generaciones; bajo KENI_DATA_DIR cuelga de <data_dir>/keni-social/generaciones)
 
 LANZADORES INYECTABLES: `lanzar_job_claude` y `lanzar_job_imagen` son funciones a nivel
 de modulo; `crear_app(...)` las reasigna y los tests pasan fakes que NO usan Popen ni
@@ -57,7 +58,7 @@ from typing import Any
 import yaml
 from keni_shared.esquema_yaml import migrar, sellar
 
-from . import preferencias
+from . import preferencias, rutas
 from .dominio import runner, stream
 from .dominio.runner import ColaLlenaError  # noqa: F401  (re-export; ver nota abajo)
 from .io_atomico import bloqueo_archivo, escribir_atomico
@@ -125,10 +126,19 @@ def ahora_iso() -> str:
 
 
 def raiz() -> Path:
-    """Dir donde viven los registros de generacion. `KENI_CONSOLA_GENERACIONES` lo fija."""
+    """Dir donde viven los registros de generacion.
+
+    `KENI_CONSOLA_GENERACIONES` lo fija (override de maxima prioridad; tests). Si no:
+      - con `KENI_DATA_DIR`: `<data_dir>/keni-social/generaciones` (todo bajo el volumen).
+      - en local (sin `KENI_DATA_DIR`): `~/.config/keni-social/generaciones`, EXACTAMENTE
+        como antes (este recurso NO honraba `XDG_CONFIG_HOME`; se preserva para no
+        orfanar registros locales existentes).
+    """
     env = os.environ.get("KENI_CONSOLA_GENERACIONES")
     if env:
         return Path(env)
+    if (raiz_datos := os.environ.get(rutas.ENV_DATA_DIR)):
+        return Path(raiz_datos).expanduser() / rutas.SUBDIR_CONFIG / "generaciones"
     return Path.home() / ".config" / "keni-social" / "generaciones"
 
 

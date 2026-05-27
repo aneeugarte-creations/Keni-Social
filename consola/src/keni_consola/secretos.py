@@ -1,9 +1,24 @@
 """Almacen LOCAL de secretos de la Consola Keni (clave del proveedor de imagen IA).
 
-El archivo vive en `~/.config/keni-social/secretos.toml` (o la ruta de
-`KENI_CONSOLA_SECRETOS`, util en tests). Solo contiene la clave del proveedor de
+El archivo cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+`${XDG_CONFIG_HOME:-~/.config}/keni-social/secretos.toml`, o `<KENI_DATA_DIR>/
+keni-social/secretos.toml` en contenedor. `KENI_CONSOLA_SECRETOS` lo sobreescribe
+(override de maxima prioridad; util en tests). Solo contiene la clave del proveedor de
 imagen y el nombre del proveedor. Escritura ATOMICA con permisos `0600`
 (temp + os.replace + os.chmod), mismo patron defensivo que el config de metricas.
+
+SECRETOS POR ENTORNO (#130, servicio en contenedor): ademas del fichero, la clave del
+proveedor de imagen se puede INYECTAR por variable de entorno, util cuando el secreto lo
+gestiona el orquestador (Compose/CI) y no hay un fichero `0600` persistente. Variables
+leidas (en este orden de precedencia para la clave):
+  - `KENI_IMAGEN_API_KEY`  clave del proveedor de imagen (cualquier proveedor).
+  - `OPENAI_API_KEY`       clave de OpenAI (fallback si el proveedor es OpenAI; ya la
+                           leia `media.py`, aqui se unifica como fuente de secreto).
+  - el fichero `secretos.toml` (almacen local persistente).
+  - `KENI_IMAGEN_PROVEEDOR` nombre del proveedor de imagen por entorno (def. el del
+                            fichero o `openai`).
+El fichero gana al entorno SOLO si el fichero tiene clave; en contenedor sin fichero, el
+entorno es la fuente. NO se degrada la seguridad del fichero (sigue naciendo `0600`).
 
 SEGURIDAD MAXIMA:
   - El archivo se escribe siempre con permisos `0600` (solo el dueno lo lee).
@@ -19,7 +34,14 @@ import os
 import tomllib
 from pathlib import Path
 
+from . import rutas
 from .io_atomico import escribir_atomico
+
+# Variables de entorno que pueden INYECTAR el secreto de imagen (ver docstring, #130).
+ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
+ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
+# Fallback historico (ya consumido por `media.py`): clave de OpenAI por entorno.
+ENV_OPENAI_API_KEY = "OPENAI_API_KEY"
 
 # Proveedor de imagen por defecto (no se cambia el motor: OpenAI gpt-image-1).
 PROVEEDOR_DEFECTO = "openai"
@@ -32,11 +54,15 @@ _CABECERA = (
 
 
 def ruta_secretos() -> Path:
-    """Ruta del archivo de secretos. `KENI_CONSOLA_SECRETOS` la sobreescribe (tests)."""
+    """Ruta del archivo de secretos.
+
+    `KENI_CONSOLA_SECRETOS` la sobreescribe (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/secretos.toml`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_SECRETOS")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "secretos.toml"
+    return rutas.dir_config() / "secretos.toml"
 
 
 # --------------------------------------------------------------------------- #
@@ -125,22 +151,45 @@ def borrar_clave_imagen() -> None:
         _escribir(datos)
 
 
-def obtener_clave_imagen() -> str | None:
-    """Devuelve la clave guardada del proveedor de imagen, o None si no hay.
+def _clave_por_entorno() -> str | None:
+    """Clave del proveedor de imagen inyectada por entorno, o None si no hay (#130).
 
-    Uso INTERNO (la consume `media.py`). NUNCA se expone por la API ni se loguea.
+    Precedencia: `KENI_IMAGEN_API_KEY` (generica, cualquier proveedor) y, como fallback,
+    `OPENAI_API_KEY` (historico). Util en contenedor cuando el secreto lo gestiona el
+    orquestador y no hay fichero `0600` persistente.
+    """
+    for var in (ENV_IMAGEN_API_KEY, ENV_OPENAI_API_KEY):
+        valor = os.environ.get(var)
+        if isinstance(valor, str) and valor.strip():
+            return valor.strip()
+    return None
+
+
+def obtener_clave_imagen() -> str | None:
+    """Devuelve la clave del proveedor de imagen, o None si no hay.
+
+    Precedencia: el FICHERO de secretos (almacen local, configurado por la UI) gana si
+    tiene clave; si no, se INYECTA por entorno (`KENI_IMAGEN_API_KEY`/`OPENAI_API_KEY`,
+    #130). Uso INTERNO (la consume `media.py`). NUNCA se expone por la API ni se loguea.
     """
     clave = _bloque_imagen(_leer()).get("api_key")
     if isinstance(clave, str) and clave.strip():
         return clave
-    return None
+    return _clave_por_entorno()
 
 
 def obtener_proveedor_imagen() -> str:
-    """Devuelve el proveedor de imagen configurado (def. `openai`)."""
+    """Devuelve el proveedor de imagen configurado (def. `openai`).
+
+    Precedencia: el FICHERO de secretos gana; si no, `KENI_IMAGEN_PROVEEDOR` por entorno
+    (#130); si tampoco, el proveedor por defecto.
+    """
     proveedor = _bloque_imagen(_leer()).get("proveedor")
     if isinstance(proveedor, str) and proveedor.strip():
         return proveedor.strip().lower()
+    env = os.environ.get(ENV_IMAGEN_PROVEEDOR)
+    if isinstance(env, str) and env.strip():
+        return env.strip().lower()
     return PROVEEDOR_DEFECTO
 
 
