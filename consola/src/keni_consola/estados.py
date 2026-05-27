@@ -33,3 +33,10 @@ METRICAS_COMERCIAL: tuple[str, ...] = ("interacciones", "alcance")
 ROLES_USUARIO: tuple[str, ...] = ("admin", "editor")
 ROL_ADMIN = "admin"
 ROL_EDITOR = "editor"
+
+# Estados de un turno de la rota (F4 · #144): `propuesto` es lo que Keni genera;
+# `aprobado` es lo que Elias publica al equipo (nada se publica antes de aprobar).
+# Operacional; vive en SQLite.
+ESTADOS_ROTA: tuple[str, ...] = ("propuesto", "aprobado")
+ESTADO_ROTA_PROPUESTO = "propuesto"
+ESTADO_ROTA_APROBADO = "aprobado"

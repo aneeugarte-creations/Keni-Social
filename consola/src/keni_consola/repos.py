@@ -34,8 +34,11 @@ from . import db, ficheros
 # p. ej. `repos.ESTADOS_PUBLICACION`). Viven en `estados.py`, fuera de los almacenes.
 from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publica
     ESTADO_COMERCIAL_ACTIVA,
+    ESTADO_ROTA_APROBADO,
+    ESTADO_ROTA_PROPUESTO,
     ESTADOS_COMERCIAL,
     ESTADOS_PUBLICACION,
+    ESTADOS_ROTA,
     ESTADOS_TAREA,
     METRICAS_COMERCIAL,
 )
@@ -425,3 +428,82 @@ def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
 
 def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
     return db.ultimo_snapshot_comercial(publicacion_id)
+
+
+# --------------------------------------------------------------------------- #
+# Rota de horarios del equipo (OPERACIONAL: SQLite via db.py)                  #
+# --------------------------------------------------------------------------- #
+#
+# Eventos/transmisiones + turnos (asignaciones) de la parrilla del equipo (F4 · #144).
+# No es contenido editorial por marca: es dato operacional de coordinacion interna,
+# por eso vive en SQLite. La fachada delega 1:1 en db.py.
+
+
+def crear_evento_rota(
+    titulo: str,
+    *,
+    fecha: str = "",
+    hora: str = "",
+    contenido: str = "",
+    nota: str = "",
+) -> dict[str, Any]:
+    return db.crear_evento_rota(titulo, fecha=fecha, hora=hora, contenido=contenido, nota=nota)
+
+
+def listar_eventos_rota(
+    desde: str | None = None, hasta: str | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_eventos_rota(desde=desde, hasta=hasta)
+
+
+def obtener_evento_rota(evento_id: str) -> dict[str, Any] | None:
+    return db.obtener_evento_rota(evento_id)
+
+
+def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_evento_rota(evento_id, campos)
+
+
+def borrar_evento_rota(evento_id: str) -> bool:
+    return db.borrar_evento_rota(evento_id)
+
+
+def crear_turno_rota(
+    semana: str,
+    evento_id: str,
+    *,
+    miembro_id: str = "",
+    miembro_nombre: str = "",
+    estado: str = ESTADO_ROTA_PROPUESTO,
+    override: bool = False,
+    motivo: str = "",
+) -> dict[str, Any]:
+    return db.crear_turno_rota(
+        semana,
+        evento_id,
+        miembro_id=miembro_id,
+        miembro_nombre=miembro_nombre,
+        estado=estado,
+        override=override,
+        motivo=motivo,
+    )
+
+
+def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_turnos_rota(semana=semana)
+
+
+def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
+    return db.obtener_turno_rota(turno_id)
+
+
+def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_turno_rota(turno_id, campos)
+
+
+def borrar_turnos_semana_rota(semana: str) -> int:
+    return db.borrar_turnos_semana_rota(semana)
+
+
+def aprobar_semana_rota(semana: str) -> int:
+    return db.aprobar_semana_rota(semana)

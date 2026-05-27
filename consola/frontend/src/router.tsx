@@ -23,6 +23,7 @@ const Agentes = lazy(() => import("@/pages/Agentes"));
 const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
+const Rota = lazy(() => import("@/pages/Rota"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
@@ -54,6 +55,7 @@ export const router = createBrowserRouter([
       { path: "agentes", element: <Agentes /> },
       { path: "agentes/:id", element: <DetalleAgente /> },
       { path: "tareas", element: <Tareas /> },
+      { path: "rota", element: <Rota /> },
       { path: "monitor", element: <Monitor /> },
       // Ajustes
       { path: "configuracion", element: <Configuracion /> },

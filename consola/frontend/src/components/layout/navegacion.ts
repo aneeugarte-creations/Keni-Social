@@ -2,6 +2,7 @@ import {
   Activity,
   BarChart3,
   Bot,
+  CalendarClock,
   Globe,
   ImagePlus,
   Lightbulb,
@@ -130,6 +131,13 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Pendientes",
         icono: ListTodo,
         descripcion: "Tareas por proyecto, con su estado; ábrelas en el asistente.",
+      },
+      {
+        ruta: "/rota",
+        etiqueta: "Parrilla y rota",
+        icono: CalendarClock,
+        descripcion:
+          "Eventos de la semana + la rota del equipo: Keni propone (rota los sábados), tú apruebas y publicas.",
       },
       {
         ruta: "/monitor",

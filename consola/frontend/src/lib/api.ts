@@ -20,6 +20,9 @@ import type {
   CuerpoActualizarPublicacion,
   CuerpoActualizarSkill,
   CuerpoActualizarTarea,
+  CuerpoActualizarTurnoRota,
+  CuerpoActualizarEventoRota,
+  CuerpoAprobarRota,
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
@@ -31,6 +34,8 @@ import type {
   CuerpoCrearPublicacionesLote,
   CuerpoCrearSkill,
   CuerpoCrearTarea,
+  CuerpoCrearEventoRota,
+  CuerpoProponerRota,
   CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
   CuerpoEjecutarSkillUrl,
@@ -111,6 +116,12 @@ import type {
   RespuestaSugerencia,
   RespuestaSugerencias,
   RespuestaTareas,
+  RespuestaEquipoRota,
+  RespuestaEventosRota,
+  RespuestaEventoRota,
+  RespuestaTurnoRota,
+  RotaSemana,
+  MiSemanaRota,
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
@@ -660,6 +671,36 @@ export const api = {
     peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   abrirTarea: (id: string) =>
     peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}/abrir`, { metodo: "POST" }),
+
+  // --- Rota de horarios del equipo (F4 · #144) ---
+  rotaEquipo: (signal?: AbortSignal) =>
+    peticion<RespuestaEquipoRota>("/rota/equipo", { signal }),
+  rotaEventos: (params: { desde?: string; hasta?: string } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaEventosRota>(`/rota/eventos${query(params)}`, { signal }),
+  crearEventoRota: (cuerpo: CuerpoCrearEventoRota) =>
+    peticion<RespuestaEventoRota>("/rota/eventos", { metodo: "POST", json: cuerpo }),
+  actualizarEventoRota: (id: string, cuerpo: CuerpoActualizarEventoRota) =>
+    peticion<RespuestaEventoRota>(`/rota/eventos/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarEventoRota: (id: string) =>
+    peticion<RespuestaMensaje>(`/rota/eventos/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  rotaSemana: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+    peticion<RotaSemana>(`/rota/semana${query(params)}`, { signal }),
+  proponerRota: (cuerpo: CuerpoProponerRota) =>
+    peticion<RotaSemana>("/rota/proponer", { metodo: "POST", json: cuerpo }),
+  actualizarTurnoRota: (id: string, cuerpo: CuerpoActualizarTurnoRota) =>
+    peticion<RespuestaTurnoRota>(`/rota/turnos/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  aprobarRota: (cuerpo: CuerpoAprobarRota) =>
+    peticion<RotaSemana>("/rota/semana/aprobar", { metodo: "POST", json: cuerpo }),
+  miSemanaRota: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+    peticion<MiSemanaRota>(`/rota/mi-semana${query(params)}`, { signal }),
+  exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string } = {}) =>
+    descargar(`/rota/export.${formato}${query(params)}`),
 
   // --- Metricas ---
   metricasOpciones: (signal?: AbortSignal) =>
