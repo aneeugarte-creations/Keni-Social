@@ -39,17 +39,22 @@ from ..schema import (
 )
 from .base import CuentaNoEncontrada, engagement_pct
 
-# Claves de marca EDITORIAL: son el `id_metricas` (guion_bajo) del catalogo UNICO
-# de marca que define `consola/src/keni_consola/marcas.py` (#82/#102). Una sola
-# identidad de marca, dos formas: `id` canonico (slug-guion) para el contenido y
-# `id_metricas` (guion_bajo) en la frontera con metricas; aqui usamos esta ultima.
-# Las 5 marcas editoriales son: unotv, claro_sports, nacion_gamer, piso_15, fundacion.
-# `claro_sports_tv` y `csport_golf` NO son marcas editoriales: son cuentas hermanas
-# de Claro Sports que el equipo promociona en su reporte (el golf es un sub-vertical,
-# no una marca). El guard `tests/test_muestra.py` ancla estos ids al catalogo canonico.
+# PERFILES de muestra por cuenta: cifras creibles (visualizaciones/mes, plataformas,
+# tema) ancladas a la realidad de AMX. Estan KEYED por `id_metricas` (guion_bajo).
 #
-# marca -> (nombre, visualizaciones/mes, plataformas, tema)
-_MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
+# Las CUENTAS que sirve la muestra ya NO se hardcodean aqui: se DERIVAN del cliente
+# activo (`keni_shared.marcas`/`keni_shared.cuentas`, externalizado a config en #135;
+# por defecto AMX). Este diccionario solo aporta el PERFIL de cada id; las cuentas de
+# un cliente sin perfil propio caen a `_PERFIL_DEFECTO`. Asi, cambiar de cliente =
+# cambiar el `.toml`, sin tocar este modulo, y la muestra sigue al catalogo.
+#
+# Para el cliente AMX por defecto, los perfiles cubren exactamente las 5 marcas
+# editoriales (unotv, claro_sports, nacion_gamer, piso_15, fundacion) MAS las 2
+# cuentas hermanas de Claro Sports (claro_sports_tv, csport_golf; el golf es un
+# sub-vertical, no una marca). El guard `tests/test_muestra.py` ancla esto al catalogo.
+#
+# id_metricas -> (nombre, visualizaciones/mes, plataformas, tema)
+_PERFILES: dict[str, tuple[str, int, list[Plataforma], str]] = {
     "claro_sports": (
         "Claro Sports",
         80_000_000,
@@ -97,15 +102,60 @@ _MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = {
     ),
 }
 
-# `id_metricas` de las MARCAS editoriales del catalogo unico (sin las cuentas
-# hermanas de Claro Sports, que se promocionan aparte). Ya NO se redefine aqui: se
-# DERIVA de `keni_shared.marcas` (H3/E1, fuente unica). Antes era un espejo con
-# guard (#82/#102); ahora es la misma fuente, asi que `_MARCAS` no puede divergir
-# del catalogo sin que el test estatico lo cace.
+# Perfil por defecto para cuentas de un cliente sin perfil propio en `_PERFILES`
+# (p.ej. un cliente nuevo cargado por config): cifras medias y todas las plataformas,
+# tema "social". Garantiza que la muestra responda para CUALQUIER cliente sin tocar
+# codigo, sin pretender ser tan realista como los perfiles calibrados de AMX.
+_PERFIL_DEFECTO: tuple[str, int, list[Plataforma], str] = (
+    "",  # el nombre real lo pone la etiqueta del catalogo (ver `_MARCAS`)
+    10_000_000,
+    [Plataforma.facebook, Plataforma.instagram, Plataforma.x, Plataforma.tiktok, Plataforma.youtube],
+    "social",
+)
+
+# `id_metricas` de las MARCAS editoriales del CLIENTE ACTIVO (sin las cuentas
+# hermanas de deportes). Se DERIVA de `keni_shared.marcas` (fuente unica, ahora
+# cargada de config en #135): la muestra sigue al cliente seleccionado.
 IDS_METRICAS_MARCAS: frozenset[str] = frozenset(m.id_metricas for m in _marcas.MARCAS)
-# Cuentas hermanas de Claro Sports (canal de TV + sub-vertical de golf): NO son
+# Cuentas hermanas de deportes (canal de TV + sub-vertical de golf en AMX): NO son
 # marcas. Derivadas tambien de la fuente unica `keni_shared.cuentas`.
 IDS_CUENTAS_HERMANAS: frozenset[str] = frozenset(_cuentas.CUENTAS_DEPORTES_HERMANAS)
+
+
+def _construir_marcas() -> dict[str, tuple[str, int, list[Plataforma], str]]:
+    """Cuentas que sirve la muestra: las del cliente activo + sus cuentas hermanas.
+
+    Cada id toma su perfil de `_PERFILES` (cifras AMX) o `_PERFIL_DEFECTO` si no lo
+    tiene; el nombre humano sale de la etiqueta del catalogo. Para el cliente AMX por
+    defecto coincide exactamente con los perfiles, asi que el comportamiento historico
+    (5 marcas + 2 hermanas, con sus cifras) no cambia.
+
+    ORDEN: primero los ids del cliente que tienen perfil curado, en el ORDEN de
+    `_PERFILES` (preserva la ordenacion historica que esperaba la API, p.ej. Claro
+    Sports antes que UnoTV); luego el resto de ids del cliente (sin perfil), en orden
+    de catalogo. Asi cambiar de cliente no exige re-hardcodear orden en codigo.
+    """
+    del_cliente = {m.id_metricas for m in _marcas.MARCAS} | set(_cuentas.CUENTAS_DEPORTES_HERMANAS)
+    ids: list[str] = [cid for cid in _PERFILES if cid in del_cliente]
+    ids += [
+        m.id_metricas for m in _marcas.MARCAS if m.id_metricas not in _PERFILES
+    ]
+    ids += [c for c in _cuentas.CUENTAS_DEPORTES_HERMANAS if c not in _PERFILES]
+
+    marcas_muestra: dict[str, tuple[str, int, list[Plataforma], str]] = {}
+    for cid in ids:
+        if cid in marcas_muestra:
+            continue
+        perfil = _PERFILES.get(cid, _PERFIL_DEFECTO)
+        nombre = perfil[0] or _marcas.etiqueta_por_id_metricas(cid)
+        marcas_muestra[cid] = (nombre, perfil[1], list(perfil[2]), perfil[3])
+    return marcas_muestra
+
+
+# Cuentas servidas por la muestra (derivadas del cliente activo). Reemplaza al antiguo
+# `_MARCAS` hardcodeado; se mantiene el nombre `_MARCAS` por compatibilidad con el
+# resto del modulo y sus tests.
+_MARCAS: dict[str, tuple[str, int, list[Plataforma], str]] = _construir_marcas()
 
 # peso de cada plataforma en el reparto de visualizaciones
 _PESO = {

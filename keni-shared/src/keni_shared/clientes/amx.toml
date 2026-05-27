@@ -1,0 +1,58 @@
+# Paquete de CLIENTE: AMX Contenido (UnoTV / Claro Sports) — el cliente del piloto.
+#
+# Este fichero EXTERNALIZA a configuracion las marcas y cuentas que antes estaban
+# hardcodeadas en la capa base (`marcas.py` / `cuentas.py`). Es el cliente POR
+# DEFECTO: si no se selecciona otro (env `KENI_CLIENTE` / `KENI_CLIENTE_CONFIG`),
+# `keni_shared` carga este, asi que el comportamiento historico no cambia.
+#
+# ANADIR UN CLIENTE NUEVO = anadir otro `.toml` en este directorio (o apuntar
+# `KENI_CLIENTE_CONFIG` a uno propio) con la misma forma; NO hay que tocar codigo.
+#
+# Forma del fichero:
+#   id            slug del cliente (informativo).
+#   nombre        nombre humano del cliente.
+#   [[marca]]     una por marca editorial de primer nivel. Tres campos:
+#                   id           id CANONICO (slug-guion), p.ej. "claro-sports".
+#                   etiqueta     nombre humano con acentos, p.ej. "Claro Sports".
+#                   id_metricas  forma guion_bajo para la frontera con metricas.
+#   [cuentas]     cuenta principal de deportes + sus cuentas hermanas (NO son marcas).
+#                   deportes_principal   id_metricas de la marca ancla del reporte.
+#                   deportes_hermanas    ids (guion_bajo) de cuentas hermanas.
+
+id = "amx"
+nombre = "AMX Contenido"
+
+# Las 5 marcas de primer nivel. El golf NO es marca: es un sub-vertical editorial
+# de Claro Sports (va como cuenta hermana, abajo).
+[[marca]]
+id = "unotv"
+etiqueta = "UnoTV"
+id_metricas = "unotv"
+
+[[marca]]
+id = "claro-sports"
+etiqueta = "Claro Sports"
+id_metricas = "claro_sports"
+
+[[marca]]
+id = "nacion-gamer"
+etiqueta = "Nación Gamer"
+id_metricas = "nacion_gamer"
+
+[[marca]]
+id = "piso-15"
+etiqueta = "Piso 15"
+id_metricas = "piso_15"
+
+[[marca]]
+id = "fundacion"
+etiqueta = "Fundación"
+id_metricas = "fundacion"
+
+[cuentas]
+# Cuenta principal del reporte de deportes (su id_metricas). Coincide con la marca
+# claro-sports.
+deportes_principal = "claro_sports"
+# Cuentas hermanas de Claro Sports (canal de TV + sub-vertical de golf). NO son
+# marcas del catalogo.
+deportes_hermanas = ["claro_sports_tv", "csport_golf"]
