@@ -15,6 +15,7 @@ Cubre:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from keni_consola import generaciones, preferencias
 from keni_consola.api import skills
@@ -162,6 +163,103 @@ def test_cwd_ejecucion_skills_apunta_a_skills_copy(monkeypatch, tmp_path):
     assert dom_skills.cwd_ejecucion_skills() == tmp_path / "skills-copy"
     # La fachada reexpone el mismo resultado.
     assert skills._cwd_ejecucion_skills() == tmp_path / "skills-copy"
+
+
+# --------------------------------------------------------------------------- #
+# cwd_skills: fallback de descubrimiento de skills (#133)                      #
+# --------------------------------------------------------------------------- #
+#
+# `cwd_skills()` debe resolver una RAIZ que contenga `.claude/skills` (directa o via
+# `skills-copy/`). Preferencia: env KENI_SKILLS_CWD -> repo de dev -> cache del plugin
+# (CLAUDE_PLUGIN_ROOT, luego ~/.claude/plugins/**/keni-social) -> cwd actual.
+
+
+def _aislar_cwd_skills(monkeypatch, home: Path):
+    """Aisla cwd_skills del entorno real: HOME -> tmp y limpia los envs implicados."""
+    monkeypatch.setattr(dom_skills.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("KENI_SKILLS_CWD", raising=False)
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+
+
+def _crear_skills(raiz: Path) -> Path:
+    """Crea la estructura de skills del plugin/repo (`skills-copy/.claude/skills`) bajo `raiz`."""
+    (raiz / "skills-copy" / ".claude" / "skills").mkdir(parents=True)
+    return raiz
+
+
+def test_cwd_skills_repo_de_dev_presente(monkeypatch, tmp_path):
+    # Con el repo de dev en disco (`~/projects/keni-social` con skills) se usa ese, intacto.
+    home = tmp_path / "home"
+    repo = _crear_skills(home / "projects" / "keni-social")
+    _aislar_cwd_skills(monkeypatch, home)
+    assert dom_skills.cwd_skills() == repo
+
+
+def test_cwd_skills_fallback_a_claude_plugin_root(monkeypatch, tmp_path):
+    # Sin repo de dev, pero con CLAUDE_PLUGIN_ROOT apuntando a un plugin con skills:
+    # se usa la raiz del plugin (el caso del community manager que solo instalo el plugin).
+    home = tmp_path / "home"
+    (home / "projects").mkdir(parents=True)  # existe ~/projects pero SIN keni-social
+    plugin = _crear_skills(tmp_path / "plugin_root")
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(plugin))
+    assert dom_skills.cwd_skills() == plugin
+
+
+def test_cwd_skills_fallback_a_cache_de_plugins(monkeypatch, tmp_path):
+    # Sin repo de dev y sin CLAUDE_PLUGIN_ROOT: se descubre NUESTRO plugin en la cache
+    # `~/.claude/plugins/**/keni-social` (clon de marketplace).
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    plugin = _crear_skills(
+        home / ".claude" / "plugins" / "marketplaces" / "kenitech" / "plugins" / "keni-social"
+    )
+    _aislar_cwd_skills(monkeypatch, home)
+    assert dom_skills.cwd_skills() == plugin
+
+
+def test_cwd_skills_prioriza_plugin_root_sobre_cache(monkeypatch, tmp_path):
+    # CLAUDE_PLUGIN_ROOT manda sobre el barrido de la cache: es la senal directa.
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    _crear_skills(home / ".claude" / "plugins" / "keni-social")  # tambien en cache
+    plugin_env = _crear_skills(tmp_path / "plugin_env")
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(plugin_env))
+    assert dom_skills.cwd_skills() == plugin_env
+
+
+def test_cwd_skills_repo_de_dev_gana_al_plugin(monkeypatch, tmp_path):
+    # El flujo de dev no se rompe: con repo Y plugin presentes, gana el repo de dev.
+    home = tmp_path / "home"
+    repo = _crear_skills(home / "projects" / "keni-social")
+    _crear_skills(home / ".claude" / "plugins" / "keni-social")
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(_crear_skills(tmp_path / "otro")))
+    assert dom_skills.cwd_skills() == repo
+
+
+def test_cwd_skills_sin_skills_cae_al_cwd_actual(monkeypatch, tmp_path):
+    # Ni repo ni plugin con skills: ultimo recurso = cwd actual (compat con el viejo flujo).
+    home = tmp_path / "home"
+    home.mkdir(parents=True)
+    cwd = tmp_path / "cwd_actual"
+    cwd.mkdir()
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setattr(dom_skills.Path, "cwd", classmethod(lambda cls: cwd))
+    assert dom_skills.cwd_skills() == cwd
+
+
+def test_cwd_skills_env_explicito_se_respeta_aunque_sin_skills(monkeypatch, tmp_path):
+    # KENI_SKILLS_CWD es override explicito: se respeta si es un dir existente, contenga
+    # o no skills (lo usan operadores/tests). No debe caer al fallback del plugin.
+    home = tmp_path / "home"
+    _crear_skills(home / "projects" / "keni-social")  # habria repo, pero el env manda
+    override = tmp_path / "override"
+    override.mkdir()
+    _aislar_cwd_skills(monkeypatch, home)
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(override))
+    assert dom_skills.cwd_skills() == override
 
 
 # --------------------------------------------------------------------------- #
