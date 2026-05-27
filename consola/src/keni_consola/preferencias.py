@@ -17,6 +17,7 @@ import os
 import tomllib
 from pathlib import Path
 
+from . import rutas
 from .io_atomico import escribir_atomico
 
 # Niveles validos de `claude --effort` (ver `claude --help`), de menor a mayor
@@ -36,11 +37,15 @@ _CABECERA = (
 
 
 def ruta_preferencias() -> Path:
-    """Ruta del archivo de preferencias. `KENI_CONSOLA_PREFERENCIAS` la sobreescribe (tests)."""
+    """Ruta del archivo de preferencias.
+
+    `KENI_CONSOLA_PREFERENCIAS` la sobreescribe (override de maxima prioridad; tests). Si
+    no, cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/preferencias.toml`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_PREFERENCIAS")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "preferencias.toml"
+    return rutas.dir_config() / "preferencias.toml"
 
 
 # --------------------------------------------------------------------------- #

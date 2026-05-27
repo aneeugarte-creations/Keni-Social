@@ -39,6 +39,17 @@ Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API a
 sqlite3. Cada operacion abre y cierra su propia conexion (la app es local y de
 poca concurrencia; mantenerlo simple evita estado global y problemas de hilos con
 el `TestClient`).
+
+CONCURRENCIA (servicio compartido de una replica, #130): cada conexion abre en WAL
+(`PRAGMA journal_mode=WAL`) para que lectores y un escritor convivan sin bloquearse, y
+con `PRAGMA busy_timeout` para que la contencion espere (acotada) en vez de fallar al
+instante con `database is locked`. Sirve para un servicio multiusuario de UNA replica.
+
+FUTURO BACKEND POSTGRES (#130): para escalar a varias replicas SQLite no basta (un solo
+fichero, un escritor). El plan es sustituir esta capa por Postgres. La capa esta acotada
+(toda la persistencia operacional pasa por `conectar()` y consultas parametrizadas), asi
+que el cambio se localiza aqui SIN tocar las firmas publicas. NO se implementa todavia:
+solo se deja la nota y el punto de extension (`conectar()`).
 """
 
 from __future__ import annotations
@@ -52,6 +63,7 @@ from pathlib import Path
 from typing import Any
 
 # Allowlists de dominio (neutras, sin acoplar a SQLite): viven en `estados.py`.
+from . import rutas
 from .estados import (
     ESTADO_COMERCIAL_ACTIVA,
     ESTADOS_COMERCIAL,
@@ -84,22 +96,39 @@ __all__ = [
 
 
 def ruta_db() -> Path:
-    """Ruta del consola.db. `KENI_CONSOLA_DB` la sobreescribe (tests)."""
+    """Ruta del consola.db.
+
+    `KENI_CONSOLA_DB` la sobreescribe (override de maxima prioridad; tests). Si no,
+    cuelga de la raiz de estado unica (`rutas.dir_config()`): local
+    `${XDG_CONFIG_HOME:-~/.config}/keni-social/consola.db`, o bajo `KENI_DATA_DIR`.
+    """
     if (p := os.environ.get("KENI_CONSOLA_DB")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "consola.db"
+    return rutas.dir_config() / "consola.db"
+
+
+# Espera (ms) ante contencion antes de fallar con `database is locked` (#130).
+_BUSY_TIMEOUT_MS = 5000
 
 
 def _conectar() -> sqlite3.Connection:
     """Abre la conexion a la base, crea el esquema on-demand y migra el JSON viejo.
 
     `row_factory = sqlite3.Row` para poder leer filas como mapeos por nombre.
+
+    CONCURRENCIA (#130): WAL (`journal_mode=WAL`) deja convivir varios lectores con un
+    escritor sin `database is locked`, y `busy_timeout` hace que la contencion espere
+    (acotada) en vez de fallar al instante. Necesario para un servicio multiusuario de
+    una replica. El WAL es persistente (queda fijado en el fichero), pero lo reafirmamos
+    en cada conexion por idempotencia (la base es local y puede recrearse).
     """
     ruta = ruta_db()
     ruta.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(ruta))
+    con = sqlite3.connect(str(ruta), timeout=_BUSY_TIMEOUT_MS / 1000)
     con.row_factory = sqlite3.Row
+    con.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
+    con.execute("PRAGMA journal_mode = WAL")
+    con.execute("PRAGMA synchronous = NORMAL")
     _crear_esquema(con)
     _migrar_tareas_json(con)
     return con
@@ -187,11 +216,14 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
 
 
 def _ruta_tareas_json() -> Path:
-    """Ruta del viejo tareas.json (misma convencion que la feature historica)."""
+    """Ruta del viejo tareas.json (misma convencion que la feature historica).
+
+    `KENI_CONSOLA_TAREAS` la sobreescribe (tests); si no, cuelga de la raiz de estado
+    unica (`rutas.dir_config()`), mismo subpath `keni-social/tareas.json` que antes.
+    """
     if (p := os.environ.get("KENI_CONSOLA_TAREAS")):
         return Path(p).expanduser()
-    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "keni-social" / "tareas.json"
+    return rutas.dir_config() / "tareas.json"
 
 
 def _migrar_tareas_json(con: sqlite3.Connection) -> None:
