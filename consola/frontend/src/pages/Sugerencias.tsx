@@ -1,13 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertTriangle,
-  Bot,
-  Inbox,
-  Lightbulb,
-  Loader2,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Inbox, Lightbulb, Loader2, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -17,15 +9,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Markdown } from "@/components/ui/Markdown";
@@ -41,15 +24,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type {
-  AuditoriaAutodesarrollo,
-  CuerpoFlagAutodesarrollo,
-  EstadoAutodesarrollo,
-  Sugerencia,
-} from "@/types";
+import type { Sugerencia } from "@/types";
 
 const CLAVE_SUGERENCIAS = ["sugerencias"] as const;
-const CLAVE_AUTODESARROLLO = ["autodesarrollo"] as const;
 
 const CABECERA = {
   titulo: "Buzón de sugerencias",
@@ -80,34 +57,6 @@ const ESTADO_VARIANTE: Record<string, VarianteBadge> = {
   descartada: "error",
 };
 
-// Etiquetas y variante del estado de un intento de AUTO-DESARROLLO (#109).
-const AUTODES_ESTADO_LABEL: Record<string, string> = {
-  bloqueada: "Bloqueada",
-  rechazada: "Rechazada",
-  parked: "Necesita revisión",
-  mergeada: "Mergeada",
-  error: "Error",
-};
-
-const AUTODES_ESTADO_VARIANTE: Record<string, VarianteBadge> = {
-  bloqueada: "secondary",
-  rechazada: "destructive",
-  parked: "aviso",
-  mergeada: "ok",
-  error: "error",
-};
-
-const AUTODES_MOTIVO_LABEL: Record<string, string> = {
-  "flag-off": "El lazo estaba desactivado",
-  "rutas-sensibles": "Tocó rutas sensibles (rechazado por alcance)",
-  "supera-cap": "El cambio supera el límite de tamaño",
-  "sin-cambios": "No produjo cambios",
-  "ci-roja": "La CI no pasó en verde",
-  "generacion-fallida": "El asistente falló al implementar",
-  "merge-fallido": "No se pudo hacer fast-forward a main",
-  excepcion: "Error inesperado",
-};
-
 function etiqueta(mapa: Record<string, string>, clave: string): string {
   return mapa[clave] ?? clave;
 }
@@ -135,37 +84,18 @@ export default function Sugerencias() {
     queryFn: ({ signal }) => api.sugerencias(signal),
   });
 
-  const autodes = useQuery({
-    queryKey: CLAVE_AUTODESARROLLO,
-    queryFn: ({ signal }) => api.autodesarrollo(signal),
-  });
-
   const sugerencias = query.data?.sugerencias ?? [];
   const categorias = query.data?.categorias ?? Object.keys(CATEGORIA_LABEL);
   const estados = query.data?.estados ?? Object.keys(ESTADO_LABEL);
-  const autoActivo = autodes.data?.activo ?? false;
-
-  // Último intento de auto-desarrollo por sugerencia (para mostrar su estado en la tarjeta).
-  const auditoriaPorSugerencia = React.useMemo(() => {
-    const mapa = new Map<string, AuditoriaAutodesarrollo>();
-    for (const entrada of autodes.data?.auditoria ?? []) {
-      // La auditoría viene reciente primero: el primero por id es el más nuevo.
-      if (!mapa.has(entrada.sugerencia_id)) mapa.set(entrada.sugerencia_id, entrada);
-    }
-    return mapa;
-  }, [autodes.data?.auditoria]);
 
   return (
     <>
       <PageHeader {...CABECERA} />
-      <PanelAutodesarrollo estado={autodes.data} cargando={autodes.isPending} />
       <div className="mt-6 grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <NuevaSugerencia categorias={categorias} />
         <ListaSugerencias
           sugerencias={sugerencias}
           estados={estados}
-          autoActivo={autoActivo}
-          auditoriaPorSugerencia={auditoriaPorSugerencia}
           cargando={query.isPending}
           error={query.isError ? mensajeError(query.error) : null}
           onReintentar={() => void query.refetch()}
@@ -173,172 +103,6 @@ export default function Sugerencias() {
         />
       </div>
     </>
-  );
-}
-
-// --- Auto-desarrollo (#109): flag peligroso + auditoría --------------------
-
-function PanelAutodesarrollo({
-  estado,
-  cargando,
-}: {
-  estado: EstadoAutodesarrollo | undefined;
-  cargando: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const [confirmaAbierto, setConfirmaAbierto] = React.useState(false);
-  const [riesgoMarcado, setRiesgoMarcado] = React.useState(false);
-
-  const cambiarFlag = useMutation({
-    mutationFn: (cuerpo: CuerpoFlagAutodesarrollo) => api.flagAutodesarrollo(cuerpo),
-    onSuccess: (res) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_AUTODESARROLLO });
-      toast.success(res.mensaje ?? "Listo");
-      setConfirmaAbierto(false);
-      setRiesgoMarcado(false);
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  if (cargando || !estado) {
-    return <Skeleton className="h-24 w-full rounded-md" />;
-  }
-
-  const activo = estado.activo;
-  const fijadoPorEntorno = estado.fijado_por_entorno;
-
-  return (
-    <Card
-      className={cn(
-        "border-l-4",
-        activo ? "border-l-amber-500" : "border-l-muted-foreground/30",
-      )}
-    >
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Bot className="h-4 w-4" />
-          Auto-desarrollo
-          <Badge variant={activo ? "aviso" : "secondary"} className="font-normal">
-            {activo ? "Activado" : "Desactivado"}
-          </Badge>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <p className="flex items-start gap-2 font-medium text-amber-700 dark:text-amber-300">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            Función peligrosa. Cuando está activada, la app puede implementar una
-            sugerencia con IA y mergearla a <code>main</code> ella sola.
-          </p>
-          <p className="mt-2 text-muted-foreground">
-            Cada intento corre aislado en un worktree efímero, solo mergea si la CI local
-            pasa en verde, rechaza cambios a rutas sensibles o que superen{" "}
-            {estado.cap_lineas} líneas, no recibe secretos, y queda registrado en la
-            auditoría. Aun así, revisa lo que se mergea. Por defecto está apagado.
-          </p>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {fijadoPorEntorno
-              ? "Fijado por la variable de entorno KENI_AUTODESARROLLO (no se puede cambiar desde aquí)."
-              : activo
-                ? "El lazo está activo. Usa «Implementar» en una sugerencia para lanzarlo."
-                : "Actívalo solo cuando quieras que la app implemente sugerencias sola."}
-          </p>
-          {activo ? (
-            <Button
-              variant="outline"
-              disabled={fijadoPorEntorno || cambiarFlag.isPending}
-              onClick={() => cambiarFlag.mutate({ activo: false })}
-            >
-              {cambiarFlag.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Desactivar
-            </Button>
-          ) : (
-            <Button
-              variant="destructive"
-              disabled={fijadoPorEntorno}
-              onClick={() => setConfirmaAbierto(true)}
-            >
-              Activar
-            </Button>
-          )}
-        </div>
-
-        {estado.auditoria.length > 0 && (
-          <Auditoria entradas={estado.auditoria} />
-        )}
-      </CardContent>
-
-      <Dialog open={confirmaAbierto} onOpenChange={setConfirmaAbierto}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              Activar auto-desarrollo
-            </DialogTitle>
-            <DialogDescription>
-              Vas a permitir que la app implemente sugerencias con IA y las mergee a{" "}
-              <code>main</code> automáticamente. Hay gates de seguridad (sandbox, CI verde,
-              límites de alcance, sin secretos, auditoría), pero el riesgo residual existe:
-              revisa siempre lo que se mergea y desactívalo al terminar.
-            </DialogDescription>
-          </DialogHeader>
-          <label className="flex items-start gap-2 text-sm">
-            <Checkbox
-              checked={riesgoMarcado}
-              onCheckedChange={(v) => setRiesgoMarcado(v === true)}
-              className="mt-0.5"
-            />
-            <span>Entiendo el riesgo y quiero activar el auto-desarrollo.</span>
-          </label>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmaAbierto(false)}>
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={!riesgoMarcado || cambiarFlag.isPending}
-              onClick={() => cambiarFlag.mutate({ activo: true, confirmo_riesgo: true })}
-            >
-              {cambiarFlag.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : null}
-              Activar de todos modos
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  );
-}
-
-function Auditoria({ entradas }: { entradas: AuditoriaAutodesarrollo[] }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Auditoría reciente</p>
-      <ul className="space-y-1 text-sm">
-        {entradas.slice(0, 8).map((e) => (
-          <li key={e.id} className="flex flex-wrap items-center gap-2">
-            <Badge
-              variant={AUTODES_ESTADO_VARIANTE[e.estado] ?? "secondary"}
-              className="font-normal"
-            >
-              {AUTODES_ESTADO_LABEL[e.estado] ?? e.estado}
-            </Badge>
-            <span className="min-w-0 truncate">{e.titulo || e.sugerencia_id}</span>
-            {e.estado === "mergeada" && e.sha ? (
-              <code className="text-xs text-muted-foreground">{e.sha.slice(0, 8)}</code>
-            ) : e.motivo ? (
-              <span className="text-xs text-muted-foreground">
-                {AUTODES_MOTIVO_LABEL[e.motivo] ?? e.motivo}
-              </span>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -452,8 +216,6 @@ function NuevaSugerencia({ categorias }: { categorias: string[] }) {
 function ListaSugerencias({
   sugerencias,
   estados,
-  autoActivo,
-  auditoriaPorSugerencia,
   cargando,
   error,
   onReintentar,
@@ -461,8 +223,6 @@ function ListaSugerencias({
 }: {
   sugerencias: Sugerencia[];
   estados: string[];
-  autoActivo: boolean;
-  auditoriaPorSugerencia: Map<string, AuditoriaAutodesarrollo>;
   cargando: boolean;
   error: string | null;
   onReintentar: () => void;
@@ -502,13 +262,7 @@ function ListaSugerencias({
   return (
     <div className="space-y-3">
       {sugerencias.map((s) => (
-        <TarjetaSugerencia
-          key={s.id}
-          sugerencia={s}
-          estados={estados}
-          autoActivo={autoActivo}
-          ultimoIntento={auditoriaPorSugerencia.get(s.id)}
-        />
+        <TarjetaSugerencia key={s.id} sugerencia={s} estados={estados} />
       ))}
     </div>
   );
@@ -517,27 +271,14 @@ function ListaSugerencias({
 function TarjetaSugerencia({
   sugerencia,
   estados,
-  autoActivo,
-  ultimoIntento,
 }: {
   sugerencia: Sugerencia;
   estados: string[];
-  autoActivo: boolean;
-  ultimoIntento: AuditoriaAutodesarrollo | undefined;
 }) {
   const queryClient = useQueryClient();
 
   const invalidar = () =>
     void queryClient.invalidateQueries({ queryKey: CLAVE_SUGERENCIAS });
-
-  const implementar = useMutation({
-    mutationFn: () => api.implementarSugerencia({ sugerencia_id: sugerencia.id }),
-    onSuccess: (res) => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_AUTODESARROLLO });
-      toast.success(res?.mensaje ?? "Implementación lanzada");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
 
   const cambiarEstado = useMutation({
     mutationFn: (estado: string) => api.actualizarSugerencia(sugerencia.id, { estado }),
@@ -575,27 +316,6 @@ function TarjetaSugerencia({
               >
                 {etiqueta(ESTADO_LABEL, sugerencia.estado)}
               </Badge>
-              {ultimoIntento && (
-                <Tooltip
-                  label={
-                    ultimoIntento.estado === "mergeada" && ultimoIntento.sha
-                      ? `Auto-desarrollo: mergeada (${ultimoIntento.sha.slice(0, 8)})`
-                      : `Auto-desarrollo: ${
-                          AUTODES_MOTIVO_LABEL[ultimoIntento.motivo ?? ""] ??
-                          ultimoIntento.motivo ??
-                          AUTODES_ESTADO_LABEL[ultimoIntento.estado]
-                        }`
-                  }
-                >
-                  <Badge
-                    variant={AUTODES_ESTADO_VARIANTE[ultimoIntento.estado] ?? "secondary"}
-                    className="font-normal"
-                  >
-                    <Bot className="mr-1 h-3 w-3" />
-                    {AUTODES_ESTADO_LABEL[ultimoIntento.estado] ?? ultimoIntento.estado}
-                  </Badge>
-                </Tooltip>
-              )}
             </div>
             {(sugerencia.autor || fecha) && (
               <p className="text-xs text-muted-foreground">
@@ -640,23 +360,6 @@ function TarjetaSugerencia({
         </div>
         {sugerencia.detalle && (
           <Markdown className="text-muted-foreground">{sugerencia.detalle}</Markdown>
-        )}
-        {autoActivo && (
-          <div className="flex justify-end border-t pt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => implementar.mutate()}
-              disabled={implementar.isPending}
-            >
-              {implementar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Bot className="h-4 w-4" />
-              )}
-              Implementar con IA
-            </Button>
-          </div>
         )}
       </CardContent>
     </Card>

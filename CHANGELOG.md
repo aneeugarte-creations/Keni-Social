@@ -7,30 +7,19 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
-### Auto-desarrollo del buzón de sugerencias (experimental, PELIGROSO, default OFF)
+### Eliminado el lazo de auto-merge/auto-desarrollo del buzón (#132)
 
-- El **buzón de sugerencias** puede ahora **cerrar el lazo**: implementar una sugerencia
-  con IA (`claude -p`) y **mergearla sola a `main`**. Es una capacidad potente y
-  arriesgada, así que vive **detrás de un feature flag DESACTIVADO por defecto** y bajo un
-  **suelo de seguridad innegociable** (los 6 gates de #109). Con el flag apagado, el buzón
-  se comporta exactamente como hasta hoy (solo recoge ideas).
-- **Los 6 gates de seguridad**: (1) **default OFF** con flag por entorno
-  (`KENI_AUTODESARROLLO`, kill switch en caliente) o config local; (2) **ejecución
-  aislada** en un git **worktree efímero** en carpeta temporal, nunca en el árbol vivo;
-  (3) **CI-verde-o-no-merge**: solo se mergea si el mirror local (`KENI_AUTODESARROLLO_CI`)
-  pasa en verde, si no queda **parked** (revisión humana); (4) **caps de alcance**: se
-  **rechaza** cualquier diff que toque rutas sensibles (secretos, persistencia base,
-  credenciales, `.github/`, `keni-shared/`, deps) o que **supere el cap de tamaño**
-  (400 líneas por defecto); (5) **sin secretos**: el subproceso recibe un entorno saneado
-  (sin `*_API_KEY`/`*_TOKEN`/`KENI_CONSOLA_SECRETOS`) y cwd restringido al clon; (6)
-  **kill switch + auditoría**: log persistente de cada intento (sugerencia → rama → CI →
-  mergeado/parked/rechazado con SHA o motivo).
-- **UI**: nuevo panel de *Auto-desarrollo* en la página del buzón, con advertencia de
-  riesgo prominente, activación tras **confirmar el riesgo** en un diálogo, botón
-  *Implementar con IA* por sugerencia (solo con el flag activo) y la **auditoría reciente**.
-  Endpoints `GET /api/autodesarrollo`, `POST /api/autodesarrollo/flag` y
-  `POST /api/autodesarrollo/implementar`. Ver `docs/autodesarrollo.md` (incluye el **riesgo
-  residual**).
+- Se **elimina del producto entregable** el lazo de auto-desarrollo del buzón de
+  sugerencias (nunca llegó a publicarse). Permitía que la Consola implementara una
+  sugerencia con IA y **mergeara/pusheara sola a `main`** (`git push origin HEAD:main`)
+  y ejecutara un comando de CI arbitrario configurable por entorno. Embebido en una app
+  web local sin autenticación, era una **superficie de RCE/exfiltración fuera de la misión**
+  de una herramienta de redes sociales.
+- Quitados el dominio `keni_consola.autodesarrollo`, su capa HTTP
+  `keni_consola.api.autodesarrollo` (endpoints `/api/autodesarrollo*`), la inyección
+  `disparar_autodesarrollo` de `crear_app`, el panel/botones de auto-desarrollo del frontend
+  y la documentación asociada. El **buzón de sugerencias** sigue igual: solo recoge ideas
+  (todo local, sin push ni ejecución).
 
 ### Termómetro mundial (experimental)
 

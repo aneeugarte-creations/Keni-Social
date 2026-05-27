@@ -1192,53 +1192,6 @@ export interface CuerpoActualizarSugerencia {
   estado: string;
 }
 
-// --- Auto-desarrollo del buzón (#109): lazo que implementa Y mergea solo ---
-//
-// PELIGROSO. Default OFF. Cada intento pasa por 6 gates (sandbox, CI verde, caps de
-// alcance, sin secretos, auditoría). Estos tipos reflejan `/api/autodesarrollo`.
-
-/** Una entrada del log de auditoría de un intento de auto-desarrollo. */
-export interface AuditoriaAutodesarrollo {
-  id: string;
-  fecha: string;
-  sugerencia_id: string;
-  titulo: string;
-  /** "bloqueada" | "rechazada" | "parked" | "mergeada" | "error". */
-  estado: string;
-  /** Motivo cuando no se mergeó ("flag-off", "rutas-sensibles", "ci-roja", ...). */
-  motivo?: string;
-  /** SHA en main cuando el estado es "mergeada". */
-  sha?: string;
-  rama?: string;
-  ci_verde?: boolean;
-  lineas?: number;
-  ficheros?: number;
-}
-
-/** Estado del lazo de auto-desarrollo: `GET /api/autodesarrollo`. */
-export interface EstadoAutodesarrollo {
-  /** Si el lazo está activado. Default false. */
-  activo: boolean;
-  /** True si el flag viene de la variable de entorno (kill switch; no editable por UI). */
-  fijado_por_entorno: boolean;
-  /** Cap de líneas de diff por encima del cual una sugerencia queda parked. */
-  cap_lineas: number;
-  auditoria: AuditoriaAutodesarrollo[];
-  estados: string[];
-  mensaje?: string;
-}
-
-/** Cuerpo para activar/desactivar el lazo. Activar exige confirmar el riesgo. */
-export interface CuerpoFlagAutodesarrollo {
-  activo: boolean;
-  confirmo_riesgo?: boolean;
-}
-
-/** Cuerpo para disparar la implementación de una sugerencia. */
-export interface CuerpoImplementarSugerencia {
-  sugerencia_id: string;
-}
-
 // --- Respuesta generica con mensaje ---
 //
 // `RespuestaMensaje` y `ErrorApi` se GENERAN desde el backend y se re-exportan
