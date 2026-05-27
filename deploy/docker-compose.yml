@@ -62,7 +62,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/front/Dockerfile
-    image: keni-social/front:latest
+    image: keni-social/front:${KENI_VERSION:-latest}
     restart: unless-stopped
     networks:
       - edge
@@ -80,7 +80,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/back/Dockerfile
-    image: keni-social/back:latest
+    image: keni-social/back:${KENI_VERSION:-latest}
     restart: unless-stopped
     environment:
       XDG_CONFIG_HOME: /data
@@ -146,7 +146,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/worker/Dockerfile
-    image: keni-social/worker:latest
+    image: keni-social/worker:${KENI_VERSION:-latest}
     restart: unless-stopped
     environment:
       XDG_CONFIG_HOME: /data
@@ -182,7 +182,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/mcp/Dockerfile
-    image: keni-social/mcp:latest
+    image: keni-social/mcp:${KENI_VERSION:-latest}
     restart: unless-stopped
     environment:
       KENI_MCP_TRANSPORT: http

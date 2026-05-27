@@ -148,6 +148,28 @@ docker compose logs -f back     # el admin inicial (#130) se loguea aquí en el 
 El primer arranque crea el admin desde `KENI_CONSOLA_ADMIN_USER/PASS` (si la BD no
 tiene usuarios). Entra por `https://social.kenitech.io`.
 
+## Versionado de imágenes + limpieza (janitor)
+
+`deploy.sh` taggea las imágenes propias (`front`/`back`/`worker`/`mcp`) con un tag
+**versionado** (`KENI_VERSION`, timestamp por defecto; o `KENI_VERSION=1.4.0 sh deploy.sh .env`)
+y también las marca `:latest`. El compose interpola `${KENI_VERSION:-latest}`, así que un
+`docker compose build` "pelado" sin la var sigue dando `:latest` (compatible).
+
+Un **janitor** (`deploy/janitor/`, systemd timer **diario**) evita que las imágenes se
+acumulen: conserva las **5** más recientes por repo `keni-social/*` (nunca borra una en
+uso), y **solo si `/` supera el 50% usado** purga dangling + build cache (y baja la
+retención a 1). Config en `/etc/keni-janitor.conf` (`KEEP=`, `THRESHOLD=`). Instalar/operar:
+
+```bash
+sudo install -m755 deploy/janitor/keni-janitor.sh /usr/local/bin/keni-janitor
+sudo cp deploy/janitor/keni-janitor.{service,timer} /etc/systemd/system/
+printf 'KEEP=5\nTHRESHOLD=50\n' | sudo tee /etc/keni-janitor.conf
+sudo systemctl daemon-reload && sudo systemctl enable --now keni-janitor.timer
+systemctl list-timers keni-janitor.timer    # próxima ejecución
+sudo systemctl start keni-janitor.service    # correr ya una vez
+tail -n 30 /var/log/keni-janitor.log
+```
+
 ## Bootstrap de Garage (una sola vez)
 
 Garage arranca "vacío": hay que asignar layout y crear bucket + clave.

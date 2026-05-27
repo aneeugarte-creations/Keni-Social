@@ -17,8 +17,18 @@ ENVFILE="${1:-.env}"
 DC="docker compose --env-file $ENVFILE"
 VOL="keni-social_keni-data"   # volumen de estado (proyecto compose = keni-social)
 
+# Tag VERSIONADO para que el janitor (deploy/janitor) conserve N versiones por imagen y
+# permita rollback legible. Sin override => timestamp. Compose interpola ${KENI_VERSION:-latest}.
+KENI_VERSION="${KENI_VERSION:-$(date +%Y%m%d-%H%M%S)}"
+export KENI_VERSION
+echo "==> version de build: $KENI_VERSION"
+
 echo "==> [1/5] build de imagenes (back SIN Node, worker CON claude, front, mcp)"
 $DC build
+# Cada imagen versionada apunta tambien a :latest (conveniencia/rollback legible).
+for svc in front back worker mcp; do
+  docker tag "keni-social/$svc:$KENI_VERSION" "keni-social/$svc:latest" || true
+done
 
 echo "==> [2/5] stop back (quiesce consola.db antes de migrar) — empieza breve indisponibilidad"
 $DC stop back || true

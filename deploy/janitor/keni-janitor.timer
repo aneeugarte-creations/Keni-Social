@@ -1,0 +1,10 @@
+[Unit]
+Description=Ejecuta keni-janitor a diario (limpieza de imagenes Docker)
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

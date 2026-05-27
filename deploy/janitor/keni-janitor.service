@@ -1,0 +1,9 @@
+[Unit]
+Description=keni-social Docker janitor (conserva N tags + prune por disco)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/keni-janitor.conf
+ExecStart=/usr/local/bin/keni-janitor
