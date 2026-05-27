@@ -29,7 +29,7 @@ Por cada persona del equipo, en este orden:
 
    Tras instalar, recarga (`/reload-plugins` o reiniciar). Quedan disponibles las skills
    `/keni-social:copy-desde-nota`, `clip-a-copy`, `resumen-tendencia`, `nota-a-formato`
-   y `publica-preview`. **Con esto el copy ya funciona** — no hace falta nada más.
+   y `publica-meta`. **Con esto el copy ya funciona** — no hace falta nada más.
 
 2. **Conectar las métricas (opcional).** El servidor `keni-metricas` viene declarado en el
    plugin pero necesita `uv`/`uvx` para arrancar. Regístralo y compruébalo:
@@ -51,7 +51,14 @@ Por cada persona del equipo, en este orden:
    python -m keni_metricas.asistente --validar        # prueba la conexión si hay tokens
    ```
 
-3. **Elegir el modo de despliegue del MCP.** Conviven los dos (arquitectura híbrida):
+3. **Consola web (opcional, para quien prefiere botones a comandos).** Es una capa de
+   gestión LOCAL (`127.0.0.1`) sobre Claude Code y las métricas; no la necesita quien
+   trabaja por conversación. Qué es y su diseño: [`consola.md`](consola.md). Instalar y
+   arrancar (`python -m keni_consola`, dependencias del monorepo): el README del paquete,
+   [`../consola/README.md`](../consola/README.md); tocar la interfaz,
+   [`../consola/frontend/README.md`](../consola/frontend/README.md).
+
+4. **Elegir el modo de despliegue del MCP.** Conviven los dos (arquitectura híbrida):
 
    | Modo | Cuándo usarlo | Doc |
    |---|---|---|
@@ -137,7 +144,7 @@ y entender la **auto-verificación** (✅ / ⚠️ / ❌). Como operador, convie
 
 Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba).
 
-- **Hoy: preview en dry-run.** La skill `publica-preview` es el pre-vuelo final: muestra
+- **Hoy: preview en dry-run.** La skill `publica-meta` es el pre-vuelo final: muestra
   exactamente qué se publicaría en cada red (texto, conteo de caracteres, hashtags, carrusel/hilo,
   qué media acompaña) y cierra con una checklist. **No toca la red, no sube media.** También hay
   una CLI dry-run del payload de Meta: `python -m keni_metricas.publicacion ...` (solo imprime la
@@ -196,6 +203,8 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
 |---|---|
 | Cómo encajan las piezas | [`arquitectura.md`](arquitectura.md) |
 | Instalar el plugin | [`README.md`](../README.md) |
+| Consola web (qué es) | [`consola.md`](consola.md) |
+| Consola — instalar y arrancar | [`../consola/README.md`](../consola/README.md) |
 | Despliegue local por persona | [`despliegue-local.md`](despliegue-local.md) |
 | Despliegue alojado por Keni | [`despliegue-hosted.md`](despliegue-hosted.md) |
 | Credenciales y tokens | [`credenciales.md`](credenciales.md) |

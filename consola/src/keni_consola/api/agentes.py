@@ -293,11 +293,6 @@ def _argv_stream(prompt: str) -> list[str]:
     return runner.argv_claude(prompt)
 
 
-# Cada cuanto (s) persistimos el avance: con parciales llegan muchos eventos por segundo;
-# throttlear evita martillear el disco sin perder la sensacion de "en vivo".
-_THROTTLE_S = 0.4
-
-
 def _leer_stream(
     marca_id: str, run_id: str, proc: subprocess.Popen, acumulador: stream.AcumuladorStream
 ) -> None:
@@ -305,35 +300,22 @@ def _leer_stream(
 
     Por cada avance persiste `estado="ejecutando"`, el TEXTO en vivo (`acumulador.texto`,
     que va creciendo token a token) y las metricas PARCIALES (turnos/tokens). Es la fuente
-    de verdad del sondeo. Persiste al cambiar de turno (hito) o cada `_THROTTLE_S` s; nunca
-    en la linea terminal (`result`): el cierre fija el estado final. Tolerante: una linea
-    no JSON se ignora; cualquier fallo se traga (nunca un traceback crudo).
+    de verdad del sondeo. Delega la mecanica de lectura/throttle en `runner.leer_stream`
+    (compartida con las generaciones); aqui solo va la finalizacion propia del run.
     """
-    import time
 
-    if proc.stdout is None:
-        return
-    ultimo = 0.0
-    ultimo_turno = -1
-    try:
-        for linea in proc.stdout:
-            acumulador.procesar_linea(linea)
-            if acumulador.terminado:
-                continue
-            ahora = time.monotonic()
-            if acumulador.turnos != ultimo_turno or (ahora - ultimo) >= _THROTTLE_S:
-                ultimo, ultimo_turno = ahora, acumulador.turnos
-                agentes.actualizar_run(
-                    marca_id,
-                    run_id,
-                    {
-                        "estado": "ejecutando",
-                        "salida": acumulador.texto,
-                        "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
-                    },
-                )
-    except Exception:  # noqa: BLE001 -- el lector nunca debe propagar; el cierre fija el estado
-        pass
+    def _avance() -> None:
+        agentes.actualizar_run(
+            marca_id,
+            run_id,
+            {
+                "estado": "ejecutando",
+                "salida": acumulador.texto,
+                "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
+            },
+        )
+
+    runner.leer_stream(proc, acumulador, _avance)
 
 
 def _finalizar_run(

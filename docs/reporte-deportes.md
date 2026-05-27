@@ -74,14 +74,17 @@ pasa `--agenda`, el deck se genera igual con la sección de agenda como pendient
 
 ## Diseño
 
-- Vive en `mcp-metricas/src/keni_metricas/reporte_deck.py`. `python-pptx` es una
-  dependencia **opcional** (`[deck]`) e importada de forma **perezosa**: el servidor
-  MCP y la consola no la cargan.
+- El núcleo vive en `mcp-metricas/src/keni_metricas/reporte_deck.py`. `python-pptx` es una
+  dependencia **opcional** (`[deck]`) e importada de forma **perezosa** en el MCP.
 - `construir_reporte_deportes(...)` arma un dict JSON-serializable (sirve para JSON o
   para alimentar otro render); `render_pptx(...)` produce la presentación.
+- **Integrado en la Consola** (página "Reporte deportes"): backend
+  `consola/src/keni_consola/api/reporte_deportes.py` (`GET /opciones`, `POST /preview`,
+  `POST /export.pptx`) + frontend `frontend/src/pages/ReporteDeportes.tsx` (selector de rango,
+  editor de agenda, previsualización por plataforma y descarga del `.pptx`). El equipo no necesita
+  la CLI.
 
 ## Pendiente / siguientes pasos
 
-- Integración en la consola (botón "generar reporte semanal").
 - Exportación PDF nativa sin depender de LibreOffice.
 - Plantilla(s) de imagen para la línea visual de Claro Sports (ver `estudio-imagen.md`).

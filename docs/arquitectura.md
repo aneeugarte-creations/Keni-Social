@@ -1,6 +1,11 @@
 # Arquitectura
 
-Dos sistemas independientes que se complementan.
+Tres piezas independientes que se complementan: el **sistema de copy** (skills), el **MCP de
+métricas**, y la **Consola** (UI que orquesta ambos). Cada una funciona por su cuenta.
+
+Para el **estado** de cada pieza (qué está listo, qué está pausado por gating externo) la fuente
+única es [`estado-producto.md`](estado-producto.md); aquí se describe **cómo** encajan, no el
+estado.
 
 ## 1. Sistema de copy (`skills-copy/`)
 
@@ -48,13 +53,32 @@ Añadir una plataforma = un adaptador nuevo, sin tocar las tools. El esquema (`s
 
 Distribución: todo el conjunto (skills + MCP) se instala y actualiza como **plugin de Claude Code** desde un marketplace privado (ver `README.md`). La voz personal de cada quien vive en `~/.config/keni-social/voces/` para sobrevivir a las actualizaciones.
 
+## 3. Consola (`consola/`)
+
+Capa de gestión opcional para máquinas no técnicas (community managers): una UI web local que
+**orquesta** las skills de copy/imagen y el MCP de métricas, sin reemplazarlos. Backend Starlette
+(Python) + frontend React/TS/Vite/shadcn (bundle vendorizado en
+`consola/src/keni_consola/webapp/`). La generación corre **en segundo plano con `claude -p`**
+(stream-json, token a token), con un semáforo de concurrencia (`KENI_MAX_JOBS`, def. 4).
+
+```
+Consola (Starlette + React, local 127.0.0.1)
+   ├─ páginas de Trabajo: Generar copy · Imágenes · Reporte deportes · Termómetro mundial …
+   │    └─ lanzan las MISMAS skills (`claude -p`) que un usuario técnico invocaría a mano
+   ├─ páginas de métricas: dashboard / reporte sobre el MCP `keni-metricas`
+   └─ Ajustes: credenciales (`secretos.toml`, 0600), buzón de sugerencias / auto-desarrollo
+```
+
+Las skills son un plugin independiente y leen solo variables de entorno; la Consola **exporta** la
+clave del almacén único (`secretos.toml`) al subproceso al lanzar una skill. Detalle en
+[`consola.md`](consola.md); el lazo de auto-desarrollo en [`autodesarrollo.md`](autodesarrollo.md).
+
 ## Cómo encajan
 
-`copy-desde-nota` puede consultar `mejores_piezas` del MCP para ajustar el tono a lo que funcionó (paso opcional con degradación: si el MCP no está, se omite). Así el sistema que **produce** aprende del que **mide**, sin acoplarse: cada uno funciona solo.
+`copy-desde-nota` puede consultar `mejores_piezas` del MCP para ajustar el tono a lo que funcionó (paso opcional con degradación: si el MCP no está, se omite). Así el sistema que **produce** aprende del que **mide**, sin acoplarse: cada uno funciona solo. La Consola es la cara visible que reúne las tres piezas para quien no quiere usar Claude Code a pelo.
 
-## Estado / hitos
-
-- **Copy (texto):** listo (sin dependencias externas).
-- **Copy desde video/audio (`clip-a-copy`):** listo; requiere whisper.cpp + ffmpeg + modelo en local (Mac Apple Silicon), todo gratis y sin nube. Ver `despliegue-local.md`.
-- **MCP núcleo + fuente `muestra`:** listo y conectable. Cifras de `muestra` ancladas a la entrevista de estrategia (Claro Sports ~80M vis/mes 2-3%; UnoTV alto alcance, bajo engagement).
-- **Adaptadores reales:** el código está; el dato real por plataforma se habilita conforme caen los bloqueos externos — Meta App Review (semanas), auditoría de TikTok, decisión de coste de X. Ver `credenciales.md`.
+> **Estado y hitos:** la fuente única es [`estado-producto.md`](estado-producto.md) (qué está
+> listo, qué está pausado por gating externo de plataforma). Las cifras de la fuente `muestra`
+> están ancladas a la entrevista de estrategia (Claro Sports ~80M vis/mes 2–3%; UnoTV alto alcance,
+> bajo engagement). El detalle operativo de credenciales reales está en
+> [`credenciales.md`](credenciales.md).

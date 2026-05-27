@@ -46,7 +46,7 @@ from typing import Any
 
 import yaml
 
-from . import db, indice, marcas, redes
+from . import indice, marcas, redes
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
 from .io_atomico import escribir_atomico
 
@@ -1137,28 +1137,3 @@ def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
     # historial/<YYYY>/<MM>/<id>.yaml -> la marca es 3 niveles arriba del fichero.
     marca = _marca_de_slug(ruta.parent.parent.parent.parent.name)
     return _parsear_historial(datos, marca, historial_id)
-
-
-# --------------------------------------------------------------------------- #
-# Tareas: el backend de ficheros NO las gestiona (siguen en SQLite via db.py)  #
-# --------------------------------------------------------------------------- #
-
-
-def listar_tareas() -> list[dict[str, Any]]:
-    return db.listar_tareas()
-
-
-def crear_tarea(proyecto_id: str, titulo: str, detalle: str = "") -> dict[str, Any]:
-    return db.crear_tarea(proyecto_id, titulo, detalle)
-
-
-def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
-    return db.obtener_tarea(tarea_id)
-
-
-def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None:
-    return db.actualizar_estado_tarea(tarea_id, estado)
-
-
-def borrar_tarea(tarea_id: str) -> bool:
-    return db.borrar_tarea(tarea_id)

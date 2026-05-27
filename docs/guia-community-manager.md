@@ -136,9 +136,12 @@ Para evitar sorpresas, esto es lo que el sistema **no** hace por ahora:
 - **No publica solo.** Prepara y previsualiza el copy (modo borrador). Publicar lo haces tú,
   a mano, en cada red. Tú eres quien aprueba siempre.
 - **No programa publicaciones** ni las pone en cola.
-- **No genera imágenes** ni edita el video. Te da el texto y, con un clip, te dice qué
-  fragmento cortar; el corte y el arte los hace una persona.
-- **No tiene una pantalla con botones.** Todo es por conversación: tú escribes la instrucción
-  y él responde con el borrador.
+- **No edita el video.** Con un clip te dice qué fragmento cortar, pero el corte lo hace
+  una persona.
+
+> **¿Prefieres botones a teclear?** Además de escribirle a Claude, hay una **Consola Keni**
+> con interfaz web que envuelve estas mismas tareas (corre en tu máquina, en
+> `http://127.0.0.1:8765`). Es opcional; lo de esta guía funciona igual por conversación.
+> Ver la [guía de la consola](consola.md).
 
 En resumen: el sistema **produce y verifica**; tú **revisas, apruebas y publicas**.

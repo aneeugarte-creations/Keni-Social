@@ -76,31 +76,14 @@ equipo de contenido, así que lo que validemos con AMX es replicable con el sigu
 
 ## 3. Moat (por qué es difícil de copiar)
 
-El error sería creer que el moat es la tecnología. **No lo es.** Claude, MCP y whisper.cpp son
-plomería replicable: cualquiera con tiempo puede cablear un MCP de métricas o transcribir audio en
-local. Si vendiéramos eso, competiríamos a precio.
+El moat **no es la tecnología** (Claude + MCP + whisper.cpp es plomería replicable) sino lo
+**editorial**: corpus es-MX por marca + disciplina de verificación honesta + privacidad por
+diseño, que se acumulan con cada cliente y son propios e intransferibles.
 
-El moat real es **editorial** y se compone de tres cosas que sí son difíciles de copiar:
-
-1. **El corpus editorial es-MX.** No es un prompt de "escribe en mexicano". Es contexto editorial
-   versionado: línea de marca institucional (estable) + voz personal por persona (la rellena cada
-   quien) + reglas de tropicalización + reglas legales (bandera/escudo, menores, datos personales).
-   Esto se acumula con el uso y se afina con cada marca.
-2. **La disciplina de verificación.** El sistema termina cada copy con una auto-verificación
-   honesta (✅ / ⚠️ / ❌) que dice **cuándo creerle**: marca lo dudoso —sobre todo nombres y cifras
-   sacados de ASR— en vez de colgarse la medalla de un dato no confirmado. Para un medio de
-   noticias esto no es un adorno: es la diferencia entre una herramienta usable y una que mete
-   errores publicables. Esa disciplina es producto de criterio editorial, no de código.
-3. **Privacidad como diseño, no como promesa.** El audio/video y las llaves de las redes **nunca
-   salen de la máquina** (transcripción local con whisper.cpp; tokens en config local). A servicios
-   externos solo viaja texto de copy y números agregados. Esto es verificable, está documentado
-   para una revisión de privacidad, y es algo que las SaaS en la nube (Metricool, Jasper, etc.) no
-   pueden ofrecer estructuralmente.
-
-**Por qué se compone con cada cliente:** el corpus editorial y las voces crecen con cada marca y
-cada CM que lo usa. El cliente nº2 no parte de cero —parte del método ya probado—, pero su corpus
-es propio e intransferible. Cuanto más se usa, más cuesta arrancarlo. Ese es el efecto de
-acumulación que protege el negocio, no el stack técnico.
+> **Fuente única:** el moat, el wedge y los diferenciadores defendibles viven en
+> [`analisis-competitivo.md`](analisis-competitivo.md) §3 (con la tabla competidor × capacidad).
+> No se repiten aquí para no divergir. Este documento usa el moat solo como **argumento de
+> precio** (§4): vendemos la capa editorial, no el stack.
 
 ---
 
@@ -148,8 +131,8 @@ Dos componentes:
 |---|---|---|---|
 | **Por puesto CM** | **$45/puesto/mes** | + ~$30 (Claude for Teams) | **≈ $75/puesto/mes** |
 
-- Incluye: las cuatro skills de copy, tropicalización es-MX, voz por marca + voz personal,
-  verificación, `clip-a-copy` (video→copy local), preview en dry-run.
+- Incluye: las skills de copy (desde texto y desde video/audio), tropicalización es-MX, voz por
+  marca + voz personal, verificación, `clip-a-copy` (video→copy local), preview en dry-run.
 - No incluye: MCP de métricas alojado ni publicación (esta última no existe aún).
 - **Lectura de ancla:** la capa Keni ($45) se sitúa cerca de Jasper ($39–59) pero entregando lo que
   Jasper no tiene (es-MX real + fact-check + local). El total al cliente (~$75) queda **por debajo
@@ -196,7 +179,9 @@ Claude for Teams lo permitan; validar antes de ofrecerlo.
 ## 5. Propuesta por fases (alineada con el roadmap)
 
 La oferta sigue el estado real del producto. No vendemos humo: lo que aún no existe se nombra como
-hito, con su dependencia.
+hito, con su dependencia. (El **estado** de cada capacidad —listo vs. pausado por gating externo—
+es el que define [`estado-producto.md`](estado-producto.md); aquí se le pone **precio y orden de
+venta**, no se redefine.)
 
 ### Fase 0 — Lo que se vende YA (piloto)
 
@@ -244,28 +229,22 @@ no una promesa pendiente que devalúe la venta inicial.
 
 ## 6. Riesgos comerciales
 
-1. **Dependencia de aprobaciones externas.** La publicación real depende de **Meta App Review**
-   (3–6 semanas, externo, reinicia con cada rechazo) y la métrica real depende de revisiones por
-   red (TikTok, etc.). *Mitigación:* la oferta de Fase 0 **no depende** de ninguna aprobación
-   externa, así que el piloto genera valor (y factura) sin esperar a Meta. No prometer fechas de
-   publicación que no controlamos.
-2. **Legal corporativo si escala más allá de Bernardo.** Mientras la compra viva en el departamento
-   de Bernardo (presupuesto propio), evitamos procurement. En cuanto el despliegue alojado maneje
-   tokens de las marcas a nivel corporativo, o el gasto suba de cierto umbral, entra **Legal/IT
-   corporativo de AMX** (revisión de privacidad, contrato de subprocesador con Anthropic, manejo de
-   datos). *Mitigación:* el doc de flujo de datos y privacidad ya está escrito para esa revisión;
-   el diseño local/privacy-first es el argumento más fuerte ahí. Anticiparlo, no esperar a que lo
-   pidan.
-3. **Moat replicable a nivel técnico.** Si nos posicionamos como "MCP + Whisper + Claude", competimos
-   a precio contra cualquiera que lo cablee. *Mitigación:* vender el corpus editorial es-MX + la
-   verificación + privacidad, no la plomería (ver §3).
-4. **Dependencia del incumbente en métricas históricas.** Mientras Metricool tenga el histórico, el
-   cliente no migra del todo. *Mitigación:* posicionarnos como complemento aditivo (§1) y construir
-   nuestro propio histórico (el MCP guarda cada lectura en SQLite local → serie temporal propia) para
-   que con el tiempo la dependencia se invierta.
-5. **Coste de insumo visible.** El asiento de Claude (~$30) es un coste que el cliente ve. *Mitigación:*
-   anclarlo a horas de reescritura ahorradas y/o ofrecer la variante todo incluido para que sea un
-   solo número.
+El catálogo completo de riesgos (comoditización del MCP/copy, dependencia de aprobaciones
+externas, dependencia del incumbente en el histórico, coste de insumo, dependencia de Anthropic)
+y sus mitigaciones es **único** y vive en [`analisis-competitivo.md`](analisis-competitivo.md) §4.
+Aquí solo el riesgo **propiamente comercial** que ese doc no cubre:
+
+- **Legal/IT corporativo si la compra escala más allá de Bernardo.** Mientras viva en su
+  departamento (presupuesto propio), se evita procurement. En cuanto el despliegue alojado maneje
+  tokens de las marcas a nivel corporativo, o el gasto suba de cierto umbral, entra **Legal/IT
+  corporativo de AMX** (revisión de privacidad, contrato de subprocesador con Anthropic, manejo de
+  datos). *Mitigación:* [`flujo-de-datos-privacidad.md`](flujo-de-datos-privacidad.md) ya está
+  escrito para esa revisión; el diseño local/privacy-first es el argumento más fuerte. Anticiparlo,
+  no esperar a que lo pidan.
+
+Los riesgos de mercado (Fase 0 no depende de aprobaciones; vender el moat editorial y no la
+plomería; complemento aditivo para invertir la dependencia del histórico) ya están en §3 y en el
+análisis competitivo: no se repiten para no divergir.
 
 ---
 

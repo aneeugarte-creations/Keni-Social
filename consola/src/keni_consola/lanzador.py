@@ -19,7 +19,6 @@ En sistemas que no son macOS no lanzamos nada: devolvemos un aviso claro de
 from __future__ import annotations
 
 import shlex
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -78,8 +77,3 @@ def abrir_en_claude_code(ruta: Path, prompt: str | None = None) -> str:
         raise RuntimeError("Tiempo agotado al pedirle a Terminal que abriera Claude Code.") from e
 
     return f"Claude Code se esta abriendo en una nueva ventana de Terminal ({ruta_str})."
-
-
-def claude_disponible() -> bool:
-    """True si el binario `claude` esta en el PATH (best-effort, informativo)."""
-    return shutil.which("claude") is not None

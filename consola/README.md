@@ -1,8 +1,10 @@
 # keni-consola
 
 **Consola Keni**: capa de gestion web **LOCAL** para equipo NO tecnico. Una app
-con pestañas (Proyectos, Métricas, Generar copy, Tareas, Nueva carpeta,
-Configuración, Estado) que envuelve a Claude Code y al servidor de métricas.
+con sidebar (páginas de trabajo diario + ajustes) que envuelve a Claude Code y al
+servidor de métricas. El catálogo de páginas vivo está en el sidebar de la app
+(`frontend/src/components/layout/navegacion.ts` / `router.tsx`); no se enumera aquí
+para que no se desfase.
 
 Corre **solo en `127.0.0.1`** (nunca expuesta a la red) y arranca con datos de
 muestra. Es una capa de gestión: el motor que hace el trabajo sigue siendo

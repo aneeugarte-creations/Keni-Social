@@ -37,7 +37,6 @@ keni-consola
 
 - [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan el sistema de copy y el MCP de métricas.
 - [`docs/estado-producto.md`](docs/estado-producto.md) — panorama honesto: qué está listo, qué está pausado por gating externo.
-- [`docs/demo-lunes.md`](docs/demo-lunes.md) — guion de la demo para el equipo de AMX.
 
 ## Instalación como plugin
 

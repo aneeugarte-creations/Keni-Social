@@ -1,6 +1,6 @@
 # Consola Keni (interfaz)
 
-La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y te da una **interfaz con pestañas** para las tareas del día a día, sin teclear comandos. Es una **capa de gestión**: por debajo, el motor que hace el trabajo de verdad sigue siendo **Claude Code** (las skills de copy y el servidor de métricas). La consola solo te lo pone fácil de lanzar y de ver.
+La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y te da una **interfaz** para las tareas del día a día, sin teclear comandos. Es una **capa de gestión**: por debajo, el motor que hace el trabajo de verdad sigue siendo **Claude Code** (las skills de copy y el servidor de métricas). La consola solo te lo pone fácil de lanzar y de ver.
 
 > **No reemplaza a Claude Code, lo envuelve.** Si prefieres escribirle a Claude directamente, puedes seguir haciéndolo; la consola es la opción para quien quiere botones en vez de comandos.
 
@@ -28,20 +28,23 @@ La consola intenta abrir el navegador sola; si no lo hace, copia esa dirección.
 
 ---
 
-## Las 7 pestañas
+## Qué es (idea de diseño)
 
-Agrupadas en **Trabajo** (lo del día a día) y **Ajustes** (configuración):
+La consola es una **capa de gestión** sobre Claude Code: no hace el trabajo, lo
+**lanza y lo muestra**. El motor sigue siendo Claude Code (las skills de copy) y el
+servidor de métricas; la consola solo da botones a quien no quiere teclear comandos.
+Dos ideas de diseño la rigen:
 
-**Trabajo**
-- **Generar copy** — eliges el tipo de contenido y la marca, y pegas tu nota **o subes un archivo**; la consola corre el asistente por debajo y te devuelve el copy (con botones para copiarlo o descargarlo). Guarda un **historial** de lo generado. Nada se publica.
-- **Métricas** — dashboard con gráficas de las redes de tus marcas (KPIs, reparto por marca, tabla), comparar dos periodos con su variación, y descargar los datos (CSV / Markdown / JSON).
-- **Tareas** — organiza tareas por proyecto y abre el asistente en la carpeta de cada una con su prompt.
+- **El YAML por marca es la fuente de verdad.** Lo que ves y editas en la consola
+  (publicaciones, plantillas, fuentes, contexto de cada marca) vive en ficheros YAML
+  por marca, editables a mano; la consola es una vista cómoda sobre ellos, no un
+  almacén paralelo.
+- **Solo en tu máquina.** Escucha únicamente en `127.0.0.1`; nada se expone a la red.
 
-**Ajustes**
-- **Proyectos** — edita el `CLAUDE.md` de tus carpetas y abre el asistente dentro de ellas.
-- **Nueva carpeta** — crea una carpeta de proyecto con un `CLAUDE.md` de partida (plantilla por tipo de marca) y la deja registrada.
-- **Estado** — autodiagnóstico del entorno (✅ / ⚠️ / ❌) y el siguiente paso, en lenguaje claro.
-- **Configuración** — elige tus marcas, su alcance y la fuente de datos (muestra / real) sin tocar archivos.
+El sidebar agrupa las páginas en **Trabajo** (uso diario) y **Ajustes**
+(configuración). **No listamos aquí las páginas una a una**: la superficie cambia y
+esta lista se desfasaría. La referencia viva es la propia app (el sidebar) y, en el
+código, `consola/frontend/src/components/layout/navegacion.ts`.
 
 ---
 
@@ -60,37 +63,16 @@ Agrupadas en **Trabajo** (lo del día a día) y **Ajustes** (configuración):
 
 ---
 
-## Instalación
+## Instalar y desarrollar
 
-La consola es su propio paquete (`keni-consola`) y **depende de `keni-shared`** (la capa más baja del monorepo: catálogo de marca, límites de plataforma, utilidades canónicas) **y de `keni-metricas`**. Instala primero las dependencias y luego la consola:
+Este documento es de **diseño**; el cómo-instalar vive donde se mantiene de verdad,
+para no duplicarlo aquí:
 
-```
-pip install -e ./keni-shared
-pip install -e ./mcp-metricas
-pip install -e ./consola
-```
-
-Con `uv` también puedes instalarla como herramienta desde la ruta del paquete (`uv tool install ./consola`) o ejecutarla sin instalar (`uvx --from ./consola keni-consola`). El bundle de la interfaz ya va compilado en el paquete: **no necesitas Node para usarla**.
-
----
-
-## Desarrollar la interfaz (solo si tocas el código)
-
-Para **modificar** la interfaz sí hace falta Node (≥ 18). El código vive en `consola/frontend/` (React + TypeScript + Vite + shadcn/ui + Tremor). Ver [`../consola/frontend/README.md`](../consola/frontend/README.md).
-
-```
-cd consola/frontend
-npm install
-npm run dev      # servidor de desarrollo; proxy de /api -> 127.0.0.1:8765
-```
-
-Para el día a día con `npm run dev`, ten el backend corriendo aparte (`keni-consola`). Cuando termines un cambio, **recompila el bundle versionado** (es lo que se distribuye):
-
-```
-npm run build    # escribe en consola/src/keni_consola/webapp/ (commitea esa salida)
-npm run lint
-npm run typecheck
-```
+- **Instalar y arrancar** (paquete `keni-consola`, dependencias del monorepo, `uv`):
+  [`../consola/README.md`](../consola/README.md). El bundle de la interfaz viaja
+  compilado, así que **para usar la consola no hace falta Node**.
+- **Tocar la interfaz** (Node ≥ 18, `npm run dev`/`build`, recompilar el bundle
+  versionado): [`../consola/frontend/README.md`](../consola/frontend/README.md).
 
 ---
 

@@ -1,9 +1,10 @@
 # Estudio de imagen — keni-social
 ### Arquitectura y decisión · Keni AI
 
-- **Fecha:** 2026-05-25 · **Estado:** exploración — hipótesis bajo prueba dentro del piloto AMX.
+- **Fecha:** 2026-05-25 · **Estado:** en uso (beta) dentro del piloto AMX.
 - **Origen:** sugerencia de Tescu (community Claro Sports) en el piloto: *"que yo le suba la foto, que ya tenga precargado meterle nuestro logo + el archivo de breaking, y que nos genere el copy."*
 - **Para:** decidir cómo keni-social gestiona tareas de imagen como una herramienta **independiente de Generar copy**, y cómo conviven lo determinista (herramientas) y lo generativo (IA).
+- **Doc canónico de imagen.** Esta es la arquitectura de imagen de keni-social (enrutador + 2 motores + revisor, motor por API). La sub-decisión de **dirección de arte por marca** (un Skill por marca que dirige un prompt y verifica) vive en [`diseno-redes.md`](diseno-redes.md) y encaja aquí como la vía "director de arte / sin key".
 
 ---
 
@@ -69,22 +70,34 @@ Regla práctica: si la vía determinista resuelve el caso, úsala; la IA es para
 
 ---
 
-## 4. Qué ya existe vs. qué es nuevo
+## 4. La decisión de fondo: Claude dirige y verifica, no renderiza
 
-| Pieza | Estado |
-|---|---|
-| Compositor determinista (`breaking-express/componer.py`, Pillow) | ✅ existe |
-| **Modo overlay** (usar el archivo de breaking + marca de agua de la casa) | ✅ añadido (2026-05-25) |
-| Director de arte por marca (prompts en marca, `skills-copy/.claude/skills/diseno-unotv` y `diseno-clarosports`; decisión en `docs/diseno-redes.md`) | ✅ existe (para la vía "prompt") |
-| Revisor legal/editorial (`revisa-imagen`) | ✅ existe |
-| **Enrutador** `estudio-imagen` que une todo | ✅ Fase 1 |
-| Operaciones deterministas (recortar, redimensionar, comprimir, extender, placa) | ✅ Fase 1 |
-| Motor **generativo por API** (§6): `generar.py` (ilustración) y `expandir.py` (outpaint de fondo) | ✅ Fase 1 |
-| **Pestaña "Imágenes"** en la Consola (subir, operación, preview, assets) | ✅ Fase 2 |
+La regla que estructura todo el Estudio (qué pieza existe y dónde vive lo deja claro el código:
+`estudio-imagen/{editar,generar,expandir}.py`, `breaking-express/componer.py`, `revisa-imagen`):
+
+- **Claude no renderiza píxeles** — los *ve*. Su papel es **enrutar** (decidir el motor),
+  **dirigir** (parámetros / prompt en marca) y **verificar** (revisor legal/editorial). Nunca es el
+  motor de imagen.
+- **Dos motores tras un enrutador único:** determinista (scripts Pillow/ffmpeg, gratis y exacto)
+  para lo repetible; generativo (IA por API, con coste) solo para crear/rellenar píxeles (§3, §6).
+- **Un revisor común** (`revisa-imagen`) cierra la salida de cualquier motor con ✅/⚠️/❌ y gate
+  humano. Es la misma disciplina de verificación que el copy.
+- **Línea roja editorial:** la IA generativa **no inventa sobre el sujeto de una foto real**. En
+  el outpaint, `expandir.py` **re-compone la foto original sobre su región exacta** (el sujeto queda
+  intacto pixel a pixel; la IA solo aporta la banda de fondo añadida). El motor de ilustración
+  (`generar.py`) es para crear/rellenar píxeles desde cero, no para alterar fotos documentales.
+
+La vía "director de arte por marca" (prompt en marca para herramientas externas, sin API key) es la
+sub-decisión detallada en [`diseno-redes.md`](diseno-redes.md) y el modo degradado del motor
+generativo (§6).
 
 ---
 
-## 5. Plan por fases
+## 5. Plan por fases (ambas fases ya construidas)
+
+El plan se ejecutó: la Fase 1 (motor en skills) y la Fase 2 (pestaña "Imágenes" en la Consola) están
+en el repo (`estudio-imagen/{editar,generar,expandir}.py`, `frontend/src/pages/Imagenes.tsx`). Se
+deja documentado el orden de construcción como rationale de diseño:
 
 - **Fase 1 — el motor (skills en Claude Code).**
   1. Enrutador `estudio-imagen` (clasifica determinista vs generativo, cierra con el revisor).
@@ -107,7 +120,7 @@ Regla práctica: si la vía determinista resuelve el caso, úsala; la IA es para
 
 ## 7. Decisiones abiertas / a verificar
 
-1. **Assets reales de la casa:** rutas/archivos de `logo`, `marca_agua` y `overlay_breaking` por marca (los aporta AMX). Mientras falten, el modo sintético y el wordmark de respaldo cubren la demo.
+1. **Assets reales de la casa:** rutas/archivos de `logo`, `marca_agua` y `overlay_breaking` por marca (los aporta AMX). Mientras falten, el modo sintético y el wordmark de respaldo dejan el flujo operativo hasta que llegan los oficiales.
 2. **Modelo de imagen por defecto en OpenRouter** (Gemini Flash Image vs Seedream 4.5 vs FLUX) y su coste por imagen — afinar con pruebas reales cuando haya clave.
 3. **Catálogo en la Consola:** cómo se listan las operaciones del Estudio (¿reusar el patrón `keni.yaml` de skills, o un catálogo de operaciones propio?).
 4. **Multi-formato de salida** desde una sola imagen (9:16 + 4:5 + 1:1 de un tiro).

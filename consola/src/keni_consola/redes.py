@@ -46,11 +46,6 @@ REDES: tuple[Red, ...] = (
 _POR_ID: dict[str, Red] = {r.id: r for r in REDES}
 
 
-def red_por_id(red_id: str) -> Red | None:
-    """Devuelve la `Red` con ese `id`, o `None` si no existe."""
-    return _POR_ID.get(red_id)
-
-
 def es_red(red_id: str) -> bool:
     """True si `red_id` es una red canonica conocida."""
     return red_id in _POR_ID

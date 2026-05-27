@@ -62,16 +62,19 @@ AMX.
   skills de imagen; almacen de media con UUID y anti-traversal.
 - **Revision humana**: skill `revisa-imagen` (checklist legal/editorial, aprobacion humana).
 
-### Gaps a implementar
+### Gaps a implementar _(ya implementados — ver `docs/estudio-imagen.md` §8)_
 - **Compresion a peso objetivo (full)**: hoy `redimensionar` solo cambia dimensiones; NO
   ajusta calidad/peso. Falta comprimir iterando calidad JPEG/WebP hasta caer bajo el peso
   elegido, conservando tamano. Exponer el peso como parametro (dropdown en consola).
+  _(hecho: `estudio-imagen/editar.py comprimir` + dropdown "Peso" en `keni.yaml`.)_
 - **Extension de fondo (4:5)**: NO existe codigo. Documentado como futuro ("expandir/outpaint")
   pero sin implementar. Implementar:
   - deteccion de borde uniforme (cielo/negro) + extension deterministica (clonado/estirado);
   - deteccion de cuando el recorte 4:5 cortaria al sujeto (disparador del flujo auto);
   - vista previa para aprobacion antes de exportar;
   - fallback IA opcional, solo bajo excepcion editorial confirmada.
+  _(hecho: `editar.py extender` (determinista, solo borde uniforme) + `expandir.py` (fallback IA,
+  re-compone el sujeto intacto); el resto del flujo auto/vista previa en la skill.)_
 
 ---
 

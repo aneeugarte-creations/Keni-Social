@@ -52,3 +52,6 @@ Decision: hacerlo end-to-end reutilizando el motor de Skills que ya corre `claud
 - **Validacion con el piloto**: la skill nace en grupo "experimentales"; pasa a "validadas"
   cuando el equipo confirme criterio (regiones, tono del caption, cuantos slides).
 - **Merge a `main` + push**: pendiente de confirmacion (la rama queda lista, CI en verde).
+  _(ya implementado: la skill `skills-copy/.claude/skills/termometro-mundial/`, la pagina
+  `consola/frontend/src/pages/Termometro.tsx` y el backend `consola/src/keni_consola/api/termometro.py`
+  estan en `main`.)_

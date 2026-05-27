@@ -439,7 +439,7 @@ def lanzar_job_claude(
                     return
                 with _HANDLES_LOCK:
                     _HANDLES[gen_id] = {"proc": proc}
-                _leer_stream(proc, acumulador, _avance)
+                runner.leer_stream(proc, acumulador, _avance)
                 timed_out = _esperar(proc, timeout)
                 # Estado terminal ANTES de soltar el handle: un sondeo que ya no ve el
                 # handle nunca lee un "ejecutando" obsoleto.
@@ -450,36 +450,6 @@ def lanzar_job_claude(
 
     hilo = threading.Thread(target=_ciclo, name=f"gen-{gen_id}", daemon=True)
     hilo.start()
-
-
-# Cada cuanto (segundos) persistimos el avance: con parciales llegan MUCHOS eventos por
-# segundo; throttlear evita martillear el disco sin perder la sensacion de "en vivo".
-_THROTTLE_S = 0.4
-
-
-def _leer_stream(proc: subprocess.Popen, acumulador: Any, on_avance: Callable[[], None]) -> None:
-    """Hilo lector: alimenta el acumulador con el NDJSON y persiste el avance (throttled).
-
-    Persiste al cambiar de turno (hito) o cada `_THROTTLE_S` s; nunca en la linea terminal
-    (`result`), porque el cierre fija el estado final con la salida/metricas definitivas.
-    """
-    import time
-
-    if proc.stdout is None:
-        return
-    ultimo = 0.0
-    ultimo_turno = -1
-    try:
-        for linea in proc.stdout:
-            acumulador.procesar_linea(linea)
-            if acumulador.terminado:
-                continue
-            ahora = time.monotonic()
-            if acumulador.turnos != ultimo_turno or (ahora - ultimo) >= _THROTTLE_S:
-                ultimo, ultimo_turno = ahora, acumulador.turnos
-                on_avance()
-    except Exception:  # noqa: BLE001 -- el lector nunca propaga; el cierre fija el estado
-        pass
 
 
 def _esperar(proc: subprocess.Popen, timeout: int) -> bool:

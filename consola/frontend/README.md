@@ -50,7 +50,7 @@ sin necesidad de Node: el paquete Python lo sirve desde el mismo origen.
 | `npm run lint`      | ESLint sobre `src/`.                                |
 | `npm run typecheck` | `tsc --noEmit` (chequeo de tipos).                  |
 | `npm run preview`   | Sirve el bundle compilado localmente.               |
-| `npm run test`      | Tests con Vitest (incluye el de la página Estado).  |
+| `npm run test`      | Tests con Vitest.                                   |
 | `npm run gen:types` | Regenera `src/types.gen.ts` desde el backend.       |
 | `npm run gen:types:check` | Falla si `types.gen.ts` está desincronizado.  |
 
@@ -59,7 +59,7 @@ sin necesidad de Node: el paquete Python lo sirve desde el mismo origen.
 ```
 src/
   main.tsx              Monta React + React Query + Router + Toaster
-  router.tsx            Las 7 rutas del SPA (landing → /generar-copy)
+  router.tsx            Rutas del SPA (landing → /generar-copy) + redirecciones
   index.css             Tailwind + tokens shadcn + modo oscuro
   types.ts              Contrato tipado de la API (/api/*)
   lib/
@@ -114,9 +114,11 @@ Dos pruebas evitan que el TS generado se separe del backend:
   actual del backend contra el `types.gen.ts` comiteado (interfaces y **campos**).
   Si cambias un `TypedDict` y olvidas `npm run gen:types`, **falla**.
 
-## Estado de las páginas
+## Páginas
 
-- **Estado** (`/estado`): implementada por completo (consume `GET /api/estado`).
-- Las otras seis (`/generar-copy`, `/metricas`, `/tareas`, `/proyectos`,
-  `/carpetas`, `/configuracion`) son _stubs_ "🚧 En construcción", listas para
-  que cada una se rellene editando solo su archivo en `src/pages/`.
+Cada ruta del SPA es una página en `src/pages/` (algunas con subcarpetas para sus
+piezas). Las páginas están implementadas y consumen la API; no quedan _stubs_. La
+lista viva y autoritativa de rutas es `router.tsx`, agrupadas en el sidebar por
+`components/layout/navegacion.ts` (Trabajo / Ajustes). El router también mantiene
+las redirecciones de páginas fusionadas o retiradas (p. ej. `/estado` y
+`/conexiones` → `/configuracion`), así que enlaces antiguos no rompen.

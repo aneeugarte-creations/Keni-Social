@@ -62,8 +62,8 @@ publicaría, sin publicar).
   Enseñar al equipo del cliente a trabajar con agentes dentro de su flujo real **es** el producto
   y **es** la capacitación: no se vende una suscripción opaca, se deja capacidad instalada. Es la
   encarnación del "lo que vendemos lo aplicamos primero" de Keni.
-- **Construido y verificado de verdad.** El sistema corre con una batería de **338 pruebas
-  automatizadas** (más chequeos estáticos de las skills) y **CI en verde** en cada cambio. No es
+- **Construido y verificado de verdad.** El sistema corre con una amplia batería de pruebas
+  automatizadas (más chequeos estáticos de las skills) y **CI en verde** en cada cambio. No es
   una maqueta: lo que está listo, está probado.
 
 ## Valor para AMX y para Keni

@@ -20,3 +20,7 @@ credenciales.toml
 .DS_Store
 .idea/
 .vscode/
+
+# Claude Code / temporales locales (worktrees y artefactos de demo, NUNCA se versionan)
+.claude/
+.keni-tmp/

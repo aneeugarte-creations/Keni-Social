@@ -37,8 +37,9 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
 - **Documentación de dirección, ventas y operación.** Resumen, análisis competitivo, roadmap de
   UX, guía del community manager, manual de operación, flujo de datos / privacidad, despliegue
   local y alojado.
-- **Calidad verificada.** **338 pruebas automatizadas** del MCP (más chequeos estáticos de las
-  skills) y **CI en verde** en cada cambio.
+- **Calidad verificada.** Amplia batería de pruebas automatizadas (MCP + Consola) más chequeos
+  estáticos de las skills, con **CI en verde** en cada cambio. No es una maqueta: lo que está
+  listo, está probado. (El número exacto de pruebas vive en CI, no aquí, para no quedar desfasado.)
 
 Arquitectura y hitos al detalle en [`arquitectura.md`](arquitectura.md).
 
