@@ -84,6 +84,7 @@ jobs:
           test_checks_copy.py
           test_limites.py
           test_wave3_skills.py
+          test_brief_junta.py
 
   # 3) Bundle del frontend: verifica que la SPA COMPILA. `npm run build` corre
   #    `tsc -b && vite build`, asi que falla el job tanto si el typecheck como si
