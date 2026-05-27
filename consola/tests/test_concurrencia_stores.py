@@ -16,7 +16,6 @@ from collections.abc import Callable
 
 import pytest
 
-from keni_consola import autodesarrollo as ad
 from keni_consola import sugerencias as sug
 
 
@@ -48,15 +47,3 @@ def test_sugerencias_crear_concurrente_no_pierde(tmp_path, monkeypatch):
     titulos = {s["titulo"] for s in sug.listar()}
     faltan = [f"idea {i}" for i in range(25) if f"idea {i}" not in titulos]
     assert not faltan, f"se perdieron sugerencias: {faltan}"
-
-
-@pytest.mark.timeout(30)
-def test_auditoria_registrar_concurrente_no_pierde(tmp_path, monkeypatch):
-    monkeypatch.setenv("KENI_AUTODESARROLLO_AUDITORIA", str(tmp_path / "aud.jsonl"))
-    _en_paralelo(
-        lambda i: ad.registrar_auditoria({"sugerencia_id": f"s{i}", "estado": "parked"}),
-        n=25,
-    )
-    ids = {e.get("sugerencia_id") for e in ad.leer_auditoria(limite=1000)}
-    faltan = [f"s{i}" for i in range(25) if f"s{i}" not in ids]
-    assert not faltan, f"se perdieron entradas de auditoria: {faltan}"

@@ -163,7 +163,7 @@ async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response
 
 def crear_app(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
-    disparar_autodesarrollo=None, token=None,
+    token=None,
 ) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
@@ -174,17 +174,9 @@ def crear_app(
     `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background.
     `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
     para lanzar trabajos de IA (copy/RSS/hashtags) en background. `lanzar_imagen`: funcion
-    opcional `(gen_id, *, generar)` para trabajos de imagen. `disparar_autodesarrollo`:
-    funcion opcional `(sugerencia) -> None` para lanzar el lazo de auto-desarrollo (#109)
-    en background; los tests pasan una fake que NO crea worktree ni llama a `claude`. Por
-    defecto todas son las reales (Popen/hilo/stream-json); los tests pasan mocks que NO
-    tocan `claude` ni la red.
+    opcional `(gen_id, *, generar)` para trabajos de imagen. Por defecto todas son las
+    reales (Popen/hilo/stream-json); los tests pasan mocks que NO tocan `claude` ni la red.
     """
-    if disparar_autodesarrollo is not None:
-        from .api import autodesarrollo as api_autodesarrollo
-
-        api_autodesarrollo.disparar_implementacion = disparar_autodesarrollo
-
     if abrir is not None or lanzar_run is not None:
         from .api import agentes as api_agentes
 

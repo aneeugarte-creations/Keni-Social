@@ -66,12 +66,12 @@ Consola (Starlette + React, local 127.0.0.1)
    ├─ páginas de Trabajo: Generar copy · Imágenes · Reporte deportes · Termómetro mundial …
    │    └─ lanzan las MISMAS skills (`claude -p`) que un usuario técnico invocaría a mano
    ├─ páginas de métricas: dashboard / reporte sobre el MCP `keni-metricas`
-   └─ Ajustes: credenciales (`secretos.toml`, 0600), buzón de sugerencias / auto-desarrollo
+   └─ Ajustes: credenciales (`secretos.toml`, 0600), buzón de sugerencias
 ```
 
 Las skills son un plugin independiente y leen solo variables de entorno; la Consola **exporta** la
 clave del almacén único (`secretos.toml`) al subproceso al lanzar una skill. Detalle en
-[`consola.md`](consola.md); el lazo de auto-desarrollo en [`autodesarrollo.md`](autodesarrollo.md).
+[`consola.md`](consola.md).
 
 ### Versionado de esquema de los YAML
 

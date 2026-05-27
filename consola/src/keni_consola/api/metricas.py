@@ -43,9 +43,19 @@ def _validar_rango(rango: str) -> str:
     return rango if rango in RANGOS_VALIDOS else "mes"
 
 
-def _variacion_pct(a: int | float, b: int | float) -> float:
-    """Variacion de A respecto a B en %. 0.0 si B es 0 (no divide entre cero)."""
+def _variacion_pct(a: float | None, b: float | None) -> float | None:
+    """Variacion de A respecto a B en %. None si falta algun dato (#138: alcance/
+    engagement pueden ser n/d); 0.0 si B es 0 (no divide entre cero)."""
+    if a is None or b is None:
+        return None
     return round((a - b) / b * 100, 1) if b else 0.0
+
+
+def _delta(a: float | None, b: float | None) -> float | None:
+    """Diferencia A-B tolerante a None (#138: alcance/engagement pueden ser n/d)."""
+    if a is None or b is None:
+        return None
+    return a - b
 
 
 def _fuente_combinada(rep_a: dict, rep_b: dict) -> str:
@@ -67,25 +77,26 @@ def _comparar_totales(total_a: dict, total_b: dict) -> dict:
     """Comparativa del total consolidado de dos reportes (4 metricas)."""
     metricas = []
     for clave in ("visualizaciones", "alcance", "interacciones"):
-        va = total_a.get(clave, 0)
-        vb = total_b.get(clave, 0)
+        va = total_a.get(clave)
+        vb = total_b.get(clave)
         metricas.append(
             {
                 "metrica": clave,
                 "a": va,
                 "b": vb,
-                "diferencia": va - vb,
+                "diferencia": _delta(va, vb),
                 "variacion_pct": _variacion_pct(va, vb),
             }
         )
-    eng_a = total_a.get("engagement_pct", 0.0)
-    eng_b = total_b.get("engagement_pct", 0.0)
+    eng_a = total_a.get("engagement_pct")
+    eng_b = total_b.get("engagement_pct")
+    eng_d = _delta(eng_a, eng_b)
     metricas.append(
         {
             "metrica": "engagement_pct",
             "a": eng_a,
             "b": eng_b,
-            "diferencia": round(eng_a - eng_b, 1),
+            "diferencia": round(eng_d, 1) if eng_d is not None else None,
             "variacion_pct": _variacion_pct(eng_a, eng_b),
         }
     )

@@ -24,19 +24,8 @@ const RESP_SUGERENCIAS = {
   estados: ["nueva", "en-estudio", "hecha", "descartada"],
 };
 
-/** Estado del lazo de auto-desarrollo (flag + auditoría). `activo`/`auditoria` ajustables. */
-function estadoAutodes(over: Partial<{ activo: boolean; fijado: boolean; auditoria: object[] }> = {}) {
-  return {
-    activo: over.activo ?? false,
-    fijado_por_entorno: over.fijado ?? false,
-    cap_lineas: 400,
-    auditoria: over.auditoria ?? [],
-    estados: ["bloqueada", "rechazada", "parked", "mergeada", "error"],
-  };
-}
-
-/** Stub de fetch que enruta /api/sugerencias y /api/autodesarrollo. Captura POSTs. */
-function stubFetch(autodes: object, capturas: { url: string; body: unknown }[] = []) {
+/** Stub de fetch que enruta /api/sugerencias. Captura POSTs/PATCH/DELETE. */
+function stubFetch(capturas: { url: string; body: unknown }[] = []) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string | URL, init?: RequestInit) => {
@@ -45,19 +34,8 @@ function stubFetch(autodes: object, capturas: { url: string; body: unknown }[] =
       const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       if (metodo !== "GET") capturas.push({ url: ruta, body });
 
-      if (ruta.includes("/api/autodesarrollo/flag") && metodo === "POST") {
-        return new Response(
-          JSON.stringify({ ...estadoAutodes({ activo: !!body?.activo }), mensaje: "ok" }),
-          { status: 200 },
-        );
-      }
-      if (ruta.includes("/api/autodesarrollo/implementar") && metodo === "POST") {
-        return new Response(JSON.stringify({ mensaje: "Implementación lanzada en segundo plano." }), {
-          status: 200,
-        });
-      }
-      if (ruta.includes("/api/autodesarrollo")) {
-        return new Response(JSON.stringify(autodes), { status: 200 });
+      if (ruta.includes("/api/sugerencias") && metodo === "POST") {
+        return new Response(JSON.stringify({ sugerencia: SUGERENCIAS[0] }), { status: 200 });
       }
       if (ruta.includes("/api/sugerencias")) {
         return new Response(JSON.stringify(RESP_SUGERENCIAS), { status: 200 });
@@ -76,7 +54,7 @@ function renderConProviders(ui: React.ReactElement) {
   );
 }
 
-describe("Sugerencias · auto-desarrollo (#109)", () => {
+describe("Sugerencias · buzón", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -84,74 +62,36 @@ describe("Sugerencias · auto-desarrollo (#109)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra el panel de auto-desarrollo desactivado con su advertencia de riesgo", async () => {
-    stubFetch(estadoAutodes({ activo: false }));
+  it("lista las sugerencias del buzón", async () => {
+    stubFetch();
     renderConProviders(<Sugerencias />);
 
-    expect(await screen.findByText("Auto-desarrollo")).toBeInTheDocument();
-    expect(screen.getByText(/Función peligrosa/i)).toBeInTheDocument();
-    expect(screen.getByText("Desactivado")).toBeInTheDocument();
-    // Con el flag OFF, NO hay botón de «Implementar» en las tarjetas.
+    expect(await screen.findByText("Exportar métricas a Slack")).toBeInTheDocument();
+    expect(screen.getByText("Buzón de sugerencias")).toBeInTheDocument();
+  });
+
+  it("no muestra ningún panel ni botón de auto-desarrollo", async () => {
+    stubFetch();
+    renderConProviders(<Sugerencias />);
+
+    expect(await screen.findByText("Exportar métricas a Slack")).toBeInTheDocument();
+    expect(screen.queryByText(/auto-desarrollo/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /implementar con ia/i })).not.toBeInTheDocument();
   });
 
-  it("activar exige confirmar el riesgo en un diálogo antes de mandar la petición", async () => {
+  it("envía una nueva sugerencia con el formulario", async () => {
     const capturas: { url: string; body: unknown }[] = [];
-    stubFetch(estadoAutodes({ activo: false }), capturas);
+    stubFetch(capturas);
     renderConProviders(<Sugerencias />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /^activar$/i }));
-    // El botón del diálogo está deshabilitado hasta marcar el checkbox de riesgo.
-    const confirmar = await screen.findByRole("button", { name: /activar de todos modos/i });
-    expect(confirmar).toBeDisabled();
-
-    fireEvent.click(screen.getByRole("checkbox"));
-    expect(confirmar).toBeEnabled();
-    fireEvent.click(confirmar);
+    fireEvent.change(await screen.findByLabelText("Título"), {
+      target: { value: "Nueva idea" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar sugerencia/i }));
 
     await waitFor(() => {
-      const flag = capturas.find((c) => c.url.includes("/flag"));
-      expect(flag).toBeTruthy();
-      expect(flag?.body).toMatchObject({ activo: true, confirmo_riesgo: true });
+      const alta = capturas.find((c) => c.url.includes("/api/sugerencias"));
+      expect(alta?.body).toMatchObject({ titulo: "Nueva idea" });
     });
-  });
-
-  it("con el lazo activo aparece «Implementar con IA» y dispara la implementación", async () => {
-    const capturas: { url: string; body: unknown }[] = [];
-    stubFetch(estadoAutodes({ activo: true }), capturas);
-    renderConProviders(<Sugerencias />);
-
-    const boton = await screen.findByRole("button", { name: /implementar con ia/i });
-    fireEvent.click(boton);
-
-    await waitFor(() => {
-      const imp = capturas.find((c) => c.url.includes("/implementar"));
-      expect(imp?.body).toMatchObject({ sugerencia_id: "s1" });
-    });
-  });
-
-  it("pinta la auditoría reciente (mergeada con SHA, parked con motivo)", async () => {
-    stubFetch(
-      estadoAutodes({
-        activo: true,
-        auditoria: [
-          { id: "a1", fecha: "x", sugerencia_id: "s1", titulo: "Exportar métricas a Slack", estado: "mergeada", sha: "abc12345def" },
-          { id: "a2", fecha: "x", sugerencia_id: "s9", titulo: "Otra", estado: "parked", motivo: "ci-roja" },
-        ],
-      }),
-    );
-    renderConProviders(<Sugerencias />);
-
-    expect(await screen.findByText("Auditoría reciente")).toBeInTheDocument();
-    expect(screen.getByText("abc12345")).toBeInTheDocument(); // SHA recortado
-    expect(screen.getByText(/La CI no pasó en verde/i)).toBeInTheDocument();
-  });
-
-  it("si el flag está fijado por entorno, no se puede activar desde la UI", async () => {
-    stubFetch(estadoAutodes({ activo: false, fijado: true }));
-    renderConProviders(<Sugerencias />);
-
-    expect(await screen.findByText(/Fijado por la variable de entorno/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^activar$/i })).toBeDisabled();
   });
 });
