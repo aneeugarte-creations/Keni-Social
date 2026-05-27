@@ -44,7 +44,7 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
 
 ## Ingress (estado actual: Traefik único, Caddy retirado)
 
-**HECHO.** En `learn-01` (162.43.191.103) Traefik es el **ingress único**
+**HECHO.** En el servidor Latitude (162.43.191.103) Traefik es el **ingress único**
 (`network_mode: host`, dueño de `:80/:443`, ACME Let's Encrypt). El Caddy de sistema
 fue **parado y deshabilitado** (`sudo systemctl disable --now caddy`). Traefik sirve,
 además de keni-social:
@@ -65,7 +65,7 @@ además de keni-social:
 ## Requisitos en el host
 
 ```bash
-# El plugin compose v2 NO está instalado en learn-01; Docker sí.
+# El plugin compose v2 NO está instalado en el servidor Latitude; Docker sí.
 sudo apt-get update && sudo apt-get install -y docker-compose-plugin
 docker compose version            # comprobar
 ```

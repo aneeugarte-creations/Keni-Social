@@ -11,7 +11,7 @@
 # El contexto de build de las imagenes propias es la RAIZ del repo (`..`).
 #
 # INGRESS: Traefik es el ingress unico (network_mode: host, dueño de :80/:443).
-# En learn-01 el Caddy de sistema fue retirado (systemctl disable --now caddy).
+# En el servidor Latitude el Caddy de sistema fue retirado (systemctl disable --now caddy).
 # Traefik sirve tambien code/api.kenitech.io via traefik/dynamic/legacy-sites.yml.
 
 name: keni-social

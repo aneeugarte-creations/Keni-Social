@@ -1,4 +1,4 @@
-# Routers Traefik para los sitios que learn-01 SÍ sirve además de keni-social:
+# Routers Traefik para los sitios que el servidor Latitude SÍ sirve además de keni-social:
 #   - code.kenitech.io  -> code-launcher (127.0.0.1:9001), browser Claude Code.
 #   - api.kenitech.io   -> learn-control-plane (127.0.0.1:8080), API del piloto learn.
 #
