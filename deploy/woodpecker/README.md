@@ -61,3 +61,36 @@ docker compose down                            # parar (no borra volumenes)
 
 Secretos de pipeline (registry, tokens) se anaden en la UI de Woodpecker por repo
 (Settings -> Secrets), nunca en git.
+
+## Despliegue de la app (`.woodpecker/deploy.yml`)
+
+Ademas de los 3 pipelines de CI (tests), hay un pipeline de **despliegue**:
+`.woodpecker/deploy.yml`. Como el agente corre en el **mismo host** que el stack y ya
+monta el `docker.sock`, el step construye las imagenes desde el checkout del pipeline
+(sin rsync) y recrea el stack via `deploy/deploy.sh`.
+
+- **Disparo MANUAL** (`when: event: manual`): se lanza desde la UI (boton *Run
+  pipeline*/manual) sobre `main`. A proposito NO se despliega en cada push (piloto en
+  vivo).
+- **Hace:** `docker compose build` -> `stop back` -> chown del volumen a uid 10001 (los
+  contenedores corren no-root) -> `migracion --solo-db` (cutover SQLite->Postgres,
+  idempotente y no destructivo) -> `up -d`. Detalle en `deploy/deploy.sh`.
+
+### Requisitos (una vez) para que el deploy funcione
+
+1. **Marca el repo como TRUSTED** en Woodpecker (Repo Settings -> *Trusted*). Sin eso,
+   Woodpecker **bloquea** el montaje del `docker.sock` y del `.env` que el step necesita.
+   (Alternativa si no quieres confiar el repo: fija en el agente
+   `WOODPECKER_BACKEND_DOCKER_VOLUMES=/var/run/docker.sock:/var/run/docker.sock,/home/ubuntu/keni-social/deploy/.env:/secrets/env:ro`
+   — pero eso expone el socket a TODOS los steps, incluidos los de test.)
+2. **`.env` de secretos** en `/home/ubuntu/keni-social/deploy/.env` (el del stack
+   principal; ya existe). Hasta bootstrapear Garage, deja las `S3_*` **vacias** ahi: la
+   media se queda en disco (volumen `keni-data`) y Postgres/worker/auth ya funcionan.
+3. **Garage (S3) — bootstrap de una vez** (cuando quieras media en object storage):
+   ver `deploy/README.md` ("Bootstrap de Garage" + "Cutover a Postgres + S3"). Tras
+   crear bucket+clave y poner las `S3_*` reales en `.env`, corre
+   `migracion --solo-media` (o el deploy completo) para subir la media existente.
+
+> El primer deploy migra `consola.db` (SQLite) a Postgres. Es idempotente: si algo
+> falla, el SQLite sigue intacto y puedes reintentar. La guarda de arranque del back
+> impide arrancar contra un Postgres vacio teniendo datos en SQLite.

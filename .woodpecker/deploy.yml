@@ -1,0 +1,29 @@
+# Woodpecker: DESPLIEGUE de keni-social (build de imagenes + recreacion del stack).
+#
+# Corre en el agente del server Latitude (mismo host que el stack), que YA monta el
+# docker.sock (deploy/woodpecker/docker-compose.yml). Construye las imagenes desde el
+# checkout del pipeline (no rsync) y recrea el stack llamando a `deploy/deploy.sh` via
+# el docker.sock del host.
+#
+# DISPARO MANUAL a proposito: NO se despliega en cada push a un piloto en vivo. Lanzalo
+# desde la UI de Woodpecker ("Run pipeline" / manual) sobre `main`.
+#
+# REQUISITO (una vez) en tu instancia de Woodpecker — ver deploy/woodpecker/README.md:
+#   Marca el repo `kenitech-io/keni-social` como TRUSTED (Repo Settings -> Trust). Sin
+#   eso, Woodpecker bloquea el montaje del docker.sock y del .env en el step.
+#
+# El .env de secretos vive en /home/ubuntu/keni-social/deploy/.env (ya esta en el server;
+# NO va a git). Hasta bootstrapear Garage, deja las S3_* VACIAS en ese .env: la media se
+# queda en disco (volumen keni-data) y el resto (Postgres, worker, auth) ya funciona.
+when:
+  - event: manual
+
+steps:
+  - name: build-and-deploy
+    image: docker:27-cli
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/ubuntu/keni-social/deploy/.env:/secrets/env:ro
+    commands:
+      - apk add --no-cache docker-cli-compose
+      - sh deploy/deploy.sh /secrets/env
