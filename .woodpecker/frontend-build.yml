@@ -1,0 +1,15 @@
+# Woodpecker: bundle del frontend (verifica que la SPA COMPILA).
+# Espejo del job `frontend-build` de .github/workflows/ci.yml.
+# `npm run build` corre `tsc -b && vite build`: falla si el typecheck o el build
+# de Vite se rompen. El bundle versionado en consola/src/keni_consola/webapp/ no
+# se recommitea aqui; solo se comprueba que sigue compilando.
+when:
+  - event: [push, pull_request, manual]
+
+steps:
+  - name: build
+    image: node:22
+    commands:
+      - cd consola/frontend
+      - npm ci
+      - npm run build

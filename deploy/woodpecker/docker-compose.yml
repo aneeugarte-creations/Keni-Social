@@ -1,0 +1,92 @@
+# Woodpecker CI para keni-social — stack SEPARADO en el server Latitude.
+#
+# Por que aqui y no en devops-infra (Ansible): los servers DevOps estan
+# deprovisionados, asi que este stack vive junto a keni-social y REUSA su Traefik
+# como ingress/TLS. Convenciones tomadas del rol Ansible de DevOps
+# (kenidevops/devops-infra/ansible/roles/woodpecker): mismas imagenes v3, mismo
+# layout de env, secreto compartido server<->agent, secretos via .env gitignored.
+#
+# INGRESS: no publica puertos. El server se cuelga de la red `keni-social_edge`
+# (externa, creada por deploy/docker-compose.yml) y el Traefik host-mode existente
+# lo enruta por labels + TLS Let's Encrypt (resolver `le`, igual que front/back).
+#
+# Proyecto compose separado (`keni-ci`): no interfiere con el proyecto
+# `keni-social`. Arranque:  cd deploy/woodpecker && docker compose up -d
+# (rellena .env desde .env.example primero; .env NUNCA va a git).
+
+name: keni-ci
+
+services:
+  woodpecker-server:
+    image: woodpeckerci/woodpecker-server:${WOODPECKER_VERSION:-v3.13.0}
+    container_name: woodpecker-server
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - woodpecker_data:/var/lib/woodpecker
+    environment:
+      WOODPECKER_HOST: "https://${WOODPECKER_HOSTNAME}"
+      WOODPECKER_OPEN: "false"
+      WOODPECKER_ADMIN: "${WOODPECKER_ADMIN}"
+      WOODPECKER_GITHUB: "true"
+      WOODPECKER_GITHUB_CLIENT: "${WOODPECKER_GITHUB_CLIENT}"
+      WOODPECKER_GITHUB_SECRET: "${WOODPECKER_GITHUB_SECRET}"
+      WOODPECKER_AGENT_SECRET: "${WOODPECKER_AGENT_SECRET}"
+      WOODPECKER_LOG_LEVEL: "info"
+    networks:
+      - woodpecker
+      - edge
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    # Sin healthcheck: la imagen es scratch (sin shell/wget/curl).
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=keni-social_edge
+      - "traefik.http.routers.woodpecker.rule=Host(`${WOODPECKER_HOSTNAME}`)"
+      - traefik.http.routers.woodpecker.entrypoints=websecure
+      - traefik.http.routers.woodpecker.tls.certresolver=le
+      - traefik.http.services.woodpecker.loadbalancer.server.port=8000
+
+  woodpecker-agent:
+    image: woodpeckerci/woodpecker-agent:${WOODPECKER_VERSION:-v3.13.0}
+    container_name: woodpecker-agent
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      - woodpecker-server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - woodpecker_agent_data:/var/lib/woodpecker
+    environment:
+      WOODPECKER_SERVER: "woodpecker-server:9000"
+      WOODPECKER_AGENT_SECRET: "${WOODPECKER_AGENT_SECRET}"
+      WOODPECKER_MAX_WORKFLOWS: "${WOODPECKER_MAX_WORKFLOWS:-3}"
+      # Red donde el agente engancha los contenedores de cada step del pipeline.
+      WOODPECKER_BACKEND_DOCKER_NETWORK: "keni-ci_woodpecker"
+      WOODPECKER_LOG_LEVEL: "info"
+    networks:
+      - woodpecker
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+volumes:
+  woodpecker_data:
+    name: woodpecker_data
+  woodpecker_agent_data:
+    name: woodpecker_agent_data
+
+networks:
+  # Red interna del stack de CI (server <-> agent <-> steps). Nombre explicito
+  # para que coincida con WOODPECKER_BACKEND_DOCKER_NETWORK.
+  woodpecker:
+    name: keni-ci_woodpecker
+  # Red del stack principal: Traefik (host-mode) enruta al server por aqui.
+  edge:
+    name: keni-social_edge
+    external: true
