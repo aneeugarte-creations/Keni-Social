@@ -92,6 +92,112 @@ def test_borrar_tarea(base):
     assert db.borrar_tarea(t["id"]) is False
 
 
+# --------------------------------------------------------------------------- #
+# Tareas: tablero compartido (#145 F5) - responsable, enlace, estado, filtro    #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_tarea_con_responsable_y_enlace(base):
+    """Una tarea nace con responsable (id+nombre) y enlace de accion; persisten."""
+    t = db.crear_tarea(
+        "proj1",
+        "Asignada",
+        responsable={"id": "u1", "usuario": "ana"},
+        enlace="/asistente?skill=copy",
+    )
+    assert t["responsable_id"] == "u1"
+    assert t["responsable_nombre"] == "ana"
+    assert t["enlace"] == "/asistente?skill=copy"
+    releida = db.obtener_tarea(t["id"])
+    assert releida["responsable_nombre"] == "ana"
+    assert releida["enlace"] == "/asistente?skill=copy"
+
+
+def test_crear_tarea_sin_responsable_queda_sin_asignar(base):
+    """Sin responsable/enlace, los campos quedan vacios (sin asignar)."""
+    t = db.crear_tarea("proj1", "Suelta")
+    assert t["responsable_id"] == ""
+    assert t["responsable_nombre"] == ""
+    assert t["enlace"] == ""
+
+
+def test_actualizar_estado_en_curso(base):
+    """El ciclo de vida admite el estado intermedio 'en_curso' (#145)."""
+    assert "en_curso" in db.ESTADOS_TAREA
+    t = db.crear_tarea("proj1", "Avanza")
+    actualizada = db.actualizar_tarea(t["id"], {"estado": "en_curso"})
+    assert actualizada["estado"] == "en_curso"
+
+
+def test_actualizar_tarea_reasigna_responsable_y_enlace(base):
+    """`actualizar_tarea` cambia responsable y enlace; vaciar limpia las columnas."""
+    t = db.crear_tarea("proj1", "Reasignar")
+    asignada = db.actualizar_tarea(
+        t["id"],
+        {"responsable_id": "u2", "responsable_nombre": "luis", "enlace": "/x"},
+    )
+    assert asignada["responsable_nombre"] == "luis"
+    assert asignada["enlace"] == "/x"
+    # Desasignar: ambos campos vuelven a vacio.
+    limpia = db.actualizar_tarea(
+        t["id"], {"responsable_id": "", "responsable_nombre": "", "enlace": ""}
+    )
+    assert limpia["responsable_id"] == ""
+    assert limpia["responsable_nombre"] == ""
+    assert limpia["enlace"] == ""
+
+
+def test_actualizar_tarea_ignora_columnas_arbitrarias(base):
+    """`actualizar_tarea` solo escribe campos de la allowlist (no columnas arbitrarias)."""
+    t = db.crear_tarea("proj1", "Titulo original")
+    # Intentar reescribir 'titulo'/'proyecto' (no editables) se ignora silenciosamente.
+    db.actualizar_tarea(t["id"], {"titulo": "hackeado", "proyecto": "otro", "estado": "hecha"})
+    releida = db.obtener_tarea(t["id"])
+    assert releida["titulo"] == "Titulo original"
+    assert releida["proyecto"] == "proj1"
+    assert releida["estado"] == "hecha"  # el campo valido si se aplico
+
+
+def test_actualizar_tarea_inexistente_devuelve_none(base):
+    assert db.actualizar_tarea("noexiste", {"estado": "hecha"}) is None
+
+
+def test_listar_tareas_filtra_por_proyecto(base):
+    """`listar_tareas(proyecto_id)` acota al proyecto (acotado por marca/proyecto, #145)."""
+    db.crear_tarea("proj1", "De A")
+    db.crear_tarea("proj2", "De B")
+    solo_a = db.listar_tareas("proj1")
+    assert len(solo_a) == 1
+    assert solo_a[0]["titulo"] == "De A"
+    assert len(db.listar_tareas()) == 2
+
+
+def test_migracion_columnas_tablero_en_bd_vieja(base):
+    """Una BD con `tareas` SIN responsable/enlace se ALTERa (idempotente) y se lee vacia."""
+    ruta = db.ruta_db()
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(ruta))
+    # Esquema previo a #145 (con autor de #130 pero sin responsable/enlace).
+    con.execute(
+        "CREATE TABLE tareas (id TEXT PRIMARY KEY, proyecto TEXT NOT NULL, titulo TEXT NOT NULL, "
+        "detalle TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'pendiente', "
+        "fecha TEXT NOT NULL DEFAULT '', autor_id TEXT NOT NULL DEFAULT '', "
+        "autor_nombre TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute("INSERT INTO tareas (id, proyecto, titulo) VALUES ('vieja', 'p', 'Tarea vieja')")
+    con.commit()
+    con.close()
+    # Cualquier operacion dispara la migracion idempotente.
+    t = db.obtener_tarea("vieja")
+    assert t is not None
+    assert t["responsable_id"] == ""
+    assert t["responsable_nombre"] == ""
+    assert t["enlace"] == ""
+    # Y la columna queda disponible para nuevas filas.
+    nueva = db.crear_tarea("p", "Nueva", responsable={"id": "u1", "usuario": "ana"})
+    assert nueva["responsable_nombre"] == "ana"
+
+
 def test_sql_parametrizado_no_inyectable(base):
     """Un titulo con sintaxis SQL se guarda LITERAL (consultas parametrizadas)."""
     malicioso = "'; DROP TABLE tareas; --"

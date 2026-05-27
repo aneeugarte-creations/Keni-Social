@@ -17,7 +17,10 @@ SEGURIDAD:
   - La base es local; ninguna fila sale de la maquina.
 
 Tablas:
-  - `tareas`(id, proyecto, titulo, detalle, estado, fecha)
+  - `tareas`(id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre,
+    responsable_id, responsable_nombre, enlace)
+    [tablero de pendientes compartido del equipo (#145): autor = quien la creo;
+    responsable = a quien se le asigna; enlace = ruta/URL opcional para actuar]
   - `comercial_publicaciones`(id, url, titulo, marca, cliente, campania, red,
     metrica_objetivo, objetivo, estado, publicado, notas, aviso_en,
     fecha_creacion, fecha_actualizacion)
@@ -85,6 +88,7 @@ __all__ = [
     "actualizar_estado_tarea",
     "actualizar_evento_rota",
     "actualizar_publicacion_comercial",
+    "actualizar_tarea",
     "actualizar_turno_rota",
     "aprobar_semana_rota",
     "borrar_evento_rota",
@@ -166,14 +170,17 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
     con.executescript(
         """
         CREATE TABLE IF NOT EXISTS tareas (
-            id            TEXT PRIMARY KEY,
-            proyecto      TEXT NOT NULL,
-            titulo        TEXT NOT NULL,
-            detalle       TEXT NOT NULL DEFAULT '',
-            estado        TEXT NOT NULL DEFAULT 'pendiente',
-            fecha         TEXT NOT NULL DEFAULT '',
-            autor_id      TEXT NOT NULL DEFAULT '',
-            autor_nombre  TEXT NOT NULL DEFAULT ''
+            id                  TEXT PRIMARY KEY,
+            proyecto            TEXT NOT NULL,
+            titulo              TEXT NOT NULL,
+            detalle             TEXT NOT NULL DEFAULT '',
+            estado              TEXT NOT NULL DEFAULT 'pendiente',
+            fecha               TEXT NOT NULL DEFAULT '',
+            autor_id            TEXT NOT NULL DEFAULT '',
+            autor_nombre        TEXT NOT NULL DEFAULT '',
+            responsable_id      TEXT NOT NULL DEFAULT '',
+            responsable_nombre  TEXT NOT NULL DEFAULT '',
+            enlace              TEXT NOT NULL DEFAULT ''
         );
         CREATE TABLE IF NOT EXISTS comercial_publicaciones (
             id                   TEXT PRIMARY KEY,
@@ -253,20 +260,34 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
             ON rota_turnos (miembro_id);
         """
     )
-    _migrar_atribucion_tareas(con)
+    _migrar_columnas_tareas(con)
     con.commit()
 
 
-def _migrar_atribucion_tareas(con: sqlite3.Connection) -> None:
-    """Anade `autor_id`/`autor_nombre` a `tareas` si una BD vieja no las tenia (#130 Fase 1).
+# Columnas que se anadieron a `tareas` despues de su esquema original. Una BD creada
+# antes de cada ampliacion no las tiene; `ALTER TABLE ... ADD COLUMN DEFAULT ''` es
+# retrocompatible (las filas viejas quedan con el campo vacio, sin reescribir nada).
+#   - autor_id/autor_nombre: atribucion por usuario (#130 Fase 1).
+#   - responsable_id/responsable_nombre/enlace: tablero compartido del equipo (#145, F5).
+_COLUMNAS_TAREAS_AMPLIADAS: tuple[str, ...] = (
+    "autor_id",
+    "autor_nombre",
+    "responsable_id",
+    "responsable_nombre",
+    "enlace",
+)
+
+
+def _migrar_columnas_tareas(con: sqlite3.Connection) -> None:
+    """Anade a `tareas` las columnas ampliadas que una BD vieja no tuviera (idempotente).
 
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
-    ANTES de la atribucion no las tiene. `ALTER TABLE ... ADD COLUMN` con `DEFAULT ''` es
-    retrocompatible: las tareas existentes quedan con autor vacio (= "desconocido" en la
-    UI) y no se pierde ni reescribe nada. Idempotente: solo anade la columna que falte.
+    antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y anade solo
+    la que falte, con `DEFAULT ''`: las tareas existentes quedan con el campo vacio (autor /
+    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada.
     """
     columnas = {fila["name"] for fila in con.execute("PRAGMA table_info(tareas)").fetchall()}
-    for columna in ("autor_id", "autor_nombre"):
+    for columna in _COLUMNAS_TAREAS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
 
@@ -358,17 +379,20 @@ def _normalizar_tarea_json(cruda: object) -> dict[str, Any] | None:
 # --------------------------------------------------------------------------- #
 
 
-# Columnas de `tareas` en el SELECT (incluye la atribucion por usuario, #130 Fase 1).
+# Columnas de `tareas` en el SELECT (atribucion por usuario #130; responsable/enlace #145).
 _SELECT_TAREA = (
-    "SELECT id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre FROM tareas"
+    "SELECT id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre, "
+    "responsable_id, responsable_nombre, enlace FROM tareas"
 )
 
 
 def _fila_a_tarea(fila: sqlite3.Row) -> dict[str, Any]:
     """Convierte una fila de `tareas` en un dict simple.
 
-    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) salen "" en tareas
-    legadas / anonimas; la UI las muestra como "desconocido".
+    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) y
+    `responsable_id`/`responsable_nombre`/`enlace` (tablero compartido, #145 F5) salen ""
+    en tareas legadas / anonimas / sin asignar; la UI las muestra como "desconocido" / "sin
+    asignar".
     """
     return {
         "id": fila["id"],
@@ -379,16 +403,29 @@ def _fila_a_tarea(fila: sqlite3.Row) -> dict[str, Any]:
         "fecha": fila["fecha"],
         "autor_id": fila["autor_id"] or "",
         "autor_nombre": fila["autor_nombre"] or "",
+        "responsable_id": fila["responsable_id"] or "",
+        "responsable_nombre": fila["responsable_nombre"] or "",
+        "enlace": fila["enlace"] or "",
     }
 
 
-def listar_tareas() -> list[dict[str, Any]]:
-    """Todas las tareas, mas recientes primero (por fecha y luego id)."""
+def listar_tareas(proyecto_id: str | None = None) -> list[dict[str, Any]]:
+    """Tareas del tablero compartido, mas recientes primero (por fecha y luego id).
+
+    Con `proyecto_id` filtra a un solo proyecto/marca (acotado por proyecto, #145 F5); sin
+    el, devuelve el tablero completo del equipo.
+    """
     con = _conectar()
     try:
-        filas = con.execute(
-            f"{_SELECT_TAREA} ORDER BY fecha DESC, id DESC"
-        ).fetchall()
+        if proyecto_id:
+            filas = con.execute(
+                f"{_SELECT_TAREA} WHERE proyecto = ? ORDER BY fecha DESC, id DESC",
+                (proyecto_id,),
+            ).fetchall()
+        else:
+            filas = con.execute(
+                f"{_SELECT_TAREA} ORDER BY fecha DESC, id DESC"
+            ).fetchall()
     finally:
         con.close()
     return [_fila_a_tarea(f) for f in filas]
@@ -400,13 +437,19 @@ def crear_tarea(
     detalle: str = "",
     *,
     autor: dict[str, str] | None = None,
+    responsable: dict[str, str] | None = None,
+    enlace: str = "",
 ) -> dict[str, Any]:
     """Inserta una tarea nueva y la devuelve. NO valida el proyecto (lo hace la API).
 
     `autor` (atribucion por usuario, #130 Fase 1) es `{"id", "usuario"}` o `None`
     (creacion anonima / por token de mantenimiento); se persiste vacio en ese caso.
+
+    `responsable` (tablero compartido, #145 F5) es `{"id", "usuario"}` o `None` (sin
+    asignar). `enlace` es una ruta/URL opcional para actuar sobre la tarea.
     """
     autor = autor or {}
+    responsable = responsable or {}
     tarea = {
         "id": uuid.uuid4().hex[:12],
         "proyecto": proyecto_id,
@@ -416,12 +459,16 @@ def crear_tarea(
         "fecha": date.today().isoformat(),
         "autor_id": autor.get("id", "") or "",
         "autor_nombre": autor.get("usuario", "") or "",
+        "responsable_id": responsable.get("id", "") or "",
+        "responsable_nombre": responsable.get("usuario", "") or "",
+        "enlace": enlace or "",
     }
     con = _conectar()
     try:
         con.execute(
             "INSERT INTO tareas (id, proyecto, titulo, detalle, estado, fecha, "
-            "autor_id, autor_nombre) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "autor_id, autor_nombre, responsable_id, responsable_nombre, enlace) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 tarea["id"],
                 tarea["proyecto"],
@@ -431,6 +478,9 @@ def crear_tarea(
                 tarea["fecha"],
                 tarea["autor_id"],
                 tarea["autor_nombre"],
+                tarea["responsable_id"],
+                tarea["responsable_nombre"],
+                tarea["enlace"],
             ),
         )
         con.commit()
@@ -452,12 +502,34 @@ def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
     return _fila_a_tarea(fila) if fila is not None else None
 
 
-def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None:
-    """Cambia el estado de una tarea; devuelve la tarea actualizada (None si no existe)."""
+# Campos de `tareas` editables via `actualizar_tarea` (tablero compartido, #145 F5).
+# El `responsable` se actualiza como par id+nombre desde la API; aqui se mapean a sus dos
+# columnas. La validacion (estado valido, responsable real) es de la capa API.
+_CAMPOS_EDITABLES_TAREA: tuple[str, ...] = (
+    "estado",
+    "responsable_id",
+    "responsable_nombre",
+    "enlace",
+)
+
+
+def actualizar_tarea(tarea_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Actualiza campos de una tarea (estado/responsable/enlace) y la devuelve.
+
+    `campos` se filtra a `_CAMPOS_EDITABLES_TAREA` (defensa en profundidad: nunca se
+    escriben columnas arbitrarias). Devuelve la tarea actualizada, o None si no existe o no
+    hay nada que actualizar tras el filtro. La validacion de valores la hace la capa API.
+    """
+    editables = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_TAREA}
+    if not editables:
+        return obtener_tarea(tarea_id)
+    asignaciones = ", ".join(f"{col} = ?" for col in editables)
+    valores = [*editables.values(), tarea_id]
     con = _conectar()
     try:
         cur = con.execute(
-            "UPDATE tareas SET estado = ? WHERE id = ?", (estado, tarea_id)
+            f"UPDATE tareas SET {asignaciones} WHERE id = ?",  # noqa: S608 -- columnas de allowlist
+            valores,
         )
         con.commit()
         if cur.rowcount == 0:
@@ -469,6 +541,15 @@ def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None
     finally:
         con.close()
     return _fila_a_tarea(fila) if fila is not None else None
+
+
+def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None:
+    """Cambia el estado de una tarea; devuelve la tarea actualizada (None si no existe).
+
+    Atajo historico sobre `actualizar_tarea` (se conserva para no romper a quien solo cambia
+    el estado).
+    """
+    return actualizar_tarea(tarea_id, {"estado": estado})
 
 
 def borrar_tarea(tarea_id: str) -> bool:

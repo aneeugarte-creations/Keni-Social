@@ -808,6 +808,12 @@ export interface Tarea {
   autor_id: string;
   /** Nombre de quien creó (para mostrar). "" si legado/anónimo. */
   autor_nombre: string;
+  /** Tablero compartido (#145 F5): id del responsable asignado. "" si sin asignar. */
+  responsable_id: string;
+  /** Nombre del responsable (para mostrar). "" si sin asignar. */
+  responsable_nombre: string;
+  /** Enlace/ruta opcional para actuar sobre el pendiente (abrir asistente, generar copy…). "" si no hay. */
+  enlace: string;
 }
 
 export interface ProyectoTarea {
@@ -816,23 +822,39 @@ export interface ProyectoTarea {
   existe: boolean;
 }
 
+/** Usuario asignable como responsable (#145 F5): solo id + nombre. */
+export interface UsuarioTarea {
+  id: string;
+  usuario: string;
+}
+
 export interface RespuestaTareas {
   tareas: Tarea[];
   proyectos: ProyectoTarea[];
+  /** Usuarios reales para el selector de responsable (#145 F5). */
+  usuarios: UsuarioTarea[];
 }
 
 export interface CuerpoCrearTarea {
   proyecto: string;
   titulo: string;
   detalle: string;
+  /** Responsable asignado al crear (#145 F5). "" / omitido = sin asignar. */
+  responsable_id?: string;
+  /** Enlace/ruta opcional para actuar sobre el pendiente (#145 F5). */
+  enlace?: string;
 }
 
 export interface RespuestaCrearTarea {
   tarea: Tarea;
 }
 
+/** Cambios parciales sobre un pendiente (#145 F5): cada campo es opcional. */
 export interface CuerpoActualizarTarea {
-  estado: EstadoTarea;
+  estado?: EstadoTarea;
+  /** "" desasigna; un id real reasigna. */
+  responsable_id?: string;
+  enlace?: string;
 }
 
 // --- Rota de horarios del equipo (F4 · #144) ---
