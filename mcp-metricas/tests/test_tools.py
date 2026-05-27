@@ -1,4 +1,4 @@
-"""Tests de las 7 tools del MCP ejercitadas EN PROCESO (sin servidor ni red).
+"""Tests de las 8 tools del MCP ejercitadas EN PROCESO (sin servidor ni red).
 
 Replica el registro que hace `server.crear_servidor` (`registrar(mcp, fuente,
 historico)`) sobre una `FastMCP` de prueba y las invoca con `mcp.call_tool`,
@@ -36,7 +36,7 @@ def anyio_backend() -> str:
 
 
 def _mcp(fuente, historico: Historico | None = None) -> FastMCP:
-    """Una FastMCP de prueba con las 7 tools registradas sobre `fuente`."""
+    """Una FastMCP de prueba con las 8 tools registradas sobre `fuente`."""
     mcp = FastMCP("keni-metricas-test")
     registrar(mcp, fuente, historico)
     return mcp
@@ -53,7 +53,7 @@ async def _llamar(mcp: FastMCP, nombre: str, **args) -> dict:
     return _payload(await mcp.call_tool(nombre, args))
 
 
-# --- T1: camino feliz de las 7 tools ----------------------------------------
+# --- T1: camino feliz de las 8 tools ----------------------------------------
 
 
 async def test_listar_cuentas_lista_las_marcas_y_la_fuente():
@@ -145,6 +145,23 @@ async def test_picos_devuelve_estructura_serializable():
     assert isinstance(out["alertas"], list)
     assert out["cobertura"]["completa"] is True
     json.dumps(out)
+
+
+async def test_analisis_diario_devuelve_narrativa_con_siguiente_paso():
+    out = await _llamar(_mcp(FuenteMuestra()), "analisis_diario", rango="semana")
+    assert out["rango"] == "semana"
+    assert out["es_muestra"] is True  # marca datos de muestra (issue #131)
+    assert isinstance(out["movimientos"], list)
+    # cierra con un siguiente paso accionable (loop a la accion, UX-roadmap #11)
+    assert out["siguiente_paso"] is not None
+    assert "Pídele a Claude" in out["siguiente_paso"]["texto"]
+    json.dumps(out)
+
+
+async def test_analisis_diario_rango_invalido_devuelve_error():
+    out = await _llamar(_mcp(FuenteMuestra()), "analisis_diario", rango="trimestre")
+    assert "error" in out
+    assert "trimestre" in out["error"]
 
 
 async def test_tendencia_historica_devuelve_serie_tras_poblar_el_historico():

@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
 
+import { AnalisisDiario } from "./metricas/AnalisisDiario";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorMarca, SelectorRango } from "./metricas/Controles";
 import { Descargas } from "./metricas/Descargas";
@@ -145,6 +146,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           </div>
 
           <Kpis total={reporteQuery.data.total} />
+          {/* Lectura "qué cambió y por qué" + siguiente paso (F6/#146): la
+              narrativa va arriba para que el día a día empiece por la lectura,
+              no por la tabla (principio UX #1: el veredicto primero). */}
+          <AnalisisDiario marcaActual={marca} rangoActual={rango} />
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
           <TablaCuentas cuentas={reporteQuery.data.cuentas} fuente={reporteQuery.data.fuente} />
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />

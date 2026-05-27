@@ -166,6 +166,65 @@ class CompararMetricas(TypedDict):
     por_marca: list[ComparativaPorMarca]
 
 
+class PiezaAnalisis(TypedDict):
+    """Pieza que explica un movimiento (o que apuntala el siguiente paso)."""
+
+    titulo: str
+    plataforma: str
+    engagement_pct: float
+    # url: puede no existir según la fuente/plataforma.
+    url: str | None
+
+
+class MovimientoAnalisis(TypedDict):
+    """Un movimiento del periodo: qué se movió y la pieza que lo explica."""
+
+    marca_id: str
+    marca: str
+    variacion_vis_pct: float
+    # direccion: "sube" | "baja" | "estable" (se deriva del signo de la variación).
+    direccion: str
+    visualizaciones: int
+    # engagement_pct: None si no es comparable entre plataformas (#138).
+    engagement_pct: float | None
+    # pieza: None si la marca no tiene piezas que destacar.
+    pieza: PiezaAnalisis | None
+
+
+class SiguientePasoAnalisis(TypedDict):
+    """Sugerencia accionable que cierra el loop a la acción (UX-roadmap #11)."""
+
+    marca_id: str
+    marca: str
+    engagement_pct: float | None
+    pieza: PiezaAnalisis | None
+    texto: str
+
+
+class AnalisisDiario(TypedDict):
+    """Respuesta de `GET /api/metricas/analisis`: lectura "qué cambió y por qué".
+
+    Capa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)
+    que los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los
+    datos son de muestra y no reales (issue #131).
+    """
+
+    rango: str
+    etiqueta_rango: str
+    marca: str
+    # Procedencia: "muestra" (ficticios) o nombre de la fuente real.
+    fuente: str
+    es_muestra: bool
+    movimientos: list[MovimientoAnalisis]
+    movimientos_resto: int
+    marcas_estables: int
+    # Marcas con cobertura parcial (nombres resueltos); la lectura puede estar
+    # incompleta. Vacío = cobertura completa.
+    cobertura_parcial: list[str]
+    # siguiente_paso: None si no hay una marca líder clara a la que apuntar.
+    siguiente_paso: SiguientePasoAnalisis | None
+
+
 # --------------------------------------------------------------------------- #
 # Paginacion — envelope aditivo comun a los listados pesados (#121)            #
 # --------------------------------------------------------------------------- #
@@ -465,6 +524,11 @@ MODELOS = [
     ComparativaPorMarca,
     TotalComparativa,
     CompararMetricas,
+    # Análisis diario con narrativa (F6/#146).
+    PiezaAnalisis,
+    MovimientoAnalisis,
+    SiguientePasoAnalisis,
+    AnalisisDiario,
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,
