@@ -1,0 +1,40 @@
+{
+  "_comentario": "Indice de golden outputs (#139). Cada entrada enlaza un copy de referencia con su marca, plataforma y la fuente (en fuentes/) para el check de fidelidad. 'voz_notas' documenta que rasgo de voz ilustra. Rutas relativas a esta carpeta golden/. test_golden.py recorre este manifest.",
+  "golden": [
+    {
+      "archivo": "claro-sports/x.md",
+      "marca": "claro-sports",
+      "plataforma": "x",
+      "fuente": "fuentes/fichaje-delantero.md",
+      "voz_notas": "Deportiva coloquial pero correcta: lexico de aficion (se armo, agarrate), datos exactos, sin groserias ni espanolismos."
+    },
+    {
+      "archivo": "claro-sports/tiktok.md",
+      "marca": "claro-sports",
+      "plataforma": "tiktok",
+      "fuente": "fuentes/fichaje-delantero.md",
+      "voz_notas": "El registro mas desenfadado de la marca (la rompio, se armo) con hook corto; sigue sin jerga peninsular."
+    },
+    {
+      "archivo": "unotv/x.md",
+      "marca": "unotv",
+      "plataforma": "x",
+      "fuente": "fuentes/sismo-cdmx.md",
+      "voz_notas": "Noticias es-MX neutro profesional: preterito simple, fuente citada, sin sensacionalismo ni jerga."
+    },
+    {
+      "archivo": "unotv/carrusel.md",
+      "marca": "unotv",
+      "plataforma": "carrusel",
+      "fuente": "fuentes/sismo-cdmx.md",
+      "voz_notas": "Explicador en claves: slide 1 = el hecho, ultima slide = CTA; tono neutro profesional."
+    },
+    {
+      "archivo": "fundacion/facebook.md",
+      "marca": "fundacion",
+      "plataforma": "facebook",
+      "fuente": "fuentes/beca-comunidad.md",
+      "voz_notas": "Marca social: sobria, calida, digna; sin jerga ni humor; cifras de impacto con su fuente, sin inflar."
+    }
+  ]
+}

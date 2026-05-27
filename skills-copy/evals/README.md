@@ -34,6 +34,19 @@ Python puro, sin dependencias de terceros (pytest es opcional). Ficheros:
   (`checks.py`) con fixtures sintéticos de copy "bueno" y "malo", para que la
   lógica del gate esté verificada en CI aunque el gate en sí no corra ahí.
 - **`checks.py`** — módulo compartido por ambas capas (sin dependencias).
+- **`tropicalizacion.py`** (#139) — detector de españolismos **por flexiones**:
+  amplía `checks.detecta_espanolismos` (que solo casa el lema exacto y deja pasar
+  "mola"/"flipo") detectando además conjugaciones de verbo, género/número y
+  diminutivos a partir del lema y su clase morfológica. Determinista, sin modelo
+  ni red; corre en CI y como script/CLI (`python3 tropicalizacion.py fichero`).
+  Reporta **cobertura** (cuántos lemas/formas vigila). `test_tropicalizacion.py`
+  lo prueba.
+- **`golden/`** (#139) — **golden outputs** de referencia de voz/tropicalización
+  por marca/plataforma (Claro Sports, UnoTV, Fundación). Cada copy de referencia,
+  revisado a mano, fija el contrato de voz de su marca y debe cumplir las
+  propiedades deterministas: pasa `checks.evaluar_copy` contra su fuente y **no**
+  trae españolismos ni flexiones. El `golden/manifest.json` los indexa;
+  `test_golden.py` los recorre. Ver `golden/README.md`.
 
 ### Cómo correrlos
 
