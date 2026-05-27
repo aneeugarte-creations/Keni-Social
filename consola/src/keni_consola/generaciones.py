@@ -30,16 +30,17 @@ red (NUNCA se llama a `claude` ni a un proveedor de imagen real en tests). El
 SEGURIDAD: escritura atomica (tmp + os.replace); el id de un registro se sanea contra
 traversal al leer; sin shell (argv como lista). Errores en espanol, sin tracebacks.
 
-ENDURECIMIENTO INTERINO (#137): este lanzador recibe medidas TRANSITORIAS de robustez
-mientras llega el SERVICIO COMPARTIDO (#130), que sustituira el subprocess `claude -p`
-por la API de Claude. NO es la solucion final:
+ENDURECIMIENTO PERMANENTE (#137): la generacion se hace —y se SEGUIRA haciendo— con el
+subprocess `claude -p` (ahora en sandbox por usuario; ver ADR 0001), NO con la API de
+Claude. Por eso este lanzador NO es transitorio: su robustez es deuda PERMANENTE:
   - GRUPO DE PROCESOS: el subprocess arranca con su propio grupo (`runner.lanzar_proc`)
     y al timeout/cancel se mata el ARBOL entero (`runner.matar_arbol`), no solo el padre.
   - TOPE DE COLA: `runner.slot()` rechaza con `ColaLlenaError` si la cola esta al tope;
     aqui se refleja como `error`/`motivo="cola_llena"` y el llamante lo traduce a 429.
-  - CANCELACION: `cancelar(gen_id)` mata el arbol del job y lo marca cancelado.
-  - SIN TRAGAR EXCEPCIONES: los fallos del hilo se LOGUEAN con el job-id (#123), ya no
-    se silencian con un `except: pass` opaco.
+  - CANCELACION: `cancelar(gen_id)` mata el arbol del job y lo marca cancelado; el usuario
+    la dispara desde la SPA (`POST /api/generaciones/{id}/cancelar`).
+  - SIN TRAGAR EXCEPCIONES: los fallos del hilo se LOGUEAN correlacionados por job-id (y
+    por el request-id de la peticion que lo lanzo, #123), ya no se silencian en mudo.
 """
 
 from __future__ import annotations
@@ -62,6 +63,7 @@ from . import preferencias, rutas
 from .dominio import runner, stream
 from .dominio.runner import ColaLlenaError  # noqa: F401  (re-export; ver nota abajo)
 from .io_atomico import bloqueo_archivo, escribir_atomico
+from .observabilidad import request_id_actual
 
 # `ColaLlenaError` se RE-EXPORTA aqui (tope de cola, #137): los endpoints capturan
 # `generaciones.ColaLlenaError` sin acoplarse al modulo `dominio.runner`. Lo usan otros
@@ -408,7 +410,7 @@ def lanzar_job_claude(
     Si `dir_temporal` viene (archivo subido), se borra al terminar. INYECTABLE: los tests
     reemplazan esta funcion por una fake que llama a `procesar` con una salida canned.
 
-    TOPE DE COLA INTERINO (#137): la admision se decide AQUI, SINCRONAMENTE, antes de
+    TOPE DE COLA (#137, PERMANENTE): la admision se decide AQUI, SINCRONAMENTE, antes de
     arrancar el hilo: si el sistema esta saturado (`runner.admitir()` lanza
     `ColaLlenaError`) propagamos la excepcion al llamante, que responde 429. Asi no se
     apilan hilos daemon bloqueados sin limite (el bug original). El hilo hereda esa
@@ -417,9 +419,17 @@ def lanzar_job_claude(
     acumulador = stream.AcumuladorStream()
     timeout = _timeout()
 
-    # Admision SINCRONA: si la cola esta al tope, NO lanzamos el hilo; el llamante
-    # recibe ColaLlenaError y responde 429 (INTERINO #137; lo reemplaza el servicio
-    # compartido #130). El hilo, ya admitido, libera el cupo al terminar via `slot`.
+    # CORRELACION (#123 + #137): capturamos AQUI (sincronicamente, dentro de la peticion)
+    # el request-id de quien lanzo el job. El hilo de trabajo corre fuera del contexto de
+    # la peticion, asi que el ContextVar ya no estara puesto; por eso lo guardamos ahora y
+    # lo incluimos en TODOS los logs del job. Asi un fallo del job se rastrea hasta la
+    # peticion que lo origino (y hasta el id que el usuario pudo haber reportado).
+    rid = request_id_actual()
+    etq = f"generacion {gen_id}" + (f" (req {rid})" if rid else "")
+
+    # Admision SINCRONA: si la cola esta al tope, NO lanzamos el hilo; el llamante recibe
+    # ColaLlenaError y responde 429 (#137; PERMANENTE: la generacion sigue siendo `claude
+    # -p`, ADR 0001). El hilo, ya admitido, libera el cupo al terminar via `slot`.
     runner.admitir()
 
     def _avance() -> None:
@@ -434,8 +444,8 @@ def lanzar_job_claude(
             )
         except Exception:  # noqa: BLE001 -- el avance nunca debe romper el hilo
             # Persistir un parcial es best-effort (el cierre fija el estado), pero ya no
-            # lo silenciamos en mudo: dejamos rastro con el job-id (#123, #137).
-            _log.warning("generacion %s: fallo al persistir avance parcial", gen_id, exc_info=True)
+            # lo silenciamos en mudo: dejamos rastro con el job-id + request-id (#123, #137).
+            _log.warning("%s: fallo al persistir avance parcial", etq, exc_info=True)
 
     def _finalizar(timed_out: bool, returncode: int | None, cancelado: bool) -> None:
         # OJO: el `dir_temporal` se borra al FINAL (no aqui), porque el post-procesado
@@ -474,8 +484,8 @@ def lanzar_job_claude(
                     resultado = procesar(acumulador.texto, acumulador.final)
                 except Exception:  # noqa: BLE001 -- fallo del post-procesado -> error claro
                     # El cliente ve un mensaje generico (sin traceback), pero el fallo
-                    # queda CORRELACIONADO al job en el log del servidor (#123, #137).
-                    _log.exception("generacion %s: fallo el post-procesado (procesar)", gen_id)
+                    # queda CORRELACIONADO al job + a la peticion en el log (#123, #137).
+                    _log.exception("%s: fallo el post-procesado (procesar)", etq)
                     actualizar(gen_id, {
                         "estado": ESTADO_ERROR,
                         "error": "Se generó el contenido pero no se pudo procesar el resultado.",
@@ -502,9 +512,9 @@ def lanzar_job_claude(
             })
         except Exception:  # noqa: BLE001 -- el cierre nunca debe propagar
             # Antes era `pass` mudo: un fallo del cierre se volvia un job atascado en
-            # "ejecutando" sin rastro. Ahora lo LOGUEAMOS con el job-id (#123, #137) y,
-            # best-effort, intentamos dejarlo en error (no propagamos: el hilo es daemon).
-            _log.exception("generacion %s: fallo al fijar el estado terminal", gen_id)
+            # "ejecutando" sin rastro. Ahora lo LOGUEAMOS con el job-id + request-id (#123,
+            # #137) y, best-effort, intentamos dejarlo en error (no propagamos: es daemon).
+            _log.exception("%s: fallo al fijar el estado terminal", etq)
             try:
                 actualizar(gen_id, {
                     "estado": ESTADO_ERROR,
@@ -512,7 +522,7 @@ def lanzar_job_claude(
                     "fecha_fin": fecha_fin,
                 })
             except Exception:  # noqa: BLE001 -- ya logueamos; no hay mas que hacer
-                _log.error("generacion %s: tampoco se pudo marcar el error de cierre", gen_id)
+                _log.error("%s: tampoco se pudo marcar el error de cierre", etq)
         finally:
             # Limpieza del temporal de la subida: DESPUES de `procesar` (ver nota arriba).
             if dir_temporal is not None:
@@ -585,13 +595,14 @@ def lanzar_job_claude(
 
 
 def cancelar(gen_id: str) -> bool:
-    """Cancela un job de claude EN VUELO: mata el ARBOL del subproceso. (#137, INTERINO).
+    """Cancela un job de claude EN VUELO: mata el ARBOL del subproceso (#137, PERMANENTE).
 
     Devuelve True si habia un job en vuelo (proceso) que se senalizo/mato; False si no
     hay nada que cancelar (ya terminó o no es un job con proceso). Arma el evento de
     cancelacion (para que `_finalizar` lo marque como cancelado) y, si ya hay proceso,
     le manda el kill al GRUPO. La limpieza del estado terminal la hace el hilo en
-    `_finalizar`. Es contencion mientras llega el servicio compartido (#130).
+    `_finalizar`. La generacion es subprocess `claude -p` (ADR 0001): cancelar = matar el
+    arbol del proceso, no una operacion remota.
     """
     with _HANDLES_LOCK:
         handle = _HANDLES.get(gen_id)

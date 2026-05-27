@@ -1,4 +1,4 @@
-import { Loader2 } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import * as React from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -78,18 +78,25 @@ function StreamTexto({ texto, ejecutando }: { texto: string; ejecutando: boolean
 
 /**
  * Tarjeta reutilizable de progreso de una generación en segundo plano. Mientras
- * corre muestra el texto en vivo + métricas parciales; al terminar con error,
+ * corre muestra el texto en vivo + métricas parciales (y, si se pasa `onCancelar`, un
+ * botón "Cancelar" que mata el trabajo en el servidor, #137); al terminar con error,
  * muestra el mensaje y (si se pasa) un botón para reintentar. El resultado
  * COMPLETADO lo renderiza cada página a su manera (copy, hashtags, imagen…).
  */
 export function ProgresoGeneracion({
   generacion,
   onReintentar,
+  onCancelar,
+  cancelando = false,
   className,
 }: {
   generacion: Generacion;
   /** Si se pasa, se muestra "Reintentar" en el estado de error. */
   onReintentar?: () => void;
+  /** Si se pasa, se muestra "Cancelar" mientras corre (mata el trabajo, #137). */
+  onCancelar?: () => void;
+  /** `true` mientras la cancelación está en curso (deshabilita el botón). */
+  cancelando?: boolean;
   className?: string;
 }) {
   const ejecutando = generacion.estado === "ejecutando";
@@ -109,6 +116,22 @@ export function ProgresoGeneracion({
             <Badge variant="error">Error</Badge>
           ) : (
             <Badge variant="ok">Completado</Badge>
+          )}
+          {ejecutando && onCancelar && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={onCancelar}
+              disabled={cancelando}
+            >
+              {cancelando ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+              ) : (
+                <X className="h-3.5 w-3.5" aria-hidden />
+              )}
+              Cancelar
+            </Button>
           )}
         </div>
         <LineaMetricas metricas={generacion.metricas} />

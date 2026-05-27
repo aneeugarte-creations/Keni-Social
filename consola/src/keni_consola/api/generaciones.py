@@ -9,9 +9,9 @@ terminal:
   - `GET /api/generaciones`         -> listado reciente (para una vista de actividad).
   - `GET /api/generaciones/{id}`    -> una generacion (estado + salida en vivo + metricas
                                        + `resultado` cuando completa). 404 si no existe.
-  - `POST /api/generaciones/{id}/cancelar` -> cancela un job en vuelo (#137, INTERINO):
-                                       mata el ARBOL del subproceso `claude` y deja el
-                                       registro en estado terminal. 404 si no existe.
+  - `POST /api/generaciones/{id}/cancelar` -> cancela un job en vuelo (#137): mata el
+                                       ARBOL del subproceso `claude` y deja el registro
+                                       en estado terminal. 404 si no existe.
 
 La logica vive en el dominio `consola.generaciones`; aqui solo se serializa a JSON.
 """
@@ -59,15 +59,15 @@ async def obtener(request: Request) -> Response:
 
 
 async def cancelar(request: Request) -> Response:
-    """Cancela un job de generacion EN VUELO (#137, INTERINO).
+    """Cancela un job de generacion EN VUELO (#137).
 
     Mata el ARBOL del subproceso `claude` y deja el registro en estado terminal
     (`error`/`motivo=cancelado`, lo fija el hilo del job). -> `{generacion}` con el
     estado actual. 404 si la generacion no existe. Si ya habia terminado (sin job en
     vuelo) devuelve el registro tal cual: la cancelacion es idempotente.
 
-    Es contencion mientras llega el servicio compartido (#130): cuando exista, la
-    cancelacion sera una operacion de la API de Claude, no un kill de proceso local.
+    La generacion es subprocess `claude -p` (ADR 0001), asi que cancelar = matar el arbol
+    del proceso local; lo dispara el usuario desde la SPA (un boton "Cancelar").
     """
     gen_id = request.path_params.get("generacion_id")
     generacion = generaciones.obtener(gen_id)

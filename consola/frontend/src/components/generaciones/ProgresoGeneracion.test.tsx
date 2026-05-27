@@ -41,6 +41,47 @@ describe("ProgresoGeneracion", () => {
     expect(screen.getByText("Pensando…")).toBeInTheDocument();
   });
 
+  it("muestra el botón Cancelar mientras corre y dispara onCancelar (#137)", () => {
+    let cancelaciones = 0;
+    render(
+      <ProgresoGeneracion
+        generacion={base({ salida: "en curso" })}
+        onCancelar={() => {
+          cancelaciones += 1;
+        }}
+      />,
+    );
+    const boton = screen.getByRole("button", { name: /Cancelar/ });
+    boton.click();
+    expect(cancelaciones).toBe(1);
+  });
+
+  it("no muestra Cancelar si no se pasa onCancelar", () => {
+    render(<ProgresoGeneracion generacion={base({ salida: "en curso" })} />);
+    expect(screen.queryByRole("button", { name: /Cancelar/ })).toBeNull();
+  });
+
+  it("deshabilita Cancelar mientras la cancelación está en curso", () => {
+    render(
+      <ProgresoGeneracion
+        generacion={base({ salida: "en curso" })}
+        onCancelar={() => {}}
+        cancelando
+      />,
+    );
+    expect(screen.getByRole("button", { name: /Cancelar/ })).toBeDisabled();
+  });
+
+  it("no muestra Cancelar cuando ya terminó (no está ejecutando)", () => {
+    render(
+      <ProgresoGeneracion
+        generacion={base({ estado: "completado", salida: "listo" })}
+        onCancelar={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /Cancelar/ })).toBeNull();
+  });
+
   it("muestra el error y el botón de reintentar", () => {
     let reintentos = 0;
     render(

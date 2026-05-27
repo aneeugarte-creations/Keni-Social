@@ -139,7 +139,7 @@ export function FlujoGeneracion({
   const [redes, setRedes] = React.useState<Set<string>>(new Set());
 
   // Generación en segundo plano (streaming en vivo + reanudable al cambiar de pestaña).
-  const { generacion, ejecutando, iniciar } = useGeneracion(claveGen);
+  const { generacion, ejecutando, cancelando, iniciar, cancelar } = useGeneracion(claveGen);
 
   // Grupos filtrados a las skills de esta sección (descarta grupos vacíos).
   const grupos = React.useMemo(
@@ -514,8 +514,14 @@ export function FlujoGeneracion({
             </CardContent>
           </Card>
 
-          {/* Progreso en vivo mientras corre (texto token a token + métricas). */}
-          {generacion && ejecutando && <ProgresoGeneracion generacion={generacion} />}
+          {/* Progreso en vivo mientras corre (texto token a token + métricas) + Cancelar (#137). */}
+          {generacion && ejecutando && (
+            <ProgresoGeneracion
+              generacion={generacion}
+              onCancelar={cancelar}
+              cancelando={cancelando}
+            />
+          )}
           {/* Estado de error con opción de reintentar. */}
           {generacion && generacion.estado === "error" && (
             <ProgresoGeneracion generacion={generacion} onReintentar={() => mutacion.mutate()} />
