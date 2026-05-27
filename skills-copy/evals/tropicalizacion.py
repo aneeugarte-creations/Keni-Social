@@ -260,7 +260,7 @@ class CoberturaTropicalizacion:
         )
 
 
-_LEMA_A_MEX: dict[str, str] = {l.lema: l.mexicano for l in LEMAS}
+_LEMA_A_MEX: dict[str, str] = {lm.lema: lm.mexicano for lm in LEMAS}
 
 
 def detecta_flexiones_es_es(texto: str) -> list[HallazgoTropicalizacion]:
@@ -294,7 +294,7 @@ def detecta_flexiones_es_es(texto: str) -> list[HallazgoTropicalizacion]:
 
 def cobertura() -> CoberturaTropicalizacion:
     """Cobertura ESTATICA del detector (sin texto): lemas y formas vigiladas."""
-    lemas = sorted({l.lema for l in LEMAS if l.lema not in AMBIGUOS_FUERA})
+    lemas = sorted({lm.lema for lm in LEMAS if lm.lema not in AMBIGUOS_FUERA})
     return CoberturaTropicalizacion(
         lemas_totales=len(lemas),
         formas_totales=len(INDICE_FLEXIONES),
