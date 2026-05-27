@@ -316,10 +316,63 @@ def construir_procesar_documento(
 # (hallazgo N13). `skills_catalogo` lo importa de forma perezosa para no crear ciclo.
 
 
+# Nombre del plugin (== `name` en `.claude-plugin/plugin.json`): asi localizamos NUESTRA
+# carpeta dentro de la cache de plugins de Claude Code, sin barrer plugins ajenos.
+_NOMBRE_PLUGIN = "keni-social"
+
+
+def _contiene_skills(base: Path) -> bool:
+    """True si `base` es una raiz valida de skills (contiene `.claude/skills`).
+
+    Acepta las DOS formas posibles de raiz: la del repo/plugin (las skills cuelgan de
+    `skills-copy/.claude/skills`, igual que declara `plugin.json`) o una raiz que ya sea
+    el propio `skills-copy/` (las skills cuelgan directo de `.claude/skills`). Coincide a
+    proposito con la deteccion de `cwd_ejecucion_skills`.
+    """
+    return (base / "skills-copy" / ".claude" / "skills").is_dir() or (
+        base / ".claude" / "skills"
+    ).is_dir()
+
+
+def _candidatos_plugin() -> list[Path]:
+    """Raices candidatas de NUESTRO plugin en la cache de Claude Code (fallback distribucion).
+
+    Orden de preferencia:
+      1. `CLAUDE_PLUGIN_ROOT`: env que pone Claude Code apuntando a la raiz del plugin en
+         ejecucion. Es la senal directa y mas fiable cuando la Consola corre dentro de un
+         `claude -p` lanzado con el plugin instalado.
+      2. `~/.claude/plugins/**/keni-social`: la cache donde Claude Code clona los plugins
+         de un marketplace (`marketplaces/<mkt>/plugins/keni-social`). Buscamos por NOMBRE
+         de carpeta para no barrer plugins ajenos; aceptamos cualquier profundidad.
+
+    Solo candidatos, sin validar todavia que contengan las skills (eso lo hace el caller).
+    """
+    candidatos: list[Path] = []
+    env_plugin = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if env_plugin:
+        candidatos.append(Path(env_plugin))
+    cache = Path.home() / ".claude" / "plugins"
+    if cache.is_dir():
+        # `**/keni-social`: cubre tanto `plugins/keni-social` como
+        # `marketplaces/<mkt>/plugins/keni-social`. Orden estable para ser deterministas.
+        candidatos.extend(sorted(p for p in cache.glob(f"**/{_NOMBRE_PLUGIN}") if p.is_dir()))
+    return candidatos
+
+
 def cwd_skills() -> Path:
     """Directorio desde el que corremos `claude` para que las skills esten a mano.
 
-    Preferencia: env `KENI_SKILLS_CWD` -> repo keni-social conocido -> cwd actual.
+    Devuelve la PRIMERA raiz (base que contiene `.claude/skills`, directa o via
+    `skills-copy/`) de esta lista de preferencia:
+
+      1. env `KENI_SKILLS_CWD` (override explicito): si apunta a un dir EXISTENTE se
+         respeta tal cual, contenga o no skills (compat: lo usan tests/operadores).
+      2. repo de desarrollo conocido (`~/projects/keni-social`) — flujo de dev intacto.
+      3. FALLBACK de distribucion (#133): la cache del plugin de Claude Code, via
+         `CLAUDE_PLUGIN_ROOT` y `~/.claude/plugins/**/keni-social`, para que un community
+         manager que SOLO instalo el plugin (sin clonar el repo) tenga skills a mano.
+
+    Si ninguna raiz contiene skills, cae al cwd actual (ultimo recurso, como antes).
     """
     env = os.environ.get("KENI_SKILLS_CWD")
     if env:
@@ -327,8 +380,9 @@ def cwd_skills() -> Path:
         if candidato.is_dir():
             return candidato
     repo = Path.home() / "projects" / "keni-social"
-    if repo.is_dir():
-        return repo
+    for base in [repo, *_candidatos_plugin()]:
+        if _contiene_skills(base):
+            return base
     return Path.cwd()
 
 
