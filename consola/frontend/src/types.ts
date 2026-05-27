@@ -835,6 +835,115 @@ export interface CuerpoActualizarTarea {
   estado: EstadoTarea;
 }
 
+// --- Rota de horarios del equipo (F4 · #144) ---
+
+/** Un miembro del equipo (un usuario de la consola) disponible para la rota. */
+export interface MiembroRota {
+  id: string;
+  nombre: string;
+}
+
+export interface RespuestaEquipoRota {
+  equipo: MiembroRota[];
+}
+
+/** Un evento/transmisión a cubrir: cuándo es y QUÉ sacar de él. */
+export interface EventoRota {
+  id: string;
+  titulo: string;
+  /** ISO (AAAA-MM-DD). */
+  fecha: string;
+  hora: string;
+  /** "Qué sacar" de esta transmisión (el campo clave del Excel de Elías). */
+  contenido: string;
+  nota: string;
+  es_sabado: boolean;
+}
+
+export interface RespuestaEventosRota {
+  eventos: EventoRota[];
+}
+
+export interface RespuestaEventoRota {
+  evento: EventoRota;
+}
+
+export interface CuerpoCrearEventoRota {
+  titulo: string;
+  fecha: string;
+  hora?: string;
+  contenido?: string;
+  nota?: string;
+}
+
+export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota>;
+
+/** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por Elías). */
+export type EstadoTurnoRota = "propuesto" | "aprobado";
+
+/** Un turno: un miembro cubre un evento. Vincula ambos + qué sacar. */
+export interface TurnoRota {
+  id: string;
+  /** Lunes ISO de la semana. */
+  semana: string;
+  evento_id: string;
+  evento_titulo: string;
+  evento_fecha: string;
+  evento_hora: string;
+  contenido: string;
+  es_sabado: boolean;
+  miembro_id: string;
+  miembro_nombre: string;
+  estado: EstadoTurnoRota;
+  /** Cobertura forzada que rompe la rotación de sábados (la decide Elías). */
+  override: boolean;
+  motivo: string;
+}
+
+/** La rota de una semana: turnos + rango + si está publicada. */
+export interface RotaSemana {
+  /** Lunes ISO. */
+  lunes: string;
+  inicio: string;
+  fin: string;
+  turnos: TurnoRota[];
+  /** `true` => todos los turnos aprobados (publicada al equipo). */
+  aprobada: boolean;
+  total: number;
+  /** Avisos de la propuesta (p. ej. no se pudo rotar). Solo tras proponer. */
+  avisos?: string[];
+  /** Mensaje de confirmación (p. ej. tras aprobar). */
+  mensaje?: string;
+}
+
+export interface CuerpoProponerRota {
+  /** Lunes (o cualquier día) de la semana a proponer. */
+  lunes: string;
+}
+
+export type CuerpoAprobarRota = CuerpoProponerRota;
+
+/** Edición de un turno por Elías (todo opcional; se manda lo que cambia). */
+export interface CuerpoActualizarTurnoRota {
+  miembro_id?: string;
+  override?: boolean;
+  motivo?: string;
+  estado?: EstadoTurnoRota;
+}
+
+export interface RespuestaTurnoRota {
+  turno: TurnoRota;
+}
+
+/** "Mi próxima semana": la semana + los turnos del usuario actual. */
+export interface MiSemanaRota extends RotaSemana {
+  miembro_id: string;
+  miembro_nombre: string;
+  mis_turnos: TurnoRota[];
+  /** Aviso si no hay sesión (token de mantenimiento). */
+  aviso?: string;
+}
+
 // --- Metricas ---
 //
 // Los tipos de métricas (`RangoMetrica`, `OpcionesMetricas`, `TotalMetricas`,

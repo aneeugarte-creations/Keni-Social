@@ -66,29 +66,46 @@ from typing import Any
 from . import rutas
 from .estados import (
     ESTADO_COMERCIAL_ACTIVA,
+    ESTADO_ROTA_APROBADO,
+    ESTADO_ROTA_PROPUESTO,
     ESTADOS_COMERCIAL,
+    ESTADOS_ROTA,
     ESTADOS_TAREA,
     METRICAS_COMERCIAL,
 )
 
 __all__ = [
     "ESTADO_COMERCIAL_ACTIVA",
+    "ESTADO_ROTA_APROBADO",
+    "ESTADO_ROTA_PROPUESTO",
     "ESTADOS_COMERCIAL",
+    "ESTADOS_ROTA",
     "ESTADOS_TAREA",
     "METRICAS_COMERCIAL",
     "actualizar_estado_tarea",
+    "actualizar_evento_rota",
     "actualizar_publicacion_comercial",
+    "actualizar_turno_rota",
+    "aprobar_semana_rota",
+    "borrar_evento_rota",
     "borrar_publicacion_comercial",
     "borrar_tarea",
+    "borrar_turnos_semana_rota",
     "conectar",
+    "crear_evento_rota",
     "crear_publicacion_comercial",
     "crear_tarea",
+    "crear_turno_rota",
+    "listar_eventos_rota",
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
     "listar_tareas",
+    "listar_turnos_rota",
     "marcar_aviso_comercial",
+    "obtener_evento_rota",
     "obtener_publicacion_comercial",
     "obtener_tarea",
+    "obtener_turno_rota",
     "registrar_snapshot_comercial",
     "ruta_db",
     "ultimo_snapshot_comercial",
@@ -207,6 +224,33 @@ def _crear_esquema(con: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_sesiones_usuario
             ON sesiones (usuario_id);
+        CREATE TABLE IF NOT EXISTS rota_eventos (
+            id          TEXT PRIMARY KEY,
+            titulo      TEXT NOT NULL,
+            fecha       TEXT NOT NULL DEFAULT '',
+            hora        TEXT NOT NULL DEFAULT '',
+            contenido   TEXT NOT NULL DEFAULT '',
+            nota        TEXT NOT NULL DEFAULT '',
+            creado      TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha
+            ON rota_eventos (fecha);
+        CREATE TABLE IF NOT EXISTS rota_turnos (
+            id            TEXT PRIMARY KEY,
+            semana        TEXT NOT NULL,
+            evento_id     TEXT NOT NULL,
+            miembro_id    TEXT NOT NULL DEFAULT '',
+            miembro_nombre TEXT NOT NULL DEFAULT '',
+            estado        TEXT NOT NULL DEFAULT 'propuesto',
+            override      INTEGER NOT NULL DEFAULT 0,
+            motivo        TEXT NOT NULL DEFAULT '',
+            creado        TEXT NOT NULL DEFAULT '',
+            actualizado   TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana
+            ON rota_turnos (semana);
+        CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro
+            ON rota_turnos (miembro_id);
         """
     )
     _migrar_atribucion_tareas(con)
@@ -706,3 +750,269 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
         "interacciones": int(fila["interacciones"]),
         "alcance": int(fila["alcance"]),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Rota de horarios del equipo (F4 · #144): eventos/transmisiones + turnos       #
+# --------------------------------------------------------------------------- #
+#
+# Sustituye el Excel manual de Elias. Dos tablas operacionales:
+#   - `rota_eventos`: el calendario de eventos/transmisiones (fecha+hora+que sacar).
+#   - `rota_turnos`:  las asignaciones (un miembro cubre un evento), por semana, con
+#                     estado propuesto|aprobado y un flag `override` (cobertura forzada
+#                     que rompe la rotacion de sabados; la decide Elias). NO se publica
+#                     nada al equipo hasta que la semana esta `aprobada`.
+# El PROPONEDOR (rota.py) es puro; aqui solo se persiste lo que la API decide.
+
+_COLS_EVENTO_ROTA = ("id", "titulo", "fecha", "hora", "contenido", "nota", "creado")
+_SELECT_EVENTO_ROTA = f"SELECT {', '.join(_COLS_EVENTO_ROTA)} FROM rota_eventos"
+_CAMPOS_EDITABLES_EVENTO_ROTA = ("titulo", "fecha", "hora", "contenido", "nota")
+
+_COLS_TURNO_ROTA = (
+    "id",
+    "semana",
+    "evento_id",
+    "miembro_id",
+    "miembro_nombre",
+    "estado",
+    "override",
+    "motivo",
+    "creado",
+    "actualizado",
+)
+_SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
+
+
+def _fila_a_evento_rota(fila: sqlite3.Row) -> dict[str, Any]:
+    return {col: fila[col] for col in _COLS_EVENTO_ROTA}
+
+
+def _fila_a_turno_rota(fila: sqlite3.Row) -> dict[str, Any]:
+    turno = {col: fila[col] for col in _COLS_TURNO_ROTA}
+    turno["override"] = bool(fila["override"])
+    return turno
+
+
+# --- Eventos / transmisiones --------------------------------------------------
+
+
+def crear_evento_rota(
+    titulo: str,
+    *,
+    fecha: str = "",
+    hora: str = "",
+    contenido: str = "",
+    nota: str = "",
+) -> dict[str, Any]:
+    """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "titulo": titulo,
+        "fecha": fecha or "",
+        "hora": hora or "",
+        "contenido": contenido or "",
+        "nota": nota or "",
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_EVENTO_ROTA)
+        con.execute(
+            f"INSERT INTO rota_eventos ({', '.join(_COLS_EVENTO_ROTA)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_EVENTO_ROTA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def listar_eventos_rota(
+    desde: str | None = None, hasta: str | None = None
+) -> list[dict[str, Any]]:
+    """Eventos de la rota, en orden cronologico. Filtro opcional por rango de fechas (ISO)."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if desde:
+        clausulas.append("fecha >= ?")
+        params.append(desde)
+    if hasta:
+        clausulas.append("fecha <= ?")
+        params.append(hasta)
+    sql = _SELECT_EVENTO_ROTA
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY fecha ASC, hora ASC, titulo ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_evento_rota(f) for f in filas]
+
+
+def obtener_evento_rota(evento_id: str) -> dict[str, Any] | None:
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_EVENTO_ROTA} WHERE id = ?", (evento_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_evento_rota(fila) if fila is not None else None
+
+
+def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita parcialmente un evento; None si el id no existe. Solo campos editables."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_EVENTO_ROTA}
+    if not cambios:
+        return obtener_evento_rota(evento_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = list(cambios.values())
+    params.append(evento_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE rota_eventos SET {', '.join(asignaciones)} WHERE id = ?", tuple(params)
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(f"{_SELECT_EVENTO_ROTA} WHERE id = ?", (evento_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_evento_rota(fila) if fila is not None else None
+
+
+def borrar_evento_rota(evento_id: str) -> bool:
+    """Borra un evento y los turnos que lo referencian; True si existia."""
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM rota_turnos WHERE evento_id = ?", (evento_id,))
+        cur = con.execute("DELETE FROM rota_eventos WHERE id = ?", (evento_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --- Turnos (asignaciones de la rota) -----------------------------------------
+
+
+def crear_turno_rota(
+    semana: str,
+    evento_id: str,
+    *,
+    miembro_id: str = "",
+    miembro_nombre: str = "",
+    estado: str = ESTADO_ROTA_PROPUESTO,
+    override: bool = False,
+    motivo: str = "",
+) -> dict[str, Any]:
+    """Inserta un turno (asignacion) y lo devuelve. NO valida (lo hace la API)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "semana": semana,
+        "evento_id": evento_id,
+        "miembro_id": miembro_id or "",
+        "miembro_nombre": miembro_nombre or "",
+        "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
+        "override": 1 if override else 0,
+        "motivo": motivo or "",
+        "creado": ahora,
+        "actualizado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_TURNO_ROTA)
+        con.execute(
+            f"INSERT INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_TURNO_ROTA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    fila["override"] = bool(fila["override"])
+    return fila
+
+
+def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
+    """Turnos de la rota; filtro opcional por `semana` (lunes ISO)."""
+    sql = _SELECT_TURNO_ROTA
+    params: tuple[Any, ...] = ()
+    if semana:
+        sql += " WHERE semana = ?"
+        params = (semana,)
+    sql += " ORDER BY semana ASC, creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_turno_rota(f) for f in filas]
+
+
+def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_TURNO_ROTA} WHERE id = ?", (turno_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_turno_rota(fila) if fila is not None else None
+
+
+def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita un turno (miembro/override/motivo/estado); None si el id no existe.
+
+    Pone `actualizado` a ahora. `override` se normaliza a 0/1. NO valida (lo hace la API).
+    """
+    editables = ("miembro_id", "miembro_nombre", "estado", "override", "motivo")
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if "override" in cambios:
+        cambios["override"] = 1 if cambios["override"] else 0
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(turno_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE rota_turnos SET {', '.join(asignaciones)} WHERE id = ?", tuple(params)
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(f"{_SELECT_TURNO_ROTA} WHERE id = ?", (turno_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_turno_rota(fila) if fila is not None else None
+
+
+def borrar_turnos_semana_rota(semana: str) -> int:
+    """Borra TODOS los turnos de una semana (al re-proponer). Devuelve cuantos borro."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM rota_turnos WHERE semana = ?", (semana,))
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def aprobar_semana_rota(semana: str) -> int:
+    """Marca TODOS los turnos de una semana como `aprobado` (publica al equipo).
+
+    Devuelve cuantos turnos quedaron aprobados. Idempotente: re-aprobar no rompe.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE semana = ?",
+            (ESTADO_ROTA_APROBADO, ahora, semana),
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
