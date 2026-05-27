@@ -23,7 +23,7 @@ prompt de dirección de arte para rellenar la banda en tu herramienta.
 
 Uso:
   python3 expandir.py --foto FOTO --formato feed \
-      [--modelo google/gemini-2.5-flash-image] [--strength 0.4] \
+      [--modelo openai/gpt-5.4-image-2] [--strength 0.4] \
       [--lado auto|arriba|abajo|izquierda|derecha] [--marca claro-sports] \
       [--prompt "..."] [--salida SAL]
 """
@@ -62,7 +62,7 @@ ESTILO_MARCA = {
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Modelo de imagen por defecto (editable por --modelo o OPENROUTER_IMAGE_MODEL).
 # Otros: bytedance/seedream-4.5 (preserva sujeto), black-forest-labs/flux..., etc.
-_MODELO_DEFECTO = "google/gemini-2.5-flash-image"
+_MODELO_DEFECTO = "openai/gpt-5.4-image-2"
 _STRENGTH_DEFECTO = 0.4  # bajo = más fiel al original; afinar en la primera prueba real
 _TIMEOUT = 120
 

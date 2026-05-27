@@ -20,7 +20,7 @@ GENERACION POR IA (inyectable / mockeable):
   - `generar_imagen(prompt)` delega en `_PROVEEDOR` (modulo-nivel). Los tests lo
     parchean para NUNCA tocar la red: ni se llama a OpenAI ni se necesita httpx real.
   - Proveedor por defecto: OpenRouter (gateway compatible con OpenAI; el modelo de
-    imagen se elige por id, def. `google/gemini-2.5-flash-image`, editable con
+    imagen se elige por id, def. `openai/gpt-5.4-image-2`, editable con
     `OPENROUTER_IMAGE_MODEL`). La clave se toma del almacen de secretos
     (`keni_consola.secretos`) y, si no, del env `OPENROUTER_API_KEY`.
 """
@@ -66,7 +66,7 @@ _TIMEOUT_GEN = 120
 # Endpoint y modelo por defecto en OpenRouter (gateway compatible con OpenAI; el modelo
 # de imagen se elige por id y se puede cambiar con OPENROUTER_IMAGE_MODEL).
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_MODELO_DEFECTO = "google/gemini-2.5-flash-image"
+_MODELO_DEFECTO = "openai/gpt-5.4-image-2"
 
 
 class MediaError(RuntimeError):

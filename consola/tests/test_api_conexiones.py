@@ -28,7 +28,7 @@ def test_imagen_estado_sin_clave(cliente):
     cuerpo = r.json()
     assert cuerpo == {
         "proveedor": "openrouter",
-        "modelo": "google/gemini-2.5-flash-image",
+        "modelo": "openai/gpt-5.4-image-2",
         "configurado": False,
         "pista": "",
     }
@@ -43,7 +43,7 @@ def test_imagen_guardar_y_estado(cliente):
 
     estado = cliente.get("/api/conexiones/imagen").json()
     assert estado["configurado"] is True
-    assert estado["modelo"] == "google/gemini-2.5-flash-image"
+    assert estado["modelo"] == "openai/gpt-5.4-image-2"
     assert estado["pista"] == "····" + _CLAVE[-4:]
     # el estado NUNCA expone la clave entera
     assert _CLAVE not in cliente.get("/api/conexiones/imagen").text

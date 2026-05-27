@@ -13,7 +13,7 @@ entrega el "prompt de dirección de arte" listo para pegar en tu herramienta.
 
 Uso:
   python3 generar.py --prompt "..." [--marca claro-sports] [--formato feed] \
-      [--modelo google/gemini-2.5-flash-image] [--salida SAL]
+      [--modelo openai/gpt-5.4-image-2] [--salida SAL]
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ ESTILO_MARCA = {
 
 _OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 # Modelo por defecto (editable por --modelo o OPENROUTER_IMAGE_MODEL).
-MODELO_DEFECTO = "google/gemini-2.5-flash-image"
+MODELO_DEFECTO = "openai/gpt-5.4-image-2"
 _TIMEOUT = 120
 
 
