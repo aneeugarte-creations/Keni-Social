@@ -15,14 +15,13 @@ antigua carpeta de features al migrar a API JSON).
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import proyectos
+from .. import config, proyectos
 from .._http_json import leer_json
 
 # Las plantillas viven en el paquete (no en features/, que se elimino).
@@ -67,9 +66,15 @@ def render_claude_md(plantilla_id: str, nombre: str) -> str:
 
 def raiz_permitida() -> Path:
     """Raiz dentro de la cual se pueden crear carpetas. `KENI_CONSOLA_RAIZ` la
-    sobreescribe (tests/equipos); por defecto `~/keni-proyectos`."""
-    if (p := os.environ.get("KENI_CONSOLA_RAIZ")):
-        return Path(p).expanduser().resolve()
+    sobreescribe (tests/equipos); por defecto `~/keni-proyectos`.
+
+    NOTA: este default es deliberadamente literal (`~/keni-proyectos`), NO
+    `rutas.raiz_proyectos()`: aqui solo se valida el destino de creacion de carpetas
+    desde la UI y nunca corre bajo `KENI_DATA_DIR`. Se preserva tal cual (no se unifica
+    con `ficheros.raiz_datos`) para no cambiar comportamiento.
+    """
+    if (p := config.override_ruta(config.ENV_RAIZ)) is not None:
+        return p.resolve()
     return (Path.home() / "keni-proyectos").resolve()
 
 

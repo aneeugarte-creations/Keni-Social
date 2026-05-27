@@ -13,11 +13,10 @@ mismo patron defensivo que `secretos.py`. NO contiene secretos.
 
 from __future__ import annotations
 
-import os
 import tomllib
 from pathlib import Path
 
-from . import rutas
+from . import config, rutas
 from .io_atomico import escribir_atomico
 
 # Niveles validos de `claude --effort` (ver `claude --help`), de menor a mayor
@@ -43,8 +42,8 @@ def ruta_preferencias() -> Path:
     no, cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/preferencias.toml`, o bajo `KENI_DATA_DIR`.
     """
-    if (p := os.environ.get("KENI_CONSOLA_PREFERENCIAS")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_PREFERENCIAS)) is not None:
+        return p
     return rutas.dir_config() / "preferencias.toml"
 
 

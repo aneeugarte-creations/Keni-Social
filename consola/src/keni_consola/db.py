@@ -58,7 +58,6 @@ solo se deja la nota y el punto de extension (`conectar()`).
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import uuid
 from datetime import date, datetime
@@ -66,7 +65,7 @@ from pathlib import Path
 from typing import Any
 
 # Allowlists de dominio (neutras, sin acoplar a SQLite): viven en `estados.py`.
-from . import rutas
+from . import config, rutas
 from .estados import (
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
@@ -123,8 +122,8 @@ def ruta_db() -> Path:
     cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/consola.db`, o bajo `KENI_DATA_DIR`.
     """
-    if (p := os.environ.get("KENI_CONSOLA_DB")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_DB)) is not None:
+        return p
     return rutas.dir_config() / "consola.db"
 
 
@@ -303,8 +302,8 @@ def _ruta_tareas_json() -> Path:
     `KENI_CONSOLA_TAREAS` la sobreescribe (tests); si no, cuelga de la raiz de estado
     unica (`rutas.dir_config()`), mismo subpath `keni-social/tareas.json` que antes.
     """
-    if (p := os.environ.get("KENI_CONSOLA_TAREAS")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_TAREAS)) is not None:
+        return p
     return rutas.dir_config() / "tareas.json"
 
 

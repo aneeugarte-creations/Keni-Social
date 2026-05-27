@@ -33,8 +33,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import config
+
 # Variable de entorno que fija la raiz UNICA de estado en contenedor (p.ej. `/data`).
-ENV_DATA_DIR = "KENI_DATA_DIR"
+# El nombre canonico vive en `config` (fuente unica de las `KENI_*`); se re-exporta aqui
+# para los call sites/tests que ya referencian `rutas.ENV_DATA_DIR`.
+ENV_DATA_DIR = config.ENV_DATA_DIR
 
 # Sub-carpeta de CONFIG bajo la raiz (historica: `<base>/keni-social/...`).
 SUBDIR_CONFIG = "keni-social"

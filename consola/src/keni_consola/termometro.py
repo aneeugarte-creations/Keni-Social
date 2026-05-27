@@ -17,12 +17,11 @@ mismo patron defensivo que `preferencias.py`/`sugerencias.py`. NO contiene secre
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any
 
-from . import marcas, rutas
+from . import config, marcas, rutas
 from .io_atomico import escribir_atomico
 
 # Limites del numero de slides de noticia (mas la portada). Coinciden con la skill.
@@ -47,8 +46,8 @@ def ruta() -> Path:
     no, cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/termometro.json`, o bajo `KENI_DATA_DIR`.
     """
-    if (p := os.environ.get("KENI_CONSOLA_TERMOMETRO")):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_TERMOMETRO)) is not None:
+        return p
     return rutas.dir_config() / "termometro.json"
 
 

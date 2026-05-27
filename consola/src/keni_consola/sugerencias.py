@@ -17,13 +17,12 @@ sugerencias deja el archivo con lista vacía y NO vuelve a sembrar.
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from . import rutas
+from . import config, rutas
 from .io_atomico import bloqueo_archivo, escribir_atomico
 
 # Categorías y estados válidos (la UI los pinta con etiquetas legibles).
@@ -71,8 +70,8 @@ def ruta_sugerencias() -> Path:
     no, cuelga de la raiz de estado unica (`rutas.dir_config()`): local
     `${XDG_CONFIG_HOME:-~/.config}/keni-social/sugerencias.json`, o bajo `KENI_DATA_DIR`.
     """
-    if p := os.environ.get("KENI_CONSOLA_SUGERENCIAS"):
-        return Path(p).expanduser()
+    if (p := config.override_ruta(config.ENV_SUGERENCIAS)) is not None:
+        return p
     return rutas.dir_config() / "sugerencias.json"
 
 

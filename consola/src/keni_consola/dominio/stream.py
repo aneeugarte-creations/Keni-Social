@@ -15,11 +15,12 @@ perezosos en `generaciones.py`: este modulo no importa de `api/` ni de `generaci
 from __future__ import annotations
 
 import json
-import os
 import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from datetime import date
+
+from .. import config
 
 
 class SkillError(RuntimeError):
@@ -82,15 +83,12 @@ def metricas_a_dict(metricas: MetricasRun | None) -> dict[str, object] | None:
 # Presupuesto y maximo de turnos: argumentos de `claude` desde el entorno      #
 # --------------------------------------------------------------------------- #
 
-# Env opcional: tope de presupuesto (USD) que se pasa a `claude` como `--max-budget-usd`.
-_ENV_MAX_USD = "KENI_CLAUDE_MAX_USD"
-
-# Env opcional: tope de turnos del agente que se pasa a `claude` como `--max-turns`.
-_ENV_MAX_TURNS = "KENI_CLAUDE_MAX_TURNS"
-
-# Env opcional: saltar permisos de `claude -p` (def. ON). Ver `arg_skip_permisos`.
-_ENV_SKIP_PERMISOS = "KENI_CLAUDE_SKIP_PERMISSIONS"
-_FALSY = frozenset({"0", "false", "no", "off", ""})
+# Env opcionales de la generacion `claude -p`. Nombres canonicos en `config` (fuente
+# unica); re-exportados aqui por compat de referencias. La EXTRACCION del valor (parseo
+# tolerante) vive en `config`; aqui solo se compone el argv para `claude`.
+_ENV_MAX_USD = config.ENV_CLAUDE_MAX_USD
+_ENV_MAX_TURNS = config.ENV_CLAUDE_MAX_TURNS
+_ENV_SKIP_PERMISOS = config.ENV_CLAUDE_SKIP_PERMISSIONS
 
 # Subtipos de error conocidos del campo `result` que conviene reportar especificamente.
 _SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
@@ -99,16 +97,11 @@ _SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
 def arg_presupuesto() -> list[str]:
     """Devuelve `['--max-budget-usd', '<n>']` si `KENI_CLAUDE_MAX_USD` es valido; si no, `[]`.
 
-    Tolerante: un valor ausente, vacio, no numerico o <= 0 se ignora (sin tope).
+    Tolerante: un valor ausente, vacio, no numerico o <= 0 se ignora (sin tope). El parseo
+    del valor vive en `config.claude_max_usd`; aqui solo se compone el argv.
     """
-    crudo = (os.environ.get(_ENV_MAX_USD) or "").strip()
-    if not crudo:
-        return []
-    try:
-        valor = float(crudo)
-    except ValueError:
-        return []
-    if valor <= 0:
+    valor = config.claude_max_usd()
+    if valor is None:
         return []
     # Sin notacion cientifica ni ceros colgantes: formato estable para el argv.
     texto = f"{valor:.10f}".rstrip("0").rstrip(".")
@@ -120,16 +113,11 @@ def arg_max_turns() -> list[str]:
 
     El tope de turnos limita cuantos turnos de agente puede dar `claude` antes de
     detenerse (complementa al wall-timeout, que limita por tiempo). Tolerante: un valor
-    ausente, vacio, no entero o <= 0 se ignora (sin tope de turnos).
+    ausente, vacio, no entero o <= 0 se ignora (sin tope de turnos). El parseo vive en
+    `config.claude_max_turns`.
     """
-    crudo = (os.environ.get(_ENV_MAX_TURNS) or "").strip()
-    if not crudo:
-        return []
-    try:
-        valor = int(crudo)
-    except ValueError:
-        return []
-    if valor <= 0:
+    valor = config.claude_max_turns()
+    if valor is None:
         return []
     return ["--max-turns", str(valor)]
 
@@ -143,9 +131,9 @@ def arg_skip_permisos() -> list[str]:
     cuelga pidiendo un permiso que nadie puede conceder). El subproceso corre ACOTADO (cwd
     de skills, tope de turnos/coste/wall-timeout y, en hosted, dentro del contenedor), por
     lo que se saltan los permisos por defecto. Desactivable con
-    `KENI_CLAUDE_SKIP_PERMISSIONS=0` (p.ej. para depurar qué permiso falta)."""
-    crudo = os.environ.get(_ENV_SKIP_PERMISOS, "1").strip().lower()
-    return [] if crudo in _FALSY else ["--dangerously-skip-permissions"]
+    `KENI_CLAUDE_SKIP_PERMISSIONS=0` (p.ej. para depurar qué permiso falta). La decision
+    vive en `config.claude_skip_permisos`."""
+    return ["--dangerously-skip-permissions"] if config.claude_skip_permisos() else []
 
 
 # --------------------------------------------------------------------------- #

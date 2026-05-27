@@ -136,10 +136,26 @@ def test_local_no_cambia_subpaths(monkeypatch, sin_vars, tmp_path):
     assert sugerencias.ruta_sugerencias() == cfg / "sugerencias.json"
     assert termometro.ruta() == cfg / "termometro.json"
     assert proyectos.ruta_config_consola() == cfg / "consola.toml"
-    # generaciones NO honraba XDG: es exactamente ~/.config/keni-social/generaciones.
+    # generaciones: con XDG SIN fijar el default es el historico ~/.config/keni-social/
+    # generaciones (no se orfanan registros locales tras el fix XDG de #126).
     assert generaciones.raiz() == cfg / "generaciones"
     # Contenido editorial: ~/keni-proyectos (NO bajo .config), igual que siempre.
     assert ficheros.raiz_datos() == casa / "keni-proyectos"
+
+
+def test_generaciones_respeta_xdg(monkeypatch, sin_vars, tmp_path):
+    """`generaciones.raiz()` AHORA honra `XDG_CONFIG_HOME` (#126), como el resto de recursos.
+
+    Antes este recurso ignoraba XDG (siempre `~/.config`). Tras el fix cuelga de
+    `rutas.dir_config()`, asi que con `XDG_CONFIG_HOME` fijado vive bajo el (igual que db,
+    media, etc.). El default SIN XDG sigue siendo `~/.config/...` (cubierto arriba).
+    """
+    xdg = tmp_path / "xdg"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    esperada = xdg / "keni-social" / "generaciones"
+    assert generaciones.raiz() == esperada
+    # Y queda alineada con los demas recursos de config bajo la misma raiz XDG.
+    assert generaciones.raiz().parent == db.ruta_db().parent
 
 
 def test_var_especifica_gana_a_keni_data_dir(monkeypatch, sin_vars, tmp_path):

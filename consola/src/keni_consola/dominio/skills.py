@@ -71,7 +71,7 @@ import os
 import re
 from pathlib import Path
 
-from .. import generaciones, marcas, redes, repos, skills_catalogo
+from .. import config, generaciones, marcas, redes, repos, skills_catalogo
 from . import stream
 from .publicaciones import publicacion_a_dict
 
@@ -423,7 +423,7 @@ def cwd_skills() -> Path:
 
     Si ninguna raiz contiene skills, cae al cwd actual (ultimo recurso, como antes).
     """
-    env = os.environ.get("KENI_SKILLS_CWD")
+    env = config.skills_cwd()
     if env:
         candidato = Path(env)
         if candidato.is_dir():
@@ -470,7 +470,7 @@ def cwd_ejecucion_skills() -> Path:
          con bundle escribible). Resuelve la base via el ATRIBUTO de modulo `cwd_skills`
          (no por referencia capturada) para que un monkeypatch en los tests siga aplicando.
     """
-    env = os.environ.get("KENI_SKILLS_EJECUCION_CWD")
+    env = config.skills_ejecucion_cwd()
     if env:
         candidato = Path(env)
         if candidato.is_dir():

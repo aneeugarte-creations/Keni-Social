@@ -26,13 +26,12 @@ propia conexion, asi que correr en un hilo aparte es seguro.
 from __future__ import annotations
 
 import logging
-import os
 import threading
 import time
 from datetime import datetime
 from typing import Any
 
-from . import repos
+from . import config, repos
 from .estados import ESTADO_PROGRAMADO
 
 _log = logging.getLogger("keni_consola.programador")
@@ -103,12 +102,9 @@ def preparar_vencidas(ahora: datetime | None = None) -> int:
 
 def _intervalo_segundos() -> float:
     """Intervalo del barrido en segundos (configurable por entorno; util en demo/tests)."""
-    crudo = os.environ.get("KENI_PROGRAMADOR_INTERVALO_SEGUNDOS")
-    if crudo:
-        try:
-            return max(1.0, float(crudo))
-        except ValueError:
-            pass
+    seg = config.programador_intervalo_segundos()
+    if seg is not None:
+        return seg
     return INTERVALO_SEGUNDOS_DEF
 
 
