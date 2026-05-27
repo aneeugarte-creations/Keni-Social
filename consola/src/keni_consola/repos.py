@@ -65,8 +65,8 @@ def raiz_datos() -> Path:
 # --------------------------------------------------------------------------- #
 
 
-def listar_tareas() -> list[dict[str, Any]]:
-    return db.listar_tareas()
+def listar_tareas(proyecto_id: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_tareas(proyecto_id)
 
 
 def crear_tarea(
@@ -75,12 +75,20 @@ def crear_tarea(
     detalle: str = "",
     *,
     autor: dict[str, str] | None = None,
+    responsable: dict[str, str] | None = None,
+    enlace: str = "",
 ) -> dict[str, Any]:
-    return db.crear_tarea(proyecto_id, titulo, detalle, autor=autor)
+    return db.crear_tarea(
+        proyecto_id, titulo, detalle, autor=autor, responsable=responsable, enlace=enlace
+    )
 
 
 def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
     return db.obtener_tarea(tarea_id)
+
+
+def actualizar_tarea(tarea_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_tarea(tarea_id, campos)
 
 
 def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None:

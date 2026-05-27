@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Circle,
+  CircleDot,
   ClipboardList,
   ExternalLink,
+  Link2,
   Loader2,
   ListTodo,
   Plus,
@@ -33,25 +35,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { ProyectoTarea, Tarea } from "@/types";
+import type { ProyectoTarea, Tarea, UsuarioTarea } from "@/types";
 
 const CLAVE_TAREAS = ["tareas"] as const;
 
 const CABECERA = {
   titulo: "Pendientes",
   descripcion:
-    "Las tareas por proyecto, con su estado. Crea pendientes, márcalos como hechos y ábrelos en el asistente. Todo local; nada sale a la red.",
+    "El tablero de pendientes del equipo: compartido para todos. Crea pendientes, asígnalos a un responsable, muévelos por su estado y ábrelos en el asistente. Filtra por proyecto.",
 };
 
+/** Valor del selector de responsable cuando un pendiente queda sin asignar. */
+const SIN_RESPONSABLE = "__sin_asignar__";
+/** Valor del filtro de proyecto que muestra el tablero completo. */
+const TODOS_PROYECTOS = "__todos__";
+
 /**
- * Estados compartidos de una tarea (los del backend, `db.ESTADOS_TAREA`). El
- * orden marca el avance del ciclo de vida (pendiente -> hecha).
+ * Estados compartidos de un pendiente (los del backend, `estados.ESTADOS_TAREA`).
+ * El orden marca el avance del ciclo de vida: pendiente -> en curso -> hecha (#145).
  */
-const ORDEN_ESTADOS = ["pendiente", "hecha"] as const;
+const ORDEN_ESTADOS = ["pendiente", "en_curso", "hecha"] as const;
 type EstadoTareaUi = (typeof ORDEN_ESTADOS)[number];
 
 const ESTADO_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
+  en_curso: "En curso",
   hecha: "Hecha",
 };
 
@@ -59,6 +67,7 @@ type VarianteBadge = "secondary" | "aviso" | "ok" | "error" | "outline";
 
 const ESTADO_VARIANTE: Record<string, VarianteBadge> = {
   pendiente: "aviso",
+  en_curso: "secondary",
   hecha: "ok",
 };
 
@@ -66,9 +75,22 @@ function etiquetaEstado(estado: string): string {
   return ESTADO_LABEL[estado] ?? estado;
 }
 
-/** Estado al que avanza al alternar (pendiente <-> hecha). */
-function estadoAlternado(estado: string): EstadoTareaUi {
-  return estado === "hecha" ? "pendiente" : "hecha";
+/**
+ * Siguiente estado del ciclo de vida al avanzar (pendiente -> en curso -> hecha ->
+ * pendiente). Un estado desconocido (legado) vuelve al inicio del ciclo.
+ */
+function estadoSiguiente(estado: string): EstadoTareaUi {
+  const i = ORDEN_ESTADOS.indexOf(estado as EstadoTareaUi);
+  return ORDEN_ESTADOS[(i + 1) % ORDEN_ESTADOS.length] ?? "pendiente";
+}
+
+/** Icono del ciclo de vida según el estado actual. */
+function IconoEstado({ estado, className }: { estado: string; className?: string }) {
+  if (estado === "hecha")
+    return <CheckCircle2 className={cn("text-emerald-600 dark:text-emerald-400", className)} />;
+  if (estado === "en_curso")
+    return <CircleDot className={cn("text-amber-600 dark:text-amber-400", className)} />;
+  return <Circle className={cn("text-muted-foreground", className)} />;
 }
 
 function mensajeError(error: unknown): string {
@@ -84,10 +106,11 @@ function formatearFecha(iso: string): string {
 }
 
 /**
- * Vista editorial de pendientes (#104, F-C-19): panel izquierdo para crear una
- * tarea sobre un proyecto de la allowlist; panel derecho con la barra de estatus
- * compartida (cuántas pendientes / hechas) y la lista, editable. Consume el
- * backend de tareas que ya existe (`/api/tareas`).
+ * Tablero de pendientes COMPARTIDO del equipo (#145, F5): panel izquierdo para crear
+ * un pendiente sobre un proyecto de la allowlist (con responsable y enlace de acción
+ * opcionales); panel derecho con el filtro por proyecto, la barra de estatus compartida
+ * (cuántos pendientes / en curso / hechos) y la lista, editable por todo el equipo.
+ * Consume el backend de tareas (`/api/tareas`), que ya es multiusuario.
  */
 export default function Tareas() {
   const query = useQuery({
@@ -97,15 +120,17 @@ export default function Tareas() {
 
   const tareas = query.data?.tareas ?? [];
   const proyectos = query.data?.proyectos ?? [];
+  const usuarios = query.data?.usuarios ?? [];
 
   return (
     <>
       <PageHeader {...CABECERA} />
       <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-        <NuevaTarea proyectos={proyectos} cargando={query.isPending} />
+        <NuevaTarea proyectos={proyectos} usuarios={usuarios} cargando={query.isPending} />
         <ListaTareas
           tareas={tareas}
           proyectos={proyectos}
+          usuarios={usuarios}
           cargando={query.isPending}
           error={query.isError ? mensajeError(query.error) : null}
           onReintentar={() => void query.refetch()}
@@ -118,11 +143,21 @@ export default function Tareas() {
 
 // --- Alta (panel izquierdo) ------------------------------------------------
 
-function NuevaTarea({ proyectos, cargando }: { proyectos: ProyectoTarea[]; cargando: boolean }) {
+function NuevaTarea({
+  proyectos,
+  usuarios,
+  cargando,
+}: {
+  proyectos: ProyectoTarea[];
+  usuarios: UsuarioTarea[];
+  cargando: boolean;
+}) {
   const queryClient = useQueryClient();
   const [proyecto, setProyecto] = React.useState("");
   const [titulo, setTitulo] = React.useState("");
   const [detalle, setDetalle] = React.useState("");
+  const [responsable, setResponsable] = React.useState(SIN_RESPONSABLE);
+  const [enlace, setEnlace] = React.useState("");
 
   // Preselecciona el primer proyecto disponible cuando llega la allowlist.
   React.useEffect(() => {
@@ -131,12 +166,20 @@ function NuevaTarea({ proyectos, cargando }: { proyectos: ProyectoTarea[]; carga
 
   const crear = useMutation({
     mutationFn: () =>
-      api.crearTarea({ proyecto, titulo: titulo.trim(), detalle: detalle.trim() }),
+      api.crearTarea({
+        proyecto,
+        titulo: titulo.trim(),
+        detalle: detalle.trim(),
+        responsable_id: responsable === SIN_RESPONSABLE ? "" : responsable,
+        enlace: enlace.trim(),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
-      toast.success("Tarea creada.");
+      toast.success("Pendiente creado.");
       setTitulo("");
       setDetalle("");
+      setResponsable(SIN_RESPONSABLE);
+      setEnlace("");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -199,6 +242,38 @@ function NuevaTarea({ proyectos, cargando }: { proyectos: ProyectoTarea[]; carga
                 maxLength={8000}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tarea-responsable">
+                Responsable{" "}
+                <span className="font-normal text-muted-foreground">(opcional)</span>
+              </Label>
+              <Select value={responsable} onValueChange={setResponsable} disabled={cargando}>
+                <SelectTrigger id="tarea-responsable" aria-label="Responsable">
+                  <SelectValue placeholder="Sin asignar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_RESPONSABLE}>Sin asignar</SelectItem>
+                  {usuarios.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.usuario}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tarea-enlace">
+                Enlace de acción{" "}
+                <span className="font-normal text-muted-foreground">(opcional)</span>
+              </Label>
+              <Input
+                id="tarea-enlace"
+                value={enlace}
+                onChange={(e) => setEnlace(e.target.value)}
+                placeholder="Ej. /asistente o https://…"
+                maxLength={2000}
+              />
+            </div>
             <div className="flex justify-end">
               <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
                 {crear.isPending ? (
@@ -206,7 +281,7 @@ function NuevaTarea({ proyectos, cargando }: { proyectos: ProyectoTarea[]; carga
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                Crear tarea
+                Crear pendiente
               </Button>
             </div>
           </>
@@ -221,6 +296,7 @@ function NuevaTarea({ proyectos, cargando }: { proyectos: ProyectoTarea[]; carga
 function ListaTareas({
   tareas,
   proyectos,
+  usuarios,
   cargando,
   error,
   onReintentar,
@@ -228,11 +304,23 @@ function ListaTareas({
 }: {
   tareas: Tarea[];
   proyectos: ProyectoTarea[];
+  usuarios: UsuarioTarea[];
   cargando: boolean;
   error: string | null;
   onReintentar: () => void;
   reintentando: boolean;
 }) {
+  // Filtro por proyecto (acotado por marca/proyecto, #145 F5). Se aplica en cliente:
+  // el tablero llega completo y filtramos para que la barra de estatus refleje el filtro.
+  const [filtroProyecto, setFiltroProyecto] = React.useState(TODOS_PROYECTOS);
+  const tareasFiltradas = React.useMemo(
+    () =>
+      filtroProyecto === TODOS_PROYECTOS
+        ? tareas
+        : tareas.filter((t) => t.proyecto === filtroProyecto),
+    [tareas, filtroProyecto],
+  );
+
   if (cargando) {
     return (
       <div className="space-y-3">
@@ -254,24 +342,51 @@ function ListaTareas({
     );
   }
 
-  if (tareas.length === 0) {
-    return (
-      <EstadoVacio
-        icono={ListTodo}
-        titulo="Sin pendientes"
-        texto="Crea la primera tarea con el formulario de la izquierda."
-      />
-    );
-  }
+  const hayProyectos = proyectos.length > 0;
 
   return (
     <div className="space-y-4">
-      <BarraEstatus tareas={tareas} />
-      <div className="space-y-3">
-        {tareas.map((t) => (
-          <TarjetaTarea key={t.id} tarea={t} proyectos={proyectos} />
-        ))}
-      </div>
+      {hayProyectos && (
+        <div className="flex items-center gap-2">
+          <Label htmlFor="filtro-proyecto" className="text-sm text-muted-foreground">
+            Proyecto
+          </Label>
+          <Select value={filtroProyecto} onValueChange={setFiltroProyecto}>
+            <SelectTrigger id="filtro-proyecto" aria-label="Filtrar por proyecto" className="w-60">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS_PROYECTOS}>Todos los proyectos</SelectItem>
+              {proyectos.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {tareasFiltradas.length === 0 ? (
+        <EstadoVacio
+          icono={ListTodo}
+          titulo="Sin pendientes"
+          texto={
+            tareas.length === 0
+              ? "Crea el primer pendiente con el formulario de la izquierda."
+              : "No hay pendientes en este proyecto. Cambia el filtro o crea uno."
+          }
+        />
+      ) : (
+        <>
+          <BarraEstatus tareas={tareasFiltradas} />
+          <div className="space-y-3">
+            {tareasFiltradas.map((t) => (
+              <TarjetaTarea key={t.id} tarea={t} proyectos={proyectos} usuarios={usuarios} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -279,7 +394,7 @@ function ListaTareas({
 /** Barra de estatus compartida: recuento por estado del ciclo de vida. */
 function BarraEstatus({ tareas }: { tareas: Tarea[] }) {
   const conteo = React.useMemo(() => {
-    const base: Record<string, number> = { pendiente: 0, hecha: 0 };
+    const base: Record<string, number> = { pendiente: 0, en_curso: 0, hecha: 0 };
     for (const t of tareas) base[t.estado] = (base[t.estado] ?? 0) + 1;
     return base;
   }, [tareas]);
@@ -291,7 +406,7 @@ function BarraEstatus({ tareas }: { tareas: Tarea[] }) {
       aria-label="Resumen de tareas por estado"
     >
       <span className="text-muted-foreground">
-        {tareas.length} {tareas.length === 1 ? "tarea" : "tareas"}
+        {tareas.length} {tareas.length === 1 ? "pendiente" : "pendientes"}
       </span>
       {ORDEN_ESTADOS.map((estado) => (
         <Badge key={estado} variant={ESTADO_VARIANTE[estado] ?? "secondary"} className="font-normal">
@@ -302,7 +417,15 @@ function BarraEstatus({ tareas }: { tareas: Tarea[] }) {
   );
 }
 
-function TarjetaTarea({ tarea, proyectos }: { tarea: Tarea; proyectos: ProyectoTarea[] }) {
+function TarjetaTarea({
+  tarea,
+  proyectos,
+  usuarios,
+}: {
+  tarea: Tarea;
+  proyectos: ProyectoTarea[];
+  usuarios: UsuarioTarea[];
+}) {
   const queryClient = useQueryClient();
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_TAREAS });
@@ -313,11 +436,17 @@ function TarjetaTarea({ tarea, proyectos }: { tarea: Tarea; proyectos: ProyectoT
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const reasignar = useMutation({
+    mutationFn: (responsable_id: string) => api.actualizarTarea(tarea.id, { responsable_id }),
+    onSuccess: () => invalidar(),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const borrar = useMutation({
     mutationFn: () => api.eliminarTarea(tarea.id),
     onSuccess: (res) => {
       invalidar();
-      toast.success(res?.mensaje ?? "Tarea borrada.");
+      toast.success(res?.mensaje ?? "Pendiente borrado.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -333,6 +462,8 @@ function TarjetaTarea({ tarea, proyectos }: { tarea: Tarea; proyectos: ProyectoT
   const nombreProyecto = tarea.proyecto_nombre || proyecto?.nombre || tarea.proyecto;
   const hecha = tarea.estado === "hecha";
   const fecha = formatearFecha(tarea.fecha);
+  const siguiente = estadoSiguiente(tarea.estado);
+  const tieneEnlace = tarea.enlace.trim().length > 0;
 
   return (
     <Card className={cn(hecha && "opacity-60")}>
@@ -356,23 +487,30 @@ function TarjetaTarea({ tarea, proyectos }: { tarea: Tarea; proyectos: ProyectoT
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Tooltip label={hecha ? "Marcar como pendiente" : "Marcar como hecha"}>
+            <Tooltip label={`Pasar a "${etiquetaEstado(siguiente)}"`}>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label={hecha ? "Marcar como pendiente" : "Marcar como hecha"}
-                onClick={() => cambiarEstado.mutate(estadoAlternado(tarea.estado))}
+                aria-label={`Pasar a ${etiquetaEstado(siguiente)}`}
+                onClick={() => cambiarEstado.mutate(siguiente)}
                 disabled={cambiarEstado.isPending}
               >
                 {cambiarEstado.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-                ) : hecha ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 ) : (
-                  <Circle className="h-4 w-4 text-muted-foreground" />
+                  <IconoEstado estado={tarea.estado} className="h-4 w-4" />
                 )}
               </Button>
             </Tooltip>
+            {tieneEnlace && (
+              <Tooltip label="Abrir enlace de acción">
+                <Button asChild variant="ghost" size="icon" aria-label="Abrir enlace de acción">
+                  <a href={tarea.enlace} target="_blank" rel="noreferrer">
+                    <Link2 className="h-4 w-4" />
+                  </a>
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip
               label={carpetaFalta ? "La carpeta del proyecto no existe" : "Abrir en Claude Code"}
             >
@@ -411,6 +549,37 @@ function TarjetaTarea({ tarea, proyectos }: { tarea: Tarea; proyectos: ProyectoT
         {tarea.detalle && (
           <p className="whitespace-pre-wrap text-sm text-muted-foreground">{tarea.detalle}</p>
         )}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Responsable</span>
+          <Select
+            value={tarea.responsable_id || SIN_RESPONSABLE}
+            onValueChange={(v) => reasignar.mutate(v === SIN_RESPONSABLE ? "" : v)}
+            disabled={reasignar.isPending}
+          >
+            <SelectTrigger
+              aria-label="Responsable del pendiente"
+              className="h-7 w-48 text-xs"
+            >
+              <SelectValue placeholder="Sin asignar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SIN_RESPONSABLE}>Sin asignar</SelectItem>
+              {usuarios.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.usuario}
+                </SelectItem>
+              ))}
+              {/* Responsable legado que ya no está en la lista de usuarios: lo mostramos
+                  para no perder la asignación visible. */}
+              {tarea.responsable_id &&
+                !usuarios.some((u) => u.id === tarea.responsable_id) && (
+                  <SelectItem value={tarea.responsable_id}>
+                    {tarea.responsable_nombre || "desconocido"}
+                  </SelectItem>
+                )}
+            </SelectContent>
+          </Select>
+        </div>
       </CardContent>
     </Card>
   );

@@ -11,8 +11,11 @@ por una simple allowlist (E5/H2, riesgo R5 del plan de persistencia).
 
 from __future__ import annotations
 
-# Estados validos de una tarea (operacional; vive en SQLite).
-ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "hecha")
+# Estados validos de una tarea/pendiente (operacional; vive en SQLite). El orden
+# es el ciclo de vida: pendiente -> en curso -> hecha (#145, F5). "en_curso" se
+# anadio al pasar el tablero a multiusuario; las tareas legadas solo tenian
+# "pendiente"/"hecha" y siguen siendo validas (ambos estados se conservan).
+ESTADOS_TAREA: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
 
 # Estados validos de una publicacion (flujo editorial borrador -> publicado; YAML).
 ESTADOS_PUBLICACION: tuple[str, ...] = ("borrador", "aprobado", "programado", "publicado")
