@@ -129,6 +129,43 @@ def test_reporte_campania(cliente):
     assert r.json()["reporte"]["total"]["piezas"] == 2
 
 
+def test_cifras_marcadas_como_muestra(cliente):
+    """Mientras no haya APIs reales, todo va marcado como dato de muestra (#124).
+
+    La cifra sintética no debe confundirse con datos reales: el flag `es_muestra`
+    (y la `fuente` "muestra") tiene que viajar en cada respuesta que expone cifras.
+    """
+    pub = _crear(cliente, campania="Mundial", publicado=_hace_dias(7), objetivo=100).json()[
+        "publicacion"
+    ]
+
+    # Alta + detalle: la pieza serializada se marca como muestra.
+    assert pub["es_muestra"] is True
+    assert pub["fuente"] == "muestra"
+    detalle = cliente.get(f"/api/comercial/publicaciones/{pub['id']}").json()["publicacion"]
+    assert detalle["es_muestra"] is True
+
+    # Listado: flag común a nivel de respuesta + en cada item.
+    lista = cliente.get("/api/comercial/publicaciones").json()
+    assert lista["es_muestra"] is True
+    assert lista["fuente"] == "muestra"
+    assert all(p["es_muestra"] is True for p in lista["publicaciones"])
+
+    # Reporte de pieza (JSON): el flag viaja en el reporte.
+    rep_pieza = cliente.get(f"/api/comercial/reporte?publicacion={pub['id']}").json()["reporte"]
+    assert rep_pieza["es_muestra"] is True
+    assert rep_pieza["fuente"] == "muestra"
+
+    # Reporte de campaña (JSON): idem.
+    rep_camp = cliente.get("/api/comercial/reporte?campania=Mundial").json()["reporte"]
+    assert rep_camp["es_muestra"] is True
+    assert rep_camp["fuente"] == "muestra"
+
+    # Markdown entregable: lleva el aviso visible de procedencia.
+    md = cliente.get(f"/api/comercial/reporte?publicacion={pub['id']}&formato=md").text
+    assert "Datos de muestra" in md
+
+
 def test_reporte_sin_parametros(cliente):
     r = cliente.get("/api/comercial/reporte")
     assert r.status_code == 400

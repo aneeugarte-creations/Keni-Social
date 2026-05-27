@@ -74,6 +74,10 @@ def _a_dict(pub: dict[str, Any], *, con_serie: bool = False) -> dict[str, Any]:
         "actual": actual,
         "progreso_pct": progreso,
         "alcanzado": bool(pub.get("aviso_en")) or (objetivo > 0 and progreso >= 100),
+        # Procedencia de las cifras: de muestra (sinteticas) mientras no haya APIs
+        # reales conectadas. Que el frontend nunca las confunda con datos reales.
+        "fuente": comercial.FUENTE_ACTUAL,
+        "es_muestra": comercial.es_muestra(),
     }
     if con_serie:
         d["serie"] = comercial.serie(pub["id"])
@@ -207,7 +211,14 @@ async def listar(request: Request) -> Response:
     cliente = qp.get("cliente") or None
     campania = qp.get("campania") or None
     pubs = repos.listar_publicaciones_comerciales(estado=estado, cliente=cliente, campania=campania)
-    return JSONResponse({"publicaciones": [_a_dict(p) for p in pubs]})
+    return JSONResponse(
+        {
+            "publicaciones": [_a_dict(p) for p in pubs],
+            # Procedencia comun a todas: de muestra mientras no haya APIs reales.
+            "fuente": comercial.FUENTE_ACTUAL,
+            "es_muestra": comercial.es_muestra(),
+        }
+    )
 
 
 async def crear(request: Request) -> Response:

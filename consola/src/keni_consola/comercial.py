@@ -42,6 +42,19 @@ INTERVALO_HORAS_DEF = 6.0
 # importar cuan antigua sea (para piezas viejas, los puntos se espacian mas).
 MAX_PUNTOS_BACKFILL = 120
 
+# Procedencia de las cifras. Mientras las APIs reales por plataforma no esten
+# conectadas, todo sale del modelo sintetico de `metrica_en`: es DATO DE MUESTRA.
+# Mismo centinela ("muestra") que usa Metricas, asi el frontend reutiliza `BadgeFuente`.
+# Cuando se cablee la lectura real, `FUENTE_ACTUAL` pasara a la fuente real (p. ej.
+# "meta") y `es_muestra()` devolvera False sin tocar el resto del flujo.
+FUENTE_MUESTRA = "muestra"
+FUENTE_ACTUAL = FUENTE_MUESTRA
+
+
+def es_muestra() -> bool:
+    """`True` mientras las cifras salgan del modelo sintetico (datos de muestra)."""
+    return FUENTE_ACTUAL == FUENTE_MUESTRA
+
 
 # --------------------------------------------------------------------------- #
 # Modelo sintetico (muestra): curva determinista por link                      #
@@ -272,6 +285,8 @@ def reporte_publicacion(pub: dict[str, Any]) -> dict[str, Any]:
     return {
         "tipo": "publicacion",
         "generado": datetime.now().isoformat(timespec="seconds"),
+        "fuente": FUENTE_ACTUAL,
+        "es_muestra": es_muestra(),
         "publicacion": _pub_publica(pub),
         "periodo": {
             "desde": pub.get("publicado") or "",
@@ -304,6 +319,8 @@ def reporte_campania(
     return {
         "tipo": "campania",
         "generado": datetime.now().isoformat(timespec="seconds"),
+        "fuente": FUENTE_ACTUAL,
+        "es_muestra": es_muestra(),
         "campania": campania,
         "cliente": cliente,
         "piezas": filas,
@@ -330,6 +347,16 @@ def _alcanzado_texto(obj: dict[str, Any]) -> str:
     return f"en progreso ({obj.get('progreso_pct', 0)} %)"
 
 
+# Aviso de procedencia para el Markdown entregable: que nadie confunda las cifras
+# sinteticas con datos reales del cliente mientras no haya APIs conectadas.
+_AVISO_MUESTRA_MD = "> ⚠️ Datos de muestra (sintéticos): cifras de demostración, aún no reales."
+
+
+def _aviso_muestra_md(rep: dict[str, Any]) -> list[str]:
+    """Lineas del aviso de muestra (vacio si el reporte ya no es de muestra)."""
+    return [_AVISO_MUESTRA_MD, ""] if rep.get("es_muestra") else []
+
+
 def render_markdown_reporte(rep: dict[str, Any]) -> str:
     """Renderiza un reporte (pieza o campania) a Markdown listo para entregar."""
     if rep["tipo"] == "campania":
@@ -347,6 +374,7 @@ def _render_publicacion_md(rep: dict[str, Any]) -> str:
         "",
         f"Generado: {rep['generado']}",
         "",
+        *_aviso_muestra_md(rep),
         f"- Cliente: {p['cliente'] or '—'}",
         f"- Campaña: {p['campania'] or '—'}",
         f"- Marca: {p['marca_nombre'] or '—'}",
@@ -379,6 +407,7 @@ def _render_campania_md(rep: dict[str, Any]) -> str:
         "",
         f"Generado: {rep['generado']}",
         "",
+        *_aviso_muestra_md(rep),
     ]
     if rep["cliente"]:
         lineas.append(f"- Cliente: {rep['cliente']}")

@@ -90,10 +90,14 @@ def test_reporte_publicacion_estructura(entorno):
     assert rep["tipo"] == "publicacion"
     assert rep["publicacion"]["cliente"] == "ACME"
     assert rep["objetivo"]["alcanzado"] is True
+    # Cifras sintéticas: el reporte se marca como dato de muestra (#124).
+    assert rep["es_muestra"] is True
+    assert rep["fuente"] == "muestra"
     md = comercial.render_markdown_reporte(rep)
     assert "Reporte comercial" in md
     assert "Lanzamiento" in md
     assert "Engagement" in md
+    assert "Datos de muestra" in md
 
 
 def test_reporte_campania_agrega(entorno):
@@ -104,8 +108,11 @@ def test_reporte_campania_agrega(entorno):
     assert rep["tipo"] == "campania"
     assert rep["total"]["piezas"] == 2
     assert rep["total"]["alcance"] > 0
+    assert rep["es_muestra"] is True
+    assert rep["fuente"] == "muestra"
     md = comercial.render_markdown_reporte(rep)
     assert "Detalle por pieza" in md
+    assert "Datos de muestra" in md
 
 
 def test_iniciar_captura_programada_arranca_hilo(entorno):

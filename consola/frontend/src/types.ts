@@ -1350,6 +1350,13 @@ export interface PublicacionComercial {
   actual: ActualComercial;
   progreso_pct: number;
   alcanzado: boolean;
+  /**
+   * Procedencia de las cifras. `"muestra"` = sintéticas (modelo determinista,
+   * aún sin APIs reales). El frontend lo pasa a `BadgeFuente`.
+   */
+  fuente?: string;
+  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
+  es_muestra?: boolean;
   /** Serie temporal completa (solo en el detalle / al crear). */
   serie?: SnapshotComercial[];
 }
@@ -1374,6 +1381,10 @@ export interface OpcionesComercial {
 
 export interface RespuestaPublicacionesComercial {
   publicaciones: PublicacionComercial[];
+  /** Procedencia común a todas (`"muestra"` = sintéticas). */
+  fuente?: string;
+  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
+  es_muestra?: boolean;
 }
 
 export interface RespuestaPublicacionComercial {
@@ -1434,6 +1445,10 @@ export interface ObjetivoReporteComercial {
 export interface ReportePublicacionComercial {
   tipo: "publicacion";
   generado: string;
+  /** Procedencia de las cifras (`"muestra"` = sintéticas). */
+  fuente?: string;
+  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
+  es_muestra?: boolean;
   publicacion: PiezaReporteComercial;
   periodo: { desde: string; hasta: string };
   actual: ActualComercial;
@@ -1450,6 +1465,10 @@ export interface FilaReporteCampania {
 export interface ReporteCampaniaComercial {
   tipo: "campania";
   generado: string;
+  /** Procedencia de las cifras (`"muestra"` = sintéticas). */
+  fuente?: string;
+  /** `true` mientras las cifras sean de muestra (sintéticas), no reales. */
+  es_muestra?: boolean;
   campania: string;
   cliente: string;
   piezas: FilaReporteCampania[];

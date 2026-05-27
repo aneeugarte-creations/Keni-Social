@@ -178,6 +178,14 @@ function Contenido({
         <DialogTitle className="pr-6">{titulo}</DialogTitle>
         <DialogDescription className="flex flex-wrap items-center gap-2">
           <Badge variant={estadoBadge.variante}>{estadoBadge.texto}</Badge>
+          {pub.es_muestra && (
+            <Badge
+              variant="aviso"
+              title="Datos de muestra: cifras sintéticas de demostración, no reales."
+            >
+              Datos de muestra (sintéticos)
+            </Badge>
+          )}
           {pub.red_nombre && <Badge variant="outline">{pub.red_nombre}</Badge>}
           {pub.marca_nombre && <span className="text-muted-foreground">· {pub.marca_nombre}</span>}
           {pub.cliente && <span className="text-muted-foreground">· {pub.cliente}</span>}

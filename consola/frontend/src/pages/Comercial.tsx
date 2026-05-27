@@ -162,6 +162,7 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
         />
       ) : (
         <div className="space-y-6">
+          {listaQuery.data?.es_muestra && <AvisoMuestra />}
           <Kpis publicaciones={todas} />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -205,6 +206,22 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
         onCerrar={() => setDetalleId(null)}
       />
     </>
+  );
+}
+
+/**
+ * Aviso, no alarmante, de que las cifras son de MUESTRA (sintéticas) y no datos
+ * reales del cliente. Mientras no haya APIs reales conectadas, todo el apartado
+ * Comercial sale de un modelo determinista; que nadie lo confunda con lo real.
+ */
+function AvisoMuestra() {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+      <Badge variant="aviso">Datos de muestra (sintéticos)</Badge>
+      <span>
+        Las cifras de alcance e interacciones son de demostración, no datos reales del cliente.
+      </span>
+    </div>
   );
 }
 
