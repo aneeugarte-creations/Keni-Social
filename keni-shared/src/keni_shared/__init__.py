@@ -8,6 +8,7 @@ importable de lo que antes estaba espejado (con guards) entre modulos (H3/E1):
   - `cuentas`             cuenta principal de deportes y sus cuentas hermanas.
   - `io_atomico`          `escribir_atomico`: escritura atomica de texto a fichero.
   - `metricas`            `engagement_pct`: la formula unica de engagement.
+  - `esquema_yaml`        `migrar`/`sellar`: versionado de esquema de los YAML.
 
 Tanto keni-metricas como keni-consola dependen de este paquete e importan de el;
 los guards de skills y del frontend verifican contra esta fuente unica.
@@ -15,7 +16,8 @@ los guards de skills y del frontend verifican contra esta fuente unica.
 
 from __future__ import annotations
 
-from . import cuentas, io_atomico, limites_plataforma, marcas, metricas
+from . import cuentas, esquema_yaml, io_atomico, limites_plataforma, marcas, metricas
+from .esquema_yaml import migrar, sellar
 from .io_atomico import escribir_atomico
 from .marcas import MARCAS, Marca
 from .metricas import engagement_pct
@@ -26,8 +28,11 @@ __all__ = [
     "cuentas",
     "engagement_pct",
     "escribir_atomico",
+    "esquema_yaml",
     "io_atomico",
     "limites_plataforma",
     "marcas",
     "metricas",
+    "migrar",
+    "sellar",
 ]

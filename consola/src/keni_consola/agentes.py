@@ -56,6 +56,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from keni_shared.esquema_yaml import migrar, sellar
 
 from . import marcas, repos
 from .io_atomico import escribir_atomico
@@ -248,13 +249,15 @@ def _leer_manifiesto(slug: str) -> dict[str, Any] | None:
         return None
     if not ruta.is_file():
         return None
-    return _leer_yaml(ruta)
+    return _leer_yaml(ruta, tipo="agente")
 
 
 def _escribir_manifiesto(slug: str, nombre: str, tipo: str, creado: str) -> None:
     """Escribe `.keni/agente.yaml` de forma ATOMICA `{nombre, tipo, creado}`."""
     ruta = _ruta_manifiesto(slug)
-    _escribir_yaml_atomico(ruta, {"nombre": nombre, "tipo": tipo, "creado": creado})
+    _escribir_yaml_atomico(
+        ruta, {"nombre": nombre, "tipo": tipo, "creado": creado}, tipo="agente"
+    )
 
 
 def _slugs_genericos() -> set[str]:
@@ -593,7 +596,7 @@ def guardar_run(marca_id: str, run: dict[str, Any]) -> dict[str, Any]:
     if metricas is not None:
         cuerpo["metricas"] = metricas
     ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
-    _escribir_yaml_atomico(ruta, cuerpo)
+    _escribir_yaml_atomico(ruta, cuerpo, tipo="run")
     return {"id": run_id, "motivo": motivo, **cuerpo, "metricas": metricas}
 
 
@@ -608,7 +611,7 @@ def actualizar_run(marca_id: str, run_id: str, cambios: dict[str, Any]) -> dict[
     viene en `cambios` (parciales o finales); las claves ausentes se conservan.
     """
     ruta = _dir_runs(marca_id) / f"{run_id}.yaml"
-    actual = _leer_yaml(ruta) or {}
+    actual = _leer_yaml(ruta, tipo="run") or {}
     fusion: dict[str, Any] = {"id": run_id, **actual, **cambios}
     return guardar_run(marca_id, fusion)
 
@@ -622,7 +625,7 @@ def listar_runs(marca_id: str) -> list[dict[str, Any]]:
     for ruta in carpeta.glob("*.yaml"):
         if ruta.name.startswith(".tmp-"):
             continue
-        datos = _leer_yaml(ruta)
+        datos = _leer_yaml(ruta, tipo="run")
         if datos is None:
             continue
         runs.append(_parsear_run(datos, ruta.stem))
@@ -645,7 +648,7 @@ def obtener_run(marca_id: str, run_id: str) -> dict[str, Any] | None:
     base = (carpeta_agente(marca_id) / _DIR_RUNS).resolve()
     if ruta.parent != base or not ruta.is_file():
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="run")
     if datos is None:
         return None
     return _parsear_run(datos, seguro)
@@ -804,16 +807,26 @@ def _escribir_texto_atomico(ruta: Path, contenido: str) -> None:
     escribir_atomico(ruta, contenido)
 
 
-def _escribir_yaml_atomico(ruta: Path, datos: dict[str, Any]) -> None:
-    """Escribe un dict como YAML legible de forma ATOMICA (tmp + os.replace)."""
+def _escribir_yaml_atomico(ruta: Path, datos: dict[str, Any], *, tipo: str) -> None:
+    """Escribe un dict como YAML legible de forma ATOMICA (tmp + os.replace).
+
+    `sellar(tipo, ...)` estampa la `version` de esquema antes de volcar (#125).
+    """
     texto = yaml.safe_dump(
-        datos, default_flow_style=False, allow_unicode=True, sort_keys=False, width=4096
+        sellar(tipo, datos),
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+        width=4096,
     )
     _escribir_texto_atomico(ruta, texto)
 
 
-def _leer_yaml(ruta: Path) -> dict[str, Any] | None:
-    """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa."""
+def _leer_yaml(ruta: Path, *, tipo: str) -> dict[str, Any] | None:
+    """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
+
+    `migrar(tipo, ...)` sube de version el dict legado en memoria (#125).
+    """
     try:
         texto = ruta.read_text(encoding="utf-8")
     except OSError:
@@ -824,4 +837,4 @@ def _leer_yaml(ruta: Path) -> dict[str, Any] | None:
         return None
     if not isinstance(datos, dict):
         return None
-    return datos
+    return migrar(tipo, datos)

@@ -45,6 +45,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from keni_shared.esquema_yaml import migrar, sellar
 
 from . import indice, marcas, redes
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
@@ -64,6 +65,16 @@ _SUBDIR = {
 
 # Marca por defecto para entidades creadas SIN marca (la carpeta necesita un slug).
 _MARCA_SIN = "_sin-marca"
+
+# Tipo de INDICE -> tipo de ESQUEMA (`keni_shared.esquema_yaml.VERSIONES`). Solo
+# difieren en `historial` (indice) vs `historial_skill` (esquema); el resto coincide.
+_TIPO_ESQUEMA = {
+    "publicacion": "publicacion",
+    "plantilla": "plantilla",
+    "fuente_rss": "fuente_rss",
+    "grupo_hashtags": "grupo_hashtags",
+    "historial": "historial_skill",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -100,7 +111,7 @@ def _sembrar_marca(carpeta: Path, marca: str) -> None:
             "etiqueta": marcas.etiqueta_de(marca),
             "id_metricas": marcas.id_metricas_de(marca),
         }
-        _escribir_yaml(meta, datos)
+        _escribir_yaml(meta, datos, tipo="marca")
     claude = carpeta / "CLAUDE.md"
     if not claude.exists() and marca:
         claude.write_text(
@@ -161,15 +172,16 @@ def _str_bloque(dumper: yaml.Dumper, data: str) -> Any:
 _DumperBloque.add_representer(str, _str_bloque)
 
 
-def _escribir_yaml(ruta: Path, datos: dict[str, Any]) -> None:
+def _escribir_yaml(ruta: Path, datos: dict[str, Any], *, tipo: str) -> None:
     """Escribe un dict como YAML legible de forma ATOMICA (tmp + os.replace).
 
     `default_flow_style=False` (mapas/listas en bloque), `allow_unicode=True`
     (acentos sin escapar), `sort_keys=False` (respeta el orden dado), y bloque `|`
-    para textos multilinea (via `_DumperBloque`).
+    para textos multilinea (via `_DumperBloque`). `sellar(tipo, ...)` estampa la
+    `version` de esquema antes de volcar (#125).
     """
     texto = yaml.dump(
-        datos,
+        sellar(tipo, datos),
         Dumper=_DumperBloque,
         default_flow_style=False,
         allow_unicode=True,
@@ -179,10 +191,12 @@ def _escribir_yaml(ruta: Path, datos: dict[str, Any]) -> None:
     escribir_atomico(ruta, texto, sufijo=".yaml")
 
 
-def _leer_yaml(ruta: Path) -> dict[str, Any] | None:
+def _leer_yaml(ruta: Path, *, tipo: str) -> dict[str, Any] | None:
     """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
 
-    Degrada con log (nunca lanza): un fichero ilegible se trata como ausente.
+    Degrada con log (nunca lanza): un fichero ilegible se trata como ausente. Al
+    leer aplica `migrar(tipo, ...)` (upgrade perezoso de esquema, #125): un YAML
+    legado sin `version` se trata como version 0 y se sube a la actual en memoria.
     """
     try:
         texto = ruta.read_text(encoding="utf-8")
@@ -196,7 +210,7 @@ def _leer_yaml(ruta: Path) -> dict[str, Any] | None:
     if not isinstance(datos, dict):
         _log.warning("YAML no es un mapa, se omite: %s", ruta)
         return None
-    return datos
+    return migrar(tipo, datos)
 
 
 def _ahora_iso() -> str:
@@ -285,7 +299,7 @@ def _reindexar_tipo(tipo: str) -> None:
     """Reconstruye en el indice TODAS las entradas de un `tipo` leyendo el disco."""
     entradas: list[dict[str, Any]] = []
     for marca, ruta in _rutas_de_tipo(tipo):
-        datos = _leer_yaml(ruta)
+        datos = _leer_yaml(ruta, tipo=_TIPO_ESQUEMA[tipo])
         if datos is None:
             continue
         entradas.append(_a_entrada_indice(tipo, marca, ruta, datos))
@@ -317,7 +331,7 @@ def _listar_validado(
     salida: list[dict[str, Any]] = []
     for entrada in entradas:
         ruta = Path(entrada["ruta"])
-        datos = _leer_yaml(ruta)
+        datos = _leer_yaml(ruta, tipo=_TIPO_ESQUEMA[tipo])
         if datos is None:
             continue
         item = parsear(datos, entrada["marca"], entrada["id"])
@@ -409,7 +423,7 @@ def _guardar_publicacion(pub: dict[str, Any]) -> None:
     """Escribe el YAML de una publicacion y actualiza el indice."""
     ruta = _subcarpeta(pub["marca"], "publicacion") / f"{pub['id']}.yaml"
     cuerpo = _publicacion_yaml(pub)
-    _escribir_yaml(ruta, cuerpo)
+    _escribir_yaml(ruta, cuerpo, tipo="publicacion")
     _indexar("publicacion", pub["marca"], ruta, cuerpo)
 
 
@@ -474,7 +488,7 @@ def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
     ruta = _buscar_ruta("publicacion", publicacion_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="publicacion")
     if datos is None:
         return None
     marca = _marca_de_slug(ruta.parent.parent.name)
@@ -532,7 +546,7 @@ def _guardar_grupo(grupo: dict[str, Any]) -> None:
         "fecha_creacion": grupo.get("fecha_creacion", ""),
         "hashtags": list(grupo["hashtags"]),
     }
-    _escribir_yaml(ruta, cuerpo)
+    _escribir_yaml(ruta, cuerpo, tipo="grupo_hashtags")
     _indexar("grupo_hashtags", grupo["marca"], ruta, cuerpo)
 
 
@@ -546,7 +560,7 @@ def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
     ruta = _buscar_ruta("grupo_hashtags", grupo_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="grupo_hashtags")
     if datos is None:
         return None
     return _parsear_grupo(datos, _marca_de_slug(ruta.parent.parent.name), grupo_id)
@@ -579,7 +593,7 @@ def actualizar_grupo_hashtags(
     ruta = _buscar_ruta("grupo_hashtags", grupo_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="grupo_hashtags")
     if datos is None:
         return None
     marca_actual = _marca_de_slug(ruta.parent.parent.name)
@@ -638,6 +652,8 @@ def _leer_franjas_marca(slug: str) -> list[dict[str, Any]]:
     except (OSError, yaml.YAMLError):
         _log.warning("franjas.yaml invalido, se omite: %s", ruta)
         return []
+    if isinstance(datos, dict):
+        datos = migrar("franjas", datos)  # upgrade perezoso de esquema (#125)
     crudas = datos.get("franjas") if isinstance(datos, dict) else datos
     if not isinstance(crudas, list):
         return []
@@ -702,7 +718,7 @@ def _escribir_franjas_marca(marca: str, franjas: list[dict[str, Any]]) -> None:
             for f in franjas
         ]
     }
-    _escribir_yaml(_ruta_franjas(marca), cuerpo)
+    _escribir_yaml(_ruta_franjas(marca), cuerpo, tipo="franjas")
 
 
 def borrar_franja(franja_id: str) -> bool:
@@ -744,7 +760,7 @@ def _guardar_plantilla(plantilla: dict[str, Any]) -> None:
         "fecha_creacion": plantilla.get("fecha_creacion", plantilla["fecha"]),
         "contenido": plantilla["contenido"],
     }
-    _escribir_yaml(ruta, cuerpo)
+    _escribir_yaml(ruta, cuerpo, tipo="plantilla")
     _indexar("plantilla", plantilla["marca"], ruta, cuerpo)
 
 
@@ -758,7 +774,7 @@ def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
     ruta = _buscar_ruta("plantilla", plantilla_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="plantilla")
     if datos is None:
         return None
     return _parsear_plantilla(datos, _marca_de_slug(ruta.parent.parent.name), plantilla_id)
@@ -796,7 +812,7 @@ def actualizar_plantilla(
     ruta = _buscar_ruta("plantilla", plantilla_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="plantilla")
     if datos is None:
         return None
     marca_actual = _marca_de_slug(ruta.parent.parent.name)
@@ -874,7 +890,7 @@ def _guardar_fuente(fuente: dict[str, Any]) -> None:
         "ultimo_error": fuente["ultimo_error"],
         "ultimo_conteo": int(fuente["ultimo_conteo"]),
     }
-    _escribir_yaml(ruta, cuerpo)
+    _escribir_yaml(ruta, cuerpo, tipo="fuente_rss")
     _indexar("fuente_rss", fuente["marca"], ruta, cuerpo)
 
 
@@ -888,7 +904,7 @@ def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
     ruta = _buscar_ruta("fuente_rss", fuente_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="fuente_rss")
     if datos is None:
         return None
     return _parsear_fuente(datos, _marca_de_slug(ruta.parent.parent.name), fuente_id)
@@ -932,7 +948,7 @@ def actualizar_fuente_rss(
     ruta = _buscar_ruta("fuente_rss", fuente_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="fuente_rss")
     if datos is None:
         return None
     marca_actual = _marca_de_slug(ruta.parent.parent.name)
@@ -963,7 +979,7 @@ def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") 
     ruta = _buscar_ruta("fuente_rss", fuente_id)
     if ruta is None:
         return
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="fuente_rss")
     if datos is None:
         return
     marca = _marca_de_slug(ruta.parent.parent.name)
@@ -1012,8 +1028,11 @@ def _leer_vistos(marca: str) -> dict[str, list[str]]:
         return {}
     if not isinstance(datos, dict):
         return {}
+    datos = migrar("rss_vistos", datos)  # upgrade perezoso de esquema (#125)
     salida: dict[str, list[str]] = {}
     for fid, claves in datos.items():
+        if fid == "version":  # clave de control, no es un fuente_id
+            continue
         if isinstance(fid, str) and isinstance(claves, list):
             salida[fid] = [c for c in claves if isinstance(c, str)]
     return salida
@@ -1021,7 +1040,11 @@ def _leer_vistos(marca: str) -> dict[str, list[str]]:
 
 def _escribir_vistos(marca: str, vistos: dict[str, list[str]]) -> None:
     """Reescribe el fichero de items vistos de una marca (atomico)."""
-    _escribir_yaml(_ruta_vistos(marca), {fid: sorted(set(cl)) for fid, cl in vistos.items()})
+    _escribir_yaml(
+        _ruta_vistos(marca),
+        {fid: sorted(set(cl)) for fid, cl in vistos.items()},
+        tipo="rss_vistos",
+    )
 
 
 def _marca_de_fuente(fuente_id: str) -> str | None:
@@ -1116,7 +1139,7 @@ def registrar_historial_skill(
         cuerpo["metricas"] = dict(metricas)
     carpeta = carpeta_marca(marca) / "historial" / f"{ahora.year:04d}" / f"{ahora.month:02d}"
     ruta = carpeta / f"{hid}.yaml"
-    _escribir_yaml(ruta, cuerpo)
+    _escribir_yaml(ruta, cuerpo, tipo="historial_skill")
     _indexar("historial", marca, ruta, cuerpo)
     return hid
 
@@ -1131,7 +1154,7 @@ def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
     ruta = _buscar_ruta("historial", historial_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta)
+    datos = _leer_yaml(ruta, tipo="historial_skill")
     if datos is None:
         return None
     # historial/<YYYY>/<MM>/<id>.yaml -> la marca es 3 niveles arriba del fichero.

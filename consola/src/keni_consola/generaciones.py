@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from keni_shared.esquema_yaml import migrar, sellar
 
 from . import preferencias
 from .dominio import runner, stream
@@ -117,16 +118,31 @@ def _ruta(gen_id: str) -> Path:
     return destino
 
 
+# Tipo de esquema de este modulo (un solo tipo de fichero: el registro de generacion).
+_TIPO = "generacion"
+
+
 def _escribir_yaml_atomico(ruta_fichero: Path, datos: dict[str, Any]) -> None:
-    """Escribe un dict como YAML de forma ATOMICA (tmp en el mismo dir + os.replace)."""
+    """Escribe un dict como YAML de forma ATOMICA (tmp en el mismo dir + os.replace).
+
+    `sellar` estampa la `version` de esquema antes de volcar (#125). Se aplica DESPUES
+    de `_cuerpo` (que filtra claves vacias), asi la `version` int siempre sobrevive.
+    """
     texto = yaml.safe_dump(
-        datos, default_flow_style=False, allow_unicode=True, sort_keys=False, width=4096
+        sellar(_TIPO, datos),
+        default_flow_style=False,
+        allow_unicode=True,
+        sort_keys=False,
+        width=4096,
     )
     escribir_atomico(ruta_fichero, texto, sufijo=".yaml")
 
 
 def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:
-    """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa."""
+    """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
+
+    `migrar` sube de version el dict legado en memoria (#125).
+    """
     try:
         texto = ruta_fichero.read_text(encoding="utf-8")
     except OSError:
@@ -137,7 +153,7 @@ def _leer_yaml(ruta_fichero: Path) -> dict[str, Any] | None:
         return None
     if not isinstance(datos, dict):
         return None
-    return datos
+    return migrar(_TIPO, datos)
 
 
 # --------------------------------------------------------------------------- #

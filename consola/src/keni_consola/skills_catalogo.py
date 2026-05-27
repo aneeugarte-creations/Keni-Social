@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+from keni_shared.esquema_yaml import migrar, sellar
 
 from .io_atomico import escribir_atomico
 
@@ -192,7 +193,10 @@ def _escribir_atomico(ruta: Path, texto: str) -> None:
 
 
 def _leer_yaml(ruta: Path) -> dict[str, object] | None:
-    """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa."""
+    """Lee un YAML como dict, o None si no existe / esta corrupto / no es un mapa.
+
+    `migrar("skill", ...)` sube de version el `keni.yaml` legado en memoria (#125).
+    """
     try:
         texto = ruta.read_text(encoding="utf-8")
     except OSError:
@@ -203,7 +207,7 @@ def _leer_yaml(ruta: Path) -> dict[str, object] | None:
         return None
     if not isinstance(datos, dict):
         return None
-    return datos
+    return migrar("skill", datos)
 
 
 # --------------------------------------------------------------------------- #
@@ -523,10 +527,14 @@ def actualizar(skill_id: str, metadata: dict[str, object]) -> SkillDef:
 
 
 def _escribir_meta(skill: SkillDef) -> None:
-    """Escribe el `keni.yaml` de una skill (atomico, unicode, orden de claves estable)."""
+    """Escribe el `keni.yaml` de una skill (atomico, unicode, orden de claves estable).
+
+    `sellar("skill", ...)` estampa la `version` de esquema DESPUES de pasar el
+    `SkillDef` a dict (#125).
+    """
     carpeta = _ruta_carpeta(skill.id)
     texto = yaml.safe_dump(
-        _meta_desde_skilldef(skill),
+        sellar("skill", _meta_desde_skilldef(skill)),
         default_flow_style=False,
         allow_unicode=True,
         sort_keys=False,

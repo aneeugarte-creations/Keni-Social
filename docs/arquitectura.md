@@ -73,6 +73,23 @@ Las skills son un plugin independiente y leen solo variables de entorno; la Cons
 clave del almacén único (`secretos.toml`) al subproceso al lanzar una skill. Detalle en
 [`consola.md`](consola.md); el lazo de auto-desarrollo en [`autodesarrollo.md`](autodesarrollo.md).
 
+### Versionado de esquema de los YAML
+
+La Consola guarda su contenido como **ficheros YAML editables a mano** (fuente de verdad). Para que
+un cambio incompatible de forma no obligue a una migración heurística, cada fichero lleva una clave
+top-level `version: <int>`. El registro único vive en `keni_shared.esquema_yaml`:
+
+- `VERSIONES` (tipo → versión actual) y `MIGRACIONES` (tipo → lista de funciones `dict → dict`).
+- `sellar(tipo, datos)` estampa la versión actual antes de volcar; `migrar(tipo, datos)` la sube al
+  leer. Cada lector de YAML llama `migrar` tras `safe_load`; cada escritor llama `sellar` antes de
+  serializar.
+
+Upgrade **perezoso**: la versión 1 es la forma actual, así que hoy `MIGRACIONES` está vacío y un
+fichero legado sin `version` solo se re-sella al siguiente guardado (sin reescritura masiva al
+arranque ni fichero sidecar). **Añadir una migración** cuando cambie la forma de un tipo: subir
+`VERSIONES[tipo]` a N+1 y añadir a `MIGRACIONES[tipo]` una función en la posición N (0-based = versión
+de partida) que transforme de N a N+1; el salto 0→1 es identidad y no se registra.
+
 ## Cómo encajan
 
 `copy-desde-nota` puede consultar `mejores_piezas` del MCP para ajustar el tono a lo que funcionó (paso opcional con degradación: si el MCP no está, se omite). Así el sistema que **produce** aprende del que **mide**, sin acoplarse: cada uno funciona solo. La Consola es la cara visible que reúne las tres piezas para quien no quiere usar Claude Code a pelo.
