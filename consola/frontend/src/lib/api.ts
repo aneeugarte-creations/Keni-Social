@@ -109,6 +109,13 @@ import type {
   CuerpoCrearSugerencia,
   CuerpoActualizarComercial,
   CuerpoCrearComercial,
+  CuerpoActualizarUsuario,
+  CuerpoCambiarPassword,
+  CuerpoCrearUsuario,
+  CuerpoLogin,
+  RespuestaSesion,
+  RespuestaUsuarios,
+  UsuarioAdmin,
   FiltrosComercial,
   OpcionesComercial,
   RespuestaPublicacionComercial,
@@ -308,6 +315,29 @@ async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: stri
 }
 
 export const api = {
+  // --- Autenticación (sesión por cookie) ---
+  // El login depende de la cookie de sesión que pone el backend; `api.ts` ya
+  // manda las cabeceras de auth (#134) en cada petición para las mutaciones.
+  // `me` se llama al cargar la app: 200 => sesión viva; 401 => mostrar login.
+  login: (cuerpo: CuerpoLogin) =>
+    peticion<RespuestaSesion>("/auth/login", { metodo: "POST", json: cuerpo }),
+  logout: () => peticion<void>("/auth/logout", { metodo: "POST" }),
+  me: (signal?: AbortSignal) => peticion<RespuestaSesion>("/auth/me", { signal }),
+  cambiarPassword: (cuerpo: CuerpoCambiarPassword) =>
+    peticion<void>("/auth/cambiar-password", { metodo: "POST", json: cuerpo }),
+
+  // --- Usuarios (solo admin; 403 si no) ---
+  usuarios: (signal?: AbortSignal) => peticion<RespuestaUsuarios>("/usuarios", { signal }),
+  crearUsuario: (cuerpo: CuerpoCrearUsuario) =>
+    peticion<UsuarioAdmin>("/usuarios", { metodo: "POST", json: cuerpo }),
+  actualizarUsuario: (id: string, cuerpo: CuerpoActualizarUsuario) =>
+    peticion<UsuarioAdmin>(`/usuarios/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarUsuario: (id: string) =>
+    peticion<void>(`/usuarios/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
   // --- Estado ---
   estado: (signal?: AbortSignal) => peticion<RespuestaEstado>("/estado", { signal }),
 

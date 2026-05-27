@@ -23,6 +23,7 @@ const Monitor = lazy(() => import("@/pages/Monitor"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
+const Usuarios = lazy(() => import("@/pages/Usuarios"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
@@ -52,6 +53,9 @@ export const router = createBrowserRouter([
       // Ajustes
       { path: "configuracion", element: <Configuracion /> },
       { path: "sugerencias", element: <Sugerencias /> },
+      // Gestión de usuarios (solo admin; el backend devuelve 403 si no, y la
+      // propia página muestra el aviso de permiso al entrar por URL directa).
+      { path: "usuarios", element: <Usuarios /> },
       // Redirecciones de páginas fusionadas/retiradas (issues #87, #88):
       // Conexiones se fusionó en Configuración; Estado pasó a la topbar.
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },

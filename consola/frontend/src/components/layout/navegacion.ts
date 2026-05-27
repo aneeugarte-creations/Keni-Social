@@ -13,6 +13,7 @@ import {
   Send,
   Settings2,
   Sparkles,
+  Users,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +24,8 @@ export interface ItemNav {
   icono: LucideIcon;
   /** Descripcion corta para tooltip/accesibilidad. */
   descripcion: string;
+  /** `true` si el ítem solo debe verse con rol admin (lo filtra el Sidebar). */
+  soloAdmin?: boolean;
 }
 
 export interface GrupoNav {
@@ -135,6 +138,25 @@ export const NAVEGACION: GrupoNav[] = [
         icono: Lightbulb,
         descripcion: "Buzón de ideas y mejoras del producto.",
       },
+      {
+        ruta: "/usuarios",
+        etiqueta: "Usuarios",
+        icono: Users,
+        descripcion: "Gestiona las cuentas que acceden a la consola (solo admin).",
+        soloAdmin: true,
+      },
     ],
   },
 ];
+
+/**
+ * Filtra la navegación según el rol: oculta los ítems `soloAdmin` cuando el
+ * usuario no es admin, y descarta los grupos que quedan vacíos. La fuente de
+ * verdad de visibilidad por rol vive aquí; las rutas en sí también se protegen.
+ */
+export function navegacionParaRol(esAdmin: boolean): GrupoNav[] {
+  return NAVEGACION.map((grupo) => ({
+    ...grupo,
+    items: grupo.items.filter((item) => !item.soloAdmin || esAdmin),
+  })).filter((grupo) => grupo.items.length > 0);
+}
