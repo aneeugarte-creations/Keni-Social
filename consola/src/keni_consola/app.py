@@ -38,6 +38,11 @@ from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
+# Centinela para distinguir "no se paso `token`" (=> resolver de env / generar en local)
+# de "se paso `token=None`" (=> EXPRESAMENTE sin token interino, solo sesion + CSRF). El
+# token interino es OPCIONAL (#130): el despliegue ya no depende de el.
+_TOKEN_NO_ESPECIFICADO = object()
+
 # Carpeta donde el build del frontend deja el SPA (no existe aun en este worktree).
 _DIR_WEBAPP = Path(__file__).parent / "webapp"
 _INDICE_SPA = _DIR_WEBAPP / "index.html"
@@ -176,13 +181,19 @@ async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response
 
 def crear_app(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
-    token=None, bootstrap=True,
+    token=_TOKEN_NO_ESPECIFICADO, bootstrap=True,
 ) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
-    `token`: token de sesion para la API (#134). Si es None, se resuelve de
-    `KENI_CONSOLA_TOKEN` o se genera uno aleatorio (que se loguea). Los tests pasan
-    uno conocido. `bootstrap`: si True (def), crea el admin inicial si la BD no tiene
+    `token`: token INTERINO opcional para la API (#134/#130). Es un gate EXTRA, no la
+    barrera principal (esa es la sesion). Tres formas:
+      - NO pasarlo (def): se resuelve de `KENI_CONSOLA_TOKEN`; si no esta, en local se
+        GENERA uno y se loguea (UX `?token=...`). El arranque hosted fija la env (o la deja
+        vacia para correr SIN token interino).
+      - `token="..."`: usa ese token fijo (los tests pasan uno conocido).
+      - `token=None`: EXPRESAMENTE sin token interino. La unica credencial es la sesion;
+        sin sesion -> 401 igual. Sirve para probar/usar el modo "solo sesion + CSRF".
+    `bootstrap`: si True (def), crea el admin inicial si la BD no tiene
     usuarios (#130, idempotente). Los tests lo desactivan por defecto (la mayoria usan
     el token y no quieren pagar el coste del hash); los de auth lo activan o crean el
     usuario a mano. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
@@ -270,16 +281,18 @@ def crear_app(
     rutas.append(Route("/", _servir_spa))
     rutas.append(Route("/{resto:path}", _servir_spa))
 
-    # Seguridad (issue #134): resolvemos el token de sesion. Si no se inyecto uno (tests
-    # pasan uno conocido), lo toma de KENI_CONSOLA_TOKEN o genera uno aleatorio. Cuando
-    # se GENERA, hay que mostrarlo en el log para que el operador local pueda usarlo.
-    if token is None:
+    # Seguridad (#134/#130): resolvemos el token INTERINO opcional. Si NO se inyecto
+    # (centinela), lo toma de KENI_CONSOLA_TOKEN; en local, si no esta, GENERA uno y lo
+    # loguea (UX `?token=...`). Si se inyecta `token=None` EXPRESAMENTE, no hay token
+    # interino: la app queda protegida solo por sesion + CSRF (el despliegue ya no depende
+    # del token, #130). El token, cuando lo hay, sigue valiendo como gate extra.
+    if token is _TOKEN_NO_ESPECIFICADO:
         token, generado = seguridad.resolver_token()
         if generado:
             _logger.warning(
-                "No hay KENI_CONSOLA_TOKEN: token de sesion generado para esta "
+                "No hay KENI_CONSOLA_TOKEN: token interino generado para esta "
                 "ejecucion: %s  (abre la Consola con ?token=%s o exporta "
-                "KENI_CONSOLA_TOKEN para fijarlo).",
+                "KENI_CONSOLA_TOKEN para fijarlo; el login multiusuario protege igual).",
                 token,
                 token,
             )

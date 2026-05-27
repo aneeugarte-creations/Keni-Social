@@ -16,12 +16,16 @@ anade una barrera minima (NO multiusuario, eso es #130):
      para que las descargas por `window.open` y las `<img src>` —que NO pueden
      mandar cabeceras— sigan funcionando).
 
-  2) PROTECCION CSRF en MUTACIONES (POST/PUT/PATCH/DELETE). Como el token tambien
-     viaja por cookie (que el navegador envia automaticamente, incluso desde otro
-     sitio), se verifica ADEMAS el `Origin`/`Referer` de la peticion contra el host
-     esperado (el propio `127.0.0.1:PUERTO`). Una pagina atacante tendra un `Origin`
-     ajeno -> 403. El SPA propio comparte origen -> pasa. Asi una cookie robada por
-     CSRF no basta para mutar.
+  2) PROTECCION CSRF en MUTACIONES (POST/PUT/PATCH/DELETE). Como las credenciales
+     tambien viajan por cookie (que el navegador envia automaticamente, incluso desde
+     otro sitio), se verifica ADEMAS el `Origin`/`Referer` de la peticion contra el host
+     esperado. En LOCAL (127.0.0.1, sin proxy) el host esperado es el propio `Host` de la
+     peticion (`127.0.0.1:PUERTO`). Detras de un reverse-proxy (Traefik) el host publico
+     es otro (`social.kenitech.io`) y el back ve cabeceras reenviadas; por eso se admite
+     ademas una ALLOWLIST configurable de hosts externos (`KENI_CONSOLA_ORIGENES`): una
+     mutacion pasa si su `Origin`/`Referer` coincide con el `Host` de la peticion O con
+     uno de los hosts permitidos. Una pagina atacante tendra un `Origin` ajeno -> 403. El
+     SPA propio comparte origen -> pasa. Asi una cookie robada por CSRF no basta para mutar.
 
 QUE SE PROTEGE Y QUE NO
 =======================
@@ -35,15 +39,18 @@ El SPA tambien manda el token por cabecera (`api.ts` lo lee de `window.__KENI_TO
 inyectado en el index), de modo que la cookie es defensa en profundidad y no el unico
 camino.
 
-AUTH MULTIUSUARIO (#130)
-========================
+AUTH MULTIUSUARIO (#130) — Y EL TOKEN AHORA ES OPCIONAL
+=======================================================
 Sobre la barrera de token unico se monta el login user/pass + roles (ver `auth.py`).
-El middleware ahora acepta para `/api` CUALQUIERA de estas dos credenciales:
+El middleware acepta para `/api` CUALQUIERA de estas credenciales:
 
   1) Una SESION valida: cookie `keni_consola_sesion` con un token de sesion vigente
-     (tabla `sesiones`). Es el camino del multiusuario real.
-  2) El TOKEN de bootstrap de #134 (cabecera Bearer/X-Keni-Token o cookie
-     `keni_consola_token`). SIGUE VALIENDO para no romper clientes/tests existentes.
+     (tabla `sesiones`). Es el camino del multiusuario real y la barrera PRINCIPAL.
+  2) El TOKEN interino de #134 (cabecera Bearer/X-Keni-Token o cookie
+     `keni_consola_token`), SI ESTA CONFIGURADO. Es un gate EXTRA opcional: sigue
+     valiendo para clientes de mantenimiento/tests, pero el despliegue YA NO depende de
+     el. Si no se fija (`token=None`), esa via simplemente NO existe y la unica credencial
+     valida es la sesion: una peticion sin sesion -> 401 igualmente. NO se debilita nada.
 
 `/api/auth/login` es PUBLICO (no exige credencial previa) pero pasa por la verificacion
 Origin/CSRF de las mutaciones. Las rutas `/api/usuarios/*` exigen ADEMAS rol admin (lo
@@ -66,8 +73,10 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 
 # Nombres de las env vars de auth/cookies. Canonicos en `config` (fuente unica);
 # re-exportados aqui porque los tests y otros call sites referencian `seguridad.ENV_*`.
-# Env var que fija el token de sesion. Si no esta, se genera uno al arrancar.
+# Env var del token INTERINO opcional. Si no esta, la Consola se protege con sesion + CSRF.
 ENV_TOKEN = config.ENV_TOKEN
+# Env var de la allowlist de hosts externos para el chequeo CSRF detras de un proxy.
+ENV_ORIGENES = config.ENV_ORIGENES
 # Flags (env) que marcan la cookie de sesion y la del token como `Secure` (solo viajan
 # por HTTPS). Default OFF: el modo local es HTTP plano y debe seguir funcionando (y los
 # tests no lo activan). En contenedor detras de un proxy TLS se pone a "1" para que el
@@ -106,6 +115,15 @@ def cookie_secure() -> bool:
     En contenedor detras de un proxy TLS se pone a "1". Logica centralizada en `config`.
     """
     return config.cookie_secure()
+
+
+def origenes_permitidos() -> frozenset[str]:
+    """Hosts externos permitidos para el chequeo CSRF (`KENI_CONSOLA_ORIGENES`).
+
+    Vacio (def) en local: el chequeo compara solo contra el `Host` de la peticion. Detras
+    de un proxy se fija al host publico (`social.kenitech.io`). Logica/parseo en `config`.
+    """
+    return config.origenes_permitidos()
 
 
 def generar_token() -> str:
@@ -157,27 +175,51 @@ def _host_esperado(scope: Scope) -> str | None:
 
 
 def _origen_mismo_host(scope: Scope) -> bool:
-    """True si `Origin`/`Referer` apuntan al MISMO host:puerto que la peticion.
+    """True si `Origin`/`Referer` apuntan a un host PERMITIDO para esta peticion.
 
-    Defensa CSRF: una mutacion solo se acepta si su origen declarado coincide con el
-    host de la Consola. Si NO hay ni `Origin` ni `Referer` (algunos clientes/curl), se
-    deja pasar: la barrera CSRF protege contra el NAVEGADOR de un tercero, que SIEMPRE
-    manda `Origin` en peticiones cross-site con cuerpo; un cliente sin navegador que ya
-    tiene el token no es el modelo de amenaza de CSRF.
+    Defensa CSRF: una mutacion solo se acepta si su origen declarado coincide con un host
+    de confianza. Hosts de confianza =
+      - el `Host` de la propia peticion (caso LOCAL 127.0.0.1, sin proxy: el SPA comparte
+        origen con el back), y
+      - la ALLOWLIST `KENI_CONSOLA_ORIGENES` (caso DETRAS DE PROXY: Traefik termina TLS en
+        `social.kenitech.io` y el `Origin` del navegador es ese host publico; el `Host`
+        que el back ve puede no coincidir byte a byte con el publico, asi que NO basta con
+        compararlo solo contra el `Host`).
+    En local la allowlist esta vacia y solo cuenta el `Host`: comportamiento INTACTO.
+
+    Si NO hay ni `Origin` ni `Referer` (algunos clientes/curl), se deja pasar: la barrera
+    CSRF protege contra el NAVEGADOR de un tercero, que SIEMPRE manda `Origin` en peticiones
+    cross-site con cuerpo; un cliente sin navegador que ya tiene credencial no es el modelo
+    de amenaza de CSRF.
     """
     host = _host_esperado(scope)
+    permitidos = origenes_permitidos()
     cabeceras = {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in scope.get("headers", [])}
 
     origen = cabeceras.get("origin", "").strip()
     if origen:
-        return _host_de_url(origen) == host
+        return _host_de_confianza(_host_de_url(origen), host, permitidos)
 
     referer = cabeceras.get("referer", "").strip()
     if referer:
-        return _host_de_url(referer) == host
+        return _host_de_confianza(_host_de_url(referer), host, permitidos)
 
     # Sin Origin ni Referer: no es una peticion de navegador cross-site. Pasa.
     return True
+
+
+def _host_de_confianza(host_declarado: str | None, host_peticion: str | None, permitidos: frozenset[str]) -> bool:
+    """True si `host_declarado` (del Origin/Referer) coincide con el Host o la allowlist.
+
+    `permitidos` ya viene normalizado a `host[:puerto]` en minusculas (ver `config`). Si
+    el origen no parsea (`host_declarado is None`) -> False: un Origin presente pero ilegible
+    se rechaza (no se confunde con "sin Origin", que es otra rama y SI pasa).
+    """
+    if host_declarado is None:
+        return False
+    if host_peticion is not None and host_declarado == host_peticion:
+        return True
+    return host_declarado in permitidos
 
 
 def _host_de_url(url: str) -> str | None:
@@ -199,7 +241,7 @@ _RUTAS_API_PUBLICAS = frozenset({"/api/auth/login"})
 
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
-# servidor, no solo en el frontend). El acceso por token de bootstrap no esta sujeto.
+# servidor, no solo en el frontend). El acceso por token interino no esta sujeto.
 _RUTAS_API_CAMBIO_PASSWORD = frozenset(
     {"/api/auth/me", "/api/auth/cambiar-password", "/api/auth/logout"}
 )
@@ -207,28 +249,32 @@ _MSG_DEBE_CAMBIAR = "Debes cambiar tu contraseña antes de usar la Consola."
 
 
 class SeguridadConsola:
-    """Middleware ASGI: sesion/token para `/api` + CSRF en mutaciones (#134 + #130).
+    """Middleware ASGI: sesion (+ token interino opcional) para `/api` + CSRF (#134 + #130).
 
     - Las rutas que NO empiezan por `/api` (SPA, assets, favicons) pasan SIN credencial:
-      hay que poder cargar la pagina. El index siembra la cookie del token.
+      hay que poder cargar la pagina. El index siembra la cookie del token (si lo hay).
     - `/api/auth/login` es PUBLICO (crea la sesion) pero pasa por el chequeo CSRF.
-    - El resto de `/api/...`: exige UNA sesion valida (cookie `keni_consola_sesion`) O
-      el token de bootstrap (cabecera/cookie). Si falta o no vale -> 401.
+    - El resto de `/api/...`: exige UNA sesion valida (cookie `keni_consola_sesion`) O,
+      SI HAY token interino configurado, el token (cabecera/cookie). Si falta o no vale ->
+      401. La barrera PRINCIPAL es la sesion: si `token is None` (interino no configurado),
+      la unica credencial valida es la sesion y una peticion sin sesion -> 401 igualmente.
     - Mutaciones (`POST/PUT/PATCH/DELETE`) sobre `/api`: exigen ADEMAS que el
-      `Origin`/`Referer` sea del mismo host -> si no, 403 (CSRF).
+      `Origin`/`Referer` sea de un host de confianza (Host de la peticion o allowlist) ->
+      si no, 403 (CSRF).
 
     Cuando autentica por sesion, deja el usuario en `scope["state"]["usuario"]` (lo lee
     `request.state.usuario`) para que los handlers comprueben el rol. Si autentica por
-    token de bootstrap, NO hay usuario asociado: cuenta como acceso de mantenimiento con
-    plenos permisos (equivalente a admin para las rutas que solo miran el rol).
+    token interino, NO hay usuario asociado: cuenta como acceso de mantenimiento con plenos
+    permisos (equivalente a admin para las rutas que solo miran el rol).
 
     El token se compara con `secrets.compare_digest` (tiempo constante). Solo actua
     sobre `scope["type"] == "http"`; el resto pasa intacto.
     """
 
-    def __init__(self, app: ASGIApp, token: str) -> None:
+    def __init__(self, app: ASGIApp, token: str | None) -> None:
         self.app = app
-        self._token = token
+        # Token interino OPCIONAL (#130): None/"" => esa via no existe (solo sesion).
+        self._token = token or None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -250,7 +296,7 @@ class SeguridadConsola:
 
         publica = ruta in _RUTAS_API_PUBLICAS
         if not publica:
-            # 1) Credencial: sesion valida (cookie) O token de bootstrap.
+            # 1) Credencial: sesion valida (cookie) O token interino (si esta configurado).
             usuario = self._usuario_de_sesion(scope)
             if usuario is not None:
                 estado["usuario"] = usuario
@@ -263,7 +309,7 @@ class SeguridadConsola:
         # 1b) Si el usuario de la sesion debe cambiar su contrasena, solo le dejamos las
         # rutas para hacerlo (ver/cambiar/salir); cualquier otra /api -> 403. Asi el
         # "cambio forzado" se aplica en el SERVIDOR, no solo en el frontend. El acceso por
-        # token de bootstrap (mantenimiento, sin usuario) no esta sujeto a esto.
+        # token interino (mantenimiento, sin usuario) no esta sujeto a esto.
         usuario_sesion = estado["usuario"]
         if (
             usuario_sesion is not None
@@ -281,7 +327,14 @@ class SeguridadConsola:
         await self.app(scope, receive, send)
 
     def _token_valido(self, scope: Scope) -> bool:
-        """True si la peticion trae el token de bootstrap correcto (tiempo constante)."""
+        """True si HAY token interino configurado y la peticion trae el correcto.
+
+        Si el token interino no esta configurado (`self._token is None`), esta via NO
+        existe: devuelve False sin comparar nada (la unica credencial valida es la sesion).
+        La comparacion es en tiempo constante (`secrets.compare_digest`).
+        """
+        if self._token is None:
+            return False
         presentado = _token_de_la_peticion(scope)
         return presentado is not None and secrets.compare_digest(presentado, self._token)
 
@@ -304,7 +357,7 @@ def autor_de_peticion(request: object) -> dict[str, str] | None:
 
     Devuelve `{"id": <id estable>, "usuario": <nombre>}` cuando la peticion se autentico
     con una SESION de usuario (el middleware deja el usuario en `request.state.usuario`);
-    `None` cuando se entro por el TOKEN de bootstrap (mantenimiento, sin usuario) o no hay
+    `None` cuando se entro por el TOKEN interino (mantenimiento, sin usuario) o no hay
     sesion. Ese `None` se persiste como atribucion vacia: el registro queda "sin autor"
     (legado / anonimo), nunca rompe la creacion.
 
@@ -323,9 +376,13 @@ def autor_de_peticion(request: object) -> dict[str, str] | None:
 
 
 def resolver_token() -> tuple[str, bool]:
-    """Devuelve `(token, generado)`: el de la env var o uno nuevo si no estaba.
+    """Devuelve `(token, generado)` para el token INTERINO: el de la env var o uno nuevo.
 
-    `generado=True` indica que se creo uno aleatorio (hay que mostrarlo en el log).
+    `generado=True` indica que se creo uno aleatorio (hay que mostrarlo en el log). El
+    token interino es un gate EXTRA opcional (#130): aunque se genere uno, la barrera
+    PRINCIPAL es la sesion + CSRF. Para correr EXPRESAMENTE sin token interino, se pasa
+    `crear_app(token=None)` (no se llama aqui); este resolver mantiene la UX local de
+    `?token=...` generando uno cuando no se fijo `KENI_CONSOLA_TOKEN`.
     """
     fijo = token_configurado()
     if fijo is not None:

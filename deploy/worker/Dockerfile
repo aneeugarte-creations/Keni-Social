@@ -43,6 +43,17 @@ COPY skills-copy/ ./skills-copy/
 # [s3] (boto3) porque el post-procesado de imagen importa al media (bucket en hosted).
 RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]"
 
+# HARDENING (#130): el worker NO corre como root. `claude` ya esta instalado globalmente
+# (RUN anterior, como root) y el usuario solo lo EJECUTA; ademas, fuera de root `claude` NO
+# exige el bypass `--dangerously-skip-permissions`+IS_SANDBOX (esa restriccion es solo para
+# uid 0). Le damos /app (codigo + skills bundleadas), /data (estado compartido con el back)
+# y un HOME propio (config/cache de `claude` y npm). Mismo aviso de volumen EXISTENTE que el
+# back: re-chown una sola vez en el host (ver deploy/README.md).
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin keni \
+ && mkdir -p /data \
+ && chown -R keni:keni /app /data
+USER keni
+
 VOLUME ["/data"]
 
 # El worker NO publica puertos ni sirve HTTP: solo consume la cola. Corre el bucle hasta

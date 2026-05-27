@@ -43,6 +43,17 @@ COPY skills-copy/ ./skills-copy/
 RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]" \
  && pip install "uvicorn[standard]>=0.31.1"
 
+# HARDENING (#130): el proceso NO corre como root. Creamos un usuario sin privilegios y le
+# damos /app (codigo, solo lectura en runtime) y /data (estado: SQLite, secretos 0600, media).
+# Crear y CHOWNear /data AQUI cubre el caso de un volumen NUEVO (Docker copia el contenido y
+# los permisos de este punto de montaje al inicializarlo). OJO con un volumen YA EXISTENTE
+# (poblado siendo root en un deploy anterior): Docker NO re-chownea uno con datos, asi que hay
+# que ajustarlo UNA vez en el host (ver deploy/README.md, "Hardening / contenedor no-root").
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin keni \
+ && mkdir -p /data \
+ && chown -R keni:keni /app /data
+USER keni
+
 EXPOSE 8765
 VOLUME ["/data"]
 

@@ -29,7 +29,8 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CONSOLA_PORT            puerto                             def 8765
 
   Auth / sesion / CSRF (`seguridad`, `auth`):
-    - KENI_CONSOLA_TOKEN          token de sesion fijo               def (genera uno)
+    - KENI_CONSOLA_TOKEN          token interino OPCIONAL (gate extra) def (modo local genera uno)
+    - KENI_CONSOLA_ORIGENES       hosts externos permitidos (CSRF tras proxy) def (solo el Host)
     - KENI_CONSOLA_COOKIE_SECURE  cookies Secure (flag)              def derivado de HTTPS
     - KENI_CONSOLA_HTTPS          vamos tras TLS (flag)              def off
     - KENI_CONSOLA_SESION_HORAS   duracion de sesion (horas)         def 12
@@ -111,6 +112,10 @@ ENV_PORT = "KENI_CONSOLA_PORT"
 
 # Auth / sesion / CSRF.
 ENV_TOKEN = "KENI_CONSOLA_TOKEN"
+# Origenes/hosts externos permitidos para la verificacion CSRF de mutaciones detras de
+# un reverse-proxy (Traefik). Lista separada por comas; cada item puede ser un origen
+# completo (`https://social.kenitech.io`) o solo el host[:puerto] (`social.kenitech.io`).
+ENV_ORIGENES = "KENI_CONSOLA_ORIGENES"
 ENV_COOKIE_SECURE = "KENI_CONSOLA_COOKIE_SECURE"
 ENV_HTTPS = "KENI_CONSOLA_HTTPS"
 ENV_SESION_HORAS = "KENI_CONSOLA_SESION_HORAS"
@@ -248,8 +253,60 @@ def port() -> int:
 
 
 def token() -> str | None:
-    """Token de sesion fijado por `KENI_CONSOLA_TOKEN` (None si no esta; vacio = no fijado)."""
+    """Token interino OPCIONAL fijado por `KENI_CONSOLA_TOKEN` (None si no esta; vacio = no fijado).
+
+    Tras la auth multiusuario (#130) este token es un gate EXTRA, no la barrera principal:
+    la Consola queda protegida por sesion + CSRF aunque no se fije. Si esta presente, sigue
+    valiendo como credencial adicional (cabecera/cookie) para clientes de mantenimiento.
+    """
     return _crudo(ENV_TOKEN) or None
+
+
+def origenes_permitidos() -> frozenset[str]:
+    """Hosts externos permitidos para la verificacion CSRF (`KENI_CONSOLA_ORIGENES`).
+
+    Lista separada por comas. Cada item se NORMALIZA a `host[:puerto]` en minusculas: se
+    acepta tanto un origen completo (`https://social.kenitech.io`) como solo el host
+    (`social.kenitech.io`). Vacio (def) => conjunto vacio: el chequeo CSRF compara contra
+    el `Host` de la peticion, como en local (127.0.0.1). Detras de un proxy (Traefik) se
+    fija al host publico para que las mutaciones del SPA legitimo (cuyo `Origin` es el host
+    externo) pasen, sin depender de que el `Host` reenviado coincida byte a byte.
+    """
+    crudo = _crudo(ENV_ORIGENES)
+    if not crudo:
+        return frozenset()
+    hosts: set[str] = set()
+    for parte in crudo.split(","):
+        item = parte.strip()
+        if not item:
+            continue
+        host = _host_de_origen(item)
+        if host:
+            hosts.add(host)
+    return frozenset(hosts)
+
+
+def _host_de_origen(valor: str) -> str | None:
+    """Normaliza un item de `KENI_CONSOLA_ORIGENES` a `host[:puerto]` en minusculas.
+
+    Acepta un origen con esquema (`https://host:puerto`) o solo el host (`host:puerto`).
+    Devuelve None si no se puede extraer un host (entrada vacia/invalida).
+    """
+    from urllib.parse import urlsplit
+
+    item = valor.strip().lower()
+    if not item:
+        return None
+    # Con esquema: parsea el netloc. Sin esquema, `urlsplit` no separa el host, asi que
+    # lo tratamos como host[:puerto] directo (quitando una posible barra/ruta final).
+    if "://" in item:
+        try:
+            netloc = urlsplit(item).netloc
+        except ValueError:
+            return None
+        netloc = netloc.rsplit("@", 1)[-1]
+        return netloc or None
+    return item.split("/", 1)[0] or None
 
 
 def flag_https() -> bool:

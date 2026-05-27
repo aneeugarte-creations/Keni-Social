@@ -21,6 +21,7 @@ _TODAS = (
     config.ENV_HOST,
     config.ENV_PORT,
     config.ENV_TOKEN,
+    config.ENV_ORIGENES,
     config.ENV_COOKIE_SECURE,
     config.ENV_HTTPS,
     config.ENV_SESION_HORAS,
@@ -67,6 +68,7 @@ def test_nombres_son_la_fuente_unica():
     assert config.ENV_HOST == "KENI_CONSOLA_HOST"
     assert config.ENV_PORT == "KENI_CONSOLA_PORT"
     assert config.ENV_TOKEN == "KENI_CONSOLA_TOKEN"
+    assert config.ENV_ORIGENES == "KENI_CONSOLA_ORIGENES"
     assert config.ENV_SESION_HORAS == "KENI_CONSOLA_SESION_HORAS"
     assert config.ENV_ADMIN_USER == "KENI_CONSOLA_ADMIN_USER"
     assert config.ENV_ADMIN_PASS == "KENI_CONSOLA_ADMIN_PASS"
@@ -279,6 +281,28 @@ def test_cookie_secure_precedencia(limpio):
     limpio.delenv(config.ENV_HTTPS, raising=False)
     limpio.setenv(config.ENV_COOKIE_SECURE, "1")
     assert config.cookie_secure() is True
+
+
+# --------------------------------------------------------------------------- #
+# origenes_permitidos(): allowlist CSRF detras de proxy (#130)                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_origenes_permitidos_default_vacio(limpio):
+    """Sin `KENI_CONSOLA_ORIGENES`, la allowlist esta vacia (modo local)."""
+    assert config.origenes_permitidos() == frozenset()
+
+
+def test_origenes_permitidos_acepta_origen_completo_y_host(limpio):
+    """Acepta tanto un origen con esquema como un host pelado; normaliza a host[:puerto]."""
+    limpio.setenv(config.ENV_ORIGENES, "https://social.kenitech.io, otro.example:8443")
+    assert config.origenes_permitidos() == frozenset({"social.kenitech.io", "otro.example:8443"})
+
+
+def test_origenes_permitidos_normaliza_mayusculas_y_descarta_ruido(limpio):
+    """Minusculiza, ignora items vacios y descarta la ruta de un origen con path."""
+    limpio.setenv(config.ENV_ORIGENES, " HTTPS://Social.Kenitech.IO/app , , ")
+    assert config.origenes_permitidos() == frozenset({"social.kenitech.io"})
 
 
 @pytest.mark.parametrize("valor", ["0", "false", "no", "off", ""])

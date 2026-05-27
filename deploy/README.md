@@ -47,10 +47,19 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   servicio: el back arranca el worker **en proceso** (un hilo), y la UX no cambia.
 - **whisper (clip→copy) NO está en hosted.** Por privacidad (el audio no sale de la
   máquina), la transcripción es del perfil local. El gateway hosted no transcribe.
-- **Expuesto públicamente tras auth.** `/api` va protegido por el token interino
-  (`KENI_CONSOLA_TOKEN`) + CSRF por `Origin`, más el login multiusuario user/pass
-  (#130). El admin inicial se crea desde `KENI_CONSOLA_ADMIN_USER/PASS` (o pass
-  aleatoria logueada). El bind `0.0.0.0` del back solo lo alcanza Traefik.
+- **Expuesto públicamente tras auth (login multiusuario + CSRF; token interino OPCIONAL).**
+  La barrera **principal** de `/api` es el **login multiusuario** user/pass + roles (#130):
+  sesión server-side (cookie `keni_consola_sesion`, HttpOnly+SameSite=Strict). El admin
+  inicial se crea desde `KENI_CONSOLA_ADMIN_USER/PASS` (o pass aleatoria logueada). Sobre
+  eso, **CSRF en mutaciones** por `Origin`/`Referer`: detrás de Traefik el `Origin` del SPA
+  es el host **público** (`social.kenitech.io`), que el back puede no ver byte a byte como
+  `Host`, por eso `KENI_CONSOLA_ORIGENES` (cableado a `KENI_HOST`) lo declara como host de
+  confianza — sin él las mutaciones del SPA darían 403; un `Origin` ajeno se sigue
+  rechazando. `KENI_CONSOLA_HTTPS=1` marca las cookies `Secure` (Traefik termina TLS). El
+  **token interino** (`KENI_CONSOLA_TOKEN`) es ahora un **gate EXTRA OPCIONAL**, no un
+  requisito: si lo dejas vacío, el back queda igualmente protegido por **sesión + CSRF** (sin
+  sesión válida → 401 en `/api`). Si lo pones, sigue valiendo como credencial adicional de
+  mantenimiento. El bind `0.0.0.0` del back solo lo alcanza Traefik.
 - **Claude (generación) usa el OAuth token de la máquina**, no una API key: el back
   recibe `CLAUDE_CODE_OAUTH_TOKEN` desde `/etc/learn-platform/claude-oauth-token`.
 
@@ -236,7 +245,12 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
 
 ## Gaps a cerrar antes de producción real
 
-- [ ] Terminar auth multiusuario (#130) y validar `Origin`/CSRF tras Traefik.
+- [x] **Auth multiusuario (#130) + `Origin`/CSRF tras Traefik validados (HECHO).** El back se
+      protege con **login multiusuario (sesión) + CSRF**; el **token interino es OPCIONAL**
+      (gate extra). El chequeo CSRF detrás del proxy honra el host público vía
+      `KENI_CONSOLA_ORIGENES` (= `KENI_HOST`) además del `Host` de la petición (local intacto:
+      127.0.0.1 sin allowlist sigue comparando contra el `Host`). Tests en
+      `consola/tests/test_seguridad.py` (sección 7 CSRF tras proxy y 8 token opcional).
 - [ ] `config.toml` real (System User token de Meta) para `KENI_METRICAS_FUENTE=real`.
 - [x] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage **(#130, HECHO)**. El
       back consume Postgres (`DATABASE_URL`) y S3 (`S3_*`) cuando están puestas; sin ellas,
@@ -247,6 +261,35 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
       El `back` ENCOLA (tabla `jobs` en Postgres); el servicio `worker` corre `claude -p`.
       Pendiente fino: aislamiento por usuario del sandbox en `code.kenitech.io` (infra más
       profunda; ver más abajo) y `--scale worker=N` si el piloto necesita más throughput.
+- [x] **Hardening: `back` y `worker` corren como usuario no-root (HECHO).** Ver
+      "Hardening / contenedor no-root" abajo (implicación de permisos del volumen).
 - [ ] Backups de `pgdata` y `keni-data` (el cutover ya los respalda; falta automatizarlo).
-      Hardening del contenedor `back` (no-root).
 - [ ] Decidir/ejecutar el ingress (migrar Caddy) en ventana de mantenimiento.
+
+---
+
+## Hardening / contenedor no-root (#130)
+
+`back` y `worker` corren como un **usuario sin privilegios** (`keni`, uid `10001`), no como
+root. Las imágenes crean ese usuario y le dan `/app` (código) y `/data` (estado: SQLite,
+`secretos.toml` 0600, media). El `worker` instala `claude` **globalmente como root** (en el
+build) y luego sólo lo **ejecuta** como `keni`; fuera de root, `claude` ya **no** restringe
+`--dangerously-skip-permissions` (esa guarda es sólo para uid 0), así que `IS_SANDBOX` deja
+de ser necesario (se deja inocuo por compatibilidad).
+
+**Implicación de permisos del volumen `keni-data`:**
+
+- **Volumen NUEVO (primer `up` tras esta imagen):** Docker inicializa el punto de montaje
+  copiando el contenido y los **permisos del directorio `/data` de la imagen** (ya `chown`eado
+  a `keni`), así que el usuario no-root puede escribir desde el arranque. **Nada que hacer.**
+- **Volumen YA EXISTENTE (poblado antes, siendo root):** Docker **no** re-chownea un volumen
+  con datos. Tras actualizar a esta imagen, el proceso no-root podría no poder escribir. Ajusta
+  la propiedad **una vez** en el host (ventana de mantenimiento, con el stack parado):
+
+  ```bash
+  cd /home/ubuntu/keni-social/deploy
+  docker compose stop back worker
+  # uid:gid del usuario no-root de las imágenes (keni = 10001:10001)
+  docker run --rm -v keni-social_keni-data:/d alpine chown -R 10001:10001 /d
+  docker compose up -d back worker
+  ```

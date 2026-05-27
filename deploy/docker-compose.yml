@@ -85,17 +85,24 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_SKILLS_CWD: /app
-      # El contenedor corre como root; `claude` rechaza --dangerously-skip-permissions
-      # con root SALVO en un sandbox declarado. El contenedor ES un sandbox aislado, asi
-      # que IS_SANDBOX=1 habilita el flag (necesario para cargar skills + WebFetch en -p).
-      # TODO: contenedor no-root (README "gaps") y quitar este bypass.
+      # El back YA corre como usuario no-root (deploy/back/Dockerfile). El back no ejecuta
+      # `claude` (solo encola), pero dejamos IS_SANDBOX=1 inocuo por si algun camino lo
+      # consultara; el bypass de root de `claude` ya no aplica al ser no-root. Ver README.
       IS_SANDBOX: "1"
       # Modelo de imagen en OpenRouter. El SELECTOR de Ajustes lo elige (se guarda en el
       # almacen y MANDA sobre este env). Este env es solo un override de operador por .env;
       # VACIO por defecto => el defecto del codigo: openai/gpt-5-image-mini (economico y
       # SI genera personas; Nano Banana/Gemini es mas barato pero BLOQUEA personas).
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
+      # Token interino OPCIONAL (#130): gate EXTRA. La barrera principal es el login
+      # multiusuario (sesion) + CSRF; el back queda protegido aunque esto este vacio.
       KENI_CONSOLA_TOKEN: ${KENI_CONSOLA_TOKEN}
+      # Host(s) externo(s) permitido(s) para el chequeo CSRF detras de Traefik. Igual a
+      # KENI_HOST (social.kenitech.io): el `Origin` del SPA es el host publico, no el Host
+      # interno que ve el back. Sin esto, las mutaciones del SPA tras el proxy darian 403.
+      KENI_CONSOLA_ORIGENES: ${KENI_HOST}
+      # Cookies Secure: vamos tras un proxy TLS (Traefik termina HTTPS).
+      KENI_CONSOLA_HTTPS: "1"
       KENI_CONSOLA_ADMIN_USER: ${KENI_CONSOLA_ADMIN_USER}
       KENI_CONSOLA_ADMIN_PASS: ${KENI_CONSOLA_ADMIN_PASS}
       KENI_CONSOLA_SESION_HORAS: ${KENI_CONSOLA_SESION_HORAS}
@@ -144,8 +151,9 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_SKILLS_CWD: /app
-      # Mismo bypass que el back: el contenedor ES un sandbox aislado, asi `claude` acepta
-      # --dangerously-skip-permissions con root. TODO: contenedor no-root (README "gaps").
+      # El worker YA corre como usuario no-root (deploy/worker/Dockerfile). Fuera de root,
+      # `claude` NO restringe --dangerously-skip-permissions (esa guarda es solo para uid 0),
+      # asi que IS_SANDBOX deja de ser necesario; lo dejamos en "1" (inocuo) por compatibilidad.
       IS_SANDBOX: "1"
       OPENROUTER_IMAGE_MODEL: ${OPENROUTER_IMAGE_MODEL:-}
       # Concurrencia de `claude` por worker + topes de coste/tiempo (mismos nombres que antes).
