@@ -179,6 +179,36 @@ def test_ruta_no_api_se_sirve_sin_token(entorno):
     assert r.status_code == 200
 
 
+def test_cookie_token_sin_secure_por_defecto(entorno, monkeypatch):
+    """Por defecto (local HTTP) la cookie del token NO lleva `Secure`."""
+    monkeypatch.delenv(seguridad.ENV_COOKIE_SECURE, raising=False)
+    monkeypatch.delenv(seguridad.ENV_HTTPS, raising=False)
+    c = _cli_sin_auth()
+    r = c.get("/")
+    set_cookie = r.headers.get("set-cookie", "").lower()
+    assert seguridad.COOKIE_TOKEN.lower() in set_cookie
+    assert "secure" not in set_cookie
+
+
+def test_cookie_token_con_secure_por_env(entorno, monkeypatch):
+    """`KENI_CONSOLA_COOKIE_SECURE=1` marca la cookie del token como `Secure`."""
+    monkeypatch.setenv(seguridad.ENV_COOKIE_SECURE, "1")
+    c = _cli_sin_auth()
+    r = c.get("/")
+    set_cookie = r.headers.get("set-cookie", "").lower()
+    assert seguridad.COOKIE_TOKEN.lower() in set_cookie
+    assert "secure" in set_cookie
+
+
+def test_cookie_token_secure_derivado_de_https(entorno, monkeypatch):
+    """Sin flag explicito, `KENI_CONSOLA_HTTPS=1` tambien activa `Secure`."""
+    monkeypatch.delenv(seguridad.ENV_COOKIE_SECURE, raising=False)
+    monkeypatch.setenv(seguridad.ENV_HTTPS, "1")
+    c = _cli_sin_auth()
+    r = c.get("/")
+    assert "secure" in r.headers.get("set-cookie", "").lower()
+
+
 # --------------------------------------------------------------------------- #
 # 4) Resolucion del token (env var o generado)                                 #
 # --------------------------------------------------------------------------- #
@@ -247,3 +277,34 @@ def test_app_usa_token_de_env(entorno, monkeypatch):
 )
 def test_host_de_url(url, esperado):
     assert seguridad._host_de_url(url) == esperado
+
+
+# --------------------------------------------------------------------------- #
+# 6) cookie_secure(): flag explicito > derivado de HTTPS > default False       #
+# --------------------------------------------------------------------------- #
+
+
+def test_cookie_secure_default_false(monkeypatch):
+    monkeypatch.delenv(seguridad.ENV_COOKIE_SECURE, raising=False)
+    monkeypatch.delenv(seguridad.ENV_HTTPS, raising=False)
+    assert seguridad.cookie_secure() is False
+
+
+@pytest.mark.parametrize("valor", ["1", "true", "yes", "si", "on"])
+def test_cookie_secure_activada_por_flag(monkeypatch, valor):
+    monkeypatch.setenv(seguridad.ENV_COOKIE_SECURE, valor)
+    assert seguridad.cookie_secure() is True
+
+
+def test_cookie_secure_derivada_de_https(monkeypatch):
+    """Sin flag explicito, se deriva de `KENI_CONSOLA_HTTPS`."""
+    monkeypatch.delenv(seguridad.ENV_COOKIE_SECURE, raising=False)
+    monkeypatch.setenv(seguridad.ENV_HTTPS, "1")
+    assert seguridad.cookie_secure() is True
+
+
+def test_cookie_secure_flag_explicito_manda_sobre_https(monkeypatch):
+    """El flag explicito gana: `COOKIE_SECURE=0` apaga aunque `HTTPS=1`."""
+    monkeypatch.setenv(seguridad.ENV_COOKIE_SECURE, "0")
+    monkeypatch.setenv(seguridad.ENV_HTTPS, "1")
+    assert seguridad.cookie_secure() is False

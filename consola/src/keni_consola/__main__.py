@@ -1,10 +1,13 @@
-"""Arranca la Consola Keni: servidor LOCAL (Starlette/uvicorn) en 127.0.0.1.
+"""Arranca la Consola Keni: servidor (Starlette/uvicorn).
 
     python -m keni_consola                  # arranca el servidor
 
-Puerto configurable con `KENI_CONSOLA_PORT` (def: 8765). Bind SIEMPRE a 127.0.0.1
-(nunca 0.0.0.0): es una app que toca el disco y lanza procesos, no debe quedar
-expuesta a la red. Imprime la URL y, best-effort, la abre en el navegador.
+Puerto configurable con `KENI_CONSOLA_PORT` (def: 8765) y host con
+`KENI_CONSOLA_HOST` (def: 127.0.0.1). Por defecto solo escucha en localhost: es una
+app que toca el disco y lanza procesos. Bind a `0.0.0.0` SOLO detras de un proxy de
+confianza y CON auth (login multiusuario + token, #130/#134); el proxy es quien la
+expone y termina TLS (entonces pon `KENI_CONSOLA_HTTPS=1` para cookies `Secure`).
+Imprime la URL y, best-effort, la abre en el navegador.
 
 NOTA: el contenido editorial vive en ficheros YAML por marca (`ficheros.py`) y el
 dato operacional (tareas + comercial) en SQLite (`db.py`). La vieja migracion
@@ -22,9 +25,11 @@ import uvicorn
 
 from .app import crear_app
 
-# Bind FIJO a localhost. No se expone por env var a proposito (decision de
-# seguridad: la consola nunca debe escuchar en una interfaz de red).
-HOST = "127.0.0.1"
+# Bind por defecto a localhost. Configurable con `KENI_CONSOLA_HOST` (#130): en
+# contenedor se pone `0.0.0.0` para que un reverse-proxy de confianza la exponga. Es
+# seguro porque YA hay auth (login multiusuario + token, #130/#134); NO la pongas en
+# `0.0.0.0` sin un proxy delante.
+HOST = os.environ.get("KENI_CONSOLA_HOST", "127.0.0.1")
 PUERTO_DEF = 8765
 
 
@@ -52,11 +57,20 @@ def main() -> int:
 
     token, generado = seguridad.resolver_token()
 
-    base = f"http://{HOST}:{puerto}/"
+    # Host navegable para la URL: si el bind es `0.0.0.0` (todas las interfaces) no es
+    # una direccion a la que el navegador pueda ir, asi que mostramos `localhost`.
+    host_url = "localhost" if HOST in ("0.0.0.0", "::") else HOST
+    base = f"http://{host_url}:{puerto}/"
     # La URL con `?token` siembra la cookie del token; el SPA luego autentica solo.
     url = f"{base}?token={token}"
-    print(f"Consola Keni en {base}")
-    print("Privacidad por diseno: solo escucha en 127.0.0.1 (no expuesta a la red).")
+    print(f"Consola Keni escuchando en {HOST}:{puerto}")
+    if HOST in ("0.0.0.0", "::"):
+        print(
+            "AVISO: bind a todas las interfaces. Hazlo SOLO detras de un proxy de "
+            "confianza y CON auth (login + token); el proxy es quien la expone."
+        )
+    else:
+        print(f"Privacidad por diseno: solo escucha en {HOST} (no expuesta a la red).")
     if generado:
         print(
             "Token de sesion generado para esta ejecucion (no habia KENI_CONSOLA_TOKEN).\n"

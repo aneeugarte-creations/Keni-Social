@@ -115,6 +115,7 @@ def _respuesta_index_spa(request: Request, html: str) -> HTMLResponse:
             token,
             httponly=False,  # el SPA puede leerla; la defensa CSRF no depende del secreto
             samesite="strict",
+            secure=seguridad.cookie_secure(),  # Secure tras un proxy TLS (#130); ver seguridad.py
             path="/",
         )
     return resp
@@ -145,6 +146,17 @@ async def _servir_spa(request: Request) -> Response:
 async def _api_no_encontrado(request: Request) -> Response:
     """Sub-ruta /api inexistente: 404 JSON en espanol (NO debe caer al SPA)."""
     return JSONResponse({"error": "Recurso no encontrado."}, status_code=404)
+
+
+async def _healthz(request: Request) -> Response:
+    """Liveness (#130): 200 JSON simple, SIN auth y SIN tocar la BD.
+
+    Va FUERA de `/api` a proposito: asi el middleware `SeguridadConsola` la deja pasar
+    sin credencial (un proxy/orquestador necesita pingarla sin token). Es liveness PURA:
+    no consulta la BD ni nada externo, para no dar falsos negativos (un fallo de BD no
+    debe tumbar el proceso). Una eventual readiness iria en otra ruta, aparte y opcional.
+    """
+    return JSONResponse({"estado": "ok"})
 
 
 async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response:
@@ -230,6 +242,11 @@ def crear_app(
     # rutas reales y ANTES del fallback del SPA, para que un /api/... inexistente no
     # devuelva el index.html del SPA (que confundiria al cliente).
     rutas.append(Route("/api/{resto:path}", _api_no_encontrado))
+
+    # Healthcheck de liveness (#130): ruta de nivel superior (NO bajo /api, asi el
+    # middleware la deja pasar sin token) y ANTES del catch-all del SPA, para que no
+    # caiga al index.html. 200 JSON barato, sin tocar la BD.
+    rutas.append(Route("/healthz", _healthz))
 
     # Estaticos del SPA y fallback. Van DESPUES de las rutas /api para no taparlas.
     rutas.append(Route("/assets/{ruta:path}", _servir_asset))

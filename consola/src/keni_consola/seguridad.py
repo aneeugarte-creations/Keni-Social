@@ -68,6 +68,16 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 # Env var que fija el token de sesion. Si no esta, se genera uno al arrancar.
 ENV_TOKEN = "KENI_CONSOLA_TOKEN"
 
+# Flags (env) que marcan la cookie de sesion y la del token como `Secure` (solo viajan
+# por HTTPS). Default OFF: el modo local es HTTP plano y debe seguir funcionando (y los
+# tests no lo activan). En contenedor detras de un proxy TLS se pone a "1" para que el
+# navegador no mande las cookies por HTTP. `KENI_CONSOLA_COOKIE_SECURE` manda; si no se
+# fija, se deriva de `KENI_CONSOLA_HTTPS` (el mismo flag que dice "vamos detras de TLS").
+ENV_COOKIE_SECURE = "KENI_CONSOLA_COOKIE_SECURE"
+ENV_HTTPS = "KENI_CONSOLA_HTTPS"
+
+_VALORES_VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
+
 # Nombre de la cookie en la que el servidor siembra el token (para GET por navegacion
 # y `<img>`, que no pueden mandar cabeceras). NO es HttpOnly a proposito: el SPA podria
 # necesitar leerla; la defensa CSRF no depende del secreto de la cookie sino del Origin.
@@ -89,6 +99,23 @@ def token_configurado() -> str | None:
     """Token fijado por `KENI_CONSOLA_TOKEN` (None si no esta). Vacio cuenta como no fijado."""
     crudo = os.environ.get(ENV_TOKEN, "").strip()
     return crudo or None
+
+
+def _flag_activa(nombre: str) -> bool:
+    """True si la env var `nombre` esta puesta a un valor afirmativo (1/true/yes/si/on)."""
+    return os.environ.get(nombre, "").strip().lower() in _VALORES_VERDADEROS
+
+
+def cookie_secure() -> bool:
+    """¿Marcar las cookies como `Secure`? (solo viajan por HTTPS).
+
+    Lo manda `KENI_CONSOLA_COOKIE_SECURE`; si no se fija, se deriva de `KENI_CONSOLA_HTTPS`.
+    Default `False`: el modo local (HTTP plano) sigue funcionando y los tests no lo activan.
+    En contenedor detras de un proxy TLS se pone a "1".
+    """
+    if os.environ.get(ENV_COOKIE_SECURE, "").strip():
+        return _flag_activa(ENV_COOKIE_SECURE)
+    return _flag_activa(ENV_HTTPS)
 
 
 def generar_token() -> str:
