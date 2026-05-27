@@ -24,6 +24,7 @@ from starlette.routing import Route
 
 from .. import generaciones
 from .._http_json import envoltura_paginacion, paginacion_query
+from ..observabilidad import error
 
 
 async def listar(request: Request) -> Response:
@@ -53,7 +54,7 @@ async def obtener(request: Request) -> Response:
     gen_id = request.path_params.get("generacion_id")
     generacion = generaciones.obtener(gen_id)
     if generacion is None:
-        return JSONResponse({"error": "No se encontró esa generación."}, status_code=404)
+        return error("No se encontró esa generación.", status=404)
     return JSONResponse({"generacion": generacion})
 
 
@@ -71,7 +72,7 @@ async def cancelar(request: Request) -> Response:
     gen_id = request.path_params.get("generacion_id")
     generacion = generaciones.obtener(gen_id)
     if generacion is None:
-        return JSONResponse({"error": "No se encontró esa generación."}, status_code=404)
+        return error("No se encontró esa generación.", status=404)
     generaciones.cancelar(gen_id)
     return JSONResponse({"generacion": generaciones.obtener(gen_id) or generacion})
 

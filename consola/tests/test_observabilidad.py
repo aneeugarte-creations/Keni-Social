@@ -78,13 +78,21 @@ def modulo_api_que_lanza():
 
 
 def test_excepcion_no_controlada_da_500_json_estandar(entorno, modulo_api_que_lanza):
-    """Un endpoint que lanza -> 500 con `{"error", "tipo"}`, sin filtrar el detalle."""
+    """Un endpoint que lanza -> 500 con `{"error", "tipo", "request_id"}`, sin filtrar.
+
+    El cuerpo lleva el id de correlacion (#123): un usuario que reporta el fallo da ese
+    id y casa 1:1 con la traza del servidor. `error` sigue siendo el mensaje generico y
+    `tipo` el nombre de la clase; NUNCA el detalle interno ni el stack.
+    """
     cliente = _cli_obs(raise_server_exceptions=False)
     r = cliente.get("/api/zzlanza")
     assert r.status_code == 500
     cuerpo = r.json()
-    assert set(cuerpo) == {"error", "tipo"}
+    assert set(cuerpo) == {"error", "tipo", "request_id"}
     assert cuerpo["tipo"] == "RuntimeError"
+    assert cuerpo["request_id"], "el 500 debe llevar un id de correlacion no vacio"
+    # El id del cuerpo casa con la cabecera X-Request-ID de la respuesta.
+    assert r.headers.get("x-request-id") == cuerpo["request_id"]
     # El mensaje al cliente es generico: NO filtra el detalle interno ni el stack.
     assert "detalle interno secreto" not in r.text
     assert "Traceback" not in r.text
@@ -106,6 +114,30 @@ def test_excepcion_no_controlada_loguea_traceback_en_servidor(
     assert any(r.exc_info for r in registros)
 
 
+def test_excepcion_loguea_y_responde_el_mismo_request_id(
+    entorno, modulo_api_que_lanza, caplog
+):
+    """CORRELACION (#123): el id del cuerpo/cabecera 500 casa con el id del LOG.
+
+    Un fallo se loguea UNA vez con un id de correlacion usable, y ese mismo id viaja al
+    cliente: dado el id que reporta el usuario, se localiza la traza exacta del servidor.
+    """
+    logger_pet = f"{NOMBRE_LOGGER}.peticiones"
+    cliente = _cli_obs(raise_server_exceptions=False)
+    with caplog.at_level(logging.INFO):
+        r = cliente.get("/api/zzlanza")
+    rid = r.json()["request_id"]
+    assert rid and r.headers.get("x-request-id") == rid
+    # El log de ERROR del manejador central incluye ese mismo id entre corchetes.
+    errores = [rec for rec in caplog.records if rec.name == NOMBRE_LOGGER and rec.levelno >= logging.ERROR]
+    assert any(f"[{rid}]" in rec.getMessage() for rec in errores), (
+        "el log del 500 debe llevar el mismo request_id que la respuesta"
+    )
+    # La linea del middleware de peticiones tambien lleva el id (correlacion de punta a punta).
+    lineas_pet = [rec.getMessage() for rec in caplog.records if rec.name == logger_pet]
+    assert any(f"[{rid}]" in linea for linea in lineas_pet)
+
+
 def test_endpoint_que_no_lanza_no_se_ve_afectado(entorno, modulo_api_que_lanza):
     """El manejador es aditivo: un endpoint normal responde como siempre."""
     cliente = _cli_obs()
@@ -120,7 +152,7 @@ def test_endpoint_que_no_lanza_no_se_ve_afectado(entorno, modulo_api_que_lanza):
 
 
 def test_middleware_loguea_una_linea_por_peticion(cliente, caplog):
-    """Una peticion produce una linea con metodo, ruta, estado y duracion en ms."""
+    """Una peticion produce una linea con id de correlacion, metodo, ruta, estado y ms."""
     logger_pet = f"{NOMBRE_LOGGER}.peticiones"
     with caplog.at_level(logging.INFO, logger=logger_pet):
         r = cliente.get("/api/estado")
@@ -132,6 +164,52 @@ def test_middleware_loguea_una_linea_por_peticion(cliente, caplog):
     assert "/api/estado" in linea
     assert "200" in linea
     assert "ms" in linea
+    # El id de correlacion va entre corchetes al inicio y casa con la cabecera.
+    rid = r.headers.get("x-request-id")
+    assert rid, "la respuesta debe llevar la cabecera X-Request-ID"
+    assert f"[{rid}]" in linea
+
+
+def test_request_id_en_estado_de_la_peticion(entorno, modulo_api_que_lanza):
+    """El middleware deja el id en `request.state.request_id` (lo leen los handlers)."""
+    import importlib
+
+    # Endpoint que DEVUELVE el request_id que ve en request.state (prueba la disponibilidad).
+    dir_api = Path(api.__file__).parent
+    modulo = dir_api / "zzrid.py"
+    modulo.write_text(
+        "from starlette.responses import JSONResponse\n"
+        "from starlette.routing import Route\n"
+        "async def _ep(request):\n"
+        "    return JSONResponse({'visto': getattr(request.state, 'request_id', None)})\n"
+        "RUTAS = [Route('/api/zzrid', _ep)]\n",
+        encoding="utf-8",
+    )
+    importlib.invalidate_caches()
+    api.descubrir(refresco=True)
+    try:
+        cliente = _cli_obs()
+        r = cliente.get("/api/zzrid")
+        assert r.status_code == 200
+        assert r.json()["visto"] == r.headers.get("x-request-id")
+    finally:
+        modulo.unlink(missing_ok=True)
+        sys.modules.pop("keni_consola.api.zzrid", None)
+        api.descubrir(refresco=True)
+
+
+def test_request_id_entrante_se_reusa(cliente):
+    """Si el cliente/proxy manda X-Request-ID, se reusa (encadena trazas)."""
+    r = cliente.get("/api/estado", headers={"X-Request-ID": "trace-abc123"})
+    assert r.headers.get("x-request-id") == "trace-abc123"
+
+
+def test_request_id_entrante_invalido_se_sustituye(cliente):
+    """Un X-Request-ID con caracteres raros se descarta y se genera uno limpio."""
+    r = cliente.get("/api/estado", headers={"X-Request-ID": "no validos!! <script>"})
+    rid = r.headers.get("x-request-id")
+    assert rid and all(c.isalnum() or c in "-_" for c in rid)
+    assert "<" not in rid and " " not in rid
 
 
 def test_middleware_no_loguea_la_query_string(cliente, caplog):
@@ -154,7 +232,11 @@ def test_middleware_no_loguea_la_query_string(cliente, caplog):
 
 
 def test_error_helper_forma_estandar():
-    """`error()` devuelve `{"error": <mensaje>}` con el status pedido (def 400)."""
+    """`error()` devuelve `{"error": <mensaje>}` con el status pedido (def 400).
+
+    FUERA de una peticion (sin id de correlacion en contexto) no añade `request_id`:
+    la forma minima es identica a las ~250 respuestas en linea que reemplaza.
+    """
     import json
 
     r = error("Falta la marca.")
@@ -164,6 +246,20 @@ def test_error_helper_forma_estandar():
     r2 = error("No encontrado.", status=404)
     assert r2.status_code == 404
     assert json.loads(bytes(r2.body)) == {"error": "No encontrado."}
+
+
+def test_error_helper_incluye_request_id_en_contexto():
+    """DENTRO de una peticion, `error()` añade el id de correlacion (clave aditiva)."""
+    import json
+
+    from keni_consola.observabilidad import fijar_request_id, restaurar_request_id
+
+    token = fijar_request_id("rid-de-prueba")
+    try:
+        cuerpo = json.loads(bytes(error("Falta la marca.").body))
+    finally:
+        restaurar_request_id(token)
+    assert cuerpo == {"error": "Falta la marca.", "request_id": "rid-de-prueba"}
 
 
 # --------------------------------------------------------------------------- #
