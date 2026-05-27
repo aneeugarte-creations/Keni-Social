@@ -283,6 +283,12 @@ export interface Skill {
   salida: SalidaSkill;
   /** `true` si algún campo es de tipo archivo (envío multipart). */
   media: boolean;
+  /**
+   * Modo de ingesta de la fuente. "" = la fuente la pega/sube el usuario tal cual.
+   * "url" = el único campo es un enlace y la Consola extrae el texto de la página en
+   * el servidor antes de generar (F9); ese texto se trata como NO verificado.
+   */
+  ingesta?: "" | "url";
   /** Campos del formulario dinámico. */
   campos: Campo[];
 }
@@ -380,6 +386,16 @@ export interface CuerpoEjecutarSkill {
   /** Valores del formulario dinámico: id de campo -> valor. */
   valores: Record<string, string>;
   /** Redes para las que generar piezas. Solo si la skill `aplica_redes`. */
+  redes?: string[];
+}
+
+/** Cuerpo para generar copy DESDE UNA URL (skills con `ingesta === "url"`, F9). */
+export interface CuerpoEjecutarSkillUrl {
+  skill: string;
+  marca: string;
+  /** Enlace de la nota; la Consola extrae su texto en el servidor. */
+  url: string;
+  /** Redes para las que generar piezas. */
   redes?: string[];
 }
 

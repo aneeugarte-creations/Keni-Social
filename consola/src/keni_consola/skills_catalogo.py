@@ -50,6 +50,11 @@ _SUBDIR_SKILLS = Path("skills-copy") / ".claude" / "skills"
 GRUPOS = ("validadas", "experimentales")
 SALIDAS = ("piezas", "documento")
 TIPOS_CAMPO = ("textarea", "texto", "archivo", "select", "fecha")
+# Modo de INGESTA de la fuente. "" = la fuente la pega/sube el usuario tal cual (el caso
+# normal). "url": el unico campo de texto es una URL y la Consola EXTRAE el texto de esa
+# pagina EN EL SERVIDOR antes de generar (F9 / #149); ese texto se trata como NO
+# VERIFICADO. Es un metadato declarativo: el endpoint `ejecutar-url` lo exige.
+INGESTAS = ("", "url")
 
 # Etiqueta humana de cada grupo + si es experimental (para la UI).
 ETIQUETA_GRUPO = {
@@ -107,6 +112,7 @@ class SkillDef:
     aplica_redes: bool = False
     salida: str = "documento"  # piezas | documento
     media: bool = False
+    ingesta: str = ""  # "" (fuente directa) | "url" (la Consola extrae el texto del link)
     orden: int = 100
     campos: list[Campo] = field(default_factory=list)
     plantilla_invocacion: str = ""
@@ -120,6 +126,7 @@ class SkillDef:
             "aplica_redes": self.aplica_redes,
             "salida": self.salida,
             "media": self.media,
+            "ingesta": self.ingesta,
             "orden": self.orden,
             "campos": [c.a_dict() for c in self.campos],
             "plantilla_invocacion": self.plantilla_invocacion,
@@ -251,6 +258,9 @@ def _skilldef_desde_meta(skill_id: str, datos: dict[str, object]) -> SkillDef:
     salida = datos.get("salida")
     salida = salida if isinstance(salida, str) and salida in SALIDAS else "documento"
 
+    ingesta = datos.get("ingesta")
+    ingesta = ingesta if isinstance(ingesta, str) and ingesta in INGESTAS else ""
+
     orden = datos.get("orden")
     orden = orden if isinstance(orden, int) and not isinstance(orden, bool) else 100
 
@@ -275,6 +285,7 @@ def _skilldef_desde_meta(skill_id: str, datos: dict[str, object]) -> SkillDef:
         aplica_redes=bool(datos.get("aplica_redes")),
         salida=salida,
         media=media,
+        ingesta=ingesta,
         orden=orden,
         campos=campos,
         plantilla_invocacion=plantilla,
@@ -290,6 +301,7 @@ def _meta_desde_skilldef(skill: SkillDef) -> dict[str, object]:
         "aplica_redes": skill.aplica_redes,
         "salida": skill.salida,
         "media": skill.media,
+        "ingesta": skill.ingesta,
         "orden": skill.orden,
         "campos": [c.a_dict() for c in skill.campos],
         "plantilla_invocacion": skill.plantilla_invocacion,
@@ -467,6 +479,9 @@ def _validar_meta(datos: dict[str, object]) -> SkillDef:
     salida = datos.get("salida", "documento")
     if salida not in SALIDAS:
         raise SkillCatalogoError("La salida debe ser 'piezas' o 'documento'.")
+    ingesta = datos.get("ingesta", "")
+    if ingesta not in INGESTAS:
+        raise SkillCatalogoError("La ingesta debe ser '' (fuente directa) o 'url'.")
     orden = datos.get("orden", 100)
     if not isinstance(orden, int) or isinstance(orden, bool):
         raise SkillCatalogoError("El orden debe ser un número entero.")
@@ -509,6 +524,7 @@ def _validar_meta(datos: dict[str, object]) -> SkillDef:
         aplica_redes=bool(datos.get("aplica_redes")),
         salida=salida,
         media=media,
+        ingesta=ingesta,
         orden=orden,
         campos=campos,
         plantilla_invocacion=plantilla,

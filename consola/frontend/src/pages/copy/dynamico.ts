@@ -13,6 +13,21 @@ export function campoArchivo(skill: Skill | undefined): Campo | undefined {
   return skill?.campos.find((c) => c.tipo === "archivo");
 }
 
+/**
+ * `true` si la skill genera copy DESDE UNA URL (`ingesta === "url"`, F9): el único
+ * insumo es un enlace y la Consola extrae el texto de la página en el servidor antes
+ * de generar. El envío va por `POST /api/skills/ejecutar-url` (no por `ejecutar`).
+ */
+export function esSkillDesdeUrl(skill: Skill | undefined): boolean {
+  return skill?.ingesta === "url";
+}
+
+/** Id del campo de URL de una skill `ingesta === "url"` (su primer campo de texto). */
+export function campoUrl(skill: Skill | undefined): Campo | undefined {
+  if (!esSkillDesdeUrl(skill)) return undefined;
+  return skill?.campos.find((c) => c.tipo === "texto" || c.tipo === "textarea");
+}
+
 /** `true` si la skill se envía como multipart (tiene un campo archivo). */
 export function esSkillConArchivo(skill: Skill | undefined): boolean {
   return campoArchivo(skill) !== undefined;

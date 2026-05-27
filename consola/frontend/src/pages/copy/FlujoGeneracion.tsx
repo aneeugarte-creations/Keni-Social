@@ -32,7 +32,9 @@ import type { GrupoSkills, RespuestaEjecutarSkill, RespuestaGeneracion, Skill } 
 import { CamposSkill } from "./CamposSkill";
 import {
   campoArchivo,
+  campoUrl,
   esSkillConArchivo,
+  esSkillDesdeUrl,
   filtrarGrupos,
   puedeGenerarSkill,
   valoresIniciales,
@@ -232,6 +234,18 @@ export function FlujoGeneracion({
       if (!skillSeleccionada) throw new Error("Elige una skill.");
       const limpio = valoresRecortados(valores);
       const redesSel = skillSeleccionada.aplica_redes ? [...redes] : undefined;
+
+      // Generar desde una URL (F9): el único insumo es un enlace; la extracción del
+      // texto ocurre en el servidor. Va por su propio endpoint `ejecutar-url`.
+      if (esSkillDesdeUrl(skillSeleccionada)) {
+        const campo = campoUrl(skillSeleccionada);
+        return api.ejecutarSkillUrl({
+          skill: skillId,
+          marca: marcaId,
+          url: campo ? (limpio[campo.id] ?? "") : "",
+          redes: redesSel,
+        });
+      }
 
       // Vía multipart SOLO si de verdad hay archivo. Una skill con campo archivo
       // OPCIONAL (p. ej. estudio-imagen, que puede generar sin foto) cae a la vía
