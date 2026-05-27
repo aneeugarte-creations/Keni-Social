@@ -93,6 +93,9 @@ Adoptar un **monolito modular organizado como un catálogo de apps**, y extraer 
    Más infra compartida: **Postgres** (estado compartido; resuelve la tensión YAML-vs-SQLite local),
    **object storage** (media), y **whisper** (transcripción en el sandbox del usuario en hosted, o en
    su máquina en local; nunca a una API de terceros — ver [ADR 0001](0001-runtime-servicio-compartido.md)).
+   La persistencia operacional del gateway ya **consume Postgres** (`DATABASE_URL`) y la media
+   **object storage S3/Garage** (`S3_*`) en hosted, cayendo a SQLite+disco en local (#130); el
+   contenido editorial YAML por marca sigue en el volumen (migrarlo es trabajo futuro).
 
 4. **Docker/compose con dos perfiles**, no un enjambre: perfil **local/privacidad** (un contenedor
    o la app local, sin exponer red) y perfil **hosted/equipo** (gateway + sandboxes + MCP + Postgres).

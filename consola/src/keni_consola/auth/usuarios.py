@@ -12,12 +12,11 @@ persiste y se exponen los conteos necesarios.
 
 from __future__ import annotations
 
-import sqlite3
 import uuid
 from datetime import timedelta
 from typing import Any
 
-from .. import db
+from .. import db, motor_db
 from ..estados import ROL_ADMIN, ROL_EDITOR
 from . import _comun
 from .hashing import hash_en_falso, hashear_password, verificar_password
@@ -32,7 +31,7 @@ BLOQUEO_MINUTOS = 5
 # --------------------------------------------------------------------------- #
 
 
-def _fila_a_usuario_publico(fila: sqlite3.Row) -> dict[str, Any]:
+def _fila_a_usuario_publico(fila: Any) -> dict[str, Any]:
     """Forma PUBLICA de un usuario para la API (NUNCA salt/hash)."""
     return {
         "id": fila["id"],
@@ -82,8 +81,8 @@ def crear_usuario(
             ),
         )
         con.commit()
-    except sqlite3.IntegrityError:
-        return None  # usuario UNIQUE: ya existe
+    except motor_db.IntegrityError:
+        return None  # usuario UNIQUE: ya existe (neutro: SQLite o Postgres)
     finally:
         con.close()
     return {
@@ -123,7 +122,7 @@ def obtener_usuario_por_id(usuario_id: str) -> dict[str, Any] | None:
     return _fila_a_usuario_publico(fila) if fila is not None else None
 
 
-def _fila_credenciales(con: sqlite3.Connection, usuario: str) -> sqlite3.Row | None:
+def _fila_credenciales(con: Any, usuario: str) -> Any:
     """Fila COMPLETA (incluye salt/hash) por nombre de usuario; None si no existe.
 
     De uso interno (login): nunca sale de este modulo.

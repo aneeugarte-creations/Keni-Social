@@ -65,6 +65,16 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
   fichero de secretos participa en la decision):
     - KENI_IMAGEN_API_KEY, KENI_IMAGEN_PROVEEDOR  (+ OPENROUTER_API_KEY/OPENAI_API_KEY)
 
+  Persistencia hosted (#130): Postgres y object storage S3/Garage. Si NO se fijan, el
+  perfil LOCAL/privado sigue en SQLite + disco (ADR 0001/0002); si se fijan (el stack
+  hosted las cablea en `deploy/`), `db.py`/`media.py` consumen Postgres/S3. Los NOMBRES
+  son los que ya estan en `deploy/docker-compose.yml`/`.env.example` (no se renombran):
+    - DATABASE_URL                URL Postgres del back            def (vacio = SQLite)
+    - S3_ENDPOINT                 endpoint S3/Garage               (cablea S3 si presente)
+    - S3_REGION                   region S3                        def garage
+    - S3_BUCKET                   bucket de media                  def keni-media
+    - S3_ACCESS_KEY / S3_SECRET_KEY  credenciales S3               (vacias = disco)
+
   Rutas de estado (override especifico de cada recurso; la composicion del fallback
   vive en `rutas.py`). Nombre centralizado aqui, valor leido via `override_ruta`:
     - KENI_DATA_DIR               raiz unica de estado (contenedor)  -> lo usa `rutas`
@@ -131,6 +141,16 @@ ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
+# Persistencia hosted (#130): Postgres + object storage S3/Garage. NOMBRES EXACTOS de
+# `deploy/docker-compose.yml`/`.env.example` (NO se renombran). Sin fijar => perfil
+# local/privado (SQLite + disco). Fijados => `db.py`/`media.py` consumen Postgres/S3.
+ENV_DATABASE_URL = "DATABASE_URL"
+ENV_S3_ENDPOINT = "S3_ENDPOINT"
+ENV_S3_REGION = "S3_REGION"
+ENV_S3_BUCKET = "S3_BUCKET"
+ENV_S3_ACCESS_KEY = "S3_ACCESS_KEY"
+ENV_S3_SECRET_KEY = "S3_SECRET_KEY"
+
 # Rutas de estado (override especifico de cada recurso; fallback en `rutas.py`).
 ENV_DATA_DIR = "KENI_DATA_DIR"
 ENV_RAIZ = "KENI_CONSOLA_RAIZ"
@@ -157,6 +177,11 @@ LOG_LEVEL_DEF = "INFO"
 MAX_JOBS_DEF = 4
 MAX_COLA_DEF = 16
 CLAUDE_TIMEOUT_DEF = 600
+
+# Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
+# credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
+S3_REGION_DEF = "garage"
+S3_BUCKET_DEF = "keni-media"
 
 # Conjuntos de verdad/falsedad para flags (mismos que usaban los modulos de origen).
 _VERDADEROS = frozenset({"1", "true", "yes", "si", "sí", "on"})
@@ -401,6 +426,64 @@ def programador_intervalo_segundos() -> float | None:
         return max(1.0, float(crudo))
     except ValueError:
         return None
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: persistencia hosted (Postgres + object storage S3/Garage, #130)   #
+# --------------------------------------------------------------------------- #
+#
+# La PRESENCIA de la variable es el conmutador de backend (perfil local/privado vs
+# hosted): sin `DATABASE_URL` -> SQLite; sin endpoint+credenciales S3 -> disco. No se
+# rompe el modo local (ADR 0001/0002) porque el default de cada accesor es "ausente".
+
+
+def database_url() -> str | None:
+    """URL de Postgres del back (`DATABASE_URL`); None si no esta (=> SQLite local).
+
+    Es el CONMUTADOR de backend de `db.py`: si hay URL, la persistencia operacional
+    (tareas/comercial/rota/usuarios/sesiones) va a Postgres; si no, sigue en SQLite.
+    """
+    return _crudo(ENV_DATABASE_URL) or None
+
+
+def s3_endpoint() -> str | None:
+    """Endpoint S3/Garage (`S3_ENDPOINT`); None si no esta."""
+    return _crudo(ENV_S3_ENDPOINT) or None
+
+
+def s3_region() -> str:
+    """Region S3 (`S3_REGION`, def `garage`)."""
+    return _crudo(ENV_S3_REGION) or S3_REGION_DEF
+
+
+def s3_bucket() -> str:
+    """Bucket de media S3 (`S3_BUCKET`, def `keni-media`)."""
+    return _crudo(ENV_S3_BUCKET) or S3_BUCKET_DEF
+
+
+def s3_access_key() -> str | None:
+    """Access key S3 (`S3_ACCESS_KEY`); None si no esta."""
+    return _crudo(ENV_S3_ACCESS_KEY) or None
+
+
+def s3_secret_key() -> str | None:
+    """Secret key S3 (`S3_SECRET_KEY`); None si no esta. SIN strip: puede ser sensible.
+
+    A diferencia del resto, NO recortamos: una clave S3 puede (en teoria) llevar
+    espacios significativos. Devuelve None solo si la var no esta o esta vacia.
+    """
+    valor = os.environ.get(ENV_S3_SECRET_KEY)
+    return valor if valor else None
+
+
+def s3_configurado() -> bool:
+    """True si HAY object storage S3 cableado (endpoint + ambas credenciales).
+
+    Es el conmutador de `media.py`: con S3 cableado, la media va al bucket; si no
+    (perfil local/privado), sigue en disco. Exige endpoint y AMBAS credenciales para
+    no intentar hablar S3 a medio configurar.
+    """
+    return bool(s3_endpoint() and s3_access_key() and s3_secret_key())
 
 
 # --------------------------------------------------------------------------- #

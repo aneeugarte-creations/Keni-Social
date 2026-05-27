@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
-from starlette.responses import FileResponse, JSONResponse, Response
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import generaciones, media
@@ -43,12 +43,16 @@ async def subir(request: Request) -> Response:
 
 
 async def servir(request: Request) -> Response:
-    """Sirve una imagen del dir de media por nombre (404 si falta; anti-traversal)."""
+    """Sirve una imagen del almacen de media por nombre (404 si falta; anti-traversal).
+
+    Camino backend-NEUTRAL: `media.leer_media` lee del disco (con anti-traversal) o del
+    bucket S3 segun el backend activo, y devolvemos los bytes con el mime de la extension.
+    """
     nombre = request.path_params["nombre"]
-    destino = media.resolver_media(nombre)
-    if destino is None or not destino.is_file():
+    datos = media.leer_media(nombre)
+    if datos is None:
         return JSONResponse({"error": "Esa imagen no existe."}, status_code=404)
-    return FileResponse(destino, media_type=media.mime_de(nombre))
+    return Response(datos, media_type=media.mime_de(nombre))
 
 
 async def generar(request: Request) -> Response:
