@@ -98,11 +98,14 @@ __all__ = [
     "borrar_publicacion_comercial",
     "borrar_tarea",
     "borrar_turnos_semana_rota",
+    "cancelar_job",
     "conectar",
     "crear_evento_rota",
     "crear_publicacion_comercial",
     "crear_tarea",
     "crear_turno_rota",
+    "encolar_job",
+    "job_cancelado",
     "listar_eventos_rota",
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
@@ -113,7 +116,9 @@ __all__ = [
     "obtener_publicacion_comercial",
     "obtener_tarea",
     "obtener_turno_rota",
+    "reclamar_job",
     "registrar_snapshot_comercial",
+    "terminar_job",
     "ruta_db",
     "ultimo_snapshot_comercial",
 ]
@@ -344,6 +349,28 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
+    # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
+    # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
+    # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
+    # (fuente de verdad del sondeo), `spec` el JSON serializable para reconstruir el job
+    # (prompt + post-procesado + cwd) en el worker, `estado` el del ciclo de la cola
+    # (pendiente|reclamado|terminado), `claimed_at`/`worker` para depurar y reaprovechar
+    # jobs huerfanos (un worker que muere a media ejecucion). `cancelado` lo marca el back
+    # al cancelar: el worker lo lee y mata el arbol (cancelacion cross-proceso).
+    """
+    CREATE TABLE IF NOT EXISTS jobs (
+        id          TEXT PRIMARY KEY,
+        gen_id      TEXT NOT NULL,
+        spec        TEXT NOT NULL,
+        estado      TEXT NOT NULL DEFAULT 'pendiente',
+        cancelado   INTEGER NOT NULL DEFAULT 0,
+        worker      TEXT NOT NULL DEFAULT '',
+        creado      TEXT NOT NULL DEFAULT '',
+        claimed_at  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_jobs_estado ON jobs (estado)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_gen ON jobs (gen_id)",
 )
 
 
@@ -1197,3 +1224,133 @@ def aprobar_semana_rota(semana: str) -> int:
         return cur.rowcount
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B)                    #
+# --------------------------------------------------------------------------- #
+#
+# El back ENCOLA (`encolar_job`) y devuelve de inmediato; un WORKER (in-proceso en local,
+# servicio aparte en hosted) CLAVA un pendiente (`reclamar_job`) y corre `claude -p`. La
+# reclamacion es CONCURRENTE-SEGURA: en Postgres con `FOR UPDATE SKIP LOCKED` (varios
+# workers no clavan el mismo job); en SQLite con un UPDATE GUARDADO condicional
+# (`WHERE estado='pendiente'`) que, por el WAL + busy_timeout de `motor_db`, es atomico (el
+# que gane el UPDATE se lleva la fila; los demas ven rowcount 0). La cancelacion viaja por
+# la columna `cancelado` (el back la marca; el worker la lee y mata el arbol), de modo que
+# funciona AUNQUE el worker sea otro proceso.
+
+# Estados del ciclo de la cola (distintos de los del registro de generacion).
+JOB_PENDIENTE = "pendiente"
+JOB_RECLAMADO = "reclamado"
+JOB_TERMINADO = "terminado"
+
+
+def encolar_job(gen_id: str, spec: str) -> str:
+    """Encola un job de generacion para el `gen_id` dado con su `spec` (JSON). Devuelve el job id.
+
+    `spec` es el JSON serializable que el worker usa para reconstruir el trabajo (prompt +
+    post-procesado + cwd). Idempotente por `gen_id` (indice UNICO): re-encolar el mismo
+    registro no duplica filas. El back lo llama dentro de la peticion y responde al instante.
+    """
+    job_id = uuid.uuid4().hex[:12]
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT OR IGNORE INTO jobs (id, gen_id, spec, estado, creado) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (job_id, gen_id, spec, JOB_PENDIENTE, ahora),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return job_id
+
+
+def reclamar_job(worker: str = "") -> dict[str, Any] | None:
+    """Clava UN job pendiente de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
+
+    Postgres: `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE
+    a `reclamado`; otro worker que corra a la vez salta esa fila (no la doble-ejecuta).
+    SQLite: selecciona un candidato y lo CLAVA con un UPDATE GUARDADO
+    (`WHERE id=? AND estado='pendiente'`); si dos workers eligen el mismo, solo uno tiene
+    rowcount>0 (el otro reintenta). Devuelve `{id, gen_id, spec, ...}` del job clavado.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        if motor_db.es_postgres():
+            fila = con.execute(
+                "SELECT id, gen_id, spec FROM jobs WHERE estado = ? "
+                "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+                (JOB_PENDIENTE,),
+            ).fetchone()
+            if fila is None:
+                con.commit()
+                return None
+            con.execute(
+                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? WHERE id = ?",
+                (JOB_RECLAMADO, worker, ahora, fila["id"]),
+            )
+            con.commit()
+            return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
+        # SQLite: candidato + UPDATE guardado (atomico por el WAL/busy_timeout).
+        while True:
+            fila = con.execute(
+                "SELECT id, gen_id, spec FROM jobs WHERE estado = ? "
+                "ORDER BY creado ASC, id ASC LIMIT 1",
+                (JOB_PENDIENTE,),
+            ).fetchone()
+            if fila is None:
+                return None
+            cur = con.execute(
+                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? "
+                "WHERE id = ? AND estado = ?",
+                (JOB_RECLAMADO, worker, ahora, fila["id"], JOB_PENDIENTE),
+            )
+            con.commit()
+            if cur.rowcount > 0:
+                return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
+            # Otro worker lo clavo entre el SELECT y el UPDATE: reintenta con otro candidato.
+    finally:
+        con.close()
+
+
+def terminar_job(job_id: str) -> None:
+    """Marca un job como terminado (el worker ya fijo el estado terminal del registro)."""
+    con = _conectar()
+    try:
+        con.execute("UPDATE jobs SET estado = ? WHERE id = ?", (JOB_TERMINADO, job_id))
+        con.commit()
+    finally:
+        con.close()
+
+
+def cancelar_job(gen_id: str) -> bool:
+    """Marca el job de un `gen_id` como cancelado (cross-proceso). True si habia un job.
+
+    El back lo llama al cancelar; el worker LEE `cancelado` y mata el arbol. Tambien
+    cubre el caso de un job AUN pendiente (no reclamado): el worker, al clavarlo, ve el
+    flag y lo finaliza como cancelado sin lanzar `claude`. Devuelve False si no hay job
+    (ya terminado o nunca encolado): el llamante cae a la cancelacion in-memoria.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE jobs SET cancelado = 1 WHERE gen_id = ? AND estado <> ?",
+            (gen_id, JOB_TERMINADO),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def job_cancelado(job_id: str) -> bool:
+    """True si el job esta marcado como cancelado (lo sondea el worker en ejecucion)."""
+    con = _conectar()
+    try:
+        fila = con.execute("SELECT cancelado FROM jobs WHERE id = ?", (job_id,)).fetchone()
+    finally:
+        con.close()
+    return bool(fila["cancelado"]) if fila is not None else False

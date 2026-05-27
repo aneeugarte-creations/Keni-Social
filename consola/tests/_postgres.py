@@ -36,6 +36,7 @@ _TABLAS = (
     "comercial_publicaciones",
     "rota_turnos",
     "rota_eventos",
+    "jobs",
 )
 
 

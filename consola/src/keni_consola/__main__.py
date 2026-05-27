@@ -105,6 +105,17 @@ def main() -> int:
 
     iniciar_programador()
 
+    # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un WORKER
+    # corre `claude -p`. En el perfil LOCAL / un solo proceso, el worker corre EN PROCESO
+    # (hilo daemon) para que la UX de una sola maquina no cambie (no hace falta un servicio
+    # aparte). En HOSTED hay un servicio `worker` aparte: el back arranca con
+    # `KENI_WORKER_EXTERNO=1` y aqui NO se arranca el in-proceso. Vive aqui (servidor real),
+    # NO en `crear_app`, para no arrancarlo en los tests (igual que el programador).
+    if not config.worker_externo():
+        from .worker import iniciar_worker_inproceso
+
+        iniciar_worker_inproceso()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

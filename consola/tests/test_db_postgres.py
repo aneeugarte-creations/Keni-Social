@@ -152,3 +152,68 @@ def test_bootstrap_admin_idempotente(pg, monkeypatch):
     assert auth.hay_usuarios() is True
     admins = [u for u in auth.listar_usuarios() if u["usuario"] == "jefe"]
     assert len(admins) == 1
+
+
+# --------------------------------------------------------------------------- #
+# Cola de jobs sobre Postgres (#130 Fase 2): claim FOR UPDATE SKIP LOCKED      #
+# --------------------------------------------------------------------------- #
+
+
+def test_cola_encolar_reclamar_terminar_pg(pg):
+    job_id = db.encolar_job("gen-1", '{"prompt": "p"}')
+    assert job_id
+    fila = db.reclamar_job("w1")
+    assert fila is not None and fila["gen_id"] == "gen-1"
+    # Ya no quedan pendientes.
+    assert db.reclamar_job("w2") is None
+    db.terminar_job(job_id)
+
+
+def test_cola_encolar_idempotente_por_gen_id_pg(pg):
+    db.encolar_job("gen-2", "{}")
+    db.encolar_job("gen-2", "{}")  # UNIQUE(gen_id) -> ON CONFLICT DO NOTHING
+    assert db.reclamar_job() is not None
+    assert db.reclamar_job() is None
+
+
+def test_cola_cancelar_y_flag_pg(pg):
+    db.encolar_job("gen-3", "{}")
+    assert db.cancelar_job("gen-3") is True
+    fila = db.reclamar_job("w")
+    assert fila is not None
+    assert db.job_cancelado(fila["id"]) is True
+
+
+def test_cola_reclamacion_concurrente_no_doble_ejecuta_pg(pg):
+    """N hilos reclamando a la vez sobre Postgres: cada job lo clava EXACTAMENTE uno.
+
+    Ejercita `FOR UPDATE SKIP LOCKED`: dos workers concurrentes NO se llevan la misma
+    fila. Cada hilo abre su PROPIA conexion (cada `reclamar_job` lo hace), como en hosted.
+    """
+    import threading
+
+    for i in range(20):
+        db.encolar_job(f"gen-c-{i}", "{}")
+    encolados = {f"gen-c-{i}" for i in range(20)}
+    reclamados: list[str] = []
+    lock = threading.Lock()
+    arrancar = threading.Event()
+
+    def trabajar(wid: str) -> None:
+        arrancar.wait()
+        while True:
+            fila = db.reclamar_job(wid)
+            if fila is None:
+                return
+            with lock:
+                reclamados.append(fila["gen_id"])
+
+    hilos = [threading.Thread(target=trabajar, args=(f"w{i}",)) for i in range(8)]
+    for h in hilos:
+        h.start()
+    arrancar.set()
+    for h in hilos:
+        h.join(timeout=20)
+
+    assert sorted(reclamados) == sorted(encolados)
+    assert len(reclamados) == len(set(reclamados))  # ninguno dos veces

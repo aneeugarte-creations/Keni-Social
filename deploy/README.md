@@ -8,9 +8,10 @@
 |---|---|---|---|
 | `traefik` | `traefik:v3` | Reverse proxy + TLS (Let's Encrypt), `network_mode: host` | **:80/:443** |
 | `front` | build `front/` | SPA React (nginx) | vía Traefik (todo menos `/api`) |
-| `back` | build `back/` | Gateway Starlette + generación | vía Traefik (`/api`) |
+| `back` | build `back/` | Gateway Starlette; **ENCOLA** la generación (sin Node/`claude`) | vía Traefik (`/api`) |
+| `worker` | build `worker/` | Consume la cola y corre **`claude -p`** (#130 Fase 2) | interno |
 | `mcp` | build `mcp/` | `keni-metricas` por HTTP | interno (ver abajo) |
-| `db` | `postgres:16` | Estado compartido | interno |
+| `db` | `postgres:16` | Estado compartido + **cola de jobs** | interno |
 | `files` | `dxflrs/garage` | Object storage S3 (media) | interno |
 
 > El contexto de build de las imágenes propias es la **raíz del repo** (`..`),
@@ -34,9 +35,16 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
   **FUERA de alcance (#130):** el contenido editorial YAML (`ficheros.py`,
   `/data/keni-proyectos/<marca>/...`) y su índice regenerable (`indice.py`) **siguen en el
   volumen** (`keni-data`/`KENI_DATA_DIR`); migrarlos a object storage es trabajo futuro.
-- **La imagen `back` es interina.** Incluye Node + la CLI `claude` porque la
-  generación corre con `claude -p` en proceso (ADR 0001, Fase 0). ADR 0002 Fase B
-  extrae un **worker** que llamará a la API de Claude y dejará la imagen sin Node.
+- **Generación DESACOPLADA (#130 Fase 2 / ADR 0002 Fase B).** El `back` ya **no** ejecuta
+  `claude -p`: **ENCOLA** un job (tabla `jobs` en Postgres) y responde al instante. El
+  servicio **`worker`** clava el job, reconstruye prompt + post-procesado desde el `spec`
+  serializado y corre **`claude -p`** (con todo el endurecimiento #137: grupo de procesos
+  propio, kill del árbol al timeout/cancel, tope de concurrencia, sin huérfanos). Por eso
+  **`worker` lleva Node + la CLI `claude` y `back` ya no** (`KENI_WORKER_EXTERNO=1` en el
+  back evita que levante su worker in-proceso). La generación **sigue siendo `claude -p`**
+  (ADR 0001): el worker **no** usa la API de Claude. *Reiniciar el back NO mata los jobs en
+  curso del worker* (es otro contenedor). En **local / un solo proceso** no hace falta el
+  servicio: el back arranca el worker **en proceso** (un hilo), y la UX no cambia.
 - **whisper (clip→copy) NO está en hosted.** Por privacidad (el audio no sale de la
   máquina), la transcripción es del perfil local. El gateway hosted no transcribe.
 - **Expuesto públicamente tras auth.** `/api` va protegido por el token interino
@@ -222,8 +230,9 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
   Fase 1 (auth) la sirve el back; la generación sigue en Fase 0 (`claude -p`).
 - **ADR 0002 (descomposición):** `back`+`front` = gateway/catálogo; `mcp` = el 3er
   deployable; `db`/`files` = la infra compartida (Postgres + object storage). El
-  **worker** de generación (Fase B) aún no existe: se añadirá como servicio
-  `worker` cuando se extraiga, y el back pasará a **encolar** en vez de ejecutar.
+  **worker** de generación (Fase B) **ya existe** como servicio `worker`: el back
+  **ENCOLA** (tabla `jobs` en Postgres) y el worker **ejecuta `claude -p`**. La generación
+  corre **fuera del proceso del gateway**; reiniciar el back no mata los jobs en curso.
 
 ## Gaps a cerrar antes de producción real
 
@@ -234,7 +243,10 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
       sigue en SQLite+disco (perfil local). Cutover one-shot con
       `python -m keni_consola.migracion` (ver "Cutover a Postgres + S3"). Pendiente solo el
       **YAML editorial** (`ficheros.py`/`indice.py`), fuera de alcance de #130.
-- [ ] Extraer el worker de generación (ADR 0002 Fase B) → quitar Node de `back`.
+- [x] Extraer el worker de generación (ADR 0002 Fase B) → Node fuera de `back` **(HECHO)**.
+      El `back` ENCOLA (tabla `jobs` en Postgres); el servicio `worker` corre `claude -p`.
+      Pendiente fino: aislamiento por usuario del sandbox en `code.kenitech.io` (infra más
+      profunda; ver más abajo) y `--scale worker=N` si el piloto necesita más throughput.
 - [ ] Backups de `pgdata` y `keni-data` (el cutover ya los respalda; falta automatizarlo).
       Hardening del contenedor `back` (no-root).
 - [ ] Decidir/ejecutar el ingress (migrar Caddy) en ventana de mantenimiento.

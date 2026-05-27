@@ -1,9 +1,10 @@
 # Gateway de keni-social: API Starlette (`consola/`) + fallback del SPA.
 #
-# IMAGEN INTERINA a proposito: incluye Node + la CLI `claude` porque HOY la
-# generacion corre con `claude -p` en proceso (ADR 0001, Fase 0). ADR 0002 Fase B
-# extrae un worker que llamara a la API de Claude (SDK) y dejara esta imagen sin
-# Node. Hasta entonces, esto es lo que hace funcionar la generacion de copy.
+# El back ENCOLA la generacion (#130 Fase 2 / ADR 0002 Fase B); ya NO ejecuta `claude -p`.
+# Por eso esta imagen NO lleva Node ni la CLI `claude` (eso vive ahora en la imagen del
+# servicio `worker`, ver deploy/worker/Dockerfile). La generacion sigue siendo `claude -p`
+# (ADR 0001): la corre el worker, no el back. El back arranca con KENI_WORKER_EXTERNO=1
+# para NO levantar su worker in-proceso (lo hace el contenedor `worker`).
 #
 # Contexto de build: la RAIZ del repo (ver deploy/docker-compose.yml).
 FROM python:3.12-slim
@@ -16,16 +17,14 @@ ENV PYTHONUNBUFFERED=1 \
     XDG_CONFIG_HOME=/data \
     # Descubrimiento de skills DENTRO del contenedor (cierra #133 aqui): el repo
     # vive en /app, que contiene skills-copy/.
-    KENI_SKILLS_CWD=/app
+    KENI_SKILLS_CWD=/app \
+    # El back NO ejecuta `claude -p`: solo ENCOLA. El servicio `worker` consume la cola.
+    KENI_WORKER_EXTERNO=1
 
-# curl: healthcheck + script de nodesource. git: lo usan algunas skills.
-# Node 20 + Claude Code CLI = INTERINO (generacion por `claude -p`).
+# curl: solo para el healthcheck. git: lo usan algunas skills al renderizar. SIN Node ni
+# `claude` (el back ya no genera; eso lo hace la imagen del worker).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates git \
- && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && npm install -g @anthropic-ai/claude-code \
- && npm cache clean --force \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -55,8 +54,9 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 #   admin (#130) desde env. Bind 0.0.0.0 es seguro: el contenedor NO publica
 #   puertos al host; solo Traefik lo alcanza por la red interna de Docker.
 # --proxy-headers + --forwarded-allow-ips=*: confiar en las X-Forwarded-* de Traefik.
-# 1 worker: el runner de jobs es in-process (cola/estado en memoria); con varios
-#   workers se romperia. Concurrencia real = KENI_MAX_JOBS dentro del proceso.
+# 1 worker uvicorn: el back solo ENCOLA (la cola vive en Postgres compartido). La
+#   ejecucion (`claude -p`) corre en el servicio `worker`. Concurrencia real = KENI_MAX_JOBS
+#   por proceso worker (el tope de admision lo respeta tambien el encolado del back).
 CMD ["uvicorn", "keni_consola.app:crear_app", "--factory", \
      "--host", "0.0.0.0", "--port", "8765", \
      "--proxy-headers", "--forwarded-allow-ips=*"]

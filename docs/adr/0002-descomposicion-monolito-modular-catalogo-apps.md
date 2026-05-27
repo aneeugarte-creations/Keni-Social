@@ -62,8 +62,11 @@ Lo que **falta** y deja la puerta al spaghetti:
 - **Fronteras no enforced.** Nada impide hoy que un módulo de `api/` importe las tripas de otro;
   el acoplamiento app↔app no está prohibido por ninguna prueba ni lint.
 - **Catálogo no data-driven.** Añadir una app exige tocar la navegación a mano; no hay manifest.
-- **El runner de generación sigue in-process** (`dominio/runner.py`, `generaciones.py`): es la
-  costura que ADR 0001 ya manda extraer (su Fase 2), aún acoplada al proceso del gateway.
+- **El runner de generación se EXTRAJO a un worker** (#130 Fase 2 / Fase B de abajo): el back
+  **ENCOLA** un job (tabla `jobs` en Postgres) y un **worker** corre `claude -p` (`worker.py`,
+  reusando `dominio/runner.py` + `generaciones.lanzar_job_claude` con todo el #137). En local
+  el worker corre **en proceso** (un hilo); en hosted es el servicio `worker` de compose. La
+  generación ya **no** está acoplada al proceso del gateway: reiniciar el back no mata los jobs.
 
 ---
 
@@ -160,17 +163,27 @@ Incremental y sin parar el piloto. No mueve la IP de dominio; reordena y formali
   - El sidebar/catálogo se genera a partir de los manifests de las apps (añadir una app no exige
     editar la navegación a mano).
 
-### Fase B — Sacar la generación del gateway al sandbox por usuario (ver [ADR 0001](0001-runtime-servicio-compartido.md))
+### Fase B — Sacar la generación del gateway al worker (#130 Fase 2) — **HECHO**
 
-- El gateway **despacha** la generación al **sandbox del usuario** (que corre `claude -p`) y
-  **transmite el stream-json** a la UI; no ejecuta `claude -p` en su propio proceso. El runner de
-  subprocesos se **endurece como permanente** (#137: cola con tope, grupo de procesos propio, kill
-  del árbol).
-- **Criterios de aceptación:**
-  - La generación corre **fuera del proceso del gateway** (en el sandbox); reiniciar el gateway
-    **no mata** los jobs en curso.
-  - Un timeout/cancelación **no deja procesos huérfanos** en el sandbox.
-  - "Actividad IA" registra **tokens/coste/duración por job y usuario** (observabilidad, no bloqueo).
+- El gateway **ENCOLA** la generación (tabla `jobs` en Postgres; spec serializable con prompt +
+  post-procesado) y responde al instante; un **worker** la clava y corre `claude -p`, escribiendo
+  el stream-json y el resultado en el registro de generación (la SPA sigue **sondeando** ese
+  registro, sin cambiar la UX). El gateway **no** ejecuta `claude -p` en su propio proceso. El
+  runner de subprocesos se **endurece como permanente** (#137: cola con tope, grupo de procesos
+  propio, kill del árbol) y se **reutiliza tal cual** en el worker.
+  - **Local / un solo proceso:** el back arranca el worker **en proceso** (un hilo de fondo): la
+    UX de una sola máquina no cambia (sin servicio aparte, `claude` en el mismo entorno).
+  - **Hosted:** un servicio **`worker`** de compose consume la misma cola; la imagen del back
+    **pierde Node + la CLI `claude`** (se mueven a la imagen del worker).
+- **Criterios de aceptación (cumplidos):**
+  - La generación corre **fuera del proceso del gateway** (en el worker); reiniciar el gateway
+    **no mata** los jobs en curso (en hosted el worker es otro contenedor).
+  - Un timeout/cancelación **no deja procesos huérfanos** (kill del árbol del grupo de procesos);
+    la cancelación funciona **cross-proceso** (flag en la cola que el worker sondea).
+  - "Actividad IA" registra **tokens/coste/duración por job y usuario** (ya lo hacía el runner; el
+    worker lo conserva al reusar `lanzar_job_claude`).
+- **Pendiente (más profundo):** el **aislamiento por usuario** del sandbox en `code.kenitech.io`
+  (un sandbox por persona) es infra aparte; hoy el worker es un servicio compartido del stack.
 
 ### Fase C — Dockerizar con dos perfiles
 

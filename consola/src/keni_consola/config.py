@@ -43,6 +43,10 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_MAX_JOBS               jobs `claude` simultaneos          def 4   (min 1)
     - KENI_MAX_COLA               jobs esperando un slot             def 16  (min 0)
 
+  Cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B; `cola`, `worker`):
+    - KENI_WORKER_EXTERNO         hay un servicio `worker` aparte    def OFF (worker in-proceso)
+    - KENI_WORKER_SONDEO_SEGUNDOS intervalo de sondeo de la cola (s) def 0.5  (min 0.05)
+
   Generacion `claude -p` (`generaciones`, `dominio.stream`):
     - KENI_CLAUDE_TIMEOUT         wall-timeout de un job (s)         def 600
     - KENI_CLAUDE_MAX_USD         tope de coste (--max-budget-usd)   def sin tope
@@ -120,6 +124,10 @@ ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 ENV_MAX_JOBS = "KENI_MAX_JOBS"
 ENV_MAX_COLA = "KENI_MAX_COLA"
 
+# Cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B).
+ENV_WORKER_EXTERNO = "KENI_WORKER_EXTERNO"
+ENV_WORKER_SONDEO_SEGUNDOS = "KENI_WORKER_SONDEO_SEGUNDOS"
+
 # Generacion `claude -p`.
 ENV_CLAUDE_TIMEOUT = "KENI_CLAUDE_TIMEOUT"
 ENV_CLAUDE_MAX_USD = "KENI_CLAUDE_MAX_USD"
@@ -177,6 +185,9 @@ LOG_LEVEL_DEF = "INFO"
 MAX_JOBS_DEF = 4
 MAX_COLA_DEF = 16
 CLAUDE_TIMEOUT_DEF = 600
+# Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
+# al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
+WORKER_SONDEO_SEGUNDOS_DEF = 0.5
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -298,6 +309,41 @@ def max_jobs() -> int:
 def max_cola() -> int:
     """Maximo de jobs ESPERANDO un slot (`KENI_MAX_COLA`, def 16, minimo 0)."""
     return _entero(ENV_MAX_COLA, MAX_COLA_DEF, minimo=0)
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: cola + worker de generacion (#130 Fase 2 / ADR 0002 Fase B)       #
+# --------------------------------------------------------------------------- #
+#
+# DOS modos de ejecucion del worker que consume la cola de generacion:
+#   - LOCAL / un solo proceso (def): el back arranca el worker EN PROCESO (hilo de
+#     fondo). La UX de una sola maquina no cambia: no hace falta un servicio aparte y
+#     `claude` esta en el mismo entorno.
+#   - HOSTED: un servicio `worker` SEPARADO consume la misma cola. Se activa con
+#     `KENI_WORKER_EXTERNO` afirmativo en el back (asi NO arranca su worker in-proceso) y
+#     el contenedor `worker` corre `python -m keni_consola.worker` (que SI tiene `claude`).
+
+
+def worker_externo() -> bool:
+    """True si hay un servicio `worker` SEPARADO (hosted) que consume la cola.
+
+    `KENI_WORKER_EXTERNO` afirmativo => el back NO arranca su worker in-proceso (lo hace
+    el contenedor `worker`). Def OFF: el back arranca el worker in-proceso (perfil local /
+    un solo proceso), preservando la UX de una sola maquina sin servicio aparte.
+    """
+    return _crudo(ENV_WORKER_EXTERNO).lower() in _VERDADEROS
+
+
+def worker_sondeo_segundos() -> float:
+    """Intervalo de sondeo de la cola por el worker (`KENI_WORKER_SONDEO_SEGUNDOS`, def 0.5, min 0.05)."""
+    crudo = _crudo(ENV_WORKER_SONDEO_SEGUNDOS)
+    if not crudo:
+        return WORKER_SONDEO_SEGUNDOS_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return WORKER_SONDEO_SEGUNDOS_DEF
+    return max(0.05, valor)
 
 
 # --------------------------------------------------------------------------- #

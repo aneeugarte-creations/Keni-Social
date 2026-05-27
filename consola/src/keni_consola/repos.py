@@ -524,3 +524,31 @@ def borrar_turnos_semana_rota(semana: str) -> int:
 
 def aprobar_semana_rota(semana: str) -> int:
     return db.aprobar_semana_rota(semana)
+
+
+# --------------------------------------------------------------------------- #
+# Cola de jobs de generacion (OPERACIONAL: persistencia via db.py; #130 Fase 2) #
+# --------------------------------------------------------------------------- #
+#
+# El back ENCOLA y un WORKER (in-proceso en local, servicio aparte en hosted) clava y
+# ejecuta `claude -p`. La fachada delega 1:1 en db.py (SQLite local o Postgres hosted).
+
+
+def encolar_job(gen_id: str, spec: str) -> str:
+    return db.encolar_job(gen_id, spec)
+
+
+def reclamar_job(worker: str = "") -> dict[str, Any] | None:
+    return db.reclamar_job(worker)
+
+
+def terminar_job(job_id: str) -> None:
+    return db.terminar_job(job_id)
+
+
+def cancelar_job(gen_id: str) -> bool:
+    return db.cancelar_job(gen_id)
+
+
+def job_cancelado(job_id: str) -> bool:
+    return db.job_cancelado(job_id)

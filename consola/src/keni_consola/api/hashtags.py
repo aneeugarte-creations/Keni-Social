@@ -14,7 +14,6 @@ SEGURIDAD / VALIDACION (reusa las fuentes de verdad):
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from starlette.requests import Request
@@ -23,6 +22,8 @@ from starlette.routing import Route
 
 from .. import generaciones, marcas, redes, repos
 from .._http_json import leer_json
+from ..dominio import hashtags as dom_hashtags
+from ..dominio import jobspec
 from ..seguridad import autor_de_peticion
 from . import skills
 
@@ -31,21 +32,10 @@ from . import skills
 _MARCAS: tuple[tuple[str, str], ...] = tuple(marcas.opciones())
 _MARCAS_IDS = {m[0] for m in _MARCAS}
 
-# Caracteres validos dentro de un hashtag (letras Unicode, digitos y _). Sin espacios.
-_RE_TAG = re.compile(r"#?([\wÀ-ɏ]+)", re.UNICODE)
-
-
-def _normalizar_tag(crudo: str) -> str | None:
-    """Normaliza un hashtag a `#xxx` (un solo token). None si queda vacio."""
-    if not isinstance(crudo, str):
-        return None
-    crudo = crudo.strip()
-    if not crudo:
-        return None
-    m = _RE_TAG.search(crudo)
-    if m is None:
-        return None
-    return f"#{m.group(1)}"
+# Prompt + parseo de la sugerencia viven AHORA en el dominio (`dominio.hashtags`), para
+# que el WORKER de generacion los reconstruya sin importar de `api/` (#130 Fase 2). Aqui
+# se reexportan por compat de referencias (el dominio del job apunta al mismo parseo).
+_normalizar_tag = dom_hashtags.normalizar_tag
 
 
 def _normalizar_lista_tags(crudas: Any) -> list[str] | None:
@@ -79,43 +69,10 @@ def _grupo_a_dict(grupo: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# --------------------------------------------------------------------------- #
-# Sugerencia por IA: prompt + parseo tolerante                                 #
-# --------------------------------------------------------------------------- #
-
-
-def construir_prompt_sugerencia(texto: str, marca: str, red: str | None = None) -> str:
-    """Prompt para pedir hashtags. El texto viaja como argumento (sin shell)."""
-    destino = f" para {redes.nombre_por_id(red)}" if red else ""
-    return (
-        f"Sugiere entre 8 y 15 hashtags relevantes en español{destino} para la marca "
-        f"{marca}, a partir del siguiente texto. Responde SOLO con los hashtags, uno por "
-        f"línea, cada uno empezando por #, sin numeración ni explicaciones:\n\n{texto}"
-    )
-
-
-def parsear_hashtags(salida: str) -> list[str]:
-    """Extrae hashtags de la salida cruda del asistente (tolerante).
-
-    Estrategia: primero busca tokens `#xxx`; si no hay ninguno, cae a tratar cada
-    LINEA no vacia como un hashtag (normalizandola). Quita duplicados preservando el
-    orden. Devuelve `[]` si no hay nada utilizable.
-    """
-    salida = salida or ""
-    encontrados = re.findall(r"#([\wÀ-ɏ]+)", salida, re.UNICODE)
-    if encontrados:
-        crudos = [f"#{t}" for t in encontrados]
-    else:
-        crudos = [linea for linea in salida.splitlines() if linea.strip()]
-    salida_norm: list[str] = []
-    vistos: set[str] = set()
-    for crudo in crudos:
-        tag = _normalizar_tag(crudo)
-        if tag is None or tag in vistos:
-            continue
-        vistos.add(tag)
-        salida_norm.append(tag)
-    return salida_norm
+# Sugerencia por IA: el prompt + el parseo viven en `dominio.hashtags` (para el worker).
+# Se reexportan aqui para no romper los call sites (tests/otros modulos los referencian).
+construir_prompt_sugerencia = dom_hashtags.construir_prompt_sugerencia
+parsear_hashtags = dom_hashtags.parsear_hashtags
 
 
 # --------------------------------------------------------------------------- #
@@ -229,9 +186,13 @@ async def sugerir(request: Request) -> Response:
             "autor_nombre": autor.get("usuario", ""),
         }
     )
+    # ENCOLA y devuelve de inmediato (#130 Fase 2): el worker reconstruye el parseo de
+    # hashtags desde el `spec` y corre `claude -p` (con #137). `procesar` solo lo usa un
+    # lanzador inyectado (tests). El cwd lo resuelve el worker (jobspec.cwd, via env vars).
+    spec = jobspec.construir(prompt=prompt, procesar=jobspec.construir_hashtags())
     try:
-        generaciones.lanzar_job_claude(
-            gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar
+        generaciones.encolar_job_claude(
+            gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar, spec=spec
         )
     except generaciones.ColaLlenaError:
         # Cola al tope (#137): marcamos el registro y RE-LANZAMOS para que el manejador

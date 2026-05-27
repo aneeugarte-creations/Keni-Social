@@ -3,15 +3,24 @@
 TODA generacion de IA de la consola (copy desde nota, copy desde RSS, hashtags,
 imagen) corre como un TRABAJO en segundo plano en vez de bloquear la peticion HTTP:
 
-  1. El endpoint valida, crea un registro `{estado: "ejecutando"}` y lanza el trabajo
-     EN BACKGROUND (Popen + hilo lector para claude; un hilo simple para imagen).
+  1. El endpoint valida, crea un registro `{estado: "ejecutando"}` y ENCOLA el trabajo
+     (#130 Fase 2): persiste un `spec` serializable en la cola (`cola.py`/tabla `jobs`).
   2. El POST responde de INMEDIATO con el registro (no bloquea, no hay timeout de 180 s
      en la peticion). El trabajo sigue aunque el usuario cambie de pestana o de pagina.
-  3. El hilo avanza el registro de forma incremental y ATOMICA: para los trabajos de
-     claude persiste el TEXTO en vivo (stream token a token con `--include-partial-
-     messages`) + metricas parciales (turnos/tokens). Al terminar fija el estado
-     terminal (`completado` con el `resultado` ya procesado, o `error`).
+  3. Un WORKER (in-proceso en local, servicio aparte en hosted; ver `worker.py`) CLAVA el
+     job, reconstruye prompt+post-procesado desde el `spec` y corre `claude -p` con el
+     runner de `lanzar_job_claude` (mismo #137: grupo de procesos, kill del arbol, tope de
+     cola, cancelacion). El hilo avanza el registro de forma incremental y ATOMICA: persiste
+     el TEXTO en vivo (stream token a token con `--include-partial-messages`) + metricas
+     parciales. Al terminar fija el estado terminal (`completado` con el `resultado` ya
+     procesado, o `error`).
   4. El frontend SONDEA `GET /api/generaciones/{id}` hasta el estado terminal.
+
+DESACOPLO (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA (`encolar_job_claude`) y el
+WORKER EJECUTA (`lanzar_job_claude`). `lanzar_job_claude` NO desaparece: es la primitiva de
+ejecucion del worker (con todo el #137). En el perfil LOCAL el worker corre en un hilo del
+propio back (UX de una sola maquina intacta, sin servicio aparte); en HOSTED corre en un
+contenedor `worker` que SI tiene `claude` (la imagen del back ya no lleva Node).
 
 El registro YAML es la FUENTE DE VERDAD del sondeo. Los ARTEFACTOS durables (historial
 de skills, publicaciones, imagenes) se guardan en su sitio de siempre; el registro de
@@ -388,6 +397,50 @@ def _entorno_skill() -> dict[str, str]:
     return entorno
 
 
+def encolar_job_claude(
+    gen_id: str,
+    *,
+    prompt: str,
+    cwd: Path,
+    procesar: Procesar,
+    dir_temporal: Path | None = None,
+    spec: dict[str, Any] | None = None,
+) -> None:
+    """ENCOLA un trabajo de claude (#130 Fase 2): persiste el `spec` y vuelve de INMEDIATO.
+
+    Es el NUEVO seam de lanzamiento que usan los endpoints/dominio en lugar de ejecutar
+    `claude -p` en la peticion. El back solo ENCOLA; un WORKER (in-proceso en local,
+    servicio aparte en hosted) clava el job y corre `lanzar_job_claude` (el runner real
+    con todo el #137). `spec` es la forma serializable (prompt + post-procesado + cwd) que
+    el worker usa para reconstruir el trabajo; `procesar`/`cwd`/`dir_temporal` SOLO los
+    necesita un lanzador INYECTADO (tests), que recibe la MISMA firma que el viejo
+    `lanzar_job_claude` y por eso sigue funcionando sin cambios.
+
+    INYECTABLE: `crear_app(lanzar_generacion=...)` reasigna ESTA funcion; los tests pasan
+    fakes que NO tocan `claude` ni la cola (ejecutan `procesar` sincronicamente o dejan el
+    registro `ejecutando`). En produccion, el default encola el `spec`.
+
+    TOPE DE COLA (#137, PERMANENTE): la admision se decide AQUI, SINCRONAMENTE: si el
+    sistema esta saturado (`runner.admitir()` lanza `ColaLlenaError`) propagamos al llamante,
+    que responde 429. Asi el backpressure es inmediato (no se encola un job que no cabe). El
+    worker, al clavar el job, llama a `slot(ya_admitido=True)` para heredar y liberar el cupo.
+    """
+    if spec is None:
+        # Defensa: sin spec no se puede reconstruir el job en el worker. El llamante real
+        # SIEMPRE pasa spec; un test que inyecte su fake no llega aqui (reasigna la funcion).
+        raise ValueError("encolar_job_claude requiere un spec serializable")
+    # Admision SINCRONA (mismo tope que el flujo in-process): rechaza con ColaLlenaError
+    # ANTES de encolar si el sistema esta al tope (-> 429). El worker hereda esta admision.
+    runner.admitir()
+    try:
+        from . import cola
+
+        cola.encolar(gen_id, spec)
+    except Exception:  # noqa: BLE001 -- si el encolado falla, no fugar el cupo de admision
+        runner.liberar_admision()
+        raise
+
+
 def lanzar_job_claude(
     gen_id: str,
     *,
@@ -395,6 +448,7 @@ def lanzar_job_claude(
     cwd: Path,
     procesar: Procesar,
     dir_temporal: Path | None = None,
+    ya_admitido: bool = False,
 ) -> None:
     """Lanza un trabajo de claude EN SEGUNDO PLANO (Popen + hilo lector). NO bloquea.
 
@@ -405,11 +459,14 @@ def lanzar_job_claude(
     Si `dir_temporal` viene (archivo subido), se borra al terminar. INYECTABLE: los tests
     reemplazan esta funcion por una fake que llama a `procesar` con una salida canned.
 
-    TOPE DE COLA (#137, PERMANENTE): la admision se decide AQUI, SINCRONAMENTE, antes de
-    arrancar el hilo: si el sistema esta saturado (`runner.admitir()` lanza
-    `ColaLlenaError`) propagamos la excepcion al llamante, que responde 429. Asi no se
-    apilan hilos daemon bloqueados sin limite (el bug original). El hilo hereda esa
-    admision (`slot(ya_admitido=True)`) y la libera al terminar.
+    LO LLAMA EL WORKER (#130 Fase 2) tras clavar un job, NO la peticion HTTP. `ya_admitido`
+    es True cuando el cupo de admision ya lo tomo `encolar_job_claude` (el caso normal del
+    worker): asi NO se vuelve a admitir (evita doble cuenta), pero `slot` SIGUE liberandolo.
+
+    TOPE DE COLA (#137, PERMANENTE): la admision se decide SINCRONAMENTE; si el sistema esta
+    saturado (`runner.admitir()` lanza `ColaLlenaError`) se propaga al llamante (429). Con
+    `ya_admitido` la admision la hizo ya el encolado (el worker no re-admite). El hilo
+    hereda la admision (`slot(ya_admitido=True)`) y la libera al terminar.
     """
     acumulador = stream.AcumuladorStream()
     timeout = _timeout()
@@ -424,8 +481,10 @@ def lanzar_job_claude(
 
     # Admision SINCRONA: si la cola esta al tope, NO lanzamos el hilo; el llamante recibe
     # ColaLlenaError y responde 429 (#137; PERMANENTE: la generacion sigue siendo `claude
-    # -p`, ADR 0001). El hilo, ya admitido, libera el cupo al terminar via `slot`.
-    runner.admitir()
+    # -p`, ADR 0001). El hilo, ya admitido, libera el cupo al terminar via `slot`. Si el
+    # cupo ya lo tomo `encolar_job_claude` (worker, #130 Fase 2), NO re-admitimos.
+    if not ya_admitido:
+        runner.admitir()
 
     def _avance() -> None:
         try:
@@ -592,25 +651,37 @@ def lanzar_job_claude(
 def cancelar(gen_id: str) -> bool:
     """Cancela un job de claude EN VUELO: mata el ARBOL del subproceso (#137, PERMANENTE).
 
-    Devuelve True si habia un job en vuelo (proceso) que se senalizo/mato; False si no
-    hay nada que cancelar (ya terminó o no es un job con proceso). Arma el evento de
-    cancelacion (para que `_finalizar` lo marque como cancelado) y, si ya hay proceso,
-    le manda el kill al GRUPO. La limpieza del estado terminal la hace el hilo en
-    `_finalizar`. La generacion es subprocess `claude -p` (ADR 0001): cancelar = matar el
-    arbol del proceso, no una operacion remota.
+    Devuelve True si se pudo cancelar algo (handle in-memoria del proceso O un job en la
+    cola); False si no hay nada que cancelar (ya terminó). Tiene DOS vias, porque el job
+    puede correr en ESTE proceso o en otro (worker hosted, #130 Fase 2):
+      - IN-MEMORIA: si el job corre aqui (back local con worker in-proceso, o el propio
+        worker), hay un handle con el proceso: armamos el evento y matamos el ARBOL ya.
+      - CROSS-PROCESO: marcamos el job en la cola como `cancelado` (`cola.cancelar`). El
+        worker que lo corre sondea ese flag y mata el arbol; un job aun pendiente se
+        finaliza como cancelado al clavarse, sin lanzar `claude`.
+    La limpieza del estado terminal la hace el hilo del job en `_finalizar`. La generacion
+    es subprocess `claude -p` (ADR 0001): cancelar = matar el arbol del proceso.
     """
+    cancelado_algo = False
     with _HANDLES_LOCK:
         handle = _HANDLES.get(gen_id)
-        if handle is None:
-            return False
-        ev = handle.get("cancelado")
-        proc = handle.get("proc")
+        ev = handle.get("cancelado") if handle else None
+        proc = handle.get("proc") if handle else None
     if isinstance(ev, threading.Event):
         ev.set()
+        cancelado_algo = True
     if isinstance(proc, subprocess.Popen):
         runner.matar_arbol(proc)
-        return True
-    return ev is not None
+        cancelado_algo = True
+    # Cross-proceso: marca el job en la cola (lo lee el worker, esté donde esté).
+    try:
+        from . import cola
+
+        if cola.cancelar(gen_id):
+            cancelado_algo = True
+    except Exception:  # noqa: BLE001 -- la cancelacion in-memoria ya pudo bastar; no propagar
+        _log.warning("generacion %s: fallo al marcar la cancelacion en la cola", gen_id, exc_info=True)
+    return cancelado_algo
 
 
 # --------------------------------------------------------------------------- #

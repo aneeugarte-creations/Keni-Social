@@ -216,7 +216,17 @@ def crear_app(
         from . import generaciones as gen_modulo
 
         if lanzar_generacion is not None:
-            gen_modulo.lanzar_job_claude = lanzar_generacion
+            # #130 Fase 2: el seam de lanzamiento es ahora ENCOLAR (el back ya no ejecuta
+            # `claude -p` en la peticion). El fake recibe la MISMA firma de antes (gen_id +
+            # prompt/cwd/procesar/dir_temporal); aceptamos el `spec` extra (lo ignora). Asi
+            # las fakes existentes (noop / "completa" que corre `procesar`) siguen valiendo
+            # sin tocar nada, y ningun test toca la cola ni `claude` real.
+            def _encolar_inyectado(gen_id, *, prompt, cwd, procesar, dir_temporal=None, spec=None):  # noqa: ANN001
+                return lanzar_generacion(
+                    gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal
+                )
+
+            gen_modulo.encolar_job_claude = _encolar_inyectado
         if lanzar_imagen is not None:
             gen_modulo.lanzar_job_imagen = lanzar_imagen
 

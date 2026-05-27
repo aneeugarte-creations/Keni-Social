@@ -72,7 +72,7 @@ import re
 from pathlib import Path
 
 from .. import config, generaciones, marcas, redes, repos, skills_catalogo
-from . import stream
+from . import jobspec, stream
 from .publicaciones import publicacion_a_dict
 
 # Instruccion ADITIVA de estilo que se anade a TODO prompt de generacion: el copy
@@ -515,11 +515,16 @@ def _lanzar_con_procesar(
     marca: str,
     prompt: str,
     procesar: generaciones.Procesar,
+    procesar_spec: dict[str, object],
     dir_temporal: Path | None = None,
     autor: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    """Crea el registro de generacion, lanza el trabajo de claude EN BACKGROUND y
-    devuelve el registro ACTUAL (puede haber avanzado ya si el lanzador es una fake).
+    """Crea el registro de generacion, ENCOLA el trabajo (#130 Fase 2) y devuelve el registro.
+
+    El back solo ENCOLA (responde al instante); un WORKER clava el job y corre `claude -p`.
+    Se pasa TANTO `procesar` (closure, para un lanzador INYECTADO en tests, misma firma de
+    antes) COMO `spec` (forma serializable que el worker usa para reconstruir el job). El
+    registro devuelto puede haber avanzado ya si el lanzador inyectado es sincrono.
 
     `autor` (atribucion por usuario, #130 Fase 1) se estampa en el registro de generacion.
     """
@@ -533,10 +538,15 @@ def _lanzar_con_procesar(
             **_autor_campos(autor),
         }
     )
+    spec = jobspec.construir(
+        prompt=prompt,
+        procesar=procesar_spec,
+        dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
+    )
     try:
-        generaciones.lanzar_job_claude(
+        generaciones.encolar_job_claude(
             gen["id"], prompt=prompt, cwd=cwd_ejecucion_skills(), procesar=procesar,
-            dir_temporal=dir_temporal,
+            dir_temporal=dir_temporal, spec=spec,
         )
     except generaciones.ColaLlenaError:
         # Cola al tope (#137): limpiamos el temporal, marcamos el registro y RE-LANZAMOS
@@ -573,20 +583,48 @@ def lanzar_generacion_copy(
     texto_base: str,
     dir_temporal: Path | None = None,
     autor: dict[str, str] | None = None,
+    fuente_id: str | None = None,
+    clave: str | None = None,
 ) -> dict[str, object]:
-    """Lanza una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS.
+    """Lanza (ENCOLA) una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS.
 
     `autor` (atribucion por usuario, #130 Fase 1) se propaga al registro, al historial y
-    a las publicaciones que el post-procesado crea en background.
+    a las publicaciones que el post-procesado crea en background. `fuente_id`/`clave` (RSS):
+    si vienen, ademas el post-procesado marca el item del feed como usado al completar con
+    exito (lo que antes envolvia `api/rss.generar`).
     """
     procesar = construir_procesar_copy(
         skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base,
         autor=autor,
     )
+    if fuente_id and clave:
+        procesar = _envolver_marcar_item(procesar, fuente_id, clave)
+    procesar_spec = jobspec.construir_copy(
+        skill=skill, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
+        texto_base=texto_base, autor=autor, fuente_id=fuente_id, clave=clave,
+    )
     return _lanzar_con_procesar(
         tipo=tipo, skill=skill, marca=marca, prompt=prompt, procesar=procesar,
-        dir_temporal=dir_temporal, autor=autor,
+        procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
     )
+
+
+def _envolver_marcar_item(
+    procesar: generaciones.Procesar, fuente_id: str, clave: str
+) -> generaciones.Procesar:
+    """Envuelve `procesar` para marcar un item de RSS como usado al completar con exito.
+
+    Identico al wrap que antes vivia en `api/rss.generar`, traido al dominio para que el
+    lanzador (in-proceso, inyectado en tests) y el worker compartan la MISMA logica.
+    """
+
+    def procesar_rss(salida: str, metricas: object) -> dict[str, object]:
+        resultado = procesar(salida, metricas)
+        if repos.obtener_fuente_rss(fuente_id) is not None:
+            repos.marcar_item(fuente_id, clave, True)
+        return resultado
+
+    return procesar_rss
 
 
 def lanzar_generacion_skill(
@@ -614,12 +652,20 @@ def lanzar_generacion_skill(
             skilldef.id, marca, redes_ids=redes_ids, titulo_dado="", texto_base=titulo_base,
             con_imagenes=skilldef.media, autor=autor,
         )
+        procesar_spec = jobspec.construir_copy(
+            skill=skilldef.id, marca=marca, redes_ids=redes_ids, titulo_dado="",
+            texto_base=titulo_base, con_imagenes=skilldef.media, autor=autor,
+        )
     else:
         procesar = construir_procesar_documento(
             skilldef.id, marca, titulo_base=titulo_base, con_imagenes=skilldef.media,
             autor=autor,
         )
+        procesar_spec = jobspec.construir_documento(
+            skill=skilldef.id, marca=marca, titulo_base=titulo_base,
+            con_imagenes=skilldef.media, autor=autor,
+        )
     return _lanzar_con_procesar(
         tipo="copy", skill=skilldef.id, marca=marca, prompt=prompt, procesar=procesar,
-        dir_temporal=dir_temporal, autor=autor,
+        procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
     )

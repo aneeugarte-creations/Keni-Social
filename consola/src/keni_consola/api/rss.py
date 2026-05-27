@@ -48,7 +48,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, redes, repos
+from .. import marcas, redes, repos
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
 from . import skills
@@ -695,49 +695,18 @@ async def generar(request: Request) -> Response:
     autor = autor_de_peticion(request)
 
     # El post-procesado de copy (parsear + historial + N publicaciones) se reutiliza tal
-    # cual; lo envolvemos para marcar el item como usado SOLO si completa con exito.
-    procesar_copy = skills.construir_procesar_copy(
-        skill, marca, redes_ids=redes_ids, titulo_dado=titulo.strip(), texto_base=nota,
-        autor=autor,
-    )
-
-    def procesar(salida: str, metricas: object) -> dict[str, object]:
-        resultado = procesar_copy(salida, metricas)
-        if isinstance(fuente_id, str) and fuente_id and isinstance(clave, str) and clave.strip():
-            if repos.obtener_fuente_rss(fuente_id) is not None:
-                repos.marcar_item(fuente_id, clave.strip(), True)
-        return resultado
-
-    gen = generaciones.crear(
-        {
-            "tipo": "rss",
-            "marca": marca,
-            "etiqueta": skills.etiqueta_generacion(skill, marca),
-            "autor_id": (autor or {}).get("id", ""),
-            "autor_nombre": (autor or {}).get("usuario", ""),
-        }
-    )
+    # cual; `fuente_id`/`clave` hacen que, ademas, se marque el item del feed como usado
+    # SOLO si completa con exito (lo hace el dominio, in-proceso o en el worker, igual).
+    # ENCOLA y devuelve de inmediato (#130 Fase 2); el worker corre `claude -p`.
     prompt = skills.construir_prompt(skill, marca, nota, redes_ids)
-    try:
-        generaciones.lanzar_job_claude(
-            gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar
-        )
-    except generaciones.ColaLlenaError:
-        # Cola al tope (#137): marcamos el registro y RE-LANZAMOS para el 429 central.
-        generaciones.actualizar(
-            gen["id"],
-            {"estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
-             "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
-             "fecha_fin": generaciones.ahora_iso()},
-        )
-        raise
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
-        generaciones.actualizar(
-            gen["id"],
-            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
-             "fecha_fin": generaciones.ahora_iso()},
-        )
-    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
+    fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
+    clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
+    gen = skills.lanzar_generacion_copy(
+        tipo="rss", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
+        titulo_dado=titulo.strip(), texto_base=nota, autor=autor,
+        fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
+    )
+    return JSONResponse({"generacion": gen})
 
 
 RUTAS = [
