@@ -84,6 +84,11 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_SKILLS_CWD: /app
+      # El contenedor corre como root; `claude` rechaza --dangerously-skip-permissions
+      # con root SALVO en un sandbox declarado. El contenedor ES un sandbox aislado, asi
+      # que IS_SANDBOX=1 habilita el flag (necesario para cargar skills + WebFetch en -p).
+      # TODO: contenedor no-root (README "gaps") y quitar este bypass.
+      IS_SANDBOX: "1"
       KENI_CONSOLA_TOKEN: ${KENI_CONSOLA_TOKEN}
       KENI_CONSOLA_ADMIN_USER: ${KENI_CONSOLA_ADMIN_USER}
       KENI_CONSOLA_ADMIN_PASS: ${KENI_CONSOLA_ADMIN_PASS}
