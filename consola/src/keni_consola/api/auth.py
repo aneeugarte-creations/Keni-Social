@@ -95,7 +95,12 @@ async def logout(request: Request) -> Response:
 
 
 async def me(request: Request) -> Response:
-    """GET /api/auth/me: el usuario de la sesion actual (401 si se entro por token)."""
+    """GET /api/auth/me: el usuario de la sesion actual (401 si se entro por token).
+
+    Devuelve, ademas del nucleo de sesion, `creado` y `ultimo_acceso` para que la
+    pagina "Mi cuenta" muestre los datos de la cuenta sin un endpoint aparte. (El
+    login mantiene su forma minima de 4 campos; estos extras solo llegan por `me`.)
+    """
     usuario = getattr(request.state, "usuario", None)
     if usuario is None:
         return JSONResponse({"error": "No hay sesión iniciada."}, status_code=401)
@@ -106,6 +111,8 @@ async def me(request: Request) -> Response:
                 "usuario": usuario["usuario"],
                 "rol": usuario["rol"],
                 "debe_cambiar_password": usuario["debe_cambiar_password"],
+                "creado": usuario.get("creado", ""),
+                "ultimo_acceso": usuario.get("ultimo_acceso", ""),
             }
         }
     )

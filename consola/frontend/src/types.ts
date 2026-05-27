@@ -1509,6 +1509,13 @@ export interface UsuarioSesion {
   rol: RolUsuario;
   /** `true` => hay que forzar el cambio de contraseña antes de usar la app. */
   debe_cambiar_password: boolean;
+  /**
+   * ISO 8601 de creación de la cuenta. Solo llega por `GET /api/auth/me` (la página
+   * "Mi cuenta" lo muestra); el login devuelve la forma mínima y no lo incluye.
+   */
+  creado?: string;
+  /** ISO 8601 del último acceso (vacío si nunca entró). Solo llega por `me`. */
+  ultimo_acceso?: string;
 }
 
 /** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */

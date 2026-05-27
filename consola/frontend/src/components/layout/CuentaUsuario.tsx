@@ -1,5 +1,6 @@
-import { ChevronsUpDown, LogOut } from "lucide-react";
+import { ChevronsUpDown, LogOut, UserCog } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { useSesion } from "@/hooks/sesion-contexto";
 import { cn } from "@/lib/utils";
@@ -89,6 +90,15 @@ export function CuentaUsuario({ className }: { className?: string }) {
           aria-label="Cuenta"
           className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md"
         >
+          <Link
+            to="/mi-cuenta"
+            role="menuitem"
+            onClick={() => setAbierto(false)}
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+          >
+            <UserCog className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            Mi cuenta
+          </Link>
           <button
             type="button"
             role="menuitem"

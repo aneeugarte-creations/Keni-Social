@@ -7,6 +7,22 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### «Mi cuenta»: configuración de la propia cuenta + auth reorganizada (#130)
+
+- Nueva página **Mi cuenta** (en *Ajustes*, para cualquier rol, también desde el menú de
+  cuenta del lateral): consulta tus datos (usuario, rol, fecha de creación y último acceso)
+  y **cambia tu propia contraseña** de forma voluntaria, sin pasar por el cambio forzado del
+  primer acceso. Reutiliza `POST /api/auth/cambiar-password`: el backend invalida el resto de
+  sesiones y re-emite la de este dispositivo, así que **no** hay que volver a iniciar sesión.
+- `GET /api/auth/me` ahora incluye `creado` y `ultimo_acceso` (el **login** mantiene su forma
+  mínima de 4 campos); los consume la nueva página.
+- **Reorganización del dominio de auth**: `auth.py` pasa a ser el paquete `auth/` (`hashing`,
+  `usuarios`, `sesiones`, `bootstrap` y `_comun`) con una **fachada** que conserva el contrato
+  público intacto. Sin cambios de seguridad ni de esquema: scrypt+salt, comparación en tiempo
+  constante, sesiones server-side deslizantes, bloqueo anti fuerza bruta, topes anti-DoS y la
+  barrera CSRF siguen igual. La gestión de **otras** cuentas (alta/rol/reset/baja, solo admin)
+  no cambia.
+
 ### Generar copy desde una URL (#149, ficha F9)
 
 - Nuevo atajo en **Generar copy**: pegas el **enlace** de una nota y obtienes copy por

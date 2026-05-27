@@ -15,6 +15,7 @@ import {
   Send,
   Settings2,
   Sparkles,
+  UserCog,
   Users,
   Wand2,
   type LucideIcon,
@@ -141,6 +142,12 @@ export const NAVEGACION: GrupoNav[] = [
   {
     etiqueta: "Ajustes",
     items: [
+      {
+        ruta: "/mi-cuenta",
+        etiqueta: "Mi cuenta",
+        icono: UserCog,
+        descripcion: "Tus datos y el cambio de tu contraseña.",
+      },
       {
         ruta: "/configuracion",
         etiqueta: "Configuración",

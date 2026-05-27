@@ -25,6 +25,7 @@ const Monitor = lazy(() => import("@/pages/Monitor"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
+const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 const Usuarios = lazy(() => import("@/pages/Usuarios"));
 
 /**
@@ -57,6 +58,8 @@ export const router = createBrowserRouter([
       // Ajustes
       { path: "configuracion", element: <Configuracion /> },
       { path: "sugerencias", element: <Sugerencias /> },
+      // Configuración de la propia cuenta (cualquier rol): datos + cambio de contraseña.
+      { path: "mi-cuenta", element: <MiCuenta /> },
       // Gestión de usuarios (solo admin; el backend devuelve 403 si no, y la
       // propia página muestra el aviso de permiso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },

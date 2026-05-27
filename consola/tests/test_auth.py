@@ -208,6 +208,25 @@ def test_me_sin_ninguna_credencial_da_401(entorno):
     assert r.status_code == 401
 
 
+def test_me_incluye_creado_y_ultimo_acceso_para_mi_cuenta(entorno):
+    """`me` expone `creado` y `ultimo_acceso` (los usa la pagina "Mi cuenta")."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    _login(c, "ana", CLAVE)
+    cuerpo = c.get("/api/auth/me").json()["usuario"]
+    assert {"creado", "ultimo_acceso"} <= set(cuerpo)
+    # Tras el login el ultimo_acceso queda fijado (no vacio).
+    assert cuerpo["ultimo_acceso"]
+
+
+def test_login_no_filtra_creado_ni_ultimo_acceso(entorno):
+    """El login mantiene su forma minima de 4 campos (esos extras solo van por `me`)."""
+    _crear("ana", CLAVE, "editor")
+    c = _cli()
+    cuerpo = _login(c, "ana", CLAVE).json()["usuario"]
+    assert set(cuerpo) == {"id", "usuario", "rol", "debe_cambiar_password"}
+
+
 # --------------------------------------------------------------------------- #
 # 4) Logout                                                                   #
 # --------------------------------------------------------------------------- #
