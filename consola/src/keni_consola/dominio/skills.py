@@ -448,6 +448,18 @@ def _lanzar_con_procesar(
             gen["id"], prompt=prompt, cwd=cwd_ejecucion_skills(), procesar=procesar,
             dir_temporal=dir_temporal,
         )
+    except generaciones.ColaLlenaError:
+        # Cola al tope (#137): limpiamos el temporal, marcamos el registro y RE-LANZAMOS
+        # para que el manejador central responda 429 (backpressure). INTERINO hasta #130.
+        if dir_temporal is not None:
+            shutil.rmtree(dir_temporal, ignore_errors=True)
+        generaciones.actualizar(
+            gen["id"],
+            {"estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
+             "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
+             "fecha_fin": generaciones.ahora_iso()},
+        )
+        raise
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
         if dir_temporal is not None:
             shutil.rmtree(dir_temporal, ignore_errors=True)

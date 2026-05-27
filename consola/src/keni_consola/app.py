@@ -32,6 +32,7 @@ from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainT
 from starlette.routing import Route
 
 from . import api, proyectos
+from .dominio.runner import ColaLlenaError
 from .observabilidad import RegistroPeticiones, manejar_excepcion
 
 # Carpeta donde el build del frontend deja el SPA (no existe aun en este worktree).
@@ -113,6 +114,20 @@ async def _api_no_encontrado(request: Request) -> Response:
     return JSONResponse({"error": "Recurso no encontrado."}, status_code=404)
 
 
+async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response:
+    """Cola de generaciones al tope -> 429 JSON claro (#137, INTERINO).
+
+    Manejador CENTRAL por TIPO: cualquier endpoint que deje propagar `ColaLlenaError`
+    (en vez de tragarla) responde un 429 consistente con un mensaje en espanol y la
+    cabecera `Retry-After`. Asi un pico de peticiones se rechaza con backpressure en
+    vez de apilar hilos. Medida transitoria hasta el servicio compartido (#130)."""
+    return JSONResponse(
+        {"error": str(exc) or "Hay demasiadas generaciones en curso; inténtalo en unos segundos."},
+        status_code=429,
+        headers={"Retry-After": "5"},
+    )
+
+
 def crear_app(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
     disparar_autodesarrollo=None,
@@ -188,5 +203,10 @@ def crear_app(
     return Starlette(
         routes=rutas,
         middleware=[Middleware(RegistroPeticiones)],
-        exception_handlers={Exception: manejar_excepcion},
+        # ColaLlenaError ANTES que Exception: Starlette elige el handler por tipo mas
+        # especifico, pero lo dejamos explicito (#137: cola al tope -> 429, no 500).
+        exception_handlers={
+            ColaLlenaError: _manejar_cola_llena,
+            Exception: manejar_excepcion,
+        },
     )
