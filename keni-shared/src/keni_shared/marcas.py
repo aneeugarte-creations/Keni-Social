@@ -21,10 +21,16 @@ Cada marca tiene tres campos:
                   FRONTERA con metricas (api/metricas.py, api/config.py); el resto
                   de la consola trabaja siempre con el `id` canonico.
 
-El catalogo tiene 5 marcas de primer nivel. El golf NO es una marca propia: es
-un matiz/sub-vertical editorial dentro del contexto de Claro Sports.
+El catalogo NO esta hardcodeado: se CARGA de un paquete de cliente declarativo
+(`clientes/<cliente>.toml`, ver `keni_shared.cliente`), externalizado a
+configuracion (#135). El cliente POR DEFECTO es AMX (`clientes/amx.toml`), con las
+mismas 5 marcas de siempre, de modo que sin configurar nada nada cambia. Anadir un
+cliente nuevo = anadir/seleccionar un `.toml`, sin tocar este modulo. El golf NO es
+una marca propia: es un matiz/sub-vertical editorial dentro del contexto de Claro
+Sports (va como cuenta hermana, ver `keni_shared.cuentas`).
 
-No tiene estado ni I/O: solo datos y funciones puras.
+El catalogo se materializa UNA vez al importar el modulo (desde el cliente activo).
+Las funciones del modulo son puras sobre ese catalogo ya cargado.
 
 USO TIPICO:
 
@@ -45,6 +51,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .cliente import cargar_cliente
+
 
 @dataclass(frozen=True)
 class Marca:
@@ -55,16 +63,14 @@ class Marca:
     id_metricas: str
 
 
-# Orden de presentacion estable (el que ya usaban Skills/Metricas en su UI).
+# Catalogo del cliente ACTIVO, en orden de presentacion estable (el del `.toml`).
 # `id` es la forma canonica (slug-guion); `id_metricas` la forma guion_bajo que
-# espera keni_metricas. Son 5 marcas de primer nivel: el golf es un sub-vertical
-# editorial de Claro Sports, NO una marca propia.
-MARCAS: tuple[Marca, ...] = (
-    Marca(id="unotv", etiqueta="UnoTV", id_metricas="unotv"),
-    Marca(id="claro-sports", etiqueta="Claro Sports", id_metricas="claro_sports"),
-    Marca(id="nacion-gamer", etiqueta="Nación Gamer", id_metricas="nacion_gamer"),
-    Marca(id="piso-15", etiqueta="Piso 15", id_metricas="piso_15"),
-    Marca(id="fundacion", etiqueta="Fundación", id_metricas="fundacion"),
+# espera keni_metricas. Por defecto son las 5 marcas de AMX (`clientes/amx.toml`),
+# pero NO estan hardcodeadas aqui: se CARGAN del paquete de cliente (#135). El golf
+# es un sub-vertical editorial de Claro Sports, NO una marca propia.
+MARCAS: tuple[Marca, ...] = tuple(
+    Marca(id=m.id, etiqueta=m.etiqueta, id_metricas=m.id_metricas)
+    for m in cargar_cliente().marcas
 )
 
 # Indices para acceso O(1). Construidos una sola vez al importar el modulo.

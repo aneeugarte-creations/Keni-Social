@@ -15,15 +15,25 @@ guards los importen de la misma fuente.
 Los ids estan en forma `id_metricas` (guion_bajo), que es la que usa
 `keni_metricas` para hablar con sus cuentas (igual que `marcas.Marca.id_metricas`).
 
-Sin estado ni I/O: solo datos.
+NO estan hardcodeados: se CARGAN del paquete de cliente declarativo
+(`clientes/<cliente>.toml`, seccion `[cuentas]`; ver `keni_shared.cliente`),
+externalizado a configuracion (#135). Por defecto es AMX (`clientes/amx.toml`), con
+los mismos ids de siempre, asi que sin configurar nada nada cambia. Anadir un
+cliente nuevo = anadir/seleccionar un `.toml`, sin tocar este modulo.
+
+Sin estado: solo datos, materializados una vez al importar (desde el cliente activo).
 """
 
 from __future__ import annotations
 
+from .cliente import cargar_cliente
+
+_cliente = cargar_cliente()
+
 # Cuenta principal del reporte de deportes (su `id_metricas`). Coincide con
-# `marcas.id_metricas_de("claro-sports")`.
-CUENTA_DEPORTES_PRINCIPAL: str = "claro_sports"
+# `marcas.id_metricas_de("claro-sports")` en el cliente AMX por defecto.
+CUENTA_DEPORTES_PRINCIPAL: str = _cliente.deportes_principal
 
 # Cuentas hermanas de Claro Sports (canal de TV + sub-vertical de golf). NO son
 # marcas del catalogo: el guard de `muestra` verifica que no se solapan con el.
-CUENTAS_DEPORTES_HERMANAS: tuple[str, ...] = ("claro_sports_tv", "csport_golf")
+CUENTAS_DEPORTES_HERMANAS: tuple[str, ...] = _cliente.deportes_hermanas

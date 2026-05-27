@@ -1,0 +1,19 @@
+# Cliente de EJEMPLO solo para tests (#135): demuestra que anadir un cliente nuevo es
+# anadir/seleccionar un `.toml`, SIN tocar la capa base. Marcas y cuentas distintas a
+# las de AMX, para verificar que el catalogo cambia con la configuracion.
+id = "demo"
+nombre = "Cliente Demo"
+
+[[marca]]
+id = "acme-news"
+etiqueta = "ACME News"
+id_metricas = "acme_news"
+
+[[marca]]
+id = "acme-sports"
+etiqueta = "ACME Sports"
+id_metricas = "acme_sports"
+
+[cuentas]
+deportes_principal = "acme_sports"
+deportes_hermanas = ["acme_sports_tv"]

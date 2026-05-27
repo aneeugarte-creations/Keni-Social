@@ -21,6 +21,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/keni_shared"]
+# Empaqueta los ficheros de cliente (marcas/cuentas externalizadas a config, #135).
+# Explicito para que los `.toml` de `clientes/` entren en el wheel/sdist; sin ellos
+# la carga del catalogo fallaria al instalar el paquete.
+artifacts = ["src/keni_shared/clientes/*.toml"]
 
 [tool.pytest.ini_options]
 addopts = "-q"
