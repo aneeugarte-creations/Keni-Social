@@ -26,6 +26,8 @@ La consola intenta abrir el navegador sola; si no lo hace, copia esa dirección.
 
 > El puerto por defecto es `8765`. Si lo necesitas cambiar (por ejemplo, porque está ocupado), arranca con la variable `KENI_CONSOLA_PORT`, p. ej. `KENI_CONSOLA_PORT=9000 keni-consola`.
 
+> **Clave de acceso (token).** La consola pide un **token** para usar sus funciones, así ninguna otra web abierta en tu navegador puede dispararlas por error. Al arrancar verás un enlace del tipo `http://127.0.0.1:8765/?token=…`: **ábrelo tal cual la primera vez** y listo, no tienes que volver a escribir nada. Si prefieres una clave fija, arranca con `KENI_CONSOLA_TOKEN=tu-clave keni-consola`. Esto es solo una barrera local; no sustituye a usuarios y contraseñas (eso vendrá después).
+
 ---
 
 ## Qué es (idea de diseño)

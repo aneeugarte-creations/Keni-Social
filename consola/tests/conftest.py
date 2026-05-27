@@ -164,6 +164,9 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_AUTODESARROLLO", raising=False)
     monkeypatch.delenv("KENI_AUTODESARROLLO_CI", raising=False)
     monkeypatch.delenv("KENI_AUTODESARROLLO_CAP_LINEAS", raising=False)
+    # Token de sesion (#134): lo borramos del entorno para que `crear_app` use el que
+    # le pasamos (TOKEN_PRUEBA) y no uno del shell del usuario. Determinismo en tests.
+    monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
@@ -295,9 +298,16 @@ def lanzador_imagen_ejecuta():
     return lanzar
 
 
+# Token de sesion FIJO para los tests (#134). `_cliente` lo inyecta a `crear_app` y
+# lo manda por defecto en CADA peticion del TestClient, asi los ~600 tests existentes
+# de la API pasan la barrera de auth sin cambios. Los tests de seguridad construyen un
+# cliente SIN este header (`_cliente_sin_token`) para probar el rechazo (401/403).
+TOKEN_PRUEBA = "token-de-prueba-1234567890"
+
+
 def _cliente(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
-    disparar_autodesarrollo=None,
+    disparar_autodesarrollo=None, token=TOKEN_PRUEBA, autenticar=True,
 ) -> TestClient:
     """TestClient de la app. Ningun lanzador toca nada real (mocks).
 
@@ -306,6 +316,11 @@ def _cliente(
     buzon, #109) se inyectan por defecto a fakes inofensivas para que NUNCA se llame a
     `claude`, a un proveedor de imagen, a git/push, ni se abra Terminal. Los tests que
     necesiten un resultado pasan una fake "completa".
+
+    `token` fija el token de sesion de la app (#134). Si `autenticar` (def), el cliente
+    manda `Authorization: Bearer <token>` por defecto en cada peticion para que los tests
+    de API existentes pasen la auth sin cambios. Pasa `autenticar=False` para probar el
+    rechazo sin token.
     """
     if abrir is None:
         def abrir(_ruta):  # noqa: ANN001
@@ -319,6 +334,7 @@ def _cliente(
     if disparar_autodesarrollo is None:
         disparar_autodesarrollo = _disparar_autodesarrollo_noop
 
+    cabeceras = {"Authorization": f"Bearer {token}"} if autenticar else None
     return TestClient(
         app_modulo.crear_app(
             abrir=abrir,
@@ -326,7 +342,9 @@ def _cliente(
             lanzar_generacion=lanzar_generacion,
             lanzar_imagen=lanzar_imagen,
             disparar_autodesarrollo=disparar_autodesarrollo,
-        )
+            token=token,
+        ),
+        headers=cabeceras,
     )
 
 
