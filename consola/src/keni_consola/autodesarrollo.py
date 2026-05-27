@@ -30,7 +30,13 @@ LOS 6 GATES DE SEGURIDAD (todos OBLIGATORIOS; sin uno, no se mergea)
 
 5. SIN SECRETOS (`entorno_saneado`): el `claude -p` lanzado recibe un entorno SIN
    tokens ni claves (se eliminan `*_API_KEY`, `*_TOKEN`, `KENI_CONSOLA_SECRETOS`, etc.),
-   y su cwd es el clon efímero, que NO contiene `secretos.toml` (vive en `~/.config`).
+   su cwd es el clon efímero (que NO contiene `secretos.toml`) y se le redirige
+   `XDG_CONFIG_HOME` a un dir vacío para que la resolución NORMAL del almacén de secretos
+   (`~/.config/keni-social/secretos.toml`) apunte fuera. Defensa en profundidad para una
+   app LOCAL de confianza, no un sandbox de SO: `HOME` se conserva (el `claude` lanzado lo
+   necesita para `~/.claude`), así que un agente que leyera la ruta ABSOLUTA del fichero
+   aún podría abrirlo. Eso queda fuera del modelo de amenaza interno (localhost, equipo de
+   confianza, flag OFF por defecto); ver issues #128/#129.
 
 6. KILL SWITCH + AUDITORÍA (`flag_activo` + `registrar_auditoria`/`leer_auditoria`):
    el flag desactiva el lazo en caliente; cada intento se escribe en un LOG DE AUDITORÍA
@@ -237,15 +243,25 @@ def _es_var_prohibida(nombre: str) -> bool:
     return any(up.endswith(s) for s in _SUFIJOS_ENV_PROHIBIDOS)
 
 
-def entorno_saneado() -> dict[str, str]:
+def entorno_saneado(config_aislado: Path | None = None) -> dict[str, str]:
     """GATE 5: copia de `os.environ` SIN credenciales/tokens/secretos.
 
     Elimina las variables que casan `_es_var_prohibida` (claves `*_API_KEY`, `*_TOKEN`,
-    `KENI_CONSOLA_SECRETOS`, tokens de git, etc.). Así el `claude -p` que implementa una
-    sugerencia NO recibe ningún secreto por el entorno. (El cwd, además, es el clon
-    efímero, que no contiene `secretos.toml`: ese vive en `~/.config`.)
+    `KENI_CONSOLA_SECRETOS`, tokens de git, etc.), así el `claude -p` no recibe secretos
+    por el entorno. Además, si se pasa `config_aislado`, redirige `XDG_CONFIG_HOME` a ese
+    directorio (vacío) para que la resolución NORMAL del almacén de secretos
+    (`secretos.ruta_secretos`, basada en `XDG_CONFIG_HOME`) NO encuentre el
+    `~/.config/keni-social/secretos.toml` real.
+
+    Alcance honesto: defensa en profundidad para una app LOCAL de confianza, no un sandbox
+    del sistema de ficheros. `HOME` no se altera (el `claude` lanzado lo necesita para
+    autenticarse en `~/.claude`), así que un agente que leyera la ruta ABSOLUTA del fichero
+    aún podría abrirlo; contra eso haría falta aislamiento de SO, fuera del modelo interno.
     """
-    return {k: v for k, v in os.environ.items() if not _es_var_prohibida(k)}
+    env = {k: v for k, v in os.environ.items() if not _es_var_prohibida(k)}
+    if config_aislado is not None:
+        env["XDG_CONFIG_HOME"] = str(config_aislado)
+    return env
 
 
 # --------------------------------------------------------------------------- #
@@ -594,14 +610,17 @@ def implementar(sugerencia: dict[str, Any]) -> dict[str, Any]:
         )
 
     worktree: Path | None = None
+    config_aislado: Path | None = None
     rama = ""
     try:
         # GATE 2: ejecución aislada en worktree efímero.
         worktree, rama = crear_worktree_efimero(sid)
         base_aud["rama"] = rama
 
-        # GATE 5: entorno saneado (sin secretos) para el subproceso.
-        env = entorno_saneado()
+        # GATE 5: entorno saneado (sin secretos) + config-home aislado, para que el
+        # subproceso no encuentre `secretos.toml` por la ruta habitual (XDG_CONFIG_HOME).
+        config_aislado = Path(tempfile.mkdtemp(prefix="keni-autodev-cfg-"))
+        env = entorno_saneado(config_aislado=config_aislado)
         gen = lanzar_implementacion(_prompt_implementacion(sugerencia), cwd=worktree, env=env)
         if not gen.get("ok"):
             return registrar_auditoria(
@@ -654,6 +673,9 @@ def implementar(sugerencia: dict[str, Any]) -> dict[str, Any]:
         # GATE 2: el worktree efímero se borra SIEMPRE.
         if worktree is not None:
             borrar_worktree(worktree, rama)
+        # GATE 5: el config-home aislado del subproceso también se borra SIEMPRE.
+        if config_aislado is not None:
+            shutil.rmtree(config_aislado, ignore_errors=True)
 
 
 def _commitear_y_mergear(worktree: Path, sugerencia: dict[str, Any]) -> tuple[str, str]:

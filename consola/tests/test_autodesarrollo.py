@@ -19,10 +19,12 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
 from keni_consola import autodesarrollo as ad
+from keni_consola import secretos
 
 
 @pytest.fixture
@@ -157,6 +159,29 @@ def test_entorno_saneado_quita_claves_y_tokens(aislado, monkeypatch):
     assert "MI_SERVICIO_SECRET" not in env
     assert "KENI_CONSOLA_SECRETOS" not in env
     assert env.get("PATH_SEGURO") == "ok"
+
+
+def test_entorno_saneado_aisla_config_home(aislado, monkeypatch, tmp_path):
+    """Con `config_aislado`, redirige XDG_CONFIG_HOME para que el subproceso NO encuentre
+    el `secretos.toml` real por la ruta habitual; sin él, no toca XDG_CONFIG_HOME."""
+    # El secreto real "vive" en el XDG_CONFIG_HOME del operador.
+    real = tmp_path / "config-operador"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(real))
+    real_secretos = real / "keni-social" / "secretos.toml"
+    assert secretos.ruta_secretos() == real_secretos
+
+    # Sin config_aislado: no se redirige (se conserva el del operador).
+    assert ad.entorno_saneado().get("XDG_CONFIG_HOME") == str(real)
+
+    # Con config_aislado: el subproceso ve un XDG_CONFIG_HOME vacío y aislado.
+    aislado_dir = tmp_path / "cfg-aislado"
+    env = ad.entorno_saneado(config_aislado=aislado_dir)
+    assert env["XDG_CONFIG_HOME"] == str(aislado_dir)
+    # Resuelto bajo ESE entorno, el almacén de secretos apunta FUERA del real.
+    monkeypatch.setenv("XDG_CONFIG_HOME", env["XDG_CONFIG_HOME"])
+    assert secretos.ruta_secretos() == aislado_dir / "keni-social" / "secretos.toml"
+    assert secretos.ruta_secretos() != real_secretos
+    assert not Path(env["XDG_CONFIG_HOME"], "keni-social", "secretos.toml").exists()
 
 
 # --------------------------------------------------------------------------- #
