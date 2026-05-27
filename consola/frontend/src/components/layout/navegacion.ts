@@ -10,6 +10,7 @@ import {
   Presentation,
   Rss,
   ScanSearch,
+  ScanText,
   Send,
   Settings2,
   Sparkles,
@@ -53,6 +54,13 @@ export const NAVEGACION: GrupoNav[] = [
         icono: ImagePlus,
         descripcion:
           "Estudio de imagen: recorta, pon el breaking en marca o genera ilustraciones.",
+      },
+      {
+        ruta: "/revision-editorial",
+        etiqueta: "Revisión editorial",
+        icono: ScanText,
+        descripcion:
+          "Revisa el copy que escribió el equipo: veredicto de typos, datos, legal y voz. Señala, no reescribe.",
       },
       {
         ruta: "/skills",

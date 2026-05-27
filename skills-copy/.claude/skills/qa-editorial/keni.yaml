@@ -1,0 +1,47 @@
+nombre: QA editorial
+explicacion: Revisa el copy que YA escribió el community manager y devuelve un veredicto 🟢/🟡/🔴 con los hallazgos (typos, ortografía, datos sospechosos, reglas legales y desviaciones de la voz de marca), cada uno con su corrección sugerida. SEÑALA; no reescribe ni publica. El equipo decide qué acepta.
+grupo: validadas
+aplica_redes: false
+salida: documento
+media: false
+orden: 35
+campos:
+  - id: texto
+    etiqueta: Copy a revisar
+    tipo: textarea
+    requerido: true
+    placeholder: "Pega aquí el copy que escribió el community manager (tal cual, sin corregir)."
+    ayuda: "El texto ya redactado por el equipo. La revisión NO lo reescribe ni lo publica: solo señala lo que conviene revisar antes de aprobar."
+    opciones: []
+    media_tipos: ""
+  - id: plataforma
+    etiqueta: Plataforma
+    tipo: select
+    requerido: false
+    placeholder: ""
+    ayuda: Para qué red es este copy (afecta el límite de caracteres y el registro). Si lo dejas vacío, no se valida ningún límite.
+    opciones:
+      - "X / Twitter"
+      - "Instagram"
+      - "Facebook"
+      - "TikTok"
+      - "YouTube"
+    media_tipos: ""
+  - id: contexto
+    etiqueta: Contexto / fuente (opcional)
+    tipo: textarea
+    requerido: false
+    placeholder: "Pega la nota o los datos de origen contra los que comprobar fechas, nombres y cifras (si los tienes)."
+    ayuda: "Sin fuente, los datos solo se marcan como 'no verificables': nunca se inventan ni se dan por buenos a ciegas."
+    opciones: []
+    media_tipos: ""
+plantilla_invocacion: |
+  usa qa-editorial para REVISAR (no reescribir) el copy ya escrito por el community manager, marca {marca}.
+
+  Plataforma (vacío = sin límite que validar): {plataforma}
+
+  Contexto / fuente para comprobar datos (vacío = no hay fuente; marca los datos como no verificables, no los inventes):
+  {contexto}
+
+  Copy a revisar (tal cual lo escribió el equipo; NO lo modifiques ni lo publiques):
+  {texto}

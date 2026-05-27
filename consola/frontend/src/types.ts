@@ -405,7 +405,13 @@ export interface RespuestaEjecutarSkill {
 // --- Generaciones (trabajos de IA en segundo plano, seguibles en vivo) ---
 
 /** Tipo de trabajo de IA: define cómo se renderiza su `resultado`. */
-export type TipoGeneracion = "copy" | "rss" | "hashtags" | "imagen" | "verificacion";
+export type TipoGeneracion =
+  | "copy"
+  | "rss"
+  | "hashtags"
+  | "imagen"
+  | "verificacion"
+  | "qa-editorial";
 
 /** Estado del ciclo de vida de una generación. */
 export type EstadoGeneracion = "ejecutando" | "completado" | "error";
@@ -437,6 +443,8 @@ export interface ResultadoGeneracion {
   imagenes?: ImagenGenerada[];
   // verificacion (workflow propio: datar un video)
   verificacion?: ReporteVerificacion;
+  // qa-editorial (workflow propio: revisar el copy ya escrito por el community)
+  informe?: InformeQaEditorial;
 }
 
 /** Una imagen producida por una skill de imagen, lista para previsualizar. */
@@ -506,6 +514,61 @@ export interface ReporteVerificacion {
 /** Cuerpo de POST /api/verificar: el enlace del video y, opcional, lo que se afirma. */
 export interface CuerpoVerificar {
   enlace: string;
+  contexto?: string;
+}
+
+// --- QA editorial (revisar el copy YA escrito por el community, ficha F3 / #143) ---
+
+/** Tipo de hallazgo del QA editorial: qué dimensión se incumple. */
+export type TipoHallazgoQa = "ortografia" | "dato" | "legal" | "voz";
+
+/** Gravedad de un hallazgo: `error` baja a 🔴; `aviso` baja (a lo sumo) a 🟡. */
+export type GravedadHallazgoQa = "error" | "aviso";
+
+/**
+ * Un hallazgo de la revisión editorial: SEÑALA un problema en el copy ajeno con su
+ * tipo, gravedad, el fragmento donde está y una corrección SUGERIDA (que el equipo
+ * acepta o ignora; nunca se aplica sola). Si `no_verificable`, es un dato que no se
+ * pudo comprobar contra la fuente: no se afirma erróneo ni se inventa el correcto.
+ */
+export interface HallazgoQaEditorial {
+  tipo: TipoHallazgoQa;
+  gravedad: GravedadHallazgoQa;
+  fragmento: string;
+  explicacion: string;
+  sugerencia: string;
+  no_verificable: boolean;
+}
+
+/**
+ * Informe del QA editorial sobre el copy del community manager. Abre con un veredicto
+ * 🟢/🟡/🔴 (`verdicto`, igual codificación que el resto del producto) y lista los
+ * hallazgos. NO reescribe el copy ni publica: es solo el informe.
+ */
+export interface InformeQaEditorial {
+  verdicto: Veredicto;
+  resumen: string;
+  hallazgos: HallazgoQaEditorial[];
+  /** El informe legible completo (Markdown), por si se quiere leer/copiar entero. */
+  informe_texto: string;
+}
+
+/** Respuesta de GET /api/qa-editorial: lo que necesita el formulario de revisión. */
+export interface OpcionesQaEditorial {
+  marcas: { id: string; nombre: string }[];
+  /** Plataformas seleccionables (para validar el límite); "" = no validar límite. */
+  plataformas: string[];
+  /** `true` si la skill `qa-editorial` está instalada en este equipo. */
+  skill_disponible: boolean;
+}
+
+/** Cuerpo de POST /api/qa-editorial/revisar: el copy a revisar + su marca/plataforma. */
+export interface CuerpoRevisarQaEditorial {
+  marca: string;
+  texto: string;
+  /** Plataforma del copy (para validar su límite). Vacío = no validar ninguno. */
+  plataforma?: string;
+  /** Fuente/nota contra la que comprobar datos. Vacío = datos no verificables. */
   contexto?: string;
 }
 
