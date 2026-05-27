@@ -48,7 +48,10 @@ def test_dashboard_contiene_totales_y_rango():
     # el total de visualizaciones aparece formateado con separador de miles (punto)
     total_vis = f"{rep['total']['visualizaciones']:,}".replace(",", ".")
     assert total_vis in html
-    assert f"{rep['total']['engagement_pct']}%" in html
+    # engagement global no es comparable entre plataformas heterogeneas (#138):
+    # el total lo reporta None y el dashboard lo muestra como "n/d", no un numero.
+    assert rep["total"]["engagement_pct"] is None
+    assert "n/d" in html
 
 
 def test_dashboard_incluye_nota_de_cobertura():
@@ -125,8 +128,10 @@ def test_dashboard_seccion_engagement_north_star():
 
     assert "Engagement (north-star)" in html
     assert "Engagement global" in html
-    # el engagement global del total aparece tambien en el hero north-star
-    assert f"{rep['total']['engagement_pct']}%" in html
+    # el engagement global no es comparable entre plataformas heterogeneas (#138):
+    # el hero north-star muestra "n/d", no un numero engañoso.
+    assert rep["total"]["engagement_pct"] is None
+    assert "n/d" in html
     # los umbrales documentados se muestran al lector
     assert str(_ENG_UMBRAL_ALTO) in html
     assert str(_ENG_UMBRAL_BAJO) in html

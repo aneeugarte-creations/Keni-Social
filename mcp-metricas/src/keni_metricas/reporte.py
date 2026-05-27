@@ -17,8 +17,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .formato import etiqueta_marca, miles, partes_cobertura, signo
-from .fuentes.base import FuenteMetricas, engagement_pct
+from .formato import cifra, etiqueta_marca, miles, partes_cobertura, pct, signo
+from .fuentes.base import FuenteMetricas
 
 if TYPE_CHECKING:
     from .historico import Historico
@@ -33,7 +33,8 @@ def construir_reporte(
     """Estructura JSON-serializable con el total y el desglose por marca."""
     cuentas = fuente.cuentas()
     filas: list[dict] = []
-    tot_vis = tot_alc = tot_inter = 0
+    tot_vis = tot_inter = 0
+    tot_alc: int | None = None  # se suma solo el alcance medido; None = nadie lo mide (#138)
     cuentas_parciales: list[str] = []  # marcas con alguna plataforma omitida
     # Mapa id->nombre legible (mismo origen que el dashboard). El resumen guarda
     # el id crudo; el render lo traduce al NOMBRE legible con este mapa.
@@ -53,7 +54,9 @@ def construir_reporte(
             }
         )
         tot_vis += r.visualizaciones
-        tot_alc += r.alcance
+        if r.alcance is not None:
+            # solo suma el alcance realmente medido; deja None si nadie lo mide (#138)
+            tot_alc = (tot_alc or 0) + r.alcance
         tot_inter += r.interacciones
         if r.cobertura is not None and r.cobertura.omitidas:
             cuentas_parciales.append(c.id)
@@ -66,7 +69,10 @@ def construir_reporte(
             "visualizaciones": tot_vis,
             "alcance": tot_alc,
             "interacciones": tot_inter,
-            "engagement_pct": engagement_pct(tot_inter, tot_vis),
+            # engagement global no comparable: el total combina varias plataformas
+            # con bases de visualización heterogéneas (#138). El engagement fiable
+            # vive por plataforma. None se muestra como "n/d".
+            "engagement_pct": None,
             "cuentas": len(filas),
         },
         # cobertura global: marcas con datos parciales. Vacio = todas completas.
@@ -98,9 +104,9 @@ def render_markdown(rep: dict) -> str:
     out.append(f"*Generado {rep['generado']} · fuente: {rep['fuente']}*\n")
     out.append("## Total")
     out.append(f"- **Visualizaciones:** {miles(t['visualizaciones'])}")
-    out.append(f"- **Alcance:** {miles(t['alcance'])}")
+    out.append(f"- **Alcance:** {cifra(t['alcance'])}")
     out.append(f"- **Interacciones:** {miles(t['interacciones'])}")
-    out.append(f"- **Engagement:** {t['engagement_pct']}%")
+    out.append(f"- **Engagement:** {pct(t['engagement_pct'])} (ver por plataforma)")
     out.append(f"- **Cuentas:** {t['cuentas']}")
     cob_global = rep.get("cobertura") or {}
     if cob_global.get("cuentas_parciales"):
@@ -117,7 +123,7 @@ def render_markdown(rep: dict) -> str:
             cab += f"  ({signo(v_vis)}% vis vs. anterior)"
         out.append(cab)
         out.append(
-            f"- {miles(r['visualizaciones'])} vis · {miles(r['alcance'])} alcance · {r['engagement_pct']}% eng"
+            f"- {miles(r['visualizaciones'])} vis · {cifra(r['alcance'])} alcance · {pct(r['engagement_pct'])} eng"
         )
         if (nota := _nota_cobertura(r.get("cobertura"))) is not None:
             out.append(f"- {nota}")

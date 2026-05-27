@@ -7,6 +7,27 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Normalización de métricas: no sumar magnitudes incomparables (#138)
+
+- La agregación entre plataformas dejaba un **número combinado engañoso**: sumaba
+  `visualizaciones` heterogéneas (impresiones de FB/IG/X con reproducciones de
+  YouTube/TikTok) como si fueran lo mismo, rellenaba `alcance` con **0** para las
+  redes que no lo miden (YouTube/X/TikTok) y calculaba un `engagement_pct` global
+  dividiendo interacciones entre esas bases incomparables.
+- **Semántica explícita de agregación** (en `schema.py`/`agregador.py`):
+  `interacciones` es la única magnitud homogénea → **se suma**; `visualizaciones`
+  se suma solo como **total informativo** (el desglose fiable vive en
+  `por_plataforma`) y **no** es base del engagement global; `alcance` solo lo
+  miden FB/IG y ahora se representa **AUSENTE (`None`)** —nunca 0— en las demás,
+  sumándose solo entre las que sí lo miden (y `None` si ninguna lo mide); el
+  `engagement_pct` agregado es **`None`** cuando combina bases heterogéneas (no se
+  divide sobre bases incomparables) y conserva el suyo con una sola plataforma.
+- **Schema**: `MetricaPlataforma.alcance` y `ResumenMetricas.alcance`/`engagement_pct`
+  pasan a opcionales (`None` = no medible / no comparable, distinto de 0 real). Los
+  consumidores (reporte, dashboard, notificaciones, histórico, picos, tools) muestran
+  `n/d` y excluyen lo no comparable en vez de propagar ceros falsos. La fuente
+  `muestra` se alinea: ya no inventa alcance para redes que no lo miden.
+
 ### Auto-desarrollo del buzón de sugerencias (experimental, PELIGROSO, default OFF)
 
 - El **buzón de sugerencias** puede ahora **cerrar el lazo**: implementar una sugerencia
