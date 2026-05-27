@@ -86,6 +86,7 @@ import type {
   RespuestaPlantilla,
   RespuestaPlantillas,
   RespuestaProyectos,
+  RespuestaRadar,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
   RespuestaCatalogoSkills,
@@ -622,6 +623,14 @@ export const api = {
     peticion<RespuestaMensaje>("/rss/items/usado", { metodo: "POST", json: cuerpo }),
   generarDesdeItemRss: (cuerpo: CuerpoGenerarDesdeItem) =>
     peticion<RespuestaGeneracion>("/rss/generar", { metodo: "POST", json: cuerpo }),
+
+  // --- Radar de tendencias (lo más viral del momento, multi-red · #147) ---
+  // Solo lectura: consolida tendencias por tema con su estado HONESTO por fuente.
+  radar: (geo?: string, feeds?: boolean, signal?: AbortSignal) =>
+    peticion<RespuestaRadar>(
+      `/radar${query({ geo, feeds: feeds === false ? "0" : undefined })}`,
+      { signal },
+    ),
 
   // --- Franjas (colas) ---
   franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),

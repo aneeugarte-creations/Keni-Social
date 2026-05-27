@@ -657,6 +657,74 @@ export interface CuerpoGenerarTermometro {
   fecha?: string;
 }
 
+// --- Radar de tendencias (lo más viral del momento, multi-red · F7/#147) ---
+
+/** Una nota/enlace que explica por qué sube un tema (título + URL + medio). */
+export interface EnlaceRadar {
+  titulo: string;
+  url: string;
+  /** Medio/fuente de la nota (p. ej. "ESPN Deportes"). */
+  fuente: string;
+}
+
+/** Un tema en tendencia, consolidado de una o varias fuentes y deduplicado. */
+export interface TemaRadar {
+  titulo: string;
+  /** Redes/superficies donde aparece (p. ej. "busquedas-mx", "rss"). */
+  redes: string[];
+  /** Fuentes que lo reportan (p. ej. "Google Trends", el nombre del feed). */
+  fuentes: string[];
+  /** Por qué sube: señal real + la nota más relevante (sin inventar la causa). */
+  por_que: string;
+  /** Señal numérica comparable para priorizar (mayor = más viral). */
+  senal: number;
+  /** Señal tal cual la da la fuente, para mostrarla sin reinterpretar ("50 mil+"). */
+  senal_texto: string;
+  enlaces: EnlaceRadar[];
+}
+
+/** Estado HONESTO de una fuente del radar (disponible o no, con su motivo). */
+export interface FuenteRadar {
+  id: string;
+  nombre: string;
+  /** Red/superficie de la fuente. */
+  red: string;
+  /** `true` si la fuente respondió; `false` si falló o no está disponible. */
+  disponible: boolean;
+  /** Motivo legible cuando no está disponible; "" si todo bien. */
+  motivo: string;
+  /** Nº de temas que aportó esta fuente. */
+  conteo: number;
+}
+
+/** Una red que el radar AÚN no cubre, con el motivo (degradación honesta). */
+export interface FuentePendienteRadar {
+  red: string;
+  nombre: string;
+  motivo: string;
+}
+
+/** Un país (geo) disponible para el feed de Google Trends. */
+export interface GeoRadar {
+  id: string;
+  nombre: string;
+}
+
+/** Respuesta de GET /api/radar. */
+export interface RespuestaRadar {
+  /** Geo activo del feed de tendencias (id ISO, p. ej. "MX"). */
+  geo: string;
+  geos_disponibles: GeoRadar[];
+  /** Temas consolidados, deduplicados y ordenados por señal desc. */
+  temas: TemaRadar[];
+  /** Estado por fuente consultada (con su motivo si no está disponible). */
+  fuentes: FuenteRadar[];
+  /** Redes aún no cubiertas, con el motivo (no se inventan datos). */
+  fuentes_pendientes: FuentePendienteRadar[];
+  /** Nº total de temas consolidados. */
+  total: number;
+}
+
 export interface EntradaHistorial {
   id: string;
   skill: string;
