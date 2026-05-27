@@ -26,11 +26,13 @@ import mimetypes
 from pathlib import Path
 
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
 from . import api, proyectos
+from .observabilidad import RegistroPeticiones, manejar_excepcion
 
 # Carpeta donde el build del frontend deja el SPA (no existe aun en este worktree).
 _DIR_WEBAPP = Path(__file__).parent / "webapp"
@@ -178,4 +180,13 @@ def crear_app(
     rutas.append(Route("/", _servir_spa))
     rutas.append(Route("/{resto:path}", _servir_spa))
 
-    return Starlette(routes=rutas)
+    # Observabilidad (issue #123): UNA linea de log por peticion (sin body/query/
+    # cabeceras: ver `RegistroPeticiones`) + un manejador central que convierte
+    # cualquier `Exception` no controlada en un 500 JSON consistente, logueando el
+    # traceback en el servidor. Es ADITIVO: los endpoints que ya devuelven su propio
+    # `{"error": ...}` siguen igual; esto solo atrapa lo que hoy caeria a un 500 crudo.
+    return Starlette(
+        routes=rutas,
+        middleware=[Middleware(RegistroPeticiones)],
+        exception_handlers={Exception: manejar_excepcion},
+    )

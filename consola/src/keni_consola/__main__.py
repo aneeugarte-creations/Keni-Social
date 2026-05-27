@@ -37,6 +37,12 @@ def _puerto() -> int:
 
 
 def main() -> int:
+    # Logging del paquete (issue #123): nivel via KENI_CONSOLA_LOG_LEVEL (def: INFO).
+    # Se configura aqui, en el arranque real; los tests no lo necesitan (usan caplog).
+    from .observabilidad import configurar_logging
+
+    configurar_logging()
+
     puerto = _puerto()
     url = f"http://{HOST}:{puerto}/"
     print(f"Consola Keni en {url}")
