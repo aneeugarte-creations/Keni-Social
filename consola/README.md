@@ -40,4 +40,21 @@ keni-consola
 (o el equivalente `python -m keni_consola`). Abre `http://127.0.0.1:8765`. El
 puerto se cambia con `KENI_CONSOLA_PORT`, p. ej. `KENI_CONSOLA_PORT=9000 keni-consola`.
 
+## Autenticación (token de sesión, #134)
+
+El bind a `127.0.0.1` **no es control de acceso**: cualquier web abierta en el
+navegador del operador podría hacer POST a la API local. Por eso la API (`/api/...`)
+exige un **token de sesión** y verifica el `Origin`/`Referer` en las mutaciones
+(POST/PUT/PATCH/DELETE) como protección **CSRF**.
+
+- Fíjalo con `KENI_CONSOLA_TOKEN=<tu-token> keni-consola` (recomendado: estable).
+- Si no lo defines, se **genera uno al arrancar** y se imprime en el log/terminal con
+  la URL `http://127.0.0.1:8765/?token=…`. Ábrela una vez: el servidor siembra la
+  cookie del token y el SPA autentica solo a partir de ahí (el modo local sigue
+  usable sin configurar nada).
+- El SPA y sus estáticos se sirven sin token (hay que poder cargar la página); solo
+  `/api/...` exige token.
+
+Esto es una barrera mínima local; la auth multiusuario real es otra pieza (#130).
+
 Guía de usuario completa: [`../docs/consola.md`](../docs/consola.md).

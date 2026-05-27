@@ -126,6 +126,25 @@ import { type NombreContrato, validarContrato } from "./contrato";
 export const BASE_API = "/api";
 
 /**
+ * Token de sesion de la Consola (#134). El backend lo inyecta en el index del SPA
+ * como `window.__KENI_TOKEN__` y tambien lo siembra como cookie `keni_consola_token`
+ * (SameSite=Strict). Lo mandamos por cabecera cuando esta disponible (defensa en
+ * profundidad); la cookie cubre las descargas por `window.open` y las `<img src>`,
+ * que no pueden mandar cabeceras. Si no hay token inyectado, se devuelve cadena vacia
+ * y se confia en la cookie.
+ */
+function tokenSesion(): string {
+  const w = window as unknown as { __KENI_TOKEN__?: string };
+  return typeof w.__KENI_TOKEN__ === "string" ? w.__KENI_TOKEN__ : "";
+}
+
+/** Cabeceras de autenticacion (token de sesion) si hay token inyectado. */
+function cabecerasAuth(): Record<string, string> {
+  const t = tokenSesion();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+/**
  * Muestreo de validación para endpoints SONDEADOS (listas grandes que se refrescan
  * en bucle): en PROD validamos solo una fracción de las respuestas para que el coste
  * no se acumule en cada poll; en DEV validamos SIEMPRE (queremos cazar el drift). El
@@ -224,7 +243,7 @@ interface OpcionesPeticion {
 /** Petición base: arma la URL, serializa el cuerpo y delega en `parsear`. */
 async function peticion<T>(ruta: string, opciones: OpcionesPeticion = {}): Promise<T> {
   const { metodo = "GET", json, form, signal, validador, muestrear } = opciones;
-  const headers: HeadersInit = {};
+  const headers: Record<string, string> = { ...cabecerasAuth() };
   let body: BodyInit | undefined;
 
   if (form) {
@@ -270,7 +289,7 @@ async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: stri
   try {
     res = await fetch(`${BASE_API}${ruta}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...cabecerasAuth() },
       body: JSON.stringify(json),
     });
   } catch {

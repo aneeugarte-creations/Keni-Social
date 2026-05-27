@@ -22,6 +22,7 @@ tracebacks crudos).
 
 from __future__ import annotations
 
+import logging
 import mimetypes
 from pathlib import Path
 
@@ -31,9 +32,11 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from . import api, proyectos
+from . import api, proyectos, seguridad
 from .dominio.runner import ColaLlenaError
-from .observabilidad import RegistroPeticiones, manejar_excepcion
+from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
+
+_logger = logging.getLogger(NOMBRE_LOGGER)
 
 # Carpeta donde el build del frontend deja el SPA (no existe aun en este worktree).
 _DIR_WEBAPP = Path(__file__).parent / "webapp"
@@ -88,6 +91,35 @@ async def _servir_asset(request: Request) -> Response:
     return FileResponse(destino)
 
 
+def _token_app(request: Request) -> str | None:
+    """Token de sesion guardado en el estado de la app (None si no hay)."""
+    return getattr(request.app.state, "token_consola", None)
+
+
+def _respuesta_index_spa(request: Request, html: str) -> HTMLResponse:
+    """Devuelve el index del SPA inyectando el token y sembrando la cookie (#134).
+
+    El token se inyecta en el HTML (`window.__KENI_TOKEN__`, lo lee `api.ts` para la
+    cabecera) y se siembra como cookie `keni_consola_token`, de modo que las descargas
+    por `window.open` y las `<img src>` —que no pueden mandar cabeceras— sigan
+    autenticando. La cookie es SameSite=Strict: el navegador no la envia desde otro
+    sitio, lo que (junto al chequeo de Origin en mutaciones) cierra el vector CSRF.
+    """
+    token = _token_app(request)
+    if token:
+        html = seguridad.inyectar_token_en_html(html, token)
+    resp = HTMLResponse(html)
+    if token:
+        resp.set_cookie(
+            seguridad.COOKIE_TOKEN,
+            token,
+            httponly=False,  # el SPA puede leerla; la defensa CSRF no depende del secreto
+            samesite="strict",
+            path="/",
+        )
+    return resp
+
+
 async def _servir_spa(request: Request) -> Response:
     """Fallback SPA: sirve `webapp/index.html` o un placeholder amable (200).
 
@@ -105,8 +137,9 @@ async def _servir_spa(request: Request) -> Response:
             return FileResponse(candidato, media_type=tipo or "application/octet-stream")
 
     if _INDICE_SPA.is_file():
-        return FileResponse(_INDICE_SPA, media_type="text/html; charset=utf-8")
-    return HTMLResponse(_PLACEHOLDER)
+        html = _INDICE_SPA.read_text(encoding="utf-8")
+        return _respuesta_index_spa(request, html)
+    return _respuesta_index_spa(request, _PLACEHOLDER)
 
 
 async def _api_no_encontrado(request: Request) -> Response:
@@ -130,11 +163,13 @@ async def _manejar_cola_llena(request: Request, exc: ColaLlenaError) -> Response
 
 def crear_app(
     abrir=None, lanzar_run=None, lanzar_generacion=None, lanzar_imagen=None,
-    disparar_autodesarrollo=None,
+    disparar_autodesarrollo=None, token=None,
 ) -> Starlette:
     """Construye la app Starlette descubriendo las rutas de la API + el SPA.
 
-    `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
+    `token`: token de sesion para la API (#134). Si es None, se resuelve de
+    `KENI_CONSOLA_TOKEN` o se genera uno aleatorio (que se loguea). Los tests pasan
+    uno conocido. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
     por defecto la real. `lanzar_run`: funcion opcional
     `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background.
     `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
@@ -195,14 +230,35 @@ def crear_app(
     rutas.append(Route("/", _servir_spa))
     rutas.append(Route("/{resto:path}", _servir_spa))
 
+    # Seguridad (issue #134): resolvemos el token de sesion. Si no se inyecto uno (tests
+    # pasan uno conocido), lo toma de KENI_CONSOLA_TOKEN o genera uno aleatorio. Cuando
+    # se GENERA, hay que mostrarlo en el log para que el operador local pueda usarlo.
+    if token is None:
+        token, generado = seguridad.resolver_token()
+        if generado:
+            _logger.warning(
+                "No hay KENI_CONSOLA_TOKEN: token de sesion generado para esta "
+                "ejecucion: %s  (abre la Consola con ?token=%s o exporta "
+                "KENI_CONSOLA_TOKEN para fijarlo).",
+                token,
+                token,
+            )
+
     # Observabilidad (issue #123): UNA linea de log por peticion (sin body/query/
     # cabeceras: ver `RegistroPeticiones`) + un manejador central que convierte
     # cualquier `Exception` no controlada en un 500 JSON consistente, logueando el
     # traceback en el servidor. Es ADITIVO: los endpoints que ya devuelven su propio
     # `{"error": ...}` siguen igual; esto solo atrapa lo que hoy caeria a un 500 crudo.
-    return Starlette(
+    #
+    # Seguridad (#134): `SeguridadConsola` envuelve TODO (va el primero, mas externo)
+    # para exigir el token en `/api` y verificar CSRF en mutaciones ANTES de tocar las
+    # rutas. El SPA y los estaticos pasan sin token (hay que poder cargar la pagina).
+    app = Starlette(
         routes=rutas,
-        middleware=[Middleware(RegistroPeticiones)],
+        middleware=[
+            Middleware(seguridad.SeguridadConsola, token=token),
+            Middleware(RegistroPeticiones),
+        ],
         # ColaLlenaError ANTES que Exception: Starlette elige el handler por tipo mas
         # especifico, pero lo dejamos explicito (#137: cola al tope -> 429, no 500).
         exception_handlers={
@@ -210,3 +266,6 @@ def crear_app(
             Exception: manejar_excepcion,
         },
     )
+    # El token vive en el estado de la app para que `_servir_spa` lo inyecte/siembre.
+    app.state.token_consola = token
+    return app

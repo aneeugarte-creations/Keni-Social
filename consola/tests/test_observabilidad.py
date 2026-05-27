@@ -32,6 +32,17 @@ from keni_consola.observabilidad import (
     error,
 )
 
+from .conftest import TOKEN_PRUEBA
+
+
+def _cli_obs(**kwargs) -> TestClient:
+    """TestClient con token de sesion (#134) fijo + auth por defecto, igual que conftest."""
+    return TestClient(
+        app_modulo.crear_app(token=TOKEN_PRUEBA),
+        headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"},
+        **kwargs,
+    )
+
 
 @pytest.fixture
 def modulo_api_que_lanza():
@@ -68,7 +79,7 @@ def modulo_api_que_lanza():
 
 def test_excepcion_no_controlada_da_500_json_estandar(entorno, modulo_api_que_lanza):
     """Un endpoint que lanza -> 500 con `{"error", "tipo"}`, sin filtrar el detalle."""
-    cliente = TestClient(app_modulo.crear_app(), raise_server_exceptions=False)
+    cliente = _cli_obs(raise_server_exceptions=False)
     r = cliente.get("/api/zzlanza")
     assert r.status_code == 500
     cuerpo = r.json()
@@ -83,7 +94,7 @@ def test_excepcion_no_controlada_loguea_traceback_en_servidor(
     entorno, modulo_api_que_lanza, caplog
 ):
     """El servidor SI registra el error con traceback (auditable en beta)."""
-    cliente = TestClient(app_modulo.crear_app(), raise_server_exceptions=False)
+    cliente = _cli_obs(raise_server_exceptions=False)
     with caplog.at_level(logging.ERROR, logger=NOMBRE_LOGGER):
         cliente.get("/api/zzlanza")
     registros = [r for r in caplog.records if r.name == NOMBRE_LOGGER]
@@ -97,7 +108,7 @@ def test_excepcion_no_controlada_loguea_traceback_en_servidor(
 
 def test_endpoint_que_no_lanza_no_se_ve_afectado(entorno, modulo_api_que_lanza):
     """El manejador es aditivo: un endpoint normal responde como siempre."""
-    cliente = TestClient(app_modulo.crear_app())
+    cliente = _cli_obs()
     r = cliente.get("/api/zzok")
     assert r.status_code == 200
     assert r.json() == {"ok": True}

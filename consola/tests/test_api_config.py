@@ -46,7 +46,14 @@ def cfg_metricas(monkeypatch, tmp_path):
 
 
 def _cli() -> TestClient:
-    return TestClient(app_modulo.crear_app(abrir=lambda _r: "ok-mock"))
+    # Token de sesion (#134): fijamos el de prueba y lo mandamos por defecto, igual que
+    # el `_cliente` de conftest, para que la API pase la barrera de auth.
+    from .conftest import TOKEN_PRUEBA
+
+    return TestClient(
+        app_modulo.crear_app(abrir=lambda _r: "ok-mock", token=TOKEN_PRUEBA),
+        headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"},
+    )
 
 
 def _escribir(ruta, contenido: str) -> None:
