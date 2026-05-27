@@ -59,6 +59,9 @@ async def login(request: Request) -> Response:
     if not isinstance(usuario, str) or not isinstance(password, str) or not usuario or not password:
         # Mismo mensaje generico que un fallo de credenciales (no damos pistas).
         return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
+    if len(password) > auth.LONGITUD_MAX_PASSWORD or len(usuario) > auth.LONGITUD_MAX_USUARIO:
+        # Tope anti-DoS: no hasheamos (scrypt) entradas absurdamente largas. Generico.
+        return JSONResponse({"error": _MSG_LOGIN_KO}, status_code=401)
 
     autenticado = auth.autenticar(usuario, password)
     if autenticado is None:
@@ -127,14 +130,26 @@ async def cambiar_password(request: Request) -> Response:
         return JSONResponse({"error": "Falta la contraseña actual."}, status_code=400)
     if not auth.password_aceptable(nueva):
         return JSONResponse(
-            {"error": f"La contraseña nueva debe tener al menos {auth.LONGITUD_MIN_PASSWORD} caracteres."},
+            {
+                "error": (
+                    f"La contraseña nueva debe tener entre {auth.LONGITUD_MIN_PASSWORD} "
+                    f"y {auth.LONGITUD_MAX_PASSWORD} caracteres."
+                )
+            },
             status_code=400,
         )
-    if not auth.verificar_password_actual(usuario["id"], actual):
+    # Tope anti-DoS en la actual (no hasheamos una entrada enorme); cuenta como incorrecta.
+    if len(actual) > auth.LONGITUD_MAX_PASSWORD or not auth.verificar_password_actual(usuario["id"], actual):
         return JSONResponse({"error": "La contraseña actual no es correcta."}, status_code=400)
 
     auth.establecer_password(usuario["id"], nueva, debe_cambiar_password=False)
-    return Response(status_code=204)
+    # `establecer_password` invalida TODAS las sesiones del usuario (seguridad). Para no
+    # forzar un re-login en el cambio voluntario, reabrimos UNA sesion nueva (rotacion)
+    # y la sembramos en la cookie del dispositivo actual.
+    token = auth.crear_sesion(usuario["id"])
+    resp = Response(status_code=204)
+    _set_cookie_sesion(resp, token)
+    return resp
 
 
 RUTAS = [

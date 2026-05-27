@@ -65,6 +65,10 @@ _SALT_BYTES = 16
 
 # Fuerza minima de contrasena (razonable, sin exagerar para una app local).
 LONGITUD_MIN_PASSWORD = 8
+# Tope de longitud (anti-DoS): hashear con scrypt una contrasena enorme es un consumo
+# de CPU/memoria barato de provocar; la capamos ANTES de hashear. Idem el nombre.
+LONGITUD_MAX_PASSWORD = 1024
+LONGITUD_MAX_USUARIO = 64
 
 # Anti fuerza bruta: tras N fallos seguidos, el usuario queda bloqueado un rato.
 MAX_INTENTOS_FALLIDOS = 5
@@ -147,8 +151,11 @@ def verificar_password(password: str, salt_hex: str, hash_hex: str) -> bool:
 
 
 def password_aceptable(password: object) -> bool:
-    """Valida la fuerza minima de una contrasena (longitud razonable, sin espacios solo)."""
-    return isinstance(password, str) and len(password) >= LONGITUD_MIN_PASSWORD
+    """Valida la longitud de una contrasena: minimo de fuerza y MAXIMO anti-DoS (scrypt)."""
+    return (
+        isinstance(password, str)
+        and LONGITUD_MIN_PASSWORD <= len(password) <= LONGITUD_MAX_PASSWORD
+    )
 
 
 def rol_valido(rol: object) -> bool:
@@ -294,6 +301,10 @@ def establecer_password(
     """Fija una contrasena nueva (re-salt) y resetea intentos/bloqueo; True si existia.
 
     Usado tanto por el reset del admin (PATCH) como por el cambio del propio usuario.
+    SEGURIDAD: invalida TODAS las sesiones del usuario (revisión de seguridad de auth):
+    cambiar/resetear la contrasena debe expulsar cualquier sesion activa (token robado,
+    equipo prestado, cuenta sospechosa). El cambio voluntario re-emite una sesion nueva
+    para el dispositivo actual desde la capa API.
     """
     salt_hex, hash_hex = hashear_password(password)
     con = db.conectar()
@@ -303,6 +314,7 @@ def establecer_password(
             "intentos_fallidos = 0, bloqueo_hasta = '' WHERE id = ?",
             (salt_hex, hash_hex, 1 if debe_cambiar_password else 0, usuario_id),
         )
+        con.execute("DELETE FROM sesiones WHERE usuario_id = ?", (usuario_id,))
         con.commit()
         return cur.rowcount > 0
     finally:

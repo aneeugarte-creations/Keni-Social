@@ -78,6 +78,11 @@ async def crear(request: Request) -> Response:
     if not isinstance(usuario, str) or not usuario.strip():
         return JSONResponse({"error": "El usuario necesita un nombre."}, status_code=400)
     usuario = usuario.strip()
+    if len(usuario) > auth.LONGITUD_MAX_USUARIO:
+        return JSONResponse(
+            {"error": f"El nombre de usuario no puede superar {auth.LONGITUD_MAX_USUARIO} caracteres."},
+            status_code=400,
+        )
     if not auth.password_aceptable(password):
         return JSONResponse(
             {"error": f"La contraseña debe tener al menos {auth.LONGITUD_MIN_PASSWORD} caracteres."},

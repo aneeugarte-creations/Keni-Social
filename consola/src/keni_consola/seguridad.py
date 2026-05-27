@@ -180,6 +180,14 @@ def _host_de_url(url: str) -> str | None:
 # asi pasa por la verificacion Origin/CSRF de las mutaciones (es un POST).
 _RUTAS_API_PUBLICAS = frozenset({"/api/auth/login"})
 
+# Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
+# cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
+# servidor, no solo en el frontend). El acceso por token de bootstrap no esta sujeto.
+_RUTAS_API_CAMBIO_PASSWORD = frozenset(
+    {"/api/auth/me", "/api/auth/cambiar-password", "/api/auth/logout"}
+)
+_MSG_DEBE_CAMBIAR = "Debes cambiar tu contraseña antes de usar la Consola."
+
 
 class SeguridadConsola:
     """Middleware ASGI: sesion/token para `/api` + CSRF en mutaciones (#134 + #130).
@@ -234,6 +242,19 @@ class SeguridadConsola:
             else:
                 await _rechazar(scope, receive, send, _MSG_NO_AUTORIZADO, 401)
                 return
+
+        # 1b) Si el usuario de la sesion debe cambiar su contrasena, solo le dejamos las
+        # rutas para hacerlo (ver/cambiar/salir); cualquier otra /api -> 403. Asi el
+        # "cambio forzado" se aplica en el SERVIDOR, no solo en el frontend. El acceso por
+        # token de bootstrap (mantenimiento, sin usuario) no esta sujeto a esto.
+        usuario_sesion = estado["usuario"]
+        if (
+            usuario_sesion is not None
+            and usuario_sesion.get("debe_cambiar_password")
+            and ruta not in _RUTAS_API_CAMBIO_PASSWORD
+        ):
+            await _rechazar(scope, receive, send, _MSG_DEBE_CAMBIAR, 403)
+            return
 
         # 2) CSRF en mutaciones: Origin/Referer del mismo host (tambien en el login).
         if metodo in _METODOS_MUTANTES and not _origen_mismo_host(scope):
