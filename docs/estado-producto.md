@@ -38,8 +38,10 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   UX, guía del community manager, manual de operación, flujo de datos / privacidad, despliegue
   local y alojado.
 - **Calidad verificada.** Amplia batería de pruebas automatizadas (MCP + Consola) más chequeos
-  estáticos de las skills, con **CI en verde** en cada cambio. No es una maqueta: lo que está
-  listo, está probado. (El número exacto de pruebas vive en CI, no aquí, para no quedar desfasado.)
+  estáticos de las skills, con **CI en GitHub Actions** (`.github/workflows/ci.yml`) que en cada
+  push y pull request corre los tests de los tres paquetes Python, los evals estáticos de las
+  skills y la construcción del bundle del frontend. No es una maqueta: lo que está listo, está
+  probado. (El número exacto de pruebas vive en CI, no aquí, para no quedar desfasado.)
 
 Arquitectura y hitos al detalle en [`arquitectura.md`](arquitectura.md).
 

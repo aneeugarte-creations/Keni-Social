@@ -48,7 +48,10 @@ python3 test_checks_copy.py
 ```
 
 CI los ejecuta en el job `skills-copy-estatico` de `.github/workflows/ci.yml`
-(solo Python + pytest; sin Claude, sin whisper, sin red).
+(solo Python + pytest + PyYAML, con `keni-shared` instalado para anclar los
+límites a su fuente única; sin Claude, sin whisper, sin red). El job corre
+`test_static.py`, `test_checks_copy.py`, `test_limites.py` y
+`test_wave3_skills.py`.
 
 ---
 
