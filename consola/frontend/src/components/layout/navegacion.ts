@@ -8,6 +8,7 @@ import {
   ListTodo,
   Megaphone,
   Presentation,
+  Radar,
   Rss,
   ScanSearch,
   Send,
@@ -77,6 +78,12 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Termómetro mundial",
         icono: Globe,
         descripcion: "Galería diaria con las 5–8 noticias internacionales más importantes.",
+      },
+      {
+        ruta: "/radar",
+        etiqueta: "Radar de tendencias",
+        icono: Radar,
+        descripcion: "Lo más viral del momento multi-red, agrupado por tema; tú marcas lo relevante.",
       },
       {
         ruta: "/verificacion",
