@@ -6,7 +6,8 @@ usuario autenticado podia leerlos/mutarlos; ahora TODOS los endpoints de conexio
 (lectura Y mutacion) exigen rol admin:
 
   - un EDITOR (sesion) recibe 403 en cada endpoint (GET/PUT/POST/DELETE),
-  - un ADMIN (sesion) y el acceso por TOKEN interino de mantenimiento SI pueden.
+  - SOLO un ADMIN (sesion) puede; el TOKEN de mantenimiento NO es admin (#150) y
+    tambien recibe 403 en conexiones (no es un backdoor a los secretos globales).
 
 Mismo aislamiento OFFLINE que el resto: `entorno` aisla `secretos.toml` y el config
 de metricas en tmp; nunca se toca la red ni el disco real. La sesion se obtiene por
@@ -59,7 +60,10 @@ def _cli_como(rol: str) -> TestClient:
 
 
 def _cli_token() -> TestClient:
-    """TestClient que entra por el TOKEN interino (mantenimiento = plenos permisos)."""
+    """TestClient que entra SOLO por el TOKEN de mantenimiento (sin usuario de sesion).
+
+    ESTRICTO (#150): el token NO es admin, asi que en `/api/conexiones/*` recibe 403.
+    """
     c = _cli()
     c.headers.update({"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     return c
@@ -107,8 +111,10 @@ def test_editor_no_muta_conexiones_403(entorno):
 
 
 def test_editor_no_filtra_secreto_de_imagen(entorno):
-    """Un admin guarda una clave; un editor NO debe poder leer ni la pista del estado."""
-    admin = _cli_token()
+    """Un admin (sesion) guarda una clave; un editor NO puede leer ni la pista del estado."""
+    auth.crear_usuario("admin", CLAVE, "admin")
+    admin = _cli()
+    assert _login(admin, "admin", CLAVE).status_code == 200
     admin.put("/api/conexiones/imagen", json={"api_key": _CLAVE_IMG}, headers=_ORIGIN)
     editor = _cli_como("editor")
     r = editor.get("/api/conexiones/imagen")
@@ -123,13 +129,15 @@ def test_editor_no_escribe_secreto_global(entorno):
     editor = _cli_como("editor")
     r = editor.put("/api/conexiones/imagen", json={"api_key": _CLAVE_IMG}, headers=_ORIGIN)
     assert r.status_code == 403
-    # El admin (token) comprueba que NADA se guardo: sigue sin configurar.
-    admin = _cli_token()
+    # Un admin (sesion) comprueba que NADA se guardo: sigue sin configurar.
+    auth.crear_usuario("admin", CLAVE, "admin")
+    admin = _cli()
+    assert _login(admin, "admin", CLAVE).status_code == 200
     assert admin.get("/api/conexiones/imagen").json()["configurado"] is False
 
 
 # --------------------------------------------------------------------------- #
-# Admin (sesion) -> SI puede; token interino tambien                          #
+# Admin (sesion) -> SI puede; token de mantenimiento -> NO (403, #150)        #
 # --------------------------------------------------------------------------- #
 
 
@@ -154,9 +162,16 @@ def test_admin_guarda_token_de_red(entorno):
     assert datos["credenciales"]["meta"]["access_token"] == _TOKEN_RED
 
 
-def test_token_interino_mantiene_acceso(entorno):
-    """El acceso por TOKEN interino (despliegue/mantenimiento) sigue pudiendo gestionar."""
+def test_token_mantenimiento_no_gestiona_conexiones_403(entorno):
+    """ESTRICTO (#150): el TOKEN de mantenimiento NO es admin -> 403 en conexiones.
+
+    Pasa la barrera de `/api` (es una credencial de mantenimiento), pero NO da acceso a los
+    secretos globales: solo una SESION admin real los gestiona. Ni lectura ni mutacion.
+    """
     c = _cli_token()
-    assert c.get("/api/conexiones/imagen").status_code == 200
+    assert c.get("/api/conexiones/imagen").status_code == 403
+    assert c.get("/api/conexiones/redes").status_code == 403
     r = c.put("/api/conexiones/redes/youtube", json={"token": _TOKEN_RED}, headers=_ORIGIN)
-    assert r.status_code == 200
+    assert r.status_code == 403
+    # El secreto nunca aparece en el cuerpo del rechazo.
+    assert _TOKEN_RED not in r.text

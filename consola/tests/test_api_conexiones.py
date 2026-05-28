@@ -4,6 +4,12 @@ Cubre la clave de imagen IA (estado/guardar/probar-mockeado/borrar, incl. "no
 configurada") y los tokens de redes (estado/set/remove sobre un config.toml de
 metricas temporal). En "probar" se parchea `_PROBADOR`: jamas se llama a OpenRouter.
 La clave nunca debe aparecer en ninguna respuesta de la API.
+
+AUTORIZACION (#153, ESTRICTO por #150): los endpoints de conexiones son SOLO ADMIN y el
+TOKEN de mantenimiento NO es admin (#150). Por eso estos tests funcionales usan un
+`cliente` que es una SESION admin REAL (no el token): la `fixture cliente` de aqui
+SOBREESCRIBE la de conftest. El gate por rol (editor/token -> 403) se prueba aparte en
+`test_api_conexiones_permisos.py`.
 """
 
 from __future__ import annotations
@@ -12,9 +18,36 @@ import os
 import tomllib
 from unittest.mock import MagicMock, patch
 
+import pytest
+from starlette.testclient import TestClient
+
+from keni_consola import app as app_modulo
+from keni_consola import auth
 from keni_consola.api import conexiones
 
+from .conftest import TOKEN_PRUEBA
+
 _CLAVE = "sk-test-PISTA1234"
+_ORIGIN = {"Origin": "http://testserver"}
+_CLAVE_SESION = "clave-de-prueba"
+
+
+@pytest.fixture
+def cliente(entorno):
+    """TestClient autenticado por SESION con un ADMIN real (no el token de mantenimiento).
+
+    Conexiones es SOLO ADMIN (#153) y el token NO es admin (#150); estos tests funcionales
+    necesitan a quien SI puede gestionarlas: un admin con sesion. Sobreescribe el `cliente`
+    de conftest (que entra por el token) solo para este modulo.
+    """
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    auth.crear_usuario("admin", _CLAVE_SESION, "admin")
+    c = TestClient(app)
+    r = c.post("/api/auth/login", json={"usuario": "admin", "password": _CLAVE_SESION}, headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    # Origin propio por defecto: las mutaciones (PUT/DELETE/POST) pasan el chequeo CSRF.
+    c.headers.update(_ORIGIN)
+    return c
 
 
 # --------------------------------------------------------------------------- #

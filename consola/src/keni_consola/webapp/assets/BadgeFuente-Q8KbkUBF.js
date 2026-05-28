@@ -1,7 +1,0 @@
-<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/BadgeFuente-Q8KbkUBF.js
-import{_ as r}from"./index-B4kAbBod.js";import{B as s}from"./badge-BPkwUs9J.js";const o="muestra";function n(a){return a===o}function d({fuente:a,className:t}){if(!a)return null;const e=n(a);return r.jsx(s,{variant:e?"aviso":"ok",className:t,title:e?"Datos de muestra: cifras ficticias para demostración, no reales.":"Datos reales tomados de la API de cada red.",children:e?"Datos de muestra":"Datos reales"})}export{d as B};
-|||||||| f333624:consola/src/keni_consola/webapp/assets/BadgeFuente-C1wuhQah.js
-import{_ as r}from"./index-DLSgsCmB.js";import{B as s}from"./badge-BAEIA7Az.js";const o="muestra";function n(a){return a===o}function d({fuente:a,className:t}){if(!a)return null;const e=n(a);return r.jsx(s,{variant:e?"aviso":"ok",className:t,title:e?"Datos de muestra: cifras ficticias para demostración, no reales.":"Datos reales tomados de la API de cada red.",children:e?"Datos de muestra":"Datos reales"})}export{d as B};
-========
-import{_ as r}from"./index-BwZMA8Cs.js";import{B as s}from"./badge-D1nufAim.js";const o="muestra";function n(a){return a===o}function d({fuente:a,className:t}){if(!a)return null;const e=n(a);return r.jsx(s,{variant:e?"aviso":"ok",className:t,title:e?"Datos de muestra: cifras ficticias para demostración, no reales.":"Datos reales tomados de la API de cada red.",children:e?"Datos de muestra":"Datos reales"})}export{d as B};
->>>>>>>> fix/153-scoping-permisos:consola/src/keni_consola/webapp/assets/BadgeFuente-tNwm9Xve.js

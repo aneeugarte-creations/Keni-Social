@@ -1,13 +1,14 @@
-"""Helper unico de rol `keni_consola.permisos` (#153).
+"""Helper unico de rol `keni_consola.permisos` (#153, ESTRICTO por #150).
 
 `es_admin(request)` lee SOLO lo que el middleware deja en `request.state`:
-  - token interino de mantenimiento (`auth_por_token=True`) -> True (plenos permisos),
+  - token de mantenimiento (`auth_por_token=True`, sin usuario) -> False (NO es admin, #150),
   - sesion de un admin -> True,
   - sesion de un editor -> False,
   - sin credencial reconocida -> False.
 
 Es la fuente unica que comparten `/api/conexiones`, `/api/usuarios` y `/api/rota`,
-asi que el rol se decide en UN solo sitio. Sin red, sin BD: se simula `request.state`.
+asi que el rol se decide en UN solo sitio. El token de mantenimiento NO es un backdoor de
+admin (#150): solo una SESION admin real cuenta. Sin red, sin BD: se simula `request.state`.
 """
 
 from __future__ import annotations
@@ -22,8 +23,9 @@ def _req(**estado):
     return SimpleNamespace(state=SimpleNamespace(**estado))
 
 
-def test_token_interino_es_admin():
-    assert permisos.es_admin(_req(auth_por_token=True, usuario=None)) is True
+def test_token_mantenimiento_no_es_admin():
+    # ESTRICTO (#150): el token de mantenimiento (sin usuario de sesion) NO es admin.
+    assert permisos.es_admin(_req(auth_por_token=True, usuario=None)) is False
 
 
 def test_sesion_admin_es_admin():

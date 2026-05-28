@@ -9,16 +9,27 @@ cualquier usuario autenticado podia leer y mutar. El primer cerrojo achacable es
 exigir rol ADMIN para esas areas sensibles y globales.
 
 Este modulo centraliza la pregunta "¿esta peticion la hace un admin?" que antes
-estaba DUPLICADA inline en `api/usuarios.py` y `api/rota.py` (mismo cuerpo). Mismo
-contrato exacto que esas copias:
+estaba DUPLICADA inline en `api/usuarios.py` y `api/rota.py` (mismo cuerpo). Es la
+FUENTE UNICA de la decision de rol admin para `/api/usuarios`, `/api/conexiones` y
+`/api/rota`.
 
-  - Si se entro por el TOKEN interino de mantenimiento (`request.state.auth_por_token`),
-    cuenta como acceso de mantenimiento con plenos permisos -> True (no rompe el modo
-    local ni el token de despliegue, que no llevan usuario asociado).
-  - Si hay una SESION de usuario (`request.state.usuario`), True solo si su rol es
-    `admin`; un `editor` -> False.
+CONTRATO ESTRICTO (#150 + #153): el TOKEN de mantenimiento NO es admin
+======================================================================
+Alineado con #150 (CRITICO: el token de mantenimiento NO es un backdoor de admin),
+este helper es ESTRICTO:
+
+  - Si hay una SESION de un usuario REAL (`request.state.usuario`), True SOLO si su rol
+    es `admin`; un `editor` -> False.
+  - Si se entro SOLO por el TOKEN de mantenimiento (`request.state.auth_por_token`, sin
+    usuario de sesion), NO es admin -> False. El token pasa la barrera de `/api` (es una
+    credencial de mantenimiento), pero NO otorga poder admin sobre usuarios/secretos.
   - Sin credencial reconocida (no deberia llegar aqui: el middleware ya devolvio 401),
     False por defecto.
+
+Consecuencia: el token de mantenimiento recibe 403 en `/api/usuarios/*` y en
+`/api/conexiones/*`; solo una SESION admin real gestiona usuarios y secretos. La UNICA
+excepcion acotada es el BOOTSTRAP del primer admin con la BD vacia, que `api/usuarios`
+trata aparte (no aqui).
 
 NO inventa una via de auth nueva: solo LEE el estado que `SeguridadConsola` ya dejo
 en `request.state`. El gate de sesion + CSRF lo sigue aplicando el middleware.
@@ -47,14 +58,14 @@ MSG_SOLO_ADMIN = "Solo un administrador puede acceder a esta sección."
 
 
 def es_admin(request: Request) -> bool:
-    """True si la peticion la hace un admin o entro por el token de mantenimiento.
+    """True SOLO si la peticion la hace una SESION de un usuario real con rol admin.
 
-    Lee SOLO el estado que dejo el middleware (`request.state.auth_por_token` y
-    `request.state.usuario`); no abre ninguna via de auth nueva. El token interino
-    (mantenimiento / despliegue, sin usuario) cuenta como plenos permisos.
+    ESTRICTO (#150 + #153): el token de mantenimiento NO es admin. Lee SOLO el estado que
+    dejo el middleware (`request.state.usuario`); no abre ninguna via de auth nueva. Una
+    peticion autenticada UNICAMENTE por el token (`request.state.auth_por_token`, sin
+    usuario de sesion) NO pasa: el token no es un backdoor de admin sobre usuarios/secretos
+    (#150). El bootstrap del primer admin con la BD vacia se trata aparte (`api/usuarios`).
     """
-    if getattr(request.state, "auth_por_token", False):
-        return True
     usuario = getattr(request.state, "usuario", None)
     if not isinstance(usuario, dict):
         return False

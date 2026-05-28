@@ -25,10 +25,11 @@ La clave del proveedor de imagen y los tokens de redes son SECRETOS GLOBALES y
 COMPARTIDOS (un unico fichero por despliegue). Antes cualquier usuario autenticado
 podia leerlos/mutarlos; eso es una fuga de datos en un servicio multiusuario. Ahora
 TODOS los endpoints de conexiones (lectura Y mutacion) exigen rol ADMIN: un editor
-recibe 403. El admin (o el acceso por token interino de mantenimiento/despliegue)
-sigue pudiendo gestionarlos. El gate se aplica por handler leyendo el rol que el
-middleware dejo en `request.state` (`keni_consola.permisos.es_admin`), igual que
-`/api/usuarios`. El AISLAMIENTO por tenant (un almacen por cliente) queda diferido:
+recibe 403. SOLO una SESION admin real puede gestionarlos; el TOKEN de mantenimiento
+NO es admin (#150) y tambien recibe 403 aqui (no es un backdoor a los secretos). El gate
+se aplica por handler leyendo el rol que el middleware dejo en `request.state`
+(`keni_consola.permisos.es_admin`, fuente unica y ESTRICTA), igual que `/api/usuarios`.
+El AISLAMIENTO por tenant (un almacen por cliente) queda diferido:
 ver `docs/adr/0003-aislamiento-secretos-por-tenant.md`.
 """
 
