@@ -1,19 +1,25 @@
-"""API Tareas: TABLERO de pendientes COMPARTIDO del equipo (#145, F5).
+"""API Tareas: TABLERO de pendientes COMPARTIDO del equipo (#145, F5 + unificacion).
 
 Listar, crear, asignar responsable, cambiar estado, poner enlace de accion, borrar y abrir
 el asistente. Persistencia en SQLite (`consola.db`). El tablero es UNICO y compartido: todo
 el equipo autenticado lo ve y lo edita; cada tarea lleva su propia identidad (autor = quien
 la creo, responsable = a quien se le asigna).
 
-Cada tarea referencia un PROYECTO de la allowlist compartida (`consola.proyectos`); ese
-proyecto ES el acotado por marca/proyecto (se puede filtrar por `?proyecto=<id>`).
+Unificacion de pendientes: un pendiente puede ser (a) cobertura de un evento de la rota
+(`evento_id` referencia un `rota_eventos`) o (b) tarea libre con responsable. El PROYECTO
+de la allowlist es OPCIONAL: una tarea libre puede no estar atada a ningun proyecto (en
+ese caso "abrir en Claude Code" responde 400). Ademas, GET devuelve `eventos_sin_cubrir`:
+eventos de la rota de esta semana y la siguiente cuyo turno no tiene miembro asignado
+(pendientes IMPLICITOS) para que la UI los muestre arriba.
 
 SEGURIDAD:
   - Multiusuario: el middleware ya autentica (sesion o token de mantenimiento) y deja el
     usuario en `request.state.usuario`. Esta API no relaja ese control; cualquier usuario
     autenticado ve y edita el tablero compartido (el equipo gestiona sus pendientes).
-  - Una tarea SOLO puede apuntar a un proyecto presente en la allowlist (consola.toml):
-    al crear se valida el id contra `consola.proyectos.proyecto_por_id`.
+  - Si la tarea LLEVA proyecto, debe estar en la allowlist (consola.toml): al crear se
+    valida el id contra `consola.proyectos.proyecto_por_id`. Vacio se permite (tarea libre).
+  - Si la tarea LLEVA `evento_id`, el evento debe existir en `rota_eventos` (no se confia
+    en ids inventados desde el cliente).
   - El RESPONSABLE solo puede ser un usuario REAL de la consola (`auth.obtener_usuario_por_id`);
     nunca se confia en el nombre que mande el cliente.
   - "Abrir en Claude Code" resuelve la carpeta SOLO desde la allowlist y delega en
@@ -27,6 +33,7 @@ parcheen (mockeen) y NO se lance nada real. Por defecto reusa
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 
 from starlette.requests import Request
@@ -58,13 +65,37 @@ def _nombres_proyecto() -> dict[str, proyectos.Proyecto]:
 
 
 def _tarea_a_dict(tarea: dict, por_id: dict[str, proyectos.Proyecto]) -> dict:
-    """Serializa una tarea, resolviendo el nombre legible de su proyecto."""
+    """Serializa una tarea, resolviendo el nombre legible de su proyecto y su evento.
+
+    `proyecto_existe` (bool): si el id del proyecto sigue en la allowlist Y la carpeta
+    existe en disco. La UI lo usa para decidir si "abrir en Claude Code" es viable.
+
+    Si la tarea lleva `evento_id`, hidrata `evento_titulo`, `evento_fecha`, `evento_hora`
+    y `evento_tipo_cobertura` (consulta `rota_eventos`). Si el evento se borro despues,
+    los campos hidratados quedan "" (pero `evento_id` se conserva en la tarea).
+    """
     proyecto = por_id.get(tarea["proyecto"])
     nombre = proyecto.nombre if proyecto is not None else ""
+    proyecto_existe = proyecto is not None and proyecto.existe
+
+    evento_id = tarea.get("evento_id", "") or ""
+    evento_titulo = ""
+    evento_fecha = ""
+    evento_hora = ""
+    evento_tipo_cobertura = ""
+    if evento_id:
+        evento = repos.obtener_evento_rota(evento_id)
+        if evento is not None:
+            evento_titulo = evento.get("titulo", "") or ""
+            evento_fecha = evento.get("fecha", "") or ""
+            evento_hora = evento.get("hora", "") or ""
+            evento_tipo_cobertura = evento.get("tipo_cobertura", "") or ""
+
     return {
         "id": tarea["id"],
         "proyecto": tarea["proyecto"],
         "proyecto_nombre": nombre,
+        "proyecto_existe": proyecto_existe,
         "titulo": tarea["titulo"],
         "detalle": tarea["detalle"],
         "estado": tarea["estado"],
@@ -78,6 +109,12 @@ def _tarea_a_dict(tarea: dict, por_id: dict[str, proyectos.Proyecto]) -> dict:
         "responsable_id": tarea.get("responsable_id", "") or "",
         "responsable_nombre": tarea.get("responsable_nombre", "") or "",
         "enlace": tarea.get("enlace", "") or "",
+        # Pendientes unificados: referencia opcional a un evento de la rota + hidratacion.
+        "evento_id": evento_id,
+        "evento_titulo": evento_titulo,
+        "evento_fecha": evento_fecha,
+        "evento_hora": evento_hora,
+        "evento_tipo_cobertura": evento_tipo_cobertura,
     }
 
 
@@ -109,24 +146,96 @@ def _resolver_responsable(responsable_id: object) -> tuple[dict[str, str] | None
 
 
 # --------------------------------------------------------------------------- #
+# Pendientes implicitos: eventos de la rota sin cobertura asignada              #
+# --------------------------------------------------------------------------- #
+#
+# La UI muestra arriba los eventos "sin cubrir": eventos de la rota cuya cobertura aun
+# no tiene a nadie asignado (turno con `miembro_id == ""`) Y los eventos de semanas que
+# aun no se han propuesto (sin ningun turno). Acotamos a la semana ACTUAL y la SIGUIENTE
+# (lunes de la semana actual -> domingo de la siguiente) para no inundar con un calendario
+# completo. Los eventos `no_cubrir` (decision editorial: no se cubre) NO cuentan.
+
+
+def _rango_dos_semanas(hoy: date) -> tuple[str, str]:
+    """`(lunes, domingo)` ISO del rango "semana actual + semana siguiente" desde `hoy`."""
+    lunes = hoy - timedelta(days=hoy.weekday())
+    domingo_siguiente = lunes + timedelta(days=13)  # 14 dias inclusivos
+    return lunes.isoformat(), domingo_siguiente.isoformat()
+
+
+def _eventos_sin_cubrir(hoy: date | None = None) -> list[dict]:
+    """Eventos de la rota de esta semana y la siguiente cuyo turno NO tiene miembro.
+
+    Cruza `rota_eventos` (filtrados por rango y por `tipo_cobertura != 'no_cubrir'`) con
+    `rota_turnos` (semanas actual + siguiente). Un evento cuenta como SIN CUBRIR si:
+      - no tiene turno creado todavia para su semana (la rota aun no se ha propuesto), o
+      - tiene turno pero con `miembro_id` vacio.
+
+    Devuelve dicts ligeros (id, titulo, fecha, hora, contenido, tipo_cobertura, prioridad)
+    ordenados por fecha y hora ascendentes (mismo orden que `listar_eventos_rota`).
+    """
+    hoy = hoy or date.today()
+    desde, hasta = _rango_dos_semanas(hoy)
+    eventos = repos.listar_eventos_rota(desde=desde, hasta=hasta)
+    # Filtra los `no_cubrir` (decision editorial: ese evento no se cubre, no es pendiente).
+    eventos = [e for e in eventos if e.get("tipo_cobertura", "") != "no_cubrir"]
+
+    # Mapa evento_id -> miembro_id mas reciente que lo cubre. Si NO esta en el mapa, el
+    # evento es "sin cubrir" porque su semana aun no se ha propuesto (no hay turno).
+    turnos_por_evento: dict[str, str] = {}
+    semanas = {
+        (date.fromisoformat(desde) + timedelta(days=7 * i)).isoformat() for i in range(2)
+    }
+    for semana in semanas:
+        for turno in repos.listar_turnos_rota(semana=semana):
+            # Si hay varios turnos para el mismo evento (no deberia, pero defensa), gana el
+            # ultimo: con miembro asignado si lo hay; si todos vacios, queda vacio.
+            ev = turno.get("evento_id", "") or ""
+            miembro = turno.get("miembro_id", "") or ""
+            actual = turnos_por_evento.get(ev, "")
+            if not actual:
+                turnos_por_evento[ev] = miembro
+
+    sin_cubrir: list[dict] = []
+    for e in eventos:
+        miembro = turnos_por_evento.get(e["id"], "")
+        if not miembro:
+            sin_cubrir.append(
+                {
+                    "id": e["id"],
+                    "titulo": e["titulo"],
+                    "fecha": e.get("fecha", "") or "",
+                    "hora": e.get("hora", "") or "",
+                    "contenido": e.get("contenido", "") or "",
+                    "tipo_cobertura": e.get("tipo_cobertura", "") or "",
+                    "prioridad": e.get("prioridad", "") or "",
+                }
+            )
+    return sin_cubrir
+
+
+# --------------------------------------------------------------------------- #
 # Endpoints                                                                    #
 # --------------------------------------------------------------------------- #
 
 
 async def listar(request: Request) -> Response:
-    """GET /api/tareas[?proyecto=<id>]: tablero compartido del equipo.
+    """GET /api/tareas[?proyecto=<id>][&evento_id=<id>]: tablero compartido del equipo.
 
     Devuelve, ademas de las tareas y los proyectos de la allowlist, la lista de usuarios
-    asignables (para el selector de responsable). Con `?proyecto=<id>` acota a un proyecto
-    (acotado por marca/proyecto, #145 F5).
+    asignables (para el selector de responsable) y los EVENTOS SIN CUBRIR de la rota de
+    esta semana y la siguiente (pendientes IMPLICITOS, para que la UI los muestre arriba).
+    Filtros opcionales: `?proyecto=<id>` (acotado por marca/proyecto, #145 F5) y
+    `?evento_id=<id>` (tareas atadas a un evento concreto).
     """
     por_id = _nombres_proyecto()
     proyecto_filtro = request.query_params.get("proyecto") or None
+    evento_filtro = request.query_params.get("evento_id") or None
     # Solo se filtra por un proyecto de la allowlist; un id ajeno devuelve vacio sin error.
     if proyecto_filtro is not None and proyecto_filtro not in por_id:
         tareas: list[dict] = []
     else:
-        tareas = repos.listar_tareas(proyecto_filtro)
+        tareas = repos.listar_tareas(proyecto_filtro, evento_filtro)
     return JSONResponse(
         {
             "tareas": [_tarea_a_dict(t, por_id) for t in tareas],
@@ -134,20 +243,33 @@ async def listar(request: Request) -> Response:
                 {"id": p.id, "nombre": p.nombre, "existe": p.existe} for p in por_id.values()
             ],
             "usuarios": _usuarios_asignables(),
+            "eventos_sin_cubrir": _eventos_sin_cubrir(),
         }
     )
 
 
 async def crear(request: Request) -> Response:
+    """POST /api/tareas: crea un pendiente (libre o atado a evento/proyecto).
+
+    El TITULO sigue siendo obligatorio. El PROYECTO es OPCIONAL (pendientes unificados):
+    si llega vacio o falta, la tarea queda sin proyecto (tarea libre). Si llega un id, se
+    valida contra la allowlist. `evento_id` es opcional; si llega, el evento debe existir
+    en la rota.
+    """
     datos = await leer_json(request)
     proyecto_id = datos.get("proyecto")
     titulo = datos.get("titulo")
     detalle = datos.get("detalle", "")
     enlace = datos.get("enlace", "")
+    evento_id = datos.get("evento_id", "")
     if not isinstance(titulo, str) or not titulo.strip():
         return JSONResponse({"error": "La tarea necesita un titulo."}, status_code=400)
-    if not isinstance(proyecto_id, str) or not proyecto_id.strip():
-        return JSONResponse({"error": "La tarea necesita un proyecto."}, status_code=400)
+    # Proyecto: opcional (pendientes unificados). Vacio / faltante -> tarea libre.
+    if proyecto_id is None:
+        proyecto_id = ""
+    if not isinstance(proyecto_id, str):
+        return JSONResponse({"error": "El proyecto debe ser un id de la allowlist."}, status_code=400)
+    proyecto_id = proyecto_id.strip()
     if not isinstance(detalle, str):
         detalle = ""
     if not isinstance(enlace, str):
@@ -155,9 +277,17 @@ async def crear(request: Request) -> Response:
     enlace = enlace.strip()
     if len(enlace) > _MAX_ENLACE:
         return JSONResponse({"error": "El enlace es demasiado largo."}, status_code=400)
-    # Allowlist: solo proyectos configurados.
-    if proyectos.proyecto_por_id(proyecto_id) is None:
+    # Allowlist: si la tarea LLEVA proyecto, solo se aceptan ids configurados. Vacio se permite.
+    if proyecto_id and proyectos.proyecto_por_id(proyecto_id) is None:
         return JSONResponse({"error": "Proyecto no permitido o inexistente."}, status_code=400)
+    # Evento de la rota: opcional. Si llega, debe existir (defensa: no se confia en ids del cliente).
+    if not isinstance(evento_id, str):
+        evento_id = ""
+    evento_id = evento_id.strip()
+    if evento_id and repos.obtener_evento_rota(evento_id) is None:
+        return JSONResponse(
+            {"error": "Ese evento ya no está en la rota"}, status_code=400
+        )
     # El responsable, si se manda, debe ser un usuario REAL (no se confia en el cliente).
     responsable, valido = _resolver_responsable(datos.get("responsable_id"))
     if not valido:
@@ -170,15 +300,16 @@ async def crear(request: Request) -> Response:
         autor=autor_de_peticion(request),
         responsable=responsable,
         enlace=enlace,
+        evento_id=evento_id,
     )
     return JSONResponse({"tarea": _tarea_a_dict(tarea, _nombres_proyecto())})
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/tareas/{id}: cambia estado, responsable y/o enlace de accion.
+    """PATCH /api/tareas/{id}: cambia estado, responsable, enlace y/o evento_id.
 
     Cada campo es opcional; se aplican solo los presentes. Retrocompatible con el cliente
-    que solo manda `{"estado": ...}`.
+    que solo manda `{"estado": ...}`. `evento_id=""` desata la tarea de cualquier evento.
     """
     tarea_id = request.path_params["tarea_id"]
     datos = await leer_json(request)
@@ -210,9 +341,22 @@ async def actualizar(request: Request) -> Response:
             return JSONResponse({"error": "El enlace es demasiado largo."}, status_code=400)
         campos["enlace"] = enlace
 
+    if "evento_id" in datos:
+        evento_id = datos.get("evento_id")
+        if not isinstance(evento_id, str):
+            evento_id = ""
+        evento_id = evento_id.strip()
+        # Vacio = desatar; con valor, el evento debe existir (defensa contra ids inventados).
+        if evento_id and repos.obtener_evento_rota(evento_id) is None:
+            return JSONResponse(
+                {"error": "Ese evento ya no está en la rota"}, status_code=400
+            )
+        campos["evento_id"] = evento_id
+
     if not campos:
         return JSONResponse(
-            {"error": "Indica un estado, un responsable o un enlace."}, status_code=400
+            {"error": "Indica un estado, un responsable, un enlace o un evento."},
+            status_code=400,
         )
 
     tarea = repos.actualizar_tarea(tarea_id, campos)
@@ -229,12 +373,28 @@ async def borrar(request: Request) -> Response:
 
 
 async def abrir(request: Request) -> Response:
+    """POST /api/tareas/{id}/abrir: abre Claude Code en la carpeta del proyecto.
+
+    Si la tarea NO esta atada a un proyecto (tarea libre): 400 explicito pidiendo al
+    usuario que le ponga un proyecto desde el detalle (no se puede abrir un asistente
+    en una carpeta inexistente).
+    """
     tarea_id = request.path_params["tarea_id"]
     tarea = repos.obtener_tarea(tarea_id)
     if tarea is None:
         return JSONResponse({"error": "La tarea ya no existe."}, status_code=400)
+    # Pendientes unificados: una tarea libre (sin proyecto) NO se puede abrir en Claude Code.
+    proyecto_id = (tarea.get("proyecto") or "").strip()
+    if not proyecto_id:
+        return JSONResponse(
+            {
+                "error": "Esta tarea no está atada a un proyecto: añade uno desde el detalle "
+                "para abrirla en Claude Code."
+            },
+            status_code=400,
+        )
     # Allowlist: la carpeta solo se resuelve desde consola.proyectos por id estable.
-    p = proyectos.proyecto_por_id(tarea["proyecto"])
+    p = proyectos.proyecto_por_id(proyecto_id)
     if p is None:
         return JSONResponse(
             {"error": "El proyecto de esta tarea ya no está configurado."}, status_code=400

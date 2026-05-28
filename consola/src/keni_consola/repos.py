@@ -77,8 +77,11 @@ def raiz_datos() -> Path:
 # --------------------------------------------------------------------------- #
 
 
-def listar_tareas(proyecto_id: str | None = None) -> list[dict[str, Any]]:
-    return db.listar_tareas(proyecto_id)
+def listar_tareas(
+    proyecto_id: str | None = None,
+    evento_id: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_tareas(proyecto_id, evento_id)
 
 
 def crear_tarea(
@@ -89,9 +92,16 @@ def crear_tarea(
     autor: dict[str, str] | None = None,
     responsable: dict[str, str] | None = None,
     enlace: str = "",
+    evento_id: str = "",
 ) -> dict[str, Any]:
     return db.crear_tarea(
-        proyecto_id, titulo, detalle, autor=autor, responsable=responsable, enlace=enlace
+        proyecto_id,
+        titulo,
+        detalle,
+        autor=autor,
+        responsable=responsable,
+        enlace=enlace,
+        evento_id=evento_id,
     )
 
 

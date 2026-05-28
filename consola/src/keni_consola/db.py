@@ -219,7 +219,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         autor_nombre        TEXT NOT NULL DEFAULT '',
         responsable_id      TEXT NOT NULL DEFAULT '',
         responsable_nombre  TEXT NOT NULL DEFAULT '',
-        enlace              TEXT NOT NULL DEFAULT ''
+        enlace              TEXT NOT NULL DEFAULT '',
+        evento_id           TEXT NOT NULL DEFAULT ''
     )
     """,
     """
@@ -484,12 +485,15 @@ def _columnas_existentes(con: Any, tabla: str) -> set[str]:
 # retrocompatible (las filas viejas quedan con el campo vacio, sin reescribir nada).
 #   - autor_id/autor_nombre: atribucion por usuario (#130 Fase 1).
 #   - responsable_id/responsable_nombre/enlace: tablero compartido del equipo (#145, F5).
+#   - evento_id: referencia opcional a un evento de la rota (pendientes unificados). Si
+#     la tarea cubre un evento de la rota lleva su id; si es una tarea libre, "".
 _COLUMNAS_TAREAS_AMPLIADAS: tuple[str, ...] = (
     "autor_id",
     "autor_nombre",
     "responsable_id",
     "responsable_nombre",
     "enlace",
+    "evento_id",
 )
 
 
@@ -592,10 +596,11 @@ def _migrar_columnas_swaps(con: Any) -> None:
 # --------------------------------------------------------------------------- #
 
 
-# Columnas de `tareas` en el SELECT (atribucion por usuario #130; responsable/enlace #145).
+# Columnas de `tareas` en el SELECT (atribucion por usuario #130; responsable/enlace #145;
+# evento_id = referencia opcional a un evento de la rota para pendientes unificados).
 _SELECT_TAREA = (
     "SELECT id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre, "
-    "responsable_id, responsable_nombre, enlace FROM tareas"
+    "responsable_id, responsable_nombre, enlace, evento_id FROM tareas"
 )
 
 
@@ -605,7 +610,7 @@ def _fila_a_tarea(fila: Any) -> dict[str, Any]:
     `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) y
     `responsable_id`/`responsable_nombre`/`enlace` (tablero compartido, #145 F5) salen ""
     en tareas legadas / anonimas / sin asignar; la UI las muestra como "desconocido" / "sin
-    asignar".
+    asignar". `evento_id` sale "" en tareas libres (no atadas a un evento de la rota).
     """
     return {
         "id": fila["id"],
@@ -619,26 +624,36 @@ def _fila_a_tarea(fila: Any) -> dict[str, Any]:
         "responsable_id": fila["responsable_id"] or "",
         "responsable_nombre": fila["responsable_nombre"] or "",
         "enlace": fila["enlace"] or "",
+        "evento_id": fila["evento_id"] or "",
     }
 
 
-def listar_tareas(proyecto_id: str | None = None) -> list[dict[str, Any]]:
+def listar_tareas(
+    proyecto_id: str | None = None,
+    evento_id: str | None = None,
+) -> list[dict[str, Any]]:
     """Tareas del tablero compartido, mas recientes primero (por fecha y luego id).
 
-    Con `proyecto_id` filtra a un solo proyecto/marca (acotado por proyecto, #145 F5); sin
-    el, devuelve el tablero completo del equipo.
+    Con `proyecto_id` filtra a un solo proyecto/marca (acotado por proyecto, #145 F5); con
+    `evento_id` filtra a las tareas atadas a un evento concreto de la rota (pendientes
+    unificados). Sin filtros, devuelve el tablero completo del equipo. Los dos filtros son
+    combinables (AND).
     """
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if proyecto_id:
+        clausulas.append("proyecto = ?")
+        params.append(proyecto_id)
+    if evento_id:
+        clausulas.append("evento_id = ?")
+        params.append(evento_id)
+    sql = _SELECT_TAREA
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY fecha DESC, id DESC"
     con = _conectar()
     try:
-        if proyecto_id:
-            filas = con.execute(
-                f"{_SELECT_TAREA} WHERE proyecto = ? ORDER BY fecha DESC, id DESC",
-                (proyecto_id,),
-            ).fetchall()
-        else:
-            filas = con.execute(
-                f"{_SELECT_TAREA} ORDER BY fecha DESC, id DESC"
-            ).fetchall()
+        filas = con.execute(sql, tuple(params)).fetchall()
     finally:
         con.close()
     return [_fila_a_tarea(f) for f in filas]
@@ -652,6 +667,7 @@ def crear_tarea(
     autor: dict[str, str] | None = None,
     responsable: dict[str, str] | None = None,
     enlace: str = "",
+    evento_id: str = "",
 ) -> dict[str, Any]:
     """Inserta una tarea nueva y la devuelve. NO valida el proyecto (lo hace la API).
 
@@ -660,6 +676,10 @@ def crear_tarea(
 
     `responsable` (tablero compartido, #145 F5) es `{"id", "usuario"}` o `None` (sin
     asignar). `enlace` es una ruta/URL opcional para actuar sobre la tarea.
+
+    `evento_id` (pendientes unificados): id de un evento de la rota cuya cobertura
+    representa esta tarea, o "" si es una tarea libre. La API valida que el evento exista.
+    `proyecto_id` puede ser "" (pendiente sin proyecto: tarea libre que el equipo cubre).
     """
     autor = autor or {}
     responsable = responsable or {}
@@ -675,13 +695,14 @@ def crear_tarea(
         "responsable_id": responsable.get("id", "") or "",
         "responsable_nombre": responsable.get("usuario", "") or "",
         "enlace": enlace or "",
+        "evento_id": evento_id or "",
     }
     con = _conectar()
     try:
         con.execute(
             "INSERT INTO tareas (id, proyecto, titulo, detalle, estado, fecha, "
-            "autor_id, autor_nombre, responsable_id, responsable_nombre, enlace) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "autor_id, autor_nombre, responsable_id, responsable_nombre, enlace, evento_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 tarea["id"],
                 tarea["proyecto"],
@@ -694,6 +715,7 @@ def crear_tarea(
                 tarea["responsable_id"],
                 tarea["responsable_nombre"],
                 tarea["enlace"],
+                tarea["evento_id"],
             ),
         )
         con.commit()
@@ -717,12 +739,15 @@ def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
 
 # Campos de `tareas` editables via `actualizar_tarea` (tablero compartido, #145 F5).
 # El `responsable` se actualiza como par id+nombre desde la API; aqui se mapean a sus dos
-# columnas. La validacion (estado valido, responsable real) es de la capa API.
+# columnas. `evento_id` (pendientes unificados) tambien es editable: una tarea puede
+# atarse / desatarse a posteriori. La validacion (estado valido, responsable real, evento
+# existente) es de la capa API.
 _CAMPOS_EDITABLES_TAREA: tuple[str, ...] = (
     "estado",
     "responsable_id",
     "responsable_nombre",
     "enlace",
+    "evento_id",
 )
 
 
