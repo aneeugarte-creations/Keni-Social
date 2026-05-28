@@ -454,25 +454,96 @@ function ausenciaTocaDia(a: AusenciaRota, fecha: string): boolean {
   return a.desde <= fecha && fecha <= a.hasta;
 }
 
+// Las dos franjas reales que el equipo trabaja, en orden de aparición vertical en
+// el calendario. `descanso` aparece como una banda inferior con marca clara: aunque
+// nadie "cubre" en descanso, mostrarla deja explícito quién está OFF ese día y dónde
+// caen los eventos nocturnos (>=23h) que no se cubren.
+const FRANJAS_CALENDARIO: FranjaTurno[] = ["matutino", "vespertino", "descanso"];
+
+/**
+ * Mapea la hora de un evento a la franja de trabajo. Sin hora -> matutino (la mayoría
+ * de los eventos "TBD" son notas tempraneras). El equipo trabaja matutino 06-13:59,
+ * vespertino 14-22:59 y "descanso" 23-05:59 (turno de madrugada que NADIE cubre, pero
+ * que aparece en la rejilla para no esconder eventos nocturnos).
+ */
+function franjaDeHora(hora: string): FranjaTurno {
+  const m = hora.match(/(\d{1,2}):?(\d{2})?/);
+  if (!m) return "matutino";
+  const h = Number(m[1]);
+  if (!Number.isFinite(h)) return "matutino";
+  if (h >= 6 && h <= 13) return "matutino";
+  if (h >= 14 && h <= 22) return "vespertino";
+  return "descanso";
+}
+
+/** Presentación visual de cada franja en el calendario (color de banda izquierda). */
+const COLOR_FRANJA_CALENDARIO: Record<FranjaTurno, { label: string; banda: string; fondo: string }> = {
+  matutino: {
+    label: "Mañana",
+    banda: "border-l-amber-400",
+    fondo: "bg-amber-50/30 dark:bg-amber-950/10",
+  },
+  vespertino: {
+    label: "Tarde",
+    banda: "border-l-sky-400",
+    fondo: "bg-sky-50/30 dark:bg-sky-950/10",
+  },
+  descanso: {
+    label: "Descanso / madrugada",
+    banda: "border-l-zinc-300 dark:border-l-zinc-700",
+    fondo: "bg-muted/30",
+  },
+};
+
+interface ItemEventoCalendario {
+  evento: EventoRota;
+  /** Turno que asigna al evento (null si nadie lo cubre). */
+  turno: TurnoRota | null;
+  /** `true` si el evento está asignado a alguien que no trabaja esa franja-día. */
+  fueraDeTurno: boolean;
+}
+
+interface RecuadroPersona {
+  miembro_id: string;
+  miembro_nombre: string;
+  /** `true` si el recuadro es "Sin asignar" (eventos sin turno o asignados fuera). */
+  sinAsignar: boolean;
+  eventos: ItemEventoCalendario[];
+}
+
+/**
+ * Calendario nuevo (día × franja × persona): la frontera real con la que trabaja el
+ * equipo. Las filas son franjas (mañana → tarde → descanso), las columnas son los 7
+ * días de la semana. Cada celda contiene un recuadro por persona que TRABAJA esa
+ * franja ese día con sus eventos asignados; si un evento está asignado a alguien
+ * fuera de su franja, sale en "Sin asignar" con badge "Fuera de turno". El relleno
+ * ocupa el alto disponible para minimizar scroll lateral.
+ */
 function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) => void }) {
   const queryClient = useQueryClient();
-  // El rango (lun→dom) de la semana en vista para acotar la consulta de eventos.
+  // El rango (lun→dom) de la semana en vista para acotar las consultas.
   const desde = lunes;
-  const hasta = lunesSiguiente(lunes, 1); // lunes siguiente = exclusivo, cubre todo dom
-  const clave = ["rota", "calendario", desde] as const;
-
-  const q = useQuery({
-    queryKey: clave,
+  const hasta = lunesSiguiente(lunes, 1); // exclusivo
+  const eventosQ = useQuery({
+    queryKey: ["rota", "calendario", "eventos", desde] as const,
     queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
   });
-  // Ausencias del equipo (sin filtro por miembro): luego acotamos a la intersección
-  // con la semana en cliente. Pequeño volumen (vacaciones/bajas/descanso), ok cargarlas.
+  const semanaQ = useQuery({
+    queryKey: ["rota", "semana", lunes] as const,
+    queryFn: ({ signal }) => api.rotaSemana({ lunes }, signal),
+  });
+  const horarioQ = useQuery({
+    queryKey: ["rota", "horario", lunes] as const,
+    queryFn: ({ signal }) => api.rotaHorario({ lunes }, signal),
+  });
   const ausenciasQ = useQuery({
-    queryKey: ["rota", "ausencias"],
+    queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
   });
+
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
 
+  // Las 7 fechas de la semana (lun → dom). Memo para estabilidad referencial.
   const dias = React.useMemo(() => {
     const base = new Date(`${lunes}T00:00:00`);
     return Array.from({ length: 7 }, (_, i) => {
@@ -482,15 +553,46 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
     });
   }, [lunes]);
 
-  // Filtramos en cliente al rango exacto lun→dom (la consulta usa `hasta` exclusivo).
-  const eventos = (q.data?.eventos ?? []).filter((e) => e.fecha >= desde && e.fecha < hasta);
-  const porDia = new Map<string, EventoRota[]>();
-  for (const e of eventos) {
-    const lista = porDia.get(e.fecha) ?? [];
-    lista.push(e);
-    porDia.set(e.fecha, lista);
-  }
-  // Ausencias que solapan con la semana (intersección no vacía con [desde, fin]).
+  // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
+  const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
+
+  // Filtra al rango exacto.
+  const eventos = (eventosQ.data?.eventos ?? []).filter(
+    (e) => e.fecha >= desde && e.fecha < hasta,
+  );
+  // Mapa eventoId → turno (cobertura): nos dice quién cubre cada evento.
+  const turnosPorEvento = React.useMemo(() => {
+    const m = new Map<string, TurnoRota>();
+    for (const t of semanaQ.data?.turnos ?? []) m.set(t.evento_id, t);
+    return m;
+  }, [semanaQ.data?.turnos]);
+
+  // Mapa (miembro_id|fecha) → franja del horario de trabajo. Indica quién trabaja qué.
+  const franjaPorPersona = React.useMemo(() => {
+    const m = new Map<string, FranjaTurno>();
+    for (const t of horarioQ.data?.turnos ?? []) {
+      m.set(`${t.miembro_id}|${t.fecha}`, t.franja);
+    }
+    return m;
+  }, [horarioQ.data?.turnos]);
+
+  // Personas que trabajan cada (franja, fecha) según el horario publicado.
+  const personasPorCelda = React.useMemo(() => {
+    const m = new Map<string, { miembro_id: string; miembro_nombre: string }[]>();
+    for (const t of horarioQ.data?.turnos ?? []) {
+      const k = `${t.franja}|${t.fecha}`;
+      const lista = m.get(k) ?? [];
+      lista.push({ miembro_id: t.miembro_id, miembro_nombre: t.miembro_nombre });
+      m.set(k, lista);
+    }
+    // Orden estable por nombre para que los recuadros no salten entre renders.
+    for (const lista of m.values()) {
+      lista.sort((a, b) => a.miembro_nombre.localeCompare(b.miembro_nombre));
+    }
+    return m;
+  }, [horarioQ.data?.turnos]);
+
+  // Ausencias que solapan con la semana.
   const finSemana = dias[6] ?? desde;
   const ausenciasSemana = (ausenciasQ.data?.ausencias ?? []).filter(
     (a) => a.desde <= finSemana && a.hasta >= desde,
@@ -499,8 +601,6 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
   for (const fecha of dias) {
     const lista = ausenciasSemana.filter((a) => ausenciaTocaDia(a, fecha));
     if (lista.length > 0) {
-      // Ordena por tipo (vacaciones primero por ser el caso planificado más visible)
-      // y luego por nombre, para una vista estable entre renders.
       lista.sort((x, y) => {
         if (x.tipo !== y.tipo) return x.tipo.localeCompare(y.tipo);
         return (x.miembro_nombre || "").localeCompare(y.miembro_nombre || "");
@@ -508,13 +608,70 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
       ausenciasPorDia.set(fecha, lista);
     }
   }
+
+  // Itera los eventos y los reparte en su (franja, fecha) → persona/sin-asignar.
+  const recuadrosPorCelda = React.useMemo(() => {
+    const m = new Map<string, RecuadroPersona[]>(); // clave: `${franja}|${fecha}`
+    // Para cada celda primero metemos el recuadro de cada persona que trabaja allí
+    // (aunque no tenga eventos): es lo que pidió el usuario, "ver quién cubre el turno".
+    for (const franja of FRANJAS_CALENDARIO) {
+      for (const fecha of dias) {
+        const personas = personasPorCelda.get(`${franja}|${fecha}`) ?? [];
+        const lista: RecuadroPersona[] = personas.map((p) => ({
+          miembro_id: p.miembro_id,
+          miembro_nombre: p.miembro_nombre,
+          sinAsignar: false,
+          eventos: [],
+        }));
+        m.set(`${franja}|${fecha}`, lista);
+      }
+    }
+    // Ahora coloca cada evento en su recuadro: turno.miembro -> recuadro de esa persona
+    // EN LA FRANJA del evento; si la persona no trabaja esa franja (o no hay turno),
+    // cae en "Sin asignar" con badge fueraDeTurno cuando había asignación.
+    for (const evento of eventos) {
+      const franja = franjaDeHora(evento.hora);
+      const clave = `${franja}|${evento.fecha}`;
+      const turno = turnosPorEvento.get(evento.id) ?? null;
+      const persona = turno?.miembro_id ?? "";
+      const lista = m.get(clave) ?? [];
+
+      if (persona && franjaPorPersona.get(`${persona}|${evento.fecha}`) === franja) {
+        // La persona trabaja esa franja ese día: lo metemos en su recuadro.
+        const recuadro = lista.find((r) => !r.sinAsignar && r.miembro_id === persona);
+        if (recuadro) {
+          recuadro.eventos.push({ evento, turno, fueraDeTurno: false });
+          continue;
+        }
+      }
+      // O no hay turno, o el asignado no trabaja esa franja: "Sin asignar" con badge.
+      let recuadroSin = lista.find((r) => r.sinAsignar);
+      if (!recuadroSin) {
+        recuadroSin = {
+          miembro_id: "",
+          miembro_nombre: "Sin asignar",
+          sinAsignar: true,
+          eventos: [],
+        };
+        // El recuadro Sin asignar se muestra al final.
+        lista.push(recuadroSin);
+      }
+      recuadroSin.eventos.push({
+        evento,
+        turno,
+        fueraDeTurno: Boolean(persona),
+      });
+      m.set(clave, lista);
+    }
+    return m;
+  }, [eventos, dias, personasPorCelda, turnosPorEvento, franjaPorPersona]);
+
   const inicio = dias[0] ?? "";
   const fin = dias[6] ?? "";
   const nCambiados = eventos.filter((e) => e.cambiado).length;
-
-  // En celdas estrechas (7 columnas) sólo cabe poco: mostramos hasta 3 ausencias visibles
-  // y agrupamos el resto en un "+N" con popover. Equilibra densidad y legibilidad.
-  const MAX_AUSENCIAS_VISIBLES = 3;
+  const cargando =
+    eventosQ.isPending || semanaQ.isPending || horarioQ.isPending || ausenciasQ.isPending;
+  const error = eventosQ.error || semanaQ.error || horarioQ.error || ausenciasQ.error;
 
   return (
     <div className="space-y-4">
@@ -530,62 +687,400 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
 
       <LeyendaCobertura />
 
-      {q.isPending ? (
-        <Skeleton className="h-64 w-full rounded-md" />
-      ) : q.isError ? (
+      {cargando ? (
+        <Skeleton className="h-[60vh] w-full rounded-md" />
+      ) : error ? (
         <BloqueError
           titulo="No se pudo cargar el calendario"
-          mensaje={mensajeError(q.error)}
-          onReintentar={() => void q.refetch()}
-          cargando={q.isFetching}
+          mensaje={mensajeError(error)}
+          onReintentar={() => {
+            void eventosQ.refetch();
+            void semanaQ.refetch();
+            void horarioQ.refetch();
+            void ausenciasQ.refetch();
+          }}
+          cargando={eventosQ.isFetching}
         />
       ) : (
-        <Card>
-          <CardContent className="overflow-x-auto p-3">
-            <div className="grid min-w-[56rem] grid-cols-7 gap-2">
-              {dias.map((fecha) => {
-                const finde = esFinDeSemana(fecha);
-                const delDia = porDia.get(fecha) ?? [];
-                const ausDia = ausenciasPorDia.get(fecha) ?? [];
-                const ausVisibles = ausDia.slice(0, MAX_AUSENCIAS_VISIBLES);
-                const ausRestantes = ausDia.slice(MAX_AUSENCIAS_VISIBLES);
-                return (
-                  <div
-                    key={fecha}
-                    className={`flex min-h-[8rem] flex-col gap-1.5 rounded-md border p-2 ${
-                      finde ? "bg-amber-50/40 dark:bg-amber-950/10" : "bg-muted/20"
-                    }`}
-                  >
-                    <div className="flex items-baseline justify-between">
-                      <span className="text-xs font-semibold capitalize">{diaCorto(fecha)}</span>
-                      <span className="text-xs text-muted-foreground">{fecha.slice(8, 10)}</span>
-                    </div>
-                    {ausDia.length > 0 && (
-                      <div
-                        className="flex flex-wrap gap-1 border-b border-border/60 pb-1"
-                        aria-label={`Ausencias del ${fecha}`}
-                      >
-                        {ausVisibles.map((a) => (
-                          <ChipAusenciaDia key={a.id} ausencia={a} />
-                        ))}
-                        {ausRestantes.length > 0 && <MasAusencias ausencias={ausRestantes} />}
-                      </div>
-                    )}
-                    {delDia.length === 0 ? (
-                      <span className="mt-1 text-xs text-muted-foreground/60">—</span>
-                    ) : (
-                      delDia.map((e) => (
-                        <ChipEvento key={e.id} evento={e} onCambio={invalidar} />
-                      ))
-                    )}
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            {/* Rejilla principal: 1 cabecera con días + 1 fila por franja.
+                `max-h-[calc(100vh-18rem)]` aprovecha el alto disponible con scroll interno
+                si la semana se sale de pantalla; `min-w-[56rem]` mantiene legibilidad. */}
+            <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 18rem)" }}>
+              <div className="min-w-[56rem]">
+                {/* Cabecera de días (sticky para que no se pierda al hacer scroll). */}
+                <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
+                  <div className="bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Franja
                   </div>
-                );
-              })}
+                  {dias.map((fecha) => {
+                    const ausDia = ausenciasPorDia.get(fecha) ?? [];
+                    const finde = esFinDeSemana(fecha);
+                    return (
+                      <div
+                        key={fecha}
+                        className={`flex flex-col gap-1 px-2 py-2 ${
+                          finde ? "bg-amber-50/40 dark:bg-amber-950/10" : "bg-background"
+                        }`}
+                      >
+                        <div className="flex items-baseline justify-between">
+                          <span className="text-xs font-semibold capitalize">
+                            {diaCorto(fecha)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {fecha.slice(8, 10)}
+                          </span>
+                        </div>
+                        {ausDia.length > 0 && (
+                          <div
+                            className="flex flex-wrap gap-1"
+                            aria-label={`Ausencias del ${fecha}`}
+                          >
+                            {ausDia.slice(0, 2).map((a) => (
+                              <ChipAusenciaDia key={a.id} ausencia={a} />
+                            ))}
+                            {ausDia.length > 2 && (
+                              <MasAusencias ausencias={ausDia.slice(2)} />
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Filas: una por franja. Borde superior grueso para marcar el cambio. */}
+                {FRANJAS_CALENDARIO.map((franja, idx) => {
+                  const meta = COLOR_FRANJA_CALENDARIO[franja];
+                  return (
+                    <div
+                      key={franja}
+                      className={`grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px ${
+                        idx > 0 ? "border-t-4 border-t-border" : ""
+                      }`}
+                    >
+                      {/* Etiqueta de franja (sticky a la izquierda para scroll horizontal). */}
+                      <div
+                        className={`sticky left-0 z-[1] flex items-center border-l-4 px-3 py-3 text-sm font-semibold ${meta.banda} ${meta.fondo}`}
+                      >
+                        {meta.label}
+                      </div>
+                      {dias.map((fecha) => {
+                        const finde = esFinDeSemana(fecha);
+                        const recuadros = recuadrosPorCelda.get(`${franja}|${fecha}`) ?? [];
+                        return (
+                          <div
+                            key={`${franja}-${fecha}`}
+                            className={`flex min-h-[8rem] flex-col gap-2 border-l p-2 ${
+                              finde ? "bg-amber-50/20 dark:bg-amber-950/5" : ""
+                            }`}
+                          >
+                            {recuadros.length === 0 ? (
+                              <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/60">
+                                {franja === "descanso" ? "—" : "Sin turno asignado"}
+                              </div>
+                            ) : (
+                              recuadros.map((rec) => (
+                                <RecuadroPersonaCalendario
+                                  key={`${rec.miembro_id}-${rec.sinAsignar ? "sin" : "ok"}`}
+                                  recuadro={rec}
+                                  franja={franja}
+                                  onEditarEvento={(e) => setEventoSeleccionado(e)}
+                                  onCambio={invalidar}
+                                />
+                              ))
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
+
+      {eventoSeleccionado && (
+        <DialogEditarEvento
+          evento={eventoSeleccionado}
+          onCerrar={() => setEventoSeleccionado(null)}
+          onCambio={invalidar}
+        />
+      )}
     </div>
+  );
+}
+
+/** Un recuadro por persona dentro de una celda día-franja del calendario. */
+function RecuadroPersonaCalendario({
+  recuadro,
+  franja,
+  onEditarEvento,
+  onCambio,
+}: {
+  recuadro: RecuadroPersona;
+  franja: FranjaTurno;
+  onEditarEvento: (evento: EventoRota) => void;
+  onCambio: () => void;
+}) {
+  const esDescanso = franja === "descanso";
+  const estilo = recuadro.sinAsignar
+    ? "border-dashed border-amber-300/70 bg-amber-50/30 dark:bg-amber-950/10"
+    : esDescanso
+      ? "border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/40"
+      : "border-border bg-background";
+  return (
+    <div className={`flex flex-col gap-1 rounded-md border p-1.5 text-xs ${estilo}`}>
+      <div className="flex items-center justify-between gap-1">
+        <span
+          className={`truncate font-medium ${
+            recuadro.sinAsignar ? "text-amber-700 dark:text-amber-400" : ""
+          }`}
+        >
+          {recuadro.sinAsignar ? "Sin asignar" : recuadro.miembro_nombre}
+        </span>
+        {recuadro.eventos.length > 0 && (
+          <Badge variant="outline" className="h-4 px-1 text-[10px] font-normal">
+            {recuadro.eventos.length}
+          </Badge>
+        )}
+      </div>
+      {recuadro.eventos.length === 0 ? (
+        <span className="px-0.5 text-[10px] text-muted-foreground/70">
+          {esDescanso ? "Descanso" : "Sin eventos"}
+        </span>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {recuadro.eventos.map((item) => (
+            <ChipEventoCalendario
+              key={item.evento.id}
+              item={item}
+              onClick={() => onEditarEvento(item.evento)}
+              onCambio={onCambio}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Chip de evento dentro de un recuadro de persona (clicable: abre edición). */
+function ChipEventoCalendario({
+  item,
+  onClick,
+  onCambio,
+}: {
+  item: ItemEventoCalendario;
+  onClick: () => void;
+  onCambio: () => void;
+}) {
+  const cob = COBERTURA[item.evento.tipo_cobertura] ?? COBERTURA.transmision;
+  const Icono = cob.icono;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group/chip flex flex-col gap-0.5 rounded-sm border px-1.5 py-1 text-left text-[11px] leading-tight transition hover:ring-1 hover:ring-primary/40 ${cob.chip}`}
+      aria-label={`Editar ${item.evento.titulo}`}
+    >
+      <span className="flex items-start gap-1">
+        <Icono className="mt-0.5 h-2.5 w-2.5 shrink-0" />
+        <span className="min-w-0 break-words font-medium">{item.evento.titulo}</span>
+      </span>
+      <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 opacity-90">
+        {item.evento.hora && <span>{item.evento.hora}</span>}
+        <span className={COLOR_PRIORIDAD[item.evento.prioridad]}>· {item.evento.prioridad}</span>
+        {item.evento.cambiado && (
+          <Badge variant="aviso" className="h-3.5 gap-0.5 px-1 text-[9px] font-normal">
+            <BellRing className="h-2.5 w-2.5" /> cambió
+          </Badge>
+        )}
+      </span>
+      {item.fueraDeTurno && item.turno?.miembro_nombre && (
+        <span className="mt-0.5 inline-flex items-center gap-1 rounded border border-amber-400/60 bg-amber-100/60 px-1 py-0.5 text-[10px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          <AlertTriangle className="h-2.5 w-2.5" />
+          Asignado a {item.turno.miembro_nombre} fuera de turno
+        </span>
+      )}
+      {item.evento.cambiado && (
+        <span
+          // Stop propagation: marcar avisado no debe abrir el modal de edición.
+          onClick={(e) => e.stopPropagation()}
+          className="mt-0.5"
+        >
+          <BotonMarcarAvisado evento={item.evento} onCambio={onCambio} />
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** Diálogo de edición rápida de evento: lo que más se cambia desde el calendario. */
+function DialogEditarEvento({
+  evento,
+  onCerrar,
+  onCambio,
+}: {
+  evento: EventoRota;
+  onCerrar: () => void;
+  onCambio: () => void;
+}) {
+  const [titulo, setTitulo] = React.useState(evento.titulo);
+  const [fecha, setFecha] = React.useState(evento.fecha);
+  const [hora, setHora] = React.useState(evento.hora);
+  const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>(
+    evento.tipo_cobertura,
+  );
+  const [prioridad, setPrioridad] = React.useState<PrioridadEvento>(evento.prioridad);
+  const [contenido, setContenido] = React.useState(evento.contenido);
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.actualizarEventoRota(evento.id, {
+        titulo: titulo.trim(),
+        fecha,
+        hora: hora.trim(),
+        tipo_cobertura: tipoCobertura,
+        prioridad,
+        contenido: contenido.trim(),
+      }),
+    onSuccess: () => {
+      toast.success("Evento guardado.");
+      onCambio();
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarEventoRota(evento.id),
+    onSuccess: () => {
+      toast.success("Evento eliminado.");
+      onCambio();
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Editar evento</DialogTitle>
+          <DialogDescription>
+            Los cambios de fecha/hora/cobertura marcan el evento como reprogramado para que
+            avisen al equipo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="ce-titulo">Evento / transmisión</Label>
+            <Input
+              id="ce-titulo"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              maxLength={200}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ce-fecha">Fecha</Label>
+              <Input
+                id="ce-fecha"
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ce-hora">Hora</Label>
+              <Input
+                id="ce-hora"
+                value={hora}
+                onChange={(e) => setHora(e.target.value)}
+                placeholder="16:00"
+                maxLength={40}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Cobertura</Label>
+              <Select
+                value={tipoCobertura}
+                onValueChange={(v) => setTipoCobertura(v as TipoCoberturaEvento)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIPOS_COBERTURA.map((t) => (
+                    <SelectItem key={t.valor} value={t.valor}>
+                      {t.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Prioridad</Label>
+              <Select value={prioridad} onValueChange={(v) => setPrioridad(v as PrioridadEvento)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PRIORIDADES.map((p) => (
+                    <SelectItem key={p.valor} value={p.valor}>
+                      {p.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ce-contenido">Qué sacar</Label>
+            <Textarea
+              id="ce-contenido"
+              value={contenido}
+              onChange={(e) => setContenido(e.target.value)}
+              rows={3}
+              maxLength={2000}
+            />
+          </div>
+        </div>
+        <DialogFooter className="flex-row justify-between gap-2 sm:justify-between">
+          <Button
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => {
+              if (window.confirm("¿Borrar este evento? Sus turnos también se perderán."))
+                borrar.mutate();
+            }}
+            disabled={borrar.isPending}
+          >
+            {borrar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Borrar
+          </Button>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onCerrar}>
+              Cancelar
+            </Button>
+            <Button onClick={() => guardar.mutate()} disabled={guardar.isPending}>
+              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
