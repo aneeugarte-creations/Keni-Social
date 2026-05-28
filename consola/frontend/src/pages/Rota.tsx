@@ -387,32 +387,6 @@ function BotonMarcarAvisado({ evento, onCambio }: { evento: EventoRota; onCambio
   );
 }
 
-/** Un chip de evento dentro de una celda del calendario, color por tipo de cobertura. */
-function ChipEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () => void }) {
-  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
-  const Icono = cob.icono;
-  return (
-    <div className={`space-y-1 rounded-md border px-2 py-1.5 text-xs ${cob.chip}`}>
-      <div className="flex items-start gap-1.5">
-        <Icono className="mt-0.5 h-3 w-3 shrink-0" />
-        <span className="min-w-0 break-words font-medium leading-tight">{evento.titulo}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90">
-        {evento.hora && <span>{evento.hora}</span>}
-        <span className={COLOR_PRIORIDAD[evento.prioridad]}>· {evento.prioridad}</span>
-      </div>
-      {evento.cambiado && (
-        <div className="flex flex-wrap items-center gap-1">
-          <Badge variant="aviso" className="gap-1 font-normal">
-            <BellRing className="h-3 w-3" /> Cambió
-          </Badge>
-          <BotonMarcarAvisado evento={evento} onCambio={onCambio} />
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Chip compacto de una ausencia dentro de la banda superior del día. */
 function ChipAusenciaDia({ ausencia }: { ausencia: AusenciaRota }) {
   const pres = PRESENTACION_AUSENCIA[ausencia.tipo] ?? PRESENTACION_AUSENCIA.otro;
@@ -3365,7 +3339,7 @@ function FiltrosEventos({
   );
 }
 
-function Eventos() {
+function Eventos({ onIrAProgramas }: { onIrAProgramas?: () => void }) {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const estado = React.useMemo(() => leerFiltrosDesdeUrl(searchParams), [searchParams]);
@@ -3433,7 +3407,7 @@ function Eventos() {
         </div>
       </div>
       {/* Piezas sueltas (#150): campanas evergreen sin evento, agrupadas por programa. */}
-      <PiezasSueltas />
+      <PiezasSueltas onIrAProgramas={onIrAProgramas} />
     </div>
   );
 }
@@ -4393,7 +4367,7 @@ function FormularioNuevaPieza({
   );
 }
 
-function PiezasSueltas() {
+function PiezasSueltas({ onIrAProgramas }: { onIrAProgramas?: () => void }) {
   const [abierto, setAbierto] = React.useState(false);
   const queryClient = useQueryClient();
   const clave = ["rota", "piezas", "sueltas"] as const;
@@ -4421,8 +4395,9 @@ function PiezasSueltas() {
   const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
   const limpiarSeleccion = () => setSeleccionados(new Set());
 
-  const todasPiezas = q.data?.piezas ?? [];
+  const piezasData = q.data?.piezas;
   const piezasFiltradas = React.useMemo(() => {
+    const todasPiezas = piezasData ?? [];
     const salidaQ = filtroSalida.trim().toLowerCase();
     const programaQ = filtroPrograma.trim().toLowerCase();
     return todasPiezas.filter((p) => {
@@ -4432,7 +4407,7 @@ function PiezasSueltas() {
       if (programaQ && !(p.programa || "").toLowerCase().includes(programaQ)) return false;
       return true;
     });
-  }, [todasPiezas, filtroAlwaysOn, filtroSalida, filtroPrograma]);
+  }, [piezasData, filtroAlwaysOn, filtroSalida, filtroPrograma]);
 
   // Agrupamos por programa (las piezas sueltas son campañas evergreen).
   const grupos = React.useMemo(() => {
@@ -4541,7 +4516,18 @@ function PiezasSueltas() {
                 ))}
               </datalist>
             </div>
-            <div className="ml-auto">
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              {onIrAProgramas && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={onIrAProgramas}
+                >
+                  Gestionar programas →
+                </Button>
+              )}
               <FormularioNuevaPieza
                 onCreada={invalidar}
                 programas={programas}
