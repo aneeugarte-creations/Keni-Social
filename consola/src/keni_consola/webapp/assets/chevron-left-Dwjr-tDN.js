@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/chevron-left-Dwjr-tDN.js
 import{E as e}from"./index-B4kAbBod.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/chevron-left-DVe_O1d-.js
+import{E as e}from"./index-DLSgsCmB.js";/**
+========
+import{E as e}from"./index-BwZMA8Cs.js";/**
+>>>>>>>> fix/153-scoping-permisos:consola/src/keni_consola/webapp/assets/chevron-left-Bv1wdY4m.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

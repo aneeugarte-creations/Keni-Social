@@ -29,7 +29,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth
+from .. import auth, permisos
 from .._http_json import leer_json
 from ..estados import ROL_ADMIN, ROLES_USUARIO
 from ..observabilidad import NOMBRE_LOGGER
@@ -40,15 +40,16 @@ _MSG_SOLO_ADMIN = "Solo un administrador puede gestionar usuarios."
 
 
 def _es_admin(request: Request) -> bool:
-    """True SOLO si la peticion la hace un usuario real con rol admin (#150).
+    """True SOLO si la peticion la hace un usuario real con rol admin (#150 + #153).
 
-    El token de mantenimiento NO es admin: una peticion autenticada unicamente por el
-    token (`request.state.auth_por_token`) NO pasa esta comprobacion. El unico camino con
-    poder admin es una sesion de un usuario real con rol admin. El arranque del PRIMER
-    admin por token se trata aparte (la excepcion acotada de `crear`), no aqui.
+    Delega en el helper unico de rol (`keni_consola.permisos.es_admin`), FUENTE UNICA
+    compartida con `/api/conexiones` y `/api/rota` (#153). Ese helper es ESTRICTO (#150):
+    el token de mantenimiento (`request.state.auth_por_token`, sin usuario de sesion) NO
+    cuenta como admin. El unico camino con poder admin es una sesion de un usuario real con
+    rol admin. El arranque del PRIMER admin por token se trata aparte (la excepcion acotada
+    de `crear`), no aqui.
     """
-    usuario = getattr(request.state, "usuario", None)
-    return bool(usuario) and usuario.get("rol") == ROL_ADMIN
+    return permisos.es_admin(request)
 
 
 def _es_token_mantenimiento(request: Request) -> bool:
@@ -63,7 +64,7 @@ def _usuario_actual_id(request: Request) -> str | None:
 
 
 def _rechazo_no_admin() -> Response:
-    return JSONResponse({"error": _MSG_SOLO_ADMIN}, status_code=403)
+    return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
 
 
 async def listar(request: Request) -> Response:

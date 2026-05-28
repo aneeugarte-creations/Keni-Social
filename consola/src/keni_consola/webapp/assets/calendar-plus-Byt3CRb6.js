@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/calendar-plus-Byt3CRb6.js
 import{E as a}from"./index-B4kAbBod.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/calendar-plus-BbIwmIjt.js
+import{E as a}from"./index-DLSgsCmB.js";/**
+========
+import{E as a}from"./index-BwZMA8Cs.js";/**
+>>>>>>>> fix/153-scoping-permisos:consola/src/keni_consola/webapp/assets/calendar-plus-Qt2ZiR5g.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

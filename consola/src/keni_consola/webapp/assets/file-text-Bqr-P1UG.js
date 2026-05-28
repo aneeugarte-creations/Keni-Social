@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/file-text-Bqr-P1UG.js
 import{E as e}from"./index-B4kAbBod.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/file-text-CDgqAtcR.js
+import{E as e}from"./index-DLSgsCmB.js";/**
+========
+import{E as e}from"./index-BwZMA8Cs.js";/**
+>>>>>>>> fix/153-scoping-permisos:consola/src/keni_consola/webapp/assets/file-text-Ufc2nOt6.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/Radar-Cd8lW5N6.js
 import{E as h,a6 as p,aj as w,_ as e,b as N,p as S,a as k,c as d,d as o,R as g,f as u,g as x,w as C}from"./index-B4kAbBod.js";import{B as E}from"./BloqueError-D_2bQWWc.js";import{P as _}from"./PageHeader-BsCszEyY.js";import{B as m}from"./badge-BPkwUs9J.js";import{S as q,h as R,i as F,c as A,e as L}from"./select-BwoYYV7k.js";import{S as j}from"./skeleton-BX_HemrF.js";import{C as v}from"./circle-x-0Z_gruTA.js";import{E as z}from"./external-link-CNW1ohtL.js";import{C as T}from"./circle-check-DEJolf8M.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/Radar-D0sBozAq.js
+import{E as h,a6 as p,aj as w,_ as e,b as N,p as S,a as k,c as d,d as o,R as g,f as u,g as x,w as C}from"./index-DLSgsCmB.js";import{B as E}from"./BloqueError-CO8NXR5o.js";import{P as _}from"./PageHeader-C591l8aK.js";import{B as m}from"./badge-BAEIA7Az.js";import{S as q,h as R,i as F,c as A,e as L}from"./select-QOHH7yV6.js";import{S as j}from"./skeleton-B7cO5Jt7.js";import{C as v}from"./circle-x-DvXxlzJU.js";import{E as z}from"./external-link-Bp9G6V2t.js";import{C as T}from"./circle-check-DqbbW6yn.js";/**
+========
+import{E as h,a6 as p,aj as w,_ as e,b as N,p as S,a as k,c as d,d as o,R as g,f as u,g as x,w as C}from"./index-BwZMA8Cs.js";import{B as E}from"./BloqueError-D278Nq8R.js";import{P as _}from"./PageHeader-CEYYF0uI.js";import{B as m}from"./badge-D1nufAim.js";import{S as q,h as R,i as F,c as A,e as L}from"./select-BIIupc3l.js";import{S as j}from"./skeleton-CPBax-pi.js";import{C as v}from"./circle-x-GD2NAQM3.js";import{E as z}from"./external-link-25w-uCLR.js";import{C as T}from"./circle-check-BYU8Uucb.js";/**
+>>>>>>>> fix/153-scoping-permisos:consola/src/keni_consola/webapp/assets/Radar-Ccb5GsM-.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.
