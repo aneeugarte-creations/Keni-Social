@@ -435,6 +435,14 @@ export const api = {
       signal,
       validador: "Run",
     }),
+  // Cancela un run de agente en vuelo (#152): el backend mata el árbol del subproceso
+  // `claude` y devuelve el run en su estado terminal (error/motivo=cancelado). Idempotente;
+  // un run aún pendiente se cancela sin spawnear. Espeja `cancelarGeneracion` (#137).
+  cancelarRunAgente: (id: string, runId: string) =>
+    peticion<RespuestaRun>(
+      `/agentes/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/cancelar`,
+      { metodo: "POST" },
+    ),
 
   // --- Monitor (actividad IA: runs de todos los agentes + agregados) ---
   // `runs` admite paginacion offset-based (#121); sin params devuelve el conjunto
