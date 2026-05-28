@@ -35,7 +35,6 @@ import type {
   CuerpoCrearSkill,
   CuerpoCrearTarea,
   CuerpoCrearEventoRota,
-  CuerpoProponerRota,
   CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
   CuerpoEjecutarSkillUrl,
@@ -736,8 +735,6 @@ export const api = {
     peticion<RespuestaMensaje>(`/rota/eventos/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   rotaSemana: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
     peticion<RotaSemana>(`/rota/semana${query(params)}`, { signal }),
-  proponerRota: (cuerpo: CuerpoProponerRota) =>
-    peticion<RotaSemana>("/rota/proponer", { metodo: "POST", json: cuerpo }),
   actualizarTurnoRota: (id: string, cuerpo: CuerpoActualizarTurnoRota) =>
     peticion<RespuestaTurnoRota>(`/rota/turnos/${encodeURIComponent(id)}`, {
       metodo: "PATCH",
@@ -766,8 +763,6 @@ export const api = {
   // --- Gestión de turnos: horario de trabajo del equipo ---
   rotaHorario: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
     peticion<HorarioSemana>(`/rota/horario${query(params)}`, { signal }),
-  proponerHorario: (cuerpo: { lunes: string }) =>
-    peticion<HorarioSemana>("/rota/horario/proponer", { metodo: "POST", json: cuerpo }),
   actualizarTurnoTrabajoRota: (id: string, cuerpo: CuerpoActualizarTurnoTrabajoRota) =>
     peticion<RespuestaTurnoTrabajoRota>(`/rota/horario/turnos/${encodeURIComponent(id)}`, {
       metodo: "PATCH",

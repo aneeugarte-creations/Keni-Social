@@ -14,7 +14,6 @@ import {
   Plane,
   Plus,
   Radio,
-  Sparkles,
   Trash2,
   User,
 } from "lucide-react";
@@ -65,7 +64,7 @@ import type {
 const CABECERA = {
   titulo: "Parrilla y rota",
   descripcion:
-    "Calendario de eventos (con su tipo de cobertura: transmisión, solo imágenes o no cubrir) y reprogramaciones marcadas, rota de cobertura y horarios/turnos del equipo. Keni propone y avisa de los cambios de horario; tú decides qué se cubre, ajustas y apruebas antes de publicar al equipo.",
+    "Calendario de eventos (con su tipo de cobertura: transmisión, solo imágenes o no cubrir) y reprogramaciones marcadas, rota de cobertura y horarios/turnos del equipo. Tú decides qué cubre cada quien; la consola te muestra huecos, repite sábados y carga por persona, y tú apruebas antes de publicar al equipo.",
 };
 
 // Etiquetas legibles de cada franja del turno de trabajo.
@@ -447,17 +446,6 @@ function Parrilla({
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveSemana });
 
-  const proponer = useMutation({
-    mutationFn: () => api.proponerRota({ lunes }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(claveSemana, res);
-      const avisos = res.avisos ?? [];
-      if (avisos.length > 0) avisos.forEach((a) => toast.warning(a));
-      else toast.success("Rota propuesta. Revísala y apruébala antes de publicarla.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const aprobar = useMutation({
     mutationFn: () => api.aprobarRota({ lunes }),
     onSuccess: (res) => {
@@ -482,18 +470,10 @@ function Parrilla({
               <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicada
             </Badge>
           ) : turnos.length > 0 ? (
-            <Badge variant="aviso" className="font-normal">
-              Propuesta (sin publicar)
+            <Badge variant="secondary" className="font-normal">
+              Borrador
             </Badge>
           ) : null}
-          <Button onClick={() => proponer.mutate()} disabled={proponer.isPending}>
-            {proponer.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            Proponer rota
-          </Button>
           {esAdmin && (
             <Button
               variant="secondary"
@@ -530,7 +510,7 @@ function Parrilla({
         <EstadoVacio
           icono={CalendarDays}
           titulo="Sin rota para esta semana"
-          texto='Da de alta los eventos de la semana en la pestaña "Eventos" y pulsa "Proponer rota".'
+          texto="Da de alta los eventos de la semana en la pestaña 'Eventos' y asigna cada uno a un miembro de tu equipo."
         />
       ) : (
         <TablaTurnos
@@ -742,7 +722,7 @@ function MiSemana({ lunes, setLunes }: { lunes: string; setLunes: (l: string) =>
           <>
             {!horario?.aprobada && (
               <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                Este horario aún es una propuesta sin publicar; puede cambiar antes de que
+                Este horario es un borrador sin publicar; puede cambiar antes de que
                 Elías lo apruebe.
               </p>
             )}
@@ -775,7 +755,7 @@ function MiSemana({ lunes, setLunes }: { lunes: string; setLunes: (l: string) =>
           <>
             {!datos?.aprobada && (
               <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                Esta rota aún es una propuesta sin publicar; puede cambiar antes de que Elías
+                Esta rota es un borrador sin publicar; puede cambiar antes de que Elías
                 la apruebe.
               </p>
             )}
@@ -904,17 +884,6 @@ function Horario({
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveHorario });
 
-  const proponer = useMutation({
-    mutationFn: () => api.proponerHorario({ lunes }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(claveHorario, res);
-      const avisos = res.avisos ?? [];
-      if (avisos.length > 0) avisos.forEach((a) => toast.warning(a));
-      else toast.success("Horario propuesto. Revísalo y apruébalo antes de publicarlo.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
   const aprobar = useMutation({
     mutationFn: () => api.aprobarHorario({ lunes }),
     onSuccess: (res) => {
@@ -939,18 +908,10 @@ function Horario({
               <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicado
             </Badge>
           ) : turnos.length > 0 ? (
-            <Badge variant="aviso" className="font-normal">
-              Propuesta (sin publicar)
+            <Badge variant="secondary" className="font-normal">
+              Borrador
             </Badge>
           ) : null}
-          <Button onClick={() => proponer.mutate()} disabled={proponer.isPending}>
-            {proponer.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
-            )}
-            Proponer horario
-          </Button>
           {esAdmin && (
             <Button
               variant="secondary"
@@ -984,7 +945,7 @@ function Horario({
         <EstadoVacio
           icono={CalendarDays}
           titulo="Sin horario para esta semana"
-          texto='Pulsa "Proponer horario": Keni reparte mañana/tarde/descanso respetando vacaciones y rotando los sábados.'
+          texto="No has armado el horario de esta semana. Asigna mañana/tarde/descanso a cada miembro, o copia de la semana anterior."
         />
       ) : (
         <RejillaHorario
