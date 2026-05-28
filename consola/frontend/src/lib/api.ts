@@ -143,6 +143,11 @@ import type {
   CuerpoCopiarSemana,
   RespuestaCopiarSemana,
   RespuestaCargaRota,
+  CuerpoCrearSwap,
+  CuerpoDecidirSwap,
+  FiltrosSwaps,
+  RespuestaSwap,
+  RespuestaSwaps,
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
@@ -893,6 +898,53 @@ export const api = {
     peticion<RespuestaCopiarSemana>("/rota/copiar-semana", { metodo: "POST", json: cuerpo }),
   cargaRota: (params: { lunes: string }, signal?: AbortSignal) =>
     peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
+
+  // --- Solicitudes de cambio de turno entre compañeros (#175) ---
+  // Flujo: A crea -> B acepta/rechaza -> admin aprueba (ejecuta el swap sobre
+  // rota_turnos_trabajo) o rechaza. A puede cancelar mientras no sea terminal.
+  // El cliente solo informa; las validaciones de permisos y transiciones las
+  // hace el backend (errores 400/403/404/409 con mensaje en español).
+  listarSwaps: (filtros: FiltrosSwaps = {}, signal?: AbortSignal) =>
+    peticion<RespuestaSwaps>(
+      `/rota/swaps${query({
+        estado: filtros.estado,
+        solicitante_id: filtros.solicitante_id,
+        destinatario_id: filtros.destinatario_id,
+        mio: filtros.mio ? "true" : undefined,
+      })}`,
+      { signal },
+    ),
+  crearSwap: (cuerpo: CuerpoCrearSwap, signal?: AbortSignal) =>
+    peticion<RespuestaSwap>("/rota/swaps", { metodo: "POST", json: cuerpo, signal }),
+  aceptarSwap: (id: string, cuerpo: CuerpoDecidirSwap = {}, signal?: AbortSignal) =>
+    peticion<RespuestaSwap>(`/rota/swaps/${encodeURIComponent(id)}/aceptar`, {
+      metodo: "POST",
+      json: cuerpo,
+      signal,
+    }),
+  rechazarSwap: (id: string, cuerpo: CuerpoDecidirSwap = {}, signal?: AbortSignal) =>
+    peticion<RespuestaSwap>(`/rota/swaps/${encodeURIComponent(id)}/rechazar`, {
+      metodo: "POST",
+      json: cuerpo,
+      signal,
+    }),
+  aprobarSwap: (id: string, cuerpo: CuerpoDecidirSwap = {}, signal?: AbortSignal) =>
+    peticion<RespuestaSwap>(`/rota/swaps/${encodeURIComponent(id)}/aprobar`, {
+      metodo: "POST",
+      json: cuerpo,
+      signal,
+    }),
+  rechazarSwapAdmin: (id: string, cuerpo: CuerpoDecidirSwap = {}, signal?: AbortSignal) =>
+    peticion<RespuestaSwap>(`/rota/swaps/${encodeURIComponent(id)}/rechazar-admin`, {
+      metodo: "POST",
+      json: cuerpo,
+      signal,
+    }),
+  cancelarSwap: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaSwap>(`/rota/swaps/${encodeURIComponent(id)}/cancelar`, {
+      metodo: "POST",
+      signal,
+    }),
 
   // --- Metricas ---
   metricasOpciones: (signal?: AbortSignal) =>
