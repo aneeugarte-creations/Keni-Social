@@ -63,7 +63,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -105,6 +105,7 @@ __all__ = [
     "actualizar_tarea",
     "actualizar_turno_rota",
     "actualizar_turno_trabajo_rota",
+    "actualizar_turnos_rota_lote",
     "aprobar_semana_horario_rota",
     "aprobar_semana_rota",
     "arrancar_persistencia",
@@ -116,6 +117,8 @@ __all__ = [
     "borrar_turnos_trabajo_semana_rota",
     "cancelar_job",
     "conectar",
+    "copiar_turnos_rota",
+    "copiar_turnos_trabajo_rota",
     "crear_ausencia_rota",
     "crear_evento_rota",
     "crear_publicacion_comercial",
@@ -1756,6 +1759,136 @@ def borrar_ausencia_rota(ausencia_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Asignacion flexible (rama rota-asignacion-flexible): helpers de lote + copiar #
+# --------------------------------------------------------------------------- #
+#
+# Soporte para las herramientas de la consola sobre asignacion a mano: edicion
+# masiva de turnos (multi-select), copia de la semana anterior, y panel de carga.
+# La asignacion es 100% manual; ningun algoritmo de reparto vive aqui.
+
+
+def actualizar_turnos_rota_lote(
+    ids: list[str], campos: dict[str, Any]
+) -> tuple[int, list[dict[str, Any]]]:
+    """UPDATE masivo sobre `rota_turnos` para los `ids` dados. Devuelve `(n, turnos)`.
+
+    `campos` solo aplica las claves editables (mismas que `actualizar_turno_rota`). `n`
+    es el rowcount del UPDATE; `turnos` son los registros tras el cambio (SELECT por ids,
+    para que la API devuelva el estado fresco sin tirar de los call sites uno a uno).
+
+    Si `ids` viene vacio o no hay campos editables, no toca BD y devuelve `(0, [])`.
+    """
+    if not ids:
+        return 0, []
+    editables = ("miembro_id", "miembro_nombre", "estado", "override", "motivo")
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if not cambios:
+        return 0, []
+    if "override" in cambios:
+        cambios["override"] = 1 if cambios["override"] else 0
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    marcadores = ", ".join("?" for _ in ids)
+    sql_update = (
+        f"UPDATE rota_turnos SET {', '.join(asignaciones)} "
+        f"WHERE id IN ({marcadores})"  # noqa: S608 -- columnas de allowlist
+    )
+    sql_select = f"{_SELECT_TURNO_ROTA} WHERE id IN ({marcadores})"  # noqa: S608
+    con = _conectar()
+    try:
+        cur = con.execute(sql_update, tuple(params) + tuple(ids))
+        con.commit()
+        filas = con.execute(sql_select, tuple(ids)).fetchall()
+    finally:
+        con.close()
+    return cur.rowcount, [_fila_a_turno_rota(f) for f in filas]
+
+
+def copiar_turnos_rota(
+    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
+) -> tuple[int, str]:
+    """Copia COBERTURAS de una semana a otra. DECISION: solo el horario tiene sentido copiar.
+
+    La cobertura está ligada a un `evento_id` concreto, y cada semana son eventos distintos
+    (los partidos cambian); copiar turnos de cobertura sin sus eventos no aporta valor real.
+    Para mantener el contrato simétrico con `copiar_turnos_trabajo_rota`, este helper existe
+    pero devuelve siempre `(0, mensaje)` y no toca BD. El `mensaje` lo propaga la API a la UI
+    como warning.
+
+    `reemplazar` y los parametros se aceptan para mantener la firma uniforme con horario.
+    """
+    del de_lunes, a_lunes, reemplazar  # firma uniforme; no se usan (ver docstring).
+    return 0, "Solo se copia el horario; los eventos cambian cada semana."
+
+
+def copiar_turnos_trabajo_rota(
+    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
+) -> int:
+    """Copia el horario laboral (`rota_turnos_trabajo`) de `de_lunes` a `a_lunes`.
+
+    Para cada turno de la semana origen, crea uno nuevo en la semana destino con `fecha`
+    desplazada +7 dias y el mismo `miembro_id`/`franja`/`motivo`/`nota_relevo`. Los IDs
+    son nuevos (uuid); el `estado` arranca como `propuesto` (Elias re-aprueba antes de
+    publicar). Si `reemplazar=True`, primero borra los turnos existentes de `a_lunes`.
+
+    Devuelve cuantas filas se crearon. Si `de_lunes` o `a_lunes` no son fechas validas,
+    devuelve 0 sin tocar BD.
+    """
+    try:
+        d_de = date.fromisoformat(de_lunes)
+        d_a = date.fromisoformat(a_lunes)
+    except (ValueError, TypeError):
+        return 0
+    delta = (d_a - d_de).days
+    con = _conectar()
+    try:
+        if reemplazar:
+            con.execute(
+                "DELETE FROM rota_turnos_trabajo WHERE semana = ?", (a_lunes,)
+            )
+        filas = con.execute(
+            f"{_SELECT_TURNO_TRABAJO_ROTA} WHERE semana = ? ORDER BY fecha ASC, franja ASC",
+            (de_lunes,),
+        ).fetchall()
+        creadas = 0
+        ahora = datetime.now().isoformat(timespec="seconds")
+        marcadores = ", ".join("?" for _ in _COLS_TURNO_TRABAJO_ROTA)
+        for f in filas:
+            fila = _fila_a_turno_trabajo_rota(f)
+            # Desplaza la fecha +delta dias; si no parsea, salta esa fila.
+            try:
+                nueva_fecha = (date.fromisoformat(fila["fecha"]) + timedelta(days=delta)).isoformat()
+            except (ValueError, TypeError):
+                continue
+            nuevo = {
+                "id": uuid.uuid4().hex[:12],
+                "semana": a_lunes,
+                "fecha": nueva_fecha,
+                "miembro_id": fila["miembro_id"],
+                "miembro_nombre": fila["miembro_nombre"],
+                "franja": fila["franja"],
+                "estado": ESTADO_ROTA_PROPUESTO,
+                "override": 1 if fila["override"] else 0,
+                "motivo": fila["motivo"],
+                "nota_relevo": fila["nota_relevo"],
+                "creado": ahora,
+                "actualizado": ahora,
+            }
+            con.execute(
+                f"INSERT INTO rota_turnos_trabajo ({', '.join(_COLS_TURNO_TRABAJO_ROTA)}) "
+                f"VALUES ({marcadores})",
+                tuple(nuevo[col] for col in _COLS_TURNO_TRABAJO_ROTA),
+            )
+            creadas += 1
+        con.commit()
+    finally:
+        con.close()
+    return creadas
 
 
 # --------------------------------------------------------------------------- #

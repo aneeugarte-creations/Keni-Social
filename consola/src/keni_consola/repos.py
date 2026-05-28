@@ -537,6 +537,27 @@ def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, An
     return db.actualizar_turno_rota(turno_id, campos)
 
 
+def actualizar_turnos_rota_lote(
+    ids: list[str], campos: dict[str, Any]
+) -> tuple[int, list[dict[str, Any]]]:
+    """UPDATE masivo sobre `rota_turnos` por lista de ids (delega en `db.py`)."""
+    return db.actualizar_turnos_rota_lote(ids, campos)
+
+
+def copiar_turnos_rota(
+    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
+) -> tuple[int, str]:
+    """Copia turnos de cobertura (decisión: hoy es no-op + mensaje; ver `db.py`)."""
+    return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
+
+
+def copiar_turnos_trabajo_rota(
+    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
+) -> int:
+    """Copia el horario laboral de una semana a otra (offset +7 días por fila)."""
+    return db.copiar_turnos_trabajo_rota(de_lunes, a_lunes, reemplazar=reemplazar)
+
+
 def borrar_turnos_semana_rota(semana: str) -> int:
     return db.borrar_turnos_semana_rota(semana)
 
