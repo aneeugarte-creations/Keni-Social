@@ -100,6 +100,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 # --------------------------------------------------------------------------- #
 # Nombres de variable (fuente UNICA: el resto del codigo referencia estas      #
@@ -158,6 +159,15 @@ ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 # `deploy/docker-compose.yml`/`.env.example` (NO se renombran). Sin fijar => perfil
 # local/privado (SQLite + disco). Fijados => `db.py`/`media.py` consumen Postgres/S3.
 ENV_DATABASE_URL = "DATABASE_URL"
+# Componentes de la conexion Postgres (mismos nombres que `deploy/.env.example` y la
+# imagen oficial de Postgres). Sirven para DERIVAR `DATABASE_URL` cuando esta no se fija
+# explicitamente, evitando que la URL "derive" de la password (incidente de prod: la
+# password en `DATABASE_URL` no coincidia con `POSTGRES_PASSWORD`).
+ENV_PG_USER = "POSTGRES_USER"
+ENV_PG_PASSWORD = "POSTGRES_PASSWORD"
+ENV_PG_DB = "POSTGRES_DB"
+ENV_PG_HOST = "POSTGRES_HOST"
+ENV_PG_PORT = "POSTGRES_PORT"
 ENV_S3_ENDPOINT = "S3_ENDPOINT"
 ENV_S3_REGION = "S3_REGION"
 ENV_S3_BUCKET = "S3_BUCKET"
@@ -541,12 +551,37 @@ def programador_intervalo_segundos() -> float | None:
 
 
 def database_url() -> str | None:
-    """URL de Postgres del back (`DATABASE_URL`); None si no esta (=> SQLite local).
+    """URL de Postgres del back; None si no hay Postgres (=> SQLite local).
 
     Es el CONMUTADOR de backend de `db.py`: si hay URL, la persistencia operacional
     (tareas/comercial/rota/usuarios/sesiones) va a Postgres; si no, sigue en SQLite.
+
+    PRECEDENCIA (anti-drift):
+      1. `DATABASE_URL` explicita -> se devuelve TAL CUAL (override; p. ej. un Postgres
+         externo o un DSN con parametros especiales). Comportamiento intacto.
+      2. Si no hay `DATABASE_URL` pero estan `POSTGRES_USER`+`POSTGRES_PASSWORD`+
+         `POSTGRES_DB`, se DERIVA la URL de esos componentes. Asi la URL NO puede
+         desincronizarse de la password (incidente de prod: la password embebida en
+         `DATABASE_URL` dejo de coincidir con `POSTGRES_PASSWORD`). `host` default `db`
+         (nombre del servicio en compose), `port` default `5432`. Usuario y password se
+         %-codifican (`quote(..., safe="")`) porque una password base64 puede llevar
+         `+`/`/`/`=`, que romperian el parseo de la URL.
+      3. Si no hay ni URL ni componentes -> None (perfil local/privado, SQLite).
     """
-    return _crudo(ENV_DATABASE_URL) or None
+    explicita = _crudo(ENV_DATABASE_URL)
+    if explicita:
+        return explicita
+    usuario = _crudo(ENV_PG_USER)
+    password = _crudo(ENV_PG_PASSWORD)
+    db = _crudo(ENV_PG_DB)
+    if usuario and password and db:
+        host = _crudo(ENV_PG_HOST) or "db"
+        port = _crudo(ENV_PG_PORT) or "5432"
+        return (
+            f"postgresql://{quote(usuario, safe='')}:{quote(password, safe='')}"
+            f"@{host}:{port}/{db}"
+        )
+    return None
 
 
 def s3_endpoint() -> str | None:

@@ -113,7 +113,13 @@ services:
       # Persistencia hosted (#130): el back consume Postgres si DATABASE_URL esta puesta y
       # S3/Garage si S3_* lo estan; vacias => SQLite + disco (perfil local). Cutover de datos
       # existentes: `python -m keni_consola.migracion` (ver deploy/README.md).
+      # DATABASE_URL es OPCIONAL: si se deja en blanco, el back la DERIVA de POSTGRES_* (con
+      # %-encoding) para que NO pueda desincronizarse de la password. Solo fijala para apuntar
+      # a un Postgres externo o un DSN con parametros especiales.
       DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}
       S3_BUCKET: ${S3_BUCKET}
@@ -163,7 +169,13 @@ services:
       CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN}
       # Cola compartida (Postgres) + media (S3/Garage): el worker LEE la cola de Postgres y
       # ESCRIBE el post-procesado (historial/borradores/media) en la misma persistencia.
+      # DATABASE_URL es OPCIONAL: si se deja en blanco, el worker la DERIVA de POSTGRES_* (con
+      # %-encoding) para que NO pueda desincronizarse de la password. Solo fijala para apuntar
+      # a un Postgres externo o un DSN con parametros especiales.
       DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
       S3_ENDPOINT: ${S3_ENDPOINT}
       S3_REGION: ${S3_REGION}
       S3_BUCKET: ${S3_BUCKET}

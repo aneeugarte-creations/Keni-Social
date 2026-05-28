@@ -42,6 +42,11 @@ _TODAS = (
     config.ENV_COMERCIAL_INTERVALO_HORAS,
     config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
     config.ENV_DATABASE_URL,
+    config.ENV_PG_USER,
+    config.ENV_PG_PASSWORD,
+    config.ENV_PG_DB,
+    config.ENV_PG_HOST,
+    config.ENV_PG_PORT,
     config.ENV_S3_ENDPOINT,
     config.ENV_S3_REGION,
     config.ENV_S3_BUCKET,
@@ -83,6 +88,11 @@ def test_nombres_son_la_fuente_unica():
     assert config.ENV_GENERACIONES == "KENI_CONSOLA_GENERACIONES"
     # Persistencia hosted (#130): NOMBRES EXACTOS de deploy/.env.example (no se renombran).
     assert config.ENV_DATABASE_URL == "DATABASE_URL"
+    assert config.ENV_PG_USER == "POSTGRES_USER"
+    assert config.ENV_PG_PASSWORD == "POSTGRES_PASSWORD"
+    assert config.ENV_PG_DB == "POSTGRES_DB"
+    assert config.ENV_PG_HOST == "POSTGRES_HOST"
+    assert config.ENV_PG_PORT == "POSTGRES_PORT"
     assert config.ENV_S3_ENDPOINT == "S3_ENDPOINT"
     assert config.ENV_S3_REGION == "S3_REGION"
     assert config.ENV_S3_BUCKET == "S3_BUCKET"
@@ -106,6 +116,50 @@ def test_database_url_presente(limpio, monkeypatch):
 
 def test_database_url_vacia_es_none(limpio, monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "   ")
+    assert config.database_url() is None
+
+
+def test_database_url_explicita_gana_a_postgres(limpio, monkeypatch):
+    """Una DATABASE_URL explicita es OVERRIDE: se devuelve tal cual aunque haya POSTGRES_*."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://u:p@externo:5432/keni")
+    monkeypatch.setenv("POSTGRES_USER", "keni")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "secreta")
+    monkeypatch.setenv("POSTGRES_DB", "keni_social")
+    assert config.database_url() == "postgresql://u:p@externo:5432/keni"
+
+
+def test_database_url_derivada_de_postgres_con_password_especial(limpio, monkeypatch):
+    """Sin DATABASE_URL, se DERIVA de POSTGRES_*; la password se %-codifica (anti-drift).
+
+    Una password base64 puede llevar `+`/`/`/`=`, que romperian el parseo de la URL: se
+    %-codifican (`a+b/c=d` -> `a%2Bb%2Fc%3Dd`). Host default `db`, port default `5432`.
+    """
+    monkeypatch.setenv("POSTGRES_USER", "keni")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "a+b/c=d")
+    monkeypatch.setenv("POSTGRES_DB", "keni_social")
+    assert (
+        config.database_url()
+        == "postgresql://keni:a%2Bb%2Fc%3Dd@db:5432/keni_social"
+    )
+
+
+def test_database_url_derivada_respeta_host_y_port(limpio, monkeypatch):
+    """POSTGRES_HOST/PORT, si estan, sustituyen los defaults `db`/`5432`."""
+    monkeypatch.setenv("POSTGRES_USER", "keni")
+    monkeypatch.setenv("POSTGRES_PASSWORD", "secreta")
+    monkeypatch.setenv("POSTGRES_DB", "keni_social")
+    monkeypatch.setenv("POSTGRES_HOST", "pg.interno")
+    monkeypatch.setenv("POSTGRES_PORT", "6543")
+    assert (
+        config.database_url()
+        == "postgresql://keni:secreta@pg.interno:6543/keni_social"
+    )
+
+
+def test_database_url_postgres_incompleto_es_none(limpio, monkeypatch):
+    """Faltando cualquier componente requerido (user/pass/db) NO se deriva: None (SQLite)."""
+    monkeypatch.setenv("POSTGRES_USER", "keni")
+    monkeypatch.setenv("POSTGRES_DB", "keni_social")  # falta POSTGRES_PASSWORD
     assert config.database_url() is None
 
 
