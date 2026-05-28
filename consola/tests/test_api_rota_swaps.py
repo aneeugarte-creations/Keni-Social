@@ -44,20 +44,35 @@ def _cli_de(app, usuario: str) -> TestClient:
 
 
 def _crear_horario(app, equipo: list[dict]) -> None:
-    """Propone un horario base para LUNES (asi existen turnos reales que intercambiar)."""
-    token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    r = token_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES})
-    assert r.status_code == 200, r.text
-    # Sanity: hay turnos para todos los miembros que pediste.
-    turnos = r.json()["turnos"]
-    assert turnos
+    """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
+
+    Antes la consola PROPONIA reparto automatico; ahora Elias asigna a mano, asi que los
+    tests siembran directo via `repos.crear_turno_trabajo_rota`. Sembramos UN turno
+    matutino el DIA_A para el primero y UN vespertino el DIA_B para el segundo: ambos
+    suficientes para los swaps que usan los tests de esta suite.
+    """
+    del app  # ya no se usa: sembramos directo en BD.
+    primero, segundo = equipo[0], equipo[1]
+    repos.crear_turno_trabajo_rota(
+        LUNES,
+        DIA_A,
+        miembro_id=primero["id"],
+        miembro_nombre=primero["usuario"],
+        franja="matutino",
+    )
+    repos.crear_turno_trabajo_rota(
+        LUNES,
+        DIA_B,
+        miembro_id=segundo["id"],
+        miembro_nombre=segundo["usuario"],
+        franja="vespertino",
+    )
 
 
 def _turno_de(app, miembro_id: str, fecha: str, franjas: tuple[str, ...]) -> dict:
-    """Busca un turno de trabajo (no descanso) del miembro en esa fecha, o falla."""
-    token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    turnos = token_cli.get(f"/api/rota/horario?lunes={LUNES}").json()["turnos"]
-    for t in turnos:
+    """Busca un turno de trabajo del miembro en esa fecha (cualquiera de `franjas`) en BD."""
+    del app  # ya no se usa: leemos directo de BD.
+    for t in repos.listar_turnos_trabajo_rota(semana=LUNES):
         if t["miembro_id"] == miembro_id and t["fecha"] == fecha and t["franja"] in franjas:
             return t
     raise AssertionError(
