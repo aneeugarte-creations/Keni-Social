@@ -105,6 +105,13 @@ TIPOS_COBERTURA_ASIGNABLES: tuple[str, ...] = (
     TIPO_COBERTURA_IMAGENES,
 )
 
+# Estados validos de una PIEZA (un post individual asociado a un evento o programa
+# evergreen; #150 PARRILLA 2026). Una transmision como "LIV GOLF Andalucia R1" genera
+# varias piezas (pre-evento FB/IG/X, reel IG/TK, historia dia, post-evento); el flujo de
+# produccion va `pendiente` -> `en_curso` -> `listo` -> `publicado`. Operacional;
+# vive en Postgres (`rota_piezas.estado`).
+ESTADOS_PIEZA: tuple[str, ...] = ("pendiente", "en_curso", "listo", "publicado")
+
 # Prioridad de un evento del calendario (F4 · #144, ola B): pista visual para que el
 # equipo decida que cubre primero. DEFAULT `media`. Operacional (`rota_eventos.prioridad`).
 PRIORIDADES_EVENTO: tuple[str, ...] = ("alta", "media", "baja")

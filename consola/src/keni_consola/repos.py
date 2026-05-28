@@ -36,6 +36,7 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
     ESTADOS_COMERCIAL,
+    ESTADOS_PIEZA,
     ESTADOS_PUBLICACION,
     ESTADOS_ROTA,
     ESTADOS_TAREA,
@@ -628,6 +629,89 @@ def actualizar_ausencia_rota(
 
 def borrar_ausencia_rota(ausencia_id: str) -> bool:
     return db.borrar_ausencia_rota(ausencia_id)
+
+
+# --------------------------------------------------------------------------- #
+# Piezas de la parrilla (OPERACIONAL: Postgres via db.py; #150 PARRILLA 2026)   #
+# --------------------------------------------------------------------------- #
+#
+# Una pieza = un POST individual (no un evento). Un evento puede generar varias piezas;
+# tambien hay piezas SUELTAS (campanas evergreen sin evento). La fachada delega 1:1 en
+# db.py.
+
+
+def crear_pieza_rota(
+    *,
+    evento_id: str = "",
+    programa: str = "",
+    red_social: str = "",
+    tipo_pieza: str = "",
+    contenido_sugerido: str = "",
+    dia: str = "",
+    hora_post: str = "",
+    estado: str = "pendiente",
+    material_entregado: bool = False,
+    contenido_entregado: bool = False,
+    publicado: bool = False,
+    enlace: str = "",
+    responsable_id: str = "",
+    responsable_nombre: str = "",
+    notas: str = "",
+) -> dict[str, Any]:
+    return db.crear_pieza_rota(
+        evento_id=evento_id,
+        programa=programa,
+        red_social=red_social,
+        tipo_pieza=tipo_pieza,
+        contenido_sugerido=contenido_sugerido,
+        dia=dia,
+        hora_post=hora_post,
+        estado=estado,
+        material_entregado=material_entregado,
+        contenido_entregado=contenido_entregado,
+        publicado=publicado,
+        enlace=enlace,
+        responsable_id=responsable_id,
+        responsable_nombre=responsable_nombre,
+        notas=notas,
+    )
+
+
+def listar_piezas_rota(
+    *,
+    evento_id: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+    red: str | None = None,
+    tipo: str | None = None,
+    estado: str | None = None,
+    responsable_id: str | None = None,
+    programa: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_piezas_rota(
+        evento_id=evento_id,
+        desde=desde,
+        hasta=hasta,
+        red=red,
+        tipo=tipo,
+        estado=estado,
+        responsable_id=responsable_id,
+        programa=programa,
+    )
+
+
+def obtener_pieza_rota(pieza_id: str) -> dict[str, Any] | None:
+    return db.obtener_pieza_rota(pieza_id)
+
+
+def actualizar_pieza_rota(
+    pieza_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_pieza_rota(pieza_id, campos)
+
+
+def borrar_pieza_rota(pieza_id: str) -> bool:
+    return db.borrar_pieza_rota(pieza_id)
 
 
 # --------------------------------------------------------------------------- #

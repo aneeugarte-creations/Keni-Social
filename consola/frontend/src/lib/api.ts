@@ -22,6 +22,7 @@ import type {
   CuerpoActualizarTarea,
   CuerpoActualizarTurnoRota,
   CuerpoActualizarEventoRota,
+  CuerpoActualizarPiezaRota,
   CuerpoAprobarRota,
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
@@ -35,6 +36,7 @@ import type {
   CuerpoCrearSkill,
   CuerpoCrearTarea,
   CuerpoCrearEventoRota,
+  CuerpoCrearPiezaRota,
   CuerpoProponerRota,
   CuerpoDuplicarPublicacion,
   CuerpoEjecutarSkill,
@@ -132,6 +134,9 @@ import type {
   RespuestaTurnoTrabajoRota,
   HorarioSemana,
   MiHorarioRota,
+  FiltrosPiezasRota,
+  RespuestaPiezaRota,
+  RespuestaPiezasRota,
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
@@ -777,6 +782,38 @@ export const api = {
     peticion<HorarioSemana>("/rota/horario/aprobar", { metodo: "POST", json: cuerpo }),
   miHorarioRota: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
     peticion<MiHorarioRota>(`/rota/mi-horario${query(params)}`, { signal }),
+
+  // --- Piezas de la parrilla (#150 PARRILLA 2026.xlsx) ---
+  // Una pieza = un POST individual. Puede ir atada a un evento (`evento_id`) o ser
+  // suelta (campaña evergreen). Filtros combinables: `evento_id=""` lista las sueltas.
+  listarPiezasRota: (filtros: FiltrosPiezasRota = {}, signal?: AbortSignal) => {
+    // Pasamos evento_id="" tal cual (para listar piezas sueltas) sin que `query`
+    // lo descarte: `query` omite "" y undefined, así que añadimos el parametro a mano.
+    const otros: Record<string, string | undefined> = {
+      desde: filtros.desde,
+      hasta: filtros.hasta,
+      red: filtros.red,
+      tipo: filtros.tipo,
+      estado: filtros.estado,
+      responsable_id: filtros.responsable_id,
+      programa: filtros.programa,
+    };
+    let qs = query(otros);
+    if (filtros.evento_id !== undefined) {
+      const sep = qs ? "&" : "?";
+      qs = `${qs}${sep}evento_id=${encodeURIComponent(filtros.evento_id)}`;
+    }
+    return peticion<RespuestaPiezasRota>(`/rota/piezas${qs}`, { signal });
+  },
+  crearPiezaRota: (cuerpo: CuerpoCrearPiezaRota) =>
+    peticion<RespuestaPiezaRota>("/rota/piezas", { metodo: "POST", json: cuerpo }),
+  actualizarPiezaRota: (id: string, cuerpo: CuerpoActualizarPiezaRota) =>
+    peticion<RespuestaPiezaRota>(`/rota/piezas/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarPiezaRota: (id: string) =>
+    peticion<RespuestaMensaje>(`/rota/piezas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Metricas ---
   metricasOpciones: (signal?: AbortSignal) =>
