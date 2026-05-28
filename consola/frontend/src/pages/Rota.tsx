@@ -12,7 +12,6 @@ import {
   ChevronRight,
   ChevronUp,
   Coffee,
-  ChevronUp,
   Copy,
   Download,
   HeartPulse,
@@ -24,7 +23,6 @@ import {
   Search,
   Trash2,
   User,
-  X,
   Users,
   Wand2,
   X,
@@ -68,7 +66,6 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import type {
