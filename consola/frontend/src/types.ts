@@ -979,18 +979,14 @@ export interface RotaSemana {
   /** `true` => todos los turnos aprobados (publicada al equipo). */
   aprobada: boolean;
   total: number;
-  /** Avisos de la propuesta (p. ej. no se pudo rotar). Solo tras proponer. */
-  avisos?: string[];
   /** Mensaje de confirmación (p. ej. tras aprobar). */
   mensaje?: string;
 }
 
-export interface CuerpoProponerRota {
-  /** Lunes (o cualquier día) de la semana a proponer. */
+export interface CuerpoAprobarRota {
+  /** Lunes (o cualquier día) de la semana a aprobar. */
   lunes: string;
 }
-
-export type CuerpoAprobarRota = CuerpoProponerRota;
 
 /** Edición de un turno por Elías (todo opcional; se manda lo que cambia). */
 export interface CuerpoActualizarTurnoRota {
@@ -1088,8 +1084,6 @@ export interface HorarioSemana {
   /** `true` => todos los turnos aprobados (publicado al equipo). */
   aprobada: boolean;
   total: number;
-  /** Avisos de la propuesta (p. ej. equipo insuficiente). Solo tras proponer. */
-  avisos?: string[];
   /** Mensaje de confirmación (p. ej. tras aprobar). */
   mensaje?: string;
 }
