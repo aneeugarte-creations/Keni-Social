@@ -3582,6 +3582,12 @@ function PanelPiezasEvento({ evento }: { evento: EventoRota }) {
   });
   const piezas = q.data?.piezas ?? [];
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
+  // Catálogo de programas (texto libre con autocomplete): consulta liviana, cacheable.
+  const programasQ = useQuery({
+    queryKey: ["rota", "programas"] as const,
+    queryFn: ({ signal }) => api.listarProgramasRota({}, signal),
+  });
+  const programas = programasQ.data?.programas ?? [];
 
   return (
     <div className="space-y-3 p-3">
@@ -3592,11 +3598,17 @@ function PanelPiezasEvento({ evento }: { evento: EventoRota }) {
         </div>
         <FormularioNuevaPieza
           eventoIdInicial={evento.id}
+          programas={programas}
           onCreada={invalidar}
           textoBoton="Nueva pieza"
         />
       </div>
-      <TablaPiezas piezas={piezas} cargando={q.isPending} onCambio={invalidar} />
+      <TablaPiezas
+        piezas={piezas}
+        cargando={q.isPending}
+        onCambio={invalidar}
+        programas={programas}
+      />
     </div>
   );
 }
@@ -3606,12 +3618,25 @@ function TablaPiezas({
   cargando,
   onCambio,
   mostrarPrograma = false,
+  seleccionados,
+  onToggleSeleccionado,
+  onToggleTodos,
+  programas,
 }: {
   piezas: PiezaRota[];
   cargando: boolean;
   onCambio: () => void;
   mostrarPrograma?: boolean;
+  /** Si se pasa, la tabla muestra una columna de checkboxes para selección múltiple. */
+  seleccionados?: Set<string>;
+  onToggleSeleccionado?: (id: string) => void;
+  onToggleTodos?: (todos: boolean) => void;
+  /** Catálogo de programas para el autocomplete (opcional, solo en pestañas con CRUD). */
+  programas?: { nombre: string }[];
 }) {
+  const muestraCheck = !!onToggleSeleccionado;
+  const todosMarcados =
+    muestraCheck && piezas.length > 0 && piezas.every((p) => seleccionados?.has(p.id));
   if (cargando) {
     return <Skeleton className="h-24 w-full rounded-md" />;
   }
@@ -3627,7 +3652,17 @@ function TablaPiezas({
       <Table>
         <TableHeader>
           <TableRow>
+            {muestraCheck && (
+              <TableHead className="w-10">
+                <Checkbox
+                  aria-label="Seleccionar todas"
+                  checked={todosMarcados}
+                  onCheckedChange={(v) => onToggleTodos?.(v === true)}
+                />
+              </TableHead>
+            )}
             {mostrarPrograma && <TableHead className="min-w-[10rem]">Programa</TableHead>}
+            <TableHead className="min-w-[8rem]">Salida</TableHead>
             <TableHead className="min-w-[10rem]">Red</TableHead>
             <TableHead className="min-w-[8rem]">Tipo</TableHead>
             <TableHead className="min-w-[8rem]">Día</TableHead>
@@ -3637,7 +3672,7 @@ function TablaPiezas({
             <TableHead className="min-w-[6rem] text-center">Contenido</TableHead>
             <TableHead className="min-w-[6rem] text-center">Publicado</TableHead>
             <TableHead className="min-w-[16rem]">Contenido sugerido / Enlace</TableHead>
-            <TableHead className="w-10"></TableHead>
+            <TableHead className="w-20" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -3647,6 +3682,9 @@ function TablaPiezas({
               pieza={p}
               mostrarPrograma={mostrarPrograma}
               onCambio={onCambio}
+              seleccionado={seleccionados?.has(p.id) ?? false}
+              onToggleSeleccionado={onToggleSeleccionado}
+              programas={programas}
             />
           ))}
         </TableBody>
@@ -3659,10 +3697,16 @@ function FilaPieza({
   pieza,
   mostrarPrograma,
   onCambio,
+  seleccionado,
+  onToggleSeleccionado,
+  programas,
 }: {
   pieza: PiezaRota;
   mostrarPrograma: boolean;
   onCambio: () => void;
+  seleccionado: boolean;
+  onToggleSeleccionado?: (id: string) => void;
+  programas?: { nombre: string }[];
 }) {
   const editar = useMutation({
     mutationFn: (cuerpo: CuerpoActualizarPiezaRota) => api.actualizarPiezaRota(pieza.id, cuerpo),
@@ -3677,25 +3721,55 @@ function FilaPieza({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const duplicar = useMutation({
+    mutationFn: () => api.duplicarPiezaRota(pieza.id),
+    onSuccess: () => {
+      toast.success("Pieza duplicada (workflow reseteado).");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   const guardarTexto = (campo: keyof CuerpoActualizarPiezaRota, valor: string) => {
     if (valor === (pieza[campo as keyof PiezaRota] as string)) return;
     editar.mutate({ [campo]: valor } as CuerpoActualizarPiezaRota);
   };
 
+  // Si la pieza es "always_on", `dia` y `hora_post` pierden sentido (sin fecha fija):
+  // los deshabilitamos y avisamos con `title` para que la pista sea obvia.
+  const tituloAlwaysOn = pieza.always_on
+    ? "Pieza perenne (always-on): no se programa con fecha/hora fija."
+    : "";
+
   return (
-    <TableRow>
-      {mostrarPrograma && (
-        <TableCell>
-          <Input
-            defaultValue={pieza.programa}
-            placeholder="Campaña / programa"
-            onBlur={(e) => guardarTexto("programa", e.target.value.trim())}
-            className="h-8 text-xs"
-            maxLength={120}
+    <TableRow className={pieza.always_on ? "bg-emerald-50/30 dark:bg-emerald-950/10" : undefined}>
+      {onToggleSeleccionado && (
+        <TableCell className="align-top">
+          <Checkbox
+            aria-label={`Seleccionar pieza ${pieza.id}`}
+            checked={seleccionado}
+            onCheckedChange={() => onToggleSeleccionado(pieza.id)}
           />
         </TableCell>
       )}
+      {mostrarPrograma && (
+        <TableCell>
+          <InputProgramaPieza
+            valor={pieza.programa}
+            programas={programas ?? []}
+            onGuardar={(v) => guardarTexto("programa", v)}
+          />
+        </TableCell>
+      )}
+      <TableCell>
+        <Input
+          defaultValue={pieza.salida}
+          placeholder="REDES / WEB / TV"
+          onBlur={(e) => guardarTexto("salida", e.target.value.trim())}
+          className="h-8 text-xs"
+          maxLength={60}
+        />
+      </TableCell>
       <TableCell>
         <Input
           defaultValue={pieza.red_social}
@@ -3720,7 +3794,12 @@ function FilaPieza({
           defaultValue={fechaInputAValor(pieza.dia)}
           onBlur={(e) => guardarTexto("dia", e.target.value)}
           className="h-8 text-xs"
+          disabled={pieza.always_on}
+          title={tituloAlwaysOn}
         />
+        {pieza.always_on && (
+          <span className="text-[10px] text-emerald-700 dark:text-emerald-400">always-on</span>
+        )}
       </TableCell>
       <TableCell>
         <Input
@@ -3729,6 +3808,8 @@ function FilaPieza({
           onBlur={(e) => guardarTexto("hora_post", e.target.value.trim())}
           className="h-8 text-xs"
           maxLength={40}
+          disabled={pieza.always_on}
+          title={tituloAlwaysOn}
         />
       </TableCell>
       <TableCell>
@@ -3786,39 +3867,104 @@ function FilaPieza({
             className="h-8 text-xs"
             maxLength={2000}
           />
+          {pieza.comentarios && (
+            <div className="rounded bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <span className="font-semibold">Comentarios: </span>
+              {pieza.comentarios}
+            </div>
+          )}
         </div>
       </TableCell>
       <TableCell>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Borrar pieza"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={() => {
-            if (window.confirm("¿Borrar esta pieza?")) borrar.mutate();
-          }}
-          disabled={borrar.isPending}
-        >
-          {borrar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Tooltip label="Duplicar (workflow reseteado)">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Duplicar pieza"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              onClick={() => duplicar.mutate()}
+              disabled={duplicar.isPending}
+            >
+              {duplicar.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </Tooltip>
+          <Tooltip label="Borrar pieza">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Borrar pieza"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={() => {
+                if (window.confirm("¿Borrar esta pieza?")) borrar.mutate();
+              }}
+              disabled={borrar.isPending}
+            >
+              {borrar.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </Tooltip>
+        </div>
       </TableCell>
     </TableRow>
+  );
+}
+
+/**
+ * Input de `programa` con datalist de autocomplete contra el catálogo. Permite
+ * escribir un nombre nuevo (texto libre): si no existe en el catálogo, la pieza
+ * conserva ese texto, pero al pasar el blur damos un atajo "crear programa" si
+ * el nombre no está. Para mantener el componente compacto, el botón "crear" lo
+ * surfa el panel padre (`Programas`). Aquí solo persistimos el texto.
+ */
+function InputProgramaPieza({
+  valor,
+  programas,
+  onGuardar,
+}: {
+  valor: string;
+  programas: { nombre: string }[];
+  onGuardar: (v: string) => void;
+}) {
+  const listId = React.useId();
+  return (
+    <>
+      <Input
+        defaultValue={valor}
+        placeholder="Campaña / programa"
+        onBlur={(e) => onGuardar(e.target.value.trim())}
+        className="h-8 text-xs"
+        maxLength={200}
+        list={listId}
+      />
+      <datalist id={listId}>
+        {programas.map((p) => (
+          <option key={p.nombre} value={p.nombre} />
+        ))}
+      </datalist>
+    </>
   );
 }
 
 function FormularioNuevaPieza({
   eventoIdInicial = "",
   programaInicial = "",
+  programas = [],
   onCreada,
   textoBoton,
   conPrograma = false,
 }: {
   eventoIdInicial?: string;
   programaInicial?: string;
+  /** Catálogo para el autocomplete del campo `programa`. */
+  programas?: { nombre: string }[];
   onCreada: () => void;
   textoBoton: string;
   conPrograma?: boolean;
@@ -3827,9 +3973,14 @@ function FormularioNuevaPieza({
   const [programa, setPrograma] = React.useState(programaInicial);
   const [redSocial, setRedSocial] = React.useState("");
   const [tipoPieza, setTipoPieza] = React.useState("");
+  const [salida, setSalida] = React.useState("");
   const [dia, setDia] = React.useState("");
   const [horaPost, setHoraPost] = React.useState("");
   const [contenidoSugerido, setContenidoSugerido] = React.useState("");
+  const [comentarios, setComentarios] = React.useState("");
+  const [fechaEntregaMaterial, setFechaEntregaMaterial] = React.useState("");
+  const [alwaysOn, setAlwaysOn] = React.useState(false);
+  const programaListId = React.useId();
 
   const crear = useMutation({
     mutationFn: () => {
@@ -3838,9 +3989,13 @@ function FormularioNuevaPieza({
         programa: programa.trim() || undefined,
         red_social: redSocial.trim() || undefined,
         tipo_pieza: tipoPieza.trim() || undefined,
-        dia: dia || undefined,
-        hora_post: horaPost.trim() || undefined,
+        salida: salida.trim() || undefined,
+        dia: alwaysOn ? "" : dia || undefined,
+        hora_post: alwaysOn ? "" : horaPost.trim() || undefined,
         contenido_sugerido: contenidoSugerido.trim() || undefined,
+        comentarios: comentarios.trim() || undefined,
+        fecha_entrega_material: fechaEntregaMaterial || undefined,
+        always_on: alwaysOn || undefined,
       };
       return api.crearPiezaRota(cuerpo);
     },
@@ -3850,9 +4005,13 @@ function FormularioNuevaPieza({
       setPrograma(programaInicial);
       setRedSocial("");
       setTipoPieza("");
+      setSalida("");
       setDia("");
       setHoraPost("");
       setContenidoSugerido("");
+      setComentarios("");
+      setFechaEntregaMaterial("");
+      setAlwaysOn(false);
       setAbierto(false);
       onCreada();
     },
@@ -3884,11 +4043,27 @@ function FormularioNuevaPieza({
               value={programa}
               onChange={(e) => setPrograma(e.target.value)}
               placeholder="Álvaro Fidalgo, MUNDIAL…"
-              maxLength={120}
+              maxLength={200}
               className="h-8 text-xs"
+              list={programaListId}
             />
+            <datalist id={programaListId}>
+              {programas.map((p) => (
+                <option key={p.nombre} value={p.nombre} />
+              ))}
+            </datalist>
           </div>
         )}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Salida (canal amplio)</Label>
+          <Input
+            value={salida}
+            onChange={(e) => setSalida(e.target.value)}
+            placeholder="REDES / WEB / TV / OTROS"
+            maxLength={60}
+            className="h-8 text-xs"
+          />
+        </div>
         <div className="space-y-1.5">
           <Label className="text-xs">Red social</Label>
           <Input
@@ -3916,6 +4091,8 @@ function FormularioNuevaPieza({
             value={dia}
             onChange={(e) => setDia(e.target.value)}
             className="h-8 text-xs"
+            disabled={alwaysOn}
+            title={alwaysOn ? "Las piezas perennes no tienen fecha fija." : ""}
           />
         </div>
         <div className="space-y-1.5">
@@ -3926,7 +4103,32 @@ function FormularioNuevaPieza({
             placeholder="17:30 o LINK VIVO"
             maxLength={40}
             className="h-8 text-xs"
+            disabled={alwaysOn}
+            title={alwaysOn ? "Las piezas perennes no tienen hora fija." : ""}
           />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Entrega del material</Label>
+          <Input
+            type="date"
+            value={fechaEntregaMaterial}
+            onChange={(e) => setFechaEntregaMaterial(e.target.value)}
+            className="h-8 text-xs"
+            title="Deadline interno para entregar el material a producción"
+          />
+        </div>
+        <div className="flex items-center gap-2 self-end pb-1">
+          <Checkbox
+            id={`pieza-alwayson-${programaListId}`}
+            checked={alwaysOn}
+            onCheckedChange={(v) => setAlwaysOn(v === true)}
+          />
+          <Label
+            htmlFor={`pieza-alwayson-${programaListId}`}
+            className="cursor-pointer text-xs font-normal"
+          >
+            Always-on (perenne, sin fecha fija)
+          </Label>
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label className="text-xs">Contenido sugerido</Label>
@@ -3936,6 +4138,17 @@ function FormularioNuevaPieza({
             placeholder="Pre-evento, reel del gol, 5:15 LINK VIVO…"
             rows={2}
             maxLength={500}
+            className="text-xs"
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-xs">Comentarios de coordinación</Label>
+          <Textarea
+            value={comentarios}
+            onChange={(e) => setComentarios(e.target.value)}
+            placeholder="Notas internas: avisar a producción, formato, dependencias…"
+            rows={2}
+            maxLength={1000}
             className="text-xs"
           />
         </div>
@@ -3971,20 +4184,80 @@ function PiezasSueltas() {
     enabled: abierto,
   });
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
-  // Agrupamos por programa (las piezas sueltas son campanas evergreen). `q.data` es la
-  // dependencia estable; calcular `piezas` y agrupar dentro del useMemo evita el warning
-  // de `react-hooks/exhaustive-deps` por una nueva referencia al spread `?? []`.
+  const programasQ = useQuery({
+    queryKey: ["rota", "programas"] as const,
+    queryFn: ({ signal }) => api.listarProgramasRota({}, signal),
+    enabled: abierto,
+  });
+  const programas = programasQ.data?.programas ?? [];
+
+  // --- Filtros (client-side: el backend no acepta always_on / salida) ---
+  const [filtroAlwaysOn, setFiltroAlwaysOn] = React.useState<"todas" | "solo" | "excluir">(
+    "todas",
+  );
+  const [filtroSalida, setFiltroSalida] = React.useState("");
+  const [filtroPrograma, setFiltroPrograma] = React.useState("");
+
+  // Selección múltiple para borrado en lote.
+  const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
+  const limpiarSeleccion = () => setSeleccionados(new Set());
+
+  const todasPiezas = q.data?.piezas ?? [];
+  const piezasFiltradas = React.useMemo(() => {
+    const salidaQ = filtroSalida.trim().toLowerCase();
+    const programaQ = filtroPrograma.trim().toLowerCase();
+    return todasPiezas.filter((p) => {
+      if (filtroAlwaysOn === "solo" && !p.always_on) return false;
+      if (filtroAlwaysOn === "excluir" && p.always_on) return false;
+      if (salidaQ && !(p.salida || "").toLowerCase().includes(salidaQ)) return false;
+      if (programaQ && !(p.programa || "").toLowerCase().includes(programaQ)) return false;
+      return true;
+    });
+  }, [todasPiezas, filtroAlwaysOn, filtroSalida, filtroPrograma]);
+
+  // Agrupamos por programa (las piezas sueltas son campañas evergreen).
   const grupos = React.useMemo(() => {
-    const piezas = q.data?.piezas ?? [];
     const m = new Map<string, PiezaRota[]>();
-    for (const p of piezas) {
+    for (const p of piezasFiltradas) {
       const k = p.programa || "(sin programa)";
       const lista = m.get(k) ?? [];
       lista.push(p);
       m.set(k, lista);
     }
     return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [q.data]);
+  }, [piezasFiltradas]);
+
+  const toggleSeleccionado = (id: string) =>
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const toggleTodosGrupo = (ids: string[], marcarTodos: boolean) =>
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (marcarTodos) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+
+  const borrarLote = useMutation({
+    mutationFn: () => api.borrarPiezasLote({ ids: [...seleccionados] }),
+    onSuccess: (res) => {
+      const ne = res.no_encontrados?.length ?? 0;
+      toast.success(
+        ne > 0
+          ? `Borradas ${res.borrados} piezas (${ne} ya no existían).`
+          : `Borradas ${res.borrados} piezas.`,
+      );
+      limpiarSeleccion();
+      invalidar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   return (
     <Card>
@@ -3999,18 +4272,104 @@ function PiezasSueltas() {
       </CardHeader>
       {abierto && (
         <CardContent className="space-y-4">
-          <div className="flex justify-end">
-            <FormularioNuevaPieza
-              onCreada={invalidar}
-              textoBoton="Pieza suelta"
-              conPrograma
-            />
+          {/* Filtros + alta. */}
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Always-on</Label>
+              <div className="flex gap-1">
+                {(
+                  [
+                    { v: "todas", l: "Todas" },
+                    { v: "solo", l: "Solo perennes" },
+                    { v: "excluir", l: "Sin perennes" },
+                  ] as { v: typeof filtroAlwaysOn; l: string }[]
+                ).map((opt) => (
+                  <Button
+                    key={opt.v}
+                    size="sm"
+                    variant={filtroAlwaysOn === opt.v ? "default" : "outline"}
+                    className="h-7 px-2 text-xs"
+                    onClick={() => setFiltroAlwaysOn(opt.v)}
+                  >
+                    {opt.l}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs" htmlFor="filt-salida">Salida (substring)</Label>
+              <Input
+                id="filt-salida"
+                value={filtroSalida}
+                onChange={(e) => setFiltroSalida(e.target.value)}
+                placeholder="REDES, WEB…"
+                className="h-7 w-40 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs" htmlFor="filt-programa">Programa (substring)</Label>
+              <Input
+                id="filt-programa"
+                value={filtroPrograma}
+                onChange={(e) => setFiltroPrograma(e.target.value)}
+                placeholder="MUNDIAL…"
+                className="h-7 w-40 text-xs"
+                list="filt-programa-options"
+              />
+              <datalist id="filt-programa-options">
+                {programas.map((p) => (
+                  <option key={p.id} value={p.nombre} />
+                ))}
+              </datalist>
+            </div>
+            <div className="ml-auto">
+              <FormularioNuevaPieza
+                onCreada={invalidar}
+                programas={programas}
+                textoBoton="Pieza suelta"
+                conPrograma
+              />
+            </div>
           </div>
+
+          {/* Barra de selección múltiple. */}
+          {seleccionados.size > 0 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/40 bg-primary/5 p-2 text-sm">
+              <span className="font-medium">Seleccionadas {seleccionados.size}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `¿Borrar ${seleccionados.size} pieza${
+                        seleccionados.size === 1 ? "" : "s"
+                      }?`,
+                    )
+                  )
+                    borrarLote.mutate();
+                }}
+                disabled={borrarLote.isPending}
+              >
+                {borrarLote.isPending ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                Borrar selección
+              </Button>
+              <Button size="sm" variant="ghost" onClick={limpiarSeleccion}>
+                <X className="h-3.5 w-3.5" /> Limpiar
+              </Button>
+            </div>
+          )}
+
           {q.isPending ? (
             <Skeleton className="h-24 w-full rounded-md" />
           ) : grupos.length === 0 ? (
             <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-              Aún no hay piezas sueltas. Crea la primera con el botón de arriba.
+              Sin coincidencias. Ajusta filtros o crea piezas sueltas con el botón.
             </div>
           ) : (
             grupos.map(([programa, lista]) => (
@@ -4021,6 +4380,15 @@ function PiezasSueltas() {
                   cargando={false}
                   onCambio={invalidar}
                   mostrarPrograma
+                  seleccionados={seleccionados}
+                  onToggleSeleccionado={toggleSeleccionado}
+                  onToggleTodos={(todos) =>
+                    toggleTodosGrupo(
+                      lista.map((p) => p.id),
+                      todos,
+                    )
+                  }
+                  programas={programas}
                 />
               </div>
             ))
