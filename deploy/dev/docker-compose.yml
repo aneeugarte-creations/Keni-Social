@@ -1,0 +1,38 @@
+# Postgres LOCAL para desarrollo (ADR 0004).
+#
+# La operacional de la Consola vive en Postgres. Para arrancar `python -m keni_consola`
+# en local hace falta un Postgres corriendo y `DATABASE_URL` apuntandole. Este compose
+# levanta uno en el puerto 55432 (para no chocar con un Postgres del sistema en :5432).
+#
+# Uso:
+#   docker compose -f deploy/dev/docker-compose.yml up -d
+#   export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/keni_social
+#   python -m keni_consola
+#
+# Datos: viven en un VOLUMEN NAMED (`keni-pg-dev`). NINGUN puerto se publica fuera de
+# loopback (127.0.0.1) -> el Postgres NO es accesible desde la red, solo desde la maquina.
+# Si quieres empezar de cero: `docker compose -f deploy/dev/docker-compose.yml down -v`.
+#
+# Esto es solo para DEV: el Postgres hosted lo provisiona `deploy/docker-compose.yml`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: keni-pg-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: keni_social
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - keni-pg-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d keni_social"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  keni-pg-dev:

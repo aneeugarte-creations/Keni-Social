@@ -5,9 +5,10 @@
 #
 #   cd /home/ubuntu/keni-social/deploy && sh deploy.sh .env
 #
-# Idempotente y NO destructivo: la migracion COPIA de SQLite a Postgres (no borra el
-# SQLite). La media sigue en DISCO hasta que se bootstrapee Garage y se pongan las
-# S3_* reales en el .env (ver deploy/README.md, "Cutover a Postgres + S3").
+# Idempotente y NO destructivo. La operacional vive en Postgres (ADR 0004; SQLite ya no
+# existe); el paso de migracion garantiza el esquema (no-op tras la ADR). La media sigue
+# en DISCO hasta que se bootstrapee Garage y se pongan las S3_* reales en el .env (ver
+# deploy/README.md, "Cutover a Postgres + S3").
 set -eu
 
 # Ubicarse en deploy/ (el contexto de build de las imagenes propias es la raiz `..`).
@@ -30,16 +31,16 @@ for svc in front back worker mcp; do
   docker tag "keni-social/$svc:$KENI_VERSION" "keni-social/$svc:latest" || true
 done
 
-echo "==> [2/5] stop back (quiesce consola.db antes de migrar) — empieza breve indisponibilidad"
+echo "==> [2/5] stop back (breve indisponibilidad mientras se aplica el esquema)"
 $DC stop back || true
 
 echo "==> [3/5] chown del volumen de estado a uid no-root 10001 (back/worker corren no-root)"
 docker run --rm -v "$VOL":/d alpine chown -R 10001:10001 /d
 
-echo "==> [4/5] cutover de datos SQLite -> Postgres (idempotente; --solo-db: la media queda en disco)"
+echo "==> [4/5] asegura esquema Postgres (idempotente; no-op tras ADR 0004, sin SQLite que migrar)"
 $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
 
 echo "==> [5/5] up (recrea back no-root sobre Postgres + arranca el worker de generacion)"
 $DC up -d
 $DC ps
-echo "==> OK. Si la migracion fallara, el SQLite sigue intacto: revisa logs y reintenta (idempotente)."
+echo "==> OK. El esquema se crea idempotente al arrancar el back; este paso lo adelanta."

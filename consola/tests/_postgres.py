@@ -35,6 +35,8 @@ _TABLAS = (
     "comercial_snapshots",
     "comercial_publicaciones",
     "rota_turnos",
+    "rota_turnos_trabajo",
+    "rota_ausencias",
     "rota_eventos",
     "jobs",
 )
@@ -77,15 +79,17 @@ def limpiar_postgres(url: str) -> None:
 
 @pytest.fixture
 def pg(monkeypatch):
-    """Activa el backend Postgres para el test (o lo salta si no hay Postgres).
+    """Activa el Postgres de pruebas para el test (o lo salta si no hay Postgres).
 
     Fija `DATABASE_URL` (lo que lee `motor_db`) al Postgres de pruebas, limpia las tablas
     antes del test y las vuelve a limpiar despues. Devuelve la URL.
+
+    Tras la ADR 0004 la fixture `entorno` tambien fija `DATABASE_URL`; `pg` se mantiene como
+    fixture mas LIGERA (sin tocar el resto de env vars de la app) util para los tests del
+    backend de DB puro (`test_db_postgres.py`, `test_migracion.py`).
     """
     url = requiere_postgres()
     limpiar_postgres(url)
     monkeypatch.setenv("DATABASE_URL", url)
-    # Sin SQLite local en juego: que el guardia de arranque no se confunda con un .db real.
-    monkeypatch.delenv("KENI_CONSOLA_DB", raising=False)
     yield url
     limpiar_postgres(url)

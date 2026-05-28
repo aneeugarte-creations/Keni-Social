@@ -1,10 +1,9 @@
 """Tests del backend POSTGRES de la capa operacional (`db.py` + `auth/` + `motor_db`).
 
-SKIP si no hay Postgres (ver `_postgres.py`): un CI sin Postgres queda verde; donde lo haya
-(service `postgres` + `KENI_TEST_DATABASE_URL`), corren de verdad. Cubren que las MISMAS
-funciones publicas (las que en `test_db.py`/`test_auth.py` se prueban en SQLite) funcionan
-identicas sobre Postgres: CRUD de tareas, comercial + serie temporal (INSERT OR IGNORE ->
-ON CONFLICT), rota, y auth (crear usuario, duplicado UNIQUE neutro, login, sesiones).
+Tras la ADR 0004, Postgres es el unico backend; estos tests cubren la paridad funcional
+basica (CRUD de tareas, comercial + serie temporal con ON CONFLICT, rota, auth, cola de
+jobs concurrente) sobre el Postgres de pruebas, y las migraciones de columnas idempotentes
+para bases creadas por versiones anteriores. SKIP si no hay Postgres (ver `_postgres.py`).
 """
 
 from __future__ import annotations
@@ -16,12 +15,8 @@ from keni_consola import auth, db, motor_db
 
 
 # --------------------------------------------------------------------------- #
-# Esquema + seleccion de backend                                              #
+# Esquema                                                                     #
 # --------------------------------------------------------------------------- #
-
-
-def test_backend_es_postgres(pg):
-    assert motor_db.es_postgres() is True
 
 
 def test_esquema_se_crea_on_demand(pg):
@@ -112,6 +107,33 @@ def test_rota_eventos_y_turnos(pg):
     # Borrar el evento arrastra sus turnos.
     assert db.borrar_evento_rota(ev["id"]) is True
     assert db.listar_turnos_rota("2026-W09") == []
+
+
+def test_migracion_columnas_tareas_postgres_bd_vieja(pg):
+    """Un Postgres con `tareas` sin las columnas de atribucion/tablero (#130/#145) se
+    ALTERa idempotente al crear el esquema. Reproduce el escenario real del hosted: la
+    tabla PERSISTE entre despliegues; `CREATE TABLE IF NOT EXISTS` NO anade columnas.
+    """
+    con = motor_db.conectar_cruda()
+    con.execute("DROP TABLE IF EXISTS tareas")
+    con.execute(
+        "CREATE TABLE tareas (id TEXT PRIMARY KEY, proyecto TEXT NOT NULL, titulo TEXT NOT NULL, "
+        "detalle TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'pendiente', "
+        "fecha TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute("INSERT INTO tareas (id, proyecto, titulo) VALUES ('vieja', 'p', 'Tarea vieja')")
+    con.commit()
+    con.close()
+
+    # La primera operacion via la capa de datos dispara la migracion idempotente.
+    t = db.obtener_tarea("vieja")
+    assert t is not None
+    assert t["autor_id"] == "" and t["autor_nombre"] == ""
+    assert t["responsable_id"] == "" and t["responsable_nombre"] == ""
+    assert t["enlace"] == ""
+    # Y las columnas quedan disponibles para nuevas filas con responsable y enlace.
+    nueva = db.crear_tarea("p", "Nueva", responsable={"id": "u1", "usuario": "ana"})
+    assert nueva["responsable_nombre"] == "ana"
 
 
 def test_migracion_columnas_eventos_rota_postgres_bd_vieja(pg):

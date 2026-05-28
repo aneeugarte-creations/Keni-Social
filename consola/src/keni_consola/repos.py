@@ -8,9 +8,9 @@ enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
     marca (`ficheros.py`), con un indice SQLite regenerable (`indice.py`):
     publicaciones, plantillas, fuentes RSS + items vistos + salud, grupos de
     hashtags, franjas e historial de skills.
-  - OPERACIONAL (no editorial, no encaja en un fichero por entidad) -> SQLite
-    (`db.py`): `tareas` y el apartado `comercial` (piezas + su serie temporal de
-    snapshots, append-only).
+  - OPERACIONAL (no editorial, no encaja en un fichero por entidad) -> Postgres
+    (`db.py`, via `motor_db`; ADR 0004): `tareas`, `comercial` (piezas + serie temporal
+    de snapshots), `rota`, `usuarios`/`sesiones` (via `auth/`) y la cola de `jobs`.
 
 Las firmas publicas son ESTABLES: ningun `api/*.py` cambia aunque cambie el almacen.
 
@@ -19,7 +19,7 @@ Uso en las features:
     from .. import repos
 
     repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> YAML
-    repos.crear_tarea("proy", "Revisar copy")                       # -> SQLite
+    repos.crear_tarea("proy", "Revisar copy")                       # -> Postgres
 """
 
 from __future__ import annotations
@@ -46,26 +46,20 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
 )
 
 
-def ruta_db() -> Path:
-    """Ruta del fichero SQLite (delega en `db.ruta_db`; tareas/comercial viven ahi)."""
-    return db.ruta_db()
-
-
 def conectar() -> Any:
-    """Conexion al backend operacional (delega en `db.conectar`; SQLite o Postgres).
+    """Conexion al backend operacional (delega en `db.conectar`; Postgres).
 
     La usa la capa de auth (`auth/`) para operar sobre `usuarios`/`sesiones`, igual que el
-    resto de funciones de `db` se consumen via esta fachada. El backend lo elige `motor_db`
-    segun `DATABASE_URL` (transparente para los call sites).
+    resto de funciones de `db` se consumen via esta fachada. `motor_db` abre Postgres con
+    `DATABASE_URL` (obligatoria, ADR 0004).
     """
     return db.conectar()
 
 
 def arrancar_persistencia() -> None:
-    """Guardia de arranque de la persistencia operacional (delega en `db.arrancar_persistencia`).
+    """Arranque de la persistencia operacional (delega en `db.arrancar_persistencia`).
 
-    Crea el esquema y, en hosted (Postgres), rehusa arrancar si arrancar orfanaria datos
-    locales (cutover pendiente). Lo llama `crear_app` en el arranque. Ver `db.py`.
+    Crea/migra el esquema Postgres on-demand (ADR 0004). Lo llama `crear_app`. Ver `db.py`.
     """
     return db.arrancar_persistencia()
 
@@ -76,7 +70,7 @@ def raiz_datos() -> Path:
 
 
 # --------------------------------------------------------------------------- #
-# Tareas (OPERACIONAL: SQLite via db.py)                                       #
+# Tareas (OPERACIONAL: Postgres via db.py)                                       #
 # --------------------------------------------------------------------------- #
 
 
@@ -373,7 +367,7 @@ def claves_vistas(fuente_id: str) -> set[str]:
 
 
 # --------------------------------------------------------------------------- #
-# Publicaciones comerciales (OPERACIONAL: SQLite via db.py; serie temporal)    #
+# Publicaciones comerciales (OPERACIONAL: Postgres via db.py; serie temporal)    #
 # --------------------------------------------------------------------------- #
 #
 # El apartado comercial es una serie temporal append-only (snapshots de
@@ -451,12 +445,12 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
-# Rota de horarios del equipo (OPERACIONAL: SQLite via db.py)                  #
+# Rota de horarios del equipo (OPERACIONAL: Postgres via db.py)                  #
 # --------------------------------------------------------------------------- #
 #
 # Eventos/transmisiones + turnos (asignaciones) de la parrilla del equipo (F4 · #144).
 # No es contenido editorial por marca: es dato operacional de coordinacion interna,
-# por eso vive en SQLite. La fachada delega 1:1 en db.py.
+# por eso vive en Postgres. La fachada delega 1:1 en db.py.
 
 
 def crear_evento_rota(
@@ -546,7 +540,7 @@ def aprobar_semana_rota(semana: str) -> int:
 
 
 # --------------------------------------------------------------------------- #
-# Horario de TRABAJO del equipo (OPERACIONAL: SQLite via db.py; F4 · #144)     #
+# Horario de TRABAJO del equipo (OPERACIONAL: Postgres via db.py; F4 · #144)     #
 # --------------------------------------------------------------------------- #
 #
 # Turnos de trabajo (matutino/vespertino/descanso) + ausencias/vacaciones. Paralelo a la
@@ -641,7 +635,7 @@ def borrar_ausencia_rota(ausencia_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 #
 # El back ENCOLA y un WORKER (in-proceso en local, servicio aparte en hosted) clava y
-# ejecuta `claude -p`. La fachada delega 1:1 en db.py (SQLite local o Postgres hosted).
+# ejecuta `claude -p`. La fachada delega 1:1 en db.py (Postgres).
 
 
 def encolar_job(gen_id: str, spec: str) -> str:

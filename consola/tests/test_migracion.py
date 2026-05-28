@@ -1,12 +1,14 @@
-"""Tests de la migracion one-shot del cutover (`keni_consola.migracion`) + guardia de arranque.
+"""Tests del modulo de migracion (`keni_consola.migracion`) + arranque de la persistencia.
 
-Dos partes:
-  - DB (SQLite -> Postgres): SKIP si no hay Postgres. Verifica que copia las filas y que es
-    IDEMPOTENTE (re-correr no duplica).
-  - Media (disco -> S3): S3 SIMULADO con moto. Verifica que sube los objetos y salta los que
-    ya existen (idempotente).
-  - Guardia de arranque (`db.arrancar_persistencia`): que REHUSA arrancar si Postgres vacio +
-    SQLite local con datos (con Postgres), y que en local es transparente.
+Tras la ADR 0004 (Postgres unico backend) el cutover SQLite -> Postgres es HISTORIA: el
+modulo conserva `asegurar_esquema` como NO-OP idempotente (compatibilidad con
+`deploy.sh --solo-db`) y la migracion de media disco -> S3, que sigue vigente.
+
+Cubre:
+  - `asegurar_esquema`: crea/migra el esquema en Postgres (idempotente); sin `DATABASE_URL`
+    falla con un mensaje accionable.
+  - Media (disco -> S3): S3 SIMULADO con moto. Sube los objetos y salta los que ya existen.
+  - `db.arrancar_persistencia()`: crea el esquema y no orfana nada (ya no hay SQLite).
 """
 
 from __future__ import annotations
@@ -17,106 +19,38 @@ from keni_consola import almacen_media, db, migracion
 
 from ._postgres import limpiar_postgres, requiere_postgres
 
-# --------------------------------------------------------------------------- #
-# Helper: siembra un consola.db SQLite con datos                              #
-# --------------------------------------------------------------------------- #
-
-
-def _sembrar_sqlite(ruta) -> None:
-    """Crea un consola.db SQLite con el esquema real y unas filas en varias tablas.
-
-    Fija el entorno SOLO durante la siembra (SQLite, sin DATABASE_URL) y lo RESTAURA al
-    salir, para no contaminar la fase de migracion (que apunta a Postgres) ni otros tests.
-    """
-    import os
-
-    prev_db = os.environ.get("KENI_CONSOLA_DB")
-    prev_url = os.environ.get("DATABASE_URL")
-    os.environ["KENI_CONSOLA_DB"] = str(ruta)
-    os.environ.pop("DATABASE_URL", None)
-    try:
-        db.crear_tarea("proj1", "Tarea A", "detalle A")
-        db.crear_tarea("proj2", "Tarea B")
-        pub = db.crear_publicacion_comercial(
-            "https://x/1", titulo="P1", cliente="amx", objetivo=50
-        )
-        db.registrar_snapshot_comercial(pub["id"], "2026-01-01T00:00:00", 5, 50)
-        from keni_consola import auth
-
-        auth.crear_usuario("ana", "clave-de-prueba", "admin")
-    finally:
-        # Restaura el entorno previo (lo que cada test fije DESPUES es lo que vale).
-        if prev_db is None:
-            os.environ.pop("KENI_CONSOLA_DB", None)
-        else:
-            os.environ["KENI_CONSOLA_DB"] = prev_db
-        if prev_url is not None:
-            os.environ["DATABASE_URL"] = prev_url
-
 
 # --------------------------------------------------------------------------- #
-# DB: SQLite -> Postgres (skip si no hay Postgres)                            #
+# DB: asegurar_esquema (no-op idempotente tras ADR 0004)                      #
 # --------------------------------------------------------------------------- #
 
 
-def test_migrar_db_copia_filas_e_idempotente(monkeypatch, tmp_path):
+def test_asegurar_esquema_crea_y_es_idempotente(monkeypatch):
     url = requiere_postgres()
     limpiar_postgres(url)
-    ruta_sqlite = tmp_path / "consola.db"
-    _sembrar_sqlite(ruta_sqlite)
-
-    # Ahora migramos: DATABASE_URL al Postgres de pruebas, origen el SQLite sembrado.
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(ruta_sqlite))
     monkeypatch.setenv("DATABASE_URL", url)
-
-    conteos = migracion.migrar_db()
-    assert conteos["tareas"] == 2
-    assert conteos["comercial_publicaciones"] == 1
-    assert conteos["comercial_snapshots"] == 1
-    assert conteos["usuarios"] == 1
-
-    # En Postgres ya estan las filas (las leemos por las funciones reales, que ahora van a PG).
-    assert len(db.listar_tareas()) == 2
-    assert len(db.listar_publicaciones_comerciales()) == 1
-    from keni_consola import auth
-
-    assert len(auth.listar_usuarios()) == 1
-
-    # IDEMPOTENTE: re-migrar no duplica (ON CONFLICT DO NOTHING).
-    migracion.migrar_db()
-    assert len(db.listar_tareas()) == 2
-    assert len(db.listar_publicaciones_comerciales()) == 1
-    assert len(auth.listar_usuarios()) == 1
-    limpiar_postgres(url)
-
-
-def test_migrar_db_sin_database_url_falla(monkeypatch, tmp_path):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
-    with pytest.raises(SystemExit):
-        migracion.migrar_db()
-
-
-def test_migrar_db_sin_sqlite_origen_falla(monkeypatch, tmp_path):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@db:5432/keni")
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "noexiste.db"))
-    with pytest.raises(SystemExit):
-        migracion.migrar_db()
-
-
-def test_migrar_db_dry_run_no_escribe(monkeypatch, tmp_path):
-    url = requiere_postgres()
-    limpiar_postgres(url)
-    ruta_sqlite = tmp_path / "consola.db"
-    _sembrar_sqlite(ruta_sqlite)
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(ruta_sqlite))
-    monkeypatch.setenv("DATABASE_URL", url)
-
-    conteos = migracion.migrar_db(dry_run=True)
-    assert conteos["tareas"] == 2  # cuenta el ORIGEN
-    # Pero NO escribio en Postgres.
+    # Primera vez: crea el esquema.
+    assert migracion.asegurar_esquema() is True
     assert db.listar_tareas() == []
+    # Segunda vez: idempotente, no rompe (`CREATE TABLE IF NOT EXISTS` + ALTERs guardados).
+    assert migracion.asegurar_esquema() is True
     limpiar_postgres(url)
+
+
+def test_asegurar_esquema_sin_database_url_falla(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for var in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+                "POSTGRES_HOST", "POSTGRES_PORT"):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(SystemExit) as exc:
+        migracion.asegurar_esquema()
+    assert "DATABASE_URL" in str(exc.value)
+
+
+def test_asegurar_esquema_dry_run_no_abre_conexion(monkeypatch):
+    """`dry_run` no toca la DB: util para validar entorno sin riesgo."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://hay-url-pero-no-se-usa@x:1/y")
+    assert migracion.asegurar_esquema(dry_run=True) is True
 
 
 # --------------------------------------------------------------------------- #
@@ -181,53 +115,28 @@ def test_migrar_media_sin_s3_falla(monkeypatch, tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# Guardia de arranque (db.arrancar_persistencia)                             #
+# Arranque de la persistencia (`db.arrancar_persistencia`)                    #
 # --------------------------------------------------------------------------- #
 
 
-def test_arranque_local_es_transparente(monkeypatch, tmp_path):
-    """Sin DATABASE_URL (perfil local) el guardia solo crea el esquema; no rehusa nunca."""
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
-    db.crear_tarea("p", "Tengo datos locales")
-    # No lanza, aunque haya datos locales: en local no hay nada que orfanar.
+def test_arrancar_persistencia_crea_esquema_y_es_idempotente(monkeypatch):
+    """Tras la ADR 0004 el arranque solo crea/migra el esquema (no orfana nada)."""
+    url = requiere_postgres()
+    limpiar_postgres(url)
+    monkeypatch.setenv("DATABASE_URL", url)
     db.arrancar_persistencia()
-    assert len(db.listar_tareas()) == 1
-
-
-def test_arranque_rehusa_si_postgres_vacio_con_sqlite_local(monkeypatch, tmp_path):
-    """Postgres VACIO + SQLite local CON datos => REHUSA arrancar (no orfana datos)."""
-    url = requiere_postgres()
+    db.arrancar_persistencia()  # idempotente: segundo arranque tampoco rompe
+    # La aplicacion puede usar las tablas tras el arranque.
+    assert db.listar_tareas() == []
     limpiar_postgres(url)
-    ruta_sqlite = tmp_path / "consola.db"
-    _sembrar_sqlite(ruta_sqlite)  # SQLite local con datos
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(ruta_sqlite))
-    monkeypatch.setenv("DATABASE_URL", url)  # Postgres vacio (recien truncado)
 
-    with pytest.raises(db.PersistenciaError) as exc:
+
+def test_arrancar_persistencia_sin_database_url_falla(monkeypatch):
+    """Sin Postgres configurado, el arranque PROPAGA un error claro (no servir en blanco)."""
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    for var in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+                "POSTGRES_HOST", "POSTGRES_PORT"):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(RuntimeError) as exc:
         db.arrancar_persistencia()
-    assert "migracion" in str(exc.value).lower()
-    limpiar_postgres(url)
-
-
-def test_arranque_ok_tras_migrar(monkeypatch, tmp_path):
-    """Tras migrar (Postgres con datos), el guardia es transparente (cutover hecho)."""
-    url = requiere_postgres()
-    limpiar_postgres(url)
-    ruta_sqlite = tmp_path / "consola.db"
-    _sembrar_sqlite(ruta_sqlite)
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(ruta_sqlite))
-    monkeypatch.setenv("DATABASE_URL", url)
-    migracion.migrar_db()  # cutover: ahora Postgres TIENE datos
-    db.arrancar_persistencia()  # no lanza: Postgres con datos -> seguro
-    limpiar_postgres(url)
-
-
-def test_arranque_postgres_vacio_sin_sqlite_ok(monkeypatch, tmp_path):
-    """Postgres vacio y SIN SQLite local (primer deploy real) => arranca sin error."""
-    url = requiere_postgres()
-    limpiar_postgres(url)
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "noexiste.db"))
-    monkeypatch.setenv("DATABASE_URL", url)
-    db.arrancar_persistencia()  # no lanza: no hay datos locales que orfanar
-    limpiar_postgres(url)
+    assert "DATABASE_URL" in str(exc.value)

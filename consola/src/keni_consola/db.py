@@ -1,4 +1,4 @@
-"""Persistencia OPERACIONAL de la Consola Keni: SQLite (local) o Postgres (hosted).
+"""Persistencia OPERACIONAL de la Consola Keni: Postgres (ADR 0004).
 
 Cubre lo que NO es contenido editable a mano: las `tareas`, el apartado `comercial`
 (seguimiento de piezas + su serie temporal de snapshots), la `rota` y, via `auth/`, los
@@ -7,22 +7,20 @@ hashtags, franjas, historial de skills) vive en ficheros YAML por marca (`ficher
 con un indice SQLite regenerable (`indice.py`). La fachada `repos.py` enruta cada cosa a
 su almacen.
 
-BACKEND (#130): lo elige `motor_db` segun `DATABASE_URL` (ver `motor_db.py`):
-  - SIN `DATABASE_URL`  -> SQLite local en `~/.config/keni-social/consola.db` (o la ruta
-    de `KENI_CONSOLA_DB`, util para tests). Es el perfil PRIVADO/LOCAL (ADR 0001/0002):
-    ninguna fila sale de la maquina. Comportamiento HISTORICO intacto.
-  - CON `DATABASE_URL`  -> Postgres (perfil hosted multiusuario; el stack `deploy/` lo
-    cablea). El cutover de datos lo hace `migracion.py` (one-shot).
+BACKEND (#130 / ADR 0004): UNICO, Postgres. `motor_db.conectar_cruda()` abre Postgres con
+`DATABASE_URL` (OBLIGATORIA, local o hosted). Antes el backend se elegia segun esa var
+(sin URL -> SQLite local); la ADR 0004 retira ese SQLite operacional para eliminar el drift
+SQLite<->Postgres. La privacidad del perfil local se preserva con un Postgres LOCAL
+(`deploy/dev/docker-compose.yml`); se pierde el "cero-config/offline por defecto".
 
-El esquema se crea ON-DEMAND en la primera conexion (idempotente, en ambos backends). En
-el perfil SQLite, si existe el viejo `~/.config/keni-social/tareas.json`, sus tareas se
-MIGRAN una sola vez (best-effort, idempotente). Las funciones publicas y la fachada
-`repos.py` son ESTABLES: ningun call site cambia al cambiar de backend.
+El esquema se crea ON-DEMAND en la primera conexion (idempotente). Las funciones publicas y
+la fachada `repos.py` son ESTABLES: ningun call site cambia (siguen usando `?`/`fila["col"]`,
+que `motor_db` traduce a Postgres).
 
 SEGURIDAD:
   - SIEMPRE consultas PARAMETRIZADAS (`?`), NUNCA f-strings con datos en el SQL. El
     `motor_db` traduce `?`->`%s` en Postgres sin tocar los datos.
-  - En el perfil local la base es local; ninguna fila sale de la maquina.
+  - Con un Postgres LOCAL ninguna fila sale de la maquina (privacidad preservada).
 
 Tablas:
   - `tareas`(id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre,
@@ -48,27 +46,21 @@ Tablas:
 
 Las funciones devuelven `dict`s simples (filas) o ids, sin acoplar la capa API al
 backend. Cada operacion abre y cierra su propia conexion (mantenerlo simple evita estado
-global y problemas de hilos con el `TestClient`; en Postgres es una conexion por op).
+global y problemas de hilos con el `TestClient`; es una conexion por op).
 
-CONCURRENCIA (servicio compartido, #130): en SQLite cada conexion abre en WAL
-(`journal_mode=WAL`) con `busy_timeout` para una replica (lo configura `motor_db`). En
-Postgres la concurrencia multiusuario/multi-replica es nativa: ese es el motivo de migrar.
-
-BACKEND POSTGRES (#130): toda la persistencia operacional pasa por `conectar()` y
-consultas parametrizadas, asi que el cambio de backend se localiza en `motor_db`
-(SQLite/Postgres) SIN tocar las firmas publicas. `conectar()` es el punto de extension.
+CONCURRENCIA (servicio compartido, #130): la concurrencia multiusuario/multi-replica es
+nativa de Postgres (el claim de la cola de jobs usa `FOR UPDATE SKIP LOCKED`); ese fue el
+motivo de migrar y de retirar SQLite (ADR 0004).
 """
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import date, datetime
-from pathlib import Path
 from typing import Any
 
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
-from . import config, motor_db, rutas
+from . import motor_db
 from .estados import (
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
@@ -141,35 +133,21 @@ __all__ = [
     "reclamar_job",
     "registrar_snapshot_comercial",
     "terminar_job",
-    "ruta_db",
     "ultimo_snapshot_comercial",
 ]
 
 
-def ruta_db() -> Path:
-    """Ruta del consola.db (SQLite). Solo aplica en el perfil local (sin `DATABASE_URL`).
-
-    Delega en `motor_db.ruta_db`: `KENI_CONSOLA_DB` la sobreescribe (override de maxima
-    prioridad; tests); si no, cuelga de la raiz de estado unica (`rutas.dir_config()`).
-    En el perfil Postgres no se usa (la conexion va por `DATABASE_URL`).
-    """
-    return motor_db.ruta_db()
-
-
 def _conectar() -> Any:
-    """Abre la conexion al backend, crea el esquema on-demand y migra el JSON viejo.
+    """Abre la conexion a Postgres y crea el esquema on-demand.
 
-    El backend (SQLite o Postgres) lo elige `motor_db.conectar_cruda()` segun
-    `DATABASE_URL`. La conexion devuelta IMITA la API de `sqlite3.Connection` que usan los
-    call sites (`execute(sql, params)` con `?`, filas por nombre, `rowcount`, commit/close).
+    `motor_db.conectar_cruda()` abre Postgres con `DATABASE_URL` (obligatoria, ADR 0004) y
+    devuelve una conexion que IMITA la API de `sqlite3.Connection` que usan los call sites
+    (`execute(sql, params)` con `?`, filas por nombre, `rowcount`, commit/close).
 
-    El esquema se crea aqui (idempotente, en ambos backends) para que exista por cualquier
-    via de arranque. La migracion del viejo `tareas.json` solo aplica en SQLite local.
+    El esquema se crea aqui (idempotente) para que exista por cualquier via de arranque.
     """
     con = motor_db.conectar_cruda()
     _crear_esquema(con)
-    if not motor_db.es_postgres():
-        _migrar_tareas_json(con)
     return con
 
 
@@ -184,95 +162,28 @@ def conectar() -> Any:
 
 
 # --------------------------------------------------------------------------- #
-# Guardia de arranque: NUNCA arrancar hosted vacio orfanando datos locales      #
+# Arranque de la persistencia                                                  #
 # --------------------------------------------------------------------------- #
-#
-# Tablas cuya PRESENCIA de filas indica "ya hay datos" en un backend. `usuarios` es la
-# critica (perder cuentas en un servicio multiusuario es lo peor); incluimos tambien las
-# operacionales de negocio. `sesiones` se omite a proposito: son efimeras (caducan), su
-# ausencia no significa "base vacia".
-_TABLAS_CON_DATOS: tuple[str, ...] = (
-    "usuarios",
-    "tareas",
-    "comercial_publicaciones",
-    "comercial_snapshots",
-    "rota_eventos",
-    "rota_turnos",
-    "rota_turnos_trabajo",
-    "rota_ausencias",
-)
-
-
-class PersistenciaError(RuntimeError):
-    """Error de arranque de la persistencia (p.ej. cutover pendiente). Mensaje en espanol."""
-
-
-def _hay_filas(con: Any) -> bool:
-    """True si CUALQUIERA de las tablas de negocio tiene al menos una fila (en `con`)."""
-    for tabla in _TABLAS_CON_DATOS:
-        try:
-            fila = con.execute(f"SELECT 1 FROM {tabla} LIMIT 1").fetchone()  # noqa: S608 -- tabla de allowlist
-        except Exception:  # noqa: BLE001 -- tabla inexistente en un origen viejo: cuenta como vacia
-            continue
-        if fila is not None:
-            return True
-    return False
-
-
-def _sqlite_local_tiene_datos() -> bool:
-    """True si existe un `consola.db` SQLite local con datos de negocio (origen del cutover)."""
-    ruta = motor_db.ruta_db()
-    if not ruta.is_file():
-        return False
-    import sqlite3 as _sqlite3
-
-    con = _sqlite3.connect(str(ruta))
-    con.row_factory = _sqlite3.Row
-    try:
-        return _hay_filas(con)
-    finally:
-        con.close()
 
 
 def arrancar_persistencia() -> None:
-    """Comprueba en el arranque que un deploy hosted NO orfana datos locales (SEGURIDAD).
+    """Crea el esquema operacional on-demand en el arranque (idempotente).
 
-    Crea el esquema on-demand (idempotente, ambos backends) y, en el perfil POSTGRES,
-    aplica el guardia: si el Postgres esta VACIO (sin filas de negocio) PERO existe un
-    `consola.db` SQLite local CON datos, REHUSA arrancar con un error claro que apunta a la
-    migracion (`python -m keni_consola.migracion`). Asi un deploy nunca arranca en blanco
-    "perdiendo" silenciosamente los datos que aun viven en el SQLite del volumen.
-
-    En el perfil SQLite local es practicamente no-op (no hay nada que orfanar): solo crea el
-    esquema. Idempotente: una vez migrado (Postgres con datos), el guardia es transparente.
+    Abre Postgres (`DATABASE_URL` obligatoria, ADR 0004) y crea/migra el esquema, de modo
+    que el back arranca con las tablas listas por cualquier via. Si falta `DATABASE_URL`,
+    `motor_db.conectar_cruda()` lanza un `RuntimeError` accionable (no se traga: un back sin
+    Postgres no debe servir). El antiguo guardia anti-orfanamiento SQLite->Postgres se
+    retiro con SQLite (ADR 0004): ya no hay un origen local que orfanar.
     """
-    con = _conectar()  # crea el esquema on-demand
-    try:
-        if not motor_db.es_postgres():
-            return  # perfil local: nada que orfanar
-        if _hay_filas(con):
-            return  # Postgres ya tiene datos: cutover hecho (o nativo). Transparente.
-    finally:
-        con.close()
-
-    # Postgres vacio: solo es seguro arrancar si NO hay un SQLite local con datos que migrar.
-    if _sqlite_local_tiene_datos():
-        raise PersistenciaError(
-            "Arranque INSEGURO: DATABASE_URL apunta a un Postgres VACIO, pero existe un "
-            f"consola.db SQLite local CON datos ({motor_db.ruta_db()}). Arrancar ahora "
-            "dejaria esos datos huerfanos. Ejecuta el cutover ANTES de servir:\n"
-            "    python -m keni_consola.migracion\n"
-            "(idempotente; ver deploy/README.md, seccion 'Cutover a Postgres + S3')."
-        )
+    _conectar().close()  # crea/migra el esquema y cierra
 
 
-# DDL del esquema operacional, como sentencias INDIVIDUALES (no un script multi-sentencia)
-# para ser PORTABLE entre SQLite y Postgres: `executescript` es exclusivo de sqlite3, asi
-# que ejecutamos una a una via `con.execute` (soportado por ambos backends). Los tipos
-# (`TEXT`/`INTEGER`), `PRIMARY KEY`, `UNIQUE`, `NOT NULL DEFAULT ''` y
-# `CREATE [UNIQUE] INDEX IF NOT EXISTS` son comunes a SQLite y Postgres 16, asi que el
-# mismo DDL crea el esquema en ambos. Los ids son TEXT generados por la app (uuid), no
-# autoincrementales: no hay `AUTOINCREMENT`/`SERIAL` que diverja.
+# DDL del esquema operacional, como sentencias INDIVIDUALES (no un script multi-sentencia
+# `executescript`, exclusivo de sqlite3): se ejecutan una a una via `con.execute`. El DDL
+# se mantiene portable (heredado de cuando coexistia SQLite): tipos `TEXT`/`INTEGER`,
+# `PRIMARY KEY`, `UNIQUE`, `NOT NULL DEFAULT ''` y `CREATE [UNIQUE] INDEX IF NOT EXISTS` son
+# todos validos en Postgres 16. Los ids son TEXT generados por la app (uuid), no
+# autoincrementales: no hay `AUTOINCREMENT`/`SERIAL`.
 _DDL_ESQUEMA: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS tareas (
@@ -448,18 +359,15 @@ _DDL_ESQUEMA: tuple[str, ...] = (
 
 
 def _crear_esquema(con: Any) -> None:
-    """Crea las tablas operacionales si no existen (idempotente, ambos backends).
+    """Crea las tablas operacionales si no existen (idempotente).
 
-    Ejecuta el DDL sentencia a sentencia (portable SQLite/Postgres) y luego aplica las
-    migraciones de columnas ampliadas (`tareas`, `rota_eventos`).
+    Ejecuta el DDL sentencia a sentencia y luego aplica las migraciones de columnas
+    ampliadas (`tareas`, `rota_eventos`).
 
-    ESTO CORRE EN AMBOS BACKENDS, a proposito: `CREATE TABLE IF NOT EXISTS` NO anade
-    columnas a una tabla que YA existe, asi que cualquier BD —SQLite en disco o Postgres
-    hosted— creada ANTES de una ampliacion necesita el `ALTER TABLE ... ADD COLUMN`. Antes
-    se daba por hecho que "en Postgres el CREATE TABLE declara el esquema completo", pero el
-    Postgres hosted PERSISTE entre despliegues: una tabla creada por una version anterior se
-    quedaba sin las columnas nuevas (fallo real: `rota_eventos` sin `tipo_cobertura` → 500 al
-    leer el calendario). La deteccion de columnas es portable (`_columnas_existentes`).
+    Las migraciones de columnas son NECESARIAS, no opcionales: `CREATE TABLE IF NOT EXISTS`
+    NO anade columnas a una tabla que YA existe, y el Postgres hosted PERSISTE entre
+    despliegues. Una tabla creada por una version anterior se quedaba sin las columnas
+    nuevas (fallo real: `rota_eventos` sin `tipo_cobertura` → 500 al leer el calendario).
     """
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
@@ -469,21 +377,16 @@ def _crear_esquema(con: Any) -> None:
 
 
 def _columnas_existentes(con: Any, tabla: str) -> set[str]:
-    """Nombres de columnas que YA tiene `tabla`, portable a los dos backends.
+    """Nombres de columnas que YA tiene `tabla` (Postgres, via `information_schema`).
 
-    SQLite expone el esquema con `PRAGMA table_info(...)`; Postgres no, asi que alli se
-    consulta `information_schema.columns`. `tabla` es SIEMPRE un nombre interno de una
-    allowlist (constantes del modulo, nunca entrada de usuario), por eso es seguro
-    interpolarlo en el PRAGMA. El placeholder `?` lo traduce `motor_db` a `%s` en Postgres.
+    `tabla` es SIEMPRE un nombre interno de una allowlist (constantes del modulo, nunca
+    entrada de usuario). El placeholder `?` lo traduce `motor_db` a `%s`.
     """
-    if motor_db.es_postgres():
-        filas = con.execute(
-            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
-            (tabla,),
-        ).fetchall()
-        return {fila["column_name"] for fila in filas}
-    filas = con.execute(f"PRAGMA table_info({tabla})").fetchall()  # noqa: S608 -- tabla de allowlist
-    return {fila["name"] for fila in filas}
+    filas = con.execute(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+        (tabla,),
+    ).fetchall()
+    return {fila["column_name"] for fila in filas}
 
 
 # Columnas que se anadieron a `tareas` despues de su esquema original. Una BD creada
@@ -506,8 +409,8 @@ def _migrar_columnas_tareas(con: Any) -> None:
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
     antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y anade solo
     la que falte, con `DEFAULT ''`: las tareas existentes quedan con el campo vacio (autor /
-    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada. Corre en ambos
-    backends (ver `_crear_esquema`): el Postgres hosted persiste y tambien puede ir atrasado.
+    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada. El Postgres
+    hosted persiste entre despliegues, asi que tambien puede ir atrasado (ver `_crear_esquema`).
     """
     columnas = _columnas_existentes(con, "tareas")
     for columna in _COLUMNAS_TAREAS_AMPLIADAS:
@@ -537,95 +440,13 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
     antes de la ampliacion (cobertura/prioridad/reprogramaciones) no las tiene. Recorre
     `_COLUMNAS_EVENTO_ROTA_AMPLIADAS` y anade solo la que falte con su DEFAULT: los eventos
-    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada. Corre en
-    ambos backends (ver `_crear_esquema`); era el origen del 500 del calendario en hosted.
+    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada. El
+    Postgres hosted persiste entre despliegues; era el origen del 500 del calendario.
     """
     columnas = _columnas_existentes(con, "rota_eventos")
     for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_eventos ADD COLUMN {columna} {tipo}")
-
-
-# --------------------------------------------------------------------------- #
-# Migracion best-effort del viejo tareas.json                                  #
-# --------------------------------------------------------------------------- #
-
-
-def _ruta_tareas_json() -> Path:
-    """Ruta del viejo tareas.json (misma convencion que la feature historica).
-
-    `KENI_CONSOLA_TAREAS` la sobreescribe (tests); si no, cuelga de la raiz de estado
-    unica (`rutas.dir_config()`), mismo subpath `keni-social/tareas.json` que antes.
-    """
-    if (p := config.override_ruta(config.ENV_TAREAS)) is not None:
-        return p
-    return rutas.dir_config() / "tareas.json"
-
-
-def _migrar_tareas_json(con: Any) -> None:
-    """Si existe el viejo tareas.json, vuelca sus tareas a SQLite (idempotente).
-
-    Best-effort: cualquier fallo de lectura/parseo se ignora en silencio (no debe
-    impedir el arranque). Cada tarea se inserta con `INSERT OR IGNORE` por su id,
-    asi que repetir la migracion no duplica filas.
-    """
-    ruta_json = _ruta_tareas_json()
-    try:
-        texto = ruta_json.read_text(encoding="utf-8")
-    except OSError:
-        return
-    try:
-        datos = json.loads(texto)
-    except json.JSONDecodeError:
-        return
-    crudas = datos.get("tareas") if isinstance(datos, dict) else None
-    if not isinstance(crudas, list):
-        return
-    for cruda in crudas:
-        tarea = _normalizar_tarea_json(cruda)
-        if tarea is None:
-            continue
-        con.execute(
-            "INSERT OR IGNORE INTO tareas (id, proyecto, titulo, detalle, estado, fecha) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                tarea["id"],
-                tarea["proyecto"],
-                tarea["titulo"],
-                tarea["detalle"],
-                tarea["estado"],
-                tarea["fecha"],
-            ),
-        )
-    con.commit()
-
-
-def _normalizar_tarea_json(cruda: object) -> dict[str, Any] | None:
-    """Valida/normaliza una tarea cruda del JSON viejo; None si no es utilizable."""
-    if not isinstance(cruda, dict):
-        return None
-    tid = cruda.get("id")
-    proyecto_id = cruda.get("proyecto")
-    titulo = cruda.get("titulo")
-    if not (isinstance(tid, str) and tid):
-        return None
-    if not (isinstance(proyecto_id, str) and proyecto_id):
-        return None
-    if not (isinstance(titulo, str) and titulo.strip()):
-        return None
-    estado = cruda.get("estado")
-    if estado not in ESTADOS_TAREA:
-        estado = "pendiente"
-    detalle = cruda.get("detalle")
-    fecha = cruda.get("fecha")
-    return {
-        "id": tid,
-        "proyecto": proyecto_id,
-        "titulo": titulo.strip(),
-        "detalle": detalle.strip() if isinstance(detalle, str) else "",
-        "estado": estado,
-        "fecha": fecha if isinstance(fecha, str) and fecha else "",
-    }
 
 
 # --------------------------------------------------------------------------- #
@@ -1764,12 +1585,9 @@ def borrar_ausencia_rota(ausencia_id: str) -> bool:
 #
 # El back ENCOLA (`encolar_job`) y devuelve de inmediato; un WORKER (in-proceso en local,
 # servicio aparte en hosted) CLAVA un pendiente (`reclamar_job`) y corre `claude -p`. La
-# reclamacion es CONCURRENTE-SEGURA: en Postgres con `FOR UPDATE SKIP LOCKED` (varios
-# workers no clavan el mismo job); en SQLite con un UPDATE GUARDADO condicional
-# (`WHERE estado='pendiente'`) que, por el WAL + busy_timeout de `motor_db`, es atomico (el
-# que gane el UPDATE se lleva la fila; los demas ven rowcount 0). La cancelacion viaja por
-# la columna `cancelado` (el back la marca; el worker la lee y mata el arbol), de modo que
-# funciona AUNQUE el worker sea otro proceso.
+# reclamacion es CONCURRENTE-SEGURA en Postgres con `FOR UPDATE SKIP LOCKED`: varios workers
+# no clavan el mismo job. La cancelacion viaja por la columna `cancelado` (el back la marca;
+# el worker la lee y mata el arbol), de modo que funciona AUNQUE el worker sea otro proceso.
 
 # Estados del ciclo de la cola (distintos de los del registro de generacion).
 JOB_PENDIENTE = "pendiente"
@@ -1802,48 +1620,27 @@ def encolar_job(gen_id: str, spec: str) -> str:
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:
     """Clava UN job pendiente de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
-    Postgres: `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE
-    a `reclamado`; otro worker que corra a la vez salta esa fila (no la doble-ejecuta).
-    SQLite: selecciona un candidato y lo CLAVA con un UPDATE GUARDADO
-    (`WHERE id=? AND estado='pendiente'`); si dos workers eligen el mismo, solo uno tiene
-    rowcount>0 (el otro reintenta). Devuelve `{id, gen_id, spec, ...}` del job clavado.
+    `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE a
+    `reclamado`: otro worker que corra a la vez SALTA esa fila (no la doble-ejecuta).
+    Devuelve `{id, gen_id, spec}` del job clavado.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     con = _conectar()
     try:
-        if motor_db.es_postgres():
-            fila = con.execute(
-                "SELECT id, gen_id, spec FROM jobs WHERE estado = ? "
-                "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-                (JOB_PENDIENTE,),
-            ).fetchone()
-            if fila is None:
-                con.commit()
-                return None
-            con.execute(
-                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? WHERE id = ?",
-                (JOB_RECLAMADO, worker, ahora, fila["id"]),
-            )
+        fila = con.execute(
+            "SELECT id, gen_id, spec FROM jobs WHERE estado = ? "
+            "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
+            (JOB_PENDIENTE,),
+        ).fetchone()
+        if fila is None:
             con.commit()
-            return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
-        # SQLite: candidato + UPDATE guardado (atomico por el WAL/busy_timeout).
-        while True:
-            fila = con.execute(
-                "SELECT id, gen_id, spec FROM jobs WHERE estado = ? "
-                "ORDER BY creado ASC, id ASC LIMIT 1",
-                (JOB_PENDIENTE,),
-            ).fetchone()
-            if fila is None:
-                return None
-            cur = con.execute(
-                "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? "
-                "WHERE id = ? AND estado = ?",
-                (JOB_RECLAMADO, worker, ahora, fila["id"], JOB_PENDIENTE),
-            )
-            con.commit()
-            if cur.rowcount > 0:
-                return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
-            # Otro worker lo clavo entre el SELECT y el UPDATE: reintenta con otro candidato.
+            return None
+        con.execute(
+            "UPDATE jobs SET estado = ?, worker = ?, claimed_at = ? WHERE id = ?",
+            (JOB_RECLAMADO, worker, ahora, fila["id"]),
+        )
+        con.commit()
+        return {"id": fila["id"], "gen_id": fila["gen_id"], "spec": fila["spec"]}
     finally:
         con.close()
 

@@ -29,9 +29,22 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from keni_consola import db, ficheros, indice
+from keni_consola import config, ficheros, indice, rutas
 
 _log = logging.getLogger("keni_consola.migracion")
+
+
+def _ruta_consola_db() -> Path:
+    """Ruta del viejo `consola.db` (cuando SQLite era el backend operacional).
+
+    Tras la ADR 0004, la app ya no abre `consola.db`; este script archivado lo lee SOLO
+    para vaciarlo a YAML. La convencion historica era `KENI_CONSOLA_DB` o
+    `<dir_config>/consola.db`. Replicada aqui para no depender de `db.ruta_db` (retirada).
+    """
+    override = config.override_ruta("KENI_CONSOLA_DB")
+    if override is not None:
+        return override
+    return rutas.dir_config() / "consola.db"
 
 
 def _parsear_piezas_historial(crudo: str | None) -> list[dict[str, Any]]:
@@ -324,7 +337,7 @@ def migrar_a_ficheros(*, hacer_bak: bool = True) -> dict[str, int]:
     contadores en cero (nada que migrar). Tras migrar, si `hacer_bak`, deja una COPIA
     `consola.db.bak` como respaldo (las tareas siguen usando `consola.db`).
     """
-    ruta = db.ruta_db()
+    ruta = _ruta_consola_db()
     conteos = {
         "publicaciones": 0,
         "plantillas": 0,

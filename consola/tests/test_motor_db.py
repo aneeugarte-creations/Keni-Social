@@ -1,11 +1,10 @@
-"""Tests del motor de persistencia (`keni_consola.motor_db`): seleccion de backend +
-traduccion de dialecto SQLite->Postgres. OFFLINE: no abre Postgres (solo la logica pura).
+"""Tests del motor de persistencia (`keni_consola.motor_db`): traduccion de dialecto +
+contrato de `conectar_cruda` (Postgres obligatorio, ADR 0004).
 
-Lo que cubre SIN Postgres:
-  - `es_postgres()` segun `DATABASE_URL`.
-  - `_traducir_sql`: `?`->`%s`, `INSERT OR IGNORE`->`ON CONFLICT DO NOTHING`.
-  - `conectar_cruda()` devuelve SQLite cuando no hay `DATABASE_URL`.
-La conexion REAL a Postgres se prueba en `test_db_postgres.py` (skip si no hay Postgres).
+OFFLINE en su mayor parte: la traduccion `?`->`%s` y `INSERT OR IGNORE`->`ON CONFLICT DO
+NOTHING` es logica pura sin DB; el contrato de "sin DATABASE_URL falla con un mensaje
+claro" tambien se prueba sin abrir Postgres. La conexion REAL a Postgres se prueba en
+`test_db_postgres.py` (skip si no hay Postgres).
 """
 
 from __future__ import annotations
@@ -17,40 +16,36 @@ import pytest
 from keni_consola import motor_db
 
 
-@pytest.fixture
-def base(monkeypatch, tmp_path):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
-    return tmp_path
-
-
 # --------------------------------------------------------------------------- #
-# Seleccion de backend                                                        #
+# Contrato: DATABASE_URL es OBLIGATORIA (ADR 0004)                            #
 # --------------------------------------------------------------------------- #
 
 
-def test_es_postgres_falso_sin_database_url(base, monkeypatch):
+def test_conectar_cruda_sin_database_url_falla_con_mensaje_accionable(monkeypatch):
+    """Sin `DATABASE_URL`, `conectar_cruda` lanza `RuntimeError` con el one-liner de docker.
+
+    No es un fallback a SQLite ni un traceback opaco: es un error de arranque accionable.
+    """
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    assert motor_db.es_postgres() is False
+    for var in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+                "POSTGRES_HOST", "POSTGRES_PORT"):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(RuntimeError) as exc:
+        motor_db.conectar_cruda()
+    mensaje = str(exc.value)
+    assert "DATABASE_URL" in mensaje
+    assert "docker compose" in mensaje or "docker" in mensaje
+    assert "postgres" in mensaje.lower()
 
 
-def test_es_postgres_verdadero_con_database_url(base, monkeypatch):
-    monkeypatch.setenv("DATABASE_URL", "postgresql://x:y@db:5432/keni")
-    assert motor_db.es_postgres() is True
-
-
-def test_database_url_vacia_es_sqlite(base, monkeypatch):
-    # Una var vacia/espacios cuenta como AUSENTE (perfil local), no como Postgres roto.
+def test_database_url_vacia_es_como_ausente(monkeypatch):
+    """Una `DATABASE_URL` vacia/espacios cuenta como AUSENTE (no como URL rota)."""
     monkeypatch.setenv("DATABASE_URL", "   ")
-    assert motor_db.es_postgres() is False
-
-
-def test_conectar_cruda_es_sqlite_sin_database_url(base):
-    con = motor_db.conectar_cruda()
-    try:
-        assert isinstance(con, sqlite3.Connection)
-    finally:
-        con.close()
+    for var in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+                "POSTGRES_HOST", "POSTGRES_PORT"):
+        monkeypatch.delenv(var, raising=False)
+    with pytest.raises(RuntimeError):
+        motor_db.conectar_cruda()
 
 
 # --------------------------------------------------------------------------- #
@@ -86,5 +81,9 @@ def test_traduce_insert_or_ignore_insensible_a_mayusculas():
 
 
 def test_integrity_error_es_neutra():
-    # En local ES la de sqlite3; el contrato es que `auth` capture `motor_db.IntegrityError`.
+    """El tipo que se relanza desde el wrapper es `motor_db.IntegrityError`.
+
+    Por compatibilidad con el codigo y los tests historicos sigue siendo el tipo de sqlite3
+    (`sqlite3.IntegrityError`); ningun SQLite operacional se abre ya (ADR 0004).
+    """
     assert motor_db.IntegrityError is sqlite3.IntegrityError

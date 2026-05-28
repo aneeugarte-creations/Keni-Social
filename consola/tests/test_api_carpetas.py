@@ -16,14 +16,22 @@ from .conftest import _cliente
 
 @pytest.fixture
 def raiz(monkeypatch, tmp_path):
-    """RAIZ permitida + consola.toml + DB aislados en tmp (offline)."""
+    """RAIZ permitida + consola.toml aislados en tmp; Postgres operacional aislado."""
+    # La app llama `arrancar_persistencia` al crearse: exige `DATABASE_URL` (ADR 0004).
+    from ._postgres import limpiar_postgres, requiere_postgres
+
+    url_pg = requiere_postgres()
+    limpiar_postgres(url_pg)
+    monkeypatch.setenv("DATABASE_URL", url_pg)
     raiz = tmp_path / "keni-proyectos"
     raiz.mkdir()
     monkeypatch.setenv("KENI_CONSOLA_RAIZ", str(raiz))
     monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    return raiz
+    try:
+        yield raiz
+    finally:
+        limpiar_postgres(url_pg)
 
 
 # --------------------------------------------------------------------------- #

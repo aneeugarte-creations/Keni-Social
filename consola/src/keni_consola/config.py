@@ -70,11 +70,11 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
   fichero de secretos participa en la decision):
     - KENI_IMAGEN_API_KEY, KENI_IMAGEN_PROVEEDOR  (+ OPENROUTER_API_KEY/OPENAI_API_KEY)
 
-  Persistencia hosted (#130): Postgres y object storage S3/Garage. Si NO se fijan, el
-  perfil LOCAL/privado sigue en SQLite + disco (ADR 0001/0002); si se fijan (el stack
-  hosted las cablea en `deploy/`), `db.py`/`media.py` consumen Postgres/S3. Los NOMBRES
+  Persistencia (#130 / ADR 0004): la operacional (tareas/comercial/rota/usuarios/sesiones/
+  jobs) va SIEMPRE a Postgres -> `DATABASE_URL` es OBLIGATORIA (local o hosted). La media va
+  a object storage S3/Garage si se cablean las `S3_*`; si no, sigue en disco. Los NOMBRES
   son los que ya estan en `deploy/docker-compose.yml`/`.env.example` (no se renombran):
-    - DATABASE_URL                URL Postgres del back            def (vacio = SQLite)
+    - DATABASE_URL                URL Postgres del back            OBLIGATORIA (ADR 0004)
     - S3_ENDPOINT                 endpoint S3/Garage               (cablea S3 si presente)
     - S3_REGION                   region S3                        def garage
     - S3_BUCKET                   bucket de media                  def keni-media
@@ -84,8 +84,6 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
   vive en `rutas.py`). Nombre centralizado aqui, valor leido via `override_ruta`:
     - KENI_DATA_DIR               raiz unica de estado (contenedor)  -> lo usa `rutas`
     - KENI_CONSOLA_RAIZ           contenido editorial por marca
-    - KENI_CONSOLA_DB             consola.db (SQLite)
-    - KENI_CONSOLA_TAREAS         tareas.json (migracion)
     - KENI_CONSOLA_INDICE         indice.sqlite (regenerable)
     - KENI_CONSOLA_MEDIA          dir de media (imagenes)
     - KENI_CONSOLA_SECRETOS       secretos.toml
@@ -155,9 +153,10 @@ ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
-# Persistencia hosted (#130): Postgres + object storage S3/Garage. NOMBRES EXACTOS de
-# `deploy/docker-compose.yml`/`.env.example` (NO se renombran). Sin fijar => perfil
-# local/privado (SQLite + disco). Fijados => `db.py`/`media.py` consumen Postgres/S3.
+# Persistencia (#130 / ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
+# S3/Garage opcional para la media. NOMBRES EXACTOS de `deploy/docker-compose.yml`/
+# `.env.example` (NO se renombran). `DATABASE_URL` (o sus componentes `POSTGRES_*`) es
+# requerida; sin S3 cableado la media sigue en disco.
 ENV_DATABASE_URL = "DATABASE_URL"
 # Componentes de la conexion Postgres (mismos nombres que `deploy/.env.example` y la
 # imagen oficial de Postgres). Sirven para DERIVAR `DATABASE_URL` cuando esta no se fija
@@ -177,8 +176,6 @@ ENV_S3_SECRET_KEY = "S3_SECRET_KEY"
 # Rutas de estado (override especifico de cada recurso; fallback en `rutas.py`).
 ENV_DATA_DIR = "KENI_DATA_DIR"
 ENV_RAIZ = "KENI_CONSOLA_RAIZ"
-ENV_DB = "KENI_CONSOLA_DB"
-ENV_TAREAS = "KENI_CONSOLA_TAREAS"
 ENV_INDICE = "KENI_CONSOLA_INDICE"
 ENV_MEDIA = "KENI_CONSOLA_MEDIA"
 ENV_SECRETOS = "KENI_CONSOLA_SECRETOS"
@@ -545,20 +542,21 @@ def programador_intervalo_segundos() -> float | None:
 # Accesores: persistencia hosted (Postgres + object storage S3/Garage, #130)   #
 # --------------------------------------------------------------------------- #
 #
-# La PRESENCIA de la variable es el conmutador de backend (perfil local/privado vs
-# hosted): sin `DATABASE_URL` -> SQLite; sin endpoint+credenciales S3 -> disco. No se
-# rompe el modo local (ADR 0001/0002) porque el default de cada accesor es "ausente".
+# La media (S3) sigue siendo opcional: sin endpoint+credenciales S3 -> disco. La DB
+# operacional, en cambio, es Postgres OBLIGATORIO (ADR 0004): `database_url()` puede
+# devolver None, pero `motor_db.conectar_cruda()` exige la URL y falla con un mensaje claro.
 
 
 def database_url() -> str | None:
-    """URL de Postgres del back; None si no hay Postgres (=> SQLite local).
+    """URL de Postgres del back; None si no esta fijada (ni la URL ni los componentes).
 
-    Es el CONMUTADOR de backend de `db.py`: si hay URL, la persistencia operacional
-    (tareas/comercial/rota/usuarios/sesiones) va a Postgres; si no, sigue en SQLite.
+    La operacional (tareas/comercial/rota/usuarios/sesiones/jobs) va SIEMPRE a Postgres
+    (ADR 0004): esta funcion resuelve la URL, y `motor_db.conectar_cruda()` la EXIGE (un
+    None alli es un error de arranque con mensaje accionable, no un fallback a SQLite).
 
     PRECEDENCIA (anti-drift):
       1. `DATABASE_URL` explicita -> se devuelve TAL CUAL (override; p. ej. un Postgres
-         externo o un DSN con parametros especiales). Comportamiento intacto.
+         externo o un DSN con parametros especiales).
       2. Si no hay `DATABASE_URL` pero estan `POSTGRES_USER`+`POSTGRES_PASSWORD`+
          `POSTGRES_DB`, se DERIVA la URL de esos componentes. Asi la URL NO puede
          desincronizarse de la password (incidente de prod: la password embebida en
@@ -566,7 +564,8 @@ def database_url() -> str | None:
          (nombre del servicio en compose), `port` default `5432`. Usuario y password se
          %-codifican (`quote(..., safe="")`) porque una password base64 puede llevar
          `+`/`/`/`=`, que romperian el parseo de la URL.
-      3. Si no hay ni URL ni componentes -> None (perfil local/privado, SQLite).
+      3. Si no hay ni URL ni componentes -> None (sin Postgres configurado: `conectar_cruda`
+         lanzara el error obligatorio).
     """
     explicita = _crudo(ENV_DATABASE_URL)
     if explicita:
@@ -637,7 +636,7 @@ def override_ruta(nombre: str) -> Path | None:
     `rutas.dir_config()`/`rutas.raiz_proyectos()`, que componen el fallback
     `KENI_DATA_DIR` > `${XDG_CONFIG_HOME:-~/.config}`.
 
-    `nombre` es una de las constantes `ENV_*` de ruta de este modulo (p.ej. `ENV_DB`).
+    `nombre` es una de las constantes `ENV_*` de ruta de este modulo (p.ej. `ENV_INDICE`).
     """
     crudo = os.environ.get(nombre)
     if crudo:

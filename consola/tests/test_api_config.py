@@ -34,15 +34,26 @@ tipo_token = "system_user"
 
 @pytest.fixture
 def cfg_metricas(monkeypatch, tmp_path):
-    """Aisla el config de metricas en tmp; sin env vars que pisen fuente/marcas."""
+    """Aisla el config de metricas en tmp; sin env vars que pisen fuente/marcas.
+
+    Tambien apunta `DATABASE_URL` al Postgres de pruebas porque `_cli()` crea la app, que
+    en su arranque exige Postgres (ADR 0004).
+    """
+    from ._postgres import limpiar_postgres, requiere_postgres
+
+    url_pg = requiere_postgres()
+    limpiar_postgres(url_pg)
+    monkeypatch.setenv("DATABASE_URL", url_pg)
     ruta = tmp_path / "config.toml"
     monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
     monkeypatch.setenv("KENI_CONSOLA_PREFERENCIAS", str(tmp_path / "preferencias.toml"))
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(ruta))
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
-    return ruta
+    try:
+        yield ruta
+    finally:
+        limpiar_postgres(url_pg)
 
 
 def _cli() -> TestClient:
