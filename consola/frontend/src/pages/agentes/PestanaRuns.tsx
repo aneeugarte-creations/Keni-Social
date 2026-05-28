@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2, Play } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Play, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -173,11 +173,26 @@ function useSondeoRun(agenteId: string, runInicial: Run): Run {
 
 /** Bloque de resultado del último lanzamiento (en vivo mientras corre). */
 function ResultadoRun({ agenteId, runInicial }: { agenteId: string; runInicial: RunConMensaje }) {
+  const queryClient = useQueryClient();
   const sondeado = useSondeoRun(agenteId, runInicial);
   // El sondeo trae el run del backend (sin `mensaje`): conservamos el `mensaje` de
   // lanzamiento del run inicial para que la tarjeta lo siga mostrando.
   const run: RunConMensaje = { ...sondeado, mensaje: sondeado.salida ? undefined : runInicial.mensaje };
   const ejecutando = estaEjecutando(run.estado);
+
+  // Cancelar (#152): mata el árbol del subproceso `claude` en el backend y deja el run en
+  // estado terminal. Tras cancelar, refrescamos el detalle del run sondeado para que el
+  // sondeo vea el estado terminal y se detenga. Solo aplica a runs headless en curso.
+  const cancelar = useMutation({
+    mutationFn: () => api.cancelarRunAgente(agenteId, run.id),
+    onSuccess: (res) => {
+      queryClient.setQueryData(claveRuns(agenteId).concat(run.id), res.run);
+      void queryClient.invalidateQueries({ queryKey: claveAgente(agenteId) });
+      void queryClient.invalidateQueries({ queryKey: ["runs"] });
+      toast.success("Run cancelado.");
+    },
+    onError: (error) => toast.error(mensajeError(error)),
+  });
 
   return (
     <div className="mt-5 space-y-2 border-t border-border pt-4">
@@ -185,6 +200,23 @@ function ResultadoRun({ agenteId, runInicial }: { agenteId: string; runInicial: 
         <span className="text-sm font-medium">Resultado</span>
         <BadgeEstado estado={run.estado} />
         <Badge variant="outline">{etiquetaModo(run.modo)}</Badge>
+        {ejecutando && run.modo === "headless" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="ml-auto h-7 gap-1 px-2 text-xs"
+            onClick={() => cancelar.mutate()}
+            disabled={cancelar.isPending}
+          >
+            {cancelar.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
+            ) : (
+              <X className="h-3 w-3" aria-hidden />
+            )}
+            {cancelar.isPending ? "Cancelando…" : "Cancelar"}
+          </Button>
+        )}
       </div>
       {/* Métricas parciales en vivo mientras corre; finales al terminar. */}
       <MetricasRunLinea metricas={run.metricas} />

@@ -18,6 +18,19 @@ se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
 REUTILIZA los helpers de metricas (`leer_config_existente` + `fusionar_config` +
 `escribir_config_atomico`) para escribir el config.toml de forma atomica y segura;
 NO duplica esa logica. Errores en espanol, sin tracebacks, sin filtrar secretos.
+
+SOLO ADMIN (#153)
+=================
+La clave del proveedor de imagen y los tokens de redes son SECRETOS GLOBALES y
+COMPARTIDOS (un unico fichero por despliegue). Antes cualquier usuario autenticado
+podia leerlos/mutarlos; eso es una fuga de datos en un servicio multiusuario. Ahora
+TODOS los endpoints de conexiones (lectura Y mutacion) exigen rol ADMIN: un editor
+recibe 403. SOLO una SESION admin real puede gestionarlos; el TOKEN de mantenimiento
+NO es admin (#150) y tambien recibe 403 aqui (no es un backdoor a los secretos). El gate
+se aplica por handler leyendo el rol que el middleware dejo en `request.state`
+(`keni_consola.permisos.es_admin`, fuente unica y ESTRICTA), igual que `/api/usuarios`.
+El AISLAMIENTO por tenant (un almacen por cliente) queda diferido:
+ver `docs/adr/0003-aislamiento-secretos-por-tenant.md`.
 """
 
 from __future__ import annotations
@@ -28,8 +41,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import media, secretos
+from .. import media, permisos, secretos
 from .._http_json import leer_json
+
+# Mensaje de rechazo cuando un no-admin toca las conexiones (secretos globales).
+_MSG_SOLO_ADMIN = (
+    "Solo un administrador puede ver o cambiar las conexiones (claves y tokens)."
+)
 
 # Nombres legibles por plataforma de redes (las plataformas se DERIVAN de
 # `asistente.CAMPO_TOKEN`, no se hardcodean aparte).
@@ -61,8 +79,10 @@ async def imagen_estado(request: Request) -> Response:
 
     `modelo` es el modelo de imagen EN USO (`media._modelo()`, con su precedencia) y
     `modelos` la lista curada para poblar el dropdown. NUNCA devuelve la clave: solo
-    presencia y la pista `····last4`.
+    presencia y la pista `····last4`. SOLO ADMIN (#153): un editor recibe 403.
     """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     estado = secretos.estado_imagen()
     return JSONResponse(
         {
@@ -78,8 +98,10 @@ async def imagen_estado(request: Request) -> Response:
 async def imagen_guardar(request: Request) -> Response:
     """PUT: guarda la clave del proveedor de imagen (JSON `{proveedor?, api_key}`).
 
-    Valida que `api_key` no este vacia. Responde estado (sin la clave).
+    Valida que `api_key` no este vacia. Responde estado (sin la clave). SOLO ADMIN (#153).
     """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     datos = await leer_json(request)
     api_key = datos.get("api_key")
     if not isinstance(api_key, str) or not api_key.strip():
@@ -104,8 +126,10 @@ async def imagen_modelo_guardar(request: Request) -> Response:
     VALIDA que el id este en la lista curada (`media.MODELOS_IMAGEN`); si no, 400 en
     espanol. Persiste SOLO el campo modelo (preserva clave/proveedor). Mismo patron de
     auth que el resto de conexiones: la barrera de sesion + CSRF la aplica el middleware
-    `SeguridadConsola`; este handler no anade un gate de rol propio.
+    `SeguridadConsola`; ademas, SOLO ADMIN (#153): un editor recibe 403.
     """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     datos = await leer_json(request)
     modelo = datos.get("modelo")
     if not isinstance(modelo, str) or not modelo.strip():
@@ -125,7 +149,9 @@ async def imagen_modelo_guardar(request: Request) -> Response:
 
 
 async def imagen_borrar(request: Request) -> Response:
-    """DELETE: borra la clave guardada del proveedor de imagen."""
+    """DELETE: borra la clave guardada del proveedor de imagen. SOLO ADMIN (#153)."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     try:
         secretos.borrar_clave_imagen()
     except OSError:
@@ -171,7 +197,10 @@ async def imagen_probar(request: Request) -> Response:
     """POST: valida la clave GUARDADA con una llamada barata (sin generar imagen).
 
     Si no hay clave configurada responde `{ok:false, ...}`. La clave nunca sale.
+    SOLO ADMIN (#153): un editor recibe 403 (no puede sondear la clave global).
     """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     clave = secretos.obtener_clave_imagen()
     if clave is None:
         return JSONResponse({"ok": False, "mensaje": "No hay clave configurada."})
@@ -206,7 +235,12 @@ def _conectado(token: str | None) -> bool:
 
 
 async def redes_estado(request: Request) -> Response:
-    """GET: estado de conexion por plataforma de redes (sin exponer ningun token)."""
+    """GET: estado de conexion por plataforma de redes (sin exponer ningun token).
+
+    SOLO ADMIN (#153): un editor recibe 403 (no ve el estado de los tokens globales).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     cfg = _config_existente()
     redes = [
         {
@@ -235,7 +269,12 @@ def _escribir_token(plataforma: str, token: str) -> None:
 
 
 async def redes_guardar(request: Request) -> Response:
-    """PUT: pega el token de una plataforma (JSON `{token}`). No lo devuelve."""
+    """PUT: pega el token de una plataforma (JSON `{token}`). No lo devuelve.
+
+    SOLO ADMIN (#153): un editor recibe 403.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     plataforma = request.path_params["plataforma"]
     if plataforma not in asistente.CAMPO_TOKEN:
         return JSONResponse({"error": "Plataforma desconocida."}, status_code=400)
@@ -255,7 +294,12 @@ async def redes_guardar(request: Request) -> Response:
 
 
 async def redes_borrar(request: Request) -> Response:
-    """DELETE: quita el token de una plataforma (lo deja en el placeholder)."""
+    """DELETE: quita el token de una plataforma (lo deja en el placeholder).
+
+    SOLO ADMIN (#153): un editor recibe 403.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
     plataforma = request.path_params["plataforma"]
     if plataforma not in asistente.CAMPO_TOKEN:
         return JSONResponse({"error": "Plataforma desconocida."}, status_code=400)

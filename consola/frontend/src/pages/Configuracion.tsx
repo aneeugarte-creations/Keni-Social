@@ -49,6 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { useTema } from "@/hooks/tema-contexto";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -853,6 +854,12 @@ function SeccionApariencia() {
  */
 export default function Configuracion() {
   const queryClient = useQueryClient();
+  const { usuario } = useSesion();
+  // Redes e Imagen IA son SECRETOS GLOBALES: el backend solo deja a un admin verlos o
+  // cambiarlos (#153, /api/conexiones exige rol admin). Ocultamos esas secciones a un
+  // editor para no mostrarle un error 403. Sin usuario de sesión (acceso por token
+  // interino / modo local mono-usuario) cuenta como plenos permisos, así que se muestran.
+  const puedeVerConexiones = usuario === null || usuario.rol === "admin";
   // ¿Hay alguna query de esta página en vuelo? (para el spinner del botón).
   const refrescando = useQuery({
     queryKey: CLAVE_CONFIG,
@@ -865,8 +872,10 @@ export default function Configuracion() {
       onClick={() => {
         void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG });
         void queryClient.invalidateQueries({ queryKey: CLAVE_ESFUERZO });
-        void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
-        void queryClient.invalidateQueries({ queryKey: CLAVE_REDES });
+        if (puedeVerConexiones) {
+          void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
+          void queryClient.invalidateQueries({ queryKey: CLAVE_REDES });
+        }
       }}
       disabled={refrescando}
     >
@@ -886,8 +895,9 @@ export default function Configuracion() {
       <div className="space-y-6">
         <SeccionDatos />
         <SeccionEsfuerzo />
-        <SeccionRedes />
-        <SeccionImagen />
+        {/* Redes e Imagen IA: solo admin (secretos globales, #153). */}
+        {puedeVerConexiones && <SeccionRedes />}
+        {puedeVerConexiones && <SeccionImagen />}
         <SeccionApariencia />
       </div>
     </>

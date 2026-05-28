@@ -47,9 +47,12 @@ def main() -> int:
 
     puerto = _puerto()
 
-    # Seguridad (#134): resolvemos el token de sesion AQUI para poder componer la URL
-    # con `?token=...` (que siembra la cookie en el navegador) y mostrarlo. Si el
-    # operador fijo `KENI_CONSOLA_TOKEN`, usamos ese; si no, generamos uno y avisamos.
+    # Seguridad (#134/#150): resolvemos el token de mantenimiento AQUI para pasarselo a la
+    # app (un unico token por proceso). Si el operador fijo `KENI_CONSOLA_TOKEN`, usamos
+    # ese; si no, generamos uno. NUNCA lo metemos en la URL ni lo imprimimos (#150): un
+    # token en la URL/log es un vector de fuga trivial (historial, capturas, logs). La
+    # cookie del token la siembra el propio index del SPA al cargar la pagina (ver
+    # `app._respuesta_index_spa`), sin necesidad de `?token=` en la URL.
     from . import seguridad
 
     token, generado = seguridad.resolver_token()
@@ -57,36 +60,41 @@ def main() -> int:
     # Host navegable para la URL: si el bind es `0.0.0.0` (todas las interfaces) no es
     # una direccion a la que el navegador pueda ir, asi que mostramos `localhost`.
     host_url = "localhost" if HOST in ("0.0.0.0", "::") else HOST
-    base = f"http://{host_url}:{puerto}/"
-    # La URL con `?token` siembra la cookie del token; el SPA luego autentica solo.
-    url = f"{base}?token={token}"
+    # URL LIMPIA, SIN el token (#150): la cookie se siembra al servir el index.
+    url = f"http://{host_url}:{puerto}/"
     print(f"Consola Keni escuchando en {HOST}:{puerto}")
     if HOST in ("0.0.0.0", "::"):
         print(
             "AVISO: bind a todas las interfaces. Hazlo SOLO detras de un proxy de "
-            "confianza y CON auth (login + token); el proxy es quien la expone."
+            "confianza y CON auth (login multiusuario); el proxy es quien la expone."
         )
     else:
         print(f"Privacidad por diseno: solo escucha en {HOST} (no expuesta a la red).")
     if generado:
+        # NO imprimimos el token (#150). El operador local entra por el LOGIN multiusuario
+        # (el admin de bootstrap se loguea aparte). El token es solo una credencial de
+        # mantenimiento opcional y se entrega fuera de banda, nunca por la URL/log.
         print(
-            "Token de sesion generado para esta ejecucion (no habia KENI_CONSOLA_TOKEN).\n"
-            f"  Abre la Consola con: {url}\n"
-            "  O exporta KENI_CONSOLA_TOKEN=<tu-token> para fijar uno estable."
+            "Token de mantenimiento generado para esta ejecucion (no habia "
+            "KENI_CONSOLA_TOKEN). Entra con tu usuario y contraseña (login multiusuario).\n"
+            f"  Abre la Consola en: {url}"
         )
     else:
-        print("Auth activa con KENI_CONSOLA_TOKEN. Abre la Consola con tu token en la URL "
-              "(?token=...) la primera vez.")
+        print(
+            "Auth multiusuario activa (login user/pass). Hay un KENI_CONSOLA_TOKEN de "
+            "mantenimiento configurado (entregado fuera de banda; NO viaja en la URL).\n"
+            f"  Abre la Consola en: {url}"
+        )
 
-    # Abrir el navegador es best-effort: si falla (sin entorno grafico, etc.) no
-    # debe impedir que el servidor arranque. Abrimos la URL CON el token para que la
-    # cookie quede sembrada y la UI funcione sin pasos manuales.
+    # Abrir el navegador es best-effort: si falla (sin entorno grafico, etc.) no debe
+    # impedir que el servidor arranque. Abrimos la URL LIMPIA (sin token, #150): la cookie
+    # del token la siembra el index del SPA al cargar, asi que la UI funciona igual.
     try:
         webbrowser.open(url)
     except Exception:  # noqa: BLE001
         pass
 
-    # Pasamos el token ya resuelto a la app (asi no se vuelve a generar/loguear otro).
+    # Pasamos el token ya resuelto a la app (asi no se vuelve a generar otro).
     app = crear_app(token=token)
 
     # Captura programada del apartado Comercial: un hilo demonio que va tomando

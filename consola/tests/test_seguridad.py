@@ -234,8 +234,12 @@ def test_token_generado_si_no_hay_env(entorno, monkeypatch):
     assert isinstance(token, str) and len(token) >= 16
 
 
-def test_crear_app_genera_y_loguea_token(entorno, monkeypatch, caplog):
-    """Si no se inyecta token ni hay env var, `crear_app` genera uno y lo muestra en el log."""
+def test_crear_app_genera_token_pero_no_loguea_su_valor(entorno, monkeypatch, caplog):
+    """#150: sin env var, `crear_app` genera un token pero NUNCA loguea su VALOR.
+
+    Antes (#134) el token generado se imprimia en el log (UX `?token=...`); era un vector
+    de fuga (backdoor en logs/capturas). Ahora se avisa de que se genero, sin revelarlo.
+    """
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     # `configurar_logging()` (lo llaman otros tests/arranque) deja el logger del paquete
     # con `propagate=False`; caplog captura via el root, asi que forzamos propagacion
@@ -248,11 +252,15 @@ def test_crear_app_genera_y_loguea_token(entorno, monkeypatch, caplog):
             app = app_modulo.crear_app()
     finally:
         logger_pkg.propagate = propagacion_previa
-    # El token quedo en el estado de la app y aparecio en un WARNING del paquete.
+    # El token quedo en el estado de la app (se usa para autenticar)...
     token = app.state.token_consola
     assert token
+    # ...pero su VALOR NO aparece en NINGUN mensaje de log (#150), ni `?token=`.
     mensajes = "\n".join(r.getMessage() for r in caplog.records if r.name == NOMBRE_LOGGER)
-    assert token in mensajes
+    assert token not in mensajes
+    assert "?token=" not in mensajes
+    # Si avisa (sin revelar el secreto) de que se genero un token de mantenimiento.
+    assert "KENI_CONSOLA_TOKEN" in mensajes
 
 
 def test_app_usa_token_de_env(entorno, monkeypatch):

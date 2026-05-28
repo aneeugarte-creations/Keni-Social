@@ -13,30 +13,48 @@ GUARDAS de integridad (no quedarse sin acceso de admin):
   - No borrarte a TI MISMO.
   - No dejar 0 admins via PATCH (degradar al ultimo admin a editor).
 
-Autorizacion: exige rol admin. El middleware deja el usuario en `request.state.usuario`.
-Si se entro por el TOKEN de bootstrap (`request.state.auth_por_token`), cuenta como
-mantenimiento con plenos permisos (puede gestionar usuarios). Cualquier otro -> 403.
+Autorizacion (#150): exige una SESION de un usuario REAL con rol admin. El middleware
+deja ese usuario en `request.state.usuario`. El TOKEN de mantenimiento
+(`request.state.auth_por_token`) YA NO cuenta como admin: por si solo no puede listar,
+modificar ni borrar usuarios -> 403. La UNICA excepcion es el BOOTSTRAP DE RECUPERACION:
+crear el PRIMER admin cuando la BD no tiene NINGUN usuario (POST con rol admin). Es un
+arranque acotado, no poder admin general, y queda registrado como mantenimiento.
 """
 
 from __future__ import annotations
+
+import logging
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth
+from .. import auth, permisos
 from .._http_json import leer_json
 from ..estados import ROL_ADMIN, ROLES_USUARIO
+from ..observabilidad import NOMBRE_LOGGER
+
+_logger = logging.getLogger(NOMBRE_LOGGER)
 
 _MSG_SOLO_ADMIN = "Solo un administrador puede gestionar usuarios."
 
 
 def _es_admin(request: Request) -> bool:
-    """True si la peticion la hace un admin o entro por el token de bootstrap."""
-    if getattr(request.state, "auth_por_token", False):
-        return True
-    usuario = getattr(request.state, "usuario", None)
-    return bool(usuario) and usuario.get("rol") == ROL_ADMIN
+    """True SOLO si la peticion la hace un usuario real con rol admin (#150 + #153).
+
+    Delega en el helper unico de rol (`keni_consola.permisos.es_admin`), FUENTE UNICA
+    compartida con `/api/conexiones` y `/api/rota` (#153). Ese helper es ESTRICTO (#150):
+    el token de mantenimiento (`request.state.auth_por_token`, sin usuario de sesion) NO
+    cuenta como admin. El unico camino con poder admin es una sesion de un usuario real con
+    rol admin. El arranque del PRIMER admin por token se trata aparte (la excepcion acotada
+    de `crear`), no aqui.
+    """
+    return permisos.es_admin(request)
+
+
+def _es_token_mantenimiento(request: Request) -> bool:
+    """True si la peticion se autentico SOLO por el token de mantenimiento (sin usuario)."""
+    return bool(getattr(request.state, "auth_por_token", False))
 
 
 def _usuario_actual_id(request: Request) -> str | None:
@@ -46,7 +64,7 @@ def _usuario_actual_id(request: Request) -> str | None:
 
 
 def _rechazo_no_admin() -> Response:
-    return JSONResponse({"error": _MSG_SOLO_ADMIN}, status_code=403)
+    return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
 
 
 async def listar(request: Request) -> Response:
@@ -67,9 +85,21 @@ async def listar(request: Request) -> Response:
 
 
 async def crear(request: Request) -> Response:
-    """POST /api/usuarios: alta de cuenta. 409 si el nombre ya existe."""
+    """POST /api/usuarios: alta de cuenta. 409 si el nombre ya existe.
+
+    Autorizacion (#150): la regla normal es rol admin (sesion real). EXCEPCION acotada de
+    recuperacion: si la peticion entro por el TOKEN de mantenimiento Y la BD NO tiene
+    NINGUN usuario, se permite crear el PRIMER admin (bootstrap). Asi un despliegue recien
+    arrancado puede sembrar su admin inicial con el token, pero el token NO da poder admin
+    sobre una BD que YA tiene usuarios (ahi exige una sesion admin real, como el resto).
+    """
+    bootstrap_por_token = False
     if not _es_admin(request):
-        return _rechazo_no_admin()
+        # Unica via sin sesion admin: bootstrap del primer admin por token (BD vacia).
+        if _es_token_mantenimiento(request) and not auth.hay_usuarios():
+            bootstrap_por_token = True
+        else:
+            return _rechazo_no_admin()
     datos = await leer_json(request)
     usuario = datos.get("usuario")
     password = datos.get("password")
@@ -92,9 +122,24 @@ async def crear(request: Request) -> Response:
         validos = " o ".join(f'"{r}"' for r in ROLES_USUARIO)
         return JSONResponse({"error": f"Rol inválido. Usa {validos}."}, status_code=400)
 
+    # Bootstrap por token: SOLO sirve para sembrar el primer ADMIN (recuperar el acceso),
+    # no para crear editores. Crear un editor con la BD vacia dejaria la consola sin admin.
+    if bootstrap_por_token and rol != ROL_ADMIN:
+        return JSONResponse(
+            {"error": "El token de mantenimiento solo puede crear el primer administrador."},
+            status_code=403,
+        )
+
     creado = auth.crear_usuario(usuario, password, rol)
     if creado is None:
         return JSONResponse({"error": "Ya existe un usuario con ese nombre."}, status_code=409)
+    if bootstrap_por_token:
+        # Atribuible a MANTENIMIENTO (token, sin usuario): nunca un "admin fantasma" (#150).
+        _logger.warning(
+            "Mantenimiento (token): primer admin creado por bootstrap de recuperacion. "
+            "usuario=%s (la BD no tenia usuarios).",
+            creado["usuario"],
+        )
     return JSONResponse(
         {"id": creado["id"], "usuario": creado["usuario"], "rol": creado["rol"]},
         status_code=201,
