@@ -7,9 +7,12 @@ import {
   CalendarPlus,
   Camera,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Download,
+  ImageIcon,
   Loader2,
   Plane,
   Plus,
@@ -47,14 +50,19 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import type {
   AusenciaRota,
+  CuerpoCrearPiezaRota,
+  CuerpoActualizarPiezaRota,
+  EstadoPieza,
   EventoRota,
   FranjaTurno,
   HorarioSemana,
   MiembroRota,
+  PiezaRota,
   PrioridadEvento,
   TipoAusencia,
   TipoCoberturaEvento,
@@ -125,6 +133,15 @@ const TIPOS_AUSENCIA: { valor: TipoAusencia; etiqueta: string }[] = [
   { valor: "descanso", etiqueta: "Descanso" },
   { valor: "baja", etiqueta: "Baja" },
   { valor: "otro", etiqueta: "Otro" },
+];
+
+// Estados del workflow de produccion de UNA pieza (#150 PARRILLA 2026.xlsx). Mismo orden
+// que el ciclo de vida: pendiente -> en_curso -> listo -> publicado.
+const ESTADOS_PIEZA: { valor: EstadoPieza; etiqueta: string }[] = [
+  { valor: "pendiente", etiqueta: "Pendiente" },
+  { valor: "en_curso", etiqueta: "En curso" },
+  { valor: "listo", etiqueta: "Listo" },
+  { valor: "publicado", etiqueta: "Publicado" },
 ];
 
 function mensajeError(error: unknown): string {
@@ -1364,28 +1381,32 @@ function Eventos() {
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-      <NuevoEvento onCreado={invalidar} />
-      <div className="space-y-3">
-        {q.isPending ? (
-          <Skeleton className="h-40 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudieron cargar los eventos"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : eventos.length === 0 ? (
-          <EstadoVacio
-            icono={CalendarPlus}
-            titulo="Sin eventos"
-            texto="Da de alta los partidos y transmisiones de la semana con el formulario."
-          />
-        ) : (
-          eventos.map((e) => <TarjetaEvento key={e.id} evento={e} onCambio={invalidar} />)
-        )}
+    <div className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
+        <NuevoEvento onCreado={invalidar} />
+        <div className="space-y-3">
+          {q.isPending ? (
+            <Skeleton className="h-40 w-full rounded-md" />
+          ) : q.isError ? (
+            <BloqueError
+              titulo="No se pudieron cargar los eventos"
+              mensaje={mensajeError(q.error)}
+              onReintentar={() => void q.refetch()}
+              cargando={q.isFetching}
+            />
+          ) : eventos.length === 0 ? (
+            <EstadoVacio
+              icono={CalendarPlus}
+              titulo="Sin eventos"
+              texto="Da de alta los partidos y transmisiones de la semana con el formulario."
+            />
+          ) : (
+            eventos.map((e) => <TarjetaEvento key={e.id} evento={e} onCambio={invalidar} />)
+          )}
+        </div>
       </div>
+      {/* Piezas sueltas (#150): campanas evergreen sin evento, agrupadas por programa. */}
+      <PiezasSueltas />
     </div>
   );
 }
@@ -1520,6 +1541,7 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
 }
 
 function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () => void }) {
+  const [panelAbierto, setPanelAbierto] = React.useState(false);
   const borrar = useMutation({
     mutationFn: () => api.eliminarEventoRota(evento.id),
     onSuccess: () => {
@@ -1606,6 +1628,23 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
               </SelectContent>
             </Select>
             {evento.cambiado && <BotonMarcarAvisado evento={evento} onCambio={onCambio} />}
+            {/* Panel inferior expandible (NO modal): muestra las piezas asociadas al evento. */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 gap-1.5 text-xs"
+              onClick={() => setPanelAbierto((v) => !v)}
+              aria-expanded={panelAbierto}
+              aria-label={panelAbierto ? "Cerrar piezas" : "Abrir piezas"}
+            >
+              <ImageIcon className="h-3.5 w-3.5" />
+              Piezas
+              {panelAbierto ? (
+                <ChevronUp className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronDown className="h-3.5 w-3.5" />
+              )}
+            </Button>
           </div>
         </div>
         <Button
@@ -1623,6 +1662,480 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
           )}
         </Button>
       </CardContent>
+      {panelAbierto && (
+        <div className="border-t bg-muted/30">
+          <PanelPiezasEvento evento={evento} />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// --- Piezas de la parrilla (#150 PARRILLA 2026.xlsx) -----------------------
+//
+// Una pieza = un POST individual. Vive dentro de la pestana "Eventos": (a) panel inferior
+// expandible por evento; (b) seccion colapsable al final para piezas sueltas (campanas
+// evergreen sin evento). Reutiliza shadcn (Table, Input, Select, Checkbox, Button, Card).
+
+function fechaInputAValor(fecha: string): string {
+  // Input type="date" usa AAAA-MM-DD. Nuestro backend envia el mismo formato o "".
+  return fecha;
+}
+
+function PanelPiezasEvento({ evento }: { evento: EventoRota }) {
+  const queryClient = useQueryClient();
+  const clave = ["rota", "piezas", "evento", evento.id] as const;
+  const q = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.listarPiezasRota({ evento_id: evento.id }, signal),
+  });
+  const piezas = q.data?.piezas ?? [];
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
+
+  return (
+    <div className="space-y-3 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="text-xs text-muted-foreground">
+          Piezas del evento ({piezas.length}). Una pieza = un post individual (pre-evento,
+          reel, historia, post-evento…).
+        </div>
+        <FormularioNuevaPieza
+          eventoIdInicial={evento.id}
+          onCreada={invalidar}
+          textoBoton="Nueva pieza"
+        />
+      </div>
+      <TablaPiezas piezas={piezas} cargando={q.isPending} onCambio={invalidar} />
+    </div>
+  );
+}
+
+function TablaPiezas({
+  piezas,
+  cargando,
+  onCambio,
+  mostrarPrograma = false,
+}: {
+  piezas: PiezaRota[];
+  cargando: boolean;
+  onCambio: () => void;
+  mostrarPrograma?: boolean;
+}) {
+  if (cargando) {
+    return <Skeleton className="h-24 w-full rounded-md" />;
+  }
+  if (piezas.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed bg-background p-4 text-center text-xs text-muted-foreground">
+        Aún no hay piezas. Crea la primera con el botón de arriba.
+      </div>
+    );
+  }
+  return (
+    <div className="overflow-x-auto rounded-md border bg-background">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {mostrarPrograma && <TableHead className="min-w-[10rem]">Programa</TableHead>}
+            <TableHead className="min-w-[10rem]">Red</TableHead>
+            <TableHead className="min-w-[8rem]">Tipo</TableHead>
+            <TableHead className="min-w-[8rem]">Día</TableHead>
+            <TableHead className="min-w-[6rem]">Hora</TableHead>
+            <TableHead className="min-w-[8rem]">Estado</TableHead>
+            <TableHead className="min-w-[5rem] text-center">Material</TableHead>
+            <TableHead className="min-w-[6rem] text-center">Contenido</TableHead>
+            <TableHead className="min-w-[6rem] text-center">Publicado</TableHead>
+            <TableHead className="min-w-[16rem]">Contenido sugerido / Enlace</TableHead>
+            <TableHead className="w-10"></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {piezas.map((p) => (
+            <FilaPieza
+              key={p.id}
+              pieza={p}
+              mostrarPrograma={mostrarPrograma}
+              onCambio={onCambio}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+function FilaPieza({
+  pieza,
+  mostrarPrograma,
+  onCambio,
+}: {
+  pieza: PiezaRota;
+  mostrarPrograma: boolean;
+  onCambio: () => void;
+}) {
+  const editar = useMutation({
+    mutationFn: (cuerpo: CuerpoActualizarPiezaRota) => api.actualizarPiezaRota(pieza.id, cuerpo),
+    onSuccess: () => onCambio(),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarPiezaRota(pieza.id),
+    onSuccess: () => {
+      toast.success("Pieza eliminada.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const guardarTexto = (campo: keyof CuerpoActualizarPiezaRota, valor: string) => {
+    if (valor === (pieza[campo as keyof PiezaRota] as string)) return;
+    editar.mutate({ [campo]: valor } as CuerpoActualizarPiezaRota);
+  };
+
+  return (
+    <TableRow>
+      {mostrarPrograma && (
+        <TableCell>
+          <Input
+            defaultValue={pieza.programa}
+            placeholder="Campaña / programa"
+            onBlur={(e) => guardarTexto("programa", e.target.value.trim())}
+            className="h-8 text-xs"
+            maxLength={120}
+          />
+        </TableCell>
+      )}
+      <TableCell>
+        <Input
+          defaultValue={pieza.red_social}
+          placeholder="FB, IG, X…"
+          onBlur={(e) => guardarTexto("red_social", e.target.value.trim())}
+          className="h-8 text-xs"
+          maxLength={80}
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          defaultValue={pieza.tipo_pieza}
+          placeholder="IMAGEN / VIDEO…"
+          onBlur={(e) => guardarTexto("tipo_pieza", e.target.value.trim())}
+          className="h-8 text-xs"
+          maxLength={60}
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          type="date"
+          defaultValue={fechaInputAValor(pieza.dia)}
+          onBlur={(e) => guardarTexto("dia", e.target.value)}
+          className="h-8 text-xs"
+        />
+      </TableCell>
+      <TableCell>
+        <Input
+          defaultValue={pieza.hora_post}
+          placeholder="17:30 / LINK VIVO"
+          onBlur={(e) => guardarTexto("hora_post", e.target.value.trim())}
+          className="h-8 text-xs"
+          maxLength={40}
+        />
+      </TableCell>
+      <TableCell>
+        <Select
+          value={pieza.estado}
+          onValueChange={(v) => editar.mutate({ estado: v as EstadoPieza })}
+          disabled={editar.isPending}
+        >
+          <SelectTrigger aria-label="Estado" className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ESTADOS_PIEZA.map((e) => (
+              <SelectItem key={e.valor} value={e.valor}>
+                {e.etiqueta}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+      <TableCell className="text-center">
+        <Checkbox
+          checked={pieza.material_entregado}
+          onCheckedChange={(v) => editar.mutate({ material_entregado: v })}
+          aria-label="Material entregado"
+        />
+      </TableCell>
+      <TableCell className="text-center">
+        <Checkbox
+          checked={pieza.contenido_entregado}
+          onCheckedChange={(v) => editar.mutate({ contenido_entregado: v })}
+          aria-label="Contenido entregado"
+        />
+      </TableCell>
+      <TableCell className="text-center">
+        <Checkbox
+          checked={pieza.publicado}
+          onCheckedChange={(v) => editar.mutate({ publicado: v })}
+          aria-label="Publicado"
+        />
+      </TableCell>
+      <TableCell>
+        <div className="space-y-1">
+          <Input
+            defaultValue={pieza.contenido_sugerido}
+            placeholder="Contenido sugerido"
+            onBlur={(e) => guardarTexto("contenido_sugerido", e.target.value.trim())}
+            className="h-8 text-xs"
+            maxLength={500}
+          />
+          <Input
+            defaultValue={pieza.enlace}
+            placeholder="https://…"
+            onBlur={(e) => guardarTexto("enlace", e.target.value.trim())}
+            className="h-8 text-xs"
+            maxLength={2000}
+          />
+        </div>
+      </TableCell>
+      <TableCell>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Borrar pieza"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => {
+            if (window.confirm("¿Borrar esta pieza?")) borrar.mutate();
+          }}
+          disabled={borrar.isPending}
+        >
+          {borrar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+function FormularioNuevaPieza({
+  eventoIdInicial = "",
+  programaInicial = "",
+  onCreada,
+  textoBoton,
+  conPrograma = false,
+}: {
+  eventoIdInicial?: string;
+  programaInicial?: string;
+  onCreada: () => void;
+  textoBoton: string;
+  conPrograma?: boolean;
+}) {
+  const [abierto, setAbierto] = React.useState(false);
+  const [programa, setPrograma] = React.useState(programaInicial);
+  const [redSocial, setRedSocial] = React.useState("");
+  const [tipoPieza, setTipoPieza] = React.useState("");
+  const [dia, setDia] = React.useState("");
+  const [horaPost, setHoraPost] = React.useState("");
+  const [contenidoSugerido, setContenidoSugerido] = React.useState("");
+
+  const crear = useMutation({
+    mutationFn: () => {
+      const cuerpo: CuerpoCrearPiezaRota = {
+        evento_id: eventoIdInicial || undefined,
+        programa: programa.trim() || undefined,
+        red_social: redSocial.trim() || undefined,
+        tipo_pieza: tipoPieza.trim() || undefined,
+        dia: dia || undefined,
+        hora_post: horaPost.trim() || undefined,
+        contenido_sugerido: contenidoSugerido.trim() || undefined,
+      };
+      return api.crearPiezaRota(cuerpo);
+    },
+    onSuccess: () => {
+      toast.success("Pieza creada.");
+      // Limpiamos los campos editables (mantenemos `eventoIdInicial` que viene del evento).
+      setPrograma(programaInicial);
+      setRedSocial("");
+      setTipoPieza("");
+      setDia("");
+      setHoraPost("");
+      setContenidoSugerido("");
+      setAbierto(false);
+      onCreada();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Al menos uno entre evento, programa o contenido_sugerido (el back lo valida; aqui
+  // pre-validamos para que el boton se vea claro).
+  const puedeCrear =
+    Boolean(eventoIdInicial) ||
+    programa.trim().length > 0 ||
+    contenidoSugerido.trim().length > 0;
+
+  if (!abierto) {
+    return (
+      <Button size="sm" variant="outline" onClick={() => setAbierto(true)}>
+        <Plus className="h-3.5 w-3.5" /> {textoBoton}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="w-full rounded-md border bg-background p-3 space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {conPrograma && (
+          <div className="space-y-1.5">
+            <Label className="text-xs">Programa / campaña</Label>
+            <Input
+              value={programa}
+              onChange={(e) => setPrograma(e.target.value)}
+              placeholder="Álvaro Fidalgo, MUNDIAL…"
+              maxLength={120}
+              className="h-8 text-xs"
+            />
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <Label className="text-xs">Red social</Label>
+          <Input
+            value={redSocial}
+            onChange={(e) => setRedSocial(e.target.value)}
+            placeholder="FB, IG, X / HISTORIA / IG, TK (REEL)"
+            maxLength={80}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Tipo</Label>
+          <Input
+            value={tipoPieza}
+            onChange={(e) => setTipoPieza(e.target.value)}
+            placeholder="IMAGEN / VIDEO / REEL"
+            maxLength={60}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Día</Label>
+          <Input
+            type="date"
+            value={dia}
+            onChange={(e) => setDia(e.target.value)}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">Hora</Label>
+          <Input
+            value={horaPost}
+            onChange={(e) => setHoraPost(e.target.value)}
+            placeholder="17:30 o LINK VIVO"
+            maxLength={40}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1.5 sm:col-span-2">
+          <Label className="text-xs">Contenido sugerido</Label>
+          <Textarea
+            value={contenidoSugerido}
+            onChange={(e) => setContenidoSugerido(e.target.value)}
+            placeholder="Pre-evento, reel del gol, 5:15 LINK VIVO…"
+            rows={2}
+            maxLength={500}
+            className="text-xs"
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setAbierto(false)}>
+          Cancelar
+        </Button>
+        <Button
+          size="sm"
+          onClick={() => crear.mutate()}
+          disabled={!puedeCrear || crear.isPending}
+        >
+          {crear.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Plus className="h-3.5 w-3.5" />
+          )}
+          Crear pieza
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PiezasSueltas() {
+  const [abierto, setAbierto] = React.useState(false);
+  const queryClient = useQueryClient();
+  const clave = ["rota", "piezas", "sueltas"] as const;
+  const q = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.listarPiezasRota({ evento_id: "" }, signal),
+    enabled: abierto,
+  });
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
+  // Agrupamos por programa (las piezas sueltas son campanas evergreen). `q.data` es la
+  // dependencia estable; calcular `piezas` y agrupar dentro del useMemo evita el warning
+  // de `react-hooks/exhaustive-deps` por una nueva referencia al spread `?? []`.
+  const grupos = React.useMemo(() => {
+    const piezas = q.data?.piezas ?? [];
+    const m = new Map<string, PiezaRota[]>();
+    for (const p of piezas) {
+      const k = p.programa || "(sin programa)";
+      const lista = m.get(k) ?? [];
+      lista.push(p);
+      m.set(k, lista);
+    }
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [q.data]);
+
+  return (
+    <Card>
+      <CardHeader className="cursor-pointer pb-3" onClick={() => setAbierto((v) => !v)}>
+        <CardTitle className="flex items-center gap-2 text-base">
+          {abierto ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          Piezas sueltas / programas
+          <span className="ml-auto text-xs font-normal text-muted-foreground">
+            Campañas evergreen sin evento (Álvaro Fidalgo, MUNDIAL, Paty Cantú…)
+          </span>
+        </CardTitle>
+      </CardHeader>
+      {abierto && (
+        <CardContent className="space-y-4">
+          <div className="flex justify-end">
+            <FormularioNuevaPieza
+              onCreada={invalidar}
+              textoBoton="Pieza suelta"
+              conPrograma
+            />
+          </div>
+          {q.isPending ? (
+            <Skeleton className="h-24 w-full rounded-md" />
+          ) : grupos.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+              Aún no hay piezas sueltas. Crea la primera con el botón de arriba.
+            </div>
+          ) : (
+            grupos.map(([programa, lista]) => (
+              <div key={programa} className="space-y-2">
+                <div className="text-sm font-medium">{programa}</div>
+                <TablaPiezas
+                  piezas={lista}
+                  cargando={false}
+                  onCambio={invalidar}
+                  mostrarPrograma
+                />
+              </div>
+            ))
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
