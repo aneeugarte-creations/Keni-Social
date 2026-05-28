@@ -172,6 +172,33 @@ def test_listar_tareas_filtra_por_proyecto(base):
     assert len(db.listar_tareas()) == 2
 
 
+def test_listar_tareas_filtra_por_evento(base):
+    """`listar_tareas(evento_id=...)` acota a las tareas atadas a un evento."""
+    db.crear_tarea("p", "Libre", evento_id="")
+    db.crear_tarea("p", "De evento A", evento_id="evA")
+    db.crear_tarea("p", "Otra de A", evento_id="evA")
+    db.crear_tarea("p", "De evento B", evento_id="evB")
+    de_a = db.listar_tareas(evento_id="evA")
+    assert sorted(t["titulo"] for t in de_a) == ["De evento A", "Otra de A"]
+    de_b = db.listar_tareas(evento_id="evB")
+    assert [t["titulo"] for t in de_b] == ["De evento B"]
+    # Sin filtro: todas.
+    assert len(db.listar_tareas()) == 4
+
+
+def test_actualizar_tarea_evento_id(base):
+    """`actualizar_tarea({'evento_id': ...})` ata/desata una tarea de un evento."""
+    t = db.crear_tarea("p", "T")
+    assert t["evento_id"] == ""
+    actualizada = db.actualizar_tarea(t["id"], {"evento_id": "evX"})
+    assert actualizada is not None
+    assert actualizada["evento_id"] == "evX"
+    # Desatar
+    desatada = db.actualizar_tarea(t["id"], {"evento_id": ""})
+    assert desatada is not None
+    assert desatada["evento_id"] == ""
+
+
 def test_migracion_columnas_tablero_en_bd_vieja(base):
     """Una BD con `tareas` SIN responsable/enlace se ALTERa (idempotente) y se lee vacia."""
     ruta = db.ruta_db()
@@ -196,6 +223,38 @@ def test_migracion_columnas_tablero_en_bd_vieja(base):
     # Y la columna queda disponible para nuevas filas.
     nueva = db.crear_tarea("p", "Nueva", responsable={"id": "u1", "usuario": "ana"})
     assert nueva["responsable_nombre"] == "ana"
+
+
+def test_migracion_columna_evento_id_en_bd_vieja(base):
+    """Una BD con `tareas` SIN `evento_id` se ALTERa (idempotente) y se lee con ''."""
+    ruta = db.ruta_db()
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(ruta))
+    # Esquema previo a la unificacion de pendientes (#145 F5 completo, sin evento_id).
+    con.execute(
+        "CREATE TABLE tareas (id TEXT PRIMARY KEY, proyecto TEXT NOT NULL, titulo TEXT NOT NULL, "
+        "detalle TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'pendiente', "
+        "fecha TEXT NOT NULL DEFAULT '', autor_id TEXT NOT NULL DEFAULT '', "
+        "autor_nombre TEXT NOT NULL DEFAULT '', responsable_id TEXT NOT NULL DEFAULT '', "
+        "responsable_nombre TEXT NOT NULL DEFAULT '', enlace TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute(
+        "INSERT INTO tareas (id, proyecto, titulo) VALUES ('vieja', 'p', 'Tarea vieja')"
+    )
+    con.commit()
+    con.close()
+    # Cualquier operacion dispara la migracion idempotente.
+    t = db.obtener_tarea("vieja")
+    assert t is not None
+    assert t["evento_id"] == ""
+    # Y la columna queda disponible para nuevas filas.
+    nueva = db.crear_tarea("p", "Nueva atada", evento_id="ev123")
+    assert nueva["evento_id"] == "ev123"
+    leida = db.obtener_tarea(nueva["id"])
+    assert leida is not None
+    assert leida["evento_id"] == "ev123"
+    # Migracion idempotente: segunda llamada a una operacion no rompe.
+    assert db.obtener_tarea("vieja") is not None
 
 
 def test_migracion_columnas_eventos_rota_en_bd_vieja(base):
