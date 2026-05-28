@@ -227,10 +227,18 @@ def _error_prioridad() -> Response:
 
 
 async def listar_eventos(request: Request) -> Response:
-    """GET /api/rota/eventos[?desde&hasta&cambiados&tipo_cobertura]: calendario de eventos.
+    """GET /api/rota/eventos: calendario de eventos con filtros opcionales.
 
-    `cambiados=true` deja solo los REPROGRAMADOS (los que Elías debe re-avisar);
-    `tipo_cobertura=` filtra por tipo de cobertura. `desde`/`hasta` acotan por fecha.
+    Filtros (todos opcionales, combinables):
+      - `desde`, `hasta`              acotan por fecha (ISO AAAA-MM-DD).
+      - `cambiados=true`              deja solo los REPROGRAMADOS sin avisar.
+      - `tipo_cobertura=...` (multi)  filtra por tipo (repetir param para multi-select).
+      - `prioridad=...` (multi)       filtra por prioridad (repetir param para multi).
+      - `cambiado=true|false`         tri-estado: presente -> filtra, ausente -> todos.
+      - `q=...`                       substring case-insensitive sobre `titulo` y `contenido`.
+
+    Compatibilidad: `cambiados=true` (legado, plural) se mantiene como atajo equivalente
+    a `cambiado=true`. Si ambos llegan, gana `cambiado` (más explícito).
     """
     desde = (request.query_params.get("desde") or "").strip() or None
     hasta = (request.query_params.get("hasta") or "").strip() or None
@@ -240,12 +248,49 @@ async def listar_eventos(request: Request) -> Response:
         "sí",
         "si",
     )
-    tipo_cobertura = (request.query_params.get("tipo_cobertura") or "").strip() or None
-    if tipo_cobertura is not None and tipo_cobertura not in TIPOS_COBERTURA:
+
+    # Multi-select: `getlist` recoge `tipo_cobertura=a&tipo_cobertura=b`. Filtramos vacíos
+    # y validamos contra el catálogo (UX honesta: tipo inválido -> 400, no silencio).
+    tipos_cob = [t.strip() for t in request.query_params.getlist("tipo_cobertura") if t.strip()]
+    if any(t not in TIPOS_COBERTURA for t in tipos_cob):
         return _error_cobertura()
+
+    prioridades = [p.strip() for p in request.query_params.getlist("prioridad") if p.strip()]
+    if any(p not in PRIORIDADES_EVENTO for p in prioridades):
+        return _error_prioridad()
+
+    # `cambiado` tri-estado: presente y parseable -> filtra; ausente -> no filtra.
+    cambiado_crudo = (request.query_params.get("cambiado") or "").strip().lower()
+    cambiado_filtro: bool | None = None
+    if cambiado_crudo in ("1", "true", "sí", "si"):
+        cambiado_filtro = True
+    elif cambiado_crudo in ("0", "false", "no"):
+        cambiado_filtro = False
+
+    q = (request.query_params.get("q") or "").strip().lower()
+
+    # El repo solo soporta filtro mono `tipo_cobertura`; multi/prioridad/q los aplicamos
+    # en Python sobre el resultado bruto (orden lineal, dataset pequeño en operación real).
     eventos = repos.listar_eventos_rota(
-        desde=desde, hasta=hasta, solo_cambiados=solo_cambiados, tipo_cobertura=tipo_cobertura
+        desde=desde,
+        hasta=hasta,
+        solo_cambiados=solo_cambiados,
+        tipo_cobertura=tipos_cob[0] if len(tipos_cob) == 1 else None,
     )
+
+    if len(tipos_cob) > 1:
+        eventos = [e for e in eventos if e.get("tipo_cobertura", "transmision") in tipos_cob]
+    if prioridades:
+        eventos = [e for e in eventos if e.get("prioridad", "media") in prioridades]
+    if cambiado_filtro is not None:
+        eventos = [e for e in eventos if bool(e.get("cambiado")) is cambiado_filtro]
+    if q:
+        eventos = [
+            e
+            for e in eventos
+            if q in (e.get("titulo") or "").lower() or q in (e.get("contenido") or "").lower()
+        ]
+
     return JSONResponse({"eventos": [_evento_a_dict(e) for e in eventos]})
 
 
