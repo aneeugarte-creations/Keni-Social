@@ -3965,6 +3965,91 @@ function InputProgramaPieza({
   );
 }
 
+/**
+ * Selector con autocomplete del campo `programa` para alta de pieza.
+ *
+ * - Si hay catálogo, muestra las opciones que matchean lo escrito; el usuario
+ *   puede escribir cualquier texto (queda libre).
+ * - Si el texto no coincide con ningún programa del catálogo, ofrecemos crearlo
+ *   al vuelo (`POST /api/rota/programas`) y lo seleccionamos.
+ * - Degradación: si la lista llega vacía o falla, el input se comporta como
+ *   campo de texto libre como antes.
+ */
+function SelectorProgramaPieza({
+  valor,
+  programas,
+  onCambio,
+  onCreado,
+}: {
+  valor: string;
+  programas: ProgramaRota[] | { nombre: string }[];
+  onCambio: (v: string) => void;
+  onCreado: (nuevo: string) => void;
+}) {
+  const listId = React.useId();
+  // Filtramos los inactivos si el catálogo viene con `activo` (modo `ProgramaRota[]`).
+  // En modo legado `{nombre}[]` (no debería pasar aquí, pero por defensa) los mostramos
+  // todos.
+  const opciones = React.useMemo(() => {
+    const todos = programas as Array<{ nombre: string; activo?: boolean }>;
+    return todos.filter((p) => (p.activo === undefined ? true : p.activo));
+  }, [programas]);
+  const limpio = valor.trim();
+  const existeExacto = opciones.some(
+    (p) => p.nombre.localeCompare(limpio, undefined, { sensitivity: "accent" }) === 0,
+  );
+  const puedeCrear = limpio.length > 0 && !existeExacto;
+
+  const queryClient = useQueryClient();
+  const crear = useMutation({
+    mutationFn: () => api.crearProgramaRota({ nombre: limpio }),
+    onSuccess: (res) => {
+      // Invalida TODAS las queries del catálogo (con/sin filtro `activo`) para que
+      // el nuevo programa aparezca en otros sitios que ya estén renderizados.
+      void queryClient.invalidateQueries({ queryKey: ["rota", "programas"] });
+      toast.success(`Programa «${res.programa.nombre}» creado.`);
+      onCreado(res.programa.nombre);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <div className="space-y-1.5">
+      <Input
+        value={valor}
+        onChange={(e) => onCambio(e.target.value)}
+        placeholder="Álvaro Fidalgo, MUNDIAL…"
+        maxLength={200}
+        className="h-8 text-xs"
+        list={listId}
+        autoComplete="off"
+      />
+      <datalist id={listId}>
+        {opciones.map((p) => (
+          <option key={p.nombre} value={p.nombre} />
+        ))}
+      </datalist>
+      {puedeCrear && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 w-full justify-start px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={() => crear.mutate()}
+          disabled={crear.isPending}
+        >
+          {crear.isPending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <Plus className="h-3 w-3" />
+          )}
+          Crear programa «{limpio}»
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function FormularioNuevaPieza({
   eventoIdInicial = "",
   programaInicial = "",
@@ -3975,8 +4060,10 @@ function FormularioNuevaPieza({
 }: {
   eventoIdInicial?: string;
   programaInicial?: string;
-  /** Catálogo para el autocomplete del campo `programa`. */
-  programas?: { nombre: string }[];
+  /** Catálogo para el selector + autocomplete del campo `programa`. Si se pasa
+   * `ProgramaRota[]`, se filtran los inactivos; si solo se pasa `{nombre}[]`, se
+   * muestran todos (modo legado: filas inline de la tabla). */
+  programas?: ProgramaRota[] | { nombre: string }[];
   onCreada: () => void;
   textoBoton: string;
   conPrograma?: boolean;
@@ -3992,7 +4079,7 @@ function FormularioNuevaPieza({
   const [comentarios, setComentarios] = React.useState("");
   const [fechaEntregaMaterial, setFechaEntregaMaterial] = React.useState("");
   const [alwaysOn, setAlwaysOn] = React.useState(false);
-  const programaListId = React.useId();
+  const alwaysOnId = React.useId();
 
   const crear = useMutation({
     mutationFn: () => {
@@ -4051,19 +4138,15 @@ function FormularioNuevaPieza({
         {conPrograma && (
           <div className="space-y-1.5">
             <Label className="text-xs">Programa / campaña</Label>
-            <Input
-              value={programa}
-              onChange={(e) => setPrograma(e.target.value)}
-              placeholder="Álvaro Fidalgo, MUNDIAL…"
-              maxLength={200}
-              className="h-8 text-xs"
-              list={programaListId}
+            <SelectorProgramaPieza
+              valor={programa}
+              programas={programas}
+              onCambio={setPrograma}
+              onCreado={(nuevo) => {
+                onCreada();
+                setPrograma(nuevo);
+              }}
             />
-            <datalist id={programaListId}>
-              {programas.map((p) => (
-                <option key={p.nombre} value={p.nombre} />
-              ))}
-            </datalist>
           </div>
         )}
         <div className="space-y-1.5">
@@ -4131,12 +4214,12 @@ function FormularioNuevaPieza({
         </div>
         <div className="flex items-center gap-2 self-end pb-1">
           <Checkbox
-            id={`pieza-alwayson-${programaListId}`}
+            id={`pieza-alwayson-${alwaysOnId}`}
             checked={alwaysOn}
             onCheckedChange={(v) => setAlwaysOn(v === true)}
           />
           <Label
-            htmlFor={`pieza-alwayson-${programaListId}`}
+            htmlFor={`pieza-alwayson-${alwaysOnId}`}
             className="cursor-pointer text-xs font-normal"
           >
             Always-on (perenne, sin fecha fija)
