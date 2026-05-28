@@ -39,7 +39,10 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
     ESTADOS_PUBLICACION,
     ESTADOS_ROTA,
     ESTADOS_TAREA,
+    FRANJA_DESCANSO,
+    FRANJAS_TURNO,
     METRICAS_COMERCIAL,
+    TIPOS_AUSENCIA,
 )
 
 
@@ -524,6 +527,97 @@ def borrar_turnos_semana_rota(semana: str) -> int:
 
 def aprobar_semana_rota(semana: str) -> int:
     return db.aprobar_semana_rota(semana)
+
+
+# --------------------------------------------------------------------------- #
+# Horario de TRABAJO del equipo (OPERACIONAL: SQLite via db.py; F4 · #144)     #
+# --------------------------------------------------------------------------- #
+#
+# Turnos de trabajo (matutino/vespertino/descanso) + ausencias/vacaciones. Paralelo a la
+# cobertura de eventos: dato operacional de coordinacion interna. La fachada delega 1:1.
+
+
+def crear_turno_trabajo_rota(
+    semana: str,
+    fecha: str,
+    *,
+    miembro_id: str = "",
+    miembro_nombre: str = "",
+    franja: str = FRANJA_DESCANSO,
+    estado: str = ESTADO_ROTA_PROPUESTO,
+    override: bool = False,
+    motivo: str = "",
+    nota_relevo: str = "",
+) -> dict[str, Any]:
+    return db.crear_turno_trabajo_rota(
+        semana,
+        fecha,
+        miembro_id=miembro_id,
+        miembro_nombre=miembro_nombre,
+        franja=franja,
+        estado=estado,
+        override=override,
+        motivo=motivo,
+        nota_relevo=nota_relevo,
+    )
+
+
+def listar_turnos_trabajo_rota(semana: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_turnos_trabajo_rota(semana=semana)
+
+
+def obtener_turno_trabajo_rota(turno_id: str) -> dict[str, Any] | None:
+    return db.obtener_turno_trabajo_rota(turno_id)
+
+
+def actualizar_turno_trabajo_rota(
+    turno_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_turno_trabajo_rota(turno_id, campos)
+
+
+def borrar_turnos_trabajo_semana_rota(semana: str) -> int:
+    return db.borrar_turnos_trabajo_semana_rota(semana)
+
+
+def aprobar_semana_horario_rota(semana: str) -> int:
+    return db.aprobar_semana_horario_rota(semana)
+
+
+def crear_ausencia_rota(
+    miembro_id: str,
+    desde: str,
+    hasta: str,
+    *,
+    miembro_nombre: str = "",
+    tipo: str = "otro",
+    motivo: str = "",
+) -> dict[str, Any]:
+    return db.crear_ausencia_rota(
+        miembro_id, desde, hasta, miembro_nombre=miembro_nombre, tipo=tipo, motivo=motivo
+    )
+
+
+def listar_ausencias_rota(
+    miembro_id: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_ausencias_rota(miembro_id=miembro_id, desde=desde, hasta=hasta)
+
+
+def obtener_ausencia_rota(ausencia_id: str) -> dict[str, Any] | None:
+    return db.obtener_ausencia_rota(ausencia_id)
+
+
+def actualizar_ausencia_rota(
+    ausencia_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_ausencia_rota(ausencia_id, campos)
+
+
+def borrar_ausencia_rota(ausencia_id: str) -> bool:
+    return db.borrar_ausencia_rota(ausencia_id)
 
 
 # --------------------------------------------------------------------------- #

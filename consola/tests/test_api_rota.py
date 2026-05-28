@@ -297,3 +297,267 @@ def test_export_csv_semana_vacia_no_rompe(cliente):
     r = cliente.get("/api/rota/export.csv")
     assert r.status_code == 200
     assert "Fecha" in r.text  # al menos la cabecera
+
+
+# --------------------------------------------------------------------------- #
+# Gestión de turnos: ausencias / vacaciones (CRUD)                             #
+# --------------------------------------------------------------------------- #
+
+
+def _crear_ausencia(cli: TestClient, miembro_id: str, **campos) -> dict:
+    base = {
+        "miembro_id": miembro_id,
+        "desde": "2026-05-25",
+        "hasta": "2026-05-31",
+        "tipo": "vacaciones",
+    }
+    base.update(campos)
+    r = cli.post("/api/rota/ausencias", json=base)
+    assert r.status_code == 201, r.text
+    return r.json()["ausencia"]
+
+
+def test_ausencias_crud(cliente):
+    equipo = _crear_equipo(2)
+    a = _crear_ausencia(cliente, equipo[0]["id"], motivo="Playa")
+    assert a["tipo"] == "vacaciones"
+    assert a["miembro_nombre"] == equipo[0]["usuario"]
+    # Listar.
+    lista = cliente.get("/api/rota/ausencias").json()["ausencias"]
+    assert any(x["id"] == a["id"] for x in lista)
+    # Editar.
+    p = cliente.patch(f"/api/rota/ausencias/{a['id']}", json={"tipo": "baja"})
+    assert p.status_code == 200
+    assert p.json()["ausencia"]["tipo"] == "baja"
+    # Borrar.
+    d = cliente.delete(f"/api/rota/ausencias/{a['id']}")
+    assert d.status_code == 200
+    assert cliente.delete(f"/api/rota/ausencias/{a['id']}").status_code == 404
+
+
+def test_ausencia_miembro_invalido_400(cliente):
+    _crear_equipo(1)
+    r = cliente.post(
+        "/api/rota/ausencias",
+        json={"miembro_id": "no-existe", "desde": "2026-05-25", "hasta": "2026-05-26"},
+    )
+    assert r.status_code == 400
+
+
+def test_ausencia_rango_invertido_400(cliente):
+    equipo = _crear_equipo(1)
+    r = cliente.post(
+        "/api/rota/ausencias",
+        json={"miembro_id": equipo[0]["id"], "desde": "2026-05-31", "hasta": "2026-05-25"},
+    )
+    assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Gestión de turnos: proponer horario + ausencias respetadas                   #
+# --------------------------------------------------------------------------- #
+
+
+def test_proponer_horario_cubre_y_respeta_ausencias(cliente):
+    equipo = _crear_equipo(3)
+    # equipo[0] de vacaciones toda la semana 1.
+    _crear_ausencia(cliente, equipo[0]["id"])
+    r = cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    assert r.status_code == 200, r.text
+    turnos = r.json()["turnos"]
+    assert len(turnos) > 0
+    asignados = {t["miembro_id"] for t in turnos}
+    assert equipo[0]["id"] not in asignados  # el ausente nunca entra
+    # Cada día tiene mañana y tarde (con 2 disponibles).
+    franjas_por_dia: dict[str, list[str]] = {}
+    for t in turnos:
+        franjas_por_dia.setdefault(t["fecha"], []).append(t["franja"])
+    for franjas in franjas_por_dia.values():
+        assert "matutino" in franjas
+        assert "vespertino" in franjas
+    assert all(t["estado"] == "propuesto" for t in turnos)  # no publicado
+
+
+def test_proponer_horario_idempotente_reemplaza(cliente):
+    _crear_equipo(2)
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    total1 = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["total"]
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    total2 = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["total"]
+    assert total1 == total2  # re-proponer no duplica
+
+
+def test_proponer_horario_sin_lunes_400(cliente):
+    r = cliente.post("/api/rota/horario/proponer", json={})
+    assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Gestión de turnos: edición + override del sábado de trabajo                   #
+# --------------------------------------------------------------------------- #
+
+
+def _turno_sabado(cli: TestClient, lunes: str, sabado: str) -> dict | None:
+    turnos = cli.get(f"/api/rota/horario?lunes={lunes}").json()["turnos"]
+    for t in turnos:
+        if t["fecha"] == sabado and t["franja"] in ("matutino", "vespertino"):
+            return t
+    return None
+
+
+def test_editar_turno_trabajo_franja(cliente):
+    _crear_equipo(2)
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    turno = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["turnos"][0]
+    r = cliente.patch(
+        f"/api/rota/horario/turnos/{turno['id']}",
+        json={"franja": "descanso", "nota_relevo": "Dejo pendiente el clip del 2T"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["turno"]["franja"] == "descanso"
+    assert r.json()["turno"]["nota_relevo"] == "Dejo pendiente el clip del 2T"
+
+
+def test_editar_turno_trabajo_repite_sabado_exige_override(cliente):
+    equipo = _crear_equipo(3)
+    # Semana 1: propone (alguien trabaja el sábado SAB1).
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    sab1 = _turno_sabado(cliente, LUNES1, SAB1)
+    assert sab1 is not None
+    persona_previa = sab1["miembro_id"]
+
+    # Semana 2: propone (rota: persona_previa descansa el sábado SAB2).
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES2})
+    # Buscar un turno de trabajo de sábado en la semana 2 que NO sea de persona_previa,
+    # para reasignarlo a persona_previa (repetiría el sábado).
+    turnos2 = cliente.get(f"/api/rota/horario?lunes={LUNES2}").json()["turnos"]
+    objetivo = next(
+        t for t in turnos2 if t["fecha"] == SAB2 and t["franja"] in ("matutino", "vespertino")
+    )
+
+    # Reasignar a la persona del sábado 1 SIN override -> 409.
+    r = cliente.patch(
+        f"/api/rota/horario/turnos/{objetivo['id']}",
+        json={"miembro_id": persona_previa, "franja": "matutino"},
+    )
+    assert r.status_code == 409, r.text
+    assert r.json()["requiere_override"] is True
+
+    # Con override explícito SÍ se permite.
+    r_ok = cliente.patch(
+        f"/api/rota/horario/turnos/{objetivo['id']}",
+        json={
+            "miembro_id": persona_previa,
+            "franja": "matutino",
+            "override": True,
+            "motivo": "Cobertura clave",
+        },
+    )
+    assert r_ok.status_code == 200, r_ok.text
+    assert r_ok.json()["turno"]["override"] is True
+    assert len(equipo) == 3
+
+
+def test_editar_turno_trabajo_miembro_inexistente_400(cliente):
+    _crear_equipo(2)
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    turno = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["turnos"][0]
+    bad = cliente.patch(
+        f"/api/rota/horario/turnos/{turno['id']}", json={"miembro_id": "no-existe"}
+    )
+    assert bad.status_code == 400
+
+
+def test_editar_turno_trabajo_franja_invalida_400(cliente):
+    _crear_equipo(2)
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    turno = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["turnos"][0]
+    bad = cliente.patch(
+        f"/api/rota/horario/turnos/{turno['id']}", json={"franja": "nocturno"}
+    )
+    assert bad.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Gestión de turnos: aprobación (solo admin) + "mi horario"                     #
+# --------------------------------------------------------------------------- #
+
+
+def test_aprobar_horario_marca_publicado(cliente):
+    _crear_equipo(2)
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    assert cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["aprobada"] is False
+    r = cliente.post("/api/rota/horario/aprobar", json={"lunes": LUNES1})
+    assert r.status_code == 200, r.text
+    assert r.json()["aprobada"] is True
+    assert all(t["estado"] == "aprobado" for t in r.json()["turnos"])
+
+
+def test_aprobar_horario_sin_turnos_400(cliente):
+    r = cliente.post("/api/rota/horario/aprobar", json={"lunes": LUNES1})
+    assert r.status_code == 400
+
+
+def test_editor_no_puede_aprobar_horario_403(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    _crear_equipo(2)
+    admin_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
+    admin_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+
+    auth.crear_usuario("editora2", CLAVE, "editor")
+    editor_cli = TestClient(app)
+    editor_cli.post(
+        "/api/auth/login", json={"usuario": "editora2", "password": CLAVE}, headers=_ORIGIN
+    )
+    r = editor_cli.post("/api/rota/horario/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    assert r.status_code == 403
+
+
+def test_mi_horario_filtra_por_usuario(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(2)
+    admin_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
+    admin_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+
+    # Cada miembro ve solo sus propios turnos de trabajo.
+    cli = TestClient(app)
+    cli.post(
+        "/api/auth/login",
+        json={"usuario": equipo[0]["usuario"], "password": CLAVE},
+        headers=_ORIGIN,
+    )
+    r = cli.get(f"/api/rota/mi-horario?lunes={LUNES1}")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["miembro_id"] == equipo[0]["id"]
+    assert all(t["miembro_id"] == equipo[0]["id"] for t in datos["mis_turnos"])
+
+
+def test_mi_horario_sin_sesion_avisa(cliente):
+    r = cliente.get(f"/api/rota/mi-horario?lunes={LUNES1}")
+    assert r.status_code == 200
+    assert r.json()["mis_turnos"] == []
+    assert r.json()["aviso"]
+
+
+# --------------------------------------------------------------------------- #
+# Gestión de turnos: el .xlsx incluye la hoja "Horario equipo"                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_export_xlsx_incluye_hoja_horario(cliente):
+    import io
+    import zipfile
+
+    _crear_equipo(2)
+    _crear_evento(cliente, titulo="Final")
+    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
+    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    r = cliente.get(f"/api/rota/export.xlsx?lunes={LUNES1}")
+    assert r.status_code == 200
+    assert r.content[:2] == b"PK"
+    # Un .xlsx es un ZIP: workbook.xml lista las hojas por nombre.
+    with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+        workbook = z.read("xl/workbook.xml").decode("utf-8")
+    assert "Rota" in workbook
+    assert "Horario equipo" in workbook
