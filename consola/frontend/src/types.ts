@@ -1257,6 +1257,14 @@ export interface PiezaRota {
   responsable_id: string;
   responsable_nombre: string;
   notas: string;
+  /** Canal amplio o salida ("REDES", "WEB", "TV", "OTROS"). Texto libre. */
+  salida: string;
+  /** Comentarios de coordinación pre/durante (notas internas del equipo). */
+  comentarios: string;
+  /** Deadline interno para entregar el material; ISO AAAA-MM-DD o "". */
+  fecha_entrega_material: string;
+  /** `true` si la pieza es perenne (always-on, sin fecha fija). */
+  always_on: boolean;
 }
 
 export interface RespuestaPiezasRota {
@@ -1297,10 +1305,104 @@ export interface CuerpoCrearPiezaRota {
   enlace?: string;
   responsable_id?: string;
   notas?: string;
+  /** Canal amplio o salida ("REDES", "WEB", "TV"). */
+  salida?: string;
+  /** Comentarios de coordinación pre/durante. */
+  comentarios?: string;
+  /** Deadline interno para entregar el material; ISO AAAA-MM-DD. */
+  fecha_entrega_material?: string;
+  /** Marca la pieza como perenne (always-on, sin fecha fija). */
+  always_on?: boolean;
 }
 
 /** Cuerpo PATCH `/api/rota/piezas/{id}`: cualquier subconjunto editable. */
 export type CuerpoActualizarPiezaRota = CuerpoCrearPiezaRota;
+
+/** Cuerpo opcional para `POST /api/rota/piezas/{id}/duplicar`. */
+export interface CuerpoDuplicarPiezaRota {
+  /** Sobrescribe el dia del clon (ISO AAAA-MM-DD). */
+  dia?: string;
+  /** Sobrescribe el evento del clon (debe existir; "" lo deja como pieza suelta). */
+  evento_id?: string;
+}
+
+/** Cuerpo `POST /api/rota/turnos/lote/borrar` y `/api/rota/piezas/lote/borrar`. */
+export interface CuerpoBorrarLoteIds {
+  ids: string[];
+}
+
+/** Respuesta de los borrados en lote: cuántos se fueron y cuáles no existían. */
+export interface RespuestaBorrarLote {
+  borrados: number;
+  no_encontrados: string[];
+}
+
+/** Cuerpo `POST /api/rota/turnos`: crear un turno de cobertura para un evento. */
+export interface CuerpoCrearTurnoRota {
+  evento_id: string;
+  miembro_id?: string;
+  override?: boolean;
+  motivo?: string;
+  estado?: EstadoTurnoRota;
+}
+
+/** Cuerpo opcional `POST /api/rota/eventos/{id}/duplicar`. */
+export interface CuerpoDuplicarEventoRota {
+  fecha?: string;
+  hora?: string;
+  titulo?: string;
+}
+
+// --- Catálogo de programas (#150, PARRILLA 2026.xlsx) ----------------------
+//
+// Cada hoja EVERGREEN del Excel es un PROGRAMA ("Álvaro Fidalgo", "Real Oviedo",
+// "MUNDIAL"...). Se cataloga con color y fechas; las piezas referencian POR NOMBRE
+// (no por id) para que una pieza huérfana siga apareciendo con su texto. Renombrar
+// hace cascada sobre `rota_piezas.programa` (transaccional).
+
+/** Un programa/campaña del catálogo editorial. */
+export interface ProgramaRota {
+  id: string;
+  nombre: string;
+  descripcion: string;
+  /** Color en formato libre (la UI suele usar hex `#RRGGBB`). */
+  color: string;
+  /** Fecha de inicio (ISO) o "" si es indefinido. */
+  inicio: string;
+  /** Fecha de fin (ISO) o "" si es indefinido / always-on. */
+  fin: string;
+  activo: boolean;
+  creado: string;
+  actualizado: string;
+}
+
+export interface RespuestaProgramasRota {
+  programas: ProgramaRota[];
+}
+
+export interface RespuestaProgramaRota {
+  programa: ProgramaRota;
+}
+
+/** Cuerpo `POST /api/rota/programas`. */
+export interface CuerpoCrearProgramaRota {
+  nombre: string;
+  descripcion?: string;
+  color?: string;
+  inicio?: string;
+  fin?: string;
+  activo?: boolean;
+}
+
+/** Cuerpo `PATCH /api/rota/programas/{id}`: cualquier subconjunto editable. */
+export interface CuerpoActualizarProgramaRota {
+  nombre?: string;
+  descripcion?: string;
+  color?: string;
+  inicio?: string;
+  fin?: string;
+  activo?: boolean;
+}
 
 // --- Asignación flexible (rama rota-asignacion-flexible) -------------------
 
