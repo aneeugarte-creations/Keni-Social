@@ -266,10 +266,10 @@ def mapear_franja(
 class CargaMiembro:
     """Cuanto trabajo lleva un miembro en una semana (panel de carga).
 
-    Datos PUROS derivados de los turnos de cobertura y de trabajo de la semana. La UI los
-    pinta como tabla: `eventos` = cuantas coberturas, `dias_trabajados` = cuantos dias
-    entra a trabajar (matutino/vespertino), `sabado` = si toca sabado, `descansos` =
-    cuantos dias libra.
+    Datos PUROS derivados de los turnos de la semana + la cobertura DERIVADA de los eventos.
+    La UI los pinta como tabla: `eventos` = cuantos eventos cubre (derivado por franja+fecha),
+    `dias_trabajados` = cuantos dias entra a trabajar (matutino/vespertino), `sabado` = si
+    toca sabado, `descansos` = cuantos dias libra.
     """
 
     miembro_id: str
@@ -282,57 +282,133 @@ class CargaMiembro:
 
 def resumen_carga(
     equipo: list[Miembro],
-    turnos_cobertura: list[dict],
-    turnos_trabajo: list[dict],
-    fechas_eventos: dict[str, str],
+    turnos: list[dict],
+    eventos: list[dict],
+    *,
+    matutino_inicio: str = FRANJA_MATUTINO_DEFAULT_INICIO,
+    matutino_fin: str = FRANJA_MATUTINO_DEFAULT_FIN,
+    vespertino_inicio: str = FRANJA_VESPERTINO_DEFAULT_INICIO,
+    vespertino_fin: str = FRANJA_VESPERTINO_DEFAULT_FIN,
 ) -> list[CargaMiembro]:
-    """Resumen de carga por miembro a partir de los turnos de la semana (cobertura + trabajo).
+    """Resumen de carga por miembro a partir de los turnos + los eventos de la semana.
 
-    `turnos_cobertura` son los `rota_turnos` (cobertura de eventos: `evento_id`, `miembro_id`);
-    `turnos_trabajo` son los `rota_turnos_trabajo` (horario laboral: `fecha`, `franja`,
-    `miembro_id`). `fechas_eventos` es `evento_id -> fecha ISO` para resolver si la cobertura
-    cae en sabado sin re-mirar la BD. Pura: no toca IO.
+    `turnos` son los `rota_turnos` (horario: `fecha`, `franja`, `miembro_id`); `eventos` son
+    los `rota_eventos` de la semana con `fecha`/`hora`/`tipo_cobertura`. La cobertura
+    (cuantos eventos cubre cada miembro) es DERIVADA: para cada evento de la semana, sus
+    cubridores son los miembros con un turno en su franja+fecha. Pura: no toca IO.
+
+    Los parametros `*_inicio/*_fin` son los rangos vigentes de franjas (#185); por defecto
+    los del dominio. Eventos con hora invalida o `tipo_cobertura=no_cubrir` se ignoran para
+    el conteo.
 
     Devuelve un `CargaMiembro` por miembro del equipo, ordenado por `eventos` descendente
     (el mas cargado arriba; empate a alfabetico para estabilidad).
     """
+    # Indexa turnos por (miembro_id, fecha, franja) para resolver cobertura O(eventos).
+    turnos_por_clave: dict[tuple[str, str, str], dict] = {}
+    dias_trabajo_por_miembro: dict[str, set[str]] = {}
+    descansos_por_miembro: dict[str, set[str]] = {}
+    trabajo_sabado_por_miembro: dict[str, bool] = {}
+    for t in turnos:
+        mid = t.get("miembro_id", "") or ""
+        fecha = t.get("fecha", "") or ""
+        franja = t.get("franja", "") or ""
+        if not mid or not fecha or not franja:
+            continue
+        turnos_por_clave[(mid, fecha, franja)] = t
+        if franja == "descanso":
+            descansos_por_miembro.setdefault(mid, set()).add(fecha)
+            continue
+        dias_trabajo_por_miembro.setdefault(mid, set()).add(fecha)
+        if es_sabado(fecha):
+            trabajo_sabado_por_miembro[mid] = True
+
+    # Cobertura derivada: para cada evento, qué miembros tienen turno en su franja+fecha.
+    eventos_por_miembro: dict[str, int] = {}
+    sabado_cobertura_por_miembro: dict[str, bool] = {}
+    for ev in eventos:
+        if (ev.get("tipo_cobertura") or "transmision") == "no_cubrir":
+            continue
+        fecha = ev.get("fecha", "") or ""
+        hora = ev.get("hora", "") or ""
+        if not fecha:
+            continue
+        try:
+            franja_ev = mapear_franja(
+                hora,
+                matutino_inicio=matutino_inicio,
+                matutino_fin=matutino_fin,
+                vespertino_inicio=vespertino_inicio,
+                vespertino_fin=vespertino_fin,
+            )
+        except ValueError:
+            continue
+        if franja_ev == "descanso":
+            # Los eventos fuera de matutino/vespertino no los cubre nadie por defecto.
+            continue
+        for m in equipo:
+            if (m.id, fecha, franja_ev) in turnos_por_clave:
+                eventos_por_miembro[m.id] = eventos_por_miembro.get(m.id, 0) + 1
+                if es_sabado(fecha):
+                    sabado_cobertura_por_miembro[m.id] = True
+
     resultado: list[CargaMiembro] = []
     for m in equipo:
-        # Coberturas asignadas a este miembro.
-        coberturas_m = [t for t in turnos_cobertura if t.get("miembro_id") == m.id]
-        eventos = len(coberturas_m)
-        # Dias de trabajo (matutino/vespertino): conjunto de fechas distintas.
-        dias_trabajo: set[str] = set()
-        descansos_set: set[str] = set()
-        trabajo_sabado = False
-        for t in turnos_trabajo:
-            if t.get("miembro_id") != m.id:
-                continue
-            franja = t.get("franja", "")
-            fecha = t.get("fecha", "")
-            if franja == "descanso":
-                if fecha:
-                    descansos_set.add(fecha)
-                continue
-            if not fecha:
-                continue
-            dias_trabajo.add(fecha)
-            if es_sabado(fecha):
-                trabajo_sabado = True
-        # Sabado tambien cuenta si tiene una COBERTURA un sabado (a veces se cubre sin estar
-        # de horario completo).
-        cobertura_sabado = any(
-            es_sabado(fechas_eventos.get(t.get("evento_id", ""), "")) for t in coberturas_m
-        )
         resultado.append(
             CargaMiembro(
                 miembro_id=m.id,
                 nombre=m.nombre,
-                eventos=eventos,
-                dias_trabajados=len(dias_trabajo),
-                sabado=trabajo_sabado or cobertura_sabado,
-                descansos=len(descansos_set),
+                eventos=eventos_por_miembro.get(m.id, 0),
+                dias_trabajados=len(dias_trabajo_por_miembro.get(m.id, set())),
+                sabado=bool(
+                    trabajo_sabado_por_miembro.get(m.id, False)
+                    or sabado_cobertura_por_miembro.get(m.id, False)
+                ),
+                descansos=len(descansos_por_miembro.get(m.id, set())),
             )
         )
     resultado.sort(key=lambda c: (-c.eventos, c.nombre.lower()))
     return resultado
+
+
+# --------------------------------------------------------------------------- #
+# Cobertura derivada: dado un evento, quien lo cubre (turnos en su franja+fecha) #
+# --------------------------------------------------------------------------- #
+
+
+def cobertura_de_evento(
+    evento: dict,
+    turnos: list[dict],
+    *,
+    matutino_inicio: str = FRANJA_MATUTINO_DEFAULT_INICIO,
+    matutino_fin: str = FRANJA_MATUTINO_DEFAULT_FIN,
+    vespertino_inicio: str = FRANJA_VESPERTINO_DEFAULT_INICIO,
+    vespertino_fin: str = FRANJA_VESPERTINO_DEFAULT_FIN,
+) -> list[dict]:
+    """Devuelve los turnos que CUBREN `evento` (mismos fecha y franja derivada de su hora).
+
+    Pura. Si la hora del evento es invalida o cae en `descanso`, no hay cobertura.
+    """
+    fecha = evento.get("fecha", "") or ""
+    hora = evento.get("hora", "") or ""
+    if not fecha:
+        return []
+    try:
+        franja_ev = mapear_franja(
+            hora,
+            matutino_inicio=matutino_inicio,
+            matutino_fin=matutino_fin,
+            vespertino_inicio=vespertino_inicio,
+            vespertino_fin=vespertino_fin,
+        )
+    except ValueError:
+        return []
+    if franja_ev == "descanso":
+        return []
+    return [
+        t
+        for t in turnos
+        if (t.get("fecha", "") or "") == fecha
+        and (t.get("franja", "") or "") == franja_ev
+        and (t.get("miembro_id", "") or "")
+    ]

@@ -35,7 +35,6 @@ _TABLAS = (
     "comercial_snapshots",
     "comercial_publicaciones",
     "rota_turnos",
-    "rota_turnos_trabajo",
     "rota_ausencias",
     "rota_piezas",
     "rota_programas",

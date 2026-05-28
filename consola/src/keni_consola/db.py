@@ -105,9 +105,7 @@ __all__ = [
     "actualizar_ausencia_rota",
     "actualizar_tarea",
     "actualizar_turno_rota",
-    "actualizar_turno_trabajo_rota",
     "actualizar_turnos_rota_lote",
-    "aprobar_semana_horario_rota",
     "aprobar_semana_rota",
     "arrancar_persistencia",
     "borrar_ausencia_rota",
@@ -121,12 +119,10 @@ __all__ = [
     "borrar_turno_rota",
     "borrar_turnos_rota_lote",
     "borrar_turnos_semana_rota",
-    "borrar_turnos_trabajo_semana_rota",
     "cancelar_job",
     "conectar",
     "contar_piezas_por_programa",
     "copiar_turnos_rota",
-    "copiar_turnos_trabajo_rota",
     "crear_ausencia_rota",
     "crear_evento_rota",
     "crear_pieza_rota",
@@ -135,11 +131,13 @@ __all__ = [
     "crear_swap_turno",
     "crear_tarea",
     "crear_turno_rota",
-    "crear_turno_trabajo_rota",
+    "crear_turnos_rota_lote",
     "duplicar_evento_rota",
     "duplicar_pieza_rota",
+    "duplicar_turno_rota",
     "encolar_job",
     "existe_programa_por_nombre",
+    "existe_turno_para",
     "job_cancelado",
     "listar_ausencias_rota",
     "listar_eventos_rota",
@@ -150,7 +148,6 @@ __all__ = [
     "listar_swaps_turno",
     "listar_tareas",
     "listar_turnos_rota",
-    "listar_turnos_trabajo_rota",
     "marcar_aviso_comercial",
     "obtener_ausencia_rota",
     "obtener_evento_rota",
@@ -160,7 +157,6 @@ __all__ = [
     "obtener_swap_turno",
     "obtener_tarea",
     "obtener_turno_rota",
-    "obtener_turno_trabajo_rota",
     "reclamar_job",
     "registrar_snapshot_comercial",
     "terminar_job",
@@ -311,29 +307,18 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
+    # TURNO = horario del miembro en (fecha, franja). NO esta atado a un evento concreto.
+    # Cambio de modelo (ola back3, feedback usuario): antes habia DOS tablas, una era
+    # "cobertura evento×miembro" (mal nombrada `rota_turnos`) y otra "horario persona×dia×franja"
+    # (`rota_turnos`). El usuario aclaro: un turno NO va asociado a un evento, son
+    # horarios del dia que cubren los eventos que surjan en ese horario. Pueden existir
+    # turnos sin eventos y eventos sin turnos. La "cobertura" ahora es una vista DERIVADA:
+    # para un evento, sus coberturas son los miembros cuyo turno corresponda a la franja+fecha
+    # del evento. La migracion convierte la vieja `rota_turnos` en la nueva
+    # `rota_turnos` y aprovecha la cobertura legada para sembrar turnos (ver
+    # `_migrar_modelo_turnos`).
     """
     CREATE TABLE IF NOT EXISTS rota_turnos (
-        id            TEXT PRIMARY KEY,
-        semana        TEXT NOT NULL,
-        evento_id     TEXT NOT NULL,
-        miembro_id    TEXT NOT NULL DEFAULT '',
-        miembro_nombre TEXT NOT NULL DEFAULT '',
-        estado        TEXT NOT NULL DEFAULT 'propuesto',
-        override      INTEGER NOT NULL DEFAULT 0,
-        motivo        TEXT NOT NULL DEFAULT '',
-        creado        TEXT NOT NULL DEFAULT '',
-        actualizado   TEXT NOT NULL DEFAULT ''
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
-    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
-    # Horario de TRABAJO del equipo (F4 · #144, gestion de turnos): el reparto del turno
-    # de cada persona por dia (matutino/vespertino/descanso), por semana, con estado
-    # propuesto|aprobado y un `override` que rompe la rotacion de sabados. `nota_relevo` es
-    # el reporte de fin de turno ("que esta pendiente para el siguiente turno"). Paralela a
-    # `rota_turnos` (cobertura de eventos): no la sustituye, la complementa.
-    """
-    CREATE TABLE IF NOT EXISTS rota_turnos_trabajo (
         id             TEXT PRIMARY KEY,
         semana         TEXT NOT NULL,
         fecha          TEXT NOT NULL DEFAULT '',
@@ -348,9 +333,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         actualizado    TEXT NOT NULL DEFAULT ''
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_trabajo_semana ON rota_turnos_trabajo (semana)",
-    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_trabajo_miembro "
-    "ON rota_turnos_trabajo (miembro_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_fecha ON rota_turnos (fecha)",
     # Ausencias/vacaciones del horario (F4 · #144): un rango de fechas (inclusivo) en que un
     # miembro NO esta disponible. El proponedor del horario las RESPETA (excluye al miembro
     # esos dias). `tipo` es vacaciones|descanso|baja|otro.
@@ -444,7 +429,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
     # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
     # estado `propuesto`; B acepta/rechaza, y si acepta, Elias (admin) aprueba o rechaza.
-    # Al aprobar se ejecuta el swap en `rota_turnos_trabajo` (intercambia miembro_id) y la
+    # Al aprobar se ejecuta el swap en `rota_turnos` (intercambia miembro_id) y la
     # solicitud queda `aplicado`. Las ausencias de verdad (vacaciones/baja) siguen en SAP
     # y NO se gestionan aqui. Estados validos: ESTADOS_SWAP (ver `estados.py`).
     """
@@ -502,13 +487,21 @@ def _crear_esquema(con: Any) -> None:
     """Crea las tablas operacionales si no existen (idempotente).
 
     Ejecuta el DDL sentencia a sentencia y luego aplica las migraciones de columnas
-    ampliadas (`tareas`, `rota_eventos`).
+    ampliadas (`tareas`, `rota_eventos`) y la migracion del modelo de turnos (ola back3:
+    `rota_turnos` → `rota_turnos` con la nueva semantica).
 
-    Las migraciones de columnas son NECESARIAS, no opcionales: `CREATE TABLE IF NOT EXISTS`
+    Las migraciones son NECESARIAS, no opcionales: `CREATE TABLE IF NOT EXISTS`
     NO anade columnas a una tabla que YA existe, y el Postgres hosted PERSISTE entre
     despliegues. Una tabla creada por una version anterior se quedaba sin las columnas
     nuevas (fallo real: `rota_eventos` sin `tipo_cobertura` → 500 al leer el calendario).
     """
+    # IMPORTANTE: la migracion del MODELO de turnos debe correr ANTES del DDL declarativo,
+    # porque el DDL hoy declara `rota_turnos` con la NUEVA forma (con `fecha`/`franja`). Si
+    # la BD vieja tiene una `rota_turnos` con el VIEJO esquema (cobertura), `CREATE TABLE IF
+    # NOT EXISTS` la deja como esta -> el resto del codigo fallaria al usar columnas que no
+    # existen. La migracion la convierte (renombre + drop + renombre final) y deja la BD lista
+    # para que el DDL declarativo NO haga nada (la tabla ya existe con la forma correcta).
+    _migrar_modelo_turnos(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_tareas(con)
@@ -530,6 +523,237 @@ def _columnas_existentes(con: Any, tabla: str) -> set[str]:
         (tabla,),
     ).fetchall()
     return {fila["column_name"] for fila in filas}
+
+
+def _tabla_existe(con: Any, tabla: str) -> bool:
+    """True si `tabla` existe en el esquema actual (Postgres, `information_schema.tables`)."""
+    fila = con.execute(
+        "SELECT 1 FROM information_schema.tables WHERE table_name = ? LIMIT 1",
+        (tabla,),
+    ).fetchone()
+    return fila is not None
+
+
+# Defaults de franjas para la migracion (mismos que `rota.py`; los hardcodeamos aqui para
+# no introducir dependencia ciclica db -> rota). Si la BD ya tiene config de franjas
+# (`rota_config_franjas`), `_migrar_modelo_turnos` la respeta. La conversion de cobertura
+# legada a turnos usa estos rangos para mapear hora del evento -> franja.
+_MIGR_FRANJA_MATUTINO_INICIO_MIN = 8 * 60   # 08:00 inclusivo
+_MIGR_FRANJA_MATUTINO_FIN_MIN = 16 * 60     # 16:00 exclusivo
+_MIGR_FRANJA_VESPERTINO_INICIO_MIN = 16 * 60  # 16:00 inclusivo
+_MIGR_FRANJA_VESPERTINO_FIN_MIN = 24 * 60   # 24:00 exclusivo
+
+
+def _parsear_hora_a_minutos(crudo: str) -> int | None:
+    """Convierte `HH:MM` (o un rango `HH:MM-HH:MM` del Excel) a minutos. None si malformado.
+
+    Acepta sufijos del Excel real ("16:00-18:00", "16:00–18:00"): se queda con la hora de
+    inicio. No lanza: la migracion debe ser tolerante con datos viejos sucios.
+    """
+    if not isinstance(crudo, str) or not crudo.strip():
+        return None
+    parte = crudo.strip().replace("–", "-").split("-", 1)[0].strip()
+    partes = parte.split(":")
+    if len(partes) < 2:
+        return None
+    try:
+        h = int(partes[0])
+        m = int(partes[1])
+    except ValueError:
+        return None
+    if not (0 <= h <= 24 and 0 <= m <= 59):
+        return None
+    if h == 24 and m != 0:
+        return None
+    return h * 60 + m
+
+
+def _franja_para_hora_migracion(
+    hora: str, *, mat_ini: int, mat_fin: int, ves_ini: int, ves_fin: int
+) -> str:
+    """Mapea una hora a su franja usando rangos en MINUTOS. `descanso` si no encaja o malformado.
+
+    Replica `rota.mapear_franja` sin tirar de el (para no introducir dep ciclica desde db.py).
+    """
+    minutos = _parsear_hora_a_minutos(hora)
+    if minutos is None:
+        return "descanso"
+    if mat_ini <= minutos < mat_fin:
+        return "matutino"
+    if ves_ini <= minutos < ves_fin:
+        return "vespertino"
+    return "descanso"
+
+
+def _migrar_modelo_turnos(con: Any) -> None:
+    """Migra el modelo VIEJO de turnos al NUEVO (ola back3). Idempotente.
+
+    MODELO VIEJO (a borrar):
+      - `rota_turnos` (vieja, "cobertura") = evento×miembro: (id, semana, evento_id,
+        miembro_id, miembro_nombre, estado, override, motivo, creado, actualizado).
+      - `rota_turnos_trabajo` (vieja, "horario") = persona×dia×franja: (id, semana, fecha,
+        miembro_id, miembro_nombre, franja, estado, override, motivo, nota_relevo, creado,
+        actualizado).
+
+    MODELO NUEVO (un turno = horario de persona×dia×franja, SIN relacion con eventos):
+      - `rota_turnos` con la MISMA FORMA que la vieja `rota_turnos_trabajo`.
+
+    PASOS (todos `IF EXISTS`/idempotentes):
+      1. Si la vieja `rota_turnos_trabajo` aun esta, renombrarla a `rota_turnos_v2`
+         (auxiliar, para no chocar con la cobertura legada que vamos a borrar).
+      2. Si la vieja `rota_turnos` (cobertura) aun esta, leer sus filas con miembro asignado
+         y derivar turnos en la nueva forma (semana, fecha del evento, miembro, franja
+         derivada de la hora) → INSERT en `rota_turnos_v2` con UPSERT logico (evita
+         duplicados por `(semana, fecha, miembro_id, franja)`).
+      3. DROP de la vieja `rota_turnos` (cobertura).
+      4. RENAME `rota_turnos_v2` -> `rota_turnos`. Tras esto, el resto del codigo opera con
+         la tabla `rota_turnos` que tiene la nueva forma.
+      5. Renombrar indices viejos a sus equivalentes nuevos (ALTER INDEX IF EXISTS).
+
+    Si la BD ya esta migrada (existe `rota_turnos` con columna `fecha`), no hace nada.
+    """
+    # Detectar estado actual: una BD ya MIGRADA tiene `rota_turnos` con `fecha`.
+    cols_turnos = _columnas_existentes(con, "rota_turnos")
+    if "fecha" in cols_turnos and "franja" in cols_turnos:
+        # Ya estamos en el nuevo modelo; nada que hacer.
+        return
+
+    # Si NO hay tabla `rota_turnos_trabajo` y `rota_turnos` no tiene `fecha`, puede ser
+    # una BD virgen (sin ninguna de las dos): no hay nada que migrar. El DDL declarativo
+    # creara la nueva `rota_turnos` cuando le toque.
+    tiene_trabajo = _tabla_existe(con, "rota_turnos_trabajo")
+    tiene_turnos_vieja = _tabla_existe(con, "rota_turnos")
+    if not tiene_trabajo and not tiene_turnos_vieja:
+        return
+
+    # Caso 1: tenemos `rota_turnos_trabajo` (horario viejo) Y `rota_turnos` (cobertura vieja).
+    # Caso 2: solo `rota_turnos` (cobertura) - sin trabajo (raro: la version anterior siempre
+    #   creaba ambas, pero por defensa lo cubrimos).
+    # Caso 3: solo `rota_turnos_trabajo` - sin cobertura (otro caso defensivo).
+
+    # PASO 1: renombrar trabajo -> _v2 (auxiliar).
+    if tiene_trabajo:
+        con.execute("ALTER TABLE IF EXISTS rota_turnos_trabajo RENAME TO rota_turnos_v2")
+        con.execute(
+            "ALTER INDEX IF EXISTS idx_rota_turnos_trabajo_semana "
+            "RENAME TO idx_rota_turnos_semana_v2"
+        )
+        con.execute(
+            "ALTER INDEX IF EXISTS idx_rota_turnos_trabajo_miembro "
+            "RENAME TO idx_rota_turnos_miembro_v2"
+        )
+    else:
+        # No habia tabla de horario: creamos la auxiliar vacia con la forma nueva, para que
+        # el resto del flujo de migracion siga siendo uniforme.
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS rota_turnos_v2 (
+                id             TEXT PRIMARY KEY,
+                semana         TEXT NOT NULL,
+                fecha          TEXT NOT NULL DEFAULT '',
+                miembro_id     TEXT NOT NULL DEFAULT '',
+                miembro_nombre TEXT NOT NULL DEFAULT '',
+                franja         TEXT NOT NULL DEFAULT 'descanso',
+                estado         TEXT NOT NULL DEFAULT 'propuesto',
+                override       INTEGER NOT NULL DEFAULT 0,
+                motivo         TEXT NOT NULL DEFAULT '',
+                nota_relevo    TEXT NOT NULL DEFAULT '',
+                creado         TEXT NOT NULL DEFAULT '',
+                actualizado    TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+
+    # PASO 2: sembrar la cobertura legada como turnos en _v2 (si la habia y tenia miembros).
+    if tiene_turnos_vieja and "evento_id" in cols_turnos and "miembro_id" in cols_turnos:
+        # Leemos las franjas configuradas (singleton id='default') o aplicamos defaults.
+        mat_ini = _MIGR_FRANJA_MATUTINO_INICIO_MIN
+        mat_fin = _MIGR_FRANJA_MATUTINO_FIN_MIN
+        ves_ini = _MIGR_FRANJA_VESPERTINO_INICIO_MIN
+        ves_fin = _MIGR_FRANJA_VESPERTINO_FIN_MIN
+        if _tabla_existe(con, "rota_config_franjas"):
+            fila_cfg = con.execute(
+                "SELECT matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin "
+                "FROM rota_config_franjas WHERE id = ?",
+                ("default",),
+            ).fetchone()
+            if fila_cfg is not None:
+                v = _parsear_hora_a_minutos(fila_cfg["matutino_inicio"])
+                if v is not None:
+                    mat_ini = v
+                v = _parsear_hora_a_minutos(fila_cfg["matutino_fin"])
+                if v is not None:
+                    mat_fin = v
+                v = _parsear_hora_a_minutos(fila_cfg["vespertino_inicio"])
+                if v is not None:
+                    ves_ini = v
+                v = _parsear_hora_a_minutos(fila_cfg["vespertino_fin"])
+                if v is not None:
+                    ves_fin = v
+
+        # Cobertura legada CON miembro: derivar turno.
+        filas_cobertura = con.execute(
+            "SELECT t.semana, t.miembro_id, t.miembro_nombre, t.override, t.motivo, "
+            "       t.creado, t.actualizado, e.fecha, e.hora "
+            "FROM rota_turnos t LEFT JOIN rota_eventos e ON e.id = t.evento_id "
+            "WHERE t.miembro_id IS NOT NULL AND t.miembro_id <> ''"
+        ).fetchall()
+        ahora = datetime.now().isoformat(timespec="seconds")
+        for fila in filas_cobertura:
+            fecha = (fila["fecha"] or "").strip()
+            if not fecha:
+                # Sin fecha del evento no podemos derivar un turno coherente.
+                continue
+            franja = _franja_para_hora_migracion(
+                (fila["hora"] or ""),
+                mat_ini=mat_ini, mat_fin=mat_fin, ves_ini=ves_ini, ves_fin=ves_fin,
+            )
+            # Dedup logico: si ya existe un turno para (semana, fecha, miembro_id, franja), no
+            # duplicar. Hacemos SELECT (no UNIQUE en la nueva tabla; preserva libertad para
+            # turnos con el mismo trio cuando se quiera, p. ej. tras swap).
+            existente = con.execute(
+                "SELECT id FROM rota_turnos_v2 "
+                "WHERE semana = ? AND fecha = ? AND miembro_id = ? AND franja = ?",
+                (fila["semana"], fecha, fila["miembro_id"], franja),
+            ).fetchone()
+            if existente is not None:
+                continue
+            con.execute(
+                "INSERT INTO rota_turnos_v2 (id, semana, fecha, miembro_id, miembro_nombre, "
+                "franja, estado, override, motivo, nota_relevo, creado, actualizado) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    uuid.uuid4().hex[:12],
+                    fila["semana"],
+                    fecha,
+                    fila["miembro_id"],
+                    fila["miembro_nombre"] or "",
+                    franja,
+                    ESTADO_ROTA_PROPUESTO,
+                    int(bool(fila["override"])),
+                    fila["motivo"] or "",
+                    "",  # sin nota_relevo en el modelo viejo
+                    fila["creado"] or ahora,
+                    fila["actualizado"] or ahora,
+                ),
+            )
+
+    # PASO 3: drop de la vieja `rota_turnos` (cobertura). Tambien borramos sus indices.
+    con.execute("DROP INDEX IF EXISTS idx_rota_turnos_semana")
+    con.execute("DROP INDEX IF EXISTS idx_rota_turnos_miembro")
+    con.execute("DROP INDEX IF EXISTS idx_rota_turnos_fecha")  # defensa por si existia
+    con.execute("DROP TABLE IF EXISTS rota_turnos")
+
+    # PASO 4: rename _v2 -> rota_turnos (forma final). Recrea indices con los nombres
+    # canonicos del DDL declarativo (que se ejecuta justo despues; sus CREATE INDEX IF NOT
+    # EXISTS no haran nada porque ya existen).
+    con.execute("ALTER TABLE IF EXISTS rota_turnos_v2 RENAME TO rota_turnos")
+    # Renombrar indices auxiliares -> canonicos. Si vinieron del trabajo viejo, ya estan en _v2.
+    con.execute("ALTER INDEX IF EXISTS idx_rota_turnos_semana_v2 RENAME TO idx_rota_turnos_semana")
+    con.execute("ALTER INDEX IF EXISTS idx_rota_turnos_miembro_v2 RENAME TO idx_rota_turnos_miembro")
+    # Indice nuevo (no existia en el trabajo viejo): lo crea el DDL declarativo despues.
+    # Commit para que el DDL siguiente vea el esquema renombrado.
+    con.commit()
 
 
 # Columnas que se anadieron a `tareas` despues de su esquema original. Una BD creada
@@ -1164,16 +1388,21 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
-# Rota de horarios del equipo (F4 · #144): eventos/transmisiones + turnos       #
+# Rota: eventos/transmisiones + turnos (horarios persona×dia×franja)            #
 # --------------------------------------------------------------------------- #
 #
-# Sustituye el Excel manual de Elias. Dos tablas operacionales:
-#   - `rota_eventos`: el calendario de eventos/transmisiones (fecha+hora+que sacar).
-#   - `rota_turnos`:  las asignaciones (un miembro cubre un evento), por semana, con
-#                     estado propuesto|aprobado y un flag `override` (cobertura forzada
-#                     que rompe la rotacion de sabados; la decide Elias). NO se publica
-#                     nada al equipo hasta que la semana esta `aprobada`.
-# El PROPONEDOR (rota.py) es puro; aqui solo se persiste lo que la API decide.
+# Sustituye el Excel manual de Elias. Dos entidades operacionales INDEPENDIENTES (ver
+# comentario "cambio de modelo" en la DDL): el EVENTO (calendario de transmisiones) y el
+# TURNO (horario del miembro en (fecha, franja)). Un turno NO va atado a un evento. La
+# "cobertura" (quien cubre un evento) es una vista DERIVADA: para un evento, sus coberturas
+# son los miembros cuyo turno coincide con la franja+fecha del evento (`mapear_franja` en
+# `rota.py`). Pueden existir turnos sin eventos y eventos sin turnos.
+#
+# Antes el codigo tenia dos tablas: `rota_turnos` (cobertura, mal modelada) y
+# `rota_turnos` (horario). El feedback del usuario aclaro que la cobertura no es un
+# concepto persistido: un turno cubre todos los eventos que caen en su franja+fecha. La
+# migracion (`_migrar_modelo_turnos`) convierte la cobertura legada en turnos del nuevo modelo
+# y unifica todo en una unica tabla `rota_turnos`.
 
 # Columnas de `rota_eventos`. La ola B (#144) anade tipo_cobertura/prioridad/cambiado/
 # actualizado: `cambiado`/`actualizado` son GESTIONADAS POR EL SISTEMA (no editables a
@@ -1203,20 +1432,6 @@ _CAMPOS_EDITABLES_EVENTO_ROTA = (
     "prioridad",
 )
 
-_COLS_TURNO_ROTA = (
-    "id",
-    "semana",
-    "evento_id",
-    "miembro_id",
-    "miembro_nombre",
-    "estado",
-    "override",
-    "motivo",
-    "creado",
-    "actualizado",
-)
-_SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
-
 
 def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
     evento = {col: fila[col] for col in _COLS_EVENTO_ROTA}
@@ -1226,12 +1441,6 @@ def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
     evento["tipo_cobertura"] = fila["tipo_cobertura"] or TIPO_COBERTURA_TRANSMISION
     evento["prioridad"] = fila["prioridad"] or PRIORIDAD_EVENTO_DEFECTO
     return evento
-
-
-def _fila_a_turno_rota(fila: Any) -> dict[str, Any]:
-    turno = {col: fila[col] for col in _COLS_TURNO_ROTA}
-    turno["override"] = bool(fila["override"])
-    return turno
 
 
 # --- Eventos / transmisiones --------------------------------------------------
@@ -1383,10 +1592,14 @@ def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, 
 
 
 def borrar_evento_rota(evento_id: str) -> bool:
-    """Borra un evento y los turnos que lo referencian; True si existia."""
+    """Borra un evento. True si existia.
+
+    NO arrastra cascada sobre `rota_turnos` (los turnos son horarios del miembro, viven
+    independientes del evento; un evento borrado simplemente deja de cubrirse via la vista
+    derivada de cobertura).
+    """
     con = _conectar()
     try:
-        con.execute("DELETE FROM rota_turnos WHERE evento_id = ?", (evento_id,))
         cur = con.execute("DELETE FROM rota_eventos WHERE id = ?", (evento_id,))
         con.commit()
         return cur.rowcount > 0
@@ -1394,30 +1607,78 @@ def borrar_evento_rota(evento_id: str) -> bool:
         con.close()
 
 
-# --- Turnos (asignaciones de la rota) -----------------------------------------
+# --- Turnos (horario persona×dia×franja) --------------------------------------
+#
+# Un TURNO es el horario que un miembro tiene en una (fecha, franja). NO va asociado a un
+# evento. Cubre todos los eventos que caigan en su franja (cobertura derivada, no persistida).
+# Forma identica a la antigua `rota_turnos` (modelo viejo) tras la migracion.
+
+_COLS_TURNO_ROTA = (
+    "id",
+    "semana",
+    "fecha",
+    "miembro_id",
+    "miembro_nombre",
+    "franja",
+    "estado",
+    "override",
+    "motivo",
+    "nota_relevo",
+    "creado",
+    "actualizado",
+)
+_SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
+
+# Campos editables via `actualizar_turno_rota` (allowlist). `id`/`semana`/`creado` no son
+# editables aqui (la semana se deriva de la fecha si esta cambia). `actualizado` lo gestiona
+# el sistema.
+_CAMPOS_EDITABLES_TURNO_ROTA: tuple[str, ...] = (
+    "fecha",
+    "miembro_id",
+    "miembro_nombre",
+    "franja",
+    "estado",
+    "override",
+    "motivo",
+    "nota_relevo",
+)
+
+
+def _fila_a_turno_rota(fila: Any) -> dict[str, Any]:
+    turno = {col: fila[col] for col in _COLS_TURNO_ROTA}
+    turno["override"] = bool(fila["override"])
+    return turno
 
 
 def crear_turno_rota(
     semana: str,
-    evento_id: str,
+    fecha: str,
     *,
     miembro_id: str = "",
     miembro_nombre: str = "",
+    franja: str = FRANJA_DESCANSO,
     estado: str = ESTADO_ROTA_PROPUESTO,
     override: bool = False,
     motivo: str = "",
+    nota_relevo: str = "",
 ) -> dict[str, Any]:
-    """Inserta un turno (asignacion) y lo devuelve. NO valida (lo hace la API)."""
+    """Inserta un TURNO (horario en `(fecha, franja)` para `miembro_id`) y lo devuelve.
+
+    NO valida (lo hace la API). NO comprueba unicidad (semana, fecha, miembro_id, franja);
+    eso es responsabilidad del endpoint POST (que devuelve 409 si choca).
+    """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
         "semana": semana,
-        "evento_id": evento_id,
+        "fecha": fecha or "",
         "miembro_id": miembro_id or "",
         "miembro_nombre": miembro_nombre or "",
+        "franja": franja if franja in FRANJAS_TURNO else FRANJA_DESCANSO,
         "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
         "override": 1 if override else 0,
         "motivo": motivo or "",
+        "nota_relevo": nota_relevo or "",
         "creado": ahora,
         "actualizado": ahora,
     }
@@ -1436,13 +1697,13 @@ def crear_turno_rota(
 
 
 def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
-    """Turnos de la rota; filtro opcional por `semana` (lunes ISO)."""
+    """Turnos del horario; filtro opcional por `semana` (lunes ISO)."""
     sql = _SELECT_TURNO_ROTA
     params: tuple[Any, ...] = ()
     if semana:
         sql += " WHERE semana = ?"
         params = (semana,)
-    sql += " ORDER BY semana ASC, creado ASC, id ASC"
+    sql += " ORDER BY semana ASC, fecha ASC, franja ASC, creado ASC, id ASC"
     con = _conectar()
     try:
         filas = con.execute(sql, params).fetchall()
@@ -1460,15 +1721,35 @@ def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
     return _fila_a_turno_rota(fila) if fila is not None else None
 
 
-def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    """Edita un turno (miembro/override/motivo/estado); None si el id no existe.
+def existe_turno_para(
+    miembro_id: str, fecha: str, franja: str
+) -> dict[str, Any] | None:
+    """Devuelve el turno actual de `(miembro_id, fecha, franja)`; None si no hay.
 
-    Pone `actualizado` a ahora. `override` se normaliza a 0/1. NO valida (lo hace la API).
+    Sirve para que el endpoint POST detecte choque (devolver 409 antes de insertar duplicado).
     """
-    editables = ("miembro_id", "miembro_nombre", "estado", "override", "motivo")
-    cambios = {k: v for k, v in campos.items() if k in editables}
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_TURNO_ROTA} WHERE miembro_id = ? AND fecha = ? AND franja = ? LIMIT 1",
+            (miembro_id, fecha, franja),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_turno_rota(fila) if fila is not None else None
+
+
+def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita un turno (allowlist `_CAMPOS_EDITABLES_TURNO_ROTA`); None si el id no existe.
+
+    Pone `actualizado` a ahora. `override` se normaliza a 0/1. Si la fecha cambia, la semana
+    NO se recalcula aqui (la API decide si tambien envia `semana` ajustada cuando hace falta).
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_TURNO_ROTA}
     if "override" in cambios:
         cambios["override"] = 1 if cambios["override"] else 0
+    if not cambios:
+        return obtener_turno_rota(turno_id)
     asignaciones = [f"{k} = ?" for k in cambios]
     asignaciones.append("actualizado = ?")
     params: list[Any] = list(cambios.values())
@@ -1477,7 +1758,8 @@ def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, An
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE rota_turnos SET {', '.join(asignaciones)} WHERE id = ?", tuple(params)
+            f"UPDATE rota_turnos SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
         )
         con.commit()
         if cur.rowcount == 0:
@@ -1489,7 +1771,7 @@ def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, An
 
 
 def borrar_turnos_semana_rota(semana: str) -> int:
-    """Borra TODOS los turnos de una semana (al re-proponer). Devuelve cuantos borro."""
+    """Borra TODOS los turnos de una semana. Devuelve cuantos borro."""
     con = _conectar()
     try:
         cur = con.execute("DELETE FROM rota_turnos WHERE semana = ?", (semana,))
@@ -1500,7 +1782,7 @@ def borrar_turnos_semana_rota(semana: str) -> int:
 
 
 def borrar_turno_rota(turno_id: str) -> bool:
-    """Borra un turno de cobertura individual; True si existia, False si no."""
+    """Borra un turno individual; True si existia, False si no."""
     con = _conectar()
     try:
         cur = con.execute("DELETE FROM rota_turnos WHERE id = ?", (turno_id,))
@@ -1511,7 +1793,7 @@ def borrar_turno_rota(turno_id: str) -> bool:
 
 
 def borrar_turnos_rota_lote(ids: list[str]) -> int:
-    """Borra varios turnos de cobertura en una sola sentencia. 0 si `ids` venia vacio."""
+    """Borra varios turnos en una sola sentencia. 0 si `ids` venia vacio."""
     if not ids:
         return 0
     marcadores = ", ".join("?" for _ in ids)
@@ -1545,32 +1827,90 @@ def aprobar_semana_rota(semana: str) -> int:
         con.close()
 
 
-# --------------------------------------------------------------------------- #
-# Horario de TRABAJO del equipo (F4 · #144, gestion de turnos): turnos + ausencias #
-# --------------------------------------------------------------------------- #
-#
-# Paralelo a la cobertura de eventos: el reparto del TURNO de cada persona por dia
-# (matutino/vespertino/descanso) y las AUSENCIAS/vacaciones que el proponedor respeta.
-# El PROPONEDOR (rota.py, `proponer_horario`) es puro; aqui solo se persiste lo que la
-# API decide. Nada se publica al equipo hasta que la semana esta `aprobada`.
+def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Inserta varios turnos en una sola transaccion. Devuelve la lista de turnos creados.
 
-_COLS_TURNO_TRABAJO_ROTA = (
-    "id",
-    "semana",
-    "fecha",
-    "miembro_id",
-    "miembro_nombre",
-    "franja",
-    "estado",
-    "override",
-    "motivo",
-    "nota_relevo",
-    "creado",
-    "actualizado",
-)
-_SELECT_TURNO_TRABAJO_ROTA = (
-    f"SELECT {', '.join(_COLS_TURNO_TRABAJO_ROTA)} FROM rota_turnos_trabajo"
-)
+    Cada dict en `turnos` puede tener: `semana`, `fecha`, `miembro_id`, `miembro_nombre`,
+    `franja`, `estado`, `override`, `motivo`, `nota_relevo`. La API valida CADA entrada
+    antes de pasarla aqui; aqui solo se persiste con defensas minimas (uuid, `actualizado`).
+
+    NO comprueba unicidad: si dos turnos chocan en (semana, fecha, miembro_id, franja), se
+    persisten ambos (el endpoint lote es responsable de cribar antes). Lista vacia -> sin op.
+    """
+    if not turnos:
+        return []
+    ahora = datetime.now().isoformat(timespec="seconds")
+    filas: list[dict[str, Any]] = []
+    for entrada in turnos:
+        franja = entrada.get("franja") or FRANJA_DESCANSO
+        estado = entrada.get("estado") or ESTADO_ROTA_PROPUESTO
+        filas.append(
+            {
+                "id": uuid.uuid4().hex[:12],
+                "semana": entrada.get("semana", ""),
+                "fecha": entrada.get("fecha", "") or "",
+                "miembro_id": entrada.get("miembro_id", "") or "",
+                "miembro_nombre": entrada.get("miembro_nombre", "") or "",
+                "franja": franja if franja in FRANJAS_TURNO else FRANJA_DESCANSO,
+                "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
+                "override": 1 if entrada.get("override") else 0,
+                "motivo": entrada.get("motivo", "") or "",
+                "nota_relevo": entrada.get("nota_relevo", "") or "",
+                "creado": ahora,
+                "actualizado": ahora,
+            }
+        )
+    marcadores = ", ".join("?" for _ in _COLS_TURNO_ROTA)
+    sql = (
+        f"INSERT INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) VALUES ({marcadores})"
+    )
+    con = _conectar()
+    try:
+        for fila in filas:
+            con.execute(sql, tuple(fila[col] for col in _COLS_TURNO_ROTA))
+        con.commit()
+    finally:
+        con.close()
+    # Devolvemos los turnos creados con `override` como bool (formato API).
+    for fila in filas:
+        fila["override"] = bool(fila["override"])
+    return filas
+
+
+def duplicar_turno_rota(
+    turno_id: str,
+    *,
+    fecha: str | None = None,
+    miembro_id: str | None = None,
+    miembro_nombre: str | None = None,
+    franja: str | None = None,
+    semana: str | None = None,
+) -> dict[str, Any] | None:
+    """Clona un turno con overrides opcionales. None si el id no existe.
+
+    Caso comun: "rellena la semana siguiente con el turno de Luis del lunes". El estado se
+    reinicia a `propuesto` (Elias re-aprueba antes de publicar). `motivo` y `nota_relevo`
+    NO viajan (son del turno ORIGINAL, no del clon).
+    """
+    original = obtener_turno_rota(turno_id)
+    if original is None:
+        return None
+    return crear_turno_rota(
+        semana if semana is not None else original["semana"],
+        fecha if fecha is not None else original["fecha"],
+        miembro_id=miembro_id if miembro_id is not None else original["miembro_id"],
+        miembro_nombre=miembro_nombre if miembro_nombre is not None else original["miembro_nombre"],
+        franja=franja if franja is not None else original["franja"],
+        estado=ESTADO_ROTA_PROPUESTO,
+        override=bool(original.get("override", False)),
+        motivo="",
+        nota_relevo="",
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Ausencias / vacaciones                                                       #
+# --------------------------------------------------------------------------- #
 
 _COLS_AUSENCIA_ROTA = (
     "id",
@@ -1585,157 +1925,8 @@ _COLS_AUSENCIA_ROTA = (
 _SELECT_AUSENCIA_ROTA = f"SELECT {', '.join(_COLS_AUSENCIA_ROTA)} FROM rota_ausencias"
 
 
-def _fila_a_turno_trabajo_rota(fila: Any) -> dict[str, Any]:
-    turno = {col: fila[col] for col in _COLS_TURNO_TRABAJO_ROTA}
-    turno["override"] = bool(fila["override"])
-    return turno
-
-
 def _fila_a_ausencia_rota(fila: Any) -> dict[str, Any]:
     return {col: fila[col] for col in _COLS_AUSENCIA_ROTA}
-
-
-# --- Turnos de trabajo (asignaciones del horario) -----------------------------
-
-
-def crear_turno_trabajo_rota(
-    semana: str,
-    fecha: str,
-    *,
-    miembro_id: str = "",
-    miembro_nombre: str = "",
-    franja: str = FRANJA_DESCANSO,
-    estado: str = ESTADO_ROTA_PROPUESTO,
-    override: bool = False,
-    motivo: str = "",
-    nota_relevo: str = "",
-) -> dict[str, Any]:
-    """Inserta un turno de trabajo (asignacion de horario) y lo devuelve. NO valida (lo hace la API)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
-    fila = {
-        "id": uuid.uuid4().hex[:12],
-        "semana": semana,
-        "fecha": fecha or "",
-        "miembro_id": miembro_id or "",
-        "miembro_nombre": miembro_nombre or "",
-        "franja": franja if franja in FRANJAS_TURNO else FRANJA_DESCANSO,
-        "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
-        "override": 1 if override else 0,
-        "motivo": motivo or "",
-        "nota_relevo": nota_relevo or "",
-        "creado": ahora,
-        "actualizado": ahora,
-    }
-    con = _conectar()
-    try:
-        marcadores = ", ".join("?" for _ in _COLS_TURNO_TRABAJO_ROTA)
-        con.execute(
-            f"INSERT INTO rota_turnos_trabajo ({', '.join(_COLS_TURNO_TRABAJO_ROTA)}) "
-            f"VALUES ({marcadores})",
-            tuple(fila[col] for col in _COLS_TURNO_TRABAJO_ROTA),
-        )
-        con.commit()
-    finally:
-        con.close()
-    fila["override"] = bool(fila["override"])
-    return fila
-
-
-def listar_turnos_trabajo_rota(semana: str | None = None) -> list[dict[str, Any]]:
-    """Turnos de trabajo del horario; filtro opcional por `semana` (lunes ISO)."""
-    sql = _SELECT_TURNO_TRABAJO_ROTA
-    params: tuple[Any, ...] = ()
-    if semana:
-        sql += " WHERE semana = ?"
-        params = (semana,)
-    sql += " ORDER BY semana ASC, fecha ASC, franja ASC, creado ASC, id ASC"
-    con = _conectar()
-    try:
-        filas = con.execute(sql, params).fetchall()
-    finally:
-        con.close()
-    return [_fila_a_turno_trabajo_rota(f) for f in filas]
-
-
-def obtener_turno_trabajo_rota(turno_id: str) -> dict[str, Any] | None:
-    con = _conectar()
-    try:
-        fila = con.execute(
-            f"{_SELECT_TURNO_TRABAJO_ROTA} WHERE id = ?", (turno_id,)
-        ).fetchone()
-    finally:
-        con.close()
-    return _fila_a_turno_trabajo_rota(fila) if fila is not None else None
-
-
-def actualizar_turno_trabajo_rota(
-    turno_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    """Edita un turno de trabajo (franja/miembro/override/motivo/nota_relevo/estado); None si no existe.
-
-    Pone `actualizado` a ahora. `override` se normaliza a 0/1. NO valida (lo hace la API).
-    """
-    editables = (
-        "miembro_id",
-        "miembro_nombre",
-        "franja",
-        "estado",
-        "override",
-        "motivo",
-        "nota_relevo",
-    )
-    cambios = {k: v for k, v in campos.items() if k in editables}
-    if "override" in cambios:
-        cambios["override"] = 1 if cambios["override"] else 0
-    asignaciones = [f"{k} = ?" for k in cambios]
-    asignaciones.append("actualizado = ?")
-    params: list[Any] = list(cambios.values())
-    params.append(datetime.now().isoformat(timespec="seconds"))
-    params.append(turno_id)
-    con = _conectar()
-    try:
-        cur = con.execute(
-            f"UPDATE rota_turnos_trabajo SET {', '.join(asignaciones)} WHERE id = ?",
-            tuple(params),
-        )
-        con.commit()
-        if cur.rowcount == 0:
-            return None
-        fila = con.execute(
-            f"{_SELECT_TURNO_TRABAJO_ROTA} WHERE id = ?", (turno_id,)
-        ).fetchone()
-    finally:
-        con.close()
-    return _fila_a_turno_trabajo_rota(fila) if fila is not None else None
-
-
-def borrar_turnos_trabajo_semana_rota(semana: str) -> int:
-    """Borra TODOS los turnos de trabajo de una semana (al re-proponer). Devuelve cuantos borro."""
-    con = _conectar()
-    try:
-        cur = con.execute("DELETE FROM rota_turnos_trabajo WHERE semana = ?", (semana,))
-        con.commit()
-        return cur.rowcount
-    finally:
-        con.close()
-
-
-def aprobar_semana_horario_rota(semana: str) -> int:
-    """Marca TODOS los turnos de trabajo de una semana como `aprobado` (publica al equipo).
-
-    Devuelve cuantos turnos quedaron aprobados. Idempotente: re-aprobar no rompe.
-    """
-    ahora = datetime.now().isoformat(timespec="seconds")
-    con = _conectar()
-    try:
-        cur = con.execute(
-            "UPDATE rota_turnos_trabajo SET estado = ?, actualizado = ? WHERE semana = ?",
-            (ESTADO_ROTA_APROBADO, ahora, semana),
-        )
-        con.commit()
-        return cur.rowcount
-    finally:
-        con.close()
 
 
 # --- Ausencias / vacaciones ---------------------------------------------------
@@ -2447,7 +2638,7 @@ def borrar_programa_rota(programa_id: str) -> bool:
 # Cuando un CM (solicitante A) necesita cubrir un asunto personal le pide a un
 # companero (B) intercambiar el turno de un dia por el de otro. B acepta/rechaza, y si
 # acepta, Elias (admin) aprueba o rechaza. La aprobacion EJECUTA el swap en
-# `rota_turnos_trabajo` (intercambia `miembro_id` de las dos franjas) y la solicitud
+# `rota_turnos` (intercambia `miembro_id` de las dos franjas) y la solicitud
 # pasa a `aplicado`. Las ausencias REALES (vacaciones, baja) viven en SAP, no aqui.
 
 _COLS_SWAP_TURNO = (
@@ -2581,7 +2772,7 @@ def crear_swap_turno(
 
     NO valida (lo hace la API): que los miembros existan, que sean distintos, que las
     fechas sean ISO y que las franjas pertenezcan a `FRANJAS_TURNO`. La validacion de
-    que existen turnos reales en `rota_turnos_trabajo` que coinciden con (A, fecha_a,
+    que existen turnos reales en `rota_turnos` que coinciden con (A, fecha_a,
     franja_a) y (B, fecha_b, franja_b) tambien la hace la API.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
@@ -2730,7 +2921,7 @@ def aplicar_swap_turno(
 ) -> dict[str, Any] | None:
     """Aprueba+ejecuta un swap en UNA transaccion: intercambia los miembros y marca `aplicado`.
 
-    Re-VALIDA dentro de la misma conexion que las franjas actuales en `rota_turnos_trabajo`
+    Re-VALIDA dentro de la misma conexion que las franjas actuales en `rota_turnos`
     siguen siendo las del swap original (otro usuario podria haberlas reasignado a mano).
     Si NO coinciden, devuelve `{"error": "no_coinciden", "esperado": {...}, "actual": {...}}`
     y NO toca nada. Si todo cuadra, intercambia los `miembro_id`+`miembro_nombre` de las
@@ -2756,24 +2947,24 @@ def aplicar_swap_turno(
         #    seguir asignadas a quien dijo el swap. Buscamos por (fecha, franja) y
         #    comprobamos el miembro actual (asi detectamos el caso 409 con detalle).
         fila_a = con.execute(
-            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos_trabajo "
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos "
             "WHERE fecha = ? AND franja = ? AND miembro_id = ?",
             (fecha_a, franja_a, solicitante_id),
         ).fetchone()
         fila_b = con.execute(
-            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos_trabajo "
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos "
             "WHERE fecha = ? AND franja = ? AND miembro_id = ?",
             (fecha_b, franja_b, destinatario_id),
         ).fetchone()
         if fila_a is None or fila_b is None:
             # Buscamos el detalle ACTUAL (sin filtrar por miembro) para informar.
             actual_a = con.execute(
-                "SELECT miembro_id, miembro_nombre FROM rota_turnos_trabajo "
+                "SELECT miembro_id, miembro_nombre FROM rota_turnos "
                 "WHERE fecha = ? AND franja = ?",
                 (fecha_a, franja_a),
             ).fetchone()
             actual_b = con.execute(
-                "SELECT miembro_id, miembro_nombre FROM rota_turnos_trabajo "
+                "SELECT miembro_id, miembro_nombre FROM rota_turnos "
                 "WHERE fecha = ? AND franja = ?",
                 (fecha_b, franja_b),
             ).fetchone()
@@ -2813,12 +3004,12 @@ def aplicar_swap_turno(
         #    desactivado por defecto en nuestro driver -> la `con.commit()` final lo encierra
         #    como una transaccion).
         con.execute(
-            "UPDATE rota_turnos_trabajo SET miembro_id = ?, miembro_nombre = ?, "
+            "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
             "actualizado = ? WHERE id = ?",
             (destinatario_id, destinatario_nombre, ahora, fila_a["id"]),
         )
         con.execute(
-            "UPDATE rota_turnos_trabajo SET miembro_id = ?, miembro_nombre = ?, "
+            "UPDATE rota_turnos SET miembro_id = ?, miembro_nombre = ?, "
             "actualizado = ? WHERE id = ?",
             (solicitante_id, solicitante_nombre, ahora, fila_b["id"]),
         )
@@ -2858,8 +3049,7 @@ def actualizar_turnos_rota_lote(
     """
     if not ids:
         return 0, []
-    editables = ("miembro_id", "miembro_nombre", "estado", "override", "motivo")
-    cambios = {k: v for k, v in campos.items() if k in editables}
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_TURNO_ROTA}
     if not cambios:
         return 0, []
     if "override" in cambios:
@@ -2886,30 +3076,14 @@ def actualizar_turnos_rota_lote(
 
 def copiar_turnos_rota(
     de_lunes: str, a_lunes: str, *, reemplazar: bool = False
-) -> tuple[int, str]:
-    """Copia COBERTURAS de una semana a otra. DECISION: solo el horario tiene sentido copiar.
-
-    La cobertura está ligada a un `evento_id` concreto, y cada semana son eventos distintos
-    (los partidos cambian); copiar turnos de cobertura sin sus eventos no aporta valor real.
-    Para mantener el contrato simétrico con `copiar_turnos_trabajo_rota`, este helper existe
-    pero devuelve siempre `(0, mensaje)` y no toca BD. El `mensaje` lo propaga la API a la UI
-    como warning.
-
-    `reemplazar` y los parametros se aceptan para mantener la firma uniforme con horario.
-    """
-    del de_lunes, a_lunes, reemplazar  # firma uniforme; no se usan (ver docstring).
-    return 0, "Solo se copia el horario; los eventos cambian cada semana."
-
-
-def copiar_turnos_trabajo_rota(
-    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
 ) -> int:
-    """Copia el horario laboral (`rota_turnos_trabajo`) de `de_lunes` a `a_lunes`.
+    """Copia los turnos (horario persona×dia×franja) de `de_lunes` a `a_lunes`.
 
     Para cada turno de la semana origen, crea uno nuevo en la semana destino con `fecha`
-    desplazada +7 dias y el mismo `miembro_id`/`franja`/`motivo`/`nota_relevo`. Los IDs
-    son nuevos (uuid); el `estado` arranca como `propuesto` (Elias re-aprueba antes de
-    publicar). Si `reemplazar=True`, primero borra los turnos existentes de `a_lunes`.
+    desplazada +N dias (N = `a_lunes - de_lunes`) y el mismo `miembro_id`/`franja`/`motivo`/
+    `nota_relevo`. Los IDs son nuevos (uuid); el `estado` arranca como `propuesto` (Elias
+    re-aprueba antes de publicar). Si `reemplazar=True`, primero borra los turnos existentes
+    de `a_lunes`.
 
     Devuelve cuantas filas se crearon. Si `de_lunes` o `a_lunes` no son fechas validas,
     devuelve 0 sin tocar BD.
@@ -2924,17 +3098,17 @@ def copiar_turnos_trabajo_rota(
     try:
         if reemplazar:
             con.execute(
-                "DELETE FROM rota_turnos_trabajo WHERE semana = ?", (a_lunes,)
+                "DELETE FROM rota_turnos WHERE semana = ?", (a_lunes,)
             )
         filas = con.execute(
-            f"{_SELECT_TURNO_TRABAJO_ROTA} WHERE semana = ? ORDER BY fecha ASC, franja ASC",
+            f"{_SELECT_TURNO_ROTA} WHERE semana = ? ORDER BY fecha ASC, franja ASC",
             (de_lunes,),
         ).fetchall()
         creadas = 0
         ahora = datetime.now().isoformat(timespec="seconds")
-        marcadores = ", ".join("?" for _ in _COLS_TURNO_TRABAJO_ROTA)
+        marcadores = ", ".join("?" for _ in _COLS_TURNO_ROTA)
         for f in filas:
-            fila = _fila_a_turno_trabajo_rota(f)
+            fila = _fila_a_turno_rota(f)
             # Desplaza la fecha +delta dias; si no parsea, salta esa fila.
             try:
                 nueva_fecha = (date.fromisoformat(fila["fecha"]) + timedelta(days=delta)).isoformat()
@@ -2955,9 +3129,9 @@ def copiar_turnos_trabajo_rota(
                 "actualizado": ahora,
             }
             con.execute(
-                f"INSERT INTO rota_turnos_trabajo ({', '.join(_COLS_TURNO_TRABAJO_ROTA)}) "
+                f"INSERT INTO rota_turnos ({', '.join(_COLS_TURNO_ROTA)}) "
                 f"VALUES ({marcadores})",
-                tuple(nuevo[col] for col in _COLS_TURNO_TRABAJO_ROTA),
+                tuple(nuevo[col] for col in _COLS_TURNO_ROTA),
             )
             creadas += 1
         con.commit()

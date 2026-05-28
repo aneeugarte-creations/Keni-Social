@@ -513,23 +513,33 @@ def borrar_evento_rota(evento_id: str) -> bool:
 
 def crear_turno_rota(
     semana: str,
-    evento_id: str,
+    fecha: str,
     *,
     miembro_id: str = "",
     miembro_nombre: str = "",
+    franja: str = FRANJA_DESCANSO,
     estado: str = ESTADO_ROTA_PROPUESTO,
     override: bool = False,
     motivo: str = "",
+    nota_relevo: str = "",
 ) -> dict[str, Any]:
+    """Crea un turno (horario `(fecha, franja)` para un miembro). Ver `db.crear_turno_rota`."""
     return db.crear_turno_rota(
         semana,
-        evento_id,
+        fecha,
         miembro_id=miembro_id,
         miembro_nombre=miembro_nombre,
+        franja=franja,
         estado=estado,
         override=override,
         motivo=motivo,
+        nota_relevo=nota_relevo,
     )
+
+
+def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Crea varios turnos en lote (delegado en `db.py`)."""
+    return db.crear_turnos_rota_lote(turnos)
 
 
 def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
@@ -538,6 +548,13 @@ def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
 
 def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
     return db.obtener_turno_rota(turno_id)
+
+
+def existe_turno_para(
+    miembro_id: str, fecha: str, franja: str
+) -> dict[str, Any] | None:
+    """True si existe un turno para `(miembro_id, fecha, franja)` (delegado en `db.py`)."""
+    return db.existe_turno_para(miembro_id, fecha, franja)
 
 
 def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
@@ -553,16 +570,9 @@ def actualizar_turnos_rota_lote(
 
 def copiar_turnos_rota(
     de_lunes: str, a_lunes: str, *, reemplazar: bool = False
-) -> tuple[int, str]:
-    """Copia turnos de cobertura (decisión: hoy es no-op + mensaje; ver `db.py`)."""
-    return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
-
-
-def copiar_turnos_trabajo_rota(
-    de_lunes: str, a_lunes: str, *, reemplazar: bool = False
 ) -> int:
-    """Copia el horario laboral de una semana a otra (offset +7 días por fila)."""
-    return db.copiar_turnos_trabajo_rota(de_lunes, a_lunes, reemplazar=reemplazar)
+    """Copia los turnos de una semana a otra (offset +N dias por fila)."""
+    return db.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
 
 
 def borrar_turnos_semana_rota(semana: str) -> int:
@@ -581,59 +591,24 @@ def aprobar_semana_rota(semana: str) -> int:
     return db.aprobar_semana_rota(semana)
 
 
-# --------------------------------------------------------------------------- #
-# Horario de TRABAJO del equipo (OPERACIONAL: Postgres via db.py; F4 · #144)     #
-# --------------------------------------------------------------------------- #
-#
-# Turnos de trabajo (matutino/vespertino/descanso) + ausencias/vacaciones. Paralelo a la
-# cobertura de eventos: dato operacional de coordinacion interna. La fachada delega 1:1.
-
-
-def crear_turno_trabajo_rota(
-    semana: str,
-    fecha: str,
+def duplicar_turno_rota(
+    turno_id: str,
     *,
-    miembro_id: str = "",
-    miembro_nombre: str = "",
-    franja: str = FRANJA_DESCANSO,
-    estado: str = ESTADO_ROTA_PROPUESTO,
-    override: bool = False,
-    motivo: str = "",
-    nota_relevo: str = "",
-) -> dict[str, Any]:
-    return db.crear_turno_trabajo_rota(
-        semana,
-        fecha,
+    fecha: str | None = None,
+    miembro_id: str | None = None,
+    miembro_nombre: str | None = None,
+    franja: str | None = None,
+    semana: str | None = None,
+) -> dict[str, Any] | None:
+    """Clona un turno con overrides (delegado en `db.py`)."""
+    return db.duplicar_turno_rota(
+        turno_id,
+        fecha=fecha,
         miembro_id=miembro_id,
         miembro_nombre=miembro_nombre,
         franja=franja,
-        estado=estado,
-        override=override,
-        motivo=motivo,
-        nota_relevo=nota_relevo,
+        semana=semana,
     )
-
-
-def listar_turnos_trabajo_rota(semana: str | None = None) -> list[dict[str, Any]]:
-    return db.listar_turnos_trabajo_rota(semana=semana)
-
-
-def obtener_turno_trabajo_rota(turno_id: str) -> dict[str, Any] | None:
-    return db.obtener_turno_trabajo_rota(turno_id)
-
-
-def actualizar_turno_trabajo_rota(
-    turno_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_turno_trabajo_rota(turno_id, campos)
-
-
-def borrar_turnos_trabajo_semana_rota(semana: str) -> int:
-    return db.borrar_turnos_trabajo_semana_rota(semana)
-
-
-def aprobar_semana_horario_rota(semana: str) -> int:
-    return db.aprobar_semana_horario_rota(semana)
 
 
 def crear_ausencia_rota(
