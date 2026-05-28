@@ -24,11 +24,13 @@ export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
       </div>
 
       <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4">
-        {navegacion.map((grupo) => (
-          <div key={grupo.etiqueta}>
-            <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              {grupo.etiqueta}
-            </p>
+        {navegacion.map((grupo, idx) => (
+          <div key={grupo.etiqueta || `__bloque-${idx}`}>
+            {grupo.etiqueta !== "" && (
+              <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {grupo.etiqueta}
+              </p>
+            )}
             <ul className="space-y-0.5">
               {grupo.items.map((item) => {
                 const Icono = item.icono;

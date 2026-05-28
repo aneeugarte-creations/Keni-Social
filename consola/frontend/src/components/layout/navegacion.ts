@@ -1,10 +1,8 @@
 import {
-  Activity,
   BarChart3,
   Bot,
   CalendarClock,
   Globe,
-  ImagePlus,
   LayoutDashboard,
   Lightbulb,
   ListTodo,
@@ -34,17 +32,27 @@ export interface ItemNav {
 }
 
 export interface GrupoNav {
+  /**
+   * Etiqueta del grupo en el sidebar. Si es cadena vacía, el grupo se renderiza
+   * sin encabezado (útil para el bloque inicial con Panel suelto).
+   */
   etiqueta: string;
   items: ItemNav[];
 }
 
 /**
- * Estructura del sidebar, agrupada en Trabajo (uso diario) y Ajustes
- * (configuracion). El orden y los grupos siguen el contrato del proyecto.
+ * Estructura del sidebar. Agrupada por flujo de trabajo (no por dependencia
+ * técnica) para reducir carga cognitiva: el panel encabeza sin grupo, después
+ * los pasos del día (generar → investigar → revisar → analizar → organizar) y
+ * al final los ajustes.
+ *
+ * Páginas absorbidas como subnavegación:
+ * - `Generación` reemplaza `Generar copy` + `Imágenes` (pestañas internas).
+ * - `Agentes` absorbe `Actividad IA` (Monitor) como segunda pestaña.
  */
 export const NAVEGACION: GrupoNav[] = [
   {
-    etiqueta: "Trabajo",
+    etiqueta: "",
     items: [
       {
         ruta: "/panel",
@@ -53,43 +61,28 @@ export const NAVEGACION: GrupoNav[] = [
         descripcion:
           "Un vistazo: rendimiento del periodo, cola de aprobación y próximas publicaciones programadas.",
       },
+    ],
+  },
+  {
+    etiqueta: "Generación",
+    items: [
       {
-        ruta: "/generar-copy",
-        etiqueta: "Generar copy",
+        ruta: "/generacion",
+        etiqueta: "Generación",
         icono: Sparkles,
-        descripcion: "Crea publicaciones con las skills editoriales.",
-      },
-      {
-        ruta: "/imagenes",
-        etiqueta: "Imágenes",
-        icono: ImagePlus,
         descripcion:
-          "Estudio de imagen: recorta, pon el breaking en marca o genera ilustraciones.",
+          "Crea copy o imágenes con las skills editoriales. Cambia de modo con la pestaña superior.",
       },
-      {
-        ruta: "/revision-editorial",
-        etiqueta: "Revisión editorial",
-        icono: ScanText,
-        descripcion:
-          "Revisa el copy que escribió el equipo: veredicto de typos, datos, legal y voz. Señala, no reescribe.",
-      },
-      {
-        ruta: "/skills",
-        etiqueta: "Skills",
-        icono: Wand2,
-        descripcion: "Gestiona las skills editoriales: campos, plantilla y SKILL.md.",
-      },
-      {
-        ruta: "/publicaciones",
-        etiqueta: "Publicaciones",
-        icono: Send,
-        descripcion: "Gestiona borradores, aprueba, programa y publica.",
-      },
+    ],
+  },
+  {
+    etiqueta: "Investigación",
+    items: [
       {
         ruta: "/fuentes",
         etiqueta: "Fuentes",
         icono: Rss,
-        descripcion: "Feeds RSS para alimentar Generar copy.",
+        descripcion: "Feeds RSS para alimentar la generación.",
       },
       {
         ruta: "/termometro",
@@ -103,12 +96,29 @@ export const NAVEGACION: GrupoNav[] = [
         icono: Radar,
         descripcion: "Lo más viral del momento multi-red, agrupado por tema; tú marcas lo relevante.",
       },
+    ],
+  },
+  {
+    etiqueta: "Revisión",
+    items: [
+      {
+        ruta: "/revision-editorial",
+        etiqueta: "Revisión editorial",
+        icono: ScanText,
+        descripcion:
+          "Revisa el copy que escribió el equipo: veredicto de typos, datos, legal y voz. Señala, no reescribe.",
+      },
       {
         ruta: "/verificacion",
         etiqueta: "Verificación",
         icono: ScanSearch,
         descripcion: "Pega el enlace de un video y comprueba si es nuevo o ya circulaba.",
       },
+    ],
+  },
+  {
+    etiqueta: "Analíticas",
+    items: [
       {
         ruta: "/metricas",
         etiqueta: "Métricas",
@@ -128,11 +138,16 @@ export const NAVEGACION: GrupoNav[] = [
         icono: Presentation,
         descripcion: "Deck semanal de Claro Sports: mejores piezas, cuentas hermanas y agenda.",
       },
+    ],
+  },
+  {
+    etiqueta: "Organización",
+    items: [
       {
-        ruta: "/agentes",
-        etiqueta: "Agentes",
-        icono: Bot,
-        descripcion: "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones.",
+        ruta: "/publicaciones",
+        etiqueta: "Publicaciones",
+        icono: Send,
+        descripcion: "Gestiona borradores, aprueba, programa y publica.",
       },
       {
         ruta: "/tareas",
@@ -145,13 +160,20 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Parrilla y rota",
         icono: CalendarClock,
         descripcion:
-          "Calendario de eventos (transmisión, solo imágenes o no cubrir) con reprogramaciones marcadas, rota de cobertura y horarios del equipo: Keni propone y avisa de los cambios, tú apruebas y publicas.",
+          "Calendario de eventos (transmisión, solo imágenes o no cubrir) con reprogramaciones marcadas, rota de cobertura y horarios del equipo.",
       },
       {
-        ruta: "/monitor",
-        etiqueta: "Actividad IA",
-        icono: Activity,
-        descripcion: "Monitoriza tokens, coste y duración de los runs de IA.",
+        ruta: "/skills",
+        etiqueta: "Skills",
+        icono: Wand2,
+        descripcion: "Gestiona las skills editoriales: campos, plantilla y SKILL.md.",
+      },
+      {
+        ruta: "/agentes",
+        etiqueta: "Agentes",
+        icono: Bot,
+        descripcion:
+          "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones. La actividad IA es la segunda pestaña.",
       },
     ],
   },

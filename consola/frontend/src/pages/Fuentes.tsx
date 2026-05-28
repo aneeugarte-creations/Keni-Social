@@ -739,7 +739,7 @@ function ItemNoticia({
 
   function usarEnGenerar() {
     const texto = [item.titulo, item.resumen, item.enlace].filter(Boolean).join("\n\n");
-    navigate("/generar-copy", { state: { texto } });
+    navigate("/generacion", { state: { texto } });
   }
 
   return (

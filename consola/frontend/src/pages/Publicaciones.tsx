@@ -267,7 +267,7 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
           accion={
             !filtrando && (
               <Button asChild size="sm">
-                <Link to="/generar-copy">
+                <Link to="/generacion">
                   <Sparkles className="h-4 w-4" />
                   Generar copy
                 </Link>

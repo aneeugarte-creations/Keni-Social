@@ -77,7 +77,7 @@ export function TablaCuentas({
                   <TableCell className="pr-6 text-right">
                     <Button asChild variant="ghost" size="sm" className="h-8">
                       <Link
-                        to="/generar-copy"
+                        to="/generacion"
                         state={{ marca: marcaCanonicaDesdeMetricas(c.marca_id) }}
                         title={`Generar copy para ${c.marca}`}
                       >

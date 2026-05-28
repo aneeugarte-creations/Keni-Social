@@ -35,7 +35,7 @@ describe("Sidebar · visibilidad por rol", () => {
     renderSidebar("editor");
     expect(screen.queryByRole("link", { name: /usuarios/i })).not.toBeInTheDocument();
     // Las páginas de trabajo siguen visibles para el editor.
-    expect(screen.getByRole("link", { name: /generar copy/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /generación/i })).toBeInTheDocument();
   });
 });
 
