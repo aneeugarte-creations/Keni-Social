@@ -1,9 +1,11 @@
 # Woodpecker: DESPLIEGUE de keni-social (build de imagenes + recreacion del stack).
 #
 # Corre en el agente del server Latitude (mismo host que el stack), que YA monta el
-# docker.sock (deploy/woodpecker/docker-compose.yml). Construye las imagenes desde el
-# checkout del pipeline (no rsync) y recrea el stack llamando a `deploy/deploy.sh` via
-# el docker.sock del host.
+# docker.sock. IMPORTANTE: docker compose se ejecuta desde el DIR ESTABLE del host
+# (/home/ubuntu/keni-social), NO desde el checkout efimero del pipeline: como se usa el
+# docker.sock, los bind mounts host-relativos del compose (garage.toml, traefik/dynamic)
+# los resuelve el daemon EN EL HOST, asi que deben existir en un path real del host. El
+# step sincroniza el checkout a ese dir (preservando .env) y corre deploy.sh desde ahi.
 #
 # AUTO-DEPLOY en push a `main`, DESPUES de que pasen los 3 pipelines de test (depends_on).
 # Un push con tests en rojo NO despliega. Tambien disparable a mano ("manual"). NO
@@ -31,7 +33,12 @@ steps:
     image: docker:27-cli
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /home/ubuntu/keni-social/deploy/.env:/secrets/env:ro
+      # Dir estable del host montado al MISMO path (host==contenedor) para que los bind
+      # mounts del compose resuelvan en el host. Aqui vive tambien el .env (no en git).
+      - /home/ubuntu/keni-social:/home/ubuntu/keni-social
     commands:
-      - apk add --no-cache docker-cli-compose
-      - sh deploy/deploy.sh /secrets/env
+      - apk add --no-cache docker-cli-compose rsync
+      # Sincroniza el checkout al dir estable (preserva .env/.git/venv/node_modules).
+      - rsync -a --exclude .git --exclude 'deploy/.env' --exclude node_modules --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
+      # docker compose corre DESDE el dir estable -> bind mounts (garage.toml, traefik/dynamic) OK.
+      - cd /home/ubuntu/keni-social && sh deploy/deploy.sh /home/ubuntu/keni-social/deploy/.env
