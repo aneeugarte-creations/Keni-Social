@@ -106,14 +106,14 @@ export default function Usuarios() {
           onReintentar={() => void query.refetch()}
           cargando={query.isFetching}
         />
-      ) : query.data.length === 0 ? (
+      ) : query.data.usuarios.length === 0 ? (
         <EstadoVacio
           icono={Users}
           titulo="No hay usuarios"
           texto="Crea la primera cuenta con el botón de arriba."
         />
       ) : (
-        <TablaUsuarios usuarios={query.data} idActual={actual?.id ?? null} />
+        <TablaUsuarios usuarios={query.data.usuarios} idActual={actual?.id ?? null} />
       )}
     </>
   );
