@@ -1096,6 +1096,95 @@ export interface MiHorarioRota extends HorarioSemana {
   aviso?: string;
 }
 
+// --- Asignación flexible (rama rota-asignacion-flexible) -------------------
+
+/** Cobertura de eventos por franja: las dos que se trabajan + descanso (no se cubre). */
+export type FranjaCobertura = "matutino" | "vespertino" | "descanso";
+
+/** Cuerpo de POST /api/rota/cobertura/asignar-franja. */
+export interface CuerpoAsignarFranja {
+  /** Lunes ISO de la semana. */
+  lunes: string;
+  /** Día ISO dentro de la semana cuyos eventos se asignarán. */
+  fecha: string;
+  /** Franja a asignar (no se permite "descanso": no se cubre nada). */
+  franja: FranjaCobertura;
+  miembro_id: string;
+  /** Si false, salta los eventos que ya tienen miembro asignado. */
+  sobreescribir: boolean;
+  /** Override de rotación de sábados (cobertura estratégica de Elías). */
+  override?: boolean;
+  motivo?: string;
+}
+
+/** Un conflicto de rotación al asignar por franja (la API los devuelve sin aplicarlos). */
+export interface ConflictoRotacionRota {
+  turno_id: string;
+  evento_titulo: string;
+  motivo: string;
+}
+
+export interface RespuestaAsignarFranja {
+  actualizados: number;
+  saltados: number;
+  conflictos: ConflictoRotacionRota[];
+}
+
+/** Cuerpo de PATCH /api/rota/turnos/lote (asignación masiva). */
+export interface CuerpoActualizarLoteTurnos {
+  ids: string[];
+  miembro_id: string;
+  /** Override de rotación de sábados; si falta y hay sábados que la requieren -> 409. */
+  override?: boolean;
+  motivo?: string;
+}
+
+export interface RespuestaActualizarLoteTurnos {
+  actualizados: number;
+  turnos: TurnoRota[];
+}
+
+/** Alcance de la copia de semana: solo cobertura, solo horario, o ambos. */
+export type AlcanceCopiarSemana = "cobertura" | "horario" | "ambos";
+
+/** Cuerpo de POST /api/rota/copiar-semana. */
+export interface CuerpoCopiarSemana {
+  de_lunes: string;
+  a_lunes: string;
+  alcance: AlcanceCopiarSemana;
+  reemplazar?: boolean;
+}
+
+/** Respuesta de copiar-semana: el back devuelve distinta forma según el alcance. */
+export interface RespuestaCopiarSemana {
+  /** Para "cobertura" o "horario". */
+  copiados?: number;
+  /** Para "ambos". */
+  copiados_cobertura?: number;
+  copiados_horario?: number;
+  /** Mensaje informativo (p. ej. "Solo se copia el horario..."). */
+  mensaje?: string;
+}
+
+/** Carga del equipo: cuánto trabajo lleva cada persona esta semana. */
+export interface CargaMiembroRota {
+  miembro_id: string;
+  nombre: string;
+  /** Eventos de cobertura asignados al miembro esta semana. */
+  eventos: number;
+  /** Días distintos en que el miembro entra a trabajar (no descanso). */
+  dias_trabajados: number;
+  /** True si entra a trabajar el sábado o cubre un evento del sábado. */
+  sabado: boolean;
+  /** Días distintos con franja "descanso". */
+  descansos: number;
+}
+
+export interface RespuestaCargaRota {
+  lunes: string;
+  miembros: CargaMiembroRota[];
+}
+
 // --- Metricas ---
 //
 // Los tipos de métricas (`RangoMetrica`, `OpcionesMetricas`, `TotalMetricas`,

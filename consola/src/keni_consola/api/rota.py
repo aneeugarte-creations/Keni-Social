@@ -932,7 +932,8 @@ async def actualizar_turnos_lote(request: Request) -> Response:
             {"error": "Indica al menos un turno (`ids`)."}, status_code=400
         )
     nombres = _nombres_equipo()
-    if not isinstance(miembro_id, str) or miembro_id not in nombres:
+    # `miembro_id=""` significa "QUITAR asignación" (alineado con el PATCH 1:1).
+    if not isinstance(miembro_id, str) or (miembro_id and miembro_id not in nombres):
         return JSONResponse(
             {"error": "Indica un miembro del equipo válido."}, status_code=400
         )

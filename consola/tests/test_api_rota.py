@@ -780,6 +780,21 @@ def test_lote_miembro_invalido_400(cliente):
     assert r.status_code == 400
 
 
+def test_lote_miembro_vacio_quita_asignacion(cliente):
+    """`miembro_id=""` vacía la asignación de varios turnos a la vez (acción "Quitar")."""
+    equipo = _crear_equipo(2)
+    ev1 = _crear_evento(cliente, titulo="Ev1", fecha="2026-05-27", hora="15:00")
+    ev2 = _crear_evento(cliente, titulo="Ev2", fecha="2026-05-27", hora="17:00")
+    t1 = _crear_turno(LUNES1, ev1["id"], equipo[0])
+    t2 = _crear_turno(LUNES1, ev2["id"], equipo[1])
+    r = cliente.patch(
+        "/api/rota/turnos/lote", json={"ids": [t1["id"], t2["id"]], "miembro_id": ""}
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["actualizados"] == 2
+    assert all(t["miembro_id"] == "" for t in r.json()["turnos"])
+
+
 def test_lote_turno_inexistente_404(cliente):
     equipo = _crear_equipo(1)
     r = cliente.patch(
