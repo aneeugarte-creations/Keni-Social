@@ -1,4 +1,4 @@
-import { ChevronsUpDown, LogOut, UserCog } from "lucide-react";
+import { ChevronsUpDown, Lightbulb, LogOut, Settings2, UserCog, Users } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 
@@ -16,11 +16,32 @@ function etiquetaRol(rol: RolUsuario): string {
   return ROL_LABEL[rol] ?? rol;
 }
 
+interface OpcionMenu {
+  ruta: string;
+  etiqueta: string;
+  icono: typeof UserCog;
+  /** Si es `true`, solo se muestra para el rol admin. */
+  soloAdmin?: boolean;
+}
+
+/**
+ * Opciones del dropdown del avatar (= "Ajustes"). Se sacaron del sidebar
+ * principal para reducir su carga cognitiva: ahora viven aquí, accesibles
+ * desde cualquier pantalla con un clic en el avatar.
+ */
+const OPCIONES: OpcionMenu[] = [
+  { ruta: "/mi-cuenta", etiqueta: "Mi cuenta", icono: UserCog },
+  { ruta: "/configuracion", etiqueta: "Configuración", icono: Settings2 },
+  { ruta: "/sugerencias", etiqueta: "Sugerencias", icono: Lightbulb },
+  { ruta: "/usuarios", etiqueta: "Usuarios", icono: Users, soloAdmin: true },
+];
+
 /**
  * Bloque de cuenta del sidebar (estilo selector de cuenta de Vercel): avatar con
- * degradado, nombre del usuario actual y su rol. Al pulsarlo abre un menú con la
- * acción "Cerrar sesión" (POST /api/auth/logout → vuelve al login). El usuario
- * sale del contexto de sesión; si todavía no hay (carga), no pinta nada.
+ * degradado, nombre del usuario actual y su rol. Al pulsarlo abre un menú con
+ * los Ajustes (Mi cuenta, Configuración, Sugerencias y -para admin- Usuarios)
+ * y la acción "Cerrar sesión" (POST /api/auth/logout → vuelve al login). El
+ * usuario sale del contexto de sesión; si todavía no hay (carga), no pinta nada.
  */
 export function CuentaUsuario({ className }: { className?: string }) {
   const { usuario, cerrarSesion } = useSesion();
@@ -56,6 +77,8 @@ export function CuentaUsuario({ className }: { className?: string }) {
     // No reseteamos `cerrando`: la pantalla de login reemplaza este árbol.
   }
 
+  const opcionesVisibles = OPCIONES.filter((o) => !o.soloAdmin || usuario.rol === "admin");
+
   return (
     <div ref={contenedorRef} className={cn("relative w-full", className)}>
       <button
@@ -90,15 +113,19 @@ export function CuentaUsuario({ className }: { className?: string }) {
           aria-label="Cuenta"
           className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md"
         >
-          <Link
-            to="/mi-cuenta"
-            role="menuitem"
-            onClick={() => setAbierto(false)}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
-          >
-            <UserCog className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-            Mi cuenta
-          </Link>
+          {opcionesVisibles.map(({ ruta, etiqueta, icono: Icono }) => (
+            <Link
+              key={ruta}
+              to={ruta}
+              role="menuitem"
+              onClick={() => setAbierto(false)}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-accent"
+            >
+              <Icono className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              {etiqueta}
+            </Link>
+          ))}
+          <div className="my-1 border-t border-border" aria-hidden="true" />
           <button
             type="button"
             role="menuitem"

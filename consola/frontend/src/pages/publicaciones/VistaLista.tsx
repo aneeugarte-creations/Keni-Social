@@ -227,7 +227,7 @@ function TarjetaPublicacion({
             <Tooltip label="Ver métricas de esta marca">
               <Button asChild variant="ghost" size="icon" aria-label="Ver métricas">
                 <Link
-                  to="/metricas"
+                  to="/analiticas/metricas"
                   state={{ marca: marcaMetricasDesdeCanonica(publicacion.marca) }}
                 >
                   <BarChart3 className="h-4 w-4" />

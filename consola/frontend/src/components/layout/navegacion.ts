@@ -1,24 +1,12 @@
 import {
-  Activity,
   BarChart3,
   Bot,
   CalendarClock,
-  Globe,
-  ImagePlus,
   LayoutDashboard,
-  Lightbulb,
-  ListTodo,
-  Megaphone,
-  Presentation,
-  Radar,
-  Rss,
-  ScanSearch,
-  ScanText,
+  Search,
   Send,
-  Settings2,
+  ShieldCheck,
   Sparkles,
-  UserCog,
-  Users,
   Wand2,
   type LucideIcon,
 } from "lucide-react";
@@ -34,17 +22,31 @@ export interface ItemNav {
 }
 
 export interface GrupoNav {
+  /**
+   * Etiqueta del grupo en el sidebar. Si es cadena vacía, el grupo se renderiza
+   * sin encabezado. Hoy todos los grupos del sidebar van sin encabezado y un
+   * separador discreto los divide visualmente.
+   */
   etiqueta: string;
   items: ItemNav[];
 }
 
 /**
- * Estructura del sidebar, agrupada en Trabajo (uso diario) y Ajustes
- * (configuracion). El orden y los grupos siguen el contrato del proyecto.
+ * Sidebar principal: solo 9 entradas, agrupadas en bloques sin encabezado
+ * (separadores visuales).
+ *
+ * - Vistazo: Panel.
+ * - Producción del día: Generación, Investigación, Revisión, Analíticas.
+ * - Operación: Publicaciones, Parrilla, Skills, Agentes.
+ *
+ * Investigación, Revisión, Analíticas, Parrilla y Agentes son hubs con tabs
+ * internos (sub-rutas); el sidebar no los expande, así se mantiene corto y
+ * descubrible. Los ajustes (Mi cuenta, Configuración, Sugerencias, Usuarios)
+ * NO viven en el sidebar: cuelgan del dropdown del avatar.
  */
 export const NAVEGACION: GrupoNav[] = [
   {
-    etiqueta: "Trabajo",
+    etiqueta: "",
     items: [
       {
         ruta: "/panel",
@@ -53,32 +55,44 @@ export const NAVEGACION: GrupoNav[] = [
         descripcion:
           "Un vistazo: rendimiento del periodo, cola de aprobación y próximas publicaciones programadas.",
       },
+    ],
+  },
+  {
+    etiqueta: "",
+    items: [
       {
-        ruta: "/generar-copy",
-        etiqueta: "Generar copy",
+        ruta: "/generacion",
+        etiqueta: "Generación",
         icono: Sparkles,
-        descripcion: "Crea publicaciones con las skills editoriales.",
-      },
-      {
-        ruta: "/imagenes",
-        etiqueta: "Imágenes",
-        icono: ImagePlus,
         descripcion:
-          "Estudio de imagen: recorta, pon el breaking en marca o genera ilustraciones.",
+          "Crea copy o imágenes con las skills editoriales. Pestañas Copy / Imágenes.",
       },
       {
-        ruta: "/revision-editorial",
-        etiqueta: "Revisión editorial",
-        icono: ScanText,
+        ruta: "/investigacion",
+        etiqueta: "Investigación",
+        icono: Search,
         descripcion:
-          "Revisa el copy que escribió el equipo: veredicto de typos, datos, legal y voz. Señala, no reescribe.",
+          "Fuentes RSS, panorama mundial y tendencias virales. Pestañas Fuentes / Termómetro / Radar.",
       },
       {
-        ruta: "/skills",
-        etiqueta: "Skills",
-        icono: Wand2,
-        descripcion: "Gestiona las skills editoriales: campos, plantilla y SKILL.md.",
+        ruta: "/revision",
+        etiqueta: "Revisión",
+        icono: ShieldCheck,
+        descripcion:
+          "QA editorial y verificación de imágenes/videos antes de publicar. Pestañas Editorial / Verificación.",
       },
+      {
+        ruta: "/analiticas",
+        etiqueta: "Analíticas",
+        icono: BarChart3,
+        descripcion:
+          "Rendimiento de las cuentas, seguimiento de comercial y deck deportivo. Pestañas Métricas / Comercial / Reporte deportes.",
+      },
+    ],
+  },
+  {
+    etiqueta: "",
+    items: [
       {
         ruta: "/publicaciones",
         etiqueta: "Publicaciones",
@@ -86,111 +100,33 @@ export const NAVEGACION: GrupoNav[] = [
         descripcion: "Gestiona borradores, aprueba, programa y publica.",
       },
       {
-        ruta: "/fuentes",
-        etiqueta: "Fuentes",
-        icono: Rss,
-        descripcion: "Feeds RSS para alimentar Generar copy.",
-      },
-      {
-        ruta: "/termometro",
-        etiqueta: "Termómetro mundial",
-        icono: Globe,
-        descripcion: "Galería diaria con las 5–8 noticias internacionales más importantes.",
-      },
-      {
-        ruta: "/radar",
-        etiqueta: "Radar de tendencias",
-        icono: Radar,
-        descripcion: "Lo más viral del momento multi-red, agrupado por tema; tú marcas lo relevante.",
-      },
-      {
-        ruta: "/verificacion",
-        etiqueta: "Verificación",
-        icono: ScanSearch,
-        descripcion: "Pega el enlace de un video y comprueba si es nuevo o ya circulaba.",
-      },
-      {
-        ruta: "/metricas",
-        etiqueta: "Métricas",
-        icono: BarChart3,
-        descripcion: "Reportes y comparativas de tus cuentas.",
-      },
-      {
-        ruta: "/comercial",
-        etiqueta: "Comercial",
-        icono: Megaphone,
+        ruta: "/parrilla",
+        etiqueta: "Parrilla",
+        icono: CalendarClock,
         descripcion:
-          "Monitorea publicaciones comerciales por su enlace y entrega su reporte al llegar el KPI.",
+          "Pendientes del equipo y calendario semanal con la rota de cobertura. Pestañas Pendientes / Calendario.",
       },
       {
-        ruta: "/reporte-deportes",
-        etiqueta: "Reporte deportes",
-        icono: Presentation,
-        descripcion: "Deck semanal de Claro Sports: mejores piezas, cuentas hermanas y agenda.",
+        ruta: "/skills",
+        etiqueta: "Skills",
+        icono: Wand2,
+        descripcion: "Catálogo de skills editoriales: campos, plantilla y SKILL.md.",
       },
       {
         ruta: "/agentes",
         etiqueta: "Agentes",
         icono: Bot,
-        descripcion: "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones.",
-      },
-      {
-        ruta: "/tareas",
-        etiqueta: "Pendientes",
-        icono: ListTodo,
-        descripcion: "Tareas por proyecto, con su estado; ábrelas en el asistente.",
-      },
-      {
-        ruta: "/rota",
-        etiqueta: "Parrilla y rota",
-        icono: CalendarClock,
         descripcion:
-          "Calendario de eventos (transmisión, solo imágenes o no cubrir) con reprogramaciones marcadas, rota de cobertura y horarios del equipo: Keni propone y avisa de los cambios, tú apruebas y publicas.",
-      },
-      {
-        ruta: "/monitor",
-        etiqueta: "Actividad IA",
-        icono: Activity,
-        descripcion: "Monitoriza tokens, coste y duración de los runs de IA.",
-      },
-    ],
-  },
-  {
-    etiqueta: "Ajustes",
-    items: [
-      {
-        ruta: "/mi-cuenta",
-        etiqueta: "Mi cuenta",
-        icono: UserCog,
-        descripcion: "Tus datos y el cambio de tu contraseña.",
-      },
-      {
-        ruta: "/configuracion",
-        etiqueta: "Configuración",
-        icono: Settings2,
-        descripcion: "Fuente de datos, marcas, redes y clave de imagen IA.",
-      },
-      {
-        ruta: "/sugerencias",
-        etiqueta: "Sugerencias",
-        icono: Lightbulb,
-        descripcion: "Buzón de ideas y mejoras del producto.",
-      },
-      {
-        ruta: "/usuarios",
-        etiqueta: "Usuarios",
-        icono: Users,
-        descripcion: "Gestiona las cuentas que acceden a la consola (solo admin).",
-        soloAdmin: true,
+          "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones. Pestañas Agentes / Actividad IA.",
       },
     ],
   },
 ];
 
 /**
- * Filtra la navegación según el rol: oculta los ítems `soloAdmin` cuando el
- * usuario no es admin, y descarta los grupos que quedan vacíos. La fuente de
- * verdad de visibilidad por rol vive aquí; las rutas en sí también se protegen.
+ * Filtra la navegación según el rol. Los ítems admin del sidebar se ocultan
+ * para no-admin (hoy ya no hay ninguno: Usuarios bajó al dropdown del avatar
+ * y se filtra allí). Se descartan los grupos que quedan vacíos.
  */
 export function navegacionParaRol(esAdmin: boolean): GrupoNav[] {
   return NAVEGACION.map((grupo) => ({
