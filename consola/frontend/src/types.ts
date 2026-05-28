@@ -1102,6 +1102,85 @@ export interface MiHorarioRota extends HorarioSemana {
   aviso?: string;
 }
 
+// --- Piezas de la parrilla (#150 PARRILLA 2026.xlsx) -----------------------
+//
+// Cada fila del Excel de Tescu es UNA pieza (un post individual), no un evento.
+// Una transmisión genera varias piezas; hay piezas SUELTAS (campañas evergreen
+// sin evento, p. ej. "Álvaro Fidalgo", "MUNDIAL"). Workflow del Excel:
+// material/contenido entregado → publicado + enlace.
+
+/** Estados del ciclo de producción de una pieza. */
+export type EstadoPieza = "pendiente" | "en_curso" | "listo" | "publicado";
+
+/** Una pieza/post de la parrilla. */
+export interface PiezaRota {
+  id: string;
+  /** FK textual a `rota_eventos.id`; "" si es pieza suelta (campaña evergreen). */
+  evento_id: string;
+  /** Campaña / programa libre ("Álvaro Fidalgo", "MUNDIAL", "Paty Cantú"…). */
+  programa: string;
+  /** Red social libre ("FB, IG, X" / "HISTORIA" / "IG, TK (REEL)" / "WEB"…). */
+  red_social: string;
+  /** Tipo libre ("IMAGEN" / "VIDEO" / "REEL" / "NOTA" / "FIJAR"…). */
+  tipo_pieza: string;
+  contenido_sugerido: string;
+  /** ISO AAAA-MM-DD; "" si la pieza aún no se ha fechado. */
+  dia: string;
+  /** "HH:MM" o etiqueta libre ("5:15 LINK VIVO", "TBD"). */
+  hora_post: string;
+  estado: EstadoPieza;
+  material_entregado: boolean;
+  contenido_entregado: boolean;
+  publicado: boolean;
+  enlace: string;
+  responsable_id: string;
+  responsable_nombre: string;
+  notas: string;
+}
+
+export interface RespuestaPiezasRota {
+  piezas: PiezaRota[];
+}
+
+export interface RespuestaPiezaRota {
+  pieza: PiezaRota;
+}
+
+/** Filtros combinables del listado `/api/rota/piezas`. */
+export interface FiltrosPiezasRota {
+  /** "" → solo piezas sueltas (sin evento); undefined → no filtra por evento. */
+  evento_id?: string;
+  desde?: string;
+  hasta?: string;
+  red?: string;
+  tipo?: string;
+  estado?: EstadoPieza;
+  responsable_id?: string;
+  programa?: string;
+}
+
+/** Cuerpo POST `/api/rota/piezas`: todos los campos opcionales (el back valida que al
+ * menos uno entre `evento_id`, `programa` o `contenido_sugerido` esté relleno). */
+export interface CuerpoCrearPiezaRota {
+  evento_id?: string;
+  programa?: string;
+  red_social?: string;
+  tipo_pieza?: string;
+  contenido_sugerido?: string;
+  dia?: string;
+  hora_post?: string;
+  estado?: EstadoPieza;
+  material_entregado?: boolean;
+  contenido_entregado?: boolean;
+  publicado?: boolean;
+  enlace?: string;
+  responsable_id?: string;
+  notas?: string;
+}
+
+/** Cuerpo PATCH `/api/rota/piezas/{id}`: cualquier subconjunto editable. */
+export type CuerpoActualizarPiezaRota = CuerpoCrearPiezaRota;
+
 // --- Metricas ---
 //
 // Los tipos de métricas (`RangoMetrica`, `OpcionesMetricas`, `TotalMetricas`,
