@@ -121,17 +121,33 @@ def test_miembro_ausente_rango_inclusivo():
 
 
 def test_mapear_franja_limites():
-    # Matutino: 06:00 inclusive ... 13:59 inclusive.
-    assert r.mapear_franja("06:00") == "matutino"
-    assert r.mapear_franja("13:59") == "matutino"
-    # Vespertino: 14:00 inclusive ... 22:59 inclusive.
-    assert r.mapear_franja("14:00") == "vespertino"
-    assert r.mapear_franja("22:59") == "vespertino"
-    # Descanso (madrugada y noche).
+    # Defaults vigentes (#185): matutino 08:00 inclusive ... 16:00 EXCLUSIVO;
+    # vespertino 16:00 inclusive ... 24:00 EXCLUSIVO; descanso lo demas.
+    assert r.mapear_franja("08:00") == "matutino"
+    assert r.mapear_franja("15:59") == "matutino"
+    assert r.mapear_franja("16:00") == "vespertino"
+    assert r.mapear_franja("23:59") == "vespertino"
+    # Descanso (madrugada antes de matutino).
     assert r.mapear_franja("00:00") == "descanso"
-    assert r.mapear_franja("05:59") == "descanso"
-    assert r.mapear_franja("23:00") == "descanso"
-    assert r.mapear_franja("23:59") == "descanso"
+    assert r.mapear_franja("07:59") == "descanso"
+
+
+def test_mapear_franja_rangos_custom():
+    # Cuando el admin cambia las franjas desde /api/rota/config/franjas, el dominio
+    # acepta los rangos por kwargs y reclasifica los eventos. Comprobamos los rangos
+    # del piloto original (06-14 / 14-22).
+    cfg = dict(
+        matutino_inicio="06:00",
+        matutino_fin="14:00",
+        vespertino_inicio="14:00",
+        vespertino_fin="22:00",
+    )
+    assert r.mapear_franja("06:00", **cfg) == "matutino"
+    assert r.mapear_franja("13:59", **cfg) == "matutino"
+    assert r.mapear_franja("14:00", **cfg) == "vespertino"
+    assert r.mapear_franja("21:59", **cfg) == "vespertino"
+    assert r.mapear_franja("22:00", **cfg) == "descanso"
+    assert r.mapear_franja("05:59", **cfg) == "descanso"
 
 
 def test_mapear_franja_rango_se_queda_con_el_inicio():
