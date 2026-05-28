@@ -28,8 +28,10 @@ import type {
   CuerpoBorrarLoteIds,
   CuerpoCrearProgramaRota,
   CuerpoCrearTurnoRota,
+  CuerpoCrearTurnosLote,
   CuerpoDuplicarEventoRota,
   CuerpoDuplicarPiezaRota,
+  CuerpoDuplicarTurnoRota,
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
@@ -129,24 +131,21 @@ import type {
   RespuestaEventosRota,
   RespuestaEventoRota,
   RespuestaTurnoRota,
+  RespuestaCrearTurnosLote,
+  RespuestaCoberturaSemana,
+  RespuestaCoberturaEvento,
   RotaSemana,
-  MiSemanaRota,
+  MisTurnosRota,
   CuerpoCrearAusenciaRota,
   CuerpoActualizarAusenciaRota,
-  CuerpoActualizarTurnoTrabajoRota,
   RespuestaAusenciasRota,
   RespuestaAusenciaRota,
-  RespuestaTurnoTrabajoRota,
-  HorarioSemana,
-  MiHorarioRota,
   FiltrosPiezasRota,
   RespuestaBorrarLote,
   RespuestaPiezaRota,
   RespuestaPiezasRota,
   RespuestaProgramaRota,
   RespuestaProgramasRota,
-  CuerpoAsignarFranja,
-  RespuestaAsignarFranja,
   RespuestaConfigFranjas,
   CuerpoGuardarConfigFranjas,
   CuerpoActualizarLoteTurnos,
@@ -827,28 +826,55 @@ export const api = {
       metodo: "POST",
       json: cuerpo,
     }),
-  rotaSemana: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
-    peticion<RotaSemana>(`/rota/semana${query(params)}`, { signal }),
-  crearTurnoRota: (cuerpo: CuerpoCrearTurnoRota) =>
+  // --- Turnos (modelo nuevo: persona × día × franja, ola back3) ---
+  // CRUD primario sobre los turnos. La cobertura de eventos es derivada (ver más
+  // abajo). `listarTurnos` admite `?lunes=` para acotar a una semana (recomendado).
+  listarTurnos: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+    peticion<RotaSemana>(`/rota/turnos${query(params)}`, { signal }),
+  crearTurno: (cuerpo: CuerpoCrearTurnoRota) =>
     peticion<RespuestaTurnoRota>("/rota/turnos", { metodo: "POST", json: cuerpo }),
-  actualizarTurnoRota: (id: string, cuerpo: CuerpoActualizarTurnoRota) =>
+  actualizarTurno: (id: string, cuerpo: CuerpoActualizarTurnoRota) =>
     peticion<RespuestaTurnoRota>(`/rota/turnos/${encodeURIComponent(id)}`, {
       metodo: "PATCH",
       json: cuerpo,
     }),
-  eliminarTurnoRota: (id: string) =>
+  borrarTurno: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/turnos/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  crearTurnosLote: (cuerpo: CuerpoCrearTurnosLote) =>
+    peticion<RespuestaCrearTurnosLote>("/rota/turnos/lote", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  actualizarTurnosLote: (cuerpo: CuerpoActualizarLoteTurnos) =>
+    peticion<RespuestaActualizarLoteTurnos>("/rota/turnos/lote", {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
   borrarTurnosLote: (cuerpo: CuerpoBorrarLoteIds) =>
     peticion<RespuestaBorrarLote>("/rota/turnos/lote/borrar", {
       metodo: "POST",
       json: cuerpo,
     }),
-  aprobarRota: (cuerpo: CuerpoAprobarRota) =>
-    peticion<RotaSemana>("/rota/semana/aprobar", { metodo: "POST", json: cuerpo }),
-  miSemanaRota: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
-    peticion<MiSemanaRota>(`/rota/mi-semana${query(params)}`, { signal }),
+  duplicarTurno: (id: string, cuerpo: CuerpoDuplicarTurnoRota = {}) =>
+    peticion<RespuestaTurnoRota>(`/rota/turnos/${encodeURIComponent(id)}/duplicar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  aprobarTurnos: (cuerpo: CuerpoAprobarRota) =>
+    peticion<RotaSemana>("/rota/turnos/aprobar", { metodo: "POST", json: cuerpo }),
+  misTurnos: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+    peticion<MisTurnosRota>(`/rota/mis-turnos${query(params)}`, { signal }),
   exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string } = {}) =>
     descargar(`/rota/export.${formato}${query(params)}`),
+
+  // --- Cobertura DERIVADA (no persistida): eventos × turnos ---
+  cobertura: (params: { lunes: string }, signal?: AbortSignal) =>
+    peticion<RespuestaCoberturaSemana>(`/rota/cobertura${query(params)}`, { signal }),
+  coberturaEvento: (eventoId: string, signal?: AbortSignal) =>
+    peticion<RespuestaCoberturaEvento>(
+      `/rota/cobertura/evento/${encodeURIComponent(eventoId)}`,
+      { signal },
+    ),
 
   // --- Gestión de turnos: ausencias / vacaciones (F4 · #144, ola A) ---
   rotaAusencias: (params: { miembro_id?: string } = {}, signal?: AbortSignal) =>
@@ -862,19 +888,6 @@ export const api = {
     }),
   eliminarAusenciaRota: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/ausencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-
-  // --- Gestión de turnos: horario de trabajo del equipo ---
-  rotaHorario: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
-    peticion<HorarioSemana>(`/rota/horario${query(params)}`, { signal }),
-  actualizarTurnoTrabajoRota: (id: string, cuerpo: CuerpoActualizarTurnoTrabajoRota) =>
-    peticion<RespuestaTurnoTrabajoRota>(`/rota/horario/turnos/${encodeURIComponent(id)}`, {
-      metodo: "PATCH",
-      json: cuerpo,
-    }),
-  aprobarHorario: (cuerpo: { lunes: string }) =>
-    peticion<HorarioSemana>("/rota/horario/aprobar", { metodo: "POST", json: cuerpo }),
-  miHorarioRota: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
-    peticion<MiHorarioRota>(`/rota/mi-horario${query(params)}`, { signal }),
 
   // --- Piezas de la parrilla (#150 PARRILLA 2026.xlsx) ---
   // Una pieza = un POST individual. Puede ir atada a un evento (`evento_id`) o ser
@@ -943,17 +956,7 @@ export const api = {
       { metodo: "DELETE" },
     ),
 
-  // --- Asignación flexible (rama rota-asignacion-flexible) ---
-  asignarFranja: (cuerpo: CuerpoAsignarFranja) =>
-    peticion<RespuestaAsignarFranja>("/rota/cobertura/asignar-franja", {
-      metodo: "POST",
-      json: cuerpo,
-    }),
-  actualizarLoteTurnos: (cuerpo: CuerpoActualizarLoteTurnos) =>
-    peticion<RespuestaActualizarLoteTurnos>("/rota/turnos/lote", {
-      metodo: "PATCH",
-      json: cuerpo,
-    }),
+  // --- Copia de semana + panel de carga ---
   copiarSemana: (cuerpo: CuerpoCopiarSemana) =>
     peticion<RespuestaCopiarSemana>("/rota/copiar-semana", { metodo: "POST", json: cuerpo }),
   cargaRota: (params: { lunes: string }, signal?: AbortSignal) =>

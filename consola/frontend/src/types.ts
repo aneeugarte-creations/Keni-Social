@@ -984,64 +984,10 @@ export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota> & {
 /** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por Elías). */
 export type EstadoTurnoRota = "propuesto" | "aprobado";
 
-/** Un turno: un miembro cubre un evento. Vincula ambos + qué sacar. */
-export interface TurnoRota {
-  id: string;
-  /** Lunes ISO de la semana. */
-  semana: string;
-  evento_id: string;
-  evento_titulo: string;
-  evento_fecha: string;
-  evento_hora: string;
-  contenido: string;
-  es_sabado: boolean;
-  miembro_id: string;
-  miembro_nombre: string;
-  estado: EstadoTurnoRota;
-  /** Cobertura forzada que rompe la rotación de sábados (la decide Elías). */
-  override: boolean;
-  motivo: string;
-}
-
-/** La rota de una semana: turnos + rango + si está publicada. */
-export interface RotaSemana {
-  /** Lunes ISO. */
-  lunes: string;
-  inicio: string;
-  fin: string;
-  turnos: TurnoRota[];
-  /** `true` => todos los turnos aprobados (publicada al equipo). */
-  aprobada: boolean;
-  total: number;
-  /** Mensaje de confirmación (p. ej. tras aprobar). */
-  mensaje?: string;
-}
-
-export interface CuerpoAprobarRota {
-  /** Lunes (o cualquier día) de la semana a aprobar. */
-  lunes: string;
-}
-
-/** Edición de un turno por Elías (todo opcional; se manda lo que cambia). */
-export interface CuerpoActualizarTurnoRota {
-  miembro_id?: string;
-  override?: boolean;
-  motivo?: string;
-  estado?: EstadoTurnoRota;
-}
-
-export interface RespuestaTurnoRota {
-  turno: TurnoRota;
-}
-
-/** "Mi próxima semana": la semana + los turnos del usuario actual. */
-export interface MiSemanaRota extends RotaSemana {
-  miembro_id: string;
-  miembro_nombre: string;
-  mis_turnos: TurnoRota[];
-  /** Aviso si no hay sesión (token de mantenimiento). */
-  aviso?: string;
-}
+// Nota: el viejo `TurnoRota` (turno ligado a un evento + cobertura persistida) ya
+// no existe. Ahora el turno es persona × día × franja (modelo nuevo, ver más abajo).
+// La cobertura es DERIVADA (calculada): para cada evento, los turnos cuya
+// `(fecha, franja)` lo cubren. Ver `CoberturaEvento` / `RespuestaCoberturaSemana`.
 
 // --- Gestión de turnos: horario de trabajo + ausencias (F4 · #144, ola A) ---
 
@@ -1084,11 +1030,16 @@ export interface CuerpoActualizarAusenciaRota {
   motivo?: string;
 }
 
-/** Franja de un turno de trabajo: mañana / tarde / descanso. */
+/** Franja de un turno: mañana / tarde / descanso. */
 export type FranjaTurno = "matutino" | "vespertino" | "descanso";
 
-/** Un turno de TRABAJO: una persona trabaja una franja un día. */
-export interface TurnoTrabajoRota {
+/**
+ * Un turno: una persona × un día × una franja. Modelo unificado tras la ola back3
+ * (#177). NO está ligado a un evento — un turno es un horario. La cobertura se
+ * calcula DERIVADA: para cada evento, qué turnos lo cubren por (fecha, franja).
+ * Pueden existir turnos sin eventos y eventos sin turnos (cobertura "huérfana").
+ */
+export interface TurnoRota {
   id: string;
   /** Lunes ISO de la semana. */
   semana: string;
@@ -1106,15 +1057,15 @@ export interface TurnoTrabajoRota {
   es_sabado: boolean;
 }
 
-/** El horario de trabajo de una semana: turnos + rango + si está publicado. */
-export interface HorarioSemana {
+/** La rota (horario) de una semana: turnos + rango + si está publicada. */
+export interface RotaSemana {
   /** Lunes ISO. */
   lunes: string;
   inicio: string;
   fin: string;
   /** Las 7 fechas ISO (lunes->domingo) de la semana. */
   dias: string[];
-  turnos: TurnoTrabajoRota[];
+  turnos: TurnoRota[];
   /** `true` => todos los turnos aprobados (publicado al equipo). */
   aprobada: boolean;
   total: number;
@@ -1122,27 +1073,98 @@ export interface HorarioSemana {
   mensaje?: string;
 }
 
-/** Edición de un turno de trabajo por Elías (todo opcional). */
-export interface CuerpoActualizarTurnoTrabajoRota {
-  franja?: FranjaTurno;
-  miembro_id?: string;
+export interface CuerpoAprobarRota {
+  /** Lunes (o cualquier día) de la semana a aprobar. */
+  lunes: string;
+}
+
+/**
+ * Cuerpo `POST /api/rota/turnos`: crea un turno (persona × día × franja).
+ * `lunes` opcional: si falta, la semana se deriva del lunes que contiene `fecha`.
+ */
+export interface CuerpoCrearTurnoRota {
+  /** Lunes ISO de la semana; opcional (se deriva de `fecha`). */
+  lunes?: string;
+  fecha: string;
+  miembro_id: string;
+  franja: FranjaTurno;
   override?: boolean;
   motivo?: string;
   nota_relevo?: string;
   estado?: EstadoTurnoRota;
 }
 
-export interface RespuestaTurnoTrabajoRota {
-  turno: TurnoTrabajoRota;
+/** Edición parcial de un turno (todo opcional; se manda lo que cambia). */
+export interface CuerpoActualizarTurnoRota {
+  fecha?: string;
+  miembro_id?: string;
+  franja?: FranjaTurno;
+  override?: boolean;
+  motivo?: string;
+  nota_relevo?: string;
+  estado?: EstadoTurnoRota;
 }
 
-/** "Mi próximo horario": el horario + los turnos de trabajo del usuario actual. */
-export interface MiHorarioRota extends HorarioSemana {
+export interface RespuestaTurnoRota {
+  turno: TurnoRota;
+}
+
+/** "Mis turnos": la rota + los turnos del usuario actual en esa semana. */
+export interface MisTurnosRota extends RotaSemana {
   miembro_id: string;
   miembro_nombre: string;
-  mis_turnos: TurnoTrabajoRota[];
+  mis_turnos: TurnoRota[];
   /** Aviso si no hay sesión (token de mantenimiento). */
   aviso?: string;
+}
+
+// --- Cobertura DERIVADA (no persistida): para cada evento, qué turnos lo cubren
+
+/** Un turno que cubre un evento (por intersección (fecha, franja)). */
+export interface TurnoCobertura {
+  turno_id: string;
+  miembro_id: string;
+  miembro_nombre: string;
+  franja: FranjaTurno;
+  override: boolean;
+}
+
+/** Un evento con su cobertura derivada (lista de turnos que lo cubren). */
+export interface CoberturaEvento extends EventoRota {
+  cobertura: TurnoCobertura[];
+}
+
+export interface RespuestaCoberturaSemana {
+  /** Lunes ISO de la semana. */
+  lunes: string;
+  inicio: string;
+  fin: string;
+  /** Rangos de franja vigentes (cabecera del cálculo). */
+  franjas_config: ConfigFranjas;
+  /** Eventos de la semana (sin `no_cubrir`) con su cobertura derivada. */
+  eventos: CoberturaEvento[];
+}
+
+export interface RespuestaCoberturaEvento {
+  evento: CoberturaEvento;
+  franjas_config: ConfigFranjas;
+}
+
+/** Cuerpo `POST /api/rota/turnos/{id}/duplicar`: overrides opcionales del clon. */
+export interface CuerpoDuplicarTurnoRota {
+  fecha?: string;
+  miembro_id?: string;
+  franja?: FranjaTurno;
+}
+
+/** Cuerpo `POST /api/rota/turnos/lote`: crea N turnos en una sola petición. */
+export interface CuerpoCrearTurnosLote {
+  turnos: CuerpoCrearTurnoRota[];
+}
+
+export interface RespuestaCrearTurnosLote {
+  creados: number;
+  turnos: TurnoRota[];
 }
 
 // --- Solicitudes de cambio de turno entre compañeros (#175) ----------------
@@ -1337,15 +1359,6 @@ export interface RespuestaBorrarLote {
   no_encontrados: string[];
 }
 
-/** Cuerpo `POST /api/rota/turnos`: crear un turno de cobertura para un evento. */
-export interface CuerpoCrearTurnoRota {
-  evento_id: string;
-  miembro_id?: string;
-  override?: boolean;
-  motivo?: string;
-  estado?: EstadoTurnoRota;
-}
-
 /** Cuerpo opcional `POST /api/rota/eventos/{id}/duplicar`. */
 export interface CuerpoDuplicarEventoRota {
   fecha?: string;
@@ -1404,34 +1417,9 @@ export interface CuerpoActualizarProgramaRota {
   activo?: boolean;
 }
 
-// --- Asignación flexible (rama rota-asignacion-flexible) -------------------
+// --- Configuración editorial de franjas (rangos horarios) ------------------
 
-/** Cobertura de eventos por franja: las dos que se trabajan + descanso (no se cubre). */
-export type FranjaCobertura = "matutino" | "vespertino" | "descanso";
-
-/** Cuerpo de POST /api/rota/cobertura/asignar-franja. */
-export interface CuerpoAsignarFranja {
-  /** Lunes ISO de la semana. */
-  lunes: string;
-  /** Día ISO dentro de la semana cuyos eventos se asignarán. */
-  fecha: string;
-  /** Franja a asignar (no se permite "descanso": no se cubre nada). */
-  franja: FranjaCobertura;
-  miembro_id: string;
-  /** Si false, salta los eventos que ya tienen miembro asignado. */
-  sobreescribir: boolean;
-  /** Override de rotación de sábados (cobertura estratégica de Elías). */
-  override?: boolean;
-  motivo?: string;
-}
-
-/** Un conflicto de rotación al asignar por franja (la API los devuelve sin aplicarlos). */
-export interface ConflictoRotacionRota {
-  turno_id: string;
-  evento_titulo: string;
-  motivo: string;
-}
-
+/** Rangos vigentes de las dos franjas de trabajo (los usa la cobertura derivada). */
 export interface ConfigFranjas {
   matutino_inicio: string;
   matutino_fin: string;
@@ -1451,27 +1439,19 @@ export interface CuerpoGuardarConfigFranjas {
   vespertino_fin: string;
 }
 
-export interface RespuestaAsignarFranja {
-  actualizados: number;
-  saltados: number;
-  conflictos: ConflictoRotacionRota[];
-  /** Total de eventos del día (no_cubrir excluidos). #185 contexto para el toast. */
-  total_eventos?: number;
-  /** Cuántos eventos caen en la franja pedida (deberían ser ≥ actualizados+saltados+conflictos). */
-  candidatos?: number;
-  /** Eventos del día sin hora válida (no entran en ninguna franja). */
-  sin_hora?: number;
-  /** Rangos vigentes (para el mensaje "matutino 08-16 · vespertino 16-24"). */
-  franjas_config?: ConfigFranjas;
-}
-
-/** Cuerpo de PATCH /api/rota/turnos/lote (asignación masiva). */
+/**
+ * Cuerpo de `PATCH /api/rota/turnos/lote`: edita varios turnos a la vez.
+ * Todos los campos del cambio son opcionales (al menos uno requerido).
+ * `miembro_id=""` desasigna; el backend acepta vacío explícito.
+ */
 export interface CuerpoActualizarLoteTurnos {
   ids: string[];
-  miembro_id: string;
+  miembro_id?: string;
+  franja?: FranjaTurno;
   /** Override de rotación de sábados; si falta y hay sábados que la requieren -> 409. */
   override?: boolean;
   motivo?: string;
+  nota_relevo?: string;
 }
 
 export interface RespuestaActualizarLoteTurnos {
@@ -1479,26 +1459,20 @@ export interface RespuestaActualizarLoteTurnos {
   turnos: TurnoRota[];
 }
 
-/** Alcance de la copia de semana: solo cobertura, solo horario, o ambos. */
-export type AlcanceCopiarSemana = "cobertura" | "horario" | "ambos";
-
-/** Cuerpo de POST /api/rota/copiar-semana. */
+/**
+ * Cuerpo de `POST /api/rota/copiar-semana`: replica turnos de una semana en otra.
+ * Simplificado tras ola back3: ya NO hay `alcance` (solo se copian turnos, los
+ * eventos son por semana y no se duplican).
+ */
 export interface CuerpoCopiarSemana {
   de_lunes: string;
   a_lunes: string;
-  alcance: AlcanceCopiarSemana;
+  /** Si `true`, primero borra los turnos existentes de `a_lunes`. */
   reemplazar?: boolean;
 }
 
-/** Respuesta de copiar-semana: el back devuelve distinta forma según el alcance. */
 export interface RespuestaCopiarSemana {
-  /** Para "cobertura" o "horario". */
-  copiados?: number;
-  /** Para "ambos". */
-  copiados_cobertura?: number;
-  copiados_horario?: number;
-  /** Mensaje informativo (p. ej. "Solo se copia el horario..."). */
-  mensaje?: string;
+  copiados: number;
 }
 
 /** Carga del equipo: cuánto trabajo lleva cada persona esta semana. */
