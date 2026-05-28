@@ -466,14 +466,30 @@ def crear_evento_rota(
     hora: str = "",
     contenido: str = "",
     nota: str = "",
+    tipo_cobertura: str = "transmision",
+    prioridad: str = "media",
 ) -> dict[str, Any]:
-    return db.crear_evento_rota(titulo, fecha=fecha, hora=hora, contenido=contenido, nota=nota)
+    return db.crear_evento_rota(
+        titulo,
+        fecha=fecha,
+        hora=hora,
+        contenido=contenido,
+        nota=nota,
+        tipo_cobertura=tipo_cobertura,
+        prioridad=prioridad,
+    )
 
 
 def listar_eventos_rota(
-    desde: str | None = None, hasta: str | None = None
+    desde: str | None = None,
+    hasta: str | None = None,
+    *,
+    solo_cambiados: bool = False,
+    tipo_cobertura: str | None = None,
 ) -> list[dict[str, Any]]:
-    return db.listar_eventos_rota(desde=desde, hasta=hasta)
+    return db.listar_eventos_rota(
+        desde=desde, hasta=hasta, solo_cambiados=solo_cambiados, tipo_cobertura=tipo_cobertura
+    )
 
 
 def obtener_evento_rota(evento_id: str) -> dict[str, Any] | None:

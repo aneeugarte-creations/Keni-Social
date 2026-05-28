@@ -713,8 +713,10 @@ export const api = {
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>
     peticion<RespuestaEquipoRota>("/rota/equipo", { signal }),
-  rotaEventos: (params: { desde?: string; hasta?: string } = {}, signal?: AbortSignal) =>
-    peticion<RespuestaEventosRota>(`/rota/eventos${query(params)}`, { signal }),
+  rotaEventos: (
+    params: { desde?: string; hasta?: string; cambiados?: string; tipo_cobertura?: string } = {},
+    signal?: AbortSignal,
+  ) => peticion<RespuestaEventosRota>(`/rota/eventos${query(params)}`, { signal }),
   crearEventoRota: (cuerpo: CuerpoCrearEventoRota) =>
     peticion<RespuestaEventoRota>("/rota/eventos", { metodo: "POST", json: cuerpo }),
   actualizarEventoRota: (id: string, cuerpo: CuerpoActualizarEventoRota) =>

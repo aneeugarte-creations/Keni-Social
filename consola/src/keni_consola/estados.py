@@ -86,3 +86,26 @@ FRANJAS_TRABAJO: tuple[str, ...] = (FRANJA_MATUTINO, FRANJA_VESPERTINO)
 # planificado; `baja` una ausencia medica/forzosa; `otro` el cajon de sastre. Operacional;
 # vive en SQLite (`rota_ausencias.tipo`).
 TIPOS_AUSENCIA: tuple[str, ...] = ("vacaciones", "descanso", "baja", "otro")
+
+# Tipo de COBERTURA de un evento del calendario (F4 · #144, ola B). Elias distingue tres
+# casos reales: `transmision` (sale con senal/transmision), `imagenes` ("algunos no los
+# vamos a transmitir, pero si los cubrimos con imagenes y fotografias") y `no_cubrir` (se
+# trackea en el calendario pero NO se asigna cobertura). DEFAULT `transmision`: un evento
+# legado (sin tipo) se trata como transmision, asi que el proponedor lo sigue cubriendo.
+# Operacional; vive en SQLite (`rota_eventos.tipo_cobertura`).
+TIPOS_COBERTURA: tuple[str, ...] = ("transmision", "imagenes", "no_cubrir")
+TIPO_COBERTURA_TRANSMISION = "transmision"
+TIPO_COBERTURA_IMAGENES = "imagenes"
+TIPO_COBERTURA_NO_CUBRIR = "no_cubrir"
+
+# Solo estos tipos GENERAN un turno de cobertura al proponer la rota: `no_cubrir` queda
+# fuera (se trackea pero no se asigna a nadie).
+TIPOS_COBERTURA_ASIGNABLES: tuple[str, ...] = (
+    TIPO_COBERTURA_TRANSMISION,
+    TIPO_COBERTURA_IMAGENES,
+)
+
+# Prioridad de un evento del calendario (F4 · #144, ola B): pista visual para que el
+# equipo decida que cubre primero. DEFAULT `media`. Operacional (`rota_eventos.prioridad`).
+PRIORIDADES_EVENTO: tuple[str, ...] = ("alta", "media", "baja")
+PRIORIDAD_EVENTO_DEFECTO = "media"

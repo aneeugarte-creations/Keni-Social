@@ -5,9 +5,9 @@ hace visible con anticipacion. Keni propone + consolida; Elias ajusta y APRUEBA 
 asignaciones finales antes de publicarlas al equipo. Nada se publica hasta aprobar.
 
   - `GET    /api/rota/equipo`                 -> miembros del equipo (usuarios #130).
-  - `GET    /api/rota/eventos[?desde&hasta]`  -> eventos/transmisiones.
-  - `POST   /api/rota/eventos`                {titulo, fecha, hora, contenido, nota}
-  - `PATCH  /api/rota/eventos/{id}`           edita un evento.
+  - `GET    /api/rota/eventos[?desde&hasta&cambiados&tipo_cobertura]` -> eventos/transmisiones.
+  - `POST   /api/rota/eventos`                {titulo, fecha, hora, contenido, nota, tipo_cobertura, prioridad}
+  - `PATCH  /api/rota/eventos/{id}`           edita un evento (reprograma -> cambiado=1; cambiado:false lo limpia).
   - `DELETE /api/rota/eventos/{id}`           borra el evento (y sus turnos).
   - `GET    /api/rota/semana[?lunes]`         -> rota de la semana (turnos + eventos).
   - `POST   /api/rota/proponer`               {lunes} -> PROPONE (no publica) la rota.
@@ -46,7 +46,16 @@ from starlette.routing import Route
 from .. import auth, repos
 from .. import rota as dominio
 from .._http_json import leer_json
-from ..estados import ESTADOS_ROTA, FRANJAS_TRABAJO, FRANJAS_TURNO, ROL_ADMIN, TIPOS_AUSENCIA
+from ..estados import (
+    ESTADOS_ROTA,
+    FRANJAS_TRABAJO,
+    FRANJAS_TURNO,
+    PRIORIDADES_EVENTO,
+    ROL_ADMIN,
+    TIPO_COBERTURA_NO_CUBRIR,
+    TIPOS_AUSENCIA,
+    TIPOS_COBERTURA,
+)
 
 # Media types oficiales de un .xlsx (Open XML) y un CSV.
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -106,6 +115,11 @@ def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
         "hora": evento["hora"],
         "contenido": evento["contenido"],
         "nota": evento["nota"],
+        # Ola B (#144): cobertura, prioridad y seguimiento de reprogramaciones.
+        "tipo_cobertura": evento.get("tipo_cobertura", "transmision"),
+        "prioridad": evento.get("prioridad", "media"),
+        "cambiado": bool(evento.get("cambiado")),
+        "actualizado": evento.get("actualizado", ""),
         "es_sabado": dominio.es_sabado(evento["fecha"]),
     }
 
@@ -202,11 +216,36 @@ async def equipo(request: Request) -> Response:
 # --------------------------------------------------------------------------- #
 
 
+def _error_cobertura() -> Response:
+    validos = " o ".join(f'"{t}"' for t in TIPOS_COBERTURA)
+    return JSONResponse({"error": f"Tipo de cobertura inválido. Usa {validos}."}, status_code=400)
+
+
+def _error_prioridad() -> Response:
+    validos = " o ".join(f'"{p}"' for p in PRIORIDADES_EVENTO)
+    return JSONResponse({"error": f"Prioridad inválida. Usa {validos}."}, status_code=400)
+
+
 async def listar_eventos(request: Request) -> Response:
-    """GET /api/rota/eventos[?desde&hasta]: calendario de eventos/transmisiones."""
+    """GET /api/rota/eventos[?desde&hasta&cambiados&tipo_cobertura]: calendario de eventos.
+
+    `cambiados=true` deja solo los REPROGRAMADOS (los que Elías debe re-avisar);
+    `tipo_cobertura=` filtra por tipo de cobertura. `desde`/`hasta` acotan por fecha.
+    """
     desde = (request.query_params.get("desde") or "").strip() or None
     hasta = (request.query_params.get("hasta") or "").strip() or None
-    eventos = repos.listar_eventos_rota(desde=desde, hasta=hasta)
+    solo_cambiados = (request.query_params.get("cambiados") or "").strip().lower() in (
+        "1",
+        "true",
+        "sí",
+        "si",
+    )
+    tipo_cobertura = (request.query_params.get("tipo_cobertura") or "").strip() or None
+    if tipo_cobertura is not None and tipo_cobertura not in TIPOS_COBERTURA:
+        return _error_cobertura()
+    eventos = repos.listar_eventos_rota(
+        desde=desde, hasta=hasta, solo_cambiados=solo_cambiados, tipo_cobertura=tipo_cobertura
+    )
     return JSONResponse({"eventos": [_evento_a_dict(e) for e in eventos]})
 
 
@@ -223,18 +262,31 @@ async def crear_evento(request: Request) -> Response:
         return JSONResponse(
             {"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400
         )
+    tipo_cobertura = str(datos.get("tipo_cobertura", "transmision")).strip() or "transmision"
+    if tipo_cobertura not in TIPOS_COBERTURA:
+        return _error_cobertura()
+    prioridad = str(datos.get("prioridad", "media")).strip() or "media"
+    if prioridad not in PRIORIDADES_EVENTO:
+        return _error_prioridad()
     evento = repos.crear_evento_rota(
         titulo.strip(),
         fecha=fecha.strip(),
         hora=str(datos.get("hora", "")).strip(),
         contenido=str(datos.get("contenido", "")).strip(),
         nota=str(datos.get("nota", "")).strip(),
+        tipo_cobertura=tipo_cobertura,
+        prioridad=prioridad,
     )
     return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
 
 
 async def actualizar_evento(request: Request) -> Response:
-    """PATCH /api/rota/eventos/{id}: edita un evento."""
+    """PATCH /api/rota/eventos/{id}: edita un evento.
+
+    Editar `fecha`/`hora`/`tipo_cobertura` lo marca como REPROGRAMADO (`cambiado=1`); el
+    request puede enviar `cambiado:false` para la acción "marcar avisado" (limpiar el aviso),
+    que gana incluso si en el mismo PATCH se reprogramó.
+    """
     evento_id = request.path_params["evento_id"]
     datos = await leer_json(request)
     campos: dict[str, Any] = {}
@@ -245,6 +297,20 @@ async def actualizar_evento(request: Request) -> Response:
         return JSONResponse({"error": "El evento necesita un título."}, status_code=400)
     if "fecha" in campos and campos["fecha"] and dominio.lunes_de_semana_iso(campos["fecha"]) == "":
         return JSONResponse({"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400)
+    if "tipo_cobertura" in datos:
+        tipo_cobertura = str(datos["tipo_cobertura"]).strip()
+        if tipo_cobertura not in TIPOS_COBERTURA:
+            return _error_cobertura()
+        campos["tipo_cobertura"] = tipo_cobertura
+    if "prioridad" in datos:
+        prioridad = str(datos["prioridad"]).strip()
+        if prioridad not in PRIORIDADES_EVENTO:
+            return _error_prioridad()
+        campos["prioridad"] = prioridad
+    # `cambiado` no es un campo editable de texto: lo derivamos en db.py, pero el request
+    # puede enviarlo (típicamente `false`) como acción "ya avisé / visto" de Elías.
+    if "cambiado" in datos:
+        campos["cambiado"] = bool(datos["cambiado"])
     evento = repos.actualizar_evento_rota(evento_id, campos)
     if evento is None:
         return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
@@ -285,11 +351,15 @@ async def proponer(request: Request) -> Response:
         )
 
     eventos_crudos = repos.listar_eventos_rota()
+    # Ola B (#144): los eventos `no_cubrir` se trackean en el calendario pero NO generan
+    # turno de cobertura (no se asignan a nadie). `transmision`/`imagenes` sí se proponen;
+    # un evento legado sin tipo cae a `transmision`, así que se sigue proponiendo.
     eventos = [
         dominio.Evento(
             id=e["id"], titulo=e["titulo"], fecha=e["fecha"], hora=e["hora"], contenido=e["contenido"]
         )
         for e in eventos_crudos
+        if e.get("tipo_cobertura", "transmision") != TIPO_COBERTURA_NO_CUBRIR
     ]
     equipo_dom = _equipo()
     sabado_previo = _sabado_previo(lunes)

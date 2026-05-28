@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  BellRing,
   CalendarDays,
   CalendarOff,
   CalendarPlus,
+  Camera,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -11,6 +13,7 @@ import {
   Loader2,
   Plane,
   Plus,
+  Radio,
   Sparkles,
   Trash2,
   User,
@@ -52,7 +55,9 @@ import type {
   FranjaTurno,
   HorarioSemana,
   MiembroRota,
+  PrioridadEvento,
   TipoAusencia,
+  TipoCoberturaEvento,
   TurnoRota,
   TurnoTrabajoRota,
 } from "@/types";
@@ -60,7 +65,7 @@ import type {
 const CABECERA = {
   titulo: "Parrilla y rota",
   descripcion:
-    "Eventos de la semana, rota de cobertura y horarios/turnos del equipo (mañana/tarde/descanso, con vacaciones y ausencias). Keni propone (rota los sábados sin repetir a la misma persona dos seguidos); tú ajustas y apruebas antes de publicar al equipo.",
+    "Calendario de eventos (con su tipo de cobertura: transmisión, solo imágenes o no cubrir) y reprogramaciones marcadas, rota de cobertura y horarios/turnos del equipo. Keni propone y avisa de los cambios de horario; tú decides qué se cubre, ajustas y apruebas antes de publicar al equipo.",
 };
 
 // Etiquetas legibles de cada franja del turno de trabajo.
@@ -68,6 +73,51 @@ const ETIQUETA_FRANJA: Record<FranjaTurno, string> = {
   matutino: "Mañana",
   vespertino: "Tarde",
   descanso: "Descanso",
+};
+
+// Presentación de cada tipo de cobertura: etiqueta, icono y clases de color (chips/leyenda).
+// Tropicalización MX y consistente con la voz del producto (Elías decide qué se cubre).
+const COBERTURA: Record<
+  TipoCoberturaEvento,
+  { etiqueta: string; icono: typeof Radio; chip: string; punto: string }
+> = {
+  transmision: {
+    etiqueta: "Transmisión",
+    icono: Radio,
+    chip: "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
+    punto: "bg-sky-500",
+  },
+  imagenes: {
+    etiqueta: "Solo imágenes",
+    icono: Camera,
+    chip: "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300",
+    punto: "bg-violet-500",
+  },
+  no_cubrir: {
+    etiqueta: "No cubrir",
+    icono: CalendarOff,
+    chip: "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400",
+    punto: "bg-zinc-400",
+  },
+};
+
+const TIPOS_COBERTURA: { valor: TipoCoberturaEvento; etiqueta: string }[] = [
+  { valor: "transmision", etiqueta: "Transmisión (con señal)" },
+  { valor: "imagenes", etiqueta: "Solo imágenes / fotografías" },
+  { valor: "no_cubrir", etiqueta: "No cubrir" },
+];
+
+const PRIORIDADES: { valor: PrioridadEvento; etiqueta: string }[] = [
+  { valor: "alta", etiqueta: "Alta" },
+  { valor: "media", etiqueta: "Media" },
+  { valor: "baja", etiqueta: "Baja" },
+];
+
+// Color del texto de la prioridad (sutil; la alta resalta).
+const COLOR_PRIORIDAD: Record<PrioridadEvento, string> = {
+  alta: "text-red-600 dark:text-red-400",
+  media: "text-muted-foreground",
+  baja: "text-muted-foreground",
 };
 
 const TIPOS_AUSENCIA: { valor: TipoAusencia; etiqueta: string }[] = [
@@ -129,8 +179,9 @@ export default function Rota() {
   return (
     <>
       <PageHeader {...CABECERA} />
-      <Tabs defaultValue="parrilla" className="space-y-4">
+      <Tabs defaultValue="calendario" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="parrilla">Parrilla del equipo</TabsTrigger>
           <TabsTrigger value="horario">Horario del equipo</TabsTrigger>
           <TabsTrigger value="mi-semana">Mi próxima semana</TabsTrigger>
@@ -138,6 +189,9 @@ export default function Rota() {
           <TabsTrigger value="eventos">Eventos</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="calendario">
+          <Calendario lunes={lunes} setLunes={setLunes} />
+        </TabsContent>
         <TabsContent value="parrilla">
           <Parrilla lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
         </TabsContent>
@@ -193,6 +247,173 @@ function NavegadorSemana({
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
+    </div>
+  );
+}
+
+// --- Pestaña: calendario de eventos (semana, color por cobertura) ----------
+
+/** Leyenda de colores por tipo de cobertura (consistente con los chips del calendario). */
+function LeyendaCobertura() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+      {(Object.keys(COBERTURA) as TipoCoberturaEvento[]).map((tc) => (
+        <span key={tc} className="inline-flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-full ${COBERTURA[tc].punto}`} />
+          {COBERTURA[tc].etiqueta}
+        </span>
+      ))}
+      <span className="inline-flex items-center gap-1.5">
+        <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Cambió
+        (reprogramado, falta avisar)
+      </span>
+    </div>
+  );
+}
+
+/** Botón "marcar avisado": limpia el flag `cambiado` de un evento (PATCH cambiado:false). */
+function BotonMarcarAvisado({ evento, onCambio }: { evento: EventoRota; onCambio: () => void }) {
+  const marcar = useMutation({
+    mutationFn: () => api.actualizarEventoRota(evento.id, { cambiado: false }),
+    onSuccess: () => {
+      toast.success("Marcado como avisado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="h-6 gap-1 px-1.5 text-[11px] text-amber-700 dark:text-amber-400"
+      onClick={() => marcar.mutate()}
+      disabled={marcar.isPending}
+    >
+      {marcar.isPending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <CheckCircle2 className="h-3 w-3" />
+      )}
+      Marcar avisado
+    </Button>
+  );
+}
+
+/** Un chip de evento dentro de una celda del calendario, color por tipo de cobertura. */
+function ChipEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () => void }) {
+  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
+  const Icono = cob.icono;
+  return (
+    <div className={`space-y-1 rounded-md border px-2 py-1.5 text-xs ${cob.chip}`}>
+      <div className="flex items-start gap-1.5">
+        <Icono className="mt-0.5 h-3 w-3 shrink-0" />
+        <span className="min-w-0 break-words font-medium leading-tight">{evento.titulo}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90">
+        {evento.hora && <span>{evento.hora}</span>}
+        <span className={COLOR_PRIORIDAD[evento.prioridad]}>· {evento.prioridad}</span>
+      </div>
+      {evento.cambiado && (
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge variant="aviso" className="gap-1 font-normal">
+            <BellRing className="h-3 w-3" /> Cambió
+          </Badge>
+          <BotonMarcarAvisado evento={evento} onCambio={onCambio} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) => void }) {
+  const queryClient = useQueryClient();
+  // El rango (lun→dom) de la semana en vista para acotar la consulta de eventos.
+  const desde = lunes;
+  const hasta = lunesSiguiente(lunes, 1); // lunes siguiente = exclusivo, cubre todo dom
+  const clave = ["rota", "calendario", desde] as const;
+
+  const q = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
+  });
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
+
+  const dias = React.useMemo(() => {
+    const base = new Date(`${lunes}T00:00:00`);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      return iso(d);
+    });
+  }, [lunes]);
+
+  // Filtramos en cliente al rango exacto lun→dom (la consulta usa `hasta` exclusivo).
+  const eventos = (q.data?.eventos ?? []).filter((e) => e.fecha >= desde && e.fecha < hasta);
+  const porDia = new Map<string, EventoRota[]>();
+  for (const e of eventos) {
+    const lista = porDia.get(e.fecha) ?? [];
+    lista.push(e);
+    porDia.set(e.fecha, lista);
+  }
+  const inicio = dias[0] ?? "";
+  const fin = dias[6] ?? "";
+  const nCambiados = eventos.filter((e) => e.cambiado).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+        {nCambiados > 0 && (
+          <Badge variant="aviso" className="gap-1 font-normal">
+            <BellRing className="h-3.5 w-3.5" /> {nCambiados} reprogramado
+            {nCambiados === 1 ? "" : "s"} sin avisar
+          </Badge>
+        )}
+      </div>
+
+      <LeyendaCobertura />
+
+      {q.isPending ? (
+        <Skeleton className="h-64 w-full rounded-md" />
+      ) : q.isError ? (
+        <BloqueError
+          titulo="No se pudo cargar el calendario"
+          mensaje={mensajeError(q.error)}
+          onReintentar={() => void q.refetch()}
+          cargando={q.isFetching}
+        />
+      ) : (
+        <Card>
+          <CardContent className="overflow-x-auto p-3">
+            <div className="grid min-w-[56rem] grid-cols-7 gap-2">
+              {dias.map((fecha) => {
+                const finde = esFinDeSemana(fecha);
+                const delDia = porDia.get(fecha) ?? [];
+                return (
+                  <div
+                    key={fecha}
+                    className={`flex min-h-[8rem] flex-col gap-1.5 rounded-md border p-2 ${
+                      finde ? "bg-amber-50/40 dark:bg-amber-950/10" : "bg-muted/20"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs font-semibold capitalize">{diaCorto(fecha)}</span>
+                      <span className="text-xs text-muted-foreground">{fecha.slice(8, 10)}</span>
+                    </div>
+                    {delDia.length === 0 ? (
+                      <span className="mt-1 text-xs text-muted-foreground/60">—</span>
+                    ) : (
+                      delDia.map((e) => (
+                        <ChipEvento key={e.id} evento={e} onCambio={invalidar} />
+                      ))
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -1174,6 +1395,8 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
   const [fecha, setFecha] = React.useState("");
   const [hora, setHora] = React.useState("");
   const [contenido, setContenido] = React.useState("");
+  const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
+  const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
 
   const crear = useMutation({
     mutationFn: () =>
@@ -1182,12 +1405,16 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
         fecha,
         hora: hora.trim(),
         contenido: contenido.trim(),
+        tipo_cobertura: tipoCobertura,
+        prioridad,
       }),
     onSuccess: () => {
       toast.success("Evento creado.");
       setTitulo("");
       setHora("");
       setContenido("");
+      setTipoCobertura("transmision");
+      setPrioridad("media");
       onCreado();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -1229,6 +1456,41 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
             />
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Cobertura</Label>
+            <Select
+              value={tipoCobertura}
+              onValueChange={(v) => setTipoCobertura(v as TipoCoberturaEvento)}
+            >
+              <SelectTrigger aria-label="Tipo de cobertura">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_COBERTURA.map((t) => (
+                  <SelectItem key={t.valor} value={t.valor}>
+                    {t.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Prioridad</Label>
+            <Select value={prioridad} onValueChange={(v) => setPrioridad(v as PrioridadEvento)}>
+              <SelectTrigger aria-label="Prioridad">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORIDADES.map((p) => (
+                  <SelectItem key={p.valor} value={p.valor}>
+                    {p.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="space-y-1.5">
           <Label htmlFor="ev-contenido">
             Qué sacar <span className="font-normal text-muted-foreground">(opcional)</span>
@@ -1267,21 +1529,42 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Edición inline de cobertura/prioridad (cambiar cobertura reprograma -> "Cambió").
+  const editar = useMutation({
+    mutationFn: (cuerpo: { tipo_cobertura?: TipoCoberturaEvento; prioridad?: PrioridadEvento }) =>
+      api.actualizarEventoRota(evento.id, cuerpo),
+    onSuccess: () => onCambio(),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
+  const IconoCob = cob.icono;
+
   return (
     <Card>
       <CardContent className="flex items-start justify-between gap-3 p-4">
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{evento.titulo}</span>
+            <Badge variant="outline" className={`gap-1 font-normal ${cob.chip}`}>
+              <IconoCob className="h-3 w-3" /> {cob.etiqueta}
+            </Badge>
             {evento.es_sabado && (
               <Badge variant="outline" className="font-normal">
                 Sábado
+              </Badge>
+            )}
+            {evento.cambiado && (
+              <Badge variant="aviso" className="gap-1 font-normal">
+                <BellRing className="h-3 w-3" /> Cambió
               </Badge>
             )}
           </div>
           <div className="text-xs text-muted-foreground">
             {formatearFechaCorta(evento.fecha)}
             {evento.hora ? ` · ${evento.hora}` : ""}
+            {" · "}
+            <span className={COLOR_PRIORIDAD[evento.prioridad]}>prioridad {evento.prioridad}</span>
           </div>
           {evento.contenido && (
             <div className="text-sm text-muted-foreground">
@@ -1289,6 +1572,41 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
               {evento.contenido}
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Select
+              value={evento.tipo_cobertura}
+              onValueChange={(v) => editar.mutate({ tipo_cobertura: v as TipoCoberturaEvento })}
+              disabled={editar.isPending}
+            >
+              <SelectTrigger aria-label="Cambiar cobertura" className="h-8 w-[11rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_COBERTURA.map((t) => (
+                  <SelectItem key={t.valor} value={t.valor}>
+                    {t.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={evento.prioridad}
+              onValueChange={(v) => editar.mutate({ prioridad: v as PrioridadEvento })}
+              disabled={editar.isPending}
+            >
+              <SelectTrigger aria-label="Cambiar prioridad" className="h-8 w-[7rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORIDADES.map((p) => (
+                  <SelectItem key={p.valor} value={p.valor}>
+                    {p.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {evento.cambiado && <BotonMarcarAvisado evento={evento} onCambio={onCambio} />}
+          </div>
         </div>
         <Button
           variant="ghost"
