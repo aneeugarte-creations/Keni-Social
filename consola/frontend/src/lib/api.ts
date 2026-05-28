@@ -23,7 +23,13 @@ import type {
   CuerpoActualizarTurnoRota,
   CuerpoActualizarEventoRota,
   CuerpoActualizarPiezaRota,
+  CuerpoActualizarProgramaRota,
   CuerpoAprobarRota,
+  CuerpoBorrarLoteIds,
+  CuerpoCrearProgramaRota,
+  CuerpoCrearTurnoRota,
+  CuerpoDuplicarEventoRota,
+  CuerpoDuplicarPiezaRota,
   CuerpoConectarRed,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
@@ -134,8 +140,11 @@ import type {
   HorarioSemana,
   MiHorarioRota,
   FiltrosPiezasRota,
+  RespuestaBorrarLote,
   RespuestaPiezaRota,
   RespuestaPiezasRota,
+  RespuestaProgramaRota,
+  RespuestaProgramasRota,
   CuerpoAsignarFranja,
   RespuestaAsignarFranja,
   CuerpoActualizarLoteTurnos,
@@ -811,11 +820,25 @@ export const api = {
     }),
   eliminarEventoRota: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/eventos/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  duplicarEventoRota: (id: string, cuerpo: CuerpoDuplicarEventoRota = {}) =>
+    peticion<RespuestaEventoRota>(`/rota/eventos/${encodeURIComponent(id)}/duplicar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
   rotaSemana: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
     peticion<RotaSemana>(`/rota/semana${query(params)}`, { signal }),
+  crearTurnoRota: (cuerpo: CuerpoCrearTurnoRota) =>
+    peticion<RespuestaTurnoRota>("/rota/turnos", { metodo: "POST", json: cuerpo }),
   actualizarTurnoRota: (id: string, cuerpo: CuerpoActualizarTurnoRota) =>
     peticion<RespuestaTurnoRota>(`/rota/turnos/${encodeURIComponent(id)}`, {
       metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarTurnoRota: (id: string) =>
+    peticion<RespuestaMensaje>(`/rota/turnos/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  borrarTurnosLote: (cuerpo: CuerpoBorrarLoteIds) =>
+    peticion<RespuestaBorrarLote>("/rota/turnos/lote/borrar", {
+      metodo: "POST",
       json: cuerpo,
     }),
   aprobarRota: (cuerpo: CuerpoAprobarRota) =>
@@ -882,6 +905,41 @@ export const api = {
     }),
   eliminarPiezaRota: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/piezas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  duplicarPiezaRota: (id: string, cuerpo: CuerpoDuplicarPiezaRota = {}) =>
+    peticion<RespuestaPiezaRota>(`/rota/piezas/${encodeURIComponent(id)}/duplicar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  borrarPiezasLote: (cuerpo: CuerpoBorrarLoteIds) =>
+    peticion<RespuestaBorrarLote>("/rota/piezas/lote/borrar", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+
+  // --- Catálogo de programas (#150 PARRILLA 2026.xlsx) ---
+  // Las piezas referencian programas por NOMBRE; renombrar hace cascada
+  // transaccional sobre rota_piezas.programa. Borrar con piezas en uso requiere
+  // ?forzar=true (el 409 incluye `piezas_afectadas` y `en_uso:true`).
+  listarProgramasRota: (
+    params: { activo?: boolean } = {},
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaProgramasRota>(
+      `/rota/programas${query({ activo: params.activo === undefined ? undefined : String(params.activo) })}`,
+      { signal },
+    ),
+  crearProgramaRota: (cuerpo: CuerpoCrearProgramaRota) =>
+    peticion<RespuestaProgramaRota>("/rota/programas", { metodo: "POST", json: cuerpo }),
+  actualizarProgramaRota: (id: string, cuerpo: CuerpoActualizarProgramaRota) =>
+    peticion<RespuestaProgramaRota>(`/rota/programas/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarProgramaRota: (id: string, params: { forzar?: boolean } = {}) =>
+    peticion<RespuestaMensaje & { piezas_afectadas?: number }>(
+      `/rota/programas/${encodeURIComponent(id)}${query({ forzar: params.forzar ? "true" : undefined })}`,
+      { metodo: "DELETE" },
+    ),
 
   // --- Asignación flexible (rama rota-asignacion-flexible) ---
   asignarFranja: (cuerpo: CuerpoAsignarFranja) =>
