@@ -31,8 +31,23 @@ BLOQUEO_MINUTOS = 5
 # --------------------------------------------------------------------------- #
 
 
+# Columnas PUBLICAS del usuario, en orden estable. `cargo` y `cobertura` se anadieron a
+# `usuarios` con `_migrar_columnas_usuarios`; todo SELECT pasa por aqui para que tipos y
+# columnas no se desincronicen.
+_COLUMNAS_USUARIO_PUBLICAS = (
+    "id", "usuario", "rol", "debe_cambiar_password", "creado", "ultimo_acceso",
+    "cargo", "cobertura",
+)
+_SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
+
+
 def _fila_a_usuario_publico(fila: Any) -> dict[str, Any]:
-    """Forma PUBLICA de un usuario para la API (NUNCA salt/hash)."""
+    """Forma PUBLICA de un usuario para la API (NUNCA salt/hash).
+
+    `cargo` es la FUNCION del equipo ("director", "community_manager"...). `cobertura` es
+    el flag que dice si esa persona entra en la rota de turnos. Ambos vacios/`False` por
+    defecto para usuarios legados.
+    """
     return {
         "id": fila["id"],
         "usuario": fila["usuario"],
@@ -40,6 +55,8 @@ def _fila_a_usuario_publico(fila: Any) -> dict[str, Any]:
         "debe_cambiar_password": bool(fila["debe_cambiar_password"]),
         "creado": fila["creado"],
         "ultimo_acceso": fila["ultimo_acceso"],
+        "cargo": fila["cargo"],
+        "cobertura": bool(fila["cobertura"]),
     }
 
 
@@ -49,11 +66,19 @@ def _fila_a_usuario_publico(fila: Any) -> dict[str, Any]:
 
 
 def crear_usuario(
-    usuario: str, password: str, rol: str = ROL_EDITOR, *, debe_cambiar_password: bool = False
+    usuario: str,
+    password: str,
+    rol: str = ROL_EDITOR,
+    *,
+    debe_cambiar_password: bool = False,
+    cargo: str = "",
+    cobertura: bool = False,
 ) -> dict[str, Any] | None:
     """Inserta un usuario nuevo y lo devuelve (forma publica). None si el nombre ya existe.
 
-    NO valida fuerza/rol (lo hace la API contra sus mensajes); aqui solo persiste.
+    NO valida fuerza/rol/cargo (lo hace la API contra sus mensajes); aqui solo persiste.
+    `cargo` es texto libre validado en la API (allowlist en `estados.CARGOS_USUARIO`);
+    `cobertura` indica si la persona entra en la rota de turnos (`False` por defecto).
     """
     salt_hex, hash_hex = hashear_password(password)
     nuevo = {
@@ -67,17 +92,20 @@ def crear_usuario(
         "bloqueo_hasta": "",
         "creado": _comun.iso(_comun.ahora()),
         "ultimo_acceso": "",
+        "cargo": cargo,
+        "cobertura": 1 if cobertura else 0,
     }
     con = db.conectar()
     try:
         con.execute(
             "INSERT INTO usuarios (id, usuario, rol, salt, hash, debe_cambiar_password, "
-            "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nuevo["id"], nuevo["usuario"], nuevo["rol"], nuevo["salt"], nuevo["hash"],
                 nuevo["debe_cambiar_password"], nuevo["intentos_fallidos"],
                 nuevo["bloqueo_hasta"], nuevo["creado"], nuevo["ultimo_acceso"],
+                nuevo["cargo"], nuevo["cobertura"],
             ),
         )
         con.commit()
@@ -92,6 +120,8 @@ def crear_usuario(
         "debe_cambiar_password": bool(nuevo["debe_cambiar_password"]),
         "creado": nuevo["creado"],
         "ultimo_acceso": nuevo["ultimo_acceso"],
+        "cargo": nuevo["cargo"],
+        "cobertura": bool(nuevo["cobertura"]),
     }
 
 
@@ -100,8 +130,7 @@ def listar_usuarios() -> list[dict[str, Any]]:
     con = db.conectar()
     try:
         filas = con.execute(
-            "SELECT id, usuario, rol, debe_cambiar_password, creado, ultimo_acceso "
-            "FROM usuarios ORDER BY usuario ASC"
+            f"SELECT {_SELECT_USUARIO_PUBLICO} FROM usuarios ORDER BY usuario ASC"
         ).fetchall()
     finally:
         con.close()
@@ -113,13 +142,42 @@ def obtener_usuario_por_id(usuario_id: str) -> dict[str, Any] | None:
     con = db.conectar()
     try:
         fila = con.execute(
-            "SELECT id, usuario, rol, debe_cambiar_password, creado, ultimo_acceso "
-            "FROM usuarios WHERE id = ?",
+            f"SELECT {_SELECT_USUARIO_PUBLICO} FROM usuarios WHERE id = ?",
             (usuario_id,),
         ).fetchone()
     finally:
         con.close()
     return _fila_a_usuario_publico(fila) if fila is not None else None
+
+
+def actualizar_perfil(
+    usuario_id: str, *, cargo: str | None = None, cobertura: bool | None = None
+) -> bool:
+    """Actualiza `cargo` y/o `cobertura` de un usuario; True si existia.
+
+    NO aplica guardas (lo hace la API contra `CARGOS_USUARIO`). Pasar `None` deja el
+    campo intacto; `cargo=""` lo limpia.
+    """
+    campos: list[str] = []
+    valores: list[Any] = []
+    if cargo is not None:
+        campos.append("cargo = ?")
+        valores.append(cargo)
+    if cobertura is not None:
+        campos.append("cobertura = ?")
+        valores.append(1 if cobertura else 0)
+    if not campos:
+        return obtener_usuario_por_id(usuario_id) is not None
+    valores.append(usuario_id)
+    con = db.conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE usuarios SET {', '.join(campos)} WHERE id = ?", tuple(valores)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 def _fila_credenciales(con: Any, usuario: str) -> Any:
@@ -129,7 +187,7 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     """
     return con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
-        "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso "
+        "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura "
         "FROM usuarios WHERE usuario = ?",
         (usuario,),
     ).fetchone()
@@ -249,6 +307,8 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "debe_cambiar_password": bool(fila["debe_cambiar_password"]),
             "creado": fila["creado"],
             "ultimo_acceso": ahora_iso,
+            "cargo": fila["cargo"],
+            "cobertura": bool(fila["cobertura"]),
         }
     finally:
         con.close()

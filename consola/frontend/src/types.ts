@@ -2181,6 +2181,45 @@ export interface RespuestaReporteComercial {
 /** Rol de un usuario de la consola. `admin` ve además la gestión de usuarios. */
 export type RolUsuario = "admin" | "editor";
 
+/**
+ * Cargo (función) de un usuario en el equipo. Ortogonal al rol de permisos: describe
+ * QUÉ hace la persona (community manager, director, coordinador...). Allowlist
+ * sincronizada con `keni_consola.estados.CARGOS_USUARIO`; cadena vacía = sin
+ * clasificar (usuarios legados antes de la migración).
+ */
+export type CargoUsuario =
+  | "director"
+  | "gerente"
+  | "coordinador"
+  | "content_manager"
+  | "community_manager"
+  | "redactor"
+  | "guionista"
+  | "editorial"
+  | "estrategia"
+  | "fotografia"
+  | "";
+
+/** Etiqueta legible para cada cargo (para selects/badges/listados). */
+export const ETIQUETA_CARGO: Record<Exclude<CargoUsuario, "">, string> = {
+  director: "Director",
+  gerente: "Gerente",
+  coordinador: "Coordinador",
+  content_manager: "Content manager",
+  community_manager: "Community manager",
+  redactor: "Redactor",
+  guionista: "Guionista",
+  editorial: "Editorial",
+  estrategia: "Estrategia",
+  fotografia: "Fotografía",
+};
+
+/** Etiqueta legible de un cargo (vacío => "Sin cargo"). */
+export function etiquetaCargo(cargo: CargoUsuario): string {
+  if (!cargo) return "Sin cargo";
+  return ETIQUETA_CARGO[cargo];
+}
+
 /** Usuario autenticado (lo que devuelven login y `/api/auth/me`). */
 export interface UsuarioSesion {
   id: string;
@@ -2195,6 +2234,10 @@ export interface UsuarioSesion {
   creado?: string;
   /** ISO 8601 del último acceso (vacío si nunca entró). Solo llega por `me`. */
   ultimo_acceso?: string;
+  /** Cargo (función en el equipo). Cadena vacía si aún sin clasificar. */
+  cargo?: CargoUsuario;
+  /** `true` => esta persona entra en la rota de turnos (cobertura). */
+  cobertura?: boolean;
 }
 
 /** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */
@@ -2223,6 +2266,10 @@ export interface UsuarioAdmin {
   creado: string;
   /** ISO 8601 del último acceso, o `null` si nunca entró. */
   ultimo_acceso: string | null;
+  /** Cargo (función en el equipo). Cadena vacía si aún sin clasificar. */
+  cargo?: CargoUsuario;
+  /** `true` => esta persona entra en la rota de turnos. */
+  cobertura?: boolean;
 }
 
 /** Respuesta de `GET /api/usuarios`: el backend envuelve la lista en `{ usuarios }`. */

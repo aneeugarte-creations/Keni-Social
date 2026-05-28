@@ -263,6 +263,10 @@ def crear_app(
             auth.bootstrap_admin()
         except Exception:  # noqa: BLE001 -- el arranque no debe romper por el bootstrap
             _logger.warning("No se pudo ejecutar el bootstrap del admin inicial.", exc_info=True)
+        try:
+            auth.sembrar_equipo()
+        except Exception:  # noqa: BLE001 -- idem: no impide el arranque
+            _logger.warning("No se pudo sembrar el equipo AMX.", exc_info=True)
 
     rutas: list[Route] = list(api.descubrir(refresco=True))
 

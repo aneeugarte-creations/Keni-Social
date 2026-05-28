@@ -21,6 +21,7 @@ import {
   ImageIcon,
   Loader2,
   MessageSquare,
+  Moon,
   Pencil,
   Plane,
   Plus,
@@ -29,6 +30,8 @@ import {
   Send,
   Shield,
   ShieldCheck,
+  Sunrise,
+  Sunset,
   Trash2,
   User,
   Users,
@@ -41,6 +44,10 @@ import { toast } from "sonner";
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import {
+  MenuContextual,
+  type EntradaMenuContextual,
+} from "@/components/comunes/MenuContextual";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1166,6 +1173,15 @@ function Turnos({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const despublicar = useMutation({
+    mutationFn: () => api.despublicarTurnos({ lunes }),
+    onSuccess: (res) => {
+      queryClient.setQueryData(claveTurnos, res);
+      toast.success(res.mensaje ?? "Semana despublicada: vuelve a borrador.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const copiarAnterior = useMutation({
     mutationFn: () =>
       api.copiarSemana({
@@ -1239,11 +1255,11 @@ function Turnos({
             )}
             Copiar semana anterior
           </Button>
-          {esAdmin && (
+          {esAdmin && !semana?.aprobada && (
             <Button
               variant="secondary"
               onClick={() => aprobar.mutate()}
-              disabled={aprobar.isPending || turnos.length === 0 || semana?.aprobada}
+              disabled={aprobar.isPending || turnos.length === 0}
             >
               {aprobar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1251,6 +1267,28 @@ function Turnos({
                 <CheckCircle2 className="h-4 w-4" />
               )}
               Aprobar y publicar
+            </Button>
+          )}
+          {esAdmin && semana?.aprobada && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "La semana volverá a ser editable. ¿Despublicar los turnos?",
+                  )
+                )
+                  despublicar.mutate();
+              }}
+              disabled={despublicar.isPending}
+              title="Volver a borrador para editar"
+            >
+              {despublicar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CalendarOff className="h-4 w-4" />
+              )}
+              Despublicar
             </Button>
           )}
           {esAdmin && <BotonConfigFranjas />}
@@ -1560,97 +1598,84 @@ function CeldaTurno({
     );
   }
 
+  // Items del menú contextual (right-click): TODA la edición vive aquí.
+  // Reduce ruido visual en la celda: ni botones, ni selector inline. La celda solo
+  // muestra franja + override/ausente + nota/motivo; el resto se descubre con
+  // botón derecho.
+  const itemsMenu: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Mañana",
+      icono: Sunrise,
+      activo: turno.franja === "matutino",
+      onClick: () => actualizar.mutate({ franja: "matutino" }),
+    },
+    {
+      etiqueta: "Tarde",
+      icono: Sunset,
+      activo: turno.franja === "vespertino",
+      onClick: () => actualizar.mutate({ franja: "vespertino" }),
+    },
+    {
+      etiqueta: "Descanso",
+      icono: Moon,
+      activo: turno.franja === "descanso",
+      onClick: () => actualizar.mutate({ franja: "descanso" }),
+    },
+    { separador: true },
+    {
+      etiqueta: "Editar detalles…",
+      icono: Pencil,
+      onClick: () => setEditandoDetalles(true),
+    },
+    {
+      etiqueta: "Duplicar",
+      icono: Copy,
+      onClick: () => duplicar.mutate(),
+      deshabilitado: duplicar.isPending,
+    },
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      destructivo: true,
+      onClick: () => {
+        if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`))
+          borrar.mutate();
+      },
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
-    <div className="space-y-1.5 rounded-md border bg-background p-1.5">
-      <div className="flex items-start gap-1.5">
-        <Checkbox
-          aria-label={`Seleccionar turno de ${turno.miembro_nombre} el ${turno.fecha}`}
-          checked={seleccionado}
-          onCheckedChange={() => onToggleSeleccionado(turno.id)}
-          className="mt-1.5"
-        />
-        <div className="min-w-0 flex-1 space-y-1">
-          <Select
-            value={turno.franja}
-            onValueChange={(v) => actualizar.mutate({ franja: v as FranjaTurno })}
-            disabled={actualizar.isPending}
-          >
-            <SelectTrigger
-              aria-label={`Franja de ${turno.miembro_nombre}`}
-              className="h-7 min-w-[7rem] text-xs"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="matutino">Mañana</SelectItem>
-              <SelectItem value="vespertino">Tarde</SelectItem>
-              <SelectItem value="descanso">Descanso</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex flex-wrap items-center gap-1">
-            {turno.override && (
-              <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
-                <AlertTriangle className="h-2.5 w-2.5" /> override
-              </Badge>
+    <MenuContextual items={itemsMenu}>
+      <div className="space-y-1.5 rounded-md border bg-background p-1.5">
+        <div className="flex items-start gap-1.5">
+          <Checkbox
+            aria-label={`Seleccionar turno de ${turno.miembro_nombre} el ${turno.fecha}`}
+            checked={seleccionado}
+            onCheckedChange={() => onToggleSeleccionado(turno.id)}
+            className="mt-1.5"
+          />
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="text-xs font-medium">{ETIQUETA_FRANJA[turno.franja]}</div>
+            <div className="flex flex-wrap items-center gap-1">
+              {turno.override && (
+                <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
+                  <AlertTriangle className="h-2.5 w-2.5" /> override
+                </Badge>
+              )}
+              {ausencia && !turno.override && (
+                <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
+                  <Plane className="h-2.5 w-2.5" /> ausente
+                </Badge>
+              )}
+            </div>
+            {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
+            {turno.motivo && (
+              <div className="text-[10px] text-muted-foreground">{turno.motivo}</div>
             )}
-            {ausencia && !turno.override && (
-              <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
-                <Plane className="h-2.5 w-2.5" /> ausente
-              </Badge>
-            )}
-            <Tooltip label="Editar persona, motivo, nota de relevo">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                onClick={() => setEditandoDetalles(true)}
-                aria-label="Editar detalles del turno"
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
-            </Tooltip>
-            <Tooltip label="Duplicar turno">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                onClick={() => duplicar.mutate()}
-                disabled={duplicar.isPending}
-                aria-label="Duplicar turno"
-              >
-                {duplicar.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Copy className="h-3 w-3" />
-                )}
-              </Button>
-            </Tooltip>
-            <Tooltip label="Borrar turno">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-5 w-5 text-muted-foreground hover:text-destructive"
-                aria-label="Borrar turno"
-                onClick={() => {
-                  if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`))
-                    borrar.mutate();
-                }}
-                disabled={borrar.isPending}
-              >
-                {borrar.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Trash2 className="h-3 w-3" />
-                )}
-              </Button>
-            </Tooltip>
           </div>
-          {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
-          {turno.motivo && (
-            <div className="text-[10px] text-muted-foreground">{turno.motivo}</div>
-          )}
         </div>
-      </div>
       {pendienteSabado && (
         <Button
           size="sm"
@@ -1696,18 +1721,19 @@ function CeldaTurno({
           </DialogContent>
         </Dialog>
       )}
-      {editandoDetalles && (
-        <DialogEditarTurno
-          turno={turno}
-          equipo={equipo}
-          onCerrar={() => setEditandoDetalles(false)}
-          onGuardado={() => {
-            setEditandoDetalles(false);
-            onCambio();
-          }}
-        />
-      )}
-    </div>
+        {editandoDetalles && (
+          <DialogEditarTurno
+            turno={turno}
+            equipo={equipo}
+            onCerrar={() => setEditandoDetalles(false)}
+            onGuardado={() => {
+              setEditandoDetalles(false);
+              onCambio();
+            }}
+          />
+        )}
+      </div>
+    </MenuContextual>
   );
 }
 

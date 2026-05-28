@@ -273,7 +273,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         intentos_fallidos      INTEGER NOT NULL DEFAULT 0,
         bloqueo_hasta          TEXT NOT NULL DEFAULT '',
         creado                 TEXT NOT NULL DEFAULT '',
-        ultimo_acceso          TEXT NOT NULL DEFAULT ''
+        ultimo_acceso          TEXT NOT NULL DEFAULT '',
+        cargo                  TEXT NOT NULL DEFAULT '',
+        cobertura              INTEGER NOT NULL DEFAULT 0
     )
     """,
     """
@@ -509,6 +511,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
+    _migrar_columnas_usuarios(con)
     con.commit()
 
 
@@ -902,6 +905,28 @@ def _migrar_columnas_programas(con: Any) -> None:
     for columna, tipo in _COLUMNAS_PROGRAMA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_programas ADD COLUMN {columna} {tipo}")
+
+
+# Columnas que se anadieron a `usuarios` despues del esquema original (cargo + cobertura
+# del equipo real, transcripciones AMX). Una BD creada antes no las tiene; legado ->
+# `cargo=''` (sin clasificar) y `cobertura=0` (no entra en rota). Cada par es (columna,
+# fragmento de tipo/DEFAULT).
+_COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("cargo", "TEXT NOT NULL DEFAULT ''"),
+    ("cobertura", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_usuarios(con: Any) -> None:
+    """Anade a `usuarios` las columnas de cargo + cobertura que una BD vieja no tuviera.
+
+    Mismo patron que `_migrar_columnas_eventos_rota`. Un usuario legado queda con cargo
+    vacio y `cobertura=0` (no participa en rota hasta marcarlo).
+    """
+    columnas = _columnas_existentes(con, "usuarios")
+    for columna, tipo in _COLUMNAS_USUARIOS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE usuarios ADD COLUMN {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1820,6 +1845,25 @@ def aprobar_semana_rota(semana: str) -> int:
         cur = con.execute(
             "UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE semana = ?",
             (ESTADO_ROTA_APROBADO, ahora, semana),
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def desaprobar_semana_rota(semana: str) -> int:
+    """Marca TODOS los turnos de una semana como `propuesto` (vuelve a borrador).
+
+    Inverso de `aprobar_semana_rota`. Devuelve cuantos turnos quedaron en borrador.
+    Idempotente.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE rota_turnos SET estado = ?, actualizado = ? WHERE semana = ?",
+            (ESTADO_ROTA_PROPUESTO, ahora, semana),
         )
         con.commit()
         return cur.rowcount

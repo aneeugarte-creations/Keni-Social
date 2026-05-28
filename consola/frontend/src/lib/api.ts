@@ -862,6 +862,9 @@ export const api = {
     }),
   aprobarTurnos: (cuerpo: CuerpoAprobarRota) =>
     peticion<RotaSemana>("/rota/turnos/aprobar", { metodo: "POST", json: cuerpo }),
+  /** Revierte la semana publicada a borrador (solo admin). */
+  despublicarTurnos: (cuerpo: CuerpoAprobarRota) =>
+    peticion<RotaSemana>("/rota/turnos/despublicar", { metodo: "POST", json: cuerpo }),
   misTurnos: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
     peticion<MisTurnosRota>(`/rota/mis-turnos${query(params)}`, { signal }),
   exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string } = {}) =>

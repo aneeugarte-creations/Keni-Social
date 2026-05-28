@@ -30,6 +30,7 @@ Turnos (CRUD completo + lote + duplicar):
   - `POST   /api/rota/turnos/lote/borrar`     {ids} borra en lote.
   - `POST   /api/rota/turnos/{id}/duplicar`   {fecha?, miembro_id?, franja?} clona con overrides.
   - `POST   /api/rota/turnos/aprobar`         {lunes} -> Elias APRUEBA (publica) los turnos.
+  - `POST   /api/rota/turnos/despublicar`     {lunes} -> Elias REVIERTE la semana a borrador.
   - `GET    /api/rota/mis-turnos[?lunes]`     -> los turnos del usuario autenticado.
 
 Cobertura DERIVADA (sin persistencia):
@@ -97,14 +98,27 @@ _MSG_SOLO_ADMIN = "Solo Elías (administrador) puede aprobar y publicar los turn
 # --------------------------------------------------------------------------- #
 
 
-def _equipo() -> list[dominio.Miembro]:
-    """El equipo disponible: los usuarios de la consola (#130), como `Miembro`."""
-    return [dominio.Miembro(id=u["id"], nombre=u["usuario"]) for u in auth.listar_usuarios()]
+def _equipo(solo_cobertura: bool = True) -> list[dominio.Miembro]:
+    """Equipo asignable a la rota: usuarios con `cobertura=True` por defecto.
+
+    El frontend solo deberia ofrecer estos como opciones al asignar turnos. Pasar
+    `solo_cobertura=False` devuelve el equipo COMPLETO (todos los usuarios), util para
+    resolver nombres legibles de turnos historicos asignados antes de marcar a alguien
+    como `cobertura=False` (no perder el nombre en la UI).
+    """
+    usuarios = auth.listar_usuarios()
+    if solo_cobertura:
+        usuarios = [u for u in usuarios if u.get("cobertura")]
+    return [dominio.Miembro(id=u["id"], nombre=u["usuario"]) for u in usuarios]
 
 
 def _nombres_equipo() -> dict[str, str]:
-    """Mapa id->nombre del equipo (para resolver el nombre legible de un turno)."""
-    return {m.id: m.nombre for m in _equipo()}
+    """Mapa id->nombre del equipo COMPLETO (todos los usuarios).
+
+    No filtra por cobertura: un turno asignado a alguien que despues queda fuera de la
+    rota sigue mostrando su nombre, no un id huerfano.
+    """
+    return {m.id: m.nombre for m in _equipo(solo_cobertura=False)}
 
 
 def _usuario_actual(request: Request) -> dict[str, Any] | None:
@@ -176,8 +190,14 @@ def _turno_a_dict(turno: dict[str, Any], nombres: dict[str, str]) -> dict[str, A
 
 
 async def equipo(request: Request) -> Response:
-    """GET /api/rota/equipo: miembros del equipo (usuarios de la consola)."""
-    miembros = [{"id": m.id, "nombre": m.nombre} for m in _equipo()]
+    """GET /api/rota/equipo: miembros asignables a la rota (cobertura=True).
+
+    `?todos=1` devuelve el equipo COMPLETO (incluido el personal sin cobertura), util
+    para casos excepcionales donde el admin quiere asignar a alguien que normalmente no
+    cubre.
+    """
+    todos = (request.query_params.get("todos") or "").strip().lower() in {"1", "true", "yes"}
+    miembros = [{"id": m.id, "nombre": m.nombre} for m in _equipo(solo_cobertura=not todos)]
     return JSONResponse({"equipo": miembros})
 
 
@@ -1122,6 +1142,33 @@ async def aprobar_turnos(request: Request) -> Response:
         )
     payload = _turnos_semana(lunes)
     payload["mensaje"] = f"Turnos aprobados y publicados al equipo ({n} turnos)."
+    return JSONResponse(payload)
+
+
+async def despublicar_turnos(request: Request) -> Response:
+    """POST /api/rota/turnos/despublicar {lunes}: revierte la semana publicada a borrador.
+
+    Solo admin (mismo guard que aprobar). Inverso de `aprobar_turnos`: marca todos los
+    turnos de la semana como `propuesto` para volver a editarlos. Util cuando se publico
+    una semana con error o cambian las cosas tras publicar.
+    """
+    if not _es_admin(request):
+        return JSONResponse({"error": _MSG_SOLO_ADMIN}, status_code=403)
+    datos = await leer_json(request)
+    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica el lunes de la semana a despublicar (AAAA-MM-DD)."},
+            status_code=400,
+        )
+    n = repos.desaprobar_semana_rota(lunes)
+    if n == 0:
+        return JSONResponse(
+            {"error": "No hay turnos en esa semana para despublicar."},
+            status_code=400,
+        )
+    payload = _turnos_semana(lunes)
+    payload["mensaje"] = f"Semana despublicada: vuelve a borrador ({n} turnos editables)."
     return JSONResponse(payload)
 
 
@@ -2592,6 +2639,7 @@ RUTAS = [
     Route("/api/rota/turnos/lote", actualizar_turnos_lote, methods=["PATCH"]),
     Route("/api/rota/turnos/lote/borrar", borrar_turnos_lote, methods=["POST"]),
     Route("/api/rota/turnos/aprobar", aprobar_turnos, methods=["POST"]),
+    Route("/api/rota/turnos/despublicar", despublicar_turnos, methods=["POST"]),
     Route("/api/rota/turnos", turnos_semana, methods=["GET"]),
     Route("/api/rota/turnos", crear_turno, methods=["POST"]),
     Route("/api/rota/turnos/{turno_id}/duplicar", duplicar_turno, methods=["POST"]),

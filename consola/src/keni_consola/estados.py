@@ -57,6 +57,23 @@ ROLES_USUARIO: tuple[str, ...] = ("admin", "editor")
 ROL_ADMIN = "admin"
 ROL_EDITOR = "editor"
 
+# Cargos del equipo (transcripciones AMX): describen la FUNCION en el equipo, no los
+# permisos. Ortogonal a `ROLES_USUARIO` (que sigue siendo admin/editor). `cobertura` es
+# el flag separado que dice si esa persona entra en la rota de turnos: hay cargos que
+# por funcion no cubren (estrategia, fotografia, gerencia) y community managers que si.
+CARGOS_USUARIO: tuple[str, ...] = (
+    "director",
+    "gerente",
+    "coordinador",
+    "content_manager",
+    "community_manager",
+    "redactor",
+    "guionista",
+    "editorial",
+    "estrategia",
+    "fotografia",
+)
+
 # Estados de un turno de la rota (F4 · #144): `propuesto` es lo que Keni genera;
 # `aprobado` es lo que Elias publica al equipo (nada se publica antes de aprobar).
 # Operacional; vive en SQLite. Lo COMPARTEN los turnos de cobertura de eventos

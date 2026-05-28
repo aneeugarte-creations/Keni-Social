@@ -36,10 +36,18 @@ LUNES1 = "2026-05-25"
 LUNES2 = "2026-06-01"
 
 
-def _crear_equipo(n: int = 2) -> list[dict]:
-    """Crea n usuarios (miembros del equipo) directos en la BD; devuelve su forma pública."""
+def _crear_equipo(n: int = 2, *, cobertura: bool = True) -> list[dict]:
+    """Crea n usuarios (miembros del equipo) directos en la BD; devuelve su forma pública.
+
+    Por defecto los crea con `cobertura=True` para que el endpoint `/api/rota/equipo`
+    (que filtra por cobertura) los devuelva. Tests que quieran un usuario fuera de la
+    rota pueden pasar `cobertura=False`.
+    """
     nombres = ["ana", "beto", "caro", "dani"]
-    return [auth.crear_usuario(nombres[i], CLAVE, "editor") for i in range(n)]
+    return [
+        auth.crear_usuario(nombres[i], CLAVE, "editor", cobertura=cobertura)
+        for i in range(n)
+    ]
 
 
 def _crear_evento(cli: TestClient, **campos) -> dict:
@@ -87,6 +95,27 @@ def test_equipo_lista_usuarios(cliente):
     assert r.status_code == 200
     nombres = {m["nombre"] for m in r.json()["equipo"]}
     assert {"ana", "beto"} <= nombres
+
+
+def test_equipo_filtra_por_cobertura(cliente):
+    """`/api/rota/equipo` solo devuelve usuarios con `cobertura=True` por defecto."""
+    auth.crear_usuario("cubre", CLAVE, "editor", cobertura=True)
+    auth.crear_usuario("nocubre", CLAVE, "editor", cobertura=False)
+    r = cliente.get("/api/rota/equipo")
+    assert r.status_code == 200
+    nombres = {m["nombre"] for m in r.json()["equipo"]}
+    assert "cubre" in nombres
+    assert "nocubre" not in nombres
+
+
+def test_equipo_todos_incluye_no_cobertura(cliente):
+    """`?todos=1` devuelve TODOS los usuarios, incluido el que no cubre."""
+    auth.crear_usuario("cubre", CLAVE, "editor", cobertura=True)
+    auth.crear_usuario("nocubre", CLAVE, "editor", cobertura=False)
+    r = cliente.get("/api/rota/equipo?todos=1")
+    assert r.status_code == 200
+    nombres = {m["nombre"] for m in r.json()["equipo"]}
+    assert {"cubre", "nocubre"} <= nombres
 
 
 # --------------------------------------------------------------------------- #
@@ -650,6 +679,41 @@ def test_editor_no_puede_aprobar_403(entorno):
         "/api/auth/login", json={"usuario": "editora", "password": CLAVE}, headers=_ORIGIN
     )
     r = editor_cli.post("/api/rota/turnos/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    assert r.status_code == 403
+
+
+def test_despublicar_turnos_revierte_a_borrador(entorno):
+    """Tras aprobar, el admin puede despublicar la semana para volver a editarla."""
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(1)
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino")
+    admin = _cli_admin_sesion(app)
+    admin.post("/api/rota/turnos/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    r = admin.post("/api/rota/turnos/despublicar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["aprobada"] is False
+    assert all(t["estado"] == "propuesto" for t in r.json()["turnos"])
+
+
+def test_despublicar_sin_turnos_400(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    admin = _cli_admin_sesion(app)
+    r = admin.post("/api/rota/turnos/despublicar", json={"lunes": LUNES1}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_editor_no_puede_despublicar_403(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    equipo = _crear_equipo(1)
+    _crear_turno(LUNES1, LUNES1, equipo[0], franja="matutino")
+    auth.crear_usuario("editora", CLAVE, "editor")
+    editor_cli = TestClient(app)
+    editor_cli.post(
+        "/api/auth/login", json={"usuario": "editora", "password": CLAVE}, headers=_ORIGIN
+    )
+    r = editor_cli.post(
+        "/api/rota/turnos/despublicar", json={"lunes": LUNES1}, headers=_ORIGIN
+    )
     assert r.status_code == 403
 
 

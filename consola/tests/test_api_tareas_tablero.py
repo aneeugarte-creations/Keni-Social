@@ -26,7 +26,11 @@ _CLAVE = "clave-de-prueba"
 
 
 def _app():
-    return app_modulo.crear_app(token=TOKEN_PRUEBA)
+    # `bootstrap=False`: no ejecutar `bootstrap_admin` ni `sembrar_equipo` en tests.
+    # El seed del equipo AMX (`auth.sembrar_equipo`) crea entre otros un "luis" con la
+    # password de bootstrap; los tests del tablero crean su propio "luis" con otra clave
+    # y chocarian por UNIQUE → 401 al hacer login.
+    return app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
 
 
 def _cli_con_usuario(usuario: str) -> TestClient:

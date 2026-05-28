@@ -101,6 +101,41 @@ def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
     assert auth.autenticar("jefe", CLAVE) is not None
 
 
+def test_sembrar_equipo_crea_los_16(entorno):
+    """El seed deja en la BD los 16 usuarios del organigrama AMX."""
+    auth.sembrar_equipo()
+    usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
+    assert set(u for u, *_ in auth.EQUIPO_AMX) <= set(usuarios)
+    # 10 cubren (community managers + content managers + Elias + Yustine + Jonathan + Jose).
+    cubren = [u for u in usuarios.values() if u["cobertura"]]
+    assert len(cubren) == 10
+    assert usuarios["bernardo"]["rol"] == "admin"
+    assert usuarios["bernardo"]["cargo"] == "director"
+    assert usuarios["bernardo"]["cobertura"] is False
+    assert usuarios["tezcu"]["cargo"] == "community_manager"
+    assert usuarios["tezcu"]["cobertura"] is True
+
+
+def test_sembrar_equipo_es_idempotente(entorno):
+    """Re-correr el seed no duplica ni rompe; sigue habiendo 16 + el admin de bootstrap."""
+    auth.sembrar_equipo()
+    auth.sembrar_equipo()
+    usuarios = auth.listar_usuarios()
+    bernardos = [u for u in usuarios if u["usuario"] == "bernardo"]
+    assert len(bernardos) == 1
+
+
+def test_sembrar_equipo_sincroniza_cargo_y_cobertura(entorno):
+    """Si un usuario ya existe con otros valores, el seed los pone al dia (sin tocar pass)."""
+    auth.crear_usuario("tezcu", "Otra-Pass-Fuerte-Lol-1234", "editor")
+    auth.sembrar_equipo()
+    tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
+    assert tezcu["cargo"] == "community_manager"
+    assert tezcu["cobertura"] is True
+    # La pass NO se ha pisado: la del crear_usuario original sigue valiendo.
+    assert auth.autenticar("tezcu", "Otra-Pass-Fuerte-Lol-1234") is not None
+
+
 # --------------------------------------------------------------------------- #
 # 2) Login OK / KO                                                            #
 # --------------------------------------------------------------------------- #

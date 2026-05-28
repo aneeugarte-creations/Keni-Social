@@ -591,6 +591,10 @@ def aprobar_semana_rota(semana: str) -> int:
     return db.aprobar_semana_rota(semana)
 
 
+def desaprobar_semana_rota(semana: str) -> int:
+    return db.desaprobar_semana_rota(semana)
+
+
 def duplicar_turno_rota(
     turno_id: str,
     *,

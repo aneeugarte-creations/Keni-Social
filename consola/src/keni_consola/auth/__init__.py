@@ -28,6 +28,7 @@ from .bootstrap import (
     bootstrap_admin,
     hay_usuarios,
 )
+from .bootstrap_equipo import EQUIPO_AMX, sembrar_equipo
 from .hashing import (
     LONGITUD_MAX_PASSWORD,
     LONGITUD_MAX_USUARIO,
@@ -41,6 +42,7 @@ from .sesiones import COOKIE_SESION, borrar_sesion, crear_sesion, sesion_valida
 from .usuarios import (
     BLOQUEO_MINUTOS,
     MAX_INTENTOS_FALLIDOS,
+    actualizar_perfil,
     autenticar,
     borrar_usuario,
     cambiar_rol,
@@ -69,6 +71,7 @@ __all__ = [
     "cambiar_rol",
     "establecer_password",
     "borrar_usuario",
+    "actualizar_perfil",
     "autenticar",
     "verificar_password_actual",
     "MAX_INTENTOS_FALLIDOS",
@@ -82,6 +85,8 @@ __all__ = [
     # Bootstrap
     "hay_usuarios",
     "bootstrap_admin",
+    "sembrar_equipo",
+    "EQUIPO_AMX",
     "ENV_ADMIN_USER",
     "ENV_ADMIN_PASS",
     "ADMIN_POR_DEFECTO",
