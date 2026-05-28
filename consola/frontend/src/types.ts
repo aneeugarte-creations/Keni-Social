@@ -913,6 +913,21 @@ export interface RespuestaEventoRota {
   evento: EventoRota;
 }
 
+/**
+ * Filtros de la lista de Eventos (pestaña /rota → Eventos). Todo opcional; los
+ * arrays vacíos = sin filtro (igual a no enviar el campo). `q` es substring
+ * case-insensitive sobre `titulo` y `contenido`. `cambiado=null` = todos.
+ */
+export interface FiltrosListaEventos {
+  desde?: string;
+  hasta?: string;
+  tipo_cobertura?: TipoCoberturaEvento[];
+  prioridad?: PrioridadEvento[];
+  /** Tri-estado: `true` solo reprogramados, `false` solo avisados, `null|undefined` todos. */
+  cambiado?: boolean | null;
+  q?: string;
+}
+
 export interface CuerpoCrearEventoRota {
   titulo: string;
   fecha: string;

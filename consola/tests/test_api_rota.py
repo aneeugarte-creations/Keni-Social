@@ -200,6 +200,104 @@ def test_filtro_tipo_cobertura_invalido_400(cliente):
     assert r.status_code == 400
 
 
+# --------------------------------------------------------------------------- #
+# Filtros extendidos de /api/rota/eventos (lista Eventos)                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_filtro_tipo_cobertura_multi(cliente):
+    """Multi-select: ?tipo_cobertura=transmision&tipo_cobertura=imagenes deja ambos."""
+    ev_tx = _crear_evento(cliente, titulo="TX", tipo_cobertura="transmision")
+    ev_img = _crear_evento(cliente, titulo="IMG", tipo_cobertura="imagenes")
+    _crear_evento(cliente, titulo="NO", tipo_cobertura="no_cubrir")
+    r = cliente.get("/api/rota/eventos?tipo_cobertura=transmision&tipo_cobertura=imagenes")
+    assert r.status_code == 200
+    ids = {e["id"] for e in r.json()["eventos"]}
+    assert ev_tx["id"] in ids
+    assert ev_img["id"] in ids
+    # El no_cubrir queda fuera.
+    titulos = {e["titulo"] for e in r.json()["eventos"]}
+    assert "NO" not in titulos
+
+
+def test_filtro_tipo_cobertura_multi_invalido_400(cliente):
+    r = cliente.get("/api/rota/eventos?tipo_cobertura=transmision&tipo_cobertura=humo")
+    assert r.status_code == 400
+
+
+def test_filtro_prioridad_multi(cliente):
+    ev_alta = _crear_evento(cliente, titulo="A", prioridad="alta")
+    ev_media = _crear_evento(cliente, titulo="M", prioridad="media")
+    _crear_evento(cliente, titulo="B", prioridad="baja")
+    r = cliente.get("/api/rota/eventos?prioridad=alta&prioridad=media")
+    assert r.status_code == 200
+    ids = {e["id"] for e in r.json()["eventos"]}
+    assert ev_alta["id"] in ids
+    assert ev_media["id"] in ids
+    assert all(e["prioridad"] in ("alta", "media") for e in r.json()["eventos"])
+
+
+def test_filtro_prioridad_invalida_400(cliente):
+    r = cliente.get("/api/rota/eventos?prioridad=urgentisima")
+    assert r.status_code == 400
+
+
+def test_filtro_cambiado_true_y_false(cliente):
+    ev_quieto = _crear_evento(cliente, titulo="Quieto", hora="16:00")
+    ev_repro = _crear_evento(cliente, titulo="Repro", hora="16:00")
+    cliente.patch(f"/api/rota/eventos/{ev_repro['id']}", json={"hora": "18:00"})  # cambiado=1
+
+    r_si = cliente.get("/api/rota/eventos?cambiado=true")
+    ids_si = {e["id"] for e in r_si.json()["eventos"]}
+    assert ev_repro["id"] in ids_si
+    assert ev_quieto["id"] not in ids_si
+
+    r_no = cliente.get("/api/rota/eventos?cambiado=false")
+    ids_no = {e["id"] for e in r_no.json()["eventos"]}
+    assert ev_quieto["id"] in ids_no
+    assert ev_repro["id"] not in ids_no
+
+
+def test_filtro_q_busca_en_titulo_y_contenido(cliente):
+    ev_t = _crear_evento(cliente, titulo="Cruz Azul vs América", contenido="Clip del gol")
+    ev_c = _crear_evento(cliente, titulo="Otro", contenido="Resumen del PENAL")
+    _crear_evento(cliente, titulo="Tercero", contenido="Nada")
+
+    r = cliente.get("/api/rota/eventos?q=cruz")
+    ids = {e["id"] for e in r.json()["eventos"]}
+    assert ev_t["id"] in ids and ev_c["id"] not in ids
+
+    # case-insensitive sobre contenido.
+    r2 = cliente.get("/api/rota/eventos?q=penal")
+    ids2 = {e["id"] for e in r2.json()["eventos"]}
+    assert ev_c["id"] in ids2 and ev_t["id"] not in ids2
+
+
+def test_filtros_combinados(cliente):
+    """Varios filtros juntos: prioridad + tipo_cobertura + q."""
+    ev_ok = _crear_evento(
+        cliente,
+        titulo="Partido CLAVE",
+        contenido="Clip",
+        prioridad="alta",
+        tipo_cobertura="transmision",
+    )
+    _crear_evento(
+        cliente, titulo="Partido CLAVE", contenido="Clip", prioridad="baja", tipo_cobertura="transmision"
+    )
+    _crear_evento(
+        cliente, titulo="Partido CLAVE", contenido="Clip", prioridad="alta", tipo_cobertura="imagenes"
+    )
+    _crear_evento(
+        cliente, titulo="Otro", contenido="Resumen", prioridad="alta", tipo_cobertura="transmision"
+    )
+    r = cliente.get(
+        "/api/rota/eventos?prioridad=alta&tipo_cobertura=transmision&q=clave"
+    )
+    ids = {e["id"] for e in r.json()["eventos"]}
+    assert ids == {ev_ok["id"]}
+
+
 def test_proponer_excluye_eventos_no_cubrir(cliente):
     _crear_equipo(2)
     _crear_evento(cliente, titulo="Se cubre", tipo_cobertura="transmision")

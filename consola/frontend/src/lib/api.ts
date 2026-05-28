@@ -311,6 +311,38 @@ function query(params: Record<string, string | undefined>): string {
   return s ? `?${s}` : "";
 }
 
+/**
+ * Query string para `/rota/eventos`: serializa arrays como params REPETIDOS
+ * (`?prioridad=alta&prioridad=media`) y `cambiado` como tri-estado (true/false/omitir).
+ * Mantiene compatibilidad con `cambiados=true` (atajo legado).
+ */
+function queryEventos(params: {
+  desde?: string;
+  hasta?: string;
+  cambiados?: string;
+  tipo_cobertura?: string | string[];
+  prioridad?: string | string[];
+  cambiado?: boolean | null;
+  q?: string;
+}): string {
+  const sp = new URLSearchParams();
+  const aniadir = (clave: string, valor?: string | string[]) => {
+    if (valor === undefined) return;
+    const arr = Array.isArray(valor) ? valor : [valor];
+    for (const v of arr) if (v !== "") sp.append(clave, v);
+  };
+  if (params.desde) sp.set("desde", params.desde);
+  if (params.hasta) sp.set("hasta", params.hasta);
+  if (params.cambiados) sp.set("cambiados", params.cambiados);
+  if (params.q && params.q.trim() !== "") sp.set("q", params.q.trim());
+  if (params.cambiado === true) sp.set("cambiado", "true");
+  else if (params.cambiado === false) sp.set("cambiado", "false");
+  aniadir("tipo_cobertura", params.tipo_cobertura);
+  aniadir("prioridad", params.prioridad);
+  const s = sp.toString();
+  return s ? `?${s}` : "";
+}
+
 /** Dispara la descarga de un archivo abriendo su URL (CSV/MD/JSON). */
 function descargar(ruta: string): void {
   window.open(`${BASE_API}${ruta}`, "_blank", "noopener,noreferrer");
@@ -727,9 +759,17 @@ export const api = {
   rotaEquipo: (signal?: AbortSignal) =>
     peticion<RespuestaEquipoRota>("/rota/equipo", { signal }),
   rotaEventos: (
-    params: { desde?: string; hasta?: string; cambiados?: string; tipo_cobertura?: string } = {},
+    params: {
+      desde?: string;
+      hasta?: string;
+      cambiados?: string;
+      tipo_cobertura?: string | string[];
+      prioridad?: string | string[];
+      cambiado?: boolean | null;
+      q?: string;
+    } = {},
     signal?: AbortSignal,
-  ) => peticion<RespuestaEventosRota>(`/rota/eventos${query(params)}`, { signal }),
+  ) => peticion<RespuestaEventosRota>(`/rota/eventos${queryEventos(params)}`, { signal }),
   crearEventoRota: (cuerpo: CuerpoCrearEventoRota) =>
     peticion<RespuestaEventoRota>("/rota/eventos", { metodo: "POST", json: cuerpo }),
   actualizarEventoRota: (id: string, cuerpo: CuerpoActualizarEventoRota) =>

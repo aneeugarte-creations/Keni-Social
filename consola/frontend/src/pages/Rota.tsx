@@ -11,17 +11,22 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Coffee,
   Download,
+  HeartPulse,
   ImageIcon,
   Loader2,
   Plane,
   Plus,
   Radio,
+  Search,
   Sparkles,
   Trash2,
   User,
+  X,
 } from "lucide-react";
 import * as React from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -143,6 +148,34 @@ const ESTADOS_PIEZA: { valor: EstadoPieza; etiqueta: string }[] = [
   { valor: "listo", etiqueta: "Listo" },
   { valor: "publicado", etiqueta: "Publicado" },
 ];
+
+// Presentación de cada tipo de ausencia en la banda del calendario: icono + clases.
+// Colores suaves consistentes con el chip-style usado por la cobertura (no robar atención).
+const PRESENTACION_AUSENCIA: Record<
+  TipoAusencia,
+  { etiqueta: string; icono: typeof Plane; chip: string }
+> = {
+  vacaciones: {
+    etiqueta: "Vacaciones",
+    icono: Plane,
+    chip: "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300",
+  },
+  descanso: {
+    etiqueta: "Descanso",
+    icono: Coffee,
+    chip: "border-zinc-300 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-300",
+  },
+  baja: {
+    etiqueta: "Baja",
+    icono: HeartPulse,
+    chip: "border-orange-300 bg-orange-50 text-orange-800 dark:border-orange-800 dark:bg-orange-950/40 dark:text-orange-300",
+  },
+  otro: {
+    etiqueta: "Otro",
+    icono: User,
+    chip: "border-blue-300 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300",
+  },
+};
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -342,6 +375,61 @@ function ChipEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () => 
   );
 }
 
+/** Chip compacto de una ausencia dentro de la banda superior del día. */
+function ChipAusenciaDia({ ausencia }: { ausencia: AusenciaRota }) {
+  const pres = PRESENTACION_AUSENCIA[ausencia.tipo] ?? PRESENTACION_AUSENCIA.otro;
+  const Icono = pres.icono;
+  const tooltip = ausencia.motivo
+    ? `${pres.etiqueta}: ${ausencia.motivo}`
+    : pres.etiqueta;
+  // `title` nativo: tooltip honesto sin sumar otra librería. El chip es mínimo (icono + nombre).
+  return (
+    <span
+      title={tooltip}
+      className={`inline-flex max-w-full items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] leading-tight ${pres.chip}`}
+    >
+      <Icono className="h-2.5 w-2.5 shrink-0" />
+      <span className="truncate">{ausencia.miembro_nombre || "—"}</span>
+    </span>
+  );
+}
+
+/** Popover (CSS puro) con el resto de ausencias del día cuando hay > MAX_VISIBLE. */
+function MasAusencias({ ausencias }: { ausencias: AusenciaRota[] }) {
+  const [abierto, setAbierto] = React.useState(false);
+  return (
+    <div className="relative inline-block">
+      <button
+        type="button"
+        className="rounded border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground hover:bg-muted"
+        onClick={() => setAbierto((v) => !v)}
+        aria-label={`Ver ${ausencias.length} ausencias más`}
+        aria-expanded={abierto}
+      >
+        +{ausencias.length}
+      </button>
+      {abierto && (
+        <div
+          className="absolute left-0 top-full z-20 mt-1 flex w-max max-w-[14rem] flex-col gap-1 rounded-md border border-border bg-popover p-2 shadow-md"
+          role="dialog"
+        >
+          {ausencias.map((a) => (
+            <ChipAusenciaDia key={a.id} ausencia={a} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ¿La ausencia toca el día `fecha` (rango inclusivo)?
+ * Comparación lexicográfica sobre ISO AAAA-MM-DD: segura sin parseo.
+ */
+function ausenciaTocaDia(a: AusenciaRota, fecha: string): boolean {
+  return a.desde <= fecha && fecha <= a.hasta;
+}
+
 function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) => void }) {
   const queryClient = useQueryClient();
   // El rango (lun→dom) de la semana en vista para acotar la consulta de eventos.
@@ -352,6 +440,12 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
   const q = useQuery({
     queryKey: clave,
     queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
+  });
+  // Ausencias del equipo (sin filtro por miembro): luego acotamos a la intersección
+  // con la semana en cliente. Pequeño volumen (vacaciones/bajas/descanso), ok cargarlas.
+  const ausenciasQ = useQuery({
+    queryKey: ["rota", "ausencias"],
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
   });
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
 
@@ -372,9 +466,31 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
     lista.push(e);
     porDia.set(e.fecha, lista);
   }
+  // Ausencias que solapan con la semana (intersección no vacía con [desde, fin]).
+  const finSemana = dias[6] ?? desde;
+  const ausenciasSemana = (ausenciasQ.data?.ausencias ?? []).filter(
+    (a) => a.desde <= finSemana && a.hasta >= desde,
+  );
+  const ausenciasPorDia = new Map<string, AusenciaRota[]>();
+  for (const fecha of dias) {
+    const lista = ausenciasSemana.filter((a) => ausenciaTocaDia(a, fecha));
+    if (lista.length > 0) {
+      // Ordena por tipo (vacaciones primero por ser el caso planificado más visible)
+      // y luego por nombre, para una vista estable entre renders.
+      lista.sort((x, y) => {
+        if (x.tipo !== y.tipo) return x.tipo.localeCompare(y.tipo);
+        return (x.miembro_nombre || "").localeCompare(y.miembro_nombre || "");
+      });
+      ausenciasPorDia.set(fecha, lista);
+    }
+  }
   const inicio = dias[0] ?? "";
   const fin = dias[6] ?? "";
   const nCambiados = eventos.filter((e) => e.cambiado).length;
+
+  // En celdas estrechas (7 columnas) sólo cabe poco: mostramos hasta 3 ausencias visibles
+  // y agrupamos el resto en un "+N" con popover. Equilibra densidad y legibilidad.
+  const MAX_AUSENCIAS_VISIBLES = 3;
 
   return (
     <div className="space-y-4">
@@ -406,6 +522,9 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
               {dias.map((fecha) => {
                 const finde = esFinDeSemana(fecha);
                 const delDia = porDia.get(fecha) ?? [];
+                const ausDia = ausenciasPorDia.get(fecha) ?? [];
+                const ausVisibles = ausDia.slice(0, MAX_AUSENCIAS_VISIBLES);
+                const ausRestantes = ausDia.slice(MAX_AUSENCIAS_VISIBLES);
                 return (
                   <div
                     key={fecha}
@@ -417,6 +536,17 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
                       <span className="text-xs font-semibold capitalize">{diaCorto(fecha)}</span>
                       <span className="text-xs text-muted-foreground">{fecha.slice(8, 10)}</span>
                     </div>
+                    {ausDia.length > 0 && (
+                      <div
+                        className="flex flex-wrap gap-1 border-b border-border/60 pb-1"
+                        aria-label={`Ausencias del ${fecha}`}
+                      >
+                        {ausVisibles.map((a) => (
+                          <ChipAusenciaDia key={a.id} ausencia={a} />
+                        ))}
+                        {ausRestantes.length > 0 && <MasAusencias ausencias={ausRestantes} />}
+                      </div>
+                    )}
                     {delDia.length === 0 ? (
                       <span className="mt-1 text-xs text-muted-foreground/60">—</span>
                     ) : (
@@ -1373,18 +1503,282 @@ function TarjetaAusencia({
 
 // --- Pestaña: eventos / transmisiones --------------------------------------
 
+// --- Filtros de la pestaña Eventos -----------------------------------------
+
+/** Primer día del MES en curso, en ISO AAAA-MM-DD (default del rango). */
+function primerDiaMes(d: Date): string {
+  return iso(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+
+/** Último día del MES en curso, en ISO AAAA-MM-DD. */
+function ultimoDiaMes(d: Date): string {
+  return iso(new Date(d.getFullYear(), d.getMonth() + 1, 0));
+}
+
+/** Estado tri-estado del filtro "Cambiado" representado como string en la URL. */
+type FiltroCambiado = "todos" | "si" | "no";
+
+/** Lee y normaliza los filtros desde la URL (search params). Defaults = mes en curso. */
+function leerFiltrosDesdeUrl(sp: URLSearchParams): {
+  desde: string;
+  hasta: string;
+  tiposCobertura: TipoCoberturaEvento[];
+  prioridades: PrioridadEvento[];
+  cambiado: FiltroCambiado;
+  q: string;
+} {
+  const hoy = new Date();
+  const desde = sp.get("desde") ?? primerDiaMes(hoy);
+  const hasta = sp.get("hasta") ?? ultimoDiaMes(hoy);
+  const tiposCobertura = sp
+    .getAll("tipo_cobertura")
+    .filter((v): v is TipoCoberturaEvento => v === "transmision" || v === "imagenes" || v === "no_cubrir");
+  const prioridades = sp
+    .getAll("prioridad")
+    .filter((v): v is PrioridadEvento => v === "alta" || v === "media" || v === "baja");
+  const cambiadoCrudo = (sp.get("cambiado") ?? "").toLowerCase();
+  const cambiado: FiltroCambiado =
+    cambiadoCrudo === "true" || cambiadoCrudo === "si"
+      ? "si"
+      : cambiadoCrudo === "false" || cambiadoCrudo === "no"
+        ? "no"
+        : "todos";
+  const q = sp.get("q") ?? "";
+  return { desde, hasta, tiposCobertura, prioridades, cambiado, q };
+}
+
+/** Convierte los filtros a `URLSearchParams` (omite defaults para una URL limpia). */
+function filtrosAUrl(args: {
+  desde: string;
+  hasta: string;
+  tiposCobertura: TipoCoberturaEvento[];
+  prioridades: PrioridadEvento[];
+  cambiado: FiltroCambiado;
+  q: string;
+}): URLSearchParams {
+  const sp = new URLSearchParams();
+  const hoy = new Date();
+  if (args.desde && args.desde !== primerDiaMes(hoy)) sp.set("desde", args.desde);
+  if (args.hasta && args.hasta !== ultimoDiaMes(hoy)) sp.set("hasta", args.hasta);
+  for (const t of args.tiposCobertura) sp.append("tipo_cobertura", t);
+  for (const p of args.prioridades) sp.append("prioridad", p);
+  if (args.cambiado === "si") sp.set("cambiado", "true");
+  else if (args.cambiado === "no") sp.set("cambiado", "false");
+  if (args.q.trim()) sp.set("q", args.q.trim());
+  return sp;
+}
+
+/** Botón toggle de chip (multi-select). Reutiliza `Button` con dos variantes. */
+function ChipToggle({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={activo ? "default" : "outline"}
+      className="h-7 px-2.5 text-xs"
+      onClick={onClick}
+      aria-pressed={activo}
+    >
+      {children}
+    </Button>
+  );
+}
+
+function FiltrosEventos({
+  estado,
+  setEstado,
+  onLimpiar,
+  total,
+}: {
+  estado: ReturnType<typeof leerFiltrosDesdeUrl>;
+  setEstado: (next: ReturnType<typeof leerFiltrosDesdeUrl>) => void;
+  onLimpiar: () => void;
+  total: number;
+}) {
+  const togglearCobertura = (t: TipoCoberturaEvento) => {
+    const dentro = estado.tiposCobertura.includes(t);
+    setEstado({
+      ...estado,
+      tiposCobertura: dentro
+        ? estado.tiposCobertura.filter((x) => x !== t)
+        : [...estado.tiposCobertura, t],
+    });
+  };
+  const togglearPrioridad = (p: PrioridadEvento) => {
+    const dentro = estado.prioridades.includes(p);
+    setEstado({
+      ...estado,
+      prioridades: dentro
+        ? estado.prioridades.filter((x) => x !== p)
+        : [...estado.prioridades, p],
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-3">
+        <CardTitle className="text-base">Filtros</CardTitle>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span>
+            {total} evento{total === 1 ? "" : "s"}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={onLimpiar}
+          >
+            <X className="h-3.5 w-3.5" /> Limpiar
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="filtro-desde">Desde</Label>
+            <Input
+              id="filtro-desde"
+              type="date"
+              value={estado.desde}
+              onChange={(e) => setEstado({ ...estado, desde: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="filtro-hasta">Hasta</Label>
+            <Input
+              id="filtro-hasta"
+              type="date"
+              value={estado.hasta}
+              onChange={(e) => setEstado({ ...estado, hasta: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Cobertura</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {TIPOS_COBERTURA.map((t) => (
+              <ChipToggle
+                key={t.valor}
+                activo={estado.tiposCobertura.includes(t.valor)}
+                onClick={() => togglearCobertura(t.valor)}
+              >
+                {COBERTURA[t.valor].etiqueta}
+              </ChipToggle>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Prioridad</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {PRIORIDADES.map((p) => (
+              <ChipToggle
+                key={p.valor}
+                activo={estado.prioridades.includes(p.valor)}
+                onClick={() => togglearPrioridad(p.valor)}
+              >
+                {p.etiqueta}
+              </ChipToggle>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>Cambiado</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {(
+              [
+                { valor: "todos", etiqueta: "Todos" },
+                { valor: "si", etiqueta: "Sí" },
+                { valor: "no", etiqueta: "No" },
+              ] as { valor: FiltroCambiado; etiqueta: string }[]
+            ).map((opt) => (
+              <ChipToggle
+                key={opt.valor}
+                activo={estado.cambiado === opt.valor}
+                onClick={() => setEstado({ ...estado, cambiado: opt.valor })}
+              >
+                {opt.etiqueta}
+              </ChipToggle>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="filtro-q">Buscar</Label>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="filtro-q"
+              value={estado.q}
+              onChange={(e) => setEstado({ ...estado, q: e.target.value })}
+              placeholder="Buscar en título y qué sacar…"
+              className="pl-8"
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function Eventos() {
   const queryClient = useQueryClient();
-  const clave = ["rota", "eventos"] as const;
-  const q = useQuery({ queryKey: clave, queryFn: ({ signal }) => api.rotaEventos({}, signal) });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const estado = React.useMemo(() => leerFiltrosDesdeUrl(searchParams), [searchParams]);
+  // Persistencia en URL: cada cambio refleja la URL (un refresh respeta el filtro).
+  const setEstado = (next: ReturnType<typeof leerFiltrosDesdeUrl>) => {
+    setSearchParams(filtrosAUrl(next), { replace: true });
+  };
+  const limpiar = () => setSearchParams(new URLSearchParams(), { replace: true });
+
+  // La query depende de los filtros: se reejecuta cuando cambian (clave incluye el SP).
+  const clave = [
+    "rota",
+    "eventos",
+    estado.desde,
+    estado.hasta,
+    estado.tiposCobertura.join(","),
+    estado.prioridades.join(","),
+    estado.cambiado,
+    estado.q,
+  ] as const;
+  const filtrosApi: Parameters<typeof api.rotaEventos>[0] = {
+    desde: estado.desde || undefined,
+    hasta: estado.hasta || undefined,
+    tipo_cobertura: estado.tiposCobertura,
+    prioridad: estado.prioridades,
+    cambiado: estado.cambiado === "si" ? true : estado.cambiado === "no" ? false : undefined,
+    q: estado.q || undefined,
+  };
+  const q = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.rotaEventos(filtrosApi, signal),
+  });
   const eventos = q.data?.eventos ?? [];
-  const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota", "eventos"] });
 
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <NuevoEvento onCreado={invalidar} />
         <div className="space-y-3">
+          <FiltrosEventos
+            estado={estado}
+            setEstado={setEstado}
+            onLimpiar={limpiar}
+            total={eventos.length}
+          />
           {q.isPending ? (
             <Skeleton className="h-40 w-full rounded-md" />
           ) : q.isError ? (
@@ -1398,7 +1792,7 @@ function Eventos() {
             <EstadoVacio
               icono={CalendarPlus}
               titulo="Sin eventos"
-              texto="Da de alta los partidos y transmisiones de la semana con el formulario."
+              texto="Ajusta los filtros o da de alta nuevos eventos con el formulario."
             />
           ) : (
             eventos.map((e) => <TarjetaEvento key={e.id} evento={e} onCambio={invalidar} />)
