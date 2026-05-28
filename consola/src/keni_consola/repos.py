@@ -569,6 +569,14 @@ def borrar_turnos_semana_rota(semana: str) -> int:
     return db.borrar_turnos_semana_rota(semana)
 
 
+def borrar_turno_rota(turno_id: str) -> bool:
+    return db.borrar_turno_rota(turno_id)
+
+
+def borrar_turnos_rota_lote(ids: list[str]) -> int:
+    return db.borrar_turnos_rota_lote(ids)
+
+
 def aprobar_semana_rota(semana: str) -> int:
     return db.aprobar_semana_rota(semana)
 
@@ -690,6 +698,10 @@ def crear_pieza_rota(
     responsable_id: str = "",
     responsable_nombre: str = "",
     notas: str = "",
+    salida: str = "",
+    comentarios: str = "",
+    fecha_entrega_material: str = "",
+    always_on: bool = False,
 ) -> dict[str, Any]:
     return db.crear_pieza_rota(
         evento_id=evento_id,
@@ -707,6 +719,10 @@ def crear_pieza_rota(
         responsable_id=responsable_id,
         responsable_nombre=responsable_nombre,
         notas=notas,
+        salida=salida,
+        comentarios=comentarios,
+        fecha_entrega_material=fecha_entrega_material,
+        always_on=always_on,
     )
 
 
@@ -745,6 +761,79 @@ def actualizar_pieza_rota(
 
 def borrar_pieza_rota(pieza_id: str) -> bool:
     return db.borrar_pieza_rota(pieza_id)
+
+
+def borrar_piezas_rota_lote(ids: list[str]) -> int:
+    """Borra varias piezas a la vez (delegado en `db.py`)."""
+    return db.borrar_piezas_rota_lote(ids)
+
+
+def duplicar_pieza_rota(
+    pieza_id: str, *, dia: str | None = None, evento_id: str | None = None
+) -> dict[str, Any] | None:
+    """Clona una pieza (workflow reset; delegado en `db.py`)."""
+    return db.duplicar_pieza_rota(pieza_id, dia=dia, evento_id=evento_id)
+
+
+def duplicar_evento_rota(
+    evento_id: str,
+    *,
+    fecha: str | None = None,
+    hora: str | None = None,
+    titulo: str | None = None,
+) -> dict[str, Any] | None:
+    """Clona un evento (sin turnos, `cambiado` reset; delegado en `db.py`)."""
+    return db.duplicar_evento_rota(evento_id, fecha=fecha, hora=hora, titulo=titulo)
+
+
+# --------------------------------------------------------------------------- #
+# Catalogo de programas (OPERACIONAL: Postgres via db.py; #150)                #
+# --------------------------------------------------------------------------- #
+
+
+def crear_programa_rota(
+    nombre: str,
+    *,
+    descripcion: str = "",
+    color: str = "",
+    inicio: str = "",
+    fin: str = "",
+    activo: bool = True,
+) -> dict[str, Any]:
+    return db.crear_programa_rota(
+        nombre,
+        descripcion=descripcion,
+        color=color,
+        inicio=inicio,
+        fin=fin,
+        activo=activo,
+    )
+
+
+def listar_programas_rota(*, activo: bool | None = None) -> list[dict[str, Any]]:
+    return db.listar_programas_rota(activo=activo)
+
+
+def obtener_programa_rota(programa_id: str) -> dict[str, Any] | None:
+    return db.obtener_programa_rota(programa_id)
+
+
+def actualizar_programa_rota(
+    programa_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_programa_rota(programa_id, campos)
+
+
+def borrar_programa_rota(programa_id: str) -> bool:
+    return db.borrar_programa_rota(programa_id)
+
+
+def existe_programa_por_nombre(nombre: str) -> bool:
+    return db.existe_programa_por_nombre(nombre)
+
+
+def contar_piezas_por_programa(nombre: str) -> int:
+    return db.contar_piezas_por_programa(nombre)
 
 
 # --------------------------------------------------------------------------- #
