@@ -16,15 +16,23 @@ de un generico se deriva/valida en el dominio (anti-escape de `api.carpetas`).
 
 RUNS:
   - `headless`: corre `claude -p <prompt> --output-format stream-json --verbose` con
-    cwd = carpeta del agente, EN SEGUNDO PLANO (subprocess.Popen + un hilo lector que
-    parsea el NDJSON). El POST devuelve de INMEDIATO con `estado="ejecutando"`; el hilo
-    actualiza el YAML del run de forma incremental y atomica (metricas parciales
-    mientras corre; `completado`/`error` al terminar). El YAML es la FUENTE DE VERDAD
-    para el sondeo (`GET .../runs/{id}`). El lanzador (`lanzar_run_background`) es una
-    funcion modulo-nivel INYECTABLE: los tests la parchean por una fake que escribe
-    estados/medidas SIN Popen ni red.
+    cwd = carpeta del agente, EN SEGUNDO PLANO (un proceso en SU PROPIO GRUPO via
+    `runner.lanzar_proc` + un hilo lector que parsea el NDJSON). El POST devuelve de
+    INMEDIATO con `estado="ejecutando"`; el hilo actualiza el YAML del run de forma
+    incremental y atomica (metricas parciales mientras corre; `completado`/`error` al
+    terminar). El YAML es la FUENTE DE VERDAD para el sondeo (`GET .../runs/{id}`). El
+    lanzador (`lanzar_run_background`) es una funcion modulo-nivel INYECTABLE: los tests
+    la parchean por una fake que escribe estados/medidas SIN Popen ni red.
   - `interactivo`: delega en `lanzador.abrir_en_claude_code(carpeta, prompt=...)` y
     guarda el run con `estado="lanzado"`. El lanzador es inyectable (mock en tests).
+
+ENDURECIMIENTO (#152, reutiliza el runner endurecido de #137 para las generaciones):
+los runs headless comparten las primitivas de `dominio.runner` (igual que las
+generaciones), no un `Popen` crudo: admision con tope de cola (`runner.admitir()` ->
+`ColaLlenaError` -> 429), GRUPO DE PROCESOS (`start_new_session=True`) con kill del
+ARBOL (`runner.matar_arbol`/`os.killpg(SIGKILL)`) al timeout/cancel, y CANCELACION
+(`cancelar_run` + `POST .../runs/{id}/cancelar`) que mata el arbol del proceso; un run
+aun pendiente se finaliza como cancelado sin spawnear `claude`.
 
 SEGURIDAD: marca ∈ catalogo; escritura atomica y defensiva (dentro de la carpeta
 del agente); sin shell=True; bind local; errores en espanol, sin tracebacks crudos.
@@ -319,20 +327,45 @@ def _leer_stream(
 
 
 def _finalizar_run(
-    marca_id: str, run_id: str, proc: subprocess.Popen, acumulador: stream.AcumuladorStream
+    marca_id: str,
+    run_id: str,
+    proc: subprocess.Popen | None,
+    acumulador: stream.AcumuladorStream,
+    *,
+    cancelado: bool = False,
 ) -> None:
     """Espera a que el Popen termine (con wall-timeout) y fija el estado TERMINAL del run.
 
-    - timeout -> mata el proceso y marca `estado="error", motivo="timeout"`.
+    - cancelado (#152) -> el arbol del proceso ya esta muerto (o no llego a spawnear);
+      `estado="error", motivo="cancelado"`. `proc` puede ser None (cancelado mientras
+      esperaba un slot: no hubo proceso que arrancar).
+    - timeout -> mata el ARBOL del proceso y marca `estado="error", motivo="timeout"`.
     - evento `result` de error -> `estado="error"` con el mensaje en espanol.
     - rc != 0 sin `result` -> `estado="error"` generico.
     - exito -> `estado="completado"`, `salida` = texto del `result`, metricas finales.
     """
-    # Espera con wall-timeout + kill (mecanica compartida en dominio.runner). El handle
-    # se suelta en el `finally` de `_ciclo` (lanzar_run_background), no aqui.
+    fecha_fin = agentes.ahora_iso()
+    if cancelado:
+        # Cancelacion del usuario (#152): se mato el arbol (o nunca spawneo); estado terminal
+        # claro, conservando el texto/metricas ya acumulados (mismo patron que la #137).
+        agentes.actualizar_run(
+            marca_id, run_id,
+            {
+                "estado": "error",
+                "motivo": "cancelado",
+                "salida": acumulador.texto or "El run fue cancelado.",
+                "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
+                "fecha_fin": fecha_fin,
+            },
+        )
+        return
+
+    # Espera con wall-timeout + kill del ARBOL (mecanica compartida en dominio.runner, #137).
+    # El handle se suelta en el `finally` de `_ciclo` (lanzar_run_background), no aqui. A esta
+    # altura `proc` SIEMPRE existe (la via cancelada/None ya retorno arriba).
+    assert proc is not None
     timed_out = runner.esperar(proc, _TIMEOUT_RUN_DEF)
 
-    fecha_fin = agentes.ahora_iso()
     if timed_out:
         agentes.actualizar_run(
             marca_id, run_id,
@@ -388,14 +421,44 @@ def lanzar_run_background(marca_id: str, run_id: str, prompt: str, *, cwd: Path)
     que escribe estados/medidas en el YAML SIN Popen ni red. Si `claude` no esta o no se
     puede lanzar, degrada: marca el run en error (en espanol) sin romper. El hilo lee el
     NDJSON, persiste metricas parciales y, al cerrar, fija el estado terminal del run.
+
+    ENDURECIMIENTO (#152, reutiliza #137): mismo runner que las generaciones.
+      - ADMISION SINCRONA: `runner.admitir()` decide AQUI si cabe un job mas; si la cola
+        esta al tope lanza `ColaLlenaError` (-> 429) en vez de apilar un hilo bloqueado.
+        El hilo, ya admitido, libera el cupo al terminar via `slot(ya_admitido=True)`.
+      - GRUPO DE PROCESOS: el subprocess arranca con su propio grupo (`runner.lanzar_proc`,
+        `start_new_session=True`); al timeout/cancel se mata el ARBOL entero
+        (`runner.matar_arbol`), no solo el padre (sin herramientas hijas huerfanas).
+      - CANCELACION: el handle guarda un evento `cancelado` para que `cancelar_run()` mate
+        el arbol y `_finalizar_run` sepa el porque.
     """
     acumulador = stream.AcumuladorStream()
 
+    # Admision SINCRONA (#152): si la cola esta al tope, NO lanzamos el hilo; el llamante
+    # recibe ColaLlenaError y responde 429 (#137; la generacion sigue siendo `claude -p`).
+    # El hilo, ya admitido, libera el cupo al terminar via `slot(ya_admitido=True)`.
+    runner.admitir()
+
+    # Evento de cancelacion del run (lo arma `cancelar_run()`). Lo REGISTRAMOS en el handle
+    # YA (antes de arrancar el hilo y antes del `slot()`), no dentro del slot: asi un run aun
+    # PENDIENTE (esperando un hueco, sin proceso todavia) tambien se puede cancelar. Cuando
+    # haya proceso, el hilo lo añade al mismo handle para que `cancelar_run()` mate el arbol.
+    cancelado = threading.Event()
+    with _HANDLES_LOCK:
+        _HANDLES[run_id] = {"proc": None, "cancelado": cancelado}
+
     def _ciclo() -> None:
-        # Semaforo de concurrencia (#116) + spawn DENTRO del slot (igual que las
-        # generaciones); cada run tiene wall-timeout, asi que los slots se liberan.
+        # Concurrencia (#116) + admision/tope de cola (#137/#152): el run YA fue admitido
+        # arriba (sincronicamente), asi que aqui solo esperamos un proceso concurrente libre.
+        # `slot(ya_admitido=True)` libera el cupo al salir. El spawn ocurre DENTRO del slot
+        # para que el tope limite procesos `claude` reales; cada run tiene wall-timeout.
         try:
-            with runner.slot():
+            with runner.slot(ya_admitido=True):
+                # Si ya pidieron cancelar mientras el run esperaba el slot, NO spawneamos
+                # `claude`: lo finalizamos como cancelado y salimos (#152).
+                if cancelado.is_set():
+                    _finalizar_run(marca_id, run_id, None, acumulador, cancelado=True)
+                    return
                 if shutil.which("claude") is None:
                     agentes.actualizar_run(
                         marca_id, run_id,
@@ -410,14 +473,9 @@ def lanzar_run_background(marca_id: str, run_id: str, prompt: str, *, cwd: Path)
                     )
                     return
                 try:
-                    proc = subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
-                        _argv_stream(prompt),
-                        cwd=str(cwd),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.DEVNULL,
-                        text=True,
-                        bufsize=1,
-                    )
+                    # Subproceso en SU PROPIO grupo (#137/#152): al timeout/cancel matamos el
+                    # ARBOL entero (`runner.matar_arbol`), no solo el padre.
+                    proc = runner.lanzar_proc(_argv_stream(prompt), cwd=str(cwd))
                 except (OSError, ValueError):
                     agentes.actualizar_run(
                         marca_id, run_id,
@@ -429,15 +487,58 @@ def lanzar_run_background(marca_id: str, run_id: str, prompt: str, *, cwd: Path)
                     )
                     return
                 with _HANDLES_LOCK:
-                    _HANDLES[run_id] = {"proc": proc}
+                    # El handle ya existe (con el evento); le añadimos el proceso vivo.
+                    handle = _HANDLES.get(run_id)
+                    if handle is not None:
+                        handle["proc"] = proc
+                # Si pidieron cancelar entre el chequeo de arriba y registrar el proceso,
+                # matamos el arbol ya (cancelar_run pudo no ver aun el proceso).
+                if cancelado.is_set():
+                    runner.matar_arbol(proc)
                 _leer_stream(marca_id, run_id, proc, acumulador)
-                _finalizar_run(marca_id, run_id, proc, acumulador)
+                # Estado terminal ANTES de soltar el handle: un sondeo que ya no ve el
+                # handle nunca lee un "ejecutando" obsoleto.
+                _finalizar_run(marca_id, run_id, proc, acumulador, cancelado=cancelado.is_set())
         finally:
             with _HANDLES_LOCK:
                 _HANDLES.pop(run_id, None)
 
+    # El hilo (via `slot(ya_admitido=True)`) libera la admision al terminar. Si el arranque
+    # del hilo fallara ANTES de entrar al slot, liberamos aqui para no fugar el cupo (#152) y
+    # soltamos el handle que registramos arriba (no dejarlo colgado sin hilo que lo limpie).
     hilo = threading.Thread(target=_ciclo, name=f"run-{run_id}", daemon=True)
-    hilo.start()
+    try:
+        hilo.start()
+    except Exception:  # noqa: BLE001 -- el cupo admitido no debe quedar colgado
+        runner.liberar_admision()
+        with _HANDLES_LOCK:
+            _HANDLES.pop(run_id, None)
+        raise
+
+
+def cancelar_run(marca_id: str, run_id: str) -> bool:
+    """Cancela un run de agente EN VUELO: mata el ARBOL del subproceso (#152, reutiliza #137).
+
+    Devuelve True si se pudo cancelar algo (habia un handle in-memoria con el proceso),
+    False si no hay nada que cancelar (ya terminó, o aun no habia llegado al spawn). Arma el
+    evento `cancelado` —para que un run aun PENDIENTE (esperando un slot, sin proceso todavia)
+    se finalice como cancelado al spawnear sin arrancar `claude`— y, si ya hay proceso, mata
+    el ARBOL entero (`runner.matar_arbol`), no solo el padre. La limpieza del estado terminal
+    la hace el hilo del run en `_finalizar_run`. El run es subprocess `claude -p` (ADR 0001):
+    cancelar = matar el arbol del proceso.
+    """
+    cancelado_algo = False
+    with _HANDLES_LOCK:
+        handle = _HANDLES.get(run_id)
+        ev = handle.get("cancelado") if handle else None
+        proc = handle.get("proc") if handle else None
+    if isinstance(ev, threading.Event):
+        ev.set()
+        cancelado_algo = True
+    if isinstance(proc, subprocess.Popen):
+        runner.matar_arbol(proc)
+        cancelado_algo = True
+    return cancelado_algo
 
 
 async def crear_run(request: Request) -> Response:
@@ -501,6 +602,19 @@ async def crear_run(request: Request) -> Response:
     )
     try:
         lanzar_run_background(marca_id, run_id, prompt, cwd=carpeta)
+    except runner.ColaLlenaError:
+        # Cola al tope (#152, reutiliza #137): marcamos el run y RE-LANZAMOS para que el
+        # manejador central responda 429 (backpressure) en vez de apilar un hilo bloqueado.
+        agentes.actualizar_run(
+            marca_id, run_id,
+            {
+                "estado": "error",
+                "motivo": "cola_llena",
+                "salida": "Hay demasiados runs en curso; inténtalo de nuevo en unos segundos.",
+                "fecha_fin": agentes.ahora_iso(),
+            },
+        )
+        raise
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el run
         run = agentes.actualizar_run(
             marca_id, run_id,
@@ -533,6 +647,27 @@ async def obtener_run(request: Request) -> Response:
     if run is None:
         return JSONResponse({"error": "No se encontró ese run."}, status_code=404)
     return JSONResponse({"run": run})
+
+
+async def cancelar_run_endpoint(request: Request) -> Response:
+    """Cancela un run de agente EN VUELO (#152, espeja la cancelacion de generaciones #137).
+
+    Mata el ARBOL del subproceso `claude` y deja el run en estado terminal
+    (`error`/`motivo=cancelado`, lo fija el hilo del run). -> `{run}` con el estado actual.
+    404 si el agente o el run no existen. Si ya habia terminado (sin proceso en vuelo)
+    devuelve el run tal cual: la cancelacion es idempotente. Lo dispara el usuario desde la
+    SPA (un boton "Cancelar"); el run es subprocess `claude -p` (ADR 0001), asi que cancelar
+    = matar el arbol del proceso local.
+    """
+    marca_id = _agente_o_404(request.path_params.get("agente_id"))
+    if isinstance(marca_id, JSONResponse):
+        return marca_id
+    run_id = request.path_params.get("run_id")
+    run = agentes.obtener_run(marca_id, run_id)
+    if run is None:
+        return JSONResponse({"error": "No se encontró ese run."}, status_code=404)
+    cancelar_run(marca_id, run_id)
+    return JSONResponse({"run": agentes.obtener_run(marca_id, run_id) or run})
 
 
 # --------------------------------------------------------------------------- #
@@ -590,5 +725,7 @@ RUTAS = [
     Route("/api/agentes/{agente_id}/contextos/{nombre}", borrar_contexto, methods=["DELETE"]),
     Route("/api/agentes/{agente_id}/runs", crear_run, methods=["POST"]),
     Route("/api/agentes/{agente_id}/runs", listar_runs, methods=["GET"]),
+    # `cancelar` ANTES de `/{run_id}` para que no lo capture el comodin del detalle.
+    Route("/api/agentes/{agente_id}/runs/{run_id}/cancelar", cancelar_run_endpoint, methods=["POST"]),
     Route("/api/agentes/{agente_id}/runs/{run_id}", obtener_run, methods=["GET"]),
 ]
