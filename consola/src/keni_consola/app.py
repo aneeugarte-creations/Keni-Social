@@ -188,8 +188,8 @@ def crear_app(
     `token`: token INTERINO opcional para la API (#134/#130). Es un gate EXTRA, no la
     barrera principal (esa es la sesion). Tres formas:
       - NO pasarlo (def): se resuelve de `KENI_CONSOLA_TOKEN`; si no esta, en local se
-        GENERA uno y se loguea (UX `?token=...`). El arranque hosted fija la env (o la deja
-        vacia para correr SIN token interino).
+        GENERA uno (su VALOR NO se loguea, #150; la cookie la siembra el index del SPA). El
+        arranque hosted fija la env (o la deja vacia para correr SIN token interino).
       - `token="..."`: usa ese token fijo (los tests pasan uno conocido).
       - `token=None`: EXPRESAMENTE sin token interino. La unica credencial es la sesion;
         sin sesion -> 401 igual. Sirve para probar/usar el modo "solo sesion + CSRF".
@@ -281,20 +281,21 @@ def crear_app(
     rutas.append(Route("/", _servir_spa))
     rutas.append(Route("/{resto:path}", _servir_spa))
 
-    # Seguridad (#134/#130): resolvemos el token INTERINO opcional. Si NO se inyecto
-    # (centinela), lo toma de KENI_CONSOLA_TOKEN; en local, si no esta, GENERA uno y lo
-    # loguea (UX `?token=...`). Si se inyecta `token=None` EXPRESAMENTE, no hay token
-    # interino: la app queda protegida solo por sesion + CSRF (el despliegue ya no depende
-    # del token, #130). El token, cuando lo hay, sigue valiendo como gate extra.
+    # Seguridad (#134/#130/#150): resolvemos el token de mantenimiento opcional. Si NO se
+    # inyecto (centinela), lo toma de KENI_CONSOLA_TOKEN; en local, si no esta, GENERA uno
+    # (su valor NO se loguea, #150; la cookie la siembra el index del SPA). Si se inyecta
+    # `token=None` EXPRESAMENTE, no hay token: la app queda protegida solo por sesion + CSRF
+    # (el despliegue ya no depende del token, #130). El token NO es admin (#150).
     if token is _TOKEN_NO_ESPECIFICADO:
         token, generado = seguridad.resolver_token()
         if generado:
+            # #150: NUNCA logueamos el VALOR del token (vector de fuga: logs/capturas). El
+            # acceso normal es el login multiusuario; el token es una credencial de
+            # mantenimiento opcional que se entrega fuera de banda, no por el log.
             _logger.warning(
-                "No hay KENI_CONSOLA_TOKEN: token interino generado para esta "
-                "ejecucion: %s  (abre la Consola con ?token=%s o exporta "
-                "KENI_CONSOLA_TOKEN para fijarlo; el login multiusuario protege igual).",
-                token,
-                token,
+                "No hay KENI_CONSOLA_TOKEN: se genero un token de mantenimiento interino "
+                "para esta ejecucion (NO se registra su valor). Entra por el login "
+                "multiusuario; fija KENI_CONSOLA_TOKEN para un token estable de mantenimiento."
             )
 
     # Observabilidad (issue #123): UNA linea de log por peticion (sin body/query/

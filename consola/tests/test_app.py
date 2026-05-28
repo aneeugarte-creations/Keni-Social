@@ -253,6 +253,61 @@ def test_landing_es_la_raiz():
     assert 'f"http://{host_url}:{puerto}/"' in fuente
 
 
+# --------------------------------------------------------------------------- #
+# #150: el arranque NO emite el token en la URL ni en el log/stdout            #
+# --------------------------------------------------------------------------- #
+
+
+def _arrancar_capturando(monkeypatch, capsys):
+    """Corre `main()` con uvicorn/hilos/SPA mockeados; devuelve (stdout, url_navegador, token)."""
+    from keni_consola import __main__ as entry
+
+    abierto: dict[str, str] = {}
+    # uvicorn.run BLOQUEA: lo neutralizamos para que `main()` retorne en los tests.
+    monkeypatch.setattr(entry.uvicorn, "run", lambda *a, **k: None)
+    # webbrowser.open: capturamos la URL que se abriria (no debe llevar el token, #150).
+    monkeypatch.setattr(entry.webbrowser, "open", lambda u: abierto.setdefault("url", u))
+    # Los hilos de fondo (captura/programador/worker) no deben arrancar en el test.
+    import keni_consola.comercial as comercial
+    import keni_consola.programador as programador
+    import keni_consola.worker as worker
+
+    monkeypatch.setattr(comercial, "iniciar_captura_programada", lambda: None)
+    monkeypatch.setattr(programador, "iniciar_programador", lambda: None)
+    monkeypatch.setattr(worker, "iniciar_worker_inproceso", lambda: None)
+    # No construimos la app real (toca disco/BD): un stub basta para este test.
+    monkeypatch.setattr(entry, "crear_app", lambda token=None: object())
+
+    entry.main()
+    salida = capsys.readouterr().out
+    from keni_consola import seguridad
+
+    token, _ = seguridad.resolver_token()
+    return salida, abierto.get("url", ""), token
+
+
+def test_arranque_no_imprime_token_ni_lo_pone_en_la_url(entorno, monkeypatch, capsys):
+    """#150: con token FIJO, ni el stdout ni la URL del navegador contienen el token."""
+    monkeypatch.setenv("KENI_CONSOLA_TOKEN", "token-secreto-de-mantenimiento-xyz")
+    salida, url, token = _arrancar_capturando(monkeypatch, capsys)
+    assert token == "token-secreto-de-mantenimiento-xyz"
+    # El token NO aparece en el stdout del arranque...
+    assert token not in salida
+    # ...ni en la URL que se abre en el navegador (sin `?token=`).
+    assert "?token=" not in url
+    assert token not in url
+
+
+def test_arranque_token_generado_no_se_filtra(entorno, monkeypatch, capsys):
+    """#150: sin KENI_CONSOLA_TOKEN se genera uno, pero NO se imprime ni va en la URL."""
+    monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
+    salida, url, _token = _arrancar_capturando(monkeypatch, capsys)
+    assert "?token=" not in url
+    assert "?token=" not in salida
+    # Se avisa de que se genero un token de mantenimiento, sin revelar su valor.
+    assert "mantenimiento" in salida.lower()
+
+
 def test_lanzador_no_macos_devuelve_aviso(monkeypatch):
     from keni_consola import lanzador
 

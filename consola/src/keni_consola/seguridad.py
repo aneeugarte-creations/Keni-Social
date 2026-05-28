@@ -53,8 +53,11 @@ El middleware acepta para `/api` CUALQUIERA de estas credenciales:
      valida es la sesion: una peticion sin sesion -> 401 igualmente. NO se debilita nada.
 
 `/api/auth/login` es PUBLICO (no exige credencial previa) pero pasa por la verificacion
-Origin/CSRF de las mutaciones. Las rutas `/api/usuarios/*` exigen ADEMAS rol admin (lo
-comprueba el propio handler leyendo `request.state.usuario`, que este middleware fija).
+Origin/CSRF de las mutaciones. Las rutas `/api/usuarios/*` exigen ADEMAS rol admin de un
+usuario REAL (lo comprueba el propio handler leyendo `request.state.usuario`, que este
+middleware fija). El TOKEN de mantenimiento NO es admin (#150): pasa la barrera de `/api`
+(es una credencial de mantenimiento), pero NO otorga poder admin sobre `/api/usuarios/*`;
+la unica excepcion es el bootstrap del primer admin con la BD vacia (ver `api/usuarios`).
 """
 
 from __future__ import annotations
@@ -241,7 +244,9 @@ _RUTAS_API_PUBLICAS = frozenset({"/api/auth/login"})
 
 # Si el usuario de la sesion tiene `debe_cambiar_password`, SOLO puede ver su sesion,
 # cambiar la contrasena o salir. Cualquier otra ruta /api -> 403 (enforcement en el
-# servidor, no solo en el frontend). El acceso por token interino no esta sujeto.
+# servidor, no solo en el frontend). El token de mantenimiento NO tiene usuario asociado,
+# asi que NO es una via para saltarse este gate de un usuario: si una cuenta debe cambiar
+# su contrasena, debe hacerlo por su sesion (no hay "admin fantasma" por token, #150).
 _RUTAS_API_CAMBIO_PASSWORD = frozenset(
     {"/api/auth/me", "/api/auth/cambiar-password", "/api/auth/logout"}
 )
@@ -264,8 +269,10 @@ class SeguridadConsola:
 
     Cuando autentica por sesion, deja el usuario en `scope["state"]["usuario"]` (lo lee
     `request.state.usuario`) para que los handlers comprueben el rol. Si autentica por
-    token interino, NO hay usuario asociado: cuenta como acceso de mantenimiento con plenos
-    permisos (equivalente a admin para las rutas que solo miran el rol).
+    token de mantenimiento, NO hay usuario asociado (`auth_por_token=True`): es una
+    credencial de mantenimiento que pasa la barrera de `/api`, pero NO es admin (#150). Las
+    rutas que exigen rol admin (`/api/usuarios/*`) la rechazan, salvo el bootstrap del
+    primer admin con la BD vacia (acotado en `api/usuarios`).
 
     El token se compara con `secrets.compare_digest` (tiempo constante). Solo actua
     sobre `scope["type"] == "http"`; el resto pasa intacto.
@@ -308,8 +315,9 @@ class SeguridadConsola:
 
         # 1b) Si el usuario de la sesion debe cambiar su contrasena, solo le dejamos las
         # rutas para hacerlo (ver/cambiar/salir); cualquier otra /api -> 403. Asi el
-        # "cambio forzado" se aplica en el SERVIDOR, no solo en el frontend. El acceso por
-        # token interino (mantenimiento, sin usuario) no esta sujeto a esto.
+        # "cambio forzado" se aplica en el SERVIDOR, no solo en el frontend. El token de
+        # mantenimiento NO tiene usuario, asi que este gate (de un usuario) no le aplica:
+        # tampoco es una via para que un usuario se lo salte (no hay sesion via token).
         usuario_sesion = estado["usuario"]
         if (
             usuario_sesion is not None
@@ -378,11 +386,11 @@ def autor_de_peticion(request: object) -> dict[str, str] | None:
 def resolver_token() -> tuple[str, bool]:
     """Devuelve `(token, generado)` para el token INTERINO: el de la env var o uno nuevo.
 
-    `generado=True` indica que se creo uno aleatorio (hay que mostrarlo en el log). El
-    token interino es un gate EXTRA opcional (#130): aunque se genere uno, la barrera
-    PRINCIPAL es la sesion + CSRF. Para correr EXPRESAMENTE sin token interino, se pasa
-    `crear_app(token=None)` (no se llama aqui); este resolver mantiene la UX local de
-    `?token=...` generando uno cuando no se fijo `KENI_CONSOLA_TOKEN`.
+    `generado=True` indica que se creo uno aleatorio. El token de mantenimiento es un gate
+    EXTRA opcional (#130) y NO es admin (#150): aunque se genere uno, la barrera PRINCIPAL
+    es la sesion + CSRF. Su VALOR NO se loguea ni viaja en la URL (#150). Para correr
+    EXPRESAMENTE sin token, se pasa `crear_app(token=None)` (no se llama aqui); este
+    resolver genera uno cuando no se fijo `KENI_CONSOLA_TOKEN`.
     """
     fijo = token_configurado()
     if fijo is not None:

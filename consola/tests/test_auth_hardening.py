@@ -66,8 +66,10 @@ def test_reset_de_admin_expulsa_la_sesion_del_objetivo(entorno):
     assert _login(ce, "leo", CLAVE).status_code == 200
     leo_id = auth.autenticar("leo", CLAVE)["id"]
 
-    # El admin resetea la contraseña de leo (vía token de mantenimiento = admin).
-    r = _cli().patch(f"/api/usuarios/{leo_id}", json={"password": CLAVE_NUEVA}, headers=_ADMIN_TOKEN)
+    # El admin REAL (sesion) resetea la contraseña de leo (#150: el token ya no es admin).
+    cadmin = _cli()
+    assert _login(cadmin, "jefa", CLAVE).status_code == 200
+    r = cadmin.patch(f"/api/usuarios/{leo_id}", json={"password": CLAVE_NUEVA}, headers=_ORIGIN)
     assert r.status_code == 200
 
     # La sesión que leo tenía abierta deja de valer.
@@ -102,9 +104,13 @@ def test_debe_cambiar_password_bloquea_otras_rutas_en_el_servidor(entorno):
     assert c.get("/api/usuarios").status_code == 200
 
 
-def test_token_de_bootstrap_no_esta_sujeto_a_debe_cambiar(entorno):
-    # El acceso por token (mantenimiento, sin usuario) no se ve afectado por el flag.
-    assert _cli().get("/api/usuarios", headers=_ADMIN_TOKEN).status_code == 200
+def test_token_de_mantenimiento_no_esta_sujeto_a_debe_cambiar(entorno):
+    # El gate `debe_cambiar_password` es de un USUARIO de sesion; el token de mantenimiento
+    # no tiene usuario, asi que no le aplica. Probamos con una ruta /api normal (no admin):
+    # el token la pasa aunque exista una cuenta con el flag activo (no hay "admin fantasma",
+    # #150: el token NO toca /api/usuarios, eso ya es 403 — ver test_auth.py).
+    auth.crear_usuario("nueva", CLAVE, "admin", debe_cambiar_password=True)
+    assert _cli().get("/api/estado", headers=_ADMIN_TOKEN).status_code == 200
 
 
 # --------------------------------------------------------------------------- #
@@ -119,13 +125,17 @@ def test_login_rechaza_password_gigante_sin_hashear(entorno):
 
 
 def test_crear_usuario_rechaza_password_y_nombre_gigantes(entorno):
+    # #150: la gestion de usuarios exige un admin REAL (el token ya no es admin), asi que
+    # creamos un admin y entramos por sesion para probar la validacion de tamano.
+    auth.crear_usuario("jefa", CLAVE, "admin")
     c = _cli()
+    assert _login(c, "jefa", CLAVE).status_code == 200
     larga = "x" * (auth.LONGITUD_MAX_PASSWORD + 1)
-    r1 = c.post("/api/usuarios", json={"usuario": "bob", "password": larga, "rol": "editor"}, headers=_ADMIN_TOKEN)
+    r1 = c.post("/api/usuarios", json={"usuario": "bob", "password": larga, "rol": "editor"}, headers=_ORIGIN)
     assert r1.status_code == 400
 
     nombre = "n" * (auth.LONGITUD_MAX_USUARIO + 1)
-    r2 = c.post("/api/usuarios", json={"usuario": nombre, "password": CLAVE, "rol": "editor"}, headers=_ADMIN_TOKEN)
+    r2 = c.post("/api/usuarios", json={"usuario": nombre, "password": CLAVE, "rol": "editor"}, headers=_ORIGIN)
     assert r2.status_code == 400
 
 
