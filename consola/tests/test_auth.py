@@ -629,9 +629,14 @@ def test_token_de_bootstrap_sigue_valiendo_para_api(entorno):
     assert r.status_code == 200
 
 
-def test_token_de_bootstrap_gestiona_usuarios_como_mantenimiento(entorno):
-    """Por el token (acceso de mantenimiento) se puede gestionar usuarios (cuenta como admin)."""
+def test_token_bootstrap_crea_primer_admin_con_bd_vacia(entorno):
+    """#150: con la BD VACIA, el token de mantenimiento SI puede crear el PRIMER admin.
+
+    Es el unico camino admin que conserva el token: bootstrap de recuperacion. No es poder
+    admin general (ver los tests de abajo): en cuanto hay usuarios, el token deja de poder.
+    """
     c = _cli()
+    assert not auth.hay_usuarios()
     h = {**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"}
     r = c.post(
         "/api/usuarios",
@@ -639,7 +644,85 @@ def test_token_de_bootstrap_gestiona_usuarios_como_mantenimiento(entorno):
         headers=h,
     )
     assert r.status_code == 201
-    assert c.get("/api/usuarios", headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"}).status_code == 200
+    assert r.json()["rol"] == "admin"
+    assert auth.contar_admins() == 1
+
+
+def test_token_bootstrap_solo_admin_no_editor(entorno):
+    """#150: el bootstrap por token SOLO crea admin; un editor con BD vacia -> 403.
+
+    Sembrar un editor con la BD vacia dejaria la consola sin admin (y sin recuperacion).
+    """
+    c = _cli()
+    h = {**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"}
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "ed", "password": CLAVE, "rol": "editor"},
+        headers=h,
+    )
+    assert r.status_code == 403
+    assert not auth.hay_usuarios()
+
+
+def test_token_no_crea_usuarios_si_ya_hay(entorno):
+    """#150: con usuarios YA en la BD, el token NO puede crear cuentas (no es admin) -> 403."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    h = {**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"}
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "colado", "password": CLAVE, "rol": "admin"},
+        headers=h,
+    )
+    assert r.status_code == 403
+    assert auth.autenticar("colado", CLAVE) is None
+
+
+def test_token_no_lista_usuarios(entorno):
+    """#150: GET /api/usuarios por el token (sin sesion admin real) -> 403 (no es admin)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    r = c.get("/api/usuarios", headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
+    assert r.status_code == 403
+
+
+def test_token_no_modifica_usuarios(entorno):
+    """#150: PATCH /api/usuarios/{id} por el token -> 403 (no puede tocar cuentas)."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    h = {**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"}
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"rol": "admin"}, headers=h)
+    assert r.status_code == 403
+    # No cambio nada: sigue siendo editor.
+    assert auth.obtener_usuario_por_id(ed["id"])["rol"] == "editor"
+
+
+def test_token_no_borra_usuarios(entorno):
+    """#150: DELETE /api/usuarios/{id} por el token -> 403 (no puede borrar cuentas)."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    r = c.delete(
+        f"/api/usuarios/{ed['id']}",
+        headers={**_ORIGIN, "Authorization": f"Bearer {TOKEN_PRUEBA}"},
+    )
+    assert r.status_code == 403
+    assert auth.obtener_usuario_por_id(ed["id"]) is not None
+
+
+def test_admin_real_si_gestiona_usuarios(entorno):
+    """#150: un admin REAL (sesion) SIGUE gestionando usuarios (no se rompe el flujo normal)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    assert c.get("/api/usuarios").status_code == 200
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": CLAVE, "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 201
 
 
 def test_sesion_autoriza_api_sin_token(entorno):
