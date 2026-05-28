@@ -1,14 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  BellRing,
   CalendarDays,
+  CalendarOff,
   CalendarPlus,
+  Camera,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Download,
   Loader2,
+  Plane,
   Plus,
+  Radio,
   Sparkles,
   Trash2,
   User,
@@ -44,13 +49,83 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
-import type { EventoRota, MiembroRota, TurnoRota } from "@/types";
+import type {
+  AusenciaRota,
+  EventoRota,
+  FranjaTurno,
+  HorarioSemana,
+  MiembroRota,
+  PrioridadEvento,
+  TipoAusencia,
+  TipoCoberturaEvento,
+  TurnoRota,
+  TurnoTrabajoRota,
+} from "@/types";
 
 const CABECERA = {
   titulo: "Parrilla y rota",
   descripcion:
-    "Eventos y transmisiones de la semana + la rota del equipo. Keni propone (rota los sábados sin repetir a la misma persona dos seguidos); tú ajustas y apruebas antes de publicarla al equipo.",
+    "Calendario de eventos (con su tipo de cobertura: transmisión, solo imágenes o no cubrir) y reprogramaciones marcadas, rota de cobertura y horarios/turnos del equipo. Keni propone y avisa de los cambios de horario; tú decides qué se cubre, ajustas y apruebas antes de publicar al equipo.",
 };
+
+// Etiquetas legibles de cada franja del turno de trabajo.
+const ETIQUETA_FRANJA: Record<FranjaTurno, string> = {
+  matutino: "Mañana",
+  vespertino: "Tarde",
+  descanso: "Descanso",
+};
+
+// Presentación de cada tipo de cobertura: etiqueta, icono y clases de color (chips/leyenda).
+// Tropicalización MX y consistente con la voz del producto (Elías decide qué se cubre).
+const COBERTURA: Record<
+  TipoCoberturaEvento,
+  { etiqueta: string; icono: typeof Radio; chip: string; punto: string }
+> = {
+  transmision: {
+    etiqueta: "Transmisión",
+    icono: Radio,
+    chip: "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
+    punto: "bg-sky-500",
+  },
+  imagenes: {
+    etiqueta: "Solo imágenes",
+    icono: Camera,
+    chip: "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300",
+    punto: "bg-violet-500",
+  },
+  no_cubrir: {
+    etiqueta: "No cubrir",
+    icono: CalendarOff,
+    chip: "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400",
+    punto: "bg-zinc-400",
+  },
+};
+
+const TIPOS_COBERTURA: { valor: TipoCoberturaEvento; etiqueta: string }[] = [
+  { valor: "transmision", etiqueta: "Transmisión (con señal)" },
+  { valor: "imagenes", etiqueta: "Solo imágenes / fotografías" },
+  { valor: "no_cubrir", etiqueta: "No cubrir" },
+];
+
+const PRIORIDADES: { valor: PrioridadEvento; etiqueta: string }[] = [
+  { valor: "alta", etiqueta: "Alta" },
+  { valor: "media", etiqueta: "Media" },
+  { valor: "baja", etiqueta: "Baja" },
+];
+
+// Color del texto de la prioridad (sutil; la alta resalta).
+const COLOR_PRIORIDAD: Record<PrioridadEvento, string> = {
+  alta: "text-red-600 dark:text-red-400",
+  media: "text-muted-foreground",
+  baja: "text-muted-foreground",
+};
+
+const TIPOS_AUSENCIA: { valor: TipoAusencia; etiqueta: string }[] = [
+  { valor: "vacaciones", etiqueta: "Vacaciones" },
+  { valor: "descanso", etiqueta: "Descanso" },
+  { valor: "baja", etiqueta: "Baja" },
+  { valor: "otro", etiqueta: "Otro" },
+];
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -104,18 +179,30 @@ export default function Rota() {
   return (
     <>
       <PageHeader {...CABECERA} />
-      <Tabs defaultValue="parrilla" className="space-y-4">
+      <Tabs defaultValue="calendario" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="parrilla">Parrilla del equipo</TabsTrigger>
+          <TabsTrigger value="horario">Horario del equipo</TabsTrigger>
           <TabsTrigger value="mi-semana">Mi próxima semana</TabsTrigger>
+          <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
           <TabsTrigger value="eventos">Eventos</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="calendario">
+          <Calendario lunes={lunes} setLunes={setLunes} />
+        </TabsContent>
         <TabsContent value="parrilla">
           <Parrilla lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
         </TabsContent>
+        <TabsContent value="horario">
+          <Horario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
+        </TabsContent>
         <TabsContent value="mi-semana">
           <MiSemana lunes={lunes} setLunes={setLunes} />
+        </TabsContent>
+        <TabsContent value="ausencias">
+          <Ausencias />
         </TabsContent>
         <TabsContent value="eventos">
           <Eventos />
@@ -160,6 +247,173 @@ function NavegadorSemana({
       >
         <ChevronRight className="h-4 w-4" />
       </Button>
+    </div>
+  );
+}
+
+// --- Pestaña: calendario de eventos (semana, color por cobertura) ----------
+
+/** Leyenda de colores por tipo de cobertura (consistente con los chips del calendario). */
+function LeyendaCobertura() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+      {(Object.keys(COBERTURA) as TipoCoberturaEvento[]).map((tc) => (
+        <span key={tc} className="inline-flex items-center gap-1.5">
+          <span className={`h-2.5 w-2.5 rounded-full ${COBERTURA[tc].punto}`} />
+          {COBERTURA[tc].etiqueta}
+        </span>
+      ))}
+      <span className="inline-flex items-center gap-1.5">
+        <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Cambió
+        (reprogramado, falta avisar)
+      </span>
+    </div>
+  );
+}
+
+/** Botón "marcar avisado": limpia el flag `cambiado` de un evento (PATCH cambiado:false). */
+function BotonMarcarAvisado({ evento, onCambio }: { evento: EventoRota; onCambio: () => void }) {
+  const marcar = useMutation({
+    mutationFn: () => api.actualizarEventoRota(evento.id, { cambiado: false }),
+    onSuccess: () => {
+      toast.success("Marcado como avisado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="h-6 gap-1 px-1.5 text-[11px] text-amber-700 dark:text-amber-400"
+      onClick={() => marcar.mutate()}
+      disabled={marcar.isPending}
+    >
+      {marcar.isPending ? (
+        <Loader2 className="h-3 w-3 animate-spin" />
+      ) : (
+        <CheckCircle2 className="h-3 w-3" />
+      )}
+      Marcar avisado
+    </Button>
+  );
+}
+
+/** Un chip de evento dentro de una celda del calendario, color por tipo de cobertura. */
+function ChipEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () => void }) {
+  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
+  const Icono = cob.icono;
+  return (
+    <div className={`space-y-1 rounded-md border px-2 py-1.5 text-xs ${cob.chip}`}>
+      <div className="flex items-start gap-1.5">
+        <Icono className="mt-0.5 h-3 w-3 shrink-0" />
+        <span className="min-w-0 break-words font-medium leading-tight">{evento.titulo}</span>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 opacity-90">
+        {evento.hora && <span>{evento.hora}</span>}
+        <span className={COLOR_PRIORIDAD[evento.prioridad]}>· {evento.prioridad}</span>
+      </div>
+      {evento.cambiado && (
+        <div className="flex flex-wrap items-center gap-1">
+          <Badge variant="aviso" className="gap-1 font-normal">
+            <BellRing className="h-3 w-3" /> Cambió
+          </Badge>
+          <BotonMarcarAvisado evento={evento} onCambio={onCambio} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) => void }) {
+  const queryClient = useQueryClient();
+  // El rango (lun→dom) de la semana en vista para acotar la consulta de eventos.
+  const desde = lunes;
+  const hasta = lunesSiguiente(lunes, 1); // lunes siguiente = exclusivo, cubre todo dom
+  const clave = ["rota", "calendario", desde] as const;
+
+  const q = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
+  });
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
+
+  const dias = React.useMemo(() => {
+    const base = new Date(`${lunes}T00:00:00`);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      return iso(d);
+    });
+  }, [lunes]);
+
+  // Filtramos en cliente al rango exacto lun→dom (la consulta usa `hasta` exclusivo).
+  const eventos = (q.data?.eventos ?? []).filter((e) => e.fecha >= desde && e.fecha < hasta);
+  const porDia = new Map<string, EventoRota[]>();
+  for (const e of eventos) {
+    const lista = porDia.get(e.fecha) ?? [];
+    lista.push(e);
+    porDia.set(e.fecha, lista);
+  }
+  const inicio = dias[0] ?? "";
+  const fin = dias[6] ?? "";
+  const nCambiados = eventos.filter((e) => e.cambiado).length;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+        {nCambiados > 0 && (
+          <Badge variant="aviso" className="gap-1 font-normal">
+            <BellRing className="h-3.5 w-3.5" /> {nCambiados} reprogramado
+            {nCambiados === 1 ? "" : "s"} sin avisar
+          </Badge>
+        )}
+      </div>
+
+      <LeyendaCobertura />
+
+      {q.isPending ? (
+        <Skeleton className="h-64 w-full rounded-md" />
+      ) : q.isError ? (
+        <BloqueError
+          titulo="No se pudo cargar el calendario"
+          mensaje={mensajeError(q.error)}
+          onReintentar={() => void q.refetch()}
+          cargando={q.isFetching}
+        />
+      ) : (
+        <Card>
+          <CardContent className="overflow-x-auto p-3">
+            <div className="grid min-w-[56rem] grid-cols-7 gap-2">
+              {dias.map((fecha) => {
+                const finde = esFinDeSemana(fecha);
+                const delDia = porDia.get(fecha) ?? [];
+                return (
+                  <div
+                    key={fecha}
+                    className={`flex min-h-[8rem] flex-col gap-1.5 rounded-md border p-2 ${
+                      finde ? "bg-amber-50/40 dark:bg-amber-950/10" : "bg-muted/20"
+                    }`}
+                  >
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs font-semibold capitalize">{diaCorto(fecha)}</span>
+                      <span className="text-xs text-muted-foreground">{fecha.slice(8, 10)}</span>
+                    </div>
+                    {delDia.length === 0 ? (
+                      <span className="mt-1 text-xs text-muted-foreground/60">—</span>
+                    ) : (
+                      delDia.map((e) => (
+                        <ChipEvento key={e.id} evento={e} onCambio={invalidar} />
+                      ))
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
@@ -439,8 +693,14 @@ function MiSemana({ lunes, setLunes }: { lunes: string; setLunes: (l: string) =>
     queryKey: ["rota", "mi-semana", lunes],
     queryFn: ({ signal }) => api.miSemanaRota({ lunes }, signal),
   });
+  const hq = useQuery({
+    queryKey: ["rota", "mi-horario", lunes],
+    queryFn: ({ signal }) => api.miHorarioRota({ lunes }, signal),
+  });
   const datos = q.data;
   const mios = datos?.mis_turnos ?? [];
+  const horario = hq.data;
+  const misTurnosTrabajo = horario?.mis_turnos ?? [];
 
   return (
     <div className="space-y-4">
@@ -458,34 +718,104 @@ function MiSemana({ lunes, setLunes }: { lunes: string; setLunes: (l: string) =>
         )}
       </div>
 
-      {q.isPending ? (
-        <Skeleton className="h-40 w-full rounded-md" />
-      ) : q.isError ? (
-        <BloqueError
-          titulo="No se pudo cargar tu semana"
-          mensaje={mensajeError(q.error)}
-          onReintentar={() => void q.refetch()}
-          cargando={q.isFetching}
-        />
-      ) : datos?.aviso ? (
-        <EstadoVacio icono={User} titulo="Inicia sesión" texto={datos.aviso} />
-      ) : !datos?.aprobada && mios.length > 0 ? (
-        <>
-          <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-            Esta rota aún es una propuesta sin publicar; puede cambiar antes de que Elías la
-            apruebe.
-          </p>
-          <ListaMisTurnos turnos={mios} />
-        </>
-      ) : mios.length === 0 ? (
-        <EstadoVacio
-          icono={CalendarDays}
-          titulo="Sin turnos esta semana"
-          texto="No tienes asignaciones en la rota de esta semana."
-        />
-      ) : (
-        <ListaMisTurnos turnos={mios} />
-      )}
+      {/* Mi horario de trabajo (turnos mañana/tarde/descanso) */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold text-muted-foreground">Mi horario de trabajo</h3>
+        {hq.isPending ? (
+          <Skeleton className="h-24 w-full rounded-md" />
+        ) : hq.isError ? (
+          <BloqueError
+            titulo="No se pudo cargar tu horario"
+            mensaje={mensajeError(hq.error)}
+            onReintentar={() => void hq.refetch()}
+            cargando={hq.isFetching}
+          />
+        ) : horario?.aviso ? (
+          <EstadoVacio icono={User} titulo="Inicia sesión" texto={horario.aviso} />
+        ) : misTurnosTrabajo.length === 0 ? (
+          <EstadoVacio
+            icono={CalendarDays}
+            titulo="Sin horario esta semana"
+            texto="No tienes turnos de trabajo asignados esta semana."
+          />
+        ) : (
+          <>
+            {!horario?.aprobada && (
+              <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                Este horario aún es una propuesta sin publicar; puede cambiar antes de que
+                Elías lo apruebe.
+              </p>
+            )}
+            <ListaMisTurnosTrabajo turnos={misTurnosTrabajo} />
+          </>
+        )}
+      </section>
+
+      {/* Mi cobertura de eventos */}
+      <section className="space-y-2">
+        <h3 className="text-sm font-semibold text-muted-foreground">Mi cobertura de eventos</h3>
+        {q.isPending ? (
+          <Skeleton className="h-40 w-full rounded-md" />
+        ) : q.isError ? (
+          <BloqueError
+            titulo="No se pudo cargar tu semana"
+            mensaje={mensajeError(q.error)}
+            onReintentar={() => void q.refetch()}
+            cargando={q.isFetching}
+          />
+        ) : datos?.aviso ? (
+          <EstadoVacio icono={User} titulo="Inicia sesión" texto={datos.aviso} />
+        ) : mios.length === 0 ? (
+          <EstadoVacio
+            icono={CalendarDays}
+            titulo="Sin eventos esta semana"
+            texto="No tienes eventos asignados en la rota de cobertura."
+          />
+        ) : (
+          <>
+            {!datos?.aprobada && (
+              <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+                Esta rota aún es una propuesta sin publicar; puede cambiar antes de que Elías
+                la apruebe.
+              </p>
+            )}
+            <ListaMisTurnos turnos={mios} />
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function ListaMisTurnosTrabajo({ turnos }: { turnos: TurnoTrabajoRota[] }) {
+  return (
+    <div className="space-y-3">
+      {turnos.map((t) => (
+        <Card key={t.id}>
+          <CardContent className="space-y-1.5 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium">{ETIQUETA_FRANJA[t.franja]}</span>
+              {t.es_sabado && (
+                <Badge variant="outline" className="font-normal">
+                  Sábado
+                </Badge>
+              )}
+              {t.override && (
+                <Badge variant="aviso" className="font-normal">
+                  Override
+                </Badge>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">{formatearFechaCorta(t.fecha)}</div>
+            {t.nota_relevo && (
+              <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-sm">
+                <span className="font-medium">Relevo: </span>
+                {t.nota_relevo}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
@@ -522,6 +852,505 @@ function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
         </Card>
       ))}
     </div>
+  );
+}
+
+// --- Pestaña: horario del equipo (turnos de trabajo) -----------------------
+
+/** Nombre corto del día (Lun..Dom) de una fecha ISO. */
+function diaCorto(fechaIso: string): string {
+  const d = new Date(`${fechaIso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString("es-MX", { weekday: "short" });
+}
+
+/** ¿La fecha ISO cae en sábado o domingo? (para resaltar el fin de semana). */
+function esFinDeSemana(fechaIso: string): boolean {
+  const d = new Date(`${fechaIso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  const dia = d.getDay();
+  return dia === 0 || dia === 6;
+}
+
+function Horario({
+  lunes,
+  setLunes,
+  esAdmin,
+}: {
+  lunes: string;
+  setLunes: (l: string) => void;
+  esAdmin: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const claveHorario = ["rota", "horario", lunes] as const;
+
+  const horarioQ = useQuery({
+    queryKey: claveHorario,
+    queryFn: ({ signal }) => api.rotaHorario({ lunes }, signal),
+  });
+  const equipoQ = useQuery({
+    queryKey: ["rota", "equipo"],
+    queryFn: ({ signal }) => api.rotaEquipo(signal),
+  });
+  const ausenciasQ = useQuery({
+    queryKey: ["rota", "ausencias"],
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
+
+  const equipo = equipoQ.data?.equipo ?? [];
+  const ausencias = ausenciasQ.data?.ausencias ?? [];
+  const horario = horarioQ.data;
+  const turnos = horario?.turnos ?? [];
+
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveHorario });
+
+  const proponer = useMutation({
+    mutationFn: () => api.proponerHorario({ lunes }),
+    onSuccess: (res) => {
+      queryClient.setQueryData(claveHorario, res);
+      const avisos = res.avisos ?? [];
+      if (avisos.length > 0) avisos.forEach((a) => toast.warning(a));
+      else toast.success("Horario propuesto. Revísalo y apruébalo antes de publicarlo.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const aprobar = useMutation({
+    mutationFn: () => api.aprobarHorario({ lunes }),
+    onSuccess: (res) => {
+      queryClient.setQueryData(claveHorario, res);
+      toast.success(res.mensaje ?? "Horario publicado al equipo.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <NavegadorSemana
+          lunes={lunes}
+          setLunes={setLunes}
+          inicio={horario?.inicio ?? ""}
+          fin={horario?.fin ?? ""}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          {horario?.aprobada ? (
+            <Badge variant="ok" className="font-normal">
+              <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicado
+            </Badge>
+          ) : turnos.length > 0 ? (
+            <Badge variant="aviso" className="font-normal">
+              Propuesta (sin publicar)
+            </Badge>
+          ) : null}
+          <Button onClick={() => proponer.mutate()} disabled={proponer.isPending}>
+            {proponer.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            Proponer horario
+          </Button>
+          {esAdmin && (
+            <Button
+              variant="secondary"
+              onClick={() => aprobar.mutate()}
+              disabled={aprobar.isPending || turnos.length === 0 || horario?.aprobada}
+            >
+              {aprobar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Aprobar y publicar
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
+            <Download className="h-4 w-4" /> Excel
+          </Button>
+        </div>
+      </div>
+
+      {horarioQ.isPending ? (
+        <Skeleton className="h-48 w-full rounded-md" />
+      ) : horarioQ.isError ? (
+        <BloqueError
+          titulo="No se pudo cargar el horario"
+          mensaje={mensajeError(horarioQ.error)}
+          onReintentar={() => void horarioQ.refetch()}
+          cargando={horarioQ.isFetching}
+        />
+      ) : turnos.length === 0 ? (
+        <EstadoVacio
+          icono={CalendarDays}
+          titulo="Sin horario para esta semana"
+          texto='Pulsa "Proponer horario": Keni reparte mañana/tarde/descanso respetando vacaciones y rotando los sábados.'
+        />
+      ) : (
+        <RejillaHorario
+          horario={horario as HorarioSemana}
+          equipo={equipo}
+          ausencias={ausencias}
+          editable={!horario?.aprobada}
+          onCambio={invalidar}
+        />
+      )}
+    </div>
+  );
+}
+
+function RejillaHorario({
+  horario,
+  equipo,
+  ausencias,
+  editable,
+  onCambio,
+}: {
+  horario: HorarioSemana;
+  equipo: MiembroRota[];
+  ausencias: AusenciaRota[];
+  editable: boolean;
+  onCambio: () => void;
+}) {
+  const dias = horario.dias;
+  // Indexa el turno por (miembro, fecha) para llenar la rejilla.
+  const porCelda = new Map<string, TurnoTrabajoRota>();
+  for (const t of horario.turnos) porCelda.set(`${t.miembro_id}|${t.fecha}`, t);
+
+  // ¿Tiene el miembro una ausencia que cubra esa fecha?
+  const estaAusente = (miembroId: string, fecha: string): AusenciaRota | undefined =>
+    ausencias.find((a) => a.miembro_id === miembroId && a.desde <= fecha && fecha <= a.hasta);
+
+  const filas = [...equipo].sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+  return (
+    <Card>
+      <CardContent className="overflow-x-auto p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="sticky left-0 bg-background">Persona</TableHead>
+              {dias.map((fecha) => (
+                <TableHead
+                  key={fecha}
+                  className={esFinDeSemana(fecha) ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}
+                >
+                  <div className="capitalize">{diaCorto(fecha)}</div>
+                  <div className="text-xs font-normal text-muted-foreground">
+                    {fecha.slice(8, 10)}
+                  </div>
+                </TableHead>
+              ))}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filas.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="sticky left-0 whitespace-nowrap bg-background font-medium">
+                  {m.nombre}
+                </TableCell>
+                {dias.map((fecha) => {
+                  const ausencia = estaAusente(m.id, fecha);
+                  const turno = porCelda.get(`${m.id}|${fecha}`);
+                  return (
+                    <TableCell
+                      key={fecha}
+                      className={esFinDeSemana(fecha) ? "bg-amber-50/30 dark:bg-amber-950/10" : undefined}
+                    >
+                      {ausencia ? (
+                        <Badge variant="secondary" className="font-normal">
+                          <Plane className="mr-1 h-3 w-3" />
+                          {TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ??
+                            "Ausente"}
+                        </Badge>
+                      ) : turno ? (
+                        <CeldaTurno turno={turno} editable={editable} onCambio={onCambio} />
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CeldaTurno({
+  turno,
+  editable,
+  onCambio,
+}: {
+  turno: TurnoTrabajoRota;
+  editable: boolean;
+  onCambio: () => void;
+}) {
+  // Confirmación de override pendiente: si el backend pide override, lo reintenta.
+  const [pendienteOverride, setPendienteOverride] = React.useState<FranjaTurno | null>(null);
+
+  const actualizar = useMutation({
+    mutationFn: (cuerpo: { franja?: FranjaTurno; override?: boolean }) =>
+      api.actualizarTurnoTrabajoRota(turno.id, cuerpo),
+    onSuccess: () => {
+      setPendienteOverride(null);
+      onCambio();
+    },
+    onError: (e, variables) => {
+      if (e instanceof ApiError && e.status === 409 && variables.franja) {
+        // Repite el sábado de trabajo anterior: ofrecemos forzar la cobertura (override).
+        setPendienteOverride(variables.franja);
+        toast.warning(mensajeError(e));
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  if (!editable) {
+    return (
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm">{ETIQUETA_FRANJA[turno.franja]}</span>
+        {turno.override && <AlertTriangle className="h-3 w-3 text-amber-600" />}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Select
+        value={turno.franja}
+        onValueChange={(v) => actualizar.mutate({ franja: v as FranjaTurno })}
+        disabled={actualizar.isPending}
+      >
+        <SelectTrigger aria-label={`Franja de ${turno.miembro_nombre}`} className="min-w-[7.5rem]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="matutino">Mañana</SelectItem>
+          <SelectItem value="vespertino">Tarde</SelectItem>
+          <SelectItem value="descanso">Descanso</SelectItem>
+        </SelectContent>
+      </Select>
+      {turno.override && (
+        <Badge variant="aviso" className="font-normal">
+          <AlertTriangle className="mr-1 h-3 w-3" /> Override
+        </Badge>
+      )}
+      {pendienteOverride && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full text-amber-700 dark:text-amber-400"
+          onClick={() => actualizar.mutate({ franja: pendienteOverride, override: true })}
+          disabled={actualizar.isPending}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> Forzar cobertura (override)
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// --- Pestaña: ausencias / vacaciones ---------------------------------------
+
+function Ausencias() {
+  const queryClient = useQueryClient();
+  const clave = ["rota", "ausencias"] as const;
+  const q = useQuery({ queryKey: clave, queryFn: ({ signal }) => api.rotaAusencias({}, signal) });
+  const equipoQ = useQuery({
+    queryKey: ["rota", "equipo"],
+    queryFn: ({ signal }) => api.rotaEquipo(signal),
+  });
+  const ausencias = q.data?.ausencias ?? [];
+  const equipo = equipoQ.data?.equipo ?? [];
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
+      <NuevaAusencia equipo={equipo} onCreada={invalidar} />
+      <div className="space-y-3">
+        {q.isPending ? (
+          <Skeleton className="h-40 w-full rounded-md" />
+        ) : q.isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar las ausencias"
+            mensaje={mensajeError(q.error)}
+            onReintentar={() => void q.refetch()}
+            cargando={q.isFetching}
+          />
+        ) : ausencias.length === 0 ? (
+          <EstadoVacio
+            icono={CalendarOff}
+            titulo="Sin ausencias"
+            texto="Registra vacaciones, descansos o bajas para que el horario propuesto las respete."
+          />
+        ) : (
+          ausencias.map((a) => <TarjetaAusencia key={a.id} ausencia={a} onCambio={invalidar} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NuevaAusencia({
+  equipo,
+  onCreada,
+}: {
+  equipo: MiembroRota[];
+  onCreada: () => void;
+}) {
+  const [miembroId, setMiembroId] = React.useState("");
+  const [tipo, setTipo] = React.useState<TipoAusencia>("vacaciones");
+  const [desde, setDesde] = React.useState("");
+  const [hasta, setHasta] = React.useState("");
+  const [motivo, setMotivo] = React.useState("");
+
+  const crear = useMutation({
+    mutationFn: () =>
+      api.crearAusenciaRota({ miembro_id: miembroId, tipo, desde, hasta, motivo: motivo.trim() }),
+    onSuccess: () => {
+      toast.success("Ausencia registrada.");
+      setDesde("");
+      setHasta("");
+      setMotivo("");
+      onCreada();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puedeCrear = miembroId !== "" && desde !== "" && hasta !== "" && !crear.isPending;
+
+  return (
+    <Card className="h-fit">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CalendarOff className="h-4 w-4" /> Nueva ausencia
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Persona</Label>
+          <Select value={miembroId} onValueChange={setMiembroId}>
+            <SelectTrigger aria-label="Persona">
+              <SelectValue placeholder="Elige a un miembro" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipo.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Tipo</Label>
+          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
+            <SelectTrigger aria-label="Tipo de ausencia">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIPOS_AUSENCIA.map((t) => (
+                <SelectItem key={t.valor} value={t.valor}>
+                  {t.etiqueta}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="au-desde">Desde</Label>
+            <Input id="au-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="au-hasta">Hasta</Label>
+            <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="au-motivo">
+            Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+          </Label>
+          <Input
+            id="au-motivo"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Ej. Vacaciones de verano"
+            maxLength={200}
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+            {crear.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
+            Registrar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function TarjetaAusencia({
+  ausencia,
+  onCambio,
+}: {
+  ausencia: AusenciaRota;
+  onCambio: () => void;
+}) {
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarAusenciaRota(ausencia.id),
+    onSuccess: () => {
+      toast.success("Ausencia eliminada.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const etiquetaTipo =
+    TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ?? ausencia.tipo;
+
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between gap-3 p-4">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{ausencia.miembro_nombre || "—"}</span>
+            <Badge variant="secondary" className="font-normal">
+              {etiquetaTipo}
+            </Badge>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {formatearRango(ausencia.desde, ausencia.hasta)}
+          </div>
+          {ausencia.motivo && (
+            <div className="text-sm text-muted-foreground">{ausencia.motivo}</div>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Borrar ausencia"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => borrar.mutate()}
+          disabled={borrar.isPending}
+        >
+          {borrar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -566,6 +1395,8 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
   const [fecha, setFecha] = React.useState("");
   const [hora, setHora] = React.useState("");
   const [contenido, setContenido] = React.useState("");
+  const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
+  const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
 
   const crear = useMutation({
     mutationFn: () =>
@@ -574,12 +1405,16 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
         fecha,
         hora: hora.trim(),
         contenido: contenido.trim(),
+        tipo_cobertura: tipoCobertura,
+        prioridad,
       }),
     onSuccess: () => {
       toast.success("Evento creado.");
       setTitulo("");
       setHora("");
       setContenido("");
+      setTipoCobertura("transmision");
+      setPrioridad("media");
       onCreado();
     },
     onError: (e) => toast.error(mensajeError(e)),
@@ -621,6 +1456,41 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
             />
           </div>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label>Cobertura</Label>
+            <Select
+              value={tipoCobertura}
+              onValueChange={(v) => setTipoCobertura(v as TipoCoberturaEvento)}
+            >
+              <SelectTrigger aria-label="Tipo de cobertura">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_COBERTURA.map((t) => (
+                  <SelectItem key={t.valor} value={t.valor}>
+                    {t.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Prioridad</Label>
+            <Select value={prioridad} onValueChange={(v) => setPrioridad(v as PrioridadEvento)}>
+              <SelectTrigger aria-label="Prioridad">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORIDADES.map((p) => (
+                  <SelectItem key={p.valor} value={p.valor}>
+                    {p.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
         <div className="space-y-1.5">
           <Label htmlFor="ev-contenido">
             Qué sacar <span className="font-normal text-muted-foreground">(opcional)</span>
@@ -659,21 +1529,42 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Edición inline de cobertura/prioridad (cambiar cobertura reprograma -> "Cambió").
+  const editar = useMutation({
+    mutationFn: (cuerpo: { tipo_cobertura?: TipoCoberturaEvento; prioridad?: PrioridadEvento }) =>
+      api.actualizarEventoRota(evento.id, cuerpo),
+    onSuccess: () => onCambio(),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
+  const IconoCob = cob.icono;
+
   return (
     <Card>
       <CardContent className="flex items-start justify-between gap-3 p-4">
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 flex-1 space-y-1.5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{evento.titulo}</span>
+            <Badge variant="outline" className={`gap-1 font-normal ${cob.chip}`}>
+              <IconoCob className="h-3 w-3" /> {cob.etiqueta}
+            </Badge>
             {evento.es_sabado && (
               <Badge variant="outline" className="font-normal">
                 Sábado
+              </Badge>
+            )}
+            {evento.cambiado && (
+              <Badge variant="aviso" className="gap-1 font-normal">
+                <BellRing className="h-3 w-3" /> Cambió
               </Badge>
             )}
           </div>
           <div className="text-xs text-muted-foreground">
             {formatearFechaCorta(evento.fecha)}
             {evento.hora ? ` · ${evento.hora}` : ""}
+            {" · "}
+            <span className={COLOR_PRIORIDAD[evento.prioridad]}>prioridad {evento.prioridad}</span>
           </div>
           {evento.contenido && (
             <div className="text-sm text-muted-foreground">
@@ -681,6 +1572,41 @@ function TarjetaEvento({ evento, onCambio }: { evento: EventoRota; onCambio: () 
               {evento.contenido}
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Select
+              value={evento.tipo_cobertura}
+              onValueChange={(v) => editar.mutate({ tipo_cobertura: v as TipoCoberturaEvento })}
+              disabled={editar.isPending}
+            >
+              <SelectTrigger aria-label="Cambiar cobertura" className="h-8 w-[11rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_COBERTURA.map((t) => (
+                  <SelectItem key={t.valor} value={t.valor}>
+                    {t.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={evento.prioridad}
+              onValueChange={(v) => editar.mutate({ prioridad: v as PrioridadEvento })}
+              disabled={editar.isPending}
+            >
+              <SelectTrigger aria-label="Cambiar prioridad" className="h-8 w-[7rem] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PRIORIDADES.map((p) => (
+                  <SelectItem key={p.valor} value={p.valor}>
+                    {p.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {evento.cambiado && <BotonMarcarAvisado evento={evento} onCambio={onCambio} />}
+          </div>
         </div>
         <Button
           variant="ghost"

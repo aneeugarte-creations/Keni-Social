@@ -142,3 +142,91 @@ def test_viola_rotacion_sabado():
     assert r.viola_rotacion_sabado("u0", "u1", override=False) is False
     # Sin sábado previo: no viola.
     assert r.viola_rotacion_sabado("", "u0", override=False) is False
+
+
+# --------------------------------------------------------------------------- #
+# Gestión de turnos: horario de TRABAJO (proponer_horario)                      #
+# --------------------------------------------------------------------------- #
+
+
+def _franjas_por_dia(p: r.PropuestaHorario, fecha: str) -> list[str]:
+    return [t.franja for t in p.turnos if t.fecha == fecha]
+
+
+def test_proponer_horario_cubre_manana_y_tarde_cada_dia():
+    equipo = _equipo(3)
+    p = r.proponer_horario(equipo, _lunes(SAB1))
+    for fecha in r.dias_de_semana(_lunes(SAB1)):
+        franjas = _franjas_por_dia(p, fecha)
+        assert franjas.count("matutino") >= 1
+        assert franjas.count("vespertino") >= 1
+        # Con 3 personas, cada día queda 1 en descanso.
+        assert franjas.count("descanso") >= 1
+
+
+def test_proponer_horario_excluye_a_quien_esta_ausente():
+    equipo = _equipo(3)
+    # u0 (Ana) de vacaciones toda la semana del SAB1.
+    ausencias = [r.Ausencia("u0", "2026-05-25", "2026-05-31", "vacaciones")]
+    p = r.proponer_horario(equipo, _lunes(SAB1), ausencias=ausencias)
+    asignados = {t.miembro_id for t in p.turnos}
+    assert "u0" not in asignados  # nunca se asigna al ausente
+
+
+def test_miembro_ausente_predicado():
+    aus = [r.Ausencia("u0", "2026-05-25", "2026-05-27", "baja")]
+    assert r.miembro_ausente(aus, "u0", "2026-05-26") is True
+    assert r.miembro_ausente(aus, "u0", "2026-05-28") is False  # fuera de rango
+    assert r.miembro_ausente(aus, "u1", "2026-05-26") is False  # otro miembro
+    assert r.miembro_ausente(aus, "u0", "no-fecha") is False  # fecha rota no rompe
+
+
+def test_proponer_horario_no_repite_sabado_de_trabajo_consecutivo():
+    equipo = _equipo(3)
+    # Quien trabajó el sábado previo no entra a trabajar este sábado.
+    p = r.proponer_horario(equipo, _lunes(SAB1))
+    sab1_fecha = SAB1
+    trabajan_sab1 = {
+        t.miembro_id for t in p.turnos if t.fecha == sab1_fecha and t.franja in ("matutino", "vespertino")
+    }
+    p2 = r.proponer_horario(equipo, _lunes(SAB2), sabados_previos=trabajan_sab1)
+    trabajan_sab2 = {
+        t.miembro_id for t in p2.turnos if t.fecha == SAB2 and t.franja in ("matutino", "vespertino")
+    }
+    assert trabajan_sab1.isdisjoint(trabajan_sab2)  # nadie repite sábado de trabajo
+
+
+def test_proponer_horario_es_determinista():
+    equipo = _equipo(4)
+    a = r.proponer_horario(equipo, _lunes(SAB1))
+    b = r.proponer_horario(equipo, _lunes(SAB1))
+    assert [(t.fecha, t.miembro_id, t.franja) for t in a.turnos] == [
+        (t.fecha, t.miembro_id, t.franja) for t in b.turnos
+    ]
+
+
+def test_proponer_horario_equipo_pequeno_avisa():
+    equipo = _equipo(1)
+    p = r.proponer_horario(equipo, _lunes(SAB1))
+    # Con una sola persona no se puede cubrir mañana Y tarde: avisa, no inventa.
+    assert p.avisos
+    # Aun así propone (la única persona cubre la mañana cada día).
+    assert all(t.franja == "matutino" for t in p.turnos)
+
+
+def test_proponer_horario_sin_equipo_no_rompe():
+    p = r.proponer_horario([], _lunes(SAB1))
+    assert p.turnos == []
+    assert p.avisos
+
+
+def test_viola_rotacion_sabado_trabajo():
+    previos = {"u0"}
+    # u0 trabajó el sábado previo: ponerlo a trabajar de nuevo (matutino) sin override viola.
+    assert r.viola_rotacion_sabado_trabajo(previos, "u0", override=False, franja="matutino") is True
+    # Con override, no viola.
+    assert r.viola_rotacion_sabado_trabajo(previos, "u0", override=True, franja="matutino") is False
+    # Si descansa, no trabaja: no viola.
+    assert r.viola_rotacion_sabado_trabajo(previos, "u0", override=False, franja="descanso") is False
+    # Otra persona: no viola.
+    assert r.viola_rotacion_sabado_trabajo(previos, "u1", override=False, franja="matutino") is False

@@ -59,7 +59,53 @@ ROL_EDITOR = "editor"
 
 # Estados de un turno de la rota (F4 · #144): `propuesto` es lo que Keni genera;
 # `aprobado` es lo que Elias publica al equipo (nada se publica antes de aprobar).
-# Operacional; vive en SQLite.
+# Operacional; vive en SQLite. Lo COMPARTEN los turnos de cobertura de eventos
+# (`rota_turnos`) y los turnos de trabajo del horario del equipo (`rota_turnos_trabajo`):
+# misma frontera de aprobacion (Keni propone -> Elias aprueba y publica).
 ESTADOS_ROTA: tuple[str, ...] = ("propuesto", "aprobado")
 ESTADO_ROTA_PROPUESTO = "propuesto"
 ESTADO_ROTA_APROBADO = "aprobado"
+
+# Franjas de un turno de TRABAJO del horario del equipo (F4 · #144, gestion de turnos):
+# Elias reparte el dia entre `matutino` (Luis "de 8 de la manana a 4 de la tarde") y
+# `vespertino` (Tescu "de 4 a 12 de la noche"); quien no entra ese dia `descansa`. Las
+# VACACIONES/AUSENCIAS NO son una franja: son "ese dia no se asigna" (se excluye al
+# miembro). Operacional; vive en SQLite (`rota_turnos_trabajo.franja`).
+FRANJAS_TURNO: tuple[str, ...] = ("matutino", "vespertino", "descanso")
+FRANJA_MATUTINO = "matutino"
+FRANJA_VESPERTINO = "vespertino"
+FRANJA_DESCANSO = "descanso"
+
+# Franjas que cuentan como JORNADA LABORAL (el miembro entra a trabajar ese dia). El
+# `descanso` no cubre el dia; por eso la rotacion de sabados solo mira las dos primeras.
+FRANJAS_TRABAJO: tuple[str, ...] = (FRANJA_MATUTINO, FRANJA_VESPERTINO)
+
+# Tipos de una AUSENCIA del horario (F4 · #144): el proponedor los respeta por igual
+# (cualquier ausencia que cubra una fecha excluye al miembro ese dia). `vacaciones` es el
+# caso de Elias ("las vacaciones, esto por el acomodo"); `descanso` es un dia libre
+# planificado; `baja` una ausencia medica/forzosa; `otro` el cajon de sastre. Operacional;
+# vive en SQLite (`rota_ausencias.tipo`).
+TIPOS_AUSENCIA: tuple[str, ...] = ("vacaciones", "descanso", "baja", "otro")
+
+# Tipo de COBERTURA de un evento del calendario (F4 · #144, ola B). Elias distingue tres
+# casos reales: `transmision` (sale con senal/transmision), `imagenes` ("algunos no los
+# vamos a transmitir, pero si los cubrimos con imagenes y fotografias") y `no_cubrir` (se
+# trackea en el calendario pero NO se asigna cobertura). DEFAULT `transmision`: un evento
+# legado (sin tipo) se trata como transmision, asi que el proponedor lo sigue cubriendo.
+# Operacional; vive en SQLite (`rota_eventos.tipo_cobertura`).
+TIPOS_COBERTURA: tuple[str, ...] = ("transmision", "imagenes", "no_cubrir")
+TIPO_COBERTURA_TRANSMISION = "transmision"
+TIPO_COBERTURA_IMAGENES = "imagenes"
+TIPO_COBERTURA_NO_CUBRIR = "no_cubrir"
+
+# Solo estos tipos GENERAN un turno de cobertura al proponer la rota: `no_cubrir` queda
+# fuera (se trackea pero no se asigna a nadie).
+TIPOS_COBERTURA_ASIGNABLES: tuple[str, ...] = (
+    TIPO_COBERTURA_TRANSMISION,
+    TIPO_COBERTURA_IMAGENES,
+)
+
+# Prioridad de un evento del calendario (F4 · #144, ola B): pista visual para que el
+# equipo decida que cubre primero. DEFAULT `media`. Operacional (`rota_eventos.prioridad`).
+PRIORIDADES_EVENTO: tuple[str, ...] = ("alta", "media", "baja")
+PRIORIDAD_EVENTO_DEFECTO = "media"

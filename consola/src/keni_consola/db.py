@@ -76,7 +76,14 @@ from .estados import (
     ESTADOS_COMERCIAL,
     ESTADOS_ROTA,
     ESTADOS_TAREA,
+    FRANJA_DESCANSO,
+    FRANJAS_TURNO,
     METRICAS_COMERCIAL,
+    PRIORIDAD_EVENTO_DEFECTO,
+    TIPO_COBERTURA_TRANSMISION,
+    TIPOS_AUSENCIA,
+    TIPOS_COBERTURA,
+    PRIORIDADES_EVENTO,
 )
 
 __all__ = [
@@ -86,36 +93,51 @@ __all__ = [
     "ESTADOS_COMERCIAL",
     "ESTADOS_ROTA",
     "ESTADOS_TAREA",
+    "FRANJAS_TURNO",
     "METRICAS_COMERCIAL",
+    "PRIORIDADES_EVENTO",
+    "TIPOS_COBERTURA",
+    "TIPOS_AUSENCIA",
     "actualizar_estado_tarea",
     "actualizar_evento_rota",
     "actualizar_publicacion_comercial",
+    "actualizar_ausencia_rota",
     "actualizar_tarea",
     "actualizar_turno_rota",
+    "actualizar_turno_trabajo_rota",
+    "aprobar_semana_horario_rota",
     "aprobar_semana_rota",
     "arrancar_persistencia",
+    "borrar_ausencia_rota",
     "borrar_evento_rota",
     "borrar_publicacion_comercial",
     "borrar_tarea",
     "borrar_turnos_semana_rota",
+    "borrar_turnos_trabajo_semana_rota",
     "cancelar_job",
     "conectar",
+    "crear_ausencia_rota",
     "crear_evento_rota",
     "crear_publicacion_comercial",
     "crear_tarea",
     "crear_turno_rota",
+    "crear_turno_trabajo_rota",
     "encolar_job",
     "job_cancelado",
+    "listar_ausencias_rota",
     "listar_eventos_rota",
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
     "listar_tareas",
     "listar_turnos_rota",
+    "listar_turnos_trabajo_rota",
     "marcar_aviso_comercial",
+    "obtener_ausencia_rota",
     "obtener_evento_rota",
     "obtener_publicacion_comercial",
     "obtener_tarea",
     "obtener_turno_rota",
+    "obtener_turno_trabajo_rota",
     "reclamar_job",
     "registrar_snapshot_comercial",
     "terminar_job",
@@ -176,6 +198,8 @@ _TABLAS_CON_DATOS: tuple[str, ...] = (
     "comercial_snapshots",
     "rota_eventos",
     "rota_turnos",
+    "rota_turnos_trabajo",
+    "rota_ausencias",
 )
 
 
@@ -321,15 +345,24 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
+    # `tipo_cobertura`/`prioridad`/`cambiado`/`actualizado` (ola B): el evento ya no es
+    # solo "que sacar"; lleva COMO se cubre (transmision|imagenes|no_cubrir), su PRIORIDAD
+    # y si se REPROGRAMO (`cambiado`=1: hay que volver a avisar al equipo). `actualizado`
+    # se refresca en cada edicion. Para bases NUEVAS se declaran aqui; las viejas las
+    # migra `_migrar_columnas_eventos_rota` (idempotente, solo SQLite).
     """
     CREATE TABLE IF NOT EXISTS rota_eventos (
-        id          TEXT PRIMARY KEY,
-        titulo      TEXT NOT NULL,
-        fecha       TEXT NOT NULL DEFAULT '',
-        hora        TEXT NOT NULL DEFAULT '',
-        contenido   TEXT NOT NULL DEFAULT '',
-        nota        TEXT NOT NULL DEFAULT '',
-        creado      TEXT NOT NULL DEFAULT ''
+        id             TEXT PRIMARY KEY,
+        titulo         TEXT NOT NULL,
+        fecha          TEXT NOT NULL DEFAULT '',
+        hora           TEXT NOT NULL DEFAULT '',
+        contenido      TEXT NOT NULL DEFAULT '',
+        nota           TEXT NOT NULL DEFAULT '',
+        tipo_cobertura TEXT NOT NULL DEFAULT 'transmision',
+        prioridad      TEXT NOT NULL DEFAULT 'media',
+        cambiado       INTEGER NOT NULL DEFAULT 0,
+        actualizado    TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
@@ -349,6 +382,46 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
+    # Horario de TRABAJO del equipo (F4 · #144, gestion de turnos): el reparto del turno
+    # de cada persona por dia (matutino/vespertino/descanso), por semana, con estado
+    # propuesto|aprobado y un `override` que rompe la rotacion de sabados. `nota_relevo` es
+    # el reporte de fin de turno ("que esta pendiente para el siguiente turno"). Paralela a
+    # `rota_turnos` (cobertura de eventos): no la sustituye, la complementa.
+    """
+    CREATE TABLE IF NOT EXISTS rota_turnos_trabajo (
+        id             TEXT PRIMARY KEY,
+        semana         TEXT NOT NULL,
+        fecha          TEXT NOT NULL DEFAULT '',
+        miembro_id     TEXT NOT NULL DEFAULT '',
+        miembro_nombre TEXT NOT NULL DEFAULT '',
+        franja         TEXT NOT NULL DEFAULT 'descanso',
+        estado         TEXT NOT NULL DEFAULT 'propuesto',
+        override       INTEGER NOT NULL DEFAULT 0,
+        motivo         TEXT NOT NULL DEFAULT '',
+        nota_relevo    TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT '',
+        actualizado    TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_trabajo_semana ON rota_turnos_trabajo (semana)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_trabajo_miembro "
+    "ON rota_turnos_trabajo (miembro_id)",
+    # Ausencias/vacaciones del horario (F4 · #144): un rango de fechas (inclusivo) en que un
+    # miembro NO esta disponible. El proponedor del horario las RESPETA (excluye al miembro
+    # esos dias). `tipo` es vacaciones|descanso|baja|otro.
+    """
+    CREATE TABLE IF NOT EXISTS rota_ausencias (
+        id             TEXT PRIMARY KEY,
+        miembro_id     TEXT NOT NULL DEFAULT '',
+        miembro_nombre TEXT NOT NULL DEFAULT '',
+        tipo           TEXT NOT NULL DEFAULT 'otro',
+        desde          TEXT NOT NULL DEFAULT '',
+        hasta          TEXT NOT NULL DEFAULT '',
+        motivo         TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_ausencias_miembro ON rota_ausencias (miembro_id)",
     # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
@@ -385,6 +458,7 @@ def _crear_esquema(con: Any) -> None:
         con.execute(sentencia)
     if not motor_db.es_postgres():
         _migrar_columnas_tareas(con)
+        _migrar_columnas_eventos_rota(con)
     con.commit()
 
 
@@ -414,6 +488,38 @@ def _migrar_columnas_tareas(con: Any) -> None:
     for columna in _COLUMNAS_TAREAS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
+
+
+# Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
+# Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
+# retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
+#   - tipo_cobertura: transmision|imagenes|no_cubrir; legado -> "transmision" (sigue cubierto).
+#   - prioridad: alta|media|baja; legado -> "media".
+#   - cambiado: 0/1, "se reprogramo, hay que avisar"; legado -> 0 (sin reprogramar).
+#   - actualizado: timestamp de la ultima edicion; legado -> "" (nunca editado tras migrar).
+# Cada par es (columna, fragmento de tipo/DEFAULT) para emitir el ALTER correcto.
+_COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("tipo_cobertura", "TEXT NOT NULL DEFAULT 'transmision'"),
+    ("prioridad", "TEXT NOT NULL DEFAULT 'media'"),
+    ("cambiado", "INTEGER NOT NULL DEFAULT 0"),
+    ("actualizado", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_eventos_rota(con: Any) -> None:
+    """Anade a `rota_eventos` las columnas de la ola B que una BD vieja no tuviera (idempotente).
+
+    El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
+    antes de la ampliacion (cobertura/prioridad/reprogramaciones) no las tiene. Recorre
+    `_COLUMNAS_EVENTO_ROTA_AMPLIADAS` y anade solo la que falte con su DEFAULT: los eventos
+    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada.
+    """
+    columnas = {
+        fila["name"] for fila in con.execute("PRAGMA table_info(rota_eventos)").fetchall()
+    }
+    for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -972,9 +1078,33 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 #                     nada al equipo hasta que la semana esta `aprobada`.
 # El PROPONEDOR (rota.py) es puro; aqui solo se persiste lo que la API decide.
 
-_COLS_EVENTO_ROTA = ("id", "titulo", "fecha", "hora", "contenido", "nota", "creado")
+# Columnas de `rota_eventos`. La ola B (#144) anade tipo_cobertura/prioridad/cambiado/
+# actualizado: `cambiado`/`actualizado` son GESTIONADAS POR EL SISTEMA (no editables a
+# pelo: `cambiado` lo derivamos al reprogramar y `actualizado` se refresca en cada edicion),
+# por eso quedan fuera de `_CAMPOS_EDITABLES_EVENTO_ROTA`.
+_COLS_EVENTO_ROTA = (
+    "id",
+    "titulo",
+    "fecha",
+    "hora",
+    "contenido",
+    "nota",
+    "tipo_cobertura",
+    "prioridad",
+    "cambiado",
+    "actualizado",
+    "creado",
+)
 _SELECT_EVENTO_ROTA = f"SELECT {', '.join(_COLS_EVENTO_ROTA)} FROM rota_eventos"
-_CAMPOS_EDITABLES_EVENTO_ROTA = ("titulo", "fecha", "hora", "contenido", "nota")
+_CAMPOS_EDITABLES_EVENTO_ROTA = (
+    "titulo",
+    "fecha",
+    "hora",
+    "contenido",
+    "nota",
+    "tipo_cobertura",
+    "prioridad",
+)
 
 _COLS_TURNO_ROTA = (
     "id",
@@ -992,7 +1122,13 @@ _SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
 
 
 def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
-    return {col: fila[col] for col in _COLS_EVENTO_ROTA}
+    evento = {col: fila[col] for col in _COLS_EVENTO_ROTA}
+    # `cambiado` se persiste como 0/1; lo exponemos como bool para la capa API/UI.
+    evento["cambiado"] = bool(fila["cambiado"])
+    # Defensa retrocompatible: una fila migrada con NULL/"" cae al valor por defecto.
+    evento["tipo_cobertura"] = fila["tipo_cobertura"] or TIPO_COBERTURA_TRANSMISION
+    evento["prioridad"] = fila["prioridad"] or PRIORIDAD_EVENTO_DEFECTO
+    return evento
 
 
 def _fila_a_turno_rota(fila: Any) -> dict[str, Any]:
@@ -1011,8 +1147,13 @@ def crear_evento_rota(
     hora: str = "",
     contenido: str = "",
     nota: str = "",
+    tipo_cobertura: str = TIPO_COBERTURA_TRANSMISION,
+    prioridad: str = PRIORIDAD_EVENTO_DEFECTO,
 ) -> dict[str, Any]:
-    """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API)."""
+    """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API).
+
+    Nace `cambiado=0` (sin reprogramar) y con `actualizado`=`creado` (alta = primera version).
+    """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
@@ -1021,6 +1162,10 @@ def crear_evento_rota(
         "hora": hora or "",
         "contenido": contenido or "",
         "nota": nota or "",
+        "tipo_cobertura": tipo_cobertura if tipo_cobertura in TIPOS_COBERTURA else TIPO_COBERTURA_TRANSMISION,
+        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_EVENTO_DEFECTO,
+        "cambiado": 0,
+        "actualizado": ahora,
         "creado": ahora,
     }
     con = _conectar()
@@ -1033,13 +1178,23 @@ def crear_evento_rota(
         con.commit()
     finally:
         con.close()
+    fila["cambiado"] = bool(fila["cambiado"])
     return fila
 
 
 def listar_eventos_rota(
-    desde: str | None = None, hasta: str | None = None
+    desde: str | None = None,
+    hasta: str | None = None,
+    *,
+    solo_cambiados: bool = False,
+    tipo_cobertura: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Eventos de la rota, en orden cronologico. Filtro opcional por rango de fechas (ISO)."""
+    """Eventos de la rota, en orden cronologico. Filtros opcionales (todos combinables).
+
+    `desde`/`hasta` acotan por rango de fechas (ISO). `solo_cambiados` deja solo los
+    REPROGRAMADOS (`cambiado=1`, los que Elias debe re-avisar). `tipo_cobertura` filtra por
+    tipo de cobertura (transmision|imagenes|no_cubrir); la API ya valida el valor.
+    """
     clausulas: list[str] = []
     params: list[Any] = []
     if desde:
@@ -1048,6 +1203,12 @@ def listar_eventos_rota(
     if hasta:
         clausulas.append("fecha <= ?")
         params.append(hasta)
+    if solo_cambiados:
+        clausulas.append("cambiado = ?")
+        params.append(1)
+    if tipo_cobertura:
+        clausulas.append("tipo_cobertura = ?")
+        params.append(tipo_cobertura)
     sql = _SELECT_EVENTO_ROTA
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)
@@ -1069,18 +1230,51 @@ def obtener_evento_rota(evento_id: str) -> dict[str, Any] | None:
     return _fila_a_evento_rota(fila) if fila is not None else None
 
 
+# Campos cuya EDICION reprograma el evento: si cambia su valor, `cambiado` se pone a 1
+# (hay que volver a avisar al equipo). Son los datos "logisticos" que el equipo de
+# programacion mueve constantemente ("tres cambios en horarios para el fin de semana").
+_CAMPOS_REPROGRAMAN_EVENTO: tuple[str, ...] = ("fecha", "hora", "tipo_cobertura")
+
+
 def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    """Edita parcialmente un evento; None si el id no existe. Solo campos editables."""
+    """Edita parcialmente un evento; None si el id no existe.
+
+    Reglas de SEGUIMIENTO DE CAMBIOS (ola B, #144):
+      - `actualizado` SIEMPRE se refresca (toda edicion deja marca temporal).
+      - Si la edicion cambia `fecha`, `hora` o `tipo_cobertura` -> `cambiado=1` automatico
+        (se reprogramo: el equipo debe re-enterarse). Solo si el valor REALMENTE cambia.
+      - Si el request trae `cambiado=False` explicito (la accion "ya avisé / visto" de
+        Elias) -> se LIMPIA a 0, y limpiar GANA aunque en el mismo request se hubiera
+        reprogramado (Elias dice "ya está visto").
+    Solo se escriben los campos editables; `cambiado`/`actualizado` los gestiona el sistema.
+    """
+    actual = obtener_evento_rota(evento_id)
+    if actual is None:
+        return None
+
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_EVENTO_ROTA}
-    if not cambios:
-        return obtener_evento_rota(evento_id)
+
+    # ¿Se reprogramo? Solo cuenta un cambio REAL de fecha/hora/tipo_cobertura.
+    reprogramado = any(
+        k in cambios and cambios[k] != actual.get(k) for k in _CAMPOS_REPROGRAMAN_EVENTO
+    )
+    nuevo_cambiado = 1 if reprogramado else int(bool(actual["cambiado"]))
+    # La accion explicita "marcar avisado" (cambiado=False) limpia y GANA al reprograma.
+    if "cambiado" in campos and not campos["cambiado"]:
+        nuevo_cambiado = 0
+    elif "cambiado" in campos and campos["cambiado"]:
+        nuevo_cambiado = 1
+
+    ahora = datetime.now().isoformat(timespec="seconds")
     asignaciones = [f"{k} = ?" for k in cambios]
-    params: list[Any] = list(cambios.values())
-    params.append(evento_id)
+    asignaciones.append("cambiado = ?")
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), nuevo_cambiado, ahora, evento_id]
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE rota_eventos SET {', '.join(asignaciones)} WHERE id = ?", tuple(params)
+            f"UPDATE rota_eventos SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- columnas de allowlist
+            tuple(params),
         )
         con.commit()
         if cur.rowcount == 0:
@@ -1222,6 +1416,320 @@ def aprobar_semana_rota(semana: str) -> int:
         )
         con.commit()
         return cur.rowcount
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Horario de TRABAJO del equipo (F4 · #144, gestion de turnos): turnos + ausencias #
+# --------------------------------------------------------------------------- #
+#
+# Paralelo a la cobertura de eventos: el reparto del TURNO de cada persona por dia
+# (matutino/vespertino/descanso) y las AUSENCIAS/vacaciones que el proponedor respeta.
+# El PROPONEDOR (rota.py, `proponer_horario`) es puro; aqui solo se persiste lo que la
+# API decide. Nada se publica al equipo hasta que la semana esta `aprobada`.
+
+_COLS_TURNO_TRABAJO_ROTA = (
+    "id",
+    "semana",
+    "fecha",
+    "miembro_id",
+    "miembro_nombre",
+    "franja",
+    "estado",
+    "override",
+    "motivo",
+    "nota_relevo",
+    "creado",
+    "actualizado",
+)
+_SELECT_TURNO_TRABAJO_ROTA = (
+    f"SELECT {', '.join(_COLS_TURNO_TRABAJO_ROTA)} FROM rota_turnos_trabajo"
+)
+
+_COLS_AUSENCIA_ROTA = (
+    "id",
+    "miembro_id",
+    "miembro_nombre",
+    "tipo",
+    "desde",
+    "hasta",
+    "motivo",
+    "creado",
+)
+_SELECT_AUSENCIA_ROTA = f"SELECT {', '.join(_COLS_AUSENCIA_ROTA)} FROM rota_ausencias"
+
+
+def _fila_a_turno_trabajo_rota(fila: Any) -> dict[str, Any]:
+    turno = {col: fila[col] for col in _COLS_TURNO_TRABAJO_ROTA}
+    turno["override"] = bool(fila["override"])
+    return turno
+
+
+def _fila_a_ausencia_rota(fila: Any) -> dict[str, Any]:
+    return {col: fila[col] for col in _COLS_AUSENCIA_ROTA}
+
+
+# --- Turnos de trabajo (asignaciones del horario) -----------------------------
+
+
+def crear_turno_trabajo_rota(
+    semana: str,
+    fecha: str,
+    *,
+    miembro_id: str = "",
+    miembro_nombre: str = "",
+    franja: str = FRANJA_DESCANSO,
+    estado: str = ESTADO_ROTA_PROPUESTO,
+    override: bool = False,
+    motivo: str = "",
+    nota_relevo: str = "",
+) -> dict[str, Any]:
+    """Inserta un turno de trabajo (asignacion de horario) y lo devuelve. NO valida (lo hace la API)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "semana": semana,
+        "fecha": fecha or "",
+        "miembro_id": miembro_id or "",
+        "miembro_nombre": miembro_nombre or "",
+        "franja": franja if franja in FRANJAS_TURNO else FRANJA_DESCANSO,
+        "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
+        "override": 1 if override else 0,
+        "motivo": motivo or "",
+        "nota_relevo": nota_relevo or "",
+        "creado": ahora,
+        "actualizado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_TURNO_TRABAJO_ROTA)
+        con.execute(
+            f"INSERT INTO rota_turnos_trabajo ({', '.join(_COLS_TURNO_TRABAJO_ROTA)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_TURNO_TRABAJO_ROTA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    fila["override"] = bool(fila["override"])
+    return fila
+
+
+def listar_turnos_trabajo_rota(semana: str | None = None) -> list[dict[str, Any]]:
+    """Turnos de trabajo del horario; filtro opcional por `semana` (lunes ISO)."""
+    sql = _SELECT_TURNO_TRABAJO_ROTA
+    params: tuple[Any, ...] = ()
+    if semana:
+        sql += " WHERE semana = ?"
+        params = (semana,)
+    sql += " ORDER BY semana ASC, fecha ASC, franja ASC, creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_turno_trabajo_rota(f) for f in filas]
+
+
+def obtener_turno_trabajo_rota(turno_id: str) -> dict[str, Any] | None:
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_TURNO_TRABAJO_ROTA} WHERE id = ?", (turno_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_turno_trabajo_rota(fila) if fila is not None else None
+
+
+def actualizar_turno_trabajo_rota(
+    turno_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita un turno de trabajo (franja/miembro/override/motivo/nota_relevo/estado); None si no existe.
+
+    Pone `actualizado` a ahora. `override` se normaliza a 0/1. NO valida (lo hace la API).
+    """
+    editables = (
+        "miembro_id",
+        "miembro_nombre",
+        "franja",
+        "estado",
+        "override",
+        "motivo",
+        "nota_relevo",
+    )
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if "override" in cambios:
+        cambios["override"] = 1 if cambios["override"] else 0
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(turno_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE rota_turnos_trabajo SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_TURNO_TRABAJO_ROTA} WHERE id = ?", (turno_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_turno_trabajo_rota(fila) if fila is not None else None
+
+
+def borrar_turnos_trabajo_semana_rota(semana: str) -> int:
+    """Borra TODOS los turnos de trabajo de una semana (al re-proponer). Devuelve cuantos borro."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM rota_turnos_trabajo WHERE semana = ?", (semana,))
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def aprobar_semana_horario_rota(semana: str) -> int:
+    """Marca TODOS los turnos de trabajo de una semana como `aprobado` (publica al equipo).
+
+    Devuelve cuantos turnos quedaron aprobados. Idempotente: re-aprobar no rompe.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE rota_turnos_trabajo SET estado = ?, actualizado = ? WHERE semana = ?",
+            (ESTADO_ROTA_APROBADO, ahora, semana),
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+# --- Ausencias / vacaciones ---------------------------------------------------
+
+
+def crear_ausencia_rota(
+    miembro_id: str,
+    desde: str,
+    hasta: str,
+    *,
+    miembro_nombre: str = "",
+    tipo: str = "otro",
+    motivo: str = "",
+) -> dict[str, Any]:
+    """Inserta una ausencia (rango inclusivo) y la devuelve. NO valida (lo hace la API)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "miembro_id": miembro_id or "",
+        "miembro_nombre": miembro_nombre or "",
+        "tipo": tipo if tipo in TIPOS_AUSENCIA else "otro",
+        "desde": desde or "",
+        "hasta": hasta or "",
+        "motivo": motivo or "",
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_AUSENCIA_ROTA)
+        con.execute(
+            f"INSERT INTO rota_ausencias ({', '.join(_COLS_AUSENCIA_ROTA)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_AUSENCIA_ROTA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def listar_ausencias_rota(
+    miembro_id: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[dict[str, Any]]:
+    """Ausencias de la rota, mas recientes primero. Filtros opcionales por miembro y solape de rango.
+
+    `desde`/`hasta` filtran las ausencias que SOLAPAN con ese rango (ausencia.hasta >= desde
+    AND ausencia.desde <= hasta): util para resolver las ausencias relevantes a una semana.
+    """
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if miembro_id:
+        clausulas.append("miembro_id = ?")
+        params.append(miembro_id)
+    if desde:
+        clausulas.append("hasta >= ?")
+        params.append(desde)
+    if hasta:
+        clausulas.append("desde <= ?")
+        params.append(hasta)
+    sql = _SELECT_AUSENCIA_ROTA
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY desde DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_ausencia_rota(f) for f in filas]
+
+
+def obtener_ausencia_rota(ausencia_id: str) -> dict[str, Any] | None:
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_AUSENCIA_ROTA} WHERE id = ?", (ausencia_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_ausencia_rota(fila) if fila is not None else None
+
+
+def actualizar_ausencia_rota(
+    ausencia_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una ausencia (tipo/desde/hasta/motivo); None si el id no existe."""
+    editables = ("tipo", "desde", "hasta", "motivo")
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if not cambios:
+        return obtener_ausencia_rota(ausencia_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = list(cambios.values())
+    params.append(ausencia_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE rota_ausencias SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_AUSENCIA_ROTA} WHERE id = ?", (ausencia_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_ausencia_rota(fila) if fila is not None else None
+
+
+def borrar_ausencia_rota(ausencia_id: str) -> bool:
+    """Borra una ausencia; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM rota_ausencias WHERE id = ?", (ausencia_id,))
+        con.commit()
+        return cur.rowcount > 0
     finally:
         con.close()
 

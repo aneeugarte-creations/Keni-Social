@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/calendar-plus-2qgIczGY.js
 import{E as a}from"./index-OgSmodox.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/calendar-plus-BbIwmIjt.js
+import{E as a}from"./index-DLSgsCmB.js";/**
+========
+import{E as a}from"./index-CGyGNZx5.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/calendar-plus-DpFgN_jK.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

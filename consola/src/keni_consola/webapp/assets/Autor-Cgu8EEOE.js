@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/Autor-Cgu8EEOE.js
 import{E as n,_ as o,y as i}from"./index-OgSmodox.js";import{U as s}from"./user-CK5VLuBG.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/Autor-DsXYBrps.js
+import{E as n,_ as o,y as i}from"./index-DLSgsCmB.js";import{U as s}from"./user-BuO1GA7p.js";/**
+========
+import{E as n,_ as o,y as i}from"./index-CGyGNZx5.js";import{U as s}from"./user-CF9zS56j.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/Autor-CwysRBVP.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

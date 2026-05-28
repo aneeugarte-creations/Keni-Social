@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/select-CYpXQQIF.js
 import{E as It,a6 as a,_ as S,D as Mt,a7 as ye,af as z,a5 as nt,ab as gn,o as Hr,y as de}from"./index-OgSmodox.js";/**
+|||||||| f333624:consola/src/keni_consola/webapp/assets/select-QOHH7yV6.js
+import{E as It,a6 as a,_ as S,D as Mt,a7 as ye,af as z,a5 as nt,ab as gn,o as Hr,y as de}from"./index-DLSgsCmB.js";/**
+========
+import{E as It,a6 as a,_ as S,D as Mt,a7 as ye,af as z,a5 as nt,ab as gn,o as Hr,y as de}from"./index-CGyGNZx5.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/select-gNsw95FI.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

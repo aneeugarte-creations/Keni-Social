@@ -878,7 +878,13 @@ export interface RespuestaEquipoRota {
   equipo: MiembroRota[];
 }
 
-/** Un evento/transmisión a cubrir: cuándo es y QUÉ sacar de él. */
+/** Cómo se cubre un evento: con señal (transmisión), solo imágenes, o no se cubre. */
+export type TipoCoberturaEvento = "transmision" | "imagenes" | "no_cubrir";
+
+/** Prioridad de un evento del calendario (pista visual para qué cubrir primero). */
+export type PrioridadEvento = "alta" | "media" | "baja";
+
+/** Un evento/transmisión a cubrir: cuándo es, QUÉ sacar y CÓMO se cubre. */
 export interface EventoRota {
   id: string;
   titulo: string;
@@ -888,6 +894,14 @@ export interface EventoRota {
   /** "Qué sacar" de esta transmisión (el campo clave del Excel de Elías). */
   contenido: string;
   nota: string;
+  /** Tipo de cobertura: transmisión (con señal) / solo imágenes / no cubrir. */
+  tipo_cobertura: TipoCoberturaEvento;
+  /** Prioridad del evento (alta/media/baja). */
+  prioridad: PrioridadEvento;
+  /** `true` si se reprogramó y aún no se ha avisado al equipo ("Cambió"). */
+  cambiado: boolean;
+  /** ISO de la última edición. */
+  actualizado: string;
   es_sabado: boolean;
 }
 
@@ -905,9 +919,18 @@ export interface CuerpoCrearEventoRota {
   hora?: string;
   contenido?: string;
   nota?: string;
+  tipo_cobertura?: TipoCoberturaEvento;
+  prioridad?: PrioridadEvento;
 }
 
-export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota>;
+/**
+ * Edición parcial de un evento (todo opcional; se manda lo que cambia). Editar
+ * `fecha`/`hora`/`tipo_cobertura` lo marca como reprogramado (`cambiado=1`);
+ * `cambiado:false` es la acción "marcar avisado" (limpia el aviso).
+ */
+export type CuerpoActualizarEventoRota = Partial<CuerpoCrearEventoRota> & {
+  cambiado?: boolean;
+};
 
 /** Estado de un turno: `propuesto` (Keni) o `aprobado` (publicado por Elías). */
 export type EstadoTurnoRota = "propuesto" | "aprobado";
@@ -971,6 +994,110 @@ export interface MiSemanaRota extends RotaSemana {
   miembro_id: string;
   miembro_nombre: string;
   mis_turnos: TurnoRota[];
+  /** Aviso si no hay sesión (token de mantenimiento). */
+  aviso?: string;
+}
+
+// --- Gestión de turnos: horario de trabajo + ausencias (F4 · #144, ola A) ---
+
+/** Tipo de una ausencia/vacación. */
+export type TipoAusencia = "vacaciones" | "descanso" | "baja" | "otro";
+
+/** Una ausencia: un rango (inclusivo) en que un miembro NO está disponible. */
+export interface AusenciaRota {
+  id: string;
+  miembro_id: string;
+  miembro_nombre: string;
+  tipo: TipoAusencia;
+  /** ISO (AAAA-MM-DD), inclusivo. */
+  desde: string;
+  hasta: string;
+  motivo: string;
+}
+
+export interface RespuestaAusenciasRota {
+  ausencias: AusenciaRota[];
+}
+
+export interface RespuestaAusenciaRota {
+  ausencia: AusenciaRota;
+}
+
+export interface CuerpoCrearAusenciaRota {
+  miembro_id: string;
+  desde: string;
+  hasta: string;
+  tipo?: TipoAusencia;
+  motivo?: string;
+}
+
+/** Edición de una ausencia (todo opcional; se manda lo que cambia). */
+export interface CuerpoActualizarAusenciaRota {
+  tipo?: TipoAusencia;
+  desde?: string;
+  hasta?: string;
+  motivo?: string;
+}
+
+/** Franja de un turno de trabajo: mañana / tarde / descanso. */
+export type FranjaTurno = "matutino" | "vespertino" | "descanso";
+
+/** Un turno de TRABAJO: una persona trabaja una franja un día. */
+export interface TurnoTrabajoRota {
+  id: string;
+  /** Lunes ISO de la semana. */
+  semana: string;
+  /** ISO (AAAA-MM-DD). */
+  fecha: string;
+  miembro_id: string;
+  miembro_nombre: string;
+  franja: FranjaTurno;
+  estado: EstadoTurnoRota;
+  /** Cobertura forzada que rompe la rotación de sábados (la decide Elías). */
+  override: boolean;
+  motivo: string;
+  /** Reporte de fin de turno: qué queda pendiente para el siguiente. */
+  nota_relevo: string;
+  es_sabado: boolean;
+}
+
+/** El horario de trabajo de una semana: turnos + rango + si está publicado. */
+export interface HorarioSemana {
+  /** Lunes ISO. */
+  lunes: string;
+  inicio: string;
+  fin: string;
+  /** Las 7 fechas ISO (lunes->domingo) de la semana. */
+  dias: string[];
+  turnos: TurnoTrabajoRota[];
+  /** `true` => todos los turnos aprobados (publicado al equipo). */
+  aprobada: boolean;
+  total: number;
+  /** Avisos de la propuesta (p. ej. equipo insuficiente). Solo tras proponer. */
+  avisos?: string[];
+  /** Mensaje de confirmación (p. ej. tras aprobar). */
+  mensaje?: string;
+}
+
+/** Edición de un turno de trabajo por Elías (todo opcional). */
+export interface CuerpoActualizarTurnoTrabajoRota {
+  franja?: FranjaTurno;
+  miembro_id?: string;
+  override?: boolean;
+  motivo?: string;
+  nota_relevo?: string;
+  estado?: EstadoTurnoRota;
+}
+
+export interface RespuestaTurnoTrabajoRota {
+  turno: TurnoTrabajoRota;
+}
+
+/** "Mi próximo horario": el horario + los turnos de trabajo del usuario actual. */
+export interface MiHorarioRota extends HorarioSemana {
+  miembro_id: string;
+  miembro_nombre: string;
+  mis_turnos: TurnoTrabajoRota[];
   /** Aviso si no hay sesión (token de mantenimiento). */
   aviso?: string;
 }
