@@ -97,15 +97,27 @@ def test_marcar_aviso_solo_primera_vez(pg):
 
 
 def test_rota_eventos_y_turnos(pg):
+    """Modelo ola back3: un turno es horario `(fecha, franja)`; NO va atado a un evento.
+
+    Eventos y turnos viven independientes. Borrar un evento NO arrastra turnos (la
+    "cobertura" es una vista DERIVADA por la API: ver test_api_rota).
+    """
     ev = db.crear_evento_rota("Transmision", fecha="2026-03-01", hora="20:00")
     assert db.obtener_evento_rota(ev["id"])["titulo"] == "Transmision"
-    turno = db.crear_turno_rota("2026-W09", ev["id"], miembro_nombre="luis", override=True)
+    turno = db.crear_turno_rota(
+        "2026-W09", "2026-03-01", miembro_id="u-luis", miembro_nombre="luis",
+        franja="vespertino", override=True,
+    )
     assert turno["override"] is True
+    assert turno["franja"] == "vespertino"
     assert len(db.listar_turnos_rota("2026-W09")) == 1
     assert db.aprobar_semana_rota("2026-W09") == 1
     assert db.listar_turnos_rota("2026-W09")[0]["estado"] == db.ESTADO_ROTA_APROBADO
-    # Borrar el evento arrastra sus turnos.
+    # Borrar el evento NO arrastra turnos (son independientes).
     assert db.borrar_evento_rota(ev["id"]) is True
+    assert len(db.listar_turnos_rota("2026-W09")) == 1
+    # Borrado individual del turno.
+    assert db.borrar_turno_rota(turno["id"]) is True
     assert db.listar_turnos_rota("2026-W09") == []
 
 

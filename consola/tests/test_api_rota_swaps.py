@@ -47,7 +47,7 @@ def _crear_horario(app, equipo: list[dict]) -> None:
     """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
 
     Antes la consola PROPONIA reparto automatico; ahora Elias asigna a mano, asi que los
-    tests siembran directo via `repos.crear_turno_trabajo_rota`. Sembramos a cada miembro
+    tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro
     su turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
     cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que
     se usa en los tests de "consigo mismo" / "destinatario inexistente" — encuentra los
@@ -56,14 +56,14 @@ def _crear_horario(app, equipo: list[dict]) -> None:
     del app  # ya no se usa: sembramos directo en BD.
     primero, segundo = equipo[0], equipo[1]
     for dia in (DIA_A, DIA_B):
-        repos.crear_turno_trabajo_rota(
+        repos.crear_turno_rota(
             LUNES,
             dia,
             miembro_id=primero["id"],
             miembro_nombre=primero["usuario"],
             franja="matutino",
         )
-        repos.crear_turno_trabajo_rota(
+        repos.crear_turno_rota(
             LUNES,
             dia,
             miembro_id=segundo["id"],
@@ -75,7 +75,7 @@ def _crear_horario(app, equipo: list[dict]) -> None:
 def _turno_de(app, miembro_id: str, fecha: str, franjas: tuple[str, ...]) -> dict:
     """Busca un turno de trabajo del miembro en esa fecha (cualquiera de `franjas`) en BD."""
     del app  # ya no se usa: leemos directo de BD.
-    for t in repos.listar_turnos_trabajo_rota(semana=LUNES):
+    for t in repos.listar_turnos_rota(semana=LUNES):
         if t["miembro_id"] == miembro_id and t["fecha"] == fecha and t["franja"] in franjas:
             return t
     raise AssertionError(
@@ -325,7 +325,7 @@ def test_aprobar_swap_aplica_intercambio(entorno):
 
     # Efecto en `rota_turnos_trabajo`: la franja de A pasa a B y viceversa.
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    turnos = token_cli.get(f"/api/rota/horario?lunes={LUNES}").json()["turnos"]
+    turnos = token_cli.get(f"/api/rota/turnos?lunes={LUNES}").json()["turnos"]
     # En (fecha_a, franja_a) ahora trabaja B; en (fecha_b, franja_b) ahora A.
     en_a = next(
         t for t in turnos if t["fecha"] == cuerpo["fecha_a"] and t["franja"] == cuerpo["franja_a"]
@@ -376,12 +376,12 @@ def test_aprobar_swap_turnos_cambiados_409_con_detalle(entorno):
 
     # El admin reasigna el turno de ana (fecha_a, franja_a) a caro (via PATCH directo).
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    turnos = token_cli.get(f"/api/rota/horario?lunes={LUNES}").json()["turnos"]
+    turnos = token_cli.get(f"/api/rota/turnos?lunes={LUNES}").json()["turnos"]
     turno_a = next(
         t for t in turnos if t["fecha"] == cuerpo["fecha_a"] and t["franja"] == cuerpo["franja_a"]
     )
     pr = token_cli.patch(
-        f"/api/rota/horario/turnos/{turno_a['id']}",
+        f"/api/rota/turnos/{turno_a['id']}",
         json={"miembro_id": caro["id"]},
     )
     assert pr.status_code == 200, pr.text

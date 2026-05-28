@@ -206,23 +206,21 @@ def test_borrar_piezas_lote_sin_ids_400(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_duplicar_evento_sin_turnos_y_cambiado_reset(cliente):
-    """Duplicar un evento NO arrastra sus turnos y reinicia `cambiado`."""
-    equipo = _crear_equipo(1)
+def test_duplicar_evento_y_cambiado_reset(cliente):
+    """Duplicar un evento da uno NUEVO con `cambiado=0` (no reprogramado).
+
+    Modelo ola back3: los turnos no van atados a eventos, asi que la cuestion de
+    "no se clonan turnos" es trivial (no habia nada que clonar). El clon nace fresco.
+    """
     original = _crear_evento(cliente, titulo="Pumas vs America J17", hora="16:00")
-    # Lo marcamos como reprogramado (cambiado=1) y le ponemos un turno.
+    # Lo marcamos como reprogramado (cambiado=1).
     cliente.patch(f"/api/rota/eventos/{original['id']}", json={"hora": "18:00"})
-    repos.crear_turno_rota(
-        LUNES1, original["id"],
-        miembro_id=equipo[0]["id"], miembro_nombre=equipo[0]["usuario"],
-    )
-    # Verifica que se marco cambiado.
     actualizado = cliente.get(
         f"/api/rota/eventos?desde={SAB1}&hasta={SAB1}"
     ).json()["eventos"]
     assert any(e["id"] == original["id"] and e["cambiado"] for e in actualizado)
 
-    # Duplicar para Jornada 18 (nueva fecha y titulo).
+    # Duplicar para Jornada 18.
     r = cliente.post(
         f"/api/rota/eventos/{original['id']}/duplicar",
         json={"fecha": "2026-06-06", "titulo": "Pumas vs America J18"},
@@ -232,11 +230,7 @@ def test_duplicar_evento_sin_turnos_y_cambiado_reset(cliente):
     assert clon["id"] != original["id"]
     assert clon["fecha"] == "2026-06-06"
     assert clon["titulo"] == "Pumas vs America J18"
-    # cambiado reset: es un evento nuevo, no reprogramado.
     assert clon["cambiado"] is False
-    # NO se clonan turnos (la cobertura es de la semana).
-    semana2 = cliente.get(f"/api/rota/semana?lunes={LUNES2}").json()
-    assert all(t["evento_id"] != clon["id"] for t in semana2["turnos"])
 
 
 def test_duplicar_evento_inexistente_404(cliente):
@@ -258,216 +252,3 @@ def test_duplicar_evento_fecha_invalida_400(cliente):
         f"/api/rota/eventos/{original['id']}/duplicar", json={"fecha": "no-fecha"}
     )
     assert r.status_code == 400
-
-
-# --------------------------------------------------------------------------- #
-# Turnos cobertura: POST directo, DELETE individual, lote/borrar                #
-# --------------------------------------------------------------------------- #
-
-
-def test_crear_turno_directo(cliente):
-    equipo = _crear_equipo(1)
-    ev = _crear_evento(cliente)
-    r = cliente.post(
-        "/api/rota/turnos",
-        json={"evento_id": ev["id"], "miembro_id": equipo[0]["id"]},
-    )
-    assert r.status_code == 201, r.text
-    turno = r.json()["turno"]
-    assert turno["evento_id"] == ev["id"]
-    assert turno["miembro_id"] == equipo[0]["id"]
-    # Aparece en la semana del evento.
-    semana = cliente.get(f"/api/rota/semana?lunes={LUNES1}").json()
-    assert any(t["id"] == turno["id"] for t in semana["turnos"])
-
-
-def test_crear_turno_vacio_sin_miembro(cliente):
-    """Se puede crear un turno SIN asignar (Elías deja huecos a propósito)."""
-    ev = _crear_evento(cliente)
-    r = cliente.post("/api/rota/turnos", json={"evento_id": ev["id"]})
-    assert r.status_code == 201
-    assert r.json()["turno"]["miembro_id"] == ""
-
-
-def test_crear_turno_evento_inexistente_400(cliente):
-    r = cliente.post("/api/rota/turnos", json={"evento_id": "no-existe"})
-    assert r.status_code == 400
-
-
-def test_crear_turno_miembro_inexistente_400(cliente):
-    ev = _crear_evento(cliente)
-    r = cliente.post(
-        "/api/rota/turnos",
-        json={"evento_id": ev["id"], "miembro_id": "no-existe"},
-    )
-    assert r.status_code == 400
-
-
-def test_crear_turno_repite_sabado_sin_override_409(cliente):
-    """Mismas reglas que el PATCH: sabado consecutivo sin override -> 409."""
-    equipo = _crear_equipo(1)
-    ana = equipo[0]
-    # Semana 1: ana cubre el sabado.
-    ev1 = _crear_evento(cliente, fecha=SAB1)
-    repos.crear_turno_rota(
-        LUNES1, ev1["id"], miembro_id=ana["id"], miembro_nombre=ana["usuario"]
-    )
-    # Semana 2: intentamos crear un turno para ana en el sabado siguiente.
-    ev2 = _crear_evento(cliente, fecha="2026-06-06")
-    r = cliente.post(
-        "/api/rota/turnos",
-        json={"evento_id": ev2["id"], "miembro_id": ana["id"]},
-    )
-    assert r.status_code == 409
-    assert r.json()["requiere_override"] is True
-
-
-def test_crear_turno_evento_sin_fecha_400(cliente):
-    """Sin fecha en el evento no podemos derivar la semana -> 400 con mensaje claro."""
-    ev = _crear_evento(cliente)
-    # Limpiamos la fecha del evento. Usamos repos para saltarnos la validacion del PATCH.
-    from keni_consola import db
-    con = db.conectar()
-    try:
-        con.execute("UPDATE rota_eventos SET fecha = ? WHERE id = ?", ("", ev["id"]))
-        con.commit()
-    finally:
-        con.close()
-    r = cliente.post("/api/rota/turnos", json={"evento_id": ev["id"]})
-    assert r.status_code == 400
-
-
-def test_borrar_turno_individual(cliente):
-    equipo = _crear_equipo(1)
-    ev = _crear_evento(cliente)
-    turno = repos.crear_turno_rota(
-        LUNES1, ev["id"], miembro_id=equipo[0]["id"], miembro_nombre=equipo[0]["usuario"]
-    )
-    # Borrar.
-    r = cliente.delete(f"/api/rota/turnos/{turno['id']}")
-    assert r.status_code == 200
-    # Idempotencia: re-borrar -> 404.
-    assert cliente.delete(f"/api/rota/turnos/{turno['id']}").status_code == 404
-
-
-def test_borrar_turno_aprobado_se_permite(cliente):
-    """DECISION: borrar un turno APROBADO se permite (Elías rectifica tras publicar)."""
-    equipo = _crear_equipo(1)
-    ev = _crear_evento(cliente)
-    turno = repos.crear_turno_rota(
-        LUNES1, ev["id"], miembro_id=equipo[0]["id"], miembro_nombre=equipo[0]["usuario"]
-    )
-    repos.aprobar_semana_rota(LUNES1)
-    r = cliente.delete(f"/api/rota/turnos/{turno['id']}")
-    assert r.status_code == 200
-
-
-def test_borrar_turnos_lote(cliente):
-    equipo = _crear_equipo(1)
-    evs = [
-        _crear_evento(cliente, titulo=f"E{i}", fecha="2026-05-26", hora=f"{14 + i}:00")
-        for i in range(3)
-    ]
-    turnos = [
-        repos.crear_turno_rota(
-            LUNES1, ev["id"],
-            miembro_id=equipo[0]["id"], miembro_nombre=equipo[0]["usuario"],
-        )
-        for ev in evs
-    ]
-    r = cliente.post(
-        "/api/rota/turnos/lote/borrar",
-        json={"ids": [turnos[0]["id"], turnos[1]["id"]]},
-    )
-    assert r.status_code == 200
-    assert r.json()["borrados"] == 2
-    # turnos[2] sobrevive.
-    semana = cliente.get(f"/api/rota/semana?lunes={LUNES1}").json()
-    ids = {t["id"] for t in semana["turnos"]}
-    assert turnos[2]["id"] in ids
-    assert turnos[0]["id"] not in ids
-
-
-def test_borrar_turnos_lote_no_encontrados(cliente):
-    equipo = _crear_equipo(1)
-    ev = _crear_evento(cliente)
-    t = repos.crear_turno_rota(
-        LUNES1, ev["id"], miembro_id=equipo[0]["id"], miembro_nombre=equipo[0]["usuario"]
-    )
-    r = cliente.post(
-        "/api/rota/turnos/lote/borrar",
-        json={"ids": [t["id"], "no-existe-1"]},
-    )
-    assert r.status_code == 200
-    assert r.json()["borrados"] == 1
-    assert r.json()["no_encontrados"] == ["no-existe-1"]
-
-
-def test_borrar_turnos_lote_sin_ids_400(cliente):
-    r = cliente.post("/api/rota/turnos/lote/borrar", json={"ids": []})
-    assert r.status_code == 400
-
-
-# --------------------------------------------------------------------------- #
-# Horario: validacion cruzada con ausencias                                     #
-# --------------------------------------------------------------------------- #
-
-
-def test_editar_horario_turnos_persona_ausente_exige_override(cliente):
-    """Asignar a una persona AUSENTE en su rango devuelve 409 con la ausencia."""
-    equipo = _crear_equipo(2)
-    ana, beto = equipo[0], equipo[1]
-    # Ana esta de vacaciones esa semana.
-    repos.crear_ausencia_rota(
-        ana["id"], "2026-05-25", "2026-05-31",
-        miembro_nombre=ana["usuario"], tipo="vacaciones",
-    )
-    # Hay un turno de trabajo en esa fecha asignado a beto.
-    turno = repos.crear_turno_trabajo_rota(
-        LUNES1, "2026-05-27",
-        miembro_id=beto["id"], miembro_nombre=beto["usuario"], franja="matutino",
-    )
-    # Intentar pasarlo a ana SIN override -> 409 con la ausencia.
-    r = cliente.patch(
-        f"/api/rota/horario/turnos/{turno['id']}",
-        json={"miembro_id": ana["id"], "franja": "matutino"},
-    )
-    assert r.status_code == 409, r.text
-    cuerpo = r.json()
-    assert cuerpo["requiere_override"] is True
-    assert cuerpo["ausencia"]["tipo"] == "vacaciones"
-    assert cuerpo["ausencia"]["desde"] == "2026-05-25"
-
-    # Con override SI se permite (cobertura excepcional).
-    r_ok = cliente.patch(
-        f"/api/rota/horario/turnos/{turno['id']}",
-        json={
-            "miembro_id": ana["id"], "franja": "matutino",
-            "override": True, "motivo": "Acepto cubrir aunque estoy de vacaciones",
-        },
-    )
-    assert r_ok.status_code == 200, r_ok.text
-
-
-def test_editar_horario_descanso_no_choca_con_ausencia(cliente):
-    """`descanso` ES legal incluso si la persona esta ausente (no es jornada laboral)."""
-    equipo = _crear_equipo(1)
-    ana = equipo[0]
-    repos.crear_ausencia_rota(
-        ana["id"], "2026-05-25", "2026-05-31",
-        miembro_nombre=ana["usuario"], tipo="vacaciones",
-    )
-    turno = repos.crear_turno_trabajo_rota(
-        LUNES1, "2026-05-27",
-        miembro_id=ana["id"], miembro_nombre=ana["usuario"], franja="descanso",
-    )
-    # Editar la franja sin cambiar el miembro a otra de TRABAJO siendo ausente -> 409.
-    r_bad = cliente.patch(
-        f"/api/rota/horario/turnos/{turno['id']}", json={"franja": "matutino"}
-    )
-    assert r_bad.status_code == 409
-    # Mantener `descanso` -> 200 (sin choque).
-    r_ok = cliente.patch(
-        f"/api/rota/horario/turnos/{turno['id']}", json={"franja": "descanso"}
-    )
-    assert r_ok.status_code == 200

@@ -342,7 +342,13 @@ def test_listado_devuelve_eventos_sin_cubrir(entorno):
 
 
 def test_eventos_sin_cubrir_excluye_los_asignados(entorno):
-    """Un evento con turno asignado a un miembro NO aparece en `eventos_sin_cubrir`."""
+    """Un evento cubierto (turno en su franja+fecha) NO aparece en `eventos_sin_cubrir`.
+
+    Modelo ola back3: la cobertura es DERIVADA. Un evento esta cubierto si existe algun
+    turno en `rota_turnos` cuyo `(fecha, franja)` coincide con el del evento (franja
+    derivada de su hora). Sembrar un turno con la misma fecha y franja vespertino lo
+    saca de la lista de pendientes.
+    """
     from keni_consola import repos as repos_mod
 
     c = _cli_con_usuario("ana")
@@ -356,12 +362,13 @@ def test_eventos_sin_cubrir_excluye_los_asignados(entorno):
     assert r_ev.status_code == 201, r_ev.text
     ev = r_ev.json()["evento"]
 
-    # Asignamos el evento creando un turno para la semana actual con miembro_id real.
+    # Sembramos un turno de ana en la franja vespertino del 2026-05-30 (cubre el evento de 18:00).
     repos_mod.crear_turno_rota(
         "2026-05-25",
-        ev["id"],
+        "2026-05-30",
         miembro_id=ana_id,
         miembro_nombre="ana",
+        franja="vespertino",
     )
 
     cuerpo = c.get("/api/tareas").json()
