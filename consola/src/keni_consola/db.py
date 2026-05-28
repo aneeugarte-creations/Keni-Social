@@ -450,16 +450,40 @@ _DDL_ESQUEMA: tuple[str, ...] = (
 def _crear_esquema(con: Any) -> None:
     """Crea las tablas operacionales si no existen (idempotente, ambos backends).
 
-    Ejecuta el DDL sentencia a sentencia (portable SQLite/Postgres). La migracion de
-    columnas ampliadas de `tareas` solo aplica en SQLite (bases viejas en disco); en
-    Postgres el `CREATE TABLE` ya declara el esquema completo.
+    Ejecuta el DDL sentencia a sentencia (portable SQLite/Postgres) y luego aplica las
+    migraciones de columnas ampliadas (`tareas`, `rota_eventos`).
+
+    ESTO CORRE EN AMBOS BACKENDS, a proposito: `CREATE TABLE IF NOT EXISTS` NO anade
+    columnas a una tabla que YA existe, asi que cualquier BD —SQLite en disco o Postgres
+    hosted— creada ANTES de una ampliacion necesita el `ALTER TABLE ... ADD COLUMN`. Antes
+    se daba por hecho que "en Postgres el CREATE TABLE declara el esquema completo", pero el
+    Postgres hosted PERSISTE entre despliegues: una tabla creada por una version anterior se
+    quedaba sin las columnas nuevas (fallo real: `rota_eventos` sin `tipo_cobertura` → 500 al
+    leer el calendario). La deteccion de columnas es portable (`_columnas_existentes`).
     """
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
-    if not motor_db.es_postgres():
-        _migrar_columnas_tareas(con)
-        _migrar_columnas_eventos_rota(con)
+    _migrar_columnas_tareas(con)
+    _migrar_columnas_eventos_rota(con)
     con.commit()
+
+
+def _columnas_existentes(con: Any, tabla: str) -> set[str]:
+    """Nombres de columnas que YA tiene `tabla`, portable a los dos backends.
+
+    SQLite expone el esquema con `PRAGMA table_info(...)`; Postgres no, asi que alli se
+    consulta `information_schema.columns`. `tabla` es SIEMPRE un nombre interno de una
+    allowlist (constantes del modulo, nunca entrada de usuario), por eso es seguro
+    interpolarlo en el PRAGMA. El placeholder `?` lo traduce `motor_db` a `%s` en Postgres.
+    """
+    if motor_db.es_postgres():
+        filas = con.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+            (tabla,),
+        ).fetchall()
+        return {fila["column_name"] for fila in filas}
+    filas = con.execute(f"PRAGMA table_info({tabla})").fetchall()  # noqa: S608 -- tabla de allowlist
+    return {fila["name"] for fila in filas}
 
 
 # Columnas que se anadieron a `tareas` despues de su esquema original. Una BD creada
@@ -482,9 +506,10 @@ def _migrar_columnas_tareas(con: Any) -> None:
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
     antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y anade solo
     la que falte, con `DEFAULT ''`: las tareas existentes quedan con el campo vacio (autor /
-    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada.
+    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada. Corre en ambos
+    backends (ver `_crear_esquema`): el Postgres hosted persiste y tambien puede ir atrasado.
     """
-    columnas = {fila["name"] for fila in con.execute("PRAGMA table_info(tareas)").fetchall()}
+    columnas = _columnas_existentes(con, "tareas")
     for columna in _COLUMNAS_TAREAS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
@@ -512,11 +537,10 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
     antes de la ampliacion (cobertura/prioridad/reprogramaciones) no las tiene. Recorre
     `_COLUMNAS_EVENTO_ROTA_AMPLIADAS` y anade solo la que falte con su DEFAULT: los eventos
-    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada.
+    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada. Corre en
+    ambos backends (ver `_crear_esquema`); era el origen del 500 del calendario en hosted.
     """
-    columnas = {
-        fila["name"] for fila in con.execute("PRAGMA table_info(rota_eventos)").fetchall()
-    }
+    columnas = _columnas_existentes(con, "rota_eventos")
     for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_eventos ADD COLUMN {columna} {tipo}")

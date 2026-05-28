@@ -114,6 +114,41 @@ def test_rota_eventos_y_turnos(pg):
     assert db.listar_turnos_rota("2026-W09") == []
 
 
+def test_migracion_columnas_eventos_rota_postgres_bd_vieja(pg):
+    """Regresion del 500 del calendario en hosted: un `rota_eventos` Postgres creado ANTES
+    de la ola B (sin tipo_cobertura/prioridad/cambiado/actualizado) debe ALTERarse al crear
+    el esquema, TAMBIEN en Postgres.
+
+    Reproduce el estado real del hosted: la tabla PERSISTE entre despliegues, asi que
+    `CREATE TABLE IF NOT EXISTS` no anade columnas. Antes la migracion estaba gateada a SQLite
+    -> leer el calendario sobre Postgres daba `UndefinedColumn` -> 500. Ahora corre en ambos.
+    """
+    # Simula la tabla legada (esquema pre-ola-B) sobre Postgres.
+    con = motor_db.conectar_cruda()
+    con.execute("DROP TABLE IF EXISTS rota_eventos")
+    con.execute(
+        "CREATE TABLE rota_eventos (id TEXT PRIMARY KEY, titulo TEXT NOT NULL, "
+        "fecha TEXT NOT NULL DEFAULT '', hora TEXT NOT NULL DEFAULT '', "
+        "contenido TEXT NOT NULL DEFAULT '', nota TEXT NOT NULL DEFAULT '', "
+        "creado TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute(
+        "INSERT INTO rota_eventos (id, titulo, fecha) VALUES ('viejo', 'Partido', '2026-06-02')"
+    )
+    con.commit()
+    con.close()
+
+    # La primera conexion (lo que hace la pestaña Calendario: GET /api/rota/eventos) crea el
+    # esquema -> dispara la migracion idempotente -> ya no revienta.
+    eventos = db.listar_eventos_rota(desde="2026-06-01", hasta="2026-06-07")
+    assert len(eventos) == 1
+    legado = eventos[0]
+    # El evento legado queda con los DEFAULT de la ola B (sigue cubierto, prioridad media).
+    assert legado["tipo_cobertura"] == "transmision"
+    assert legado["prioridad"] == "media"
+    assert legado["cambiado"] is False
+
+
 # --------------------------------------------------------------------------- #
 # Auth sobre Postgres (usuarios, UNIQUE neutro, login, sesiones)              #
 # --------------------------------------------------------------------------- #
