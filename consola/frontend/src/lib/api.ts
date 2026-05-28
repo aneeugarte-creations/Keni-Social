@@ -124,6 +124,14 @@ import type {
   RespuestaTurnoRota,
   RotaSemana,
   MiSemanaRota,
+  CuerpoCrearAusenciaRota,
+  CuerpoActualizarAusenciaRota,
+  CuerpoActualizarTurnoTrabajoRota,
+  RespuestaAusenciasRota,
+  RespuestaAusenciaRota,
+  RespuestaTurnoTrabajoRota,
+  HorarioSemana,
+  MiHorarioRota,
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
@@ -731,6 +739,34 @@ export const api = {
     peticion<MiSemanaRota>(`/rota/mi-semana${query(params)}`, { signal }),
   exportarRota: (formato: "xlsx" | "csv", params: { lunes?: string } = {}) =>
     descargar(`/rota/export.${formato}${query(params)}`),
+
+  // --- Gestión de turnos: ausencias / vacaciones (F4 · #144, ola A) ---
+  rotaAusencias: (params: { miembro_id?: string } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaAusenciasRota>(`/rota/ausencias${query(params)}`, { signal }),
+  crearAusenciaRota: (cuerpo: CuerpoCrearAusenciaRota) =>
+    peticion<RespuestaAusenciaRota>("/rota/ausencias", { metodo: "POST", json: cuerpo }),
+  actualizarAusenciaRota: (id: string, cuerpo: CuerpoActualizarAusenciaRota) =>
+    peticion<RespuestaAusenciaRota>(`/rota/ausencias/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarAusenciaRota: (id: string) =>
+    peticion<RespuestaMensaje>(`/rota/ausencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Gestión de turnos: horario de trabajo del equipo ---
+  rotaHorario: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+    peticion<HorarioSemana>(`/rota/horario${query(params)}`, { signal }),
+  proponerHorario: (cuerpo: { lunes: string }) =>
+    peticion<HorarioSemana>("/rota/horario/proponer", { metodo: "POST", json: cuerpo }),
+  actualizarTurnoTrabajoRota: (id: string, cuerpo: CuerpoActualizarTurnoTrabajoRota) =>
+    peticion<RespuestaTurnoTrabajoRota>(`/rota/horario/turnos/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  aprobarHorario: (cuerpo: { lunes: string }) =>
+    peticion<HorarioSemana>("/rota/horario/aprobar", { metodo: "POST", json: cuerpo }),
+  miHorarioRota: (params: { lunes?: string } = {}, signal?: AbortSignal) =>
+    peticion<MiHorarioRota>(`/rota/mi-horario${query(params)}`, { signal }),
 
   // --- Metricas ---
   metricasOpciones: (signal?: AbortSignal) =>

@@ -145,7 +145,7 @@ export const NAVEGACION: GrupoNav[] = [
         etiqueta: "Parrilla y rota",
         icono: CalendarClock,
         descripcion:
-          "Eventos de la semana + la rota del equipo: Keni propone (rota los sábados), tú apruebas y publicas.",
+          "Eventos + rota de cobertura y horarios/turnos del equipo (mañana/tarde/descanso, vacaciones): Keni propone (rota los sábados), tú apruebas y publicas.",
       },
       {
         ruta: "/monitor",

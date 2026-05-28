@@ -16,6 +16,14 @@ asignaciones finales antes de publicarlas al equipo. Nada se publica hasta aprob
   - `GET    /api/rota/mi-semana[?lunes]`      -> "mi proxima semana" del usuario actual.
   - `GET    /api/rota/export.{xlsx,csv}[?lunes]` -> descarga para la transicion del Excel.
 
+GESTION DE TURNOS (ola A): el HORARIO de trabajo del equipo, paralelo a la cobertura:
+  - `GET/POST/PATCH/DELETE /api/rota/ausencias[/{id}]` -> vacaciones/ausencias por miembro.
+  - `GET    /api/rota/horario[?lunes]`        -> el horario (turnos de trabajo) de la semana.
+  - `POST   /api/rota/horario/proponer`       {lunes} -> PROPONE el horario (no publica).
+  - `PATCH  /api/rota/horario/turnos/{id}`    {franja, miembro_id, override, motivo, nota_relevo, estado}
+  - `POST   /api/rota/horario/aprobar`        {lunes} -> Elias APRUEBA (publica) el horario.
+  - `GET    /api/rota/mi-horario[?lunes]`     -> los turnos de trabajo del usuario actual.
+
 ROTACION DE SABADOS (criterio de aceptacion): el proponedor no repite a la misma
 persona dos sabados seguidos salvo override explicito. La logica pura vive en `rota.py`
 (probada aparte); aqui se construyen las entradas, se persiste y se serializa.
@@ -38,13 +46,16 @@ from starlette.routing import Route
 from .. import auth, repos
 from .. import rota as dominio
 from .._http_json import leer_json
-from ..estados import ESTADOS_ROTA, ROL_ADMIN
+from ..estados import ESTADOS_ROTA, FRANJAS_TRABAJO, FRANJAS_TURNO, ROL_ADMIN, TIPOS_AUSENCIA
 
 # Media types oficiales de un .xlsx (Open XML) y un CSV.
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _MEDIA_CSV = "text/csv; charset=utf-8"
 
 _MSG_SOLO_ADMIN = "Solo Elías (administrador) puede aprobar y publicar la rota al equipo."
+_MSG_SOLO_ADMIN_HORARIO = (
+    "Solo Elías (administrador) puede aprobar y publicar el horario al equipo."
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -429,6 +440,386 @@ async def mi_semana(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
+# Gestion de turnos: ausencias / vacaciones                                    #
+# --------------------------------------------------------------------------- #
+
+
+def _ausencia_a_dict(ausencia: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
+    return {
+        "id": ausencia["id"],
+        "miembro_id": ausencia["miembro_id"],
+        # El nombre vivo del equipo manda sobre el snapshot guardado (renombres).
+        "miembro_nombre": nombres.get(
+            ausencia["miembro_id"], ausencia.get("miembro_nombre", "")
+        ),
+        "tipo": ausencia["tipo"],
+        "desde": ausencia["desde"],
+        "hasta": ausencia["hasta"],
+        "motivo": ausencia["motivo"],
+    }
+
+
+def _ausencias_dominio() -> list[dominio.Ausencia]:
+    """Todas las ausencias como objetos de DOMINIO (para alimentar al proponedor)."""
+    return [
+        dominio.Ausencia(
+            miembro_id=a["miembro_id"], desde=a["desde"], hasta=a["hasta"], tipo=a["tipo"]
+        )
+        for a in repos.listar_ausencias_rota()
+    ]
+
+
+def _fecha_valida(iso: str) -> bool:
+    """True si `iso` es una fecha AAAA-MM-DD valida (reutiliza el parser del dominio)."""
+    return bool(iso) and dominio.lunes_de_semana_iso(iso) != ""
+
+
+async def listar_ausencias(request: Request) -> Response:
+    """GET /api/rota/ausencias[?miembro_id]: vacaciones/ausencias registradas."""
+    miembro_id = (request.query_params.get("miembro_id") or "").strip() or None
+    nombres = _nombres_equipo()
+    ausencias = repos.listar_ausencias_rota(miembro_id=miembro_id)
+    return JSONResponse(
+        {"ausencias": [_ausencia_a_dict(a, nombres) for a in ausencias]}
+    )
+
+
+async def crear_ausencia(request: Request) -> Response:
+    """POST /api/rota/ausencias: registra una vacacion/ausencia (rango inclusivo)."""
+    datos = await leer_json(request)
+    nombres = _nombres_equipo()
+    miembro_id = datos.get("miembro_id")
+    if not isinstance(miembro_id, str) or miembro_id not in nombres:
+        return JSONResponse(
+            {"error": "Indica un miembro del equipo válido."}, status_code=400
+        )
+    desde = str(datos.get("desde", "")).strip()
+    hasta = str(datos.get("hasta", "")).strip()
+    if not _fecha_valida(desde) or not _fecha_valida(hasta):
+        return JSONResponse(
+            {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."}, status_code=400
+        )
+    if hasta < desde:
+        return JSONResponse(
+            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
+            status_code=400,
+        )
+    tipo = str(datos.get("tipo", "otro")).strip() or "otro"
+    if tipo not in TIPOS_AUSENCIA:
+        validos = " o ".join(f'"{t}"' for t in TIPOS_AUSENCIA)
+        return JSONResponse({"error": f"Tipo inválido. Usa {validos}."}, status_code=400)
+    ausencia = repos.crear_ausencia_rota(
+        miembro_id,
+        desde,
+        hasta,
+        miembro_nombre=nombres.get(miembro_id, ""),
+        tipo=tipo,
+        motivo=str(datos.get("motivo", "")).strip(),
+    )
+    return JSONResponse(
+        {"ausencia": _ausencia_a_dict(ausencia, nombres)}, status_code=201
+    )
+
+
+async def actualizar_ausencia(request: Request) -> Response:
+    """PATCH /api/rota/ausencias/{id}: edita una ausencia (tipo/fechas/motivo)."""
+    ausencia_id = request.path_params["ausencia_id"]
+    datos = await leer_json(request)
+    campos: dict[str, Any] = {}
+    if "tipo" in datos:
+        tipo = str(datos["tipo"]).strip()
+        if tipo not in TIPOS_AUSENCIA:
+            validos = " o ".join(f'"{t}"' for t in TIPOS_AUSENCIA)
+            return JSONResponse({"error": f"Tipo inválido. Usa {validos}."}, status_code=400)
+        campos["tipo"] = tipo
+    for clave in ("desde", "hasta"):
+        if clave in datos:
+            valor = str(datos[clave]).strip()
+            if not _fecha_valida(valor):
+                return JSONResponse(
+                    {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."},
+                    status_code=400,
+                )
+            campos[clave] = valor
+    if "motivo" in datos and isinstance(datos["motivo"], str):
+        campos["motivo"] = datos["motivo"].strip()
+    # Coherencia del rango si se tocó alguno de los dos extremos.
+    actual = repos.obtener_ausencia_rota(ausencia_id)
+    if actual is None:
+        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+    desde = campos.get("desde", actual["desde"])
+    hasta = campos.get("hasta", actual["hasta"])
+    if desde and hasta and hasta < desde:
+        return JSONResponse(
+            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
+            status_code=400,
+        )
+    ausencia = repos.actualizar_ausencia_rota(ausencia_id, campos)
+    if ausencia is None:
+        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+    return JSONResponse({"ausencia": _ausencia_a_dict(ausencia, _nombres_equipo())})
+
+
+async def borrar_ausencia(request: Request) -> Response:
+    """DELETE /api/rota/ausencias/{id}: borra una ausencia."""
+    ausencia_id = request.path_params["ausencia_id"]
+    if not repos.borrar_ausencia_rota(ausencia_id):
+        return JSONResponse({"error": "La ausencia ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Ausencia eliminada."})
+
+
+# --------------------------------------------------------------------------- #
+# Gestion de turnos: horario de trabajo de la semana                           #
+# --------------------------------------------------------------------------- #
+
+
+def _turno_trabajo_a_dict(
+    turno: dict[str, Any], nombres: dict[str, str]
+) -> dict[str, Any]:
+    """Serializa un turno de trabajo (resolviendo el nombre vivo del miembro)."""
+    return {
+        "id": turno["id"],
+        "semana": turno["semana"],
+        "fecha": turno["fecha"],
+        "miembro_id": turno["miembro_id"],
+        "miembro_nombre": nombres.get(
+            turno["miembro_id"], turno.get("miembro_nombre", "")
+        ),
+        "franja": turno["franja"],
+        "estado": turno["estado"],
+        "override": bool(turno["override"]),
+        "motivo": turno["motivo"],
+        "nota_relevo": turno["nota_relevo"],
+        "es_sabado": dominio.es_sabado(turno["fecha"]),
+    }
+
+
+def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
+    """Ids que TRABAJARON (no descanso) el sábado de la semana ANTERIOR a `lunes_iso`.
+
+    Sirve para que el proponedor no repita a esas personas el sábado de esta semana.
+    """
+    if not lunes_iso:
+        return set()
+    from datetime import date, timedelta
+
+    try:
+        previo = (date.fromisoformat(lunes_iso) - timedelta(days=7)).isoformat()
+    except ValueError:
+        return set()
+    ids: set[str] = set()
+    for turno in repos.listar_turnos_trabajo_rota(semana=previo):
+        if dominio.es_sabado(turno["fecha"]) and turno["franja"] in FRANJAS_TRABAJO:
+            ids.add(turno["miembro_id"])
+    return ids
+
+
+def _horario_semana(lunes_iso: str) -> dict[str, Any]:
+    """Construye el payload del horario de una semana (turnos de trabajo + estado)."""
+    nombres = _nombres_equipo()
+    turnos = [
+        _turno_trabajo_a_dict(t, nombres)
+        for t in repos.listar_turnos_trabajo_rota(semana=lunes_iso)
+    ]
+    inicio, fin = dominio.rango_semana(lunes_iso) if lunes_iso else ("", "")
+    aprobada = bool(turnos) and all(t["estado"] == "aprobado" for t in turnos)
+    return {
+        "lunes": lunes_iso,
+        "inicio": inicio,
+        "fin": fin,
+        "dias": dominio.dias_de_semana(lunes_iso) if lunes_iso else [],
+        "turnos": turnos,
+        "aprobada": aprobada,
+        "total": len(turnos),
+    }
+
+
+async def horario_semana(request: Request) -> Response:
+    """GET /api/rota/horario[?lunes]: el horario de trabajo de una semana."""
+    lunes = _lunes_param(request)
+    return JSONResponse(_horario_semana(lunes))
+
+
+async def proponer_horario(request: Request) -> Response:
+    """POST /api/rota/horario/proponer {lunes}: PROPONE el horario de la semana (no publica).
+
+    Re-propone desde cero: borra los turnos de trabajo previos de esa semana y crea los
+    nuevos en estado `propuesto`. Respeta las ausencias (no asigna a quien esté de
+    vacaciones/baja ese día) y rota los sábados (excluye a quien trabajó el sábado previo).
+    Devuelve el horario y los avisos honestos.
+    """
+    datos = await leer_json(request)
+    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica el lunes de la semana a proponer (AAAA-MM-DD)."},
+            status_code=400,
+        )
+
+    equipo_dom = _equipo()
+    ausencias = _ausencias_dominio()
+    sabados_previos = _sabados_previos_trabajo(lunes)
+
+    propuesta = dominio.proponer_horario(
+        equipo_dom, lunes, ausencias=ausencias, sabados_previos=sabados_previos
+    )
+
+    # Re-proponer reemplaza la semana entera (idempotente para el operador).
+    repos.borrar_turnos_trabajo_semana_rota(lunes)
+    nombres = _nombres_equipo()
+    for turno in propuesta.turnos:
+        repos.crear_turno_trabajo_rota(
+            lunes,
+            turno.fecha,
+            miembro_id=turno.miembro_id,
+            miembro_nombre=nombres.get(turno.miembro_id, ""),
+            franja=turno.franja,
+            override=turno.override,
+            motivo=turno.motivo,
+        )
+
+    payload = _horario_semana(lunes)
+    payload["avisos"] = propuesta.avisos
+    return JSONResponse(payload)
+
+
+async def actualizar_turno_trabajo(request: Request) -> Response:
+    """PATCH /api/rota/horario/turnos/{id}: Elias edita un turno de trabajo.
+
+    Permite cambiar la franja, el miembro, marcar `override`, el motivo, la nota de relevo
+    y el estado. Si la edición pone a TRABAJAR el sábado a quien trabajó el sábado previo
+    SIN override, devuelve 409 pidiendo el override explícito (regla de aceptación).
+    """
+    turno_id = request.path_params["turno_id"]
+    actual = repos.obtener_turno_trabajo_rota(turno_id)
+    if actual is None:
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    campos: dict[str, Any] = {}
+    nombres = _nombres_equipo()
+
+    nuevo_miembro = actual["miembro_id"]
+    if "miembro_id" in datos:
+        miembro_id = datos["miembro_id"]
+        if not isinstance(miembro_id, str):
+            return JSONResponse({"error": "miembro_id inválido."}, status_code=400)
+        if miembro_id and miembro_id not in nombres:
+            return JSONResponse(
+                {"error": "Ese miembro no existe en el equipo."}, status_code=400
+            )
+        campos["miembro_id"] = miembro_id
+        campos["miembro_nombre"] = nombres.get(miembro_id, "")
+        nuevo_miembro = miembro_id
+
+    nueva_franja = actual["franja"]
+    if "franja" in datos:
+        franja = datos["franja"]
+        if franja not in FRANJAS_TURNO:
+            validos = " o ".join(f'"{f}"' for f in FRANJAS_TURNO)
+            return JSONResponse(
+                {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+            )
+        campos["franja"] = franja
+        nueva_franja = franja
+
+    override = bool(datos.get("override", actual["override"]))
+    if "override" in datos:
+        campos["override"] = override
+    if "motivo" in datos and isinstance(datos["motivo"], str):
+        campos["motivo"] = datos["motivo"].strip()
+    if "nota_relevo" in datos and isinstance(datos["nota_relevo"], str):
+        campos["nota_relevo"] = datos["nota_relevo"].strip()
+    if "estado" in datos:
+        estado = datos["estado"]
+        if estado not in ESTADOS_ROTA:
+            validos = " o ".join(f'"{e}"' for e in ESTADOS_ROTA)
+            return JSONResponse(
+                {"error": f"Estado inválido. Usa {validos}."}, status_code=400
+            )
+        campos["estado"] = estado
+
+    # Regla de aceptación: si este turno es de SÁBADO y la edición pone a TRABAJAR a quien
+    # trabajó el sábado previo SIN override -> exigir override explícito.
+    if dominio.es_sabado(actual["fecha"]):
+        previos = _sabados_previos_trabajo(actual["semana"])
+        if dominio.viola_rotacion_sabado_trabajo(
+            previos, nuevo_miembro, override=override, franja=nueva_franja
+        ):
+            return JSONResponse(
+                {
+                    "error": (
+                        "Esa persona ya trabajó el sábado anterior. Marca un override "
+                        "explícito si es una cobertura estratégica intencional."
+                    ),
+                    "requiere_override": True,
+                },
+                status_code=409,
+            )
+
+    turno = repos.actualizar_turno_trabajo_rota(turno_id, campos)
+    if turno is None:
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+    return JSONResponse({"turno": _turno_trabajo_a_dict(turno, nombres)})
+
+
+async def aprobar_semana_horario(request: Request) -> Response:
+    """POST /api/rota/horario/aprobar {lunes}: Elias APRUEBA (publica) el horario.
+
+    Solo admin: la frontera dice que Elías aprueba el horario final antes de publicarlo al
+    equipo. Marca todos los turnos de trabajo de la semana como `aprobado`.
+    """
+    if not _es_admin(request):
+        return JSONResponse({"error": _MSG_SOLO_ADMIN_HORARIO}, status_code=403)
+    datos = await leer_json(request)
+    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica el lunes de la semana a aprobar (AAAA-MM-DD)."},
+            status_code=400,
+        )
+    n = repos.aprobar_semana_horario_rota(lunes)
+    if n == 0:
+        return JSONResponse(
+            {"error": "No hay horario en esa semana para aprobar. Propón el horario primero."},
+            status_code=400,
+        )
+    payload = _horario_semana(lunes)
+    payload["mensaje"] = f"Horario aprobado y publicado al equipo ({n} turnos)."
+    return JSONResponse(payload)
+
+
+async def mi_horario(request: Request) -> Response:
+    """GET /api/rota/mi-horario[?lunes]: los turnos de trabajo del USUARIO actual.
+
+    Cada miembro ve su propio horario. Si no se entró con sesión (token de mantenimiento),
+    devuelve la semana vacía con un aviso honesto.
+    """
+    lunes = _lunes_param(request)
+    usuario = _usuario_actual(request)
+    base = _horario_semana(lunes)
+    if usuario is None:
+        return JSONResponse(
+            {
+                **base,
+                "miembro_id": "",
+                "miembro_nombre": "",
+                "mis_turnos": [],
+                "aviso": "Inicia sesión para ver tu próximo horario.",
+            }
+        )
+    mios = [t for t in base["turnos"] if t["miembro_id"] == usuario["id"]]
+    return JSONResponse(
+        {
+            **base,
+            "miembro_id": usuario["id"],
+            "miembro_nombre": usuario["usuario"],
+            "mis_turnos": mios,
+        }
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Export .xlsx / CSV (transicion desde el Excel actual)                        #
 # --------------------------------------------------------------------------- #
 
@@ -471,6 +862,54 @@ def _nombre_descarga(lunes_iso: str, ext: str) -> str:
     return f"rota-{sufijo}.{ext}"
 
 
+# Etiquetas legibles de cada franja para el grid del horario.
+_ETIQUETA_FRANJA = {
+    "matutino": "Mañana",
+    "vespertino": "Tarde",
+    "descanso": "Descanso",
+}
+
+
+def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
+    """Construye `(titulo, cabeceras, filas)` del horario persona×día de la semana.
+
+    Cabeceras = ["Persona", Lun..Dom]; cada fila es un miembro con su franja por día
+    (Mañana/Tarde/Descanso, "Ausente" si una ausencia cubre ese día, "—" si no hay turno).
+    Reutiliza `_horario_semana` y las ausencias para marcar la indisponibilidad.
+    """
+    horario = _horario_semana(lunes_iso)
+    dias = horario["dias"]
+    equipo = _equipo()
+    ausencias = _ausencias_dominio()
+    # Indexa el turno por (miembro, fecha) para llenar el grid.
+    por_celda: dict[tuple[str, str], dict[str, Any]] = {
+        (t["miembro_id"], t["fecha"]): t for t in horario["turnos"]
+    }
+    cabeceras = ["Persona", *(_DIAS[i] for i in range(len(dias)))]
+    filas: list[list[str]] = []
+    for m in sorted(equipo, key=lambda x: x.nombre.lower()):
+        fila = [m.nombre]
+        for fecha in dias:
+            if dominio.miembro_ausente(ausencias, m.id, fecha):
+                fila.append("Ausente")
+                continue
+            turno = por_celda.get((m.id, fecha))
+            if turno is None:
+                fila.append("—")
+            else:
+                etiqueta = _ETIQUETA_FRANJA.get(turno["franja"], turno["franja"])
+                if turno["override"]:
+                    etiqueta += " (override)"
+                fila.append(etiqueta)
+        filas.append(fila)
+    titulo = (
+        f"Horario equipo {horario['inicio']} a {horario['fin']}"
+        if horario["inicio"]
+        else "Horario equipo"
+    )
+    return titulo, cabeceras, filas
+
+
 async def export_csv(request: Request) -> Response:
     """GET /api/rota/export.csv[?lunes]: descarga la rota de la semana en CSV."""
     lunes = _lunes_param(request)
@@ -506,9 +945,11 @@ async def export_xlsx(request: Request) -> Response:
 
     buffer = io.BytesIO()
     libro = xlsxwriter.Workbook(buffer, {"in_memory": True})
-    hoja = libro.add_worksheet("Rota")
     fmt_titulo = libro.add_format({"bold": True, "font_size": 14})
     fmt_cabecera = libro.add_format({"bold": True, "bg_color": "#EEEEEE", "border": 1})
+
+    # Hoja 1: cobertura de eventos (la parrilla histórica; columnas del Excel de Elías).
+    hoja = libro.add_worksheet("Rota")
     hoja.write(0, 0, titulo, fmt_titulo)
     for col, encabezado in enumerate(_CABECERAS_EXPORT):
         hoja.write(2, col, encabezado, fmt_cabecera)
@@ -518,6 +959,19 @@ async def export_xlsx(request: Request) -> Response:
     anchos = (12, 11, 12, 30, 40, 18, 16)
     for col, ancho in enumerate(anchos):
         hoja.set_column(col, col, ancho)
+
+    # Hoja 2: horario de trabajo del equipo (grid persona×día) — gestión de turnos.
+    titulo_h, cabeceras_h, filas_h = _grid_horario(lunes)
+    hoja_h = libro.add_worksheet("Horario equipo")
+    hoja_h.write(0, 0, titulo_h, fmt_titulo)
+    for col, encabezado in enumerate(cabeceras_h):
+        hoja_h.write(2, col, encabezado, fmt_cabecera)
+    for i, fila in enumerate(filas_h, start=3):
+        for col, valor in enumerate(fila):
+            hoja_h.write(i, col, valor)
+    hoja_h.set_column(0, 0, 18)
+    hoja_h.set_column(1, max(len(cabeceras_h) - 1, 1), 12)
+
     libro.close()
 
     cabecera = f'attachment; filename="{_nombre_descarga(lunes, "xlsx")}"'
@@ -539,6 +993,17 @@ RUTAS = [
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
     Route("/api/rota/semana/aprobar", aprobar_semana, methods=["POST"]),
     Route("/api/rota/mi-semana", mi_semana, methods=["GET"]),
+    # Gestión de turnos: ausencias / vacaciones.
+    Route("/api/rota/ausencias", listar_ausencias, methods=["GET"]),
+    Route("/api/rota/ausencias", crear_ausencia, methods=["POST"]),
+    Route("/api/rota/ausencias/{ausencia_id}", actualizar_ausencia, methods=["PATCH"]),
+    Route("/api/rota/ausencias/{ausencia_id}", borrar_ausencia, methods=["DELETE"]),
+    # Gestión de turnos: horario de trabajo del equipo.
+    Route("/api/rota/horario", horario_semana, methods=["GET"]),
+    Route("/api/rota/horario/proponer", proponer_horario, methods=["POST"]),
+    Route("/api/rota/horario/turnos/{turno_id}", actualizar_turno_trabajo, methods=["PATCH"]),
+    Route("/api/rota/horario/aprobar", aprobar_semana_horario, methods=["POST"]),
+    Route("/api/rota/mi-horario", mi_horario, methods=["GET"]),
     Route("/api/rota/export.csv", export_csv, methods=["GET"]),
     Route("/api/rota/export.xlsx", export_xlsx, methods=["GET"]),
 ]
