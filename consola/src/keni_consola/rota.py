@@ -27,6 +27,10 @@ from typing import Literal
 
 from .estados import FRANJAS_TRABAJO
 
+# Re-export para que `api/rota.py` pueda preguntar `dominio.FRANJAS_TRABAJO` sin abrir
+# una nueva dependencia hacia `estados.py` (la API ya importa `dominio`).
+__all__ = ["FRANJAS_TRABAJO"]
+
 # Dia de la semana (Python: lunes=0 ... domingo=6). El sabado es el dia que rota.
 SABADO = 5
 

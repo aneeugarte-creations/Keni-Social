@@ -56,7 +56,6 @@ motivo de migrar y de retirar SQLite (ADR 0004).
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -101,6 +100,7 @@ __all__ = [
     "actualizar_estado_tarea",
     "actualizar_evento_rota",
     "actualizar_pieza_rota",
+    "actualizar_programa_rota",
     "actualizar_publicacion_comercial",
     "actualizar_ausencia_rota",
     "actualizar_tarea",
@@ -113,28 +113,38 @@ __all__ = [
     "borrar_ausencia_rota",
     "borrar_evento_rota",
     "borrar_pieza_rota",
+    "borrar_piezas_rota_lote",
+    "borrar_programa_rota",
     "borrar_publicacion_comercial",
     "borrar_swap_turno",
     "borrar_tarea",
+    "borrar_turno_rota",
+    "borrar_turnos_rota_lote",
     "borrar_turnos_semana_rota",
     "borrar_turnos_trabajo_semana_rota",
     "cancelar_job",
     "conectar",
+    "contar_piezas_por_programa",
     "copiar_turnos_rota",
     "copiar_turnos_trabajo_rota",
     "crear_ausencia_rota",
     "crear_evento_rota",
     "crear_pieza_rota",
+    "crear_programa_rota",
     "crear_publicacion_comercial",
     "crear_swap_turno",
     "crear_tarea",
     "crear_turno_rota",
     "crear_turno_trabajo_rota",
+    "duplicar_evento_rota",
+    "duplicar_pieza_rota",
     "encolar_job",
+    "existe_programa_por_nombre",
     "job_cancelado",
     "listar_ausencias_rota",
     "listar_eventos_rota",
     "listar_piezas_rota",
+    "listar_programas_rota",
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
     "listar_swaps_turno",
@@ -145,6 +155,7 @@ __all__ = [
     "obtener_ausencia_rota",
     "obtener_evento_rota",
     "obtener_pieza_rota",
+    "obtener_programa_rota",
     "obtener_publicacion_comercial",
     "obtener_swap_turno",
     "obtener_tarea",
@@ -366,30 +377,55 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # FOREIGN KEY a nivel DB (el borrado del evento NO arrastra sus piezas: la API decide).
     """
     CREATE TABLE IF NOT EXISTS rota_piezas (
-        id                   TEXT PRIMARY KEY,
-        evento_id            TEXT NOT NULL DEFAULT '',
-        programa             TEXT NOT NULL DEFAULT '',
-        red_social           TEXT NOT NULL DEFAULT '',
-        tipo_pieza           TEXT NOT NULL DEFAULT '',
-        contenido_sugerido   TEXT NOT NULL DEFAULT '',
-        dia                  TEXT NOT NULL DEFAULT '',
-        hora_post            TEXT NOT NULL DEFAULT '',
-        estado               TEXT NOT NULL DEFAULT 'pendiente',
-        material_entregado   INTEGER NOT NULL DEFAULT 0,
-        contenido_entregado  INTEGER NOT NULL DEFAULT 0,
-        publicado            INTEGER NOT NULL DEFAULT 0,
-        enlace               TEXT NOT NULL DEFAULT '',
-        responsable_id       TEXT NOT NULL DEFAULT '',
-        responsable_nombre   TEXT NOT NULL DEFAULT '',
-        notas                TEXT NOT NULL DEFAULT '',
-        creado               TEXT NOT NULL DEFAULT '',
-        actualizado          TEXT NOT NULL DEFAULT ''
+        id                      TEXT PRIMARY KEY,
+        evento_id               TEXT NOT NULL DEFAULT '',
+        programa                TEXT NOT NULL DEFAULT '',
+        red_social              TEXT NOT NULL DEFAULT '',
+        tipo_pieza              TEXT NOT NULL DEFAULT '',
+        contenido_sugerido      TEXT NOT NULL DEFAULT '',
+        dia                     TEXT NOT NULL DEFAULT '',
+        hora_post               TEXT NOT NULL DEFAULT '',
+        estado                  TEXT NOT NULL DEFAULT 'pendiente',
+        material_entregado      INTEGER NOT NULL DEFAULT 0,
+        contenido_entregado     INTEGER NOT NULL DEFAULT 0,
+        publicado               INTEGER NOT NULL DEFAULT 0,
+        enlace                  TEXT NOT NULL DEFAULT '',
+        responsable_id          TEXT NOT NULL DEFAULT '',
+        responsable_nombre      TEXT NOT NULL DEFAULT '',
+        notas                   TEXT NOT NULL DEFAULT '',
+        salida                  TEXT NOT NULL DEFAULT '',
+        comentarios             TEXT NOT NULL DEFAULT '',
+        fecha_entrega_material  TEXT NOT NULL DEFAULT '',
+        always_on               INTEGER NOT NULL DEFAULT 0,
+        creado                  TEXT NOT NULL DEFAULT '',
+        actualizado             TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_evento ON rota_piezas (evento_id)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_dia ON rota_piezas (dia)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_programa ON rota_piezas (programa)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_responsable ON rota_piezas (responsable_id)",
+    # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
+    # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
+    # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
+    # programas para tener color/descripcion/fechas vivas; `rota_piezas.programa` referencia
+    # a este catalogo POR NOMBRE (case-sensitive) y NO por id (defensa: una pieza huerfana
+    # con un programa borrado sigue mostrandose). `nombre` UNIQUE (case-insensitive lo
+    # garantiza la capa API/repos). `activo` para esconder del selector sin perder histórico.
+    """
+    CREATE TABLE IF NOT EXISTS rota_programas (
+        id           TEXT PRIMARY KEY,
+        nombre       TEXT NOT NULL UNIQUE,
+        descripcion  TEXT NOT NULL DEFAULT '',
+        color        TEXT NOT NULL DEFAULT '',
+        inicio       TEXT NOT NULL DEFAULT '',
+        fin          TEXT NOT NULL DEFAULT '',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_programas_activo ON rota_programas (activo)",
     # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
     # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
     # estado `propuesto`; B acepta/rechaza, y si acepta, Elias (admin) aprueba o rechaza.
@@ -464,6 +500,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_swaps(con)
+    _migrar_columnas_programas(con)
     con.commit()
 
 
@@ -545,10 +582,27 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
 
 # Columnas de `rota_piezas` declaradas en el DDL inicial: cualquier columna que se
 # anada DESPUES debera entrar aqui con `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` para
-# que las bases viejas la reciban (#150, PARRILLA 2026.xlsx). De momento la tabla es nueva,
-# pero el patron queda preparado para ampliarla sin romper instancias hosted (igual que
-# `_migrar_columnas_eventos_rota`). Cada par es (columna, fragmento de tipo/DEFAULT).
-_COLUMNAS_PIEZA_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+# que las bases viejas la reciban (#150, PARRILLA 2026.xlsx). Mismo patron idempotente que
+# `_migrar_columnas_eventos_rota`. Cada par es (columna, fragmento de tipo/DEFAULT).
+#
+# Ampliaciones reales del Excel (auditoria post-piloto):
+#   - salida: canal MAS AMPLIO que `red_social` (en LA SELECCION EN TUS MANOS y MUNDIAL el
+#     Excel registra "TV", "RADIO", "OOH", "MAILING", "PORTAL", "PROGRAMA", "YT", etc.;
+#     incluye no-redes). `red_social` se reserva al detalle FB/IG/X/TK. Legado -> "".
+#   - comentarios: texto LIBRE de coordinacion PRE/durante (distinto de `notas`, que es
+#     post-mortem). En el Excel evergreen aparece como columna "Comentarios". Legado -> "".
+#   - fecha_entrega_material: deadline INTERNO de cuando debe llegar el material a Tescu
+#     antes de la fecha de publicacion. Columna "Fecha de Entrega (Material)" del Excel.
+#     Legado -> "".
+#   - always_on: pieza siempre activa sin fecha concreta (ej. "ALWAYS ON" de PATY CANTU,
+#     teaser/promo evergreen). Si esta marcada, la fecha `dia` es opcional/ignorada por la
+#     UI. Legado -> 0 (no es always-on).
+_COLUMNAS_PIEZA_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("salida", "TEXT NOT NULL DEFAULT ''"),
+    ("comentarios", "TEXT NOT NULL DEFAULT ''"),
+    ("fecha_entrega_material", "TEXT NOT NULL DEFAULT ''"),
+    ("always_on", "INTEGER NOT NULL DEFAULT 0"),
+)
 
 
 def _migrar_columnas_piezas_rota(con: Any) -> None:
@@ -589,6 +643,26 @@ def _migrar_columnas_swaps(con: Any) -> None:
     for columna, tipo in _COLUMNAS_SWAP_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN {columna} {tipo}")
+
+
+# Columnas que se podrian anadir a `rota_programas`. Hoy esta tupla esta VACIA: la tabla
+# nace completa en su primer DDL. Se conserva el hook por coherencia con el resto del
+# patron `_migrar_columnas_*` (cuando aparezca una columna nueva, basta con anadirla aqui
+# como `(col, tipo)` y a las bases viejas se le inyecta por ALTER sin reescribir nada).
+_COLUMNAS_PROGRAMA_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+
+def _migrar_columnas_programas(con: Any) -> None:
+    """Anade a `rota_programas` columnas ampliadas que una BD vieja no tuviera (idempotente).
+
+    Hoy es no-op (tupla vacia). Mismo patron que `_migrar_columnas_swaps`.
+    """
+    if not _COLUMNAS_PROGRAMA_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_programas")
+    for columna, tipo in _COLUMNAS_PROGRAMA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_programas ADD COLUMN {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1410,6 +1484,34 @@ def borrar_turnos_semana_rota(semana: str) -> int:
         con.close()
 
 
+def borrar_turno_rota(turno_id: str) -> bool:
+    """Borra un turno de cobertura individual; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM rota_turnos WHERE id = ?", (turno_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def borrar_turnos_rota_lote(ids: list[str]) -> int:
+    """Borra varios turnos de cobertura en una sola sentencia. 0 si `ids` venia vacio."""
+    if not ids:
+        return 0
+    marcadores = ", ".join("?" for _ in ids)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"DELETE FROM rota_turnos WHERE id IN ({marcadores})",  # noqa: S608 -- placeholders
+            tuple(ids),
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
 def aprobar_semana_rota(semana: str) -> int:
     """Marca TODOS los turnos de una semana como `aprobado` (publica al equipo).
 
@@ -1773,6 +1875,10 @@ _COLS_PIEZA_ROTA = (
     "responsable_id",
     "responsable_nombre",
     "notas",
+    "salida",
+    "comentarios",
+    "fecha_entrega_material",
+    "always_on",
     "creado",
     "actualizado",
 )
@@ -1781,7 +1887,7 @@ _SELECT_PIEZA_ROTA = f"SELECT {', '.join(_COLS_PIEZA_ROTA)} FROM rota_piezas"
 # Campos editables via `actualizar_pieza_rota` (lista blanca). `id`, `creado` y
 # `actualizado` no son editables; este ultimo lo gestiona el sistema. `responsable_id` y
 # `responsable_nombre` se pasan como par desde la API (se valida `responsable_id` contra
-# un usuario REAL antes de llegar aqui).
+# un usuario REAL antes de llegar aqui). `always_on` es booleano (0/1).
 _CAMPOS_EDITABLES_PIEZA_ROTA: tuple[str, ...] = (
     "evento_id",
     "programa",
@@ -1798,6 +1904,10 @@ _CAMPOS_EDITABLES_PIEZA_ROTA: tuple[str, ...] = (
     "responsable_id",
     "responsable_nombre",
     "notas",
+    "salida",
+    "comentarios",
+    "fecha_entrega_material",
+    "always_on",
 )
 
 
@@ -1807,6 +1917,7 @@ def _fila_a_pieza_rota(fila: Any) -> dict[str, Any]:
     pieza["material_entregado"] = bool(fila["material_entregado"])
     pieza["contenido_entregado"] = bool(fila["contenido_entregado"])
     pieza["publicado"] = bool(fila["publicado"])
+    pieza["always_on"] = bool(fila["always_on"])
     pieza["estado"] = fila["estado"] or "pendiente"
     return pieza
 
@@ -1828,6 +1939,10 @@ def crear_pieza_rota(
     responsable_id: str = "",
     responsable_nombre: str = "",
     notas: str = "",
+    salida: str = "",
+    comentarios: str = "",
+    fecha_entrega_material: str = "",
+    always_on: bool = False,
 ) -> dict[str, Any]:
     """Inserta una pieza de la parrilla y la devuelve. NO valida (lo hace la API).
 
@@ -1835,6 +1950,11 @@ def crear_pieza_rota(
     en cuyo caso el `evento_id` queda vacio y la identifica `programa` (p. ej. "Alvaro
     Fidalgo", "MUNDIAL"). La API obliga a que al menos uno entre `evento_id`, `programa` o
     `contenido_sugerido` este relleno para que la pieza represente algo.
+
+    `salida` es el canal AMPLIO (TV, RADIO, OOH, PROGRAMA, YT, WEB...; distinto de
+    `red_social` que es FB/IG/X/TK). `comentarios` es texto libre PRE/durante; `notas` es
+    post-mortem. `fecha_entrega_material` es el deadline interno antes de `dia`. `always_on`
+    marca piezas evergreen sin fecha (la `dia` se permite vacia en ese caso).
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
@@ -1854,6 +1974,10 @@ def crear_pieza_rota(
         "responsable_id": responsable_id or "",
         "responsable_nombre": responsable_nombre or "",
         "notas": notas or "",
+        "salida": salida or "",
+        "comentarios": comentarios or "",
+        "fecha_entrega_material": fecha_entrega_material or "",
+        "always_on": 1 if always_on else 0,
         "creado": ahora,
         "actualizado": ahora,
     }
@@ -1870,6 +1994,7 @@ def crear_pieza_rota(
     fila["material_entregado"] = bool(fila["material_entregado"])
     fila["contenido_entregado"] = bool(fila["contenido_entregado"])
     fila["publicado"] = bool(fila["publicado"])
+    fila["always_on"] = bool(fila["always_on"])
     return fila
 
 
@@ -1955,7 +2080,7 @@ def actualizar_pieza_rota(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PIEZA_ROTA}
     if not cambios:
         return obtener_pieza_rota(pieza_id)
-    for col in ("material_entregado", "contenido_entregado", "publicado"):
+    for col in ("material_entregado", "contenido_entregado", "publicado", "always_on"):
         if col in cambios:
             cambios[col] = 1 if cambios[col] else 0
     ahora = datetime.now().isoformat(timespec="seconds")
@@ -1988,6 +2113,312 @@ def borrar_pieza_rota(pieza_id: str) -> bool:
     con = _conectar()
     try:
         cur = con.execute("DELETE FROM rota_piezas WHERE id = ?", (pieza_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def borrar_piezas_rota_lote(ids: list[str]) -> int:
+    """Borra varias piezas en una sola sentencia (rowcount). 0 si la lista venia vacia."""
+    if not ids:
+        return 0
+    marcadores = ", ".join("?" for _ in ids)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"DELETE FROM rota_piezas WHERE id IN ({marcadores})",  # noqa: S608 -- placeholders
+            tuple(ids),
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
+
+
+def duplicar_pieza_rota(
+    pieza_id: str, *, dia: str | None = None, evento_id: str | None = None
+) -> dict[str, Any] | None:
+    """Crea una pieza nueva clonando los campos editoriales de `pieza_id`.
+
+    DECISION DE NEGOCIO: el clon RESETEA el WORKFLOW de produccion (material/contenido/
+    publicado/enlace -> vacios y `estado` -> "pendiente"): duplicar una pieza es repetir el
+    TRABAJO, no copiar la pieza ya publicada. `comentarios` y `notas` tampoco viajan (son
+    contexto del POST original, no del clon). `dia`/`evento_id` se pueden sobrescribir con
+    los argumentos (caso comun: "Jornada 17 -> Jornada 18"). Devuelve la pieza nueva (con id
+    propio y timestamps frescos), o None si el `pieza_id` no existe.
+    """
+    original = obtener_pieza_rota(pieza_id)
+    if original is None:
+        return None
+    return crear_pieza_rota(
+        evento_id=evento_id if evento_id is not None else original.get("evento_id", ""),
+        programa=original.get("programa", ""),
+        red_social=original.get("red_social", ""),
+        tipo_pieza=original.get("tipo_pieza", ""),
+        contenido_sugerido=original.get("contenido_sugerido", ""),
+        dia=dia if dia is not None else original.get("dia", ""),
+        hora_post=original.get("hora_post", ""),
+        # Workflow reset: el clon arranca como pendiente y sin material/contenido/publicado.
+        estado="pendiente",
+        material_entregado=False,
+        contenido_entregado=False,
+        publicado=False,
+        enlace="",
+        responsable_id=original.get("responsable_id", ""),
+        responsable_nombre=original.get("responsable_nombre", ""),
+        notas="",  # post-mortem del original; no aplica al clon.
+        salida=original.get("salida", ""),
+        comentarios="",  # contexto pre/durante del original; no aplica al clon.
+        fecha_entrega_material=original.get("fecha_entrega_material", ""),
+        always_on=bool(original.get("always_on", False)),
+    )
+
+
+def duplicar_evento_rota(
+    evento_id: str,
+    *,
+    fecha: str | None = None,
+    hora: str | None = None,
+    titulo: str | None = None,
+) -> dict[str, Any] | None:
+    """Crea un evento nuevo clonando los campos editoriales de `evento_id`.
+
+    DECISION DE NEGOCIO: el clon RESETEA el flag `cambiado` (un evento clonado NO ha sido
+    reprogramado: es un evento RECIEN creado, aunque su `fecha` se ajuste al duplicarlo).
+    `fecha`/`hora`/`titulo` se pueden sobrescribir (caso comun: "Pumas vs América Jornada
+    17 -> Jornada 18"). No clona los turnos asociados: la cobertura es de la SEMANA, no
+    del partido. Devuelve el evento nuevo o None si el `evento_id` no existe.
+    """
+    original = obtener_evento_rota(evento_id)
+    if original is None:
+        return None
+    return crear_evento_rota(
+        titulo if titulo is not None else original.get("titulo", ""),
+        fecha=fecha if fecha is not None else original.get("fecha", ""),
+        hora=hora if hora is not None else original.get("hora", ""),
+        contenido=original.get("contenido", ""),
+        nota=original.get("nota", ""),
+        tipo_cobertura=original.get("tipo_cobertura", TIPO_COBERTURA_TRANSMISION),
+        prioridad=original.get("prioridad", PRIORIDAD_EVENTO_DEFECTO),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Catalogo de programas (#150, PARRILLA 2026.xlsx)                              #
+# --------------------------------------------------------------------------- #
+#
+# En el Excel cada HOJA evergreen ("Álvaro Fidalgo", "Real Oviedo", "Anfitriones", "PATY
+# CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS", "IDEAS SIN DERECHOS") es un PROGRAMA.
+# Hasta ahora `rota_piezas.programa` era texto libre; pasamos a un catalogo con color y
+# fechas de campana (inicio/fin) para que la UI pueda colorear y filtrar la parrilla.
+#
+# IMPORTANTE: las piezas siguen referenciando al programa POR NOMBRE (no por id) para que
+# una pieza huerfana de un programa borrado siga apareciendo en la parrilla con su texto
+# original. Al RENOMBRAR un programa, la API ejecuta una cascada (UPDATE rota_piezas SET
+# programa = ? WHERE programa = ?) en la MISMA transaccion: ver `actualizar_programa_rota`.
+
+_COLS_PROGRAMA_ROTA = (
+    "id",
+    "nombre",
+    "descripcion",
+    "color",
+    "inicio",
+    "fin",
+    "activo",
+    "creado",
+    "actualizado",
+)
+_SELECT_PROGRAMA_ROTA = f"SELECT {', '.join(_COLS_PROGRAMA_ROTA)} FROM rota_programas"
+
+# Campos editables via `actualizar_programa_rota` (allowlist; `id`/`creado`/`actualizado`
+# los gestiona el sistema). `nombre` es editable pero exige cascada en `rota_piezas`.
+_CAMPOS_EDITABLES_PROGRAMA_ROTA: tuple[str, ...] = (
+    "nombre",
+    "descripcion",
+    "color",
+    "inicio",
+    "fin",
+    "activo",
+)
+
+
+def _fila_a_programa_rota(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `rota_programas` en dict (`activo` como bool)."""
+    p: dict[str, Any] = {col: fila[col] for col in _COLS_PROGRAMA_ROTA}
+    p["activo"] = bool(fila["activo"])
+    return p
+
+
+def _programa_por_nombre(con: Any, nombre: str) -> dict[str, Any] | None:
+    """Busca un programa por nombre EXACTO (case-insensitive). None si no hay.
+
+    Usa LOWER(nombre) en SQL para que "MUNDIAL" no choque con "Mundial". La capa API
+    impone la unicidad case-insensitive antes de insertar.
+    """
+    fila = con.execute(
+        f"{_SELECT_PROGRAMA_ROTA} WHERE LOWER(nombre) = LOWER(?)", (nombre,)
+    ).fetchone()
+    return _fila_a_programa_rota(fila) if fila is not None else None
+
+
+def existe_programa_por_nombre(nombre: str) -> bool:
+    """True si hay un programa con ese nombre (case-insensitive). Util para la API."""
+    if not nombre:
+        return False
+    con = _conectar()
+    try:
+        return _programa_por_nombre(con, nombre) is not None
+    finally:
+        con.close()
+
+
+def contar_piezas_por_programa(nombre: str) -> int:
+    """Cuantas piezas en `rota_piezas` referencian ese `programa` (case-insensitive)."""
+    if not nombre:
+        return 0
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT COUNT(*) AS n FROM rota_piezas WHERE LOWER(programa) = LOWER(?)",
+            (nombre,),
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"] or 0) if fila is not None else 0
+
+
+def crear_programa_rota(
+    nombre: str,
+    *,
+    descripcion: str = "",
+    color: str = "",
+    inicio: str = "",
+    fin: str = "",
+    activo: bool = True,
+) -> dict[str, Any]:
+    """Inserta un programa nuevo y lo devuelve. NO valida (lo hace la API).
+
+    `nombre` se persiste tal cual lo manda la API; la unicidad case-insensitive la
+    garantiza la capa API antes de llegar aqui (un INSERT chocaria con el UNIQUE del
+    DDL en caso de duplicado exacto).
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "nombre": nombre,
+        "descripcion": descripcion or "",
+        "color": color or "",
+        "inicio": inicio or "",
+        "fin": fin or "",
+        "activo": 1 if activo else 0,
+        "creado": ahora,
+        "actualizado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_PROGRAMA_ROTA)
+        con.execute(
+            f"INSERT INTO rota_programas ({', '.join(_COLS_PROGRAMA_ROTA)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_PROGRAMA_ROTA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    fila["activo"] = bool(fila["activo"])
+    return fila
+
+
+def listar_programas_rota(*, activo: bool | None = None) -> list[dict[str, Any]]:
+    """Programas del catalogo, ordenados por nombre. `activo` filtra; None = todos."""
+    sql = _SELECT_PROGRAMA_ROTA
+    params: tuple[Any, ...] = ()
+    if activo is not None:
+        sql += " WHERE activo = ?"
+        params = (1 if activo else 0,)
+    sql += " ORDER BY LOWER(nombre) ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_programa_rota(f) for f in filas]
+
+
+def obtener_programa_rota(programa_id: str) -> dict[str, Any] | None:
+    """Un programa por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_PROGRAMA_ROTA} WHERE id = ?", (programa_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_programa_rota(fila) if fila is not None else None
+
+
+def actualizar_programa_rota(
+    programa_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente un programa; None si el id no existe.
+
+    Si el cambio incluye `nombre` y es distinto al actual, hace CASCADA sobre
+    `rota_piezas` (UPDATE `programa` por el nombre antiguo) en LA MISMA TRANSACCION:
+    ningun escenario deja piezas referenciando a un nombre que ya no existe.
+
+    NOTA: la unicidad case-insensitive y el control de existencia los valida la capa API
+    ANTES de llamar (defensa en profundidad: el UNIQUE del DDL es el ultimo cerrojo).
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PROGRAMA_ROTA}
+    if not cambios:
+        return obtener_programa_rota(programa_id)
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, programa_id]
+    con = _conectar()
+    try:
+        # 1) Cargar el nombre ACTUAL para detectar el rename y disparar la cascada.
+        fila_actual = con.execute(
+            "SELECT nombre FROM rota_programas WHERE id = ?", (programa_id,)
+        ).fetchone()
+        if fila_actual is None:
+            return None
+        nombre_actual = fila_actual["nombre"]
+        nuevo_nombre = cambios.get("nombre")
+        # 2) UPDATE del programa.
+        con.execute(
+            f"UPDATE rota_programas SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        # 3) Cascada en piezas si el nombre cambio realmente.
+        if isinstance(nuevo_nombre, str) and nuevo_nombre and nuevo_nombre != nombre_actual:
+            con.execute(
+                "UPDATE rota_piezas SET programa = ?, actualizado = ? WHERE programa = ?",
+                (nuevo_nombre, ahora, nombre_actual),
+            )
+        con.commit()
+        fila = con.execute(
+            f"{_SELECT_PROGRAMA_ROTA} WHERE id = ?", (programa_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_programa_rota(fila) if fila is not None else None
+
+
+def borrar_programa_rota(programa_id: str) -> bool:
+    """Borra un programa; True si existia, False si no.
+
+    NO arrastra cascada sobre `rota_piezas`: la capa API decide si bloquea el borrado
+    cuando hay piezas usando el nombre (con `?forzar=true` se permite igualmente y las
+    piezas siguen mostrando el nombre textual). Esto vive en `api/rota.py`.
+    """
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM rota_programas WHERE id = ?", (programa_id,))
         con.commit()
         return cur.rowcount > 0
     finally:
