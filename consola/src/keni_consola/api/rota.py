@@ -1242,6 +1242,9 @@ RUTAS = [
     Route("/api/rota/eventos/{evento_id}", actualizar_evento, methods=["PATCH"]),
     Route("/api/rota/eventos/{evento_id}", borrar_evento, methods=["DELETE"]),
     Route("/api/rota/semana", semana, methods=["GET"]),
+    # OJO: la ruta de lote debe ir ANTES que la paramétrica `{turno_id}`, si no Starlette
+    # captura "lote" como id de turno y devuelve 404.
+    Route("/api/rota/turnos/lote", actualizar_turnos_lote, methods=["PATCH"]),
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
     Route("/api/rota/semana/aprobar", aprobar_semana, methods=["POST"]),
     Route("/api/rota/mi-semana", mi_semana, methods=["GET"]),
@@ -1256,8 +1259,8 @@ RUTAS = [
     Route("/api/rota/horario/aprobar", aprobar_semana_horario, methods=["POST"]),
     Route("/api/rota/mi-horario", mi_horario, methods=["GET"]),
     # Asignación flexible (rama rota-asignacion-flexible): atajos manuales.
+    # (la ruta `/turnos/lote` está más arriba: tiene que ir antes que `{turno_id}`.)
     Route("/api/rota/cobertura/asignar-franja", asignar_franja, methods=["POST"]),
-    Route("/api/rota/turnos/lote", actualizar_turnos_lote, methods=["PATCH"]),
     Route("/api/rota/copiar-semana", copiar_semana, methods=["POST"]),
     Route("/api/rota/carga", carga_semana, methods=["GET"]),
     Route("/api/rota/export.csv", export_csv, methods=["GET"]),

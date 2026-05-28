@@ -624,3 +624,269 @@ def test_export_xlsx_incluye_hoja_horario(cliente):
         workbook = z.read("xl/workbook.xml").decode("utf-8")
     assert "Rota" in workbook
     assert "Horario equipo" in workbook
+
+
+# --------------------------------------------------------------------------- #
+# Asignación flexible: por franja, por lote, copiar semana, panel de carga      #
+# --------------------------------------------------------------------------- #
+
+
+def test_asignar_franja_solo_los_que_caen_en_franja(cliente):
+    equipo = _crear_equipo(2)
+    tescu = equipo[0]
+    # Sábado SAB1: 3 eventos por la tarde + 1 por la mañana (no debe asignarse).
+    ev_tarde_1 = _crear_evento(cliente, titulo="Final", fecha=SAB1, hora="16:00")
+    ev_tarde_2 = _crear_evento(cliente, titulo="Cierre", fecha=SAB1, hora="20:00")
+    ev_tarde_3 = _crear_evento(cliente, titulo="Resumen", fecha=SAB1, hora="22:00")
+    ev_mañana = _crear_evento(cliente, titulo="Pre", fecha=SAB1, hora="09:00")
+    # Uno de los de la tarde ya está asignado al otro miembro.
+    _crear_turno(LUNES1, ev_tarde_1["id"], equipo[1])
+
+    r = cliente.post(
+        "/api/rota/cobertura/asignar-franja",
+        json={
+            "lunes": LUNES1,
+            "fecha": SAB1,
+            "franja": "vespertino",
+            "miembro_id": tescu["id"],
+            "sobreescribir": False,
+        },
+    )
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    # 2 sin asignar -> actualizados; 1 ya asignado (otro miembro) -> saltado.
+    assert datos["actualizados"] == 2
+    assert datos["saltados"] == 1
+    assert datos["conflictos"] == []
+    # Comprobamos que el evento de la mañana NO se tocó.
+    semana = cliente.get(f"/api/rota/semana?lunes={LUNES1}").json()
+    turnos_por_ev = {t["evento_id"]: t for t in semana["turnos"]}
+    assert turnos_por_ev[ev_tarde_2["id"]]["miembro_id"] == tescu["id"]
+    assert turnos_por_ev[ev_tarde_3["id"]]["miembro_id"] == tescu["id"]
+    assert ev_mañana["id"] not in turnos_por_ev  # no se creó turno para él
+
+    # Con sobreescribir=true se reasignan TODOS los de la tarde, incluso el que estaba asignado.
+    r2 = cliente.post(
+        "/api/rota/cobertura/asignar-franja",
+        json={
+            "lunes": LUNES1,
+            "fecha": SAB1,
+            "franja": "vespertino",
+            "miembro_id": tescu["id"],
+            "sobreescribir": True,
+        },
+    )
+    datos2 = r2.json()
+    assert datos2["actualizados"] == 3
+    assert datos2["saltados"] == 0
+
+
+def test_asignar_franja_descanso_400(cliente):
+    equipo = _crear_equipo(1)
+    r = cliente.post(
+        "/api/rota/cobertura/asignar-franja",
+        json={
+            "lunes": LUNES1,
+            "fecha": SAB1,
+            "franja": "descanso",
+            "miembro_id": equipo[0]["id"],
+            "sobreescribir": False,
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_asignar_franja_miembro_invalido_400(cliente):
+    r = cliente.post(
+        "/api/rota/cobertura/asignar-franja",
+        json={
+            "lunes": LUNES1,
+            "fecha": SAB1,
+            "franja": "vespertino",
+            "miembro_id": "no-existe",
+            "sobreescribir": False,
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_lote_asigna_varios_turnos_a_la_vez(cliente):
+    equipo = _crear_equipo(2)
+    luis, tescu = equipo[0], equipo[1]
+    # 5 eventos de un día normal (no sábado): los asignamos a Tescu, luego en lote pasan a Luis.
+    eventos = [
+        _crear_evento(cliente, titulo=f"E{i}", fecha="2026-05-27", hora=f"{14 + i}:00")
+        for i in range(5)
+    ]
+    turnos = [_crear_turno(LUNES1, ev["id"], tescu) for ev in eventos]
+    ids = [t["id"] for t in turnos]
+    r = cliente.patch(
+        "/api/rota/turnos/lote", json={"ids": ids, "miembro_id": luis["id"]}
+    )
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    assert datos["actualizados"] == 5
+    assert all(t["miembro_id"] == luis["id"] for t in datos["turnos"])
+
+
+def test_lote_sabado_exige_override_atomico(cliente):
+    equipo = _crear_equipo(3)
+    ana, beto, _ = equipo[0], equipo[1], equipo[2]
+    # Semana 1: ana cubre el sábado SAB1.
+    ev_sab1 = _crear_evento(cliente, fecha=SAB1)
+    _crear_turno(LUNES1, ev_sab1["id"], ana)
+    # Semana 2: dos turnos, uno en sábado (asignado a beto) + uno entre semana.
+    ev_sab2 = _crear_evento(cliente, fecha=SAB2)
+    ev_mar = _crear_evento(cliente, fecha="2026-06-02", hora="10:00")
+    t_sab2 = _crear_turno(LUNES2, ev_sab2["id"], beto)
+    t_mar = _crear_turno(LUNES2, ev_mar["id"], beto)
+
+    # Intentar pasar ambos a ana en lote: el sábado choca; ATÓMICO -> 409 y nada cambia.
+    r = cliente.patch(
+        "/api/rota/turnos/lote",
+        json={"ids": [t_sab2["id"], t_mar["id"]], "miembro_id": ana["id"]},
+    )
+    assert r.status_code == 409, r.text
+    datos = r.json()
+    assert datos["requiere_override"] is True
+    assert datos["ids_que_requieren_override"] == [t_sab2["id"]]
+    # Verifica que el turno entre semana TAMPOCO se tocó (atomicidad).
+    semana = cliente.get(f"/api/rota/semana?lunes={LUNES2}").json()
+    turnos_por_id = {t["id"]: t for t in semana["turnos"]}
+    assert turnos_por_id[t_mar["id"]]["miembro_id"] == beto["id"]
+
+    # Con override SÍ se aplica al lote completo.
+    r_ok = cliente.patch(
+        "/api/rota/turnos/lote",
+        json={
+            "ids": [t_sab2["id"], t_mar["id"]],
+            "miembro_id": ana["id"],
+            "override": True,
+            "motivo": "Cobertura clave",
+        },
+    )
+    assert r_ok.status_code == 200, r_ok.text
+    assert r_ok.json()["actualizados"] == 2
+    assert all(t["miembro_id"] == ana["id"] for t in r_ok.json()["turnos"])
+
+
+def test_lote_miembro_invalido_400(cliente):
+    equipo = _crear_equipo(1)
+    ev = _crear_evento(cliente)
+    t = _crear_turno(LUNES1, ev["id"], equipo[0])
+    r = cliente.patch(
+        "/api/rota/turnos/lote", json={"ids": [t["id"]], "miembro_id": "no-existe"}
+    )
+    assert r.status_code == 400
+
+
+def test_lote_turno_inexistente_404(cliente):
+    equipo = _crear_equipo(1)
+    r = cliente.patch(
+        "/api/rota/turnos/lote",
+        json={"ids": ["no-existe"], "miembro_id": equipo[0]["id"]},
+    )
+    assert r.status_code == 404
+
+
+def test_copiar_semana_horario_replica_franjas_con_offset(cliente):
+    equipo = _crear_equipo(2)
+    luis, tescu = equipo[0], equipo[1]
+    # Semana 1: horario laboral con varias franjas y un descanso.
+    _crear_turno_trabajo(LUNES1, "2026-05-25", luis, franja="matutino")
+    _crear_turno_trabajo(LUNES1, "2026-05-25", tescu, franja="vespertino")
+    _crear_turno_trabajo(LUNES1, SAB1, luis, franja="descanso")
+    _crear_turno_trabajo(LUNES1, SAB1, tescu, franja="matutino")
+
+    r = cliente.post(
+        "/api/rota/copiar-semana",
+        json={"de_lunes": LUNES1, "a_lunes": LUNES2, "alcance": "horario"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["copiados"] == 4
+
+    horario2 = cliente.get(f"/api/rota/horario?lunes={LUNES2}").json()
+    turnos2 = horario2["turnos"]
+    # +7 dias en cada fecha; mismas franjas; estado `propuesto`.
+    fechas_franjas = {(t["fecha"], t["miembro_id"], t["franja"]) for t in turnos2}
+    assert (LUNES2, luis["id"], "matutino") in fechas_franjas
+    assert (LUNES2, tescu["id"], "vespertino") in fechas_franjas
+    assert (SAB2, luis["id"], "descanso") in fechas_franjas
+    assert (SAB2, tescu["id"], "matutino") in fechas_franjas
+    assert all(t["estado"] == "propuesto" for t in turnos2)
+
+
+def test_copiar_semana_cobertura_es_no_op_con_mensaje(cliente):
+    r = cliente.post(
+        "/api/rota/copiar-semana",
+        json={"de_lunes": LUNES1, "a_lunes": LUNES2, "alcance": "cobertura"},
+    )
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    assert datos["copiados"] == 0
+    assert "horario" in datos["mensaje"].lower()
+
+
+def test_copiar_semana_misma_origen_destino_400(cliente):
+    r = cliente.post(
+        "/api/rota/copiar-semana",
+        json={"de_lunes": LUNES1, "a_lunes": LUNES1, "alcance": "horario"},
+    )
+    assert r.status_code == 400
+
+
+def test_copiar_semana_horario_reemplazar(cliente):
+    equipo = _crear_equipo(1)
+    luis = equipo[0]
+    # Horario en ambas semanas; con reemplazar=true, el destino queda solo con lo copiado.
+    _crear_turno_trabajo(LUNES1, "2026-05-25", luis, franja="matutino")
+    _crear_turno_trabajo(LUNES2, LUNES2, luis, franja="descanso")
+    r = cliente.post(
+        "/api/rota/copiar-semana",
+        json={
+            "de_lunes": LUNES1,
+            "a_lunes": LUNES2,
+            "alcance": "horario",
+            "reemplazar": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["copiados"] == 1
+    horario2 = cliente.get(f"/api/rota/horario?lunes={LUNES2}").json()
+    assert horario2["total"] == 1
+    assert horario2["turnos"][0]["franja"] == "matutino"
+
+
+def test_carga_resumen_por_persona(cliente):
+    equipo = _crear_equipo(2)
+    tescu, luis = equipo[0], equipo[1]
+    # 6 eventos de la semana asignados a Tescu (uno cae en sábado).
+    eventos = [
+        _crear_evento(cliente, titulo=f"E{i}", fecha=("2026-05-27" if i < 5 else SAB1), hora="16:00")
+        for i in range(6)
+    ]
+    for ev in eventos:
+        _crear_turno(LUNES1, ev["id"], tescu)
+    # Horario laboral: tescu 4 dias + 1 descanso; luis 0.
+    _crear_turno_trabajo(LUNES1, "2026-05-25", tescu, franja="vespertino")
+    _crear_turno_trabajo(LUNES1, "2026-05-26", tescu, franja="vespertino")
+    _crear_turno_trabajo(LUNES1, "2026-05-27", tescu, franja="vespertino")
+    _crear_turno_trabajo(LUNES1, "2026-05-28", tescu, franja="descanso")
+    _crear_turno_trabajo(LUNES1, SAB1, tescu, franja="vespertino")
+
+    r = cliente.get(f"/api/rota/carga?lunes={LUNES1}")
+    assert r.status_code == 200, r.text
+    miembros = r.json()["miembros"]
+    # Ordenado por eventos desc: Tescu primero.
+    assert miembros[0]["nombre"] == tescu["usuario"]
+    assert miembros[0]["eventos"] == 6
+    assert miembros[0]["sabado"] is True
+    assert miembros[0]["descansos"] == 1
+    luis_carga = next(m for m in miembros if m["nombre"] == luis["usuario"])
+    assert luis_carga["eventos"] == 0
+    assert luis_carga["sabado"] is False
+
+
+def test_carga_sin_lunes_400(cliente):
+    r = cliente.get("/api/rota/carga")
+    assert r.status_code == 400
