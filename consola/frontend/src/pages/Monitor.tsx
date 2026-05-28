@@ -38,8 +38,6 @@ import type {
   TotalRuns,
 } from "@/types";
 
-import { TabsAgentes } from "./agentes/TabsAgentes";
-
 /** Centinela del filtro "todos los agentes". */
 const AGENTE_TODOS = "__todos__";
 
@@ -474,8 +472,6 @@ export default function Monitor() {
         descripcion="Tokens, coste y duración de los runs de IA de todos los agentes."
         acciones={acciones}
       />
-
-      <TabsAgentes />
 
       {cargando ? (
         <EsqueletoMonitor />

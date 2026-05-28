@@ -20,7 +20,6 @@ import {
   DialogoCrearAgente,
   DialogoRenombrarAgente,
 } from "./agentes/GestionAgentes";
-import { TabsAgentes } from "./agentes/TabsAgentes";
 
 /** Clave de React Query para el listado de agentes. */
 export const CLAVE_AGENTES = ["agentes"] as const;
@@ -171,8 +170,6 @@ export default function Agentes() {
         descripcion="Cada agente es una carpeta con su contexto (CLAUDE.md), sub-contextos y ejecuciones. Las marcas de serie son fijas; los genéricos se gestionan aquí."
         acciones={acciones}
       />
-
-      <TabsAgentes />
 
       {isPending ? (
         <EsqueletoAgentes />

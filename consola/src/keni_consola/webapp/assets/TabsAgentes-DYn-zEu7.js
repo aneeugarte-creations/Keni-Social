@@ -1,6 +1,0 @@
-import{z as n,Z as e,N as s,B as r,w as a}from"./index-CydXj9O0.js";/**
- * @license lucide-react v0.475.0 - ISC
- *
- * This source code is licensed under the ISC license.
- * See the LICENSE file in the root directory of this source tree.
- */const i=[["path",{d:"M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2",key:"169zse"}]],o=n("Activity",i);function c(){return e.jsx("nav",{"aria-label":"Pestañas de Agentes",className:"mb-4",children:e.jsxs("div",{className:"inline-flex h-9 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground",children:[e.jsxs(s,{to:"/agentes",end:!0,className:({isActive:t})=>a("inline-flex items-center gap-1.5 rounded-sm px-3 py-1 text-sm font-medium transition-colors",t?"bg-background text-foreground shadow-sm":"hover:text-foreground"),children:[e.jsx(r,{className:"h-4 w-4","aria-hidden":"true"}),"Agentes"]}),e.jsxs(s,{to:"/agentes/actividad",className:({isActive:t})=>a("inline-flex items-center gap-1.5 rounded-sm px-3 py-1 text-sm font-medium transition-colors",t?"bg-background text-foreground shadow-sm":"hover:text-foreground"),children:[e.jsx(o,{className:"h-4 w-4","aria-hidden":"true"}),"Actividad IA"]})]})})}export{o as A,c as T};

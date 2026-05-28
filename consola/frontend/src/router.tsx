@@ -9,21 +9,34 @@ import { AppShell } from "@/components/layout/AppShell";
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
 const Generacion = lazy(() => import("@/pages/Generacion"));
-const Verificacion = lazy(() => import("@/pages/Verificacion"));
-const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
-const Skills = lazy(() => import("@/pages/Skills"));
 const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
+const Skills = lazy(() => import("@/pages/Skills"));
+
+// Hubs (layouts con tabs internos) y sus subpaginas.
+const Investigacion = lazy(() => import("@/pages/Investigacion"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
-const Metricas = lazy(() => import("@/pages/Metricas"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
 const Radar = lazy(() => import("@/pages/Radar"));
+
+const Revision = lazy(() => import("@/pages/Revision"));
+const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
+const Verificacion = lazy(() => import("@/pages/Verificacion"));
+
+const Analiticas = lazy(() => import("@/pages/Analiticas"));
+const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
 const ReporteDeportes = lazy(() => import("@/pages/ReporteDeportes"));
-const Agentes = lazy(() => import("@/pages/Agentes"));
-const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
-const Monitor = lazy(() => import("@/pages/Monitor"));
+
+const Parrilla = lazy(() => import("@/pages/Parrilla"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
+
+const AgentesHub = lazy(() => import("@/pages/AgentesHub"));
+const Agentes = lazy(() => import("@/pages/Agentes"));
+const Monitor = lazy(() => import("@/pages/Monitor"));
+const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
+
+// Ajustes (ahora solo accesibles via dropdown del avatar).
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
@@ -31,7 +44,10 @@ const Usuarios = lazy(() => import("@/pages/Usuarios"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
- * cuelgan de el. La landing `/` redirige a `/generacion`, que es el uso diario.
+ * cuelgan de el. Cada "hub" (Investigación, Revisión, Analíticas, Parrilla,
+ * Agentes) es a su vez un layout con tabs internos que renderiza sub-rutas.
+ *
+ * La landing `/` redirige a `/generacion` (uso diario).
  */
 export const router = createBrowserRouter([
   {
@@ -39,48 +55,100 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <Navigate to="/generacion" replace /> },
-      // Trabajo
+
+      // Diario
       { path: "panel", element: <Panel /> },
       { path: "generacion", element: <Generacion /> },
-      { path: "verificacion", element: <Verificacion /> },
-      { path: "revision-editorial", element: <RevisionEditorial /> },
-      { path: "skills", element: <Skills /> },
       { path: "publicaciones", element: <Publicaciones /> },
-      { path: "fuentes", element: <Fuentes /> },
-      { path: "termometro", element: <Termometro /> },
-      { path: "radar", element: <Radar /> },
-      { path: "metricas", element: <Metricas /> },
-      { path: "comercial", element: <Comercial /> },
-      { path: "reporte-deportes", element: <ReporteDeportes /> },
-      // Agentes: la actividad IA (antes /monitor) es ahora la pestaña hermana
-      // dentro de la misma sección. El detalle queda en su propia ruta para
-      // ocupar toda la pantalla sin la subnav.
-      { path: "agentes", element: <Agentes /> },
-      { path: "agentes/actividad", element: <Monitor /> },
+      { path: "skills", element: <Skills /> },
+
+      // Hub Investigación
+      {
+        path: "investigacion",
+        element: <Investigacion />,
+        children: [
+          { index: true, element: <Navigate to="fuentes" replace /> },
+          { path: "fuentes", element: <Fuentes /> },
+          { path: "termometro", element: <Termometro /> },
+          { path: "radar", element: <Radar /> },
+        ],
+      },
+
+      // Hub Revisión
+      {
+        path: "revision",
+        element: <Revision />,
+        children: [
+          { index: true, element: <Navigate to="editorial" replace /> },
+          { path: "editorial", element: <RevisionEditorial /> },
+          { path: "verificacion", element: <Verificacion /> },
+        ],
+      },
+
+      // Hub Analíticas
+      {
+        path: "analiticas",
+        element: <Analiticas />,
+        children: [
+          { index: true, element: <Navigate to="metricas" replace /> },
+          { path: "metricas", element: <Metricas /> },
+          { path: "comercial", element: <Comercial /> },
+          { path: "reporte-deportes", element: <ReporteDeportes /> },
+        ],
+      },
+
+      // Hub Parrilla (antes /tareas + /rota)
+      {
+        path: "parrilla",
+        element: <Parrilla />,
+        children: [
+          { index: true, element: <Navigate to="pendientes" replace /> },
+          { path: "pendientes", element: <Tareas /> },
+          { path: "calendario", element: <Rota /> },
+        ],
+      },
+
+      // Hub Agentes (catalogo + Actividad IA como pestañas). El detalle queda
+      // fuera del hub para ocupar toda la pantalla sin la subnav.
+      {
+        path: "agentes",
+        element: <AgentesHub />,
+        children: [
+          { index: true, element: <Agentes /> },
+          { path: "actividad", element: <Monitor /> },
+        ],
+      },
       { path: "agentes/:id", element: <DetalleAgente /> },
-      { path: "tareas", element: <Tareas /> },
-      { path: "rota", element: <Rota /> },
-      // Ajustes
+
+      // Ajustes (sin entrada en el sidebar; se llega desde el dropdown del avatar).
+      { path: "mi-cuenta", element: <MiCuenta /> },
       { path: "configuracion", element: <Configuracion /> },
       { path: "sugerencias", element: <Sugerencias /> },
-      // Configuración de la propia cuenta (cualquier rol): datos + cambio de contraseña.
-      { path: "mi-cuenta", element: <MiCuenta /> },
-      // Gestión de usuarios (solo admin; el backend devuelve 403 si no, y la
-      // propia página muestra el aviso de permiso al entrar por URL directa).
+      // Gestion de usuarios: solo admin (el backend devuelve 403 si no, y la
+      // propia pagina muestra el aviso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },
-      // Redirecciones de páginas fusionadas/retiradas:
-      // Conexiones se fusionó en Configuración; Estado pasó a la topbar (#87, #88).
-      { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
-      { path: "estado", element: <Navigate to="/configuracion" replace /> },
-      // Proyectos y Nueva carpeta se unificaron en Agentes (#85). Tareas vuelve a
-      // tener su propia vista de pendientes (#104), por encima.
-      { path: "proyectos", element: <Navigate to="/agentes" replace /> },
-      { path: "carpetas", element: <Navigate to="/agentes" replace /> },
-      // Generar copy + Imágenes se fusionaron en Generación. Monitor pasó a ser
-      // la pestaña "Actividad IA" dentro de Agentes.
+
+      // ===== Redirecciones de rutas legacy =====
+      // Fusiones de paginas individuales en hubs:
+      { path: "fuentes", element: <Navigate to="/investigacion/fuentes" replace /> },
+      { path: "termometro", element: <Navigate to="/investigacion/termometro" replace /> },
+      { path: "radar", element: <Navigate to="/investigacion/radar" replace /> },
+      { path: "revision-editorial", element: <Navigate to="/revision/editorial" replace /> },
+      { path: "verificacion", element: <Navigate to="/revision/verificacion" replace /> },
+      { path: "metricas", element: <Navigate to="/analiticas/metricas" replace /> },
+      { path: "comercial", element: <Navigate to="/analiticas/comercial" replace /> },
+      { path: "reporte-deportes", element: <Navigate to="/analiticas/reporte-deportes" replace /> },
+      { path: "tareas", element: <Navigate to="/parrilla/pendientes" replace /> },
+      { path: "rota", element: <Navigate to="/parrilla/calendario" replace /> },
+      { path: "monitor", element: <Navigate to="/agentes/actividad" replace /> },
+      // Fusiones anteriores (mantener compatibilidad):
       { path: "generar-copy", element: <Navigate to="/generacion" replace /> },
       { path: "imagenes", element: <Navigate to="/generacion" replace /> },
-      { path: "monitor", element: <Navigate to="/agentes/actividad" replace /> },
+      { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
+      { path: "estado", element: <Navigate to="/configuracion" replace /> },
+      { path: "proyectos", element: <Navigate to="/agentes" replace /> },
+      { path: "carpetas", element: <Navigate to="/agentes" replace /> },
+
       // Cualquier otra ruta: de vuelta al inicio.
       { path: "*", element: <Navigate to="/generacion" replace /> },
     ],
