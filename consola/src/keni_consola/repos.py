@@ -35,9 +35,11 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
+    ESTADO_SWAP_PROPUESTO,
     ESTADOS_COMERCIAL,
     ESTADOS_PUBLICACION,
     ESTADOS_ROTA,
+    ESTADOS_SWAP,
     ESTADOS_TAREA,
     FRANJA_DESCANSO,
     FRANJAS_TURNO,
@@ -628,6 +630,96 @@ def actualizar_ausencia_rota(
 
 def borrar_ausencia_rota(ausencia_id: str) -> bool:
     return db.borrar_ausencia_rota(ausencia_id)
+
+
+# --------------------------------------------------------------------------- #
+# Solicitudes de cambio de turno entre companeros (OPERACIONAL; #175)          #
+# --------------------------------------------------------------------------- #
+#
+# Cuando un CM (A) le pide a otro (B) intercambiar turnos por un asunto personal y
+# Elias (admin) lo aprueba, se aplica el swap sobre `rota_turnos_trabajo`. Las ausencias
+# REALES (vacaciones/baja) viven en SAP, no aqui. La fachada delega 1:1 en db.py.
+
+
+def crear_swap_turno(
+    solicitante_id: str,
+    destinatario_id: str,
+    fecha_a: str,
+    franja_a: str,
+    fecha_b: str,
+    franja_b: str,
+    *,
+    solicitante_nombre: str = "",
+    destinatario_nombre: str = "",
+    motivo: str = "",
+) -> dict[str, Any]:
+    return db.crear_swap_turno(
+        solicitante_id,
+        destinatario_id,
+        fecha_a,
+        franja_a,
+        fecha_b,
+        franja_b,
+        solicitante_nombre=solicitante_nombre,
+        destinatario_nombre=destinatario_nombre,
+        motivo=motivo,
+    )
+
+
+def listar_swaps_turno(
+    estado: str | None = None,
+    solicitante_id: str | None = None,
+    destinatario_id: str | None = None,
+    *,
+    mio_id: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_swaps_turno(
+        estado=estado,
+        solicitante_id=solicitante_id,
+        destinatario_id=destinatario_id,
+        mio_id=mio_id,
+    )
+
+
+def obtener_swap_turno(swap_id: str) -> dict[str, Any] | None:
+    return db.obtener_swap_turno(swap_id)
+
+
+def actualizar_swap_turno(
+    swap_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_swap_turno(swap_id, campos)
+
+
+def borrar_swap_turno(swap_id: str) -> bool:
+    return db.borrar_swap_turno(swap_id)
+
+
+def aplicar_swap_turno(
+    swap_id: str,
+    *,
+    solicitante_id: str,
+    solicitante_nombre: str,
+    destinatario_id: str,
+    destinatario_nombre: str,
+    fecha_a: str,
+    franja_a: str,
+    fecha_b: str,
+    franja_b: str,
+    respuesta_admin: str = "",
+) -> dict[str, Any] | None:
+    return db.aplicar_swap_turno(
+        swap_id,
+        solicitante_id=solicitante_id,
+        solicitante_nombre=solicitante_nombre,
+        destinatario_id=destinatario_id,
+        destinatario_nombre=destinatario_nombre,
+        fecha_a=fecha_a,
+        franja_a=franja_a,
+        fecha_b=fecha_b,
+        franja_b=franja_b,
+        respuesta_admin=respuesta_admin,
+    )
 
 
 # --------------------------------------------------------------------------- #
