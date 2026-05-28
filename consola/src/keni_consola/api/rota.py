@@ -1,8 +1,9 @@
 """API Rota: parrilla y rota de horarios del equipo (F4 · #144).
 
-Sustituye el Excel manual de Elias por una vista de equipo que PROPONE la rota y la
-hace visible con anticipacion. Keni propone + consolida; Elias ajusta y APRUEBA las
-asignaciones finales antes de publicarlas al equipo. Nada se publica hasta aprobar.
+Sustituye el Excel manual de Elias por una vista de equipo donde EL ADMIN asigna a
+mano la rota y la hace visible con anticipacion. La consola le ENSENA huecos,
+repeticiones de sabado y carga por persona; Elias decide y APRUEBA antes de publicar
+al equipo. Nada se publica hasta aprobar.
 
   - `GET    /api/rota/equipo`                 -> miembros del equipo (usuarios #130).
   - `GET    /api/rota/eventos[?desde&hasta&cambiados&tipo_cobertura]` -> eventos/transmisiones.
@@ -10,7 +11,6 @@ asignaciones finales antes de publicarlas al equipo. Nada se publica hasta aprob
   - `PATCH  /api/rota/eventos/{id}`           edita un evento (reprograma -> cambiado=1; cambiado:false lo limpia).
   - `DELETE /api/rota/eventos/{id}`           borra el evento (y sus turnos).
   - `GET    /api/rota/semana[?lunes]`         -> rota de la semana (turnos + eventos).
-  - `POST   /api/rota/proponer`               {lunes} -> PROPONE (no publica) la rota.
   - `PATCH  /api/rota/turnos/{id}`            {miembro_id, override, motivo, estado}
   - `POST   /api/rota/semana/aprobar`         {lunes} -> Elias APRUEBA (publica) la semana.
   - `GET    /api/rota/mi-semana[?lunes]`      -> "mi proxima semana" del usuario actual.
@@ -19,14 +19,13 @@ asignaciones finales antes de publicarlas al equipo. Nada se publica hasta aprob
 GESTION DE TURNOS (ola A): el HORARIO de trabajo del equipo, paralelo a la cobertura:
   - `GET/POST/PATCH/DELETE /api/rota/ausencias[/{id}]` -> vacaciones/ausencias por miembro.
   - `GET    /api/rota/horario[?lunes]`        -> el horario (turnos de trabajo) de la semana.
-  - `POST   /api/rota/horario/proponer`       {lunes} -> PROPONE el horario (no publica).
   - `PATCH  /api/rota/horario/turnos/{id}`    {franja, miembro_id, override, motivo, nota_relevo, estado}
   - `POST   /api/rota/horario/aprobar`        {lunes} -> Elias APRUEBA (publica) el horario.
   - `GET    /api/rota/mi-horario[?lunes]`     -> los turnos de trabajo del usuario actual.
 
-ROTACION DE SABADOS (criterio de aceptacion): el proponedor no repite a la misma
-persona dos sabados seguidos salvo override explicito. La logica pura vive en `rota.py`
-(probada aparte); aqui se construyen las entradas, se persiste y se serializa.
+ROTACION DE SABADOS (criterio de aceptacion): la edicion manual no repite a la misma
+persona dos sabados seguidos salvo override explicito. Los predicados puros viven en
+`rota.py` (probados aparte); aqui se aplican al PATCH de turnos.
 
 IDENTIDAD (#130): el equipo son los USUARIOS de la consola (solo lectura desde `auth`).
 El usuario autenticado de la peticion (`request.state.usuario`) alimenta "mi semana".
@@ -51,7 +50,6 @@ from ..estados import (
     FRANJAS_TRABAJO,
     FRANJAS_TURNO,
     PRIORIDADES_EVENTO,
-    TIPO_COBERTURA_NO_CUBRIR,
     TIPOS_AUSENCIA,
     TIPOS_COBERTURA,
 )
@@ -160,7 +158,8 @@ def _sabado_previo(lunes_iso: str) -> str:
     """Id del miembro que cubrio el sabado de la semana ANTERIOR a `lunes_iso`.
 
     Mira los turnos de la semana previa y devuelve el `miembro_id` del turno de sabado
-    (vacio si no hay). Sirve para que el proponedor no repita ese miembro este sabado.
+    (vacio si no hay). Sirve para que la edicion manual del PATCH detecte la repeticion
+    de sabado consecutivo y exija un override explicito.
     """
     if not lunes_iso:
         return ""
@@ -326,7 +325,7 @@ async def borrar_evento(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Endpoints: rota de la semana, proponer, editar, aprobar                      #
+# Endpoints: rota de la semana, editar, aprobar                                #
 # --------------------------------------------------------------------------- #
 
 
@@ -334,54 +333,6 @@ async def semana(request: Request) -> Response:
     """GET /api/rota/semana[?lunes]: la rota de una semana (turnos + estado)."""
     lunes = _lunes_param(request)
     return JSONResponse(_rota_semana(lunes))
-
-
-async def proponer(request: Request) -> Response:
-    """POST /api/rota/proponer {lunes}: PROPONE la rota de la semana (no la publica).
-
-    Re-propone desde cero: borra los turnos previos de esa semana y crea los nuevos en
-    estado `propuesto`. Rota los sabados respetando "no dos sábados seguidos" (excluye
-    al miembro del sábado de la semana anterior). Devuelve la rota y los avisos.
-    """
-    datos = await leer_json(request)
-    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
-    if not lunes:
-        return JSONResponse(
-            {"error": "Indica el lunes de la semana a proponer (AAAA-MM-DD)."}, status_code=400
-        )
-
-    eventos_crudos = repos.listar_eventos_rota()
-    # Ola B (#144): los eventos `no_cubrir` se trackean en el calendario pero NO generan
-    # turno de cobertura (no se asignan a nadie). `transmision`/`imagenes` sí se proponen;
-    # un evento legado sin tipo cae a `transmision`, así que se sigue proponiendo.
-    eventos = [
-        dominio.Evento(
-            id=e["id"], titulo=e["titulo"], fecha=e["fecha"], hora=e["hora"], contenido=e["contenido"]
-        )
-        for e in eventos_crudos
-        if e.get("tipo_cobertura", "transmision") != TIPO_COBERTURA_NO_CUBRIR
-    ]
-    equipo_dom = _equipo()
-    sabado_previo = _sabado_previo(lunes)
-
-    propuesta = dominio.proponer_rota(eventos, equipo_dom, lunes, sabado_previo=sabado_previo)
-
-    # Re-proponer reemplaza la semana entera (idempotente para el operador).
-    repos.borrar_turnos_semana_rota(lunes)
-    nombres = _nombres_equipo()
-    for turno in propuesta.turnos:
-        repos.crear_turno_rota(
-            lunes,
-            turno.evento_id,
-            miembro_id=turno.miembro_id,
-            miembro_nombre=nombres.get(turno.miembro_id, ""),
-            override=turno.override,
-            motivo=turno.motivo,
-        )
-
-    payload = _rota_semana(lunes)
-    payload["avisos"] = propuesta.avisos
-    return JSONResponse(payload)
 
 
 async def actualizar_turno(request: Request) -> Response:
@@ -466,7 +417,7 @@ async def aprobar_semana(request: Request) -> Response:
     n = repos.aprobar_semana_rota(lunes)
     if n == 0:
         return JSONResponse(
-            {"error": "No hay turnos en esa semana para aprobar. Propón la rota primero."},
+            {"error": "No hay turnos en esa semana para aprobar. Asigna la rota primero."},
             status_code=400,
         )
     payload = _rota_semana(lunes)
@@ -667,7 +618,8 @@ def _turno_trabajo_a_dict(
 def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
     """Ids que TRABAJARON (no descanso) el sábado de la semana ANTERIOR a `lunes_iso`.
 
-    Sirve para que el proponedor no repita a esas personas el sábado de esta semana.
+    Sirve para que la edicion manual del PATCH detecte la repeticion de sabado de
+    trabajo consecutivo y exija un override explicito.
     """
     if not lunes_iso:
         return set()
@@ -708,49 +660,6 @@ async def horario_semana(request: Request) -> Response:
     """GET /api/rota/horario[?lunes]: el horario de trabajo de una semana."""
     lunes = _lunes_param(request)
     return JSONResponse(_horario_semana(lunes))
-
-
-async def proponer_horario(request: Request) -> Response:
-    """POST /api/rota/horario/proponer {lunes}: PROPONE el horario de la semana (no publica).
-
-    Re-propone desde cero: borra los turnos de trabajo previos de esa semana y crea los
-    nuevos en estado `propuesto`. Respeta las ausencias (no asigna a quien esté de
-    vacaciones/baja ese día) y rota los sábados (excluye a quien trabajó el sábado previo).
-    Devuelve el horario y los avisos honestos.
-    """
-    datos = await leer_json(request)
-    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
-    if not lunes:
-        return JSONResponse(
-            {"error": "Indica el lunes de la semana a proponer (AAAA-MM-DD)."},
-            status_code=400,
-        )
-
-    equipo_dom = _equipo()
-    ausencias = _ausencias_dominio()
-    sabados_previos = _sabados_previos_trabajo(lunes)
-
-    propuesta = dominio.proponer_horario(
-        equipo_dom, lunes, ausencias=ausencias, sabados_previos=sabados_previos
-    )
-
-    # Re-proponer reemplaza la semana entera (idempotente para el operador).
-    repos.borrar_turnos_trabajo_semana_rota(lunes)
-    nombres = _nombres_equipo()
-    for turno in propuesta.turnos:
-        repos.crear_turno_trabajo_rota(
-            lunes,
-            turno.fecha,
-            miembro_id=turno.miembro_id,
-            miembro_nombre=nombres.get(turno.miembro_id, ""),
-            franja=turno.franja,
-            override=turno.override,
-            motivo=turno.motivo,
-        )
-
-    payload = _horario_semana(lunes)
-    payload["avisos"] = propuesta.avisos
-    return JSONResponse(payload)
 
 
 async def actualizar_turno_trabajo(request: Request) -> Response:
@@ -851,7 +760,7 @@ async def aprobar_semana_horario(request: Request) -> Response:
     n = repos.aprobar_semana_horario_rota(lunes)
     if n == 0:
         return JSONResponse(
-            {"error": "No hay horario en esa semana para aprobar. Propón el horario primero."},
+            {"error": "No hay horario en esa semana para aprobar. Asigna el horario primero."},
             status_code=400,
         )
     payload = _horario_semana(lunes)
@@ -1059,7 +968,6 @@ RUTAS = [
     Route("/api/rota/eventos/{evento_id}", actualizar_evento, methods=["PATCH"]),
     Route("/api/rota/eventos/{evento_id}", borrar_evento, methods=["DELETE"]),
     Route("/api/rota/semana", semana, methods=["GET"]),
-    Route("/api/rota/proponer", proponer, methods=["POST"]),
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
     Route("/api/rota/semana/aprobar", aprobar_semana, methods=["POST"]),
     Route("/api/rota/mi-semana", mi_semana, methods=["GET"]),
@@ -1070,7 +978,6 @@ RUTAS = [
     Route("/api/rota/ausencias/{ausencia_id}", borrar_ausencia, methods=["DELETE"]),
     # Gestión de turnos: horario de trabajo del equipo.
     Route("/api/rota/horario", horario_semana, methods=["GET"]),
-    Route("/api/rota/horario/proponer", proponer_horario, methods=["POST"]),
     Route("/api/rota/horario/turnos/{turno_id}", actualizar_turno_trabajo, methods=["PATCH"]),
     Route("/api/rota/horario/aprobar", aprobar_semana_horario, methods=["POST"]),
     Route("/api/rota/mi-horario", mi_horario, methods=["GET"]),

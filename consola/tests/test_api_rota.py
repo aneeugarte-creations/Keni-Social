@@ -1,9 +1,11 @@
 """Tests de la API Rota (HTTP, vía TestClient). Todo OFFLINE (F4 · #144).
 
-Cubre el CONTRATO de `/api/rota/*`: equipo, eventos CRUD, proponer (con la rotación de
-sábados), edición con override, aprobación (solo admin), "mi próxima semana" y export
-.xlsx/CSV. Reusa el aislamiento de `entorno`; los miembros del equipo son usuarios
-creados a mano (auth) — el `cliente` por defecto entra por el token de mantenimiento.
+Cubre el CONTRATO de `/api/rota/*`: equipo, eventos CRUD, edición de turnos con la
+regla de override del sábado consecutivo, aprobación (solo admin), "mi próxima semana"
+y export .xlsx/CSV. Reusa el aislamiento de `entorno`; los miembros del equipo son
+usuarios creados a mano (auth) — el `cliente` por defecto entra por el token de
+mantenimiento. Los turnos se siembran directo en la BD (`repos.*`) porque la consola
+ya no propone reparto automático: Elías asigna a mano y el backend solo persiste.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
-from keni_consola import auth
+from keni_consola import auth, repos
 
 from .conftest import TOKEN_PRUEBA
 
@@ -37,6 +39,46 @@ def _crear_evento(cli: TestClient, **campos) -> dict:
     r = cli.post("/api/rota/eventos", json=base)
     assert r.status_code == 201, r.text
     return r.json()["evento"]
+
+
+def _crear_turno(
+    semana: str,
+    evento_id: str,
+    miembro: dict,
+    *,
+    override: bool = False,
+    motivo: str = "",
+) -> dict:
+    """Siembra un turno de cobertura en la BD (Elías asigna a mano; el backend persiste)."""
+    return repos.crear_turno_rota(
+        semana,
+        evento_id,
+        miembro_id=miembro["id"],
+        miembro_nombre=miembro["usuario"],
+        override=override,
+        motivo=motivo,
+    )
+
+
+def _crear_turno_trabajo(
+    semana: str,
+    fecha: str,
+    miembro: dict,
+    *,
+    franja: str = "matutino",
+    override: bool = False,
+    motivo: str = "",
+) -> dict:
+    """Siembra un turno de TRABAJO en la BD (Elías asigna a mano)."""
+    return repos.crear_turno_trabajo_rota(
+        semana,
+        fecha,
+        miembro_id=miembro["id"],
+        miembro_nombre=miembro["usuario"],
+        franja=franja,
+        override=override,
+        motivo=motivo,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -86,9 +128,9 @@ def test_editar_y_borrar_evento(cliente):
 
 
 def test_borrar_evento_borra_sus_turnos(cliente):
-    _crear_equipo(2)
+    equipo = _crear_equipo(2)
     ev = _crear_evento(cliente)
-    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
+    _crear_turno(LUNES1, ev["id"], equipo[0])
     assert cliente.get(f"/api/rota/semana?lunes={LUNES1}").json()["total"] == 1
     cliente.delete(f"/api/rota/eventos/{ev['id']}")
     assert cliente.get(f"/api/rota/semana?lunes={LUNES1}").json()["total"] == 0
@@ -200,64 +242,6 @@ def test_filtro_tipo_cobertura_invalido_400(cliente):
     assert r.status_code == 400
 
 
-def test_proponer_excluye_eventos_no_cubrir(cliente):
-    _crear_equipo(2)
-    _crear_evento(cliente, titulo="Se cubre", tipo_cobertura="transmision")
-    _crear_evento(cliente, titulo="Se cubre con fotos", tipo_cobertura="imagenes")
-    _crear_evento(cliente, titulo="No se cubre", tipo_cobertura="no_cubrir")
-    r = cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    titulos = {t["evento_titulo"] for t in r.json()["turnos"]}
-    assert "Se cubre" in titulos
-    assert "Se cubre con fotos" in titulos
-    assert "No se cubre" not in titulos  # trackeado pero NO asignado
-
-
-# --------------------------------------------------------------------------- #
-# Proponer + rotación de sábados (criterio de aceptación)                      #
-# --------------------------------------------------------------------------- #
-
-
-def test_proponer_vincula_turno_a_evento_y_contenido(cliente):
-    _crear_equipo(2)
-    _crear_evento(cliente, contenido="Clip del penal")
-    r = cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    assert r.status_code == 200
-    turnos = r.json()["turnos"]
-    assert len(turnos) == 1
-    t = turnos[0]
-    assert t["evento_id"]
-    assert t["contenido"] == "Clip del penal"  # vinculado a "qué sacar"
-    assert t["miembro_id"]  # asignado a alguien
-    assert t["estado"] == "propuesto"  # NO publicado aún
-
-
-def test_proponer_no_repite_sabado_consecutivo(cliente):
-    _crear_equipo(2)
-    # Semana 1: sábado SAB1.
-    _crear_evento(cliente, fecha=SAB1)
-    r1 = cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    sab1 = next(t for t in r1.json()["turnos"] if t["es_sabado"])
-    # Semana 2: sábado SAB2 (consecutivo).
-    _crear_evento(cliente, fecha=SAB2)
-    r2 = cliente.post("/api/rota/proponer", json={"lunes": LUNES2})
-    sab2 = next(t for t in r2.json()["turnos"] if t["es_sabado"])
-    assert sab1["miembro_id"] != sab2["miembro_id"]  # NO repite la misma persona
-
-
-def test_proponer_es_idempotente_reemplaza(cliente):
-    _crear_equipo(2)
-    _crear_evento(cliente)
-    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    # Re-proponer no duplica turnos: sigue habiendo 1.
-    assert cliente.get(f"/api/rota/semana?lunes={LUNES1}").json()["total"] == 1
-
-
-def test_proponer_sin_lunes_400(cliente):
-    r = cliente.post("/api/rota/proponer", json={})
-    assert r.status_code == 400
-
-
 # --------------------------------------------------------------------------- #
 # Edición de turno + override (regla de aceptación)                            #
 # --------------------------------------------------------------------------- #
@@ -265,20 +249,16 @@ def test_proponer_sin_lunes_400(cliente):
 
 def test_editar_turno_que_repite_sabado_exige_override(cliente):
     equipo = _crear_equipo(2)
-    # Semana 1: propone y aprobamos un sábado para 'ana' (o quien toque).
-    _crear_evento(cliente, fecha=SAB1)
-    r1 = cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    sab1 = next(t for t in r1.json()["turnos"] if t["es_sabado"])
-    persona_previa = sab1["miembro_id"]
-
-    # Semana 2: propone (rotará a otra persona).
-    _crear_evento(cliente, fecha=SAB2)
-    r2 = cliente.post("/api/rota/proponer", json={"lunes": LUNES2})
-    turno2 = next(t for t in r2.json()["turnos"] if t["es_sabado"])
+    # Semana 1: alguien (ana) cubre el sábado SAB1.
+    ev1 = _crear_evento(cliente, fecha=SAB1)
+    _crear_turno(LUNES1, ev1["id"], equipo[0])  # ana cubre el sábado previo
+    # Semana 2: alguien (beto) cubre el sábado SAB2 (rotación a mano).
+    ev2 = _crear_evento(cliente, fecha=SAB2)
+    turno2 = _crear_turno(LUNES2, ev2["id"], equipo[1])
 
     # Intentar reasignar el sábado 2 a la persona del sábado 1 SIN override -> 409.
     r = cliente.patch(
-        f"/api/rota/turnos/{turno2['id']}", json={"miembro_id": persona_previa}
+        f"/api/rota/turnos/{turno2['id']}", json={"miembro_id": equipo[0]["id"]}
     )
     assert r.status_code == 409
     assert r.json()["requiere_override"] is True
@@ -286,20 +266,17 @@ def test_editar_turno_que_repite_sabado_exige_override(cliente):
     # Con override explícito SÍ se permite (cobertura estratégica de Elías).
     r_ok = cliente.patch(
         f"/api/rota/turnos/{turno2['id']}",
-        json={"miembro_id": persona_previa, "override": True, "motivo": "Cobertura clave"},
+        json={"miembro_id": equipo[0]["id"], "override": True, "motivo": "Cobertura clave"},
     )
     assert r_ok.status_code == 200, r_ok.text
     assert r_ok.json()["turno"]["override"] is True
-    assert r_ok.json()["turno"]["miembro_id"] == persona_previa
-    # 'equipo' usado para que el lint no marque la variable sin uso.
-    assert len(equipo) == 2
+    assert r_ok.json()["turno"]["miembro_id"] == equipo[0]["id"]
 
 
 def test_editar_turno_miembro_inexistente_400(cliente):
-    _crear_equipo(2)
-    _crear_evento(cliente)
-    r = cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    turno = r.json()["turnos"][0]
+    equipo = _crear_equipo(2)
+    ev = _crear_evento(cliente)
+    turno = _crear_turno(LUNES1, ev["id"], equipo[0])
     bad = cliente.patch(f"/api/rota/turnos/{turno['id']}", json={"miembro_id": "no-existe"})
     assert bad.status_code == 400
 
@@ -324,11 +301,11 @@ def _cli_admin_sesion(app) -> TestClient:
 
 def test_aprobar_marca_semana_publicada(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
-    # Setup vía token de mantenimiento (equipo/evento/propuesta NO son solo-admin).
+    # Setup vía token de mantenimiento (equipo/evento NO son solo-admin).
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    _crear_equipo(2)
-    _crear_evento(token_cli)
-    token_cli.post("/api/rota/proponer", json={"lunes": LUNES1})
+    equipo = _crear_equipo(2)
+    ev = _crear_evento(token_cli)
+    _crear_turno(LUNES1, ev["id"], equipo[0])
     assert token_cli.get(f"/api/rota/semana?lunes={LUNES1}").json()["aprobada"] is False
     # Aprobar es solo-admin (#150/#153): lo hace una SESION admin real, no el token.
     admin = _cli_admin_sesion(app)
@@ -341,7 +318,7 @@ def test_aprobar_marca_semana_publicada(entorno):
 def test_aprobar_sin_turnos_400(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     # Aprobar es solo-admin (#150/#153): sin una sesión admin sería 403. Con admin y sin
-    # turnos propuestos, el handler responde 400 (la validación de negocio que prueba el test).
+    # turnos asignados, el handler responde 400 (la validación de negocio que prueba el test).
     admin = _cli_admin_sesion(app)
     r = admin.post("/api/rota/semana/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
     assert r.status_code == 400
@@ -350,11 +327,11 @@ def test_aprobar_sin_turnos_400(entorno):
 def test_editor_no_puede_aprobar_403(entorno):
     """Un editor (no admin) con sesión no puede aprobar/publicar la rota."""
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
-    # Equipo + un evento (vía token de mantenimiento) y propuesta.
-    _crear_equipo(2)
+    # Equipo + un evento + un turno asignado (vía token de mantenimiento).
+    equipo = _crear_equipo(2)
     admin_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    _crear_evento(admin_cli)
-    admin_cli.post("/api/rota/proponer", json={"lunes": LUNES1})
+    ev = _crear_evento(admin_cli)
+    _crear_turno(LUNES1, ev["id"], equipo[0])
 
     # Sesión de un editor real (sin el token de bootstrap).
     auth.crear_usuario("editora", CLAVE, "editor")
@@ -373,11 +350,10 @@ def test_mi_semana_filtra_por_usuario(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     equipo = _crear_equipo(2)
     admin_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    _crear_evento(admin_cli)
-    admin_cli.post("/api/rota/proponer", json={"lunes": LUNES1})
-    turnos = admin_cli.get(f"/api/rota/semana?lunes={LUNES1}").json()["turnos"]
-    asignado = turnos[0]["miembro_id"]
-    nombre_asignado = next(u["usuario"] for u in equipo if u["id"] == asignado)
+    ev = _crear_evento(admin_cli)
+    _crear_turno(LUNES1, ev["id"], equipo[0])
+    asignado = equipo[0]["id"]
+    nombre_asignado = equipo[0]["usuario"]
 
     # La persona asignada ve su turno; la otra no.
     cli = TestClient(app)
@@ -388,7 +364,7 @@ def test_mi_semana_filtra_por_usuario(entorno):
     assert datos["miembro_id"] == asignado
     assert len(datos["mis_turnos"]) == 1
 
-    otro = next(u for u in equipo if u["id"] != asignado)
+    otro = equipo[1]
     cli2 = TestClient(app)
     cli2.post("/api/auth/login", json={"usuario": otro["usuario"], "password": CLAVE}, headers=_ORIGIN)
     r2 = cli2.get(f"/api/rota/mi-semana?lunes={LUNES1}")
@@ -409,9 +385,9 @@ def test_mi_semana_sin_sesion_avisa(cliente):
 
 
 def test_export_csv(cliente):
-    _crear_equipo(2)
-    _crear_evento(cliente, titulo="Final", contenido="Resumen")
-    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
+    equipo = _crear_equipo(2)
+    ev = _crear_evento(cliente, titulo="Final", contenido="Resumen")
+    _crear_turno(LUNES1, ev["id"], equipo[0])
     r = cliente.get(f"/api/rota/export.csv?lunes={LUNES1}")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/csv")
@@ -422,9 +398,9 @@ def test_export_csv(cliente):
 
 
 def test_export_xlsx(cliente):
-    _crear_equipo(2)
-    _crear_evento(cliente, titulo="Final")
-    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
+    equipo = _crear_equipo(2)
+    ev = _crear_evento(cliente, titulo="Final")
+    _crear_turno(LUNES1, ev["id"], equipo[0])
     r = cliente.get(f"/api/rota/export.xlsx?lunes={LUNES1}")
     assert r.status_code == 200
     assert "spreadsheetml" in r.headers["content-type"]
@@ -494,61 +470,13 @@ def test_ausencia_rango_invertido_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Gestión de turnos: proponer horario + ausencias respetadas                   #
-# --------------------------------------------------------------------------- #
-
-
-def test_proponer_horario_cubre_y_respeta_ausencias(cliente):
-    equipo = _crear_equipo(3)
-    # equipo[0] de vacaciones toda la semana 1.
-    _crear_ausencia(cliente, equipo[0]["id"])
-    r = cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    assert r.status_code == 200, r.text
-    turnos = r.json()["turnos"]
-    assert len(turnos) > 0
-    asignados = {t["miembro_id"] for t in turnos}
-    assert equipo[0]["id"] not in asignados  # el ausente nunca entra
-    # Cada día tiene mañana y tarde (con 2 disponibles).
-    franjas_por_dia: dict[str, list[str]] = {}
-    for t in turnos:
-        franjas_por_dia.setdefault(t["fecha"], []).append(t["franja"])
-    for franjas in franjas_por_dia.values():
-        assert "matutino" in franjas
-        assert "vespertino" in franjas
-    assert all(t["estado"] == "propuesto" for t in turnos)  # no publicado
-
-
-def test_proponer_horario_idempotente_reemplaza(cliente):
-    _crear_equipo(2)
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    total1 = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["total"]
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    total2 = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["total"]
-    assert total1 == total2  # re-proponer no duplica
-
-
-def test_proponer_horario_sin_lunes_400(cliente):
-    r = cliente.post("/api/rota/horario/proponer", json={})
-    assert r.status_code == 400
-
-
-# --------------------------------------------------------------------------- #
 # Gestión de turnos: edición + override del sábado de trabajo                   #
 # --------------------------------------------------------------------------- #
 
 
-def _turno_sabado(cli: TestClient, lunes: str, sabado: str) -> dict | None:
-    turnos = cli.get(f"/api/rota/horario?lunes={lunes}").json()["turnos"]
-    for t in turnos:
-        if t["fecha"] == sabado and t["franja"] in ("matutino", "vespertino"):
-            return t
-    return None
-
-
 def test_editar_turno_trabajo_franja(cliente):
-    _crear_equipo(2)
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    turno = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["turnos"][0]
+    equipo = _crear_equipo(2)
+    turno = _crear_turno_trabajo(LUNES1, LUNES1, equipo[0], franja="matutino")
     r = cliente.patch(
         f"/api/rota/horario/turnos/{turno['id']}",
         json={"franja": "descanso", "nota_relevo": "Dejo pendiente el clip del 2T"},
@@ -560,34 +488,24 @@ def test_editar_turno_trabajo_franja(cliente):
 
 def test_editar_turno_trabajo_repite_sabado_exige_override(cliente):
     equipo = _crear_equipo(3)
-    # Semana 1: propone (alguien trabaja el sábado SAB1).
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    sab1 = _turno_sabado(cliente, LUNES1, SAB1)
-    assert sab1 is not None
-    persona_previa = sab1["miembro_id"]
+    # Semana 1: ana TRABAJA el sábado SAB1 (asignación manual).
+    _crear_turno_trabajo(LUNES1, SAB1, equipo[0], franja="matutino")
+    # Semana 2: beto TRABAJA el sábado SAB2 (asignación manual, rota a mano).
+    turno_sab2 = _crear_turno_trabajo(LUNES2, SAB2, equipo[1], franja="matutino")
 
-    # Semana 2: propone (rota: persona_previa descansa el sábado SAB2).
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES2})
-    # Buscar un turno de trabajo de sábado en la semana 2 que NO sea de persona_previa,
-    # para reasignarlo a persona_previa (repetiría el sábado).
-    turnos2 = cliente.get(f"/api/rota/horario?lunes={LUNES2}").json()["turnos"]
-    objetivo = next(
-        t for t in turnos2 if t["fecha"] == SAB2 and t["franja"] in ("matutino", "vespertino")
-    )
-
-    # Reasignar a la persona del sábado 1 SIN override -> 409.
+    # Reasignar el sábado 2 a la persona del sábado 1 SIN override -> 409.
     r = cliente.patch(
-        f"/api/rota/horario/turnos/{objetivo['id']}",
-        json={"miembro_id": persona_previa, "franja": "matutino"},
+        f"/api/rota/horario/turnos/{turno_sab2['id']}",
+        json={"miembro_id": equipo[0]["id"], "franja": "matutino"},
     )
     assert r.status_code == 409, r.text
     assert r.json()["requiere_override"] is True
 
     # Con override explícito SÍ se permite.
     r_ok = cliente.patch(
-        f"/api/rota/horario/turnos/{objetivo['id']}",
+        f"/api/rota/horario/turnos/{turno_sab2['id']}",
         json={
-            "miembro_id": persona_previa,
+            "miembro_id": equipo[0]["id"],
             "franja": "matutino",
             "override": True,
             "motivo": "Cobertura clave",
@@ -595,13 +513,11 @@ def test_editar_turno_trabajo_repite_sabado_exige_override(cliente):
     )
     assert r_ok.status_code == 200, r_ok.text
     assert r_ok.json()["turno"]["override"] is True
-    assert len(equipo) == 3
 
 
 def test_editar_turno_trabajo_miembro_inexistente_400(cliente):
-    _crear_equipo(2)
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    turno = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["turnos"][0]
+    equipo = _crear_equipo(2)
+    turno = _crear_turno_trabajo(LUNES1, LUNES1, equipo[0])
     bad = cliente.patch(
         f"/api/rota/horario/turnos/{turno['id']}", json={"miembro_id": "no-existe"}
     )
@@ -609,9 +525,8 @@ def test_editar_turno_trabajo_miembro_inexistente_400(cliente):
 
 
 def test_editar_turno_trabajo_franja_invalida_400(cliente):
-    _crear_equipo(2)
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    turno = cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["turnos"][0]
+    equipo = _crear_equipo(2)
+    turno = _crear_turno_trabajo(LUNES1, LUNES1, equipo[0])
     bad = cliente.patch(
         f"/api/rota/horario/turnos/{turno['id']}", json={"franja": "nocturno"}
     )
@@ -625,10 +540,10 @@ def test_editar_turno_trabajo_franja_invalida_400(cliente):
 
 def test_aprobar_horario_marca_publicado(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
-    # Setup vía token de mantenimiento (proponer NO es solo-admin).
+    # Setup vía token de mantenimiento (sembrar turno NO es solo-admin).
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    _crear_equipo(2)
-    token_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    equipo = _crear_equipo(2)
+    _crear_turno_trabajo(LUNES1, LUNES1, equipo[0], franja="matutino")
     assert token_cli.get(f"/api/rota/horario?lunes={LUNES1}").json()["aprobada"] is False
     # Aprobar el horario es solo-admin (#150/#153): lo hace una SESION admin real, no el token.
     admin = _cli_admin_sesion(app)
@@ -640,7 +555,7 @@ def test_aprobar_horario_marca_publicado(entorno):
 
 def test_aprobar_horario_sin_turnos_400(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
-    # Aprobar el horario es solo-admin (#150/#153): con admin y sin turnos propuestos, el
+    # Aprobar el horario es solo-admin (#150/#153): con admin y sin turnos asignados, el
     # handler responde 400 (la validación de negocio que prueba el test).
     admin = _cli_admin_sesion(app)
     r = admin.post("/api/rota/horario/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
@@ -649,9 +564,8 @@ def test_aprobar_horario_sin_turnos_400(entorno):
 
 def test_editor_no_puede_aprobar_horario_403(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
-    _crear_equipo(2)
-    admin_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    admin_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    equipo = _crear_equipo(2)
+    _crear_turno_trabajo(LUNES1, LUNES1, equipo[0], franja="matutino")
 
     auth.crear_usuario("editora2", CLAVE, "editor")
     editor_cli = TestClient(app)
@@ -665,8 +579,8 @@ def test_editor_no_puede_aprobar_horario_403(entorno):
 def test_mi_horario_filtra_por_usuario(entorno):
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     equipo = _crear_equipo(2)
-    admin_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
-    admin_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    _crear_turno_trabajo(LUNES1, LUNES1, equipo[0], franja="matutino")
+    _crear_turno_trabajo(LUNES1, LUNES1, equipo[1], franja="vespertino")
 
     # Cada miembro ve solo sus propios turnos de trabajo.
     cli = TestClient(app)
@@ -698,10 +612,10 @@ def test_export_xlsx_incluye_hoja_horario(cliente):
     import io
     import zipfile
 
-    _crear_equipo(2)
-    _crear_evento(cliente, titulo="Final")
-    cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    equipo = _crear_equipo(2)
+    ev = _crear_evento(cliente, titulo="Final")
+    _crear_turno(LUNES1, ev["id"], equipo[0])
+    _crear_turno_trabajo(LUNES1, LUNES1, equipo[0], franja="matutino")
     r = cliente.get(f"/api/rota/export.xlsx?lunes={LUNES1}")
     assert r.status_code == 200
     assert r.content[:2] == b"PK"
