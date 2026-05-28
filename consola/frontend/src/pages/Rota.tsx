@@ -2708,22 +2708,58 @@ function RejillaHorario({
                 {dias.map((fecha) => {
                   const ausencia = estaAusente(m.id, fecha);
                   const turno = porCelda.get(`${m.id}|${fecha}`);
+                  // Casos:
+                  //  - solo ausencia (sin turno): chip de ausencia (la persona descansa).
+                  //  - solo turno: CeldaTurno normal.
+                  //  - ambos: chip de ausencia COMO AVISO + CeldaTurno editable (puede
+                  //    existir un turno legacy o una cobertura forzada con override).
+                  //  - nada: guion.
+                  if (!ausencia && !turno) {
+                    return (
+                      <TableCell
+                        key={fecha}
+                        className={
+                          esFinDeSemana(fecha)
+                            ? "bg-amber-50/30 dark:bg-amber-950/10"
+                            : undefined
+                        }
+                      >
+                        <span className="text-sm text-muted-foreground">—</span>
+                      </TableCell>
+                    );
+                  }
                   return (
                     <TableCell
                       key={fecha}
-                      className={esFinDeSemana(fecha) ? "bg-amber-50/30 dark:bg-amber-950/10" : undefined}
+                      className={
+                        esFinDeSemana(fecha) ? "bg-amber-50/30 dark:bg-amber-950/10" : undefined
+                      }
                     >
-                      {ausencia ? (
-                        <Badge variant="secondary" className="font-normal">
-                          <Plane className="mr-1 h-3 w-3" />
-                          {TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ??
-                            "Ausente"}
-                        </Badge>
-                      ) : turno ? (
-                        <CeldaTurno turno={turno} editable={editable} onCambio={onCambio} />
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
+                      <div className="space-y-1.5">
+                        {ausencia && (
+                          <Tooltip
+                            label={
+                              ausencia.motivo
+                                ? `${ausencia.tipo}: ${ausencia.motivo}`
+                                : `${ausencia.tipo} del ${ausencia.desde} al ${ausencia.hasta}`
+                            }
+                          >
+                            <Badge variant="secondary" className="font-normal">
+                              <Plane className="mr-1 h-3 w-3" />
+                              {TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ??
+                                "Ausente"}
+                            </Badge>
+                          </Tooltip>
+                        )}
+                        {turno && (
+                          <CeldaTurno
+                            turno={turno}
+                            editable={editable}
+                            onCambio={onCambio}
+                            ausencia={ausencia}
+                          />
+                        )}
+                      </div>
                     </TableCell>
                   );
                 })}
@@ -2740,25 +2776,46 @@ function CeldaTurno({
   turno,
   editable,
   onCambio,
+  ausencia,
 }: {
   turno: TurnoTrabajoRota;
   editable: boolean;
   onCambio: () => void;
+  /** Si la persona tiene una ausencia que cubre el día de este turno: se usa para
+   * decorar el aviso del dialog cuando el backend pide override. */
+  ausencia?: AusenciaRota;
 }) {
-  // Confirmación de override pendiente: si el backend pide override, lo reintenta.
-  const [pendienteOverride, setPendienteOverride] = React.useState<FranjaTurno | null>(null);
+  // Override pendiente por regla de SÁBADO (la persona repite el sábado anterior):
+  // botón inline para forzar.
+  const [pendienteSabado, setPendienteSabado] = React.useState<FranjaTurno | null>(null);
+  // Override pendiente por AUSENCIA (la persona está ausente ese día): dialog formal
+  // con los datos de la ausencia que devuelve el backend en el 409.
+  const [pendienteAusencia, setPendienteAusencia] = React.useState<{
+    franja: FranjaTurno;
+    ausencia: AusenciaRota;
+  } | null>(null);
 
   const actualizar = useMutation({
     mutationFn: (cuerpo: { franja?: FranjaTurno; override?: boolean }) =>
       api.actualizarTurnoTrabajoRota(turno.id, cuerpo),
     onSuccess: () => {
-      setPendienteOverride(null);
+      setPendienteSabado(null);
+      setPendienteAusencia(null);
       onCambio();
     },
     onError: (e, variables) => {
       if (e instanceof ApiError && e.status === 409 && variables.franja) {
+        const cuerpo = (e.cuerpo ?? {}) as {
+          requiere_override?: boolean;
+          ausencia?: AusenciaRota;
+        };
+        if (cuerpo.requiere_override && cuerpo.ausencia) {
+          // Persona ausente: el dialog es la pista clara, no un botón inline.
+          setPendienteAusencia({ franja: variables.franja, ausencia: cuerpo.ausencia });
+          return;
+        }
         // Repite el sábado de trabajo anterior: ofrecemos forzar la cobertura (override).
-        setPendienteOverride(variables.franja);
+        setPendienteSabado(variables.franja);
         toast.warning(mensajeError(e));
         return;
       }
@@ -2768,9 +2825,12 @@ function CeldaTurno({
 
   if (!editable) {
     return (
-      <div className="flex items-center gap-1.5">
-        <span className="text-sm">{ETIQUETA_FRANJA[turno.franja]}</span>
-        {turno.override && <AlertTriangle className="h-3 w-3 text-amber-600" />}
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">{ETIQUETA_FRANJA[turno.franja]}</span>
+          {turno.override && <AlertTriangle className="h-3 w-3 text-amber-600" />}
+        </div>
+        {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
       </div>
     );
   }
@@ -2796,17 +2856,81 @@ function CeldaTurno({
           <AlertTriangle className="mr-1 h-3 w-3" /> Override
         </Badge>
       )}
-      {pendienteOverride && (
+      {ausencia && !turno.override && (
+        // Aviso visual permanente si el turno coincide con una ausencia (caso límite:
+        // turno legacy + ausencia añadida después). El dialog de 409 igualmente saltará
+        // si intentan ponerlo a trabajar.
+        <Badge variant="aviso" className="font-normal">
+          <Plane className="mr-1 h-3 w-3" /> Ausente
+        </Badge>
+      )}
+      {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
+      {pendienteSabado && (
         <Button
           size="sm"
           variant="outline"
           className="w-full text-amber-700 dark:text-amber-400"
-          onClick={() => actualizar.mutate({ franja: pendienteOverride, override: true })}
+          onClick={() => actualizar.mutate({ franja: pendienteSabado, override: true })}
           disabled={actualizar.isPending}
         >
           <AlertTriangle className="h-3.5 w-3.5" /> Forzar cobertura (override)
         </Button>
       )}
+      {pendienteAusencia && (
+        <Dialog open onOpenChange={(o) => !o && setPendienteAusencia(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Esa persona está ausente</DialogTitle>
+              <DialogDescription>
+                {pendienteAusencia.ausencia.miembro_nombre} está{" "}
+                {pendienteAusencia.ausencia.tipo} del {pendienteAusencia.ausencia.desde} al{" "}
+                {pendienteAusencia.ausencia.hasta}.
+                {pendienteAusencia.ausencia.motivo
+                  ? ` Motivo: ${pendienteAusencia.ausencia.motivo}.`
+                  : ""}{" "}
+                ¿Forzar override de todas formas?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPendienteAusencia(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
+                onClick={() =>
+                  actualizar.mutate({ franja: pendienteAusencia.franja, override: true })
+                }
+                disabled={actualizar.isPending}
+              >
+                {actualizar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                <AlertTriangle className="h-4 w-4" /> Forzar override
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Resumen de la nota de relevo con icono. La nota completa va en `title` nativo
+ * (HTML tooltip que envuelve textos largos, a diferencia del `Tooltip` propio
+ * que es `whitespace-nowrap`).
+ */
+function NotaRelevo({ nota }: { nota: string }) {
+  const limpia = nota.trim();
+  if (!limpia) return null;
+  const RESUMEN_MAX = 30;
+  const resumen = limpia.length > RESUMEN_MAX ? `${limpia.slice(0, RESUMEN_MAX)}…` : limpia;
+  return (
+    <div
+      className="flex items-start gap-1 text-[11px] text-muted-foreground"
+      title={limpia}
+    >
+      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
+      <span className="truncate">{resumen}</span>
     </div>
   );
 }
