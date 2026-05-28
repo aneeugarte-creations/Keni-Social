@@ -10,10 +10,12 @@ COPY consola/frontend/package.json consola/frontend/package-lock.json ./
 RUN npm ci
 COPY consola/frontend/ ./
 # El "build" del proyecto es `tsc -b && vite build` con outDir vendorizado dentro
-# del paquete Python. Aqui solo queremos el bundle, en una ruta limpia y conocida.
-# El typecheck (tsc) es responsabilidad de CI, no de la imagen: no queremos que un
-# error de tipos tumbe el deploy.
-RUN npx vite build --outDir /spa --emptyOutDir
+# del paquete Python. Aqui queremos el bundle en una ruta limpia y conocida (/spa).
+# El deploy se AUTO-VALIDA: corremos `tsc -b` ANTES del bundle para que un error de
+# tipos tumbe la imagen (y, por tanto, el deploy) en vez de depender de que el gate
+# externo `frontend-build` haya corrido antes. Asi la correccion de tipos no descansa
+# en el orden de los pipelines de CI (elimina la posible condicion de carrera).
+RUN npx tsc -b && npx vite build --outDir /spa --emptyOutDir
 
 # --- runtime estatico ---
 FROM nginx:1.27-alpine
