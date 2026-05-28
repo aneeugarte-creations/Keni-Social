@@ -83,6 +83,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import type {
   AusenciaRota,
   CoberturaEvento,
@@ -1216,6 +1217,16 @@ function Turnos({
       return next;
     });
 
+  // Popover de acciones de lote: se abre con click izquierdo sobre una celda ya
+  // seleccionada, en la posición (x,y) del cursor. Reemplaza al antiguo panel
+  // superior. Si la selección queda vacía, ciérralo automáticamente.
+  const [posPopoverLote, setPosPopoverLote] = React.useState<{ x: number; y: number } | null>(
+    null,
+  );
+  React.useEffect(() => {
+    if (seleccionados.size === 0 && posPopoverLote) setPosPopoverLote(null);
+  }, [seleccionados, posPopoverLote]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1303,18 +1314,6 @@ function Turnos({
 
       <FiltrosMiembro equipo={equipo} filtros={filtros} setFiltros={setFiltros} />
 
-      {seleccionados.size > 0 && (
-        <BarraSeleccion
-          seleccionados={seleccionados}
-          equipo={equipo}
-          onLimpiar={() => setSeleccionados(new Set())}
-          onAplicado={() => {
-            setSeleccionados(new Set());
-            invalidarTodo();
-          }}
-        />
-      )}
-
       {turnosQ.isPending ? (
         <Skeleton className="h-48 w-full rounded-md" />
       ) : turnosQ.isError ? (
@@ -1341,6 +1340,25 @@ function Turnos({
           seleccionados={seleccionados}
           onToggleSeleccionado={toggleSeleccionado}
           onPedirNuevoTurno={(args) => setDialogNuevo(args)}
+          onAbrirPopoverLote={(x, y) => setPosPopoverLote({ x, y })}
+        />
+      )}
+
+      {posPopoverLote && seleccionados.size > 0 && (
+        <PopoverSeleccionLote
+          pos={posPopoverLote}
+          seleccionados={seleccionados}
+          equipo={equipo}
+          onCerrar={() => setPosPopoverLote(null)}
+          onAplicado={() => {
+            setPosPopoverLote(null);
+            setSeleccionados(new Set());
+            invalidarTodo();
+          }}
+          onLimpiar={() => {
+            setPosPopoverLote(null);
+            setSeleccionados(new Set());
+          }}
         />
       )}
 
@@ -1374,6 +1392,7 @@ function RejillaTurnos({
   seleccionados,
   onToggleSeleccionado,
   onPedirNuevoTurno,
+  onAbrirPopoverLote,
 }: {
   semana: RotaSemana | null;
   turnos: TurnoRota[];
@@ -1384,6 +1403,8 @@ function RejillaTurnos({
   seleccionados: Set<string>;
   onToggleSeleccionado: (id: string) => void;
   onPedirNuevoTurno: (args: PrellenoNuevoTurno) => void;
+  /** Click izquierdo sobre una celda ya seleccionada: abrir popover de lote en (x,y). */
+  onAbrirPopoverLote?: (x: number, y: number) => void;
 }) {
   const dias = semana?.dias ?? [];
   // Indexa los turnos por (miembro, fecha). El backend garantiza unicidad por
@@ -1484,6 +1505,7 @@ function RejillaTurnos({
                               onCambio={onCambio}
                               seleccionado={seleccionados.has(t.id)}
                               onToggleSeleccionado={onToggleSeleccionado}
+                              onAbrirPopoverLote={onAbrirPopoverLote}
                             />
                           ))
                         )}
@@ -1508,6 +1530,7 @@ function CeldaTurno({
   onCambio,
   seleccionado,
   onToggleSeleccionado,
+  onAbrirPopoverLote,
 }: {
   turno: TurnoRota;
   equipo: MiembroRota[];
@@ -1517,6 +1540,8 @@ function CeldaTurno({
   onCambio: () => void;
   seleccionado: boolean;
   onToggleSeleccionado: (id: string) => void;
+  /** Si el turno ya está seleccionado, un click izquierdo en la celda (no en el checkbox) abre el popover de acciones de lote. */
+  onAbrirPopoverLote?: (x: number, y: number) => void;
 }) {
   // Override pendiente por regla de sábado (la persona repite el sábado anterior).
   const [pendienteSabado, setPendienteSabado] = React.useState<FranjaTurno | null>(null);
@@ -1648,14 +1673,34 @@ function CeldaTurno({
 
   return (
     <MenuContextual items={itemsMenu}>
-      <div className="space-y-1.5 rounded-md border bg-background p-1.5">
+      <div
+        className={cn(
+          "space-y-1.5 rounded-md border bg-background p-1.5",
+          seleccionado && onAbrirPopoverLote && "cursor-pointer",
+        )}
+        onClick={(e) => {
+          // Click izquierdo en celda ya seleccionada abre el popover de acciones
+          // de lote. Ignora clicks que vienen de elementos interactivos internos
+          // (checkbox, botón "Forzar cobertura") para no interceptarlos: el
+          // checkbox detiene la propagación con stopPropagation, pero por
+          // robustez también filtramos cualquier <button>/<input>/<a> aquí.
+          if (!seleccionado || !onAbrirPopoverLote) return;
+          const objetivo = e.target as HTMLElement;
+          if (objetivo.closest("button, input, a, [role='checkbox']")) return;
+          onAbrirPopoverLote(e.clientX, e.clientY);
+        }}
+      >
         <div className="flex items-start gap-1.5">
-          <Checkbox
-            aria-label={`Seleccionar turno de ${turno.miembro_nombre} el ${turno.fecha}`}
-            checked={seleccionado}
-            onCheckedChange={() => onToggleSeleccionado(turno.id)}
-            className="mt-1.5"
-          />
+          {/* Envuelve el Checkbox en un span para parar la propagación: así un
+              click en el checkbox solo togglea, sin disparar el click izquierdo
+              de la celda que abre el popover de acciones de lote. */}
+          <span onClick={(e) => e.stopPropagation()} className="mt-1.5">
+            <Checkbox
+              aria-label={`Seleccionar turno de ${turno.miembro_nombre} el ${turno.fecha}`}
+              checked={seleccionado}
+              onCheckedChange={() => onToggleSeleccionado(turno.id)}
+            />
+          </span>
           <div className="min-w-0 flex-1 space-y-1">
             <div className="text-xs font-medium">{ETIQUETA_FRANJA[turno.franja]}</div>
             <div className="flex flex-wrap items-center gap-1">
@@ -2126,27 +2171,61 @@ function FiltrosMiembro({
   );
 }
 
-// --- Barra de acción para la selección múltiple ----------------------------
+// --- Popover de acciones de lote (click izquierdo en celda seleccionada) ---
+//
+// Antes era una "barra superior" (Card flotante) que aparecía al seleccionar 1+
+// celdas. Ahora es un popover en `position: fixed`, abierto en la posición del
+// cursor cuando el usuario hace click izquierdo sobre una celda ya seleccionada
+// (mismo patrón visual que `MenuContextual`, pero disparado con click izquierdo
+// y mostrando acciones de lote). Se cierra con click fuera o tecla Escape.
 
-function BarraSeleccion({
+function PopoverSeleccionLote({
+  pos,
   seleccionados,
   equipo,
-  onLimpiar,
+  onCerrar,
   onAplicado,
+  onLimpiar,
 }: {
+  pos: { x: number; y: number };
   seleccionados: Set<string>;
   equipo: MiembroRota[];
-  onLimpiar: () => void;
+  /** Cerrar sin tocar la selección (click fuera / Escape). */
+  onCerrar: () => void;
+  /** Hubo una mutación con éxito: limpia selección + invalida queries. */
   onAplicado: () => void;
+  /** Cancelar selección: limpia selección + cierra. */
+  onLimpiar: () => void;
 }) {
+  const popoverRef = React.useRef<HTMLDivElement>(null);
   const [miembroId, setMiembroId] = React.useState("");
-  const [franja, setFranja] = React.useState<FranjaTurno | "">("");
   const [override, setOverride] = React.useState<{
     miembroId: string;
     franja: FranjaTurno | "";
     mensaje: string;
     ids: string[];
   } | null>(null);
+
+  // Click fuera / Escape cierran el popover (igual que MenuContextual). Si el
+  // diálogo de override está abierto, lo dejamos manejar sus propios cierres.
+  React.useEffect(() => {
+    function alPulsarFuera(e: MouseEvent) {
+      if (override) return;
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        onCerrar();
+      }
+    }
+    function alTeclear(e: KeyboardEvent) {
+      if (override) return;
+      if (e.key === "Escape") onCerrar();
+    }
+    document.addEventListener("mousedown", alPulsarFuera);
+    document.addEventListener("keydown", alTeclear);
+    return () => {
+      document.removeEventListener("mousedown", alPulsarFuera);
+      document.removeEventListener("keydown", alTeclear);
+    };
+  }, [onCerrar, override]);
 
   const aplicar = useMutation({
     mutationFn: (vars: {
@@ -2171,7 +2250,6 @@ function BarraSeleccion({
       toast.success(`Actualizados ${res.actualizados} turnos.`);
       setOverride(null);
       setMiembroId("");
-      setFranja("");
       onAplicado();
     },
     onError: (e, vars) => {
@@ -2214,17 +2292,32 @@ function BarraSeleccion({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const puedeAplicar = (miembroId !== "" || franja !== "") && !aplicar.isPending;
+  const ocupado =
+    aplicar.isPending || quitarMiembro.isPending || borrarSeleccion.isPending;
+  const n = seleccionados.size;
+  const etiquetaTurnos = `${n} ${n === 1 ? "turno" : "turnos"}`;
 
   return (
-    <Card className="border-primary/40 bg-primary/5">
-      <CardContent className="flex flex-wrap items-center gap-3 p-3">
-        <span className="text-sm font-medium">Seleccionados {seleccionados.size}</span>
-        <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Asignar a</Label>
+    <>
+      <div
+        ref={popoverRef}
+        role="menu"
+        aria-label="Acciones de lote sobre la selección"
+        className="fixed z-50 w-64 rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md"
+        style={{ left: pos.x, top: pos.y }}
+      >
+        <div className="mb-2 text-xs font-medium text-muted-foreground">
+          {etiquetaTurnos} seleccionado{n === 1 ? "" : "s"}
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-[10px] text-muted-foreground">Asignar a</Label>
+          <div className="flex gap-1.5">
             <Select value={miembroId} onValueChange={setMiembroId}>
-              <SelectTrigger aria-label="Persona para el lote" className="h-8 min-w-[10rem]">
+              <SelectTrigger
+                aria-label="Persona para el lote"
+                className="h-8 flex-1 text-xs"
+              >
                 <SelectValue placeholder="Elige persona" />
               </SelectTrigger>
               <SelectContent>
@@ -2235,73 +2328,114 @@ function BarraSeleccion({
                 ))}
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-[10px] text-muted-foreground">Cambiar franja</Label>
-            <Select
-              value={franja || "ninguna"}
-              onValueChange={(v) => setFranja(v === "ninguna" ? "" : (v as FranjaTurno))}
+            <Button
+              size="sm"
+              className="h-8 px-2"
+              onClick={() =>
+                aplicar.mutate({ miembroId, franja: "", override: false })
+              }
+              disabled={miembroId === "" || ocupado}
             >
-              <SelectTrigger aria-label="Franja para el lote" className="h-8 min-w-[8rem]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ninguna">— sin cambiar —</SelectItem>
-                <SelectItem value="matutino">Mañana</SelectItem>
-                <SelectItem value="vespertino">Tarde</SelectItem>
-                <SelectItem value="descanso">Descanso</SelectItem>
-              </SelectContent>
-            </Select>
+              {aplicar.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                "Aplicar"
+              )}
+            </Button>
           </div>
-          <Button
-            size="sm"
-            onClick={() => aplicar.mutate({ miembroId, franja, override: false })}
-            disabled={!puedeAplicar}
-          >
-            {aplicar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Users className="h-4 w-4" />
-            )}
-            Aplicar
-          </Button>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
+
+        <div className="mt-3 space-y-1">
+          <Label className="text-[10px] text-muted-foreground">Cambiar franja</Label>
+          <div className="flex gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 flex-1 px-1.5"
+              onClick={() =>
+                aplicar.mutate({ miembroId: "", franja: "matutino", override: false })
+              }
+              disabled={ocupado}
+            >
+              <Sunrise className="h-3.5 w-3.5" /> Mañana
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 flex-1 px-1.5"
+              onClick={() =>
+                aplicar.mutate({ miembroId: "", franja: "vespertino", override: false })
+              }
+              disabled={ocupado}
+            >
+              <Sunset className="h-3.5 w-3.5" /> Tarde
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 flex-1 px-1.5"
+              onClick={() =>
+                aplicar.mutate({ miembroId: "", franja: "descanso", override: false })
+              }
+              disabled={ocupado}
+            >
+              <Moon className="h-3.5 w-3.5" /> Descanso
+            </Button>
+          </div>
+        </div>
+
+        <div className="my-2 border-t border-border" aria-hidden="true" />
+
+        <button
+          type="button"
+          role="menuitem"
+          disabled={ocupado}
           onClick={() => quitarMiembro.mutate()}
-          disabled={quitarMiembro.isPending}
+          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {quitarMiembro.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-          Quitar asignación
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          className="text-destructive hover:text-destructive"
+          {quitarMiembro.isPending ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          ) : (
+            <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="flex-1">Quitar asignación</span>
+        </button>
+
+        <button
+          type="button"
+          role="menuitem"
+          disabled={ocupado}
           onClick={() => {
             if (
               window.confirm(
-                `¿Borrar ${seleccionados.size} turno${
-                  seleccionados.size === 1 ? "" : "s"
-                }?`,
+                `¿Borrar ${n} turno${n === 1 ? "" : "s"}?`,
               )
             )
               borrarSeleccion.mutate();
           }}
-          disabled={borrarSeleccion.isPending}
+          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {borrarSeleccion.isPending ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
           ) : (
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-4 w-4 shrink-0 text-destructive" />
           )}
-          Borrar
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onLimpiar}>
-          <X className="h-4 w-4" /> Cancelar
-        </Button>
-      </CardContent>
+          <span className="flex-1">Borrar {etiquetaTurnos}</span>
+        </button>
+
+        <div className="my-2 border-t border-border" aria-hidden="true" />
+
+        <button
+          type="button"
+          role="menuitem"
+          onClick={onLimpiar}
+          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent"
+        >
+          <X className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1">Cancelar selección</span>
+        </button>
+      </div>
+
       {override && (
         <Dialog open onOpenChange={(o) => !o && setOverride(null)}>
           <DialogContent>
@@ -2334,7 +2468,7 @@ function BarraSeleccion({
           </DialogContent>
         </Dialog>
       )}
-    </Card>
+    </>
   );
 }
 
