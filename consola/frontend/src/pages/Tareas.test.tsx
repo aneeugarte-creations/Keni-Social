@@ -21,6 +21,7 @@ const TAREAS = [
     id: "t1",
     proyecto: "keni-social",
     proyecto_nombre: "Keni Social",
+    proyecto_existe: true,
     titulo: "Revisar copy de las 8",
     detalle: "Con la nota de portada.",
     estado: "pendiente",
@@ -35,6 +36,7 @@ const TAREAS = [
     id: "t2",
     proyecto: "keni-social",
     proyecto_nombre: "Keni Social",
+    proyecto_existe: true,
     titulo: "Programar reel",
     detalle: "",
     estado: "hecha",
@@ -47,13 +49,31 @@ const TAREAS = [
   },
 ];
 
+const EVENTOS_SIN_CUBRIR: {
+  id: string;
+  titulo: string;
+  fecha: string;
+  hora: string;
+  contenido: string;
+  tipo_cobertura: "transmision" | "imagenes" | "no_cubrir";
+  prioridad: "alta" | "media" | "baja";
+}[] = [];
+
 /** Stub de fetch: GET /api/tareas devuelve el payload; el resto responde {}. */
-function stubFetch(tareas = TAREAS, proyectos = PROYECTOS, usuarios = USUARIOS) {
+function stubFetch(
+  tareas = TAREAS,
+  proyectos = PROYECTOS,
+  usuarios = USUARIOS,
+  eventos_sin_cubrir = EVENTOS_SIN_CUBRIR,
+) {
   const fn = vi.fn(async (url: string | URL, init?: RequestInit) => {
     const ruta = String(url);
     const metodo = (init?.method ?? "GET").toUpperCase();
     if (ruta.includes("/api/tareas") && metodo === "GET") {
-      return new Response(JSON.stringify({ tareas, proyectos, usuarios }), { status: 200 });
+      return new Response(
+        JSON.stringify({ tareas, proyectos, usuarios, eventos_sin_cubrir }),
+        { status: 200 },
+      );
     }
     if (ruta.includes("/api/tareas") && metodo === "POST") {
       return new Response(JSON.stringify({ tarea: tareas[0] }), { status: 200 });
@@ -128,8 +148,7 @@ describe("Tareas (vista de pendientes)", () => {
     const boton = await screen.findByRole("button", { name: /crear pendiente/i });
     expect(boton).toBeDisabled();
 
-    // El primer proyecto de la allowlist se preselecciona al cargar; con título
-    // y proyecto, el botón se habilita.
+    // Proyecto es OPCIONAL: basta con escribir un título para habilitar el botón.
     fireEvent.change(screen.getByLabelText("Título"), {
       target: { value: "Nueva tarea de prueba" },
     });
@@ -155,11 +174,60 @@ describe("Tareas (vista de pendientes)", () => {
     });
   });
 
-  it("avisa cuando no hay proyectos configurados", async () => {
-    stubFetch(TAREAS, []);
+  it("permite crear un pendiente sin proyecto cuando la allowlist está vacía", async () => {
+    const fn = stubFetch(TAREAS, []);
     renderConProviders(<Tareas />);
 
-    expect(await screen.findByText(/no hay proyectos configurados/i)).toBeInTheDocument();
+    // Sin proyectos: el formulario sigue disponible y el campo Proyecto queda
+    // en "(sin proyecto)". Con título basta para habilitar "Crear pendiente".
+    const titulo = await screen.findByLabelText("Título");
+    fireEvent.change(titulo, { target: { value: "Pendiente libre" } });
+    const boton = screen.getByRole("button", { name: /crear pendiente/i });
+    await waitFor(() => expect(boton).toBeEnabled());
+    fireEvent.click(boton);
+
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/api/tareas") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(post).toBeTruthy();
+      const cuerpo = JSON.parse(String((post![1] as RequestInit).body));
+      expect(cuerpo.titulo).toBe("Pendiente libre");
+      expect(cuerpo.proyecto).toBe("");
+      expect(cuerpo.evento_id).toBeUndefined();
+    });
+  });
+
+  it("muestra eventos sin cubrir y, al hacer clic, prepopula el formulario", async () => {
+    const eventos = [
+      {
+        id: "ev1",
+        titulo: "Cruz Azul vs Tigres",
+        fecha: "2026-05-29",
+        hora: "21:00",
+        contenido: "Partido amistoso",
+        tipo_cobertura: "transmision" as const,
+        prioridad: "alta" as const,
+      },
+    ];
+    stubFetch(TAREAS, PROYECTOS, USUARIOS, eventos);
+    renderConProviders(<Tareas />);
+
+    // Sección "Eventos sin cubrir" aparece arriba con el chip del evento.
+    expect(
+      await screen.findByText(/eventos sin cubrir esta semana y la siguiente/i),
+    ).toBeInTheDocument();
+    const chip = screen.getByRole("button", { name: /cruz azul vs tigres/i });
+    fireEvent.click(chip);
+
+    // El título del formulario se rellena con "Cubrir: ...".
+    const titulo = screen.getByLabelText("Título") as HTMLInputElement;
+    await waitFor(() => {
+      expect(titulo.value).toContain("Cruz Azul vs Tigres");
+      expect(titulo.value).toContain("2026-05-29");
+    });
   });
 
   it("filtra los pendientes por proyecto", async () => {

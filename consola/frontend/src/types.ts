@@ -823,6 +823,18 @@ export interface Tarea {
   responsable_nombre: string;
   /** Enlace/ruta opcional para actuar sobre el pendiente (abrir asistente, generar copy…). "" si no hay. */
   enlace: string;
+  /** Si la tarea está asociada a un evento de la rota: id del evento. "" / omitido si no. */
+  evento_id?: string;
+  /** Título del evento asociado (para mostrar). */
+  evento_titulo?: string;
+  /** Fecha del evento asociado (AAAA-MM-DD). */
+  evento_fecha?: string;
+  /** Hora del evento asociado. */
+  evento_hora?: string;
+  /** Tipo de cobertura del evento asociado. */
+  evento_tipo_cobertura?: TipoCoberturaEvento;
+  /** `true` si el proyecto referenciado existe en la allowlist. `false` si la tarea apunta a un proyecto borrado. */
+  proyecto_existe?: boolean;
 }
 
 export interface ProyectoTarea {
@@ -842,16 +854,38 @@ export interface RespuestaTareas {
   proyectos: ProyectoTarea[];
   /** Usuarios reales para el selector de responsable (#145 F5). */
   usuarios: UsuarioTarea[];
+  /**
+   * Eventos próximos de la rota cuya cobertura aún no tiene un pendiente asociado.
+   * Aparecen como "pendientes implícitos" arriba del tablero (clic = crear tarea
+   * con `evento_id` prellenado). Vacío si no hay eventos sin cubrir o si el equipo
+   * no usa rota.
+   */
+  eventos_sin_cubrir: EventoSinCubrir[];
+}
+
+/** Evento de la rota que sigue sin cubrir (pendiente implícito). */
+export interface EventoSinCubrir {
+  id: string;
+  titulo: string;
+  /** AAAA-MM-DD. */
+  fecha: string;
+  hora: string;
+  contenido: string;
+  tipo_cobertura: TipoCoberturaEvento;
+  prioridad: PrioridadEvento;
 }
 
 export interface CuerpoCrearTarea {
-  proyecto: string;
+  /** OPCIONAL (#145 F5): "" o ausente crea un pendiente libre, sin proyecto. */
+  proyecto?: string;
   titulo: string;
-  detalle: string;
+  detalle?: string;
   /** Responsable asignado al crear (#145 F5). "" / omitido = sin asignar. */
   responsable_id?: string;
   /** Enlace/ruta opcional para actuar sobre el pendiente (#145 F5). */
   enlace?: string;
+  /** Si el pendiente cubre un evento de la rota: id del evento. */
+  evento_id?: string;
 }
 
 export interface RespuestaCrearTarea {
