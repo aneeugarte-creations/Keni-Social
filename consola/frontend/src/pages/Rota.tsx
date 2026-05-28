@@ -31,9 +31,7 @@ import {
   ShieldCheck,
   Trash2,
   User,
-  UserMinus,
   Users,
-  Wand2,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -80,26 +78,27 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import type {
   AusenciaRota,
+  CoberturaEvento,
   CuerpoActualizarPiezaRota,
   CuerpoActualizarProgramaRota,
   CuerpoCrearPiezaRota,
   CuerpoCrearProgramaRota,
+  CuerpoCrearTurnoRota,
   EstadoPieza,
   EstadoSwap,
   EventoRota,
   FiltrosSwaps,
-  FranjaCobertura,
   FranjaTurno,
-  HorarioSemana,
   MiembroRota,
   PiezaRota,
   PrioridadEvento,
   ProgramaRota,
+  RotaSemana,
   SwapTurno,
   TipoAusencia,
   TipoCoberturaEvento,
+  TurnoCobertura,
   TurnoRota,
-  TurnoTrabajoRota,
 } from "@/types";
 
 const CABECERA = {
@@ -247,14 +246,33 @@ function formatearFechaCorta(s: string): string {
 
 // ===========================================================================
 
+/**
+ * Args para abrir el dialog "Nuevo turno" desde otras pestañas (p. ej. Cobertura:
+ * "Crear turno para esa franja+fecha"). El usuario salta a la pestaña Turnos y la
+ * apertura del dialog se hace con estos campos prellenados.
+ */
+type PrelleneNuevoTurno = {
+  fecha?: string;
+  franja?: FranjaTurno;
+  miembro_id?: string;
+};
+
 export default function Rota() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   // Por defecto: la próxima semana (la que más le importa al equipo, B4).
   const [lunes, setLunes] = React.useState(() => lunesSiguiente(lunesDeSemana(new Date()), 1));
-  // Pestaña activa (controlada) para que el catálogo de programas sea linkable
-  // desde otras pestañas (PiezasSueltas → "Gestionar programas →").
+  // Pestaña activa (controlada) para que pestañas hermanas puedan saltar entre sí
+  // (PiezasSueltas → Programas; Cobertura → Turnos con dialog prellenado).
   const [pestania, setPestania] = React.useState("calendario");
+  // Prellenado pendiente para el dialog "Nuevo turno" de la pestaña Turnos. Lo
+  // consumimos al cambiar a `turnos` (one-shot) para evitar reabrir en re-renders.
+  const [prellenoTurno, setPrellenoTurno] = React.useState<PrelleneNuevoTurno | null>(null);
+
+  const abrirNuevoTurnoDesdeCobertura = (args: PrelleneNuevoTurno) => {
+    setPrellenoTurno(args);
+    setPestania("turnos");
+  };
 
   return (
     <>
@@ -262,9 +280,9 @@ export default function Rota() {
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
-          <TabsTrigger value="parrilla">Parrilla del equipo</TabsTrigger>
-          <TabsTrigger value="horario">Horario del equipo</TabsTrigger>
-          <TabsTrigger value="mi-semana">Mi próxima semana</TabsTrigger>
+          <TabsTrigger value="turnos">Turnos</TabsTrigger>
+          <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
+          <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
           <TabsTrigger value="swaps">Cambios de turno</TabsTrigger>
           <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
           <TabsTrigger value="eventos">Eventos</TabsTrigger>
@@ -272,16 +290,26 @@ export default function Rota() {
         </TabsList>
 
         <TabsContent value="calendario">
-          <Calendario lunes={lunes} setLunes={setLunes} />
+          <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
         </TabsContent>
-        <TabsContent value="parrilla">
-          <Parrilla lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
+        <TabsContent value="turnos">
+          <Turnos
+            lunes={lunes}
+            setLunes={setLunes}
+            esAdmin={esAdmin}
+            prelleno={prellenoTurno}
+            limpiarPrelleno={() => setPrellenoTurno(null)}
+          />
         </TabsContent>
-        <TabsContent value="horario">
-          <Horario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
+        <TabsContent value="cobertura">
+          <Cobertura
+            lunes={lunes}
+            setLunes={setLunes}
+            onCrearTurno={abrirNuevoTurnoDesdeCobertura}
+          />
         </TabsContent>
-        <TabsContent value="mi-semana">
-          <MiSemana lunes={lunes} setLunes={setLunes} />
+        <TabsContent value="mis-turnos">
+          <MisTurnos lunes={lunes} setLunes={setLunes} />
         </TabsContent>
         <TabsContent value="swaps">
           <Swaps esAdmin={esAdmin} />
@@ -485,17 +513,15 @@ const COLOR_FRANJA_CALENDARIO: Record<FranjaTurno, { label: string; banda: strin
 
 interface ItemEventoCalendario {
   evento: EventoRota;
-  /** Turno que asigna al evento (null si nadie lo cubre). */
-  turno: TurnoRota | null;
-  /** `true` si el evento está asignado a alguien que no trabaja esa franja-día. */
-  fueraDeTurno: boolean;
+  /** Turnos (cobertura derivada) que cubren el evento por (fecha, franja). */
+  cobertura: TurnoCobertura[];
 }
 
 interface RecuadroPersona {
   miembro_id: string;
   miembro_nombre: string;
-  /** `true` si el recuadro es "Sin asignar" (eventos sin turno o asignados fuera). */
-  sinAsignar: boolean;
+  /** `true` si el recuadro es "Sin cubrir" (eventos sin cobertura derivada). */
+  sinCubrir: boolean;
   eventos: ItemEventoCalendario[];
 }
 
@@ -503,26 +529,30 @@ interface RecuadroPersona {
  * Calendario nuevo (día × franja × persona): la frontera real con la que trabaja el
  * equipo. Las filas son franjas (mañana → tarde → descanso), las columnas son los 7
  * días de la semana. Cada celda contiene un recuadro por persona que TRABAJA esa
- * franja ese día con sus eventos asignados; si un evento está asignado a alguien
- * fuera de su franja, sale en "Sin asignar" con badge "Fuera de turno". El relleno
- * ocupa el alto disponible para minimizar scroll lateral.
+ * franja ese día con sus eventos cubiertos (cobertura DERIVADA del backend); los
+ * eventos sin cobertura caen en un recuadro "Sin cubrir". Pestaña sólo de lectura
+ * editorial (el CRUD vive en la pestaña Turnos).
  */
-function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) => void }) {
+function Calendario({
+  lunes,
+  setLunes,
+  esAdmin,
+}: {
+  lunes: string;
+  setLunes: (l: string) => void;
+  esAdmin: boolean;
+}) {
   const queryClient = useQueryClient();
   // El rango (lun→dom) de la semana en vista para acotar las consultas.
   const desde = lunes;
   const hasta = lunesSiguiente(lunes, 1); // exclusivo
-  const eventosQ = useQuery({
-    queryKey: ["rota", "calendario", "eventos", desde] as const,
-    queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
+  const coberturaQ = useQuery({
+    queryKey: ["rota", "cobertura", lunes] as const,
+    queryFn: ({ signal }) => api.cobertura({ lunes }, signal),
   });
-  const semanaQ = useQuery({
-    queryKey: ["rota", "semana", lunes] as const,
-    queryFn: ({ signal }) => api.rotaSemana({ lunes }, signal),
-  });
-  const horarioQ = useQuery({
-    queryKey: ["rota", "horario", lunes] as const,
-    queryFn: ({ signal }) => api.rotaHorario({ lunes }, signal),
+  const turnosQ = useQuery({
+    queryKey: ["rota", "turnos", lunes] as const,
+    queryFn: ({ signal }) => api.listarTurnos({ lunes }, signal),
   });
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
@@ -544,30 +574,16 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
   // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
   const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
 
-  // Filtra al rango exacto.
-  const eventos = (eventosQ.data?.eventos ?? []).filter(
-    (e) => e.fecha >= desde && e.fecha < hasta,
+  // Eventos con su cobertura derivada (el backend ya excluyó los `no_cubrir`).
+  const eventosCobertura = React.useMemo(
+    () => (coberturaQ.data?.eventos ?? []).filter((e) => e.fecha >= desde && e.fecha < hasta),
+    [coberturaQ.data?.eventos, desde, hasta],
   );
-  // Mapa eventoId → turno (cobertura): nos dice quién cubre cada evento.
-  const turnosPorEvento = React.useMemo(() => {
-    const m = new Map<string, TurnoRota>();
-    for (const t of semanaQ.data?.turnos ?? []) m.set(t.evento_id, t);
-    return m;
-  }, [semanaQ.data?.turnos]);
 
-  // Mapa (miembro_id|fecha) → franja del horario de trabajo. Indica quién trabaja qué.
-  const franjaPorPersona = React.useMemo(() => {
-    const m = new Map<string, FranjaTurno>();
-    for (const t of horarioQ.data?.turnos ?? []) {
-      m.set(`${t.miembro_id}|${t.fecha}`, t.franja);
-    }
-    return m;
-  }, [horarioQ.data?.turnos]);
-
-  // Personas que trabajan cada (franja, fecha) según el horario publicado.
+  // Personas que trabajan cada (franja, fecha) según los turnos publicados.
   const personasPorCelda = React.useMemo(() => {
     const m = new Map<string, { miembro_id: string; miembro_nombre: string }[]>();
-    for (const t of horarioQ.data?.turnos ?? []) {
+    for (const t of turnosQ.data?.turnos ?? []) {
       const k = `${t.franja}|${t.fecha}`;
       const lista = m.get(k) ?? [];
       lista.push({ miembro_id: t.miembro_id, miembro_nombre: t.miembro_nombre });
@@ -578,7 +594,7 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
       lista.sort((a, b) => a.miembro_nombre.localeCompare(b.miembro_nombre));
     }
     return m;
-  }, [horarioQ.data?.turnos]);
+  }, [turnosQ.data?.turnos]);
 
   // Ausencias que solapan con la semana.
   const finSemana = dias[6] ?? desde;
@@ -597,80 +613,87 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
     }
   }
 
-  // Itera los eventos y los reparte en su (franja, fecha) → persona/sin-asignar.
+  // Itera los eventos y los reparte en su (franja, fecha) → persona/sin-cubrir.
   const recuadrosPorCelda = React.useMemo(() => {
     const m = new Map<string, RecuadroPersona[]>(); // clave: `${franja}|${fecha}`
     // Para cada celda primero metemos el recuadro de cada persona que trabaja allí
-    // (aunque no tenga eventos): es lo que pidió el usuario, "ver quién cubre el turno".
+    // (aunque no tenga eventos): el usuario quiere ver "quién entra a esta franja".
     for (const franja of FRANJAS_CALENDARIO) {
       for (const fecha of dias) {
         const personas = personasPorCelda.get(`${franja}|${fecha}`) ?? [];
         const lista: RecuadroPersona[] = personas.map((p) => ({
           miembro_id: p.miembro_id,
           miembro_nombre: p.miembro_nombre,
-          sinAsignar: false,
+          sinCubrir: false,
           eventos: [],
         }));
         m.set(`${franja}|${fecha}`, lista);
       }
     }
-    // Ahora coloca cada evento en su recuadro: turno.miembro -> recuadro de esa persona
-    // EN LA FRANJA del evento; si la persona no trabaja esa franja (o no hay turno),
-    // cae en "Sin asignar" con badge fueraDeTurno cuando había asignación.
-    for (const evento of eventos) {
+    // Ahora coloca cada evento en su recuadro: por cada cubridor en la cobertura
+    // derivada, lo metemos en el recuadro de esa persona EN LA FRANJA del evento.
+    // Si el evento no tiene cobertura, cae en un recuadro "Sin cubrir".
+    for (const evento of eventosCobertura) {
       const franja = franjaDeHora(evento.hora);
       const clave = `${franja}|${evento.fecha}`;
-      const turno = turnosPorEvento.get(evento.id) ?? null;
-      const persona = turno?.miembro_id ?? "";
       const lista = m.get(clave) ?? [];
 
-      if (persona && franjaPorPersona.get(`${persona}|${evento.fecha}`) === franja) {
-        // La persona trabaja esa franja ese día: lo metemos en su recuadro.
-        const recuadro = lista.find((r) => !r.sinAsignar && r.miembro_id === persona);
+      if (evento.cobertura.length === 0) {
+        let recuadroSin = lista.find((r) => r.sinCubrir);
+        if (!recuadroSin) {
+          recuadroSin = {
+            miembro_id: "",
+            miembro_nombre: "Sin cubrir",
+            sinCubrir: true,
+            eventos: [],
+          };
+          lista.push(recuadroSin);
+        }
+        recuadroSin.eventos.push({ evento, cobertura: [] });
+        m.set(clave, lista);
+        continue;
+      }
+
+      for (const cob of evento.cobertura) {
+        const recuadro = lista.find((r) => !r.sinCubrir && r.miembro_id === cob.miembro_id);
         if (recuadro) {
-          recuadro.eventos.push({ evento, turno, fueraDeTurno: false });
-          continue;
+          recuadro.eventos.push({ evento, cobertura: evento.cobertura });
+        } else {
+          // El backend devolvió una cobertura cuyo miembro no aparece en `turnosQ`
+          // para esa (franja, fecha). Caso raro (carrera de invalidaciones); lo
+          // metemos como persona del cubridor para no perder el dato.
+          lista.push({
+            miembro_id: cob.miembro_id,
+            miembro_nombre: cob.miembro_nombre,
+            sinCubrir: false,
+            eventos: [{ evento, cobertura: evento.cobertura }],
+          });
         }
       }
-      // O no hay turno, o el asignado no trabaja esa franja: "Sin asignar" con badge.
-      let recuadroSin = lista.find((r) => r.sinAsignar);
-      if (!recuadroSin) {
-        recuadroSin = {
-          miembro_id: "",
-          miembro_nombre: "Sin asignar",
-          sinAsignar: true,
-          eventos: [],
-        };
-        // El recuadro Sin asignar se muestra al final.
-        lista.push(recuadroSin);
-      }
-      recuadroSin.eventos.push({
-        evento,
-        turno,
-        fueraDeTurno: Boolean(persona),
-      });
       m.set(clave, lista);
     }
     return m;
-  }, [eventos, dias, personasPorCelda, turnosPorEvento, franjaPorPersona]);
+  }, [eventosCobertura, dias, personasPorCelda]);
 
-  const inicio = dias[0] ?? "";
-  const fin = dias[6] ?? "";
-  const nCambiados = eventos.filter((e) => e.cambiado).length;
-  const cargando =
-    eventosQ.isPending || semanaQ.isPending || horarioQ.isPending || ausenciasQ.isPending;
-  const error = eventosQ.error || semanaQ.error || horarioQ.error || ausenciasQ.error;
+  const inicio = coberturaQ.data?.inicio ?? dias[0] ?? "";
+  const fin = coberturaQ.data?.fin ?? dias[6] ?? "";
+  const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
+  const cargando = coberturaQ.isPending || turnosQ.isPending || ausenciasQ.isPending;
+  const error = coberturaQ.error || turnosQ.error || ausenciasQ.error;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
-        {nCambiados > 0 && (
-          <Badge variant="aviso" className="gap-1 font-normal">
-            <BellRing className="h-3.5 w-3.5" /> {nCambiados} reprogramado
-            {nCambiados === 1 ? "" : "s"} sin avisar
-          </Badge>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {nCambiados > 0 && (
+            <Badge variant="aviso" className="gap-1 font-normal">
+              <BellRing className="h-3.5 w-3.5" /> {nCambiados} reprogramado
+              {nCambiados === 1 ? "" : "s"} sin avisar
+            </Badge>
+          )}
+          {esAdmin && <BotonConfigFranjas />}
+        </div>
       </div>
 
       <LeyendaCobertura />
@@ -682,12 +705,11 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
           titulo="No se pudo cargar el calendario"
           mensaje={mensajeError(error)}
           onReintentar={() => {
-            void eventosQ.refetch();
-            void semanaQ.refetch();
-            void horarioQ.refetch();
+            void coberturaQ.refetch();
+            void turnosQ.refetch();
             void ausenciasQ.refetch();
           }}
-          cargando={eventosQ.isFetching}
+          cargando={coberturaQ.isFetching}
         />
       ) : (
         <Card className="overflow-hidden">
@@ -771,7 +793,7 @@ function Calendario({ lunes, setLunes }: { lunes: string; setLunes: (l: string) 
                             ) : (
                               recuadros.map((rec) => (
                                 <RecuadroPersonaCalendario
-                                  key={`${rec.miembro_id}-${rec.sinAsignar ? "sin" : "ok"}`}
+                                  key={`${rec.miembro_id}-${rec.sinCubrir ? "sin" : "ok"}`}
                                   recuadro={rec}
                                   franja={franja}
                                   onEditarEvento={(e) => setEventoSeleccionado(e)}
@@ -815,7 +837,7 @@ function RecuadroPersonaCalendario({
   onCambio: () => void;
 }) {
   const esDescanso = franja === "descanso";
-  const estilo = recuadro.sinAsignar
+  const estilo = recuadro.sinCubrir
     ? "border-dashed border-amber-300/70 bg-amber-50/30 dark:bg-amber-950/10"
     : esDescanso
       ? "border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900/40"
@@ -825,10 +847,10 @@ function RecuadroPersonaCalendario({
       <div className="flex items-center justify-between gap-1">
         <span
           className={`truncate font-medium ${
-            recuadro.sinAsignar ? "text-amber-700 dark:text-amber-400" : ""
+            recuadro.sinCubrir ? "text-amber-700 dark:text-amber-400" : ""
           }`}
         >
-          {recuadro.sinAsignar ? "Sin asignar" : recuadro.miembro_nombre}
+          {recuadro.sinCubrir ? "Sin cubrir" : recuadro.miembro_nombre}
         </span>
         {recuadro.eventos.length > 0 && (
           <Badge variant="outline" className="h-4 px-1 text-[10px] font-normal">
@@ -868,6 +890,7 @@ function ChipEventoCalendario({
 }) {
   const cob = COBERTURA[item.evento.tipo_cobertura] ?? COBERTURA.transmision;
   const Icono = cob.icono;
+  const tieneOverride = item.cobertura.some((c) => c.override);
   return (
     <button
       type="button"
@@ -887,13 +910,12 @@ function ChipEventoCalendario({
             <BellRing className="h-2.5 w-2.5" /> cambió
           </Badge>
         )}
+        {tieneOverride && (
+          <span className="inline-flex items-center gap-0.5 text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-2.5 w-2.5" /> override
+          </span>
+        )}
       </span>
-      {item.fueraDeTurno && item.turno?.miembro_nombre && (
-        <span className="mt-0.5 inline-flex items-center gap-1 rounded border border-amber-400/60 bg-amber-100/60 px-1 py-0.5 text-[10px] text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-          <AlertTriangle className="h-2.5 w-2.5" />
-          Asignado a {item.turno.miembro_nombre} fuera de turno
-        </span>
-      )}
       {item.evento.cambiado && (
         <span
           // Stop propagation: marcar avisado no debe abrir el modal de edición.
@@ -1072,45 +1094,74 @@ function DialogEditarEvento({
   );
 }
 
-// --- Pestaña: parrilla del equipo ------------------------------------------
+// --- Pestaña: Turnos (CRUD primario sobre persona × día × franja) ----------
+//
+// Modelo nuevo (ola back3): un turno NO está ligado a un evento. Es el horario
+// que cada persona tiene en (fecha, franja). La cobertura es derivada (otra
+// pestaña). Aquí está el CRUD completo: crear (formulario / dialog), editar
+// inline en la rejilla, multi-select para acciones en lote, borrar, duplicar,
+// copiar semana, aprobar la semana.
 
-function Parrilla({
+/** Args para abrir el dialog "Nuevo turno" desde otras pestañas. */
+type PrellenoNuevoTurno = {
+  fecha?: string;
+  franja?: FranjaTurno;
+  miembro_id?: string;
+};
+
+function Turnos({
   lunes,
   setLunes,
   esAdmin,
+  prelleno,
+  limpiarPrelleno,
 }: {
   lunes: string;
   setLunes: (l: string) => void;
   esAdmin: boolean;
+  /** Si llega un prelleno (atajo desde Cobertura), abrimos el dialog auto-rellenado. */
+  prelleno: PrellenoNuevoTurno | null;
+  limpiarPrelleno: () => void;
 }) {
   const queryClient = useQueryClient();
-  const claveSemana = ["rota", "semana", lunes] as const;
+  const claveTurnos = ["rota", "turnos", lunes] as const;
 
-  const semanaQ = useQuery({
-    queryKey: claveSemana,
-    queryFn: ({ signal }) => api.rotaSemana({ lunes }, signal),
+  const turnosQ = useQuery({
+    queryKey: claveTurnos,
+    queryFn: ({ signal }) => api.listarTurnos({ lunes }, signal),
   });
   const equipoQ = useQuery({
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
+  const ausenciasQ = useQuery({
+    queryKey: ["rota", "ausencias"],
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
 
   const equipo = equipoQ.data?.equipo ?? [];
-  const semana = semanaQ.data;
-  // Memoizamos `turnos` para que el `useMemo` de filtros tenga una referencia estable
-  // entre renders cuando los datos no cambian (evita recomputos innecesarios y avisos
-  // del linter).
+  const ausencias = ausenciasQ.data?.ausencias ?? [];
+  const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
 
-  const invalidarTodo = () =>
-    void queryClient.invalidateQueries({ queryKey: ["rota"] });
-  const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveSemana });
+  const invalidarTodo = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveTurnos });
+
+  // Estado del dialog "Nuevo turno" (con o sin prelleno).
+  const [dialogNuevo, setDialogNuevo] = React.useState<PrellenoNuevoTurno | null>(null);
+  // Si llega un prelleno desde otra pestaña, ábrelo una vez y consúmelo.
+  React.useEffect(() => {
+    if (prelleno) {
+      setDialogNuevo(prelleno);
+      limpiarPrelleno();
+    }
+  }, [prelleno, limpiarPrelleno]);
 
   const aprobar = useMutation({
-    mutationFn: () => api.aprobarRota({ lunes }),
+    mutationFn: () => api.aprobarTurnos({ lunes }),
     onSuccess: (res) => {
-      queryClient.setQueryData(claveSemana, res);
-      toast.success(res.mensaje ?? "Rota publicada al equipo.");
+      queryClient.setQueryData(claveTurnos, res);
+      toast.success(res.mensaje ?? "Turnos publicados al equipo.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -1120,44 +1171,27 @@ function Parrilla({
       api.copiarSemana({
         de_lunes: lunesSiguiente(lunes, -1),
         a_lunes: lunes,
-        alcance: "cobertura",
         reemplazar: false,
       }),
     onSuccess: (res) => {
-      if (res.mensaje) toast.warning(res.mensaje);
-      else toast.success(`Copiados ${res.copiados ?? 0} turnos de cobertura.`);
+      toast.success(`Copiados ${res.copiados ?? 0} turnos de la semana anterior.`);
       invalidarTodo();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Filtros por miembro (multi-toggle); "sin-asignar" es un id reservado.
+  // Filtros por miembro (multi-toggle).
   const [filtros, setFiltros] = React.useState<Set<string>>(new Set());
-  // Filtro por estado del turno (toggle exclusivo): null = todos.
-  const [filtroEstado, setFiltroEstado] = React.useState<
-    "todos" | "sin_asignar" | "asignados" | "aprobados"
-  >("todos");
   const turnosFiltrados = React.useMemo(() => {
-    let xs = turnos;
-    if (filtros.size > 0) {
-      xs = xs.filter((t) => {
-        if (!t.miembro_id) return filtros.has("sin-asignar");
-        return filtros.has(t.miembro_id);
-      });
-    }
-    if (filtroEstado === "sin_asignar") xs = xs.filter((t) => !t.miembro_id);
-    else if (filtroEstado === "asignados") xs = xs.filter((t) => Boolean(t.miembro_id));
-    else if (filtroEstado === "aprobados") xs = xs.filter((t) => t.estado === "aprobado");
-    return xs;
-  }, [turnos, filtros, filtroEstado]);
+    if (filtros.size === 0) return turnos;
+    return turnos.filter((t) => filtros.has(t.miembro_id));
+  }, [turnos, filtros]);
 
-  // Selección múltiple (estado del check por fila).
+  // Selección múltiple sobre la rejilla.
   const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
-  // Cada vez que cambia la semana o se invalida, limpia la selección (ids viejos).
   React.useEffect(() => {
     setSeleccionados(new Set());
-  }, [lunes, semana?.total]);
-
+  }, [lunes]);
   const toggleSeleccionado = (id: string) =>
     setSeleccionados((prev) => {
       const next = new Set(prev);
@@ -1185,18 +1219,18 @@ function Parrilla({
               Borrador
             </Badge>
           ) : null}
-          {!semana?.aprobada && (
-            <BotonNuevoTurno
-              lunes={lunes}
-              equipo={equipo}
-              onCreado={invalidarTodo}
-            />
-          )}
+          <Button
+            size="sm"
+            onClick={() => setDialogNuevo({})}
+            disabled={semana?.aprobada}
+          >
+            <Plus className="h-4 w-4" /> Nuevo turno
+          </Button>
           <Button
             variant="outline"
             onClick={() => copiarAnterior.mutate()}
             disabled={copiarAnterior.isPending || semana?.aprobada}
-            title="Copiar la cobertura de la semana anterior (los eventos cambian: avisa si no aplica)"
+            title="Copia los turnos de la semana anterior con offset +7 días"
           >
             {copiarAnterior.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1219,6 +1253,7 @@ function Parrilla({
               Aprobar y publicar
             </Button>
           )}
+          {esAdmin && <BotonConfigFranjas />}
           <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
             <Download className="h-4 w-4" /> Excel
           </Button>
@@ -1228,34 +1263,7 @@ function Parrilla({
         </div>
       </div>
 
-      {!semana?.aprobada && (
-        <AsignarDeGolpe lunes={lunes} equipo={equipo} onAplicado={invalidarTodo} />
-      )}
-
       <FiltrosMiembro equipo={equipo} filtros={filtros} setFiltros={setFiltros} />
-
-      {/* Filtros por estado del turno (exclusivos: todos / sin asignar / asignados / aprobados). */}
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <span className="text-muted-foreground">Estado:</span>
-        {(
-          [
-            { v: "todos", l: "Todos" },
-            { v: "sin_asignar", l: "Sin asignar" },
-            { v: "asignados", l: "Asignados" },
-            { v: "aprobados", l: "Aprobados" },
-          ] as { v: typeof filtroEstado; l: string }[]
-        ).map((opt) => (
-          <Button
-            key={opt.v}
-            size="sm"
-            variant={filtroEstado === opt.v ? "default" : "outline"}
-            className="h-7 px-2"
-            onClick={() => setFiltroEstado(opt.v)}
-          >
-            {opt.l}
-          </Button>
-        ))}
-      </div>
 
       {seleccionados.size > 0 && (
         <BarraSeleccion
@@ -1269,256 +1277,652 @@ function Parrilla({
         />
       )}
 
-      {semanaQ.isPending ? (
+      {turnosQ.isPending ? (
         <Skeleton className="h-48 w-full rounded-md" />
-      ) : semanaQ.isError ? (
+      ) : turnosQ.isError ? (
         <BloqueError
-          titulo="No se pudo cargar la rota"
-          mensaje={mensajeError(semanaQ.error)}
-          onReintentar={() => void semanaQ.refetch()}
-          cargando={semanaQ.isFetching}
+          titulo="No se pudieron cargar los turnos"
+          mensaje={mensajeError(turnosQ.error)}
+          onReintentar={() => void turnosQ.refetch()}
+          cargando={turnosQ.isFetching}
         />
       ) : turnos.length === 0 ? (
         <EstadoVacio
           icono={CalendarDays}
-          titulo="Sin rota para esta semana"
-          texto="Da de alta los eventos de la semana en la pestaña 'Eventos' y asigna cada uno a un miembro de tu equipo."
+          titulo="Sin turnos para esta semana"
+          texto="Crea el primero con «Nuevo turno» o copia la semana anterior."
         />
       ) : (
-        <TablaTurnos
+        <RejillaTurnos
+          semana={(semana as RotaSemana) ?? null}
           turnos={turnosFiltrados}
           equipo={equipo}
+          ausencias={ausencias}
           editable={!semana?.aprobada}
           onCambio={invalidar}
           seleccionados={seleccionados}
-          onToggleSeleccionado={!semana?.aprobada ? toggleSeleccionado : undefined}
+          onToggleSeleccionado={toggleSeleccionado}
+          onPedirNuevoTurno={(args) => setDialogNuevo(args)}
         />
       )}
 
       <PanelCarga lunes={lunes} />
+
+      {dialogNuevo && (
+        <DialogNuevoTurno
+          lunes={lunes}
+          equipo={equipo}
+          inicial={dialogNuevo}
+          onCerrar={() => setDialogNuevo(null)}
+          onCreado={() => {
+            setDialogNuevo(null);
+            invalidarTodo();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-// --- Asignar de golpe (POR FRANJA) -----------------------------------------
+// --- Rejilla persona × día con celdas editables ---------------------------
 
-function AsignarDeGolpe({
-  lunes,
+function RejillaTurnos({
+  semana,
+  turnos,
   equipo,
-  onAplicado,
+  ausencias,
+  editable,
+  onCambio,
+  seleccionados,
+  onToggleSeleccionado,
+  onPedirNuevoTurno,
 }: {
-  lunes: string;
+  semana: RotaSemana | null;
+  turnos: TurnoRota[];
   equipo: MiembroRota[];
-  onAplicado: () => void;
+  ausencias: AusenciaRota[];
+  editable: boolean;
+  onCambio: () => void;
+  seleccionados: Set<string>;
+  onToggleSeleccionado: (id: string) => void;
+  onPedirNuevoTurno: (args: PrellenoNuevoTurno) => void;
 }) {
-  const dias = React.useMemo(() => {
-    const base = new Date(`${lunes}T00:00:00`);
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(d.getDate() + i);
-      return iso(d);
-    });
-  }, [lunes]);
+  const dias = semana?.dias ?? [];
+  // Indexa los turnos por (miembro, fecha). El backend garantiza unicidad por
+  // (miembro, fecha, franja), pero una persona puede tener varios turnos en el
+  // mismo día (raro). Mostramos todos en pila por celda.
+  const porCelda = React.useMemo(() => {
+    const m = new Map<string, TurnoRota[]>();
+    for (const t of turnos) {
+      const k = `${t.miembro_id}|${t.fecha}`;
+      const lista = m.get(k) ?? [];
+      lista.push(t);
+      m.set(k, lista);
+    }
+    return m;
+  }, [turnos]);
 
-  const [fecha, setFecha] = React.useState(dias[0] ?? "");
-  const [franja, setFranja] = React.useState<FranjaCobertura>("vespertino");
-  const [miembroId, setMiembroId] = React.useState("");
-  const [sobreescribir, setSobreescribir] = React.useState(false);
+  const estaAusente = (miembroId: string, fecha: string): AusenciaRota | undefined =>
+    ausencias.find((a) => a.miembro_id === miembroId && a.desde <= fecha && fecha <= a.hasta);
 
-  React.useEffect(() => {
-    // Si cambia la semana, ancla la fecha al primer día válido.
-    if (dias.length > 0 && !dias.includes(fecha)) setFecha(dias[0]);
-  }, [dias, fecha]);
-
-  const aplicar = useMutation({
-    mutationFn: (override: boolean) =>
-      api.asignarFranja({
-        lunes,
-        fecha,
-        franja,
-        miembro_id: miembroId,
-        sobreescribir,
-        override,
-      }),
-    onSuccess: (res) => {
-      const partes: string[] = [];
-      if (res.actualizados > 0) partes.push(`asignados ${res.actualizados}`);
-      if (res.saltados > 0) partes.push(`saltados ${res.saltados}`);
-      if (res.conflictos.length > 0)
-        partes.push(`${res.conflictos.length} requieren override`);
-      if (partes.length > 0) {
-        toast.success(partes.join(" · "));
-      } else {
-        // #185: explicación accionable cuando no hubo nada que asignar.
-        const cfg = res.franjas_config;
-        const rango =
-          franja === "matutino"
-            ? `mañana (${cfg?.matutino_inicio ?? "08:00"}–${cfg?.matutino_fin ?? "16:00"})`
-            : `tarde (${cfg?.vespertino_inicio ?? "16:00"}–${cfg?.vespertino_fin ?? "24:00"})`;
-        const total = res.total_eventos ?? 0;
-        const sinHora = res.sin_hora ?? 0;
-        let msg = `No hay eventos en la ${rango} ese día.`;
-        if (total > 0) msg += ` (${total} eventos en el día en otras franjas).`;
-        if (sinHora > 0) msg += ` ${sinHora} sin hora.`;
-        msg += " Cambia los rangos en «Franjas» o edita la hora del evento.";
-        toast.info(msg);
-      }
-      onAplicado();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const puede = fecha !== "" && miembroId !== "" && !aplicar.isPending;
+  const filas = [...equipo].sort((a, b) => a.nombre.localeCompare(b.nombre));
 
   return (
     <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Wand2 className="h-4 w-4" /> Asignar de golpe
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="space-y-1.5">
-          <Label>Día</Label>
-          <Select value={fecha} onValueChange={setFecha}>
-            <SelectTrigger aria-label="Día de la semana">
-              <SelectValue placeholder="—" />
-            </SelectTrigger>
-            <SelectContent>
-              {dias.map((d) => (
-                <SelectItem key={d} value={d}>
-                  {formatearFechaCorta(d)}
-                </SelectItem>
+      <CardContent className="overflow-x-auto p-0">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="sticky left-0 bg-background">Persona</TableHead>
+              {dias.map((fecha) => (
+                <TableHead
+                  key={fecha}
+                  className={esFinDeSemana(fecha) ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}
+                >
+                  <div className="capitalize">{diaCorto(fecha)}</div>
+                  <div className="text-xs font-normal text-muted-foreground">
+                    {fecha.slice(8, 10)}
+                  </div>
+                </TableHead>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Franja</Label>
-          <Select value={franja} onValueChange={(v) => setFranja(v as FranjaCobertura)}>
-            <SelectTrigger aria-label="Franja">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="matutino">Mañana (06–13:59)</SelectItem>
-              <SelectItem value="vespertino">Tarde (14–22:59)</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Persona</Label>
-          <Select value={miembroId} onValueChange={setMiembroId}>
-            <SelectTrigger aria-label="Persona">
-              <SelectValue placeholder="Elige a un miembro" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipo.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filas.map((m) => (
+              <TableRow key={m.id}>
+                <TableCell className="sticky left-0 whitespace-nowrap bg-background font-medium">
                   {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex items-center gap-2 self-end pb-2">
-          <Checkbox
-            id="sobreescribir"
-            checked={sobreescribir}
-            onCheckedChange={(v) => setSobreescribir(v === true)}
-          />
-          <Label htmlFor="sobreescribir" className="cursor-pointer text-sm font-normal">
-            Sobrescribir
-          </Label>
-        </div>
-        <div className="flex items-end">
-          <Button
-            onClick={() => aplicar.mutate(false)}
-            disabled={!puede}
-            className="w-full"
-          >
-            {aplicar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Wand2 className="h-4 w-4" />
-            )}
-            Asignar
-          </Button>
-        </div>
+                </TableCell>
+                {dias.map((fecha) => {
+                  const ausencia = estaAusente(m.id, fecha);
+                  const turnosCelda = porCelda.get(`${m.id}|${fecha}`) ?? [];
+                  const finde = esFinDeSemana(fecha);
+                  return (
+                    <TableCell
+                      key={fecha}
+                      className={
+                        finde ? "align-top bg-amber-50/30 dark:bg-amber-950/10" : "align-top"
+                      }
+                    >
+                      <div className="space-y-1.5">
+                        {ausencia && (
+                          <Tooltip
+                            label={
+                              ausencia.motivo
+                                ? `${ausencia.tipo}: ${ausencia.motivo}`
+                                : `${ausencia.tipo} del ${ausencia.desde} al ${ausencia.hasta}`
+                            }
+                          >
+                            <Badge variant="secondary" className="font-normal">
+                              <Plane className="mr-1 h-3 w-3" />
+                              {TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ??
+                                "Ausente"}
+                            </Badge>
+                          </Tooltip>
+                        )}
+                        {turnosCelda.length === 0 ? (
+                          editable ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-full justify-start gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() =>
+                                onPedirNuevoTurno({ fecha, miembro_id: m.id })
+                              }
+                            >
+                              <Plus className="h-3 w-3" /> Añadir
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )
+                        ) : (
+                          turnosCelda.map((t) => (
+                            <CeldaTurno
+                              key={t.id}
+                              turno={t}
+                              equipo={equipo}
+                              editable={editable}
+                              ausencia={ausencia}
+                              onCambio={onCambio}
+                              seleccionado={seleccionados.has(t.id)}
+                              onToggleSeleccionado={onToggleSeleccionado}
+                            />
+                          ))
+                        )}
+                      </div>
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );
 }
 
-// --- Botón "Nuevo turno": dos modos (evento existente / evento nuevo + turno) ---
-
-/**
- * Crear un turno de cobertura directamente desde la parrilla. Dos caminos:
- *  - "Para evento existente": elige uno de los eventos de la semana y la persona.
- *  - "Crear evento + turno": atajo cuando el evento aún no existe (alta express).
- */
-function BotonNuevoTurno({
-  lunes,
+function CeldaTurno({
+  turno,
   equipo,
-  onCreado,
+  editable,
+  ausencia,
+  onCambio,
+  seleccionado,
+  onToggleSeleccionado,
 }: {
-  lunes: string;
+  turno: TurnoRota;
   equipo: MiembroRota[];
-  onCreado: () => void;
+  editable: boolean;
+  /** Si la persona tiene una ausencia que cubre el día de este turno. */
+  ausencia?: AusenciaRota;
+  onCambio: () => void;
+  seleccionado: boolean;
+  onToggleSeleccionado: (id: string) => void;
 }) {
-  const [abierto, setAbierto] = React.useState(false);
+  // Override pendiente por regla de sábado (la persona repite el sábado anterior).
+  const [pendienteSabado, setPendienteSabado] = React.useState<FranjaTurno | null>(null);
+  // Override pendiente por AUSENCIA (la persona está ausente ese día).
+  const [pendienteAusencia, setPendienteAusencia] = React.useState<{
+    franja: FranjaTurno;
+    ausencia: AusenciaRota;
+  } | null>(null);
+  const [editandoDetalles, setEditandoDetalles] = React.useState(false);
+
+  const actualizar = useMutation({
+    mutationFn: (cuerpo: {
+      franja?: FranjaTurno;
+      miembro_id?: string;
+      override?: boolean;
+      motivo?: string;
+      nota_relevo?: string;
+    }) => api.actualizarTurno(turno.id, cuerpo),
+    onSuccess: () => {
+      setPendienteSabado(null);
+      setPendienteAusencia(null);
+      onCambio();
+    },
+    onError: (e, variables) => {
+      if (e instanceof ApiError && e.status === 409 && variables.franja) {
+        const cuerpo = (e.cuerpo ?? {}) as {
+          requiere_override?: boolean;
+          ausencia?: AusenciaRota;
+        };
+        if (cuerpo.requiere_override && cuerpo.ausencia) {
+          setPendienteAusencia({ franja: variables.franja, ausencia: cuerpo.ausencia });
+          return;
+        }
+        setPendienteSabado(variables.franja);
+        toast.warning(mensajeError(e));
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const borrar = useMutation({
+    mutationFn: () => api.borrarTurno(turno.id),
+    onSuccess: () => {
+      toast.success("Turno eliminado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const duplicar = useMutation({
+    mutationFn: () => api.duplicarTurno(turno.id, {}),
+    onSuccess: () => {
+      toast.success("Turno duplicado.");
+      onCambio();
+    },
+    onError: (e) => {
+      // Choque con turno existente (común al duplicar sin cambiar nada).
+      if (e instanceof ApiError && e.status === 409) {
+        toast.info(e.message);
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  if (!editable) {
+    return (
+      <div className="space-y-1">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">{ETIQUETA_FRANJA[turno.franja]}</span>
+          {turno.override && <AlertTriangle className="h-3 w-3 text-amber-600" />}
+        </div>
+        {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
+        {turno.motivo && (
+          <div className="text-[10px] text-muted-foreground">{turno.motivo}</div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <>
-      <Button variant="default" size="sm" onClick={() => setAbierto(true)}>
-        <Plus className="h-4 w-4" /> Nuevo turno
-      </Button>
-      {abierto && (
-        <DialogNuevoTurno
-          lunes={lunes}
+    <div className="space-y-1.5 rounded-md border bg-background p-1.5">
+      <div className="flex items-start gap-1.5">
+        <Checkbox
+          aria-label={`Seleccionar turno de ${turno.miembro_nombre} el ${turno.fecha}`}
+          checked={seleccionado}
+          onCheckedChange={() => onToggleSeleccionado(turno.id)}
+          className="mt-1.5"
+        />
+        <div className="min-w-0 flex-1 space-y-1">
+          <Select
+            value={turno.franja}
+            onValueChange={(v) => actualizar.mutate({ franja: v as FranjaTurno })}
+            disabled={actualizar.isPending}
+          >
+            <SelectTrigger
+              aria-label={`Franja de ${turno.miembro_nombre}`}
+              className="h-7 min-w-[7rem] text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="matutino">Mañana</SelectItem>
+              <SelectItem value="vespertino">Tarde</SelectItem>
+              <SelectItem value="descanso">Descanso</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex flex-wrap items-center gap-1">
+            {turno.override && (
+              <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
+                <AlertTriangle className="h-2.5 w-2.5" /> override
+              </Badge>
+            )}
+            {ausencia && !turno.override && (
+              <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
+                <Plane className="h-2.5 w-2.5" /> ausente
+              </Badge>
+            )}
+            <Tooltip label="Editar persona, motivo, nota de relevo">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                onClick={() => setEditandoDetalles(true)}
+                aria-label="Editar detalles del turno"
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Duplicar turno">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                onClick={() => duplicar.mutate()}
+                disabled={duplicar.isPending}
+                aria-label="Duplicar turno"
+              >
+                {duplicar.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            </Tooltip>
+            <Tooltip label="Borrar turno">
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                aria-label="Borrar turno"
+                onClick={() => {
+                  if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`))
+                    borrar.mutate();
+                }}
+                disabled={borrar.isPending}
+              >
+                {borrar.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3 w-3" />
+                )}
+              </Button>
+            </Tooltip>
+          </div>
+          {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
+          {turno.motivo && (
+            <div className="text-[10px] text-muted-foreground">{turno.motivo}</div>
+          )}
+        </div>
+      </div>
+      {pendienteSabado && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full text-amber-700 dark:text-amber-400"
+          onClick={() => actualizar.mutate({ franja: pendienteSabado, override: true })}
+          disabled={actualizar.isPending}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> Forzar cobertura (override)
+        </Button>
+      )}
+      {pendienteAusencia && (
+        <Dialog open onOpenChange={(o) => !o && setPendienteAusencia(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Esa persona está ausente</DialogTitle>
+              <DialogDescription>
+                {pendienteAusencia.ausencia.miembro_nombre} está{" "}
+                {pendienteAusencia.ausencia.tipo} del {pendienteAusencia.ausencia.desde} al{" "}
+                {pendienteAusencia.ausencia.hasta}.
+                {pendienteAusencia.ausencia.motivo
+                  ? ` Motivo: ${pendienteAusencia.ausencia.motivo}.`
+                  : ""}{" "}
+                ¿Forzar override de todas formas?
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPendienteAusencia(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
+                onClick={() =>
+                  actualizar.mutate({ franja: pendienteAusencia.franja, override: true })
+                }
+                disabled={actualizar.isPending}
+              >
+                {actualizar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                <AlertTriangle className="h-4 w-4" /> Forzar override
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      {editandoDetalles && (
+        <DialogEditarTurno
+          turno={turno}
           equipo={equipo}
-          onCerrar={() => setAbierto(false)}
-          onCreado={() => {
-            onCreado();
-            setAbierto(false);
+          onCerrar={() => setEditandoDetalles(false)}
+          onGuardado={() => {
+            setEditandoDetalles(false);
+            onCambio();
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
+/** Diálogo para editar detalles de un turno (persona, motivo, nota de relevo). */
+function DialogEditarTurno({
+  turno,
+  equipo,
+  onCerrar,
+  onGuardado,
+}: {
+  turno: TurnoRota;
+  equipo: MiembroRota[];
+  onCerrar: () => void;
+  onGuardado: () => void;
+}) {
+  const [fecha, setFecha] = React.useState(turno.fecha);
+  const [miembroId, setMiembroId] = React.useState(turno.miembro_id);
+  const [franja, setFranja] = React.useState<FranjaTurno>(turno.franja);
+  const [motivo, setMotivo] = React.useState(turno.motivo);
+  const [notaRelevo, setNotaRelevo] = React.useState(turno.nota_relevo);
+  // Si el backend devuelve 409 requiere_override, mostramos botón "forzar".
+  const [pendienteOverride, setPendienteOverride] = React.useState<{ mensaje: string } | null>(
+    null,
+  );
+
+  const guardar = useMutation({
+    mutationFn: (override: boolean) => {
+      const cuerpo: {
+        fecha?: string;
+        miembro_id?: string;
+        franja?: FranjaTurno;
+        motivo?: string;
+        nota_relevo?: string;
+        override?: boolean;
+      } = {};
+      if (fecha !== turno.fecha) cuerpo.fecha = fecha;
+      if (miembroId !== turno.miembro_id) cuerpo.miembro_id = miembroId;
+      if (franja !== turno.franja) cuerpo.franja = franja;
+      if (motivo !== turno.motivo) cuerpo.motivo = motivo;
+      if (notaRelevo !== turno.nota_relevo) cuerpo.nota_relevo = notaRelevo;
+      if (override) cuerpo.override = true;
+      return api.actualizarTurno(turno.id, cuerpo);
+    },
+    onSuccess: () => {
+      toast.success("Turno actualizado.");
+      onGuardado();
+    },
+    onError: (e) => {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (e.cuerpo?.requiere_override as boolean | undefined)
+      ) {
+        setPendienteOverride({ mensaje: e.message });
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const sinCambios =
+    fecha === turno.fecha &&
+    miembroId === turno.miembro_id &&
+    franja === turno.franja &&
+    motivo === turno.motivo &&
+    notaRelevo === turno.nota_relevo;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Editar turno</DialogTitle>
+          <DialogDescription>
+            Cambia persona, fecha, franja, motivo o nota de relevo. Se valida el sábado
+            consecutivo y las ausencias; si chocan, te ofrecemos forzar override.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="et-fecha">Fecha</Label>
+              <Input
+                id="et-fecha"
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Franja</Label>
+              <Select value={franja} onValueChange={(v) => setFranja(v as FranjaTurno)}>
+                <SelectTrigger aria-label="Franja">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="matutino">Mañana</SelectItem>
+                  <SelectItem value="vespertino">Tarde</SelectItem>
+                  <SelectItem value="descanso">Descanso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Persona</Label>
+            <Select value={miembroId} onValueChange={setMiembroId}>
+              <SelectTrigger aria-label="Persona del turno">
+                <SelectValue placeholder="Sin asignar" />
+              </SelectTrigger>
+              <SelectContent>
+                {equipo.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="et-motivo">
+              Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="et-motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Cobertura forzada por evento crítico…"
+              maxLength={200}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="et-nota">
+              Nota de relevo{" "}
+              <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Textarea
+              id="et-nota"
+              value={notaRelevo}
+              onChange={(e) => setNotaRelevo(e.target.value)}
+              placeholder="Qué queda pendiente para el siguiente turno…"
+              rows={3}
+              maxLength={1000}
+            />
+          </div>
+          {pendienteOverride && (
+            <div className="rounded-md border border-amber-300/60 bg-amber-50/40 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+              <p className="font-medium">{pendienteOverride.mensaje}</p>
+              <p className="mt-1 text-xs">
+                Confirma solo si es una cobertura estratégica intencional.
+              </p>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          {pendienteOverride ? (
+            <Button
+              variant="outline"
+              className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
+              onClick={() => guardar.mutate(true)}
+              disabled={guardar.isPending}
+            >
+              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              <AlertTriangle className="h-4 w-4" /> Forzar override
+            </Button>
+          ) : (
+            <Button onClick={() => guardar.mutate(false)} disabled={sinCambios || guardar.isPending}>
+              {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Dialog "Nuevo turno": crea un turno (persona × fecha × franja). */
 function DialogNuevoTurno({
   lunes,
   equipo,
+  inicial,
   onCerrar,
   onCreado,
 }: {
   lunes: string;
   equipo: MiembroRota[];
+  inicial: PrellenoNuevoTurno;
   onCerrar: () => void;
   onCreado: () => void;
 }) {
-  const [modo, setModo] = React.useState<"existente" | "nuevo">("existente");
-  // Eventos de la semana en vista (lo más común: el turno encaja en algún evento real).
   const desde = lunes;
-  const hasta = lunesSiguiente(lunes, 1);
-  const eventosQ = useQuery({
-    queryKey: ["rota", "eventos-semana-picker", desde] as const,
-    queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
-  });
-  const eventos = (eventosQ.data?.eventos ?? []).filter(
-    (e) => e.fecha >= desde && e.fecha < hasta,
+  const [fecha, setFecha] = React.useState(inicial.fecha ?? desde);
+  const [miembroId, setMiembroId] = React.useState(inicial.miembro_id ?? "");
+  const [franja, setFranja] = React.useState<FranjaTurno>(inicial.franja ?? "matutino");
+  const [motivo, setMotivo] = React.useState("");
+  const [notaRelevo, setNotaRelevo] = React.useState("");
+  const [pendienteOverride, setPendienteOverride] = React.useState<{ mensaje: string } | null>(
+    null,
   );
 
-  // --- Modo "existente" ---
-  const [eventoId, setEventoId] = React.useState("");
-  const [miembroId, setMiembroId] = React.useState("");
-  const crearExistente = useMutation({
-    mutationFn: (override: boolean) =>
-      api.crearTurnoRota({
-        evento_id: eventoId,
-        miembro_id: miembroId || undefined,
-        override,
-      }),
+  const crear = useMutation({
+    mutationFn: (override: boolean) => {
+      const cuerpo: CuerpoCrearTurnoRota = {
+        lunes,
+        fecha,
+        miembro_id: miembroId,
+        franja,
+        motivo: motivo.trim() || undefined,
+        nota_relevo: notaRelevo.trim() || undefined,
+      };
+      if (override) cuerpo.override = true;
+      return api.crearTurno(cuerpo);
+    },
     onSuccess: () => {
       toast.success("Turno creado.");
       onCreado();
@@ -1529,258 +1933,115 @@ function DialogNuevoTurno({
         e.status === 409 &&
         (e.cuerpo?.requiere_override as boolean | undefined)
       ) {
-        if (
-          window.confirm(
-            `${e.message}\n\n¿Forzar la cobertura aun así (override)?`,
-          )
-        ) {
-          crearExistente.mutate(true);
-          return;
-        }
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
-  // --- Modo "nuevo" (alta express): evento + turno ---
-  const [titulo, setTitulo] = React.useState("");
-  const [fecha, setFecha] = React.useState(desde);
-  const [hora, setHora] = React.useState("");
-  const [contenido, setContenido] = React.useState("");
-  const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
-  const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
-
-  const crearNuevo = useMutation({
-    mutationFn: async (override: boolean) => {
-      const ev = await api.crearEventoRota({
-        titulo: titulo.trim(),
-        fecha,
-        hora: hora.trim(),
-        contenido: contenido.trim(),
-        tipo_cobertura: tipoCobertura,
-        prioridad,
-      });
-      return api.crearTurnoRota({
-        evento_id: ev.evento.id,
-        miembro_id: miembroId || undefined,
-        override,
-      });
-    },
-    onSuccess: () => {
-      toast.success("Evento creado y turno asignado.");
-      onCreado();
-    },
-    onError: (e) => {
-      if (
-        e instanceof ApiError &&
-        e.status === 409 &&
-        (e.cuerpo?.requiere_override as boolean | undefined)
-      ) {
-        // No reintentamos automáticamente: si el evento ya se creó (caso muy poco probable
-        // aquí), el override solo aplica al turno; lo dejamos en la mano del usuario.
-        toast.warning(`${e.message} Llama de nuevo desde el listado con override.`);
+        setPendienteOverride({ mensaje: e.message });
         return;
       }
       toast.error(mensajeError(e));
     },
   });
 
-  const puedeExistente = eventoId !== "" && !crearExistente.isPending;
-  const puedeNuevo =
-    titulo.trim().length > 0 && fecha !== "" && !crearNuevo.isPending;
+  const puedeCrear = fecha !== "" && miembroId !== "" && !crear.isPending;
 
   return (
     <Dialog open onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>Nuevo turno de cobertura</DialogTitle>
+          <DialogTitle>Nuevo turno</DialogTitle>
           <DialogDescription>
-            Asigna una persona a un evento de esta semana, o crea el evento al vuelo.
+            Un turno es una persona en una fecha y franja. NO se asocia a ningún evento:
+            la cobertura se calcula a partir de los turnos y los eventos de la semana.
           </DialogDescription>
         </DialogHeader>
-
-        {/* Toggle entre los dos modos. Tabs simulados con botones para no anidar */}
-        {/* <Tabs> dentro de <Dialog> (sería molesto con el foco). */}
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant={modo === "existente" ? "default" : "outline"}
-            onClick={() => setModo("existente")}
-          >
-            Para un evento existente
-          </Button>
-          <Button
-            size="sm"
-            variant={modo === "nuevo" ? "default" : "outline"}
-            onClick={() => setModo("nuevo")}
-          >
-            Crear evento + turno
-          </Button>
-        </div>
-
-        {modo === "existente" ? (
-          <div className="space-y-3">
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Evento</Label>
-              {eventosQ.isPending ? (
-                <Skeleton className="h-9 w-full rounded-md" />
-              ) : eventos.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No hay eventos en esta semana. Crea uno arriba o usa el modo
-                  "Crear evento + turno".
-                </p>
-              ) : (
-                <Select value={eventoId} onValueChange={setEventoId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Elige un evento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {eventos
-                      .slice()
-                      .sort((a, b) =>
-                        (a.fecha + a.hora).localeCompare(b.fecha + b.hora),
-                      )
-                      .map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {formatearFechaCorta(e.fecha)}
-                          {e.hora ? ` · ${e.hora}` : ""} — {e.titulo}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Persona</Label>
-              <Select value={miembroId} onValueChange={setMiembroId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin asignar (puedes elegir luego)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {equipo.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="nt-titulo">Evento / transmisión</Label>
+              <Label htmlFor="nt-fecha">Fecha</Label>
               <Input
-                id="nt-titulo"
-                value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
-                placeholder="Ej. Cruz Azul vs América"
-                maxLength={200}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="nt-fecha">Fecha</Label>
-                <Input
-                  id="nt-fecha"
-                  type="date"
-                  value={fecha}
-                  onChange={(e) => setFecha(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="nt-hora">Hora</Label>
-                <Input
-                  id="nt-hora"
-                  value={hora}
-                  onChange={(e) => setHora(e.target.value)}
-                  placeholder="16:00"
-                  maxLength={40}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Cobertura</Label>
-                <Select
-                  value={tipoCobertura}
-                  onValueChange={(v) => setTipoCobertura(v as TipoCoberturaEvento)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_COBERTURA.map((t) => (
-                      <SelectItem key={t.valor} value={t.valor}>
-                        {t.etiqueta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Prioridad</Label>
-                <Select
-                  value={prioridad}
-                  onValueChange={(v) => setPrioridad(v as PrioridadEvento)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PRIORIDADES.map((p) => (
-                      <SelectItem key={p.valor} value={p.valor}>
-                        {p.etiqueta}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="nt-contenido">Qué sacar</Label>
-              <Textarea
-                id="nt-contenido"
-                value={contenido}
-                onChange={(e) => setContenido(e.target.value)}
-                rows={2}
-                maxLength={2000}
+                id="nt-fecha"
+                type="date"
+                value={fecha}
+                onChange={(e) => setFecha(e.target.value)}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Persona (turno)</Label>
-              <Select value={miembroId} onValueChange={setMiembroId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sin asignar (puedes elegir luego)" />
+              <Label>Franja</Label>
+              <Select value={franja} onValueChange={(v) => setFranja(v as FranjaTurno)}>
+                <SelectTrigger aria-label="Franja del turno">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {equipo.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.nombre}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="matutino">Mañana</SelectItem>
+                  <SelectItem value="vespertino">Tarde</SelectItem>
+                  <SelectItem value="descanso">Descanso</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
-        )}
-
+          <div className="space-y-1.5">
+            <Label>Persona</Label>
+            <Select value={miembroId} onValueChange={setMiembroId}>
+              <SelectTrigger aria-label="Persona del turno">
+                <SelectValue placeholder="Elige a un miembro" />
+              </SelectTrigger>
+              <SelectContent>
+                {equipo.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nt-motivo">
+              Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="nt-motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              maxLength={200}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nt-nota">
+              Nota de relevo <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Textarea
+              id="nt-nota"
+              value={notaRelevo}
+              onChange={(e) => setNotaRelevo(e.target.value)}
+              rows={2}
+              maxLength={1000}
+            />
+          </div>
+          {pendienteOverride && (
+            <div className="rounded-md border border-amber-300/60 bg-amber-50/40 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+              <p className="font-medium">{pendienteOverride.mensaje}</p>
+              <p className="mt-1 text-xs">
+                Confirma solo si es una cobertura estratégica intencional.
+              </p>
+            </div>
+          )}
+        </div>
         <DialogFooter>
           <Button variant="ghost" onClick={onCerrar}>
             Cancelar
           </Button>
-          {modo === "existente" ? (
+          {pendienteOverride ? (
             <Button
-              onClick={() => crearExistente.mutate(false)}
-              disabled={!puedeExistente}
+              variant="outline"
+              className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
+              onClick={() => crear.mutate(true)}
+              disabled={crear.isPending}
             >
-              {crearExistente.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Crear turno
+              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              <AlertTriangle className="h-4 w-4" /> Forzar override
             </Button>
           ) : (
-            <Button onClick={() => crearNuevo.mutate(false)} disabled={!puedeNuevo}>
-              {crearNuevo.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Crear evento y turno
+            <Button onClick={() => crear.mutate(false)} disabled={!puedeCrear}>
+              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear turno
             </Button>
           )}
         </DialogFooter>
@@ -1789,7 +2050,7 @@ function DialogNuevoTurno({
   );
 }
 
-// --- Filtros por miembro ---------------------------------------------------
+// --- Filtros por miembro (chip toggles) ------------------------------------
 
 function FiltrosMiembro({
   equipo,
@@ -1825,14 +2086,6 @@ function FiltrosMiembro({
           </Button>
         );
       })}
-      <Button
-        size="sm"
-        variant={filtros.has("sin-asignar") ? "default" : "outline"}
-        className="h-7 px-2"
-        onClick={() => toggle("sin-asignar")}
-      >
-        Sin asignar
-      </Button>
       {filtros.size > 0 && (
         <Button
           size="sm"
@@ -1861,41 +2114,59 @@ function BarraSeleccion({
   onAplicado: () => void;
 }) {
   const [miembroId, setMiembroId] = React.useState("");
-  // Si el backend pide override (409), guardamos los datos y abrimos el diálogo.
+  const [franja, setFranja] = React.useState<FranjaTurno | "">("");
   const [override, setOverride] = React.useState<{
     miembroId: string;
+    franja: FranjaTurno | "";
     mensaje: string;
     ids: string[];
   } | null>(null);
 
   const aplicar = useMutation({
-    mutationFn: (vars: { miembroId: string; override: boolean }) =>
-      api.actualizarLoteTurnos({
+    mutationFn: (vars: {
+      miembroId: string;
+      franja: FranjaTurno | "";
+      override: boolean;
+    }) => {
+      const cuerpo: {
+        ids: string[];
+        miembro_id?: string;
+        franja?: FranjaTurno;
+        override?: boolean;
+      } = {
         ids: [...seleccionados],
-        miembro_id: vars.miembroId,
-        override: vars.override,
-      }),
+      };
+      if (vars.miembroId !== "") cuerpo.miembro_id = vars.miembroId;
+      if (vars.franja !== "") cuerpo.franja = vars.franja;
+      if (vars.override) cuerpo.override = true;
+      return api.actualizarTurnosLote(cuerpo);
+    },
     onSuccess: (res) => {
-      toast.success(`Asignados ${res.actualizados} turnos.`);
+      toast.success(`Actualizados ${res.actualizados} turnos.`);
       setOverride(null);
       setMiembroId("");
+      setFranja("");
       onAplicado();
     },
     onError: (e, vars) => {
       if (e instanceof ApiError && e.status === 409) {
         const ids = (e.cuerpo?.ids_que_requieren_override as string[] | undefined) ?? [];
-        setOverride({ miembroId: vars.miembroId, mensaje: e.message, ids });
+        setOverride({
+          miembroId: vars.miembroId,
+          franja: vars.franja,
+          mensaje: e.message,
+          ids,
+        });
         return;
       }
       toast.error(mensajeError(e));
     },
   });
 
-  // `miembro_id=""` SÍ está aceptado por el backend (alineado con el PATCH 1:1):
-  // quita la asignación de todos los turnos del lote.
-  const quitar = useMutation({
+  // `miembro_id=""` desasigna en el backend (alineado con el PATCH 1:1).
+  const quitarMiembro = useMutation({
     mutationFn: () =>
-      api.actualizarLoteTurnos({ ids: [...seleccionados], miembro_id: "" }),
+      api.actualizarTurnosLote({ ids: [...seleccionados], miembro_id: "" }),
     onSuccess: (res) => {
       toast.success(`Quitada asignación a ${res.actualizados} turnos.`);
       onAplicado();
@@ -1917,46 +2188,65 @@ function BarraSeleccion({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const puedeAplicar = (miembroId !== "" || franja !== "") && !aplicar.isPending;
+
   return (
     <Card className="border-primary/40 bg-primary/5">
       <CardContent className="flex flex-wrap items-center gap-3 p-3">
-        <span className="text-sm font-medium">
-          Seleccionados {seleccionados.size}
-        </span>
-        <span className="text-sm text-muted-foreground">· Asignar a</span>
-        <div className="min-w-[12rem]">
-          <Select value={miembroId} onValueChange={setMiembroId}>
-            <SelectTrigger aria-label="Persona para el lote" className="h-8">
-              <SelectValue placeholder="Elige persona" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipo.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <span className="text-sm font-medium">Seleccionados {seleccionados.size}</span>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground">Asignar a</Label>
+            <Select value={miembroId} onValueChange={setMiembroId}>
+              <SelectTrigger aria-label="Persona para el lote" className="h-8 min-w-[10rem]">
+                <SelectValue placeholder="Elige persona" />
+              </SelectTrigger>
+              <SelectContent>
+                {equipo.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-[10px] text-muted-foreground">Cambiar franja</Label>
+            <Select
+              value={franja || "ninguna"}
+              onValueChange={(v) => setFranja(v === "ninguna" ? "" : (v as FranjaTurno))}
+            >
+              <SelectTrigger aria-label="Franja para el lote" className="h-8 min-w-[8rem]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ninguna">— sin cambiar —</SelectItem>
+                <SelectItem value="matutino">Mañana</SelectItem>
+                <SelectItem value="vespertino">Tarde</SelectItem>
+                <SelectItem value="descanso">Descanso</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => aplicar.mutate({ miembroId, franja, override: false })}
+            disabled={!puedeAplicar}
+          >
+            {aplicar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Users className="h-4 w-4" />
+            )}
+            Aplicar
+          </Button>
         </div>
         <Button
           size="sm"
-          onClick={() => aplicar.mutate({ miembroId, override: false })}
-          disabled={!miembroId || aplicar.isPending}
-        >
-          {aplicar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Users className="h-4 w-4" />
-          )}
-          Aplicar
-        </Button>
-        <Button
-          size="sm"
           variant="outline"
-          onClick={() => quitar.mutate()}
-          disabled={quitar.isPending}
+          onClick={() => quitarMiembro.mutate()}
+          disabled={quitarMiembro.isPending}
         >
-          {quitar.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {quitarMiembro.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Quitar asignación
         </Button>
         <Button
@@ -1968,7 +2258,7 @@ function BarraSeleccion({
               window.confirm(
                 `¿Borrar ${seleccionados.size} turno${
                   seleccionados.size === 1 ? "" : "s"
-                }? Los eventos siguen, pero perderán su cobertura.`,
+                }?`,
               )
             )
               borrarSeleccion.mutate();
@@ -1994,16 +2284,22 @@ function BarraSeleccion({
               <DialogDescription>{override.mensaje}</DialogDescription>
             </DialogHeader>
             <p className="text-sm text-muted-foreground">
-              {override.ids.length} {override.ids.length === 1 ? "turno repite" : "turnos repiten"}
-              {" "}el sábado anterior. Confirma solo si es una cobertura estratégica
-              intencional.
+              {override.ids.length}{" "}
+              {override.ids.length === 1 ? "turno repite" : "turnos repiten"} el sábado
+              anterior. Confirma solo si es una cobertura estratégica intencional.
             </p>
             <DialogFooter>
               <Button variant="ghost" onClick={() => setOverride(null)}>
                 Cancelar
               </Button>
               <Button
-                onClick={() => aplicar.mutate({ miembroId: override.miembroId, override: true })}
+                onClick={() =>
+                  aplicar.mutate({
+                    miembroId: override.miembroId,
+                    franja: override.franja,
+                    override: true,
+                  })
+                }
                 disabled={aplicar.isPending}
               >
                 <AlertTriangle className="h-4 w-4" /> Forzar cobertura
@@ -2016,7 +2312,7 @@ function BarraSeleccion({
   );
 }
 
-// --- Panel "Carga del equipo" ----------------------------------------------
+// --- Panel "Carga del equipo" (colapsable) ---------------------------------
 
 function PanelCarga({ lunes }: { lunes: string }) {
   const [abierto, setAbierto] = React.useState(false);
@@ -2028,10 +2324,7 @@ function PanelCarga({ lunes }: { lunes: string }) {
   const miembros = q.data?.miembros ?? [];
   return (
     <Card>
-      <CardHeader
-        className="cursor-pointer pb-3"
-        onClick={() => setAbierto((v) => !v)}
-      >
+      <CardHeader className="cursor-pointer pb-3" onClick={() => setAbierto((v) => !v)}>
         <CardTitle className="flex items-center justify-between text-base">
           <span className="flex items-center gap-2">
             <Users className="h-4 w-4" /> Carga del equipo
@@ -2106,238 +2399,213 @@ function PanelCarga({ lunes }: { lunes: string }) {
   );
 }
 
-function TablaTurnos({
-  turnos,
-  equipo,
-  editable,
-  onCambio,
-  seleccionados,
-  onToggleSeleccionado,
+// --- Pestaña: Cobertura (vista DERIVADA, solo lectura) ----------------------
+//
+// Para cada evento de la semana, muestra los turnos cuya (fecha, franja) lo
+// cubren. NO es CRUD: el CRUD vive en la pestaña Turnos. Sí ofrecemos un atajo
+// "Crear turno para esa franja+fecha" cuando el evento no tiene cobertura, que
+// salta a la pestaña Turnos abriendo el dialog prellenado.
+
+function Cobertura({
+  lunes,
+  setLunes,
+  onCrearTurno,
 }: {
-  turnos: TurnoRota[];
-  equipo: MiembroRota[];
-  editable: boolean;
-  onCambio: () => void;
-  seleccionados?: Set<string>;
-  onToggleSeleccionado?: (id: string) => void;
+  lunes: string;
+  setLunes: (l: string) => void;
+  onCrearTurno: (args: PrellenoNuevoTurno) => void;
 }) {
-  const muestraCheck = !!onToggleSeleccionado;
+  const coberturaQ = useQuery({
+    queryKey: ["rota", "cobertura", lunes] as const,
+    queryFn: ({ signal }) => api.cobertura({ lunes }, signal),
+  });
+  const datos = coberturaQ.data;
+  // Memo para que la referencia sea estable entre renders sin datos nuevos.
+  const eventos = React.useMemo(() => datos?.eventos ?? [], [datos?.eventos]);
+  const inicio = datos?.inicio ?? "";
+  const fin = datos?.fin ?? "";
+
+  // Agrupamos por día para una lectura natural.
+  const porDia = React.useMemo(() => {
+    const m = new Map<string, CoberturaEvento[]>();
+    for (const e of eventos) {
+      const lista = m.get(e.fecha) ?? [];
+      lista.push(e);
+      m.set(e.fecha, lista);
+    }
+    // Orden interno por hora.
+    for (const lista of m.values()) {
+      lista.sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
+    }
+    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [eventos]);
+
+  // Resumen para la barra superior.
+  const sinCubrir = eventos.filter((e) => e.cobertura.length === 0).length;
+
   return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {muestraCheck && <TableHead className="w-10" />}
-              <TableHead>Día / hora</TableHead>
-              <TableHead>Evento / transmisión</TableHead>
-              <TableHead>Qué sacar</TableHead>
-              <TableHead className="w-[14rem]">Persona</TableHead>
-              <TableHead className="w-10" aria-label="Acciones" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {turnos.map((t) => (
-              <FilaTurno
-                key={t.id}
-                turno={t}
-                equipo={equipo}
-                editable={editable}
-                onCambio={onCambio}
-                seleccionado={seleccionados?.has(t.id) ?? false}
-                onToggleSeleccionado={onToggleSeleccionado}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+        <div className="flex flex-wrap items-center gap-2">
+          {datos && (
+            <Badge variant="secondary" className="font-normal">
+              {eventos.length} evento{eventos.length === 1 ? "" : "s"} ·{" "}
+              {sinCubrir === 0
+                ? "todo cubierto"
+                : `${sinCubrir} sin cubrir`}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Esta vista se calcula a partir de los turnos y los eventos: para cada evento, qué
+        persona lo cubre por su (fecha, franja). No se asigna aquí — usa la pestaña{" "}
+        <strong>Turnos</strong> para crear o editar turnos.
+      </p>
+
+      {coberturaQ.isPending ? (
+        <Skeleton className="h-48 w-full rounded-md" />
+      ) : coberturaQ.isError ? (
+        <BloqueError
+          titulo="No se pudo cargar la cobertura"
+          mensaje={mensajeError(coberturaQ.error)}
+          onReintentar={() => void coberturaQ.refetch()}
+          cargando={coberturaQ.isFetching}
+        />
+      ) : porDia.length === 0 ? (
+        <EstadoVacio
+          icono={CalendarDays}
+          titulo="Sin eventos esta semana"
+          texto="Da de alta eventos en la pestaña «Eventos»."
+        />
+      ) : (
+        porDia.map(([fecha, eventosDia]) => (
+          <Card key={fecha}>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
+                <span className="capitalize">{formatearFechaCorta(fecha)}</span>
+                {esFinDeSemana(fecha) && (
+                  <Badge variant="outline" className="font-normal">
+                    Fin de semana
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {eventosDia.map((evento) => (
+                <FilaCoberturaEvento
+                  key={evento.id}
+                  evento={evento}
+                  onCrearTurno={onCrearTurno}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        ))
+      )}
+    </div>
   );
 }
 
-function FilaTurno({
-  turno,
-  equipo,
-  editable,
-  onCambio,
-  seleccionado,
-  onToggleSeleccionado,
+function FilaCoberturaEvento({
+  evento,
+  onCrearTurno,
 }: {
-  turno: TurnoRota;
-  equipo: MiembroRota[];
-  editable: boolean;
-  onCambio: () => void;
-  seleccionado: boolean;
-  onToggleSeleccionado?: (id: string) => void;
+  evento: CoberturaEvento;
+  onCrearTurno: (args: PrellenoNuevoTurno) => void;
 }) {
-  // Confirmación de override pendiente: si el backend pide override, lo reintenta.
-  const [pendienteOverride, setPendienteOverride] = React.useState<string | null>(null);
-
-  const actualizar = useMutation({
-    mutationFn: (cuerpo: { miembro_id?: string; override?: boolean }) =>
-      api.actualizarTurnoRota(turno.id, cuerpo),
-    onSuccess: () => {
-      setPendienteOverride(null);
-      onCambio();
-    },
-    onError: (e, variables) => {
-      if (
-        e instanceof ApiError &&
-        e.status === 409 &&
-        typeof variables.miembro_id === "string"
-      ) {
-        // Repite el sábado anterior: ofrecemos forzar la cobertura (override).
-        setPendienteOverride(variables.miembro_id);
-        toast.warning(mensajeError(e));
-        return;
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
-  const borrar = useMutation({
-    mutationFn: () => api.eliminarTurnoRota(turno.id),
-    onSuccess: () => {
-      toast.success("Turno eliminado.");
-      onCambio();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
+  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
+  const IconoCob = cob.icono;
+  const franjaPropuesta = franjaDeHora(evento.hora);
   return (
-    <TableRow className={turno.es_sabado ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}>
-      {onToggleSeleccionado && (
-        <TableCell className="align-top">
-          <Checkbox
-            aria-label={`Seleccionar turno de ${turno.evento_titulo}`}
-            checked={seleccionado}
-            onCheckedChange={() => onToggleSeleccionado(turno.id)}
-          />
-        </TableCell>
-      )}
-      <TableCell className="whitespace-nowrap align-top">
-        <div className="font-medium">{formatearFechaCorta(turno.evento_fecha)}</div>
-        <div className="text-xs text-muted-foreground">{turno.evento_hora}</div>
-        {turno.es_sabado && (
-          <Badge variant="outline" className="mt-1 font-normal">
-            Sábado
+    <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-background p-3">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{evento.titulo}</span>
+          <Badge variant="outline" className={`gap-1 font-normal ${cob.chip}`}>
+            <IconoCob className="h-3 w-3" /> {cob.etiqueta}
           </Badge>
+          {evento.cambiado && (
+            <Badge variant="aviso" className="gap-1 font-normal">
+              <BellRing className="h-3 w-3" /> Cambió
+            </Badge>
+          )}
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {evento.hora ? `${evento.hora} · ` : ""}
+          <span className={COLOR_PRIORIDAD[evento.prioridad]}>
+            prioridad {evento.prioridad}
+          </span>
+        </div>
+        {evento.contenido && (
+          <div className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Qué sacar: </span>
+            {evento.contenido}
+          </div>
         )}
-      </TableCell>
-      <TableCell className="align-top">
-        <div className="font-medium">{turno.evento_titulo}</div>
-        {turno.override && (
-          <Badge variant="aviso" className="mt-1 font-normal">
-            <AlertTriangle className="mr-1 h-3 w-3" /> Override
-          </Badge>
-        )}
-        {turno.motivo && (
-          <div className="mt-0.5 text-xs text-muted-foreground">{turno.motivo}</div>
-        )}
-      </TableCell>
-      <TableCell className="align-top text-sm text-muted-foreground">
-        {turno.contenido || "—"}
-      </TableCell>
-      <TableCell className="align-top">
-        {editable ? (
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1">
-              <div className="flex-1">
-                <Select
-                  value={turno.miembro_id || ""}
-                  onValueChange={(v) => actualizar.mutate({ miembro_id: v })}
-                  disabled={actualizar.isPending}
-                >
-                  <SelectTrigger aria-label="Asignar persona">
-                    <SelectValue placeholder="Sin asignar" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {equipo.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {turno.miembro_id && (
-                <Tooltip label="Quitar asignación">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => actualizar.mutate({ miembro_id: "" })}
-                    disabled={actualizar.isPending}
-                  >
-                    <UserMinus className="h-3.5 w-3.5" />
-                  </Button>
-                </Tooltip>
-              )}
-            </div>
-            {pendienteOverride && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-amber-700 dark:text-amber-400"
-                onClick={() =>
-                  actualizar.mutate({ miembro_id: pendienteOverride, override: true })
-                }
-                disabled={actualizar.isPending}
-              >
-                <AlertTriangle className="h-3.5 w-3.5" /> Forzar cobertura (override)
-              </Button>
-            )}
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1.5">
+        {evento.cobertura.length === 0 ? (
+          <div className="flex flex-col items-end gap-1">
+            <Badge variant="aviso" className="gap-1 font-normal">
+              <AlertTriangle className="h-3 w-3" /> Sin cubrir
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 text-xs"
+              onClick={() =>
+                onCrearTurno({
+                  fecha: evento.fecha,
+                  franja: franjaPropuesta,
+                })
+              }
+            >
+              <Plus className="h-3 w-3" /> Crear turno
+            </Button>
           </div>
         ) : (
-          <span className="text-sm">{turno.miembro_nombre || "Sin asignar"}</span>
+          <div className="flex flex-col items-end gap-1">
+            {evento.cobertura.map((c) => (
+              <span
+                key={c.turno_id}
+                className="inline-flex items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-xs"
+              >
+                <User className="h-3 w-3 text-muted-foreground" />
+                {c.miembro_nombre}
+                <span className="text-muted-foreground">· {ETIQUETA_FRANJA[c.franja]}</span>
+                {c.override && (
+                  <AlertTriangle
+                    className="h-3 w-3 text-amber-600"
+                    aria-label="override"
+                  />
+                )}
+              </span>
+            ))}
+          </div>
         )}
-      </TableCell>
-      <TableCell className="w-10 align-top">
-        {editable && (
-          <Tooltip label="Borrar turno">
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              aria-label="Borrar turno"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `¿Borrar el turno de "${turno.evento_titulo}"? El evento sigue, pero pierde la cobertura.`,
-                  )
-                )
-                  borrar.mutate();
-              }}
-              disabled={borrar.isPending}
-            >
-              {borrar.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          </Tooltip>
-        )}
-      </TableCell>
-    </TableRow>
+      </div>
+    </div>
   );
 }
 
-// --- Pestaña: mi próxima semana --------------------------------------------
+// --- Pestaña: Mis turnos ----------------------------------------------------
 
-function MiSemana({ lunes, setLunes }: { lunes: string; setLunes: (l: string) => void }) {
+function MisTurnos({
+  lunes,
+  setLunes,
+}: {
+  lunes: string;
+  setLunes: (l: string) => void;
+}) {
   const q = useQuery({
-    queryKey: ["rota", "mi-semana", lunes],
-    queryFn: ({ signal }) => api.miSemanaRota({ lunes }, signal),
-  });
-  const hq = useQuery({
-    queryKey: ["rota", "mi-horario", lunes],
-    queryFn: ({ signal }) => api.miHorarioRota({ lunes }, signal),
+    queryKey: ["rota", "mis-turnos", lunes],
+    queryFn: ({ signal }) => api.misTurnos({ lunes }, signal),
   });
   const datos = q.data;
   const mios = datos?.mis_turnos ?? [];
-  const horario = hq.data;
-  const misTurnosTrabajo = horario?.mis_turnos ?? [];
 
   return (
     <div className="space-y-4">
@@ -2355,79 +2623,50 @@ function MiSemana({ lunes, setLunes }: { lunes: string; setLunes: (l: string) =>
         )}
       </div>
 
-      {/* Mi horario de trabajo (turnos mañana/tarde/descanso) */}
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Mi horario de trabajo</h3>
-        {hq.isPending ? (
-          <Skeleton className="h-24 w-full rounded-md" />
-        ) : hq.isError ? (
-          <BloqueError
-            titulo="No se pudo cargar tu horario"
-            mensaje={mensajeError(hq.error)}
-            onReintentar={() => void hq.refetch()}
-            cargando={hq.isFetching}
-          />
-        ) : horario?.aviso ? (
-          <EstadoVacio icono={User} titulo="Inicia sesión" texto={horario.aviso} />
-        ) : misTurnosTrabajo.length === 0 ? (
-          <EstadoVacio
-            icono={CalendarDays}
-            titulo="Sin horario esta semana"
-            texto="No tienes turnos de trabajo asignados esta semana."
-          />
-        ) : (
-          <>
-            {!horario?.aprobada && (
-              <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                Este horario es un borrador sin publicar; puede cambiar antes de que
-                Elías lo apruebe.
-              </p>
-            )}
-            <ListaMisTurnosTrabajo turnos={misTurnosTrabajo} />
-          </>
-        )}
-      </section>
-
-      {/* Mi cobertura de eventos */}
-      <section className="space-y-2">
-        <h3 className="text-sm font-semibold text-muted-foreground">Mi cobertura de eventos</h3>
-        {q.isPending ? (
-          <Skeleton className="h-40 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudo cargar tu semana"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : datos?.aviso ? (
-          <EstadoVacio icono={User} titulo="Inicia sesión" texto={datos.aviso} />
-        ) : mios.length === 0 ? (
-          <EstadoVacio
-            icono={CalendarDays}
-            titulo="Sin eventos esta semana"
-            texto="No tienes eventos asignados en la rota de cobertura."
-          />
-        ) : (
-          <>
-            {!datos?.aprobada && (
-              <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
-                Esta rota es un borrador sin publicar; puede cambiar antes de que Elías
-                la apruebe.
-              </p>
-            )}
-            <ListaMisTurnos turnos={mios} />
-          </>
-        )}
-      </section>
+      {q.isPending ? (
+        <Skeleton className="h-40 w-full rounded-md" />
+      ) : q.isError ? (
+        <BloqueError
+          titulo="No se pudieron cargar tus turnos"
+          mensaje={mensajeError(q.error)}
+          onReintentar={() => void q.refetch()}
+          cargando={q.isFetching}
+        />
+      ) : datos?.aviso ? (
+        <EstadoVacio icono={User} titulo="Inicia sesión" texto={datos.aviso} />
+      ) : mios.length === 0 ? (
+        <EstadoVacio
+          icono={CalendarDays}
+          titulo="Sin turnos esta semana"
+          texto="No tienes turnos asignados esta semana."
+        />
+      ) : (
+        <>
+          {!datos?.aprobada && (
+            <p className="rounded-md border border-amber-300/60 bg-amber-50/50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/20 dark:text-amber-300">
+              Este horario es un borrador sin publicar; puede cambiar antes de que Elías
+              lo apruebe.
+            </p>
+          )}
+          <ListaMisTurnos turnos={mios} />
+        </>
+      )}
     </div>
   );
 }
 
-function ListaMisTurnosTrabajo({ turnos }: { turnos: TurnoTrabajoRota[] }) {
+function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
+  // Orden cronológico (fecha, franja).
+  const ordenados = React.useMemo(
+    () =>
+      [...turnos].sort(
+        (a, b) => a.fecha.localeCompare(b.fecha) || a.franja.localeCompare(b.franja),
+      ),
+    [turnos],
+  );
   return (
     <div className="space-y-3">
-      {turnos.map((t) => (
+      {ordenados.map((t) => (
         <Card key={t.id}>
           <CardContent className="space-y-1.5 p-4">
             <div className="flex flex-wrap items-center gap-2">
@@ -2443,7 +2682,15 @@ function ListaMisTurnosTrabajo({ turnos }: { turnos: TurnoTrabajoRota[] }) {
                 </Badge>
               )}
             </div>
-            <div className="text-sm text-muted-foreground">{formatearFechaCorta(t.fecha)}</div>
+            <div className="text-sm text-muted-foreground">
+              {formatearFechaCorta(t.fecha)}
+            </div>
+            {t.motivo && (
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Motivo: </span>
+                {t.motivo}
+              </div>
+            )}
             {t.nota_relevo && (
               <div className="rounded-md bg-muted/50 px-2.5 py-1.5 text-sm">
                 <span className="font-medium">Relevo: </span>
@@ -2457,51 +2704,14 @@ function ListaMisTurnosTrabajo({ turnos }: { turnos: TurnoTrabajoRota[] }) {
   );
 }
 
-function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
-  return (
-    <div className="space-y-3">
-      {turnos.map((t) => (
-        <Card key={t.id}>
-          <CardContent className="space-y-1.5 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">{t.evento_titulo}</span>
-              {t.es_sabado && (
-                <Badge variant="outline" className="font-normal">
-                  Sábado
-                </Badge>
-              )}
-              {t.override && (
-                <Badge variant="aviso" className="font-normal">
-                  Override
-                </Badge>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {formatearFechaCorta(t.evento_fecha)} · {t.evento_hora}
-            </div>
-            {t.contenido && (
-              <div className="text-sm">
-                <span className="text-muted-foreground">Qué sacar: </span>
-                {t.contenido}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
+// --- Día de la semana + utilidades de fecha ---------------------------------
 
-// --- Pestaña: horario del equipo (turnos de trabajo) -----------------------
-
-/** Nombre corto del día (Lun..Dom) de una fecha ISO. */
 function diaCorto(fechaIso: string): string {
   const d = new Date(`${fechaIso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("es-MX", { weekday: "short" });
 }
 
-/** ¿La fecha ISO cae en sábado o domingo? (para resaltar el fin de semana). */
 function esFinDeSemana(fechaIso: string): boolean {
   const d = new Date(`${fechaIso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return false;
@@ -2509,406 +2719,158 @@ function esFinDeSemana(fechaIso: string): boolean {
   return dia === 0 || dia === 6;
 }
 
-function Horario({
-  lunes,
-  setLunes,
-  esAdmin,
-}: {
-  lunes: string;
-  setLunes: (l: string) => void;
-  esAdmin: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const claveHorario = ["rota", "horario", lunes] as const;
+// --- Dialog "Configurar franjas" (solo admin) -------------------------------
 
-  const horarioQ = useQuery({
-    queryKey: claveHorario,
-    queryFn: ({ signal }) => api.rotaHorario({ lunes }, signal),
-  });
-  const equipoQ = useQuery({
-    queryKey: ["rota", "equipo"],
-    queryFn: ({ signal }) => api.rotaEquipo(signal),
-  });
-  const ausenciasQ = useQuery({
-    queryKey: ["rota", "ausencias"],
-    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
-  });
-
-  const equipo = equipoQ.data?.equipo ?? [];
-  const ausencias = ausenciasQ.data?.ausencias ?? [];
-  const horario = horarioQ.data;
-  const turnos = horario?.turnos ?? [];
-
-  const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveHorario });
-
-  const aprobar = useMutation({
-    mutationFn: () => api.aprobarHorario({ lunes }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(claveHorario, res);
-      toast.success(res.mensaje ?? "Horario publicado al equipo.");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const copiarAnterior = useMutation({
-    mutationFn: () =>
-      api.copiarSemana({
-        de_lunes: lunesSiguiente(lunes, -1),
-        a_lunes: lunes,
-        alcance: "horario",
-        reemplazar: false,
-      }),
-    onSuccess: (res) => {
-      toast.success(`Copiados ${res.copiados ?? 0} turnos del horario.`);
-      void queryClient.invalidateQueries({ queryKey: ["rota"] });
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
+function BotonConfigFranjas() {
+  const [abierto, setAbierto] = React.useState(false);
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <NavegadorSemana
-          lunes={lunes}
-          setLunes={setLunes}
-          inicio={horario?.inicio ?? ""}
-          fin={horario?.fin ?? ""}
-        />
-        <div className="flex flex-wrap items-center gap-2">
-          {horario?.aprobada ? (
-            <Badge variant="ok" className="font-normal">
-              <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicado
-            </Badge>
-          ) : turnos.length > 0 ? (
-            <Badge variant="secondary" className="font-normal">
-              Borrador
-            </Badge>
-          ) : null}
-          <Button
-            variant="outline"
-            onClick={() => copiarAnterior.mutate()}
-            disabled={copiarAnterior.isPending || horario?.aprobada}
-            title="Copia las franjas (mañana/tarde/descanso) de la semana anterior con offset +7 días"
-          >
-            {copiarAnterior.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-            Copiar semana anterior
-          </Button>
-          {esAdmin && (
-            <Button
-              variant="secondary"
-              onClick={() => aprobar.mutate()}
-              disabled={aprobar.isPending || turnos.length === 0 || horario?.aprobada}
-            >
-              {aprobar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
-              Aprobar y publicar
-            </Button>
-          )}
-          <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
-            <Download className="h-4 w-4" /> Excel
-          </Button>
-        </div>
-      </div>
-
-      {horarioQ.isPending ? (
-        <Skeleton className="h-48 w-full rounded-md" />
-      ) : horarioQ.isError ? (
-        <BloqueError
-          titulo="No se pudo cargar el horario"
-          mensaje={mensajeError(horarioQ.error)}
-          onReintentar={() => void horarioQ.refetch()}
-          cargando={horarioQ.isFetching}
-        />
-      ) : turnos.length === 0 ? (
-        <EstadoVacio
-          icono={CalendarDays}
-          titulo="Sin horario para esta semana"
-          texto="No has armado el horario de esta semana. Asigna mañana/tarde/descanso a cada miembro, o copia de la semana anterior."
-        />
-      ) : (
-        <RejillaHorario
-          horario={horario as HorarioSemana}
-          equipo={equipo}
-          ausencias={ausencias}
-          editable={!horario?.aprobada}
-          onCambio={invalidar}
-        />
-      )}
-    </div>
-  );
-}
-
-function RejillaHorario({
-  horario,
-  equipo,
-  ausencias,
-  editable,
-  onCambio,
-}: {
-  horario: HorarioSemana;
-  equipo: MiembroRota[];
-  ausencias: AusenciaRota[];
-  editable: boolean;
-  onCambio: () => void;
-}) {
-  const dias = horario.dias;
-  // Indexa el turno por (miembro, fecha) para llenar la rejilla.
-  const porCelda = new Map<string, TurnoTrabajoRota>();
-  for (const t of horario.turnos) porCelda.set(`${t.miembro_id}|${t.fecha}`, t);
-
-  // ¿Tiene el miembro una ausencia que cubra esa fecha?
-  const estaAusente = (miembroId: string, fecha: string): AusenciaRota | undefined =>
-    ausencias.find((a) => a.miembro_id === miembroId && a.desde <= fecha && fecha <= a.hasta);
-
-  const filas = [...equipo].sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-  return (
-    <Card>
-      <CardContent className="overflow-x-auto p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="sticky left-0 bg-background">Persona</TableHead>
-              {dias.map((fecha) => (
-                <TableHead
-                  key={fecha}
-                  className={esFinDeSemana(fecha) ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}
-                >
-                  <div className="capitalize">{diaCorto(fecha)}</div>
-                  <div className="text-xs font-normal text-muted-foreground">
-                    {fecha.slice(8, 10)}
-                  </div>
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filas.map((m) => (
-              <TableRow key={m.id}>
-                <TableCell className="sticky left-0 whitespace-nowrap bg-background font-medium">
-                  {m.nombre}
-                </TableCell>
-                {dias.map((fecha) => {
-                  const ausencia = estaAusente(m.id, fecha);
-                  const turno = porCelda.get(`${m.id}|${fecha}`);
-                  // Casos:
-                  //  - solo ausencia (sin turno): chip de ausencia (la persona descansa).
-                  //  - solo turno: CeldaTurno normal.
-                  //  - ambos: chip de ausencia COMO AVISO + CeldaTurno editable (puede
-                  //    existir un turno legacy o una cobertura forzada con override).
-                  //  - nada: guion.
-                  if (!ausencia && !turno) {
-                    return (
-                      <TableCell
-                        key={fecha}
-                        className={
-                          esFinDeSemana(fecha)
-                            ? "bg-amber-50/30 dark:bg-amber-950/10"
-                            : undefined
-                        }
-                      >
-                        <span className="text-sm text-muted-foreground">—</span>
-                      </TableCell>
-                    );
-                  }
-                  return (
-                    <TableCell
-                      key={fecha}
-                      className={
-                        esFinDeSemana(fecha) ? "bg-amber-50/30 dark:bg-amber-950/10" : undefined
-                      }
-                    >
-                      <div className="space-y-1.5">
-                        {ausencia && (
-                          <Tooltip
-                            label={
-                              ausencia.motivo
-                                ? `${ausencia.tipo}: ${ausencia.motivo}`
-                                : `${ausencia.tipo} del ${ausencia.desde} al ${ausencia.hasta}`
-                            }
-                          >
-                            <Badge variant="secondary" className="font-normal">
-                              <Plane className="mr-1 h-3 w-3" />
-                              {TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ??
-                                "Ausente"}
-                            </Badge>
-                          </Tooltip>
-                        )}
-                        {turno && (
-                          <CeldaTurno
-                            turno={turno}
-                            editable={editable}
-                            onCambio={onCambio}
-                            ausencia={ausencia}
-                          />
-                        )}
-                      </div>
-                    </TableCell>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  );
-}
-
-function CeldaTurno({
-  turno,
-  editable,
-  onCambio,
-  ausencia,
-}: {
-  turno: TurnoTrabajoRota;
-  editable: boolean;
-  onCambio: () => void;
-  /** Si la persona tiene una ausencia que cubre el día de este turno: se usa para
-   * decorar el aviso del dialog cuando el backend pide override. */
-  ausencia?: AusenciaRota;
-}) {
-  // Override pendiente por regla de SÁBADO (la persona repite el sábado anterior):
-  // botón inline para forzar.
-  const [pendienteSabado, setPendienteSabado] = React.useState<FranjaTurno | null>(null);
-  // Override pendiente por AUSENCIA (la persona está ausente ese día): dialog formal
-  // con los datos de la ausencia que devuelve el backend en el 409.
-  const [pendienteAusencia, setPendienteAusencia] = React.useState<{
-    franja: FranjaTurno;
-    ausencia: AusenciaRota;
-  } | null>(null);
-
-  const actualizar = useMutation({
-    mutationFn: (cuerpo: { franja?: FranjaTurno; override?: boolean }) =>
-      api.actualizarTurnoTrabajoRota(turno.id, cuerpo),
-    onSuccess: () => {
-      setPendienteSabado(null);
-      setPendienteAusencia(null);
-      onCambio();
-    },
-    onError: (e, variables) => {
-      if (e instanceof ApiError && e.status === 409 && variables.franja) {
-        const cuerpo = (e.cuerpo ?? {}) as {
-          requiere_override?: boolean;
-          ausencia?: AusenciaRota;
-        };
-        if (cuerpo.requiere_override && cuerpo.ausencia) {
-          // Persona ausente: el dialog es la pista clara, no un botón inline.
-          setPendienteAusencia({ franja: variables.franja, ausencia: cuerpo.ausencia });
-          return;
-        }
-        // Repite el sábado de trabajo anterior: ofrecemos forzar la cobertura (override).
-        setPendienteSabado(variables.franja);
-        toast.warning(mensajeError(e));
-        return;
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
-  if (!editable) {
-    return (
-      <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">{ETIQUETA_FRANJA[turno.franja]}</span>
-          {turno.override && <AlertTriangle className="h-3 w-3 text-amber-600" />}
-        </div>
-        {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-1.5">
-      <Select
-        value={turno.franja}
-        onValueChange={(v) => actualizar.mutate({ franja: v as FranjaTurno })}
-        disabled={actualizar.isPending}
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setAbierto(true)}
+        title="Editar los rangos horarios de las franjas (mañana / tarde)"
       >
-        <SelectTrigger aria-label={`Franja de ${turno.miembro_nombre}`} className="min-w-[7.5rem]">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="matutino">Mañana</SelectItem>
-          <SelectItem value="vespertino">Tarde</SelectItem>
-          <SelectItem value="descanso">Descanso</SelectItem>
-        </SelectContent>
-      </Select>
-      {turno.override && (
-        <Badge variant="aviso" className="font-normal">
-          <AlertTriangle className="mr-1 h-3 w-3" /> Override
-        </Badge>
-      )}
-      {ausencia && !turno.override && (
-        // Aviso visual permanente si el turno coincide con una ausencia (caso límite:
-        // turno legacy + ausencia añadida después). El dialog de 409 igualmente saltará
-        // si intentan ponerlo a trabajar.
-        <Badge variant="aviso" className="font-normal">
-          <Plane className="mr-1 h-3 w-3" /> Ausente
-        </Badge>
-      )}
-      {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
-      {pendienteSabado && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full text-amber-700 dark:text-amber-400"
-          onClick={() => actualizar.mutate({ franja: pendienteSabado, override: true })}
-          disabled={actualizar.isPending}
-        >
-          <AlertTriangle className="h-3.5 w-3.5" /> Forzar cobertura (override)
-        </Button>
-      )}
-      {pendienteAusencia && (
-        <Dialog open onOpenChange={(o) => !o && setPendienteAusencia(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Esa persona está ausente</DialogTitle>
-              <DialogDescription>
-                {pendienteAusencia.ausencia.miembro_nombre} está{" "}
-                {pendienteAusencia.ausencia.tipo} del {pendienteAusencia.ausencia.desde} al{" "}
-                {pendienteAusencia.ausencia.hasta}.
-                {pendienteAusencia.ausencia.motivo
-                  ? ` Motivo: ${pendienteAusencia.ausencia.motivo}.`
-                  : ""}{" "}
-                ¿Forzar override de todas formas?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setPendienteAusencia(null)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="outline"
-                className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
-                onClick={() =>
-                  actualizar.mutate({ franja: pendienteAusencia.franja, override: true })
-                }
-                disabled={actualizar.isPending}
-              >
-                {actualizar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                <AlertTriangle className="h-4 w-4" /> Forzar override
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
+        <Clock className="h-4 w-4" /> Franjas
+      </Button>
+      {abierto && <DialogConfigFranjas onCerrar={() => setAbierto(false)} />}
+    </>
   );
 }
 
-/**
- * Resumen de la nota de relevo con icono. La nota completa va en `title` nativo
- * (HTML tooltip que envuelve textos largos, a diferencia del `Tooltip` propio
- * que es `whitespace-nowrap`).
- */
+function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
+  const queryClient = useQueryClient();
+  const q = useQuery({
+    queryKey: ["rota", "config", "franjas"] as const,
+    queryFn: ({ signal }) => api.obtenerConfigFranjas(signal),
+  });
+  const inicial = q.data?.franjas;
+  const [matIni, setMatIni] = React.useState("");
+  const [matFin, setMatFin] = React.useState("");
+  const [vesIni, setVesIni] = React.useState("");
+  const [vesFin, setVesFin] = React.useState("");
+
+  React.useEffect(() => {
+    if (inicial) {
+      setMatIni(inicial.matutino_inicio);
+      setMatFin(inicial.matutino_fin);
+      setVesIni(inicial.vespertino_inicio);
+      setVesFin(inicial.vespertino_fin);
+    }
+  }, [inicial]);
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.guardarConfigFranjas({
+        matutino_inicio: matIni,
+        matutino_fin: matFin,
+        vespertino_inicio: vesIni,
+        vespertino_fin: vesFin,
+      }),
+    onSuccess: () => {
+      toast.success("Franjas guardadas.");
+      void queryClient.invalidateQueries({ queryKey: ["rota"] });
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const sinCambios =
+    !!inicial &&
+    matIni === inicial.matutino_inicio &&
+    matFin === inicial.matutino_fin &&
+    vesIni === inicial.vespertino_inicio &&
+    vesFin === inicial.vespertino_fin;
+  const puedeGuardar =
+    matIni !== "" && matFin !== "" && vesIni !== "" && vesFin !== "" && !sinCambios;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Configurar franjas</DialogTitle>
+          <DialogDescription>
+            Los rangos horarios determinan qué eventos caen en cada franja al calcular
+            la cobertura. Usa formato HH:MM (24h).
+          </DialogDescription>
+        </DialogHeader>
+        {q.isPending ? (
+          <Skeleton className="h-32 w-full rounded-md" />
+        ) : q.isError ? (
+          <BloqueError
+            titulo="No se pudo cargar la configuración"
+            mensaje={mensajeError(q.error)}
+            onReintentar={() => void q.refetch()}
+            cargando={q.isFetching}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
+              <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Mañana
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-mat-ini">Inicio</Label>
+                <Input
+                  id="cf-mat-ini"
+                  type="time"
+                  value={matIni}
+                  onChange={(e) => setMatIni(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-mat-fin">Fin</Label>
+                <Input
+                  id="cf-mat-fin"
+                  type="time"
+                  value={matFin}
+                  onChange={(e) => setMatFin(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3 rounded-md border bg-muted/30 p-3">
+              <div className="col-span-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Tarde
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-ves-ini">Inicio</Label>
+                <Input
+                  id="cf-ves-ini"
+                  type="time"
+                  value={vesIni}
+                  onChange={(e) => setVesIni(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="cf-ves-fin">Fin</Label>
+                <Input
+                  id="cf-ves-fin"
+                  type="time"
+                  value={vesFin}
+                  onChange={(e) => setVesFin(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Lo que cae fuera de ambos rangos (madrugada típica) se asigna a «descanso»:
+              no se cubre, pero los eventos aparecen para que sepas que están ahí.
+            </p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar || guardar.isPending}>
+            {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function NotaRelevo({ nota }: { nota: string }) {
   const limpia = nota.trim();
   if (!limpia) return null;
@@ -2924,6 +2886,7 @@ function NotaRelevo({ nota }: { nota: string }) {
     </div>
   );
 }
+
 
 // --- Pestaña: ausencias / vacaciones ---------------------------------------
 
