@@ -147,6 +147,38 @@ def sembrar_skills(dir_skills: Path, skills: dict[str, dict] | None = None) -> P
     return dir_skills
 
 
+@pytest.fixture(autouse=True)
+def _aislar_logging_keni():
+    """Aisla el estado del logger del paquete entre tests (contaminacion cruzada de logging).
+
+    `observabilidad.configurar_logging()` anade un handler y pone `propagate=False` en el
+    logger `keni_consola` (correcto en PRODUCCION: evita el doble log via root). Pero en la
+    SUITE ese estado se filtraba al siguiente test y rompia los tests basados en `caplog`:
+      - con `propagate=False`, los records ya no suben al root donde escucha `caplog`
+        (los tests de observabilidad/generaciones veian 0 lineas -> AssertionError), y
+      - el handler quedaba apuntando a un stream de captura de pytest ya cerrado
+        ("ValueError: I/O operation on closed file").
+    Era order-dependent: bastaba que un test previo configurara el logging. Aqui
+    snapshotteamos handlers/propagate/nivel del logger ANTES de cada test y los restauramos
+    despues, de modo que ningun test herede ni filtre el estado de logging de otro. Es un
+    arreglo SOLO de test: no cambia el comportamiento en produccion.
+    """
+    import logging
+
+    from keni_consola.observabilidad import NOMBRE_LOGGER
+
+    logger = logging.getLogger(NOMBRE_LOGGER)
+    handlers = logger.handlers[:]
+    propagate = logger.propagate
+    nivel = logger.level
+    try:
+        yield
+    finally:
+        logger.handlers[:] = handlers
+        logger.propagate = propagate
+        logger.setLevel(nivel)
+
+
 @pytest.fixture
 def entorno(monkeypatch, tmp_path):
     """Config + DB aisladas en tmp; metricas offline; catalogo de skills falso en tmp."""
