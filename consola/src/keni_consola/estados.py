@@ -66,6 +66,36 @@ ESTADOS_ROTA: tuple[str, ...] = ("propuesto", "aprobado")
 ESTADO_ROTA_PROPUESTO = "propuesto"
 ESTADO_ROTA_APROBADO = "aprobado"
 
+# Estados del flujo de SWAPS de turno (intercambios entre companeros, #175). Cuando un
+# CM (A) pide a otro (B) cubrirle un turno, la solicitud nace `propuesto`; B `acepta` o
+# `rechaza`; si acepta, Elias (admin) `aprueba` (que aplica el swap en
+# `rota_turnos_trabajo` y la solicitud queda `aplicado`) o `rechazado_admin`. El
+# solicitante puede `cancelar` mientras la solicitud no sea terminal.
+#
+# Terminales: aplicado, rechazado, rechazado_admin, cancelado.
+ESTADOS_SWAP: tuple[str, ...] = (
+    "propuesto",
+    "aceptado",
+    "rechazado",
+    "aprobado",
+    "aplicado",
+    "rechazado_admin",
+    "cancelado",
+)
+ESTADO_SWAP_PROPUESTO = "propuesto"
+ESTADO_SWAP_ACEPTADO = "aceptado"
+ESTADO_SWAP_RECHAZADO = "rechazado"
+ESTADO_SWAP_APROBADO = "aprobado"
+ESTADO_SWAP_APLICADO = "aplicado"
+ESTADO_SWAP_RECHAZADO_ADMIN = "rechazado_admin"
+ESTADO_SWAP_CANCELADO = "cancelado"
+ESTADOS_SWAP_TERMINALES: tuple[str, ...] = (
+    ESTADO_SWAP_APLICADO,
+    ESTADO_SWAP_RECHAZADO,
+    ESTADO_SWAP_RECHAZADO_ADMIN,
+    ESTADO_SWAP_CANCELADO,
+)
+
 # Franjas de un turno de TRABAJO del horario del equipo (F4 · #144, gestion de turnos):
 # Elias reparte el dia entre `matutino` (Luis "de 8 de la manana a 4 de la tarde") y
 # `vespertino` (Tescu "de 4 a 12 de la noche"); quien no entra ese dia `descansa`. Las

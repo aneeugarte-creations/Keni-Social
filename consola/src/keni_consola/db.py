@@ -65,9 +65,11 @@ from .estados import (
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
+    ESTADO_SWAP_PROPUESTO,
     ESTADOS_COMERCIAL,
     ESTADOS_PIEZA,
     ESTADOS_ROTA,
+    ESTADOS_SWAP,
     ESTADOS_TAREA,
     FRANJA_DESCANSO,
     FRANJAS_TURNO,
@@ -83,9 +85,11 @@ __all__ = [
     "ESTADO_COMERCIAL_ACTIVA",
     "ESTADO_ROTA_APROBADO",
     "ESTADO_ROTA_PROPUESTO",
+    "ESTADO_SWAP_PROPUESTO",
     "ESTADOS_COMERCIAL",
     "ESTADOS_PIEZA",
     "ESTADOS_ROTA",
+    "ESTADOS_SWAP",
     "ESTADOS_TAREA",
     "FRANJAS_TURNO",
     "METRICAS_COMERCIAL",
@@ -107,6 +111,7 @@ __all__ = [
     "borrar_evento_rota",
     "borrar_pieza_rota",
     "borrar_publicacion_comercial",
+    "borrar_swap_turno",
     "borrar_tarea",
     "borrar_turnos_semana_rota",
     "borrar_turnos_trabajo_semana_rota",
@@ -116,6 +121,7 @@ __all__ = [
     "crear_evento_rota",
     "crear_pieza_rota",
     "crear_publicacion_comercial",
+    "crear_swap_turno",
     "crear_tarea",
     "crear_turno_rota",
     "crear_turno_trabajo_rota",
@@ -126,6 +132,7 @@ __all__ = [
     "listar_piezas_rota",
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
+    "listar_swaps_turno",
     "listar_tareas",
     "listar_turnos_rota",
     "listar_turnos_trabajo_rota",
@@ -134,6 +141,7 @@ __all__ = [
     "obtener_evento_rota",
     "obtener_pieza_rota",
     "obtener_publicacion_comercial",
+    "obtener_swap_turno",
     "obtener_tarea",
     "obtener_turno_rota",
     "obtener_turno_trabajo_rota",
@@ -141,6 +149,8 @@ __all__ = [
     "registrar_snapshot_comercial",
     "terminar_job",
     "ultimo_snapshot_comercial",
+    "actualizar_swap_turno",
+    "aplicar_swap_turno",
 ]
 
 
@@ -374,6 +384,38 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_dia ON rota_piezas (dia)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_programa ON rota_piezas (programa)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_responsable ON rota_piezas (responsable_id)",
+    # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
+    # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
+    # estado `propuesto`; B acepta/rechaza, y si acepta, Elias (admin) aprueba o rechaza.
+    # Al aprobar se ejecuta el swap en `rota_turnos_trabajo` (intercambia miembro_id) y la
+    # solicitud queda `aplicado`. Las ausencias de verdad (vacaciones/baja) siguen en SAP
+    # y NO se gestionan aqui. Estados validos: ESTADOS_SWAP (ver `estados.py`).
+    """
+    CREATE TABLE IF NOT EXISTS rota_swaps_turno (
+        id                       TEXT PRIMARY KEY,
+        solicitante_id           TEXT NOT NULL,
+        solicitante_nombre       TEXT NOT NULL DEFAULT '',
+        destinatario_id          TEXT NOT NULL,
+        destinatario_nombre      TEXT NOT NULL DEFAULT '',
+        fecha_a                  TEXT NOT NULL,
+        franja_a                 TEXT NOT NULL,
+        fecha_b                  TEXT NOT NULL,
+        franja_b                 TEXT NOT NULL,
+        motivo                   TEXT NOT NULL DEFAULT '',
+        estado                   TEXT NOT NULL DEFAULT 'propuesto',
+        respuesta_destinatario   TEXT NOT NULL DEFAULT '',
+        respuesta_admin          TEXT NOT NULL DEFAULT '',
+        creado                   TEXT NOT NULL DEFAULT '',
+        actualizado              TEXT NOT NULL DEFAULT '',
+        decidido_destinatario    TEXT NOT NULL DEFAULT '',
+        decidido_admin           TEXT NOT NULL DEFAULT '',
+        aplicado                 TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_solicitante ON rota_swaps_turno (solicitante_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_destinatario ON rota_swaps_turno (destinatario_id)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_estado ON rota_swaps_turno (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_swaps_fechas ON rota_swaps_turno (fecha_a, fecha_b)",
     # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
@@ -415,6 +457,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_tareas(con)
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_piezas_rota(con)
+    _migrar_columnas_swaps(con)
     con.commit()
 
 
@@ -512,6 +555,31 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
     for columna, tipo in _COLUMNAS_PIEZA_ROTA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_piezas ADD COLUMN {columna} {tipo}")
+
+
+# Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
+# tupla esta VACIA: la primera version del swap nace ya con todo el esquema declarado en
+# el `CREATE TABLE IF NOT EXISTS` (sin previas en produccion). Se conserva el hook por
+# coherencia con el patron de `_migrar_columnas_*` (tareas, eventos): cuando aparezca una
+# columna nueva, se agrega aqui como (col, tipo) y este migrador la pondra a las bases
+# viejas sin reescribir nada. Idempotente.
+_COLUMNAS_SWAP_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+
+def _migrar_columnas_swaps(con: Any) -> None:
+    """Anade a `rota_swaps_turno` las columnas que una BD vieja no tuviera (idempotente).
+
+    Hoy es no-op (tupla vacia): la tabla nace completa. Cuando se amplie, basta con
+    declarar la columna en el `CREATE TABLE` (para bases NUEVAS) y anadir `(col, tipo)` a
+    `_COLUMNAS_SWAP_AMPLIADAS` (para que las bases ANTIGUAS la reciban via ALTER). Mismo
+    patron que `_migrar_columnas_tareas` / `_migrar_columnas_eventos_rota`.
+    """
+    if not _COLUMNAS_SWAP_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_swaps_turno")
+    for columna, tipo in _COLUMNAS_SWAP_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1894,6 +1962,326 @@ def borrar_pieza_rota(pieza_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Solicitudes de cambio de turno entre companeros (#175)                       #
+# --------------------------------------------------------------------------- #
+#
+# Cuando un CM (solicitante A) necesita cubrir un asunto personal le pide a un
+# companero (B) intercambiar el turno de un dia por el de otro. B acepta/rechaza, y si
+# acepta, Elias (admin) aprueba o rechaza. La aprobacion EJECUTA el swap en
+# `rota_turnos_trabajo` (intercambia `miembro_id` de las dos franjas) y la solicitud
+# pasa a `aplicado`. Las ausencias REALES (vacaciones, baja) viven en SAP, no aqui.
+
+_COLS_SWAP_TURNO = (
+    "id",
+    "solicitante_id",
+    "solicitante_nombre",
+    "destinatario_id",
+    "destinatario_nombre",
+    "fecha_a",
+    "franja_a",
+    "fecha_b",
+    "franja_b",
+    "motivo",
+    "estado",
+    "respuesta_destinatario",
+    "respuesta_admin",
+    "creado",
+    "actualizado",
+    "decidido_destinatario",
+    "decidido_admin",
+    "aplicado",
+)
+_SELECT_SWAP_TURNO = f"SELECT {', '.join(_COLS_SWAP_TURNO)} FROM rota_swaps_turno"
+
+# Campos editables del swap (allowlist DEFENSIVA: la API valida transiciones; aqui se
+# garantiza que `actualizar_swap_turno` solo toca columnas de estado/timestamps/respuestas
+# y nunca el solicitante/destinatario/turnos originales).
+_CAMPOS_EDITABLES_SWAP = (
+    "estado",
+    "respuesta_destinatario",
+    "respuesta_admin",
+    "decidido_destinatario",
+    "decidido_admin",
+    "aplicado",
+)
+
+
+def _fila_a_swap_turno(fila: Any) -> dict[str, Any]:
+    return {col: fila[col] for col in _COLS_SWAP_TURNO}
+
+
+def crear_swap_turno(
+    solicitante_id: str,
+    destinatario_id: str,
+    fecha_a: str,
+    franja_a: str,
+    fecha_b: str,
+    franja_b: str,
+    *,
+    solicitante_nombre: str = "",
+    destinatario_nombre: str = "",
+    motivo: str = "",
+) -> dict[str, Any]:
+    """Inserta una solicitud de swap (estado `propuesto`) y la devuelve.
+
+    NO valida (lo hace la API): que los miembros existan, que sean distintos, que las
+    fechas sean ISO y que las franjas pertenezcan a `FRANJAS_TURNO`. La validacion de
+    que existen turnos reales en `rota_turnos_trabajo` que coinciden con (A, fecha_a,
+    franja_a) y (B, fecha_b, franja_b) tambien la hace la API.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "solicitante_id": solicitante_id or "",
+        "solicitante_nombre": solicitante_nombre or "",
+        "destinatario_id": destinatario_id or "",
+        "destinatario_nombre": destinatario_nombre or "",
+        "fecha_a": fecha_a or "",
+        "franja_a": franja_a or "",
+        "fecha_b": fecha_b or "",
+        "franja_b": franja_b or "",
+        "motivo": motivo or "",
+        "estado": ESTADO_SWAP_PROPUESTO,
+        "respuesta_destinatario": "",
+        "respuesta_admin": "",
+        "creado": ahora,
+        "actualizado": ahora,
+        "decidido_destinatario": "",
+        "decidido_admin": "",
+        "aplicado": "",
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_SWAP_TURNO)
+        con.execute(
+            f"INSERT INTO rota_swaps_turno ({', '.join(_COLS_SWAP_TURNO)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_SWAP_TURNO),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def listar_swaps_turno(
+    estado: str | None = None,
+    solicitante_id: str | None = None,
+    destinatario_id: str | None = None,
+    *,
+    mio_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Solicitudes de swap, mas recientes primero. Filtros opcionales combinables.
+
+    `mio_id` es un atajo para "swaps que me involucran": filas en las que `mio_id` es
+    solicitante O destinatario. La API lo usa cuando el cliente pide `?mio=true` y hay
+    sesion activa.
+    """
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if estado:
+        clausulas.append("estado = ?")
+        params.append(estado)
+    if solicitante_id:
+        clausulas.append("solicitante_id = ?")
+        params.append(solicitante_id)
+    if destinatario_id:
+        clausulas.append("destinatario_id = ?")
+        params.append(destinatario_id)
+    if mio_id:
+        clausulas.append("(solicitante_id = ? OR destinatario_id = ?)")
+        params.append(mio_id)
+        params.append(mio_id)
+    sql = _SELECT_SWAP_TURNO
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY creado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_swap_turno(f) for f in filas]
+
+
+def obtener_swap_turno(swap_id: str) -> dict[str, Any] | None:
+    """Una solicitud de swap por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_swap_turno(fila) if fila is not None else None
+
+
+def actualizar_swap_turno(
+    swap_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Actualiza campos de un swap (allowlist `_CAMPOS_EDITABLES_SWAP`); None si no existe.
+
+    Refresca `actualizado` SIEMPRE. La API es responsable de las TRANSICIONES validas
+    (no se valida aqui). Devuelve el swap actualizado, o None si el id no existe.
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_SWAP}
+    if not cambios:
+        return obtener_swap_turno(swap_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(swap_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE rota_swaps_turno SET {', '.join(asignaciones)} WHERE id = ?",
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_swap_turno(fila) if fila is not None else None
+
+
+def borrar_swap_turno(swap_id: str) -> bool:
+    """Borra un swap (uso administrativo; el flujo normal es marcar `cancelado`)."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM rota_swaps_turno WHERE id = ?", (swap_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def aplicar_swap_turno(
+    swap_id: str,
+    *,
+    solicitante_id: str,
+    solicitante_nombre: str,
+    destinatario_id: str,
+    destinatario_nombre: str,
+    fecha_a: str,
+    franja_a: str,
+    fecha_b: str,
+    franja_b: str,
+    respuesta_admin: str = "",
+) -> dict[str, Any] | None:
+    """Aprueba+ejecuta un swap en UNA transaccion: intercambia los miembros y marca `aplicado`.
+
+    Re-VALIDA dentro de la misma conexion que las franjas actuales en `rota_turnos_trabajo`
+    siguen siendo las del swap original (otro usuario podria haberlas reasignado a mano).
+    Si NO coinciden, devuelve `{"error": "no_coinciden", "esperado": {...}, "actual": {...}}`
+    y NO toca nada. Si todo cuadra, intercambia los `miembro_id`+`miembro_nombre` de las
+    dos filas, marca el swap como `aplicado` con el `respuesta_admin` y los timestamps
+    correspondientes, y devuelve el swap actualizado.
+
+    Estados de salida posibles:
+      - dict del swap (claves de `_COLS_SWAP_TURNO`) si se aplico,
+      - {"error": "no_coinciden", "esperado": ..., "actual": ...} si las franjas no
+        coinciden con lo solicitado en este momento,
+      - None si el `swap_id` no existe.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        # 1) El swap debe existir.
+        swap = con.execute(
+            f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)
+        ).fetchone()
+        if swap is None:
+            return None
+        # 2) Las dos franjas reales (por miembro + fecha + franja) deben existir y
+        #    seguir asignadas a quien dijo el swap. Buscamos por (fecha, franja) y
+        #    comprobamos el miembro actual (asi detectamos el caso 409 con detalle).
+        fila_a = con.execute(
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos_trabajo "
+            "WHERE fecha = ? AND franja = ? AND miembro_id = ?",
+            (fecha_a, franja_a, solicitante_id),
+        ).fetchone()
+        fila_b = con.execute(
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos_trabajo "
+            "WHERE fecha = ? AND franja = ? AND miembro_id = ?",
+            (fecha_b, franja_b, destinatario_id),
+        ).fetchone()
+        if fila_a is None or fila_b is None:
+            # Buscamos el detalle ACTUAL (sin filtrar por miembro) para informar.
+            actual_a = con.execute(
+                "SELECT miembro_id, miembro_nombre FROM rota_turnos_trabajo "
+                "WHERE fecha = ? AND franja = ?",
+                (fecha_a, franja_a),
+            ).fetchone()
+            actual_b = con.execute(
+                "SELECT miembro_id, miembro_nombre FROM rota_turnos_trabajo "
+                "WHERE fecha = ? AND franja = ?",
+                (fecha_b, franja_b),
+            ).fetchone()
+            return {
+                "error": "no_coinciden",
+                "esperado": {
+                    "a": {
+                        "fecha": fecha_a,
+                        "franja": franja_a,
+                        "miembro_id": solicitante_id,
+                        "miembro_nombre": solicitante_nombre,
+                    },
+                    "b": {
+                        "fecha": fecha_b,
+                        "franja": franja_b,
+                        "miembro_id": destinatario_id,
+                        "miembro_nombre": destinatario_nombre,
+                    },
+                },
+                "actual": {
+                    "a": {
+                        "fecha": fecha_a,
+                        "franja": franja_a,
+                        "miembro_id": actual_a["miembro_id"] if actual_a else "",
+                        "miembro_nombre": actual_a["miembro_nombre"] if actual_a else "",
+                    },
+                    "b": {
+                        "fecha": fecha_b,
+                        "franja": franja_b,
+                        "miembro_id": actual_b["miembro_id"] if actual_b else "",
+                        "miembro_nombre": actual_b["miembro_nombre"] if actual_b else "",
+                    },
+                },
+            }
+        # 3) Intercambiamos los miembros + nombre + actualizado de ambas filas y marcamos
+        #    el swap como `aplicado`. Todo bajo la misma conexion (Postgres autocommit
+        #    desactivado por defecto en nuestro driver -> la `con.commit()` final lo encierra
+        #    como una transaccion).
+        con.execute(
+            "UPDATE rota_turnos_trabajo SET miembro_id = ?, miembro_nombre = ?, "
+            "actualizado = ? WHERE id = ?",
+            (destinatario_id, destinatario_nombre, ahora, fila_a["id"]),
+        )
+        con.execute(
+            "UPDATE rota_turnos_trabajo SET miembro_id = ?, miembro_nombre = ?, "
+            "actualizado = ? WHERE id = ?",
+            (solicitante_id, solicitante_nombre, ahora, fila_b["id"]),
+        )
+        con.execute(
+            "UPDATE rota_swaps_turno SET estado = ?, respuesta_admin = ?, "
+            "decidido_admin = ?, aplicado = ?, actualizado = ? WHERE id = ?",
+            ("aplicado", respuesta_admin or "", ahora, ahora, ahora, swap_id),
+        )
+        con.commit()
+        fila = con.execute(
+            f"{_SELECT_SWAP_TURNO} WHERE id = ?", (swap_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_swap_turno(fila) if fila is not None else None
 
 
 # --------------------------------------------------------------------------- #

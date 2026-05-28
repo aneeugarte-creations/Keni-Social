@@ -39,6 +39,7 @@ _TABLAS = (
     "rota_ausencias",
     "rota_piezas",
     "rota_eventos",
+    "rota_swaps_turno",
     "jobs",
 )
 
