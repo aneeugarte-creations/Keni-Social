@@ -1706,7 +1706,10 @@ export interface UsuarioAdmin {
   ultimo_acceso: string | null;
 }
 
-export type RespuestaUsuarios = UsuarioAdmin[];
+/** Respuesta de `GET /api/usuarios`: el backend envuelve la lista en `{ usuarios }`. */
+export interface RespuestaUsuarios {
+  usuarios: UsuarioAdmin[];
+}
 
 /** Cuerpo de `POST /api/usuarios` (alta de usuario). */
 export interface CuerpoCrearUsuario {

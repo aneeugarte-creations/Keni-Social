@@ -2,7 +2,7 @@
 
 Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
 
-  - GET    /api/usuarios            -> [{id, usuario, rol, creado, ultimo_acceso}]
+  - GET    /api/usuarios            -> {usuarios: [{id, usuario, rol, creado, ultimo_acceso}]}
   - POST   /api/usuarios            {usuario, password, rol} -> 201 {id, usuario, rol};
                                       409 si el nombre ya existe.
   - PATCH  /api/usuarios/{id}       {rol?, password?} -> 200 (cambia rol / resetea pass).
