@@ -1145,6 +1145,84 @@ export interface MiHorarioRota extends HorarioSemana {
   aviso?: string;
 }
 
+// --- Solicitudes de cambio de turno entre compañeros (#175) ----------------
+//
+// Flujo: A (solicitante) crea -> B (destinatario) acepta/rechaza -> admin
+// aprueba (ejecuta el swap sobre `rota_turnos_trabajo`) o rechaza. A puede
+// cancelar mientras el estado no sea terminal. Estados terminales: `aplicado`,
+// `rechazado`, `rechazado_admin`, `cancelado`.
+
+/** Estados del ciclo de vida de una solicitud de cambio de turno. */
+export type EstadoSwap =
+  | "propuesto"
+  | "aceptado"
+  | "rechazado"
+  | "aprobado"
+  | "aplicado"
+  | "rechazado_admin"
+  | "cancelado";
+
+/** Una solicitud de cambio de turno entre dos compañeros (snapshot de un swap). */
+export interface SwapTurno {
+  id: string;
+  solicitante_id: string;
+  solicitante_nombre: string;
+  destinatario_id: string;
+  destinatario_nombre: string;
+  /** ISO (AAAA-MM-DD): día del turno del solicitante. */
+  fecha_a: string;
+  franja_a: FranjaTurno;
+  /** ISO (AAAA-MM-DD): día del turno del destinatario. */
+  fecha_b: string;
+  franja_b: FranjaTurno;
+  motivo: string;
+  estado: EstadoSwap;
+  respuesta_destinatario: string;
+  respuesta_admin: string;
+  /** Timestamp ISO de la creación. */
+  creado: string;
+  /** Timestamp ISO de la última actualización. */
+  actualizado: string;
+  /** Timestamp ISO cuando el destinatario aceptó/rechazó. "" si aún no. */
+  decidido_destinatario: string;
+  /** Timestamp ISO cuando el admin aprobó/rechazó. "" si aún no. */
+  decidido_admin: string;
+  /** Timestamp ISO cuando el swap se aplicó sobre el horario. "" si no. */
+  aplicado: string;
+}
+
+/** Cuerpo de `POST /api/rota/swaps`: A pide un cambio con B. */
+export interface CuerpoCrearSwap {
+  destinatario_id: string;
+  fecha_a: string;
+  franja_a: FranjaTurno;
+  fecha_b: string;
+  franja_b: FranjaTurno;
+  motivo?: string;
+}
+
+/** Cuerpo opcional para las transiciones (aceptar/rechazar/aprobar): nota libre. */
+export interface CuerpoDecidirSwap {
+  respuesta?: string;
+}
+
+/** Filtros combinables del listado `/api/rota/swaps`. */
+export interface FiltrosSwaps {
+  estado?: EstadoSwap;
+  solicitante_id?: string;
+  destinatario_id?: string;
+  /** Si `true` y hay sesión, filtra a swaps donde el usuario es A o B. */
+  mio?: boolean;
+}
+
+export interface RespuestaSwap {
+  swap: SwapTurno;
+}
+
+export interface RespuestaSwaps {
+  swaps: SwapTurno[];
+}
+
 // --- Piezas de la parrilla (#150 PARRILLA 2026.xlsx) -----------------------
 //
 // Cada fila del Excel de Tescu es UNA pieza (un post individual), no un evento.
