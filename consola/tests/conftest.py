@@ -3,10 +3,8 @@
 Aisla en `tmp_path` (env vars) toda la persistencia y configuracion para que
 ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_CONFIG`  -> consola.toml (allowlist de proyectos)
-  - `KENI_CONSOLA_DB`      -> consola.db (SQLite: tareas + comercial)
   - `KENI_CONSOLA_RAIZ`    -> raiz de datos del backend de ficheros (YAML por marca)
   - `KENI_CONSOLA_INDICE`  -> indice SQLite regenerable del backend de ficheros
-  - `KENI_CONSOLA_TAREAS`  -> tareas.json (solo para probar la migracion)
   - `KENI_CONSOLA_MEDIA`   -> dir de media (imagenes) aislado en tmp
   - `KENI_CONSOLA_SECRETOS`-> almacen de secretos (clave de imagen) aislado en tmp
   - `KENI_CONSOLA_PREFERENCIAS`-> preferencias (esfuerzo de generacion) aisladas en tmp
@@ -15,6 +13,13 @@ ningun test toque el disco real del usuario:
   - `KENI_METRICAS_CONFIG` -> apunta a un archivo inexistente => fuente de muestra
   - `KENI_SKILLS_CWD`      -> cwd valido para skills (no toca el repo real)
   - `KENI_SKILLS_DIR`      -> catalogo de skills FALSO en tmp (sembrado; no toca skills-copy/)
+
+PERSISTENCIA OPERACIONAL (ADR 0004): la Consola persiste en Postgres. La fixture `entorno`
+fija `DATABASE_URL` apuntando al Postgres de pruebas (env `KENI_TEST_DATABASE_URL`) y
+TRUNCA las tablas operacionales antes/despues del test (aislamiento entre tests). Si no
+hay Postgres de pruebas, el test se SALTA con un mensaje claro (consistente con la fixture
+`pg`): un dev sin Postgres recibe una senal clara; en CI hay un service `postgres` que los
+ejecuta de verdad.
 
 Tambien BORRA `OPENAI_API_KEY` para que, por defecto, la generacion de imagen este
 "no configurada" (camino 400). Los tests que prueban un proveedor lo parchean.
@@ -181,12 +186,27 @@ def _aislar_logging_keni():
 
 @pytest.fixture
 def entorno(monkeypatch, tmp_path):
-    """Config + DB aisladas en tmp; metricas offline; catalogo de skills falso en tmp."""
+    """Config + DB aisladas; metricas offline; catalogo de skills falso en tmp.
+
+    La operacional vive en Postgres (ADR 0004): fija `DATABASE_URL` al Postgres de pruebas
+    (`KENI_TEST_DATABASE_URL`) y trunca las tablas operacionales antes/despues del test
+    (aislamiento entre tests). Si no hay Postgres de pruebas, SE SALTA (con mensaje claro).
+    El contenido editorial sigue en disco y se aisla en `tmp_path` con `KENI_CONSOLA_*`.
+    """
+    # Postgres operacional (obligatorio tras ADR 0004): apuntar al de pruebas o saltar.
+    from ._postgres import limpiar_postgres, requiere_postgres
+
+    url_pg = requiere_postgres()
+    limpiar_postgres(url_pg)
+    monkeypatch.setenv("DATABASE_URL", url_pg)
+    # Anular componentes derivables para que `database_url()` use la URL EXPLICITA del test.
+    for var in ("POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB",
+                "POSTGRES_HOST", "POSTGRES_PORT"):
+        monkeypatch.delenv(var, raising=False)
+
     monkeypatch.setenv("KENI_CONSOLA_CONFIG", str(tmp_path / "consola.toml"))
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
     monkeypatch.setenv("KENI_CONSOLA_RAIZ", str(tmp_path / "datos"))
     monkeypatch.setenv("KENI_CONSOLA_INDICE", str(tmp_path / "indice.sqlite"))
-    monkeypatch.setenv("KENI_CONSOLA_TAREAS", str(tmp_path / "tareas.json"))
     monkeypatch.setenv("KENI_CONSOLA_MEDIA", str(tmp_path / "media"))
     monkeypatch.setenv("KENI_CONSOLA_SECRETOS", str(tmp_path / "secretos.toml"))
     monkeypatch.setenv("KENI_CONSOLA_PREFERENCIAS", str(tmp_path / "preferencias.toml"))
@@ -213,7 +233,11 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_SKILLS_DIR", str(dir_skills))
     # Almacen de generaciones (trabajos de IA en background) aislado en tmp.
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
-    return tmp_path
+    try:
+        yield tmp_path
+    finally:
+        # Aislamiento entre tests: trunca las tablas operacionales del Postgres de pruebas.
+        limpiar_postgres(url_pg)
 
 
 def _lanzador_run_noop(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001

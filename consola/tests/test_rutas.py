@@ -6,8 +6,11 @@ Cubre (#130, servicio en contenedor):
   - Con `KENI_DATA_DIR` TODO el estado cuelga de esa raiz (config bajo `keni-social/`,
     contenido editorial bajo `keni-proyectos/`, generaciones bajo `keni-social/`).
   - Sin `KENI_DATA_DIR` las rutas LOCALES no cambian (no se orfanan datos existentes).
-  - WAL activo en la conexion SQLite operacional (`db.conectar`).
   - Secreto de imagen inyectado por variable de entorno.
+
+La operacional ya no se resuelve por ruta (vive en Postgres, ADR 0004): la cubre el
+contrato de `DATABASE_URL` (`test_motor_db.py`). Aqui se prueba el resto de recursos
+(contenido editorial, media, secretos, etc.) sobre la raiz unica.
 
 Todo OFFLINE. Estos tests NO usan la fixture `entorno` (que fija cada `KENI_CONSOLA_*`):
 limpian esas vars a proposito para ejercitar el fallback de `data_dir()`.
@@ -15,10 +18,7 @@ limpian esas vars a proposito para ejercitar el fallback de `data_dir()`.
 
 from __future__ import annotations
 
-import pytest
-
 from keni_consola import (
-    db,
     ficheros,
     generaciones,
     indice,
@@ -30,12 +30,11 @@ from keni_consola import (
     sugerencias,
     termometro,
 )
+import pytest
 
 # Vars especificas de cada recurso (override de maxima prioridad): se LIMPIAN para
 # probar el fallback a `data_dir()`. Su prioridad se prueba aparte.
 _VARS_ESPECIFICAS = (
-    "KENI_CONSOLA_DB",
-    "KENI_CONSOLA_TAREAS",
     "KENI_CONSOLA_RAIZ",
     "KENI_CONSOLA_INDICE",
     "KENI_CONSOLA_MEDIA",
@@ -96,7 +95,8 @@ def test_keni_data_dir_agrupa_todo_el_estado(monkeypatch, sin_vars, tmp_path):
     monkeypatch.setenv(rutas.ENV_DATA_DIR, str(raiz))
 
     config = raiz / "keni-social"
-    assert db.ruta_db() == config / "consola.db"
+    # La operacional ya no es un fichero (vive en Postgres, ADR 0004): solo se prueban los
+    # recursos que SIGUEN siendo rutas en disco.
     assert indice.ruta_indice() == config / "indice.sqlite"
     assert media.dir_media() == config / "media"
     assert secretos.ruta_secretos() == config / "secretos.toml"
@@ -108,9 +108,9 @@ def test_keni_data_dir_agrupa_todo_el_estado(monkeypatch, sin_vars, tmp_path):
     # Contenido editorial por marca: bajo keni-proyectos/ de la misma raiz.
     assert ficheros.raiz_datos() == raiz / "keni-proyectos"
 
-    # TODAS las rutas de estado cuelgan de la raiz unica.
+    # TODAS las rutas de estado en disco cuelgan de la raiz unica.
     for ruta_recurso in (
-        db.ruta_db(), indice.ruta_indice(), media.dir_media(), secretos.ruta_secretos(),
+        indice.ruta_indice(), media.dir_media(), secretos.ruta_secretos(),
         preferencias.ruta_preferencias(), sugerencias.ruta_sugerencias(), termometro.ruta(),
         proyectos.ruta_config_consola(), generaciones.raiz(), ficheros.raiz_datos(),
     ):
@@ -128,7 +128,6 @@ def test_local_no_cambia_subpaths(monkeypatch, sin_vars, tmp_path):
     monkeypatch.setenv("HOME", str(casa))
     cfg = casa / ".config" / "keni-social"
 
-    assert db.ruta_db() == cfg / "consola.db"
     assert indice.ruta_indice() == cfg / "indice.sqlite"
     assert media.dir_media() == cfg / "media"
     assert secretos.ruta_secretos() == cfg / "secretos.toml"
@@ -147,41 +146,23 @@ def test_generaciones_respeta_xdg(monkeypatch, sin_vars, tmp_path):
     """`generaciones.raiz()` AHORA honra `XDG_CONFIG_HOME` (#126), como el resto de recursos.
 
     Antes este recurso ignoraba XDG (siempre `~/.config`). Tras el fix cuelga de
-    `rutas.dir_config()`, asi que con `XDG_CONFIG_HOME` fijado vive bajo el (igual que db,
-    media, etc.). El default SIN XDG sigue siendo `~/.config/...` (cubierto arriba).
+    `rutas.dir_config()`, asi que con `XDG_CONFIG_HOME` fijado vive bajo el (igual que
+    media, indice, etc.). El default SIN XDG sigue siendo `~/.config/...` (cubierto arriba).
     """
     xdg = tmp_path / "xdg"
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     esperada = xdg / "keni-social" / "generaciones"
     assert generaciones.raiz() == esperada
     # Y queda alineada con los demas recursos de config bajo la misma raiz XDG.
-    assert generaciones.raiz().parent == db.ruta_db().parent
+    assert generaciones.raiz().parent == rutas.dir_config()
 
 
 def test_var_especifica_gana_a_keni_data_dir(monkeypatch, sin_vars, tmp_path):
     """La env var ESPECIFICA es override de maxima prioridad (por encima de `KENI_DATA_DIR`)."""
     monkeypatch.setenv(rutas.ENV_DATA_DIR, str(tmp_path / "data"))
-    propia = tmp_path / "propia" / "consola.db"
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(propia))
-    assert db.ruta_db() == propia
-
-
-# --------------------------------------------------------------------------- #
-# Concurrencia SQLite: WAL + busy_timeout activos                             #
-# --------------------------------------------------------------------------- #
-
-
-def test_db_conectar_wal_activo(monkeypatch, sin_vars, tmp_path):
-    """`db.conectar()` deja la base en journal_mode=WAL y con busy_timeout > 0 (#130)."""
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
-    con = db.conectar()
-    try:
-        modo = con.execute("PRAGMA journal_mode").fetchone()[0]
-        timeout = con.execute("PRAGMA busy_timeout").fetchone()[0]
-    finally:
-        con.close()
-    assert modo.lower() == "wal"
-    assert int(timeout) >= 1000
+    propia = tmp_path / "propia" / "indice.sqlite"
+    monkeypatch.setenv("KENI_CONSOLA_INDICE", str(propia))
+    assert indice.ruta_indice() == propia
 
 
 # --------------------------------------------------------------------------- #

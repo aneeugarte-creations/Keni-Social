@@ -175,16 +175,16 @@ def test_tarea_por_token_sin_autor(entorno):
 def test_tarea_legada_sin_columnas_de_autor_se_migra_y_lee(entorno):
     """Una BD vieja sin columnas de autor se ALTERa (idempotente) y la tarea se lee vacia.
 
-    Recrea el escenario real: una fila de `tareas` que existia ANTES de la atribucion no
-    tiene `autor_id`/`autor_nombre`. Tras la migracion on-demand, debe leerse con autor
-    "" (desconocido) sin romper, y la columna queda disponible para nuevas filas.
+    Recrea el escenario real (Postgres hosted PERSISTE entre despliegues): una fila de
+    `tareas` que existia ANTES de la atribucion no tiene `autor_id`/`autor_nombre`. Tras la
+    migracion on-demand, debe leerse con autor "" (desconocido) sin romper, y la columna
+    queda disponible para nuevas filas.
     """
-    # 1) Tabla `tareas` con el esquema VIEJO (sin las columnas de autor).
-    ruta = db.ruta_db()
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    import sqlite3
+    # 1) Tabla `tareas` con el esquema VIEJO (sin las columnas de atribucion) sobre Postgres.
+    from keni_consola import motor_db
 
-    con = sqlite3.connect(str(ruta))
+    con = motor_db.conectar_cruda()
+    con.execute("DROP TABLE IF EXISTS tareas")
     con.execute(
         "CREATE TABLE tareas (id TEXT PRIMARY KEY, proyecto TEXT NOT NULL, titulo TEXT NOT NULL, "
         "detalle TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'pendiente', "

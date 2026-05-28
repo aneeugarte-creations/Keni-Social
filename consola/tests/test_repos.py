@@ -96,17 +96,16 @@ def test_backend_ignora_la_env_de_contenido(entorno, monkeypatch):
 
 
 def test_delega_en_db_tareas(entorno):
-    # Las tareas viven en SQLite: escribir por repos -> leer por db (misma SQLite).
+    # Las tareas viven en Postgres: escribir por repos -> leer por db (mismo Postgres).
     tarea = repos.crear_tarea("proy", "Mi tarea", "detalle")
     leida = db.obtener_tarea(tarea["id"])
     assert leida is not None
     assert leida["titulo"] == "Mi tarea"
-    assert repos.ruta_db() == db.ruta_db()
     assert any(t["id"] == tarea["id"] for t in repos.listar_tareas())
 
 
 def test_delega_en_db_comercial(entorno):
-    # El comercial vive en SQLite: escribir por repos -> leer por db.
+    # El comercial vive en Postgres: escribir por repos -> leer por db.
     pub = repos.crear_publicacion_comercial("https://x.com/a/1", titulo="Pieza", marca="unotv")
     assert db.obtener_publicacion_comercial(pub["id"])["titulo"] == "Pieza"
     repos.registrar_snapshot_comercial(pub["id"], "2026-05-25T10:00:00", 10, 100)

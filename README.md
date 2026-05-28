@@ -25,6 +25,8 @@ keni-consola
 
 (o el equivalente `python -m keni_consola`) y abre `http://127.0.0.1:8765`. Escucha **solo en localhost** y arranca con datos de muestra. La consola es su propio paquete (`keni-consola`) que, junto con `keni-metricas`, depende de `keni-shared` (la capa más baja: catálogo de marca, límites de plataforma y utilidades canónicas). Instálalos con `pip install -e ./keni-shared -e ./mcp-metricas -e ./consola` (o `uv tool install ./consola` / `uvx --from ./consola keni-consola`; `keni-shared` y `keni-metricas` se arrastran como dependencias dentro del monorepo). Guía completa en [`docs/consola.md`](docs/consola.md).
 
+> **Persistencia (ADR 0004):** la operacional de la consola vive en **Postgres** (ya no SQLite). Arranca un Postgres local antes de la consola: `docker compose -f deploy/dev/docker-compose.yml up -d` y exporta `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/keni_social`. Sin `DATABASE_URL` el back falla con un mensaje accionable. La privacidad local se preserva (Postgres en la propia máquina); ver [`consola/README.md`](consola/README.md) y [`docs/adr/0004-persistencia-operacional-postgres-unico.md`](docs/adr/0004-persistencia-operacional-postgres-unico.md).
+
 ## Por dónde empezar
 
 - **Primeros pasos (recomendado):** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 min, sin tecnicismos.

@@ -1,33 +1,33 @@
-"""Motor de persistencia operacional: SQLite (local) o Postgres (hosted), un solo codigo.
+"""Motor de persistencia operacional: Postgres, un solo backend (ADR 0004).
 
-Esta capa es el punto de extension que el ADR 0001/0002 dejaba reservado en `db.py`:
-toda la persistencia OPERACIONAL (tareas, comercial, rota, usuarios, sesiones) pasa por
-`conectar()`, y aqui se elige el backend SEGUN `DATABASE_URL`:
+Toda la persistencia OPERACIONAL (tareas, comercial, rota, usuarios, sesiones, jobs) pasa
+por `conectar_cruda()`, que abre Postgres usando `DATABASE_URL`. Antes (ADR 0002/#130) el
+backend se elegia segun la presencia de esa var: SIN `DATABASE_URL` -> SQLite local; CON
+ella -> Postgres. La ADR 0004 retira ese SQLite operacional: ahora `DATABASE_URL` es
+REQUERIDA (un Postgres, local o hosted). Asi desaparece el drift SQLite<->Postgres que
+causaba bugs (p. ej. columnas que solo migraban en un backend). Ver `docs/adr/0004`.
 
-  - SIN `DATABASE_URL`  -> SQLite local (perfil privado/local de ADR 0001/0002). Es el
-    comportamiento HISTORICO: ninguna fila sale de la maquina. No se toca.
-  - CON `DATABASE_URL`  -> Postgres (perfil hosted multiusuario). La var ya esta cableada
-    en `deploy/docker-compose.yml`; el codigo la consume ahora.
+La privacidad del perfil local se preserva apuntando `DATABASE_URL` a un Postgres LOCAL
+(ningun dato sale de la maquina). Lo que se pierde es el "cero-config / offline por
+defecto"; el dev arranca un Postgres con `deploy/dev/docker-compose.yml`.
 
 POR QUE UN WRAPPER (y no SQLAlchemy): la capa de auth (`auth/usuarios.py`,
 `auth/sesiones.py`, `auth/bootstrap.py`) y `db.py` operan DIRECTAMENTE sobre la conexion
 (`con.execute(sql, params)`, `fila["col"]`, `cur.rowcount`, `con.commit()`), con SQL
-parametrizado y unas pocas construcciones SQLite (`?`, `INSERT OR IGNORE`). Reescribir
-todo eso a un ORM seria un cambio invasivo y arriesgado en un servicio LIVE. En su lugar,
-`conectar()` devuelve una conexion que IMITA la API de `sqlite3.Connection` que esos
-modulos ya usan, pero por debajo habla SQLite o Postgres. Asi:
+parametrizado y unas pocas construcciones estilo SQLite (`?`, `INSERT OR IGNORE`). Cuando
+ambos backends coexistian, reescribirlo a un ORM habria sido invasivo y arriesgado en un
+servicio LIVE; el wrapper IMITA la API de `sqlite3.Connection` que esos modulos ya usan,
+pero por debajo habla Postgres. Aunque ya solo quede Postgres, MANTENEMOS el wrapper: los
+cientos de call sites siguen usando `?` y `fila["col"]` sin cambios. Asi:
 
   - La FACHADA (`repos.py`/`db.conectar`) y las firmas publicas NO cambian.
   - Los call sites de auth/db NO cambian (siguen usando `?` y `fila["col"]`).
-  - El unico ajuste en los call sites es capturar `motor_db.IntegrityError` (neutro) en
-    vez de `sqlite3.IntegrityError` (especifico de un backend).
+  - El unico ajuste de los call sites (ya hecho) es capturar `motor_db.IntegrityError`
+    (neutro) en vez de `sqlite3.IntegrityError`.
 
-NORMALIZACION DE DIALECTO (lo unico que el wrapper traduce, en Postgres):
+NORMALIZACION DE DIALECTO (lo unico que el wrapper traduce):
   - Placeholders `?` -> `%s` (psycopg). Solo `?`; NUNCA se interpolan datos.
   - `INSERT OR IGNORE` -> `INSERT ... ON CONFLICT DO NOTHING`.
-  - `INTEGER PRIMARY KEY`/`AUTOINCREMENT`/pragmas: NO se usan en el esquema operacional
-    (los ids son TEXT generados por la app), asi que el DDL es portable salvo detalles
-    que `db.py` ya resuelve por backend (`_crear_esquema`).
   - Filas accesibles por NOMBRE (como `sqlite3.Row`): en Postgres via `dict_row`.
 
 SEGURIDAD: igual que antes, SIEMPRE consultas parametrizadas; el wrapper solo cambia el
@@ -38,68 +38,26 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from . import config, rutas
-
-if TYPE_CHECKING:  # pragma: no cover -- solo para tipos; psycopg es opcional en local
-    pass
-
-# Espera (ms) ante contencion antes de fallar con `database is locked` (#130, SQLite).
-_BUSY_TIMEOUT_MS = 5000
+from . import config
 
 
 # --------------------------------------------------------------------------- #
 # Excepcion neutra de integridad (UNIQUE/PK duplicada)                         #
 # --------------------------------------------------------------------------- #
 #
-# auth/usuarios.py captura el duplicado de `usuario UNIQUE`. Antes capturaba
-# `sqlite3.IntegrityError`; ahora captura `motor_db.IntegrityError`, que ES la de sqlite3
-# en local y la mapeamos desde psycopg en hosted (ver `_ConexionPg.execute`).
+# auth/usuarios.py captura el duplicado de `usuario UNIQUE`. Captura
+# `motor_db.IntegrityError`, que mapeamos desde la `UniqueViolation` de psycopg (ver
+# `_ConexionPg.execute`). Se mantiene como `sqlite3.IntegrityError` por compatibilidad de
+# tipo con el codigo y los tests historicos: es solo el TIPO que se relanza, ningun SQLite
+# operacional se abre ya.
 IntegrityError = sqlite3.IntegrityError
 
 
-def es_postgres() -> bool:
-    """True si el backend operacional es Postgres (`DATABASE_URL` presente)."""
-    return config.database_url() is not None
-
-
 # --------------------------------------------------------------------------- #
-# Backend SQLite (local; comportamiento historico intacto)                     #
-# --------------------------------------------------------------------------- #
-
-
-def ruta_db() -> Path:
-    """Ruta del consola.db (SQLite). Solo aplica en perfil local (sin `DATABASE_URL`).
-
-    `KENI_CONSOLA_DB` la sobreescribe (override de maxima prioridad; tests). Si no,
-    cuelga de la raiz de estado unica (`rutas.dir_config()`).
-    """
-    if (p := config.override_ruta(config.ENV_DB)) is not None:
-        return p
-    return rutas.dir_config() / "consola.db"
-
-
-def _conectar_sqlite() -> sqlite3.Connection:
-    """Conexion SQLite con WAL/busy_timeout (concurrencia de una replica, #130).
-
-    El esquema NO se crea aqui: lo crea `db._crear_esquema` (que recibe la conexion), para
-    que la creacion del esquema sea responsabilidad de `db.py` en ambos backends.
-    """
-    ruta = ruta_db()
-    ruta.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(str(ruta), timeout=_BUSY_TIMEOUT_MS / 1000)
-    con.row_factory = sqlite3.Row
-    con.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
-    con.execute("PRAGMA journal_mode = WAL")
-    con.execute("PRAGMA synchronous = NORMAL")
-    return con
-
-
-# --------------------------------------------------------------------------- #
-# Backend Postgres (hosted; wrapper que imita la API de sqlite3 que usan los    #
-# call sites). Importacion DIFERIDA de psycopg: en local no es necesaria.       #
+# Backend Postgres (unico). Wrapper que imita la API de sqlite3 que usan los    #
+# call sites. Importacion DIFERIDA de psycopg (extra `postgres`).               #
 # --------------------------------------------------------------------------- #
 
 
@@ -154,8 +112,8 @@ class _ConexionPg:
     Metodos soportados (los unicos que los call sites usan): `execute(sql, params=())`,
     `commit()`, `close()`. `execute` traduce el dialecto, ejecuta y devuelve un `_CursorPg`
     cuyas filas se leen por nombre (`fila["col"]`). Las violaciones de UNIQUE/PK de psycopg
-    se re-lanzan como `motor_db.IntegrityError` para que `auth` las capture igual que en
-    SQLite.
+    se re-lanzan como `motor_db.IntegrityError` para que `auth` las capture (paridad con el
+    contrato historico).
     """
 
     def __init__(self, conexion: Any, dict_row: Any) -> None:
@@ -169,7 +127,7 @@ class _ConexionPg:
         try:
             cur.execute(_traducir_sql(sql), tuple(params))
         except psycopg.errors.UniqueViolation as e:
-            # Mapeo a la excepcion neutra que captura auth (paridad con sqlite3).
+            # Mapeo a la excepcion neutra que captura auth.
             self._con.rollback()
             raise IntegrityError(str(e)) from e
         return _CursorPg(cur)
@@ -181,36 +139,39 @@ class _ConexionPg:
         self._con.close()
 
 
-def _conectar_postgres() -> _ConexionPg:
-    """Abre Postgres con `DATABASE_URL` (autocommit OFF; los call sites hacen commit()).
+def _mensaje_sin_url() -> str:
+    """Mensaje accionable cuando falta `DATABASE_URL` (Postgres es obligatorio, ADR 0004)."""
+    return (
+        "DATABASE_URL no esta fijada y es OBLIGATORIA: la Consola persiste en Postgres "
+        "(ya no hay backend SQLite, ver docs/adr/0004). Arranca un Postgres local y "
+        "exporta la URL antes de usar la Consola, p. ej.:\n\n"
+        "    docker compose -f deploy/dev/docker-compose.yml up -d\n"
+        "    export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/keni_social\n\n"
+        "(En hosted la fija deploy/docker-compose.yml.)"
+    )
 
-    Filas como dict (`dict_row`) para que `fila["col"]` funcione como con `sqlite3.Row`.
-    Importacion DIFERIDA: psycopg solo es necesaria en hosted (extra `postgres`).
+
+def conectar_cruda() -> _ConexionPg:
+    """Conexion al Postgres operacional SIN crear esquema (lo hace `db._conectar`).
+
+    Exige `DATABASE_URL` (obligatoria, ADR 0004): si falta, lanza un `RuntimeError` con el
+    one-liner para arrancar un Postgres local. La eleccion/lectura se hace en tiempo de
+    LLAMADA (no al importar), para que los tests aislen el backend con env vars.
+
+    `autocommit=False` (los call sites hacen `commit()` explicito). Filas como dict
+    (`dict_row`) para que `fila["col"]` funcione como con `sqlite3.Row`. Importacion
+    DIFERIDA de psycopg: solo se necesita en runtime (extra `postgres`).
     """
+    url = config.database_url()
+    if url is None:
+        raise RuntimeError(_mensaje_sin_url())
     try:
         import psycopg
         from psycopg.rows import dict_row
-    except ImportError as e:  # pragma: no cover -- solo si falta el extra en hosted
+    except ImportError as e:  # pragma: no cover -- solo si falta el extra
         raise RuntimeError(
-            "DATABASE_URL esta fijado pero falta el driver de Postgres. Instala el extra "
-            "`postgres` (psycopg[binary]) en la imagen del back."
+            "DATABASE_URL esta fijada pero falta el driver de Postgres. Instala el extra "
+            "`postgres` (psycopg[binary]) en el entorno del back."
         ) from e
-    url = config.database_url()
     con = psycopg.connect(url, autocommit=False)
     return _ConexionPg(con, dict_row)
-
-
-# --------------------------------------------------------------------------- #
-# Punto de entrada unico                                                       #
-# --------------------------------------------------------------------------- #
-
-
-def conectar_cruda() -> Any:
-    """Conexion al backend operacional SIN crear esquema (lo hace `db._conectar`).
-
-    SQLite si no hay `DATABASE_URL`; Postgres si lo hay. La eleccion se hace en tiempo de
-    LLAMADA (no al importar), para que los tests aislen el backend con env vars.
-    """
-    if es_postgres():
-        return _conectar_postgres()
-    return _conectar_sqlite()

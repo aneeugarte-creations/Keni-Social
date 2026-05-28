@@ -20,11 +20,9 @@ from keni_consola import agentes, ficheros, indice, repos
 
 @pytest.fixture
 def base(monkeypatch, tmp_path):
-    """Aisla raiz de datos, indice, DB (tareas) y almacen de generaciones en tmp."""
+    """Aisla raiz de datos, indice y almacen de generaciones en tmp."""
     monkeypatch.setenv("KENI_CONSOLA_RAIZ", str(tmp_path / "datos"))
     monkeypatch.setenv("KENI_CONSOLA_INDICE", str(tmp_path / "indice.sqlite"))
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
-    monkeypatch.setenv("KENI_CONSOLA_TAREAS", str(tmp_path / "tareas.json"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     return tmp_path
 

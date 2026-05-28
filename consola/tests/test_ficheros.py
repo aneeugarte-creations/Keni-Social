@@ -22,11 +22,9 @@ from keni_consola import ficheros, indice, repos
 
 @pytest.fixture
 def base(monkeypatch, tmp_path):
-    """Aisla la raiz de datos de ficheros, el indice y la DB (tareas) en tmp."""
+    """Aisla la raiz de datos de ficheros y el indice en tmp."""
     monkeypatch.setenv("KENI_CONSOLA_RAIZ", str(tmp_path / "datos"))
     monkeypatch.setenv("KENI_CONSOLA_INDICE", str(tmp_path / "indice.sqlite"))
-    monkeypatch.setenv("KENI_CONSOLA_DB", str(tmp_path / "consola.db"))
-    monkeypatch.setenv("KENI_CONSOLA_TAREAS", str(tmp_path / "tareas.json"))
     return tmp_path
 
 

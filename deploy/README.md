@@ -23,16 +23,18 @@
 
 Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume entera:
 
-- **Postgres (`db`) y Garage (`files`) ya los CONSUME el back (#130).** El backend de la
-  persistencia operacional lo elige el entorno:
-  - **Con `DATABASE_URL`** (este stack la cablea) → la DB operacional (tareas, comercial,
-    rota, usuarios/sesiones) va a **Postgres**. **Sin** `DATABASE_URL` (perfil local/privado)
-    → SQLite, como siempre (ADR 0001/0002): el modo local NO cambia.
+- **Postgres (`db`) y Garage (`files`) ya los CONSUME el back (#130).** Tras la **ADR 0004**
+  Postgres es el **backend único** de la operacional (ya no hay SQLite):
+  - **`DATABASE_URL` es OBLIGATORIA** en local y en hosted (este stack la cablea; en local
+    el monorepo trae `deploy/dev/docker-compose.yml`). La DB operacional (tareas, comercial,
+    rota, usuarios/sesiones, cola de jobs) vive en **Postgres**. Sin `DATABASE_URL` el back
+    falla al arrancar con un mensaje accionable.
   - **Con `S3_*`** (endpoint + credenciales) → la media va al **bucket Garage/S3**. Sin S3
     → disco (`/data/keni-social/media`), como siempre.
-  El cutover de los datos que hoy viven en SQLite+disco se hace UNA vez con
-  `python -m keni_consola.migracion` (idempotente; ver "Cutover a Postgres + S3" abajo).
-  **FUERA de alcance (#130):** el contenido editorial YAML (`ficheros.py`,
+  El antiguo cutover SQLite → Postgres ya es historia (ADR 0004); el comando
+  `python -m keni_consola.migracion --solo-db` se mantiene como NO-OP idempotente que
+  garantiza el esquema, por compatibilidad con `deploy.sh`. Ver "Cutover de media a S3" abajo.
+  **FUERA de alcance:** el contenido editorial YAML (`ficheros.py`,
   `/data/keni-proyectos/<marca>/...`) y su índice regenerable (`indice.py`) **siguen en el
   volumen** (`keni-data`/`KENI_DATA_DIR`); migrarlos a object storage es trabajo futuro.
 - **Generación DESACOPLADA (#130 Fase 2 / ADR 0002 Fase B).** El `back` ya **no** ejecuta
@@ -188,12 +190,13 @@ Con esas vars puestas, el back ya **guarda y sirve la media desde el bucket** (#
 
 ---
 
-## Cutover a Postgres + S3 (#130) — secuencia EXACTA, una sola vez
+## Cutover de media a S3 (#130, vigente) — secuencia, una sola vez
 
-El back arranca con un **guardia de seguridad**: si `DATABASE_URL` apunta a un Postgres
-**vacío** pero existe un `consola.db` SQLite **con datos** en el volumen, **REHÚSA arrancar**
-(no sirve en blanco "perdiendo" los datos) y te apunta al comando de migración. Por eso el
-cutover sigue este orden — **hazlo en una ventana de mantenimiento**:
+> **Histórico:** el cutover de datos SQLite → Postgres se hizo y ya no aplica. La ADR 0004
+> retiró SQLite operacional; ahora la operacional vive **siempre** en Postgres y el comando
+> `python -m keni_consola.migracion --solo-db` quedó como NO-OP idempotente que garantiza el
+> esquema (lo invoca `deploy.sh` como paso 4/5). El cutover que aún tiene sentido es la
+> media (disco → bucket Garage/S3), si el back todavía guarda media en disco.
 
 ```bash
 cd /home/ubuntu/keni-social/deploy
@@ -201,39 +204,32 @@ cd /home/ubuntu/keni-social/deploy
 # 0) Para el back (que nadie escriba durante el copiado). Postgres/Garage siguen vivos.
 docker compose stop back
 
-# 1) BACKUP de lo que existe HOY (recuperable si algo sale mal):
-#    - el volumen del back (SQLite + media en disco): keni-social_keni-data
-#    - el volumen de Postgres (por si ya tuviera algo): keni-social_pgdata
+# 1) BACKUP del volumen del back (media en disco): keni-social_keni-data.
 docker run --rm -v keni-social_keni-data:/d -v "$PWD":/b alpine \
   tar czf /b/backup-keni-data-$(date +%F).tgz -C /d .
-docker run --rm -v keni-social_pgdata:/d -v "$PWD":/b alpine \
-  tar czf /b/backup-pgdata-$(date +%F).tgz -C /d .
 
 # 2) Bootstrap de Garage (si no se hizo ya) y S3_* puestas en .env (sección anterior).
 
 # 3) DRY-RUN: cuenta lo que migraría, SIN escribir. Revisa los números.
 docker compose run --rm \
   -e DATABASE_URL -e S3_ENDPOINT -e S3_REGION -e S3_BUCKET -e S3_ACCESS_KEY -e S3_SECRET_KEY \
-  back python -m keni_consola.migracion --dry-run
+  back python -m keni_consola.migracion --solo-media --dry-run
 
-# 4) MIGRACIÓN real (idempotente: SQLite -> Postgres y media de disco -> bucket S3).
+# 4) MIGRACIÓN real (idempotente: media de disco → bucket S3).
 docker compose run --rm \
   -e DATABASE_URL -e S3_ENDPOINT -e S3_REGION -e S3_BUCKET -e S3_ACCESS_KEY -e S3_SECRET_KEY \
-  back python -m keni_consola.migracion
+  back python -m keni_consola.migracion --solo-media
 
-# 5) Arranca el back. Con Postgres ya CON datos, el guardia es transparente.
+# 5) Arranca el back.
 docker compose up -d back
-docker compose logs -f back     # sin "Arranque INSEGURO"; entra por https://social.kenitech.io
+docker compose logs -f back     # entra por https://social.kenitech.io
 
-# 6) VERIFICA: entra, comprueba usuarios/tareas/comercial y que las imágenes se ven.
-#    docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c '\dt'  # tablas
-#    docker compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c 'SELECT count(*) FROM usuarios;'
+# 6) VERIFICA: que las imágenes se ven (servidas desde S3).
 ```
 
-El comando es **idempotente**: si se interrumpe, vuelve a correrlo sin miedo (las filas se
-insertan con conflicto→no-op y los objetos S3 ya presentes se saltan). `--solo-db` /
-`--solo-media` migran una sola mitad. **No migra el YAML editorial** (fuera de alcance):
-ese viaja con el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
+El comando es **idempotente**: si se interrumpe, vuelve a correrlo sin miedo (los objetos S3
+ya presentes se saltan). **No migra el YAML editorial** (fuera de alcance): ese viaja con
+el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
 
 ## Exponer el MCP (opcional)
 
@@ -274,11 +270,11 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
       127.0.0.1 sin allowlist sigue comparando contra el `Host`). Tests en
       `consola/tests/test_seguridad.py` (sección 7 CSRF tras proxy y 8 token opcional).
 - [ ] `config.toml` real (System User token de Meta) para `KENI_METRICAS_FUENTE=real`.
-- [x] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage **(#130, HECHO)**. El
-      back consume Postgres (`DATABASE_URL`) y S3 (`S3_*`) cuando están puestas; sin ellas,
-      sigue en SQLite+disco (perfil local). Cutover one-shot con
-      `python -m keni_consola.migracion` (ver "Cutover a Postgres + S3"). Pendiente solo el
-      **YAML editorial** (`ficheros.py`/`indice.py`), fuera de alcance de #130.
+- [x] Migrar `db.py` SQLite → Postgres y `media.py` disco → S3/Garage **(#130, HECHO)**.
+      Tras la **ADR 0004** la operacional es Postgres ÚNICO (`DATABASE_URL` obligatoria,
+      local y hosted); el SQLite operacional se retiró. La media va a S3 si las `S3_*`
+      están puestas; sin ellas sigue en disco. Pendiente solo el **YAML editorial**
+      (`ficheros.py`/`indice.py`), fuera de alcance.
 - [x] Extraer el worker de generación (ADR 0002 Fase B) → Node fuera de `back` **(HECHO)**.
       El `back` ENCOLA (tabla `jobs` en Postgres); el servicio `worker` corre `claude -p`.
       Pendiente fino: aislamiento por usuario del sandbox en `code.kenitech.io` (infra más
@@ -293,8 +289,8 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
 ## Hardening / contenedor no-root (#130)
 
 `back` y `worker` corren como un **usuario sin privilegios** (`keni`, uid `10001`), no como
-root. Las imágenes crean ese usuario y le dan `/app` (código) y `/data` (estado: SQLite,
-`secretos.toml` 0600, media). El `worker` instala `claude` **globalmente como root** (en el
+root. Las imágenes crean ese usuario y le dan `/app` (código) y `/data` (estado:
+`secretos.toml` 0600, media en disco si no se cablea S3). El `worker` instala `claude` **globalmente como root** (en el
 build) y luego sólo lo **ejecuta** como `keni`; fuera de root, `claude` ya **no** restringe
 `--dangerously-skip-permissions` (esa guarda es sólo para uid 0), así que `IS_SANDBOX` deja
 de ser necesario (se deja inocuo por compatibilidad).

@@ -427,19 +427,19 @@ def test_programador_intervalo_segundos_min_1(limpio):
 
 
 def test_override_ruta_ausente_es_none(limpio):
-    limpio.delenv(config.ENV_DB, raising=False)
-    assert config.override_ruta(config.ENV_DB) is None
+    limpio.delenv(config.ENV_INDICE, raising=False)
+    assert config.override_ruta(config.ENV_INDICE) is None
 
 
 def test_override_ruta_expande_tilde(limpio, tmp_path):
     """El override de ruta expande `~` (consistente con todos los recursos)."""
-    limpio.setenv(config.ENV_DB, "~/sub/consola.db")
-    resuelto = config.override_ruta(config.ENV_DB)
+    limpio.setenv(config.ENV_INDICE, "~/sub/indice.sqlite")
+    resuelto = config.override_ruta(config.ENV_INDICE)
     assert resuelto is not None
     assert "~" not in str(resuelto)
-    assert resuelto.name == "consola.db"
+    assert resuelto.name == "indice.sqlite"
 
     # Una ruta absoluta se respeta tal cual.
-    abs_ruta = tmp_path / "x" / "consola.db"
-    limpio.setenv(config.ENV_DB, str(abs_ruta))
-    assert config.override_ruta(config.ENV_DB) == abs_ruta
+    abs_ruta = tmp_path / "x" / "indice.sqlite"
+    limpio.setenv(config.ENV_INDICE, str(abs_ruta))
+    assert config.override_ruta(config.ENV_INDICE) == abs_ruta

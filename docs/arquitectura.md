@@ -73,6 +73,13 @@ Las skills son un plugin independiente y leen solo variables de entorno; la Cons
 clave del almacén único (`secretos.toml`) al subproceso al lanzar una skill. Detalle en
 [`consola.md`](consola.md).
 
+**Persistencia operacional (ADR 0004): Postgres único.** Las tareas, el seguimiento comercial,
+la rota, los usuarios/sesiones y la cola de jobs viven en **Postgres** (`DATABASE_URL`
+obligatoria en local y hosted; `deploy/dev/docker-compose.yml` levanta un Postgres local).
+El contenido editorial sigue en **YAML por marca** (`ficheros.py`) con su índice SQLite
+regenerable (`indice.py`). El histórico de métricas del MCP (SQLite local por persona) es
+otro almacén distinto y no se ve afectado.
+
 ### Versionado de esquema de los YAML
 
 La Consola guarda su contenido como **ficheros YAML editables a mano** (fuente de verdad). Para que
