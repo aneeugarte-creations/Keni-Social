@@ -47,6 +47,7 @@ from .. import auth, permisos, repos
 from .. import rota as dominio
 from .._http_json import leer_json
 from ..estados import (
+    ESTADOS_PIEZA,
     ESTADOS_ROTA,
     FRANJAS_TRABAJO,
     FRANJAS_TURNO,
@@ -55,6 +56,9 @@ from ..estados import (
     TIPOS_AUSENCIA,
     TIPOS_COBERTURA,
 )
+
+# Longitud maxima del enlace de una pieza (defensa: evita strings absurdos en la BD).
+_MAX_ENLACE_PIEZA = 2000
 
 # Media types oficiales de un .xlsx (Open XML) y un CSV.
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -1052,6 +1056,265 @@ async def export_xlsx(request: Request) -> Response:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Piezas de la parrilla (#150 PARRILLA 2026.xlsx)                              #
+# --------------------------------------------------------------------------- #
+#
+# Una pieza = un POST individual (no un evento). Un evento puede generar varias piezas;
+# tambien hay piezas SUELTAS (campanas evergreen sin evento). El workflow del Excel
+# (material/contenido/publicado/enlace) se persiste tal cual. Los campos de texto libre
+# (red_social, tipo_pieza, programa) NO van por allowlist: Tescu usa cadenas como
+# "FB, IG, X" / "HISTORIA" / "IG, TK (REEL)" / "WEB" / "IMAGEN" / "REEL" / "FIJAR" que
+# todavia no encajan en un set cerrado; nos quedamos con el texto bruto.
+
+
+def _pieza_a_dict(pieza: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
+    """Serializa una pieza, resolviendo el nombre vivo del responsable (renombres)."""
+    return {
+        "id": pieza["id"],
+        "evento_id": pieza.get("evento_id", "") or "",
+        "programa": pieza.get("programa", "") or "",
+        "red_social": pieza.get("red_social", "") or "",
+        "tipo_pieza": pieza.get("tipo_pieza", "") or "",
+        "contenido_sugerido": pieza.get("contenido_sugerido", "") or "",
+        "dia": pieza.get("dia", "") or "",
+        "hora_post": pieza.get("hora_post", "") or "",
+        "estado": pieza.get("estado", "pendiente") or "pendiente",
+        "material_entregado": bool(pieza.get("material_entregado")),
+        "contenido_entregado": bool(pieza.get("contenido_entregado")),
+        "publicado": bool(pieza.get("publicado")),
+        "enlace": pieza.get("enlace", "") or "",
+        "responsable_id": pieza.get("responsable_id", "") or "",
+        # El nombre vivo del equipo manda sobre el snapshot guardado (renombres),
+        # mismo patron que `_turno_a_dict` / `_ausencia_a_dict`.
+        "responsable_nombre": nombres.get(
+            pieza.get("responsable_id", ""), pieza.get("responsable_nombre", "")
+        ),
+        "notas": pieza.get("notas", "") or "",
+    }
+
+
+def _resolver_responsable_pieza(
+    responsable_id: object, nombres: dict[str, str]
+) -> tuple[str, str, bool]:
+    """Resuelve un `responsable_id` del cliente a `(id, nombre, valido)`.
+
+      - `("" / None)` -> `("", "", True)`: sin asignar (se permite explicitamente).
+      - id de un usuario REAL -> `(id, nombre, True)`.
+      - cualquier otra cosa (id inexistente / tipo raro) -> `("", "", False)`.
+    """
+    if responsable_id in (None, ""):
+        return "", "", True
+    if not isinstance(responsable_id, str):
+        return "", "", False
+    usuario = auth.obtener_usuario_por_id(responsable_id)
+    if usuario is None:
+        return "", "", False
+    return usuario["id"], usuario["usuario"], True
+
+
+def _evento_existe(evento_id: str) -> bool:
+    """True si el `evento_id` referencia un evento real de `rota_eventos`."""
+    if not evento_id:
+        return False
+    return repos.obtener_evento_rota(evento_id) is not None
+
+
+def _fecha_iso_valida_o_vacia(valor: str) -> bool:
+    """True si `valor` es "" (sin fechar) o un AAAA-MM-DD valido."""
+    if not valor:
+        return True
+    return dominio.lunes_de_semana_iso(valor) != ""
+
+
+async def listar_piezas(request: Request) -> Response:
+    """GET /api/rota/piezas[?filtros]: piezas de la parrilla, con filtros combinables.
+
+    Filtros opcionales (query): `evento_id` ("" para piezas SUELTAS), `desde`/`hasta`
+    (rango de `dia` ISO), `red`, `tipo`, `estado`, `responsable_id`, `programa`.
+    """
+    qp = request.query_params
+    evento_id = qp.get("evento_id")  # None / "" / id
+    # `evento_id=""` (cadena vacia explicita) significa "piezas sueltas, sin evento"; sin
+    # el parametro (None) significa "no filtrar por evento".
+    if "evento_id" not in qp:
+        evento_id = None
+    desde = (qp.get("desde") or "").strip() or None
+    hasta = (qp.get("hasta") or "").strip() or None
+    red = (qp.get("red") or "").strip() or None
+    tipo = (qp.get("tipo") or "").strip() or None
+    estado = (qp.get("estado") or "").strip() or None
+    responsable_id = qp.get("responsable_id")
+    if "responsable_id" not in qp:
+        responsable_id = None
+    programa = qp.get("programa")
+    if "programa" not in qp:
+        programa = None
+
+    if estado is not None and estado not in ESTADOS_PIEZA:
+        validos = " o ".join(f'"{e}"' for e in ESTADOS_PIEZA)
+        return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
+    if desde is not None and not _fecha_iso_valida_o_vacia(desde):
+        return JSONResponse({"error": "La fecha 'desde' no es válida (usa AAAA-MM-DD)."}, status_code=400)
+    if hasta is not None and not _fecha_iso_valida_o_vacia(hasta):
+        return JSONResponse({"error": "La fecha 'hasta' no es válida (usa AAAA-MM-DD)."}, status_code=400)
+
+    piezas = repos.listar_piezas_rota(
+        evento_id=evento_id,
+        desde=desde,
+        hasta=hasta,
+        red=red,
+        tipo=tipo,
+        estado=estado,
+        responsable_id=responsable_id,
+        programa=programa,
+    )
+    nombres = _nombres_equipo()
+    return JSONResponse({"piezas": [_pieza_a_dict(p, nombres) for p in piezas]})
+
+
+async def crear_pieza(request: Request) -> Response:
+    """POST /api/rota/piezas: alta de una pieza (post individual de la parrilla).
+
+    Al menos uno entre `evento_id`, `programa` o `contenido_sugerido` debe estar relleno
+    (sin esto la pieza no representa nada). Valida que `evento_id` (si se manda) referencie
+    un evento real y `responsable_id` (si se manda) un usuario real.
+    """
+    datos = await leer_json(request)
+    nombres = _nombres_equipo()
+
+    evento_id = str(datos.get("evento_id", "")).strip()
+    programa = str(datos.get("programa", "")).strip()
+    contenido_sugerido = str(datos.get("contenido_sugerido", "")).strip()
+    if not evento_id and not programa and not contenido_sugerido:
+        return JSONResponse(
+            {
+                "error": (
+                    "La pieza necesita al menos un evento, un programa o un contenido "
+                    "sugerido."
+                )
+            },
+            status_code=400,
+        )
+    if evento_id and not _evento_existe(evento_id):
+        return JSONResponse({"error": "Ese evento no existe."}, status_code=400)
+
+    estado = str(datos.get("estado", "pendiente")).strip() or "pendiente"
+    if estado not in ESTADOS_PIEZA:
+        validos = " o ".join(f'"{e}"' for e in ESTADOS_PIEZA)
+        return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
+
+    dia = str(datos.get("dia", "")).strip()
+    if dia and not _fecha_iso_valida_o_vacia(dia):
+        return JSONResponse({"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400)
+
+    enlace = str(datos.get("enlace", "")).strip()
+    if len(enlace) > _MAX_ENLACE_PIEZA:
+        return JSONResponse({"error": "El enlace es demasiado largo."}, status_code=400)
+
+    resp_id, resp_nombre, valido = _resolver_responsable_pieza(
+        datos.get("responsable_id"), nombres
+    )
+    if not valido:
+        return JSONResponse({"error": "El responsable no es un usuario válido."}, status_code=400)
+
+    pieza = repos.crear_pieza_rota(
+        evento_id=evento_id,
+        programa=programa,
+        red_social=str(datos.get("red_social", "")).strip(),
+        tipo_pieza=str(datos.get("tipo_pieza", "")).strip(),
+        contenido_sugerido=contenido_sugerido,
+        dia=dia,
+        hora_post=str(datos.get("hora_post", "")).strip(),
+        estado=estado,
+        material_entregado=bool(datos.get("material_entregado", False)),
+        contenido_entregado=bool(datos.get("contenido_entregado", False)),
+        publicado=bool(datos.get("publicado", False)),
+        enlace=enlace,
+        responsable_id=resp_id,
+        responsable_nombre=resp_nombre,
+        notas=str(datos.get("notas", "")).strip(),
+    )
+    return JSONResponse({"pieza": _pieza_a_dict(pieza, nombres)}, status_code=201)
+
+
+async def actualizar_pieza(request: Request) -> Response:
+    """PATCH /api/rota/piezas/{id}: edicion parcial de una pieza.
+
+    Cualquier subconjunto de campos editables. Las mismas validaciones que en `crear_pieza`
+    aplican a los campos presentes: `evento_id` (si no vacio) debe existir, `responsable_id`
+    (si no vacio) debe ser usuario real, `estado` debe ser de `ESTADOS_PIEZA`, `enlace` <=
+    `_MAX_ENLACE_PIEZA`, `dia` debe ser AAAA-MM-DD o "".
+    """
+    pieza_id = request.path_params["pieza_id"]
+    actual = repos.obtener_pieza_rota(pieza_id)
+    if actual is None:
+        return JSONResponse({"error": "La pieza ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    nombres = _nombres_equipo()
+    campos: dict[str, Any] = {}
+
+    if "evento_id" in datos:
+        evento_id = str(datos.get("evento_id", "")).strip()
+        if evento_id and not _evento_existe(evento_id):
+            return JSONResponse({"error": "Ese evento no existe."}, status_code=400)
+        campos["evento_id"] = evento_id
+
+    for clave in ("programa", "red_social", "tipo_pieza", "contenido_sugerido",
+                  "hora_post", "notas"):
+        if clave in datos:
+            valor = datos[clave]
+            campos[clave] = str(valor).strip() if isinstance(valor, str) else ""
+
+    if "dia" in datos:
+        dia = str(datos.get("dia", "")).strip()
+        if dia and not _fecha_iso_valida_o_vacia(dia):
+            return JSONResponse({"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400)
+        campos["dia"] = dia
+
+    if "estado" in datos:
+        estado = str(datos.get("estado", "")).strip()
+        if estado not in ESTADOS_PIEZA:
+            validos = " o ".join(f'"{e}"' for e in ESTADOS_PIEZA)
+            return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
+        campos["estado"] = estado
+
+    if "enlace" in datos:
+        enlace = str(datos.get("enlace", "")).strip()
+        if len(enlace) > _MAX_ENLACE_PIEZA:
+            return JSONResponse({"error": "El enlace es demasiado largo."}, status_code=400)
+        campos["enlace"] = enlace
+
+    for bool_col in ("material_entregado", "contenido_entregado", "publicado"):
+        if bool_col in datos:
+            campos[bool_col] = bool(datos[bool_col])
+
+    if "responsable_id" in datos:
+        resp_id, resp_nombre, valido = _resolver_responsable_pieza(
+            datos.get("responsable_id"), nombres
+        )
+        if not valido:
+            return JSONResponse({"error": "El responsable no es un usuario válido."}, status_code=400)
+        # Sin asignar limpia ambas columnas; asignado las fija a la par (mismo patron que
+        # las tareas del tablero).
+        campos["responsable_id"] = resp_id
+        campos["responsable_nombre"] = resp_nombre
+
+    pieza = repos.actualizar_pieza_rota(pieza_id, campos)
+    if pieza is None:
+        return JSONResponse({"error": "La pieza ya no existe."}, status_code=404)
+    return JSONResponse({"pieza": _pieza_a_dict(pieza, nombres)})
+
+
+async def borrar_pieza(request: Request) -> Response:
+    """DELETE /api/rota/piezas/{id}: borra la pieza. 200 si existia, 404 si no."""
+    pieza_id = request.path_params["pieza_id"]
+    if not repos.borrar_pieza_rota(pieza_id):
+        return JSONResponse({"error": "La pieza ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Pieza eliminada."})
+
+
 RUTAS = [
     Route("/api/rota/equipo", equipo, methods=["GET"]),
     Route("/api/rota/eventos", listar_eventos, methods=["GET"]),
@@ -1076,4 +1339,9 @@ RUTAS = [
     Route("/api/rota/mi-horario", mi_horario, methods=["GET"]),
     Route("/api/rota/export.csv", export_csv, methods=["GET"]),
     Route("/api/rota/export.xlsx", export_xlsx, methods=["GET"]),
+    # Piezas de la parrilla (#150 PARRILLA 2026.xlsx): un POST individual por fila.
+    Route("/api/rota/piezas", listar_piezas, methods=["GET"]),
+    Route("/api/rota/piezas", crear_pieza, methods=["POST"]),
+    Route("/api/rota/piezas/{pieza_id}", actualizar_pieza, methods=["PATCH"]),
+    Route("/api/rota/piezas/{pieza_id}", borrar_pieza, methods=["DELETE"]),
 ]
