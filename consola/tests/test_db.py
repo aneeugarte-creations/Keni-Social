@@ -102,7 +102,7 @@ def test_listar_tareas_filtra_por_proyecto(entorno):
     assert len(db.listar_tareas()) == 2
 
 
-def test_listar_tareas_filtra_por_evento(base):
+def test_listar_tareas_filtra_por_evento(entorno):
     """`listar_tareas(evento_id=...)` acota a las tareas atadas a un evento."""
     db.crear_tarea("p", "Libre", evento_id="")
     db.crear_tarea("p", "De evento A", evento_id="evA")
@@ -116,7 +116,7 @@ def test_listar_tareas_filtra_por_evento(base):
     assert len(db.listar_tareas()) == 4
 
 
-def test_actualizar_tarea_evento_id(base):
+def test_actualizar_tarea_evento_id(entorno):
     """`actualizar_tarea({'evento_id': ...})` ata/desata una tarea de un evento."""
     t = db.crear_tarea("p", "T")
     assert t["evento_id"] == ""
@@ -129,7 +129,7 @@ def test_actualizar_tarea_evento_id(base):
     assert desatada["evento_id"] == ""
 
 
-def test_migracion_columnas_tablero_en_bd_vieja(base):
+def test_migracion_columnas_tablero_en_bd_vieja(entorno):
     """Una BD con `tareas` SIN responsable/enlace se ALTERa (idempotente) y se lee vacia."""
     ruta = db.ruta_db()
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -155,7 +155,7 @@ def test_migracion_columnas_tablero_en_bd_vieja(base):
     assert nueva["responsable_nombre"] == "ana"
 
 
-def test_migracion_columna_evento_id_en_bd_vieja(base):
+def test_migracion_columna_evento_id_en_bd_vieja(entorno):
     """Una BD con `tareas` SIN `evento_id` se ALTERa (idempotente) y se lee con ''."""
     ruta = db.ruta_db()
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -187,7 +187,7 @@ def test_migracion_columna_evento_id_en_bd_vieja(base):
     assert db.obtener_tarea("vieja") is not None
 
 
-def test_migracion_columnas_eventos_rota_en_bd_vieja(base):
+def test_migracion_columnas_eventos_rota_en_bd_vieja(entorno):
     """Un `rota_eventos` SIN cobertura/prioridad/cambiado/actualizado se ALTERa idempotente."""
     ruta = db.ruta_db()
     ruta.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +217,7 @@ def test_migracion_columnas_eventos_rota_en_bd_vieja(base):
     assert nuevo["tipo_cobertura"] == "imagenes"
 
 
-def test_sql_parametrizado_no_inyectable(base):
+def test_sql_parametrizado_no_inyectable(entorno):
     """Un titulo con sintaxis SQL se guarda LITERAL (consultas parametrizadas)."""
     malicioso = "'; DROP TABLE tareas; --"
     t = db.crear_tarea("proj1", malicioso)
