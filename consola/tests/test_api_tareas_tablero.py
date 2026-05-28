@@ -240,3 +240,141 @@ def test_patch_tarea_inexistente_404(entorno):
     _crear_proyecto(entorno)
     r = c.patch("/api/tareas/noexiste", json={"estado": "hecha"}, headers=_ORIGIN)
     assert r.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Pendientes unificados: proyecto opcional, evento_id, abrir sin proyecto      #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_pendiente_sin_proyecto(entorno):
+    """El proyecto es OPCIONAL: una tarea libre (solo titulo) se crea y persiste."""
+    c = _cli_con_usuario("ana")
+    r = c.post("/api/tareas", json={"titulo": "Tarea libre"}, headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    tarea = r.json()["tarea"]
+    assert tarea["titulo"] == "Tarea libre"
+    assert tarea["proyecto"] == ""
+    assert tarea["proyecto_nombre"] == ""
+    assert tarea["proyecto_existe"] is False
+    assert tarea["evento_id"] == ""
+
+    # Persiste en el tablero compartido.
+    listado = c.get("/api/tareas").json()["tareas"]
+    assert any(t["id"] == tarea["id"] and t["proyecto"] == "" for t in listado)
+
+
+def test_crear_pendiente_sin_titulo_400(entorno):
+    """Regresion: el titulo sigue siendo obligatorio (sin proyecto NO basta)."""
+    c = _cli_con_usuario("ana")
+    r = c.post("/api/tareas", json={"detalle": "x"}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_crear_pendiente_con_evento_valido(entorno):
+    """Una tarea atada a un evento existente de la rota hidrata `evento_titulo/fecha/hora`."""
+    c = _cli_con_usuario("ana")
+    # Creamos un evento de la rota directamente con la API ya existente.
+    r_ev = c.post(
+        "/api/rota/eventos",
+        json={"titulo": "Final", "fecha": "2026-05-30", "hora": "20:00"},
+        headers=_ORIGIN,
+    )
+    assert r_ev.status_code == 201, r_ev.text
+    evento = r_ev.json()["evento"]
+
+    r = c.post(
+        "/api/tareas",
+        json={"titulo": "Cubrir final", "evento_id": evento["id"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    tarea = r.json()["tarea"]
+    assert tarea["evento_id"] == evento["id"]
+    assert tarea["evento_titulo"] == "Final"
+    assert tarea["evento_fecha"] == "2026-05-30"
+    assert tarea["evento_hora"] == "20:00"
+
+    # El listado tambien la hidrata.
+    listado = c.get("/api/tareas").json()["tareas"]
+    en_lista = next(t for t in listado if t["id"] == tarea["id"])
+    assert en_lista["evento_titulo"] == "Final"
+    assert en_lista["evento_fecha"] == "2026-05-30"
+    assert en_lista["evento_hora"] == "20:00"
+
+
+def test_crear_pendiente_con_evento_inexistente_400(entorno):
+    """`evento_id` inventado: 400 explicito (no se confia en el cliente)."""
+    c = _cli_con_usuario("ana")
+    r = c.post(
+        "/api/tareas",
+        json={"titulo": "T", "evento_id": "noexiste"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    assert "rota" in r.json()["error"].lower()
+
+
+def test_listado_devuelve_eventos_sin_cubrir(entorno):
+    """GET /api/tareas devuelve `eventos_sin_cubrir` con los eventos de la rota sin asignar."""
+    c = _cli_con_usuario("ana")
+    # Evento de esta semana, sin turno todavia -> debe aparecer como sin cubrir.
+    r_a = c.post(
+        "/api/rota/eventos",
+        json={"titulo": "Sin cubrir aun", "fecha": "2026-05-30", "hora": "16:00"},
+        headers=_ORIGIN,
+    )
+    assert r_a.status_code == 201, r_a.text
+    ev_a = r_a.json()["evento"]
+
+    cuerpo = c.get("/api/tareas").json()
+    assert "eventos_sin_cubrir" in cuerpo
+    ids = [e["id"] for e in cuerpo["eventos_sin_cubrir"]]
+    assert ev_a["id"] in ids
+
+    # Forma del item: id/titulo/fecha/hora/contenido/tipo_cobertura/prioridad.
+    sin_cubrir = next(e for e in cuerpo["eventos_sin_cubrir"] if e["id"] == ev_a["id"])
+    assert sin_cubrir["titulo"] == "Sin cubrir aun"
+    assert sin_cubrir["fecha"] == "2026-05-30"
+    assert sin_cubrir["hora"] == "16:00"
+    assert sin_cubrir["tipo_cobertura"] == "transmision"
+    assert sin_cubrir["prioridad"] == "media"
+
+
+def test_eventos_sin_cubrir_excluye_los_asignados(entorno):
+    """Un evento con turno asignado a un miembro NO aparece en `eventos_sin_cubrir`."""
+    from keni_consola import repos as repos_mod
+
+    c = _cli_con_usuario("ana")
+    ana_id = _id_usuario("ana")
+
+    r_ev = c.post(
+        "/api/rota/eventos",
+        json={"titulo": "Ya asignado", "fecha": "2026-05-30", "hora": "18:00"},
+        headers=_ORIGIN,
+    )
+    assert r_ev.status_code == 201, r_ev.text
+    ev = r_ev.json()["evento"]
+
+    # Asignamos el evento creando un turno para la semana actual con miembro_id real.
+    repos_mod.crear_turno_rota(
+        "2026-05-25",
+        ev["id"],
+        miembro_id=ana_id,
+        miembro_nombre="ana",
+    )
+
+    cuerpo = c.get("/api/tareas").json()
+    ids = [e["id"] for e in cuerpo["eventos_sin_cubrir"]]
+    assert ev["id"] not in ids
+
+
+def test_abrir_tarea_sin_proyecto_400(entorno):
+    """Una tarea libre (sin proyecto) NO se puede abrir en Claude Code: 400 explicito."""
+    c = _cli_con_usuario("ana")
+    creada = c.post(
+        "/api/tareas", json={"titulo": "Libre"}, headers=_ORIGIN
+    ).json()["tarea"]
+    r = c.post(f"/api/tareas/{creada['id']}/abrir", headers=_ORIGIN)
+    assert r.status_code == 400
+    assert "proyecto" in r.json()["error"].lower()
