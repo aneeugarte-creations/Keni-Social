@@ -164,53 +164,57 @@ def _rango_dos_semanas(hoy: date) -> tuple[str, str]:
 
 
 def _eventos_sin_cubrir(hoy: date | None = None) -> list[dict]:
-    """Eventos de la rota de esta semana y la siguiente cuyo turno NO tiene miembro.
+    """Eventos de la rota de esta semana y la siguiente que NADIE cubre via su turno.
 
-    Cruza `rota_eventos` (filtrados por rango y por `tipo_cobertura != 'no_cubrir'`) con
-    `rota_turnos` (semanas actual + siguiente). Un evento cuenta como SIN CUBRIR si:
-      - no tiene turno creado todavia para su semana (la rota aun no se ha propuesto), o
-      - tiene turno pero con `miembro_id` vacio.
+    Cobertura DERIVADA (modelo ola back3): un evento esta cubierto si EXISTE algun turno
+    en `rota_turnos` con `(fecha, franja)` igual al evento (franja derivada de su hora con
+    `mapear_franja`). Filtra `tipo_cobertura=no_cubrir` (decision editorial).
 
     Devuelve dicts ligeros (id, titulo, fecha, hora, contenido, tipo_cobertura, prioridad)
     ordenados por fecha y hora ascendentes (mismo orden que `listar_eventos_rota`).
     """
+    from .. import rota as dominio
+
     hoy = hoy or date.today()
     desde, hasta = _rango_dos_semanas(hoy)
     eventos = repos.listar_eventos_rota(desde=desde, hasta=hasta)
     # Filtra los `no_cubrir` (decision editorial: ese evento no se cubre, no es pendiente).
     eventos = [e for e in eventos if e.get("tipo_cobertura", "") != "no_cubrir"]
 
-    # Mapa evento_id -> miembro_id mas reciente que lo cubre. Si NO esta en el mapa, el
-    # evento es "sin cubrir" porque su semana aun no se ha propuesto (no hay turno).
-    turnos_por_evento: dict[str, str] = {}
+    # Trae los turnos de las DOS semanas que cubren el rango.
     semanas = {
         (date.fromisoformat(desde) + timedelta(days=7 * i)).isoformat() for i in range(2)
     }
+    turnos: list[dict] = []
     for semana in semanas:
-        for turno in repos.listar_turnos_rota(semana=semana):
-            # Si hay varios turnos para el mismo evento (no deberia, pero defensa), gana el
-            # ultimo: con miembro asignado si lo hay; si todos vacios, queda vacio.
-            ev = turno.get("evento_id", "") or ""
-            miembro = turno.get("miembro_id", "") or ""
-            actual = turnos_por_evento.get(ev, "")
-            if not actual:
-                turnos_por_evento[ev] = miembro
+        turnos.extend(repos.listar_turnos_rota(semana=semana))
+
+    # Franjas configurables (#185).
+    franjas_cfg = repos.obtener_franjas_config()
 
     sin_cubrir: list[dict] = []
     for e in eventos:
-        miembro = turnos_por_evento.get(e["id"], "")
-        if not miembro:
-            sin_cubrir.append(
-                {
-                    "id": e["id"],
-                    "titulo": e["titulo"],
-                    "fecha": e.get("fecha", "") or "",
-                    "hora": e.get("hora", "") or "",
-                    "contenido": e.get("contenido", "") or "",
-                    "tipo_cobertura": e.get("tipo_cobertura", "") or "",
-                    "prioridad": e.get("prioridad", "") or "",
-                }
-            )
+        cubridores = dominio.cobertura_de_evento(
+            e,
+            turnos,
+            matutino_inicio=franjas_cfg["matutino_inicio"],
+            matutino_fin=franjas_cfg["matutino_fin"],
+            vespertino_inicio=franjas_cfg["vespertino_inicio"],
+            vespertino_fin=franjas_cfg["vespertino_fin"],
+        )
+        if cubridores:
+            continue
+        sin_cubrir.append(
+            {
+                "id": e["id"],
+                "titulo": e["titulo"],
+                "fecha": e.get("fecha", "") or "",
+                "hora": e.get("hora", "") or "",
+                "contenido": e.get("contenido", "") or "",
+                "tipo_cobertura": e.get("tipo_cobertura", "") or "",
+                "prioridad": e.get("prioridad", "") or "",
+            }
+        )
     return sin_cubrir
 
 

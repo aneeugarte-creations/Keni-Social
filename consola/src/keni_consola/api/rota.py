@@ -1,34 +1,53 @@
-"""API Rota: parrilla y rota de horarios del equipo (F4 · #144).
+"""API Rota: parrilla y horarios del equipo (F4 · #144, modelo ola back3).
 
 Sustituye el Excel manual de Elias por una vista de equipo donde EL ADMIN asigna a
-mano la rota y la hace visible con anticipacion. La consola le ENSENA huecos,
-repeticiones de sabado y carga por persona; Elias decide y APRUEBA antes de publicar
-al equipo. Nada se publica hasta aprobar.
+mano los TURNOS (horarios de cada miembro por dia y franja) y la hace visible con
+anticipacion. La consola muestra huecos, repeticiones de sabado y carga por persona;
+Elias decide y APRUEBA antes de publicar al equipo. Nada se publica hasta aprobar.
 
+MODELO (cambio post-ola2 por feedback usuario):
+  - **TURNO** = horario de un miembro en (fecha, franja). NO va atado a un evento.
+  - **EVENTO** = transmision/partido con fecha+hora. Existe SIN relacion con miembros.
+  - **COBERTURA** = vista DERIVADA, no persistida: para un evento, sus cubridores son
+    los miembros cuyo turno coincide con la franja+fecha del evento (mapear_franja).
+    Puede haber turnos sin eventos y eventos sin turnos.
+
+Eventos (CRUD + duplicar):
   - `GET    /api/rota/equipo`                 -> miembros del equipo (usuarios #130).
   - `GET    /api/rota/eventos[?desde&hasta&cambiados&tipo_cobertura]` -> eventos/transmisiones.
   - `POST   /api/rota/eventos`                {titulo, fecha, hora, contenido, nota, tipo_cobertura, prioridad}
   - `PATCH  /api/rota/eventos/{id}`           edita un evento (reprograma -> cambiado=1; cambiado:false lo limpia).
-  - `DELETE /api/rota/eventos/{id}`           borra el evento (y sus turnos).
-  - `GET    /api/rota/semana[?lunes]`         -> rota de la semana (turnos + eventos).
-  - `PATCH  /api/rota/turnos/{id}`            {miembro_id, override, motivo, estado}
-  - `POST   /api/rota/semana/aprobar`         {lunes} -> Elias APRUEBA (publica) la semana.
-  - `GET    /api/rota/mi-semana[?lunes]`      -> "mi proxima semana" del usuario actual.
-  - `GET    /api/rota/export.{xlsx,csv}[?lunes]` -> descarga para la transicion del Excel.
+  - `DELETE /api/rota/eventos/{id}`           borra el evento.
+  - `POST   /api/rota/eventos/{id}/duplicar`  clona un evento.
 
-GESTION DE TURNOS (ola A): el HORARIO de trabajo del equipo, paralelo a la cobertura:
+Turnos (CRUD completo + lote + duplicar):
+  - `GET    /api/rota/turnos[?lunes]`         -> los turnos de la semana (persona×dia×franja).
+  - `POST   /api/rota/turnos`                 {lunes?, fecha, miembro_id, franja, motivo?, nota_relevo?, override?}
+  - `PATCH  /api/rota/turnos/{id}`            edita un turno (franja/miembro/override/motivo/nota_relevo/estado).
+  - `DELETE /api/rota/turnos/{id}`            borra un turno individual.
+  - `POST   /api/rota/turnos/lote`            {turnos: [{lunes?, fecha, miembro_id, franja, ...}, ...]} crea varios.
+  - `PATCH  /api/rota/turnos/lote`            {ids, miembro_id, franja?, override?, motivo?} edita en lote.
+  - `POST   /api/rota/turnos/lote/borrar`     {ids} borra en lote.
+  - `POST   /api/rota/turnos/{id}/duplicar`   {fecha?, miembro_id?, franja?} clona con overrides.
+  - `POST   /api/rota/turnos/aprobar`         {lunes} -> Elias APRUEBA (publica) los turnos.
+  - `GET    /api/rota/mis-turnos[?lunes]`     -> los turnos del usuario autenticado.
+
+Cobertura DERIVADA (sin persistencia):
+  - `GET    /api/rota/cobertura[?lunes]`      -> para cada evento de la semana, sus cubridores.
+  - `GET    /api/rota/cobertura/evento/{id}`  -> los cubridores de un evento concreto.
+
+Ausencias (CRUD):
   - `GET/POST/PATCH/DELETE /api/rota/ausencias[/{id}]` -> vacaciones/ausencias por miembro.
-  - `GET    /api/rota/horario[?lunes]`        -> el horario (turnos de trabajo) de la semana.
-  - `PATCH  /api/rota/horario/turnos/{id}`    {franja, miembro_id, override, motivo, nota_relevo, estado}
-  - `POST   /api/rota/horario/aprobar`        {lunes} -> Elias APRUEBA (publica) el horario.
-  - `GET    /api/rota/mi-horario[?lunes]`     -> los turnos de trabajo del usuario actual.
 
-ROTACION DE SABADOS (criterio de aceptacion): la edicion manual no repite a la misma
-persona dos sabados seguidos salvo override explicito. Los predicados puros viven en
-`rota.py` (probados aparte); aqui se aplican al PATCH de turnos.
+Otros (mantenidos): piezas, programas, swaps, config/franjas, carga, copiar-semana,
+exports.csv/.xlsx.
+
+ROTACION DE SABADOS (criterio de aceptacion): la edicion manual no pone a la misma
+persona a TRABAJAR dos sabados seguidos salvo override explicito (`viola_rotacion_sabado_trabajo`
+en `rota.py`). Aplica a PATCH y POST de turnos cuando la franja es de trabajo.
 
 IDENTIDAD (#130): el equipo son los USUARIOS de la consola (solo lectura desde `auth`).
-El usuario autenticado de la peticion (`request.state.usuario`) alimenta "mi semana".
+El usuario autenticado de la peticion (`request.state.usuario`) alimenta "mis-turnos".
 La APROBACION (publicar al equipo) exige rol admin: la frontera dice que Elias aprueba.
 """
 
@@ -70,10 +89,7 @@ _MAX_ENLACE_PIEZA = 2000
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _MEDIA_CSV = "text/csv; charset=utf-8"
 
-_MSG_SOLO_ADMIN = "Solo Elías (administrador) puede aprobar y publicar la rota al equipo."
-_MSG_SOLO_ADMIN_HORARIO = (
-    "Solo Elías (administrador) puede aprobar y publicar el horario al equipo."
-)
+_MSG_SOLO_ADMIN = "Solo Elías (administrador) puede aprobar y publicar los turnos al equipo."
 
 
 # --------------------------------------------------------------------------- #
@@ -134,80 +150,23 @@ def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _turno_a_dict(
-    turno: dict[str, Any],
-    eventos_por_id: dict[str, dict[str, Any]],
-    nombres: dict[str, str],
-) -> dict[str, Any]:
-    """Serializa un turno resolviendo su evento (que sacar) y el nombre del miembro."""
-    evento = eventos_por_id.get(turno["evento_id"])
+def _turno_a_dict(turno: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
+    """Serializa un turno (horario `(fecha, franja)` para `miembro_id`)."""
     return {
         "id": turno["id"],
         "semana": turno["semana"],
-        "evento_id": turno["evento_id"],
-        "evento_titulo": evento["titulo"] if evento else "",
-        "evento_fecha": evento["fecha"] if evento else "",
-        "evento_hora": evento["hora"] if evento else "",
-        "contenido": evento["contenido"] if evento else "",
-        "es_sabado": dominio.es_sabado(evento["fecha"]) if evento else False,
+        "fecha": turno["fecha"],
         "miembro_id": turno["miembro_id"],
         # El nombre vivo del equipo manda sobre el snapshot guardado (renombres).
-        "miembro_nombre": nombres.get(turno["miembro_id"], turno.get("miembro_nombre", "")),
+        "miembro_nombre": nombres.get(
+            turno["miembro_id"], turno.get("miembro_nombre", "")
+        ),
+        "franja": turno["franja"],
         "estado": turno["estado"],
         "override": bool(turno["override"]),
         "motivo": turno["motivo"],
-    }
-
-
-def _ordenar_turnos(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Ordena turnos cronologicamente por su evento (fecha, hora, titulo)."""
-    return sorted(
-        turnos, key=lambda t: (t["evento_fecha"], t["evento_hora"], t["evento_titulo"])
-    )
-
-
-def _sabado_previo(lunes_iso: str) -> str:
-    """Id del miembro que cubrio el sabado de la semana ANTERIOR a `lunes_iso`.
-
-    Mira los turnos de la semana previa y devuelve el `miembro_id` del turno de sabado
-    (vacio si no hay). Sirve para que la edicion manual del PATCH detecte la repeticion
-    de sabado consecutivo y exija un override explicito.
-    """
-    if not lunes_iso:
-        return ""
-    from datetime import date, timedelta
-
-    try:
-        previo = (date.fromisoformat(lunes_iso) - timedelta(days=7)).isoformat()
-    except ValueError:
-        return ""
-    eventos_por_id = {e["id"]: e for e in repos.listar_eventos_rota()}
-    for turno in repos.listar_turnos_rota(semana=previo):
-        evento = eventos_por_id.get(turno["evento_id"])
-        if evento and dominio.es_sabado(evento["fecha"]):
-            return turno["miembro_id"]
-    return ""
-
-
-def _rota_semana(lunes_iso: str) -> dict[str, Any]:
-    """Construye el payload de la rota de una semana (turnos + eventos + estado)."""
-    eventos_por_id = {e["id"]: e for e in repos.listar_eventos_rota()}
-    nombres = _nombres_equipo()
-    turnos = [
-        _turno_a_dict(t, eventos_por_id, nombres)
-        for t in repos.listar_turnos_rota(semana=lunes_iso)
-    ]
-    turnos = _ordenar_turnos(turnos)
-    inicio, fin = dominio.rango_semana(lunes_iso) if lunes_iso else ("", "")
-    # La semana esta "publicada" cuando TODOS sus turnos estan aprobados (y hay turnos).
-    aprobada = bool(turnos) and all(t["estado"] == "aprobado" for t in turnos)
-    return {
-        "lunes": lunes_iso,
-        "inicio": inicio,
-        "fin": fin,
-        "turnos": turnos,
-        "aprobada": aprobada,
-        "total": len(turnos),
+        "nota_relevo": turno["nota_relevo"],
+        "es_sabado": dominio.es_sabado(turno["fecha"]),
     }
 
 
@@ -382,142 +341,6 @@ async def borrar_evento(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Endpoints: rota de la semana, editar, aprobar                                #
-# --------------------------------------------------------------------------- #
-
-
-async def semana(request: Request) -> Response:
-    """GET /api/rota/semana[?lunes]: la rota de una semana (turnos + estado)."""
-    lunes = _lunes_param(request)
-    return JSONResponse(_rota_semana(lunes))
-
-
-async def actualizar_turno(request: Request) -> Response:
-    """PATCH /api/rota/turnos/{id}: Elias edita una asignacion.
-
-    Permite cambiar el miembro, marcar `override` (cobertura estratégica que rompe la
-    rotación), el motivo y el estado. Si la edición REPITE el sábado de la semana previa
-    SIN override, devuelve 409 pidiendo el override explícito (regla de aceptación).
-    """
-    turno_id = request.path_params["turno_id"]
-    actual = repos.obtener_turno_rota(turno_id)
-    if actual is None:
-        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-
-    datos = await leer_json(request)
-    campos: dict[str, Any] = {}
-
-    nombres = _nombres_equipo()
-    nuevo_miembro = actual["miembro_id"]
-    if "miembro_id" in datos:
-        miembro_id = datos["miembro_id"]
-        if not isinstance(miembro_id, str):
-            return JSONResponse({"error": "miembro_id inválido."}, status_code=400)
-        if miembro_id and miembro_id not in nombres:
-            return JSONResponse(
-                {"error": "Ese miembro no existe en el equipo."}, status_code=400
-            )
-        campos["miembro_id"] = miembro_id
-        campos["miembro_nombre"] = nombres.get(miembro_id, "")
-        nuevo_miembro = miembro_id
-
-    override = bool(datos.get("override", actual["override"]))
-    if "override" in datos:
-        campos["override"] = override
-    if "motivo" in datos and isinstance(datos["motivo"], str):
-        campos["motivo"] = datos["motivo"].strip()
-    if "estado" in datos:
-        estado = datos["estado"]
-        if estado not in ESTADOS_ROTA:
-            validos = " o ".join(f'"{e}"' for e in ESTADOS_ROTA)
-            return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
-        campos["estado"] = estado
-
-    # Regla de aceptación: si este turno es de SÁBADO y la asignación repite a la
-    # persona del sábado de la semana previa SIN override -> exigir override explícito.
-    evento = repos.obtener_evento_rota(actual["evento_id"])
-    if evento and dominio.es_sabado(evento["fecha"]):
-        previo = _sabado_previo(actual["semana"])
-        if dominio.viola_rotacion_sabado(previo, nuevo_miembro, override=override):
-            return JSONResponse(
-                {
-                    "error": (
-                        "Esa persona ya cubrió el sábado anterior. Marca un override "
-                        "explícito si es una cobertura estratégica intencional."
-                    ),
-                    "requiere_override": True,
-                },
-                status_code=409,
-            )
-
-    turno = repos.actualizar_turno_rota(turno_id, campos)
-    if turno is None:
-        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-    eventos_por_id = {e["id"]: e for e in repos.listar_eventos_rota()}
-    return JSONResponse({"turno": _turno_a_dict(turno, eventos_por_id, nombres)})
-
-
-async def aprobar_semana(request: Request) -> Response:
-    """POST /api/rota/semana/aprobar {lunes}: Elias APRUEBA (publica) la semana.
-
-    Solo admin: la frontera dice que Elías aprueba las asignaciones finales antes de
-    publicarlas al equipo. Marca todos los turnos de la semana como `aprobado`.
-    """
-    if not _es_admin(request):
-        return JSONResponse({"error": _MSG_SOLO_ADMIN}, status_code=403)
-    datos = await leer_json(request)
-    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
-    if not lunes:
-        return JSONResponse(
-            {"error": "Indica el lunes de la semana a aprobar (AAAA-MM-DD)."}, status_code=400
-        )
-    n = repos.aprobar_semana_rota(lunes)
-    if n == 0:
-        return JSONResponse(
-            {"error": "No hay turnos en esa semana para aprobar. Asigna la rota primero."},
-            status_code=400,
-        )
-    payload = _rota_semana(lunes)
-    payload["mensaje"] = f"Rota aprobada y publicada al equipo ({n} turnos)."
-    return JSONResponse(payload)
-
-
-# --------------------------------------------------------------------------- #
-# Endpoint: "mi proxima semana"                                                #
-# --------------------------------------------------------------------------- #
-
-
-async def mi_semana(request: Request) -> Response:
-    """GET /api/rota/mi-semana[?lunes]: los turnos del USUARIO actual en esa semana.
-
-    Cada miembro ve su propia semana. Por defecto la semana pedida; si no se entró con
-    sesión (token de mantenimiento), devuelve la semana vacía con un aviso honesto.
-    """
-    lunes = _lunes_param(request)
-    usuario = _usuario_actual(request)
-    base = _rota_semana(lunes)
-    if usuario is None:
-        return JSONResponse(
-            {
-                **base,
-                "miembro_id": "",
-                "miembro_nombre": "",
-                "mis_turnos": [],
-                "aviso": "Inicia sesión para ver tu próxima semana.",
-            }
-        )
-    mios = [t for t in base["turnos"] if t["miembro_id"] == usuario["id"]]
-    return JSONResponse(
-        {
-            **base,
-            "miembro_id": usuario["id"],
-            "miembro_nombre": usuario["usuario"],
-            "mis_turnos": mios,
-        }
-    )
-
-
-# --------------------------------------------------------------------------- #
 # Gestion de turnos: ausencias / vacaciones                                    #
 # --------------------------------------------------------------------------- #
 
@@ -662,36 +485,19 @@ async def borrar_ausencia(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Gestion de turnos: horario de trabajo de la semana                           #
+# Turnos (horario persona×dia×franja): CRUD + lote + duplicar + aprobar         #
 # --------------------------------------------------------------------------- #
-
-
-def _turno_trabajo_a_dict(
-    turno: dict[str, Any], nombres: dict[str, str]
-) -> dict[str, Any]:
-    """Serializa un turno de trabajo (resolviendo el nombre vivo del miembro)."""
-    return {
-        "id": turno["id"],
-        "semana": turno["semana"],
-        "fecha": turno["fecha"],
-        "miembro_id": turno["miembro_id"],
-        "miembro_nombre": nombres.get(
-            turno["miembro_id"], turno.get("miembro_nombre", "")
-        ),
-        "franja": turno["franja"],
-        "estado": turno["estado"],
-        "override": bool(turno["override"]),
-        "motivo": turno["motivo"],
-        "nota_relevo": turno["nota_relevo"],
-        "es_sabado": dominio.es_sabado(turno["fecha"]),
-    }
+#
+# Modelo NUEVO (ola back3): un turno NO esta asociado a un evento. Es el horario que un
+# miembro tiene en (fecha, franja). Pueden existir turnos sin eventos y eventos sin turnos.
+# La cobertura es derivada (ver seccion "cobertura derivada"). Elias asigna a mano.
 
 
 def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
     """Ids que TRABAJARON (no descanso) el sábado de la semana ANTERIOR a `lunes_iso`.
 
     Sirve para que la edicion manual del PATCH detecte la repeticion de sabado de
-    trabajo consecutivo y exija un override explicito.
+    trabajo consecutivo y exija un override explicito (`viola_rotacion_sabado_trabajo`).
     """
     if not lunes_iso:
         return set()
@@ -702,18 +508,32 @@ def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
     except ValueError:
         return set()
     ids: set[str] = set()
-    for turno in repos.listar_turnos_trabajo_rota(semana=previo):
+    for turno in repos.listar_turnos_rota(semana=previo):
         if dominio.es_sabado(turno["fecha"]) and turno["franja"] in FRANJAS_TRABAJO:
             ids.add(turno["miembro_id"])
     return ids
 
 
-def _horario_semana(lunes_iso: str) -> dict[str, Any]:
-    """Construye el payload del horario de una semana (turnos de trabajo + estado)."""
+def _semana_de_turno(lunes_param: str, fecha: str) -> str:
+    """Resuelve la `semana` (lunes ISO) del turno. Prefiere el `lunes_param` si es valido.
+
+    El cliente puede pasar el `lunes` explicitamente (caso comun: viene del calendario y ya
+    sabe la semana); si no, derivamos del lunes que contiene `fecha`. Devuelve "" si nada
+    funciona (la API responde 400 entonces).
+    """
+    if lunes_param:
+        normal = dominio.lunes_de_semana_iso(lunes_param)
+        if normal:
+            return normal
+    return dominio.lunes_de_semana_iso(fecha)
+
+
+def _turnos_semana(lunes_iso: str) -> dict[str, Any]:
+    """Construye el payload de los turnos de una semana."""
     nombres = _nombres_equipo()
     turnos = [
-        _turno_trabajo_a_dict(t, nombres)
-        for t in repos.listar_turnos_trabajo_rota(semana=lunes_iso)
+        _turno_a_dict(t, nombres)
+        for t in repos.listar_turnos_rota(semana=lunes_iso)
     ]
     inicio, fin = dominio.rango_semana(lunes_iso) if lunes_iso else ("", "")
     aprobada = bool(turnos) and all(t["estado"] == "aprobado" for t in turnos)
@@ -728,55 +548,69 @@ def _horario_semana(lunes_iso: str) -> dict[str, Any]:
     }
 
 
-async def horario_semana(request: Request) -> Response:
-    """GET /api/rota/horario[?lunes]: el horario de trabajo de una semana."""
+async def turnos_semana(request: Request) -> Response:
+    """GET /api/rota/turnos[?lunes]: los turnos (horario) de una semana."""
     lunes = _lunes_param(request)
-    return JSONResponse(_horario_semana(lunes))
+    return JSONResponse(_turnos_semana(lunes))
 
 
-async def actualizar_turno_trabajo(request: Request) -> Response:
-    """PATCH /api/rota/horario/turnos/{id}: Elias edita un turno de trabajo.
+def _validar_y_resolver_turno(
+    datos: dict[str, Any],
+    nombres: dict[str, str],
+    *,
+    actual: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], Response | None]:
+    """Helper compartido por POST/PATCH: valida `datos` y devuelve `(campos, error?)`.
 
-    Permite cambiar la franja, el miembro, marcar `override`, el motivo, la nota de relevo
-    y el estado. Si la edición pone a TRABAJAR el sábado a quien trabajó el sábado previo
-    SIN override, devuelve 409 pidiendo el override explícito (regla de aceptación).
+    Si `actual` es un turno existente, los campos no enviados se toman de ahi (PATCH parcial);
+    si es None, exige los obligatorios (POST). En el primer error devuelve el `Response` ya
+    construido. `campos` siempre incluye los keys validados (fecha, miembro_id+nombre, franja,
+    override, motivo, nota_relevo, estado), listos para pasarse a `actualizar_turno_rota` o
+    a `crear_turno_rota` segun la operacion.
     """
-    turno_id = request.path_params["turno_id"]
-    actual = repos.obtener_turno_trabajo_rota(turno_id)
-    if actual is None:
-        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-
-    datos = await leer_json(request)
     campos: dict[str, Any] = {}
-    nombres = _nombres_equipo()
 
-    nuevo_miembro = actual["miembro_id"]
+    if "fecha" in datos:
+        fecha = str(datos["fecha"] or "").strip()
+        if not _fecha_valida(fecha):
+            return campos, JSONResponse(
+                {"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400
+            )
+        campos["fecha"] = fecha
+    elif actual is None:
+        return campos, JSONResponse({"error": "Indica una fecha (AAAA-MM-DD)."}, status_code=400)
+
     if "miembro_id" in datos:
         miembro_id = datos["miembro_id"]
         if not isinstance(miembro_id, str):
-            return JSONResponse({"error": "miembro_id inválido."}, status_code=400)
+            return campos, JSONResponse({"error": "miembro_id inválido."}, status_code=400)
+        miembro_id = miembro_id.strip()
         if miembro_id and miembro_id not in nombres:
-            return JSONResponse(
+            return campos, JSONResponse(
                 {"error": "Ese miembro no existe en el equipo."}, status_code=400
             )
         campos["miembro_id"] = miembro_id
         campos["miembro_nombre"] = nombres.get(miembro_id, "")
-        nuevo_miembro = miembro_id
+    elif actual is None:
+        return campos, JSONResponse(
+            {"error": "Indica el miembro del equipo (`miembro_id`)."}, status_code=400
+        )
 
-    nueva_franja = actual["franja"]
     if "franja" in datos:
         franja = datos["franja"]
         if franja not in FRANJAS_TURNO:
             validos = " o ".join(f'"{f}"' for f in FRANJAS_TURNO)
-            return JSONResponse(
+            return campos, JSONResponse(
                 {"error": f"Franja inválida. Usa {validos}."}, status_code=400
             )
         campos["franja"] = franja
-        nueva_franja = franja
+    elif actual is None:
+        return campos, JSONResponse(
+            {"error": "Indica la franja (matutino/vespertino/descanso)."}, status_code=400
+        )
 
-    override = bool(datos.get("override", actual["override"]))
     if "override" in datos:
-        campos["override"] = override
+        campos["override"] = bool(datos["override"])
     if "motivo" in datos and isinstance(datos["motivo"], str):
         campos["motivo"] = datos["motivo"].strip()
     if "nota_relevo" in datos and isinstance(datos["nota_relevo"], str):
@@ -785,64 +619,494 @@ async def actualizar_turno_trabajo(request: Request) -> Response:
         estado = datos["estado"]
         if estado not in ESTADOS_ROTA:
             validos = " o ".join(f'"{e}"' for e in ESTADOS_ROTA)
-            return JSONResponse(
+            return campos, JSONResponse(
                 {"error": f"Estado inválido. Usa {validos}."}, status_code=400
             )
         campos["estado"] = estado
 
-    # Regla de aceptación: si este turno es de SÁBADO y la edición pone a TRABAJAR a quien
-    # trabajó el sábado previo SIN override -> exigir override explícito.
-    if dominio.es_sabado(actual["fecha"]):
-        previos = _sabados_previos_trabajo(actual["semana"])
-        if dominio.viola_rotacion_sabado_trabajo(
-            previos, nuevo_miembro, override=override, franja=nueva_franja
-        ):
+    return campos, None
+
+
+def _violacion_sabado(
+    fecha: str,
+    semana: str,
+    miembro_id: str,
+    franja: str,
+    *,
+    override: bool,
+) -> Response | None:
+    """Si `(fecha,franja)` cae en sabado de trabajo y repite al miembro del sabado previo sin
+    override, devuelve la respuesta 409 ya construida. Si no aplica, devuelve None.
+    """
+    if not dominio.es_sabado(fecha):
+        return None
+    previos = _sabados_previos_trabajo(semana)
+    if dominio.viola_rotacion_sabado_trabajo(
+        previos, miembro_id, override=override, franja=franja
+    ):
+        return JSONResponse(
+            {
+                "error": (
+                    "Esa persona ya trabajó el sábado anterior. Marca un override "
+                    "explícito si es una cobertura estratégica intencional."
+                ),
+                "requiere_override": True,
+            },
+            status_code=409,
+        )
+    return None
+
+
+def _violacion_ausencia(
+    miembro_id: str, fecha: str, franja: str, *, override: bool
+) -> Response | None:
+    """Si `miembro_id` esta de ausencia ese dia y la franja es de trabajo sin override,
+    devuelve la respuesta 409 (con el dict de la ausencia). Si no aplica, None.
+
+    `descanso` ES legal incluso si la persona esta ausente (no es jornada laboral).
+    """
+    if not miembro_id or franja not in dominio.FRANJAS_TRABAJO or override:
+        return None
+    ausencia = _ausencia_que_cubre(miembro_id, fecha)
+    if ausencia is None:
+        return None
+    return JSONResponse(
+        {
+            "error": (
+                f"Esa persona tiene «{ausencia['tipo']}» del "
+                f"{ausencia['desde']} al {ausencia['hasta']}. Marca un override "
+                "explícito si es una cobertura excepcional."
+            ),
+            "requiere_override": True,
+            "ausencia": ausencia,
+        },
+        status_code=409,
+    )
+
+
+async def crear_turno(request: Request) -> Response:
+    """POST /api/rota/turnos: crea un turno (horario `(fecha, franja)` para un miembro).
+
+    Cuerpo: `{lunes?, fecha, miembro_id, franja, motivo?, nota_relevo?, override?, estado?}`.
+    La `semana` se deriva del `lunes` enviado, o del lunes que contiene `fecha`. Devuelve
+    409 si ya existe un turno para `(miembro_id, fecha, franja)` (el cliente debe editar el
+    existente, no duplicar). Tambien aplica la regla de sabado y la cruzada de ausencias.
+    """
+    datos = await leer_json(request)
+    nombres = _nombres_equipo()
+    campos, err = _validar_y_resolver_turno(datos, nombres, actual=None)
+    if err is not None:
+        return err
+
+    fecha = campos["fecha"]
+    miembro_id = campos["miembro_id"]
+    franja = campos["franja"]
+    override = bool(campos.get("override", False))
+    lunes_param = str(datos.get("lunes", "")).strip()
+    semana = _semana_de_turno(lunes_param, fecha)
+    if not semana:
+        return JSONResponse(
+            {"error": "No se puede derivar la semana de la fecha."}, status_code=400
+        )
+
+    # Unicidad: si ya existe un turno para (miembro, fecha, franja) -> 409 con el id.
+    if miembro_id:
+        existente = repos.existe_turno_para(miembro_id, fecha, franja)
+        if existente is not None:
             return JSONResponse(
                 {
                     "error": (
-                        "Esa persona ya trabajó el sábado anterior. Marca un override "
-                        "explícito si es una cobertura estratégica intencional."
+                        "Ya hay un turno para ese miembro en esa fecha y franja. Edita el "
+                        "existente o duplicalo."
                     ),
-                    "requiere_override": True,
+                    "turno_existente": _turno_a_dict(existente, nombres),
                 },
                 status_code=409,
             )
 
-    # Regla cruzada: una persona AUSENTE (vacaciones/baja...) no puede trabajar ese día.
-    # Si la franja final es de trabajo (no `descanso`) y la fecha cae dentro de una ausencia
-    # registrada para ese miembro, exigir `override` explícito. El caso `descanso` ES legal
-    # incluso si la persona está ausente (un descanso pisado por una ausencia no produce
-    # daño operativo: simplemente NO se publica como turno laboral).
-    if nuevo_miembro and nueva_franja in dominio.FRANJAS_TRABAJO and not override:
-        ausencia = _ausencia_que_cubre(nuevo_miembro, actual["fecha"])
-        if ausencia is not None:
-            return JSONResponse(
-                {
-                    "error": (
-                        f"Esa persona tiene «{ausencia['tipo']}» del "
-                        f"{ausencia['desde']} al {ausencia['hasta']}. Marca un override "
-                        "explícito si es una cobertura excepcional."
-                    ),
-                    "requiere_override": True,
-                    "ausencia": ausencia,
-                },
-                status_code=409,
-            )
+    err = _violacion_sabado(fecha, semana, miembro_id, franja, override=override)
+    if err is not None:
+        return err
+    err = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+    if err is not None:
+        return err
 
-    turno = repos.actualizar_turno_trabajo_rota(turno_id, campos)
+    turno = repos.crear_turno_rota(
+        semana,
+        fecha,
+        miembro_id=miembro_id,
+        miembro_nombre=nombres.get(miembro_id, ""),
+        franja=franja,
+        estado=campos.get("estado", ESTADO_ROTA_PROPUESTO),
+        override=override,
+        motivo=campos.get("motivo", ""),
+        nota_relevo=campos.get("nota_relevo", ""),
+    )
+    return JSONResponse({"turno": _turno_a_dict(turno, nombres)}, status_code=201)
+
+
+async def actualizar_turno(request: Request) -> Response:
+    """PATCH /api/rota/turnos/{id}: edita un turno (franja/miembro/override/motivo/...).
+
+    Si la edicion pone a TRABAJAR el sabado a quien trabajó el sabado previo SIN override,
+    devuelve 409. Si la persona esta de ausencia y la franja es de trabajo sin override, 409.
+    """
+    turno_id = request.path_params["turno_id"]
+    actual = repos.obtener_turno_rota(turno_id)
+    if actual is None:
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    nombres = _nombres_equipo()
+    campos, err = _validar_y_resolver_turno(datos, nombres, actual=actual)
+    if err is not None:
+        return err
+
+    # Resuelve los valores finales (PATCH parcial: defaults desde `actual`).
+    fecha = campos.get("fecha", actual["fecha"])
+    miembro_id = campos.get("miembro_id", actual["miembro_id"])
+    franja = campos.get("franja", actual["franja"])
+    override = bool(campos.get("override", actual["override"]))
+
+    err = _violacion_sabado(fecha, actual["semana"], miembro_id, franja, override=override)
+    if err is not None:
+        return err
+    err = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+    if err is not None:
+        return err
+
+    turno = repos.actualizar_turno_rota(turno_id, campos)
     if turno is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-    return JSONResponse({"turno": _turno_trabajo_a_dict(turno, nombres)})
+    return JSONResponse({"turno": _turno_a_dict(turno, nombres)})
 
 
-async def aprobar_semana_horario(request: Request) -> Response:
-    """POST /api/rota/horario/aprobar {lunes}: Elias APRUEBA (publica) el horario.
+async def borrar_turno(request: Request) -> Response:
+    """DELETE /api/rota/turnos/{id}: borra un turno individual."""
+    turno_id = request.path_params["turno_id"]
+    if not repos.borrar_turno_rota(turno_id):
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Turno eliminado."})
 
-    Solo admin: la frontera dice que Elías aprueba el horario final antes de publicarlo al
-    equipo. Marca todos los turnos de trabajo de la semana como `aprobado`.
+
+async def borrar_turnos_lote(request: Request) -> Response:
+    """POST /api/rota/turnos/lote/borrar {ids}: borra varios turnos a la vez.
+
+    Devuelve `{borrados: N, no_encontrados: [ids]}`. Tolerante con ids inexistentes.
+    """
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
+        return JSONResponse(
+            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
+        )
+    existentes = {t["id"] for t in repos.listar_turnos_rota() if t["id"] in ids}
+    no_encontrados = [i for i in ids if i not in existentes]
+    n = repos.borrar_turnos_rota_lote(list(existentes))
+    return JSONResponse({"borrados": n, "no_encontrados": no_encontrados})
+
+
+async def crear_turnos_lote(request: Request) -> Response:
+    """POST /api/rota/turnos/lote {turnos: [...]}: crea varios turnos en una sola peticion.
+
+    Cuerpo: `{turnos: [{lunes?, fecha, miembro_id, franja, motivo?, nota_relevo?, override?, estado?}, ...]}`.
+    Si ALGUNA entrada falla la validacion (fecha invalida, miembro no existe, franja
+    invalida) o ya existe un turno para `(miembro, fecha, franja)`, devuelve 409 con el
+    indice y el motivo SIN tocar BD. Caso comun: "matutino lun-vie para Luis".
+    """
+    datos = await leer_json(request)
+    entradas = datos.get("turnos")
+    if not isinstance(entradas, list) or not entradas:
+        return JSONResponse(
+            {"error": "Indica al menos un turno (`turnos`)."}, status_code=400
+        )
+    nombres = _nombres_equipo()
+    preparados: list[dict[str, Any]] = []
+    errores: list[dict[str, Any]] = []
+
+    # Pre-indice de turnos ya existentes en BD para detectar choques sin recargar uno a uno.
+    turnos_existentes_por_clave: set[tuple[str, str, str]] = {
+        (t["miembro_id"], t["fecha"], t["franja"]) for t in repos.listar_turnos_rota()
+    }
+    # Tambien evita duplicados DENTRO del propio lote.
+    claves_pendientes: set[tuple[str, str, str]] = set()
+
+    for i, entrada in enumerate(entradas):
+        if not isinstance(entrada, dict):
+            errores.append({"indice": i, "error": "Entrada inválida."})
+            continue
+        campos, err = _validar_y_resolver_turno(entrada, nombres, actual=None)
+        if err is not None:
+            cuerpo = err.body.decode("utf-8") if isinstance(err.body, bytes) else str(err.body)
+            errores.append({"indice": i, "error": cuerpo})
+            continue
+        fecha = campos["fecha"]
+        miembro_id = campos["miembro_id"]
+        franja = campos["franja"]
+        override = bool(campos.get("override", False))
+        lunes_param = str(entrada.get("lunes", "")).strip()
+        semana = _semana_de_turno(lunes_param, fecha)
+        if not semana:
+            errores.append({"indice": i, "error": "No se puede derivar la semana de la fecha."})
+            continue
+        clave = (miembro_id, fecha, franja)
+        if miembro_id and clave in (turnos_existentes_por_clave | claves_pendientes):
+            errores.append(
+                {
+                    "indice": i,
+                    "error": "Ya hay un turno para ese miembro en esa fecha y franja.",
+                    "clave": {"miembro_id": miembro_id, "fecha": fecha, "franja": franja},
+                }
+            )
+            continue
+        # Sabado: regla de rotacion.
+        sab = _violacion_sabado(fecha, semana, miembro_id, franja, override=override)
+        if sab is not None:
+            errores.append(
+                {
+                    "indice": i,
+                    "error": "Esa persona ya trabajó el sábado anterior; usa override.",
+                    "requiere_override": True,
+                }
+            )
+            continue
+        # Ausencia: regla cruzada.
+        aus = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+        if aus is not None:
+            errores.append(
+                {
+                    "indice": i,
+                    "error": "La persona tiene una ausencia ese día; usa override.",
+                    "requiere_override": True,
+                }
+            )
+            continue
+        claves_pendientes.add(clave)
+        preparados.append(
+            {
+                "semana": semana,
+                "fecha": fecha,
+                "miembro_id": miembro_id,
+                "miembro_nombre": nombres.get(miembro_id, ""),
+                "franja": franja,
+                "estado": campos.get("estado", ESTADO_ROTA_PROPUESTO),
+                "override": override,
+                "motivo": campos.get("motivo", ""),
+                "nota_relevo": campos.get("nota_relevo", ""),
+            }
+        )
+
+    if errores:
+        return JSONResponse(
+            {
+                "error": "Hay entradas que no se pueden crear.",
+                "errores": errores,
+                "creados": 0,
+            },
+            status_code=409,
+        )
+
+    creados = repos.crear_turnos_rota_lote(preparados)
+    return JSONResponse(
+        {
+            "creados": len(creados),
+            "turnos": [_turno_a_dict(t, nombres) for t in creados],
+        },
+        status_code=201,
+    )
+
+
+async def actualizar_turnos_lote(request: Request) -> Response:
+    """PATCH /api/rota/turnos/lote: edita en lote varios turnos.
+
+    Cuerpo: `{ids: [...], miembro_id?, franja?, override?: bool, motivo?: str, nota_relevo?: str}`.
+    Si algun turno requiere override (sabado de trabajo consecutivo con el mismo miembro)
+    y no se mando `override:true`, devuelve 409 con la lista de ids problematicos sin tocar
+    BD. `miembro_id=""` vacia la asignacion (alineado con el PATCH 1:1).
+    """
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
+        return JSONResponse(
+            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
+        )
+    nombres = _nombres_equipo()
+    override = bool(datos.get("override", False))
+
+    # Construye los campos a aplicar. `miembro_id` requiere validacion contra el equipo;
+    # franja contra `FRANJAS_TURNO`. Los demas se pasan tal cual.
+    campos: dict[str, Any] = {}
+    miembro_id_final: str | None = None
+    if "miembro_id" in datos:
+        miembro_id = datos["miembro_id"]
+        if not isinstance(miembro_id, str) or (miembro_id and miembro_id not in nombres):
+            return JSONResponse(
+                {"error": "Indica un miembro del equipo válido."}, status_code=400
+            )
+        campos["miembro_id"] = miembro_id
+        campos["miembro_nombre"] = nombres.get(miembro_id, "")
+        miembro_id_final = miembro_id
+    franja_final: str | None = None
+    if "franja" in datos:
+        franja = datos["franja"]
+        if franja not in FRANJAS_TURNO:
+            validos = " o ".join(f'"{f}"' for f in FRANJAS_TURNO)
+            return JSONResponse(
+                {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+            )
+        campos["franja"] = franja
+        franja_final = franja
+    if "override" in datos:
+        campos["override"] = override
+    if "motivo" in datos and isinstance(datos["motivo"], str):
+        campos["motivo"] = datos["motivo"].strip()
+    if "nota_relevo" in datos and isinstance(datos["nota_relevo"], str):
+        campos["nota_relevo"] = datos["nota_relevo"].strip()
+    if not campos:
+        return JSONResponse(
+            {"error": "Indica al menos un campo a editar."}, status_code=400
+        )
+
+    # Carga los turnos pedidos y verifica que todos existan.
+    turnos_objetivo: list[dict[str, Any]] = []
+    for tid in ids:
+        t = repos.obtener_turno_rota(tid)
+        if t is None:
+            return JSONResponse(
+                {"error": f"El turno {tid} ya no existe."}, status_code=404
+            )
+        turnos_objetivo.append(t)
+
+    # Atomico frente a la regla de rotacion: si miembro_id viene en el cambio Y la nueva
+    # franja (o la actual) es de trabajo, comprueba sabados por semana.
+    if miembro_id_final and not override:
+        sabados_previos_por_semana: dict[str, set[str]] = {}
+        ids_que_requieren_override: list[str] = []
+        for t in turnos_objetivo:
+            franja_resultante = franja_final or t["franja"]
+            if not dominio.es_sabado(t["fecha"]):
+                continue
+            semana = t["semana"]
+            if semana not in sabados_previos_por_semana:
+                sabados_previos_por_semana[semana] = _sabados_previos_trabajo(semana)
+            if dominio.viola_rotacion_sabado_trabajo(
+                sabados_previos_por_semana[semana],
+                miembro_id_final,
+                override=False,
+                franja=franja_resultante,
+            ):
+                ids_que_requieren_override.append(t["id"])
+        if ids_que_requieren_override:
+            return JSONResponse(
+                {
+                    "error": (
+                        "Hay turnos de sábado que repetirían la persona del sábado anterior; "
+                        "marca override si es una cobertura estratégica intencional."
+                    ),
+                    "requiere_override": True,
+                    "ids_que_requieren_override": ids_que_requieren_override,
+                },
+                status_code=409,
+            )
+
+    n, turnos = repos.actualizar_turnos_rota_lote(ids, campos)
+    return JSONResponse(
+        {
+            "actualizados": n,
+            "turnos": [_turno_a_dict(t, nombres) for t in turnos],
+        }
+    )
+
+
+async def duplicar_turno(request: Request) -> Response:
+    """POST /api/rota/turnos/{id}/duplicar: clona un turno con overrides opcionales.
+
+    Cuerpo opcional `{fecha?, miembro_id?, franja?}`. Caso comun: copiar el turno del lunes
+    al martes con el mismo miembro y franja. Aplica las mismas reglas que la creacion (sabado,
+    ausencia, choque (miembro, fecha, franja)).
+    """
+    turno_id = request.path_params["turno_id"]
+    original = repos.obtener_turno_rota(turno_id)
+    if original is None:
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+    datos = await leer_json(request) or {}
+    nombres = _nombres_equipo()
+
+    fecha = original["fecha"]
+    if "fecha" in datos:
+        f = str(datos.get("fecha", "")).strip()
+        if not _fecha_valida(f):
+            return JSONResponse(
+                {"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400
+            )
+        fecha = f
+    miembro_id = original["miembro_id"]
+    if "miembro_id" in datos:
+        m = datos["miembro_id"]
+        if not isinstance(m, str) or (m and m not in nombres):
+            return JSONResponse(
+                {"error": "Indica un miembro del equipo válido."}, status_code=400
+            )
+        miembro_id = m
+    franja = original["franja"]
+    if "franja" in datos:
+        f = datos["franja"]
+        if f not in FRANJAS_TURNO:
+            validos = " o ".join(f'"{x}"' for x in FRANJAS_TURNO)
+            return JSONResponse(
+                {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+            )
+        franja = f
+
+    semana = dominio.lunes_de_semana_iso(fecha)
+    if not semana:
+        return JSONResponse(
+            {"error": "No se puede derivar la semana de la fecha."}, status_code=400
+        )
+
+    # Choque (miembro, fecha, franja) -> 409.
+    if miembro_id:
+        existente = repos.existe_turno_para(miembro_id, fecha, franja)
+        if existente is not None:
+            return JSONResponse(
+                {
+                    "error": (
+                        "Ya hay un turno para ese miembro en esa fecha y franja. Edita el "
+                        "existente o cambia uno de los tres campos."
+                    ),
+                    "turno_existente": _turno_a_dict(existente, nombres),
+                },
+                status_code=409,
+            )
+    override = bool(original.get("override", False))
+    err = _violacion_sabado(fecha, semana, miembro_id, franja, override=override)
+    if err is not None:
+        return err
+    err = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+    if err is not None:
+        return err
+
+    clon = repos.duplicar_turno_rota(
+        turno_id,
+        fecha=fecha,
+        miembro_id=miembro_id,
+        miembro_nombre=nombres.get(miembro_id, ""),
+        franja=franja,
+        semana=semana,
+    )
+    if clon is None:
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+    return JSONResponse({"turno": _turno_a_dict(clon, nombres)}, status_code=201)
+
+
+async def aprobar_turnos(request: Request) -> Response:
+    """POST /api/rota/turnos/aprobar {lunes}: Elias APRUEBA (publica) los turnos al equipo.
+
+    Solo admin: la frontera dice que Elias aprueba los turnos finales antes de publicarlos
+    al equipo. Marca todos los turnos de la semana como `aprobado`.
     """
     if not _es_admin(request):
-        return JSONResponse({"error": _MSG_SOLO_ADMIN_HORARIO}, status_code=403)
+        return JSONResponse({"error": _MSG_SOLO_ADMIN}, status_code=403)
     datos = await leer_json(request)
     lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
     if not lunes:
@@ -850,26 +1114,22 @@ async def aprobar_semana_horario(request: Request) -> Response:
             {"error": "Indica el lunes de la semana a aprobar (AAAA-MM-DD)."},
             status_code=400,
         )
-    n = repos.aprobar_semana_horario_rota(lunes)
+    n = repos.aprobar_semana_rota(lunes)
     if n == 0:
         return JSONResponse(
-            {"error": "No hay horario en esa semana para aprobar. Asigna el horario primero."},
+            {"error": "No hay turnos en esa semana para aprobar. Asigna los turnos primero."},
             status_code=400,
         )
-    payload = _horario_semana(lunes)
-    payload["mensaje"] = f"Horario aprobado y publicado al equipo ({n} turnos)."
+    payload = _turnos_semana(lunes)
+    payload["mensaje"] = f"Turnos aprobados y publicados al equipo ({n} turnos)."
     return JSONResponse(payload)
 
 
-async def mi_horario(request: Request) -> Response:
-    """GET /api/rota/mi-horario[?lunes]: los turnos de trabajo del USUARIO actual.
-
-    Cada miembro ve su propio horario. Si no se entró con sesión (token de mantenimiento),
-    devuelve la semana vacía con un aviso honesto.
-    """
+async def mis_turnos(request: Request) -> Response:
+    """GET /api/rota/mis-turnos[?lunes]: los turnos del USUARIO actual en esa semana."""
     lunes = _lunes_param(request)
     usuario = _usuario_actual(request)
-    base = _horario_semana(lunes)
+    base = _turnos_semana(lunes)
     if usuario is None:
         return JSONResponse(
             {
@@ -877,7 +1137,7 @@ async def mi_horario(request: Request) -> Response:
                 "miembro_id": "",
                 "miembro_nombre": "",
                 "mis_turnos": [],
-                "aviso": "Inicia sesión para ver tu próximo horario.",
+                "aviso": "Inicia sesión para ver tus próximos turnos.",
             }
         )
     mios = [t for t in base["turnos"] if t["miembro_id"] == usuario["id"]]
@@ -892,236 +1152,110 @@ async def mi_horario(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Asignacion flexible: por franja, por lote, copia de semana, carga del equipo  #
+# Cobertura DERIVADA: para un evento, quien lo cubre via turnos en su franja+fecha #
 # --------------------------------------------------------------------------- #
 #
-# Elias y su equipo asignan la rota a MANO (no hay reparto automatico). Aqui viven los
-# atajos que evitan el dolor del "uno a uno": asignar de golpe por franja (sabado-tarde
-# -> Tescu), edicion masiva (multi-select), filtros por miembro, copia de la semana
-# anterior y panel de carga por persona.
+# NO persistida. Cada llamada cruza eventos x turnos x franjas vigentes. Si hay turnos sin
+# evento o eventos sin turno, la vista lo refleja sin error.
 
 
-async def asignar_franja(request: Request) -> Response:
-    """POST /api/rota/cobertura/asignar-franja: asigna de golpe los eventos de una franja.
+def _cobertura_para_evento(
+    evento: dict[str, Any],
+    turnos: list[dict[str, Any]],
+    nombres: dict[str, str],
+    franjas_cfg: dict[str, str],
+) -> dict[str, Any]:
+    """Calcula la cobertura derivada de UN evento usando `dominio.cobertura_de_evento`."""
+    cubridores = dominio.cobertura_de_evento(
+        evento,
+        turnos,
+        matutino_inicio=franjas_cfg["matutino_inicio"],
+        matutino_fin=franjas_cfg["matutino_fin"],
+        vespertino_inicio=franjas_cfg["vespertino_inicio"],
+        vespertino_fin=franjas_cfg["vespertino_fin"],
+    )
+    return {
+        **_evento_a_dict(evento),
+        "cobertura": [
+            {
+                "turno_id": t["id"],
+                "miembro_id": t["miembro_id"],
+                "miembro_nombre": nombres.get(
+                    t["miembro_id"], t.get("miembro_nombre", "")
+                ),
+                "franja": t["franja"],
+                "override": bool(t.get("override", False)),
+            }
+            for t in cubridores
+        ],
+    }
 
-    Cuerpo: `{lunes, fecha, franja, miembro_id, sobreescribir, override?}`. Filtra los
-    eventos del dia que caen en la franja (por `mapear_franja(evento.hora)`) y que NO son
-    `no_cubrir`, y a cada uno le pega el miembro indicado. Si el evento aun no tenia turno
-    en la semana, lo crea; si ya tenia miembro y `sobreescribir=false`, salta. La regla de
-    rotacion de sabados se respeta: si la asignacion repite al miembro del sabado previo
-    sin override, el turno NO se actualiza y entra en `conflictos`.
+
+async def cobertura_semana(request: Request) -> Response:
+    """GET /api/rota/cobertura[?lunes]: cobertura derivada de los eventos de la semana.
+
+    Devuelve `{lunes, eventos: [{...evento, cobertura: [{miembro_id, miembro_nombre, franja,
+    turno_id, override}, ...]}]}`. NO persiste nada; cruza turnos x eventos x franjas
+    vigentes. Sin `lunes` valido -> 400.
     """
-    datos = await leer_json(request)
-    lunes = dominio.lunes_de_semana_iso(str(datos.get("lunes", "")).strip())
-    fecha = str(datos.get("fecha", "")).strip()
-    franja = str(datos.get("franja", "")).strip()
-    miembro_id = datos.get("miembro_id")
-    sobreescribir = bool(datos.get("sobreescribir", False))
-    override = bool(datos.get("override", False))
-
+    lunes = _lunes_param(request)
     if not lunes:
         return JSONResponse(
             {"error": "Indica el lunes de la semana (AAAA-MM-DD)."}, status_code=400
         )
-    if dominio.lunes_de_semana_iso(fecha) != lunes:
-        return JSONResponse(
-            {"error": "La fecha no cae dentro de la semana indicada."}, status_code=400
-        )
-    if franja not in dominio.FRANJAS:
-        validos = " o ".join(f'"{f}"' for f in dominio.FRANJAS)
-        return JSONResponse(
-            {"error": f"Franja inválida. Usa {validos}."}, status_code=400
-        )
-    if franja == "descanso":
-        return JSONResponse(
-            {"error": "No se puede asignar cobertura a la franja de descanso."},
-            status_code=400,
-        )
+    inicio, fin = dominio.rango_semana(lunes)
+    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
+    # Filtra los `no_cubrir` por defecto (no se cubren por convencion editorial).
+    eventos = [e for e in eventos if (e.get("tipo_cobertura") or "transmision") != TIPO_COBERTURA_NO_CUBRIR]
+    turnos = repos.listar_turnos_rota(semana=lunes)
     nombres = _nombres_equipo()
-    if not isinstance(miembro_id, str) or miembro_id not in nombres:
-        return JSONResponse(
-            {"error": "Indica un miembro del equipo válido."}, status_code=400
-        )
-
-    # Eventos del día que TOCA cubrir y caen en la franja indicada.
-    eventos_dia = [
-        e
-        for e in repos.listar_eventos_rota()
-        if e["fecha"] == fecha and e.get("tipo_cobertura") != TIPO_COBERTURA_NO_CUBRIR
-    ]
-    # Franjas configurables (#185): usamos los rangos vigentes de la BD para clasificar
-    # los eventos por su hora. Si el admin no las ha tocado, son los defaults (08-16, 16-24).
     franjas_cfg = repos.obtener_franjas_config()
-    candidatos: list[dict[str, Any]] = []
-    sin_hora: list[dict[str, Any]] = []
-    for e in eventos_dia:
-        try:
-            franja_evento = dominio.mapear_franja(
-                e.get("hora", ""),
-                matutino_inicio=franjas_cfg["matutino_inicio"],
-                matutino_fin=franjas_cfg["matutino_fin"],
-                vespertino_inicio=franjas_cfg["vespertino_inicio"],
-                vespertino_fin=franjas_cfg["vespertino_fin"],
-            )
-        except ValueError:
-            sin_hora.append(e)
-            continue
-        if franja_evento == franja:
-            candidatos.append(e)
-
-    # Turnos existentes de la semana, indexados por evento_id (un turno por evento).
-    turnos_semana = repos.listar_turnos_rota(semana=lunes)
-    turno_por_evento = {t["evento_id"]: t for t in turnos_semana}
-    sabado_previo_id = _sabado_previo(lunes)
-
-    actualizados = 0
-    saltados = 0
-    conflictos: list[dict[str, Any]] = []
-    for ev in candidatos:
-        turno = turno_por_evento.get(ev["id"])
-        if turno is None:
-            # No habia turno para este evento: lo creamos (vacio) y seguimos para asignarlo.
-            turno = repos.crear_turno_rota(lunes, ev["id"])
-        if turno["miembro_id"] and not sobreescribir:
-            saltados += 1
-            continue
-        # Regla de rotacion: si es sabado y repite al del sabado previo sin override -> conflicto.
-        if dominio.es_sabado(ev["fecha"]) and dominio.viola_rotacion_sabado(
-            sabado_previo_id, miembro_id, override=override
-        ):
-            conflictos.append(
-                {
-                    "turno_id": turno["id"],
-                    "evento_titulo": ev.get("titulo", ""),
-                    "motivo": (
-                        "Esa persona ya cubrió el sábado anterior; marca override si "
-                        "es una cobertura estratégica intencional."
-                    ),
-                }
-            )
-            continue
-        repos.actualizar_turno_rota(
-            turno["id"],
-            {
-                "miembro_id": miembro_id,
-                "miembro_nombre": nombres.get(miembro_id, ""),
-                "override": override,
-                "motivo": str(datos.get("motivo", "")).strip(),
-            },
-        )
-        actualizados += 1
-
-    # Devolvemos contadores + contexto util para el toast (#185):
-    #   - `total_eventos`: cuantos eventos hay ese dia (antes de filtrar por franja).
-    #   - `sin_hora`: cuantos eventos del dia no tienen hora valida (no entran en ninguna franja).
-    #   - `franjas_config`: rangos vigentes (para el front mostrar "matutino 08-16, vespertino 16-24").
     return JSONResponse(
         {
-            "actualizados": actualizados,
-            "saltados": saltados,
-            "conflictos": conflictos,
-            "total_eventos": len(eventos_dia),
-            "candidatos": len(candidatos),
-            "sin_hora": len(sin_hora),
+            "lunes": lunes,
+            "inicio": inicio,
+            "fin": fin,
+            "franjas_config": franjas_cfg,
+            "eventos": [
+                _cobertura_para_evento(e, turnos, nombres, franjas_cfg) for e in eventos
+            ],
+        }
+    )
+
+
+async def cobertura_evento(request: Request) -> Response:
+    """GET /api/rota/cobertura/evento/{evento_id}: cobertura derivada de UN evento."""
+    evento_id = request.path_params["evento_id"]
+    evento = repos.obtener_evento_rota(evento_id)
+    if evento is None:
+        return JSONResponse({"error": "El evento no existe."}, status_code=404)
+    semana = dominio.lunes_de_semana_iso(evento.get("fecha", ""))
+    turnos = repos.listar_turnos_rota(semana=semana) if semana else []
+    nombres = _nombres_equipo()
+    franjas_cfg = repos.obtener_franjas_config()
+    return JSONResponse(
+        {
+            "evento": _cobertura_para_evento(evento, turnos, nombres, franjas_cfg),
             "franjas_config": franjas_cfg,
         }
     )
 
 
-async def actualizar_turnos_lote(request: Request) -> Response:
-    """PATCH /api/rota/turnos/lote: asigna en lote varios turnos a la misma persona.
-
-    Cuerpo: `{ids: [turno_id...], miembro_id, override?: bool, motivo?: str}`. Atomico
-    frente a la regla de rotacion: si algun turno requiere override (sabado consecutivo
-    con el mismo miembro) y NO se mando `override:true`, devuelve 409 con la lista de
-    ids problematicos y no toca nada. Si todo encaja, dispara un UPDATE masivo.
-    """
-    datos = await leer_json(request)
-    ids = datos.get("ids")
-    miembro_id = datos.get("miembro_id")
-    override = bool(datos.get("override", False))
-    motivo = str(datos.get("motivo", "")).strip()
-
-    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
-        return JSONResponse(
-            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
-        )
-    nombres = _nombres_equipo()
-    # `miembro_id=""` significa "QUITAR asignación" (alineado con el PATCH 1:1).
-    if not isinstance(miembro_id, str) or (miembro_id and miembro_id not in nombres):
-        return JSONResponse(
-            {"error": "Indica un miembro del equipo válido."}, status_code=400
-        )
-
-    # Carga los turnos pedidos y verifica que todos existan.
-    turnos_objetivo: list[dict[str, Any]] = []
-    for tid in ids:
-        t = repos.obtener_turno_rota(tid)
-        if t is None:
-            return JSONResponse(
-                {"error": f"El turno {tid} ya no existe."}, status_code=404
-            )
-        turnos_objetivo.append(t)
-
-    # Mapea cada turno a su evento (para saber si cae en sabado) y precomputa los sabados
-    # previos por semana (puede haber turnos de varias semanas en el mismo lote).
-    eventos_por_id = {e["id"]: e for e in repos.listar_eventos_rota()}
-    sabados_previos_por_semana: dict[str, str] = {}
-    ids_que_requieren_override: list[str] = []
-    for t in turnos_objetivo:
-        ev = eventos_por_id.get(t["evento_id"])
-        if ev is None or not dominio.es_sabado(ev.get("fecha", "")):
-            continue
-        semana = t["semana"]
-        if semana not in sabados_previos_por_semana:
-            sabados_previos_por_semana[semana] = _sabado_previo(semana)
-        if dominio.viola_rotacion_sabado(
-            sabados_previos_por_semana[semana], miembro_id, override=override
-        ):
-            ids_que_requieren_override.append(t["id"])
-
-    if ids_que_requieren_override:
-        return JSONResponse(
-            {
-                "error": (
-                    "Hay turnos de sábado que repetirían la persona del sábado anterior; "
-                    "marca override si es una cobertura estratégica intencional."
-                ),
-                "requiere_override": True,
-                "ids_que_requieren_override": ids_que_requieren_override,
-            },
-            status_code=409,
-        )
-
-    n, turnos = repos.actualizar_turnos_rota_lote(
-        ids,
-        {
-            "miembro_id": miembro_id,
-            "miembro_nombre": nombres.get(miembro_id, ""),
-            "override": override,
-            "motivo": motivo,
-        },
-    )
-    return JSONResponse(
-        {
-            "actualizados": n,
-            "turnos": [_turno_a_dict(t, eventos_por_id, nombres) for t in turnos],
-        }
-    )
+# --------------------------------------------------------------------------- #
+# Copia de semana + panel de carga                                              #
+# --------------------------------------------------------------------------- #
 
 
 async def copiar_semana(request: Request) -> Response:
-    """POST /api/rota/copiar-semana: replica horario (y, simbolicamente, cobertura) de otra semana.
+    """POST /api/rota/copiar-semana: replica los turnos de una semana a otra (offset +N dias).
 
-    Cuerpo: `{de_lunes, a_lunes, alcance, reemplazar?: bool}`. `alcance` puede ser
-    `"cobertura"`, `"horario"` o `"ambos"`. Para `cobertura` no toca BD y devuelve un
-    mensaje explicativo (la cobertura depende de los eventos de cada semana). Para
-    `horario`, copia las filas de `rota_turnos_trabajo` con offset +7 dias.
+    Cuerpo: `{de_lunes, a_lunes, reemplazar?: bool}`. NO copia eventos (cada semana tiene los
+    suyos); copia EXCLUSIVAMENTE turnos del horario. Con `reemplazar=true`, primero borra los
+    turnos existentes de `a_lunes`. Devuelve `{copiados: N}`.
     """
     datos = await leer_json(request)
     de_lunes = dominio.lunes_de_semana_iso(str(datos.get("de_lunes", "")).strip())
     a_lunes = dominio.lunes_de_semana_iso(str(datos.get("a_lunes", "")).strip())
-    alcance = str(datos.get("alcance", "")).strip().lower()
     reemplazar = bool(datos.get("reemplazar", False))
 
     if not de_lunes or not a_lunes:
@@ -1133,32 +1267,17 @@ async def copiar_semana(request: Request) -> Response:
             {"error": "La semana origen y la destino no pueden ser la misma."},
             status_code=400,
         )
-    if alcance not in ("cobertura", "horario", "ambos"):
-        return JSONResponse(
-            {"error": 'Alcance inválido. Usa "cobertura", "horario" o "ambos".'},
-            status_code=400,
-        )
 
-    if alcance == "cobertura":
-        _, mensaje = repos.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
-        return JSONResponse({"copiados": 0, "mensaje": mensaje})
-    if alcance == "horario":
-        n = repos.copiar_turnos_trabajo_rota(de_lunes, a_lunes, reemplazar=reemplazar)
-        return JSONResponse({"copiados": n})
-    # ambos
-    _, mensaje = repos.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
-    n = repos.copiar_turnos_trabajo_rota(de_lunes, a_lunes, reemplazar=reemplazar)
-    return JSONResponse(
-        {"copiados_cobertura": 0, "copiados_horario": n, "mensaje": mensaje}
-    )
+    n = repos.copiar_turnos_rota(de_lunes, a_lunes, reemplazar=reemplazar)
+    return JSONResponse({"copiados": n})
 
 
 async def carga_semana(request: Request) -> Response:
     """GET /api/rota/carga?lunes=AAAA-MM-DD: panel de carga por miembro.
 
-    Devuelve `{miembros: [...]}` con el resumen de carga (eventos cubiertos, dias
-    trabajados, si toca sabado, descansos) ordenado por el mas cargado primero. Datos
-    puros del dominio (`dominio.resumen_carga`).
+    Devuelve `{miembros: [...]}` con el resumen de carga: eventos cubiertos (DERIVADO de
+    turnos × eventos), dias trabajados, si toca sabado, descansos. Ordenado por el mas
+    cargado primero. Datos puros del dominio (`dominio.resumen_carga`).
     """
     lunes = _lunes_param(request)
     if not lunes:
@@ -1166,10 +1285,19 @@ async def carga_semana(request: Request) -> Response:
             {"error": "Indica el lunes de la semana (AAAA-MM-DD)."}, status_code=400
         )
     equipo = _equipo()
-    turnos_cobertura = repos.listar_turnos_rota(semana=lunes)
-    turnos_trabajo = repos.listar_turnos_trabajo_rota(semana=lunes)
-    fechas_eventos = {e["id"]: e["fecha"] for e in repos.listar_eventos_rota()}
-    cargas = dominio.resumen_carga(equipo, turnos_cobertura, turnos_trabajo, fechas_eventos)
+    turnos = repos.listar_turnos_rota(semana=lunes)
+    inicio, fin = dominio.rango_semana(lunes)
+    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
+    franjas_cfg = repos.obtener_franjas_config()
+    cargas = dominio.resumen_carga(
+        equipo,
+        turnos,
+        eventos,
+        matutino_inicio=franjas_cfg["matutino_inicio"],
+        matutino_fin=franjas_cfg["matutino_fin"],
+        vespertino_inicio=franjas_cfg["vespertino_inicio"],
+        vespertino_fin=franjas_cfg["vespertino_fin"],
+    )
     return JSONResponse(
         {
             "lunes": lunes,
@@ -1198,31 +1326,67 @@ _DIAS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domin
 
 
 def _filas_export(lunes_iso: str) -> tuple[list[str], list[list[str]]]:
-    """Devuelve `(titulo, filas)` de la rota de la semana, lista para xlsx/CSV."""
-    rota = _rota_semana(lunes_iso)
-    filas: list[list[str]] = []
-    for t in rota["turnos"]:
-        fecha = t["evento_fecha"]
-        dia = ""
-        from datetime import date
+    """Devuelve `(titulo, filas)` de la cobertura DERIVADA de la semana, lista para xlsx/CSV.
 
+    Una fila por (evento, miembro cubridor). Eventos sin cubridores aparecen con `Persona`
+    vacia (Elias detecta huecos al exportar). Cobertura DERIVADA: cruza eventos × turnos ×
+    franjas vigentes (`mapear_franja`).
+    """
+    if not lunes_iso:
+        return "Rota", []
+    inicio, fin = dominio.rango_semana(lunes_iso)
+    eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
+    eventos = [
+        e for e in eventos
+        if (e.get("tipo_cobertura") or "transmision") != TIPO_COBERTURA_NO_CUBRIR
+    ]
+    turnos = repos.listar_turnos_rota(semana=lunes_iso)
+    nombres = _nombres_equipo()
+    franjas_cfg = repos.obtener_franjas_config()
+    filas: list[list[str]] = []
+    from datetime import date as _date
+
+    for e in eventos:
+        fecha = e.get("fecha", "") or ""
         try:
-            dia = _DIAS[date.fromisoformat(fecha).weekday()] if fecha else ""
+            dia = _DIAS[_date.fromisoformat(fecha).weekday()] if fecha else ""
         except ValueError:
             dia = ""
-        override = " (override)" if t["override"] else ""
-        filas.append(
-            [
-                fecha,
-                dia,
-                t["evento_hora"],
-                t["evento_titulo"],
-                t["contenido"],
-                t["miembro_nombre"],
-                f"{t['estado']}{override}",
-            ]
+        cubridores = dominio.cobertura_de_evento(
+            e,
+            turnos,
+            matutino_inicio=franjas_cfg["matutino_inicio"],
+            matutino_fin=franjas_cfg["matutino_fin"],
+            vespertino_inicio=franjas_cfg["vespertino_inicio"],
+            vespertino_fin=franjas_cfg["vespertino_fin"],
         )
-    titulo = f"Rota {rota['inicio']} a {rota['fin']}" if rota["inicio"] else "Rota"
+        if not cubridores:
+            filas.append(
+                [
+                    fecha,
+                    dia,
+                    e.get("hora", "") or "",
+                    e.get("titulo", "") or "",
+                    e.get("contenido", "") or "",
+                    "",  # sin cubridor
+                    "sin cubrir",
+                ]
+            )
+            continue
+        for t in cubridores:
+            override = " (override)" if t.get("override") else ""
+            filas.append(
+                [
+                    fecha,
+                    dia,
+                    e.get("hora", "") or "",
+                    e.get("titulo", "") or "",
+                    e.get("contenido", "") or "",
+                    nombres.get(t["miembro_id"], t.get("miembro_nombre", "")),
+                    f"{t['estado']}{override}",
+                ]
+            )
+    titulo = f"Rota {inicio} a {fin}" if inicio else "Rota"
     return titulo, filas
 
 
@@ -1244,15 +1408,15 @@ def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
 
     Cabeceras = ["Persona", Lun..Dom]; cada fila es un miembro con su franja por día
     (Mañana/Tarde/Descanso, "Ausente" si una ausencia cubre ese día, "—" si no hay turno).
-    Reutiliza `_horario_semana` y las ausencias para marcar la indisponibilidad.
+    Reutiliza `_turnos_semana` y las ausencias para marcar la indisponibilidad.
     """
-    horario = _horario_semana(lunes_iso)
-    dias = horario["dias"]
+    turnos_payload = _turnos_semana(lunes_iso)
+    dias = turnos_payload["dias"]
     equipo = _equipo()
     ausencias = _ausencias_dominio()
     # Indexa el turno por (miembro, fecha) para llenar el grid.
     por_celda: dict[tuple[str, str], dict[str, Any]] = {
-        (t["miembro_id"], t["fecha"]): t for t in horario["turnos"]
+        (t["miembro_id"], t["fecha"]): t for t in turnos_payload["turnos"]
     }
     cabeceras = ["Persona", *(_DIAS[i] for i in range(len(dias)))]
     filas: list[list[str]] = []
@@ -1272,8 +1436,8 @@ def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
                 fila.append(etiqueta)
         filas.append(fila)
     titulo = (
-        f"Horario equipo {horario['inicio']} a {horario['fin']}"
-        if horario["inicio"]
+        f"Horario equipo {turnos_payload['inicio']} a {turnos_payload['fin']}"
+        if turnos_payload["inicio"]
         else "Horario equipo"
     )
     return titulo, cabeceras, filas
@@ -1691,16 +1855,12 @@ def _swap_a_dict(swap: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any
     }
 
 
-def _existe_turno_trabajo(miembro_id: str, fecha: str, franja: str) -> bool:
-    """True si EXISTE una fila en `rota_turnos_trabajo` con esos (miembro, fecha, franja)."""
-    for t in repos.listar_turnos_trabajo_rota():
-        if (
-            t["miembro_id"] == miembro_id
-            and t["fecha"] == fecha
-            and t["franja"] == franja
-        ):
-            return True
-    return False
+def _existe_turno(miembro_id: str, fecha: str, franja: str) -> bool:
+    """True si EXISTE un turno en `rota_turnos` con `(miembro_id, fecha, franja)`.
+
+    Delega en `repos.existe_turno_para` (un solo SELECT directo en BD).
+    """
+    return repos.existe_turno_para(miembro_id, fecha, franja) is not None
 
 
 def _mio_param(request: Request) -> bool:
@@ -1796,7 +1956,7 @@ async def crear_swap(request: Request) -> Response:
         )
 
     # Los turnos DEBEN existir en el horario: si no, no hay nada que cambiar.
-    if not _existe_turno_trabajo(usuario["id"], fecha_a, franja_a):
+    if not _existe_turno(usuario["id"], fecha_a, franja_a):
         return JSONResponse(
             {
                 "error": (
@@ -1806,7 +1966,7 @@ async def crear_swap(request: Request) -> Response:
             },
             status_code=400,
         )
-    if not _existe_turno_trabajo(destinatario_id, fecha_b, franja_b):
+    if not _existe_turno(destinatario_id, fecha_b, franja_b):
         return JSONResponse(
             {
                 "error": (
@@ -2040,113 +2200,6 @@ def _ahora_iso() -> str:
     from datetime import datetime
 
     return datetime.now().isoformat(timespec="seconds")
-
-
-# --------------------------------------------------------------------------- #
-# Turnos (cobertura): POST directo, DELETE individual y borrado en lote        #
-# --------------------------------------------------------------------------- #
-#
-# El PATCH ya existia; faltaba (1) crear un turno para un evento existente sin pasar por la
-# semana entera, (2) borrar UN turno suelto (sin borrar el evento), y (3) borrar en lote.
-# DECISION DE NEGOCIO: borrar un turno APROBADO NO se bloquea (Elias necesita poder
-# rectificar la rota publicada); el front se encarga de advertir antes de mandar el DELETE.
-
-
-async def crear_turno(request: Request) -> Response:
-    """POST /api/rota/turnos: crea un turno de cobertura para un evento existente.
-
-    Cuerpo: `{evento_id, miembro_id?, override?, motivo?, estado?}`. La `semana` se DERIVA
-    del lunes que contiene `evento.fecha` (no se pide al cliente: una vez tengo el evento,
-    su semana es única). `miembro_id` puede ser "" (turno vacío, sin asignar). Si la
-    asignación viola la rotación de sábados sin override, 409 con `requiere_override`.
-    """
-    datos = await leer_json(request)
-    evento_id = str(datos.get("evento_id", "")).strip()
-    if not evento_id:
-        return JSONResponse({"error": "Indica el evento a cubrir."}, status_code=400)
-    evento = repos.obtener_evento_rota(evento_id)
-    if evento is None:
-        return JSONResponse({"error": "Ese evento no existe."}, status_code=400)
-    semana = dominio.lunes_de_semana_iso(evento.get("fecha", ""))
-    if not semana:
-        return JSONResponse(
-            {"error": "El evento no tiene fecha válida; ajústala antes de asignarlo."},
-            status_code=400,
-        )
-    nombres = _nombres_equipo()
-    miembro_id = datos.get("miembro_id", "")
-    if not isinstance(miembro_id, str):
-        return JSONResponse({"error": "miembro_id inválido."}, status_code=400)
-    miembro_id = miembro_id.strip()
-    if miembro_id and miembro_id not in nombres:
-        return JSONResponse(
-            {"error": "Ese miembro no existe en el equipo."}, status_code=400
-        )
-    override = bool(datos.get("override", False))
-    motivo = str(datos.get("motivo", "")).strip()
-    estado = datos.get("estado")
-    if estado is not None and estado not in ESTADOS_ROTA:
-        validos = " o ".join(f'"{e}"' for e in ESTADOS_ROTA)
-        return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
-    # Regla rotacion sabado (igual que PATCH/lote): si el evento es sabado y la asignacion
-    # repite al miembro del sabado previo sin override -> 409 antes de tocar BD.
-    if miembro_id and dominio.es_sabado(evento["fecha"]):
-        previo = _sabado_previo(semana)
-        if dominio.viola_rotacion_sabado(previo, miembro_id, override=override):
-            return JSONResponse(
-                {
-                    "error": (
-                        "Esa persona ya cubrió el sábado anterior. Marca un override "
-                        "explícito si es una cobertura estratégica intencional."
-                    ),
-                    "requiere_override": True,
-                },
-                status_code=409,
-            )
-    turno = repos.crear_turno_rota(
-        semana,
-        evento_id,
-        miembro_id=miembro_id,
-        miembro_nombre=nombres.get(miembro_id, "") if miembro_id else "",
-        estado=estado or ESTADO_ROTA_PROPUESTO,
-        override=override,
-        motivo=motivo,
-    )
-    eventos_por_id = {evento["id"]: evento}
-    return JSONResponse(
-        {"turno": _turno_a_dict(turno, eventos_por_id, nombres)}, status_code=201
-    )
-
-
-async def borrar_turno(request: Request) -> Response:
-    """DELETE /api/rota/turnos/{id}: borra UN turno de cobertura (sin tocar el evento).
-
-    DECISION: borrar un turno APROBADO se permite (Elías necesita poder rectificar tras
-    publicar). El front advierte antes de mandar el DELETE.
-    """
-    turno_id = request.path_params["turno_id"]
-    if not repos.borrar_turno_rota(turno_id):
-        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-    return JSONResponse({"mensaje": "Turno eliminado."})
-
-
-async def borrar_turnos_lote(request: Request) -> Response:
-    """POST /api/rota/turnos/lote/borrar: borra varios turnos de cobertura a la vez.
-
-    Cuerpo: `{ids: [turno_id, ...]}`. Devuelve `{borrados: N, no_encontrados: [ids]}`. Es
-    tolerante: si algun id no existe, no falla; lo lista en `no_encontrados`. Atomicidad
-    no es critica (los DELETE individuales no chocan entre si).
-    """
-    datos = await leer_json(request)
-    ids = datos.get("ids")
-    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
-        return JSONResponse(
-            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
-        )
-    existentes = {t["id"] for t in repos.listar_turnos_rota() if t["id"] in ids}
-    no_encontrados = [i for i in ids if i not in existentes]
-    n = repos.borrar_turnos_rota_lote(list(existentes))
-    return JSONResponse({"borrados": n, "no_encontrados": no_encontrados})
 
 
 # --------------------------------------------------------------------------- #
@@ -2526,37 +2579,37 @@ async def guardar_config_franjas(request: Request) -> Response:
 
 RUTAS = [
     Route("/api/rota/equipo", equipo, methods=["GET"]),
+    # Eventos / transmisiones.
     Route("/api/rota/eventos", listar_eventos, methods=["GET"]),
     Route("/api/rota/eventos", crear_evento, methods=["POST"]),
     Route("/api/rota/eventos/{evento_id}", actualizar_evento, methods=["PATCH"]),
     Route("/api/rota/eventos/{evento_id}", borrar_evento, methods=["DELETE"]),
-    # Duplicar evento (con sus campos editoriales; sin turnos, `cambiado` reset).
     Route("/api/rota/eventos/{evento_id}/duplicar", duplicar_evento, methods=["POST"]),
-    Route("/api/rota/semana", semana, methods=["GET"]),
-    # OJO: las rutas de lote DEBEN ir ANTES que las paramétricas `{turno_id}`, si no
-    # Starlette captura "lote"/"lote/borrar" como id de turno y devuelve 404 o 405.
+    # Turnos (horario persona×dia×franja). OJO: las rutas de lote DEBEN ir ANTES que las
+    # paramétricas `{turno_id}`, si no Starlette captura "lote"/"lote/borrar"/"aprobar" como
+    # id de turno y devuelve 404/405.
+    Route("/api/rota/turnos/lote", crear_turnos_lote, methods=["POST"]),
     Route("/api/rota/turnos/lote", actualizar_turnos_lote, methods=["PATCH"]),
     Route("/api/rota/turnos/lote/borrar", borrar_turnos_lote, methods=["POST"]),
+    Route("/api/rota/turnos/aprobar", aprobar_turnos, methods=["POST"]),
+    Route("/api/rota/turnos", turnos_semana, methods=["GET"]),
     Route("/api/rota/turnos", crear_turno, methods=["POST"]),
+    Route("/api/rota/turnos/{turno_id}/duplicar", duplicar_turno, methods=["POST"]),
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
     Route("/api/rota/turnos/{turno_id}", borrar_turno, methods=["DELETE"]),
-    Route("/api/rota/semana/aprobar", aprobar_semana, methods=["POST"]),
-    Route("/api/rota/mi-semana", mi_semana, methods=["GET"]),
-    # Gestión de turnos: ausencias / vacaciones.
+    Route("/api/rota/mis-turnos", mis_turnos, methods=["GET"]),
+    # Cobertura DERIVADA (vista, sin persistencia).
+    Route("/api/rota/cobertura", cobertura_semana, methods=["GET"]),
+    Route("/api/rota/cobertura/evento/{evento_id}", cobertura_evento, methods=["GET"]),
+    # Ausencias / vacaciones.
     Route("/api/rota/ausencias", listar_ausencias, methods=["GET"]),
     Route("/api/rota/ausencias", crear_ausencia, methods=["POST"]),
     Route("/api/rota/ausencias/{ausencia_id}", actualizar_ausencia, methods=["PATCH"]),
     Route("/api/rota/ausencias/{ausencia_id}", borrar_ausencia, methods=["DELETE"]),
-    # Gestión de turnos: horario de trabajo del equipo.
-    Route("/api/rota/horario", horario_semana, methods=["GET"]),
-    Route("/api/rota/horario/turnos/{turno_id}", actualizar_turno_trabajo, methods=["PATCH"]),
-    Route("/api/rota/horario/aprobar", aprobar_semana_horario, methods=["POST"]),
-    Route("/api/rota/mi-horario", mi_horario, methods=["GET"]),
-    # Asignación flexible (rama rota-asignacion-flexible): atajos manuales.
-    # (la ruta `/turnos/lote` está más arriba: tiene que ir antes que `{turno_id}`.)
-    Route("/api/rota/cobertura/asignar-franja", asignar_franja, methods=["POST"]),
+    # Copia de semana + panel de carga.
     Route("/api/rota/copiar-semana", copiar_semana, methods=["POST"]),
     Route("/api/rota/carga", carga_semana, methods=["GET"]),
+    # Exports.
     Route("/api/rota/export.csv", export_csv, methods=["GET"]),
     Route("/api/rota/export.xlsx", export_xlsx, methods=["GET"]),
     # Piezas de la parrilla (#150 PARRILLA 2026.xlsx): un POST individual por fila.
