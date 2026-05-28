@@ -35,10 +35,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, repos
+from .. import auth, permisos, repos
 from .. import rota as dominio
 from .._http_json import leer_json
-from ..estados import ESTADOS_ROTA, ROL_ADMIN
+from ..estados import ESTADOS_ROTA
 
 # Media types oficiales de un .xlsx (Open XML) y un CSV.
 _MEDIA_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -69,11 +69,12 @@ def _usuario_actual(request: Request) -> dict[str, Any] | None:
 
 
 def _es_admin(request: Request) -> bool:
-    """True si la peticion la hace un admin o entro por el token de bootstrap."""
-    if getattr(request.state, "auth_por_token", False):
-        return True
-    usuario = _usuario_actual(request)
-    return bool(usuario) and usuario.get("rol") == ROL_ADMIN
+    """True si la peticion la hace un admin o entro por el token de bootstrap.
+
+    Delega en el helper unico de rol (`keni_consola.permisos.es_admin`), compartido
+    con `/api/conexiones` y `/api/usuarios` (#153). Mismo contrato que antes.
+    """
+    return permisos.es_admin(request)
 
 
 def _lunes_param(request: Request) -> str:

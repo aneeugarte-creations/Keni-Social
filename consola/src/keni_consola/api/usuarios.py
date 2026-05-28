@@ -24,7 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth
+from .. import auth, permisos
 from .._http_json import leer_json
 from ..estados import ROL_ADMIN, ROLES_USUARIO
 
@@ -32,11 +32,12 @@ _MSG_SOLO_ADMIN = "Solo un administrador puede gestionar usuarios."
 
 
 def _es_admin(request: Request) -> bool:
-    """True si la peticion la hace un admin o entro por el token de bootstrap."""
-    if getattr(request.state, "auth_por_token", False):
-        return True
-    usuario = getattr(request.state, "usuario", None)
-    return bool(usuario) and usuario.get("rol") == ROL_ADMIN
+    """True si la peticion la hace un admin o entro por el token de bootstrap.
+
+    Delega en el helper unico de rol (`keni_consola.permisos.es_admin`), compartido
+    con `/api/conexiones` y `/api/rota` (#153). Mismo contrato que antes.
+    """
+    return permisos.es_admin(request)
 
 
 def _usuario_actual_id(request: Request) -> str | None:
@@ -46,7 +47,7 @@ def _usuario_actual_id(request: Request) -> str | None:
 
 
 def _rechazo_no_admin() -> Response:
-    return JSONResponse({"error": _MSG_SOLO_ADMIN}, status_code=403)
+    return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
 
 
 async def listar(request: Request) -> Response:
