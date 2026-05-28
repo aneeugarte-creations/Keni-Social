@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Trash2,
   User,
+  UserMinus,
   Users,
   Wand2,
   X,
@@ -37,6 +38,7 @@ import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
+import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -1145,13 +1147,23 @@ function Parrilla({
 
   // Filtros por miembro (multi-toggle); "sin-asignar" es un id reservado.
   const [filtros, setFiltros] = React.useState<Set<string>>(new Set());
+  // Filtro por estado del turno (toggle exclusivo): null = todos.
+  const [filtroEstado, setFiltroEstado] = React.useState<
+    "todos" | "sin_asignar" | "asignados" | "aprobados"
+  >("todos");
   const turnosFiltrados = React.useMemo(() => {
-    if (filtros.size === 0) return turnos;
-    return turnos.filter((t) => {
-      if (!t.miembro_id) return filtros.has("sin-asignar");
-      return filtros.has(t.miembro_id);
-    });
-  }, [turnos, filtros]);
+    let xs = turnos;
+    if (filtros.size > 0) {
+      xs = xs.filter((t) => {
+        if (!t.miembro_id) return filtros.has("sin-asignar");
+        return filtros.has(t.miembro_id);
+      });
+    }
+    if (filtroEstado === "sin_asignar") xs = xs.filter((t) => !t.miembro_id);
+    else if (filtroEstado === "asignados") xs = xs.filter((t) => Boolean(t.miembro_id));
+    else if (filtroEstado === "aprobados") xs = xs.filter((t) => t.estado === "aprobado");
+    return xs;
+  }, [turnos, filtros, filtroEstado]);
 
   // Selección múltiple (estado del check por fila).
   const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
@@ -1187,6 +1199,13 @@ function Parrilla({
               Borrador
             </Badge>
           ) : null}
+          {!semana?.aprobada && (
+            <BotonNuevoTurno
+              lunes={lunes}
+              equipo={equipo}
+              onCreado={invalidarTodo}
+            />
+          )}
           <Button
             variant="outline"
             onClick={() => copiarAnterior.mutate()}
@@ -1228,6 +1247,29 @@ function Parrilla({
       )}
 
       <FiltrosMiembro equipo={equipo} filtros={filtros} setFiltros={setFiltros} />
+
+      {/* Filtros por estado del turno (exclusivos: todos / sin asignar / asignados / aprobados). */}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Estado:</span>
+        {(
+          [
+            { v: "todos", l: "Todos" },
+            { v: "sin_asignar", l: "Sin asignar" },
+            { v: "asignados", l: "Asignados" },
+            { v: "aprobados", l: "Aprobados" },
+          ] as { v: typeof filtroEstado; l: string }[]
+        ).map((opt) => (
+          <Button
+            key={opt.v}
+            size="sm"
+            variant={filtroEstado === opt.v ? "default" : "outline"}
+            className="h-7 px-2"
+            onClick={() => setFiltroEstado(opt.v)}
+          >
+            {opt.l}
+          </Button>
+        ))}
+      </div>
 
       {seleccionados.size > 0 && (
         <BarraSeleccion
@@ -1405,6 +1447,346 @@ function AsignarDeGolpe({
   );
 }
 
+// --- Botón "Nuevo turno": dos modos (evento existente / evento nuevo + turno) ---
+
+/**
+ * Crear un turno de cobertura directamente desde la parrilla. Dos caminos:
+ *  - "Para evento existente": elige uno de los eventos de la semana y la persona.
+ *  - "Crear evento + turno": atajo cuando el evento aún no existe (alta express).
+ */
+function BotonNuevoTurno({
+  lunes,
+  equipo,
+  onCreado,
+}: {
+  lunes: string;
+  equipo: MiembroRota[];
+  onCreado: () => void;
+}) {
+  const [abierto, setAbierto] = React.useState(false);
+  return (
+    <>
+      <Button variant="default" size="sm" onClick={() => setAbierto(true)}>
+        <Plus className="h-4 w-4" /> Nuevo turno
+      </Button>
+      {abierto && (
+        <DialogNuevoTurno
+          lunes={lunes}
+          equipo={equipo}
+          onCerrar={() => setAbierto(false)}
+          onCreado={() => {
+            onCreado();
+            setAbierto(false);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function DialogNuevoTurno({
+  lunes,
+  equipo,
+  onCerrar,
+  onCreado,
+}: {
+  lunes: string;
+  equipo: MiembroRota[];
+  onCerrar: () => void;
+  onCreado: () => void;
+}) {
+  const [modo, setModo] = React.useState<"existente" | "nuevo">("existente");
+  // Eventos de la semana en vista (lo más común: el turno encaja en algún evento real).
+  const desde = lunes;
+  const hasta = lunesSiguiente(lunes, 1);
+  const eventosQ = useQuery({
+    queryKey: ["rota", "eventos-semana-picker", desde] as const,
+    queryFn: ({ signal }) => api.rotaEventos({ desde, hasta }, signal),
+  });
+  const eventos = (eventosQ.data?.eventos ?? []).filter(
+    (e) => e.fecha >= desde && e.fecha < hasta,
+  );
+
+  // --- Modo "existente" ---
+  const [eventoId, setEventoId] = React.useState("");
+  const [miembroId, setMiembroId] = React.useState("");
+  const crearExistente = useMutation({
+    mutationFn: (override: boolean) =>
+      api.crearTurnoRota({
+        evento_id: eventoId,
+        miembro_id: miembroId || undefined,
+        override,
+      }),
+    onSuccess: () => {
+      toast.success("Turno creado.");
+      onCreado();
+    },
+    onError: (e) => {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (e.cuerpo?.requiere_override as boolean | undefined)
+      ) {
+        if (
+          window.confirm(
+            `${e.message}\n\n¿Forzar la cobertura aun así (override)?`,
+          )
+        ) {
+          crearExistente.mutate(true);
+          return;
+        }
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  // --- Modo "nuevo" (alta express): evento + turno ---
+  const [titulo, setTitulo] = React.useState("");
+  const [fecha, setFecha] = React.useState(desde);
+  const [hora, setHora] = React.useState("");
+  const [contenido, setContenido] = React.useState("");
+  const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
+  const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
+
+  const crearNuevo = useMutation({
+    mutationFn: async (override: boolean) => {
+      const ev = await api.crearEventoRota({
+        titulo: titulo.trim(),
+        fecha,
+        hora: hora.trim(),
+        contenido: contenido.trim(),
+        tipo_cobertura: tipoCobertura,
+        prioridad,
+      });
+      return api.crearTurnoRota({
+        evento_id: ev.evento.id,
+        miembro_id: miembroId || undefined,
+        override,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Evento creado y turno asignado.");
+      onCreado();
+    },
+    onError: (e) => {
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (e.cuerpo?.requiere_override as boolean | undefined)
+      ) {
+        // No reintentamos automáticamente: si el evento ya se creó (caso muy poco probable
+        // aquí), el override solo aplica al turno; lo dejamos en la mano del usuario.
+        toast.warning(`${e.message} Llama de nuevo desde el listado con override.`);
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const puedeExistente = eventoId !== "" && !crearExistente.isPending;
+  const puedeNuevo =
+    titulo.trim().length > 0 && fecha !== "" && !crearNuevo.isPending;
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Nuevo turno de cobertura</DialogTitle>
+          <DialogDescription>
+            Asigna una persona a un evento de esta semana, o crea el evento al vuelo.
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Toggle entre los dos modos. Tabs simulados con botones para no anidar */}
+        {/* <Tabs> dentro de <Dialog> (sería molesto con el foco). */}
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={modo === "existente" ? "default" : "outline"}
+            onClick={() => setModo("existente")}
+          >
+            Para un evento existente
+          </Button>
+          <Button
+            size="sm"
+            variant={modo === "nuevo" ? "default" : "outline"}
+            onClick={() => setModo("nuevo")}
+          >
+            Crear evento + turno
+          </Button>
+        </div>
+
+        {modo === "existente" ? (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Evento</Label>
+              {eventosQ.isPending ? (
+                <Skeleton className="h-9 w-full rounded-md" />
+              ) : eventos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No hay eventos en esta semana. Crea uno arriba o usa el modo
+                  "Crear evento + turno".
+                </p>
+              ) : (
+                <Select value={eventoId} onValueChange={setEventoId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Elige un evento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventos
+                      .slice()
+                      .sort((a, b) =>
+                        (a.fecha + a.hora).localeCompare(b.fecha + b.hora),
+                      )
+                      .map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {formatearFechaCorta(e.fecha)}
+                          {e.hora ? ` · ${e.hora}` : ""} — {e.titulo}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Persona</Label>
+              <Select value={miembroId} onValueChange={setMiembroId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin asignar (puedes elegir luego)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {equipo.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="nt-titulo">Evento / transmisión</Label>
+              <Input
+                id="nt-titulo"
+                value={titulo}
+                onChange={(e) => setTitulo(e.target.value)}
+                placeholder="Ej. Cruz Azul vs América"
+                maxLength={200}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="nt-fecha">Fecha</Label>
+                <Input
+                  id="nt-fecha"
+                  type="date"
+                  value={fecha}
+                  onChange={(e) => setFecha(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="nt-hora">Hora</Label>
+                <Input
+                  id="nt-hora"
+                  value={hora}
+                  onChange={(e) => setHora(e.target.value)}
+                  placeholder="16:00"
+                  maxLength={40}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Cobertura</Label>
+                <Select
+                  value={tipoCobertura}
+                  onValueChange={(v) => setTipoCobertura(v as TipoCoberturaEvento)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_COBERTURA.map((t) => (
+                      <SelectItem key={t.valor} value={t.valor}>
+                        {t.etiqueta}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Prioridad</Label>
+                <Select
+                  value={prioridad}
+                  onValueChange={(v) => setPrioridad(v as PrioridadEvento)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRIORIDADES.map((p) => (
+                      <SelectItem key={p.valor} value={p.valor}>
+                        {p.etiqueta}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nt-contenido">Qué sacar</Label>
+              <Textarea
+                id="nt-contenido"
+                value={contenido}
+                onChange={(e) => setContenido(e.target.value)}
+                rows={2}
+                maxLength={2000}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Persona (turno)</Label>
+              <Select value={miembroId} onValueChange={setMiembroId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sin asignar (puedes elegir luego)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {equipo.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          {modo === "existente" ? (
+            <Button
+              onClick={() => crearExistente.mutate(false)}
+              disabled={!puedeExistente}
+            >
+              {crearExistente.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear turno
+            </Button>
+          ) : (
+            <Button onClick={() => crearNuevo.mutate(false)} disabled={!puedeNuevo}>
+              {crearNuevo.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear evento y turno
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // --- Filtros por miembro ---------------------------------------------------
 
 function FiltrosMiembro({
@@ -1507,6 +1889,8 @@ function BarraSeleccion({
     },
   });
 
+  // `miembro_id=""` SÍ está aceptado por el backend (alineado con el PATCH 1:1):
+  // quita la asignación de todos los turnos del lote.
   const quitar = useMutation({
     mutationFn: () =>
       api.actualizarLoteTurnos({ ids: [...seleccionados], miembro_id: "" }),
@@ -1514,9 +1898,20 @@ function BarraSeleccion({
       toast.success(`Quitada asignación a ${res.actualizados} turnos.`);
       onAplicado();
     },
-    // El backend exige miembro_id válido para "quitar"; usamos otra ruta: el PATCH 1:1
-    // tampoco soporta vacío -> caemos en la API por turno. Para mantenerlo simple aquí
-    // capturamos el error y avisamos.
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const borrarSeleccion = useMutation({
+    mutationFn: () => api.borrarTurnosLote({ ids: [...seleccionados] }),
+    onSuccess: (res) => {
+      const ne = res.no_encontrados?.length ?? 0;
+      toast.success(
+        ne > 0
+          ? `Borrados ${res.borrados} turnos (${ne} ya no existían).`
+          : `Borrados ${res.borrados} turnos.`,
+      );
+      onAplicado();
+    },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
@@ -1559,7 +1954,31 @@ function BarraSeleccion({
           onClick={() => quitar.mutate()}
           disabled={quitar.isPending}
         >
+          {quitar.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           Quitar asignación
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="text-destructive hover:text-destructive"
+          onClick={() => {
+            if (
+              window.confirm(
+                `¿Borrar ${seleccionados.size} turno${
+                  seleccionados.size === 1 ? "" : "s"
+                }? Los eventos siguen, pero perderán su cobertura.`,
+              )
+            )
+              borrarSeleccion.mutate();
+          }}
+          disabled={borrarSeleccion.isPending}
+        >
+          {borrarSeleccion.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Trash2 className="h-3.5 w-3.5" />
+          )}
+          Borrar
         </Button>
         <Button size="sm" variant="ghost" onClick={onLimpiar}>
           <X className="h-4 w-4" /> Cancelar
@@ -1712,6 +2131,7 @@ function TablaTurnos({
               <TableHead>Evento / transmisión</TableHead>
               <TableHead>Qué sacar</TableHead>
               <TableHead className="w-[14rem]">Persona</TableHead>
+              <TableHead className="w-10" aria-label="Acciones" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -1773,6 +2193,15 @@ function FilaTurno({
     },
   });
 
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarTurnoRota(turno.id),
+    onSuccess: () => {
+      toast.success("Turno eliminado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   return (
     <TableRow className={turno.es_sabado ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}>
       {onToggleSeleccionado && (
@@ -1810,22 +2239,39 @@ function FilaTurno({
       <TableCell className="align-top">
         {editable ? (
           <div className="space-y-1.5">
-            <Select
-              value={turno.miembro_id || ""}
-              onValueChange={(v) => actualizar.mutate({ miembro_id: v })}
-              disabled={actualizar.isPending}
-            >
-              <SelectTrigger aria-label="Asignar persona">
-                <SelectValue placeholder="Sin asignar" />
-              </SelectTrigger>
-              <SelectContent>
-                {equipo.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1">
+              <div className="flex-1">
+                <Select
+                  value={turno.miembro_id || ""}
+                  onValueChange={(v) => actualizar.mutate({ miembro_id: v })}
+                  disabled={actualizar.isPending}
+                >
+                  <SelectTrigger aria-label="Asignar persona">
+                    <SelectValue placeholder="Sin asignar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {equipo.map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {turno.miembro_id && (
+                <Tooltip label="Quitar asignación">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => actualizar.mutate({ miembro_id: "" })}
+                    disabled={actualizar.isPending}
+                  >
+                    <UserMinus className="h-3.5 w-3.5" />
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
             {pendienteOverride && (
               <Button
                 size="sm"
@@ -1842,6 +2288,33 @@ function FilaTurno({
           </div>
         ) : (
           <span className="text-sm">{turno.miembro_nombre || "Sin asignar"}</span>
+        )}
+      </TableCell>
+      <TableCell className="w-10 align-top">
+        {editable && (
+          <Tooltip label="Borrar turno">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              aria-label="Borrar turno"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `¿Borrar el turno de "${turno.evento_titulo}"? El evento sigue, pero pierde la cobertura.`,
+                  )
+                )
+                  borrar.mutate();
+              }}
+              disabled={borrar.isPending}
+            >
+              {borrar.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          </Tooltip>
         )}
       </TableCell>
     </TableRow>
