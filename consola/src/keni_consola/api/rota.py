@@ -46,12 +46,13 @@ from .. import auth, permisos, repos
 from .. import rota as dominio
 from .._http_json import leer_json
 from ..estados import (
-    ESTADOS_PIEZA,
+    ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_ACEPTADO,
     ESTADO_SWAP_CANCELADO,
     ESTADO_SWAP_PROPUESTO,
     ESTADO_SWAP_RECHAZADO,
     ESTADO_SWAP_RECHAZADO_ADMIN,
+    ESTADOS_PIEZA,
     ESTADOS_ROTA,
     FRANJAS_TRABAJO,
     FRANJAS_TURNO,
@@ -545,6 +546,21 @@ def _ausencias_dominio() -> list[dominio.Ausencia]:
     ]
 
 
+def _ausencia_que_cubre(miembro_id: str, fecha_iso: str) -> dict[str, Any] | None:
+    """Devuelve la 1ª ausencia REGISTRADA de `miembro_id` que cubre `fecha_iso`, o None.
+
+    Se usa para la validacion cruzada en `actualizar_turno_trabajo` (no asignar a alguien
+    que esta de vacaciones/baja sin override explicito). El cuerpo del 409 incluye este
+    diccionario para que la UI muestre "tiene vacaciones del X al Y" sin tener que recargar.
+    """
+    if not miembro_id or not fecha_iso:
+        return None
+    candidatos = repos.listar_ausencias_rota(
+        miembro_id=miembro_id, desde=fecha_iso, hasta=fecha_iso
+    )
+    return candidatos[0] if candidatos else None
+
+
 def _fecha_valida(iso: str) -> bool:
     """True si `iso` es una fecha AAAA-MM-DD valida (reutiliza el parser del dominio)."""
     return bool(iso) and dominio.lunes_de_semana_iso(iso) != ""
@@ -787,6 +803,27 @@ async def actualizar_turno_trabajo(request: Request) -> Response:
                         "explícito si es una cobertura estratégica intencional."
                     ),
                     "requiere_override": True,
+                },
+                status_code=409,
+            )
+
+    # Regla cruzada: una persona AUSENTE (vacaciones/baja...) no puede trabajar ese día.
+    # Si la franja final es de trabajo (no `descanso`) y la fecha cae dentro de una ausencia
+    # registrada para ese miembro, exigir `override` explícito. El caso `descanso` ES legal
+    # incluso si la persona está ausente (un descanso pisado por una ausencia no produce
+    # daño operativo: simplemente NO se publica como turno laboral).
+    if nuevo_miembro and nueva_franja in dominio.FRANJAS_TRABAJO and not override:
+        ausencia = _ausencia_que_cubre(nuevo_miembro, actual["fecha"])
+        if ausencia is not None:
+            return JSONResponse(
+                {
+                    "error": (
+                        f"Esa persona tiene «{ausencia['tipo']}» del "
+                        f"{ausencia['desde']} al {ausencia['hasta']}. Marca un override "
+                        "explícito si es una cobertura excepcional."
+                    ),
+                    "requiere_override": True,
+                    "ausencia": ausencia,
                 },
                 status_code=409,
             )
@@ -1325,6 +1362,12 @@ def _pieza_a_dict(pieza: dict[str, Any], nombres: dict[str, str]) -> dict[str, A
             pieza.get("responsable_id", ""), pieza.get("responsable_nombre", "")
         ),
         "notas": pieza.get("notas", "") or "",
+        # Ampliaciones del Excel real (auditoria): canal amplio, comentarios de coordinacion,
+        # deadline interno de material y flag "siempre activo" (campanas evergreen sin fecha).
+        "salida": pieza.get("salida", "") or "",
+        "comentarios": pieza.get("comentarios", "") or "",
+        "fecha_entrega_material": pieza.get("fecha_entrega_material", "") or "",
+        "always_on": bool(pieza.get("always_on")),
     }
 
 
@@ -1442,6 +1485,13 @@ async def crear_pieza(request: Request) -> Response:
     if dia and not _fecha_iso_valida_o_vacia(dia):
         return JSONResponse({"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400)
 
+    fecha_entrega_material = str(datos.get("fecha_entrega_material", "")).strip()
+    if fecha_entrega_material and not _fecha_iso_valida_o_vacia(fecha_entrega_material):
+        return JSONResponse(
+            {"error": "La fecha de entrega de material no es válida (usa AAAA-MM-DD)."},
+            status_code=400,
+        )
+
     enlace = str(datos.get("enlace", "")).strip()
     if len(enlace) > _MAX_ENLACE_PIEZA:
         return JSONResponse({"error": "El enlace es demasiado largo."}, status_code=400)
@@ -1468,6 +1518,13 @@ async def crear_pieza(request: Request) -> Response:
         responsable_id=resp_id,
         responsable_nombre=resp_nombre,
         notas=str(datos.get("notas", "")).strip(),
+        # Ampliaciones del Excel real (auditoria): salida (canal amplio), comentarios
+        # (coordinacion pre/durante), fecha_entrega_material (deadline interno) y always_on
+        # (flag de pieza siempre activa, p. ej. "ALWAYS ON" de PATY CANTU).
+        salida=str(datos.get("salida", "")).strip(),
+        comentarios=str(datos.get("comentarios", "")).strip(),
+        fecha_entrega_material=fecha_entrega_material,
+        always_on=bool(datos.get("always_on", False)),
     )
     return JSONResponse({"pieza": _pieza_a_dict(pieza, nombres)}, status_code=201)
 
@@ -1495,8 +1552,16 @@ async def actualizar_pieza(request: Request) -> Response:
             return JSONResponse({"error": "Ese evento no existe."}, status_code=400)
         campos["evento_id"] = evento_id
 
-    for clave in ("programa", "red_social", "tipo_pieza", "contenido_sugerido",
-                  "hora_post", "notas"):
+    for clave in (
+        "programa",
+        "red_social",
+        "tipo_pieza",
+        "contenido_sugerido",
+        "hora_post",
+        "notas",
+        "salida",
+        "comentarios",
+    ):
         if clave in datos:
             valor = datos[clave]
             campos[clave] = str(valor).strip() if isinstance(valor, str) else ""
@@ -1506,6 +1571,15 @@ async def actualizar_pieza(request: Request) -> Response:
         if dia and not _fecha_iso_valida_o_vacia(dia):
             return JSONResponse({"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400)
         campos["dia"] = dia
+
+    if "fecha_entrega_material" in datos:
+        fem = str(datos.get("fecha_entrega_material", "")).strip()
+        if fem and not _fecha_iso_valida_o_vacia(fem):
+            return JSONResponse(
+                {"error": "La fecha de entrega de material no es válida (usa AAAA-MM-DD)."},
+                status_code=400,
+            )
+        campos["fecha_entrega_material"] = fem
 
     if "estado" in datos:
         estado = str(datos.get("estado", "")).strip()
@@ -1520,7 +1594,7 @@ async def actualizar_pieza(request: Request) -> Response:
             return JSONResponse({"error": "El enlace es demasiado largo."}, status_code=400)
         campos["enlace"] = enlace
 
-    for bool_col in ("material_entregado", "contenido_entregado", "publicado"):
+    for bool_col in ("material_entregado", "contenido_entregado", "publicado", "always_on"):
         if bool_col in datos:
             campos[bool_col] = bool(datos[bool_col])
 
@@ -1944,17 +2018,419 @@ def _ahora_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+# --------------------------------------------------------------------------- #
+# Turnos (cobertura): POST directo, DELETE individual y borrado en lote        #
+# --------------------------------------------------------------------------- #
+#
+# El PATCH ya existia; faltaba (1) crear un turno para un evento existente sin pasar por la
+# semana entera, (2) borrar UN turno suelto (sin borrar el evento), y (3) borrar en lote.
+# DECISION DE NEGOCIO: borrar un turno APROBADO NO se bloquea (Elias necesita poder
+# rectificar la rota publicada); el front se encarga de advertir antes de mandar el DELETE.
+
+
+async def crear_turno(request: Request) -> Response:
+    """POST /api/rota/turnos: crea un turno de cobertura para un evento existente.
+
+    Cuerpo: `{evento_id, miembro_id?, override?, motivo?, estado?}`. La `semana` se DERIVA
+    del lunes que contiene `evento.fecha` (no se pide al cliente: una vez tengo el evento,
+    su semana es única). `miembro_id` puede ser "" (turno vacío, sin asignar). Si la
+    asignación viola la rotación de sábados sin override, 409 con `requiere_override`.
+    """
+    datos = await leer_json(request)
+    evento_id = str(datos.get("evento_id", "")).strip()
+    if not evento_id:
+        return JSONResponse({"error": "Indica el evento a cubrir."}, status_code=400)
+    evento = repos.obtener_evento_rota(evento_id)
+    if evento is None:
+        return JSONResponse({"error": "Ese evento no existe."}, status_code=400)
+    semana = dominio.lunes_de_semana_iso(evento.get("fecha", ""))
+    if not semana:
+        return JSONResponse(
+            {"error": "El evento no tiene fecha válida; ajústala antes de asignarlo."},
+            status_code=400,
+        )
+    nombres = _nombres_equipo()
+    miembro_id = datos.get("miembro_id", "")
+    if not isinstance(miembro_id, str):
+        return JSONResponse({"error": "miembro_id inválido."}, status_code=400)
+    miembro_id = miembro_id.strip()
+    if miembro_id and miembro_id not in nombres:
+        return JSONResponse(
+            {"error": "Ese miembro no existe en el equipo."}, status_code=400
+        )
+    override = bool(datos.get("override", False))
+    motivo = str(datos.get("motivo", "")).strip()
+    estado = datos.get("estado")
+    if estado is not None and estado not in ESTADOS_ROTA:
+        validos = " o ".join(f'"{e}"' for e in ESTADOS_ROTA)
+        return JSONResponse({"error": f"Estado inválido. Usa {validos}."}, status_code=400)
+    # Regla rotacion sabado (igual que PATCH/lote): si el evento es sabado y la asignacion
+    # repite al miembro del sabado previo sin override -> 409 antes de tocar BD.
+    if miembro_id and dominio.es_sabado(evento["fecha"]):
+        previo = _sabado_previo(semana)
+        if dominio.viola_rotacion_sabado(previo, miembro_id, override=override):
+            return JSONResponse(
+                {
+                    "error": (
+                        "Esa persona ya cubrió el sábado anterior. Marca un override "
+                        "explícito si es una cobertura estratégica intencional."
+                    ),
+                    "requiere_override": True,
+                },
+                status_code=409,
+            )
+    turno = repos.crear_turno_rota(
+        semana,
+        evento_id,
+        miembro_id=miembro_id,
+        miembro_nombre=nombres.get(miembro_id, "") if miembro_id else "",
+        estado=estado or ESTADO_ROTA_PROPUESTO,
+        override=override,
+        motivo=motivo,
+    )
+    eventos_por_id = {evento["id"]: evento}
+    return JSONResponse(
+        {"turno": _turno_a_dict(turno, eventos_por_id, nombres)}, status_code=201
+    )
+
+
+async def borrar_turno(request: Request) -> Response:
+    """DELETE /api/rota/turnos/{id}: borra UN turno de cobertura (sin tocar el evento).
+
+    DECISION: borrar un turno APROBADO se permite (Elías necesita poder rectificar tras
+    publicar). El front advierte antes de mandar el DELETE.
+    """
+    turno_id = request.path_params["turno_id"]
+    if not repos.borrar_turno_rota(turno_id):
+        return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
+    return JSONResponse({"mensaje": "Turno eliminado."})
+
+
+async def borrar_turnos_lote(request: Request) -> Response:
+    """POST /api/rota/turnos/lote/borrar: borra varios turnos de cobertura a la vez.
+
+    Cuerpo: `{ids: [turno_id, ...]}`. Devuelve `{borrados: N, no_encontrados: [ids]}`. Es
+    tolerante: si algun id no existe, no falla; lo lista en `no_encontrados`. Atomicidad
+    no es critica (los DELETE individuales no chocan entre si).
+    """
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
+        return JSONResponse(
+            {"error": "Indica al menos un turno (`ids`)."}, status_code=400
+        )
+    existentes = {t["id"] for t in repos.listar_turnos_rota() if t["id"] in ids}
+    no_encontrados = [i for i in ids if i not in existentes]
+    n = repos.borrar_turnos_rota_lote(list(existentes))
+    return JSONResponse({"borrados": n, "no_encontrados": no_encontrados})
+
+
+# --------------------------------------------------------------------------- #
+# Piezas: duplicar + borrar en lote                                            #
+# --------------------------------------------------------------------------- #
+
+
+async def duplicar_pieza(request: Request) -> Response:
+    """POST /api/rota/piezas/{id}/duplicar: clona una pieza (workflow reset).
+
+    Cuerpo opcional `{dia?, evento_id?}`. El clon RESETEA material/contenido/publicado/
+    enlace/notas/comentarios y vuelve a `estado="pendiente"`: duplicar una pieza es repetir
+    el TRABAJO de producción. `dia`/`evento_id` se pueden sobrescribir desde el cuerpo
+    (caso típico: "Pumas vs América Jornada 17 -> Jornada 18").
+    """
+    pieza_id = request.path_params["pieza_id"]
+    datos = await leer_json(request) or {}
+    dia: str | None = None
+    evento_id: str | None = None
+    if "dia" in datos:
+        dia = str(datos.get("dia", "")).strip()
+        if dia and not _fecha_iso_valida_o_vacia(dia):
+            return JSONResponse(
+                {"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400
+            )
+    if "evento_id" in datos:
+        evento_id = str(datos.get("evento_id", "")).strip()
+        if evento_id and not _evento_existe(evento_id):
+            return JSONResponse({"error": "Ese evento no existe."}, status_code=400)
+    pieza = repos.duplicar_pieza_rota(pieza_id, dia=dia, evento_id=evento_id)
+    if pieza is None:
+        return JSONResponse({"error": "La pieza ya no existe."}, status_code=404)
+    return JSONResponse({"pieza": _pieza_a_dict(pieza, _nombres_equipo())}, status_code=201)
+
+
+async def borrar_piezas_lote(request: Request) -> Response:
+    """POST /api/rota/piezas/lote/borrar: borra varias piezas a la vez.
+
+    Cuerpo: `{ids: [pieza_id, ...]}`. Mismo contrato que `/api/rota/turnos/lote/borrar`:
+    `{borrados: N, no_encontrados: [ids]}`.
+    """
+    datos = await leer_json(request)
+    ids = datos.get("ids")
+    if not isinstance(ids, list) or not all(isinstance(x, str) and x for x in ids) or not ids:
+        return JSONResponse(
+            {"error": "Indica al menos una pieza (`ids`)."}, status_code=400
+        )
+    # Pre-comprobamos cuales existen (para reportar los no encontrados sin falsear la cuenta).
+    todas = {p["id"] for p in repos.listar_piezas_rota()}
+    existentes = [i for i in ids if i in todas]
+    no_encontrados = [i for i in ids if i not in todas]
+    n = repos.borrar_piezas_rota_lote(existentes)
+    return JSONResponse({"borrados": n, "no_encontrados": no_encontrados})
+
+
+# --------------------------------------------------------------------------- #
+# Eventos: duplicar                                                            #
+# --------------------------------------------------------------------------- #
+
+
+async def duplicar_evento(request: Request) -> Response:
+    """POST /api/rota/eventos/{id}/duplicar: clona un evento (sin turnos, `cambiado` reset).
+
+    Cuerpo opcional `{fecha?, hora?, titulo?}`. NO clona los turnos (la cobertura es de la
+    SEMANA, no del partido). El clon nace con `cambiado=0` (es un evento RECIÉN creado).
+    """
+    evento_id = request.path_params["evento_id"]
+    datos = await leer_json(request) or {}
+    fecha: str | None = None
+    hora: str | None = None
+    titulo: str | None = None
+    if "fecha" in datos:
+        fecha = str(datos.get("fecha", "")).strip()
+        if fecha and dominio.lunes_de_semana_iso(fecha) == "":
+            return JSONResponse(
+                {"error": "La fecha no es válida (usa AAAA-MM-DD)."}, status_code=400
+            )
+    if "hora" in datos:
+        hora = str(datos.get("hora", "")).strip()
+    if "titulo" in datos:
+        titulo = str(datos.get("titulo", "")).strip()
+        if not titulo:
+            return JSONResponse(
+                {"error": "El título no puede estar vacío."}, status_code=400
+            )
+    evento = repos.duplicar_evento_rota(evento_id, fecha=fecha, hora=hora, titulo=titulo)
+    if evento is None:
+        return JSONResponse({"error": "El evento ya no existe."}, status_code=404)
+    return JSONResponse({"evento": _evento_a_dict(evento)}, status_code=201)
+
+
+# --------------------------------------------------------------------------- #
+# Catálogo de programas (#150, PARRILLA 2026.xlsx)                              #
+# --------------------------------------------------------------------------- #
+#
+# Cada hoja EVERGREEN del Excel es un PROGRAMA ("Álvaro Fidalgo", "Real Oviedo",
+# "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS", "IDEAS SIN
+# DERECHOS"). Se cataloga con color y fechas; las piezas referencian POR NOMBRE (no por
+# id) para que una pieza huérfana de un programa borrado siga apareciendo con su texto.
+# Renombrar un programa hace cascada sobre `rota_piezas.programa` (transaccional, vive en
+# `db.py`).
+#
+# Color: texto libre (la UI usa hex `#RRGGBB`); no se valida la sintaxis para no atar la API
+# al esquema de colores del front. La UI decide si lo respeta o lo limpia.
+
+
+_MAX_NOMBRE_PROGRAMA = 200
+
+
+def _programa_a_dict(programa: dict[str, Any]) -> dict[str, Any]:
+    """Serializa un programa al contrato HTTP (booleano explícito, defaults sanos)."""
+    return {
+        "id": programa["id"],
+        "nombre": programa.get("nombre", "") or "",
+        "descripcion": programa.get("descripcion", "") or "",
+        "color": programa.get("color", "") or "",
+        "inicio": programa.get("inicio", "") or "",
+        "fin": programa.get("fin", "") or "",
+        "activo": bool(programa.get("activo", True)),
+        "creado": programa.get("creado", "") or "",
+        "actualizado": programa.get("actualizado", "") or "",
+    }
+
+
+def _activo_param(crudo: str | None) -> bool | None:
+    """Convierte un query-param string a tri-estado (None / True / False)."""
+    if crudo is None:
+        return None
+    valor = crudo.strip().lower()
+    if valor in ("1", "true", "sí", "si"):
+        return True
+    if valor in ("0", "false", "no"):
+        return False
+    return None
+
+
+async def listar_programas(request: Request) -> Response:
+    """GET /api/rota/programas[?activo=true|false]: programas del catálogo."""
+    activo = _activo_param(request.query_params.get("activo"))
+    programas = repos.listar_programas_rota(activo=activo)
+    return JSONResponse({"programas": [_programa_a_dict(p) for p in programas]})
+
+
+async def crear_programa(request: Request) -> Response:
+    """POST /api/rota/programas: alta de un programa.
+
+    Cuerpo: `{nombre, descripcion?, color?, inicio?, fin?, activo?}`. `nombre` es único
+    case-insensitive (si ya existe, 409 con `programa_existente`).
+    """
+    datos = await leer_json(request)
+    nombre = datos.get("nombre")
+    if not isinstance(nombre, str) or not nombre.strip():
+        return JSONResponse({"error": "El programa necesita un nombre."}, status_code=400)
+    nombre = nombre.strip()
+    if len(nombre) > _MAX_NOMBRE_PROGRAMA:
+        return JSONResponse(
+            {"error": f"El nombre no puede tener más de {_MAX_NOMBRE_PROGRAMA} caracteres."},
+            status_code=400,
+        )
+    # Unicidad case-insensitive: defensa en profundidad (el UNIQUE del DDL es el ultimo cerrojo).
+    if repos.existe_programa_por_nombre(nombre):
+        return JSONResponse(
+            {"error": "Ya existe un programa con ese nombre.", "programa_existente": True},
+            status_code=409,
+        )
+    inicio = str(datos.get("inicio", "")).strip()
+    fin = str(datos.get("fin", "")).strip()
+    if inicio and not _fecha_iso_valida_o_vacia(inicio):
+        return JSONResponse(
+            {"error": "La fecha de inicio no es válida (usa AAAA-MM-DD)."}, status_code=400
+        )
+    if fin and not _fecha_iso_valida_o_vacia(fin):
+        return JSONResponse(
+            {"error": "La fecha de fin no es válida (usa AAAA-MM-DD)."}, status_code=400
+        )
+    if inicio and fin and fin < inicio:
+        return JSONResponse(
+            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
+            status_code=400,
+        )
+    programa = repos.crear_programa_rota(
+        nombre,
+        descripcion=str(datos.get("descripcion", "")).strip(),
+        color=str(datos.get("color", "")).strip(),
+        inicio=inicio,
+        fin=fin,
+        activo=bool(datos.get("activo", True)),
+    )
+    return JSONResponse({"programa": _programa_a_dict(programa)}, status_code=201)
+
+
+async def actualizar_programa(request: Request) -> Response:
+    """PATCH /api/rota/programas/{id}: edita un programa.
+
+    Si cambia `nombre`, hace CASCADA sobre `rota_piezas.programa` (transaccional). El nuevo
+    nombre debe ser único case-insensitive (si otro programa ya lo usa, 409).
+    """
+    programa_id = request.path_params["programa_id"]
+    actual = repos.obtener_programa_rota(programa_id)
+    if actual is None:
+        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    campos: dict[str, Any] = {}
+    if "nombre" in datos:
+        nuevo = datos["nombre"]
+        if not isinstance(nuevo, str) or not nuevo.strip():
+            return JSONResponse(
+                {"error": "El programa necesita un nombre."}, status_code=400
+            )
+        nuevo = nuevo.strip()
+        if len(nuevo) > _MAX_NOMBRE_PROGRAMA:
+            return JSONResponse(
+                {"error": f"El nombre no puede tener más de {_MAX_NOMBRE_PROGRAMA} caracteres."},
+                status_code=400,
+            )
+        # Si el nuevo nombre (case-insensitive) ya existe en OTRO programa -> 409.
+        if nuevo.lower() != (actual.get("nombre") or "").lower() and repos.existe_programa_por_nombre(nuevo):
+            return JSONResponse(
+                {
+                    "error": "Ya existe un programa con ese nombre.",
+                    "programa_existente": True,
+                },
+                status_code=409,
+            )
+        campos["nombre"] = nuevo
+    for clave in ("descripcion", "color"):
+        if clave in datos:
+            valor = datos[clave]
+            campos[clave] = str(valor).strip() if isinstance(valor, str) else ""
+    for fecha_col in ("inicio", "fin"):
+        if fecha_col in datos:
+            valor = str(datos.get(fecha_col, "")).strip()
+            if valor and not _fecha_iso_valida_o_vacia(valor):
+                return JSONResponse(
+                    {"error": f"La fecha de {fecha_col} no es válida (usa AAAA-MM-DD)."},
+                    status_code=400,
+                )
+            campos[fecha_col] = valor
+    if "activo" in datos:
+        campos["activo"] = bool(datos["activo"])
+    # Coherencia del rango si quedan ambos extremos.
+    nuevo_inicio = campos.get("inicio", actual.get("inicio", ""))
+    nuevo_fin = campos.get("fin", actual.get("fin", ""))
+    if nuevo_inicio and nuevo_fin and nuevo_fin < nuevo_inicio:
+        return JSONResponse(
+            {"error": "La fecha de fin no puede ser anterior a la de inicio."},
+            status_code=400,
+        )
+    programa = repos.actualizar_programa_rota(programa_id, campos)
+    if programa is None:
+        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
+    return JSONResponse({"programa": _programa_a_dict(programa)})
+
+
+async def borrar_programa(request: Request) -> Response:
+    """DELETE /api/rota/programas/{id}[?forzar=true]: borra un programa.
+
+    Si HAY piezas referenciando el programa (por nombre), devuelve 409 con
+    `{en_uso: True, piezas_afectadas: N}` salvo que el cliente pase `?forzar=true` (lo
+    típico de Elías: "ya sé que hay piezas y aun así quiero borrar el catálogo; las
+    piezas huérfanas seguirán mostrando el nombre textual").
+    """
+    programa_id = request.path_params["programa_id"]
+    actual = repos.obtener_programa_rota(programa_id)
+    if actual is None:
+        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
+    forzar = (request.query_params.get("forzar") or "").strip().lower() in (
+        "1",
+        "true",
+        "sí",
+        "si",
+    )
+    en_uso = repos.contar_piezas_por_programa(actual["nombre"])
+    if en_uso and not forzar:
+        return JSONResponse(
+            {
+                "error": (
+                    f"El programa «{actual['nombre']}» está en uso por {en_uso} piezas. "
+                    "Llama con `?forzar=true` para borrarlo igualmente."
+                ),
+                "en_uso": True,
+                "piezas_afectadas": en_uso,
+            },
+            status_code=409,
+        )
+    if not repos.borrar_programa_rota(programa_id):
+        return JSONResponse({"error": "El programa ya no existe."}, status_code=404)
+    return JSONResponse(
+        {"mensaje": "Programa eliminado.", "piezas_afectadas": en_uso}
+    )
+
+
 RUTAS = [
     Route("/api/rota/equipo", equipo, methods=["GET"]),
     Route("/api/rota/eventos", listar_eventos, methods=["GET"]),
     Route("/api/rota/eventos", crear_evento, methods=["POST"]),
     Route("/api/rota/eventos/{evento_id}", actualizar_evento, methods=["PATCH"]),
     Route("/api/rota/eventos/{evento_id}", borrar_evento, methods=["DELETE"]),
+    # Duplicar evento (con sus campos editoriales; sin turnos, `cambiado` reset).
+    Route("/api/rota/eventos/{evento_id}/duplicar", duplicar_evento, methods=["POST"]),
     Route("/api/rota/semana", semana, methods=["GET"]),
-    # OJO: la ruta de lote debe ir ANTES que la paramétrica `{turno_id}`, si no Starlette
-    # captura "lote" como id de turno y devuelve 404.
+    # OJO: las rutas de lote DEBEN ir ANTES que las paramétricas `{turno_id}`, si no
+    # Starlette captura "lote"/"lote/borrar" como id de turno y devuelve 404 o 405.
     Route("/api/rota/turnos/lote", actualizar_turnos_lote, methods=["PATCH"]),
+    Route("/api/rota/turnos/lote/borrar", borrar_turnos_lote, methods=["POST"]),
+    Route("/api/rota/turnos", crear_turno, methods=["POST"]),
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
+    Route("/api/rota/turnos/{turno_id}", borrar_turno, methods=["DELETE"]),
     Route("/api/rota/semana/aprobar", aprobar_semana, methods=["POST"]),
     Route("/api/rota/mi-semana", mi_semana, methods=["GET"]),
     # Gestión de turnos: ausencias / vacaciones.
@@ -1977,8 +2453,18 @@ RUTAS = [
     # Piezas de la parrilla (#150 PARRILLA 2026.xlsx): un POST individual por fila.
     Route("/api/rota/piezas", listar_piezas, methods=["GET"]),
     Route("/api/rota/piezas", crear_pieza, methods=["POST"]),
+    # OJO: borrado en lote ANTES que las paramétricas `{pieza_id}` (Starlette captura
+    # "lote/borrar" antes de la regex de id si va arriba).
+    Route("/api/rota/piezas/lote/borrar", borrar_piezas_lote, methods=["POST"]),
     Route("/api/rota/piezas/{pieza_id}", actualizar_pieza, methods=["PATCH"]),
     Route("/api/rota/piezas/{pieza_id}", borrar_pieza, methods=["DELETE"]),
+    # Duplicar una pieza (workflow reset; ver `duplicar_pieza_rota` en db.py).
+    Route("/api/rota/piezas/{pieza_id}/duplicar", duplicar_pieza, methods=["POST"]),
+    # Catálogo de programas evergreen (#150). Renombrar hace cascada sobre rota_piezas.
+    Route("/api/rota/programas", listar_programas, methods=["GET"]),
+    Route("/api/rota/programas", crear_programa, methods=["POST"]),
+    Route("/api/rota/programas/{programa_id}", actualizar_programa, methods=["PATCH"]),
+    Route("/api/rota/programas/{programa_id}", borrar_programa, methods=["DELETE"]),
     # Solicitudes de cambio de turno entre companeros (#175).
     Route("/api/rota/swaps", listar_swaps, methods=["GET"]),
     Route("/api/rota/swaps", crear_swap, methods=["POST"]),
