@@ -23,11 +23,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
+from typing import Literal
 
 from .estados import FRANJAS_TRABAJO
 
 # Dia de la semana (Python: lunes=0 ... domingo=6). El sabado es el dia que rota.
 SABADO = 5
+
+# Franjas reconocidas por `mapear_franja`: la cobertura de eventos se asigna POR FRANJA
+# (sabado por la tarde -> Tescu de un golpe). El mismo vocabulario que el horario de
+# trabajo (`FRANJAS_TURNO`), pero aqui no es la franja del miembro sino la del EVENTO
+# segun su hora de inicio.
+Franja = Literal["matutino", "vespertino", "descanso"]
+FRANJAS: tuple[Franja, ...] = ("matutino", "vespertino", "descanso")
 
 
 @dataclass(frozen=True)
@@ -178,3 +186,116 @@ def viola_rotacion_sabado_trabajo(
     if franja not in FRANJAS_TRABAJO:
         return False
     return bool(miembro) and miembro in sabados_previos
+
+
+# --------------------------------------------------------------------------- #
+# Asignacion flexible: franja por hora del evento + carga por persona          #
+# --------------------------------------------------------------------------- #
+
+
+def mapear_franja(hora_iso: str) -> Franja:
+    """Mapea una hora `HH:MM` a la franja a la que pertenece (cobertura de eventos).
+
+    Regla de Elias y el equipo (asignar de golpe por franja):
+      - `matutino`    -> 06:00-13:59
+      - `vespertino`  -> 14:00-22:59
+      - `descanso`    -> 00:00-05:59 y 23:00-23:59
+
+    Acepta sufijos del Excel real (rangos `"16:00-18:00"`, `"16:00–18:00"`): se queda con
+    la hora de inicio. Vacio o malformado -> `ValueError` (la API decide si avisa al admin).
+    """
+    if not isinstance(hora_iso, str) or not hora_iso.strip():
+        raise ValueError("La hora esta vacia.")
+    # El Excel original a veces guarda rangos ("16:00-18:00"); cogemos el inicio.
+    crudo = hora_iso.strip().replace("–", "-").split("-", 1)[0].strip()
+    partes = crudo.split(":")
+    if len(partes) < 2:
+        raise ValueError(f"Hora malformada: {hora_iso!r} (usa HH:MM).")
+    try:
+        h = int(partes[0])
+        m = int(partes[1])
+    except ValueError as exc:
+        raise ValueError(f"Hora malformada: {hora_iso!r} (usa HH:MM).") from exc
+    if not (0 <= h <= 23 and 0 <= m <= 59):
+        raise ValueError(f"Hora fuera de rango: {hora_iso!r}.")
+    if 6 <= h <= 13:
+        return "matutino"
+    if 14 <= h <= 22:
+        return "vespertino"
+    return "descanso"
+
+
+@dataclass(frozen=True)
+class CargaMiembro:
+    """Cuanto trabajo lleva un miembro en una semana (panel de carga).
+
+    Datos PUROS derivados de los turnos de cobertura y de trabajo de la semana. La UI los
+    pinta como tabla: `eventos` = cuantas coberturas, `dias_trabajados` = cuantos dias
+    entra a trabajar (matutino/vespertino), `sabado` = si toca sabado, `descansos` =
+    cuantos dias libra.
+    """
+
+    miembro_id: str
+    nombre: str
+    eventos: int
+    dias_trabajados: int
+    sabado: bool
+    descansos: int
+
+
+def resumen_carga(
+    equipo: list[Miembro],
+    turnos_cobertura: list[dict],
+    turnos_trabajo: list[dict],
+    fechas_eventos: dict[str, str],
+) -> list[CargaMiembro]:
+    """Resumen de carga por miembro a partir de los turnos de la semana (cobertura + trabajo).
+
+    `turnos_cobertura` son los `rota_turnos` (cobertura de eventos: `evento_id`, `miembro_id`);
+    `turnos_trabajo` son los `rota_turnos_trabajo` (horario laboral: `fecha`, `franja`,
+    `miembro_id`). `fechas_eventos` es `evento_id -> fecha ISO` para resolver si la cobertura
+    cae en sabado sin re-mirar la BD. Pura: no toca IO.
+
+    Devuelve un `CargaMiembro` por miembro del equipo, ordenado por `eventos` descendente
+    (el mas cargado arriba; empate a alfabetico para estabilidad).
+    """
+    resultado: list[CargaMiembro] = []
+    for m in equipo:
+        # Coberturas asignadas a este miembro.
+        coberturas_m = [t for t in turnos_cobertura if t.get("miembro_id") == m.id]
+        eventos = len(coberturas_m)
+        # Dias de trabajo (matutino/vespertino): conjunto de fechas distintas.
+        dias_trabajo: set[str] = set()
+        descansos_set: set[str] = set()
+        trabajo_sabado = False
+        for t in turnos_trabajo:
+            if t.get("miembro_id") != m.id:
+                continue
+            franja = t.get("franja", "")
+            fecha = t.get("fecha", "")
+            if franja == "descanso":
+                if fecha:
+                    descansos_set.add(fecha)
+                continue
+            if not fecha:
+                continue
+            dias_trabajo.add(fecha)
+            if es_sabado(fecha):
+                trabajo_sabado = True
+        # Sabado tambien cuenta si tiene una COBERTURA un sabado (a veces se cubre sin estar
+        # de horario completo).
+        cobertura_sabado = any(
+            es_sabado(fechas_eventos.get(t.get("evento_id", ""), "")) for t in coberturas_m
+        )
+        resultado.append(
+            CargaMiembro(
+                miembro_id=m.id,
+                nombre=m.nombre,
+                eventos=eventos,
+                dias_trabajados=len(dias_trabajo),
+                sabado=trabajo_sabado or cobertura_sabado,
+                descansos=len(descansos_set),
+            )
+        )
+    resultado.sort(key=lambda c: (-c.eventos, c.nombre.lower()))
+    return resultado

@@ -136,6 +136,13 @@ import type {
   FiltrosPiezasRota,
   RespuestaPiezaRota,
   RespuestaPiezasRota,
+  CuerpoAsignarFranja,
+  RespuestaAsignarFranja,
+  CuerpoActualizarLoteTurnos,
+  RespuestaActualizarLoteTurnos,
+  CuerpoCopiarSemana,
+  RespuestaCopiarSemana,
+  RespuestaCargaRota,
   RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
@@ -206,29 +213,46 @@ export function urlMedia(nombreOUrl: string | null | undefined): string {
 /** Error de la API con el mensaje legible (en espanol) ya extraido. */
 export class ApiError extends Error {
   readonly status: number;
-  constructor(mensaje: string, status: number) {
+  /**
+   * Cuerpo JSON del error (cuando el back lo envía). Útil para 409s que llevan
+   * datos accionables (p. ej. `ids_que_requieren_override`).
+   */
+  readonly cuerpo: Record<string, unknown> | null;
+  constructor(mensaje: string, status: number, cuerpo: Record<string, unknown> | null = null) {
     super(mensaje);
     this.name = "ApiError";
     this.status = status;
+    this.cuerpo = cuerpo;
   }
 }
 
-/** Extrae un mensaje legible del cuerpo de error (campo `mensaje` o `error`). */
-async function mensajeDeError(res: Response): Promise<string> {
+/**
+ * Extrae mensaje + cuerpo JSON de una respuesta de error. Devuelve `{mensaje, cuerpo}`:
+ * `cuerpo` es el JSON crudo (o null si no era JSON), `mensaje` lo legible.
+ */
+async function infoDeError(
+  res: Response,
+): Promise<{ mensaje: string; cuerpo: Record<string, unknown> | null }> {
   try {
-    const cuerpo = (await res.clone().json()) as ErrorApi;
-    if (cuerpo?.mensaje) return cuerpo.mensaje;
-    if (cuerpo?.error) return cuerpo.error;
+    const cuerpo = (await res.clone().json()) as ErrorApi & Record<string, unknown>;
+    const mensaje =
+      cuerpo?.mensaje ||
+      cuerpo?.error ||
+      `Algo salió mal (código ${res.status}). Vuelve a intentarlo.`;
+    return { mensaje, cuerpo };
   } catch {
     // El cuerpo no era JSON; intentamos texto plano abajo.
   }
   try {
     const texto = (await res.text()).trim();
-    if (texto) return texto;
+    if (texto) return { mensaje: texto, cuerpo: null };
   } catch {
     // Sin cuerpo legible.
   }
-  return `Algo salió mal (código ${res.status}). Vuelve a intentarlo.`;
+  return {
+    mensaje: `Algo salió mal (código ${res.status}). Vuelve a intentarlo.`,
+    cuerpo: null,
+  };
 }
 
 /**
@@ -244,7 +268,8 @@ async function parsear<T>(
   muestrear = true,
 ): Promise<T> {
   if (!res.ok) {
-    throw new ApiError(await mensajeDeError(res), res.status);
+    const info = await infoDeError(res);
+    throw new ApiError(info.mensaje, res.status, info.cuerpo);
   }
   // 204 No Content u otras respuestas sin cuerpo.
   if (res.status === 204) return undefined as T;
@@ -363,7 +388,10 @@ async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: stri
   } catch {
     throw new ApiError("No se pudo contactar con la consola. ¿Está corriendo el servidor local?", 0);
   }
-  if (!res.ok) throw new ApiError(await mensajeDeError(res), res.status);
+  if (!res.ok) {
+    const info = await infoDeError(res);
+    throw new ApiError(info.mensaje, res.status, info.cuerpo);
+  }
 
   const blob = await res.blob();
   const cd = res.headers.get("Content-Disposition") ?? "";
@@ -849,6 +877,22 @@ export const api = {
     }),
   eliminarPiezaRota: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/piezas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Asignación flexible (rama rota-asignacion-flexible) ---
+  asignarFranja: (cuerpo: CuerpoAsignarFranja) =>
+    peticion<RespuestaAsignarFranja>("/rota/cobertura/asignar-franja", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  actualizarLoteTurnos: (cuerpo: CuerpoActualizarLoteTurnos) =>
+    peticion<RespuestaActualizarLoteTurnos>("/rota/turnos/lote", {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  copiarSemana: (cuerpo: CuerpoCopiarSemana) =>
+    peticion<RespuestaCopiarSemana>("/rota/copiar-semana", { metodo: "POST", json: cuerpo }),
+  cargaRota: (params: { lunes: string }, signal?: AbortSignal) =>
+    peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
 
   // --- Metricas ---
   metricasOpciones: (signal?: AbortSignal) =>

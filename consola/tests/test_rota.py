@@ -113,3 +113,109 @@ def test_miembro_ausente_rango_inclusivo():
     # Los extremos del rango sí cuentan (inclusivo).
     assert r.miembro_ausente(aus, "u0", "2026-05-25") is True
     assert r.miembro_ausente(aus, "u0", "2026-05-27") is True
+
+
+# --------------------------------------------------------------------------- #
+# Asignación flexible: mapeo hora -> franja (la API la usa para "asignar de golpe") #
+# --------------------------------------------------------------------------- #
+
+
+def test_mapear_franja_limites():
+    # Matutino: 06:00 inclusive ... 13:59 inclusive.
+    assert r.mapear_franja("06:00") == "matutino"
+    assert r.mapear_franja("13:59") == "matutino"
+    # Vespertino: 14:00 inclusive ... 22:59 inclusive.
+    assert r.mapear_franja("14:00") == "vespertino"
+    assert r.mapear_franja("22:59") == "vespertino"
+    # Descanso (madrugada y noche).
+    assert r.mapear_franja("00:00") == "descanso"
+    assert r.mapear_franja("05:59") == "descanso"
+    assert r.mapear_franja("23:00") == "descanso"
+    assert r.mapear_franja("23:59") == "descanso"
+
+
+def test_mapear_franja_rango_se_queda_con_el_inicio():
+    # El Excel guarda a veces rangos como "16:00–18:00" / "16:00-18:00".
+    assert r.mapear_franja("16:00-18:00") == "vespertino"
+    assert r.mapear_franja("08:30–10:00") == "matutino"
+
+
+def test_mapear_franja_vacio_o_malformado_lanza():
+    import pytest
+
+    with pytest.raises(ValueError):
+        r.mapear_franja("")
+    with pytest.raises(ValueError):
+        r.mapear_franja("no-hora")
+    with pytest.raises(ValueError):
+        r.mapear_franja("25:00")  # fuera de rango
+
+
+# --------------------------------------------------------------------------- #
+# Resumen de carga por miembro (panel "Carga del equipo")                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_resumen_carga_basico():
+    equipo = [
+        r.Miembro("u_tescu", "Tescu"),
+        r.Miembro("u_luis", "Luis"),
+        r.Miembro("u_eli", "Elias"),
+    ]
+    # 6 eventos asignados a Tescu (3 caen en sábado), 0 a Luis, 1 a Elías.
+    fechas = {
+        "ev1": "2026-05-25",  # lunes
+        "ev2": "2026-05-25",
+        "ev3": "2026-05-27",
+        "ev4": SAB1,  # sábado 2026-05-30
+        "ev5": SAB1,
+        "ev6": SAB1,
+        "ev_eli": "2026-05-26",
+    }
+    turnos_cobertura = [
+        *({"evento_id": eid, "miembro_id": "u_tescu"} for eid in ["ev1", "ev2", "ev3", "ev4", "ev5", "ev6"]),
+        {"evento_id": "ev_eli", "miembro_id": "u_eli"},
+    ]
+    # Horario de trabajo: Tescu trabaja 5 días + 1 descanso; Luis 3 días + 2 descansos.
+    turnos_trabajo = [
+        {"miembro_id": "u_tescu", "fecha": "2026-05-25", "franja": "vespertino"},
+        {"miembro_id": "u_tescu", "fecha": "2026-05-26", "franja": "vespertino"},
+        {"miembro_id": "u_tescu", "fecha": "2026-05-27", "franja": "vespertino"},
+        {"miembro_id": "u_tescu", "fecha": "2026-05-28", "franja": "descanso"},
+        {"miembro_id": "u_tescu", "fecha": "2026-05-29", "franja": "vespertino"},
+        {"miembro_id": "u_tescu", "fecha": SAB1, "franja": "vespertino"},
+        {"miembro_id": "u_luis", "fecha": "2026-05-25", "franja": "matutino"},
+        {"miembro_id": "u_luis", "fecha": "2026-05-26", "franja": "matutino"},
+        {"miembro_id": "u_luis", "fecha": "2026-05-27", "franja": "descanso"},
+        {"miembro_id": "u_luis", "fecha": "2026-05-28", "franja": "descanso"},
+        {"miembro_id": "u_luis", "fecha": "2026-05-29", "franja": "matutino"},
+    ]
+    carga = r.resumen_carga(equipo, turnos_cobertura, turnos_trabajo, fechas)
+    # Ordenado por eventos desc.
+    assert [c.nombre for c in carga] == ["Tescu", "Elias", "Luis"]
+    tescu = carga[0]
+    assert tescu.eventos == 6
+    assert tescu.dias_trabajados == 5
+    assert tescu.sabado is True  # trabaja sábado y cubre eventos del sábado
+    assert tescu.descansos == 1
+
+    luis = next(c for c in carga if c.nombre == "Luis")
+    assert luis.eventos == 0
+    assert luis.dias_trabajados == 3
+    assert luis.sabado is False
+    assert luis.descansos == 2
+
+    eli = next(c for c in carga if c.nombre == "Elias")
+    assert eli.eventos == 1
+    assert eli.dias_trabajados == 0  # sin turnos de trabajo
+    assert eli.sabado is False  # el evento es martes
+
+
+def test_resumen_carga_sabado_solo_por_cobertura():
+    """Aunque no esté en horario laboral, si cubre un evento en sábado -> sabado=True."""
+    equipo = [r.Miembro("u_tescu", "Tescu")]
+    fechas = {"ev1": SAB1}
+    cobertura = [{"evento_id": "ev1", "miembro_id": "u_tescu"}]
+    trabajo: list[dict] = []
+    carga = r.resumen_carga(equipo, cobertura, trabajo, fechas)
+    assert carga[0].sabado is True

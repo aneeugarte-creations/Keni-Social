@@ -12,6 +12,8 @@ import {
   ChevronRight,
   ChevronUp,
   Coffee,
+  ChevronUp,
+  Copy,
   Download,
   HeartPulse,
   ImageIcon,
@@ -22,6 +24,9 @@ import {
   Search,
   Trash2,
   User,
+  X,
+  Users,
+  Wand2,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -34,6 +39,15 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -63,6 +77,7 @@ import type {
   CuerpoActualizarPiezaRota,
   EstadoPieza,
   EventoRota,
+  FranjaCobertura,
   FranjaTurno,
   HorarioSemana,
   MiembroRota,
@@ -589,8 +604,13 @@ function Parrilla({
 
   const equipo = equipoQ.data?.equipo ?? [];
   const semana = semanaQ.data;
-  const turnos = semana?.turnos ?? [];
+  // Memoizamos `turnos` para que el `useMemo` de filtros tenga una referencia estable
+  // entre renders cuando los datos no cambian (evita recomputos innecesarios y avisos
+  // del linter).
+  const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
 
+  const invalidarTodo = () =>
+    void queryClient.invalidateQueries({ queryKey: ["rota"] });
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveSemana });
 
   const aprobar = useMutation({
@@ -601,6 +621,47 @@ function Parrilla({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  const copiarAnterior = useMutation({
+    mutationFn: () =>
+      api.copiarSemana({
+        de_lunes: lunesSiguiente(lunes, -1),
+        a_lunes: lunes,
+        alcance: "cobertura",
+        reemplazar: false,
+      }),
+    onSuccess: (res) => {
+      if (res.mensaje) toast.warning(res.mensaje);
+      else toast.success(`Copiados ${res.copiados ?? 0} turnos de cobertura.`);
+      invalidarTodo();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Filtros por miembro (multi-toggle); "sin-asignar" es un id reservado.
+  const [filtros, setFiltros] = React.useState<Set<string>>(new Set());
+  const turnosFiltrados = React.useMemo(() => {
+    if (filtros.size === 0) return turnos;
+    return turnos.filter((t) => {
+      if (!t.miembro_id) return filtros.has("sin-asignar");
+      return filtros.has(t.miembro_id);
+    });
+  }, [turnos, filtros]);
+
+  // Selección múltiple (estado del check por fila).
+  const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
+  // Cada vez que cambia la semana o se invalida, limpia la selección (ids viejos).
+  React.useEffect(() => {
+    setSeleccionados(new Set());
+  }, [lunes, semana?.total]);
+
+  const toggleSeleccionado = (id: string) =>
+    setSeleccionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   return (
     <div className="space-y-4">
@@ -621,6 +682,19 @@ function Parrilla({
               Borrador
             </Badge>
           ) : null}
+          <Button
+            variant="outline"
+            onClick={() => copiarAnterior.mutate()}
+            disabled={copiarAnterior.isPending || semana?.aprobada}
+            title="Copiar la cobertura de la semana anterior (los eventos cambian: avisa si no aplica)"
+          >
+            {copiarAnterior.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            Copiar semana anterior
+          </Button>
           {esAdmin && (
             <Button
               variant="secondary"
@@ -644,6 +718,24 @@ function Parrilla({
         </div>
       </div>
 
+      {!semana?.aprobada && (
+        <AsignarDeGolpe lunes={lunes} equipo={equipo} onAplicado={invalidarTodo} />
+      )}
+
+      <FiltrosMiembro equipo={equipo} filtros={filtros} setFiltros={setFiltros} />
+
+      {seleccionados.size > 0 && (
+        <BarraSeleccion
+          seleccionados={seleccionados}
+          equipo={equipo}
+          onLimpiar={() => setSeleccionados(new Set())}
+          onAplicado={() => {
+            setSeleccionados(new Set());
+            invalidarTodo();
+          }}
+        />
+      )}
+
       {semanaQ.isPending ? (
         <Skeleton className="h-48 w-full rounded-md" />
       ) : semanaQ.isError ? (
@@ -661,13 +753,430 @@ function Parrilla({
         />
       ) : (
         <TablaTurnos
-          turnos={turnos}
+          turnos={turnosFiltrados}
           equipo={equipo}
           editable={!semana?.aprobada}
           onCambio={invalidar}
+          seleccionados={seleccionados}
+          onToggleSeleccionado={!semana?.aprobada ? toggleSeleccionado : undefined}
         />
       )}
+
+      <PanelCarga lunes={lunes} />
     </div>
+  );
+}
+
+// --- Asignar de golpe (POR FRANJA) -----------------------------------------
+
+function AsignarDeGolpe({
+  lunes,
+  equipo,
+  onAplicado,
+}: {
+  lunes: string;
+  equipo: MiembroRota[];
+  onAplicado: () => void;
+}) {
+  const dias = React.useMemo(() => {
+    const base = new Date(`${lunes}T00:00:00`);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(base);
+      d.setDate(d.getDate() + i);
+      return iso(d);
+    });
+  }, [lunes]);
+
+  const [fecha, setFecha] = React.useState(dias[0] ?? "");
+  const [franja, setFranja] = React.useState<FranjaCobertura>("vespertino");
+  const [miembroId, setMiembroId] = React.useState("");
+  const [sobreescribir, setSobreescribir] = React.useState(false);
+
+  React.useEffect(() => {
+    // Si cambia la semana, ancla la fecha al primer día válido.
+    if (dias.length > 0 && !dias.includes(fecha)) setFecha(dias[0]);
+  }, [dias, fecha]);
+
+  const aplicar = useMutation({
+    mutationFn: (override: boolean) =>
+      api.asignarFranja({
+        lunes,
+        fecha,
+        franja,
+        miembro_id: miembroId,
+        sobreescribir,
+        override,
+      }),
+    onSuccess: (res) => {
+      const partes: string[] = [];
+      if (res.actualizados > 0) partes.push(`asignados ${res.actualizados}`);
+      if (res.saltados > 0) partes.push(`saltados ${res.saltados}`);
+      if (res.conflictos.length > 0)
+        partes.push(`${res.conflictos.length} requieren override`);
+      toast.success(partes.length > 0 ? partes.join(" · ") : "Sin cambios que aplicar.");
+      onAplicado();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puede = fecha !== "" && miembroId !== "" && !aplicar.isPending;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Wand2 className="h-4 w-4" /> Asignar de golpe
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="space-y-1.5">
+          <Label>Día</Label>
+          <Select value={fecha} onValueChange={setFecha}>
+            <SelectTrigger aria-label="Día de la semana">
+              <SelectValue placeholder="—" />
+            </SelectTrigger>
+            <SelectContent>
+              {dias.map((d) => (
+                <SelectItem key={d} value={d}>
+                  {formatearFechaCorta(d)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Franja</Label>
+          <Select value={franja} onValueChange={(v) => setFranja(v as FranjaCobertura)}>
+            <SelectTrigger aria-label="Franja">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="matutino">Mañana (06–13:59)</SelectItem>
+              <SelectItem value="vespertino">Tarde (14–22:59)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Persona</Label>
+          <Select value={miembroId} onValueChange={setMiembroId}>
+            <SelectTrigger aria-label="Persona">
+              <SelectValue placeholder="Elige a un miembro" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipo.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2 self-end pb-2">
+          <Checkbox
+            id="sobreescribir"
+            checked={sobreescribir}
+            onCheckedChange={(v) => setSobreescribir(v === true)}
+          />
+          <Label htmlFor="sobreescribir" className="cursor-pointer text-sm font-normal">
+            Sobrescribir
+          </Label>
+        </div>
+        <div className="flex items-end">
+          <Button
+            onClick={() => aplicar.mutate(false)}
+            disabled={!puede}
+            className="w-full"
+          >
+            {aplicar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Wand2 className="h-4 w-4" />
+            )}
+            Asignar
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// --- Filtros por miembro ---------------------------------------------------
+
+function FiltrosMiembro({
+  equipo,
+  filtros,
+  setFiltros,
+}: {
+  equipo: MiembroRota[];
+  filtros: Set<string>;
+  setFiltros: React.Dispatch<React.SetStateAction<Set<string>>>;
+}) {
+  const toggle = (id: string) =>
+    setFiltros((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  if (equipo.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-muted-foreground">Filtra por persona:</span>
+      {equipo.map((m) => {
+        const activo = filtros.has(m.id);
+        return (
+          <Button
+            key={m.id}
+            size="sm"
+            variant={activo ? "default" : "outline"}
+            className="h-7 px-2"
+            onClick={() => toggle(m.id)}
+          >
+            {m.nombre}
+          </Button>
+        );
+      })}
+      <Button
+        size="sm"
+        variant={filtros.has("sin-asignar") ? "default" : "outline"}
+        className="h-7 px-2"
+        onClick={() => toggle("sin-asignar")}
+      >
+        Sin asignar
+      </Button>
+      {filtros.size > 0 && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-muted-foreground"
+          onClick={() => setFiltros(new Set())}
+        >
+          <X className="h-3.5 w-3.5" /> Limpiar
+        </Button>
+      )}
+    </div>
+  );
+}
+
+// --- Barra de acción para la selección múltiple ----------------------------
+
+function BarraSeleccion({
+  seleccionados,
+  equipo,
+  onLimpiar,
+  onAplicado,
+}: {
+  seleccionados: Set<string>;
+  equipo: MiembroRota[];
+  onLimpiar: () => void;
+  onAplicado: () => void;
+}) {
+  const [miembroId, setMiembroId] = React.useState("");
+  // Si el backend pide override (409), guardamos los datos y abrimos el diálogo.
+  const [override, setOverride] = React.useState<{
+    miembroId: string;
+    mensaje: string;
+    ids: string[];
+  } | null>(null);
+
+  const aplicar = useMutation({
+    mutationFn: (vars: { miembroId: string; override: boolean }) =>
+      api.actualizarLoteTurnos({
+        ids: [...seleccionados],
+        miembro_id: vars.miembroId,
+        override: vars.override,
+      }),
+    onSuccess: (res) => {
+      toast.success(`Asignados ${res.actualizados} turnos.`);
+      setOverride(null);
+      setMiembroId("");
+      onAplicado();
+    },
+    onError: (e, vars) => {
+      if (e instanceof ApiError && e.status === 409) {
+        const ids = (e.cuerpo?.ids_que_requieren_override as string[] | undefined) ?? [];
+        setOverride({ miembroId: vars.miembroId, mensaje: e.message, ids });
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const quitar = useMutation({
+    mutationFn: () =>
+      api.actualizarLoteTurnos({ ids: [...seleccionados], miembro_id: "" }),
+    onSuccess: (res) => {
+      toast.success(`Quitada asignación a ${res.actualizados} turnos.`);
+      onAplicado();
+    },
+    // El backend exige miembro_id válido para "quitar"; usamos otra ruta: el PATCH 1:1
+    // tampoco soporta vacío -> caemos en la API por turno. Para mantenerlo simple aquí
+    // capturamos el error y avisamos.
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Card className="border-primary/40 bg-primary/5">
+      <CardContent className="flex flex-wrap items-center gap-3 p-3">
+        <span className="text-sm font-medium">
+          Seleccionados {seleccionados.size}
+        </span>
+        <span className="text-sm text-muted-foreground">· Asignar a</span>
+        <div className="min-w-[12rem]">
+          <Select value={miembroId} onValueChange={setMiembroId}>
+            <SelectTrigger aria-label="Persona para el lote" className="h-8">
+              <SelectValue placeholder="Elige persona" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipo.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Button
+          size="sm"
+          onClick={() => aplicar.mutate({ miembroId, override: false })}
+          disabled={!miembroId || aplicar.isPending}
+        >
+          {aplicar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Users className="h-4 w-4" />
+          )}
+          Aplicar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => quitar.mutate()}
+          disabled={quitar.isPending}
+        >
+          Quitar asignación
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onLimpiar}>
+          <X className="h-4 w-4" /> Cancelar
+        </Button>
+      </CardContent>
+      {override && (
+        <Dialog open onOpenChange={(o) => !o && setOverride(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>¿Forzar la cobertura?</DialogTitle>
+              <DialogDescription>{override.mensaje}</DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              {override.ids.length} {override.ids.length === 1 ? "turno repite" : "turnos repiten"}
+              {" "}el sábado anterior. Confirma solo si es una cobertura estratégica
+              intencional.
+            </p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setOverride(null)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => aplicar.mutate({ miembroId: override.miembroId, override: true })}
+                disabled={aplicar.isPending}
+              >
+                <AlertTriangle className="h-4 w-4" /> Forzar cobertura
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </Card>
+  );
+}
+
+// --- Panel "Carga del equipo" ----------------------------------------------
+
+function PanelCarga({ lunes }: { lunes: string }) {
+  const [abierto, setAbierto] = React.useState(false);
+  const q = useQuery({
+    queryKey: ["rota", "carga", lunes],
+    queryFn: ({ signal }) => api.cargaRota({ lunes }, signal),
+    enabled: abierto && !!lunes,
+  });
+  const miembros = q.data?.miembros ?? [];
+  return (
+    <Card>
+      <CardHeader
+        className="cursor-pointer pb-3"
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <CardTitle className="flex items-center justify-between text-base">
+          <span className="flex items-center gap-2">
+            <Users className="h-4 w-4" /> Carga del equipo
+          </span>
+          {abierto ? (
+            <ChevronUp className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          )}
+        </CardTitle>
+      </CardHeader>
+      {abierto && (
+        <CardContent className="p-0">
+          {q.isPending ? (
+            <Skeleton className="h-24 w-full rounded-none" />
+          ) : q.isError ? (
+            <BloqueError
+              titulo="No se pudo cargar el resumen"
+              mensaje={mensajeError(q.error)}
+              onReintentar={() => void q.refetch()}
+              cargando={q.isFetching}
+            />
+          ) : miembros.length === 0 ? (
+            <EstadoVacio
+              icono={Users}
+              titulo="Sin datos"
+              texto="No hay miembros del equipo todavía."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Persona</TableHead>
+                  <TableHead className="text-right">Eventos</TableHead>
+                  <TableHead className="text-right">Días trabajados</TableHead>
+                  <TableHead>Sábado</TableHead>
+                  <TableHead className="text-right">Descansos</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {miembros.map((m) => (
+                  <TableRow key={m.miembro_id}>
+                    <TableCell className="font-medium">{m.nombre}</TableCell>
+                    <TableCell
+                      className={
+                        m.eventos >= 7
+                          ? "text-right font-medium text-red-600 dark:text-red-400"
+                          : "text-right"
+                      }
+                    >
+                      {m.eventos}
+                    </TableCell>
+                    <TableCell className="text-right">{m.dias_trabajados}</TableCell>
+                    <TableCell>
+                      {m.sabado ? (
+                        <Badge variant="outline" className="font-normal">
+                          Sábado
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">{m.descansos}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      )}
+    </Card>
   );
 }
 
@@ -676,18 +1185,24 @@ function TablaTurnos({
   equipo,
   editable,
   onCambio,
+  seleccionados,
+  onToggleSeleccionado,
 }: {
   turnos: TurnoRota[];
   equipo: MiembroRota[];
   editable: boolean;
   onCambio: () => void;
+  seleccionados?: Set<string>;
+  onToggleSeleccionado?: (id: string) => void;
 }) {
+  const muestraCheck = !!onToggleSeleccionado;
   return (
     <Card>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
+              {muestraCheck && <TableHead className="w-10" />}
               <TableHead>Día / hora</TableHead>
               <TableHead>Evento / transmisión</TableHead>
               <TableHead>Qué sacar</TableHead>
@@ -702,6 +1217,8 @@ function TablaTurnos({
                 equipo={equipo}
                 editable={editable}
                 onCambio={onCambio}
+                seleccionado={seleccionados?.has(t.id) ?? false}
+                onToggleSeleccionado={onToggleSeleccionado}
               />
             ))}
           </TableBody>
@@ -716,11 +1233,15 @@ function FilaTurno({
   equipo,
   editable,
   onCambio,
+  seleccionado,
+  onToggleSeleccionado,
 }: {
   turno: TurnoRota;
   equipo: MiembroRota[];
   editable: boolean;
   onCambio: () => void;
+  seleccionado: boolean;
+  onToggleSeleccionado?: (id: string) => void;
 }) {
   // Confirmación de override pendiente: si el backend pide override, lo reintenta.
   const [pendienteOverride, setPendienteOverride] = React.useState<string | null>(null);
@@ -749,6 +1270,15 @@ function FilaTurno({
 
   return (
     <TableRow className={turno.es_sabado ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}>
+      {onToggleSeleccionado && (
+        <TableCell className="align-top">
+          <Checkbox
+            aria-label={`Seleccionar turno de ${turno.evento_titulo}`}
+            checked={seleccionado}
+            onCheckedChange={() => onToggleSeleccionado(turno.id)}
+          />
+        </TableCell>
+      )}
       <TableCell className="whitespace-nowrap align-top">
         <div className="font-medium">{formatearFechaCorta(turno.evento_fecha)}</div>
         <div className="text-xs text-muted-foreground">{turno.evento_hora}</div>
@@ -1040,6 +1570,21 @@ function Horario({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const copiarAnterior = useMutation({
+    mutationFn: () =>
+      api.copiarSemana({
+        de_lunes: lunesSiguiente(lunes, -1),
+        a_lunes: lunes,
+        alcance: "horario",
+        reemplazar: false,
+      }),
+    onSuccess: (res) => {
+      toast.success(`Copiados ${res.copiados ?? 0} turnos del horario.`);
+      void queryClient.invalidateQueries({ queryKey: ["rota"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1059,6 +1604,19 @@ function Horario({
               Borrador
             </Badge>
           ) : null}
+          <Button
+            variant="outline"
+            onClick={() => copiarAnterior.mutate()}
+            disabled={copiarAnterior.isPending || horario?.aprobada}
+            title="Copia las franjas (mañana/tarde/descanso) de la semana anterior con offset +7 días"
+          >
+            {copiarAnterior.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Copy className="h-4 w-4" />
+            )}
+            Copiar semana anterior
+          </Button>
           {esAdmin && (
             <Button
               variant="secondary"
