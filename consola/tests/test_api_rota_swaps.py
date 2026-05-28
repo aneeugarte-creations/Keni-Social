@@ -47,26 +47,29 @@ def _crear_horario(app, equipo: list[dict]) -> None:
     """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
 
     Antes la consola PROPONIA reparto automatico; ahora Elias asigna a mano, asi que los
-    tests siembran directo via `repos.crear_turno_trabajo_rota`. Sembramos UN turno
-    matutino el DIA_A para el primero y UN vespertino el DIA_B para el segundo: ambos
-    suficientes para los swaps que usan los tests de esta suite.
+    tests siembran directo via `repos.crear_turno_trabajo_rota`. Sembramos a cada miembro
+    su turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
+    cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que
+    se usa en los tests de "consigo mismo" / "destinatario inexistente" — encuentra los
+    turnos en BD antes de tirar la peticion al endpoint.
     """
     del app  # ya no se usa: sembramos directo en BD.
     primero, segundo = equipo[0], equipo[1]
-    repos.crear_turno_trabajo_rota(
-        LUNES,
-        DIA_A,
-        miembro_id=primero["id"],
-        miembro_nombre=primero["usuario"],
-        franja="matutino",
-    )
-    repos.crear_turno_trabajo_rota(
-        LUNES,
-        DIA_B,
-        miembro_id=segundo["id"],
-        miembro_nombre=segundo["usuario"],
-        franja="vespertino",
-    )
+    for dia in (DIA_A, DIA_B):
+        repos.crear_turno_trabajo_rota(
+            LUNES,
+            dia,
+            miembro_id=primero["id"],
+            miembro_nombre=primero["usuario"],
+            franja="matutino",
+        )
+        repos.crear_turno_trabajo_rota(
+            LUNES,
+            dia,
+            miembro_id=segundo["id"],
+            miembro_nombre=segundo["usuario"],
+            franja="vespertino",
+        )
 
 
 def _turno_de(app, miembro_id: str, fecha: str, franjas: tuple[str, ...]) -> dict:
