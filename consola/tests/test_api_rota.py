@@ -623,18 +623,27 @@ def test_editar_turno_trabajo_franja_invalida_400(cliente):
 # --------------------------------------------------------------------------- #
 
 
-def test_aprobar_horario_marca_publicado(cliente):
+def test_aprobar_horario_marca_publicado(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    # Setup vía token de mantenimiento (proponer NO es solo-admin).
+    token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     _crear_equipo(2)
-    cliente.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
-    assert cliente.get(f"/api/rota/horario?lunes={LUNES1}").json()["aprobada"] is False
-    r = cliente.post("/api/rota/horario/aprobar", json={"lunes": LUNES1})
+    token_cli.post("/api/rota/horario/proponer", json={"lunes": LUNES1})
+    assert token_cli.get(f"/api/rota/horario?lunes={LUNES1}").json()["aprobada"] is False
+    # Aprobar el horario es solo-admin (#150/#153): lo hace una SESION admin real, no el token.
+    admin = _cli_admin_sesion(app)
+    r = admin.post("/api/rota/horario/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert r.json()["aprobada"] is True
     assert all(t["estado"] == "aprobado" for t in r.json()["turnos"])
 
 
-def test_aprobar_horario_sin_turnos_400(cliente):
-    r = cliente.post("/api/rota/horario/aprobar", json={"lunes": LUNES1})
+def test_aprobar_horario_sin_turnos_400(entorno):
+    app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
+    # Aprobar el horario es solo-admin (#150/#153): con admin y sin turnos propuestos, el
+    # handler responde 400 (la validación de negocio que prueba el test).
+    admin = _cli_admin_sesion(app)
+    r = admin.post("/api/rota/horario/aprobar", json={"lunes": LUNES1}, headers=_ORIGIN)
     assert r.status_code == 400
 
 
