@@ -1,16 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   BellRing,
   CalendarDays,
   CalendarOff,
   CalendarPlus,
   Camera,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
   Coffee,
   Copy,
   Download,
@@ -21,6 +24,9 @@ import {
   Plus,
   Radio,
   Search,
+  Send,
+  Shield,
+  ShieldCheck,
   Trash2,
   User,
   Users,
@@ -73,13 +79,16 @@ import type {
   CuerpoCrearPiezaRota,
   CuerpoActualizarPiezaRota,
   EstadoPieza,
+  EstadoSwap,
   EventoRota,
+  FiltrosSwaps,
   FranjaCobertura,
   FranjaTurno,
   HorarioSemana,
   MiembroRota,
   PiezaRota,
   PrioridadEvento,
+  SwapTurno,
   TipoAusencia,
   TipoCoberturaEvento,
   TurnoRota,
@@ -246,6 +255,7 @@ export default function Rota() {
           <TabsTrigger value="parrilla">Parrilla del equipo</TabsTrigger>
           <TabsTrigger value="horario">Horario del equipo</TabsTrigger>
           <TabsTrigger value="mi-semana">Mi próxima semana</TabsTrigger>
+          <TabsTrigger value="swaps">Cambios de turno</TabsTrigger>
           <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
           <TabsTrigger value="eventos">Eventos</TabsTrigger>
         </TabsList>
@@ -261,6 +271,9 @@ export default function Rota() {
         </TabsContent>
         <TabsContent value="mi-semana">
           <MiSemana lunes={lunes} setLunes={setLunes} />
+        </TabsContent>
+        <TabsContent value="swaps">
+          <Swaps esAdmin={esAdmin} />
         </TabsContent>
         <TabsContent value="ausencias">
           <Ausencias />
@@ -3047,5 +3060,641 @@ function PiezasSueltas() {
         </CardContent>
       )}
     </Card>
+  );
+}
+
+// --- Pestaña: cambios de turno entre compañeros (#175) --------------------
+//
+// Flujo (todo lo orquesta el backend; el cliente solo informa):
+//   A (solicitante) crea -> B (destinatario) acepta/rechaza -> admin aprueba
+//   (ejecuta el swap sobre `rota_turnos_trabajo`) o rechaza. A puede cancelar
+//   mientras el estado no sea terminal (terminales: aplicado, rechazado,
+//   rechazado_admin, cancelado).
+
+/** Etiqueta legible para cada estado del swap (es-MX, voz del producto). */
+const ETIQUETA_ESTADO_SWAP: Record<EstadoSwap, string> = {
+  propuesto: "Pendiente de su respuesta",
+  aceptado: "Aceptado · espera a Elías",
+  aprobado: "Aprobado por Elías",
+  aplicado: "Aplicado al horario",
+  rechazado: "Rechazado por el compañero",
+  rechazado_admin: "Rechazado por Elías",
+  cancelado: "Cancelado",
+};
+
+/** Variante visual del Badge para cada estado del swap. */
+const VARIANTE_ESTADO_SWAP: Record<
+  EstadoSwap,
+  "aviso" | "secondary" | "ok" | "error"
+> = {
+  propuesto: "aviso",
+  aceptado: "secondary",
+  aprobado: "ok",
+  aplicado: "ok",
+  rechazado: "error",
+  rechazado_admin: "error",
+  cancelado: "error",
+};
+
+/** Estados terminales: el swap ya no admite más acciones (solo historial). */
+const ESTADOS_TERMINALES_SWAP: ReadonlySet<EstadoSwap> = new Set([
+  "aplicado",
+  "rechazado",
+  "rechazado_admin",
+  "cancelado",
+]);
+
+const FRANJAS_SWAP: { valor: FranjaTurno; etiqueta: string }[] = [
+  { valor: "matutino", etiqueta: "Mañana" },
+  { valor: "vespertino", etiqueta: "Tarde" },
+  { valor: "descanso", etiqueta: "Descanso" },
+];
+
+/** Formatea un timestamp ISO ("2026-05-25T18:42:11") como fecha-hora corta es-MX. */
+function formatearMomentoCorto(s: string): string {
+  if (!s) return "";
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString("es-MX", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function Swaps({ esAdmin }: { esAdmin: boolean }) {
+  const { usuario } = useSesion();
+  // Sin sesión (token de mantenimiento) no hay "yo": el backend devuelve [] para
+  // las consultas con `mio=true`. Lo decimos honestamente y no listamos nada.
+  if (!usuario) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-sm text-muted-foreground">
+          Inicia sesión para gestionar tus cambios de turno con el equipo.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <FormularioNuevoSwap miId={usuario.id} />
+      <SeccionSwaps
+        titulo="Por responder"
+        descripcion="Compañeros que te piden un cambio. Acepta o rechaza."
+        icono={ArrowLeftRight}
+        filtros={{ destinatario_id: usuario.id, estado: "propuesto" }}
+        miId={usuario.id}
+        esAdmin={esAdmin}
+        vacio="No tienes solicitudes esperando tu respuesta."
+      />
+      <SeccionSwaps
+        titulo="Solicité"
+        descripcion="Cambios que pediste tú. Puedes cancelar mientras no sean terminales."
+        icono={Send}
+        filtros={{ solicitante_id: usuario.id }}
+        soloEstados="no_terminales"
+        miId={usuario.id}
+        esAdmin={esAdmin}
+        vacio="No tienes solicitudes activas. Pide un cambio con el formulario de arriba."
+      />
+      {esAdmin && (
+        <SeccionSwaps
+          titulo="Para aprobar"
+          descripcion="Cambios que ya aceptaron entre compañeros: tú decides si se aplican al horario."
+          icono={ShieldCheck}
+          filtros={{ estado: "aceptado" }}
+          miId={usuario.id}
+          esAdmin={esAdmin}
+          vacio="No hay cambios pendientes de tu aprobación."
+        />
+      )}
+      <SeccionSwaps
+        titulo="Historial"
+        descripcion="Tus cambios ya cerrados (aplicados, rechazados o cancelados)."
+        icono={Clock}
+        filtros={{ mio: true }}
+        soloEstados="terminales"
+        miId={usuario.id}
+        esAdmin={esAdmin}
+        vacio="Aún no tienes cambios cerrados."
+      />
+    </div>
+  );
+}
+
+function FormularioNuevoSwap({ miId }: { miId: string }) {
+  const queryClient = useQueryClient();
+  const equipoQ = useQuery({
+    queryKey: ["rota", "equipo"],
+    queryFn: ({ signal }) => api.rotaEquipo(signal),
+  });
+  const equipo = (equipoQ.data?.equipo ?? []).filter((m) => m.id !== miId);
+
+  const [destinatarioId, setDestinatarioId] = React.useState("");
+  const [fechaA, setFechaA] = React.useState("");
+  const [franjaA, setFranjaA] = React.useState<FranjaTurno>("matutino");
+  const [fechaB, setFechaB] = React.useState("");
+  const [franjaB, setFranjaB] = React.useState<FranjaTurno>("matutino");
+  const [motivo, setMotivo] = React.useState("");
+
+  const destinatario = equipo.find((m) => m.id === destinatarioId);
+
+  const crear = useMutation({
+    mutationFn: () =>
+      api.crearSwap({
+        destinatario_id: destinatarioId,
+        fecha_a: fechaA,
+        franja_a: franjaA,
+        fecha_b: fechaB,
+        franja_b: franjaB,
+        motivo: motivo.trim(),
+      }),
+    onSuccess: () => {
+      toast.success("Solicitud enviada. Tu compañero la verá en su lista de 'Por responder'.");
+      setDestinatarioId("");
+      setFechaA("");
+      setFranjaA("matutino");
+      setFechaB("");
+      setFranjaB("matutino");
+      setMotivo("");
+      void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puedeCrear =
+    destinatarioId !== "" &&
+    fechaA !== "" &&
+    fechaB !== "" &&
+    !crear.isPending;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <ArrowLeftRight className="h-4 w-4" /> Pedir cambio de turno
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <Label>Compañero/a</Label>
+          <Select value={destinatarioId} onValueChange={setDestinatarioId}>
+            <SelectTrigger aria-label="Compañero al que pides el cambio">
+              <SelectValue placeholder="Elige a un compañero/a" />
+            </SelectTrigger>
+            <SelectContent>
+              {equipo.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Mi turno
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="swap-fecha-a">Día</Label>
+              <Input
+                id="swap-fecha-a"
+                type="date"
+                value={fechaA}
+                onChange={(e) => setFechaA(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Franja</Label>
+              <Select value={franjaA} onValueChange={(v) => setFranjaA(v as FranjaTurno)}>
+                <SelectTrigger aria-label="Franja de mi turno">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FRANJAS_SWAP.map((f) => (
+                    <SelectItem key={f.valor} value={f.valor}>
+                      {f.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Turno de {destinatario?.nombre || "tu compañero/a"}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="swap-fecha-b">Día</Label>
+              <Input
+                id="swap-fecha-b"
+                type="date"
+                value={fechaB}
+                onChange={(e) => setFechaB(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Franja</Label>
+              <Select value={franjaB} onValueChange={(v) => setFranjaB(v as FranjaTurno)}>
+                <SelectTrigger aria-label="Franja del turno del compañero">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FRANJAS_SWAP.map((f) => (
+                    <SelectItem key={f.valor} value={f.valor}>
+                      {f.etiqueta}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="swap-motivo">
+            Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+          </Label>
+          <Textarea
+            id="swap-motivo"
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            placeholder="Ej. Cita médica, evento familiar, examen…"
+            rows={2}
+            maxLength={500}
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+            {crear.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            Solicitar cambio
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Una sección de la pestaña de Swaps: lista filtrada de tarjetas, con un filtro
+ * adicional cliente (`soloEstados`) para dividir "Solicité" entre activos y los
+ * "Historial" (terminales), reaprovechando la misma consulta backend.
+ */
+function SeccionSwaps({
+  titulo,
+  descripcion,
+  icono: Icono,
+  filtros,
+  soloEstados,
+  miId,
+  esAdmin,
+  vacio,
+}: {
+  titulo: string;
+  descripcion: string;
+  icono: typeof ArrowLeftRight;
+  filtros: FiltrosSwaps;
+  /** Filtro extra cliente: deja solo (no_)terminales. Sin valor = sin filtro. */
+  soloEstados?: "terminales" | "no_terminales";
+  miId: string;
+  esAdmin: boolean;
+  vacio: string;
+}) {
+  const clave = ["rota", "swaps", filtros] as const;
+  const q = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) => api.listarSwaps(filtros, signal),
+  });
+
+  const swaps = React.useMemo(() => {
+    const todos = q.data?.swaps ?? [];
+    if (!soloEstados) return todos;
+    const esTerminal = (s: SwapTurno) => ESTADOS_TERMINALES_SWAP.has(s.estado);
+    return soloEstados === "terminales" ? todos.filter(esTerminal) : todos.filter((s) => !esTerminal(s));
+  }, [q.data, soloEstados]);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Icono className="h-4 w-4" /> {titulo}
+          <span className="ml-2 text-xs font-normal text-muted-foreground">
+            {descripcion}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {q.isPending ? (
+          <Skeleton className="h-24 w-full rounded-md" />
+        ) : q.isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar los cambios de turno"
+            mensaje={mensajeError(q.error)}
+            onReintentar={() => void q.refetch()}
+            cargando={q.isFetching}
+          />
+        ) : swaps.length === 0 ? (
+          <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+            {vacio}
+          </div>
+        ) : (
+          swaps.map((s) => (
+            <TarjetaSwap key={s.id} swap={s} miId={miId} esAdmin={esAdmin} />
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Una tarjeta con los datos de un swap y los botones de acción según contexto. */
+function TarjetaSwap({
+  swap,
+  miId,
+  esAdmin,
+}: {
+  swap: SwapTurno;
+  miId: string;
+  esAdmin: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const invalidar = () =>
+    void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });
+
+  const soyDestinatario = swap.destinatario_id === miId;
+  const soySolicitante = swap.solicitante_id === miId;
+  const esTerminal = ESTADOS_TERMINALES_SWAP.has(swap.estado);
+
+  // Qué acciones puede ejecutar el usuario en este swap, en este estado.
+  // El backend revalida; aquí solo decidimos qué BOTONES enseñar.
+  const puedeAceptarRechazarDestinatario =
+    soyDestinatario && swap.estado === "propuesto";
+  const puedeAprobarAdmin = esAdmin && swap.estado === "aceptado";
+  const puedeCancelar = soySolicitante && !esTerminal;
+
+  const cancelar = useMutation({
+    mutationFn: () => api.cancelarSwap(swap.id),
+    onSuccess: () => {
+      toast.success("Solicitud cancelada.");
+      invalidar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <div className="rounded-md border bg-card p-4 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">{swap.solicitante_nombre}</span>
+            <ArrowLeftRight className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium">{swap.destinatario_nombre}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            <span>
+              {formatearFechaCorta(swap.fecha_a)} · {ETIQUETA_FRANJA[swap.franja_a]}
+            </span>
+            <span className="mx-1.5">↔</span>
+            <span>
+              {formatearFechaCorta(swap.fecha_b)} · {ETIQUETA_FRANJA[swap.franja_b]}
+            </span>
+          </div>
+        </div>
+        <Badge variant={VARIANTE_ESTADO_SWAP[swap.estado]}>
+          {ETIQUETA_ESTADO_SWAP[swap.estado]}
+        </Badge>
+      </div>
+
+      {swap.motivo && (
+        <div className="text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Motivo ·{" "}
+          </span>
+          <span className="text-muted-foreground">{swap.motivo}</span>
+        </div>
+      )}
+      {swap.respuesta_destinatario && (
+        <div className="text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Respuesta de {swap.destinatario_nombre} ·{" "}
+          </span>
+          <span className="text-muted-foreground">{swap.respuesta_destinatario}</span>
+        </div>
+      )}
+      {swap.respuesta_admin && (
+        <div className="text-sm">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Nota de Elías ·{" "}
+          </span>
+          <span className="text-muted-foreground">{swap.respuesta_admin}</span>
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span>Creado: {formatearMomentoCorto(swap.creado)}</span>
+        {swap.decidido_destinatario && (
+          <span>· Respondió el compañero: {formatearMomentoCorto(swap.decidido_destinatario)}</span>
+        )}
+        {swap.decidido_admin && (
+          <span>· Decisión admin: {formatearMomentoCorto(swap.decidido_admin)}</span>
+        )}
+        {swap.aplicado && (
+          <span>· Aplicado: {formatearMomentoCorto(swap.aplicado)}</span>
+        )}
+      </div>
+
+      {(puedeAceptarRechazarDestinatario || puedeAprobarAdmin || puedeCancelar) && (
+        <div className="flex flex-wrap justify-end gap-2 pt-1">
+          {puedeAceptarRechazarDestinatario && (
+            <>
+              <DialogAccionSwap
+                swapId={swap.id}
+                accion="aceptar"
+                onCambio={invalidar}
+                trigger={
+                  <Button size="sm">
+                    <Check className="h-4 w-4" /> Aceptar
+                  </Button>
+                }
+              />
+              <DialogAccionSwap
+                swapId={swap.id}
+                accion="rechazar"
+                onCambio={invalidar}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <X className="h-4 w-4" /> Rechazar
+                  </Button>
+                }
+              />
+            </>
+          )}
+          {puedeAprobarAdmin && (
+            <>
+              <DialogAccionSwap
+                swapId={swap.id}
+                accion="aprobar"
+                onCambio={invalidar}
+                trigger={
+                  <Button size="sm">
+                    <ShieldCheck className="h-4 w-4" /> Aprobar y aplicar
+                  </Button>
+                }
+              />
+              <DialogAccionSwap
+                swapId={swap.id}
+                accion="rechazar_admin"
+                onCambio={invalidar}
+                trigger={
+                  <Button size="sm" variant="outline">
+                    <Shield className="h-4 w-4" /> Rechazar
+                  </Button>
+                }
+              />
+            </>
+          )}
+          {puedeCancelar && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-muted-foreground hover:text-destructive"
+              onClick={() => cancelar.mutate()}
+              disabled={cancelar.isPending}
+            >
+              {cancelar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Cancelar solicitud
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Diálogo de confirmación para aceptar/rechazar/aprobar/rechazar-admin un swap.
+ * Pide una nota opcional ("respuesta") antes de mandar la mutación. El backend
+ * valida estado, identidad y rol; aquí solo informamos.
+ */
+function DialogAccionSwap({
+  swapId,
+  accion,
+  onCambio,
+  trigger,
+}: {
+  swapId: string;
+  accion: "aceptar" | "rechazar" | "aprobar" | "rechazar_admin";
+  onCambio: () => void;
+  trigger: React.ReactNode;
+}) {
+  const [abierto, setAbierto] = React.useState(false);
+  const [respuesta, setRespuesta] = React.useState("");
+
+  // Cada acción tiene su título, llamada API y texto del botón confirmar.
+  const META: Record<
+    typeof accion,
+    {
+      titulo: string;
+      descripcion: string;
+      botonConfirmar: string;
+      llamar: (cuerpo: { respuesta?: string }) => Promise<unknown>;
+      toastOk: string;
+      placeholder: string;
+    }
+  > = {
+    aceptar: {
+      titulo: "Aceptar el cambio",
+      descripcion:
+        "Confirmas que puedes cubrir el turno de tu compañero. Aún falta que Elías lo apruebe.",
+      botonConfirmar: "Aceptar",
+      llamar: (cuerpo) => api.aceptarSwap(swapId, cuerpo),
+      toastOk: "Cambio aceptado. Espera la aprobación de Elías.",
+      placeholder: "Sin problema, yo te cubro…",
+    },
+    rechazar: {
+      titulo: "Rechazar el cambio",
+      descripcion: "Rechazas el cambio que te pidió tu compañero. Puedes dejarle el motivo.",
+      botonConfirmar: "Rechazar",
+      llamar: (cuerpo) => api.rechazarSwap(swapId, cuerpo),
+      toastOk: "Cambio rechazado.",
+      placeholder: "No puedo ese día porque…",
+    },
+    aprobar: {
+      titulo: "Aprobar y aplicar el cambio",
+      descripcion:
+        "Vas a intercambiar los turnos en el horario del equipo. Si los turnos han cambiado a mano desde la solicitud, la consola lo avisará y no aplicará nada.",
+      botonConfirmar: "Aprobar y aplicar",
+      llamar: (cuerpo) => api.aprobarSwap(swapId, cuerpo),
+      toastOk: "Cambio aprobado y aplicado al horario.",
+      placeholder: "Ojo con el relevo / nota interna…",
+    },
+    rechazar_admin: {
+      titulo: "Rechazar el cambio (admin)",
+      descripcion: "Vas a rechazar el cambio aunque tus compañeros ya lo hubieran acordado.",
+      botonConfirmar: "Rechazar",
+      llamar: (cuerpo) => api.rechazarSwapAdmin(swapId, cuerpo),
+      toastOk: "Cambio rechazado.",
+      placeholder: "Ese día necesitamos a… en transmisión.",
+    },
+  };
+  const meta = META[accion];
+
+  const mutar = useMutation({
+    mutationFn: () => meta.llamar({ respuesta: respuesta.trim() }),
+    onSuccess: () => {
+      toast.success(meta.toastOk);
+      setRespuesta("");
+      setAbierto(false);
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <>
+      <span onClick={() => setAbierto(true)}>{trigger}</span>
+      <Dialog open={abierto} onOpenChange={setAbierto}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{meta.titulo}</DialogTitle>
+            <DialogDescription>{meta.descripcion}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor={`resp-${swapId}-${accion}`}>
+              Respuesta <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Textarea
+              id={`resp-${swapId}-${accion}`}
+              value={respuesta}
+              onChange={(e) => setRespuesta(e.target.value)}
+              placeholder={meta.placeholder}
+              rows={3}
+              maxLength={500}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAbierto(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={() => mutar.mutate()} disabled={mutar.isPending}>
+              {mutar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              {meta.botonConfirmar}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
