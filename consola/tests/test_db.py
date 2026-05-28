@@ -198,6 +198,36 @@ def test_migracion_columnas_tablero_en_bd_vieja(base):
     assert nueva["responsable_nombre"] == "ana"
 
 
+def test_migracion_columnas_eventos_rota_en_bd_vieja(base):
+    """Un `rota_eventos` SIN cobertura/prioridad/cambiado/actualizado se ALTERa idempotente."""
+    ruta = db.ruta_db()
+    ruta.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(ruta))
+    # Esquema previo a la ola B (solo los campos originales del evento).
+    con.execute(
+        "CREATE TABLE rota_eventos (id TEXT PRIMARY KEY, titulo TEXT NOT NULL, "
+        "fecha TEXT NOT NULL DEFAULT '', hora TEXT NOT NULL DEFAULT '', "
+        "contenido TEXT NOT NULL DEFAULT '', nota TEXT NOT NULL DEFAULT '', "
+        "creado TEXT NOT NULL DEFAULT '')"
+    )
+    con.execute(
+        "INSERT INTO rota_eventos (id, titulo, fecha) VALUES ('viejo', 'Partido', '2026-05-30')"
+    )
+    con.commit()
+    con.close()
+    # Cualquier operacion dispara la migracion idempotente; el evento legado queda con
+    # los valores por defecto sensatos (transmision/media/sin reprogramar).
+    ev = db.obtener_evento_rota("viejo")
+    assert ev is not None
+    assert ev["tipo_cobertura"] == "transmision"
+    assert ev["prioridad"] == "media"
+    assert ev["cambiado"] is False
+    assert ev["actualizado"] == ""
+    # Y las columnas quedan disponibles para nuevas filas.
+    nuevo = db.crear_evento_rota("Nuevo", fecha="2026-05-30", tipo_cobertura="imagenes")
+    assert nuevo["tipo_cobertura"] == "imagenes"
+
+
 def test_sql_parametrizado_no_inyectable(base):
     """Un titulo con sintaxis SQL se guarda LITERAL (consultas parametrizadas)."""
     malicioso = "'; DROP TABLE tareas; --"

@@ -79,7 +79,11 @@ from .estados import (
     FRANJA_DESCANSO,
     FRANJAS_TURNO,
     METRICAS_COMERCIAL,
+    PRIORIDAD_EVENTO_DEFECTO,
+    TIPO_COBERTURA_TRANSMISION,
     TIPOS_AUSENCIA,
+    TIPOS_COBERTURA,
+    PRIORIDADES_EVENTO,
 )
 
 __all__ = [
@@ -91,6 +95,8 @@ __all__ = [
     "ESTADOS_TAREA",
     "FRANJAS_TURNO",
     "METRICAS_COMERCIAL",
+    "PRIORIDADES_EVENTO",
+    "TIPOS_COBERTURA",
     "TIPOS_AUSENCIA",
     "actualizar_estado_tarea",
     "actualizar_evento_rota",
@@ -339,15 +345,24 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
+    # `tipo_cobertura`/`prioridad`/`cambiado`/`actualizado` (ola B): el evento ya no es
+    # solo "que sacar"; lleva COMO se cubre (transmision|imagenes|no_cubrir), su PRIORIDAD
+    # y si se REPROGRAMO (`cambiado`=1: hay que volver a avisar al equipo). `actualizado`
+    # se refresca en cada edicion. Para bases NUEVAS se declaran aqui; las viejas las
+    # migra `_migrar_columnas_eventos_rota` (idempotente, solo SQLite).
     """
     CREATE TABLE IF NOT EXISTS rota_eventos (
-        id          TEXT PRIMARY KEY,
-        titulo      TEXT NOT NULL,
-        fecha       TEXT NOT NULL DEFAULT '',
-        hora        TEXT NOT NULL DEFAULT '',
-        contenido   TEXT NOT NULL DEFAULT '',
-        nota        TEXT NOT NULL DEFAULT '',
-        creado      TEXT NOT NULL DEFAULT ''
+        id             TEXT PRIMARY KEY,
+        titulo         TEXT NOT NULL,
+        fecha          TEXT NOT NULL DEFAULT '',
+        hora           TEXT NOT NULL DEFAULT '',
+        contenido      TEXT NOT NULL DEFAULT '',
+        nota           TEXT NOT NULL DEFAULT '',
+        tipo_cobertura TEXT NOT NULL DEFAULT 'transmision',
+        prioridad      TEXT NOT NULL DEFAULT 'media',
+        cambiado       INTEGER NOT NULL DEFAULT 0,
+        actualizado    TEXT NOT NULL DEFAULT '',
+        creado         TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
@@ -443,6 +458,7 @@ def _crear_esquema(con: Any) -> None:
         con.execute(sentencia)
     if not motor_db.es_postgres():
         _migrar_columnas_tareas(con)
+        _migrar_columnas_eventos_rota(con)
     con.commit()
 
 
@@ -472,6 +488,38 @@ def _migrar_columnas_tareas(con: Any) -> None:
     for columna in _COLUMNAS_TAREAS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
+
+
+# Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
+# Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
+# retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
+#   - tipo_cobertura: transmision|imagenes|no_cubrir; legado -> "transmision" (sigue cubierto).
+#   - prioridad: alta|media|baja; legado -> "media".
+#   - cambiado: 0/1, "se reprogramo, hay que avisar"; legado -> 0 (sin reprogramar).
+#   - actualizado: timestamp de la ultima edicion; legado -> "" (nunca editado tras migrar).
+# Cada par es (columna, fragmento de tipo/DEFAULT) para emitir el ALTER correcto.
+_COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("tipo_cobertura", "TEXT NOT NULL DEFAULT 'transmision'"),
+    ("prioridad", "TEXT NOT NULL DEFAULT 'media'"),
+    ("cambiado", "INTEGER NOT NULL DEFAULT 0"),
+    ("actualizado", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_eventos_rota(con: Any) -> None:
+    """Anade a `rota_eventos` las columnas de la ola B que una BD vieja no tuviera (idempotente).
+
+    El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
+    antes de la ampliacion (cobertura/prioridad/reprogramaciones) no las tiene. Recorre
+    `_COLUMNAS_EVENTO_ROTA_AMPLIADAS` y anade solo la que falte con su DEFAULT: los eventos
+    existentes quedan como `transmision`/`media`/sin reprogramar y no se pierde nada.
+    """
+    columnas = {
+        fila["name"] for fila in con.execute("PRAGMA table_info(rota_eventos)").fetchall()
+    }
+    for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -1030,9 +1078,33 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 #                     nada al equipo hasta que la semana esta `aprobada`.
 # El PROPONEDOR (rota.py) es puro; aqui solo se persiste lo que la API decide.
 
-_COLS_EVENTO_ROTA = ("id", "titulo", "fecha", "hora", "contenido", "nota", "creado")
+# Columnas de `rota_eventos`. La ola B (#144) anade tipo_cobertura/prioridad/cambiado/
+# actualizado: `cambiado`/`actualizado` son GESTIONADAS POR EL SISTEMA (no editables a
+# pelo: `cambiado` lo derivamos al reprogramar y `actualizado` se refresca en cada edicion),
+# por eso quedan fuera de `_CAMPOS_EDITABLES_EVENTO_ROTA`.
+_COLS_EVENTO_ROTA = (
+    "id",
+    "titulo",
+    "fecha",
+    "hora",
+    "contenido",
+    "nota",
+    "tipo_cobertura",
+    "prioridad",
+    "cambiado",
+    "actualizado",
+    "creado",
+)
 _SELECT_EVENTO_ROTA = f"SELECT {', '.join(_COLS_EVENTO_ROTA)} FROM rota_eventos"
-_CAMPOS_EDITABLES_EVENTO_ROTA = ("titulo", "fecha", "hora", "contenido", "nota")
+_CAMPOS_EDITABLES_EVENTO_ROTA = (
+    "titulo",
+    "fecha",
+    "hora",
+    "contenido",
+    "nota",
+    "tipo_cobertura",
+    "prioridad",
+)
 
 _COLS_TURNO_ROTA = (
     "id",
@@ -1050,7 +1122,13 @@ _SELECT_TURNO_ROTA = f"SELECT {', '.join(_COLS_TURNO_ROTA)} FROM rota_turnos"
 
 
 def _fila_a_evento_rota(fila: Any) -> dict[str, Any]:
-    return {col: fila[col] for col in _COLS_EVENTO_ROTA}
+    evento = {col: fila[col] for col in _COLS_EVENTO_ROTA}
+    # `cambiado` se persiste como 0/1; lo exponemos como bool para la capa API/UI.
+    evento["cambiado"] = bool(fila["cambiado"])
+    # Defensa retrocompatible: una fila migrada con NULL/"" cae al valor por defecto.
+    evento["tipo_cobertura"] = fila["tipo_cobertura"] or TIPO_COBERTURA_TRANSMISION
+    evento["prioridad"] = fila["prioridad"] or PRIORIDAD_EVENTO_DEFECTO
+    return evento
 
 
 def _fila_a_turno_rota(fila: Any) -> dict[str, Any]:
@@ -1069,8 +1147,13 @@ def crear_evento_rota(
     hora: str = "",
     contenido: str = "",
     nota: str = "",
+    tipo_cobertura: str = TIPO_COBERTURA_TRANSMISION,
+    prioridad: str = PRIORIDAD_EVENTO_DEFECTO,
 ) -> dict[str, Any]:
-    """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API)."""
+    """Inserta un evento/transmision y lo devuelve. NO valida (lo hace la API).
+
+    Nace `cambiado=0` (sin reprogramar) y con `actualizado`=`creado` (alta = primera version).
+    """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
@@ -1079,6 +1162,10 @@ def crear_evento_rota(
         "hora": hora or "",
         "contenido": contenido or "",
         "nota": nota or "",
+        "tipo_cobertura": tipo_cobertura if tipo_cobertura in TIPOS_COBERTURA else TIPO_COBERTURA_TRANSMISION,
+        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_EVENTO_DEFECTO,
+        "cambiado": 0,
+        "actualizado": ahora,
         "creado": ahora,
     }
     con = _conectar()
@@ -1091,13 +1178,23 @@ def crear_evento_rota(
         con.commit()
     finally:
         con.close()
+    fila["cambiado"] = bool(fila["cambiado"])
     return fila
 
 
 def listar_eventos_rota(
-    desde: str | None = None, hasta: str | None = None
+    desde: str | None = None,
+    hasta: str | None = None,
+    *,
+    solo_cambiados: bool = False,
+    tipo_cobertura: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Eventos de la rota, en orden cronologico. Filtro opcional por rango de fechas (ISO)."""
+    """Eventos de la rota, en orden cronologico. Filtros opcionales (todos combinables).
+
+    `desde`/`hasta` acotan por rango de fechas (ISO). `solo_cambiados` deja solo los
+    REPROGRAMADOS (`cambiado=1`, los que Elias debe re-avisar). `tipo_cobertura` filtra por
+    tipo de cobertura (transmision|imagenes|no_cubrir); la API ya valida el valor.
+    """
     clausulas: list[str] = []
     params: list[Any] = []
     if desde:
@@ -1106,6 +1203,12 @@ def listar_eventos_rota(
     if hasta:
         clausulas.append("fecha <= ?")
         params.append(hasta)
+    if solo_cambiados:
+        clausulas.append("cambiado = ?")
+        params.append(1)
+    if tipo_cobertura:
+        clausulas.append("tipo_cobertura = ?")
+        params.append(tipo_cobertura)
     sql = _SELECT_EVENTO_ROTA
     if clausulas:
         sql += " WHERE " + " AND ".join(clausulas)
@@ -1127,18 +1230,51 @@ def obtener_evento_rota(evento_id: str) -> dict[str, Any] | None:
     return _fila_a_evento_rota(fila) if fila is not None else None
 
 
+# Campos cuya EDICION reprograma el evento: si cambia su valor, `cambiado` se pone a 1
+# (hay que volver a avisar al equipo). Son los datos "logisticos" que el equipo de
+# programacion mueve constantemente ("tres cambios en horarios para el fin de semana").
+_CAMPOS_REPROGRAMAN_EVENTO: tuple[str, ...] = ("fecha", "hora", "tipo_cobertura")
+
+
 def actualizar_evento_rota(evento_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    """Edita parcialmente un evento; None si el id no existe. Solo campos editables."""
+    """Edita parcialmente un evento; None si el id no existe.
+
+    Reglas de SEGUIMIENTO DE CAMBIOS (ola B, #144):
+      - `actualizado` SIEMPRE se refresca (toda edicion deja marca temporal).
+      - Si la edicion cambia `fecha`, `hora` o `tipo_cobertura` -> `cambiado=1` automatico
+        (se reprogramo: el equipo debe re-enterarse). Solo si el valor REALMENTE cambia.
+      - Si el request trae `cambiado=False` explicito (la accion "ya avisé / visto" de
+        Elias) -> se LIMPIA a 0, y limpiar GANA aunque en el mismo request se hubiera
+        reprogramado (Elias dice "ya está visto").
+    Solo se escriben los campos editables; `cambiado`/`actualizado` los gestiona el sistema.
+    """
+    actual = obtener_evento_rota(evento_id)
+    if actual is None:
+        return None
+
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_EVENTO_ROTA}
-    if not cambios:
-        return obtener_evento_rota(evento_id)
+
+    # ¿Se reprogramo? Solo cuenta un cambio REAL de fecha/hora/tipo_cobertura.
+    reprogramado = any(
+        k in cambios and cambios[k] != actual.get(k) for k in _CAMPOS_REPROGRAMAN_EVENTO
+    )
+    nuevo_cambiado = 1 if reprogramado else int(bool(actual["cambiado"]))
+    # La accion explicita "marcar avisado" (cambiado=False) limpia y GANA al reprograma.
+    if "cambiado" in campos and not campos["cambiado"]:
+        nuevo_cambiado = 0
+    elif "cambiado" in campos and campos["cambiado"]:
+        nuevo_cambiado = 1
+
+    ahora = datetime.now().isoformat(timespec="seconds")
     asignaciones = [f"{k} = ?" for k in cambios]
-    params: list[Any] = list(cambios.values())
-    params.append(evento_id)
+    asignaciones.append("cambiado = ?")
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), nuevo_cambiado, ahora, evento_id]
     con = _conectar()
     try:
         cur = con.execute(
-            f"UPDATE rota_eventos SET {', '.join(asignaciones)} WHERE id = ?", tuple(params)
+            f"UPDATE rota_eventos SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- columnas de allowlist
+            tuple(params),
         )
         con.commit()
         if cur.rowcount == 0:

@@ -95,6 +95,124 @@ def test_borrar_evento_borra_sus_turnos(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# Cobertura + prioridad + reprogramaciones (ola B, #144)                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_evento_nace_con_cobertura_y_prioridad_por_defecto(cliente):
+    ev = _crear_evento(cliente)
+    assert ev["tipo_cobertura"] == "transmision"  # default
+    assert ev["prioridad"] == "media"  # default
+    assert ev["cambiado"] is False  # recién creado: nada que avisar
+    assert ev["actualizado"]  # se sella la marca temporal al crear
+
+
+def test_crear_evento_cobertura_y_prioridad_explicitas(cliente):
+    ev = _crear_evento(cliente, tipo_cobertura="imagenes", prioridad="alta")
+    assert ev["tipo_cobertura"] == "imagenes"
+    assert ev["prioridad"] == "alta"
+
+
+def test_crear_evento_cobertura_invalida_400(cliente):
+    r = cliente.post(
+        "/api/rota/eventos", json={"titulo": "X", "fecha": SAB1, "tipo_cobertura": "humo"}
+    )
+    assert r.status_code == 400
+
+
+def test_crear_evento_prioridad_invalida_400(cliente):
+    r = cliente.post(
+        "/api/rota/eventos", json={"titulo": "X", "fecha": SAB1, "prioridad": "urgentisima"}
+    )
+    assert r.status_code == 400
+
+
+def test_editar_hora_marca_cambiado(cliente):
+    ev = _crear_evento(cliente, hora="16:00")
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"hora": "18:00"})
+    assert r.status_code == 200
+    assert r.json()["evento"]["cambiado"] is True  # se reprogramó -> hay que avisar
+
+
+def test_editar_fecha_marca_cambiado(cliente):
+    ev = _crear_evento(cliente, fecha=SAB1)
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"fecha": SAB2})
+    assert r.json()["evento"]["cambiado"] is True
+
+
+def test_editar_tipo_cobertura_marca_cambiado(cliente):
+    ev = _crear_evento(cliente)
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"tipo_cobertura": "imagenes"})
+    assert r.json()["evento"]["cambiado"] is True
+
+
+def test_editar_solo_contenido_no_marca_cambiado(cliente):
+    ev = _crear_evento(cliente)
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"contenido": "Otro plan"})
+    assert r.json()["evento"]["cambiado"] is False  # editar "qué sacar" NO reprograma
+
+
+def test_actualizado_se_refresca_en_cada_edicion(cliente):
+    ev = _crear_evento(cliente)
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"contenido": "v2"})
+    assert r.json()["evento"]["actualizado"]  # sigue presente tras editar
+
+
+def test_marcar_avisado_limpia_cambiado(cliente):
+    ev = _crear_evento(cliente, hora="16:00")
+    cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"hora": "18:00"})  # cambiado=1
+    r = cliente.patch(f"/api/rota/eventos/{ev['id']}", json={"cambiado": False})
+    assert r.status_code == 200
+    assert r.json()["evento"]["cambiado"] is False  # "ya avisé / visto"
+
+
+def test_marcar_avisado_gana_aunque_se_reprograme_en_el_mismo_patch(cliente):
+    ev = _crear_evento(cliente, hora="16:00")
+    # Mismo request: reprograma la hora PERO pide limpiar el aviso -> limpiar gana.
+    r = cliente.patch(
+        f"/api/rota/eventos/{ev['id']}", json={"hora": "20:00", "cambiado": False}
+    )
+    assert r.json()["evento"]["cambiado"] is False
+    assert r.json()["evento"]["hora"] == "20:00"
+
+
+def test_filtro_cambiados_solo_reprogramados(cliente):
+    ev1 = _crear_evento(cliente, titulo="Sin tocar", fecha=SAB1)
+    ev2 = _crear_evento(cliente, titulo="Reprogramado", fecha=SAB1, hora="16:00")
+    cliente.patch(f"/api/rota/eventos/{ev2['id']}", json={"hora": "18:00"})  # cambiado=1
+    r = cliente.get("/api/rota/eventos?cambiados=true")
+    ids = {e["id"] for e in r.json()["eventos"]}
+    assert ev2["id"] in ids
+    assert ev1["id"] not in ids
+
+
+def test_filtro_tipo_cobertura(cliente):
+    ev_tx = _crear_evento(cliente, titulo="TX", tipo_cobertura="transmision")
+    ev_img = _crear_evento(cliente, titulo="IMG", tipo_cobertura="imagenes")
+    r = cliente.get("/api/rota/eventos?tipo_cobertura=imagenes")
+    ids = {e["id"] for e in r.json()["eventos"]}
+    assert ev_img["id"] in ids
+    assert ev_tx["id"] not in ids
+
+
+def test_filtro_tipo_cobertura_invalido_400(cliente):
+    r = cliente.get("/api/rota/eventos?tipo_cobertura=humo")
+    assert r.status_code == 400
+
+
+def test_proponer_excluye_eventos_no_cubrir(cliente):
+    _crear_equipo(2)
+    _crear_evento(cliente, titulo="Se cubre", tipo_cobertura="transmision")
+    _crear_evento(cliente, titulo="Se cubre con fotos", tipo_cobertura="imagenes")
+    _crear_evento(cliente, titulo="No se cubre", tipo_cobertura="no_cubrir")
+    r = cliente.post("/api/rota/proponer", json={"lunes": LUNES1})
+    titulos = {t["evento_titulo"] for t in r.json()["turnos"]}
+    assert "Se cubre" in titulos
+    assert "Se cubre con fotos" in titulos
+    assert "No se cubre" not in titulos  # trackeado pero NO asignado
+
+
+# --------------------------------------------------------------------------- #
 # Proponer + rotación de sábados (criterio de aceptación)                      #
 # --------------------------------------------------------------------------- #
 
