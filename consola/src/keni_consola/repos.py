@@ -952,3 +952,23 @@ def cancelar_job(gen_id: str) -> bool:
 
 def job_cancelado(job_id: str) -> bool:
     return db.job_cancelado(job_id)
+
+
+# --------------------------------------------------------------------------- #
+# Config de franjas (#185)                                                     #
+# --------------------------------------------------------------------------- #
+
+
+def obtener_franjas_config() -> dict[str, str]:
+    return db.obtener_franjas_config()
+
+
+def guardar_franjas_config(
+    matutino_inicio: str,
+    matutino_fin: str,
+    vespertino_inicio: str,
+    vespertino_fin: str,
+) -> dict[str, str]:
+    return db.guardar_franjas_config(
+        matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin
+    )

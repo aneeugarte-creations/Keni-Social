@@ -1432,10 +1432,37 @@ export interface ConflictoRotacionRota {
   motivo: string;
 }
 
+export interface ConfigFranjas {
+  matutino_inicio: string;
+  matutino_fin: string;
+  vespertino_inicio: string;
+  vespertino_fin: string;
+  actualizado?: string;
+}
+
+export interface RespuestaConfigFranjas {
+  franjas: ConfigFranjas;
+}
+
+export interface CuerpoGuardarConfigFranjas {
+  matutino_inicio: string;
+  matutino_fin: string;
+  vespertino_inicio: string;
+  vespertino_fin: string;
+}
+
 export interface RespuestaAsignarFranja {
   actualizados: number;
   saltados: number;
   conflictos: ConflictoRotacionRota[];
+  /** Total de eventos del día (no_cubrir excluidos). #185 contexto para el toast. */
+  total_eventos?: number;
+  /** Cuántos eventos caen en la franja pedida (deberían ser ≥ actualizados+saltados+conflictos). */
+  candidatos?: number;
+  /** Eventos del día sin hora válida (no entran en ninguna franja). */
+  sin_hora?: number;
+  /** Rangos vigentes (para el mensaje "matutino 08-16 · vespertino 16-24"). */
+  franjas_config?: ConfigFranjas;
 }
 
 /** Cuerpo de PATCH /api/rota/turnos/lote (asignación masiva). */

@@ -1346,7 +1346,23 @@ function AsignarDeGolpe({
       if (res.saltados > 0) partes.push(`saltados ${res.saltados}`);
       if (res.conflictos.length > 0)
         partes.push(`${res.conflictos.length} requieren override`);
-      toast.success(partes.length > 0 ? partes.join(" · ") : "Sin cambios que aplicar.");
+      if (partes.length > 0) {
+        toast.success(partes.join(" · "));
+      } else {
+        // #185: explicación accionable cuando no hubo nada que asignar.
+        const cfg = res.franjas_config;
+        const rango =
+          franja === "matutino"
+            ? `mañana (${cfg?.matutino_inicio ?? "08:00"}–${cfg?.matutino_fin ?? "16:00"})`
+            : `tarde (${cfg?.vespertino_inicio ?? "16:00"}–${cfg?.vespertino_fin ?? "24:00"})`;
+        const total = res.total_eventos ?? 0;
+        const sinHora = res.sin_hora ?? 0;
+        let msg = `No hay eventos en la ${rango} ese día.`;
+        if (total > 0) msg += ` (${total} eventos en el día en otras franjas).`;
+        if (sinHora > 0) msg += ` ${sinHora} sin hora.`;
+        msg += " Cambia los rangos en «Franjas» o edita la hora del evento.";
+        toast.info(msg);
+      }
       onAplicado();
     },
     onError: (e) => toast.error(mensajeError(e)),

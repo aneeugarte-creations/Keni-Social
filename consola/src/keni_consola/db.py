@@ -426,6 +426,21 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_programas_activo ON rota_programas (activo)",
+    # Configuracion de FRANJAS (#185): los rangos horarios de matutino/vespertino son
+    # editoriales del equipo y se editan desde la UI. Singleton: una sola fila con
+    # `id='default'`. Si no existe, los endpoints devuelven los defaults del dominio.
+    # Aplica al endpoint `POST /api/rota/cobertura/asignar-franja` (que llama a
+    # `dominio.mapear_franja` con estos valores). Inicios INCLUSIVOS, finales EXCLUSIVOS.
+    """
+    CREATE TABLE IF NOT EXISTS rota_config_franjas (
+        id                  TEXT PRIMARY KEY,
+        matutino_inicio     TEXT NOT NULL DEFAULT '08:00',
+        matutino_fin        TEXT NOT NULL DEFAULT '16:00',
+        vespertino_inicio   TEXT NOT NULL DEFAULT '16:00',
+        vespertino_fin      TEXT NOT NULL DEFAULT '24:00',
+        actualizado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
     # Solicitudes de cambio de turno entre compañeros (#175): cuando un CM (A) quiere
     # canjear su turno por el de otro (B) por un asunto personal, crea una solicitud en
     # estado `propuesto`; B acepta/rechaza, y si acepta, Elias (admin) aprueba o rechaza.
@@ -2472,6 +2487,82 @@ _CAMPOS_EDITABLES_SWAP = (
 
 def _fila_a_swap_turno(fila: Any) -> dict[str, Any]:
     return {col: fila[col] for col in _COLS_SWAP_TURNO}
+
+
+# --------------------------------------------------------------------------- #
+# Config de franjas (#185): singleton id='default'                              #
+# --------------------------------------------------------------------------- #
+
+
+_COLS_CONFIG_FRANJAS = (
+    "matutino_inicio",
+    "matutino_fin",
+    "vespertino_inicio",
+    "vespertino_fin",
+    "actualizado",
+)
+
+
+def obtener_franjas_config() -> dict[str, str]:
+    """Lee la config singleton de franjas. Si no existe, devuelve los DEFAULTS del dominio.
+
+    No SELECT-INSERT race: si la fila aun no esta, la app no la crea aqui; la crea el
+    PATCH del admin. Mientras tanto, `mapear_franja` usa los defaults de rota.py.
+    """
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"SELECT {', '.join(_COLS_CONFIG_FRANJAS)} FROM rota_config_franjas "
+            "WHERE id = ?",
+            ("default",),
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return {
+            "matutino_inicio": "08:00",
+            "matutino_fin": "16:00",
+            "vespertino_inicio": "16:00",
+            "vespertino_fin": "24:00",
+            "actualizado": "",
+        }
+    return {col: fila[col] for col in _COLS_CONFIG_FRANJAS}
+
+
+def guardar_franjas_config(
+    matutino_inicio: str,
+    matutino_fin: str,
+    vespertino_inicio: str,
+    vespertino_fin: str,
+) -> dict[str, str]:
+    """Hace UPSERT del singleton de franjas. Devuelve la fila resultante."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        # INSERT ... ON CONFLICT DO UPDATE (Postgres): si la fila existe, actualiza.
+        con.execute(
+            "INSERT INTO rota_config_franjas "
+            "(id, matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin, "
+            " actualizado) VALUES (?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (id) DO UPDATE SET "
+            "matutino_inicio = EXCLUDED.matutino_inicio, "
+            "matutino_fin = EXCLUDED.matutino_fin, "
+            "vespertino_inicio = EXCLUDED.vespertino_inicio, "
+            "vespertino_fin = EXCLUDED.vespertino_fin, "
+            "actualizado = EXCLUDED.actualizado",
+            (
+                "default",
+                matutino_inicio,
+                matutino_fin,
+                vespertino_inicio,
+                vespertino_fin,
+                ahora,
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_franjas_config()
 
 
 def crear_swap_turno(

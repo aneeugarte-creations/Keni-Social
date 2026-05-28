@@ -147,6 +147,8 @@ import type {
   RespuestaProgramasRota,
   CuerpoAsignarFranja,
   RespuestaAsignarFranja,
+  RespuestaConfigFranjas,
+  CuerpoGuardarConfigFranjas,
   CuerpoActualizarLoteTurnos,
   RespuestaActualizarLoteTurnos,
   CuerpoCopiarSemana,
@@ -956,6 +958,15 @@ export const api = {
     peticion<RespuestaCopiarSemana>("/rota/copiar-semana", { metodo: "POST", json: cuerpo }),
   cargaRota: (params: { lunes: string }, signal?: AbortSignal) =>
     peticion<RespuestaCargaRota>(`/rota/carga${query(params)}`, { signal }),
+
+  // --- Configuración editorial de franjas (#185) ---
+  obtenerConfigFranjas: (signal?: AbortSignal) =>
+    peticion<RespuestaConfigFranjas>("/rota/config/franjas", { signal }),
+  guardarConfigFranjas: (cuerpo: CuerpoGuardarConfigFranjas) =>
+    peticion<RespuestaConfigFranjas>("/rota/config/franjas", {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
 
   // --- Solicitudes de cambio de turno entre compañeros (#175) ---
   // Flujo: A crea -> B acepta/rechaza -> admin aprueba (ejecuta el swap sobre

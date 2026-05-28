@@ -197,20 +197,25 @@ def viola_rotacion_sabado_trabajo(
 # --------------------------------------------------------------------------- #
 
 
-def mapear_franja(hora_iso: str) -> Franja:
-    """Mapea una hora `HH:MM` a la franja a la que pertenece (cobertura de eventos).
+# Defaults editoriales (#185): el equipo de Claro Sports trabaja 08:00-16:00 (matutino)
+# y 16:00-00:00 (vespertino). Hasta el #185 estaban hardcoded a 06-13:59 / 14-22:59 (los
+# del piloto de Mar 2026). Ahora son CONFIGURABLES por admin: el endpoint
+# /api/rota/config/franjas devuelve los valores vigentes, mapear_franja los recibe.
+# Los defaults se quedan como fallback si la BD aun no tiene config.
+FRANJA_MATUTINO_DEFAULT_INICIO = "08:00"
+FRANJA_MATUTINO_DEFAULT_FIN = "16:00"  # exclusivo: 16:00 ya es vespertino.
+FRANJA_VESPERTINO_DEFAULT_INICIO = "16:00"
+FRANJA_VESPERTINO_DEFAULT_FIN = "24:00"  # exclusivo: 24:00 == fin del dia.
 
-    Regla de Elias y el equipo (asignar de golpe por franja):
-      - `matutino`    -> 06:00-13:59
-      - `vespertino`  -> 14:00-22:59
-      - `descanso`    -> 00:00-05:59 y 23:00-23:59
 
-    Acepta sufijos del Excel real (rangos `"16:00-18:00"`, `"16:00–18:00"`): se queda con
-    la hora de inicio. Vacio o malformado -> `ValueError` (la API decide si avisa al admin).
+def _parsear_hora_minutos(hora_iso: str) -> int:
+    """Convierte `HH:MM` (o un rango `HH:MM-HH:MM` del Excel) a MINUTOS desde 00:00.
+
+    Acepta sufijos del Excel real ("16:00-18:00", "16:00–18:00"): se queda con la hora de
+    inicio. Vacio o malformado -> `ValueError`.
     """
     if not isinstance(hora_iso, str) or not hora_iso.strip():
         raise ValueError("La hora esta vacia.")
-    # El Excel original a veces guarda rangos ("16:00-18:00"); cogemos el inicio.
     crudo = hora_iso.strip().replace("–", "-").split("-", 1)[0].strip()
     partes = crudo.split(":")
     if len(partes) < 2:
@@ -220,11 +225,39 @@ def mapear_franja(hora_iso: str) -> Franja:
         m = int(partes[1])
     except ValueError as exc:
         raise ValueError(f"Hora malformada: {hora_iso!r} (usa HH:MM).") from exc
-    if not (0 <= h <= 23 and 0 <= m <= 59):
+    # Aceptamos h==24 SOLO si es el limite superior de una franja (00:00 del dia siguiente):
+    # `mapear_franja` permite "24:00" como fin exclusivo, no como hora de un evento.
+    if not (0 <= h <= 24 and 0 <= m <= 59):
         raise ValueError(f"Hora fuera de rango: {hora_iso!r}.")
-    if 6 <= h <= 13:
+    if h == 24 and m != 0:
+        raise ValueError(f"24:00 solo se usa como fin de franja: {hora_iso!r}.")
+    return h * 60 + m
+
+
+def mapear_franja(
+    hora_iso: str,
+    *,
+    matutino_inicio: str = FRANJA_MATUTINO_DEFAULT_INICIO,
+    matutino_fin: str = FRANJA_MATUTINO_DEFAULT_FIN,
+    vespertino_inicio: str = FRANJA_VESPERTINO_DEFAULT_INICIO,
+    vespertino_fin: str = FRANJA_VESPERTINO_DEFAULT_FIN,
+) -> Franja:
+    """Mapea una hora `HH:MM` a la franja a la que pertenece (cobertura de eventos).
+
+    Las franjas son CONFIGURABLES (#185, `/api/rota/config/franjas`). Los inicios son
+    INCLUSIVOS, los finales EXCLUSIVOS. La franja `descanso` cubre lo que no entra en
+    matutino ni vespertino.
+
+    Vacio o malformado -> `ValueError` (la API salta el evento, mostrando warning al user).
+    """
+    minutos_evento = _parsear_hora_minutos(hora_iso)
+    m_inicio = _parsear_hora_minutos(matutino_inicio)
+    m_fin = _parsear_hora_minutos(matutino_fin)
+    v_inicio = _parsear_hora_minutos(vespertino_inicio)
+    v_fin = _parsear_hora_minutos(vespertino_fin)
+    if m_inicio <= minutos_evento < m_fin:
         return "matutino"
-    if 14 <= h <= 22:
+    if v_inicio <= minutos_evento < v_fin:
         return "vespertino"
     return "descanso"
 

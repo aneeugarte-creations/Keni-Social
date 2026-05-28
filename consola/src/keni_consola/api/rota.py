@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import csv
 import io
+import re
 from typing import Any
 
 from starlette.requests import Request
@@ -948,14 +949,25 @@ async def asignar_franja(request: Request) -> Response:
         for e in repos.listar_eventos_rota()
         if e["fecha"] == fecha and e.get("tipo_cobertura") != TIPO_COBERTURA_NO_CUBRIR
     ]
+    # Franjas configurables (#185): usamos los rangos vigentes de la BD para clasificar
+    # los eventos por su hora. Si el admin no las ha tocado, son los defaults (08-16, 16-24).
+    franjas_cfg = repos.obtener_franjas_config()
     candidatos: list[dict[str, Any]] = []
+    sin_hora: list[dict[str, Any]] = []
     for e in eventos_dia:
         try:
-            if dominio.mapear_franja(e.get("hora", "")) == franja:
-                candidatos.append(e)
+            franja_evento = dominio.mapear_franja(
+                e.get("hora", ""),
+                matutino_inicio=franjas_cfg["matutino_inicio"],
+                matutino_fin=franjas_cfg["matutino_fin"],
+                vespertino_inicio=franjas_cfg["vespertino_inicio"],
+                vespertino_fin=franjas_cfg["vespertino_fin"],
+            )
         except ValueError:
-            # Evento sin hora (o malformada): no entra en NINGUNA franja; lo saltamos.
+            sin_hora.append(e)
             continue
+        if franja_evento == franja:
+            candidatos.append(e)
 
     # Turnos existentes de la semana, indexados por evento_id (un turno por evento).
     turnos_semana = repos.listar_turnos_rota(semana=lunes)
@@ -999,8 +1011,20 @@ async def asignar_franja(request: Request) -> Response:
         )
         actualizados += 1
 
+    # Devolvemos contadores + contexto util para el toast (#185):
+    #   - `total_eventos`: cuantos eventos hay ese dia (antes de filtrar por franja).
+    #   - `sin_hora`: cuantos eventos del dia no tienen hora valida (no entran en ninguna franja).
+    #   - `franjas_config`: rangos vigentes (para el front mostrar "matutino 08-16, vespertino 16-24").
     return JSONResponse(
-        {"actualizados": actualizados, "saltados": saltados, "conflictos": conflictos}
+        {
+            "actualizados": actualizados,
+            "saltados": saltados,
+            "conflictos": conflictos,
+            "total_eventos": len(eventos_dia),
+            "candidatos": len(candidatos),
+            "sin_hora": len(sin_hora),
+            "franjas_config": franjas_cfg,
+        }
     )
 
 
@@ -2415,6 +2439,91 @@ async def borrar_programa(request: Request) -> Response:
     )
 
 
+# --------------------------------------------------------------------------- #
+# Config de franjas (#185)                                                     #
+# --------------------------------------------------------------------------- #
+
+
+_PATRON_HORA = re.compile(r"^([01]?\d|2[0-4]):([0-5]\d)$")
+
+
+def _hora_valida(valor: Any) -> bool:
+    """`HH:MM` con 00:00..24:00 (24:00 valido como FIN exclusivo de franja)."""
+    if not isinstance(valor, str):
+        return False
+    m = _PATRON_HORA.match(valor.strip())
+    if not m:
+        return False
+    h, mm = int(m.group(1)), int(m.group(2))
+    if h == 24 and mm != 0:
+        return False
+    return True
+
+
+def _minutos_de(hhmm: str) -> int:
+    h, m = hhmm.split(":")
+    return int(h) * 60 + int(m)
+
+
+async def obtener_config_franjas(request: Request) -> Response:
+    """GET /api/rota/config/franjas: devuelve los rangos vigentes (defaults si no hay)."""
+    del request
+    return JSONResponse({"franjas": repos.obtener_franjas_config()})
+
+
+async def guardar_config_franjas(request: Request) -> Response:
+    """PATCH /api/rota/config/franjas: cambia los rangos vigentes (solo admin).
+
+    Cuerpo: `{matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin}` en
+    `HH:MM`. Reglas: `inicio < fin` en cada franja; matutino y vespertino no se
+    solapan internamente, pero `matutino_fin == vespertino_inicio` SI esta permitido
+    (intencional: las franjas se tocan en el limite). Aplica solo a `asignar-franja`
+    (cobertura de eventos por hora), no toca los turnos de trabajo del horario.
+    """
+    if not _es_admin(request):
+        return JSONResponse(
+            {"error": "Solo un admin puede editar la configuración de franjas."},
+            status_code=403,
+        )
+    datos = await leer_json(request)
+    campos = (
+        "matutino_inicio",
+        "matutino_fin",
+        "vespertino_inicio",
+        "vespertino_fin",
+    )
+    for c in campos:
+        if not _hora_valida(datos.get(c)):
+            return JSONResponse(
+                {"error": f"`{c}` debe ser HH:MM (00:00..24:00)."}, status_code=400
+            )
+    m_ini = _minutos_de(datos["matutino_inicio"])
+    m_fin = _minutos_de(datos["matutino_fin"])
+    v_ini = _minutos_de(datos["vespertino_inicio"])
+    v_fin = _minutos_de(datos["vespertino_fin"])
+    if not (m_ini < m_fin):
+        return JSONResponse(
+            {"error": "El matutino tiene que terminar después de empezar."},
+            status_code=400,
+        )
+    if not (v_ini < v_fin):
+        return JSONResponse(
+            {"error": "El vespertino tiene que terminar después de empezar."},
+            status_code=400,
+        )
+    if m_fin > v_ini:
+        return JSONResponse(
+            {"error": "El matutino se solapa con el vespertino."}, status_code=400
+        )
+    franjas = repos.guardar_franjas_config(
+        datos["matutino_inicio"],
+        datos["matutino_fin"],
+        datos["vespertino_inicio"],
+        datos["vespertino_fin"],
+    )
+    return JSONResponse({"franjas": franjas})
+
+
 RUTAS = [
     Route("/api/rota/equipo", equipo, methods=["GET"]),
     Route("/api/rota/eventos", listar_eventos, methods=["GET"]),
@@ -2473,4 +2582,7 @@ RUTAS = [
     Route("/api/rota/swaps/{swap_id}/aprobar", aprobar_swap, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/rechazar-admin", rechazar_swap_admin, methods=["POST"]),
     Route("/api/rota/swaps/{swap_id}/cancelar", cancelar_swap, methods=["POST"]),
+    # Configuración editorial de FRANJAS de cobertura (#185). GET libre; PATCH solo admin.
+    Route("/api/rota/config/franjas", obtener_config_franjas, methods=["GET"]),
+    Route("/api/rota/config/franjas", guardar_config_franjas, methods=["PATCH"]),
 ]
