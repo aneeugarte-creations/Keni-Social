@@ -1,4 +1,4 @@
-import { Globe, Radar, Rss } from "lucide-react";
+import { Globe, ListOrdered, Radar, Rss } from "lucide-react";
 import { Outlet } from "react-router-dom";
 
 import { TabsHub, type ItemTabHub } from "@/components/layout/TabsHub";
@@ -7,6 +7,7 @@ const TABS: ItemTabHub[] = [
   { ruta: "/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
   { ruta: "/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
   { ruta: "/investigacion/radar", etiqueta: "Radar", icono: Radar },
+  { ruta: "/investigacion/parrilla-dia", etiqueta: "Parrilla del día", icono: ListOrdered },
 ];
 
 /**

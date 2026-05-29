@@ -18,6 +18,7 @@ const Investigacion = lazy(() => import("@/pages/Investigacion"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
 const Radar = lazy(() => import("@/pages/Radar"));
+const ParrillaDia = lazy(() => import("@/pages/ParrillaDia"));
 
 const Revision = lazy(() => import("@/pages/Revision"));
 const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
           { path: "fuentes", element: <Fuentes /> },
           { path: "termometro", element: <Termometro /> },
           { path: "radar", element: <Radar /> },
+          { path: "parrilla-dia", element: <ParrillaDia /> },
         ],
       },
 

@@ -50,6 +50,7 @@ rutas_frontend = [
   "/investigacion/fuentes",
   "/investigacion/termometro",
   "/investigacion/radar",
+  "/investigacion/parrilla-dia",
   "/revision",
   "/revision/editorial",
   "/revision/verificacion",

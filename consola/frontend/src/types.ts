@@ -754,6 +754,50 @@ export interface RespuestaRadar {
   total: number;
 }
 
+/** Subtipo de un posteo de la parrilla (vacío para los video-editoriales). */
+export type SubtipoParrilla = "clip" | "galeria" | "infografia" | "normal" | "";
+
+/** Un tema clasificado y jerarquizado para la parrilla del día. */
+export interface ItemParrilla {
+  titulo: string;
+  /** "posteo" (clip/galería/infografía/normal) o "editorial" (video con carnita). */
+  tipo: "posteo" | "editorial";
+  subtipo: SubtipoParrilla;
+  /** Puntuación de jerarquía (mayor = más importante). */
+  score: number;
+  /** Posición 1-based en la parrilla del día (1 = se publica primero). */
+  orden: number;
+  /** Texto en español explicando el porqué del orden. */
+  razon: string;
+  senal: number;
+  senal_texto: string;
+  por_que: string;
+  redes: string[];
+  fuentes: string[];
+  enlaces: EnlaceRadar[];
+}
+
+/** Respuesta de GET/POST /api/parrilla-dia: la parrilla editorial del día. */
+export interface RespuestaParrilla {
+  /** Geo activo (id ISO, p. ej. "MX"). */
+  geo: string;
+  geos_disponibles: GeoRadar[];
+  /** Hasta `cuota_posteos` posteos, jerarquizados (1 = primero). */
+  posteos: ItemParrilla[];
+  /** Hasta `cuota_editorial` video-editoriales, jerarquizados. */
+  editorial: ItemParrilla[];
+  /** Temas que superan las cuotas (igualmente jerarquizados). */
+  sobrantes: ItemParrilla[];
+  total_entrada: number;
+  total_posteos: number;
+  total_editorial: number;
+  total_sobrantes: number;
+  cuota_posteos: number;
+  cuota_editorial: number;
+  /** Geo/contexto usado en el scoring. */
+  contexto: string;
+}
+
 export interface EntradaHistorial {
   id: string;
   skill: string;

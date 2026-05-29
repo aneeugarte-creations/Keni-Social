@@ -127,6 +127,8 @@ def _obtener_temas_radar(geo: str) -> list[radar.Tema]:
 def _construir_respuesta(parrilla_dia: parrilla.ParrillaDia, geo: str) -> dict[str, Any]:
     datos = parrilla_dia.a_dict()
     datos["geo"] = geo
+    # Geos disponibles para el selector de la UI (mismo catalogo que el Radar).
+    datos["geos_disponibles"] = [{"id": k, "nombre": v} for k, v in radar.GEOS.items()]
     return datos
 
 

@@ -109,6 +109,7 @@ import type {
   RespuestaPlantillas,
   RespuestaProyectos,
   RespuestaRadar,
+  RespuestaParrilla,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
   RespuestaGuardarModeloImagen,
@@ -795,6 +796,11 @@ export const api = {
       `/radar${query({ geo, feeds: feeds === false ? "0" : undefined })}`,
       { signal },
     ),
+
+  // --- Parrilla del día (clasifica 13 posteos + 6 editoriales y los jerarquiza) ---
+  // Solo lectura: deriva del Radar. PROPONE el orden; publicar lo decide el humano.
+  parrillaDia: (geo?: string, signal?: AbortSignal) =>
+    peticion<RespuestaParrilla>(`/parrilla-dia${query({ geo })}`, { signal }),
 
   // --- Franjas (colas) ---
   franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),
