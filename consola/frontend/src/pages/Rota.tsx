@@ -84,7 +84,6 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   AusenciaRota,
-  CoberturaEvento,
   CuerpoActualizarPiezaRota,
   CuerpoActualizarProgramaRota,
   CuerpoCrearFranjaSemana,
@@ -271,34 +270,14 @@ function formatearFechaCorta(s: string): string {
 
 // ===========================================================================
 
-/**
- * Args para resaltar una celda concreta del Calendario fusionado cuando llegamos desde
- * Cobertura ("Crear turno para esa franja+fecha"). NO abre dialog: solo pinta un anillo
- * de atención en la celda durante unos segundos para que el admin use el dropdown
- * "+ Añadir persona" al pie.
- */
-type PrellenoNuevoTurno = {
-  fecha?: string;
-  franja?: FranjaTurno;
-  miembro_id?: string;
-};
-
 export default function Rota() {
   const { usuario } = useSesion();
   const esAdmin = usuario?.rol === "admin";
   // Por defecto: la próxima semana (la que más le importa al equipo, B4).
   const [lunes, setLunes] = React.useState(() => lunesSiguiente(lunesDeSemana(new Date()), 1));
   // Pestaña activa (controlada) para que pestañas hermanas puedan saltar entre sí
-  // (PiezasSueltas → Programas; Cobertura → Calendario con celda resaltada).
+  // (Eventos → Programas).
   const [pestania, setPestania] = React.useState("calendario");
-  // Prellenado pendiente para resaltar una celda concreta del Calendario fusionado.
-  // Lo consumimos al cambiar a `calendario` (one-shot) para evitar repintar en re-renders.
-  const [prellenoTurno, setPrellenoTurno] = React.useState<PrellenoNuevoTurno | null>(null);
-
-  const abrirNuevoTurnoDesdeCobertura = (args: PrellenoNuevoTurno) => {
-    setPrellenoTurno(args);
-    setPestania("calendario");
-  };
 
   return (
     <>
@@ -314,7 +293,6 @@ export default function Rota() {
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
-          <TabsTrigger value="cobertura">Cobertura</TabsTrigger>
           <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
           <TabsTrigger value="swaps">Cambios de turno</TabsTrigger>
           <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
@@ -323,20 +301,7 @@ export default function Rota() {
         </TabsList>
 
         <TabsContent value="calendario">
-          <Calendario
-            lunes={lunes}
-            setLunes={setLunes}
-            esAdmin={esAdmin}
-            prelleno={prellenoTurno}
-            limpiarPrelleno={() => setPrellenoTurno(null)}
-          />
-        </TabsContent>
-        <TabsContent value="cobertura">
-          <Cobertura
-            lunes={lunes}
-            setLunes={setLunes}
-            onCrearTurno={abrirNuevoTurnoDesdeCobertura}
-          />
+          <Calendario lunes={lunes} setLunes={setLunes} esAdmin={esAdmin} />
         </TabsContent>
         <TabsContent value="mis-turnos">
           <MisTurnos lunes={lunes} setLunes={setLunes} />
@@ -501,22 +466,6 @@ function ausenciaTocaDia(a: AusenciaRota, fecha: string): boolean {
 }
 
 /**
- * Mapea la hora de un evento a la franja LEGACY (modelo 3-buckets). Sin hora ->
- * matutino. El equipo trabaja matutino 06-13:59, vespertino 14-22:59 y "descanso"
- * 23-05:59. Lo seguimos usando como hint para `Cobertura → Crear turno` (el handler
- * resuelve después el `franja_id` real contra las franjas vivas de la semana).
- */
-function franjaDeHora(hora: string): FranjaTurno {
-  const m = hora.match(/(\d{1,2}):?(\d{2})?/);
-  if (!m) return "matutino";
-  const h = Number(m[1]);
-  if (!Number.isFinite(h)) return "matutino";
-  if (h >= 6 && h <= 13) return "matutino";
-  if (h >= 14 && h <= 22) return "vespertino";
-  return "descanso";
-}
-
-/**
  * Convierte "HH:MM" a minutos desde 00:00. Devuelve `null` si no parsea.
  */
 function horaAMinutos(s: string): number | null {
@@ -624,15 +573,10 @@ function Calendario({
   lunes,
   setLunes,
   esAdmin,
-  prelleno,
-  limpiarPrelleno,
 }: {
   lunes: string;
   setLunes: (l: string) => void;
   esAdmin: boolean;
-  /** Si llega un prelleno (atajo desde Cobertura), resaltamos la celda objetivo. */
-  prelleno: PrellenoNuevoTurno | null;
-  limpiarPrelleno: () => void;
 }) {
   const queryClient = useQueryClient();
   const claveTurnos = ["rota", "turnos", lunes] as const;
@@ -684,34 +628,6 @@ function Calendario({
 
   // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
   const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
-
-  // Resaltado one-shot de la celda objetivo cuando llegamos desde Cobertura. La
-  // celda se identifica por `franja_id`: el prelleno legado trae el nombre de la
-  // franja (Mañana/Tarde/Descanso) y aquí lo resolvemos contra las franjas vivas.
-  const [celdaResaltada, setCeldaResaltada] = React.useState<{
-    fecha: string;
-    franja: string;
-  } | null>(null);
-  React.useEffect(() => {
-    if (prelleno?.fecha && prelleno.franja) {
-      const nombreLegado =
-        prelleno.franja === "matutino"
-          ? "Mañana"
-          : prelleno.franja === "vespertino"
-            ? "Tarde"
-            : prelleno.franja === "descanso"
-              ? "Descanso"
-              : "";
-      const match = franjasSemana.find((f) => f.nombre === nombreLegado);
-      if (match) {
-        setCeldaResaltada({ fecha: prelleno.fecha, franja: match.id });
-        limpiarPrelleno();
-        const t = window.setTimeout(() => setCeldaResaltada(null), 4000);
-        return () => window.clearTimeout(t);
-      }
-    }
-    if (prelleno) limpiarPrelleno();
-  }, [prelleno, limpiarPrelleno, franjasSemana]);
 
   // Mutaciones de cabecera (de la antigua pestaña Turnos): aprobar / despublicar /
   // copiar semana anterior. Sin cambios funcionales — sólo migradas aquí.
@@ -1089,10 +1005,6 @@ function Calendario({
                         {dias.map((fecha) => {
                           const recuadros =
                             recuadrosPorCelda.get(`${franja.id}|${fecha}`) ?? [];
-                          const resaltada =
-                            !!celdaResaltada &&
-                            celdaResaltada.fecha === fecha &&
-                            celdaResaltada.franja === franja.id;
                           // CMs disponibles para añadir aquí: los de ClaroSports que no
                           // estén ya asignados a esta celda. La franja Descanso también
                           // admite asignaciones (turno de no-laboral explícito).
@@ -1114,7 +1026,6 @@ function Calendario({
                               equipo={equipo}
                               cmsDisponibles={cmsDisponibles}
                               editable={editable}
-                              resaltada={resaltada}
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
                               onEditarEvento={(e) => setEventoSeleccionado(e)}
@@ -1159,7 +1070,6 @@ function CeldaDeRejilla({
   equipo,
   cmsDisponibles,
   editable,
-  resaltada,
   finde,
   ausenciaDe,
   onEditarEvento,
@@ -1172,7 +1082,6 @@ function CeldaDeRejilla({
   equipo: MiembroRota[];
   cmsDisponibles: MiembroRota[];
   editable: boolean;
-  resaltada: boolean;
   finde: boolean;
   ausenciaDe: (miembroId: string, fecha: string) => AusenciaRota | undefined;
   onEditarEvento: (evento: EventoRota) => void;
@@ -1192,7 +1101,6 @@ function CeldaDeRejilla({
       className={cn(
         "flex min-h-[8rem] flex-col gap-2 border-l p-2",
         finde && "bg-amber-50/20 dark:bg-amber-950/5",
-        resaltada && "ring-2 ring-amber-400 ring-inset",
       )}
     >
       {recuadros.length === 0 && !editable && (
@@ -2120,197 +2028,6 @@ function PanelCarga({ lunes }: { lunes: string }) {
   );
 }
 
-// --- Pestaña: Cobertura (vista DERIVADA, solo lectura) ----------------------
-//
-// Para cada evento de la semana, muestra los turnos cuya (fecha, franja) lo
-// cubren. NO es CRUD: el CRUD vive en la pestaña Turnos. Sí ofrecemos un atajo
-// "Crear turno para esa franja+fecha" cuando el evento no tiene cobertura, que
-// salta a la pestaña Turnos abriendo el dialog prellenado.
-
-function Cobertura({
-  lunes,
-  setLunes,
-  onCrearTurno,
-}: {
-  lunes: string;
-  setLunes: (l: string) => void;
-  onCrearTurno: (args: PrellenoNuevoTurno) => void;
-}) {
-  const coberturaQ = useQuery({
-    queryKey: ["rota", "cobertura", lunes] as const,
-    queryFn: ({ signal }) => api.cobertura({ lunes }, signal),
-  });
-  const datos = coberturaQ.data;
-  // Memo para que la referencia sea estable entre renders sin datos nuevos.
-  const eventos = React.useMemo(() => datos?.eventos ?? [], [datos?.eventos]);
-  const inicio = datos?.inicio ?? "";
-  const fin = datos?.fin ?? "";
-
-  // Agrupamos por día para una lectura natural.
-  const porDia = React.useMemo(() => {
-    const m = new Map<string, CoberturaEvento[]>();
-    for (const e of eventos) {
-      const lista = m.get(e.fecha) ?? [];
-      lista.push(e);
-      m.set(e.fecha, lista);
-    }
-    // Orden interno por hora.
-    for (const lista of m.values()) {
-      lista.sort((a, b) => (a.hora || "").localeCompare(b.hora || ""));
-    }
-    return Array.from(m.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [eventos]);
-
-  // Resumen para la barra superior.
-  const sinCubrir = eventos.filter((e) => e.cobertura.length === 0).length;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
-        <div className="flex flex-wrap items-center gap-2">
-          {datos && (
-            <Badge variant="secondary" className="font-normal">
-              {eventos.length} evento{eventos.length === 1 ? "" : "s"} ·{" "}
-              {sinCubrir === 0
-                ? "todo cubierto"
-                : `${sinCubrir} sin cubrir`}
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      <p className="text-xs text-muted-foreground">
-        Esta vista se calcula a partir de los turnos y los eventos: para cada evento, qué
-        persona lo cubre por su (fecha, franja). No se asigna aquí — usa la pestaña{" "}
-        <strong>Turnos</strong> para crear o editar turnos.
-      </p>
-
-      {coberturaQ.isPending ? (
-        <Skeleton className="h-48 w-full rounded-md" />
-      ) : coberturaQ.isError ? (
-        <BloqueError
-          titulo="No se pudo cargar la cobertura"
-          mensaje={mensajeError(coberturaQ.error)}
-          onReintentar={() => void coberturaQ.refetch()}
-          cargando={coberturaQ.isFetching}
-        />
-      ) : porDia.length === 0 ? (
-        <EstadoVacio
-          icono={CalendarDays}
-          titulo="Sin eventos esta semana"
-          texto="Da de alta eventos en la pestaña «Eventos»."
-        />
-      ) : (
-        porDia.map(([fecha, eventosDia]) => (
-          <Card key={fecha}>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center justify-between text-base">
-                <span className="capitalize">{formatearFechaCorta(fecha)}</span>
-                {esFinDeSemana(fecha) && (
-                  <Badge variant="outline" className="font-normal">
-                    Fin de semana
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {eventosDia.map((evento) => (
-                <FilaCoberturaEvento
-                  key={evento.id}
-                  evento={evento}
-                  onCrearTurno={onCrearTurno}
-                />
-              ))}
-            </CardContent>
-          </Card>
-        ))
-      )}
-    </div>
-  );
-}
-
-function FilaCoberturaEvento({
-  evento,
-  onCrearTurno,
-}: {
-  evento: CoberturaEvento;
-  onCrearTurno: (args: PrellenoNuevoTurno) => void;
-}) {
-  const cob = COBERTURA[evento.tipo_cobertura] ?? COBERTURA.transmision;
-  const IconoCob = cob.icono;
-  const franjaPropuesta = franjaDeHora(evento.hora);
-  return (
-    <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border bg-background p-3">
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{evento.titulo}</span>
-          <Badge variant="outline" className={`gap-1 font-normal ${cob.chip}`}>
-            <IconoCob className="h-3 w-3" /> {cob.etiqueta}
-          </Badge>
-          {evento.cambiado && (
-            <Badge variant="aviso" className="gap-1 font-normal">
-              <BellRing className="h-3 w-3" /> Cambió
-            </Badge>
-          )}
-        </div>
-        <div className="text-xs text-muted-foreground">
-          {evento.hora ? `${evento.hora} · ` : ""}
-          <span className={COLOR_PRIORIDAD[evento.prioridad]}>
-            prioridad {evento.prioridad}
-          </span>
-        </div>
-        {evento.contenido && (
-          <div className="text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Qué sacar: </span>
-            {evento.contenido}
-          </div>
-        )}
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1.5">
-        {evento.cobertura.length === 0 ? (
-          <div className="flex flex-col items-end gap-1">
-            <Badge variant="aviso" className="gap-1 font-normal">
-              <AlertTriangle className="h-3 w-3" /> Sin cubrir
-            </Badge>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 gap-1 text-xs"
-              onClick={() =>
-                onCrearTurno({
-                  fecha: evento.fecha,
-                  franja: franjaPropuesta,
-                })
-              }
-            >
-              <Plus className="h-3 w-3" /> Crear turno
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col items-end gap-1">
-            {evento.cobertura.map((c) => (
-              <span
-                key={c.turno_id}
-                className="inline-flex items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-xs"
-              >
-                <User className="h-3 w-3 text-muted-foreground" />
-                {c.miembro_nombre}
-                <span className="text-muted-foreground">· {c.franja_nombre}</span>
-                {c.override && (
-                  <AlertTriangle
-                    className="h-3 w-3 text-amber-600"
-                    aria-label="override"
-                  />
-                )}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // --- Pestaña: Mis turnos ----------------------------------------------------
 
