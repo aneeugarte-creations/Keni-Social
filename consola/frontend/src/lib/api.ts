@@ -34,7 +34,7 @@ import type {
   CuerpoDuplicarEventoRota,
   CuerpoDuplicarPiezaRota,
   CuerpoDuplicarTurnoRota,
-  CuerpoConectarRed,
+  CuerpoPerfilesMetricool,
   CuerpoGuardarMetricool,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
@@ -83,8 +83,7 @@ import type {
   RespuestaAgentes,
   RespuestaCarpetas,
   RespuestaCatalogo,
-  RespuestaConectarRed,
-  RespuestaConexionesRedes,
+  RespuestaPerfilesMetricool,
   RespuestaMetricool,
   RespuestaGuardarMetricool,
   RespuestaProbarMetricool,
@@ -1128,22 +1127,16 @@ export const api = {
   eliminarConexionImagen: () =>
     peticion<RespuestaMensaje>("/conexiones/imagen", { metodo: "DELETE" }),
 
-  conexionesRedes: (signal?: AbortSignal) =>
-    peticion<RespuestaConexionesRedes>("/conexiones/redes", { signal }),
-  conectarRed: (plataforma: string, cuerpo: CuerpoConectarRed) =>
-    peticion<RespuestaConectarRed>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  desconectarRed: (plataforma: string) =>
-    peticion<RespuestaMensaje>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
-      metodo: "DELETE",
-    }),
-
   // Metricool por marca: cada marca es una cuenta Metricool con su propio token.
   // El user_token es write-only: solo se envía (PUT); del servidor llega el estado.
   conexionesMetricool: (signal?: AbortSignal) =>
     peticion<RespuestaMetricool>("/conexiones/metricool", { signal }),
+  // Descubre las marcas (blogId) de un token. NO persiste nada y el token nunca vuelve.
+  descubrirPerfilesMetricool: (cuerpo: CuerpoPerfilesMetricool) =>
+    peticion<RespuestaPerfilesMetricool>("/conexiones/metricool/perfiles", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
   guardarMetricool: (marca: string, cuerpo: CuerpoGuardarMetricool) =>
     peticion<RespuestaGuardarMetricool>(`/conexiones/metricool/${encodeURIComponent(marca)}`, {
       metodo: "PUT",
