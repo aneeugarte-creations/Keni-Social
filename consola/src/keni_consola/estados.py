@@ -197,3 +197,56 @@ ESTADOS_PIEZA: tuple[str, ...] = ("pendiente", "en_curso", "listo", "publicado")
 # equipo decida que cubre primero. DEFAULT `media`. Operacional (`rota_eventos.prioridad`).
 PRIORIDADES_EVENTO: tuple[str, ...] = ("alta", "media", "baja")
 PRIORIDAD_EVENTO_DEFECTO = "media"
+
+# --------------------------------------------------------------------------- #
+# Tablero de CONTENIDO unificado (herramienta de community manager)            #
+# --------------------------------------------------------------------------- #
+# Unifica el tablero de tareas, las piezas de la rota y las publicaciones en un
+# unico modelo padre+hijos (`contenido` + `contenido_plataforma`). Operacional;
+# vive en Postgres. Ver `db.py` y `api/contenido.py`.
+
+# `clase` de un item del tablero: contenido publicable (con filas por plataforma) o
+# una tarea libre del equipo (relevo/recado, sin plataformas).
+CLASES_CONTENIDO: tuple[str, ...] = ("contenido", "tarea")
+CLASE_CONTENIDO = "contenido"
+CLASE_TAREA = "tarea"
+
+# `flujo` editorial de un contenido: lo importante del dia, evergreen (always-on) o
+# cobertura de un evento previsto. "" para tareas libres (clase=tarea).
+FLUJOS_CONTENIDO: tuple[str, ...] = ("importante", "evergreen", "evento")
+FLUJO_IMPORTANTE = "importante"
+FLUJO_EVERGREEN = "evergreen"
+FLUJO_EVENTO = "evento"
+
+# Prioridad de un contenido/tarea del tablero (misma escala que un evento).
+PRIORIDADES_CONTENIDO: tuple[str, ...] = PRIORIDADES_EVENTO
+PRIORIDAD_CONTENIDO_DEFECTO = PRIORIDAD_EVENTO_DEFECTO
+
+# Estado de un contenido a nivel PADRE (resumen editable / estado directo de una tarea
+# libre). Cubre el ciclo de una tarea (pendiente/en_curso/hecha) y sirve de resumen.
+ESTADOS_CONTENIDO: tuple[str, ...] = ("pendiente", "en_curso", "hecha")
+
+# Estado de UNA fila por plataforma (`contenido_plataforma.estado`). Ciclo unificado que
+# fusiona el de pieza (pendiente/en_curso/listo/publicado) y el editorial de publicacion
+# (borrador/en_revision/aprobado/programado/publicado):
+#
+#   pendiente -> en_curso -> en_revision -> aprobado -> programado -> publicado
+#
+# Mapeos de migracion: `borrador` -> `pendiente`; `listo` (pieza) -> `aprobado`.
+ESTADOS_CONTENIDO_PLATAFORMA: tuple[str, ...] = (
+    "pendiente",
+    "en_curso",
+    "en_revision",
+    "aprobado",
+    "programado",
+    "publicado",
+)
+
+# Items del checklist "falta X" que se siguen por plataforma. Cada uno es un booleano en
+# `contenido_plataforma` (`falta_copy`, `falta_imagen`, `falta_revision`, `falta_publicar`).
+CHECKLIST_CONTENIDO: tuple[str, ...] = (
+    "falta_copy",
+    "falta_imagen",
+    "falta_revision",
+    "falta_publicar",
+)

@@ -784,6 +784,172 @@ def duplicar_pieza_rota(
     return db.duplicar_pieza_rota(pieza_id, dia=dia, evento_id=evento_id)
 
 
+# --------------------------------------------------------------------------- #
+# Tablero de CONTENIDO unificado (OPERACIONAL: Postgres via db.py)              #
+# --------------------------------------------------------------------------- #
+# Padre `contenido` (item del tablero: importante/evergreen/evento, o tarea libre) +
+# hijos `contenido_plataforma` (una fila por red con estado y checklist). La fachada
+# delega 1:1 en `db.py`.
+
+
+def crear_contenido(
+    *,
+    clase: str = "contenido",
+    flujo: str = "",
+    titulo: str = "",
+    descripcion: str = "",
+    marca: str = "",
+    evento_id: str = "",
+    programa: str = "",
+    prioridad: str = "media",
+    estado: str = "pendiente",
+    fecha_objetivo: str = "",
+    hora_objetivo: str = "",
+    fecha_entrega: str = "",
+    autor: dict[str, str] | None = None,
+    responsable: dict[str, str] | None = None,
+    origen: str = "",
+    notas: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """Crea un item del tablero (padre). Delegado en `db.py`."""
+    return db.crear_contenido(
+        clase=clase,
+        flujo=flujo,
+        titulo=titulo,
+        descripcion=descripcion,
+        marca=marca,
+        evento_id=evento_id,
+        programa=programa,
+        prioridad=prioridad,
+        estado=estado,
+        fecha_objetivo=fecha_objetivo,
+        hora_objetivo=hora_objetivo,
+        fecha_entrega=fecha_entrega,
+        autor=autor,
+        responsable=responsable,
+        origen=origen,
+        notas=notas,
+        creado=creado,
+        actualizado=actualizado,
+        id=id,
+    )
+
+
+def listar_contenido(
+    *,
+    clase: str | None = None,
+    flujo: str | None = None,
+    marca: str | None = None,
+    evento_id: str | None = None,
+    responsable_id: str | None = None,
+    estado: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[dict[str, Any]]:
+    """Lista items del tablero (padres), filtros combinables. Delegado en `db.py`."""
+    return db.listar_contenido(
+        clase=clase,
+        flujo=flujo,
+        marca=marca,
+        evento_id=evento_id,
+        responsable_id=responsable_id,
+        estado=estado,
+        desde=desde,
+        hasta=hasta,
+    )
+
+
+def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
+    return db.obtener_contenido(contenido_id)
+
+
+def actualizar_contenido(
+    contenido_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_contenido(contenido_id, campos)
+
+
+def borrar_contenido(contenido_id: str) -> bool:
+    return db.borrar_contenido(contenido_id)
+
+
+def crear_contenido_plataforma(
+    *,
+    contenido_id: str,
+    red: str,
+    estado: str = "pendiente",
+    falta_copy: bool | None = None,
+    falta_imagen: bool | None = None,
+    falta_revision: bool = True,
+    falta_publicar: bool = True,
+    copy: str = "",
+    imagen: str = "",
+    veredicto: str = "",
+    revisor_id: str = "",
+    revisor_nombre: str = "",
+    revisado_en: str = "",
+    enviado_a_revision_en: str = "",
+    fecha_programada: str = "",
+    preparado_en: str = "",
+    id_post_metricool: str = "",
+    enlace: str = "",
+    evergreen: bool = False,
+    hora_post: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """Crea una fila por plataforma de un contenido. Delegado en `db.py`."""
+    return db.crear_contenido_plataforma(
+        contenido_id=contenido_id,
+        red=red,
+        estado=estado,
+        falta_copy=falta_copy,
+        falta_imagen=falta_imagen,
+        falta_revision=falta_revision,
+        falta_publicar=falta_publicar,
+        copy=copy,
+        imagen=imagen,
+        veredicto=veredicto,
+        revisor_id=revisor_id,
+        revisor_nombre=revisor_nombre,
+        revisado_en=revisado_en,
+        enviado_a_revision_en=enviado_a_revision_en,
+        fecha_programada=fecha_programada,
+        preparado_en=preparado_en,
+        id_post_metricool=id_post_metricool,
+        enlace=enlace,
+        evergreen=evergreen,
+        hora_post=hora_post,
+        creado=creado,
+        actualizado=actualizado,
+        id=id,
+    )
+
+
+def listar_contenido_plataforma(
+    contenido_id: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_contenido_plataforma(contenido_id)
+
+
+def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:
+    return db.obtener_contenido_plataforma(plataforma_id)
+
+
+def actualizar_contenido_plataforma(
+    plataforma_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_contenido_plataforma(plataforma_id, campos)
+
+
+def borrar_contenido_plataforma(plataforma_id: str) -> bool:
+    return db.borrar_contenido_plataforma(plataforma_id)
+
+
 def duplicar_evento_rota(
     evento_id: str,
     *,

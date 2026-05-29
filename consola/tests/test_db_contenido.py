@@ -1,0 +1,122 @@
+"""Tests del CRUD del tablero de CONTENIDO unificado (`keni_consola.db`).
+
+Modelo padre `contenido` (item del tablero: importante/evergreen/evento, o tarea libre)
++ hijos `contenido_plataforma` (una fila por red con estado y checklist). Probamos el
+contrato basico de la persistencia: CRUD del padre y de las filas por plataforma, filtros
+combinables, autodeduccion del checklist, cascada al borrar, preservacion de id al migrar,
+y que `actualizado` se refresca. Reutiliza la fixture `entorno` (Postgres de pruebas o skip).
+"""
+
+from __future__ import annotations
+
+from keni_consola import db
+
+
+def test_crear_contenido_minimal(entorno):
+    """Un item nace con defaults y `id` propio."""
+    c = db.crear_contenido(flujo="importante", titulo="Sismo CDMX")
+    assert c["id"]
+    assert c["clase"] == "contenido"
+    assert c["flujo"] == "importante"
+    assert c["titulo"] == "Sismo CDMX"
+    assert c["prioridad"] == "media"
+    assert c["estado"] == "pendiente"
+    assert c["creado"] and c["actualizado"]
+
+
+def test_crear_tarea_libre(entorno):
+    """Una tarea libre del equipo se guarda con clase='tarea' y sin plataformas."""
+    t = db.crear_contenido(clase="tarea", titulo="Revisar relevo de la noche")
+    assert t["clase"] == "tarea"
+    assert db.listar_contenido_plataforma(t["id"]) == []
+
+
+def test_listar_contenido_filtra_y_ordena_por_prioridad(entorno):
+    """Filtra por flujo y ordena prioridad alta primero."""
+    db.crear_contenido(flujo="evergreen", titulo="Evergreen", prioridad="baja")
+    db.crear_contenido(flujo="importante", titulo="Media", prioridad="media")
+    db.crear_contenido(flujo="importante", titulo="Alta", prioridad="alta")
+
+    importantes = db.listar_contenido(flujo="importante")
+    assert [c["titulo"] for c in importantes] == ["Alta", "Media"]
+    assert all(c["flujo"] == "importante" for c in importantes)
+
+
+def test_plataforma_autodeduce_checklist_de_copy_e_imagen(entorno):
+    """Si llega copy/imagen, el checklist 'falta_*' se apaga solo."""
+    c = db.crear_contenido(flujo="evento", titulo="Partido")
+    sin = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
+    assert sin["falta_copy"] is True
+    assert sin["falta_imagen"] is True
+    con_copy = db.crear_contenido_plataforma(
+        contenido_id=c["id"], red="instagram", copy="¡Gol!", imagen="foto.jpg"
+    )
+    assert con_copy["falta_copy"] is False
+    assert con_copy["falta_imagen"] is False
+
+
+def test_listar_plataformas_de_un_contenido(entorno):
+    """Devuelve solo las filas del contenido pedido."""
+    a = db.crear_contenido(titulo="A")
+    b = db.crear_contenido(titulo="B")
+    db.crear_contenido_plataforma(contenido_id=a["id"], red="x")
+    db.crear_contenido_plataforma(contenido_id=a["id"], red="facebook")
+    db.crear_contenido_plataforma(contenido_id=b["id"], red="tiktok")
+    redes_a = {p["red"] for p in db.listar_contenido_plataforma(a["id"])}
+    assert redes_a == {"x", "facebook"}
+
+
+def test_actualizar_plataforma_estado_y_checklist(entorno):
+    """Editar estado y checklist persiste y refresca `actualizado`."""
+    c = db.crear_contenido(titulo="C")
+    p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
+    actualizada = db.actualizar_contenido_plataforma(
+        p["id"], {"estado": "aprobado", "falta_copy": False, "red": "hackeo"}
+    )
+    assert actualizada["estado"] == "aprobado"
+    assert actualizada["falta_copy"] is False
+    # `red` NO es editable (lista blanca): se ignora.
+    assert actualizada["red"] == "x"
+    assert actualizada["actualizado"] >= p["actualizado"]
+
+
+def test_actualizar_contenido_ignora_columnas_no_editables(entorno):
+    """`id`/`clase`/`autor_*`/`creado` no se editan; el resto si."""
+    c = db.crear_contenido(titulo="Orig", autor={"id": "u1", "usuario": "ana"})
+    upd = db.actualizar_contenido(
+        c["id"], {"id": "otro", "clase": "tarea", "titulo": "Nuevo", "prioridad": "alta"}
+    )
+    assert upd["id"] == c["id"]
+    assert upd["clase"] == "contenido"
+    assert upd["titulo"] == "Nuevo"
+    assert upd["prioridad"] == "alta"
+    assert upd["autor_nombre"] == "ana"
+
+
+def test_borrar_contenido_cascada_plataformas(entorno):
+    """Borrar el padre borra sus filas por plataforma."""
+    c = db.crear_contenido(titulo="Con hijos")
+    p = db.crear_contenido_plataforma(contenido_id=c["id"], red="x")
+    assert db.borrar_contenido(c["id"]) is True
+    assert db.obtener_contenido(c["id"]) is None
+    assert db.obtener_contenido_plataforma(p["id"]) is None
+
+
+def test_crear_preserva_id_para_migracion(entorno):
+    """Se puede forzar `id`/`creado` para PRESERVAR identidad de datos legados."""
+    c = db.crear_contenido(id="legado-123", titulo="Migrado", creado="2025-01-01T00:00:00")
+    assert c["id"] == "legado-123"
+    assert c["creado"] == "2025-01-01T00:00:00"
+    p = db.crear_contenido_plataforma(
+        id="pub-legada", contenido_id=c["id"], red="instagram", estado="publicado"
+    )
+    assert p["id"] == "pub-legada"
+    assert p["estado"] == "publicado"
+
+
+def test_migracion_columnas_contenido_idempotente(entorno):
+    """Listar varias veces no rompe (el esquema se crea/migra idempotente)."""
+    db.listar_contenido()
+    db.listar_contenido()
+    c = db.crear_contenido(titulo="X")
+    assert c["id"]

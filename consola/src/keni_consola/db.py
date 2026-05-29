@@ -63,11 +63,14 @@ from typing import Any
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
 from . import motor_db
 from .estados import (
+    CLASE_CONTENIDO,
     ESTADO_COMERCIAL_ACTIVA,
     ESTADO_ROTA_APROBADO,
     ESTADO_ROTA_PROPUESTO,
     ESTADO_SWAP_PROPUESTO,
     ESTADOS_COMERCIAL,
+    ESTADOS_CONTENIDO,
+    ESTADOS_CONTENIDO_PLATAFORMA,
     ESTADOS_PIEZA,
     ESTADOS_ROTA,
     ESTADOS_SWAP,
@@ -75,6 +78,7 @@ from .estados import (
     METRICAS_COMERCIAL,
     NOMBRE_FRANJA_MANANA_DEFAULT,
     NOMBRE_FRANJA_TARDE_DEFAULT,
+    PRIORIDAD_CONTENIDO_DEFECTO,
     PRIORIDAD_EVENTO_DEFECTO,
     PRIORIDADES_EVENTO,
     TIPO_COBERTURA_TRANSMISION,
@@ -446,6 +450,71 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_dia ON rota_piezas (dia)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_programa ON rota_piezas (programa)",
     "CREATE INDEX IF NOT EXISTS idx_rota_piezas_responsable ON rota_piezas (responsable_id)",
+    # Tablero de CONTENIDO unificado (herramienta de community manager): un padre
+    # `contenido` (item del tablero: importante del dia / evergreen / evento, o tarea
+    # libre) y N filas `contenido_plataforma` (una por red, con su estado y checklist).
+    # Una "publicacion" del flujo editorial = una fila `contenido_plataforma` unida a su
+    # padre (ver `ficheros.py`/`repos.py`). Operacional; Postgres (ADR 0004).
+    """
+    CREATE TABLE IF NOT EXISTS contenido (
+        id                  TEXT PRIMARY KEY,
+        clase               TEXT NOT NULL DEFAULT 'contenido',
+        flujo               TEXT NOT NULL DEFAULT '',
+        titulo              TEXT NOT NULL DEFAULT '',
+        descripcion         TEXT NOT NULL DEFAULT '',
+        marca               TEXT NOT NULL DEFAULT '',
+        evento_id           TEXT NOT NULL DEFAULT '',
+        programa            TEXT NOT NULL DEFAULT '',
+        prioridad           TEXT NOT NULL DEFAULT 'media',
+        estado              TEXT NOT NULL DEFAULT 'pendiente',
+        fecha_objetivo      TEXT NOT NULL DEFAULT '',
+        hora_objetivo       TEXT NOT NULL DEFAULT '',
+        fecha_entrega       TEXT NOT NULL DEFAULT '',
+        responsable_id      TEXT NOT NULL DEFAULT '',
+        responsable_nombre  TEXT NOT NULL DEFAULT '',
+        autor_id            TEXT NOT NULL DEFAULT '',
+        autor_nombre        TEXT NOT NULL DEFAULT '',
+        origen              TEXT NOT NULL DEFAULT '',
+        notas               TEXT NOT NULL DEFAULT '',
+        creado              TEXT NOT NULL DEFAULT '',
+        actualizado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_contenido_flujo ON contenido (flujo)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_marca ON contenido (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_evento ON contenido (evento_id)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_responsable ON contenido (responsable_id)",
+    """
+    CREATE TABLE IF NOT EXISTS contenido_plataforma (
+        id                    TEXT PRIMARY KEY,
+        contenido_id          TEXT NOT NULL DEFAULT '',
+        red                   TEXT NOT NULL DEFAULT '',
+        estado                TEXT NOT NULL DEFAULT 'pendiente',
+        falta_copy            INTEGER NOT NULL DEFAULT 1,
+        falta_imagen          INTEGER NOT NULL DEFAULT 1,
+        falta_revision        INTEGER NOT NULL DEFAULT 1,
+        falta_publicar        INTEGER NOT NULL DEFAULT 1,
+        copy                  TEXT NOT NULL DEFAULT '',
+        imagen                TEXT NOT NULL DEFAULT '',
+        veredicto             TEXT NOT NULL DEFAULT '',
+        revisor_id            TEXT NOT NULL DEFAULT '',
+        revisor_nombre        TEXT NOT NULL DEFAULT '',
+        revisado_en           TEXT NOT NULL DEFAULT '',
+        enviado_a_revision_en TEXT NOT NULL DEFAULT '',
+        fecha_programada      TEXT NOT NULL DEFAULT '',
+        preparado_en          TEXT NOT NULL DEFAULT '',
+        id_post_metricool     TEXT NOT NULL DEFAULT '',
+        enlace                TEXT NOT NULL DEFAULT '',
+        evergreen             INTEGER NOT NULL DEFAULT 0,
+        hora_post             TEXT NOT NULL DEFAULT '',
+        creado                TEXT NOT NULL DEFAULT '',
+        actualizado           TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_contenido ON contenido_plataforma (contenido_id)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_red ON contenido_plataforma (red)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_estado ON contenido_plataforma (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_contenido_plat_programada ON contenido_plataforma (fecha_programada)",
     # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
@@ -606,6 +675,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_tareas(con)
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_piezas_rota(con)
+    _migrar_columnas_contenido(con)
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
@@ -1153,6 +1223,28 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
     for columna, tipo in _COLUMNAS_PIEZA_ROTA_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE rota_piezas ADD COLUMN {columna} {tipo}")
+
+
+# Columnas ampliadas de `contenido` / `contenido_plataforma` (tablero unificado). Hoy
+# ambas tablas nacen enteras en el DDL declarativo (sin previas en produccion); estos
+# hooks existen por coherencia con `_migrar_columnas_*` para futuras ampliaciones sin
+# reescribir el esquema en bases hosted. Idempotentes; vacios no hacen nada.
+_COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+
+def _migrar_columnas_contenido(con: Any) -> None:
+    """Anade a `contenido`/`contenido_plataforma` columnas que una BD vieja no tuviera."""
+    for tabla, ampliadas in (
+        ("contenido", _COLUMNAS_CONTENIDO_AMPLIADAS),
+        ("contenido_plataforma", _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS),
+    ):
+        if not ampliadas:
+            continue
+        columnas = _columnas_existentes(con, tabla)
+        for columna, tipo in ampliadas:
+            if columna not in columnas:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}")
 
 
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
@@ -2814,6 +2906,444 @@ def duplicar_pieza_rota(
         fecha_entrega_material=original.get("fecha_entrega_material", ""),
         always_on=bool(original.get("always_on", False)),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Tablero de CONTENIDO unificado (padre `contenido` + hijos `contenido_plataforma`)  #
+# --------------------------------------------------------------------------- #
+
+_COLS_CONTENIDO = (
+    "id",
+    "clase",
+    "flujo",
+    "titulo",
+    "descripcion",
+    "marca",
+    "evento_id",
+    "programa",
+    "prioridad",
+    "estado",
+    "fecha_objetivo",
+    "hora_objetivo",
+    "fecha_entrega",
+    "responsable_id",
+    "responsable_nombre",
+    "autor_id",
+    "autor_nombre",
+    "origen",
+    "notas",
+    "creado",
+    "actualizado",
+)
+_SELECT_CONTENIDO = f"SELECT {', '.join(_COLS_CONTENIDO)} FROM contenido"
+
+# Campos del padre editables via `actualizar_contenido` (lista blanca). `id`, `clase`,
+# `autor_*`, `creado` y `actualizado` no son editables (el ultimo lo gestiona el sistema).
+_CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
+    "flujo",
+    "titulo",
+    "descripcion",
+    "marca",
+    "evento_id",
+    "programa",
+    "prioridad",
+    "estado",
+    "fecha_objetivo",
+    "hora_objetivo",
+    "fecha_entrega",
+    "responsable_id",
+    "responsable_nombre",
+    "origen",
+    "notas",
+)
+
+
+def _fila_a_contenido(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `contenido` en un dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_CONTENIDO}
+    item["estado"] = fila["estado"] or "pendiente"
+    item["prioridad"] = fila["prioridad"] or PRIORIDAD_CONTENIDO_DEFECTO
+    item["clase"] = fila["clase"] or CLASE_CONTENIDO
+    return item
+
+
+def crear_contenido(
+    *,
+    clase: str = CLASE_CONTENIDO,
+    flujo: str = "",
+    titulo: str = "",
+    descripcion: str = "",
+    marca: str = "",
+    evento_id: str = "",
+    programa: str = "",
+    prioridad: str = PRIORIDAD_CONTENIDO_DEFECTO,
+    estado: str = "pendiente",
+    fecha_objetivo: str = "",
+    hora_objetivo: str = "",
+    fecha_entrega: str = "",
+    autor: dict[str, str] | None = None,
+    responsable: dict[str, str] | None = None,
+    origen: str = "",
+    notas: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """Inserta un item del tablero (padre) y lo devuelve. NO valida (lo hace la API).
+
+    `clase` distingue un contenido publicable (con filas por plataforma) de una tarea libre
+    del equipo (`tarea`, sin plataformas). `id`/`creado`/`actualizado` se pueden pasar para
+    PRESERVAR identidad al migrar datos legados; si van vacios se generan.
+    """
+    autor = autor or {}
+    responsable = responsable or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "clase": clase if clase in ("contenido", "tarea") else CLASE_CONTENIDO,
+        "flujo": flujo or "",
+        "titulo": titulo or "",
+        "descripcion": descripcion or "",
+        "marca": marca or "",
+        "evento_id": evento_id or "",
+        "programa": programa or "",
+        "prioridad": prioridad if prioridad in PRIORIDADES_EVENTO else PRIORIDAD_CONTENIDO_DEFECTO,
+        "estado": estado if estado in ESTADOS_CONTENIDO else "pendiente",
+        "fecha_objetivo": fecha_objetivo or "",
+        "hora_objetivo": hora_objetivo or "",
+        "fecha_entrega": fecha_entrega or "",
+        "responsable_id": responsable.get("id", "") or "",
+        "responsable_nombre": responsable.get("usuario", "") or "",
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "origen": origen or "",
+        "notas": notas or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_CONTENIDO)
+        con.execute(
+            f"INSERT INTO contenido ({', '.join(_COLS_CONTENIDO)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_CONTENIDO),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return fila
+
+
+def listar_contenido(
+    *,
+    clase: str | None = None,
+    flujo: str | None = None,
+    marca: str | None = None,
+    evento_id: str | None = None,
+    responsable_id: str | None = None,
+    estado: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[dict[str, Any]]:
+    """Items del tablero (padres), filtros combinables (AND). Orden estable.
+
+    `desde`/`hasta` acotan por `fecha_objetivo` (ISO inclusivo). El resto filtran texto
+    EXACTO. Sin filtros, devuelve el tablero completo del equipo.
+    """
+    clausulas: list[str] = []
+    params: list[Any] = []
+    for col, val in (
+        ("clase", clase),
+        ("flujo", flujo),
+        ("marca", marca),
+        ("estado", estado),
+    ):
+        if val:
+            clausulas.append(f"{col} = ?")
+            params.append(val)
+    if evento_id is not None:
+        clausulas.append("evento_id = ?")
+        params.append(evento_id)
+    if responsable_id is not None:
+        clausulas.append("responsable_id = ?")
+        params.append(responsable_id)
+    if desde:
+        clausulas.append("fecha_objetivo >= ?")
+        params.append(desde)
+    if hasta:
+        clausulas.append("fecha_objetivo <= ?")
+        params.append(hasta)
+    sql = _SELECT_CONTENIDO
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    # Prioridad primero (alta antes que media/baja), luego por fecha objetivo y creacion.
+    sql += (
+        " ORDER BY CASE prioridad WHEN 'alta' THEN 0 WHEN 'media' THEN 1 ELSE 2 END,"
+        " fecha_objetivo ASC, creado ASC, id ASC"
+    )
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_contenido(f) for f in filas]
+
+
+def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
+    """Un item del tablero por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_CONTENIDO} WHERE id = ?", (contenido_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_contenido(fila) if fila is not None else None
+
+
+def actualizar_contenido(
+    contenido_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente un item; None si el id no existe. Filtra a la lista blanca."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CONTENIDO}
+    if not cambios:
+        return obtener_contenido(contenido_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, contenido_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE contenido SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_CONTENIDO} WHERE id = ?", (contenido_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_contenido(fila) if fila is not None else None
+
+
+def borrar_contenido(contenido_id: str) -> bool:
+    """Borra un item del tablero y SUS filas por plataforma (cascada). True si existia."""
+    con = _conectar()
+    try:
+        con.execute(
+            "DELETE FROM contenido_plataforma WHERE contenido_id = ?", (contenido_id,)
+        )
+        cur = con.execute("DELETE FROM contenido WHERE id = ?", (contenido_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+_COLS_CONTENIDO_PLATAFORMA = (
+    "id",
+    "contenido_id",
+    "red",
+    "estado",
+    "falta_copy",
+    "falta_imagen",
+    "falta_revision",
+    "falta_publicar",
+    "copy",
+    "imagen",
+    "veredicto",
+    "revisor_id",
+    "revisor_nombre",
+    "revisado_en",
+    "enviado_a_revision_en",
+    "fecha_programada",
+    "preparado_en",
+    "id_post_metricool",
+    "enlace",
+    "evergreen",
+    "hora_post",
+    "creado",
+    "actualizado",
+)
+_SELECT_CONTENIDO_PLATAFORMA = (
+    f"SELECT {', '.join(_COLS_CONTENIDO_PLATAFORMA)} FROM contenido_plataforma"
+)
+_BOOLS_CONTENIDO_PLATAFORMA = (
+    "falta_copy",
+    "falta_imagen",
+    "falta_revision",
+    "falta_publicar",
+    "evergreen",
+)
+# Campos editables de una fila por plataforma (lista blanca). `id`, `contenido_id`,
+# `red`, `creado` y `actualizado` no se editan (el ultimo lo gestiona el sistema).
+_CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA: tuple[str, ...] = tuple(
+    c
+    for c in _COLS_CONTENIDO_PLATAFORMA
+    if c not in ("id", "contenido_id", "red", "creado", "actualizado")
+)
+
+
+def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `contenido_plataforma` en dict (booleanos como bool)."""
+    plat: dict[str, Any] = {col: fila[col] for col in _COLS_CONTENIDO_PLATAFORMA}
+    for col in _BOOLS_CONTENIDO_PLATAFORMA:
+        plat[col] = bool(fila[col])
+    plat["estado"] = fila["estado"] or "pendiente"
+    return plat
+
+
+def crear_contenido_plataforma(
+    *,
+    contenido_id: str,
+    red: str,
+    estado: str = "pendiente",
+    falta_copy: bool | None = None,
+    falta_imagen: bool | None = None,
+    falta_revision: bool = True,
+    falta_publicar: bool = True,
+    copy: str = "",
+    imagen: str = "",
+    veredicto: str = "",
+    revisor_id: str = "",
+    revisor_nombre: str = "",
+    revisado_en: str = "",
+    enviado_a_revision_en: str = "",
+    fecha_programada: str = "",
+    preparado_en: str = "",
+    id_post_metricool: str = "",
+    enlace: str = "",
+    evergreen: bool = False,
+    hora_post: str = "",
+    creado: str = "",
+    actualizado: str = "",
+    id: str = "",
+) -> dict[str, Any]:
+    """Inserta una fila por plataforma de un `contenido` y la devuelve. NO valida.
+
+    El checklist `falta_copy`/`falta_imagen` se autodeduce de `copy`/`imagen` si no se pasa
+    explicito (copy no vacio => no falta copy). `id`/`creado`/`actualizado` se pueden pasar
+    para PRESERVAR identidad al migrar (p. ej. el id de una publicacion legada).
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    falta_copy = (not bool(copy)) if falta_copy is None else falta_copy
+    falta_imagen = (not bool(imagen)) if falta_imagen is None else falta_imagen
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "contenido_id": contenido_id,
+        "red": red,
+        "estado": estado if estado in ESTADOS_CONTENIDO_PLATAFORMA else "pendiente",
+        "falta_copy": 1 if falta_copy else 0,
+        "falta_imagen": 1 if falta_imagen else 0,
+        "falta_revision": 1 if falta_revision else 0,
+        "falta_publicar": 1 if falta_publicar else 0,
+        "copy": copy or "",
+        "imagen": imagen or "",
+        "veredicto": veredicto or "",
+        "revisor_id": revisor_id or "",
+        "revisor_nombre": revisor_nombre or "",
+        "revisado_en": revisado_en or "",
+        "enviado_a_revision_en": enviado_a_revision_en or "",
+        "fecha_programada": fecha_programada or "",
+        "preparado_en": preparado_en or "",
+        "id_post_metricool": id_post_metricool or "",
+        "enlace": enlace or "",
+        "evergreen": 1 if evergreen else 0,
+        "hora_post": hora_post or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_CONTENIDO_PLATAFORMA)
+        con.execute(
+            f"INSERT INTO contenido_plataforma ({', '.join(_COLS_CONTENIDO_PLATAFORMA)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_CONTENIDO_PLATAFORMA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_contenido_plataforma(fila)
+
+
+def listar_contenido_plataforma(
+    contenido_id: str | None = None,
+) -> list[dict[str, Any]]:
+    """Filas por plataforma de un contenido (o de todos si `contenido_id` es None)."""
+    sql = _SELECT_CONTENIDO_PLATAFORMA
+    params: tuple[Any, ...] = ()
+    if contenido_id is not None:
+        sql += " WHERE contenido_id = ?"
+        params = (contenido_id,)
+    sql += " ORDER BY contenido_id ASC, creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, params).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_contenido_plataforma(f) for f in filas]
+
+
+def obtener_contenido_plataforma(plataforma_id: str) -> dict[str, Any] | None:
+    """Una fila por plataforma por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_CONTENIDO_PLATAFORMA} WHERE id = ?", (plataforma_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_contenido_plataforma(fila) if fila is not None else None
+
+
+def actualizar_contenido_plataforma(
+    plataforma_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una fila por plataforma (estado/checklist/copy/...); None si no existe."""
+    cambios = {
+        k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA
+    }
+    if not cambios:
+        return obtener_contenido_plataforma(plataforma_id)
+    for col in _BOOLS_CONTENIDO_PLATAFORMA:
+        if col in cambios:
+            cambios[col] = 1 if cambios[col] else 0
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, plataforma_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE contenido_plataforma SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_CONTENIDO_PLATAFORMA} WHERE id = ?", (plataforma_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_contenido_plataforma(fila) if fila is not None else None
+
+
+def borrar_contenido_plataforma(plataforma_id: str) -> bool:
+    """Borra una fila por plataforma; True si existia."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM contenido_plataforma WHERE id = ?", (plataforma_id,)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 def duplicar_evento_rota(
