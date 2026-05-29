@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -67,8 +66,9 @@ function TarjetasCargando() {
  * el backend la añade/quita aquí sola). Cada tarjeta lleva a la ruta primaria de
  * su app; al entrar, el sidebar se reduce a las secciones de esa app.
  *
- * Además, una tarjeta fija "Panel" (el "vistazo" del shell, que NO es una app de
- * catálogo) para que su acceso no se pierda al sacar la nav plana del sidebar.
+ * En esta ruta NO se renderiza el sidebar (lo decide el AppShell): solo el
+ * avatar/topbar + las tarjetas. El acceso a Panel ya no vive aquí como tarjeta;
+ * Panel es una entrada GLOBAL fija del sidebar (visible al entrar en una app).
  */
 export default function Launcher() {
   const catalogoQuery = useQuery({
@@ -87,14 +87,6 @@ export default function Launcher() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Panel: vistazo del shell, acceso fijo (no es app de catálogo). */}
-        <TarjetaApp
-          to="/panel"
-          icono={LayoutDashboard}
-          etiqueta="Panel"
-          descripcion="Un vistazo: rendimiento, cola de aprobación y próximas publicaciones."
-        />
-
         {catalogoQuery.isLoading && <TarjetasCargando />}
 
         {apps.map((app) => (

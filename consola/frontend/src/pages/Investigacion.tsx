@@ -1,24 +1,18 @@
-import { Globe, ListOrdered, Radar, Rss } from "lucide-react";
 import { Outlet } from "react-router-dom";
 
-import { TabsHub, type ItemTabHub } from "@/components/layout/TabsHub";
-
-const TABS: ItemTabHub[] = [
-  { ruta: "/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
-  { ruta: "/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
-  { ruta: "/investigacion/radar", etiqueta: "Radar", icono: Radar },
-  { ruta: "/investigacion/parrilla-dia", etiqueta: "Parrilla del día", icono: ListOrdered },
-];
+import { TabsHub } from "@/components/layout/TabsHub";
+import { TABS_INVESTIGACION } from "@/components/layout/hub-tabs";
 
 /**
- * Hub de Investigación: agrupa las tres fuentes de input para la generación
- * (RSS, panorama mundial y tendencias virales). Cada tab es una sub-ruta para
- * que se pueda compartir/refrescar y caer en el mismo sitio.
+ * Hub de Investigación: agrupa las fuentes de input para la generación
+ * (RSS, panorama mundial, tendencias virales y la parrilla del día). Cada tab es
+ * una sub-ruta para que se pueda compartir/refrescar y caer en el mismo sitio. Las
+ * pestañas salen del registro compartido `hub-tabs` (las mismas que expande el sidebar).
  */
 export default function Investigacion() {
   return (
     <>
-      <TabsHub items={TABS} etiquetaAria="Pestañas de Investigación" />
+      <TabsHub items={TABS_INVESTIGACION} etiquetaAria="Pestañas de Investigación" />
       <Outlet />
     </>
   );
