@@ -2100,6 +2100,40 @@ export interface RespuestaConectarRed {
   mensaje: string;
 }
 
+/** Estado de conexión de Metricool para UNA marca (sin exponer el token). */
+export interface MarcaMetricool {
+  marca: string;
+  etiqueta: string;
+  conectado: boolean;
+  /** Pista no sensible del user_id (solo si está conectada). */
+  user_id_pista?: string;
+  /** blogId de Metricool (solo si está conectada; no es secreto). */
+  blog_id?: string;
+}
+
+export interface RespuestaMetricool {
+  marcas: MarcaMetricool[];
+}
+
+/** Cuerpo para guardar las credenciales de Metricool de una marca. */
+export interface CuerpoGuardarMetricool {
+  user_token: string;
+  user_id: string;
+  blog_id: string;
+}
+
+/** Respuesta al guardar una credencial de Metricool. */
+export interface RespuestaGuardarMetricool {
+  conectado: boolean;
+  mensaje: string;
+}
+
+/** Respuesta de la prueba en vivo de una credencial de Metricool. */
+export interface RespuestaProbarMetricool {
+  ok: boolean;
+  detalle: string;
+}
+
 // --- Buzón de sugerencias ---
 
 export interface Sugerencia {

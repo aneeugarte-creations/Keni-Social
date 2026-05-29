@@ -35,6 +35,7 @@ import type {
   CuerpoDuplicarPiezaRota,
   CuerpoDuplicarTurnoRota,
   CuerpoConectarRed,
+  CuerpoGuardarMetricool,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
   CuerpoCrearRun,
@@ -84,6 +85,9 @@ import type {
   RespuestaCatalogo,
   RespuestaConectarRed,
   RespuestaConexionesRedes,
+  RespuestaMetricool,
+  RespuestaGuardarMetricool,
+  RespuestaProbarMetricool,
   RespuestaConexionImagen,
   RespuestaConfig,
   RespuestaCrearCarpeta,
@@ -1108,6 +1112,25 @@ export const api = {
     peticion<RespuestaMensaje>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
       metodo: "DELETE",
     }),
+
+  // Metricool por marca: cada marca es una cuenta Metricool con su propio token.
+  // El user_token es write-only: solo se envía (PUT); del servidor llega el estado.
+  conexionesMetricool: (signal?: AbortSignal) =>
+    peticion<RespuestaMetricool>("/conexiones/metricool", { signal }),
+  guardarMetricool: (marca: string, cuerpo: CuerpoGuardarMetricool) =>
+    peticion<RespuestaGuardarMetricool>(`/conexiones/metricool/${encodeURIComponent(marca)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarMetricool: (marca: string) =>
+    peticion<RespuestaMensaje>(`/conexiones/metricool/${encodeURIComponent(marca)}`, {
+      metodo: "DELETE",
+    }),
+  probarMetricool: (marca: string) =>
+    peticion<RespuestaProbarMetricool>(
+      `/conexiones/metricool/${encodeURIComponent(marca)}/probar`,
+      { metodo: "POST" },
+    ),
 
   // --- Buzón de sugerencias ---
   sugerencias: (signal?: AbortSignal) =>
