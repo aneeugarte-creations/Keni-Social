@@ -19,11 +19,9 @@ export interface ContextoTema {
 
 export const TemaContext = React.createContext<ContextoTema | null>(null);
 
-/** Lee el tema inicial: lo guardado en localStorage o, si no, la preferencia del SO. */
+/** Tema inicial = preferencia de color del sistema operativo (sin override manual). */
 export function temaInicial(): Tema {
-  if (typeof window === "undefined") return "oscuro";
-  const guardado = window.localStorage.getItem(CLAVE_LS);
-  if (guardado === "claro" || guardado === "oscuro") return guardado;
+  if (typeof window === "undefined") return "claro";
   const prefiereOscuro = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   return prefiereOscuro ? "oscuro" : "claro";
 }

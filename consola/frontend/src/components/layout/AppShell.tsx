@@ -91,10 +91,12 @@ export function AppShell() {
             {menuAbierto ? <X /> : <Menu />}
           </Button>
 
+          {/* Marca (solo movil; en escritorio vive en el sidebar). */}
           <div className="md:hidden">
             <Wordmark />
           </div>
 
+          {/* Titulo de la seccion activa (escritorio), estilo Vercel. */}
           <h1 className="hidden text-sm font-medium text-foreground md:block">{titulo}</h1>
 
           {/* Indicador de salud del sistema, alineado a la derecha de la topbar. */}

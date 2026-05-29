@@ -63,9 +63,21 @@ const CLAVE_REDES = ["conexiones", "redes"];
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
 
+/**
+ * Limpia emojis de estado (❌ ✅ ⚠️ …) que pueda traer el backend y normaliza
+ * espacios y puntuación, para mostrar un texto sobrio en la consola.
+ */
+function limpiarMensaje(texto: string): string {
+  return texto
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️]/gu, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([.,;:!?])/g, "$1")
+    .trim();
+}
+
 /** Texto legible del error de la API (o un fallback en español). */
 function mensajeError(error: unknown): string {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
+  if (error instanceof ApiError || error instanceof Error) return limpiarMensaje(error.message);
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
 }
 
@@ -132,7 +144,7 @@ function SeccionDatos() {
   const guardar = useMutation({
     mutationFn: () => api.guardarConfig({ fuente, marcas }),
     onSuccess: (res) => {
-      toast.success(res.mensaje || "Configuración guardada.");
+      toast.success(res.mensaje ? limpiarMensaje(res.mensaje) : "Configuración guardada.");
       void queryClient.invalidateQueries({ queryKey: CLAVE_CONFIG });
     },
     onError: (errorGuardar) => toast.error(mensajeError(errorGuardar)),

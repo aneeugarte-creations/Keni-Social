@@ -74,6 +74,17 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
+/**
+ * Limpia emojis de estado (❌ ✅ ⚠️) que el backend puede anteponer a los
+ * mensajes y normaliza la puntuación inicial para una vista sobria.
+ */
+function limpiarMensaje(texto: string): string {
+  return texto
+    .replace(/[✅❌⚠️]/g, "")
+    .replace(/^[\s:;,.\-–—]+/, "")
+    .trim();
+}
+
 const CABECERA = {
   titulo: "Fuentes",
   descripcion:
@@ -153,7 +164,7 @@ function GestionFuentes({
             ))}
           </div>
         ) : query.isError ? (
-          <p className="py-4 text-center text-sm text-destructive">{mensajeError(query.error)}</p>
+          <p className="py-4 text-center text-sm text-muted-foreground">{mensajeError(query.error)}</p>
         ) : fuentes.length === 0 ? (
           <EstadoVacioTexto
             texto="Aún no hay feeds. Añade el primero con el botón de arriba."
@@ -251,9 +262,7 @@ function FilaFuente({
               variant="ghost"
               size="icon"
               aria-label={fuente.activo ? "Desactivar feed" : "Activar feed"}
-              className={cn(
-                fuente.activo ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground",
-              )}
+              className="text-muted-foreground"
               onClick={() => alternarActivo.mutate()}
               disabled={alternarActivo.isPending}
             >
@@ -300,10 +309,10 @@ function SaludFeed({ fuente }: { fuente: FuenteRss }) {
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
       {fuente.ultimo_error ? (
-        <Badge variant="error" className="font-normal" title={fuente.ultimo_error}>
-          <AlertCircle className="mr-1 h-3 w-3" />
+        <span className="inline-flex items-center gap-1.5" title={fuente.ultimo_error}>
+          <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-hidden />
           Error al refrescar
-        </Badge>
+        </span>
       ) : (
         <span>
           {fuente.ultimo_conteo} {fuente.ultimo_conteo === 1 ? "item" : "items"}
@@ -652,14 +661,14 @@ function ItemsRecientes({
       </CardHeader>
       <CardContent className="space-y-3">
         {errores.length > 0 && (
-          <div className="space-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-            <p className="flex items-center gap-2 font-medium">
-              <AlertCircle className="h-4 w-4" />
+          <div className="space-y-1.5 rounded-md border border-border p-3 text-sm text-muted-foreground">
+            <p className="flex items-center gap-2 font-medium text-foreground">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden />
               Algunos feeds dieron error al refrescar
             </p>
-            <ul className="ml-6 list-disc text-xs">
+            <ul className="ml-4 list-disc text-xs">
               {errores.map((e, i) => (
-                <li key={i}>{e}</li>
+                <li key={i}>{limpiarMensaje(e)}</li>
               ))}
             </ul>
           </div>
@@ -755,7 +764,7 @@ function ItemNoticia({
         </Badge>
         {item.fecha && <span>{formatearFechaHora(item.fecha)}</span>}
         {item.usado && (
-          <Badge variant="ok" className="font-normal">
+          <Badge variant="secondary" className="font-normal">
             <CheckCircle2 className="mr-1 h-3 w-3" />
             Usado
           </Badge>

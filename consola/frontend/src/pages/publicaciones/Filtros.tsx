@@ -44,7 +44,7 @@ export function FiltrosPublicaciones({
   onSoloPerennes: (v: boolean) => void;
 }) {
   return (
-    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
       <SelectorMarca
         marcas={opciones.marcas}
         valor={marca}
