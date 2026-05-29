@@ -167,67 +167,7 @@ export default function Usuarios() {
   );
 }
 
-// --- Árbol -------------------------------------------------------------------
-
-/**
- * Ajusta el organigrama para que QUEPA ENTERO en el espacio disponible, sin scroll.
- * Mide el tamaño NATURAL del árbol (las transformaciones no alteran `offsetWidth/Height`,
- * solo el render) y aplica un `scale` = min(ancho, alto disponibles / naturales), tope 1
- * (no amplía más allá de su tamaño real). Recalcula al cambiar el tamaño de la ventana, del
- * contenedor o del propio árbol (ResizeObserver). La altura del contenedor se estira hasta
- * el borde inferior del viewport, así el alto disponible no depende de constantes frágiles.
- */
-function useAjusteAlContenedor() {
-  const contenedor = React.useRef<HTMLDivElement>(null);
-  const contenido = React.useRef<HTMLDivElement>(null);
-  const [escala, setEscala] = React.useState(1);
-  const [alto, setAlto] = React.useState<number | undefined>(undefined);
-
-  const medir = React.useCallback(() => {
-    const c = contenedor.current;
-    const i = contenido.current;
-    if (!c || !i) return;
-    const margen = 16;
-    // Alto disponible hasta el borde inferior del viewport: es el TOPE para que no aparezca
-    // scroll vertical, no la altura final del contenedor.
-    const disponibleAlto = Math.max(
-      240,
-      window.innerHeight - c.getBoundingClientRect().top - margen,
-    );
-    const anchoNatural = i.offsetWidth;
-    const altoNatural = i.offsetHeight;
-    const anchoCaja = c.clientWidth;
-    if (!anchoNatural || !altoNatural || !anchoCaja) return;
-    // Encaja a lo ancho y a lo alto; nunca amplía por encima de su tamaño real.
-    const s = Math.min(anchoCaja / anchoNatural, disponibleAlto / altoNatural, 1);
-    if (s > 0 && Number.isFinite(s)) {
-      setEscala(s);
-      // El contenedor se CIÑE al alto ya escalado (las transforms no encogen el layout),
-      // así no queda un hueco vacío enorme cuando el árbol es ancho y bajo. El pequeño
-      // margen evita recortar la última fila por redondeo/borde.
-      setAlto(Math.ceil(altoNatural * s) + 4);
-    }
-  }, []);
-
-  React.useLayoutEffect(() => {
-    medir();
-    // `ResizeObserver` puede no existir (jsdom en tests, navegadores muy viejos): si falta,
-    // nos quedamos con la medida inicial + el listener de resize de ventana.
-    const ro =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => medir()) : null;
-    if (ro) {
-      if (contenedor.current) ro.observe(contenedor.current);
-      if (contenido.current) ro.observe(contenido.current);
-    }
-    window.addEventListener("resize", medir);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener("resize", medir);
-    };
-  }, [medir]);
-
-  return { contenedor, contenido, escala, alto };
-}
+// --- Árbol vertical (indentado) ----------------------------------------------
 
 function OrganigramaArbol({
   usuarios,
@@ -255,34 +195,44 @@ function OrganigramaArbol({
   const [seleccionado, setSeleccionado] = React.useState<string | null>(null);
   const usuarioSel = seleccionado ? (porId.get(seleccionado) ?? null) : null;
 
-  const { contenedor, contenido, escala, alto } = useAjusteAlContenedor();
-
   return (
     <div className="space-y-4">
       <Leyenda zonas={zonasPresentes} />
 
-      <div
-        ref={contenedor}
-        className="org-fit rounded-lg border bg-muted/20"
-        style={{ height: alto }}
-      >
-        <div
-          ref={contenido}
-          className="org-fit-inner"
-          style={{ transform: `scale(${escala})` }}
-        >
-          <ul className="org-tree org-tree--root">
-            {cima.map((raiz) => (
-              <NodoRaiz
-                key={raiz.id}
-                raiz={raiz}
-                hijos={hijos}
-                idActual={idActual}
-                onAbrir={setSeleccionado}
-              />
-            ))}
-          </ul>
-        </div>
+      <div className="org-v overflow-x-auto rounded-lg border bg-muted/20">
+        <ul className="org-v-root">
+          {cima.map((raiz) => {
+            // Hijos del director ordenados por ÁREA (marca) para que cada zona quede
+            // contigua; cada cabeza lleva su zona para colorear su rama.
+            const areas = zonasOrdenadas(hijos.get(raiz.id) ?? []);
+            return (
+              <li key={raiz.id} className="org-v-node">
+                <TarjetaMiembro
+                  usuario={raiz}
+                  zona={ZONA_DIRECCION}
+                  esYoMismo={raiz.id === idActual}
+                  onAbrir={setSeleccionado}
+                />
+                {areas.length > 0 && (
+                  <ul className="org-v-children">
+                    {areas.flatMap(({ zona, cabezas }) =>
+                      cabezas.map((cabeza) => (
+                        <NodoVertical
+                          key={cabeza.id}
+                          nodo={cabeza}
+                          zona={zona}
+                          hijos={hijos}
+                          idActual={idActual}
+                          onAbrir={setSeleccionado}
+                        />
+                      )),
+                    )}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </div>
 
       <DialogoMiembro
@@ -298,68 +248,12 @@ function OrganigramaArbol({
   );
 }
 
-/** Raíz del organigrama (director): tarjeta + sus áreas agrupadas por zona/marca. */
-function NodoRaiz({
-  raiz,
-  hijos,
-  idActual,
-  onAbrir,
-}: {
-  raiz: UsuarioAdmin;
-  hijos: Map<string, UsuarioAdmin[]>;
-  idActual: string | null;
-  onAbrir: (id: string) => void;
-}) {
-  const cabezas = hijos.get(raiz.id) ?? [];
-  const zonas = zonasOrdenadas(cabezas);
-
-  return (
-    <li>
-      <TarjetaMiembro
-        usuario={raiz}
-        zona={ZONA_DIRECCION}
-        esYoMismo={raiz.id === idActual}
-        onAbrir={onAbrir}
-      />
-      {zonas.length > 0 && (
-        <ul className="org-tree">
-          {zonas.map(({ zona, cabezas: cabezasZona }) => {
-            const meta = metaZona(zona);
-            return (
-              <li key={zona}>
-                <div
-                  className="org-zona"
-                  style={
-                    {
-                      "--zona-color": meta.color,
-                      "--zona-bg": hexAlpha(meta.color, 0.06),
-                    } as React.CSSProperties
-                  }
-                >
-                  <ul className="org-tree">
-                    {cabezasZona.map((cabeza) => (
-                      <NodoArbol
-                        key={cabeza.id}
-                        nodo={cabeza}
-                        zona={zona}
-                        hijos={hijos}
-                        idActual={idActual}
-                        onAbrir={onAbrir}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </li>
-  );
-}
-
-/** Nodo recursivo dentro de una zona: tarjeta + subárbol de sus reportes directos. */
-function NodoArbol({
+/**
+ * Nodo recursivo del árbol vertical: una tarjeta-fila y, indentado debajo, el subárbol de
+ * sus reportes directos. `zona` (marca) se hereda hacia abajo y colorea la rama (conector
+ * y acento de la tarjeta), así cada área se distingue por color.
+ */
+function NodoVertical({
   nodo,
   zona,
   hijos,
@@ -373,8 +267,12 @@ function NodoArbol({
   onAbrir: (id: string) => void;
 }) {
   const reportes = hijos.get(nodo.id) ?? [];
+  const meta = metaZona(zona);
   return (
-    <li>
+    <li
+      className="org-v-node"
+      style={{ "--vline": meta.color } as React.CSSProperties}
+    >
       <TarjetaMiembro
         usuario={nodo}
         zona={zona}
@@ -382,9 +280,9 @@ function NodoArbol({
         onAbrir={onAbrir}
       />
       {reportes.length > 0 && (
-        <ul className="org-tree">
+        <ul className="org-v-children">
           {reportes.map((r) => (
-            <NodoArbol
+            <NodoVertical
               key={r.id}
               nodo={r}
               zona={zona}
@@ -419,63 +317,56 @@ function TarjetaMiembro({
     <button
       type="button"
       onClick={() => onAbrir(usuario.id)}
-      className="org-tarjeta w-[14rem] rounded-lg border bg-card p-3 text-left shadow-sm hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      style={{ borderTopColor: meta.color, borderTopWidth: 3 }}
+      className="org-tarjeta flex w-[21rem] items-start gap-2.5 rounded-md border bg-card py-2 pl-2.5 pr-2 text-left shadow-sm transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      style={{ borderLeftColor: meta.color, borderLeftWidth: 4 }}
       aria-label={`Editar a ${nombre}`}
     >
-      <div className="flex items-center gap-2.5">
-        <span
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
-          style={{ backgroundColor: meta.color }}
-          aria-hidden
-        >
-          {iniciales(nombre)}
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+        style={{ backgroundColor: meta.color }}
+        aria-hidden
+      >
+        {iniciales(nombre)}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold leading-tight">
+          {nombre}
+          {esYoMismo && (
+            <span className="ml-1 text-xs font-normal text-muted-foreground">(tú)</span>
+          )}
         </span>
-        <span className="min-w-0">
-          <span className="block truncate text-sm font-semibold leading-tight">
-            {nombre}
-            {esYoMismo && (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">(tú)</span>
-            )}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {etiquetaCargo((usuario.cargo ?? "") as CargoUsuario)}
-          </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {etiquetaCargo((usuario.cargo ?? "") as CargoUsuario)}
         </span>
-      </div>
+      </span>
 
-      {(usuario.rol === "admin" ||
-        usuario.cobertura ||
-        usuario.puede_coordinar ||
-        marcas.length > 0) && (
-        <div className="mt-2 flex flex-wrap gap-1">
-          {usuario.rol === "admin" && (
-            <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
-              Admin
-            </Badge>
-          )}
-          {usuario.cobertura && (
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-              Turnos
-            </Badge>
-          )}
-          {usuario.puede_coordinar && (
-            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
-              Coord.
-            </Badge>
-          )}
-          {marcas.map((m) => (
-            <Badge
-              key={m}
-              variant="outline"
-              className="h-5 px-1.5 text-[10px] font-normal"
-              style={{ borderColor: hexAlpha(metaZona(m).color, 0.5), color: metaZona(m).color }}
-            >
-              {metaZona(m).etiqueta}
-            </Badge>
-          ))}
-        </div>
-      )}
+      <span className="flex max-w-[8.5rem] shrink-0 flex-wrap justify-end gap-1">
+        {usuario.rol === "admin" && (
+          <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
+            Admin
+          </Badge>
+        )}
+        {usuario.cobertura && (
+          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+            Turnos
+          </Badge>
+        )}
+        {usuario.puede_coordinar && (
+          <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+            Coord.
+          </Badge>
+        )}
+        {marcas.map((m) => (
+          <Badge
+            key={m}
+            variant="outline"
+            className="h-5 px-1.5 text-[10px] font-normal"
+            style={{ borderColor: hexAlpha(metaZona(m).color, 0.5), color: metaZona(m).color }}
+          >
+            {metaZona(m).etiqueta}
+          </Badge>
+        ))}
+      </span>
     </button>
   );
 }

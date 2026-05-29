@@ -1,125 +1,75 @@
 /*
- * Conectores del organigrama (árbol top-down) con la técnica clásica de listas anidadas
- * + pseudo-elementos. Cada `ul.org-tree` dispone sus hijos en fila (flex) y dibuja las
- * líneas verticales/horizontales que unen un nodo con sus descendientes. Es robusto a
- * cualquier profundidad y no necesita JS de medición.
+ * Conectores del organigrama VERTICAL (árbol indentado, estilo explorador): cada nodo es
+ * una fila; sus reportes cuelgan debajo, indentados a la derecha, unidos por una guía en
+ * forma de codo (├─ / └─). Crece hacia ABAJO (legible: las tarjetas van a tamaño real y el
+ * ancho es acotado), no a lo ancho. No necesita JS de medición.
  *
- * El color de las líneas sale de `--org-line` (lo respeta el tema: usa el borde shadcn).
+ * El color de la guía sale de `--vline` (la marca/área de esa rama); si no se fija, cae al
+ * borde del tema (`--org-line`).
  */
 
-/* Contenedor que ENCAJA el árbol sin scroll: el JS calcula un `scale` para que quepa
- * entero. `overflow: hidden` recorta el hueco sobrante de la caja natural (las transforms
- * no encogen el layout, solo el pintado). El árbol se centra arriba. */
-.org-fit {
+.org-v {
   --org-line: hsl(var(--border));
-  position: relative;
-  overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  /* Sin padding: el alto del contenedor lo fija el JS al alto YA escalado del árbol; un
-   * padding (con box-sizing border-box) recortaría la fila inferior. El aire visual lo da
-   * el padding interno del propio árbol. */
+  padding: 0.75rem 0.75rem 1.25rem;
+}
+
+.org-v ul {
+  list-style: none;
+  margin: 0;
   padding: 0;
 }
 
-.org-fit-inner {
-  width: max-content;
-  padding: 0.75rem 0.75rem 1rem;
-  transform-origin: top center;
-}
-
-.org-tree {
-  display: flex;
-  justify-content: center;
-  padding-top: 1.25rem;
-  position: relative;
-  margin: 0;
-  list-style: none;
-}
-
-/* La fila raíz no necesita el espacio superior para la línea de entrada. */
-.org-tree.org-tree--root {
-  padding-top: 0;
-}
-
-.org-tree li {
-  list-style: none;
-  position: relative;
-  padding: 1.25rem 0.5rem 0;
+/* Raíz(es) del organigrama (normalmente solo el director). */
+.org-v-root {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 0.5rem;
 }
 
-/* Conectores: medio enlace horizontal a cada lado + el vertical hacia el padre. */
-.org-tree li::before,
-.org-tree li::after {
+.org-v-node {
+  position: relative;
+}
+
+/* Reportes de un nodo: indentados; la guía vertical se alinea bajo el avatar del padre. */
+.org-v-children {
+  margin-left: 1.15rem;
+}
+
+.org-v-children > .org-v-node {
+  position: relative;
+  padding-left: 1.6rem;
+  padding-top: 0.5rem;
+}
+
+/* Guía vertical (tramo del codo). En los hijos NO últimos baja entera para enlazar con el
+ * siguiente hermano; en el último solo llega hasta el conector horizontal. */
+.org-v-children > .org-v-node::before {
   content: "";
   position: absolute;
+  left: 0;
   top: 0;
-  right: 50%;
-  width: 50%;
-  height: 1.25rem;
-  border-top: 2px solid var(--org-line);
+  width: 2px;
+  height: 100%;
+  background: var(--vline, var(--org-line));
 }
 
-.org-tree li::after {
-  right: auto;
-  left: 50%;
-  border-left: 2px solid var(--org-line);
+.org-v-children > .org-v-node:last-child::before {
+  height: 2rem;
 }
 
-/* Hijo único: sin barra horizontal, solo el vertical (lo dibuja ul::before). */
-.org-tree > li:only-child {
-  padding-top: 1.25rem;
-}
-.org-tree > li:only-child::before,
-.org-tree > li:only-child::after {
-  display: none;
-}
-
-/* Extremos de la fila: redondea las esquinas y recorta el tramo sobrante. */
-.org-tree li:first-child::before,
-.org-tree li:last-child::after {
-  border: 0 none;
-}
-.org-tree li:last-child::before {
-  border-right: 2px solid var(--org-line);
-  border-radius: 0 6px 0 0;
-}
-.org-tree li:first-child::after {
-  border-radius: 6px 0 0 0;
-}
-
-/* Línea vertical que baja desde un nodo hacia su grupo de hijos. */
-.org-tree ul.org-tree::before {
+/* Tramo horizontal del codo hasta la tarjeta (a la altura del avatar). */
+.org-v-children > .org-v-node::after {
   content: "";
   position: absolute;
-  top: 0;
-  left: 50%;
-  width: 0;
-  height: 1.25rem;
-  border-left: 2px solid var(--org-line);
-}
-
-/* La raíz no recibe línea de entrada. */
-.org-tree.org-tree--root > li::before,
-.org-tree.org-tree--root > li::after {
-  display: none;
-}
-
-/* Panel de zona (área por marca): caja tintada. El color identifica el área (la leyenda
- * de arriba mapea color -> marca); ya no lleva etiqueta de texto dentro del árbol. */
-.org-zona {
-  border-radius: 0.75rem;
-  border: 1px solid var(--zona-color, var(--org-line));
-  background: var(--zona-bg, transparent);
-  padding: 0.5rem 0.75rem 0.75rem;
+  left: 0;
+  top: 2rem;
+  width: 1.6rem;
+  height: 2px;
+  background: var(--vline, var(--org-line));
 }
 
 @media (prefers-reduced-motion: no-preference) {
   .org-tarjeta {
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    transition: box-shadow 0.12s ease;
   }
 }
