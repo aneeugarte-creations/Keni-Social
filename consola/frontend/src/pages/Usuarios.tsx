@@ -180,6 +180,7 @@ function TablaUsuarios({
               <TableHead>Rol</TableHead>
               <TableHead>Cargo</TableHead>
               <TableHead className="text-center">Cobertura</TableHead>
+              <TableHead className="text-center">Coordina</TableHead>
               <TableHead>Marcas</TableHead>
               <TableHead>Creado</TableHead>
               <TableHead>Último acceso</TableHead>
@@ -241,6 +242,18 @@ function FilaUsuario({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Ola "coord": flag de candidato a coordinador por celda. Solo el admin lo cambia;
+  // el resto del front lee este flag para filtrar el selector de coordinador.
+  const cambiarPuedeCoordinar = useMutation({
+    mutationFn: (puede_coordinar: boolean) =>
+      api.actualizarUsuario(usuario.id, { puede_coordinar }),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Permiso de coordinación actualizado");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const cargoActual: CargoUsuario = (usuario.cargo ?? "") as CargoUsuario;
   const marcasUsuario = usuario.marcas ?? [];
 
@@ -296,6 +309,14 @@ function FilaUsuario({
           onCheckedChange={(v) => cambiarCobertura.mutate(Boolean(v))}
           disabled={cambiarCobertura.isPending}
           aria-label={`Cobertura de ${usuario.usuario}`}
+        />
+      </TableCell>
+      <TableCell className="text-center">
+        <Checkbox
+          checked={Boolean(usuario.puede_coordinar)}
+          onCheckedChange={(v) => cambiarPuedeCoordinar.mutate(Boolean(v))}
+          disabled={cambiarPuedeCoordinar.isPending}
+          aria-label={`Puede coordinar (${usuario.usuario})`}
         />
       </TableCell>
       <TableCell>

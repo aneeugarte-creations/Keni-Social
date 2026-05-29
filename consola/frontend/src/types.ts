@@ -921,6 +921,8 @@ export interface MiembroRota {
   cargo?: string;
   /** Si el miembro esta disponible para cubrir turnos hoy. */
   cobertura?: boolean;
+  /** Candidato a coordinador por celda (ola "coord"). */
+  puede_coordinar?: boolean;
 }
 
 export interface RespuestaEquipoRota {
@@ -1228,6 +1230,40 @@ export interface RespuestaCoberturaEvento {
   franjas_config: ConfigFranjas;
   /** Franjas vivas de la semana del evento. */
   franjas: FranjaSemana[];
+}
+
+// --- Coordinador por turno (ola "coord") -----------------------------------
+//
+// Cada celda del calendario (combinación fecha + franja_id) puede tener UN coordinador
+// asignado. Los candidatos son usuarios con `puede_coordinar=true`. La coordinación es
+// INDEPENDIENTE de los turnos de CM: cambiar el turno NO toca la coordinación.
+
+/** Coordinador asignado a una celda (fecha, franja_id) del calendario. */
+export interface CoordinacionTurno {
+  fecha: string;
+  franja_id: string;
+  coordinador_id: string;
+  /** Nombre legible resuelto por el backend (puede quedar vacío si el usuario desapareció). */
+  coordinador_nombre: string;
+}
+
+export interface RespuestaCoordinacionSemana {
+  lunes: string;
+  coordinacion: CoordinacionTurno[];
+}
+
+/** Cuerpo `PUT /api/rota/coordinacion`: UPSERT del coordinador en (fecha, franja_id). */
+export interface CuerpoSetCoordinador {
+  lunes: string;
+  fecha: string;
+  franja_id: string;
+  coordinador_id: string;
+}
+
+/** Cuerpo `DELETE /api/rota/coordinacion`: borra el coordinador de la celda. */
+export interface CuerpoQuitarCoordinador {
+  fecha: string;
+  franja_id: string;
 }
 
 /** Cuerpo `POST /api/rota/turnos/{id}/duplicar`: overrides opcionales del clon. */
@@ -2379,6 +2415,8 @@ export interface UsuarioSesion {
   cargo?: CargoUsuario;
   /** `true` => esta persona entra en la rota de turnos (cobertura). */
   cobertura?: boolean;
+  /** `true` => candidato a coordinador por celda en el calendario (ola "coord"). */
+  puede_coordinar?: boolean;
   /**
    * Verticales/marcas a las que pertenece (relación N:M con `keni_shared.marcas`).
    * Una persona puede estar en varias (Yustine: claro-sports + unotv + piso-15).
@@ -2417,6 +2455,8 @@ export interface UsuarioAdmin {
   cargo?: CargoUsuario;
   /** `true` => esta persona entra en la rota de turnos. */
   cobertura?: boolean;
+  /** `true` => candidato a coordinador por celda en el calendario (ola "coord"). */
+  puede_coordinar?: boolean;
   /**
    * Verticales/marcas a las que pertenece (relación N:M; ids canónicos del catálogo).
    * Siempre llega (lista vacía si no tiene marcas asignadas). Ola `feat/roles-marcas`.
@@ -2448,6 +2488,8 @@ export interface CuerpoActualizarUsuario {
   cargo?: CargoUsuario;
   /** Cobertura: entra o no en la rota de turnos. */
   cobertura?: boolean;
+  /** Candidato a coordinador por celda en el calendario (ola "coord"). */
+  puede_coordinar?: boolean;
   /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
   marcas?: string[];
 }
