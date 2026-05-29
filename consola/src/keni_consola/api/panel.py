@@ -3,11 +3,14 @@
 Una SOLA lectura agregada para la pantalla de inicio del equipo, REUTILIZANDO los
 caminos de lectura existentes (no duplica logica ni toca la pagina de Metricas):
 
-  - Resumen de metricas: total consolidado + top movimientos ("picos") del periodo,
-    via `keni_metricas.servicio` (las MISMAS funciones que consume `/api/metricas/*`).
-  - Cola de aprobacion: cuantas piezas esperan revision (estado `en_revision`).
-  - Proximas programadas: las siguientes piezas en estado `programado`, ordenadas por
-    `fecha_programada`, con su marca dry-run (`preparado_en`) si ya vencieron.
+  - Resumen de metricas (app B): total consolidado + top movimientos ("picos") del
+    periodo, via la FACHADA `keni_metricas.servicio` (B = infra de solo lectura, ADR 0005
+    §Seams #6; las MISMAS funciones que consume `/api/metricas/*`). El panel NO toca los
+    internals del router `metricas`: por eso `(panel, metricas)` NO es un cruce de app.
+  - Cola de aprobacion (app C) + proximas programadas (app C): el panel NO consulta el
+    almacen de C ni conoce sus estados internos; las pide por las funciones-CONTRATO de
+    solo lectura que C expone (`dominio.publicaciones.cola_de_aprobacion` /
+    `proximas_programadas`, ADR 0005 §Seams #3 — cruce shell->app legitimo, por fachada).
 
 GATING (frontera del producto): el panel solo LEE. Las proximas programadas se preparan
 en dry-run (el sistema no publica solo); el campo `preparado_en` lo refleja. Posteo real
@@ -25,8 +28,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
-from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
+from .. import marcas
+from ..dominio.publicaciones import cola_de_aprobacion, proximas_programadas
 
 # Cuantas piezas programadas mostrar como "proximas" (las mas inminentes). Mantiene el
 # panel ligero: un vistazo, no la agenda completa.
@@ -86,22 +89,6 @@ def _nombre_marca(cuenta_id: str, nombres: dict[str, str]) -> str:
     return nombres.get(cuenta_id) or cuenta_id
 
 
-def _proxima(pub: dict[str, Any]) -> dict[str, Any]:
-    """Forma minima de una pieza programada para el panel (nombres resueltos en servidor)."""
-    return {
-        "id": pub["id"],
-        "titulo": pub.get("titulo") or "",
-        "marca": pub.get("marca") or "",
-        "marca_nombre": marcas.etiqueta_de(pub["marca"]) if pub.get("marca") else "",
-        "red": pub.get("red") or "",
-        "red_nombre": redes.nombre_por_id(pub["red"]) if pub.get("red") else "",
-        "fecha_programada": pub.get("fecha_programada") or "",
-        # Marca dry-run del programador: si ya vencio y se preparo, viene el instante; ""
-        # si aun no vence. La UI muestra "lista para publicar (dry-run)" cuando hay valor.
-        "preparado_en": pub.get("preparado_en") or "",
-    }
-
-
 async def resumen(request: Request) -> Response:
     """GET /api/panel: dashboard ligero (metricas + cola de aprobacion + proximas).
 
@@ -115,18 +102,16 @@ async def resumen(request: Request) -> Response:
 
     metricas = _resumen_metricas(rango, marca)
 
-    pendientes = repos.listar_publicaciones(estado=ESTADO_EN_REVISION)
-
-    programadas = repos.listar_publicaciones(estado=ESTADO_PROGRAMADO)
-    # Las mas inminentes primero (por fecha_programada ascendente); las sin fecha al final.
-    programadas.sort(key=lambda p: p.get("fecha_programada") or "9999")
-    proximas = [_proxima(p) for p in programadas[:_MAX_PROXIMAS]]
+    # Cola de aprobacion + proximas programadas: por el CONTRATO de lectura de C (el panel
+    # no consulta el almacen ni conoce los estados internos de `publicaciones`).
+    pendientes = cola_de_aprobacion()
+    proximas, total_programadas = proximas_programadas(_MAX_PROXIMAS)
 
     return JSONResponse(
         {
             "metricas": metricas,
             "cola": {"total": len(pendientes)},
-            "proximas": {"items": proximas, "total": len(programadas)},
+            "proximas": {"items": proximas, "total": total_programadas},
             # Aviso de frontera del producto: el panel NO publica; el posteo real esta
             # gated por #5/#8. La UI lo muestra como nota junto a las proximas.
             "gating": {

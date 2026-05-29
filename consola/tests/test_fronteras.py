@@ -51,23 +51,35 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # shell→app de hoy; queda explícito aquí. T-futura puede moverlo tras la
         # fachada de jobs del gateway. (ADR 0005 §Seams #4.)
         ("media", "generaciones"),
-        # Seam #1 (A→C handoff de borrador): una generación de copy puede crear un
-        # *borrador* en `publicaciones` (C). HOY el helper `api/skills.py` (sin
-        # RUTAS, no es router) usa `dominio.publicaciones`; lo dejamos declarado por
-        # si un router de A lo tocara. (ADR 0005 §Seams #1; lo formaliza T1.3.)
+        # Seam #1 (A→C handoff de borrador): una generación de copy deposita un
+        # *borrador* en `publicaciones` (C). Tras T1.3, el handoff pasa SIEMPRE por la
+        # función-CONTRATO `dominio.publicaciones.crear_borrador` (C garantiza el estado
+        # inicial `borrador`), no por `repos.crear_publicacion` ni por tablas internas
+        # de C. `api/skills.py` (FACHADA de A, sin RUTAS) reexpone ese contrato y la rama
+        # legada de `api/skills_generacion_api.py` lo consume; el grueso del handoff
+        # corre por `dominio.skills.crear_publicaciones_desde_piezas`, que llama al mismo
+        # contrato. Entradas DOCUMENTALES (el cruce vive en el dominio, no en el router,
+        # así que el lint no lo dispara): dejan el seam VISIBLE. (ADR 0005 §Seams #1.)
         ("skills", "publicaciones"),
         ("skills_generacion_api", "publicaciones"),
-        # Seam #2 (`reciclaje` A lee `publicaciones` C): hoy reciclaje lee las
-        # publicaciones vía la capa compartida `repos` (no import directo de C), así
-        # que no dispara el lint; se declara igualmente para dejar el seam visible.
-        # T1.1 lo saneará a un contrato de lectura explícito. (ADR 0005 §Seams #2.)
-        ("reciclaje", "publicaciones"),
-        # Seam #3 (`panel` shell lee métricas B + cola C): panel agrega por las
-        # fachadas de solo-lectura, no por internals; hoy no dispara el lint (usa
-        # `repos`/`keni_metricas.servicio`). Declarado para dejarlo visible.
-        # (ADR 0005 §Seams #3; lo formaliza T1.2.)
-        ("panel", "metricas"),
+        # Seam #3 (`panel` shell lee la cola de aprobación de C): tras T1.2, el panel
+        # lee C SOLO por las funciones-CONTRATO de solo lectura que C expone
+        # (`dominio.publicaciones.cola_de_aprobacion` / `proximas_programadas`), no por
+        # `repos` ni por los estados internos de C. Cruce shell→app LEGÍTIMO y por
+        # fachada: el router de `panel` importa esas funciones públicas de C, así que el
+        # lint SÍ lo detecta hoy. Se mantiene explícito aquí. (ADR 0005 §Seams #3.)
         ("panel", "publicaciones"),
+        # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2):
+        #   ("reciclaje", "publicaciones")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
+        #       de C en su router; pide el universo a la función-contrato de lectura de C
+        #       `dominio.publicaciones.listar_para_reciclaje` a través de su propio
+        #       `dominio.reciclaje`. El router quedó limpio: no hay cruce de frontera que
+        #       permitir. (Era una entrada documental/precautoria; el seam sigue siendo
+        #       legítimo pero ya no necesita allowlist porque no toca el router.)
+        #   ("panel", "metricas")  [T1.2]: el panel lee B por la FACHADA
+        #       `keni_metricas.servicio` (infra de solo lectura, ADR 0005 §Seams #6), no
+        #       por el router/internals de `metricas`. Nunca fue un cruce app↔app real;
+        #       era una entrada documental. Se retira: la infra compartida no es un seam.
     }
 )
 

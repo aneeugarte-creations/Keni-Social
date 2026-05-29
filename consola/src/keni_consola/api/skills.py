@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from .. import marcas, redes, skills_catalogo
 from ..dominio import skills as dom_skills
 from ..dominio import stream
-from ..dominio.publicaciones import publicacion_a_dict
+from ..dominio.publicaciones import crear_borrador, publicacion_a_dict
 
 # Parseo del stream / metricas / presupuesto / verdicto / limpieza (dominio.stream):
 SkillError = stream.SkillError
@@ -66,6 +66,12 @@ lanzar_generacion_skill = dom_skills.lanzar_generacion_skill
 # Serializacion de una publicacion: vive en el dominio (sitio comun para publicaciones y
 # skills); se reexpone con el nombre privado historico para los callsites.
 _publicacion_a_dict = publicacion_a_dict
+
+# Handoff A->C (ADR 0005 §Seams #1): crear un BORRADOR en C (`publicaciones`) por su
+# funcion-contrato. Se reexpone por la fachada para que los routers de A (p.ej.
+# `skills_generacion_api.historial_guardar` en su rama legada de UNA pieza) depositen el
+# borrador por el contrato de C, no por `repos.crear_publicacion` directo.
+crear_borrador = crear_borrador
 
 # --------------------------------------------------------------------------- #
 # Allowlists: skills curadas y marcas (NUNCA invocaciones arbitrarias)         #

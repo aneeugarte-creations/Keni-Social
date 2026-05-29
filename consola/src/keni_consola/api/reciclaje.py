@@ -6,8 +6,11 @@ las piezas publicadas que la heuristica considera dignas de retomarse, cada una 
 su `motivo` y un texto explicable. La UI muestra la lista y, al pulsar, dispara el
 reciclado existente (mismo endpoint de siempre), sin duplicar logica.
 
-La heuristica (sin ML, auditable) vive en `dominio.reciclaje`. Este modulo solo
-carga las publicaciones via `repos`, aplica filtros opcionales de query y serializa.
+La heuristica (sin ML, auditable) vive en `dominio.reciclaje`. Este router NO consulta
+el almacen de C (`publicaciones`) por su cuenta: el dominio de reciclaje pide el universo
+de piezas a la funcion-contrato de LECTURA que C expone
+(`dominio.publicaciones.listar_para_reciclaje`, ADR 0005 §Seams #2). El router solo lee
+los filtros de query, dispara la heuristica y serializa la respuesta.
 
   GET /api/reciclaje/sugerencias?marca=&red=  -> {sugerencias: [...], parametros: {...}}
 
@@ -20,7 +23,6 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import repos
 from ..dominio import reciclaje
 
 
@@ -34,11 +36,11 @@ async def sugerencias(request: Request) -> Response:
     qp = request.query_params
     marca = qp.get("marca") or None
     red = qp.get("red") or None
-    # Cargamos TODAS las piezas del universo filtrado (cualquier estado): la
-    # heuristica necesita ver borradores/programadas para no reproponer lo ya
-    # reciclado y las publicadas para el cruce de temas recurrentes.
-    publicaciones = repos.listar_publicaciones(marca=marca, red=red)
-    candidatas = reciclaje.candidatas_reciclaje(publicaciones)
+    # El universo de piezas (cualquier estado) lo sirve el CONTRATO de lectura de C
+    # (`dominio.publicaciones.listar_para_reciclaje`, via `dominio.reciclaje`): la
+    # heuristica necesita ver borradores/programadas para no reproponer lo ya reciclado
+    # y las publicadas para el cruce de temas recurrentes. El router no toca el almacen.
+    candidatas = reciclaje.sugerencias_de_reciclaje(marca=marca, red=red)
     return JSONResponse(
         {
             "sugerencias": candidatas,
