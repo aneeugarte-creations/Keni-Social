@@ -1,1 +1,0 @@
-import{a8 as s,D as t,o as a}from"./index-Ci9PR68N.js";import{T as e}from"./TabsHub-B3g503SA.js";function n(){return s.jsxs(s.Fragment,{children:[s.jsx(e,{items:t,etiquetaAria:"Pestañas de Investigación"}),s.jsx(a,{})]})}export{n as default};

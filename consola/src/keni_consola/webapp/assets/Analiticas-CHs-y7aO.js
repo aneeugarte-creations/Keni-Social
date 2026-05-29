@@ -1,1 +1,0 @@
-import{a8 as a,z as s,o as t}from"./index-Ci9PR68N.js";import{T as e}from"./TabsHub-B3g503SA.js";function n(){return a.jsxs(a.Fragment,{children:[a.jsx(e,{items:s,etiquetaAria:"Pestañas de Analíticas"}),a.jsx(t,{})]})}export{n as default};

@@ -9,6 +9,7 @@ import {
   Loader2,
   Pencil,
   RefreshCw,
+  Send,
   Sprout,
   Trash2,
 } from "lucide-react";
@@ -156,6 +157,16 @@ function TarjetaPublicacion({
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{publicacion.titulo}</span>
               <BadgeEstado estado={publicacion.estado} />
+              {publicacion.id_post_metricool && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
+                  title={`Programada en Metricool · id ${publicacion.id_post_metricool}`}
+                >
+                  <Send className="h-3 w-3" />
+                  Metricool
+                </Badge>
+              )}
               {publicacion.evergreen && (
                 <Badge
                   variant="outline"

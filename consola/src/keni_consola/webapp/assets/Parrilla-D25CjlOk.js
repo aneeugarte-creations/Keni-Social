@@ -1,1 +1,0 @@
-import{a8 as a,E as r,o as s}from"./index-Ci9PR68N.js";import{T as t}from"./TabsHub-B3g503SA.js";function o(){return a.jsxs(a.Fragment,{children:[a.jsx(t,{items:r,etiquetaAria:"Pestañas de Parrilla"}),a.jsx(s,{})]})}export{o as default};

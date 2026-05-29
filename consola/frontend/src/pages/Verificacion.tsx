@@ -1,10 +1,13 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   CalendarClock,
+  Copyright,
   ExternalLink,
   Info,
   Loader2,
+  MapPin,
   ScanSearch,
+  ShieldAlert,
   ShieldQuestion,
 } from "lucide-react";
 import * as React from "react";
@@ -19,7 +22,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
-import type { ReporteVerificacion, RespuestaGeneracion, SenalVerificacion } from "@/types";
+import type {
+  PaisOrigen,
+  ReporteVerificacion,
+  RespuestaGeneracion,
+  SenalesCopyright,
+  SenalVerificacion,
+} from "@/types";
 
 /** Clave de sessionStorage para reanudar la verificación en curso al volver a la página. */
 const CLAVE_GEN_VERIF = "keni:generacion-verificacion";
@@ -54,6 +63,110 @@ function Senales({ senales }: { senales: SenalVerificacion[] }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/** Indicios de copyright / derechos de agencia: lo primero, para evitar strikes. */
+function SeccionCopyright({ datos }: { datos?: SenalesCopyright }) {
+  if (!datos) return null;
+  const hay = datos.tiene_indicios && datos.agencias_detectadas.length > 0;
+  return (
+    <div
+      className={
+        hay
+          ? "space-y-2 rounded-md border border-amber-400/60 bg-amber-50/60 p-3 dark:border-amber-500/40 dark:bg-amber-950/30"
+          : "space-y-2"
+      }
+    >
+      <h4 className="flex items-center gap-1.5 text-sm font-medium">
+        {hay ? (
+          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" aria-hidden />
+        ) : (
+          <Copyright className="h-4 w-4 text-muted-foreground" aria-hidden />
+        )}
+        Derechos / copyright
+      </h4>
+      <p className="text-sm text-muted-foreground">{datos.resumen}</p>
+      {hay && (
+        <ul className="space-y-1.5">
+          {datos.agencias_detectadas.map((a, i) => (
+            <li key={i} className="flex flex-wrap items-center gap-1.5 text-sm">
+              <Badge variant={variantePorNivel(a.nivel_confianza)} className="uppercase">
+                {a.nivel_confianza}
+              </Badge>
+              <span className="font-medium">{a.agencia}</span>
+              <span className="text-muted-foreground">
+                · vía {a.fuente}
+                {a.patron_detectado ? ` ("${a.patron_detectado}")` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">
+        Detección local (OCR, título, dominio): puede no ver una marca de agua tapada o una
+        licencia sin texto. Ante la duda, confirma la licencia antes de publicar.
+      </p>
+    </div>
+  );
+}
+
+/** Hipótesis de país de origen + fuentes de confirmación dirigidas. */
+function SeccionPais({ datos }: { datos?: PaisOrigen }) {
+  if (!datos) return null;
+  const hayHipotesis = Boolean(datos.pais_hipotesis);
+  return (
+    <div className="space-y-2">
+      <h4 className="flex items-center gap-1.5 text-sm font-medium">
+        <MapPin className="h-4 w-4 text-muted-foreground" aria-hidden />
+        País de origen
+      </h4>
+      <p className="flex flex-wrap items-center gap-1.5 text-sm">
+        {hayHipotesis ? (
+          <>
+            <span className="font-medium">{datos.pais_hipotesis}</span>
+            {datos.codigo_iso && (
+              <Badge variant="secondary" className="uppercase">
+                {datos.codigo_iso}
+              </Badge>
+            )}
+            <Badge variant="outline">confianza {datos.confianza}</Badge>
+          </>
+        ) : (
+          <span className="text-muted-foreground">
+            Señal insuficiente para inferir el país (confianza {datos.confianza}).
+          </span>
+        )}
+      </p>
+      {datos.senales_detectadas && datos.senales_detectadas.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Señales: {datos.senales_detectadas.join(", ")}
+        </p>
+      )}
+      {datos.fuentes_confirmacion.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-foreground">
+            Confírmalo en estas fuentes (haz clic; tú juzgas):
+          </p>
+          <ul className="space-y-1">
+            {datos.fuentes_confirmacion.map((f, i) => (
+              <li key={i} className="flex items-start gap-1.5 text-sm">
+                <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <a
+                  href={f.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  {f.descripcion}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {datos.nota && <p className="text-xs text-muted-foreground">{datos.nota}</p>}
     </div>
   );
 }
@@ -164,6 +277,10 @@ function ResultadoVerificacion({ reporte }: { reporte: ReporteVerificacion }) {
             </p>
           </div>
         )}
+
+        <SeccionCopyright datos={reporte.senales_copyright} />
+
+        <SeccionPais datos={reporte.pais_origen} />
 
         <Senales senales={reporte.senales ?? []} />
 

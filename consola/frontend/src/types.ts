@@ -535,9 +535,57 @@ export interface ReporteVerificacion {
     fotogramas_guardados_en?: string | null;
   };
   fact_check: { consultado: boolean; motivo?: string; resultados?: FactCheckResultado[] };
+  /** Indicios de copyright / derechos de agencia (Storyful, AP, Reuters…). */
+  senales_copyright?: SenalesCopyright;
+  /** Hipótesis de país de origen + fuentes de confirmación dirigidas. */
+  pais_origen?: PaisOrigen;
   senales: SenalVerificacion[];
   avisos?: string[];
   carpeta_trabajo?: string;
+}
+
+/** Una agencia/derecho detectado en el video (por OCR, título o dominio). */
+export interface AgenciaCopyright {
+  agencia: string;
+  /** "alto" | "medio" | "bajo" según la fuente de la señal. */
+  nivel_confianza: string;
+  /** Dónde se detectó: "ocr" | "titulo" | "descripcion" | "dominio". */
+  fuente: string;
+  /** Patrón/texto que disparó la detección. */
+  patron_detectado: string;
+}
+
+/** Indicios de copyright/derechos: heurística local (no consulta APIs externas). */
+export interface SenalesCopyright {
+  agencias_detectadas: AgenciaCopyright[];
+  /** Resumen legible (p. ej. "watermark de Storyful: verifica licencia"). */
+  resumen: string;
+  /** Atajo: ¿hay algún indicio que revisar antes de publicar? */
+  tiene_indicios: boolean;
+}
+
+/** Una fuente de confirmación sugerida (búsqueda dirigida; el humano la juzga). */
+export interface FuenteConfirmacionPais {
+  descripcion: string;
+  url: string;
+  /** Tipo de fuente (p. ej. "busqueda_google_idioma_local", "busqueda_google_news"). */
+  tipo: string;
+}
+
+/** Hipótesis del país donde ocurrió el hecho del video (heurística, honesta). */
+export interface PaisOrigen {
+  /** Nombre del país, o null si no hay señal suficiente. */
+  pais_hipotesis: string | null;
+  /** Código ISO 3166-1 alfa-2, o null. */
+  codigo_iso: string | null;
+  /** "alta" | "media" | "baja" | "insuficiente". */
+  confianza: string;
+  /** Señales que llevaron a la hipótesis (topónimos, idioma…). */
+  senales_detectadas?: string[];
+  /** ≥ 2 enlaces de búsqueda dirigida para confirmar (vacío si insuficiente). */
+  fuentes_confirmacion: FuenteConfirmacionPais[];
+  /** Nota/aclaración honesta sobre la inferencia. */
+  nota?: string;
 }
 
 /** Cuerpo de POST /api/verificar: el enlace del video y, opcional, lo que se afirma. */
