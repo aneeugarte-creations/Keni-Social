@@ -125,13 +125,22 @@ def test_crear_pendiente_sin_responsable_queda_sin_asignar(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_listado_incluye_usuarios_asignables(entorno):
-    """El listado expone los usuarios reales para el selector de responsable."""
+def test_listado_solo_expone_usuarios_con_cobertura(entorno):
+    """El selector de responsable solo ofrece usuarios que entran en la rota.
+
+    Un pendiente lo asume quien hace coberturas; las cuentas sin cobertura (p. ej.
+    administrativas) no aparecen como responsables asignables.
+    """
     c = _cli_con_usuario("ana")
     _cli_con_usuario("luis")
+    _cli_con_usuario("admin")  # sin cobertura: no debe aparecer como asignable
+    auth.actualizar_perfil(_id_usuario("ana"), cobertura=True)
+    auth.actualizar_perfil(_id_usuario("luis"), cobertura=True)
+
     cuerpo = c.get("/api/tareas").json()
     nombres = {u["usuario"] for u in cuerpo["usuarios"]}
     assert {"ana", "luis"} <= nombres
+    assert "admin" not in nombres
     # Solo id + nombre (sin rol ni mas estado).
     assert all(set(u.keys()) == {"id", "usuario"} for u in cuerpo["usuarios"])
 

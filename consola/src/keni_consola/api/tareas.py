@@ -119,12 +119,20 @@ def _tarea_a_dict(tarea: dict, por_id: dict[str, proyectos.Proyecto]) -> dict:
 
 
 def _usuarios_asignables() -> list[dict[str, str]]:
-    """Lista de usuarios reales (id + nombre) para el selector de responsable.
+    """Usuarios candidatos a RESPONSABLE de un pendiente (id + nombre).
 
     Reusa la lista de usuarios de la consola (`auth.listar_usuarios`, misma fuente que
-    /api/usuarios). Solo expone id y nombre: el selector no necesita rol ni mas estado.
+    /api/usuarios) pero SOLO los que entran en la rota de turnos (`cobertura == True`):
+    un pendiente lo asume quien hace coberturas, no cualquier cuenta. Solo expone id y
+    nombre: el selector no necesita rol ni mas estado. (Un responsable legado que pierda
+    la cobertura sigue resolviendose por id en `_resolver_responsable`; el frontend lo
+    muestra aparte para no perder la asignacion visible.)
     """
-    return [{"id": u["id"], "usuario": u["usuario"]} for u in auth.listar_usuarios()]
+    return [
+        {"id": u["id"], "usuario": u["usuario"]}
+        for u in auth.listar_usuarios()
+        if u.get("cobertura")
+    ]
 
 
 def _resolver_responsable(responsable_id: object) -> tuple[dict[str, str] | None, bool]:

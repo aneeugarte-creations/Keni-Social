@@ -126,9 +126,11 @@ export default function Tareas() {
   const usuarios = query.data?.usuarios ?? [];
 
   return (
-    <>
+    // Ocupa toda el área visible (alto del <main>, ~100vh menos topbar + padding)
+    // para que el panel "Nuevo pendiente" llegue hasta el fondo de la página.
+    <div className="flex flex-col lg:min-h-[calc(100vh-6rem)]">
       <PageHeader {...CABECERA} />
-      <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:flex-1 lg:grid-cols-[24rem_minmax(0,1fr)]">
         <NuevaTarea usuarios={usuarios} cargando={query.isPending} />
         <ListaTareas
           tareas={tareas}
@@ -140,7 +142,7 @@ export default function Tareas() {
           reintentando={query.isFetching}
         />
       </div>
-    </>
+    </div>
   );
 }
 
@@ -178,14 +180,14 @@ function NuevaTarea({
   const puedeCrear = titulo.trim().length > 0 && !crear.isPending;
 
   return (
-    <Card className="h-fit">
+    <Card className="flex h-fit flex-col lg:h-full">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <ClipboardList className="h-4 w-4" />
           Nuevo pendiente
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex flex-1 flex-col space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="tarea-titulo">Título</Label>
           <Input
@@ -194,19 +196,6 @@ function NuevaTarea({
             onChange={(e) => setTitulo(e.target.value)}
             placeholder="Ej. Revisar el copy de la nota de las 8"
             maxLength={200}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="tarea-detalle">
-            Notas <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <Textarea
-            id="tarea-detalle"
-            value={detalle}
-            onChange={(e) => setDetalle(e.target.value)}
-            placeholder="Contexto, enlaces o cualquier detalle para el equipo."
-            rows={5}
-            maxLength={8000}
           />
         </div>
         <div className="space-y-1.5">
@@ -227,6 +216,21 @@ function NuevaTarea({
               ))}
             </SelectContent>
           </Select>
+        </div>
+        {/* Notas ocupa el alto sobrante para que el panel cubra toda la página. */}
+        <div className="flex flex-1 flex-col space-y-1.5">
+          <Label htmlFor="tarea-detalle">
+            Notas <span className="font-normal text-muted-foreground">(opcional)</span>
+          </Label>
+          <Textarea
+            id="tarea-detalle"
+            value={detalle}
+            onChange={(e) => setDetalle(e.target.value)}
+            placeholder="Contexto, enlaces o cualquier detalle para el equipo."
+            rows={5}
+            maxLength={8000}
+            className="min-h-32 flex-1 resize-none"
+          />
         </div>
         <div className="flex justify-end">
           <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
