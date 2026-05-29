@@ -99,32 +99,55 @@ function renderAvatarMenu(rol: RolUsuario) {
 }
 
 describe("Sidebar · scope por app", () => {
-  it("dentro de una app muestra SOLO las secciones de esa app + 'Apps'", async () => {
+  it("muestra Panel global (arriba) y ⊞ Apps (al pie) siempre", async () => {
     renderSidebar("editor", "/generacion");
-    // Control para volver al launcher.
-    expect(await screen.findByRole("link", { name: /apps/i })).toBeInTheDocument();
+    // Panel: entrada global fija, lleva a /panel.
+    const panel = await screen.findByRole("link", { name: /^panel$/i });
+    expect(panel).toHaveAttribute("href", "/panel");
+    // ⊞ Apps: volver al catálogo.
+    const apps = screen.getByRole("link", { name: /^apps$/i });
+    expect(apps).toHaveAttribute("href", "/");
+  });
+
+  it("dentro de una app muestra SOLO las secciones de esa app + sub-pestañas expandidas", async () => {
+    renderSidebar("editor", "/generacion");
     // Secciones de Producción.
     expect(await screen.findByRole("link", { name: /generación/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /investigación/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^investigación$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /skills/i })).toBeInTheDocument();
+    // El hub Investigación expande sus sub-pestañas indentadas.
+    expect(screen.getByRole("link", { name: /fuentes/i })).toHaveAttribute("href", "/investigacion/fuentes");
+    expect(screen.getByRole("link", { name: /termómetro/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /radar/i })).toBeInTheDocument();
+    // El hub Revisión también expande las suyas.
+    expect(screen.getByRole("link", { name: /editorial/i })).toHaveAttribute("href", "/revision/editorial");
+    expect(screen.getByRole("link", { name: /verificación/i })).toBeInTheDocument();
+    // El hub Agentes expande catálogo + Actividad IA.
+    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/agentes/actividad");
     // NO se ven las secciones de otra app (Operación).
     expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /parrilla/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^parrilla$/i })).not.toBeInTheDocument();
   });
 
-  it("en otra app muestra solo la nav de ESA app", async () => {
+  it("en otra app muestra solo la nav de ESA app y expande sus hubs", async () => {
     renderSidebar("editor", "/parrilla/calendario");
     expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /parrilla/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^parrilla$/i })).toBeInTheDocument();
+    // Parrilla expande sus sub-pestañas (Calendario · Pendientes).
+    expect(screen.getByRole("link", { name: /calendario/i })).toHaveAttribute("href", "/parrilla/calendario");
+    expect(screen.getByRole("link", { name: /pendientes/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /generación/i })).not.toBeInTheDocument();
   });
 
-  it("en el launcher ('/') no muestra nav de ninguna app", async () => {
-    renderSidebar("editor", "/");
-    // El control "Apps" sigue (volver al inicio), pero no hay secciones de app.
-    expect(await screen.findByRole("link", { name: /apps/i })).toBeInTheDocument();
+  it("en `/panel` queda escueto: Panel (activo) + ⊞ Apps, sin secciones de app", async () => {
+    renderSidebar("editor", "/panel");
+    const panel = await screen.findByRole("link", { name: /^panel$/i });
+    expect(panel).toHaveAttribute("href", "/panel");
+    expect(screen.getByRole("link", { name: /^apps$/i })).toBeInTheDocument();
+    // No es app: no hay secciones ni sub-pestañas.
     expect(screen.queryByRole("link", { name: /generación/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /fuentes/i })).not.toBeInTheDocument();
   });
 
   it("no muestra los ajustes en el sidebar (cuelgan del avatar)", async () => {

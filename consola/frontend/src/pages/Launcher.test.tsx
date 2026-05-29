@@ -71,15 +71,46 @@ function renderLauncher(ui: React.ReactElement) {
 }
 
 describe("Launcher · cajón de apps", () => {
-  it("pinta una tarjeta por app del catálogo (data-driven) + Panel", async () => {
+  it("pinta SOLO una tarjeta por app del catálogo (data-driven), sin Panel", async () => {
     stubCatalogo();
     renderLauncher(<Launcher />);
     expect(await screen.findByRole("link", { name: /producción/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /operación/i })).toBeInTheDocument();
-    // El acceso a Panel (vistazo del shell) no se pierde.
-    expect(screen.getByRole("link", { name: /panel/i })).toBeInTheDocument();
     // La descripción de la tarjeta sale del catálogo.
     expect(screen.getByText(/copy, clips, skills y verificación/i)).toBeInTheDocument();
+    // Panel ya NO es una tarjeta del launcher (es entrada global del sidebar).
+    expect(screen.queryByRole("link", { name: /panel/i })).not.toBeInTheDocument();
+    // No hay flecha/control "Apps" en el catálogo (eso vive solo en el sidebar).
+    expect(screen.queryByRole("link", { name: /^apps$/i })).not.toBeInTheDocument();
+    // Hay exactamente tantas tarjetas-enlace como apps del catálogo.
+    expect(screen.getAllByRole("link")).toHaveLength(CATALOGO.apps.length);
+  });
+
+  it("con las 3 apps activas pinta exactamente 3 tarjetas, sin Panel", async () => {
+    const tres = {
+      apps: [
+        CATALOGO.apps[0],
+        CATALOGO.apps[1],
+        {
+          ...CATALOGO.apps[0],
+          id: "metricas",
+          etiqueta: "Métricas",
+          icono: "BarChart3",
+          rutas_frontend: ["/analiticas"],
+          nav: [
+            { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "x", grupo_orden: 10, orden: 10 },
+          ],
+        },
+      ],
+      navegacion: [],
+    };
+    stubCatalogo(tres);
+    renderLauncher(<Launcher />);
+    expect(await screen.findByRole("link", { name: /producción/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /operación/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /métricas/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /panel/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(3);
   });
 
   it("al hacer clic en una tarjeta navega a la ruta primaria de la app", async () => {
@@ -90,11 +121,11 @@ describe("Launcher · cajón de apps", () => {
     expect(await screen.findByTestId("path")).toHaveTextContent("/generacion");
   });
 
-  it("con UNA sola app activa pinta solo esa tarjeta (+ Panel)", async () => {
+  it("con UNA sola app activa pinta solo esa tarjeta (sin Panel)", async () => {
     stubCatalogo({ apps: [CATALOGO.apps[0]], navegacion: [] });
     renderLauncher(<Launcher />);
     expect(await screen.findByRole("link", { name: /producción/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /operación/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /panel/i })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /panel/i })).not.toBeInTheDocument();
   });
 });
