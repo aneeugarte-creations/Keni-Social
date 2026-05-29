@@ -42,9 +42,9 @@ from .estados import (  # noqa: F401 -- re-exportadas como parte de la API publi
     ESTADOS_ROTA,
     ESTADOS_SWAP,
     ESTADOS_TAREA,
-    FRANJA_DESCANSO,
-    FRANJAS_TURNO,
     METRICAS_COMERCIAL,
+    NOMBRE_FRANJA_MANANA_DEFAULT,
+    NOMBRE_FRANJA_TARDE_DEFAULT,
     TIPOS_AUSENCIA,
 )
 
@@ -517,23 +517,30 @@ def crear_turno_rota(
     *,
     miembro_id: str = "",
     miembro_nombre: str = "",
-    franja: str = FRANJA_DESCANSO,
+    franja_id: str = "",
     estado: str = ESTADO_ROTA_PROPUESTO,
     override: bool = False,
     motivo: str = "",
     nota_relevo: str = "",
+    franja: str | None = None,
 ) -> dict[str, Any]:
-    """Crea un turno (horario `(fecha, franja)` para un miembro). Ver `db.crear_turno_rota`."""
+    """Crea un turno (horario `(fecha, franja_id)` para un miembro). Delegado en `db.py`.
+
+    Retrocompat para tests legados: acepta `franja` (literal 'matutino'/'vespertino'/
+    'descanso'). El shim vive en `db.crear_turno_rota` (la traduccion necesita conexion BD
+    para sembrar franjas por defecto). Codigo NUEVO debe pasar `franja_id` directamente.
+    """
     return db.crear_turno_rota(
         semana,
         fecha,
         miembro_id=miembro_id,
         miembro_nombre=miembro_nombre,
-        franja=franja,
+        franja_id=franja_id,
         estado=estado,
         override=override,
         motivo=motivo,
         nota_relevo=nota_relevo,
+        franja=franja,
     )
 
 
@@ -551,10 +558,10 @@ def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
 
 
 def existe_turno_para(
-    miembro_id: str, fecha: str, franja: str
+    miembro_id: str, fecha: str, franja_id: str
 ) -> dict[str, Any] | None:
-    """True si existe un turno para `(miembro_id, fecha, franja)` (delegado en `db.py`)."""
-    return db.existe_turno_para(miembro_id, fecha, franja)
+    """True si existe un turno para `(miembro_id, fecha, franja_id)` (delegado en `db.py`)."""
+    return db.existe_turno_para(miembro_id, fecha, franja_id)
 
 
 def actualizar_turno_rota(turno_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
@@ -601,7 +608,7 @@ def duplicar_turno_rota(
     fecha: str | None = None,
     miembro_id: str | None = None,
     miembro_nombre: str | None = None,
-    franja: str | None = None,
+    franja_id: str | None = None,
     semana: str | None = None,
 ) -> dict[str, Any] | None:
     """Clona un turno con overrides (delegado en `db.py`)."""
@@ -610,7 +617,7 @@ def duplicar_turno_rota(
         fecha=fecha,
         miembro_id=miembro_id,
         miembro_nombre=miembro_nombre,
-        franja=franja,
+        franja_id=franja_id,
         semana=semana,
     )
 
@@ -936,6 +943,52 @@ def job_cancelado(job_id: str) -> bool:
 # --------------------------------------------------------------------------- #
 # Config de franjas (#185)                                                     #
 # --------------------------------------------------------------------------- #
+
+
+# --------------------------------------------------------------------------- #
+# Franjas POR SEMANA (modelo "Mundial": N franjas/semana, solapes permitidos)   #
+# --------------------------------------------------------------------------- #
+
+
+def listar_franjas_semana(lunes: str) -> list[dict[str, Any]]:
+    """Franjas vivas de la semana cuyo lunes es `lunes` (delegado en `db.py`)."""
+    return db.listar_franjas_semana(lunes)
+
+
+def obtener_franja_semana(franja_id: str) -> dict[str, Any] | None:
+    return db.obtener_franja_semana(franja_id)
+
+
+def crear_franja_semana(
+    lunes: str,
+    nombre: str,
+    inicio: str,
+    fin: str,
+    *,
+    orden: int = 0,
+    es_descanso: bool = False,
+) -> dict[str, Any] | None:
+    return db.crear_franja_semana(
+        lunes, nombre, inicio, fin, orden=orden, es_descanso=es_descanso
+    )
+
+
+def actualizar_franja_semana(
+    franja_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_franja_semana(franja_id, campos)
+
+
+def borrar_franja_semana(franja_id: str, *, forzar: bool = False) -> dict[str, Any]:
+    return db.borrar_franja_semana(franja_id, forzar=forzar)
+
+
+def contar_turnos_de_franja(franja_id: str) -> int:
+    return db.contar_turnos_de_franja(franja_id)
+
+
+def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
+    return db.sembrar_franjas_por_defecto(lunes)
 
 
 def obtener_franjas_config() -> dict[str, str]:

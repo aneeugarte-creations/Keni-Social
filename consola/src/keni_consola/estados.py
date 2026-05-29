@@ -132,19 +132,34 @@ ESTADOS_SWAP_TERMINALES: tuple[str, ...] = (
     ESTADO_SWAP_CANCELADO,
 )
 
-# Franjas de un turno de TRABAJO del horario del equipo (F4 · #144, gestion de turnos):
-# Elias reparte el dia entre `matutino` (Luis "de 8 de la manana a 4 de la tarde") y
-# `vespertino` (Tescu "de 4 a 12 de la noche"); quien no entra ese dia `descansa`. Las
-# VACACIONES/AUSENCIAS NO son una franja: son "ese dia no se asigna" (se excluye al
-# miembro). Operacional; vive en SQLite (`rota_turnos_trabajo.franja`).
-FRANJAS_TURNO: tuple[str, ...] = ("matutino", "vespertino", "descanso")
-FRANJA_MATUTINO = "matutino"
-FRANJA_VESPERTINO = "vespertino"
-FRANJA_DESCANSO = "descanso"
+# Franjas LEGADAS de un turno de TRABAJO (pre-#XYZ, ola "franjas por semana"). Se conservan
+# como nombres VIEJOS para que la MIGRACION (`_migrar_modelo_franjas` en `db.py`) sepa
+# reconocer las filas pre-migracion con `franja='matutino'/'vespertino'/'descanso'`. Tras
+# la migracion, los turnos referencian `rota_franjas.id` (franjas por semana, configurables,
+# con solapes permitidos) y NO usan estos literales para nada operativo.
+#
+# Mientras quedan tests legados que pasan estos strings al crear un turno, los aceptamos por
+# retrocompat y el repos los traduce a un `franja_id` real sembrando la semana por defecto
+# (Mañana 08:00-16:00, Tarde 16:00-24:00). Codigo nuevo debe pasar `franja_id` directamente.
+FRANJAS_TURNO_LEGACY: tuple[str, ...] = ("matutino", "vespertino", "descanso")
+FRANJA_MATUTINO_LEGACY = "matutino"
+FRANJA_VESPERTINO_LEGACY = "vespertino"
+FRANJA_DESCANSO_LEGACY = "descanso"
 
-# Franjas que cuentan como JORNADA LABORAL (el miembro entra a trabajar ese dia). El
-# `descanso` no cubre el dia; por eso la rotacion de sabados solo mira las dos primeras.
-FRANJAS_TRABAJO: tuple[str, ...] = (FRANJA_MATUTINO, FRANJA_VESPERTINO)
+# Nombres por defecto que sembramos para una semana nueva (las 2 franjas iniciales). Estos
+# valores se usan al RENDERIZAR la primera vista de una semana sin franjas: la API siembra
+# "Mañana" y "Tarde" con los rangos de `rota_config_franjas` (plantilla global) si existe,
+# o con los DEFAULTs editoriales del dominio (`rota.py`).
+NOMBRE_FRANJA_MANANA_DEFAULT = "Mañana"
+NOMBRE_FRANJA_TARDE_DEFAULT = "Tarde"
+
+# Alias retrocompat para call sites que aun no se han adaptado (se mantienen como
+# tuplas/strings para no romper imports). Codigo NUEVO no deberia usarlos.
+FRANJAS_TURNO: tuple[str, ...] = FRANJAS_TURNO_LEGACY
+FRANJA_MATUTINO = FRANJA_MATUTINO_LEGACY
+FRANJA_VESPERTINO = FRANJA_VESPERTINO_LEGACY
+FRANJA_DESCANSO = FRANJA_DESCANSO_LEGACY
+FRANJAS_TRABAJO: tuple[str, ...] = (FRANJA_MATUTINO_LEGACY, FRANJA_VESPERTINO_LEGACY)
 
 # Tipos de una AUSENCIA del horario (F4 · #144): el proponedor los respeta por igual
 # (cualquier ausencia que cubra una fecha excluye al miembro ese dia). `vacaciones` es el

@@ -75,12 +75,10 @@ from ..estados import (
     ESTADO_SWAP_RECHAZADO_ADMIN,
     ESTADOS_PIEZA,
     ESTADOS_ROTA,
-    FRANJAS_TRABAJO,
-    FRANJAS_TURNO,
     PRIORIDADES_EVENTO,
+    TIPO_COBERTURA_NO_CUBRIR,
     TIPOS_AUSENCIA,
     TIPOS_COBERTURA,
-    TIPO_COBERTURA_NO_CUBRIR,
 )
 
 # Longitud maxima del enlace de una pieza (defensa: evita strings absurdos en la BD).
@@ -189,8 +187,32 @@ def _evento_a_dict(evento: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _turno_a_dict(turno: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any]:
-    """Serializa un turno (horario `(fecha, franja)` para `miembro_id`)."""
+def _turno_a_dict(
+    turno: dict[str, Any],
+    nombres: dict[str, str],
+    franjas_por_id: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Serializa un turno (horario `(fecha, franja_id)` para `miembro_id`).
+
+    Si se pasa `franjas_por_id`, anade `franja_nombre` resuelto (para que el front no
+    tenga que cruzarlo con la lista de franjas). Sin el mapa, `franja_nombre` queda "".
+
+    Retrocompat: `franja` (literal 'matutino'/'vespertino'/'descanso') se calcula a partir
+    del NOMBRE de la franja para tests legados y clientes pre-"franjas por semana". Es
+    derivado: codigo nuevo debe leer `franja_id`/`franja_nombre`.
+    """
+    franja_def = (franjas_por_id or {}).get(turno.get("franja_id", "") or "")
+    nombre = franja_def["nombre"] if franja_def else ""
+    es_descanso = bool(franja_def.get("es_descanso", False)) if franja_def else False
+    # Mapeo retrocompat: nombre conocido -> literal viejo.
+    if es_descanso:
+        franja_legacy = "descanso"
+    elif nombre == "Mañana":
+        franja_legacy = "matutino"
+    elif nombre == "Tarde":
+        franja_legacy = "vespertino"
+    else:
+        franja_legacy = nombre.lower() if nombre else ""
     return {
         "id": turno["id"],
         "semana": turno["semana"],
@@ -200,13 +222,55 @@ def _turno_a_dict(turno: dict[str, Any], nombres: dict[str, str]) -> dict[str, A
         "miembro_nombre": nombres.get(
             turno["miembro_id"], turno.get("miembro_nombre", "")
         ),
-        "franja": turno["franja"],
+        "franja_id": turno.get("franja_id", "") or "",
+        "franja_nombre": nombre,
+        "franja": franja_legacy,  # retrocompat: derivado del nombre de la franja.
         "estado": turno["estado"],
         "override": bool(turno["override"]),
         "motivo": turno["motivo"],
         "nota_relevo": turno["nota_relevo"],
         "es_sabado": dominio.es_sabado(turno["fecha"]),
     }
+
+
+def _franja_semana_a_dict(franja: dict[str, Any]) -> dict[str, Any]:
+    """Serializa una `FranjaDef` al contrato HTTP."""
+    return {
+        "id": franja["id"],
+        "lunes": franja["lunes"],
+        "nombre": franja["nombre"],
+        "inicio": franja["inicio"],
+        "fin": franja["fin"],
+        "orden": int(franja.get("orden", 0)),
+        "es_descanso": bool(franja.get("es_descanso", False)),
+    }
+
+
+# Patron HH:MM con 00:00..24:00 (24:00 valido como FIN exclusivo de franja).
+import re as _re  # noqa: E402 -- import local al modulo, evita cambiar la cabecera
+
+_PATRON_HHMM = _re.compile(r"^([01]?\d|2[0-4]):([0-5]\d)$")
+
+
+def _hhmm_valido(valor: Any) -> bool:
+    """True si `valor` es 'HH:MM' (24h, con 24:00 permitido como fin exclusivo)."""
+    if not isinstance(valor, str):
+        return False
+    m = _PATRON_HHMM.match(valor.strip())
+    if not m:
+        return False
+    h, mm = int(m.group(1)), int(m.group(2))
+    if h == 24 and mm != 0:
+        return False
+    return True
+
+
+def _franjas_de_semana(lunes_iso: str) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Devuelve `(franjas_lista, franjas_por_id)` de la semana. Siembra por defecto si vacio."""
+    franjas = repos.listar_franjas_semana(lunes_iso) if lunes_iso else []
+    if not franjas and lunes_iso:
+        franjas = repos.sembrar_franjas_por_defecto(lunes_iso)
+    return franjas, {f["id"]: f for f in franjas}
 
 
 # --------------------------------------------------------------------------- #
@@ -541,10 +605,13 @@ async def borrar_ausencia(request: Request) -> Response:
 
 
 def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
-    """Ids que TRABAJARON (no descanso) el sábado de la semana ANTERIOR a `lunes_iso`.
+    """Ids que TRABAJARON el sábado de la semana ANTERIOR a `lunes_iso`.
 
     Sirve para que la edicion manual del PATCH detecte la repeticion de sabado de
     trabajo consecutivo y exija un override explicito (`viola_rotacion_sabado_trabajo`).
+    Tras "franjas por semana": un turno cuenta como jornada SALVO si su franja tiene
+    `es_descanso=true`. Se filtran las franjas de descanso usando la lista viva de la
+    semana previa.
     """
     if not lunes_iso:
         return set()
@@ -554,10 +621,18 @@ def _sabados_previos_trabajo(lunes_iso: str) -> set[str]:
         previo = (date.fromisoformat(lunes_iso) - timedelta(days=7)).isoformat()
     except ValueError:
         return set()
+    # Indexamos las franjas de la semana previa para excluir las de descanso.
+    franjas_previas = repos.listar_franjas_semana(previo)
+    franjas_descanso = {
+        f["id"] for f in franjas_previas if f.get("es_descanso")
+    }
     ids: set[str] = set()
     for turno in repos.listar_turnos_rota(semana=previo):
-        if dominio.es_sabado(turno["fecha"]) and turno["franja"] in FRANJAS_TRABAJO:
-            ids.add(turno["miembro_id"])
+        if not dominio.es_sabado(turno["fecha"]):
+            continue
+        if turno.get("franja_id", "") in franjas_descanso:
+            continue
+        ids.add(turno["miembro_id"])
     return ids
 
 
@@ -576,10 +651,16 @@ def _semana_de_turno(lunes_param: str, fecha: str) -> str:
 
 
 def _turnos_semana(lunes_iso: str) -> dict[str, Any]:
-    """Construye el payload de los turnos de una semana."""
+    """Construye el payload de los turnos de una semana (incluye las franjas vivas).
+
+    Las franjas viajan en la respuesta (`franjas`) para que el frontend renderice la
+    rejilla NxDIAS sin un fetch extra. Si la semana no tiene franjas todavia, las
+    siembra por defecto (Mañana, Tarde) y las devuelve.
+    """
     nombres = _nombres_equipo()
+    franjas_lista, franjas_por_id = _franjas_de_semana(lunes_iso)
     turnos = [
-        _turno_a_dict(t, nombres)
+        _turno_a_dict(t, nombres, franjas_por_id)
         for t in repos.listar_turnos_rota(semana=lunes_iso)
     ]
     inicio, fin = dominio.rango_semana(lunes_iso) if lunes_iso else ("", "")
@@ -590,6 +671,7 @@ def _turnos_semana(lunes_iso: str) -> dict[str, Any]:
         "fin": fin,
         "dias": dominio.dias_de_semana(lunes_iso) if lunes_iso else [],
         "turnos": turnos,
+        "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
         "aprobada": aprobada,
         "total": len(turnos),
     }
@@ -611,9 +693,12 @@ def _validar_y_resolver_turno(
 
     Si `actual` es un turno existente, los campos no enviados se toman de ahi (PATCH parcial);
     si es None, exige los obligatorios (POST). En el primer error devuelve el `Response` ya
-    construido. `campos` siempre incluye los keys validados (fecha, miembro_id+nombre, franja,
-    override, motivo, nota_relevo, estado), listos para pasarse a `actualizar_turno_rota` o
-    a `crear_turno_rota` segun la operacion.
+    construido. `campos` siempre incluye los keys validados (fecha, miembro_id+nombre,
+    franja_id, override, motivo, nota_relevo, estado), listos para pasarse a
+    `actualizar_turno_rota` o a `crear_turno_rota` segun la operacion.
+
+    Valida ademas que `franja_id` (si viene) referencia una franja real de la semana del
+    turno (cohesion: una franja `(lunes)` solo cubre turnos cuya fecha cae en esa semana).
     """
     campos: dict[str, Any] = {}
 
@@ -643,17 +728,79 @@ def _validar_y_resolver_turno(
             {"error": "Indica el miembro del equipo (`miembro_id`)."}, status_code=400
         )
 
-    if "franja" in datos:
-        franja = datos["franja"]
-        if franja not in FRANJAS_TURNO:
-            validos = " o ".join(f'"{f}"' for f in FRANJAS_TURNO)
+    # Validacion de `franja_id`: debe existir y pertenecer a la semana de la fecha del
+    # turno. La fecha final puede venir de `datos` o de `actual` (PATCH parcial).
+    #
+    # RETROCOMPAT: tests legados envian `franja: "matutino"|"vespertino"|"descanso"`. Lo
+    # aceptamos traduciendo al `franja_id` de la franja por defecto de la semana (Mañana,
+    # Tarde, Descanso). Esto permite que tests pre-"franjas por semana" sigan ejerciendo
+    # las reglas de POST/PATCH; codigo nuevo debe pasar `franja_id` directo.
+    legacy_franja: str | None = None
+    if "franja" in datos and "franja_id" not in datos:
+        bruto = datos.get("franja")
+        if not isinstance(bruto, str) or bruto.strip().lower() not in (
+            "matutino",
+            "vespertino",
+            "descanso",
+        ):
             return campos, JSONResponse(
-                {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+                {
+                    "error": (
+                        "Franja inválida. Usa \"matutino\" o \"vespertino\" o \"descanso\" "
+                        "(o pasa `franja_id`)."
+                    )
+                },
+                status_code=400,
             )
-        campos["franja"] = franja
+        legacy_franja = bruto.strip().lower()
+        fecha_final = campos.get("fecha", (actual or {}).get("fecha", ""))
+        semana_legacy = dominio.lunes_de_semana_iso(fecha_final) if fecha_final else ""
+        if semana_legacy:
+            defaults = repos.sembrar_franjas_por_defecto(semana_legacy)
+            nombre_buscado = ""
+            if legacy_franja == "matutino":
+                nombre_buscado = "Mañana"
+            elif legacy_franja == "vespertino":
+                nombre_buscado = "Tarde"
+            elif legacy_franja == "descanso":
+                # Buscamos por el flag `es_descanso=true` para no depender del literal.
+                desc = next((f for f in defaults if f.get("es_descanso")), None)
+                nombre_buscado = desc["nombre"] if desc else ""
+            match = next((f for f in defaults if f["nombre"] == nombre_buscado), None)
+            if match is not None:
+                campos["franja_id"] = match["id"]
+    if "franja_id" in datos:
+        franja_id = datos["franja_id"]
+        if not isinstance(franja_id, str) or not franja_id.strip():
+            return campos, JSONResponse(
+                {"error": "Indica la franja del turno (`franja_id`)."}, status_code=400
+            )
+        franja_id = franja_id.strip()
+        franja_def = repos.obtener_franja_semana(franja_id)
+        if franja_def is None:
+            return campos, JSONResponse(
+                {"error": "La franja indicada no existe."}, status_code=400
+            )
+        fecha_final = campos.get("fecha", (actual or {}).get("fecha", ""))
+        lunes_fecha = dominio.lunes_de_semana_iso(fecha_final) if fecha_final else ""
+        if lunes_fecha and franja_def["lunes"] != lunes_fecha:
+            return campos, JSONResponse(
+                {
+                    "error": (
+                        "La franja pertenece a otra semana. Crea/usa una franja de la "
+                        "semana del turno."
+                    )
+                },
+                status_code=400,
+            )
+        campos["franja_id"] = franja_id
+    elif legacy_franja is not None and "franja_id" in campos:
+        # ya resuelto via legacy; nada que hacer.
+        pass
     elif actual is None:
         return campos, JSONResponse(
-            {"error": "Indica la franja (matutino/vespertino/descanso)."}, status_code=400
+            {"error": "Indica la franja del turno (`franja_id` o `franja`)."},
+            status_code=400,
         )
 
     if "override" in datos:
@@ -678,19 +825,25 @@ def _violacion_sabado(
     fecha: str,
     semana: str,
     miembro_id: str,
-    franja: str,
     *,
     override: bool,
+    franja_id: str = "",
 ) -> Response | None:
-    """Si `(fecha,franja)` cae en sabado de trabajo y repite al miembro del sabado previo sin
-    override, devuelve la respuesta 409 ya construida. Si no aplica, devuelve None.
+    """Si la fecha cae en sabado y repite al miembro del sabado previo sin override,
+    devuelve la respuesta 409 ya construida. Si no aplica, devuelve None.
+
+    Tras "franjas por semana": un turno cuenta como jornada laboral SALVO si su franja
+    tiene `es_descanso=true`. Asignar a alguien la franja Descanso del sabado no rompe la
+    rotacion (no esta trabajando ese dia).
     """
     if not dominio.es_sabado(fecha):
         return None
+    if franja_id:
+        franja_def = repos.obtener_franja_semana(franja_id)
+        if franja_def and franja_def.get("es_descanso"):
+            return None
     previos = _sabados_previos_trabajo(semana)
-    if dominio.viola_rotacion_sabado_trabajo(
-        previos, miembro_id, override=override, franja=franja
-    ):
+    if dominio.viola_rotacion_sabado_trabajo(previos, miembro_id, override=override):
         return JSONResponse(
             {
                 "error": (
@@ -705,15 +858,20 @@ def _violacion_sabado(
 
 
 def _violacion_ausencia(
-    miembro_id: str, fecha: str, franja: str, *, override: bool
+    miembro_id: str, fecha: str, *, override: bool, franja_id: str = ""
 ) -> Response | None:
-    """Si `miembro_id` esta de ausencia ese dia y la franja es de trabajo sin override,
-    devuelve la respuesta 409 (con el dict de la ausencia). Si no aplica, None.
+    """Si `miembro_id` esta de ausencia ese dia sin override, devuelve 409 (con dict de
+    la ausencia). Si no aplica, None.
 
-    `descanso` ES legal incluso si la persona esta ausente (no es jornada laboral).
+    Una franja con `es_descanso=true` ES legal aunque la persona este ausente: el descanso
+    no es jornada laboral, asi que no choca con una vacacion/baja.
     """
-    if not miembro_id or franja not in dominio.FRANJAS_TRABAJO or override:
+    if not miembro_id or override:
         return None
+    if franja_id:
+        franja_def = repos.obtener_franja_semana(franja_id)
+        if franja_def and franja_def.get("es_descanso"):
+            return None
     ausencia = _ausencia_que_cubre(miembro_id, fecha)
     if ausencia is None:
         return None
@@ -732,12 +890,13 @@ def _violacion_ausencia(
 
 
 async def crear_turno(request: Request) -> Response:
-    """POST /api/rota/turnos: crea un turno (horario `(fecha, franja)` para un miembro).
+    """POST /api/rota/turnos: crea un turno (horario `(fecha, franja_id)` para un miembro).
 
-    Cuerpo: `{lunes?, fecha, miembro_id, franja, motivo?, nota_relevo?, override?, estado?}`.
-    La `semana` se deriva del `lunes` enviado, o del lunes que contiene `fecha`. Devuelve
-    409 si ya existe un turno para `(miembro_id, fecha, franja)` (el cliente debe editar el
-    existente, no duplicar). Tambien aplica la regla de sabado y la cruzada de ausencias.
+    Cuerpo: `{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}`.
+    La `semana` se deriva del `lunes` enviado, o del lunes que contiene `fecha`. La
+    `franja_id` debe pertenecer a la misma semana. Devuelve 409 si ya existe un turno para
+    `(miembro_id, fecha, franja_id)` (el cliente debe editar el existente, no duplicar).
+    Tambien aplica la regla de sabado y la cruzada de ausencias.
     """
     datos = await leer_json(request)
     nombres = _nombres_equipo()
@@ -747,7 +906,7 @@ async def crear_turno(request: Request) -> Response:
 
     fecha = campos["fecha"]
     miembro_id = campos["miembro_id"]
-    franja = campos["franja"]
+    franja_id = campos["franja_id"]
     override = bool(campos.get("override", False))
     lunes_param = str(datos.get("lunes", "")).strip()
     semana = _semana_de_turno(lunes_param, fecha)
@@ -756,9 +915,11 @@ async def crear_turno(request: Request) -> Response:
             {"error": "No se puede derivar la semana de la fecha."}, status_code=400
         )
 
-    # Unicidad: si ya existe un turno para (miembro, fecha, franja) -> 409 con el id.
+    _franjas_lista, franjas_por_id = _franjas_de_semana(semana)
+
+    # Unicidad: si ya existe un turno para (miembro, fecha, franja_id) -> 409 con el id.
     if miembro_id:
-        existente = repos.existe_turno_para(miembro_id, fecha, franja)
+        existente = repos.existe_turno_para(miembro_id, fecha, franja_id)
         if existente is not None:
             return JSONResponse(
                 {
@@ -766,15 +927,15 @@ async def crear_turno(request: Request) -> Response:
                         "Ya hay un turno para ese miembro en esa fecha y franja. Edita el "
                         "existente o duplicalo."
                     ),
-                    "turno_existente": _turno_a_dict(existente, nombres),
+                    "turno_existente": _turno_a_dict(existente, nombres, franjas_por_id),
                 },
                 status_code=409,
             )
 
-    err = _violacion_sabado(fecha, semana, miembro_id, franja, override=override)
+    err = _violacion_sabado(fecha, semana, miembro_id, override=override, franja_id=franja_id)
     if err is not None:
         return err
-    err = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+    err = _violacion_ausencia(miembro_id, fecha, override=override, franja_id=franja_id)
     if err is not None:
         return err
 
@@ -783,20 +944,20 @@ async def crear_turno(request: Request) -> Response:
         fecha,
         miembro_id=miembro_id,
         miembro_nombre=nombres.get(miembro_id, ""),
-        franja=franja,
+        franja_id=franja_id,
         estado=campos.get("estado", ESTADO_ROTA_PROPUESTO),
         override=override,
         motivo=campos.get("motivo", ""),
         nota_relevo=campos.get("nota_relevo", ""),
     )
-    return JSONResponse({"turno": _turno_a_dict(turno, nombres)}, status_code=201)
+    return JSONResponse({"turno": _turno_a_dict(turno, nombres, franjas_por_id)}, status_code=201)
 
 
 async def actualizar_turno(request: Request) -> Response:
-    """PATCH /api/rota/turnos/{id}: edita un turno (franja/miembro/override/motivo/...).
+    """PATCH /api/rota/turnos/{id}: edita un turno (franja_id/miembro/override/motivo/...).
 
     Si la edicion pone a TRABAJAR el sabado a quien trabajó el sabado previo SIN override,
-    devuelve 409. Si la persona esta de ausencia y la franja es de trabajo sin override, 409.
+    devuelve 409. Si la persona esta de ausencia sin override, 409.
     """
     turno_id = request.path_params["turno_id"]
     actual = repos.obtener_turno_rota(turno_id)
@@ -812,20 +973,25 @@ async def actualizar_turno(request: Request) -> Response:
     # Resuelve los valores finales (PATCH parcial: defaults desde `actual`).
     fecha = campos.get("fecha", actual["fecha"])
     miembro_id = campos.get("miembro_id", actual["miembro_id"])
-    franja = campos.get("franja", actual["franja"])
+    franja_id_final = campos.get("franja_id", actual.get("franja_id", ""))
     override = bool(campos.get("override", actual["override"]))
 
-    err = _violacion_sabado(fecha, actual["semana"], miembro_id, franja, override=override)
+    err = _violacion_sabado(
+        fecha, actual["semana"], miembro_id, override=override, franja_id=franja_id_final
+    )
     if err is not None:
         return err
-    err = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+    err = _violacion_ausencia(
+        miembro_id, fecha, override=override, franja_id=franja_id_final
+    )
     if err is not None:
         return err
 
     turno = repos.actualizar_turno_rota(turno_id, campos)
     if turno is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-    return JSONResponse({"turno": _turno_a_dict(turno, nombres)})
+    _franjas_lista, franjas_por_id = _franjas_de_semana(actual["semana"])
+    return JSONResponse({"turno": _turno_a_dict(turno, nombres, franjas_por_id)})
 
 
 async def borrar_turno(request: Request) -> Response:
@@ -856,10 +1022,10 @@ async def borrar_turnos_lote(request: Request) -> Response:
 async def crear_turnos_lote(request: Request) -> Response:
     """POST /api/rota/turnos/lote {turnos: [...]}: crea varios turnos en una sola peticion.
 
-    Cuerpo: `{turnos: [{lunes?, fecha, miembro_id, franja, motivo?, nota_relevo?, override?, estado?}, ...]}`.
+    Cuerpo: `{turnos: [{lunes?, fecha, miembro_id, franja_id, motivo?, nota_relevo?, override?, estado?}, ...]}`.
     Si ALGUNA entrada falla la validacion (fecha invalida, miembro no existe, franja
-    invalida) o ya existe un turno para `(miembro, fecha, franja)`, devuelve 409 con el
-    indice y el motivo SIN tocar BD. Caso comun: "matutino lun-vie para Luis".
+    invalida) o ya existe un turno para `(miembro, fecha, franja_id)`, devuelve 409 con el
+    indice y el motivo SIN tocar BD. Caso comun: "Mañana lun-vie para Luis".
     """
     datos = await leer_json(request)
     entradas = datos.get("turnos")
@@ -873,10 +1039,12 @@ async def crear_turnos_lote(request: Request) -> Response:
 
     # Pre-indice de turnos ya existentes en BD para detectar choques sin recargar uno a uno.
     turnos_existentes_por_clave: set[tuple[str, str, str]] = {
-        (t["miembro_id"], t["fecha"], t["franja"]) for t in repos.listar_turnos_rota()
+        (t["miembro_id"], t["fecha"], t["franja_id"]) for t in repos.listar_turnos_rota()
     }
     # Tambien evita duplicados DENTRO del propio lote.
     claves_pendientes: set[tuple[str, str, str]] = set()
+    # Cache de franjas por semana para serializar la respuesta final.
+    franjas_cache: dict[str, dict[str, dict[str, Any]]] = {}
 
     for i, entrada in enumerate(entradas):
         if not isinstance(entrada, dict):
@@ -889,25 +1057,30 @@ async def crear_turnos_lote(request: Request) -> Response:
             continue
         fecha = campos["fecha"]
         miembro_id = campos["miembro_id"]
-        franja = campos["franja"]
+        franja_id = campos["franja_id"]
         override = bool(campos.get("override", False))
         lunes_param = str(entrada.get("lunes", "")).strip()
         semana = _semana_de_turno(lunes_param, fecha)
         if not semana:
             errores.append({"indice": i, "error": "No se puede derivar la semana de la fecha."})
             continue
-        clave = (miembro_id, fecha, franja)
+        if semana not in franjas_cache:
+            _lista, por_id = _franjas_de_semana(semana)
+            franjas_cache[semana] = por_id
+        clave = (miembro_id, fecha, franja_id)
         if miembro_id and clave in (turnos_existentes_por_clave | claves_pendientes):
             errores.append(
                 {
                     "indice": i,
                     "error": "Ya hay un turno para ese miembro en esa fecha y franja.",
-                    "clave": {"miembro_id": miembro_id, "fecha": fecha, "franja": franja},
+                    "clave": {"miembro_id": miembro_id, "fecha": fecha, "franja_id": franja_id},
                 }
             )
             continue
         # Sabado: regla de rotacion.
-        sab = _violacion_sabado(fecha, semana, miembro_id, franja, override=override)
+        sab = _violacion_sabado(
+            fecha, semana, miembro_id, override=override, franja_id=franja_id
+        )
         if sab is not None:
             errores.append(
                 {
@@ -918,7 +1091,7 @@ async def crear_turnos_lote(request: Request) -> Response:
             )
             continue
         # Ausencia: regla cruzada.
-        aus = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+        aus = _violacion_ausencia(miembro_id, fecha, override=override, franja_id=franja_id)
         if aus is not None:
             errores.append(
                 {
@@ -935,7 +1108,7 @@ async def crear_turnos_lote(request: Request) -> Response:
                 "fecha": fecha,
                 "miembro_id": miembro_id,
                 "miembro_nombre": nombres.get(miembro_id, ""),
-                "franja": franja,
+                "franja_id": franja_id,
                 "estado": campos.get("estado", ESTADO_ROTA_PROPUESTO),
                 "override": override,
                 "motivo": campos.get("motivo", ""),
@@ -954,10 +1127,15 @@ async def crear_turnos_lote(request: Request) -> Response:
         )
 
     creados = repos.crear_turnos_rota_lote(preparados)
+    # Componer el mapa global de franjas (uniendo todas las semanas tocadas) para
+    # serializar `franja_nombre` en cada turno devuelto.
+    franjas_global: dict[str, dict[str, Any]] = {}
+    for por_id in franjas_cache.values():
+        franjas_global.update(por_id)
     return JSONResponse(
         {
             "creados": len(creados),
-            "turnos": [_turno_a_dict(t, nombres) for t in creados],
+            "turnos": [_turno_a_dict(t, nombres, franjas_global) for t in creados],
         },
         status_code=201,
     )
@@ -966,10 +1144,10 @@ async def crear_turnos_lote(request: Request) -> Response:
 async def actualizar_turnos_lote(request: Request) -> Response:
     """PATCH /api/rota/turnos/lote: edita en lote varios turnos.
 
-    Cuerpo: `{ids: [...], miembro_id?, franja?, override?: bool, motivo?: str, nota_relevo?: str}`.
-    Si algun turno requiere override (sabado de trabajo consecutivo con el mismo miembro)
-    y no se mando `override:true`, devuelve 409 con la lista de ids problematicos sin tocar
-    BD. `miembro_id=""` vacia la asignacion (alineado con el PATCH 1:1).
+    Cuerpo: `{ids: [...], miembro_id?, franja_id?, override?: bool, motivo?: str, nota_relevo?: str}`.
+    Si algun turno requiere override (sabado consecutivo con el mismo miembro) y no se
+    mando `override:true`, devuelve 409 con la lista de ids problematicos sin tocar BD.
+    `miembro_id=""` vacia la asignacion (alineado con el PATCH 1:1).
     """
     datos = await leer_json(request)
     ids = datos.get("ids")
@@ -981,7 +1159,7 @@ async def actualizar_turnos_lote(request: Request) -> Response:
     override = bool(datos.get("override", False))
 
     # Construye los campos a aplicar. `miembro_id` requiere validacion contra el equipo;
-    # franja contra `FRANJAS_TURNO`. Los demas se pasan tal cual.
+    # `franja_id` requiere que la franja exista en BD. Los demas se pasan tal cual.
     campos: dict[str, Any] = {}
     miembro_id_final: str | None = None
     if "miembro_id" in datos:
@@ -993,16 +1171,18 @@ async def actualizar_turnos_lote(request: Request) -> Response:
         campos["miembro_id"] = miembro_id
         campos["miembro_nombre"] = nombres.get(miembro_id, "")
         miembro_id_final = miembro_id
-    franja_final: str | None = None
-    if "franja" in datos:
-        franja = datos["franja"]
-        if franja not in FRANJAS_TURNO:
-            validos = " o ".join(f'"{f}"' for f in FRANJAS_TURNO)
+    if "franja_id" in datos:
+        franja_id = datos["franja_id"]
+        if not isinstance(franja_id, str) or not franja_id.strip():
             return JSONResponse(
-                {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+                {"error": "Indica la franja (`franja_id`)."}, status_code=400
             )
-        campos["franja"] = franja
-        franja_final = franja
+        franja_id = franja_id.strip()
+        if repos.obtener_franja_semana(franja_id) is None:
+            return JSONResponse(
+                {"error": "La franja indicada no existe."}, status_code=400
+            )
+        campos["franja_id"] = franja_id
     if "override" in datos:
         campos["override"] = override
     if "motivo" in datos and isinstance(datos["motivo"], str):
@@ -1024,15 +1204,20 @@ async def actualizar_turnos_lote(request: Request) -> Response:
             )
         turnos_objetivo.append(t)
 
-    # Atomico frente a la regla de rotacion: si miembro_id viene en el cambio Y la nueva
-    # franja (o la actual) es de trabajo, comprueba sabados por semana.
+    # Atomico frente a la regla de rotacion: si miembro_id viene en el cambio, comprueba
+    # sabados por semana. Una franja `es_descanso=true` queda fuera (no es jornada).
     if miembro_id_final and not override:
         sabados_previos_por_semana: dict[str, set[str]] = {}
         ids_que_requieren_override: list[str] = []
         for t in turnos_objetivo:
-            franja_resultante = franja_final or t["franja"]
             if not dominio.es_sabado(t["fecha"]):
                 continue
+            # Excluye los turnos cuya franja es de descanso (no cuenta como jornada).
+            franja_efectiva = campos.get("franja_id", t.get("franja_id", ""))
+            if franja_efectiva:
+                franja_def = repos.obtener_franja_semana(franja_efectiva)
+                if franja_def and franja_def.get("es_descanso"):
+                    continue
             semana = t["semana"]
             if semana not in sabados_previos_por_semana:
                 sabados_previos_por_semana[semana] = _sabados_previos_trabajo(semana)
@@ -1040,7 +1225,6 @@ async def actualizar_turnos_lote(request: Request) -> Response:
                 sabados_previos_por_semana[semana],
                 miembro_id_final,
                 override=False,
-                franja=franja_resultante,
             ):
                 ids_que_requieren_override.append(t["id"])
         if ids_que_requieren_override:
@@ -1057,10 +1241,16 @@ async def actualizar_turnos_lote(request: Request) -> Response:
             )
 
     n, turnos = repos.actualizar_turnos_rota_lote(ids, campos)
+    # Componer franjas de las semanas afectadas para serializar `franja_nombre`.
+    semanas_tocadas = {t["semana"] for t in turnos}
+    franjas_global: dict[str, dict[str, Any]] = {}
+    for semana in semanas_tocadas:
+        _lista, por_id = _franjas_de_semana(semana)
+        franjas_global.update(por_id)
     return JSONResponse(
         {
             "actualizados": n,
-            "turnos": [_turno_a_dict(t, nombres) for t in turnos],
+            "turnos": [_turno_a_dict(t, nombres, franjas_global) for t in turnos],
         }
     )
 
@@ -1068,9 +1258,13 @@ async def actualizar_turnos_lote(request: Request) -> Response:
 async def duplicar_turno(request: Request) -> Response:
     """POST /api/rota/turnos/{id}/duplicar: clona un turno con overrides opcionales.
 
-    Cuerpo opcional `{fecha?, miembro_id?, franja?}`. Caso comun: copiar el turno del lunes
-    al martes con el mismo miembro y franja. Aplica las mismas reglas que la creacion (sabado,
-    ausencia, choque (miembro, fecha, franja)).
+    Cuerpo opcional `{fecha?, miembro_id?, franja_id?}`. Caso comun: copiar el turno del
+    lunes al martes con el mismo miembro y franja. Aplica las mismas reglas que la creacion
+    (sabado, ausencia, choque `(miembro, fecha, franja_id)`).
+
+    Si la `fecha` cambia a otra semana, el `franja_id` del original NO es valido en la
+    semana destino (las franjas son por semana). En ese caso devolvemos 400: el cliente
+    debe pasar un `franja_id` de la semana destino, o crear la franja antes.
     """
     turno_id = request.path_params["turno_id"]
     original = repos.obtener_turno_rota(turno_id)
@@ -1095,15 +1289,18 @@ async def duplicar_turno(request: Request) -> Response:
                 {"error": "Indica un miembro del equipo válido."}, status_code=400
             )
         miembro_id = m
-    franja = original["franja"]
-    if "franja" in datos:
-        f = datos["franja"]
-        if f not in FRANJAS_TURNO:
-            validos = " o ".join(f'"{x}"' for x in FRANJAS_TURNO)
+    franja_id = original["franja_id"]
+    if "franja_id" in datos:
+        f = datos["franja_id"]
+        if not isinstance(f, str) or not f.strip():
             return JSONResponse(
-                {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+                {"error": "Indica la franja del turno (`franja_id`)."}, status_code=400
             )
-        franja = f
+        franja_id = f.strip()
+        if repos.obtener_franja_semana(franja_id) is None:
+            return JSONResponse(
+                {"error": "La franja indicada no existe."}, status_code=400
+            )
 
     semana = dominio.lunes_de_semana_iso(fecha)
     if not semana:
@@ -1111,9 +1308,24 @@ async def duplicar_turno(request: Request) -> Response:
             {"error": "No se puede derivar la semana de la fecha."}, status_code=400
         )
 
-    # Choque (miembro, fecha, franja) -> 409.
+    # La franja del clon debe pertenecer a la semana destino.
+    franja_def = repos.obtener_franja_semana(franja_id)
+    if franja_def is None or franja_def["lunes"] != semana:
+        return JSONResponse(
+            {
+                "error": (
+                    "La franja del turno original es de otra semana. Pasa un `franja_id` "
+                    "que exista en la semana destino."
+                )
+            },
+            status_code=400,
+        )
+
+    _lista, franjas_por_id = _franjas_de_semana(semana)
+
+    # Choque (miembro, fecha, franja_id) -> 409.
     if miembro_id:
-        existente = repos.existe_turno_para(miembro_id, fecha, franja)
+        existente = repos.existe_turno_para(miembro_id, fecha, franja_id)
         if existente is not None:
             return JSONResponse(
                 {
@@ -1121,15 +1333,17 @@ async def duplicar_turno(request: Request) -> Response:
                         "Ya hay un turno para ese miembro en esa fecha y franja. Edita el "
                         "existente o cambia uno de los tres campos."
                     ),
-                    "turno_existente": _turno_a_dict(existente, nombres),
+                    "turno_existente": _turno_a_dict(existente, nombres, franjas_por_id),
                 },
                 status_code=409,
             )
     override = bool(original.get("override", False))
-    err = _violacion_sabado(fecha, semana, miembro_id, franja, override=override)
+    err = _violacion_sabado(
+        fecha, semana, miembro_id, override=override, franja_id=franja_id
+    )
     if err is not None:
         return err
-    err = _violacion_ausencia(miembro_id, fecha, franja, override=override)
+    err = _violacion_ausencia(miembro_id, fecha, override=override, franja_id=franja_id)
     if err is not None:
         return err
 
@@ -1138,12 +1352,14 @@ async def duplicar_turno(request: Request) -> Response:
         fecha=fecha,
         miembro_id=miembro_id,
         miembro_nombre=nombres.get(miembro_id, ""),
-        franja=franja,
+        franja_id=franja_id,
         semana=semana,
     )
     if clon is None:
         return JSONResponse({"error": "El turno ya no existe."}, status_code=404)
-    return JSONResponse({"turno": _turno_a_dict(clon, nombres)}, status_code=201)
+    return JSONResponse(
+        {"turno": _turno_a_dict(clon, nombres, franjas_por_id)}, status_code=201
+    )
 
 
 async def aprobar_turnos(request: Request) -> Response:
@@ -1237,17 +1453,12 @@ def _cobertura_para_evento(
     evento: dict[str, Any],
     turnos: list[dict[str, Any]],
     nombres: dict[str, str],
-    franjas_cfg: dict[str, str],
+    franjas_semana: list[dict[str, Any]],
+    franjas_por_id: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Calcula la cobertura derivada de UN evento usando `dominio.cobertura_de_evento`."""
-    cubridores = dominio.cobertura_de_evento(
-        evento,
-        turnos,
-        matutino_inicio=franjas_cfg["matutino_inicio"],
-        matutino_fin=franjas_cfg["matutino_fin"],
-        vespertino_inicio=franjas_cfg["vespertino_inicio"],
-        vespertino_fin=franjas_cfg["vespertino_fin"],
-    )
+    cubridores = dominio.cobertura_de_evento(evento, turnos, franjas_semana)
+    franjas_por_id = franjas_por_id or {f["id"]: f for f in franjas_semana}
     return {
         **_evento_a_dict(evento),
         "cobertura": [
@@ -1257,7 +1468,10 @@ def _cobertura_para_evento(
                 "miembro_nombre": nombres.get(
                     t["miembro_id"], t.get("miembro_nombre", "")
                 ),
-                "franja": t["franja"],
+                "franja_id": t.get("franja_id", "") or "",
+                "franja_nombre": (
+                    franjas_por_id.get(t.get("franja_id", "") or "", {}).get("nombre", "")
+                ),
                 "override": bool(t.get("override", False)),
             }
             for t in cubridores
@@ -1268,9 +1482,9 @@ def _cobertura_para_evento(
 async def cobertura_semana(request: Request) -> Response:
     """GET /api/rota/cobertura[?lunes]: cobertura derivada de los eventos de la semana.
 
-    Devuelve `{lunes, eventos: [{...evento, cobertura: [{miembro_id, miembro_nombre, franja,
-    turno_id, override}, ...]}]}`. NO persiste nada; cruza turnos x eventos x franjas
-    vigentes. Sin `lunes` valido -> 400.
+    Devuelve `{lunes, eventos: [{...evento, cobertura: [{miembro_id, miembro_nombre,
+    franja_id, franja_nombre, turno_id, override}, ...]}], franjas}`. NO persiste nada;
+    cruza turnos x eventos x franjas vivas de la semana. Sin `lunes` valido -> 400.
     """
     lunes = _lunes_param(request)
     if not lunes:
@@ -1284,14 +1498,17 @@ async def cobertura_semana(request: Request) -> Response:
     turnos = repos.listar_turnos_rota(semana=lunes)
     nombres = _nombres_equipo()
     franjas_cfg = repos.obtener_franjas_config()
+    franjas_lista, franjas_por_id = _franjas_de_semana(lunes)
     return JSONResponse(
         {
             "lunes": lunes,
             "inicio": inicio,
             "fin": fin,
             "franjas_config": franjas_cfg,
+            "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
             "eventos": [
-                _cobertura_para_evento(e, turnos, nombres, franjas_cfg) for e in eventos
+                _cobertura_para_evento(e, turnos, nombres, franjas_lista, franjas_por_id)
+                for e in eventos
             ],
         }
     )
@@ -1307,10 +1524,14 @@ async def cobertura_evento(request: Request) -> Response:
     turnos = repos.listar_turnos_rota(semana=semana) if semana else []
     nombres = _nombres_equipo()
     franjas_cfg = repos.obtener_franjas_config()
+    franjas_lista, franjas_por_id = _franjas_de_semana(semana) if semana else ([], {})
     return JSONResponse(
         {
-            "evento": _cobertura_para_evento(evento, turnos, nombres, franjas_cfg),
+            "evento": _cobertura_para_evento(
+                evento, turnos, nombres, franjas_lista, franjas_por_id
+            ),
             "franjas_config": franjas_cfg,
+            "franjas": [_franja_semana_a_dict(f) for f in franjas_lista],
         }
     )
 
@@ -1362,15 +1583,13 @@ async def carga_semana(request: Request) -> Response:
     turnos = repos.listar_turnos_rota(semana=lunes)
     inicio, fin = dominio.rango_semana(lunes)
     eventos = repos.listar_eventos_rota(desde=inicio, hasta=fin)
-    franjas_cfg = repos.obtener_franjas_config()
+    franjas_lista, _por_id = _franjas_de_semana(lunes)
     cargas = dominio.resumen_carga(
         equipo,
         turnos,
         eventos,
-        matutino_inicio=franjas_cfg["matutino_inicio"],
-        matutino_fin=franjas_cfg["matutino_fin"],
-        vespertino_inicio=franjas_cfg["vespertino_inicio"],
-        vespertino_fin=franjas_cfg["vespertino_fin"],
+        franjas_lista,
+        lunes_iso=lunes,
     )
     return JSONResponse(
         {
@@ -1404,7 +1623,7 @@ def _filas_export(lunes_iso: str) -> tuple[list[str], list[list[str]]]:
 
     Una fila por (evento, miembro cubridor). Eventos sin cubridores aparecen con `Persona`
     vacia (Elias detecta huecos al exportar). Cobertura DERIVADA: cruza eventos × turnos ×
-    franjas vigentes (`mapear_franja`).
+    franjas vivas de la semana.
     """
     if not lunes_iso:
         return "Rota", []
@@ -1416,7 +1635,7 @@ def _filas_export(lunes_iso: str) -> tuple[list[str], list[list[str]]]:
     ]
     turnos = repos.listar_turnos_rota(semana=lunes_iso)
     nombres = _nombres_equipo()
-    franjas_cfg = repos.obtener_franjas_config()
+    franjas_lista, _por_id = _franjas_de_semana(lunes_iso)
     filas: list[list[str]] = []
     from datetime import date as _date
 
@@ -1426,14 +1645,7 @@ def _filas_export(lunes_iso: str) -> tuple[list[str], list[list[str]]]:
             dia = _DIAS[_date.fromisoformat(fecha).weekday()] if fecha else ""
         except ValueError:
             dia = ""
-        cubridores = dominio.cobertura_de_evento(
-            e,
-            turnos,
-            matutino_inicio=franjas_cfg["matutino_inicio"],
-            matutino_fin=franjas_cfg["matutino_fin"],
-            vespertino_inicio=franjas_cfg["vespertino_inicio"],
-            vespertino_fin=franjas_cfg["vespertino_fin"],
-        )
+        cubridores = dominio.cobertura_de_evento(e, turnos, franjas_lista)
         if not cubridores:
             filas.append(
                 [
@@ -1469,20 +1681,13 @@ def _nombre_descarga(lunes_iso: str, ext: str) -> str:
     return f"rota-{sufijo}.{ext}"
 
 
-# Etiquetas legibles de cada franja para el grid del horario.
-_ETIQUETA_FRANJA = {
-    "matutino": "Mañana",
-    "vespertino": "Tarde",
-    "descanso": "Descanso",
-}
-
-
 def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
     """Construye `(titulo, cabeceras, filas)` del horario persona×día de la semana.
 
     Cabeceras = ["Persona", Lun..Dom]; cada fila es un miembro con su franja por día
-    (Mañana/Tarde/Descanso, "Ausente" si una ausencia cubre ese día, "—" si no hay turno).
-    Reutiliza `_turnos_semana` y las ausencias para marcar la indisponibilidad.
+    (el `nombre` de la franja viva, "Ausente" si una ausencia cubre ese día, "—" si no
+    hay turno asignado). Reutiliza `_turnos_semana` y las ausencias para marcar la
+    indisponibilidad.
     """
     turnos_payload = _turnos_semana(lunes_iso)
     dias = turnos_payload["dias"]
@@ -1504,7 +1709,7 @@ def _grid_horario(lunes_iso: str) -> tuple[str, list[str], list[list[str]]]:
             if turno is None:
                 fila.append("—")
             else:
-                etiqueta = _ETIQUETA_FRANJA.get(turno["franja"], turno["franja"])
+                etiqueta = turno.get("franja_nombre") or "Turno"
                 if turno["override"]:
                     etiqueta += " (override)"
                 fila.append(etiqueta)
@@ -1929,12 +2134,12 @@ def _swap_a_dict(swap: dict[str, Any], nombres: dict[str, str]) -> dict[str, Any
     }
 
 
-def _existe_turno(miembro_id: str, fecha: str, franja: str) -> bool:
-    """True si EXISTE un turno en `rota_turnos` con `(miembro_id, fecha, franja)`.
+def _existe_turno(miembro_id: str, fecha: str, franja_id: str) -> bool:
+    """True si EXISTE un turno en `rota_turnos` con `(miembro_id, fecha, franja_id)`.
 
     Delega en `repos.existe_turno_para` (un solo SELECT directo en BD).
     """
-    return repos.existe_turno_para(miembro_id, fecha, franja) is not None
+    return repos.existe_turno_para(miembro_id, fecha, franja_id) is not None
 
 
 def _mio_param(request: Request) -> bool:
@@ -2021,12 +2226,21 @@ async def crear_swap(request: Request) -> Response:
         return JSONResponse(
             {"error": "Las fechas no son válidas (usa AAAA-MM-DD)."}, status_code=400
         )
+    # `franja_a`/`franja_b` ahora son `franja_id` reales (la columna en BD conserva el
+    # nombre `franja_a/_b` por inercia: cambio de SEMANTICA del dato, no de columna).
     franja_a = str(datos.get("franja_a", "")).strip()
     franja_b = str(datos.get("franja_b", "")).strip()
-    if franja_a not in FRANJAS_TURNO or franja_b not in FRANJAS_TURNO:
-        validos = " o ".join(f'"{f}"' for f in FRANJAS_TURNO)
+    if not franja_a or not franja_b:
         return JSONResponse(
-            {"error": f"Franja inválida. Usa {validos}."}, status_code=400
+            {"error": "Indica `franja_a` y `franja_b` (franja_id de la semana de cada turno)."},
+            status_code=400,
+        )
+    if (
+        repos.obtener_franja_semana(franja_a) is None
+        or repos.obtener_franja_semana(franja_b) is None
+    ):
+        return JSONResponse(
+            {"error": "Alguna de las franjas indicadas no existe."}, status_code=400
         )
 
     # Los turnos DEBEN existir en el horario: si no, no hay nada que cambiar.
@@ -2651,6 +2865,158 @@ async def guardar_config_franjas(request: Request) -> Response:
     return JSONResponse({"franjas": franjas})
 
 
+# --------------------------------------------------------------------------- #
+# Franjas POR SEMANA (#XYZ "Mundial"): CRUD de `rota_franjas` por `lunes`        #
+# --------------------------------------------------------------------------- #
+
+
+async def listar_franjas_de_semana(request: Request) -> Response:
+    """GET /api/rota/semana/{lunes}/franjas: las franjas vivas de esa semana.
+
+    Siembra por defecto (Mañana, Tarde, Descanso) si la semana aun no tiene franjas.
+    """
+    lunes = dominio.lunes_de_semana_iso(request.path_params["lunes"])
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica un lunes válido (AAAA-MM-DD)."}, status_code=400
+        )
+    franjas, _por_id = _franjas_de_semana(lunes)
+    return JSONResponse({"franjas": [_franja_semana_a_dict(f) for f in franjas]})
+
+
+async def crear_franja_de_semana(request: Request) -> Response:
+    """POST /api/rota/semana/{lunes}/franjas: anade una franja extra a la semana.
+
+    Cuerpo: `{nombre, inicio, fin, orden?, es_descanso?}`. Solo admin (la rejilla es
+    editorial). Devuelve 409 si ya existe una franja con el mismo nombre en esa semana
+    (UNIQUE `(lunes, nombre)`).
+    """
+    if not _es_admin(request):
+        return JSONResponse(
+            {"error": "Solo un admin puede crear franjas de la semana."}, status_code=403
+        )
+    lunes = dominio.lunes_de_semana_iso(request.path_params["lunes"])
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica un lunes válido (AAAA-MM-DD)."}, status_code=400
+        )
+    datos = await leer_json(request)
+    nombre = str(datos.get("nombre", "")).strip()
+    inicio = str(datos.get("inicio", "")).strip()
+    fin = str(datos.get("fin", "")).strip()
+    orden = datos.get("orden", 0)
+    es_descanso = bool(datos.get("es_descanso", False))
+    if not nombre:
+        return JSONResponse(
+            {"error": "Indica el `nombre` de la franja."}, status_code=400
+        )
+    if not _hhmm_valido(inicio) or not _hhmm_valido(fin):
+        return JSONResponse(
+            {"error": "`inicio` y `fin` deben ser HH:MM (00:00..24:00)."},
+            status_code=400,
+        )
+    try:
+        orden_int = int(orden)
+    except (TypeError, ValueError):
+        return JSONResponse(
+            {"error": "`orden` debe ser un entero."}, status_code=400
+        )
+    creada = repos.crear_franja_semana(
+        lunes, nombre, inicio, fin, orden=orden_int, es_descanso=es_descanso
+    )
+    if creada is None:
+        return JSONResponse(
+            {"error": f"Ya hay una franja llamada «{nombre}» en esa semana."},
+            status_code=409,
+        )
+    return JSONResponse(_franja_semana_a_dict(creada), status_code=201)
+
+
+async def actualizar_franja_de_semana(request: Request) -> Response:
+    """PATCH /api/rota/franjas/{franja_id}: edita nombre/rangos/orden de una franja.
+
+    Solo admin. `es_descanso` NO se edita despues de crear (cambio de semantica del dato
+    en turnos existentes; si quieres una franja de descanso, borra y crea una nueva).
+    """
+    if not _es_admin(request):
+        return JSONResponse(
+            {"error": "Solo un admin puede editar franjas de la semana."}, status_code=403
+        )
+    franja_id = request.path_params["franja_id"]
+    datos = await leer_json(request) or {}
+    campos: dict[str, Any] = {}
+    if "nombre" in datos:
+        nombre = str(datos.get("nombre", "")).strip()
+        if not nombre:
+            return JSONResponse(
+                {"error": "`nombre` no puede estar vacío."}, status_code=400
+            )
+        campos["nombre"] = nombre
+    for clave in ("inicio", "fin"):
+        if clave in datos:
+            valor = str(datos.get(clave, "")).strip()
+            if not _hhmm_valido(valor):
+                return JSONResponse(
+                    {"error": f"`{clave}` debe ser HH:MM (00:00..24:00)."},
+                    status_code=400,
+                )
+            campos[clave] = valor
+    if "orden" in datos:
+        try:
+            campos["orden"] = int(datos["orden"])
+        except (TypeError, ValueError):
+            return JSONResponse(
+                {"error": "`orden` debe ser un entero."}, status_code=400
+            )
+    if not campos:
+        return JSONResponse(
+            {"error": "Indica al menos un campo a editar."}, status_code=400
+        )
+    actualizada = repos.actualizar_franja_semana(franja_id, campos)
+    if actualizada is None:
+        return JSONResponse(
+            {"error": "La franja no existe o el cambio rompe la unicidad por nombre."},
+            status_code=404,
+        )
+    return JSONResponse(_franja_semana_a_dict(actualizada))
+
+
+async def borrar_franja_de_semana(request: Request) -> Response:
+    """DELETE /api/rota/franjas/{franja_id}[?forzar=true]: borra una franja.
+
+    Si hay turnos asociados y no se pasa `?forzar=true`, devuelve 409 con el conteo. Con
+    `?forzar=true`, borra los turnos en cascada y la franja despues. Solo admin.
+    """
+    if not _es_admin(request):
+        return JSONResponse(
+            {"error": "Solo un admin puede borrar franjas de la semana."}, status_code=403
+        )
+    franja_id = request.path_params["franja_id"]
+    forzar = (request.query_params.get("forzar") or "").strip().lower() in (
+        "1",
+        "true",
+        "sí",
+        "si",
+    )
+    resultado = repos.borrar_franja_semana(franja_id, forzar=forzar)
+    if not resultado["borrada"] and resultado["turnos_asociados"] > 0:
+        return JSONResponse(
+            {
+                "error": (
+                    f"Tiene {resultado['turnos_asociados']} turnos asociados. "
+                    "Repite con `?forzar=true` para borrar la franja y sus turnos."
+                ),
+                "turnos_asociados": resultado["turnos_asociados"],
+            },
+            status_code=409,
+        )
+    if not resultado["borrada"]:
+        return JSONResponse({"error": "La franja no existe."}, status_code=404)
+    return JSONResponse(
+        {"ok": True, "turnos_borrados": resultado["turnos_borrados"]}
+    )
+
+
 RUTAS = [
     Route("/api/rota/equipo", equipo, methods=["GET"]),
     # Eventos / transmisiones.
@@ -2673,6 +3039,12 @@ RUTAS = [
     Route("/api/rota/turnos/{turno_id}", actualizar_turno, methods=["PATCH"]),
     Route("/api/rota/turnos/{turno_id}", borrar_turno, methods=["DELETE"]),
     Route("/api/rota/mis-turnos", mis_turnos, methods=["GET"]),
+    # Franjas POR SEMANA ("Mundial"): cada lunes tiene sus franjas (Mañana/Tarde/Descanso
+    # por defecto, configurables con N franjas y solapes permitidos).
+    Route("/api/rota/semana/{lunes}/franjas", listar_franjas_de_semana, methods=["GET"]),
+    Route("/api/rota/semana/{lunes}/franjas", crear_franja_de_semana, methods=["POST"]),
+    Route("/api/rota/franjas/{franja_id}", actualizar_franja_de_semana, methods=["PATCH"]),
+    Route("/api/rota/franjas/{franja_id}", borrar_franja_de_semana, methods=["DELETE"]),
     # Cobertura DERIVADA (vista, sin persistencia).
     Route("/api/rota/cobertura", cobertura_semana, methods=["GET"]),
     Route("/api/rota/cobertura/evento/{evento_id}", cobertura_evento, methods=["GET"]),

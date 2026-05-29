@@ -57,7 +57,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
@@ -72,15 +71,16 @@ from .estados import (
     ESTADOS_ROTA,
     ESTADOS_SWAP,
     ESTADOS_TAREA,
-    FRANJA_DESCANSO,
-    FRANJAS_TURNO,
     METRICAS_COMERCIAL,
+    NOMBRE_FRANJA_MANANA_DEFAULT,
+    NOMBRE_FRANJA_TARDE_DEFAULT,
     PRIORIDAD_EVENTO_DEFECTO,
     PRIORIDADES_EVENTO,
     TIPO_COBERTURA_TRANSMISION,
     TIPOS_AUSENCIA,
     TIPOS_COBERTURA,
 )
+from .motor_db import IntegrityError
 
 __all__ = [
     "ESTADO_COMERCIAL_ACTIVA",
@@ -92,12 +92,12 @@ __all__ = [
     "ESTADOS_ROTA",
     "ESTADOS_SWAP",
     "ESTADOS_TAREA",
-    "FRANJAS_TURNO",
     "METRICAS_COMERCIAL",
     "PRIORIDADES_EVENTO",
     "TIPOS_COBERTURA",
     "TIPOS_AUSENCIA",
     "actualizar_estado_tarea",
+    "actualizar_franja_semana",
     "actualizar_evento_rota",
     "actualizar_pieza_rota",
     "actualizar_programa_rota",
@@ -110,6 +110,7 @@ __all__ = [
     "arrancar_persistencia",
     "borrar_ausencia_rota",
     "borrar_evento_rota",
+    "borrar_franja_semana",
     "borrar_pieza_rota",
     "borrar_piezas_rota_lote",
     "borrar_programa_rota",
@@ -125,6 +126,7 @@ __all__ = [
     "copiar_turnos_rota",
     "crear_ausencia_rota",
     "crear_evento_rota",
+    "crear_franja_semana",
     "crear_pieza_rota",
     "crear_programa_rota",
     "crear_publicacion_comercial",
@@ -141,6 +143,7 @@ __all__ = [
     "job_cancelado",
     "listar_ausencias_rota",
     "listar_eventos_rota",
+    "listar_franjas_semana",
     "listar_piezas_rota",
     "listar_programas_rota",
     "listar_publicaciones_comerciales",
@@ -151,6 +154,7 @@ __all__ = [
     "marcar_aviso_comercial",
     "obtener_ausencia_rota",
     "obtener_evento_rota",
+    "obtener_franja_semana",
     "obtener_pieza_rota",
     "obtener_programa_rota",
     "obtener_publicacion_comercial",
@@ -159,6 +163,7 @@ __all__ = [
     "obtener_turno_rota",
     "reclamar_job",
     "registrar_snapshot_comercial",
+    "sembrar_franjas_por_defecto",
     "terminar_job",
     "ultimo_snapshot_comercial",
     "actualizar_swap_turno",
@@ -323,16 +328,43 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
-    # TURNO = horario del miembro en (fecha, franja). NO esta atado a un evento concreto.
-    # Cambio de modelo (ola back3, feedback usuario): antes habia DOS tablas, una era
-    # "cobertura evento×miembro" (mal nombrada `rota_turnos`) y otra "horario persona×dia×franja"
-    # (`rota_turnos`). El usuario aclaro: un turno NO va asociado a un evento, son
-    # horarios del dia que cubren los eventos que surjan en ese horario. Pueden existir
-    # turnos sin eventos y eventos sin turnos. La "cobertura" ahora es una vista DERIVADA:
-    # para un evento, sus coberturas son los miembros cuyo turno corresponda a la franja+fecha
-    # del evento. La migracion convierte la vieja `rota_turnos` en la nueva
-    # `rota_turnos` y aprovecha la cobertura legada para sembrar turnos (ver
-    # `_migrar_modelo_turnos`).
+    # FRANJAS POR SEMANA (#XYZ "Mundial"): el feedback real del piloto AMX descubrio
+    # semanas con coberturas atipicas (Mundial, eventos grandes) con MAS de 2 franjas y
+    # CON SOLAPES (ej. semana 24 jun 2026: 09:00-17:00, 13:00-21:00, 17:00-01:00). El
+    # modelo viejo (`Franja = matutino|vespertino|descanso` literal en `rota_turnos.franja`)
+    # no lo soportaba. Ahora cada SEMANA tiene sus propias franjas: nombre libre, rangos
+    # HH:MM, solapes permitidos y `fin <= inicio` indica franja que cruza medianoche.
+    # `rota_config_franjas` (singleton) sigue existiendo como plantilla por defecto al
+    # sembrar las 2 franjas de trabajo iniciales ("Mañana", "Tarde") de una semana nueva.
+    #
+    # `es_descanso`: marca una franja como "no laboral" (turno planificado de descanso). El
+    # usuario aclaro: el descanso NO es ausencia implicita, es un turno explicito asignado a
+    # la persona ese dia. La franja descanso NO cubre ningun evento (`franjas_activas_en`
+    # la EXCLUYE). Sirve para que la UI muestre una fila "Descanso" en la rejilla donde el
+    # admin marca quien no trabaja ese dia (distinto de "olvido de asignacion").
+    """
+    CREATE TABLE IF NOT EXISTS rota_franjas (
+        id           TEXT PRIMARY KEY,
+        lunes        TEXT NOT NULL,
+        nombre       TEXT NOT NULL,
+        inicio       TEXT NOT NULL,
+        fin          TEXT NOT NULL,
+        orden        INTEGER NOT NULL DEFAULT 0,
+        es_descanso  BOOLEAN NOT NULL DEFAULT FALSE,
+        UNIQUE (lunes, nombre)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)",
+    # TURNO = horario del miembro en (fecha, franja_id). NO esta atado a un evento concreto.
+    # Cambio de modelo (#XYZ "franjas por semana"): el `franja` literal de tres valores
+    # ('matutino'/'vespertino'/'descanso') desaparece. Ahora cada turno apunta a una
+    # `franja_id` de `rota_franjas` (definidas por semana, con nombre libre y solapes).
+    # El "descanso" sigue existiendo como FRANJA explicita (con `es_descanso=true`) en cada
+    # semana: una persona con turno en la franja Descanso esta planificada para no trabajar
+    # ese dia (distinto de "olvido de asignacion"). La migracion (`_migrar_modelo_franjas`):
+    #   - siembra ("Mañana"/"Tarde"/"Descanso") en cada semana con turnos legados (usando
+    #     `rota_config_franjas` como plantilla para las dos primeras),
+    #   - asigna `franja_id` a los turnos PRESERVANDO los de `franja='descanso'`.
     """
     CREATE TABLE IF NOT EXISTS rota_turnos (
         id             TEXT PRIMARY KEY,
@@ -340,7 +372,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         fecha          TEXT NOT NULL DEFAULT '',
         miembro_id     TEXT NOT NULL DEFAULT '',
         miembro_nombre TEXT NOT NULL DEFAULT '',
-        franja         TEXT NOT NULL DEFAULT 'descanso',
+        franja_id      TEXT NOT NULL DEFAULT '',
         estado         TEXT NOT NULL DEFAULT 'propuesto',
         override       INTEGER NOT NULL DEFAULT 0,
         motivo         TEXT NOT NULL DEFAULT '',
@@ -352,6 +384,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_miembro ON rota_turnos (miembro_id)",
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_fecha ON rota_turnos (fecha)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_turnos_franja_id ON rota_turnos (franja_id)",
     # Ausencias/vacaciones del horario (F4 · #144): un rango de fechas (inclusivo) en que un
     # miembro NO esta disponible. El proponedor del horario las RESPETA (excluye al miembro
     # esos dias). `tipo` es vacaciones|descanso|baja|otro.
@@ -526,6 +559,11 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
+    # Ola "franjas por semana": tras crear el DDL declarativo (que ya declara
+    # `rota_franjas` y `rota_turnos.franja_id`), migramos las filas legadas con
+    # `franja='matutino'/'vespertino'` a `franja_id` y borramos las de `franja='descanso'`.
+    # Idempotente: si ya no hay columna `franja`, no hace nada.
+    _migrar_modelo_franjas(con)
     con.commit()
 
 
@@ -630,9 +668,11 @@ def _migrar_modelo_turnos(con: Any) -> None:
     Si la BD ya esta migrada (existe `rota_turnos` con columna `fecha`), no hace nada.
     """
     # Detectar estado actual: una BD ya MIGRADA tiene `rota_turnos` con `fecha`.
+    # Esta migracion trabaja con la forma INTERMEDIA (`franja` literal): la migracion
+    # posterior (`_migrar_modelo_franjas`) hace el salto a `franja_id`.
     cols_turnos = _columnas_existentes(con, "rota_turnos")
-    if "fecha" in cols_turnos and "franja" in cols_turnos:
-        # Ya estamos en el nuevo modelo; nada que hacer.
+    if "fecha" in cols_turnos and ("franja" in cols_turnos or "franja_id" in cols_turnos):
+        # Ya estamos en el modelo intermedio (o posterior); nada que hacer aqui.
         return
 
     # Si NO hay tabla `rota_turnos_trabajo` y `rota_turnos` no tiene `fecha`, puede ser
@@ -770,6 +810,178 @@ def _migrar_modelo_turnos(con: Any) -> None:
     con.execute("ALTER INDEX IF EXISTS idx_rota_turnos_miembro_v2 RENAME TO idx_rota_turnos_miembro")
     # Indice nuevo (no existia en el trabajo viejo): lo crea el DDL declarativo despues.
     # Commit para que el DDL siguiente vea el esquema renombrado.
+    con.commit()
+
+
+# Nombres por defecto para sembrar las 2 franjas iniciales de una semana. Coherentes con
+# `estados.NOMBRE_FRANJA_*_DEFAULT` (los re-importamos arriba). Mantener una sola fuente.
+_NOMBRE_FRANJA_MANANA = NOMBRE_FRANJA_MANANA_DEFAULT
+_NOMBRE_FRANJA_TARDE = NOMBRE_FRANJA_TARDE_DEFAULT
+
+
+def _config_franjas_template(con: Any) -> tuple[str, str, str, str]:
+    """Devuelve `(matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin)` para
+    sembrar las 2 franjas por defecto de una semana nueva.
+
+    Si `rota_config_franjas` tiene una fila con `id='default'`, usamos sus rangos
+    (configuracion editorial #185). Si no, defaults del dominio (08-16 / 16-24).
+    """
+    mat_ini, mat_fin = "08:00", "16:00"
+    ves_ini, ves_fin = "16:00", "24:00"
+    if not _tabla_existe(con, "rota_config_franjas"):
+        return mat_ini, mat_fin, ves_ini, ves_fin
+    fila = con.execute(
+        "SELECT matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin "
+        "FROM rota_config_franjas WHERE id = ?",
+        ("default",),
+    ).fetchone()
+    if fila is None:
+        return mat_ini, mat_fin, ves_ini, ves_fin
+    return (
+        fila["matutino_inicio"] or mat_ini,
+        fila["matutino_fin"] or mat_fin,
+        fila["vespertino_inicio"] or ves_ini,
+        fila["vespertino_fin"] or ves_fin,
+    )
+
+
+_NOMBRE_FRANJA_DESCANSO = "Descanso"
+
+
+def _sembrar_franjas_por_defecto_en(con: Any, lunes: str) -> dict[str, str]:
+    """Inserta (Mañana, Tarde, Descanso) en `rota_franjas` para `lunes` si no existen.
+
+    Devuelve el mapa `{nombre -> id}` con las franjas vigentes (sembradas o ya existentes).
+    La franja "Descanso" se siembra con `es_descanso=true`, `inicio='00:00'`/`fin='00:00'`
+    (sin rango horario real: nadie cubre eventos en descanso) y un `orden` alto (999) para
+    que la UI la pinte siempre al final.
+    """
+    if not lunes:
+        return {}
+    existentes = con.execute(
+        "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+        (lunes,),
+    ).fetchall()
+    por_nombre = {f["nombre"]: f["id"] for f in existentes}
+    if (
+        _NOMBRE_FRANJA_MANANA in por_nombre
+        and _NOMBRE_FRANJA_TARDE in por_nombre
+        and _NOMBRE_FRANJA_DESCANSO in por_nombre
+    ):
+        return por_nombre
+    mat_ini, mat_fin, ves_ini, ves_fin = _config_franjas_template(con)
+    # (nombre, inicio, fin, orden, es_descanso)
+    semilla = [
+        (_NOMBRE_FRANJA_MANANA, mat_ini, mat_fin, 0, False),
+        (_NOMBRE_FRANJA_TARDE, ves_ini, ves_fin, 1, False),
+        (_NOMBRE_FRANJA_DESCANSO, "00:00", "00:00", 999, True),
+    ]
+    for nombre, inicio, fin, orden, es_descanso in semilla:
+        if nombre in por_nombre:
+            continue
+        nuevo_id = uuid.uuid4().hex[:12]
+        con.execute(
+            "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lunes, nombre) DO NOTHING",
+            (nuevo_id, lunes, nombre, inicio, fin, orden, es_descanso),
+        )
+        por_nombre[nombre] = nuevo_id
+    # Releemos para coger los `id` reales (el ON CONFLICT pudo descartar el INSERT si otra
+    # transaccion sembro a la vez): el dict en memoria puede traer un id que no esta.
+    filas = con.execute(
+        "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+        (lunes,),
+    ).fetchall()
+    return {f["nombre"]: f["id"] for f in filas}
+
+
+def _migrar_modelo_franjas(con: Any) -> None:
+    """Migra `rota_turnos.franja` (literal) -> `rota_turnos.franja_id` (FK por semana).
+
+    Idempotente. Pasos:
+      1. Asegura que `rota_franjas` tiene la columna `es_descanso` (instancias anteriores
+         a la introduccion de descanso explicito la pierden).
+      2. Asegura que `rota_turnos` tiene una columna `franja_id` (la crea como NULLABLE
+         temporal si la BD legada solo tiene `franja`).
+      3. Por cada `lunes` con turnos legados, siembra las 3 franjas por defecto (Mañana,
+         Tarde, Descanso) en `rota_franjas` usando los rangos de `rota_config_franjas`
+         para las dos primeras si existe.
+      4. Reasigna los turnos: `franja='matutino'`->Mañana, `franja='vespertino'`->Tarde,
+         `franja='descanso'`->Descanso (la franja con `es_descanso=true`).
+         IMPORTANTE: los turnos de descanso SE PRESERVAN. El usuario aclaro que el descanso
+         es un TURNO EXPLICITO planificado, no una ausencia implicita.
+      5. Drop de la columna `franja` (si existe) y commit.
+
+    Si la BD ya esta en el modelo nuevo (no existe `franja`, solo `franja_id` con datos
+    coherentes), no toca nada de turnos, pero igual se asegura de la columna `es_descanso`.
+    """
+    # PASO 1: columna `es_descanso` en `rota_franjas` (idempotente). Necesario antes de
+    # sembrar para que el INSERT no falle en instancias legadas.
+    cols_franjas = _columnas_existentes(con, "rota_franjas")
+    if cols_franjas and "es_descanso" not in cols_franjas:
+        con.execute(
+            "ALTER TABLE rota_franjas ADD COLUMN es_descanso BOOLEAN NOT NULL DEFAULT FALSE"
+        )
+
+    cols = _columnas_existentes(con, "rota_turnos")
+    if not cols:
+        # Sin tabla `rota_turnos` -> nada que migrar (BD virgen; el DDL la creara con
+        # `franja_id` directamente).
+        return
+    tiene_franja_literal = "franja" in cols
+    tiene_franja_id = "franja_id" in cols
+
+    if not tiene_franja_literal and tiene_franja_id:
+        # Ya migrado a `franja_id`: nada que mover.
+        return
+
+    # PASO 2: asegurar columna `franja_id` (nullable temporal).
+    if not tiene_franja_id:
+        con.execute(
+            "ALTER TABLE rota_turnos ADD COLUMN franja_id TEXT NOT NULL DEFAULT ''"
+        )
+
+    # PASO 3 y 4: por cada semana con turnos legados, sembrar las 3 franjas por defecto y
+    # asignar `franja_id`. Un solo SELECT de lunes distintos con cualquier franja literal
+    # legada que aun no tenga `franja_id`.
+    if tiene_franja_literal:
+        lunes_filas = con.execute(
+            "SELECT DISTINCT semana FROM rota_turnos "
+            "WHERE franja IN ('matutino', 'vespertino', 'descanso') "
+            "AND (franja_id = '' OR franja_id IS NULL)"
+        ).fetchall()
+        for fila in lunes_filas:
+            lunes = (fila["semana"] or "").strip()
+            if not lunes:
+                continue
+            mapa = _sembrar_franjas_por_defecto_en(con, lunes)
+            manana_id = mapa.get(_NOMBRE_FRANJA_MANANA, "")
+            tarde_id = mapa.get(_NOMBRE_FRANJA_TARDE, "")
+            descanso_id = mapa.get(_NOMBRE_FRANJA_DESCANSO, "")
+            if manana_id:
+                con.execute(
+                    "UPDATE rota_turnos SET franja_id = ? "
+                    "WHERE semana = ? AND franja = 'matutino' AND (franja_id = '' OR franja_id IS NULL)",
+                    (manana_id, lunes),
+                )
+            if tarde_id:
+                con.execute(
+                    "UPDATE rota_turnos SET franja_id = ? "
+                    "WHERE semana = ? AND franja = 'vespertino' AND (franja_id = '' OR franja_id IS NULL)",
+                    (tarde_id, lunes),
+                )
+            if descanso_id:
+                # IMPORTANTE: el descanso es turno explicito. Lo PRESERVAMOS reasignando.
+                con.execute(
+                    "UPDATE rota_turnos SET franja_id = ? "
+                    "WHERE semana = ? AND franja = 'descanso' AND (franja_id = '' OR franja_id IS NULL)",
+                    (descanso_id, lunes),
+                )
+
+        # PASO 5: drop de la columna `franja`. En Postgres, `DROP COLUMN ... IF EXISTS`
+        # es soportado.
+        con.execute("ALTER TABLE rota_turnos DROP COLUMN IF EXISTS franja")
+
     con.commit()
 
 
@@ -1658,7 +1870,7 @@ _COLS_TURNO_ROTA = (
     "fecha",
     "miembro_id",
     "miembro_nombre",
-    "franja",
+    "franja_id",
     "estado",
     "override",
     "motivo",
@@ -1675,7 +1887,7 @@ _CAMPOS_EDITABLES_TURNO_ROTA: tuple[str, ...] = (
     "fecha",
     "miembro_id",
     "miembro_nombre",
-    "franja",
+    "franja_id",
     "estado",
     "override",
     "motivo",
@@ -1695,17 +1907,37 @@ def crear_turno_rota(
     *,
     miembro_id: str = "",
     miembro_nombre: str = "",
-    franja: str = FRANJA_DESCANSO,
+    franja_id: str = "",
     estado: str = ESTADO_ROTA_PROPUESTO,
     override: bool = False,
     motivo: str = "",
     nota_relevo: str = "",
+    franja: str | None = None,
 ) -> dict[str, Any]:
-    """Inserta un TURNO (horario en `(fecha, franja)` para `miembro_id`) y lo devuelve.
+    """Inserta un TURNO (horario en `(fecha, franja_id)` para `miembro_id`) y lo devuelve.
 
-    NO valida (lo hace la API). NO comprueba unicidad (semana, fecha, miembro_id, franja);
-    eso es responsabilidad del endpoint POST (que devuelve 409 si choca).
+    NO valida (lo hace la API). NO comprueba unicidad (semana, fecha, miembro_id,
+    franja_id); eso es responsabilidad del endpoint POST (que devuelve 409 si choca).
+
+    RETROCOMPAT: acepta `franja` (literal 'matutino'/'vespertino'/'descanso') traduciendolo
+    a `franja_id` via las franjas por defecto de la semana. Mismo contrato que el shim de
+    `repos.crear_turno_rota`; codigo NUEVO debe pasar `franja_id` directamente.
     """
+    if franja_id == "" and franja is not None:
+        franja_norm = (franja or "").strip().lower()
+        # Sembramos en la conexion local (sin pasar por `repos` para evitar ciclos).
+        con_t = _conectar()
+        try:
+            mapa = _sembrar_franjas_por_defecto_en(con_t, semana)
+            con_t.commit()
+        finally:
+            con_t.close()
+        if franja_norm == "matutino":
+            franja_id = mapa.get(_NOMBRE_FRANJA_MANANA, "")
+        elif franja_norm == "vespertino":
+            franja_id = mapa.get(_NOMBRE_FRANJA_TARDE, "")
+        elif franja_norm == "descanso":
+            franja_id = mapa.get(_NOMBRE_FRANJA_DESCANSO, "")
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
@@ -1713,7 +1945,7 @@ def crear_turno_rota(
         "fecha": fecha or "",
         "miembro_id": miembro_id or "",
         "miembro_nombre": miembro_nombre or "",
-        "franja": franja if franja in FRANJAS_TURNO else FRANJA_DESCANSO,
+        "franja_id": franja_id or "",
         "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
         "override": 1 if override else 0,
         "motivo": motivo or "",
@@ -1742,7 +1974,7 @@ def listar_turnos_rota(semana: str | None = None) -> list[dict[str, Any]]:
     if semana:
         sql += " WHERE semana = ?"
         params = (semana,)
-    sql += " ORDER BY semana ASC, fecha ASC, franja ASC, creado ASC, id ASC"
+    sql += " ORDER BY semana ASC, fecha ASC, franja_id ASC, creado ASC, id ASC"
     con = _conectar()
     try:
         filas = con.execute(sql, params).fetchall()
@@ -1761,17 +1993,17 @@ def obtener_turno_rota(turno_id: str) -> dict[str, Any] | None:
 
 
 def existe_turno_para(
-    miembro_id: str, fecha: str, franja: str
+    miembro_id: str, fecha: str, franja_id: str
 ) -> dict[str, Any] | None:
-    """Devuelve el turno actual de `(miembro_id, fecha, franja)`; None si no hay.
+    """Devuelve el turno actual de `(miembro_id, fecha, franja_id)`; None si no hay.
 
     Sirve para que el endpoint POST detecte choque (devolver 409 antes de insertar duplicado).
     """
     con = _conectar()
     try:
         fila = con.execute(
-            f"{_SELECT_TURNO_ROTA} WHERE miembro_id = ? AND fecha = ? AND franja = ? LIMIT 1",
-            (miembro_id, fecha, franja),
+            f"{_SELECT_TURNO_ROTA} WHERE miembro_id = ? AND fecha = ? AND franja_id = ? LIMIT 1",
+            (miembro_id, fecha, franja_id),
         ).fetchone()
     finally:
         con.close()
@@ -1900,7 +2132,6 @@ def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]
     ahora = datetime.now().isoformat(timespec="seconds")
     filas: list[dict[str, Any]] = []
     for entrada in turnos:
-        franja = entrada.get("franja") or FRANJA_DESCANSO
         estado = entrada.get("estado") or ESTADO_ROTA_PROPUESTO
         filas.append(
             {
@@ -1909,7 +2140,7 @@ def crear_turnos_rota_lote(turnos: list[dict[str, Any]]) -> list[dict[str, Any]]
                 "fecha": entrada.get("fecha", "") or "",
                 "miembro_id": entrada.get("miembro_id", "") or "",
                 "miembro_nombre": entrada.get("miembro_nombre", "") or "",
-                "franja": franja if franja in FRANJAS_TURNO else FRANJA_DESCANSO,
+                "franja_id": entrada.get("franja_id", "") or "",
                 "estado": estado if estado in ESTADOS_ROTA else ESTADO_ROTA_PROPUESTO,
                 "override": 1 if entrada.get("override") else 0,
                 "motivo": entrada.get("motivo", "") or "",
@@ -1941,7 +2172,7 @@ def duplicar_turno_rota(
     fecha: str | None = None,
     miembro_id: str | None = None,
     miembro_nombre: str | None = None,
-    franja: str | None = None,
+    franja_id: str | None = None,
     semana: str | None = None,
 ) -> dict[str, Any] | None:
     """Clona un turno con overrides opcionales. None si el id no existe.
@@ -1958,7 +2189,7 @@ def duplicar_turno_rota(
         fecha if fecha is not None else original["fecha"],
         miembro_id=miembro_id if miembro_id is not None else original["miembro_id"],
         miembro_nombre=miembro_nombre if miembro_nombre is not None else original["miembro_nombre"],
-        franja=franja if franja is not None else original["franja"],
+        franja_id=franja_id if franja_id is not None else original["franja_id"],
         estado=ESTADO_ROTA_PROPUESTO,
         override=bool(original.get("override", False)),
         motivo="",
@@ -2690,6 +2921,215 @@ def borrar_programa_rota(programa_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
+# Franjas por semana (#XYZ "Mundial"): CRUD de `rota_franjas`                  #
+# --------------------------------------------------------------------------- #
+#
+# Cada semana tiene sus propias franjas (nombre libre, rangos HH:MM, solapes permitidos,
+# soporte a franjas que cruzan medianoche). Se siembran 2 por defecto ("Mañana", "Tarde")
+# la primera vez que la API lee la semana; admin puede anadir, editar o borrar mas.
+
+_COLS_FRANJA_SEMANA = ("id", "lunes", "nombre", "inicio", "fin", "orden", "es_descanso")
+_SELECT_FRANJA_SEMANA = (
+    f"SELECT {', '.join(_COLS_FRANJA_SEMANA)} FROM rota_franjas"
+)
+
+
+def _fila_a_franja_semana(fila: Any) -> dict[str, Any]:
+    fila_dict = {col: fila[col] for col in _COLS_FRANJA_SEMANA}
+    # Normaliza `es_descanso` a bool (Postgres devuelve True/False, sqlite-fake 0/1).
+    fila_dict["es_descanso"] = bool(fila_dict.get("es_descanso", False))
+    return fila_dict
+
+
+def listar_franjas_semana(lunes: str) -> list[dict[str, Any]]:
+    """Franjas de la semana cuyo lunes es `lunes`, ordenadas por `orden` ASC."""
+    if not lunes:
+        return []
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_FRANJA_SEMANA} WHERE lunes = ? ORDER BY orden ASC, nombre ASC",
+            (lunes,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_franja_semana(f) for f in filas]
+
+
+def obtener_franja_semana(franja_id: str) -> dict[str, Any] | None:
+    """Una franja por id, None si no existe."""
+    if not franja_id:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_FRANJA_SEMANA} WHERE id = ?", (franja_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_franja_semana(fila) if fila is not None else None
+
+
+def crear_franja_semana(
+    lunes: str,
+    nombre: str,
+    inicio: str,
+    fin: str,
+    *,
+    orden: int = 0,
+    es_descanso: bool = False,
+) -> dict[str, Any] | None:
+    """Inserta una franja en `rota_franjas`. Devuelve la franja creada o None si
+    ya existe una con el mismo `(lunes, nombre)` (UNIQUE).
+
+    NO valida formato (lo hace la API): aqui solo persistimos lo que llega. La franja con
+    `es_descanso=true` se trata como "no laboral": no cubre eventos (ver
+    `rota.franjas_activas_en`), pero el turno existe (y puede asignarse a un miembro).
+    """
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "lunes": lunes,
+        "nombre": nombre,
+        "inicio": inicio,
+        "fin": fin,
+        "orden": int(orden),
+        "es_descanso": bool(es_descanso),
+    }
+    con = _conectar()
+    try:
+        try:
+            con.execute(
+                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    fila["id"],
+                    fila["lunes"],
+                    fila["nombre"],
+                    fila["inicio"],
+                    fila["fin"],
+                    fila["orden"],
+                    fila["es_descanso"],
+                ),
+            )
+            con.commit()
+        except IntegrityError:
+            # UNIQUE violation (lunes, nombre) -> ya existe. `_ConexionPg` ya hizo rollback.
+            return None
+    finally:
+        con.close()
+    return fila
+
+
+def actualizar_franja_semana(
+    franja_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita campos de una franja (allowlist `nombre/inicio/fin/orden`); None si no existe.
+
+    NOTA: `es_descanso` NO se edita (cambiarlo a posteriori dejaria turnos de descanso
+    "convertidos" en laborales o viceversa: una incoherencia silenciosa). Si se quiere
+    "renombrar" una franja de descanso, se borra y se crea una nueva.
+    """
+    editables = ("nombre", "inicio", "fin", "orden")
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if not cambios:
+        return obtener_franja_semana(franja_id)
+    if "orden" in cambios:
+        cambios["orden"] = int(cambios["orden"])
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), franja_id]
+    con = _conectar()
+    try:
+        try:
+            cur = con.execute(
+                f"UPDATE rota_franjas SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+                tuple(params),
+            )
+            con.commit()
+        except IntegrityError:
+            # UNIQUE violation (otra franja con el mismo nombre en la semana).
+            return None
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_FRANJA_SEMANA} WHERE id = ?", (franja_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_franja_semana(fila) if fila is not None else None
+
+
+def contar_turnos_de_franja(franja_id: str) -> int:
+    """Numero de turnos que tienen esa `franja_id` (para el 409 al borrar)."""
+    if not franja_id:
+        return 0
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT COUNT(*) AS n FROM rota_turnos WHERE franja_id = ?",
+            (franja_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def borrar_franja_semana(franja_id: str, *, forzar: bool = False) -> dict[str, Any]:
+    """Borra una franja. Devuelve `{borrada: bool, turnos_borrados: int, turnos_asociados: int}`.
+
+    Si hay turnos asociados y `forzar=False`, no borra y devuelve
+    `{borrada: False, turnos_asociados: N, turnos_borrados: 0}` para que la API responda
+    con 409. Con `forzar=True`, borra los turnos en cascada y la franja despues.
+    """
+    if not franja_id:
+        return {"borrada": False, "turnos_asociados": 0, "turnos_borrados": 0}
+    con = _conectar()
+    try:
+        fila_count = con.execute(
+            "SELECT COUNT(*) AS n FROM rota_turnos WHERE franja_id = ?",
+            (franja_id,),
+        ).fetchone()
+        asociados = int(fila_count["n"]) if fila_count is not None else 0
+        if asociados > 0 and not forzar:
+            return {
+                "borrada": False,
+                "turnos_asociados": asociados,
+                "turnos_borrados": 0,
+            }
+        turnos_borrados = 0
+        if asociados > 0 and forzar:
+            cur_t = con.execute(
+                "DELETE FROM rota_turnos WHERE franja_id = ?", (franja_id,)
+            )
+            turnos_borrados = cur_t.rowcount
+        cur_f = con.execute("DELETE FROM rota_franjas WHERE id = ?", (franja_id,))
+        con.commit()
+        return {
+            "borrada": cur_f.rowcount > 0,
+            "turnos_asociados": asociados,
+            "turnos_borrados": turnos_borrados,
+        }
+    finally:
+        con.close()
+
+
+def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
+    """Idempotente: siembra ("Mañana", "Tarde") en `rota_franjas` para `lunes` si faltan.
+
+    Devuelve la lista de franjas de la semana tras el sembrado (orden ASC). Si ya hay 2 o
+    mas y "Mañana"/"Tarde" estan presentes, no toca nada.
+    """
+    if not lunes:
+        return []
+    con = _conectar()
+    try:
+        _sembrar_franjas_por_defecto_en(con, lunes)
+        con.commit()
+    finally:
+        con.close()
+    return listar_franjas_semana(lunes)
+
+
+# --------------------------------------------------------------------------- #
 # Solicitudes de cambio de turno entre companeros (#175)                       #
 # --------------------------------------------------------------------------- #
 #
@@ -2698,6 +3138,11 @@ def borrar_programa_rota(programa_id: str) -> bool:
 # acepta, Elias (admin) aprueba o rechaza. La aprobacion EJECUTA el swap en
 # `rota_turnos` (intercambia `miembro_id` de las dos franjas) y la solicitud
 # pasa a `aplicado`. Las ausencias REALES (vacaciones, baja) viven en SAP, no aqui.
+#
+# IMPORTANTE: tras la migracion a "franjas por semana", las columnas `franja_a`/`franja_b`
+# de `rota_swaps_turno` referencian `rota_franjas.id` (NO strings 'matutino'/'vespertino').
+# Es un cambio de SEMANTICA del DATO, no de columna: los call sites deben pasar el
+# `franja_id` real al crear el swap y al re-validarlo en el aprobado.
 
 _COLS_SWAP_TURNO = (
     "id",
@@ -3005,25 +3450,25 @@ def aplicar_swap_turno(
         #    seguir asignadas a quien dijo el swap. Buscamos por (fecha, franja) y
         #    comprobamos el miembro actual (asi detectamos el caso 409 con detalle).
         fila_a = con.execute(
-            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos "
-            "WHERE fecha = ? AND franja = ? AND miembro_id = ?",
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja_id FROM rota_turnos "
+            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ?",
             (fecha_a, franja_a, solicitante_id),
         ).fetchone()
         fila_b = con.execute(
-            "SELECT id, miembro_id, miembro_nombre, fecha, franja FROM rota_turnos "
-            "WHERE fecha = ? AND franja = ? AND miembro_id = ?",
+            "SELECT id, miembro_id, miembro_nombre, fecha, franja_id FROM rota_turnos "
+            "WHERE fecha = ? AND franja_id = ? AND miembro_id = ?",
             (fecha_b, franja_b, destinatario_id),
         ).fetchone()
         if fila_a is None or fila_b is None:
             # Buscamos el detalle ACTUAL (sin filtrar por miembro) para informar.
             actual_a = con.execute(
                 "SELECT miembro_id, miembro_nombre FROM rota_turnos "
-                "WHERE fecha = ? AND franja = ?",
+                "WHERE fecha = ? AND franja_id = ?",
                 (fecha_a, franja_a),
             ).fetchone()
             actual_b = con.execute(
                 "SELECT miembro_id, miembro_nombre FROM rota_turnos "
-                "WHERE fecha = ? AND franja = ?",
+                "WHERE fecha = ? AND franja_id = ?",
                 (fecha_b, franja_b),
             ).fetchone()
             return {
@@ -3138,13 +3583,15 @@ def copiar_turnos_rota(
     """Copia los turnos (horario persona×dia×franja) de `de_lunes` a `a_lunes`.
 
     Para cada turno de la semana origen, crea uno nuevo en la semana destino con `fecha`
-    desplazada +N dias (N = `a_lunes - de_lunes`) y el mismo `miembro_id`/`franja`/`motivo`/
-    `nota_relevo`. Los IDs son nuevos (uuid); el `estado` arranca como `propuesto` (Elias
-    re-aprueba antes de publicar). Si `reemplazar=True`, primero borra los turnos existentes
-    de `a_lunes`.
+    desplazada +N dias (N = `a_lunes - de_lunes`). Tambien CLONA las definiciones de
+    franjas de la semana origen a la destino (mismo nombre/inicio/fin/orden) si la semana
+    destino aun no tiene una franja con ese nombre — asi los turnos clonados se enlazan a
+    una franja real en la semana destino. Los IDs son nuevos (uuid); el `estado` arranca
+    como `propuesto` (Elias re-aprueba antes de publicar). Si `reemplazar=True`, primero
+    borra los turnos existentes de `a_lunes` (las franjas NO se borran: no son turnos).
 
-    Devuelve cuantas filas se crearon. Si `de_lunes` o `a_lunes` no son fechas validas,
-    devuelve 0 sin tocar BD.
+    Devuelve cuantas filas de turnos se crearon. Si `de_lunes` o `a_lunes` no son fechas
+    validas, devuelve 0 sin tocar BD.
     """
     try:
         d_de = date.fromisoformat(de_lunes)
@@ -3154,12 +3601,49 @@ def copiar_turnos_rota(
     delta = (d_a - d_de).days
     con = _conectar()
     try:
+        # PASO 1: clonar las definiciones de franjas a la semana destino (si no estan ya).
+        # Las franjas son "plantilla" de cobertura por semana; al copiar la semana entera,
+        # las franjas viajan tambien con su nombre/inicio/fin/orden. El mapeo es por
+        # NOMBRE: si la semana destino ya tiene "Mañana", reusamos su id.
+        franjas_origen = con.execute(
+            "SELECT id, nombre, inicio, fin, orden, es_descanso FROM rota_franjas "
+            "WHERE lunes = ? ORDER BY orden ASC, nombre ASC",
+            (de_lunes,),
+        ).fetchall()
+        franjas_destino = con.execute(
+            "SELECT id, nombre FROM rota_franjas WHERE lunes = ?",
+            (a_lunes,),
+        ).fetchall()
+        id_destino_por_nombre = {f["nombre"]: f["id"] for f in franjas_destino}
+        # Mapeo id_origen -> id_destino (insertando las que falten).
+        id_dest_por_origen: dict[str, str] = {}
+        for fo in franjas_origen:
+            if fo["nombre"] in id_destino_por_nombre:
+                id_dest_por_origen[fo["id"]] = id_destino_por_nombre[fo["nombre"]]
+                continue
+            nuevo_id = uuid.uuid4().hex[:12]
+            con.execute(
+                "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT (lunes, nombre) DO NOTHING",
+                (
+                    nuevo_id,
+                    a_lunes,
+                    fo["nombre"],
+                    fo["inicio"],
+                    fo["fin"],
+                    fo["orden"],
+                    bool(fo["es_descanso"]),
+                ),
+            )
+            id_dest_por_origen[fo["id"]] = nuevo_id
+            id_destino_por_nombre[fo["nombre"]] = nuevo_id
+
         if reemplazar:
             con.execute(
                 "DELETE FROM rota_turnos WHERE semana = ?", (a_lunes,)
             )
         filas = con.execute(
-            f"{_SELECT_TURNO_ROTA} WHERE semana = ? ORDER BY fecha ASC, franja ASC",
+            f"{_SELECT_TURNO_ROTA} WHERE semana = ? ORDER BY fecha ASC, franja_id ASC",
             (de_lunes,),
         ).fetchall()
         creadas = 0
@@ -3172,13 +3656,17 @@ def copiar_turnos_rota(
                 nueva_fecha = (date.fromisoformat(fila["fecha"]) + timedelta(days=delta)).isoformat()
             except (ValueError, TypeError):
                 continue
+            franja_id_dest = id_dest_por_origen.get(fila["franja_id"], "")
+            if not franja_id_dest:
+                # Sin franja destino no podemos enlazar el turno: lo saltamos (defensa).
+                continue
             nuevo = {
                 "id": uuid.uuid4().hex[:12],
                 "semana": a_lunes,
                 "fecha": nueva_fecha,
                 "miembro_id": fila["miembro_id"],
                 "miembro_nombre": fila["miembro_nombre"],
-                "franja": fila["franja"],
+                "franja_id": franja_id_dest,
                 "estado": ESTADO_ROTA_PROPUESTO,
                 "override": 1 if fila["override"] else 0,
                 "motivo": fila["motivo"],

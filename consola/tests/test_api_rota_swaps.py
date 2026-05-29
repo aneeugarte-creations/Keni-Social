@@ -43,15 +43,18 @@ def _cli_de(app, usuario: str) -> TestClient:
     return cli
 
 
-def _crear_horario(app, equipo: list[dict]) -> None:
+def _crear_horario(app, equipo: list[dict]) -> dict[str, str]:
     """Siembra turnos de trabajo en LUNES para los dos primeros miembros (ana, beto).
 
     Antes la consola PROPONIA reparto automatico; ahora Elias asigna a mano, asi que los
-    tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro
-    su turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
-    cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que
-    se usa en los tests de "consigo mismo" / "destinatario inexistente" — encuentra los
+    tests siembran directo via `repos.crear_turno_rota`. Sembramos a cada miembro su
+    turno en DIA_A y DIA_B (franjas distintas por persona para no solaparse): asi
+    cualquier `_payload_swap(X, Y)` con X, Y en (ana, beto) — incluido `(ana, ana)` que se
+    usa en los tests de "consigo mismo" / "destinatario inexistente" — encuentra los
     turnos en BD antes de tirar la peticion al endpoint.
+
+    Devuelve el mapa `{nombre_legacy -> franja_id}` para usar en `_payload_swap` (Mañana
+    y Tarde de la semana LUNES, sembradas al crear el primer turno).
     """
     del app  # ya no se usa: sembramos directo en BD.
     primero, segundo = equipo[0], equipo[1]
@@ -70,28 +73,49 @@ def _crear_horario(app, equipo: list[dict]) -> None:
             miembro_nombre=segundo["usuario"],
             franja="vespertino",
         )
+    franjas = {f["nombre"]: f["id"] for f in repos.listar_franjas_semana(LUNES)}
+    return {
+        "matutino": franjas.get("Mañana", ""),
+        "vespertino": franjas.get("Tarde", ""),
+    }
 
 
-def _turno_de(app, miembro_id: str, fecha: str, franjas: tuple[str, ...]) -> dict:
-    """Busca un turno de trabajo del miembro en esa fecha (cualquiera de `franjas`) en BD."""
+def _turno_de(
+    app,
+    miembro_id: str,
+    fecha: str,
+    franja_ids: tuple[str, ...],
+) -> dict:
+    """Busca un turno del miembro en esa fecha cuya `franja_id` este en `franja_ids`."""
     del app  # ya no se usa: leemos directo de BD.
     for t in repos.listar_turnos_rota(semana=LUNES):
-        if t["miembro_id"] == miembro_id and t["fecha"] == fecha and t["franja"] in franjas:
+        if (
+            t["miembro_id"] == miembro_id
+            and t["fecha"] == fecha
+            and t.get("franja_id", "") in franja_ids
+        ):
             return t
     raise AssertionError(
-        f"no encuentro turno del miembro {miembro_id} en {fecha} (franjas={franjas})"
+        f"no encuentro turno del miembro {miembro_id} en {fecha} (franja_ids={franja_ids})"
     )
+
+
+_FRANJAS_LUNES: dict[str, str] = {}
 
 
 def _setup_basico(entorno) -> tuple:
     """App + dos miembros (ana, beto) con sesion y horario propuesto.
 
     Devuelve `(app, ana, beto, cli_ana, cli_beto)`. `ana` es solicitante por defecto.
+    Tambien rellena `_FRANJAS_LUNES` con `{matutino->id, vespertino->id}` para que los
+    tests posteriores puedan referenciar las franjas reales sin re-consultar BD.
     """
     app = app_modulo.crear_app(token=TOKEN_PRUEBA, bootstrap=False)
     ana = auth.crear_usuario("ana", CLAVE, "editor")
     beto = auth.crear_usuario("beto", CLAVE, "editor")
-    _crear_horario(app, [ana, beto])
+    mapa = _crear_horario(app, [ana, beto])
+    _FRANJAS_LUNES.clear()
+    _FRANJAS_LUNES.update(mapa)
     cli_ana = _cli_de(app, "ana")
     cli_beto = _cli_de(app, "beto")
     return app, ana, beto, cli_ana, cli_beto
@@ -106,15 +130,17 @@ def _setup_con_admin(entorno) -> tuple:
 
 
 def _payload_swap(ana: dict, beto: dict, app) -> dict:
-    """Cuerpo de un swap A(ana) <-> B(beto): toma franjas REALES del horario."""
-    ta = _turno_de(app, ana["id"], DIA_A, ("matutino", "vespertino"))
-    tb = _turno_de(app, beto["id"], DIA_B, ("matutino", "vespertino"))
+    """Cuerpo de un swap A(ana) <-> B(beto): toma `franja_id` REALES del horario."""
+    franja_ids = (_FRANJAS_LUNES["matutino"], _FRANJAS_LUNES["vespertino"])
+    ta = _turno_de(app, ana["id"], DIA_A, franja_ids)
+    tb = _turno_de(app, beto["id"], DIA_B, franja_ids)
     return {
         "destinatario_id": beto["id"],
         "fecha_a": ta["fecha"],
-        "franja_a": ta["franja"],
+        # `franja_a`/`franja_b` ahora son `franja_id` reales (modelo "franjas por semana").
+        "franja_a": ta["franja_id"],
         "fecha_b": tb["fecha"],
-        "franja_b": tb["franja"],
+        "franja_b": tb["franja_id"],
         "motivo": "Cita médica",
     }
 
@@ -187,17 +213,16 @@ def test_crear_swap_franja_invalida_400(entorno):
 
 
 def test_crear_swap_sin_turno_en_horario_400(entorno):
-    """Si no existe un turno real del solicitante en (fecha_a, franja_a) -> 400 accionable."""
+    """Si no existe un turno real del solicitante en (fecha_a, franja_a) -> 400 accionable.
+
+    Cambiamos la `franja_a` a la franja Descanso de la semana (ana no tiene turno ahi
+    porque _crear_horario solo siembra Mañana/Tarde) -> el backend responde 400.
+    """
     app, ana, beto, cli_ana, _ = _setup_basico(entorno)
     cuerpo = _payload_swap(ana, beto, app)
-    # Cambiamos la franja a una en la que ana NO trabaja ese dia (su turno es la otra).
-    cuerpo["franja_a"] = (
-        "vespertino" if cuerpo["franja_a"] == "matutino" else "matutino"
-    )
-    # Pero forzamos que la nueva franja apunte al turno del OTRO miembro (no de ana).
-    # Si el turno alterno de ana ese dia es matutino/vespertino, escogemos descanso (que
-    # nunca existe para ana ese dia con 2 miembros).
-    cuerpo["franja_a"] = "descanso"
+    franjas_semana = repos.listar_franjas_semana(LUNES)
+    descanso = next(f for f in franjas_semana if f.get("es_descanso"))
+    cuerpo["franja_a"] = descanso["id"]
     r = cli_ana.post("/api/rota/swaps", json=cuerpo, headers=_ORIGIN)
     assert r.status_code == 400
 
@@ -323,15 +348,16 @@ def test_aprobar_swap_aplica_intercambio(entorno):
     assert swap["decidido_admin"]
     assert swap["respuesta_admin"] == "Aprobado, ojo con el relevo."
 
-    # Efecto en `rota_turnos_trabajo`: la franja de A pasa a B y viceversa.
+    # Efecto en `rota_turnos`: el (fecha, franja_id) de A pasa a B y viceversa.
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     turnos = token_cli.get(f"/api/rota/turnos?lunes={LUNES}").json()["turnos"]
-    # En (fecha_a, franja_a) ahora trabaja B; en (fecha_b, franja_b) ahora A.
     en_a = next(
-        t for t in turnos if t["fecha"] == cuerpo["fecha_a"] and t["franja"] == cuerpo["franja_a"]
+        t for t in turnos
+        if t["fecha"] == cuerpo["fecha_a"] and t["franja_id"] == cuerpo["franja_a"]
     )
     en_b = next(
-        t for t in turnos if t["fecha"] == cuerpo["fecha_b"] and t["franja"] == cuerpo["franja_b"]
+        t for t in turnos
+        if t["fecha"] == cuerpo["fecha_b"] and t["franja_id"] == cuerpo["franja_b"]
     )
     assert en_a["miembro_id"] == beto["id"]
     assert en_b["miembro_id"] == ana["id"]
@@ -378,7 +404,8 @@ def test_aprobar_swap_turnos_cambiados_409_con_detalle(entorno):
     token_cli = TestClient(app, headers={"Authorization": f"Bearer {TOKEN_PRUEBA}"})
     turnos = token_cli.get(f"/api/rota/turnos?lunes={LUNES}").json()["turnos"]
     turno_a = next(
-        t for t in turnos if t["fecha"] == cuerpo["fecha_a"] and t["franja"] == cuerpo["franja_a"]
+        t for t in turnos
+        if t["fecha"] == cuerpo["fecha_a"] and t["franja_id"] == cuerpo["franja_a"]
     )
     pr = token_cli.patch(
         f"/api/rota/turnos/{turno_a['id']}",

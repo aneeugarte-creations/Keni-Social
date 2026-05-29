@@ -97,19 +97,24 @@ def test_marcar_aviso_solo_primera_vez(pg):
 
 
 def test_rota_eventos_y_turnos(pg):
-    """Modelo ola back3: un turno es horario `(fecha, franja)`; NO va atado a un evento.
-
-    Eventos y turnos viven independientes. Borrar un evento NO arrastra turnos (la
-    "cobertura" es una vista DERIVADA por la API: ver test_api_rota).
+    """Modelo "franjas por semana": un turno es horario `(fecha, franja_id)`; NO va atado a
+    un evento. Eventos y turnos viven independientes. Borrar un evento NO arrastra turnos
+    (la "cobertura" es una vista DERIVADA por la API: ver test_api_rota).
     """
     ev = db.crear_evento_rota("Transmision", fecha="2026-03-01", hora="20:00")
     assert db.obtener_evento_rota(ev["id"])["titulo"] == "Transmision"
+    # Usamos el shim retrocompat `franja="vespertino"` que siembra la franja Tarde de la
+    # semana y traduce a `franja_id`. La aserción es por la franja Tarde resuelta en BD.
     turno = db.crear_turno_rota(
         "2026-W09", "2026-03-01", miembro_id="u-luis", miembro_nombre="luis",
         franja="vespertino", override=True,
     )
     assert turno["override"] is True
-    assert turno["franja"] == "vespertino"
+    assert turno["franja_id"]
+    # La franja_id apunta a "Tarde" en la semana que contiene 2026-03-01.
+    franja_def = db.obtener_franja_semana(turno["franja_id"])
+    assert franja_def is not None
+    assert franja_def["nombre"] == "Tarde"
     assert len(db.listar_turnos_rota("2026-W09")) == 1
     assert db.aprobar_semana_rota("2026-W09") == 1
     assert db.listar_turnos_rota("2026-W09")[0]["estado"] == db.ESTADO_ROTA_APROBADO
