@@ -795,7 +795,16 @@ def _construir_fuentes_confirmacion(codigo_pais: str, termino_busqueda: str) -> 
     q_limpio = termino_busqueda.strip()[:120]
     q_enc = urllib.parse.quote(q_limpio)
 
-    info_idioma = _IDIOMAS_PAIS.get(codigo_pais)
+    # _IDIOMAS_PAIS usa codigos de idioma en minusculas (ej. "th", "ja").
+    # codigo_pais es un codigo ISO 3166-1 alfa-2 en mayusculas (ej. "TH", "JP").
+    # Para la mayoria de los idiomas el codigo coincide (th/TH, ja/JP no... pero
+    # usamos el codigo de pais del _IDIOMAS_PAIS[lang]["codigo"] que es mayusculas).
+    # Hacemos busqueda inversa: idioma cuyo "codigo" coincide con codigo_pais.
+    info_idioma = None
+    for lang_code, info in _IDIOMAS_PAIS.items():
+        if info.get("codigo") == codigo_pais:
+            info_idioma = info
+            break
     query_local = info_idioma["query_local"] if info_idioma else None
     idioma_nombre = info_idioma["idioma_nombre"] if info_idioma else "local"
 
@@ -816,7 +825,9 @@ def _construir_fuentes_confirmacion(codigo_pais: str, termino_busqueda: str) -> 
         })
 
     # Fuente 2: Google News filtrado por pais/region
-    hl_param = codigo_pais.lower() if codigo_pais in _IDIOMAS_PAIS else "en"
+    # hl_param: codigo de idioma (en minusculas) para el parametro hl= de Google
+    hl_param_keys = [lc for lc, inf in _IDIOMAS_PAIS.items() if inf.get("codigo") == codigo_pais]
+    hl_param = hl_param_keys[0] if hl_param_keys else "en"
     fuentes.append({
         "descripcion": f"Google News ({codigo_pais}) para el evento",
         "url": f"https://news.google.com/search?q={q_enc}&hl={hl_param}-{codigo_pais}&gl={codigo_pais}&ceid={codigo_pais}:{hl_param}",
