@@ -22,14 +22,15 @@ function CargandoPagina() {
   );
 }
 
+/** Clave de localStorage del estado colapsado del sidebar (rail). */
+const CLAVE_SIDEBAR_COLAPSADO = "keni:sidebar-colapsado";
+
 /**
- * Título de la topbar según el path. En el launcher ("/") no hay app: "Tus apps".
- * Dentro de una app, busca el item de nav que mejor matchea (prefijo más largo) y
- * usa su etiqueta; si no, cae a la etiqueta de la app. Fuera de apps (Panel,
- * ajustes) cae a "Consola".
+ * Título de la topbar según el path. Dentro de una app, busca el item de nav que
+ * mejor matchea (prefijo más largo) y usa su etiqueta; si no, cae a la etiqueta
+ * de la app. Fuera de apps (Panel, ajustes) cae a "Consola".
  */
 function tituloDeRuta(pathname: string, apps: AppCatalogo[]): string {
-  if (pathname === "/") return "Tus apps";
   const app = appDeRuta(apps, pathname);
   if (!app) return pathname.startsWith("/panel") ? "Panel" : "Consola";
   let mejor = app.etiqueta;
@@ -54,6 +55,24 @@ function tituloDeRuta(pathname: string, apps: AppCatalogo[]): string {
 export function AppShell() {
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
+
+  // Estado colapsado del sidebar (rail de solo iconos), persistido en
+  // localStorage para que sobreviva al refresco. Inicializa leyéndolo (lazy).
+  const [colapsado, setColapsado] = React.useState<boolean>(() => {
+    try {
+      return localStorage.getItem(CLAVE_SIDEBAR_COLAPSADO) === "1";
+    } catch {
+      return false;
+    }
+  });
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_SIDEBAR_COLAPSADO, colapsado ? "1" : "0");
+    } catch {
+      // localStorage no disponible (modo privado / SSR): el estado vive en memoria.
+    }
+  }, [colapsado]);
+  const alternarColapsado = React.useCallback(() => setColapsado((v) => !v), []);
 
   // Hidrata la caché de límites de caracteres desde la fuente única del backend
   // (`GET /api/limites`, #112). Mientras carga, `metaRed().limite` usa la semilla
@@ -84,23 +103,17 @@ export function AppShell() {
 
   const titulo = tituloDeRuta(location.pathname, apps);
 
-  // El sidebar se muestra DENTRO de una app y en `/panel` (dashboard global),
-  // pero NO en el launcher `/` (catálogo): allí solo van el avatar/topbar + las
-  // tarjetas. Todo lo que no sea la raíz exacta tiene scope que mostrar (una app
-  // o Panel global), así que basta con ocultarlo en `/`.
-  const mostrarSidebar = location.pathname !== "/";
-
+  // El sidebar se muestra SIEMPRE ahora: ya no hay launcher `/` sin barra. Las
+  // apps viven dentro del sidebar como grupos de acordeón.
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      {/* Sidebar fijo (escritorio). No se monta en el launcher `/`. */}
-      {mostrarSidebar && (
-        <aside className="hidden md:block">
-          <Sidebar />
-        </aside>
-      )}
+      {/* Sidebar fijo (escritorio). En rail (colapsado) queda estrecho. */}
+      <aside className="hidden md:block">
+        <Sidebar colapsado={colapsado} onToggleColapsar={alternarColapsado} />
+      </aside>
 
-      {/* Sidebar deslizable (movil). */}
-      {mostrarSidebar && menuAbierto && (
+      {/* Sidebar deslizable (movil). Siempre completo (sin rail en móvil). */}
+      {menuAbierto && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div
             className="absolute inset-0 bg-black/60"
@@ -115,17 +128,15 @@ export function AppShell() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60 lg:px-6">
-          {mostrarSidebar && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="md:hidden"
-              aria-label={menuAbierto ? "Cerrar menú" : "Abrir menú"}
-              onClick={() => setMenuAbierto((v) => !v)}
-            >
-              {menuAbierto ? <X /> : <Menu />}
-            </Button>
-          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden"
+            aria-label={menuAbierto ? "Cerrar menú" : "Abrir menú"}
+            onClick={() => setMenuAbierto((v) => !v)}
+          >
+            {menuAbierto ? <X /> : <Menu />}
+          </Button>
 
           {/* Marca (solo movil; en escritorio vive en el sidebar). */}
           <div className="md:hidden">

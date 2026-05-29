@@ -1,0 +1,1 @@
+import{a9 as s,T as t,p as e}from"./index-D83X9wGW.js";import{T as a}from"./TabsHub-inKUZJdr.js";function n(){return s.jsxs(s.Fragment,{children:[s.jsx(a,{items:t,etiquetaAria:"Pestañas de Agentes"}),s.jsx(e,{})]})}export{n as default};
