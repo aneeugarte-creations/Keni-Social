@@ -2451,3 +2451,38 @@ export interface CuerpoActualizarUsuario {
   /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
   marcas?: string[];
 }
+
+// --- Catálogo de apps (ADR 0005 · GET /api/catalogo) ------------------------
+// El sidebar se hidrata de aquí: el backend declara las apps ACTIVAS (según flags)
+// y sus entradas de navegación. El icono llega como STRING (nombre de icono lucide)
+// y el frontend lo resuelve a un componente vía un mapa en `navegacion.ts`.
+
+/** Una entrada de navegación del sidebar tal como llega del catálogo. */
+export interface ItemNavCatalogo {
+  ruta: string;
+  etiqueta: string;
+  /** Nombre del icono lucide (p. ej. "Sparkles"); se mapea a un componente. */
+  icono: string;
+  descripcion: string;
+}
+
+/** Un bloque del sidebar (sin encabezado si `etiqueta` es ""). */
+export interface GrupoNavCatalogo {
+  etiqueta: string;
+  items: ItemNavCatalogo[];
+}
+
+/** Una app de catálogo activa (sin el shell). */
+export interface AppCatalogo {
+  id: string;
+  etiqueta: string;
+  icono: string;
+  permisos: string[];
+  rutas_frontend: string[];
+}
+
+/** Respuesta de `GET /api/catalogo`: apps activas + navegación data-driven. */
+export interface RespuestaCatalogo {
+  apps: AppCatalogo[];
+  navegacion: GrupoNavCatalogo[];
+}

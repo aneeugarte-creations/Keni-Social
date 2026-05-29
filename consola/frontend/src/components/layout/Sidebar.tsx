@@ -1,10 +1,12 @@
+import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import * as React from "react";
 import { NavLink } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
-import { navegacionParaRol } from "@/components/layout/navegacion";
+import { catalogoAGrupos, navegacionParaRol } from "@/components/layout/navegacion";
 import { useSesion } from "@/hooks/sesion-contexto";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 /** Buscador del sidebar estilo Vercel: input blanco con icono y atajo de teclado "F". */
@@ -51,7 +53,22 @@ function BuscadorSidebar() {
  */
 export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
   const { usuario } = useSesion();
-  const navegacion = navegacionParaRol(usuario?.rol === "admin");
+
+  // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo` (apps activas +
+  // entradas de nav, filtradas por los flags del backend). Mientras carga —o si la
+  // petición falla— usamos `NAVEGACION_DEFECTO` (espejo baked-in) vía el default de
+  // `navegacionParaRol`, así el sidebar nunca aparece vacío. `staleTime: Infinity`:
+  // el catálogo solo cambia con un redeploy (flags), no merece re-fetch en uso.
+  const catalogoQuery = useQuery({
+    queryKey: ["catalogo"],
+    queryFn: ({ signal }) => api.catalogo(signal),
+    staleTime: Infinity,
+  });
+
+  const grupos = catalogoQuery.data
+    ? catalogoAGrupos(catalogoQuery.data.navegacion)
+    : undefined;
+  const navegacion = navegacionParaRol(usuario?.rol === "admin", grupos);
 
   return (
     <nav

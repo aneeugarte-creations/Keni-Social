@@ -1,0 +1,46 @@
+# Manifest de la app C · Operación de equipo (ADR 0005 §C).
+#
+# Coordinación del trabajo del equipo: rota, pendientes, parrilla, programación y
+# aprobación. La PUBLICACIÓN REAL es una sub-capacidad que enciende con App Review;
+# rota/pendientes/parrilla entran ya con multiusuario (#130).
+#
+# Declarativo: lo lee `apps/registro.py`. Claves de nivel superior ANTES de `[[nav]]`.
+
+id = "operacion"
+etiqueta = "Operación"
+icono = "Send"
+flag_activacion = "KENI_APP_OPERACION"
+permisos = ["editor", "admin"]
+
+modulos_backend = [
+  "publicaciones",
+  "aprobacion",
+  "franjas",
+  "rota",
+  "tareas",
+]
+
+rutas_frontend = [
+  "/publicaciones",
+  "/parrilla",
+  "/parrilla/pendientes",
+  "/parrilla/calendario",
+]
+
+[[nav]]
+ruta = "/publicaciones"
+etiqueta = "Publicaciones"
+icono = "Send"
+descripcion = "Gestiona borradores, aprueba, programa y publica."
+grupo = "operacion"
+grupo_orden = 30
+orden = 10
+
+[[nav]]
+ruta = "/parrilla"
+etiqueta = "Parrilla"
+icono = "CalendarClock"
+descripcion = "Pendientes del equipo y calendario semanal con la rota de cobertura. Pestañas Pendientes / Calendario."
+grupo = "operacion"
+grupo_orden = 30
+orden = 20

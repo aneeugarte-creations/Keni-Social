@@ -1,8 +1,18 @@
 # Woodpecker: evals ESTATICOS de skills-copy (sin modelo, sin whisper, sin red).
 # Espejo del job `skills-copy-estatico` de .github/workflows/ci.yml.
 # Se instala keni-shared para que test_limites use la FUENTE UNICA de limites.
+# TEST SCOPING (plan §1.5): solo corre cuando cambia skills-copy o keni-shared (la
+# fuente única de límites que usan los evals), y SIEMPRE en push a `main` (el deploy
+# `depends_on: skills-copy-estatico` lo necesita) y a mano.
 when:
-  - event: [push, pull_request, manual]
+  - event: [push, pull_request]
+    path:
+      include:
+        - "skills-copy/**"
+        - "keni-shared/**"
+  - event: push
+    branch: main
+  - event: manual
 
 steps:
   - name: evals-estaticos

@@ -81,6 +81,7 @@ import type {
   RespuestaAgente,
   RespuestaAgentes,
   RespuestaCarpetas,
+  RespuestaCatalogo,
   RespuestaConectarRed,
   RespuestaConexionesRedes,
   RespuestaConexionImagen,
@@ -426,6 +427,11 @@ async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: stri
 }
 
 export const api = {
+  // --- Catálogo de apps (ADR 0005): apps activas + navegación data-driven ---
+  // El sidebar se hidrata de aquí en vez de hardcodear las entradas. Filtra por los
+  // flags de activación del backend; desactivar una app la oculta sin tocar el front.
+  catalogo: (signal?: AbortSignal) => peticion<RespuestaCatalogo>("/catalogo", { signal }),
+
   // --- Autenticación (sesión por cookie) ---
   // El login depende de la cookie de sesión que pone el backend; `api.ts` ya
   // manda las cabeceras de auth (#134) en cada petición para las mutaciones.

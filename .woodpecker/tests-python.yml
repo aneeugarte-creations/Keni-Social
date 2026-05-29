@@ -1,14 +1,30 @@
-# Woodpecker: tests de los tres paquetes Python del monorepo.
+# Woodpecker: SUITE COMPLETA de los tres paquetes Python del monorepo.
 # Espejo del job `tests-python` de .github/workflows/ci.yml.
 # keni-metricas depende de keni-shared, y consola de ambos; se instalan editables
 # en orden de dependencia para que pip resuelva el grafo local.
 #
-# Postgres efímero: el back HOSTED corre sobre Postgres, así que CI debe ejercitar ESE
-# backend (no solo SQLite local). Sin este servicio, los tests de Postgres se SALTABAN y
-# pasó desapercibido el drift de esquema en Postgres (rota_eventos sin las columnas de la
-# ola B -> 500 del calendario). Con el servicio, KENI_TEST_DATABASE_URL los activa de verdad.
+# TEST SCOPING (ADR 0005 §Test scoping · plan §1.5): esta es la suite COMPLETA. Corre
+# cuando cambia keni-shared (la base común: su contrato afecta a TODAS las apps), o el
+# mcp de métricas, o la fontanería del gateway (app.py, db, repos, motor_db…), o en
+# push a `main` (el deploy depende de este pipeline) y a mano. Los cambios acotados a
+# UNA app NO la disparan: usan su pipeline scoped (`tests-app-*`) + el contrato
+# (`fronteras`). Postgres efímero: ejercita el backend HOSTED real (no solo SQLite).
 when:
-  - event: [push, pull_request, manual]
+  # Suite completa: base común / fontanería del gateway / MCP.
+  - event: [push, pull_request]
+    path:
+      include:
+        - "keni-shared/**"
+        - "mcp-metricas/**"
+        - "consola/src/keni_consola/{app,db,motor_db,repos,migracion,cola,worker,observabilidad,seguridad,programador,marcas,redes,estados,rutas,ficheros,indice}.py"
+        - "consola/pyproject.toml"
+        - "consola/tests/conftest.py"
+        - "consola/tests/_postgres.py"
+        - ".woodpecker/tests-python.yml"
+  # En push a `main` SIEMPRE (el deploy `depends_on: tests-python` necesita que corra).
+  - event: push
+    branch: main
+  - event: manual
 
 services:
   - name: postgres

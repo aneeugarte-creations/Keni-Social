@@ -1,0 +1,27 @@
+# Woodpecker: CONTRATO de fronteras entre apps (ADR 0002 Fase A · ADR 0005 §Seams).
+# Espejo del job `fronteras` de .github/workflows/ci.yml.
+#
+# El lint de fronteras (`consola/tests/test_fronteras.py`) + el contrato del catálogo
+# (`test_catalogo.py`) son la RED DE SEGURIDAD anti-spaghetti: garantizan que ninguna
+# app importa los internals de otra (salvo seams de la allowlist) y que el catálogo
+# data-driven sigue íntegro. Es BARATO (AST + TOML puro, sin BD ni red), así que corre
+# en CUALQUIER cambio de backend: es el "+contrato" que acompaña al test scoping por
+# app (artefacto 5 del plan): toda app tocada corre SUS tests + ESTE contrato.
+when:
+  - event: [push, pull_request, manual]
+    path:
+      include:
+        - "consola/**"
+        - "keni-shared/**"
+        - "mcp-metricas/**"
+        - ".woodpecker/**"
+
+steps:
+  - name: contrato-fronteras
+    image: python:3.11
+    commands:
+      - python -m pip install --upgrade pip
+      - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
+      # Lint de fronteras + contrato del catálogo. NO necesitan Postgres (los tests del
+      # endpoint que lo requieren se SALTAN solos); este job es puro contrato estático.
+      - python -m pytest consola/tests/test_fronteras.py consola/tests/test_catalogo.py -q

@@ -1,0 +1,36 @@
+# Manifest de la app B · Métricas e inteligencia (ADR 0005 §B).
+#
+# Lectura multi-marca / multi-plataforma, consolidación y reportes. Consumidor de
+# Metricool (adapter `FuenteMetricol` detrás de `FuenteMetricas`), NO motor de
+# ingesta. Sin gating para leer.
+#
+# Declarativo: lo lee `apps/registro.py`. Las claves de nivel superior van ANTES de
+# los `[[nav]]` (regla TOML).
+
+id = "metricas"
+etiqueta = "Analíticas"
+icono = "BarChart3"
+flag_activacion = "KENI_APP_METRICAS"
+permisos = ["editor", "admin"]
+
+modulos_backend = [
+  "metricas",
+  "comercial",
+  "reporte_deportes",
+]
+
+rutas_frontend = [
+  "/analiticas",
+  "/analiticas/metricas",
+  "/analiticas/comercial",
+  "/analiticas/reporte-deportes",
+]
+
+[[nav]]
+ruta = "/analiticas"
+etiqueta = "Analíticas"
+icono = "BarChart3"
+descripcion = "Rendimiento de las cuentas, seguimiento de comercial y deck deportivo. Pestañas Métricas / Comercial / Reporte deportes."
+grupo = "dia"
+grupo_orden = 20
+orden = 40
