@@ -223,6 +223,7 @@ export interface Publicacion {
   revisor_nombre: string;
   revisado_en: string;
   preparado_en: string;
+  id_post_metricool: string;
   fecha_creacion: string;
   fecha_actualizacion: string;
   fecha_programada: string;

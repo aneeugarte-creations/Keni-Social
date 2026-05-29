@@ -207,7 +207,7 @@ def test_dryrun_no_llama_metricool(entorno, monkeypatch):
     pub = _pub_programada(entorno)
 
     with respx.mock(assert_all_called=False) as mock_routes:
-        mock_routes.post(_METRICOOL_URL, name="post").mock(
+        ruta = mock_routes.post(_METRICOOL_URL, name="post").mock(
             Response(200, json=_RESP_OK)
         )
         preparadas = preparar_vencidas(datetime.now())
@@ -219,7 +219,7 @@ def test_dryrun_no_llama_metricool(entorno, monkeypatch):
     assert actualizada["preparado_en"]  # estampado
     assert actualizada.get("id_post_metricool", "") == ""  # no fue a Metricool
     # El mock NO fue llamado
-    assert not mock_routes["post"].called
+    assert not ruta.called
 
 
 def test_dryrun_flag_false_no_llama_metricool(entorno, monkeypatch):
@@ -228,12 +228,12 @@ def test_dryrun_flag_false_no_llama_metricool(entorno, monkeypatch):
     pub = _pub_programada(entorno)
 
     with respx.mock(assert_all_called=False) as mock_routes:
-        mock_routes.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
+        ruta = mock_routes.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
         preparar_vencidas(datetime.now())
 
     actualizada = repos.obtener_publicacion(pub["id"])
     assert actualizada["estado"] == "programado"
-    assert not mock_routes["post"].called
+    assert not ruta.called
 
 
 # --------------------------------------------------------------------------- #
@@ -336,7 +336,7 @@ def test_sin_creds_sigue_en_programado_no_rompe_barrido(entorno, monkeypatch):
         "keni_consola.programador._creds_metricool",
         return_value=None,
     ), respx.mock(assert_all_called=False) as mc:
-        mc.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
+        ruta = mc.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
         preparadas = preparar_vencidas(datetime.now())
 
     assert preparadas == 1
@@ -346,7 +346,7 @@ def test_sin_creds_sigue_en_programado_no_rompe_barrido(entorno, monkeypatch):
     assert actualizada["preparado_en"]
     assert actualizada.get("id_post_metricool", "") == ""
     # Nunca fue a Metricool
-    assert not mc["post"].called
+    assert not ruta.called
 
 
 def test_varias_piezas_una_sin_creds_no_rompe_otras(entorno, monkeypatch):
