@@ -382,6 +382,8 @@ _CAMPOS_EDITABLES_PUBLICACION = (
     "revisado_en",
     # Preparacion por el programador (#9): marca dry-run "lista para publicar".
     "preparado_en",
+    # Publicacion real via Metricool: id del post en el scheduler de Metricool.
+    "id_post_metricool",
 )
 
 
@@ -409,6 +411,9 @@ def _publicacion_yaml(pub: dict[str, Any]) -> dict[str, Any]:
         # Marca dry-run del programador (#9): instante en que se preparo "lista para
         # publicar" (NO publica de verdad; gating en #5/#8). "" hasta que vence.
         "preparado_en": pub.get("preparado_en", "") or "",
+        # Id del post en Metricool una vez programado de verdad (KENI_PUBLICAR_REAL).
+        # "" en dry-run y en piezas legadas; nunca rompe el round-trip.
+        "id_post_metricool": pub.get("id_post_metricool", "") or "",
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],
@@ -448,6 +453,8 @@ def _parsear_publicacion(datos: dict[str, Any], marca: str, pub_id: str) -> dict
         "revisado_en": datos.get("revisado_en", "") or "",
         # Marca dry-run del programador (#9): "" hasta que el programador la prepara.
         "preparado_en": datos.get("preparado_en", "") or "",
+        # Id del post en Metricool (solo cuando KENI_PUBLICAR_REAL esta activo).
+        "id_post_metricool": datos.get("id_post_metricool", "") or "",
         "fecha_creacion": datos.get("fecha_creacion", "") or "",
         "fecha_actualizacion": datos.get("fecha_actualizacion", "") or "",
         "fecha_programada": datos.get("fecha_programada", "") or "",
@@ -476,6 +483,7 @@ def _construir_publicacion(datos: dict[str, Any]) -> dict[str, Any]:
         "revisor_nombre": datos.get("revisor_nombre") or "",
         "revisado_en": datos.get("revisado_en") or "",
         "preparado_en": datos.get("preparado_en") or "",
+        "id_post_metricool": datos.get("id_post_metricool") or "",
         "fecha_creacion": ahora,
         "fecha_actualizacion": ahora,
         "fecha_programada": datos.get("fecha_programada") or "",
