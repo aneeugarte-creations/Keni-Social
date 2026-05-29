@@ -63,6 +63,7 @@ from ..schema import (
     Periodo,
     Pieza,
     Plataforma,
+    PuntoSerie,
     ResumenMetricas,
     agregar_alcance,
     agregar_engagement,
@@ -371,3 +372,65 @@ class FuenteMetricol:
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(post, _ALIAS_URL),
         )
+
+    def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:
+        """Serie diaria del periodo (visualizaciones + interacciones) sumada entre plataformas.
+
+        Reutiliza /v2/analytics/timelines (la misma llamada del agregado) pero CONSERVA
+        los valores por dia en vez de sumarlos al total. Degrada por plataforma: si una
+        falla, se omite y la serie se arma con el resto (honestidad, como `resumen`).
+        """
+        marca = self._marca(cuenta_id)
+        desde, hasta, _ = resolver_rango(rango)
+        vis_por_dia: dict[date, int] = {}
+        int_por_dia: dict[date, int] = {}
+        for plat in self._plataformas(marca):
+            metricas = _METRICAS_RED[plat]
+            self._acumular_serie(cuenta_id, plat, metricas[_METRICA_VIS], desde, hasta, vis_por_dia)
+            self._acumular_serie(cuenta_id, plat, metricas[_METRICA_INT], desde, hasta, int_por_dia)
+        fechas = sorted(set(vis_por_dia) | set(int_por_dia))
+        return [
+            PuntoSerie(
+                fecha=f,
+                visualizaciones=vis_por_dia.get(f, 0),
+                interacciones=int_por_dia.get(f, 0),
+            )
+            for f in fechas
+        ]
+
+    def _acumular_serie(
+        self,
+        cuenta_id: str,
+        plat: Plataforma,
+        metrica: str,
+        desde: date,
+        hasta: date,
+        acc: dict[date, int],
+    ) -> None:
+        """Suma en `acc` (fecha->valor) los puntos diarios de (red, metrica). No-op si la API falla."""
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/timelines",
+                params={
+                    **self._params_base(cuenta_id),
+                    "network": _RED_METRICOOL[plat],
+                    "metric": metrica,
+                    "from": desde.isoformat() + "T00:00:00",
+                    "to": hasta.isoformat() + "T23:59:59",
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — degrada sin romper, como _metrica_plataforma
+            log.warning("metricool: serie %s/%s %s fallo: %s", plat.value, metrica, cuenta_id, e)
+            return
+        for serie in datos.get("data") or []:
+            for punto in serie.get("values", []):
+                crudo = punto.get("dateTime") or punto.get("date")
+                if not crudo:
+                    continue
+                try:
+                    f = date.fromisoformat(str(crudo)[:10])
+                except ValueError:
+                    continue
+                acc[f] = acc.get(f, 0) + _entero(punto.get("value", 0))

@@ -42,9 +42,11 @@ from . import repos
 
 _log = logging.getLogger("keni_consola.metricas_cache")
 
-# Tipos de entrada de cache (coinciden con las dos lecturas de la fachada `servicio`).
+# Tipos de entrada de cache (coinciden con las lecturas de la fachada `servicio`).
 TIPO_REPORTE = "reporte"
 TIPO_ANALISIS = "analisis"
+TIPO_PIEZAS = "piezas"
+TIPO_TENDENCIA = "tendencia"
 
 # Estado del refresco en curso (en memoria; un solo proceso del back). Lo leen el
 # endpoint /estado y lo escriben el daemon y el disparador manual.
@@ -84,7 +86,13 @@ def _calcular(tipo: str, rango: str, marca: str | None) -> dict:
     """Calcula el dict crudo de `servicio` para un combo (propaga errores de dominio)."""
     if tipo == TIPO_REPORTE:
         return servicio.construir_reporte(rango, marca)
-    return servicio.construir_analisis_diario(rango, marca)
+    if tipo == TIPO_ANALISIS:
+        return servicio.construir_analisis_diario(rango, marca)
+    if tipo == TIPO_PIEZAS:
+        return servicio.construir_analitica_piezas(rango, marca)
+    if tipo == TIPO_TENDENCIA:
+        return servicio.construir_tendencia_diaria(rango, marca)
+    raise ValueError(f"Tipo de cache desconocido: {tipo!r}.")
 
 
 def _refrescar(tipo: str, rango: str, marca: str | None) -> tuple[dict, str]:
@@ -122,14 +130,24 @@ def analisis(rango: str, marca: str | None) -> tuple[dict, str]:
     return _leer_o_calcular(TIPO_ANALISIS, rango, marca)
 
 
+def piezas(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Analitica de piezas (stats + top/peores + distribucion) desde cache (lazy fill)."""
+    return _leer_o_calcular(TIPO_PIEZAS, rango, marca)
+
+
+def tendencia(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Serie diaria del periodo desde cache (lazy fill). `(dict, generado_en)`."""
+    return _leer_o_calcular(TIPO_TENDENCIA, rango, marca)
+
+
 # --------------------------------------------------------------------------- #
 # Refresco (combo y barrido completo)                                          #
 # --------------------------------------------------------------------------- #
 
 
 def refrescar_combo(rango: str, marca: str | None) -> None:
-    """Recalcula reporte + analisis de UN combo (best-effort: loguea y sigue)."""
-    for tipo in (TIPO_REPORTE, TIPO_ANALISIS):
+    """Recalcula reporte + analisis + piezas + tendencia de UN combo (best-effort)."""
+    for tipo in (TIPO_REPORTE, TIPO_ANALISIS, TIPO_PIEZAS, TIPO_TENDENCIA):
         try:
             _refrescar(tipo, rango, marca)
         except Exception:  # noqa: BLE001 -- un combo que falla no aborta el barrido

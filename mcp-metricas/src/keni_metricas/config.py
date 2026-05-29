@@ -310,6 +310,18 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.mejores_piezas(cuenta_id, rango, n)
 
+    def serie_diaria(self, cuenta_id: str, rango: str):
+        """Delega la serie diaria si la fuente envuelta la expone (dispatch opcional).
+
+        No todas las fuentes la implementan (las 'real' compuestas no). Si la envuelta
+        no la tiene, propaga `AttributeError` para que el llamante (`servicio`) degrade a
+        serie vacia — igual que si la fuente no tuviera el metodo (no la enmascara el wrap).
+        """
+        if not hasattr(self._fuente, "serie_diaria"):
+            raise AttributeError("la fuente envuelta no expone serie_diaria")
+        self._verificar(cuenta_id)
+        return self._fuente.serie_diaria(cuenta_id, rango)
+
 
 def _fuente_metricool(cfg: Config) -> FuenteMetricas:
     """Construye `FuenteMetricol` o, sin credenciales, DEGRADA con honestidad.

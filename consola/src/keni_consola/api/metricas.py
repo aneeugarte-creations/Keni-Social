@@ -24,8 +24,10 @@ from .. import marcas, metricas_cache
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
 
-# Etiquetas legibles de cada rango.
-ETIQUETAS_RANGO = {"semana": "Semana", "mes": "Mes", "7d": "7 días", "30d": "30 días"}
+# Etiqueta legible de un rango (preset o token mes:/rango:). Delega en la fachada para
+# que presets y tokens (mes:AAAA-MM, rango:AAAA-MM-DD_AAAA-MM-DD) tengan una sola fuente.
+def _etiqueta_rango(rango: str) -> str:
+    return servicio.etiqueta_rango(rango)
 
 
 def _nombre_marca_id(cuenta_id: str, nombres: dict[str, str]) -> str:
@@ -42,7 +44,17 @@ def _nombre_marca_id(cuenta_id: str, nombres: dict[str, str]) -> str:
 
 
 def _validar_rango(rango: str) -> str:
-    return rango if rango in RANGOS_VALIDOS else "mes"
+    """Acepta presets y tokens de fecha; lo demás cae a 'mes'.
+
+    Los tokens (`mes:AAAA-MM`, `rango:AAAA-MM-DD_AAAA-MM-DD`) pasan tal cual: la fachada
+    valida su formato y lanza ValueError (→400) si está mal. Un rango basura cualquiera
+    cae a 'mes' (compat con el comportamiento previo, sin romper la vista).
+    """
+    if rango in RANGOS_VALIDOS:
+        return rango
+    if rango.startswith(("mes:", "rango:")):
+        return rango
+    return "mes"
 
 
 def _variacion_pct(a: float | None, b: float | None) -> float | None:
@@ -156,7 +168,7 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     t = rep.get("total") or {}
     return {
         "rango": rango,
-        "etiqueta_rango": ETIQUETAS_RANGO.get(rango, rango),
+        "etiqueta_rango": _etiqueta_rango(rango),
         "marca": marca or "",
         # Fuente de los datos: "muestra" (ficticios) o "real". La UI pinta un badge
         # de advertencia con esto para que no se confundan datos de muestra con
@@ -181,7 +193,7 @@ async def opciones(request: Request) -> Response:
     # La frontera con metricas habla en `id_metricas` (guion_bajo): este `id` es el
     # que viaja como `?marca=` y acota la fuente (FuenteScoped), no el id canonico.
     marcas_lista = [{"id": mid, "nombre": etiqueta} for mid, etiqueta in marcas.opciones_metricas()]
-    rangos = [{"id": r, "etiqueta": ETIQUETAS_RANGO.get(r, r)} for r in RANGOS_VALIDOS]
+    rangos = [{"id": r, "etiqueta": _etiqueta_rango(r)} for r in RANGOS_VALIDOS]
     return JSONResponse({"marcas": marcas_lista, "rangos": rangos})
 
 
@@ -217,8 +229,8 @@ async def comparar(request: Request) -> Response:
             "marca": marca or "",
             "rango_a": rango_a,
             "rango_b": rango_b,
-            "etiqueta_a": ETIQUETAS_RANGO.get(rango_a, rango_a),
-            "etiqueta_b": ETIQUETAS_RANGO.get(rango_b, rango_b),
+            "etiqueta_a": _etiqueta_rango(rango_a),
+            "etiqueta_b": _etiqueta_rango(rango_b),
             # El mas antiguo de los dos: la comparativa es tan fresca como su dato mas viejo.
             "generado_en": min(gen_a, gen_b),
             # Fuente de los datos de la comparativa: "muestra" si cualquiera de los dos
@@ -281,7 +293,7 @@ def _analisis_serializable(analisis: dict, rango: str, marca: str | None) -> dic
         }
     return {
         "rango": rango,
-        "etiqueta_rango": ETIQUETAS_RANGO.get(rango, rango),
+        "etiqueta_rango": _etiqueta_rango(rango),
         "marca": marca or "",
         # Procedencia: "muestra" (ficticios) o nombre de la fuente real. La UI pinta
         # un badge de advertencia y un aviso con esto (issue #131).
@@ -315,6 +327,49 @@ async def analisis(request: Request) -> Response:
     return JSONResponse(salida)
 
 
+async def piezas(request: Request) -> Response:
+    """GET /api/metricas/piezas: estadísticas + top 5 + peores 5 + distribución.
+
+    `?marca=` acota a una marca (sus piezas); sin marca, agrega todas (tab "Todas").
+    Servido desde cache (lazy fill); incluye `etiqueta_rango` y `generado_en`.
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = metricas_cache.piezas(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse({"error": "No se pudo generar la analítica de piezas."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def tendencia(request: Request) -> Response:
+    """GET /api/metricas/tendencia: serie diaria del periodo (visualizaciones + interacciones).
+
+    `?marca=` acota el ámbito (suma de sus cuentas); sin marca, todas. Servido desde
+    cache (lazy fill). `puntos` vacío = la fuente activa no expone serie diaria.
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = metricas_cache.tendencia(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse({"error": "No se pudo generar la tendencia."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+def _rango_opcional(raw: str | None) -> str | None:
+    """Rango para /estado y /refrescar: preset o token válido, si no None (sin combo)."""
+    if not raw:
+        return None
+    if raw in RANGOS_VALIDOS or raw.startswith(("mes:", "rango:")):
+        return raw
+    return None
+
+
 async def estado(request: Request) -> Response:
     """GET /api/metricas/estado: estado del refresco + `generado_en` del combo.
 
@@ -322,9 +377,7 @@ async def estado(request: Request) -> Response:
     reporte cacheado de ese combo, "" si aun no hay). La UI lo usa para "Actualizado
     hace X" y para saber cuando dejar de pollear (`corriendo` -> false).
     """
-    rango = request.query_params.get("rango") or None
-    if rango and rango not in RANGOS_VALIDOS:
-        rango = None
+    rango = _rango_opcional(request.query_params.get("rango"))
     marca = request.query_params.get("marca") or None
     return JSONResponse(metricas_cache.estado(rango, marca))
 
@@ -336,9 +389,7 @@ async def refrescar(request: Request) -> Response:
     sigue con el resto en segundo plano. Si ya hay un refresco corriendo, NO arranca
     otro: devuelve el estado actual. Responde 202 (aceptado, trabajo en curso).
     """
-    rango = request.query_params.get("rango") or None
-    if rango and rango not in RANGOS_VALIDOS:
-        rango = None
+    rango = _rango_opcional(request.query_params.get("rango"))
     marca = request.query_params.get("marca") or None
     estado_actual = metricas_cache.disparar_refresco(rango, marca)
     return JSONResponse(estado_actual, status_code=202)
@@ -395,6 +446,8 @@ RUTAS = [
     Route("/api/metricas/reporte", reporte, methods=["GET"]),
     Route("/api/metricas/comparar", comparar, methods=["GET"]),
     Route("/api/metricas/analisis", analisis, methods=["GET"]),
+    Route("/api/metricas/piezas", piezas, methods=["GET"]),
+    Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),
     Route("/api/metricas/refrescar", refrescar, methods=["POST"]),
     Route("/api/metricas/export.csv", export_csv, methods=["GET"]),

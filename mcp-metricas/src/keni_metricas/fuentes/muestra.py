@@ -36,6 +36,7 @@ from ..schema import (
     Periodo,
     Pieza,
     Plataforma,
+    PuntoSerie,
     ResumenMetricas,
     agregar_alcance,
     resolver_rango,
@@ -409,6 +410,33 @@ class FuenteMuestra:
         ]
         candidatas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return candidatas[:n]
+
+    def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:
+        """Serie diaria sintetica y determinista para demo/tests offline.
+
+        Reparte los totales del periodo (de `resumen`) sobre los dias con un jitter
+        sembrado por (cuenta, fecha), de forma estable entre ejecuciones. Permite que la
+        tendencia diaria pinte algo coherente sin fuente real.
+        """
+        res = self.resumen(cuenta_id, rango)
+        desde, hasta, dias = resolver_rango(rango)
+        if dias <= 0:
+            return []
+        vis_dia = res.visualizaciones / dias
+        int_dia = res.interacciones / dias
+        puntos: list[PuntoSerie] = []
+        for i in range(dias):
+            f = desde + timedelta(days=i)
+            fv = _entre(_rand(cuenta_id, f.isoformat(), "sv"), 0.7, 1.3)
+            fi = _entre(_rand(cuenta_id, f.isoformat(), "si"), 0.7, 1.3)
+            puntos.append(
+                PuntoSerie(
+                    fecha=f,
+                    visualizaciones=int(vis_dia * fv),
+                    interacciones=int(int_dia * fi),
+                )
+            )
+        return puntos
 
     def mejores_por_plataforma(
         self, cuenta_id: str, rango: str, plataformas: list[Plataforma], n: int

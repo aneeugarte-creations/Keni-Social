@@ -291,3 +291,44 @@ def test_fuente_resuelve_credenciales_distintas_por_marca():
     assert por_token["TOK_CS"].url.params.get("blogId") == "blogCS"
     assert por_token["TOK_UNO"].url.params.get("userId") == "222"
     assert por_token["TOK_UNO"].url.params.get("blogId") == "blogUNO"
+
+
+@respx.mock
+def test_serie_diaria_suma_por_dia():
+    """serie_diaria conserva los valores por día (vis+int) y los suma por fecha."""
+    def responder(request: httpx.Request) -> httpx.Response:
+        metric = request.url.params.get("metric")
+        base = {"impressions": 1000, "interactions": 50}.get(metric, 0)
+        return httpx.Response(
+            200,
+            json={
+                "data": [
+                    {
+                        "metric": metric,
+                        "values": [
+                            {"dateTime": "2026-05-20T00:00:00", "value": base},
+                            {"dateTime": "2026-05-21T00:00:00", "value": base * 2},
+                        ],
+                    }
+                ]
+            },
+        )
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        puntos = _fuente(cli).serie_diaria("claro_sports", RANGO)
+
+    assert [str(p.fecha) for p in puntos] == ["2026-05-20", "2026-05-21"]
+    assert puntos[0].visualizaciones == 1000 and puntos[0].interacciones == 50
+    assert puntos[1].visualizaciones == 2000 and puntos[1].interacciones == 100
+
+
+@respx.mock
+def test_serie_diaria_degrada_si_falla():
+    """Si la API falla, la serie sale vacía (no inventa días)."""
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(
+        return_value=httpx.Response(500, json={"error": "boom"})
+    )
+    with httpx.Client() as cli:
+        puntos = _fuente(cli).serie_diaria("claro_sports", RANGO)
+    assert puntos == []

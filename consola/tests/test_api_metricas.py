@@ -154,3 +154,42 @@ def test_refrescar_responde_202_y_completa(cliente):
         time.sleep(0.02)
     assert est["corriendo"] is False
     assert est["ultimo_error"] == ""
+
+
+def test_piezas_devuelve_estadisticas_y_top(cliente):
+    r = cliente.get("/api/metricas/piezas?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["cuenta"] == "claro_sports"
+    assert data["total"] > 0
+    assert len(data["top"]) == 5 and len(data["peores"]) == 5
+    assert data["engagement"]["media"] is not None
+    assert data["generado_en"]
+    assert data["etiqueta_rango"]
+
+
+def test_piezas_global_sin_marca(cliente):
+    r = cliente.get("/api/metricas/piezas?rango=mes")
+    assert r.status_code == 200
+    assert r.json()["cuenta"] is None
+
+
+def test_tendencia_serie_diaria(cliente):
+    r = cliente.get("/api/metricas/tendencia?rango=rango:2026-05-01_2026-05-07&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert len(data["puntos"]) == 7
+    assert data["puntos"][0]["fecha"] == "2026-05-01"
+    assert data["generado_en"]
+
+
+def test_piezas_acepta_token_mes(cliente):
+    r = cliente.get("/api/metricas/piezas?rango=mes:2026-05&marca=claro_sports")
+    assert r.status_code == 200
+    assert r.json()["periodo"]["desde"] == "2026-05-01"
+
+
+def test_token_mal_formado_devuelve_400(cliente):
+    # token con prefijo válido pero formato inválido => la fachada lanza ValueError => 400.
+    r = cliente.get("/api/metricas/piezas?rango=mes:2026-99")
+    assert r.status_code == 400

@@ -254,6 +254,102 @@ class EstadoMetricas(TypedDict):
     generado_en: str
 
 
+class PeriodoMetricas(TypedDict):
+    """Ventana de fechas (ISO) de un periodo de métricas."""
+
+    desde: str
+    hasta: str
+
+
+class EstadisticasNumericas(TypedDict):
+    """Resumen estadístico de una serie (engagement o visualizaciones por pieza).
+
+    Todos los campos salvo `n` son `null` cuando no hay datos suficientes (la
+    desviación necesita n>=2): la UI distingue "0" de "sin dato".
+    """
+
+    n: int
+    media: float | None
+    mediana: float | None
+    p25: float | None
+    p75: float | None
+    minimo: float | None
+    maximo: float | None
+    desviacion: float | None
+
+
+class PiezaMetrica(TypedDict):
+    """Una pieza/video del periodo (fila de top/peores)."""
+
+    id: str
+    plataforma: str
+    titulo: str
+    # publicado: fecha ISO (AAAA-MM-DD).
+    publicado: str
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+    # url: puede no existir según la fuente/plataforma.
+    url: str | None
+
+
+class DistribucionBucket(TypedDict):
+    """Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin))."""
+
+    etiqueta: str
+    inicio: float
+    # fin: null = tramo abierto superior ("10%+").
+    fin: float | None
+    n: int
+
+
+class AnaliticaPiezas(TypedDict):
+    """Respuesta de `GET /api/metricas/piezas`: estadísticas + top/peores + distribución.
+
+    `cuenta` es `null` cuando agrega todas las marcas (tab "Todas"). Coste 0 de API:
+    se construye sobre las piezas que el reporte ya descarga del periodo.
+    """
+
+    # cuenta: id_metricas de la marca, o null = todas.
+    cuenta: str | None
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    total: int
+    fuente: str
+    engagement: EstadisticasNumericas
+    visualizaciones: EstadisticasNumericas
+    top: list[PiezaMetrica]
+    peores: list[PiezaMetrica]
+    distribucion: list[DistribucionBucket]
+    generado_en: str
+
+
+class PuntoSerie(TypedDict):
+    """Un día de la serie temporal: totales del día."""
+
+    # fecha: ISO (AAAA-MM-DD).
+    fecha: str
+    visualizaciones: int
+    interacciones: int
+
+
+class TendenciaDiaria(TypedDict):
+    """Respuesta de `GET /api/metricas/tendencia`: evolución diaria del periodo.
+
+    `puntos` vacío = la fuente activa no expone serie diaria (degradación honesta).
+    """
+
+    # cuenta: id_metricas de la marca, o null = todas.
+    cuenta: str | None
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    fuente: str
+    puntos: list[PuntoSerie]
+    generado_en: str
+
+
 # --------------------------------------------------------------------------- #
 # Paginacion — envelope aditivo comun a los listados pesados (#121)            #
 # --------------------------------------------------------------------------- #
@@ -680,6 +776,14 @@ MODELOS = [
     AnalisisDiario,
     # Estado del refresco de la cache de métricas (botón Actualizar + polling).
     EstadoMetricas,
+    # Analítica de piezas (estadísticas + top/peores + distribución) y tendencia diaria.
+    PeriodoMetricas,
+    EstadisticasNumericas,
+    PiezaMetrica,
+    DistribucionBucket,
+    AnaliticaPiezas,
+    PuntoSerie,
+    TendenciaDiaria,
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,

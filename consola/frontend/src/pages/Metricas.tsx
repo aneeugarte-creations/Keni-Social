@@ -13,11 +13,13 @@ import type { OpcionesMetricas } from "@/types";
 import { AnalisisDiario } from "./metricas/AnalisisDiario";
 import { BotonActualizar } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
-import { MARCA_TODAS, SelectorMarca, SelectorRango } from "./metricas/Controles";
+import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./metricas/Controles";
 import { Descargas } from "./metricas/Descargas";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { Kpis } from "./metricas/Kpis";
+import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
 import { TablaCuentas } from "./metricas/TablaCuentas";
+import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
 
 /** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
 const ETIQUETA_TODAS = "Todas las marcas";
@@ -119,7 +121,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         generadoEn={reporteQuery.data?.generado_en}
       />
       <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} />
-      <SelectorRango rangos={rangos} valor={rango} onCambio={setRango} />
+      <SelectorTiempo rangos={rangos} valor={rango} onCambio={setRango} />
     </div>
   );
 
@@ -159,8 +161,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               narrativa va arriba para que el día a día empiece por la lectura,
               no por la tabla (principio UX #1: el veredicto primero). */}
           <AnalisisDiario marcaActual={marca} rangoActual={rango} />
+          <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
           <TablaCuentas cuentas={reporteQuery.data.cuentas} fuente={reporteQuery.data.fuente} />
+          <PiezasAnalitica opciones={opciones} rangoActual={rango} />
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>
       )}

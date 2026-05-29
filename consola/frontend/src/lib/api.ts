@@ -12,9 +12,11 @@ import type {
   AgenteDetalle,
   AnalisisDiario,
   CompararMetricas,
+  AnaliticaPiezas,
   CuerpoConectarAgente,
   CuerpoCrearAgente,
   EstadoMetricas,
+  TendenciaDiaria,
   CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPlantilla,
@@ -1113,6 +1115,12 @@ export const api = {
   ) => peticion<CompararMetricas>(`/metricas/comparar${query(params)}`, { signal }),
   metricasAnalisis: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<AnalisisDiario>(`/metricas/analisis${query(params)}`, { signal }),
+  // Analítica de piezas: estadísticas + top 5 + peores 5 + distribución del periodo.
+  metricasPiezas: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<AnaliticaPiezas>(`/metricas/piezas${query(params)}`, { signal }),
+  // Serie diaria del periodo (visualizaciones + interacciones) para la tendencia.
+  metricasTendencia: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<TendenciaDiaria>(`/metricas/tendencia${query(params)}`, { signal }),
   // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
   metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),

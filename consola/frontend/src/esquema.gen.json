@@ -663,6 +663,334 @@
         "generado_en"
       ]
     },
+    "PeriodoMetricas": {
+      "type": "object",
+      "title": "PeriodoMetricas",
+      "properties": {
+        "desde": {
+          "type": "string"
+        },
+        "hasta": {
+          "type": "string"
+        }
+      },
+      "description": "Ventana de fechas (ISO) de un periodo de métricas.",
+      "required": [
+        "desde",
+        "hasta"
+      ]
+    },
+    "EstadisticasNumericas": {
+      "type": "object",
+      "title": "EstadisticasNumericas",
+      "properties": {
+        "n": {
+          "type": "integer"
+        },
+        "media": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mediana": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "p25": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "p75": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maximo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "desviacion": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Resumen estadístico de una serie (engagement o visualizaciones por pieza).\n\nTodos los campos salvo `n` son `null` cuando no hay datos suficientes (la\ndesviación necesita n>=2): la UI distingue \"0\" de \"sin dato\".",
+      "required": [
+        "n",
+        "media",
+        "mediana",
+        "p25",
+        "p75",
+        "minimo",
+        "maximo",
+        "desviacion"
+      ]
+    },
+    "PiezaMetrica": {
+      "type": "object",
+      "title": "PiezaMetrica",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "plataforma": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "publicado": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Una pieza/video del periodo (fila de top/peores).",
+      "required": [
+        "id",
+        "plataforma",
+        "titulo",
+        "publicado",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct",
+        "url"
+      ]
+    },
+    "DistribucionBucket": {
+      "type": "object",
+      "title": "DistribucionBucket",
+      "properties": {
+        "etiqueta": {
+          "type": "string"
+        },
+        "inicio": {
+          "type": "number"
+        },
+        "fin": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "n": {
+          "type": "integer"
+        }
+      },
+      "description": "Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin)).",
+      "required": [
+        "etiqueta",
+        "inicio",
+        "fin",
+        "n"
+      ]
+    },
+    "AnaliticaPiezas": {
+      "type": "object",
+      "title": "AnaliticaPiezas",
+      "properties": {
+        "cuenta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "engagement": {
+          "$ref": "#/$defs/EstadisticasNumericas"
+        },
+        "visualizaciones": {
+          "$ref": "#/$defs/EstadisticasNumericas"
+        },
+        "top": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PiezaMetrica"
+          }
+        },
+        "peores": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PiezaMetrica"
+          }
+        },
+        "distribucion": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DistribucionBucket"
+          }
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/piezas`: estadísticas + top/peores + distribución.\n\n`cuenta` es `null` cuando agrega todas las marcas (tab \"Todas\"). Coste 0 de API:\nse construye sobre las piezas que el reporte ya descarga del periodo.",
+      "required": [
+        "cuenta",
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "total",
+        "fuente",
+        "engagement",
+        "visualizaciones",
+        "top",
+        "peores",
+        "distribucion",
+        "generado_en"
+      ]
+    },
+    "PuntoSerie": {
+      "type": "object",
+      "title": "PuntoSerie",
+      "properties": {
+        "fecha": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        }
+      },
+      "description": "Un día de la serie temporal: totales del día.",
+      "required": [
+        "fecha",
+        "visualizaciones",
+        "interacciones"
+      ]
+    },
+    "TendenciaDiaria": {
+      "type": "object",
+      "title": "TendenciaDiaria",
+      "properties": {
+        "cuenta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "puntos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PuntoSerie"
+          }
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/tendencia`: evolución diaria del periodo.\n\n`puntos` vacío = la fuente activa no expone serie diaria (degradación honesta).",
+      "required": [
+        "cuenta",
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "fuente",
+        "puntos",
+        "generado_en"
+      ]
+    },
     "Paginacion": {
       "type": "object",
       "title": "Paginacion",
@@ -1582,6 +1910,27 @@
     },
     {
       "$ref": "#/$defs/EstadoMetricas"
+    },
+    {
+      "$ref": "#/$defs/PeriodoMetricas"
+    },
+    {
+      "$ref": "#/$defs/EstadisticasNumericas"
+    },
+    {
+      "$ref": "#/$defs/PiezaMetrica"
+    },
+    {
+      "$ref": "#/$defs/DistribucionBucket"
+    },
+    {
+      "$ref": "#/$defs/AnaliticaPiezas"
+    },
+    {
+      "$ref": "#/$defs/PuntoSerie"
+    },
+    {
+      "$ref": "#/$defs/TendenciaDiaria"
     },
     {
       "$ref": "#/$defs/Paginacion"

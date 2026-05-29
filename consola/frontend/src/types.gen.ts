@@ -184,6 +184,93 @@ export interface EstadoMetricas {
   generado_en: string;
 }
 /**
+ * Ventana de fechas (ISO) de un periodo de métricas.
+ */
+export interface PeriodoMetricas {
+  desde: string;
+  hasta: string;
+}
+/**
+ * Resumen estadístico de una serie (engagement o visualizaciones por pieza).
+ *
+ * Todos los campos salvo `n` son `null` cuando no hay datos suficientes (la
+ * desviación necesita n>=2): la UI distingue "0" de "sin dato".
+ */
+export interface EstadisticasNumericas {
+  n: number;
+  media: number | null;
+  mediana: number | null;
+  p25: number | null;
+  p75: number | null;
+  minimo: number | null;
+  maximo: number | null;
+  desviacion: number | null;
+}
+/**
+ * Una pieza/video del periodo (fila de top/peores).
+ */
+export interface PiezaMetrica {
+  id: string;
+  plataforma: string;
+  titulo: string;
+  publicado: string;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  url: string | null;
+}
+/**
+ * Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin)).
+ */
+export interface DistribucionBucket {
+  etiqueta: string;
+  inicio: number;
+  fin: number | null;
+  n: number;
+}
+/**
+ * Respuesta de `GET /api/metricas/piezas`: estadísticas + top/peores + distribución.
+ *
+ * `cuenta` es `null` cuando agrega todas las marcas (tab "Todas"). Coste 0 de API:
+ * se construye sobre las piezas que el reporte ya descarga del periodo.
+ */
+export interface AnaliticaPiezas {
+  cuenta: string | null;
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  total: number;
+  fuente: string;
+  engagement: EstadisticasNumericas;
+  visualizaciones: EstadisticasNumericas;
+  top: PiezaMetrica[];
+  peores: PiezaMetrica[];
+  distribucion: DistribucionBucket[];
+  generado_en: string;
+}
+/**
+ * Un día de la serie temporal: totales del día.
+ */
+export interface PuntoSerie {
+  fecha: string;
+  visualizaciones: number;
+  interacciones: number;
+}
+/**
+ * Respuesta de `GET /api/metricas/tendencia`: evolución diaria del periodo.
+ *
+ * `puntos` vacío = la fuente activa no expone serie diaria (degradación honesta).
+ */
+export interface TendenciaDiaria {
+  cuenta: string | null;
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  puntos: PuntoSerie[];
+  generado_en: string;
+}
+/**
  * Envelope ADITIVO de paginacion (offset-based, #121).
  *
  * Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su

@@ -153,3 +153,19 @@ def test_engagement_unotv_mas_bajo_que_claro_sports(fuente: FuenteMuestra):
     cs = fuente.resumen("claro_sports", "mes").engagement_pct
     uno = fuente.resumen("unotv", "mes").engagement_pct
     assert uno < cs
+
+
+def test_serie_diaria_muestra_determinista():
+    """La serie diaria de muestra cubre todos los días del periodo y es estable."""
+    from keni_metricas.fuentes.muestra import FuenteMuestra
+
+    f = FuenteMuestra()
+    cuenta = f.cuentas()[0].id
+    s1 = f.serie_diaria(cuenta, "semana")
+    s2 = f.serie_diaria(cuenta, "semana")
+    assert len(s1) == 7
+    # determinista: dos llamadas dan el mismo resultado.
+    assert [(p.fecha, p.visualizaciones, p.interacciones) for p in s1] == [
+        (p.fecha, p.visualizaciones, p.interacciones) for p in s2
+    ]
+    assert all(p.visualizaciones >= 0 for p in s1)

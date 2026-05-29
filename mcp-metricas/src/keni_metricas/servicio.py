@@ -27,11 +27,21 @@ from pathlib import Path
 from . import analisis_diario as _analisis
 from . import asistente
 from . import config as _config
+from . import estadisticas as _estadisticas
 from . import reporte as _reporte
 from . import reporte_deck as _deck
 from .config import FUENTES_VALIDAS, ConfigInvalida
 from .fuentes.base import CuentaNoEncontrada
-from .schema import RANGO_SEMANA_CERRADA, RANGOS_DIAS
+from .schema import (
+    RANGO_SEMANA_CERRADA,
+    RANGOS_DIAS,
+    AnaliticaPiezas,
+    Periodo,
+    PuntoSerie,
+    SerieDiaria,
+    etiqueta_rango,
+    resolver_rango,
+)
 
 # --------------------------------------------------------------------------- #
 # Constantes re-exportadas (única fuente de verdad para la Consola)            #
@@ -74,6 +84,9 @@ __all__ = [
     "reporte_json",
     "construir_analisis_diario",
     "analisis_diario_markdown",
+    "construir_analitica_piezas",
+    "construir_tendencia_diaria",
+    "etiqueta_rango",
     "construir_reporte_deportes",
     "render_reporte_deportes_pptx",
     "render_reporte_deportes_pdf",
@@ -173,6 +186,80 @@ def construir_analisis_diario(rango: str = "semana", marca: str | None = None) -
 def analisis_diario_markdown(rango: str = "semana", marca: str | None = None) -> str:
     """Análisis diario renderizado a Markdown (misma narrativa que el MCP/CLI)."""
     return _analisis.render_markdown(construir_analisis_diario(rango, marca))
+
+
+# Tope de piezas a descargar por cuenta para las estadísticas. `mejores_piezas` ya
+# trae TODAS las del periodo y recorta; con un tope alto cubrimos top/peores y la
+# distribución sin coste extra de API (la fuente de muestra crece su pool hasta n).
+_TOPE_PIEZAS = 100
+
+
+def construir_analitica_piezas(rango: str = "mes", marca: str | None = None) -> dict:
+    """Analítica de piezas del periodo: estadísticas + top 5 + peores 5 + distribución.
+
+    Coste 0 de API: reúsa las piezas que `mejores_piezas` ya descarga del periodo.
+    `marca=None` agrega todas las cuentas en alcance (tab "Todas"); con marca, esa
+    cuenta. Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera
+    de alcance). Devuelve un dict JSON-serializable (`AnaliticaPiezas`).
+    """
+    fuente = _fuente(marca)
+    desde, hasta, _ = resolver_rango(rango)
+    piezas = []
+    for c in fuente.cuentas():
+        piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
+
+    top, peores = _estadisticas.top_y_peores(piezas, n=5)
+    analitica = AnaliticaPiezas(
+        cuenta=marca,
+        rango=rango,
+        periodo=Periodo(desde=desde, hasta=hasta),
+        total=len(piezas),
+        fuente=nombre_fuente(),
+        engagement=_estadisticas.resumen_numerico(p.engagement_pct for p in piezas),
+        visualizaciones=_estadisticas.resumen_numerico(p.visualizaciones for p in piezas),
+        top=top,
+        peores=peores,
+        distribucion=_estadisticas.buckets_engagement(piezas),
+    )
+    return analitica.model_dump(mode="json")
+
+
+def construir_tendencia_diaria(rango: str = "mes", marca: str | None = None) -> dict:
+    """Serie diaria del periodo (visualizaciones + interacciones) sumada por cuenta.
+
+    Dispatch por capacidad: usa `fuente.serie_diaria` si la fuente activa la expone
+    (muestra/Metricool); si no (fuentes 'real' compuestas), degrada a serie vacía sin
+    romper. Devuelve un dict JSON-serializable (`SerieDiaria`).
+    """
+    fuente = _fuente(marca)
+    desde, hasta, _ = resolver_rango(rango)
+    serie_fn = getattr(fuente, "serie_diaria", None)
+    vis: dict = {}
+    inter: dict = {}
+    if serie_fn is not None:
+        for c in fuente.cuentas():
+            try:
+                puntos = serie_fn(c.id, rango)
+            except AttributeError:
+                # La fuente envuelta no la implementa (FuenteScoped lo propaga): degrada.
+                puntos = []
+            for p in puntos:
+                vis[p.fecha] = vis.get(p.fecha, 0) + p.visualizaciones
+                inter[p.fecha] = inter.get(p.fecha, 0) + p.interacciones
+
+    fechas = sorted(set(vis) | set(inter))
+    puntos = [
+        PuntoSerie(fecha=f, visualizaciones=vis.get(f, 0), interacciones=inter.get(f, 0))
+        for f in fechas
+    ]
+    serie = SerieDiaria(
+        cuenta=marca,
+        rango=rango,
+        periodo=Periodo(desde=desde, hasta=hasta),
+        fuente=nombre_fuente(),
+        puntos=puntos,
+    )
+    return serie.model_dump(mode="json")
 
 
 def construir_reporte_deportes(

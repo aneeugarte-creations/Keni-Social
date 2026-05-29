@@ -168,6 +168,73 @@ class Pieza(BaseModel):
     url: str | None = None
 
 
+class EstadisticasNumericas(BaseModel):
+    """Resumen estadistico de una serie de valores (engagement o visualizaciones).
+
+    Todos los campos son `None` si no hay datos suficientes (n=0; la desviacion
+    necesita n>=2). Asi la UI distingue "0" de "sin dato".
+    """
+
+    n: int
+    media: float | None = None
+    mediana: float | None = None
+    p25: float | None = None
+    p75: float | None = None
+    minimo: float | None = None
+    maximo: float | None = None
+    desviacion: float | None = None
+
+
+class DistribucionBucket(BaseModel):
+    """Un tramo del histograma de engagement (cuantas piezas caen en [inicio, fin))."""
+
+    etiqueta: str
+    inicio: float
+    # fin: None = tramo abierto superior ("10%+").
+    fin: float | None = None
+    n: int
+
+
+class AnaliticaPiezas(BaseModel):
+    """Analitica de las piezas/videos de un periodo: estadisticas + top/peores + distribucion.
+
+    `cuenta` es `None` cuando agrega todas las marcas (tab "Todas"). Coste 0 de API:
+    se construye sobre las piezas que `mejores_piezas` ya descarga del periodo.
+    """
+
+    cuenta: str | None
+    rango: str
+    periodo: Periodo
+    total: int
+    fuente: str = "desconocida"
+    engagement: EstadisticasNumericas
+    visualizaciones: EstadisticasNumericas
+    top: list[Pieza] = Field(default_factory=list)
+    peores: list[Pieza] = Field(default_factory=list)
+    distribucion: list[DistribucionBucket] = Field(default_factory=list)
+
+
+class PuntoSerie(BaseModel):
+    """Un dia de la serie temporal: totales del dia."""
+
+    fecha: date
+    visualizaciones: int
+    interacciones: int
+
+
+class SerieDiaria(BaseModel):
+    """Evolucion diaria de un periodo (suma de las cuentas en alcance).
+
+    `puntos` vacio = la fuente activa no expone serie diaria (degradacion honesta).
+    """
+
+    cuenta: str | None
+    rango: str
+    periodo: Periodo
+    fuente: str = "desconocida"
+    puntos: list[PuntoSerie] = Field(default_factory=list)
+
+
 # --- Rangos -----------------------------------------------------------------
 
 # Rangos RODANTES: ventana de N dias que TERMINA hoy (incluido). El mapa da los
@@ -200,20 +267,117 @@ def semana_cerrada(hoy: date | None = None) -> tuple[date, date]:
     return lunes_cerrado, domingo_cerrado
 
 
+# Tope de amplitud de un rango personalizado (dias). Acota el coste de API (Metricool
+# pagina/serie por dia) y evita consultas absurdas; ~1 año cubre cualquier caso real.
+MAX_DIAS_RANGO = 366
+
+# Nombres de mes en es-MX para las etiquetas legibles (indice 1-12).
+_MESES_ES: tuple[str, ...] = (
+    "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
+_MESES_ABREV_ES: tuple[str, ...] = (
+    "ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic",
+)
+
+
+def _parsear_mes(token: str) -> tuple[date, date]:
+    """`AAAA-MM` -> (primer dia, ultimo dia) de ese mes. Lanza ValueError si no es valido."""
+    try:
+        anio_s, mes_s = token.split("-")
+        anio, mes = int(anio_s), int(mes_s)
+        primero = date(anio, mes, 1)
+    except (ValueError, TypeError) as e:
+        raise ValueError(f"Mes no valido: {token!r}. Usa 'mes:AAAA-MM'.") from e
+    # ultimo dia: el dia antes del primero del mes siguiente.
+    if mes == 12:
+        ultimo = date(anio, 12, 31)
+    else:
+        ultimo = date(anio, mes + 1, 1) - timedelta(days=1)
+    return primero, ultimo
+
+
+def _parsear_rango_fechas(token: str) -> tuple[date, date]:
+    """`AAAA-MM-DD_AAAA-MM-DD` -> (desde, hasta). Valida orden y cap de amplitud."""
+    try:
+        desde_s, hasta_s = token.split("_")
+        desde = date.fromisoformat(desde_s)
+        hasta = date.fromisoformat(hasta_s)
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Rango no valido: {token!r}. Usa 'rango:AAAA-MM-DD_AAAA-MM-DD'."
+        ) from e
+    if hasta < desde:
+        raise ValueError("Rango invalido: 'hasta' es anterior a 'desde'.")
+    if (hasta - desde).days + 1 > MAX_DIAS_RANGO:
+        raise ValueError(f"Rango demasiado amplio (maximo {MAX_DIAS_RANGO} dias).")
+    return desde, hasta
+
+
 def resolver_rango(rango: str, hoy: date | None = None) -> tuple[date, date, int]:
     """Convierte un rango en `(desde, hasta, dias)`.
 
-    Rangos rodantes ('semana'|'7d'|'mes'|'30d'): ventana de N dias que termina
-    HOY. Rango anclado ('semana_cerrada'): la ultima semana natural cerrada
-    (lunes->domingo, domingo incluido), independiente del dia en que se corra.
+    Acepta:
+      - Rangos RODANTES ('semana'|'7d'|'mes'|'30d'): ventana de N dias que termina HOY.
+      - Rango ANCLADO ('semana_cerrada'): ultima semana natural cerrada (lunes->domingo).
+      - Mes concreto ('mes:AAAA-MM'): primer..ultimo dia de ese mes.
+      - Rango personalizado ('rango:AAAA-MM-DD_AAAA-MM-DD'): fechas exactas (cap MAX_DIAS_RANGO).
+
+    Como toda la cadena (fuentes, Metricool, historico) ya trabaja con `desde/hasta`,
+    estos tokens fluyen sin tocar nada mas: el token string es tambien la clave de cache.
     """
     hoy = hoy or date.today()
     clave = (rango or "").lower().strip()
     if clave == RANGO_SEMANA_CERRADA:
         desde, hasta = semana_cerrada(hoy)
         return desde, hasta, (hasta - desde).days + 1
+    if clave.startswith("mes:"):
+        desde, hasta = _parsear_mes(clave[len("mes:"):])
+        return desde, hasta, (hasta - desde).days + 1
+    if clave.startswith("rango:"):
+        desde, hasta = _parsear_rango_fechas(clave[len("rango:"):])
+        return desde, hasta, (hasta - desde).days + 1
     dias = RANGOS_DIAS.get(clave)
     if dias is None:
         validos = ", ".join(sorted(RANGOS_VALIDOS))
-        raise ValueError(f"Rango no valido: {rango!r}. Usa uno de: {validos}.")
+        raise ValueError(
+            f"Rango no valido: {rango!r}. Usa uno de: {validos}, o 'mes:AAAA-MM' / "
+            f"'rango:AAAA-MM-DD_AAAA-MM-DD'."
+        )
     return hoy - timedelta(days=dias - 1), hoy, dias
+
+
+# Etiquetas legibles de los presets (las de tokens se calculan al vuelo).
+_ETIQUETAS_PRESET: dict[str, str] = {
+    "semana": "Última semana",
+    "7d": "Últimos 7 días",
+    "mes": "Último mes",
+    "30d": "Últimos 30 días",
+    RANGO_SEMANA_CERRADA: "Semana cerrada",
+}
+
+
+def etiqueta_rango(rango: str) -> str:
+    """Etiqueta legible en es-MX de un rango (preset o token mes:/rango:).
+
+    Ejemplos: 'mes:2026-05' -> 'Mayo 2026'; 'rango:2026-05-01_2026-05-31' ->
+    '1–31 may 2026'; 'rango:2026-04-28_2026-05-03' -> '28 abr – 3 may 2026'.
+    """
+    clave = (rango or "").lower().strip()
+    if clave.startswith("mes:"):
+        primero, _ = _parsear_mes(clave[len("mes:"):])
+        return f"{_MESES_ES[primero.month - 1].capitalize()} {primero.year}"
+    if clave.startswith("rango:"):
+        desde, hasta = _parsear_rango_fechas(clave[len("rango:"):])
+        if desde.month == hasta.month and desde.year == hasta.year:
+            return f"{desde.day}–{hasta.day} {_MESES_ABREV_ES[desde.month - 1]} {desde.year}"
+        if desde.year == hasta.year:
+            return (
+                f"{desde.day} {_MESES_ABREV_ES[desde.month - 1]} – "
+                f"{hasta.day} {_MESES_ABREV_ES[hasta.month - 1]} {desde.year}"
+            )
+        return (
+            f"{desde.day} {_MESES_ABREV_ES[desde.month - 1]} {desde.year} – "
+            f"{hasta.day} {_MESES_ABREV_ES[hasta.month - 1]} {hasta.year}"
+        )
+    return _ETIQUETAS_PRESET.get(clave, rango)
