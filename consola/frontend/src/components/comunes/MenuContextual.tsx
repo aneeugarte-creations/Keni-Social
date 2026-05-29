@@ -45,9 +45,16 @@ function esSeparador(e: EntradaMenuContextual): e is SeparadorMenuContextual {
 export function MenuContextual({
   children,
   items,
+  disparador = "contextmenu",
 }: {
   children: React.ReactNode;
   items: EntradaMenuContextual[];
+  /**
+   * Qué evento abre el menú. `contextmenu` (default) preserva el comportamiento histórico
+   * de right-click; `click` lo dispara con left-click; `ambos` acepta cualquiera de los
+   * dos. Útil cuando el chip debe responder al toque primario sin botón derecho.
+   */
+  disparador?: "contextmenu" | "click" | "ambos";
 }) {
   const [pos, setPos] = React.useState<PosicionMenu | null>(null);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -73,9 +80,17 @@ export function MenuContextual({
     setPos({ x: e.clientX, y: e.clientY });
   }
 
+  const usaContextMenu = disparador === "contextmenu" || disparador === "ambos";
+  const usaClick = disparador === "click" || disparador === "ambos";
+
   return (
     <>
-      <div onContextMenu={alAbrir}>{children}</div>
+      <div
+        onContextMenu={usaContextMenu ? alAbrir : undefined}
+        onClick={usaClick ? alAbrir : undefined}
+      >
+        {children}
+      </div>
       {pos && (
         <div
           ref={menuRef}

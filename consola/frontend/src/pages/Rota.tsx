@@ -685,11 +685,6 @@ function Calendario({
   // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
   const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
 
-  // Modo edición: si admin, arranca apagado. Los botones de CRUD (dropdown por celda, menú
-  // contextual del chip, copiar/aprobar/despublicar/franjas/plantilla) sólo se muestran
-  // cuando está activo. Evita clics accidentales y mantiene la vista limpia por defecto.
-  const [modoEdicion, setModoEdicion] = React.useState(false);
-
   // Resaltado one-shot de la celda objetivo cuando llegamos desde Cobertura. La
   // celda se identifica por `franja_id`: el prelleno legado trae el nombre de la
   // franja (Mañana/Tarde/Descanso) y aquí lo resolvemos contra las franjas vivas.
@@ -898,9 +893,10 @@ function Calendario({
   const inicio = semana?.inicio ?? coberturaQ.data?.inicio ?? dias[0] ?? "";
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
-  // `editable` requiere admin + modo edición + semana no aprobada. Los CMs no admin
-  // siempre ven la vista en solo-lectura; el admin debe pulsar "Editar" explícitamente.
-  const editable = esAdmin && modoEdicion && !semana?.aprobada;
+  // `editable` requiere admin + semana no aprobada. Los CMs no admin siempre ven la vista
+  // en solo-lectura. La edición es inline: click en el chip abre el menú (Editar/Duplicar/
+  // Eliminar); click en "Sin turno asignado" o "Sin cubrir" abre el dropdown.
+  const editable = esAdmin && !semana?.aprobada;
   const cargando =
     coberturaQ.isPending ||
     turnosQ.isPending ||
@@ -928,17 +924,7 @@ function Calendario({
               Borrador
             </Badge>
           ) : null}
-          {esAdmin && !modoEdicion && (
-            <Button
-              variant="outline"
-              onClick={() => setModoEdicion(true)}
-              title="Activa el modo edición para añadir/quitar personas y publicar"
-            >
-              <Pencil className="h-4 w-4" />
-              Editar
-            </Button>
-          )}
-          {esAdmin && modoEdicion && (
+          {esAdmin && (
             <>
               <Button
                 variant="outline"
@@ -991,14 +977,6 @@ function Calendario({
               )}
               <BotonFranjasDeSemana lunes={lunes} />
               <BotonConfigFranjas />
-              <Button
-                variant="ghost"
-                onClick={() => setModoEdicion(false)}
-                title="Salir del modo edición"
-              >
-                <X className="h-4 w-4" />
-                Salir
-              </Button>
             </>
           )}
           <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
@@ -1109,7 +1087,6 @@ function Calendario({
                           </span>
                         </div>
                         {dias.map((fecha) => {
-                          const finde = esFinDeSemana(fecha);
                           const recuadros =
                             recuadrosPorCelda.get(`${franja.id}|${fecha}`) ?? [];
                           const resaltada =
@@ -1124,48 +1101,25 @@ function Calendario({
                               .filter((r) => !r.sinCubrir && r.miembro_id)
                               .map((r) => r.miembro_id),
                           );
-                          const cmsDisponibles = cms.filter((m) => !yaEnCelda.has(m.id));
+                          const cmsDisponibles = cms.filter(
+                            (m) => !yaEnCelda.has(m.id),
+                          );
                           return (
-                            <div
+                            <CeldaDeRejilla
                               key={`${franja.id}-${fecha}`}
-                              className={cn(
-                                "flex min-h-[8rem] flex-col gap-2 border-l p-2",
-                                finde && "bg-amber-50/20 dark:bg-amber-950/5",
-                                resaltada && "ring-2 ring-amber-400 ring-inset",
-                              )}
-                            >
-                              {recuadros.length === 0 && !editable ? (
-                                <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/60">
-                                  {franja.es_descanso ? "—" : "Sin turno asignado"}
-                                </div>
-                              ) : (
-                                recuadros.map((rec) => (
-                                  <RecuadroPersonaCalendario
-                                    key={`${rec.miembro_id}-${rec.sinCubrir ? "sin" : "ok"}`}
-                                    recuadro={rec}
-                                    franja={franja}
-                                    equipo={equipo}
-                                    ausencia={
-                                      rec.sinCubrir
-                                        ? undefined
-                                        : ausenciaDe(rec.miembro_id, fecha)
-                                    }
-                                    editable={editable}
-                                    onEditarEvento={(e) => setEventoSeleccionado(e)}
-                                    onCambio={invalidar}
-                                  />
-                                ))
-                              )}
-                              {editable && (
-                                <DropdownAnadirPersona
-                                  lunes={lunes}
-                                  fecha={fecha}
-                                  franja={franja}
-                                  cmsDisponibles={cmsDisponibles}
-                                  onCambio={invalidar}
-                                />
-                              )}
-                            </div>
+                              lunes={lunes}
+                              fecha={fecha}
+                              franja={franja}
+                              recuadros={recuadros}
+                              equipo={equipo}
+                              cmsDisponibles={cmsDisponibles}
+                              editable={editable}
+                              resaltada={resaltada}
+                              finde={esFinDeSemana(fecha)}
+                              ausenciaDe={ausenciaDe}
+                              onEditarEvento={(e) => setEventoSeleccionado(e)}
+                              onCambio={invalidar}
+                            />
                           );
                         })}
                       </div>
@@ -1192,6 +1146,93 @@ function Calendario({
 }
 
 /**
+ * Una celda (franja × día) de la rejilla. Mantiene estado local para abrir el dropdown
+ * desde dos puntos de entrada: el propio trigger del dropdown al pie de la celda y el
+ * recuadro "Sin cubrir" cuando hay eventos sin coverage. La separación a componente es
+ * lo que permite tener `useState` por celda sin polucionar el padre con un Map.
+ */
+function CeldaDeRejilla({
+  lunes,
+  fecha,
+  franja,
+  recuadros,
+  equipo,
+  cmsDisponibles,
+  editable,
+  resaltada,
+  finde,
+  ausenciaDe,
+  onEditarEvento,
+  onCambio,
+}: {
+  lunes: string;
+  fecha: string;
+  franja: FranjaSemana;
+  recuadros: RecuadroPersona[];
+  equipo: MiembroRota[];
+  cmsDisponibles: MiembroRota[];
+  editable: boolean;
+  resaltada: boolean;
+  finde: boolean;
+  ausenciaDe: (miembroId: string, fecha: string) => AusenciaRota | undefined;
+  onEditarEvento: (evento: EventoRota) => void;
+  onCambio: () => void;
+}) {
+  // Cada vez que sube, el dropdown del pie se abre. Se usa para que un click en el header
+  // del recuadro "Sin cubrir" abra el dropdown sin necesitar pasar refs.
+  const [pedidoAbrir, setPedidoAbrir] = React.useState(0);
+  const placeholderDropdown =
+    recuadros.length === 0
+      ? franja.es_descanso
+        ? "—"
+        : "Sin turno asignado"
+      : "Añadir persona";
+  return (
+    <div
+      className={cn(
+        "flex min-h-[8rem] flex-col gap-2 border-l p-2",
+        finde && "bg-amber-50/20 dark:bg-amber-950/5",
+        resaltada && "ring-2 ring-amber-400 ring-inset",
+      )}
+    >
+      {recuadros.length === 0 && !editable && (
+        <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/60">
+          {franja.es_descanso ? "—" : "Sin turno asignado"}
+        </div>
+      )}
+      {recuadros.map((rec) => (
+        <RecuadroPersonaCalendario
+          key={`${rec.miembro_id}-${rec.sinCubrir ? "sin" : "ok"}`}
+          recuadro={rec}
+          franja={franja}
+          equipo={equipo}
+          ausencia={
+            rec.sinCubrir ? undefined : ausenciaDe(rec.miembro_id, fecha)
+          }
+          editable={editable}
+          onEditarEvento={onEditarEvento}
+          onCambio={onCambio}
+          onClickHeaderSinCubrir={
+            editable ? () => setPedidoAbrir((n) => n + 1) : undefined
+          }
+        />
+      ))}
+      {editable && (
+        <DropdownAnadirPersona
+          lunes={lunes}
+          fecha={fecha}
+          franja={franja}
+          cmsDisponibles={cmsDisponibles}
+          onCambio={onCambio}
+          placeholder={placeholderDropdown}
+          pedidoAbrir={pedidoAbrir}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
  * Un recuadro por persona dentro de una celda día-franja del calendario fusionado. La
  * cabecera del recuadro reutiliza `ChipTurnoCM`: cuando `editable=true` y el recuadro
  * representa a una persona real (no "Sin cubrir"), expone el menú contextual de CRUD
@@ -1206,6 +1247,7 @@ function RecuadroPersonaCalendario({
   editable,
   onEditarEvento,
   onCambio,
+  onClickHeaderSinCubrir,
 }: {
   recuadro: RecuadroPersona;
   franja: FranjaSemana;
@@ -1216,6 +1258,11 @@ function RecuadroPersonaCalendario({
   editable: boolean;
   onEditarEvento: (evento: EventoRota) => void;
   onCambio: () => void;
+  /**
+   * Cuando el recuadro es "Sin cubrir" y el padre quiere abrir el dropdown al hacer
+   * click en su header, pasa este callback. Solo lo recibe el header sinCubrir.
+   */
+  onClickHeaderSinCubrir?: () => void;
 }) {
   const esDescanso = franja.es_descanso;
   const estilo = recuadro.sinCubrir
@@ -1227,9 +1274,20 @@ function RecuadroPersonaCalendario({
     <div className={`flex flex-col gap-1 rounded-md border p-1.5 text-xs ${estilo}`}>
       <div className="flex items-center justify-between gap-1">
         {recuadro.sinCubrir ? (
-          <span className="truncate font-medium text-amber-700 dark:text-amber-400">
-            Sin cubrir
-          </span>
+          onClickHeaderSinCubrir ? (
+            <button
+              type="button"
+              onClick={onClickHeaderSinCubrir}
+              className="truncate text-left font-medium text-amber-700 hover:underline dark:text-amber-400"
+              title="Asignar una persona a esta franja"
+            >
+              Sin cubrir
+            </button>
+          ) : (
+            <span className="truncate font-medium text-amber-700 dark:text-amber-400">
+              Sin cubrir
+            </span>
+          )
         ) : recuadro.turno ? (
           // `ChipTurnoCM` ya envuelve el nombre en un menú contextual (editar /
           // duplicar / borrar) + botón × para quitar el turno. Reusamos el mismo
@@ -1288,17 +1346,35 @@ function DropdownAnadirPersona({
   franja,
   cmsDisponibles,
   onCambio,
+  placeholder = "Añadir persona",
+  pedidoAbrir = 0,
 }: {
   lunes: string;
   fecha: string;
   franja: FranjaSemana;
   cmsDisponibles: MiembroRota[];
   onCambio: () => void;
+  /** Texto del trigger cuando no hay persona seleccionada. Por defecto "Añadir persona". */
+  placeholder?: string;
+  /**
+   * Contador "trigger numérico": cada incremento abre el Select programáticamente. Sirve
+   * para que el padre (la celda) abra el dropdown cuando el usuario hace click en otro
+   * elemento (p. ej. el header del recuadro "Sin cubrir") sin necesitar refs.
+   */
+  pedidoAbrir?: number;
 }) {
   const [pendienteOverride, setPendienteOverride] = React.useState<{
     miembroId: string;
     mensaje: string;
   } | null>(null);
+  const [open, setOpen] = React.useState(false);
+  // El primer render (pedidoAbrir=0) no debe abrir el dropdown; sólo los incrementos
+  // posteriores cuentan como "el padre pide abrir". Mantengo el valor anterior con un ref.
+  const ultimoPedido = React.useRef(pedidoAbrir);
+  React.useEffect(() => {
+    if (pedidoAbrir > ultimoPedido.current) setOpen(true);
+    ultimoPedido.current = pedidoAbrir;
+  }, [pedidoAbrir]);
 
   const crear = useMutation({
     mutationFn: ({ miembroId, override }: { miembroId: string; override: boolean }) => {
@@ -1333,6 +1409,8 @@ function DropdownAnadirPersona({
     <>
       <Select
         value=""
+        open={open}
+        onOpenChange={setOpen}
         onValueChange={(miembroId) => {
           if (!miembroId) return;
           crear.mutate({ miembroId, override: false });
@@ -1345,7 +1423,7 @@ function DropdownAnadirPersona({
         >
           <Plus className="h-3 w-3" />
           <span className="truncate">
-            {cmsDisponibles.length === 0 ? "Todos asignados" : "Añadir persona"}
+            {cmsDisponibles.length === 0 ? "Todos asignados" : placeholder}
           </span>
         </SelectTrigger>
         <SelectContent>
@@ -1723,19 +1801,19 @@ function ChipTurnoCM({
     },
     { separador: true },
     {
-      etiqueta: "Borrar",
+      etiqueta: "Eliminar",
       icono: Trash2,
       destructivo: true,
       onClick: () => {
-        if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`)) borrar.mutate();
+        if (window.confirm(`¿Eliminar el turno de ${turno.miembro_nombre}?`)) borrar.mutate();
       },
       deshabilitado: borrar.isPending,
     },
   ];
 
   const chip = (
-    <MenuContextual items={itemsMenu}>
-      <span className="inline-flex max-w-full cursor-default items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs">
+    <MenuContextual items={itemsMenu} disparador="ambos">
+      <span className="inline-flex max-w-full cursor-pointer items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs hover:bg-accent">
         <User className="h-3 w-3 shrink-0 text-muted-foreground" />
         <span className="truncate">{turno.miembro_nombre}</span>
         {turno.override && (
