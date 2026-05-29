@@ -130,6 +130,7 @@ def _equipo_dict(solo_cobertura: bool = True) -> list[dict[str, Any]]:
             "marcas": list(u.get("marcas") or []),
             "cargo": u.get("cargo") or "",
             "cobertura": bool(u.get("cobertura")),
+            "puede_coordinar": bool(u.get("puede_coordinar")),
         }
         for u in usuarios
     ]

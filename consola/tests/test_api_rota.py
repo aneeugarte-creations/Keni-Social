@@ -137,6 +137,27 @@ def test_equipo_incluye_marcas_de_cada_miembro(cliente):
     assert por_nombre["ng"]["marcas"] == ["nacion-gamer"]
 
 
+def test_equipo_incluye_puede_coordinar_tras_sembrar(cliente):
+    """`/api/rota/equipo?todos=1` expone `puede_coordinar` por miembro (ola "coord").
+
+    Tras `sembrar_equipo`, los tres canónicos (Elías, Ale, Mariana) quedan con
+    `puede_coordinar=True`; el resto del equipo AMX queda en `False`. El frontend
+    necesita este campo para listar candidatos a coordinador por celda en el
+    calendario (sin él, el dropdown muestra "Sin candidatos").
+    """
+    auth.sembrar_equipo()
+    r = cliente.get("/api/rota/equipo?todos=1")
+    assert r.status_code == 200
+    por_nombre = {m["nombre"]: m for m in r.json()["equipo"]}
+    for canonico in ("elias", "ale", "mariana"):
+        assert canonico in por_nombre, f"falta {canonico} tras sembrar_equipo"
+        assert por_nombre[canonico]["puede_coordinar"] is True, (
+            f"{canonico} debe tener puede_coordinar=True tras sembrar_equipo"
+        )
+    # Un miembro no canónico debe quedar en False (sanity: no se cuela el flag).
+    assert por_nombre["bernardo"]["puede_coordinar"] is False
+
+
 # --------------------------------------------------------------------------- #
 # Eventos / transmisiones (CRUD)                                              #
 # --------------------------------------------------------------------------- #

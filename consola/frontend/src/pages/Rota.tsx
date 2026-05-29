@@ -18,8 +18,10 @@ import {
   Copy,
   Download,
   HeartPulse,
+  HelpCircle,
   ImageIcon,
   Loader2,
+  MoreHorizontal,
   Pencil,
   Plane,
   Plus,
@@ -110,8 +112,9 @@ import type {
 
 const CABECERA = {
   titulo: "Parrilla y rota",
-  descripcion:
-    "Calendario de eventos (con su tipo de cobertura: transmisión, solo imágenes o no cubrir) y reprogramaciones marcadas, rota de cobertura y horarios/turnos del equipo. Tú decides qué cubre cada quien; la consola te muestra huecos, repite sábados y carga por persona, y tú apruebas antes de publicar al equipo.",
+  // Descripcion corta. La explicacion larga vivia aqui antes y comia mucho espacio
+  // visual; ahora se ofrece bajo demanda con el icono "?" del calendario.
+  descripcion: "Eventos + turnos + cobertura, semana a semana.",
 };
 
 // Marca a la que pertenece esta rota.
@@ -285,10 +288,18 @@ export default function Rota() {
       <PageHeader
         {...CABECERA}
         acciones={
-          // Hoy la rota es solo de ClaroSports. Multi-marca pendiente.
-          <Badge variant="outline" className="font-normal" data-testid="banner-marca-rota">
-            Marca: {ETIQUETA_MARCA_ROTA}
-          </Badge>
+          // Hoy la rota es solo de ClaroSports. Multi-marca pendiente. El badge
+          // se redujo (texto compacto, sin "Marca:" prefijo) para no comer la
+          // fila de acciones del calendario; el tooltip da el contexto completo.
+          <Tooltip label={`Esta rota cubre solo ${ETIQUETA_MARCA_ROTA}. Multi-marca pendiente.`}>
+            <Badge
+              variant="outline"
+              className="px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+              data-testid="banner-marca-rota"
+            >
+              {ETIQUETA_MARCA_ROTA}
+            </Badge>
+          </Tooltip>
         }
       />
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
@@ -383,6 +394,166 @@ function LeyendaCobertura() {
         por celda
       </span>
     </div>
+  );
+}
+
+/**
+ * Icono "?" con popover que muestra la leyenda completa bajo demanda. Sustituye a la
+ * `LeyendaCobertura` que vivia siempre visible bajo la cabecera del calendario y la
+ * llenaba de ruido visual; ahora la leyenda solo aparece cuando el usuario la pide.
+ *
+ * Popover autocontenido (mismo patron que IndicadorEstado): se cierra al pulsar fuera
+ * o con Escape.
+ */
+function AyudaLeyenda() {
+  const [abierto, setAbierto] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!abierto) return;
+    function alPulsarFuera(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAbierto(false);
+    }
+    function alTeclear(e: KeyboardEvent) {
+      if (e.key === "Escape") setAbierto(false);
+    }
+    document.addEventListener("mousedown", alPulsarFuera);
+    document.addEventListener("keydown", alTeclear);
+    return () => {
+      document.removeEventListener("mousedown", alPulsarFuera);
+      document.removeEventListener("keydown", alTeclear);
+    };
+  }, [abierto]);
+
+  return (
+    <div ref={ref} className="relative inline-flex">
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-muted-foreground"
+        onClick={() => setAbierto((v) => !v)}
+        aria-haspopup="dialog"
+        aria-expanded={abierto}
+        aria-label="Leyenda del calendario"
+        title="Leyenda del calendario"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </Button>
+      {abierto && (
+        <div
+          role="dialog"
+          aria-label="Leyenda del calendario"
+          className="absolute left-0 top-full z-50 mt-2 w-[20rem] max-w-[90vw] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md"
+        >
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Leyenda
+          </p>
+          <LeyendaCobertura />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Botón "Más" (overflow `⋯`) que abre un menú con las acciones secundarias del
+ * calendario: copia de semana anterior, configuración de franjas, exportes. Mantiene
+ * la primera fila reservada a las acciones primarias (Aprobar/Despublicar) y al
+ * estado de la semana, sin perder ninguna funcionalidad.
+ *
+ * Implementacion: reusa `MenuContextual` con `disparador="click"` y un trigger
+ * explicito (no hay `DropdownMenu` de shadcn instalado en el repo).
+ */
+function MenuMasAcciones({
+  esAdmin,
+  semanaAprobada,
+  onCopiarAnterior,
+  onAbrirFranjasSemana,
+  onAbrirPlantillaFranjas,
+  onExportExcel,
+  onExportCsv,
+  copiarPendiente,
+}: {
+  esAdmin: boolean;
+  semanaAprobada: boolean;
+  onCopiarAnterior: () => void;
+  onAbrirFranjasSemana: () => void;
+  onAbrirPlantillaFranjas: () => void;
+  onExportExcel: () => void;
+  onExportCsv: () => void;
+  copiarPendiente: boolean;
+}) {
+  const items: EntradaMenuContextual[] = [];
+
+  if (esAdmin) {
+    items.push({
+      etiqueta: copiarPendiente ? "Copiando…" : "Copiar semana anterior",
+      icono: Copy,
+      onClick: onCopiarAnterior,
+      deshabilitado: copiarPendiente || semanaAprobada,
+    });
+    items.push({
+      etiqueta: "Configurar franjas de esta semana",
+      icono: CalendarDays,
+      onClick: onAbrirFranjasSemana,
+    });
+    items.push({
+      etiqueta: "Plantilla por defecto de franjas",
+      icono: Clock,
+      onClick: onAbrirPlantillaFranjas,
+    });
+    items.push({ separador: true });
+  }
+  items.push({
+    etiqueta: "Descargar Excel",
+    icono: Download,
+    onClick: onExportExcel,
+  });
+  items.push({
+    etiqueta: "Descargar CSV",
+    icono: Download,
+    onClick: onExportCsv,
+  });
+
+  return (
+    <MenuContextual items={items} disparador="click">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label="Más acciones"
+        title="Más acciones"
+        data-testid="rota-mas-acciones"
+      >
+        <MoreHorizontal className="h-4 w-4" />
+      </Button>
+    </MenuContextual>
+  );
+}
+
+/**
+ * Badge de estado de la semana con tooltip que explica al usuario el significado
+ * (Borrador = no visible para el equipo; Publicada = el equipo ya la ve). Reemplaza
+ * los badges desnudos sin contexto que dejaba la cabecera anterior.
+ */
+function BadgeEstadoSemana({ aprobada, hayTurnos }: { aprobada: boolean; hayTurnos: boolean }) {
+  if (aprobada) {
+    return (
+      <Tooltip label="Visible para el equipo (publicada).">
+        <Badge variant="ok" className="font-normal">
+          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicada
+        </Badge>
+      </Tooltip>
+    );
+  }
+  if (!hayTurnos) return null;
+  return (
+    <Tooltip label="Los CMs aún no la ven; queda por aprobar y publicar.">
+      <Badge variant="secondary" className="font-normal">
+        Borrador
+      </Badge>
+    </Tooltip>
   );
 }
 
@@ -658,6 +829,11 @@ function Calendario({
 
   // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
   const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
+  // Diálogos de franjas: antes los abrían sus propios botones (BotonConfigFranjas /
+  // BotonFranjasDeSemana). Tras la slimificación de la cabecera ahora se invocan desde
+  // el menú "Más", así que la apertura se gobierna desde aquí.
+  const [abrirFranjasSemana, setAbrirFranjasSemana] = React.useState(false);
+  const [abrirPlantillaFranjas, setAbrirPlantillaFranjas] = React.useState(false);
 
   // Mutaciones de cabecera (de la antigua pestaña Turnos): aprobar / despublicar /
   // copiar semana anterior. Sin cambios funcionales — sólo migradas aquí.
@@ -855,89 +1031,89 @@ function Calendario({
 
   return (
     <div className="space-y-4">
+      {/* Cabecera SLIM (ola "cabecera-slim"): NavegadorSemana + ayuda a la izquierda; a la
+          derecha el estado de la semana, el aviso de reprogramaciones, la accion primaria
+          (Aprobar/Despublicar) y un menu "Mas" con el resto. La leyenda dejo de vivir
+          siempre visible bajo la cabecera; se ofrece bajo demanda con el icono "?". */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+        <div className="flex items-center gap-1">
+          <NavegadorSemana lunes={lunes} setLunes={setLunes} inicio={inicio} fin={fin} />
+          <AyudaLeyenda />
+        </div>
         <div className="flex flex-wrap items-center gap-2">
+          <BadgeEstadoSemana
+            aprobada={Boolean(semana?.aprobada)}
+            hayTurnos={turnos.length > 0}
+          />
           {nCambiados > 0 && (
-            <Badge variant="aviso" className="gap-1 font-normal">
-              <BellRing className="h-3.5 w-3.5" /> {nCambiados} reprogramado
-              {nCambiados === 1 ? "" : "s"} sin avisar
-            </Badge>
+            <Tooltip
+              label={`${nCambiados} evento${nCambiados === 1 ? "" : "s"} reprogramado${
+                nCambiados === 1 ? "" : "s"
+              } sin avisar al equipo.`}
+            >
+              <Badge variant="aviso" className="gap-1 font-normal">
+                <BellRing className="h-3.5 w-3.5" /> {nCambiados}
+              </Badge>
+            </Tooltip>
           )}
-          {semana?.aprobada ? (
-            <Badge variant="ok" className="font-normal">
-              <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Publicada
-            </Badge>
-          ) : turnos.length > 0 ? (
-            <Badge variant="secondary" className="font-normal">
-              Borrador
-            </Badge>
-          ) : null}
-          {esAdmin && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => copiarAnterior.mutate()}
-                disabled={copiarAnterior.isPending || semana?.aprobada}
-                title="Copia los turnos de la semana anterior con offset +7 días"
-              >
-                {copiarAnterior.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                Copiar semana anterior
-              </Button>
-              {!semana?.aprobada && (
-                <Button
-                  variant="secondary"
-                  onClick={() => aprobar.mutate()}
-                  disabled={aprobar.isPending || turnos.length === 0}
-                >
-                  {aprobar.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle2 className="h-4 w-4" />
-                  )}
-                  Aprobar y publicar
-                </Button>
+          {esAdmin && !semana?.aprobada && (
+            <Button
+              variant="secondary"
+              onClick={() => aprobar.mutate()}
+              disabled={aprobar.isPending || turnos.length === 0}
+            >
+              {aprobar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
               )}
-              {semana?.aprobada && (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "La semana volverá a ser editable. ¿Despublicar los turnos?",
-                      )
-                    )
-                      despublicar.mutate();
-                  }}
-                  disabled={despublicar.isPending}
-                  title="Volver a borrador para editar"
-                >
-                  {despublicar.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CalendarOff className="h-4 w-4" />
-                  )}
-                  Despublicar
-                </Button>
-              )}
-              <BotonFranjasDeSemana lunes={lunes} />
-              <BotonConfigFranjas />
-            </>
+              Aprobar y publicar
+            </Button>
           )}
-          <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
-            <Download className="h-4 w-4" /> Excel
-          </Button>
-          <Button variant="outline" onClick={() => api.exportarRota("csv", { lunes })}>
-            <Download className="h-4 w-4" /> CSV
-          </Button>
+          {esAdmin && semana?.aprobada && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "La semana volverá a ser editable. ¿Despublicar los turnos?",
+                  )
+                )
+                  despublicar.mutate();
+              }}
+              disabled={despublicar.isPending}
+              title="Volver a borrador para editar"
+            >
+              {despublicar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CalendarOff className="h-4 w-4" />
+              )}
+              Despublicar
+            </Button>
+          )}
+          <MenuMasAcciones
+            esAdmin={esAdmin}
+            semanaAprobada={Boolean(semana?.aprobada)}
+            copiarPendiente={copiarAnterior.isPending}
+            onCopiarAnterior={() => copiarAnterior.mutate()}
+            onAbrirFranjasSemana={() => setAbrirFranjasSemana(true)}
+            onAbrirPlantillaFranjas={() => setAbrirPlantillaFranjas(true)}
+            onExportExcel={() => api.exportarRota("xlsx", { lunes })}
+            onExportCsv={() => api.exportarRota("csv", { lunes })}
+          />
         </div>
       </div>
 
-      <LeyendaCobertura />
+      {abrirFranjasSemana && (
+        <DialogFranjasDeSemana
+          lunes={lunes}
+          onCerrar={() => setAbrirFranjasSemana(false)}
+        />
+      )}
+      {abrirPlantillaFranjas && (
+        <DialogConfigFranjas onCerrar={() => setAbrirPlantillaFranjas(false)} />
+      )}
 
       {cargando ? (
         <Skeleton className="h-[60vh] w-full rounded-md" />
@@ -2350,45 +2526,11 @@ function esFinDeSemana(fechaIso: string): boolean {
 }
 
 // --- Dialog "Configurar franjas" (solo admin) -------------------------------
-
-function BotonConfigFranjas() {
-  const [abierto, setAbierto] = React.useState(false);
-  return (
-    <>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => setAbierto(true)}
-        title="Rangos de las 2 franjas por defecto (Mañana/Tarde) al sembrar una semana nueva"
-      >
-        <Clock className="h-4 w-4" /> Plantilla por defecto
-      </Button>
-      {abierto && <DialogConfigFranjas onCerrar={() => setAbierto(false)} />}
-    </>
-  );
-}
-
-
-/** Boton "Editar franjas de esta semana" + dialog: CRUD de `rota_franjas` por semana. */
-function BotonFranjasDeSemana({ lunes }: { lunes: string }) {
-  const [abierto, setAbierto] = React.useState(false);
-  return (
-    <>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => setAbierto(true)}
-        title="Editar las franjas de esta semana concreta (añadir, renombrar, borrar)"
-      >
-        <Clock className="h-4 w-4" /> Franjas de esta semana
-      </Button>
-      {abierto && (
-        <DialogFranjasDeSemana lunes={lunes} onCerrar={() => setAbierto(false)} />
-      )}
-    </>
-  );
-}
-
+//
+// Los wrappers `BotonConfigFranjas` / `BotonFranjasDeSemana` se eliminaron al fusionar
+// sus acciones dentro del menu "Mas" del calendario (ola "cabecera-slim"): la apertura
+// la gobierna `Calendario` con estado propio (`abrirFranjasSemana` / `abrirPlantillaFranjas`)
+// y aqui solo viven los dialogs.
 
 function DialogFranjasDeSemana({
   lunes,
