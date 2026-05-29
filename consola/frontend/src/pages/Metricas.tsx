@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
 
 import { AnalisisDiario } from "./metricas/AnalisisDiario";
+import { BotonActualizar } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorMarca, SelectorRango } from "./metricas/Controles";
 import { Descargas } from "./metricas/Descargas";
@@ -105,10 +106,18 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     queryKey: ["metricas", "reporte", rango, marca_ ?? "todas"],
     queryFn: ({ signal }) => api.metricasReporte({ rango, marca: marca_ }, signal),
     enabled: Boolean(rango),
+    // El dato se sirve de la cache del backend (refresco en 2º plano); no hace falta
+    // re-pedirlo cada 30 s. El botón "Actualizar" lo invalida cuando hay dato fresco.
+    staleTime: 5 * 60_000,
   });
 
   const acciones = (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <BotonActualizar
+        rango={rango}
+        marca={marca_}
+        generadoEn={reporteQuery.data?.generado_en}
+      />
       <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} />
       <SelectorRango rangos={rangos} valor={rango} onCambio={setRango} />
     </div>

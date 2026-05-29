@@ -47,6 +47,7 @@ _TABLAS = (
     "rota_swaps_turno",
     "rota_coordinacion",
     "jobs",
+    "metricas_cache",
 )
 
 

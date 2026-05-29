@@ -87,6 +87,7 @@ export interface ReporteMetricas {
   fuente: string;
   total: TotalMetricas;
   cuentas: CuentaMetrica[];
+  generado_en: string;
 }
 export interface ComparativaMetrica {
   metrica: string;
@@ -115,6 +116,7 @@ export interface CompararMetricas {
   fuente: string;
   total: TotalComparativa;
   por_marca: ComparativaPorMarca[];
+  generado_en: string;
 }
 /**
  * Pieza que explica un movimiento (o que apuntala el siguiente paso).
@@ -165,6 +167,21 @@ export interface AnalisisDiario {
   marcas_estables: number;
   cobertura_parcial: string[];
   siguiente_paso: SiguientePasoAnalisis | null;
+  generado_en: string;
+}
+/**
+ * Respuesta de `GET /api/metricas/estado` y `POST /api/metricas/refrescar`.
+ *
+ * Estado del refresco de la cache de métricas (en 2º plano) + "última actualización"
+ * del combo consultado. La UI lo usa para el botón Actualizar (spinner mientras
+ * `corriendo`) y para el polling (deja de pollear cuando `corriendo` pasa a false).
+ */
+export interface EstadoMetricas {
+  corriendo: boolean;
+  iniciado_en: string;
+  terminado_en: string;
+  ultimo_error: string;
+  generado_en: string;
 }
 /**
  * Envelope ADITIVO de paginacion (offset-based, #121).

@@ -131,6 +131,9 @@ class ReporteMetricas(TypedDict):
     fuente: str
     total: TotalMetricas
     cuentas: list[CuentaMetrica]
+    # Cuándo se calculó este reporte (ISO). La UI lo muestra como "Actualizado hace X".
+    # Sale de la cache de métricas (refresco en 2º plano + botón Actualizar).
+    generado_en: str
 
 
 class ComparativaMetrica(TypedDict):
@@ -164,6 +167,9 @@ class CompararMetricas(TypedDict):
     fuente: str
     total: TotalComparativa
     por_marca: list[ComparativaPorMarca]
+    # La más antigua de las dos lecturas comparadas (ISO): la comparativa es tan
+    # fresca como su dato más viejo.
+    generado_en: str
 
 
 class PiezaAnalisis(TypedDict):
@@ -223,6 +229,29 @@ class AnalisisDiario(TypedDict):
     cobertura_parcial: list[str]
     # siguiente_paso: None si no hay una marca líder clara a la que apuntar.
     siguiente_paso: SiguientePasoAnalisis | None
+    # Cuándo se calculó este análisis (ISO). Igual que en ReporteMetricas: la UI lo
+    # muestra como "Actualizado hace X".
+    generado_en: str
+
+
+class EstadoMetricas(TypedDict):
+    """Respuesta de `GET /api/metricas/estado` y `POST /api/metricas/refrescar`.
+
+    Estado del refresco de la cache de métricas (en 2º plano) + "última actualización"
+    del combo consultado. La UI lo usa para el botón Actualizar (spinner mientras
+    `corriendo`) y para el polling (deja de pollear cuando `corriendo` pasa a false).
+    """
+
+    # corriendo: hay un refresco en curso (no se arranca otro hasta que termine).
+    corriendo: bool
+    # iniciado_en / terminado_en: ISO del último refresco (o "" si no aplica todavía).
+    iniciado_en: str
+    terminado_en: str
+    # ultimo_error: mensaje del último fallo de barrido, "" si fue bien.
+    ultimo_error: str
+    # generado_en: ISO de la última actualización del combo `?rango=&marca=` consultado
+    # ("" si ese combo aún no está en cache).
+    generado_en: str
 
 
 # --------------------------------------------------------------------------- #
@@ -649,6 +678,8 @@ MODELOS = [
     MovimientoAnalisis,
     SiguientePasoAnalisis,
     AnalisisDiario,
+    # Estado del refresco de la cache de métricas (botón Actualizar + polling).
+    EstadoMetricas,
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,

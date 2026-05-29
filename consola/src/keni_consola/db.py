@@ -55,6 +55,7 @@ motivo de migrar y de retirar SQLite (ADR 0004).
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -554,6 +555,23 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_jobs_estado ON jobs (estado)",
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_gen ON jobs (gen_id)",
+    # Cache de metricas (lectura instantanea + refresco en 2o plano, ver metricas_cache.py):
+    # guarda el dict CRUDO de `keni_metricas.servicio` (reporte/analisis) serializado a JSON,
+    # por combo (tipo, rango, marca). La UI lee de aqui en cada apertura (instantaneo) y un
+    # daemon + el boton "Actualizar" lo refrescan. `marca` = '' significa "todas".
+    """
+    CREATE TABLE IF NOT EXISTS metricas_cache (
+        clave        TEXT PRIMARY KEY,
+        tipo         TEXT NOT NULL,
+        rango        TEXT NOT NULL,
+        marca        TEXT NOT NULL DEFAULT '',
+        payload      TEXT NOT NULL,
+        fuente       TEXT NOT NULL DEFAULT 'muestra',
+        generado_en  TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_metricas_cache_combo "
+    "ON metricas_cache (tipo, rango, marca)",
 )
 
 
@@ -1696,6 +1714,74 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
         "interacciones": int(fila["interacciones"]),
         "alcance": int(fila["alcance"]),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Cache de metricas (combo tipo×rango×marca; lo orquesta metricas_cache.py)     #
+# --------------------------------------------------------------------------- #
+
+
+def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
+    """Lee una entrada de cache por `clave` ("{tipo}:{rango}:{marca}"), o None.
+
+    Devuelve `{payload, fuente, generado_en}` con `payload` ya deserializado (el dict
+    crudo de `keni_metricas.servicio`). None si no hay entrada o el JSON esta corrupto
+    (se trata como ausencia: el llamante recalcula).
+    """
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT payload, fuente, generado_en FROM metricas_cache WHERE clave = ?",
+            (clave,),
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return None
+    try:
+        payload = json.loads(fila["payload"])
+    except (ValueError, TypeError):
+        return None
+    return {
+        "payload": payload,
+        "fuente": fila["fuente"] or "muestra",
+        "generado_en": fila["generado_en"],
+    }
+
+
+def guardar_metricas_cache(
+    clave: str,
+    tipo: str,
+    rango: str,
+    marca: str,
+    payload: dict[str, Any],
+    fuente: str,
+    generado_en: str,
+) -> None:
+    """UPSERT de una entrada de cache (`payload` se serializa a JSON)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO metricas_cache "
+            "(clave, tipo, rango, marca, payload, fuente, generado_en) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT (clave) DO UPDATE SET "
+            "tipo = EXCLUDED.tipo, rango = EXCLUDED.rango, marca = EXCLUDED.marca, "
+            "payload = EXCLUDED.payload, fuente = EXCLUDED.fuente, "
+            "generado_en = EXCLUDED.generado_en",
+            (
+                clave,
+                tipo,
+                rango,
+                marca,
+                json.dumps(payload, ensure_ascii=False),
+                fuente,
+                generado_en,
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
 
 
 # --------------------------------------------------------------------------- #

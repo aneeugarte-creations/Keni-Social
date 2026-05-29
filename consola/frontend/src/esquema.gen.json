@@ -312,6 +312,9 @@
           "items": {
             "$ref": "#/$defs/CuentaMetrica"
           }
+        },
+        "generado_en": {
+          "type": "string"
         }
       },
       "description": "Respuesta de `GET /api/metricas/reporte`.",
@@ -321,7 +324,8 @@
         "marca",
         "fuente",
         "total",
-        "cuentas"
+        "cuentas",
+        "generado_en"
       ]
     },
     "ComparativaMetrica": {
@@ -420,6 +424,9 @@
           "items": {
             "$ref": "#/$defs/ComparativaPorMarca"
           }
+        },
+        "generado_en": {
+          "type": "string"
         }
       },
       "description": "Respuesta de `GET /api/metricas/comparar`: comparativa A vs B.",
@@ -431,7 +438,8 @@
         "etiqueta_b",
         "fuente",
         "total",
-        "por_marca"
+        "por_marca",
+        "generado_en"
       ]
     },
     "PiezaAnalisis": {
@@ -606,6 +614,9 @@
               "type": "null"
             }
           ]
+        },
+        "generado_en": {
+          "type": "string"
         }
       },
       "description": "Respuesta de `GET /api/metricas/analisis`: lectura \"qué cambió y por qué\".\n\nCapa narrativa (F6/#146) sobre las métricas: top movimientos con la(s) pieza(s)\nque los explican y un siguiente paso. `es_muestra`/`fuente` marcan cuando los\ndatos son de muestra y no reales (issue #131).",
@@ -619,7 +630,37 @@
         "movimientos_resto",
         "marcas_estables",
         "cobertura_parcial",
-        "siguiente_paso"
+        "siguiente_paso",
+        "generado_en"
+      ]
+    },
+    "EstadoMetricas": {
+      "type": "object",
+      "title": "EstadoMetricas",
+      "properties": {
+        "corriendo": {
+          "type": "boolean"
+        },
+        "iniciado_en": {
+          "type": "string"
+        },
+        "terminado_en": {
+          "type": "string"
+        },
+        "ultimo_error": {
+          "type": "string"
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/estado` y `POST /api/metricas/refrescar`.\n\nEstado del refresco de la cache de métricas (en 2º plano) + \"última actualización\"\ndel combo consultado. La UI lo usa para el botón Actualizar (spinner mientras\n`corriendo`) y para el polling (deja de pollear cuando `corriendo` pasa a false).",
+      "required": [
+        "corriendo",
+        "iniciado_en",
+        "terminado_en",
+        "ultimo_error",
+        "generado_en"
       ]
     },
     "Paginacion": {
@@ -739,6 +780,9 @@
         "preparado_en": {
           "type": "string"
         },
+        "id_post_metricool": {
+          "type": "string"
+        },
         "fecha_creacion": {
           "type": "string"
         },
@@ -779,6 +823,7 @@
         "revisor_nombre",
         "revisado_en",
         "preparado_en",
+        "id_post_metricool",
         "fecha_creacion",
         "fecha_actualizacion",
         "fecha_programada",
@@ -1534,6 +1579,9 @@
     },
     {
       "$ref": "#/$defs/AnalisisDiario"
+    },
+    {
+      "$ref": "#/$defs/EstadoMetricas"
     },
     {
       "$ref": "#/$defs/Paginacion"

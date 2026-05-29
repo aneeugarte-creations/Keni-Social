@@ -40,6 +40,7 @@ export type {
   MovimientoAnalisis,
   SiguientePasoAnalisis,
   AnalisisDiario,
+  EstadoMetricas,
   Paginacion,
   MetricasRun,
   Publicacion,

@@ -458,6 +458,29 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Cache de metricas (OPERACIONAL: Postgres via db.py; lo orquesta metricas_cache.py) #
+# --------------------------------------------------------------------------- #
+
+
+def leer_metricas_cache(clave: str) -> dict[str, Any] | None:
+    return db.leer_metricas_cache(clave)
+
+
+def guardar_metricas_cache(
+    clave: str,
+    tipo: str,
+    rango: str,
+    marca: str,
+    payload: dict[str, Any],
+    fuente: str,
+    generado_en: str,
+) -> None:
+    return db.guardar_metricas_cache(
+        clave, tipo, rango, marca, payload, fuente, generado_en
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Rota de horarios del equipo (OPERACIONAL: Postgres via db.py)                  #
 # --------------------------------------------------------------------------- #
 #

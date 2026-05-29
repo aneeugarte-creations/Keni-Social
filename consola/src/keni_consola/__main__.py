@@ -113,6 +113,15 @@ def main() -> int:
 
     iniciar_programador()
 
+    # Refresco de metricas: un hilo demonio que mantiene caliente la cache de metricas
+    # (Postgres), refrescandola al arrancar y cada N horas (def 4h, KENI_METRICAS_REFRESCO_HORAS).
+    # Asi la UI lee datos ya calculados (instantaneo) sin golpear las APIs externas en cada
+    # apertura; el boton "Actualizar" dispara un refresco extra a demanda. Vive aqui (servidor
+    # real), NO en `crear_app`, para no arrancarlo en los tests (igual que el programador).
+    from .metricas_refresco import iniciar_refresco_metricas
+
+    iniciar_refresco_metricas()
+
     # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un WORKER
     # corre `claude -p`. En el perfil LOCAL / un solo proceso, el worker corre EN PROCESO
     # (hilo daemon) para que la UX de una sola maquina no cambie (no hace falta un servicio

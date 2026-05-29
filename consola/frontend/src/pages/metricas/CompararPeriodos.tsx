@@ -84,6 +84,8 @@ export function CompararPeriodos({
     queryFn: ({ signal }) =>
       api.metricasComparar({ rango_a: rangoA, rango_b: rangoB, marca: marca_ }, signal),
     enabled: habilitado,
+    // Servido desde la cache del backend; el botón "Actualizar" lo invalida al refrescar.
+    staleTime: 5 * 60_000,
   });
 
   return (

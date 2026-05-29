@@ -64,6 +64,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_COMERCIAL_INTERVALO_SEGUNDOS  intervalo captura (s)       prioridad sobre horas
     - KENI_COMERCIAL_INTERVALO_HORAS     intervalo captura (h)       def INTERVALO_HORAS_DEF
     - KENI_PROGRAMADOR_INTERVALO_SEGUNDOS  intervalo barrido (s)     def INTERVALO_SEGUNDOS_DEF
+    - KENI_METRICAS_REFRESCO_HORAS       refresco cache metricas (h) def 4   (min 1)
 
   Imagen / secretos (`secretos`, `media`): la precedencia fichero>env vive en
   `secretos.py`; aqui se declaran solo los nombres (no hay accesor central porque el
@@ -148,6 +149,7 @@ ENV_SKILLS_MAX_SUBIDA_MB = "KENI_SKILLS_MAX_SUBIDA_MB"
 ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
 ENV_COMERCIAL_INTERVALO_HORAS = "KENI_COMERCIAL_INTERVALO_HORAS"
 ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
+ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
 
 # Publicacion real via Metricool (gate de seguridad; def OFF = dry-run).
 # `KENI_PUBLICAR_REAL=1` activa el posteo real al scheduler de Metricool en el
@@ -210,6 +212,9 @@ CLAUDE_TIMEOUT_DEF = 600
 # Cadencia de sondeo de la cola por el worker (s). Bajo para que el job arranque casi
 # al instante tras encolarse (la UX de "Generar" no debe notar el desacoplo).
 WORKER_SONDEO_SEGUNDOS_DEF = 0.5
+# Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
+# 4h da margen sin golpear las APIs externas en cada apertura.
+METRICAS_REFRESCO_HORAS_DEF = 4
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -546,6 +551,11 @@ def programador_intervalo_segundos() -> float | None:
         return max(1.0, float(crudo))
     except ValueError:
         return None
+
+
+def metricas_refresco_horas() -> int:
+    """Cada cuantas horas refresca la cache de metricas el daemon (`KENI_METRICAS_REFRESCO_HORAS`, def 4, min 1)."""
+    return _entero(ENV_METRICAS_REFRESCO_HORAS, METRICAS_REFRESCO_HORAS_DEF, minimo=1)
 
 
 def publicar_real() -> bool:

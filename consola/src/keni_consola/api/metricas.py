@@ -19,7 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from .. import marcas
+from .. import marcas, metricas_cache
 
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
@@ -189,12 +189,15 @@ async def reporte(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        rep = servicio.construir_reporte(rango, marca)
+        # Lee de cache (instantaneo); si el combo falta, lo calcula al vuelo y lo guarda.
+        rep, generado_en = metricas_cache.reporte(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo generar el reporte."}, status_code=500)
-    return JSONResponse(_reporte_serializable(rep, rango, marca))
+    salida = _reporte_serializable(rep, rango, marca)
+    salida["generado_en"] = generado_en
+    return JSONResponse(salida)
 
 
 async def comparar(request: Request) -> Response:
@@ -202,8 +205,9 @@ async def comparar(request: Request) -> Response:
     rango_b = _validar_rango(request.query_params.get("rango_b", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        rep_a = servicio.construir_reporte(rango_a, marca)
-        rep_b = servicio.construir_reporte(rango_b, marca)
+        # Ambos reportes salen de cache (lazy fill); la comparativa se computa en memoria.
+        rep_a, gen_a = metricas_cache.reporte(rango_a, marca)
+        rep_b, gen_b = metricas_cache.reporte(rango_b, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -215,6 +219,8 @@ async def comparar(request: Request) -> Response:
             "rango_b": rango_b,
             "etiqueta_a": ETIQUETAS_RANGO.get(rango_a, rango_a),
             "etiqueta_b": ETIQUETAS_RANGO.get(rango_b, rango_b),
+            # El mas antiguo de los dos: la comparativa es tan fresca como su dato mas viejo.
+            "generado_en": min(gen_a, gen_b),
             # Fuente de los datos de la comparativa: "muestra" si cualquiera de los dos
             # reportes lo es. La UI pinta un badge de advertencia con esto (N6, igual que
             # /reporte) para no confundir datos de muestra con reales (piloto AMX).
@@ -298,12 +304,44 @@ async def analisis(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "semana"))
     marca = request.query_params.get("marca") or None
     try:
-        a = servicio.construir_analisis_diario(rango, marca)
+        # Lee de cache (instantaneo); lazy fill si el combo aun no esta guardado.
+        a, generado_en = metricas_cache.analisis(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse({"error": "No se pudo generar el análisis."}, status_code=500)
-    return JSONResponse(_analisis_serializable(a, rango, marca))
+    salida = _analisis_serializable(a, rango, marca)
+    salida["generado_en"] = generado_en
+    return JSONResponse(salida)
+
+
+async def estado(request: Request) -> Response:
+    """GET /api/metricas/estado: estado del refresco + `generado_en` del combo.
+
+    `?rango=` y `?marca=` (opcionales) acotan el `generado_en` que devuelve (el del
+    reporte cacheado de ese combo, "" si aun no hay). La UI lo usa para "Actualizado
+    hace X" y para saber cuando dejar de pollear (`corriendo` -> false).
+    """
+    rango = request.query_params.get("rango") or None
+    if rango and rango not in RANGOS_VALIDOS:
+        rango = None
+    marca = request.query_params.get("marca") or None
+    return JSONResponse(metricas_cache.estado(rango, marca))
+
+
+async def refrescar(request: Request) -> Response:
+    """POST /api/metricas/refrescar: dispara un refresco en 2o plano (idempotente).
+
+    Prioriza el combo `?rango=&marca=` que se esta viendo (se recalcula primero) y
+    sigue con el resto en segundo plano. Si ya hay un refresco corriendo, NO arranca
+    otro: devuelve el estado actual. Responde 202 (aceptado, trabajo en curso).
+    """
+    rango = request.query_params.get("rango") or None
+    if rango and rango not in RANGOS_VALIDOS:
+        rango = None
+    marca = request.query_params.get("marca") or None
+    estado_actual = metricas_cache.disparar_refresco(rango, marca)
+    return JSONResponse(estado_actual, status_code=202)
 
 
 def _nombre_descarga(rango: str, marca: str | None, ext: str) -> str:
@@ -357,6 +395,8 @@ RUTAS = [
     Route("/api/metricas/reporte", reporte, methods=["GET"]),
     Route("/api/metricas/comparar", comparar, methods=["GET"]),
     Route("/api/metricas/analisis", analisis, methods=["GET"]),
+    Route("/api/metricas/estado", estado, methods=["GET"]),
+    Route("/api/metricas/refrescar", refrescar, methods=["POST"]),
     Route("/api/metricas/export.csv", export_csv, methods=["GET"]),
     Route("/api/metricas/export.md", export_md, methods=["GET"]),
     Route("/api/metricas/export.json", export_json, methods=["GET"]),

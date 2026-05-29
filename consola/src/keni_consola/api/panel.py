@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas
+from .. import marcas, metricas_cache
 from ..dominio.publicaciones import cola_de_aprobacion, proximas_programadas
 
 # Cuantas piezas programadas mostrar como "proximas" (las mas inminentes). Mantiene el
@@ -45,8 +45,9 @@ def _resumen_metricas(rango: str, marca: str | None) -> dict[str, Any]:
     no disponible en vez de romper el panel entero (el resto del dashboard sigue util).
     """
     try:
-        rep = servicio.construir_reporte(rango, marca)
-        analisis = servicio.construir_analisis_diario(rango, marca)
+        # Lee de la cache de metricas (instantaneo); lazy fill si el combo aun no esta.
+        rep, _gen = metricas_cache.reporte(rango, marca)
+        analisis, _gen_a = metricas_cache.analisis(rango, marca)
     except Exception:  # noqa: BLE001 -- el panel no debe caer por la fuente de metricas
         return {"disponible": False, "fuente": "muestra", "total": None, "picos": []}
 

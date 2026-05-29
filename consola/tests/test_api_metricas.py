@@ -8,6 +8,8 @@ de reales (riesgo operativo del piloto AMX).
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 from .conftest import _cliente
@@ -26,6 +28,8 @@ def test_reporte_expone_fuente_muestra(cliente):
     assert data["fuente"] == "muestra"
     assert "total" in data
     assert "cuentas" in data
+    # Servido desde la cache (lazy fill): la respuesta lleva cuándo se calculó.
+    assert data["generado_en"]
 
 
 def test_reporte_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
@@ -115,3 +119,38 @@ def test_analisis_rango_invalido_devuelve_400(cliente):
     r = cliente.get("/api/metricas/analisis?rango=trimestre")
     assert r.status_code == 200
     assert r.json()["fuente"] == "muestra"
+
+
+def test_analisis_y_comparar_llevan_generado_en(cliente):
+    # Igual que /reporte, las lecturas cacheadas exponen cuándo se calcularon.
+    a = cliente.get("/api/metricas/analisis?rango=semana")
+    assert a.status_code == 200
+    assert a.json()["generado_en"]
+    c = cliente.get("/api/metricas/comparar?rango_a=semana&rango_b=mes")
+    assert c.status_code == 200
+    assert c.json()["generado_en"]
+
+
+def test_estado_devuelve_contrato_y_generado_en_del_combo(cliente):
+    # Sembramos la cache del combo leyéndolo una vez.
+    rep = cliente.get("/api/metricas/reporte?rango=mes").json()
+    est = cliente.get("/api/metricas/estado?rango=mes").json()
+    assert est["corriendo"] is False
+    assert set(est) >= {"corriendo", "iniciado_en", "terminado_en", "ultimo_error", "generado_en"}
+    assert est["generado_en"] == rep["generado_en"]
+
+
+def test_refrescar_responde_202_y_completa(cliente):
+    r = cliente.post("/api/metricas/refrescar?rango=mes")
+    assert r.status_code == 202
+    cuerpo = r.json()
+    assert isinstance(cuerpo["corriendo"], bool)
+    # El barrido (fuente de muestra) termina rápido; esperamos a que acabe para no
+    # dejar un hilo escribiendo durante el teardown del test.
+    for _ in range(100):
+        est = cliente.get("/api/metricas/estado?rango=mes").json()
+        if not est["corriendo"]:
+            break
+        time.sleep(0.02)
+    assert est["corriendo"] is False
+    assert est["ultimo_error"] == ""

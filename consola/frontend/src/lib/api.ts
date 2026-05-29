@@ -14,6 +14,7 @@ import type {
   CompararMetricas,
   CuerpoConectarAgente,
   CuerpoCrearAgente,
+  EstadoMetricas,
   CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPlantilla,
@@ -1112,6 +1113,12 @@ export const api = {
   ) => peticion<CompararMetricas>(`/metricas/comparar${query(params)}`, { signal }),
   metricasAnalisis: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<AnalisisDiario>(`/metricas/analisis${query(params)}`, { signal }),
+  // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
+  metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),
+  // Dispara un refresco en 2º plano (prioriza el combo visto). Idempotente: si ya corre, no arranca otro.
+  metricasRefrescar: (params: { rango?: string; marca?: string }) =>
+    peticion<EstadoMetricas>(`/metricas/refrescar${query(params)}`, { metodo: "POST" }),
   exportarMetricas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/export.${formato}${query(params)}`),
 
