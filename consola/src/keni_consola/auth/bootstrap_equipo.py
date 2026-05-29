@@ -16,6 +16,14 @@ Cada persona tiene:
   - `marcas`    : ids canonicos de las VERTICALES a las que pertenece (relacion N:M en la
                   tabla `usuarios_marcas`). Una persona puede estar en varias
                   (Yustine: claro-sports + unotv + piso-15; Bernardo: las 5).
+  - `nombre`    : nombre HUMANO real (organigrama). Lo que se pinta en las tarjetas.
+  - `manager`   : `usuario` (login) del SUPERIOR al que reporta ("" = raiz; solo Bernardo).
+                  Define el ARBOL del organigrama. Ortogonal a `marcas`: Mariana/Ale
+                  trabajan en Claro Sports pero reportan a Bernardo, no a Elias.
+
+`nombre`/`manager_id` se siembran SOLO si estan vacios (segunda pasada), para no pisar lo
+que el admin edite desde /usuarios. Asi el organigrama queda definido de fabrica pero es
+editable y la semilla sigue siendo idempotente.
 
 Ola "feat/roles-marcas" (segunda audiencia con Bernardo):
   - Ampliacion del catalogo de cargos para reflejar el organigrama real (vertical/
@@ -50,34 +58,59 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 # Cada persona se la cambia al entrar; este valor solo vive en el seed inicial.
 PASSWORD_INICIAL = "cambiar"
 
-# Equipo real (16): (usuario, rol_permisos, cargo, cobertura, puede_coordinar, marcas).
-# Bernardo dicto el organigrama en la segunda audiencia; estas son las
+# Equipo real (16): (usuario, rol_permisos, cargo, cobertura, puede_coordinar, marcas,
+# nombre, manager). Bernardo dicto el organigrama en la segunda audiencia; estas son las
 # verticales/funciones reales por persona. `cobertura=True` = entra en la rota de turnos
 # (Claro Sports fin de semana son Tezcu+Luis+Roger+Elias; UnoTV son Lalo+Angel; Yustine
 # refuerza WhatsApp UnoTV pero entra en cobertura; Jonathan cubre Nacion Gamer).
 # `puede_coordinar=True` (ola "coord"): candidato a coordinador por celda. Hoy son tres
 # (Elias, Ale, Mariana); el admin lo decide desde /usuarios.
-EQUIPO_AMX: tuple[tuple[str, str, str, bool, bool, tuple[str, ...]], ...] = (
+#
+# `nombre` (organigrama): nombre HUMANO real para pintar las tarjetas. `manager` es el
+# `usuario` (login) del SUPERIOR al que reporta segun el organigrama dictado por Bernardo
+# ("" = raiz; solo Bernardo). Regla clave de Bernardo: "estar debajo de alguien != reportarle"
+# -> Mariana y Ale trabajan en Claro Sports pero REPORTAN a Bernardo, no a Elias; Lalo YT
+# coordina YouTube de las tres verticales y reporta a Bernardo; Yustine reporta a Lalo YT.
+# Las marcas (vertical de trabajo) y la linea de reporte (manager) son ORTOGONALES.
+EQUIPO_AMX: tuple[
+    tuple[str, str, str, bool, bool, tuple[str, ...], str, str], ...
+] = (
     ("bernardo", ROL_ADMIN, "director", False, False,
-     ("claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion")),
-    ("diana", ROL_EDITOR, "coordinador_redes", False, False, ("unotv", "piso-15", "fundacion")),
-    ("elias", ROL_EDITOR, "coordinador_redes", True, True, ("claro-sports",)),
-    ("maira", ROL_EDITOR, "gerente_podcast", False, False, ("piso-15",)),
-    ("lalo", ROL_EDITOR, "content_manager", True, False, ("unotv",)),
-    ("angel", ROL_EDITOR, "content_manager", True, False, ("unotv",)),
-    ("tezcu", ROL_EDITOR, "community_manager", True, False, ("claro-sports",)),
-    ("luis", ROL_EDITOR, "community_manager", True, False, ("claro-sports",)),
-    ("roger", ROL_EDITOR, "community_manager", True, False, ("claro-sports",)),
+     ("claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"),
+     "Bernardo Vázquez", ""),
+    ("diana", ROL_EDITOR, "coordinador_redes", False, False, ("unotv", "piso-15", "fundacion"),
+     "Diana Ramos", "bernardo"),
+    ("elias", ROL_EDITOR, "coordinador_redes", True, True, ("claro-sports",),
+     "Elías", "bernardo"),
+    ("maira", ROL_EDITOR, "gerente_podcast", False, False, ("piso-15",),
+     "Mayra Santander", "bernardo"),
+    ("lalo", ROL_EDITOR, "content_manager", True, False, ("unotv",),
+     "Eduardo Mondragón", "diana"),
+    ("angel", ROL_EDITOR, "content_manager", True, False, ("unotv",),
+     "Ángel García", "diana"),
+    ("tezcu", ROL_EDITOR, "community_manager", True, False, ("claro-sports",),
+     "Jorge Tezcuano", "elias"),
+    ("luis", ROL_EDITOR, "community_manager", True, False, ("claro-sports",),
+     "Jorge Luis Espinosa", "elias"),
+    ("roger", ROL_EDITOR, "community_manager", True, False, ("claro-sports",),
+     "Rogelio Aguilar", "elias"),
     # Daiana: NO es de ClaroSports (era un error). Es creativa de Fundacion; fuera de la
     # rota de cobertura. Esta fila es la CORRECCION explicita que motiva esta ola.
-    ("daiana", ROL_EDITOR, "creativo_vertical", False, False, ("fundacion",)),
-    ("mariana", ROL_EDITOR, "coordinador_operativo", False, True, ("claro-sports",)),
-    ("ale", ROL_EDITOR, "fotografia_qa", False, True, ("claro-sports",)),
-    ("jonathan", ROL_EDITOR, "creativo_vertical", True, False, ("nacion-gamer",)),
-    ("jose", ROL_EDITOR, "redactor", True, False, ("unotv",)),
-    ("yustine", ROL_EDITOR, "editorial_youtube", True, False, ("claro-sports", "unotv", "piso-15")),
+    ("daiana", ROL_EDITOR, "creativo_vertical", False, False, ("fundacion",),
+     "Daiana", "diana"),
+    ("mariana", ROL_EDITOR, "coordinador_operativo", False, True, ("claro-sports",),
+     "Mariana de León", "bernardo"),
+    ("ale", ROL_EDITOR, "fotografia_qa", False, True, ("claro-sports",),
+     "Alejandra (Ale)", "bernardo"),
+    ("jonathan", ROL_EDITOR, "creativo_vertical", True, False, ("nacion-gamer",),
+     "Jonathan", "diana"),
+    ("jose", ROL_EDITOR, "redactor", True, False, ("unotv",),
+     "José Rico", "diana"),
+    ("yustine", ROL_EDITOR, "editorial_youtube", True, False,
+     ("claro-sports", "unotv", "piso-15"), "Lilian Reyes (Yustine)", "laloyt"),
     ("laloyt", ROL_EDITOR, "coordinador_youtube", False, False,
-     ("claro-sports", "unotv", "piso-15", "nacion-gamer")),
+     ("claro-sports", "unotv", "piso-15", "nacion-gamer"),
+     "Eduardo Esteban López", "bernardo"),
 )
 
 # Usuarios cuyo `puede_coordinar` se sobreescribe INCONDICIONALMENTE en cada seed (ola
@@ -126,7 +159,7 @@ def sembrar_equipo() -> None:
     nuevos = 0
     actualizados = 0
     corregidos_daiana = 0
-    for usuario, _rol, cargo, cobertura, puede_coordinar_seed, marcas in EQUIPO_AMX:
+    for usuario, _rol, cargo, cobertura, puede_coordinar_seed, marcas, nombre, _mgr in EQUIPO_AMX:
         marcas_lista = list(marcas)
         if usuario in existentes:
             actual = existentes[usuario]
@@ -189,16 +222,40 @@ def sembrar_equipo() -> None:
             cargo=cargo,
             cobertura=cobertura,
             puede_coordinar=puede_coordinar_seed,
+            nombre=nombre,
             marcas=marcas_lista,
         )
         if creado is not None:
             nuevos += 1
-    if nuevos or actualizados or corregidos_daiana:
+
+    # Segunda pasada (organigrama): ya existen los 16, asi que sus ids son resolubles.
+    # Sembramos `nombre` y `manager_id` SOLO si estan vacios, para no pisar nada que el
+    # admin haya editado a mano (idempotente: la segunda corrida no cambia nada). El
+    # `manager` del seed es el `usuario` (login) del superior; lo traducimos a su id.
+    por_usuario = {u["usuario"]: u for u in listar_usuarios()}
+    organigrama = 0
+    for usuario, _rol, _cargo, _cob, _pc, _marcas, nombre, manager in EQUIPO_AMX:
+        fila = por_usuario.get(usuario)
+        if fila is None:
+            continue
+        kwargs: dict[str, object] = {}
+        if nombre and not (fila.get("nombre") or ""):
+            kwargs["nombre"] = nombre
+        if manager and not (fila.get("manager_id") or ""):
+            superior = por_usuario.get(manager)
+            if superior is not None:
+                kwargs["manager_id"] = superior["id"]
+        if kwargs:
+            actualizar_perfil(fila["id"], **kwargs)  # type: ignore[arg-type]
+            organigrama += 1
+
+    if nuevos or actualizados or corregidos_daiana or organigrama:
         _logger.info(
             "Seed equipo AMX: %d usuarios creados, %d actualizados "
             "(cargo/cobertura/puede_coordinar/marcas), "
-            "%d correctivos de Daiana aplicados.",
+            "%d correctivos de Daiana aplicados, %d con organigrama (nombre/superior).",
             nuevos,
             actualizados,
             corregidos_daiana,
+            organigrama,
         )

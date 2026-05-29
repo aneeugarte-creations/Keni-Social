@@ -2531,6 +2531,17 @@ export interface UsuarioAdmin {
   /** `true` => candidato a coordinador por celda en el calendario (ola "coord"). */
   puede_coordinar?: boolean;
   /**
+   * Nombre HUMANO (organigrama): lo que se pinta en las tarjetas. Cadena vacía en
+   * usuarios sin nombre asignado (la UI cae al `usuario`/login).
+   */
+  nombre?: string;
+  /**
+   * Id del usuario SUPERIOR al que reporta (organigrama). Cadena vacía = raíz (sin
+   * superior, p.ej. el director). Define el árbol del organigrama; es ORTOGONAL a
+   * `marcas` (una persona puede trabajar en una vertical y reportar a otra área).
+   */
+  manager_id?: string;
+  /**
    * Verticales/marcas a las que pertenece (relación N:M; ids canónicos del catálogo).
    * Siempre llega (lista vacía si no tiene marcas asignadas). Ola `feat/roles-marcas`.
    */
@@ -2547,6 +2558,8 @@ export interface CuerpoCrearUsuario {
   usuario: string;
   password: string;
   rol: RolUsuario;
+  /** Nombre humano opcional (organigrama). Si se omite, queda vacío. */
+  nombre?: string;
 }
 
 /**
@@ -2563,6 +2576,13 @@ export interface CuerpoActualizarUsuario {
   cobertura?: boolean;
   /** Candidato a coordinador por celda en el calendario (ola "coord"). */
   puede_coordinar?: boolean;
+  /** Nombre humano (organigrama); "" lo limpia. */
+  nombre?: string;
+  /**
+   * Id del superior al que reporta (organigrama); "" desliga (vuelve a raíz). Debe
+   * apuntar a un usuario existente, distinto de uno mismo y sin cerrar ciclos.
+   */
+  manager_id?: string;
   /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
   marcas?: string[];
 }

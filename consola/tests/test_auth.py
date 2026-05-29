@@ -498,11 +498,11 @@ def test_listar_usuarios_como_admin(entorno):
     nombres = {u["usuario"] for u in r.json()["usuarios"]}
     assert "jefa" in nombres
     # NUNCA se exponen salt/hash. Tras "feat/roles-marcas" la fila incluye cargo/cobertura/marcas;
-    # ola "coord" anade `puede_coordinar`.
+    # ola "coord" anade `puede_coordinar`; el organigrama anade `nombre` y `manager_id`.
     for u in r.json()["usuarios"]:
         assert set(u) == {
             "id", "usuario", "rol", "creado", "ultimo_acceso",
-            "cargo", "cobertura", "puede_coordinar", "marcas",
+            "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id", "marcas",
         }
 
 
@@ -814,6 +814,125 @@ def test_patch_sin_cambios_400(entorno):
     _login(c, "jefa", CLAVE)
     r = c.patch(f"/api/usuarios/{ed['id']}", json={}, headers=_ORIGIN)
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# 6b) Organigrama: nombre + manager_id (linea de reporte)                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_patch_cambia_nombre(entorno):
+    """El admin puede fijar el nombre HUMANO (organigrama) sin tocar otros campos."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"nombre": "  Edu Ríos  "}, headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["nombre"] == "Edu Ríos"  # se recorta (strip)
+    assert auth.obtener_usuario_por_id(ed["id"])["nombre"] == "Edu Ríos"
+
+
+def test_patch_nombre_tipo_invalido_400(entorno):
+    """`nombre` no-texto -> 400."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"nombre": 123}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_patch_asigna_manager(entorno):
+    """El admin define la linea de reporte: `manager_id` apunta a un superior existente."""
+    _crear("jefa", CLAVE, "admin")
+    dir_ = _crear("dir", CLAVE, "editor")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"manager_id": dir_["id"]}, headers=_ORIGIN)
+    assert r.status_code == 200, r.text
+    assert r.json()["manager_id"] == dir_["id"]
+    assert auth.obtener_usuario_por_id(ed["id"])["manager_id"] == dir_["id"]
+    # Desligar (volver a raiz) con cadena vacia.
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"manager_id": ""}, headers=_ORIGIN)
+    assert r.status_code == 200
+    assert r.json()["manager_id"] == ""
+
+
+def test_patch_manager_a_si_mismo_400(entorno):
+    """Una persona no puede reportarse a si misma."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"manager_id": ed["id"]}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_patch_manager_inexistente_400(entorno):
+    """Un superior que no existe -> 400."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={"manager_id": "no-existe"}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_patch_manager_ciclo_400(entorno):
+    """No se permite cerrar un ciclo en el organigrama (A->B->A)."""
+    _crear("jefa", CLAVE, "admin")
+    a = _crear("a", CLAVE, "editor")
+    b = _crear("b", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    # b reporta a a.
+    assert c.patch(
+        f"/api/usuarios/{b['id']}", json={"manager_id": a["id"]}, headers=_ORIGIN
+    ).status_code == 200
+    # Ahora intentar que a reporte a b cerraria el ciclo -> 400.
+    r = c.patch(f"/api/usuarios/{a['id']}", json={"manager_id": b["id"]}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_crear_usuario_api_con_nombre(entorno):
+    """POST /api/usuarios acepta `nombre` opcional y lo persiste."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": CLAVE, "rol": "editor", "nombre": "Nuevo Nombre"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 201, r.text
+    por_nombre = {u["usuario"]: u for u in auth.listar_usuarios()}
+    assert por_nombre["nuevo"]["nombre"] == "Nuevo Nombre"
+
+
+def test_sembrar_equipo_define_organigrama(entorno):
+    """El seed deja nombre + linea de reporte: Elias reporta a Bernardo; Tezcu a Elias."""
+    auth.sembrar_equipo()
+    por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
+    assert por_usuario["bernardo"]["nombre"] == "Bernardo Vázquez"
+    assert por_usuario["bernardo"]["manager_id"] == ""  # raiz
+    assert por_usuario["elias"]["manager_id"] == por_usuario["bernardo"]["id"]
+    assert por_usuario["tezcu"]["manager_id"] == por_usuario["elias"]["id"]
+    # Regla de Bernardo: Mariana trabaja en Claro Sports pero REPORTA a Bernardo.
+    assert por_usuario["mariana"]["manager_id"] == por_usuario["bernardo"]["id"]
+    assert por_usuario["yustine"]["manager_id"] == por_usuario["laloyt"]["id"]
+
+
+def test_sembrar_equipo_no_pisa_organigrama_editado(entorno):
+    """Idempotencia: si el admin reasigna un superior, el re-seed NO lo revierte."""
+    auth.sembrar_equipo()
+    por_usuario = {u["usuario"]: u for u in auth.listar_usuarios()}
+    # El admin mueve a Tezcu para que reporte a Bernardo (excepcion puntual).
+    auth.actualizar_perfil(por_usuario["tezcu"]["id"], manager_id=por_usuario["bernardo"]["id"])
+    auth.sembrar_equipo()  # segunda corrida no debe revertir
+    tezcu = {u["usuario"]: u for u in auth.listar_usuarios()}["tezcu"]
+    assert tezcu["manager_id"] == por_usuario["bernardo"]["id"]
 
 
 def test_catalogo_cargos_incluye_los_nuevos(entorno):

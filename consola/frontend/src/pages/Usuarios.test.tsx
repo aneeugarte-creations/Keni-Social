@@ -18,6 +18,9 @@ const USUARIOS = [
     ultimo_acceso: "2026-05-20T08:00:00",
     cargo: "director",
     cobertura: false,
+    puede_coordinar: false,
+    nombre: "Dir Admin",
+    manager_id: "",
     marcas: ["claro-sports", "unotv"],
   },
   {
@@ -28,6 +31,9 @@ const USUARIOS = [
     ultimo_acceso: null,
     cargo: "community_manager",
     cobertura: true,
+    puede_coordinar: false,
+    nombre: "Ana López",
+    manager_id: "u0",
     marcas: ["claro-sports"],
   },
 ];
@@ -117,7 +123,13 @@ function renderUsuarios() {
   );
 }
 
-describe("Usuarios · administración", () => {
+/** Abre el panel de edición de una persona pulsando su tarjeta del organigrama. */
+async function abrirPanel(nombre: RegExp) {
+  fireEvent.click(await screen.findByRole("button", { name: nombre }));
+  return screen.findByRole("dialog");
+}
+
+describe("Organigrama · administración", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -125,18 +137,17 @@ describe("Usuarios · administración", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lista los usuarios con sus columnas de organigrama", async () => {
+  it("pinta el árbol con nombres, áreas por marca y la relación de reporte", async () => {
     stubFetch();
     renderUsuarios();
 
-    expect(await screen.findByText("ana")).toBeInTheDocument();
-    expect(screen.getByText("admin")).toBeInTheDocument();
-    // Cabeceras nuevas de la ola feat/roles-marcas:
-    expect(screen.getByRole("columnheader", { name: /cargo/i })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /cobertura/i })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /marcas/i })).toBeInTheDocument();
-    // El "último acceso" nulo se muestra como guion (al menos una vez).
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    // Nombres humanos (no el login) en las tarjetas.
+    expect(await screen.findByText("Ana López")).toBeInTheDocument();
+    expect(screen.getByText("Dir Admin")).toBeInTheDocument();
+    // El área de Ana (community manager de Claro Sports) define una zona "Claro Sports".
+    expect(screen.getAllByText(/claro sports/i).length).toBeGreaterThan(0);
+    // Cada tarjeta es accionable (abre el panel de edición).
+    expect(screen.getByRole("button", { name: /editar a ana lópez/i })).toBeInTheDocument();
   });
 
   it("muestra aviso de permiso ante un 403", async () => {
@@ -144,20 +155,20 @@ describe("Usuarios · administración", () => {
     renderUsuarios();
 
     expect(await screen.findByText("No tienes permiso")).toBeInTheDocument();
-    expect(screen.queryByText("ana")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ana López")).not.toBeInTheDocument();
   });
 
-  it("crea un usuario nuevo (POST con usuario/password/rol)", async () => {
+  it("crea una persona nueva (POST con usuario/password/rol)", async () => {
     const capturas: Captura[] = [];
     stubFetch({ capturas });
     renderUsuarios();
 
-    fireEvent.click(await screen.findByRole("button", { name: /nuevo usuario/i }));
-    fireEvent.change(screen.getByLabelText("Usuario"), { target: { value: "nuevo" } });
+    fireEvent.click(await screen.findByRole("button", { name: /nueva persona/i }));
+    fireEvent.change(screen.getByLabelText("Usuario (login)"), { target: { value: "nuevo" } });
     fireEvent.change(screen.getByLabelText("Contraseña inicial"), {
       target: { value: "contrasena1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /crear usuario/i }));
+    fireEvent.click(screen.getByRole("button", { name: /crear persona/i }));
 
     await waitFor(() => {
       const alta = capturas.find((c) => c.url.endsWith("/api/usuarios") && c.metodo === "POST");
@@ -165,17 +176,16 @@ describe("Usuarios · administración", () => {
     });
   });
 
-  it("resetea la contraseña de un usuario (PATCH password)", async () => {
+  it("resetea la contraseña desde el panel (PATCH password)", async () => {
     const capturas: Captura[] = [];
     stubFetch({ capturas });
     renderUsuarios();
 
-    await screen.findByText("ana");
-    fireEvent.click(screen.getByRole("button", { name: /resetear contraseña de ana/i }));
-    fireEvent.change(screen.getByLabelText("Contraseña nueva"), {
+    const dialogo = await abrirPanel(/editar a ana lópez/i);
+    fireEvent.change(within(dialogo).getByLabelText("Nueva contraseña"), {
       target: { value: "nuevaclave1" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /guardar contraseña/i }));
+    fireEvent.click(within(dialogo).getByRole("button", { name: /resetear/i }));
 
     await waitFor(() => {
       const patch = capturas.find((c) => c.url.includes("/api/usuarios/u1") && c.metodo === "PATCH");
@@ -183,15 +193,32 @@ describe("Usuarios · administración", () => {
     });
   });
 
-  it("elimina un usuario tras confirmar", async () => {
+  it("edita una marca desde el panel (PATCH marcas)", async () => {
     const capturas: Captura[] = [];
     stubFetch({ capturas });
     renderUsuarios();
 
-    await screen.findByText("ana");
-    fireEvent.click(screen.getByRole("button", { name: /eliminar a ana/i }));
-    // Diálogo de confirmación: pulsar "Eliminar".
-    const dialogo = await screen.findByRole("dialog");
+    const dialogo = await abrirPanel(/editar a ana lópez/i);
+    // Ana tiene claro-sports; añadir UnoTV manda la lista completa.
+    fireEvent.click(within(dialogo).getByLabelText("UnoTV"));
+
+    await waitFor(() => {
+      const patch = capturas.find((c) => c.url.includes("/api/usuarios/u1") && c.metodo === "PATCH");
+      expect(patch?.body).toBeDefined();
+      expect((patch?.body as { marcas: string[] }).marcas).toEqual(
+        expect.arrayContaining(["claro-sports", "unotv"]),
+      );
+    });
+  });
+
+  it("elimina una persona tras confirmar (DELETE)", async () => {
+    const capturas: Captura[] = [];
+    stubFetch({ capturas });
+    renderUsuarios();
+
+    const dialogo = await abrirPanel(/editar a ana lópez/i);
+    fireEvent.click(within(dialogo).getByRole("button", { name: /eliminar persona/i }));
+    // Confirmación inline: pulsar "Eliminar".
     fireEvent.click(within(dialogo).getByRole("button", { name: /^eliminar$/i }));
 
     await waitFor(() => {
@@ -200,12 +227,13 @@ describe("Usuarios · administración", () => {
     });
   });
 
-  it("no permite eliminar la propia cuenta (botón deshabilitado)", async () => {
+  it("no permite eliminar la propia cuenta (acción deshabilitada)", async () => {
     stubFetch();
     renderUsuarios();
 
-    await screen.findByText("admin");
-    // El admin actual (id u0) tiene el botón de eliminar deshabilitado.
-    expect(screen.getByRole("button", { name: /eliminar a admin/i })).toBeDisabled();
+    const dialogo = await abrirPanel(/editar a dir admin/i);
+    expect(
+      within(dialogo).getByRole("button", { name: /no puedes eliminar tu propia cuenta/i }),
+    ).toBeDisabled();
   });
 });

@@ -1,0 +1,1 @@
+import{a8 as s,F as t,o as e}from"./index-Ci9PR68N.js";import{T as a}from"./TabsHub-B3g503SA.js";function o(){return s.jsxs(s.Fragment,{children:[s.jsx(a,{items:t,etiquetaAria:"Pestañas de Revisión"}),s.jsx(e,{})]})}export{o as default};

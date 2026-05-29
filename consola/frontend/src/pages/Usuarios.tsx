@@ -1,10 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  KeyRound,
   Loader2,
-  Plus,
+  Network,
   ShieldAlert,
-  Tag,
   Trash2,
   UserPlus,
   Users,
@@ -15,9 +13,9 @@ import { toast } from "sonner";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
+import "@/components/organigrama/org-tree.css";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -37,17 +35,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
+import {
+  cabezaDeArea,
+  descendientes,
+  hexAlpha,
+  hijosPorManager,
+  iniciales,
+  indexarPorId,
+  type IndiceUsuarios,
+  metaZona,
+  nombreVisible,
+  raices,
+  tamanoSubarbol,
+  ZONA_DIRECCION,
+  zonaDe,
+  zonasOrdenadas,
+} from "@/lib/organigrama";
 import {
   CARGOS_ORDENADOS,
   type CargoUsuario,
@@ -62,8 +67,10 @@ const CLAVE_USUARIOS = ["usuarios"] as const;
 const CLAVE_OPCIONES_MARCAS = ["usuarios", "opciones", "marcas"] as const;
 
 const CABECERA = {
-  titulo: "Usuarios",
-  descripcion: "Gestiona las cuentas que acceden a la consola. Solo disponible para administradores.",
+  titulo: "Organigrama",
+  descripcion:
+    "El equipo como árbol jerárquico, con cada área definida por marca. Edita una persona " +
+    "para cambiar su nombre, cargo, marcas y a quién reporta. Solo para administradores.",
 };
 
 const ROL_LABEL: Record<RolUsuario, string> = {
@@ -73,11 +80,10 @@ const ROL_LABEL: Record<RolUsuario, string> = {
 
 const ROLES: RolUsuario[] = ["editor", "admin"];
 
-/** Valor "centinela" del Select de cargo cuando aún no hay cargo asignado.
- *  shadcn/ui Select no admite SelectItem con value="", de ahí el centinela. */
+/** Centinelas de Select (shadcn no admite SelectItem con value=""). */
 const SIN_CARGO = "__sin_cargo__";
+const SIN_SUPERIOR = "__sin_superior__";
 
-/** Longitud mínima de contraseña (espejo de la pantalla de cambio). */
 const MIN_PASSWORD = 8;
 
 function mensajeError(error: unknown): string {
@@ -94,11 +100,11 @@ function formatearFecha(iso: string | null): string {
 }
 
 /**
- * Página de administración de usuarios (solo admin). Lista las cuentas y permite
- * crear, cambiar el rol, editar cargo/cobertura/marcas (organigrama AMX, ola
- * `feat/roles-marcas`), resetear la contraseña y eliminar (con confirmación).
- * Las rutas del backend devuelven 403 si el usuario no es admin: aunque el nav
- * ya oculta esta página, mostramos un aviso claro si se llega por URL directa.
+ * Página del Organigrama (rediseño de "Usuarios"). Pinta el equipo como un árbol top-down
+ * con las áreas coloreadas por marca, derivadas de la cabeza de cada área. Al hacer clic en
+ * una persona se abre un panel para editar su perfil (nombre, cargo, rol, superior, marcas,
+ * cobertura, coordinación), resetear su contraseña o eliminarla. El backend devuelve 403 si
+ * quien entra no es admin (el nav ya oculta la página, pero avisamos si se llega por URL).
  */
 export default function Usuarios() {
   const { usuario: actual } = useSesion();
@@ -107,9 +113,7 @@ export default function Usuarios() {
     queryFn: ({ signal }) => api.usuarios(signal),
   });
 
-  // Catálogo de marcas para los selectores (lo expone `/api/publicaciones/opciones`,
-  // que ya devuelve el catálogo canónico de `keni_shared.marcas`). Es una sola query
-  // pequeña y reusable; si el catálogo cambia (cliente distinto), refleja el nuevo.
+  // Catálogo de marcas (canónico) para chips y el editor de marcas.
   const marcasQuery = useQuery({
     queryKey: CLAVE_OPCIONES_MARCAS,
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
@@ -118,26 +122,31 @@ export default function Usuarios() {
   });
   const catalogoMarcas = marcasQuery.data ?? [];
 
-  const esProhibido = query.isError && query.error instanceof ApiError && query.error.status === 403;
+  const esProhibido =
+    query.isError && query.error instanceof ApiError && query.error.status === 403;
 
   return (
     <>
       <PageHeader
         {...CABECERA}
-        acciones={!esProhibido && !query.isError ? <DialogoCrearUsuario /> : undefined}
+        acciones={
+          !esProhibido && !query.isError ? (
+            <DialogoCrearUsuario />
+          ) : undefined
+        }
       />
 
       {esProhibido ? (
         <EstadoVacio
           icono={ShieldAlert}
           titulo="No tienes permiso"
-          texto="Solo los administradores pueden gestionar usuarios."
+          texto="Solo los administradores pueden ver y editar el organigrama."
         />
       ) : query.isPending ? (
-        <Skeleton className="h-64 w-full rounded-md" />
+        <Skeleton className="h-80 w-full rounded-md" />
       ) : query.isError ? (
         <BloqueError
-          titulo="No se pudieron cargar los usuarios"
+          titulo="No se pudo cargar el organigrama"
           mensaje={mensajeError(query.error)}
           onReintentar={() => void query.refetch()}
           cargando={query.isFetching}
@@ -145,11 +154,11 @@ export default function Usuarios() {
       ) : query.data.usuarios.length === 0 ? (
         <EstadoVacio
           icono={Users}
-          titulo="No hay usuarios"
+          titulo="No hay personas"
           texto="Crea la primera cuenta con el botón de arriba."
         />
       ) : (
-        <TablaUsuarios
+        <OrganigramaArbol
           usuarios={query.data.usuarios}
           idActual={actual?.id ?? null}
           catalogoMarcas={catalogoMarcas}
@@ -159,9 +168,9 @@ export default function Usuarios() {
   );
 }
 
-// --- Listado ----------------------------------------------------------------
+// --- Árbol -------------------------------------------------------------------
 
-function TablaUsuarios({
+function OrganigramaArbol({
   usuarios,
   idActual,
   catalogoMarcas,
@@ -170,301 +179,607 @@ function TablaUsuarios({
   idActual: string | null;
   catalogoMarcas: MarcaDisponible[];
 }) {
+  const porId = React.useMemo(() => indexarPorId(usuarios), [usuarios]);
+  const hijos = React.useMemo(() => hijosPorManager(usuarios), [usuarios]);
+  const cima = React.useMemo(() => raices(usuarios, porId), [usuarios, porId]);
+
+  // Zonas presentes (para la leyenda): las marcas/transversal que tengan a alguien.
+  const zonasPresentes = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const u of usuarios) {
+      const z = zonaDe(u, porId);
+      if (z !== ZONA_DIRECCION) set.add(z);
+    }
+    return set;
+  }, [usuarios, porId]);
+
+  const [seleccionado, setSeleccionado] = React.useState<string | null>(null);
+  const usuarioSel = seleccionado ? (porId.get(seleccionado) ?? null) : null;
+
   return (
-    <Card>
-      <CardContent className="p-0">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Usuario</TableHead>
-              <TableHead>Rol</TableHead>
-              <TableHead>Cargo</TableHead>
-              <TableHead className="text-center">Cobertura</TableHead>
-              <TableHead className="text-center">Coordina</TableHead>
-              <TableHead>Marcas</TableHead>
-              <TableHead>Creado</TableHead>
-              <TableHead>Último acceso</TableHead>
-              <TableHead className="text-right">Acciones</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {usuarios.map((u) => (
-              <FilaUsuario
-                key={u.id}
-                usuario={u}
-                esYoMismo={u.id === idActual}
-                catalogoMarcas={catalogoMarcas}
-              />
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
+    <div className="space-y-4">
+      <Leyenda zonas={zonasPresentes} />
+
+      <div className="org-scroll rounded-lg border bg-muted/20">
+        <ul className="org-tree org-tree--root">
+          {cima.map((raiz) => (
+            <NodoRaiz
+              key={raiz.id}
+              raiz={raiz}
+              hijos={hijos}
+              idActual={idActual}
+              onAbrir={setSeleccionado}
+            />
+          ))}
+        </ul>
+      </div>
+
+      <DialogoMiembro
+        usuario={usuarioSel}
+        usuarios={usuarios}
+        porId={porId}
+        hijos={hijos}
+        idActual={idActual}
+        catalogoMarcas={catalogoMarcas}
+        onCerrar={() => setSeleccionado(null)}
+      />
+    </div>
   );
 }
 
-function FilaUsuario({
+/** Raíz del organigrama (director): tarjeta + sus áreas agrupadas por zona/marca. */
+function NodoRaiz({
+  raiz,
+  hijos,
+  idActual,
+  onAbrir,
+}: {
+  raiz: UsuarioAdmin;
+  hijos: Map<string, UsuarioAdmin[]>;
+  idActual: string | null;
+  onAbrir: (id: string) => void;
+}) {
+  const cabezas = hijos.get(raiz.id) ?? [];
+  const zonas = zonasOrdenadas(cabezas);
+
+  return (
+    <li>
+      <TarjetaMiembro
+        usuario={raiz}
+        zona={ZONA_DIRECCION}
+        esYoMismo={raiz.id === idActual}
+        onAbrir={onAbrir}
+      />
+      {zonas.length > 0 && (
+        <ul className="org-tree">
+          {zonas.map(({ zona, cabezas: cabezasZona }) => {
+            const meta = metaZona(zona);
+            const total = cabezasZona.reduce(
+              (acc, c) => acc + tamanoSubarbol(c.id, hijos),
+              0,
+            );
+            return (
+              <li key={zona}>
+                <div
+                  className="org-zona"
+                  style={
+                    {
+                      "--zona-color": meta.color,
+                      "--zona-bg": hexAlpha(meta.color, 0.06),
+                    } as React.CSSProperties
+                  }
+                >
+                  <p className="org-zona-label">
+                    <span
+                      className="inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: meta.color }}
+                    />
+                    {meta.etiqueta}
+                    <span className="font-normal text-muted-foreground">· {total}</span>
+                  </p>
+                  <ul className="org-tree">
+                    {cabezasZona.map((cabeza) => (
+                      <NodoArbol
+                        key={cabeza.id}
+                        nodo={cabeza}
+                        zona={zona}
+                        hijos={hijos}
+                        idActual={idActual}
+                        onAbrir={onAbrir}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/** Nodo recursivo dentro de una zona: tarjeta + subárbol de sus reportes directos. */
+function NodoArbol({
+  nodo,
+  zona,
+  hijos,
+  idActual,
+  onAbrir,
+}: {
+  nodo: UsuarioAdmin;
+  zona: string;
+  hijos: Map<string, UsuarioAdmin[]>;
+  idActual: string | null;
+  onAbrir: (id: string) => void;
+}) {
+  const reportes = hijos.get(nodo.id) ?? [];
+  return (
+    <li>
+      <TarjetaMiembro
+        usuario={nodo}
+        zona={zona}
+        esYoMismo={nodo.id === idActual}
+        onAbrir={onAbrir}
+      />
+      {reportes.length > 0 && (
+        <ul className="org-tree">
+          {reportes.map((r) => (
+            <NodoArbol
+              key={r.id}
+              nodo={r}
+              zona={zona}
+              hijos={hijos}
+              idActual={idActual}
+              onAbrir={onAbrir}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/** Tarjeta de una persona. Clic = abrir el panel de edición. */
+function TarjetaMiembro({
   usuario,
+  zona,
   esYoMismo,
-  catalogoMarcas,
+  onAbrir,
 }: {
   usuario: UsuarioAdmin;
+  zona: string;
   esYoMismo: boolean;
+  onAbrir: (id: string) => void;
+}) {
+  const meta = metaZona(zona);
+  const marcas = usuario.marcas ?? [];
+  const nombre = nombreVisible(usuario);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onAbrir(usuario.id)}
+      className="org-tarjeta w-[14rem] rounded-lg border bg-card p-3 text-left shadow-sm hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      style={{ borderTopColor: meta.color, borderTopWidth: 3 }}
+      aria-label={`Editar a ${nombre}`}
+    >
+      <div className="flex items-center gap-2.5">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+          style={{ backgroundColor: meta.color }}
+          aria-hidden
+        >
+          {iniciales(nombre)}
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold leading-tight">
+            {nombre}
+            {esYoMismo && (
+              <span className="ml-1 text-xs font-normal text-muted-foreground">(tú)</span>
+            )}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {etiquetaCargo((usuario.cargo ?? "") as CargoUsuario)}
+          </span>
+        </span>
+      </div>
+
+      {(usuario.rol === "admin" ||
+        usuario.cobertura ||
+        usuario.puede_coordinar ||
+        marcas.length > 0) && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {usuario.rol === "admin" && (
+            <Badge variant="default" className="h-5 px-1.5 text-[10px] font-medium">
+              Admin
+            </Badge>
+          )}
+          {usuario.cobertura && (
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+              Turnos
+            </Badge>
+          )}
+          {usuario.puede_coordinar && (
+            <Badge variant="secondary" className="h-5 px-1.5 text-[10px] font-normal">
+              Coord.
+            </Badge>
+          )}
+          {marcas.map((m) => (
+            <Badge
+              key={m}
+              variant="outline"
+              className="h-5 px-1.5 text-[10px] font-normal"
+              style={{ borderColor: hexAlpha(metaZona(m).color, 0.5), color: metaZona(m).color }}
+            >
+              {metaZona(m).etiqueta}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </button>
+  );
+}
+
+/** Leyenda de las áreas/marcas presentes en el organigrama. */
+function Leyenda({ zonas }: { zonas: Set<string> }) {
+  const ids = [...zonas];
+  if (ids.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1.5">
+        <Network className="h-3.5 w-3.5" /> Áreas:
+      </span>
+      {ids.map((z) => {
+        const meta = metaZona(z);
+        return (
+          <span key={z} className="inline-flex items-center gap-1.5">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: meta.color }}
+            />
+            {meta.etiqueta}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// --- Panel de edición de un miembro -----------------------------------------
+
+/**
+ * Panel para editar a una persona. Cada control guarda al instante (PATCH del campo que
+ * cambia), igual que la antigua tabla, e invalida la query para redibujar el árbol. Incluye
+ * el selector de SUPERIOR (organigrama), que excluye a la propia persona y a sus
+ * descendientes para no ofrecer un cambio que cerraría un ciclo (el backend también lo
+ * rechaza). Abajo, una zona de acciones sensibles: resetear contraseña y eliminar.
+ */
+function DialogoMiembro({
+  usuario,
+  usuarios,
+  porId,
+  hijos,
+  idActual,
+  catalogoMarcas,
+  onCerrar,
+}: {
+  usuario: UsuarioAdmin | null;
+  usuarios: UsuarioAdmin[];
+  porId: IndiceUsuarios;
+  hijos: Map<string, UsuarioAdmin[]>;
+  idActual: string | null;
   catalogoMarcas: MarcaDisponible[];
+  onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
 
-  const cambiarRol = useMutation({
-    mutationFn: (rol: RolUsuario) => api.actualizarUsuario(usuario.id, { rol }),
-    onSuccess: () => {
-      invalidar();
-      toast.success("Rol actualizado");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const cambiarCargo = useMutation({
-    mutationFn: (cargo: CargoUsuario) => api.actualizarUsuario(usuario.id, { cargo }),
-    onSuccess: () => {
-      invalidar();
-      toast.success("Cargo actualizado");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const cambiarCobertura = useMutation({
-    mutationFn: (cobertura: boolean) => api.actualizarUsuario(usuario.id, { cobertura }),
-    onSuccess: () => {
-      invalidar();
-      toast.success("Cobertura actualizada");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  // Ola "coord": flag de candidato a coordinador por celda. Solo el admin lo cambia;
-  // el resto del front lee este flag para filtrar el selector de coordinador.
-  const cambiarPuedeCoordinar = useMutation({
-    mutationFn: (puede_coordinar: boolean) =>
-      api.actualizarUsuario(usuario.id, { puede_coordinar }),
-    onSuccess: () => {
-      invalidar();
-      toast.success("Permiso de coordinación actualizado");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const cargoActual: CargoUsuario = (usuario.cargo ?? "") as CargoUsuario;
-  const marcasUsuario = usuario.marcas ?? [];
-
-  return (
-    <TableRow>
-      <TableCell className="font-medium">
-        {usuario.usuario}
-        {esYoMismo && <span className="ml-2 text-xs text-muted-foreground">(tú)</span>}
-      </TableCell>
-      <TableCell>
-        <Select
-          value={usuario.rol}
-          onValueChange={(v) => cambiarRol.mutate(v as RolUsuario)}
-          disabled={cambiarRol.isPending || esYoMismo}
-        >
-          <SelectTrigger className="h-8 w-[10rem]" aria-label={`Rol de ${usuario.usuario}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {ROLES.map((r) => (
-              <SelectItem key={r} value={r}>
-                {ROL_LABEL[r]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell>
-        <Select
-          value={cargoActual === "" ? SIN_CARGO : cargoActual}
-          onValueChange={(v) => {
-            const cargo = (v === SIN_CARGO ? "" : v) as CargoUsuario;
-            cambiarCargo.mutate(cargo);
-          }}
-          disabled={cambiarCargo.isPending}
-        >
-          <SelectTrigger className="h-8 w-[14rem]" aria-label={`Cargo de ${usuario.usuario}`}>
-            <SelectValue placeholder={etiquetaCargo("")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={SIN_CARGO}>{etiquetaCargo("")}</SelectItem>
-            {CARGOS_ORDENADOS.map((c) => (
-              <SelectItem key={c} value={c}>
-                {ETIQUETA_CARGO[c]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </TableCell>
-      <TableCell className="text-center">
-        <Checkbox
-          checked={Boolean(usuario.cobertura)}
-          onCheckedChange={(v) => cambiarCobertura.mutate(Boolean(v))}
-          disabled={cambiarCobertura.isPending}
-          aria-label={`Cobertura de ${usuario.usuario}`}
-        />
-      </TableCell>
-      <TableCell className="text-center">
-        <Checkbox
-          checked={Boolean(usuario.puede_coordinar)}
-          onCheckedChange={(v) => cambiarPuedeCoordinar.mutate(Boolean(v))}
-          disabled={cambiarPuedeCoordinar.isPending}
-          aria-label={`Puede coordinar (${usuario.usuario})`}
-        />
-      </TableCell>
-      <TableCell>
-        <CeldaMarcas
-          usuario={usuario}
-          catalogoMarcas={catalogoMarcas}
-          marcasUsuario={marcasUsuario}
-          onActualizar={invalidar}
-        />
-      </TableCell>
-      <TableCell className="text-muted-foreground">{formatearFecha(usuario.creado)}</TableCell>
-      <TableCell className="text-muted-foreground">
-        {formatearFecha(usuario.ultimo_acceso)}
-      </TableCell>
-      <TableCell>
-        <div className="flex items-center justify-end gap-1">
-          <DialogoResetPassword usuario={usuario} />
-          <DialogoEliminar usuario={usuario} esYoMismo={esYoMismo} />
-        </div>
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// --- Marcas del usuario (chips + diálogo para editar) -----------------------
-
-/**
- * Celda con las marcas como chips y un botón para editar el conjunto. Editar abre un
- * diálogo con un checklist de todas las marcas del catálogo; al guardar se manda PATCH
- * con la lista completa (el backend la reemplaza, no la fusiona).
- */
-function CeldaMarcas({
-  usuario,
-  catalogoMarcas,
-  marcasUsuario,
-  onActualizar,
-}: {
-  usuario: UsuarioAdmin;
-  catalogoMarcas: MarcaDisponible[];
-  marcasUsuario: string[];
-  onActualizar: () => void;
-}) {
-  const [abierto, setAbierto] = React.useState(false);
-  const [seleccion, setSeleccion] = React.useState<Set<string>>(new Set(marcasUsuario));
-
-  // Reset de la selección al abrir el diálogo (toma siempre el estado vigente).
+  // Estado local del nombre (edición libre, se guarda al salir del campo).
+  const [nombre, setNombre] = React.useState("");
   React.useEffect(() => {
-    if (abierto) setSeleccion(new Set(marcasUsuario));
-  }, [abierto, marcasUsuario]);
+    setNombre((usuario?.nombre ?? "").trim());
+  }, [usuario]);
 
   const guardar = useMutation({
-    mutationFn: (marcas: string[]) => api.actualizarUsuario(usuario.id, { marcas }),
+    mutationFn: (cuerpo: Parameters<typeof api.actualizarUsuario>[1]) =>
+      api.actualizarUsuario(usuario!.id, cuerpo),
     onSuccess: () => {
-      onActualizar();
-      toast.success("Marcas actualizadas");
-      setAbierto(false);
+      invalidar();
+      toast.success("Cambios guardados");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const etiquetaPorId = React.useMemo(
-    () => new Map(catalogoMarcas.map((m) => [m.id, m.nombre])),
-    [catalogoMarcas],
-  );
+  const eliminar = useMutation({
+    mutationFn: () => api.eliminarUsuario(usuario!.id),
+    onSuccess: () => {
+      invalidar();
+      toast.success(`${usuario ? nombreVisible(usuario) : "Usuario"} eliminado`);
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const resetear = useMutation({
+    mutationFn: (password: string) => api.actualizarUsuario(usuario!.id, { password }),
+    onSuccess: () => toast.success("Contraseña restablecida"),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const [password, setPassword] = React.useState("");
+  const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
+  React.useEffect(() => {
+    setPassword("");
+    setConfirmarBorrado(false);
+  }, [usuario]);
+
+  if (usuario === null) {
+    return <Dialog open={false} onOpenChange={() => onCerrar()} />;
+  }
+
+  const esYoMismo = usuario.id === idActual;
+  const cargoActual = (usuario.cargo ?? "") as CargoUsuario;
+  const marcasUsuario = new Set(usuario.marcas ?? []);
+  const superiorActual = (usuario.manager_id ?? "") || SIN_SUPERIOR;
+
+  // Candidatos a superior: todos menos uno mismo y sus descendientes (evita ciclos).
+  const prohibidos = descendientes(usuario.id, hijos);
+  const candidatos = usuarios
+    .filter((u) => u.id !== usuario.id && !prohibidos.has(u.id))
+    .sort((a, b) => nombreVisible(a).localeCompare(nombreVisible(b), "es"));
+
+  const cabeza = cabezaDeArea(usuario, porId);
+  const zona = zonaDe(usuario, porId);
+  const meta = metaZona(zona);
+
+  const guardarNombre = () => {
+    const limpio = nombre.trim();
+    if (limpio !== (usuario.nombre ?? "").trim()) guardar.mutate({ nombre: limpio });
+  };
 
   return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex flex-wrap gap-1">
-        {marcasUsuario.length === 0 ? (
-          <span className="text-xs text-muted-foreground">—</span>
-        ) : (
-          marcasUsuario.map((m) => (
-            <Badge key={m} variant="secondary" className="font-normal">
-              {etiquetaPorId.get(m) ?? m}
-            </Badge>
-          ))
-        )}
-      </div>
-      <Dialog open={abierto} onOpenChange={setAbierto}>
-        <Tooltip label="Editar marcas">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            aria-label={`Editar marcas de ${usuario.usuario}`}
-            onClick={() => setAbierto(true)}
-          >
-            <Tag className="h-3.5 w-3.5" />
-          </Button>
-        </Tooltip>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Marcas de {usuario.usuario}</DialogTitle>
-            <DialogDescription>
-              Selecciona las verticales (UnoTV, Claro Sports, Piso 15, Nación Gamer,
-              Fundación…) a las que pertenece esta persona.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            {catalogoMarcas.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No hay catálogo de marcas disponible.
-              </p>
+    <Dialog open onOpenChange={(v) => (!v ? onCerrar() : undefined)}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span
+              className="inline-block h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: meta.color }}
+            />
+            {nombreVisible(usuario)}
+          </DialogTitle>
+          <DialogDescription>
+            @{usuario.usuario} · {meta.etiqueta}
+            {cabeza && cabeza.id !== usuario.id ? ` · área de ${nombreVisible(cabeza)}` : ""}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Nombre */}
+          <div className="space-y-1.5">
+            <Label htmlFor="m-nombre">Nombre</Label>
+            <Input
+              id="m-nombre"
+              value={nombre}
+              placeholder={usuario.usuario}
+              maxLength={120}
+              onChange={(e) => setNombre(e.target.value)}
+              onBlur={guardarNombre}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+              }}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Cargo */}
+            <div className="space-y-1.5">
+              <Label>Cargo</Label>
+              <Select
+                value={cargoActual === "" ? SIN_CARGO : cargoActual}
+                onValueChange={(v) =>
+                  guardar.mutate({ cargo: (v === SIN_CARGO ? "" : v) as CargoUsuario })
+                }
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue placeholder={etiquetaCargo("")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_CARGO}>{etiquetaCargo("")}</SelectItem>
+                  {CARGOS_ORDENADOS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {ETIQUETA_CARGO[c]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Rol de permisos */}
+            <div className="space-y-1.5">
+              <Label>Rol (permisos)</Label>
+              <Select
+                value={usuario.rol}
+                onValueChange={(v) => guardar.mutate({ rol: v as RolUsuario })}
+                disabled={esYoMismo}
+              >
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {ROL_LABEL[r]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Superior (organigrama) */}
+          <div className="space-y-1.5">
+            <Label>Reporta a (superior)</Label>
+            <Select
+              value={superiorActual}
+              onValueChange={(v) =>
+                guardar.mutate({ manager_id: v === SIN_SUPERIOR ? "" : v })
+              }
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={SIN_SUPERIOR}>Sin superior (raíz)</SelectItem>
+                {candidatos.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {nombreVisible(u)}
+                    {u.cargo ? ` · ${etiquetaCargo(u.cargo)}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Define el árbol. La marca (área) sale de quién encabeza la cadena de reporte.
+            </p>
+          </div>
+
+          {/* Marcas */}
+          <div className="space-y-1.5">
+            <Label>Marcas (verticales)</Label>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 rounded-md border p-3">
+              {catalogoMarcas.length === 0 ? (
+                <p className="col-span-2 text-sm text-muted-foreground">
+                  No hay catálogo de marcas.
+                </p>
+              ) : (
+                catalogoMarcas.map((m) => {
+                  const id = `m-marca-${m.id}`;
+                  return (
+                    <div key={m.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={id}
+                        checked={marcasUsuario.has(m.id)}
+                        onCheckedChange={(v) => {
+                          const nuevas = new Set(marcasUsuario);
+                          if (v) nuevas.add(m.id);
+                          else nuevas.delete(m.id);
+                          guardar.mutate({ marcas: [...nuevas] });
+                        }}
+                      />
+                      <Label htmlFor={id} className="cursor-pointer text-sm font-normal">
+                        {m.nombre}
+                      </Label>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Flags */}
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={Boolean(usuario.cobertura)}
+                onCheckedChange={(v) => guardar.mutate({ cobertura: Boolean(v) })}
+              />
+              Entra en la rota de turnos
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={Boolean(usuario.puede_coordinar)}
+                onCheckedChange={(v) => guardar.mutate({ puede_coordinar: Boolean(v) })}
+              />
+              Puede coordinar
+            </label>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            Alta: {formatearFecha(usuario.creado)} · Último acceso:{" "}
+            {formatearFecha(usuario.ultimo_acceso)}
+          </p>
+
+          {/* Zona sensible */}
+          <div className="space-y-3 rounded-md border border-destructive/30 bg-destructive/5 p-3">
+            <p className="text-sm font-medium">Acciones sensibles</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor="m-pass" className="text-xs">
+                  Nueva contraseña
+                </Label>
+                <Input
+                  id="m-pass"
+                  type="password"
+                  value={password}
+                  autoComplete="new-password"
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={`Mínimo ${MIN_PASSWORD} caracteres`}
+                />
+              </div>
+              <Button
+                variant="outline"
+                disabled={password.length < MIN_PASSWORD || resetear.isPending}
+                onClick={() => {
+                  resetear.mutate(password);
+                  setPassword("");
+                }}
+              >
+                {resetear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Resetear
+              </Button>
+            </div>
+
+            {confirmarBorrado ? (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm">¿Eliminar a {nombreVisible(usuario)}?</span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConfirmarBorrado(false)}
+                    disabled={eliminar.isPending}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => eliminar.mutate()}
+                    disabled={eliminar.isPending}
+                  >
+                    {eliminar.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    Eliminar
+                  </Button>
+                </div>
+              </div>
             ) : (
-              catalogoMarcas.map((m) => {
-                const checkedId = `marca-${usuario.id}-${m.id}`;
-                const activa = seleccion.has(m.id);
-                return (
-                  <div key={m.id} className="flex items-center gap-2">
-                    <Checkbox
-                      id={checkedId}
-                      checked={activa}
-                      onCheckedChange={(v) => {
-                        setSeleccion((prev) => {
-                          const nueva = new Set(prev);
-                          if (v) nueva.add(m.id);
-                          else nueva.delete(m.id);
-                          return nueva;
-                        });
-                      }}
-                    />
-                    <Label htmlFor={checkedId} className="cursor-pointer">
-                      {m.nombre}
-                    </Label>
-                  </div>
-                );
-              })
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                disabled={esYoMismo}
+                onClick={() => setConfirmarBorrado(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                {esYoMismo ? "No puedes eliminar tu propia cuenta" : "Eliminar persona"}
+              </Button>
             )}
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAbierto(false)}
-              disabled={guardar.isPending}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={() => guardar.mutate([...seleccion])}
-              disabled={guardar.isPending}
-            >
-              {guardar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Guardar marcas
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCerrar}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -474,18 +789,25 @@ function DialogoCrearUsuario() {
   const queryClient = useQueryClient();
   const [abierto, setAbierto] = React.useState(false);
   const [usuario, setUsuario] = React.useState("");
+  const [nombre, setNombre] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [rol, setRol] = React.useState<RolUsuario>("editor");
 
   function reiniciar() {
     setUsuario("");
+    setNombre("");
     setPassword("");
     setRol("editor");
   }
 
   const crear = useMutation({
     mutationFn: () =>
-      api.crearUsuario({ usuario: usuario.trim(), password, rol }),
+      api.crearUsuario({
+        usuario: usuario.trim(),
+        password,
+        rol,
+        nombre: nombre.trim() || undefined,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
       toast.success("Usuario creado");
@@ -493,9 +815,8 @@ function DialogoCrearUsuario() {
       reiniciar();
     },
     onError: (e) => {
-      // 409 = el usuario ya existe: mensaje claro pegado al campo.
       if (e instanceof ApiError && e.status === 409) {
-        toast.error("Ya existe un usuario con ese nombre.");
+        toast.error("Ya existe un usuario con ese nombre de cuenta.");
       } else {
         toast.error(mensajeError(e));
       }
@@ -515,14 +836,14 @@ function DialogoCrearUsuario() {
     >
       <Button onClick={() => setAbierto(true)}>
         <UserPlus className="h-4 w-4" />
-        Nuevo usuario
+        Nueva persona
       </Button>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Nuevo usuario</DialogTitle>
+          <DialogTitle>Nueva persona</DialogTitle>
           <DialogDescription>
-            Crea una cuenta de acceso a la consola. La persona deberá cambiar su contraseña al
-            entrar por primera vez.
+            Crea una cuenta de acceso. Tras crearla, ábrela en el organigrama para asignarle
+            cargo, marcas y a quién reporta. Deberá cambiar su contraseña al entrar.
           </DialogDescription>
         </DialogHeader>
         <form
@@ -534,7 +855,18 @@ function DialogoCrearUsuario() {
           noValidate
         >
           <div className="space-y-1.5">
-            <Label htmlFor="nuevo-usuario">Usuario</Label>
+            <Label htmlFor="nuevo-nombre">Nombre (organigrama)</Label>
+            <Input
+              id="nuevo-nombre"
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
+              autoComplete="off"
+              maxLength={120}
+              placeholder="Opcional, p. ej. Diana Ramos"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="nuevo-usuario">Usuario (login)</Label>
             <Input
               id="nuevo-usuario"
               value={usuario}
@@ -574,155 +906,12 @@ function DialogoCrearUsuario() {
               {crear.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Plus className="h-4 w-4" />
+                <UserPlus className="h-4 w-4" />
               )}
-              Crear usuario
+              Crear persona
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// --- Resetear contraseña ----------------------------------------------------
-
-function DialogoResetPassword({ usuario }: { usuario: UsuarioAdmin }) {
-  const [abierto, setAbierto] = React.useState(false);
-  const [password, setPassword] = React.useState("");
-
-  const resetear = useMutation({
-    mutationFn: () => api.actualizarUsuario(usuario.id, { password }),
-    onSuccess: () => {
-      toast.success(`Contraseña de ${usuario.usuario} restablecida`);
-      setAbierto(false);
-      setPassword("");
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const puedeEnviar = password.length >= MIN_PASSWORD && !resetear.isPending;
-
-  return (
-    <Dialog
-      open={abierto}
-      onOpenChange={(v) => {
-        setAbierto(v);
-        if (!v) setPassword("");
-      }}
-    >
-      <Tooltip label="Resetear contraseña">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Resetear contraseña de ${usuario.usuario}`}
-          onClick={() => setAbierto(true)}
-        >
-          <KeyRound className="h-4 w-4" />
-        </Button>
-      </Tooltip>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Resetear contraseña</DialogTitle>
-          <DialogDescription>
-            Establece una contraseña nueva para <strong>{usuario.usuario}</strong>.
-          </DialogDescription>
-        </DialogHeader>
-        <form
-          className="space-y-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (puedeEnviar) resetear.mutate();
-          }}
-          noValidate
-        >
-          <div className="space-y-1.5">
-            <Label htmlFor="reset-password">Contraseña nueva</Label>
-            <Input
-              id="reset-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              autoFocus
-            />
-            <p className="text-xs text-muted-foreground">Mínimo {MIN_PASSWORD} caracteres.</p>
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={!puedeEnviar}>
-              {resetear.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-              Guardar contraseña
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// --- Eliminar usuario -------------------------------------------------------
-
-function DialogoEliminar({
-  usuario,
-  esYoMismo,
-}: {
-  usuario: UsuarioAdmin;
-  esYoMismo: boolean;
-}) {
-  const queryClient = useQueryClient();
-  const [abierto, setAbierto] = React.useState(false);
-
-  const eliminar = useMutation({
-    mutationFn: () => api.eliminarUsuario(usuario.id),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: CLAVE_USUARIOS });
-      toast.success(`Usuario ${usuario.usuario} eliminado`);
-      setAbierto(false);
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  return (
-    <Dialog open={abierto} onOpenChange={setAbierto}>
-      <Tooltip label={esYoMismo ? "No puedes eliminar tu propia cuenta" : "Eliminar"}>
-        <span>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Eliminar a ${usuario.usuario}`}
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => setAbierto(true)}
-            disabled={esYoMismo}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </span>
-      </Tooltip>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Eliminar usuario</DialogTitle>
-          <DialogDescription>
-            ¿Seguro que quieres eliminar a <strong>{usuario.usuario}</strong>? Perderá el acceso a
-            la consola. Esta acción no se puede deshacer.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setAbierto(false)} disabled={eliminar.isPending}>
-            Cancelar
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={() => eliminar.mutate()}
-            disabled={eliminar.isPending}
-          >
-            {eliminar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            Eliminar
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

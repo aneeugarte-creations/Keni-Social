@@ -31,12 +31,13 @@ BLOQUEO_MINUTOS = 5
 # --------------------------------------------------------------------------- #
 
 
-# Columnas PUBLICAS del usuario, en orden estable. `cargo`, `cobertura` y
-# `puede_coordinar` se anadieron a `usuarios` con `_migrar_columnas_usuarios`; todo SELECT
-# pasa por aqui para que tipos y columnas no se desincronicen.
+# Columnas PUBLICAS del usuario, en orden estable. `cargo`, `cobertura`,
+# `puede_coordinar`, `nombre` y `manager_id` se anadieron a `usuarios` con
+# `_migrar_columnas_usuarios`; todo SELECT pasa por aqui para que tipos y columnas no se
+# desincronicen.
 _COLUMNAS_USUARIO_PUBLICAS = (
     "id", "usuario", "rol", "debe_cambiar_password", "creado", "ultimo_acceso",
-    "cargo", "cobertura", "puede_coordinar",
+    "cargo", "cobertura", "puede_coordinar", "nombre", "manager_id",
 )
 _SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
 
@@ -53,6 +54,9 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
     pertenece la persona (`["claro-sports", "unotv"]`). Llega de la tabla N:M
     `usuarios_marcas`. Si el caller ya las consulto pasa la lista; en caso contrario se
     consulta aqui (una query por usuario) para mantener la forma publica completa.
+
+    `nombre` es el nombre HUMANO para el organigrama (vacio en usuarios legados; la UI cae
+    al `usuario`). `manager_id` es el id del SUPERIOR al que reporta (vacio = raiz/director).
     """
     if marcas is None:
         marcas = _marcas_de_usuario(fila["id"])
@@ -66,6 +70,8 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
         "cargo": fila["cargo"],
         "cobertura": bool(fila["cobertura"]),
         "puede_coordinar": bool(fila["puede_coordinar"]),
+        "nombre": fila["nombre"],
+        "manager_id": fila["manager_id"],
         "marcas": marcas,
     }
 
@@ -162,6 +168,8 @@ def crear_usuario(
     cargo: str = "",
     cobertura: bool = False,
     puede_coordinar: bool = False,
+    nombre: str = "",
+    manager_id: str = "",
     marcas: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Inserta un usuario nuevo y lo devuelve (forma publica). None si el nombre ya existe.
@@ -189,19 +197,22 @@ def crear_usuario(
         "cargo": cargo,
         "cobertura": 1 if cobertura else 0,
         "puede_coordinar": bool(puede_coordinar),
+        "nombre": nombre,
+        "manager_id": manager_id,
     }
     con = db.conectar()
     try:
         con.execute(
             "INSERT INTO usuarios (id, usuario, rol, salt, hash, debe_cambiar_password, "
             "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-            "puede_coordinar) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "puede_coordinar, nombre, manager_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nuevo["id"], nuevo["usuario"], nuevo["rol"], nuevo["salt"], nuevo["hash"],
                 nuevo["debe_cambiar_password"], nuevo["intentos_fallidos"],
                 nuevo["bloqueo_hasta"], nuevo["creado"], nuevo["ultimo_acceso"],
                 nuevo["cargo"], nuevo["cobertura"], nuevo["puede_coordinar"],
+                nuevo["nombre"], nuevo["manager_id"],
             ),
         )
         # Marcas del organigrama (N:M): sembrarlas en la misma conexion para que el
@@ -227,6 +238,8 @@ def crear_usuario(
         "cargo": nuevo["cargo"],
         "cobertura": bool(nuevo["cobertura"]),
         "puede_coordinar": bool(nuevo["puede_coordinar"]),
+        "nombre": nuevo["nombre"],
+        "manager_id": nuevo["manager_id"],
         "marcas": marcas_norm,
     }
 
@@ -270,12 +283,17 @@ def actualizar_perfil(
     cargo: str | None = None,
     cobertura: bool | None = None,
     puede_coordinar: bool | None = None,
+    nombre: str | None = None,
+    manager_id: str | None = None,
     marcas: list[str] | None = None,
 ) -> bool:
-    """Actualiza `cargo`, `cobertura`, `puede_coordinar` y/o `marcas`; True si existia.
+    """Actualiza `cargo`, `cobertura`, `puede_coordinar`, `nombre`, `manager_id` y/o
+    `marcas`; True si existia.
 
-    NO aplica guardas (lo hace la API contra `CARGOS_USUARIO` y el catalogo de marcas).
-    Pasar `None` deja el campo intacto; `cargo=""` lo limpia; `marcas=[]` borra todas las
+    NO aplica guardas (lo hace la API contra `CARGOS_USUARIO`, el catalogo de marcas y la
+    validacion del organigrama: superior existente, distinto de uno mismo y sin ciclos).
+    Pasar `None` deja el campo intacto; `cargo=""`/`nombre=""` lo limpian; `manager_id=""`
+    deja al usuario sin superior (raiz del organigrama); `marcas=[]` borra todas las
     asignaciones N:M de ese usuario; `marcas=[...]` las REEMPLAZA al conjunto dado.
     `puede_coordinar` (ola "coord"): bool que marca al usuario como candidato a coordinador
     por celda en el calendario.
@@ -291,6 +309,12 @@ def actualizar_perfil(
     if puede_coordinar is not None:
         campos.append("puede_coordinar = ?")
         valores.append(bool(puede_coordinar))
+    if nombre is not None:
+        campos.append("nombre = ?")
+        valores.append(nombre)
+    if manager_id is not None:
+        campos.append("manager_id = ?")
+        valores.append(manager_id)
     # Sin campos directos ni marcas -> simple existencia.
     if not campos and marcas is None:
         return obtener_usuario_por_id(usuario_id) is not None
@@ -322,7 +346,7 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     return con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
         "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
-        "puede_coordinar "
+        "puede_coordinar, nombre, manager_id "
         "FROM usuarios WHERE usuario = ?",
         (usuario,),
     ).fetchone()
@@ -446,6 +470,8 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "cargo": fila["cargo"],
             "cobertura": bool(fila["cobertura"]),
             "puede_coordinar": bool(fila["puede_coordinar"]),
+            "nombre": fila["nombre"],
+            "manager_id": fila["manager_id"],
             "marcas": marcas,
         }
     finally:

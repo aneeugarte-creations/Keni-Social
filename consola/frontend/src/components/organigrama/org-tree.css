@@ -1,0 +1,120 @@
+/*
+ * Conectores del organigrama (árbol top-down) con la técnica clásica de listas anidadas
+ * + pseudo-elementos. Cada `ul.org-tree` dispone sus hijos en fila (flex) y dibuja las
+ * líneas verticales/horizontales que unen un nodo con sus descendientes. Es robusto a
+ * cualquier profundidad y no necesita JS de medición.
+ *
+ * El color de las líneas sale de `--org-line` (lo respeta el tema: usa el borde shadcn).
+ */
+
+.org-scroll {
+  --org-line: hsl(var(--border));
+  overflow-x: auto;
+  padding: 0.5rem 0.25rem 1.25rem;
+}
+
+.org-tree {
+  display: flex;
+  justify-content: center;
+  padding-top: 1.25rem;
+  position: relative;
+  margin: 0;
+  list-style: none;
+}
+
+/* La fila raíz no necesita el espacio superior para la línea de entrada. */
+.org-tree.org-tree--root {
+  padding-top: 0;
+}
+
+.org-tree li {
+  list-style: none;
+  position: relative;
+  padding: 1.25rem 0.5rem 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Conectores: medio enlace horizontal a cada lado + el vertical hacia el padre. */
+.org-tree li::before,
+.org-tree li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: 1.25rem;
+  border-top: 2px solid var(--org-line);
+}
+
+.org-tree li::after {
+  right: auto;
+  left: 50%;
+  border-left: 2px solid var(--org-line);
+}
+
+/* Hijo único: sin barra horizontal, solo el vertical (lo dibuja ul::before). */
+.org-tree > li:only-child {
+  padding-top: 1.25rem;
+}
+.org-tree > li:only-child::before,
+.org-tree > li:only-child::after {
+  display: none;
+}
+
+/* Extremos de la fila: redondea las esquinas y recorta el tramo sobrante. */
+.org-tree li:first-child::before,
+.org-tree li:last-child::after {
+  border: 0 none;
+}
+.org-tree li:last-child::before {
+  border-right: 2px solid var(--org-line);
+  border-radius: 0 6px 0 0;
+}
+.org-tree li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+/* Línea vertical que baja desde un nodo hacia su grupo de hijos. */
+.org-tree ul.org-tree::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 1.25rem;
+  border-left: 2px solid var(--org-line);
+}
+
+/* La raíz no recibe línea de entrada. */
+.org-tree.org-tree--root > li::before,
+.org-tree.org-tree--root > li::after {
+  display: none;
+}
+
+/* Panel de zona (área por marca): caja tintada con etiqueta. */
+.org-zona {
+  border-radius: 0.75rem;
+  border: 1px solid var(--zona-color, var(--org-line));
+  background: var(--zona-bg, transparent);
+  padding: 0.25rem 0.5rem 0.75rem;
+}
+
+.org-zona > .org-zona-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zona-color);
+  margin: 0.25rem 0 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .org-tarjeta {
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+}

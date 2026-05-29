@@ -284,7 +284,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         ultimo_acceso          TEXT NOT NULL DEFAULT '',
         cargo                  TEXT NOT NULL DEFAULT '',
         cobertura              INTEGER NOT NULL DEFAULT 0,
-        puede_coordinar        BOOLEAN NOT NULL DEFAULT FALSE
+        puede_coordinar        BOOLEAN NOT NULL DEFAULT FALSE,
+        nombre                 TEXT NOT NULL DEFAULT '',
+        manager_id             TEXT NOT NULL DEFAULT ''
     )
     """,
     """
@@ -1185,10 +1187,19 @@ def _migrar_columnas_programas(con: Any) -> None:
 # antes no las tiene; legado -> `cargo=''` (sin clasificar), `cobertura=0` (no entra en
 # rota), `puede_coordinar=false` (no es candidato a coordinador). Cada par es (columna,
 # fragmento de tipo/DEFAULT).
+#   - nombre: nombre HUMANO de la persona (Bernardo Vazquez, Elias...) para el organigrama;
+#     legado -> "" (la UI cae al `usuario`/login). No es UNIQUE: dos personas pueden
+#     llamarse igual, lo que identifica la cuenta sigue siendo `usuario`.
+#   - manager_id: id del usuario SUPERIOR (a quien reporta) en el organigrama; legado/raiz
+#     -> "" (sin superior, p.ej. el director). No es FK en la BD (ALTER ADD COLUMN no la
+#     anade en SQLite y el organigrama tolera ids colgados tras un borrado); la capa API
+#     valida que apunte a un usuario existente, distinto de si mismo y sin ciclos.
 _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("cargo", "TEXT NOT NULL DEFAULT ''"),
     ("cobertura", "INTEGER NOT NULL DEFAULT 0"),
     ("puede_coordinar", "BOOLEAN NOT NULL DEFAULT FALSE"),
+    ("nombre", "TEXT NOT NULL DEFAULT ''"),
+    ("manager_id", "TEXT NOT NULL DEFAULT ''"),
 )
 
 

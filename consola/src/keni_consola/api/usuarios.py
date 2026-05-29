@@ -4,11 +4,11 @@ Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
 
   - GET    /api/usuarios            -> {usuarios: [{id, usuario, rol, creado,
                                       ultimo_acceso, cargo, cobertura, puede_coordinar,
-                                      marcas}]}
-  - POST   /api/usuarios            {usuario, password, rol} -> 201 {id, usuario, rol};
-                                      409 si el nombre ya existe.
-  - PATCH  /api/usuarios/{id}       {rol?, password?, cargo?, cobertura?,
-                                      puede_coordinar?, marcas?} -> 200.
+                                      nombre, manager_id, marcas}]}
+  - POST   /api/usuarios            {usuario, password, rol, nombre?} -> 201 {id, usuario,
+                                      rol}; 409 si el nombre de cuenta ya existe.
+  - PATCH  /api/usuarios/{id}       {rol?, password?, cargo?, cobertura?, puede_coordinar?,
+                                      nombre?, manager_id?, marcas?} -> 200.
   - DELETE /api/usuarios/{id}       -> 204.
 
 PATCH (ampliacion "feat/roles-marcas"): ademas de rol/password, el admin puede actualizar
@@ -47,6 +47,33 @@ from ..observabilidad import NOMBRE_LOGGER
 _logger = logging.getLogger(NOMBRE_LOGGER)
 
 _MSG_SOLO_ADMIN = "Solo un administrador puede gestionar usuarios."
+
+# Longitud maxima del nombre HUMANO (organigrama). No es la identidad de la cuenta (esa es
+# `usuario`), solo lo que se pinta en las tarjetas; un limite holgado evita textos absurdos.
+_LONGITUD_MAX_NOMBRE = 120
+
+
+def _crearia_ciclo(usuario_id: str, manager_id: str) -> bool:
+    """True si poner `manager_id` como superior de `usuario_id` cerraria un ciclo.
+
+    Sube por la cadena de superiores desde el candidato (`manager_id`): si en el camino
+    aparece `usuario_id`, el enlace cerraria un bucle (A->B->...->A) y el organigrama
+    dejaria de ser un arbol. La cota por numero de usuarios evita un bucle infinito si la
+    BD ya tuviera un ciclo previo (no deberia, pero somos defensivos).
+    """
+    visitados: set[str] = set()
+    actual: str = manager_id
+    while actual:
+        if actual == usuario_id:
+            return True
+        if actual in visitados:
+            break  # ciclo preexistente ajeno: cortamos sin afirmar el del enlace nuevo
+        visitados.add(actual)
+        superior = auth.obtener_usuario_por_id(actual)
+        if superior is None:
+            break
+        actual = superior.get("manager_id") or ""
+    return False
 
 
 def _es_admin(request: Request) -> bool:
@@ -95,6 +122,8 @@ async def listar(request: Request) -> Response:
             "cargo": u.get("cargo", "") or "",
             "cobertura": bool(u.get("cobertura")),
             "puede_coordinar": bool(u.get("puede_coordinar")),
+            "nombre": u.get("nombre", "") or "",
+            "manager_id": u.get("manager_id", "") or "",
             "marcas": list(u.get("marcas") or []),
         }
         for u in auth.listar_usuarios()
@@ -122,10 +151,24 @@ async def crear(request: Request) -> Response:
     usuario = datos.get("usuario")
     password = datos.get("password")
     rol = datos.get("rol")
+    nombre = datos.get("nombre")
 
     if not isinstance(usuario, str) or not usuario.strip():
         return JSONResponse({"error": "El usuario necesita un nombre."}, status_code=400)
     usuario = usuario.strip()
+    # `nombre` (humano, organigrama) es opcional al crear: el admin puede dejarlo y la UI
+    # cae al `usuario`. Si llega, debe ser texto y no pasarse de largo.
+    if nombre is not None:
+        if not isinstance(nombre, str):
+            return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+        nombre = nombre.strip()
+        if len(nombre) > _LONGITUD_MAX_NOMBRE:
+            return JSONResponse(
+                {"error": f"El nombre no puede superar {_LONGITUD_MAX_NOMBRE} caracteres."},
+                status_code=400,
+            )
+    else:
+        nombre = ""
     if len(usuario) > auth.LONGITUD_MAX_USUARIO:
         return JSONResponse(
             {"error": f"El nombre de usuario no puede superar {auth.LONGITUD_MAX_USUARIO} caracteres."},
@@ -148,7 +191,7 @@ async def crear(request: Request) -> Response:
             status_code=403,
         )
 
-    creado = auth.crear_usuario(usuario, password, rol)
+    creado = auth.crear_usuario(usuario, password, rol, nombre=nombre)
     if creado is None:
         return JSONResponse({"error": "Ya existe un usuario con ese nombre."}, status_code=409)
     if bootstrap_por_token:
@@ -194,6 +237,8 @@ async def actualizar(request: Request) -> Response:
     nuevo_cargo = datos.get("cargo")
     nueva_cobertura = datos.get("cobertura")
     nuevo_puede_coordinar = datos.get("puede_coordinar")
+    nuevo_nombre = datos.get("nombre")
+    nuevo_manager_id = datos.get("manager_id")
     nuevas_marcas = datos.get("marcas")
     if (
         nuevo_rol is None
@@ -201,13 +246,15 @@ async def actualizar(request: Request) -> Response:
         and nuevo_cargo is None
         and nueva_cobertura is None
         and nuevo_puede_coordinar is None
+        and nuevo_nombre is None
+        and nuevo_manager_id is None
         and nuevas_marcas is None
     ):
         return JSONResponse(
             {
                 "error": (
-                    "Indica un campo a modificar "
-                    "(rol, contraseña, cargo, cobertura, puede_coordinar o marcas)."
+                    "Indica un campo a modificar (rol, contraseña, cargo, cobertura, "
+                    "puede_coordinar, nombre, manager_id o marcas)."
                 )
             },
             status_code=400,
@@ -253,6 +300,46 @@ async def actualizar(request: Request) -> Response:
             status_code=400,
         )
 
+    if nuevo_nombre is not None:
+        if not isinstance(nuevo_nombre, str):
+            return JSONResponse({"error": "El nombre debe ser texto."}, status_code=400)
+        nuevo_nombre = nuevo_nombre.strip()
+        if len(nuevo_nombre) > _LONGITUD_MAX_NOMBRE:
+            return JSONResponse(
+                {"error": f"El nombre no puede superar {_LONGITUD_MAX_NOMBRE} caracteres."},
+                status_code=400,
+            )
+
+    # `manager_id` define el organigrama: "" = sin superior (raiz, p.ej. el director). Si
+    # llega un id, debe apuntar a un usuario REAL, distinto de uno mismo y sin cerrar ciclos
+    # (el grafo de reporte tiene que seguir siendo un arbol). Para desligar, manda "".
+    if nuevo_manager_id is not None:
+        if not isinstance(nuevo_manager_id, str):
+            return JSONResponse(
+                {"error": "El campo 'manager_id' debe ser el id de un usuario o cadena vacía."},
+                status_code=400,
+            )
+        elif nuevo_manager_id == "":
+            pass  # desligar: el usuario pasa a ser raiz del organigrama
+        elif nuevo_manager_id == usuario_id:
+            return JSONResponse(
+                {"error": "Una persona no puede reportarse a sí misma."}, status_code=400
+            )
+        elif auth.obtener_usuario_por_id(nuevo_manager_id) is None:
+            return JSONResponse(
+                {"error": "El superior indicado no existe."}, status_code=400
+            )
+        elif _crearia_ciclo(usuario_id, nuevo_manager_id):
+            return JSONResponse(
+                {
+                    "error": (
+                        "Ese cambio crearía un ciclo en el organigrama "
+                        "(el superior depende, directa o indirectamente, de esta persona)."
+                    )
+                },
+                status_code=400,
+            )
+
     if nuevas_marcas is not None:
         if not isinstance(nuevas_marcas, list) or not all(
             isinstance(m, str) for m in nuevas_marcas
@@ -283,6 +370,8 @@ async def actualizar(request: Request) -> Response:
         nuevo_cargo is not None
         or nueva_cobertura is not None
         or nuevo_puede_coordinar is not None
+        or nuevo_nombre is not None
+        or nuevo_manager_id is not None
         or nuevas_marcas is not None
     ):
         auth.actualizar_perfil(
@@ -292,6 +381,8 @@ async def actualizar(request: Request) -> Response:
             puede_coordinar=(
                 nuevo_puede_coordinar if nuevo_puede_coordinar is not None else None
             ),
+            nombre=nuevo_nombre if nuevo_nombre is not None else None,
+            manager_id=nuevo_manager_id if nuevo_manager_id is not None else None,
             marcas=list(nuevas_marcas) if nuevas_marcas is not None else None,
         )
 
@@ -304,6 +395,8 @@ async def actualizar(request: Request) -> Response:
             "cargo": actualizado.get("cargo", "") or "",
             "cobertura": bool(actualizado.get("cobertura")),
             "puede_coordinar": bool(actualizado.get("puede_coordinar")),
+            "nombre": actualizado.get("nombre", "") or "",
+            "manager_id": actualizado.get("manager_id", "") or "",
             "marcas": list(actualizado.get("marcas") or []),
         }
     )
