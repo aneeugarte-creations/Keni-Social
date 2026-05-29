@@ -87,6 +87,7 @@ import type {
   CoberturaEvento,
   CuerpoActualizarPiezaRota,
   CuerpoActualizarProgramaRota,
+  CuerpoCrearFranjaSemana,
   CuerpoCrearPiezaRota,
   CuerpoCrearProgramaRota,
   CuerpoCrearTurnoRota,
@@ -94,6 +95,7 @@ import type {
   EstadoSwap,
   EventoRota,
   FiltrosSwaps,
+  FranjaSemana,
   FranjaTurno,
   MiembroRota,
   PiezaRota,
@@ -1158,8 +1160,8 @@ type PrellenoNuevoTurno = {
   miembro_id?: string;
 };
 
-/** Franjas que aparecen como filas. `descanso` queda fuera: es "no asignado". */
-const FRANJAS_REJILLA: readonly FranjaTurno[] = ["matutino", "vespertino"] as const;
+// (Las filas de la rejilla ahora salen DINAMICAS de `semana.franjas` — modelo
+// "franjas por semana". Antes habia un literal `FRANJAS_REJILLA` aqui.)
 
 /**
  * Restringe el equipo a los community managers cubriendo ClaroSports activos.
@@ -1223,20 +1225,35 @@ function Turnos({
   const invalidarTodo = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveTurnos });
 
-  // Resaltado one-shot de la celda objetivo cuando llegamos desde Cobertura.
+  // Resaltado one-shot de la celda objetivo cuando llegamos desde Cobertura. La
+  // celda se identifica por `franja_id` (modelo "franjas por semana"): el prelleno
+  // de Cobertura calcula el `franja_id` a partir de la hora del evento -> franjas
+  // activas de la semana (UNION; toma la primera por orden).
   const [celdaResaltada, setCeldaResaltada] = React.useState<{
     fecha: string;
-    franja: FranjaTurno;
+    franja: string;
   } | null>(null);
   React.useEffect(() => {
     if (prelleno?.fecha && prelleno.franja && prelleno.franja !== "descanso") {
-      setCeldaResaltada({ fecha: prelleno.fecha, franja: prelleno.franja });
-      limpiarPrelleno();
-      const t = window.setTimeout(() => setCeldaResaltada(null), 4000);
-      return () => window.clearTimeout(t);
+      // Resolvemos el `franja_id` desde las franjas vivas de la semana. Para retrocompat
+      // con el prelleno legado ("matutino"/"vespertino"), mapeamos por nombre.
+      const franjasVivas = semana?.franjas ?? [];
+      const nombreLegado =
+        prelleno.franja === "matutino"
+          ? "Mañana"
+          : prelleno.franja === "vespertino"
+            ? "Tarde"
+            : "";
+      const match = franjasVivas.find((f) => f.nombre === nombreLegado);
+      if (match) {
+        setCeldaResaltada({ fecha: prelleno.fecha, franja: match.id });
+        limpiarPrelleno();
+        const t = window.setTimeout(() => setCeldaResaltada(null), 4000);
+        return () => window.clearTimeout(t);
+      }
     }
     if (prelleno) limpiarPrelleno();
-  }, [prelleno, limpiarPrelleno]);
+  }, [prelleno, limpiarPrelleno, semana?.franjas]);
 
   const aprobar = useMutation({
     mutationFn: () => api.aprobarTurnos({ lunes }),
@@ -1338,6 +1355,7 @@ function Turnos({
               Despublicar
             </Button>
           )}
+          {esAdmin && <BotonFranjasDeSemana lunes={lunes} />}
           {esAdmin && <BotonConfigFranjas />}
           <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
             <Download className="h-4 w-4" /> Excel
@@ -1398,17 +1416,21 @@ function RejillaTurnosPorFranja({
   cms: MiembroRota[];
   ausencias: AusenciaRota[];
   editable: boolean;
-  celdaResaltada: { fecha: string; franja: FranjaTurno } | null;
+  celdaResaltada: { fecha: string; franja: string } | null;
   onCambio: () => void;
 }) {
   const dias = semana?.dias ?? [];
-  // Indexa los turnos por (franja, fecha). Una celda agrupa todos los CMs (y
-  // turnos en general) asignados a esa franja+día — el descanso queda fuera y
-  // no se muestra como fila.
+  // Franjas vivas de la semana (modelo "franjas por semana"). El backend siembra
+  // por defecto Mañana/Tarde/Descanso si la semana esta vacia. Ordenadas por `orden`.
+  const franjasSemana = React.useMemo(
+    () => (semana?.franjas ?? []).slice().sort((a, b) => a.orden - b.orden),
+    [semana?.franjas],
+  );
+  // Indexa los turnos por (franja_id, fecha). Una celda agrupa todos los CMs asignados.
   const porCelda = React.useMemo(() => {
     const m = new Map<string, TurnoRota[]>();
     for (const t of turnos) {
-      const k = `${t.franja}|${t.fecha}`;
+      const k = `${t.franja_id}|${t.fecha}`;
       const lista = m.get(k) ?? [];
       lista.push(t);
       m.set(k, lista);
@@ -1454,24 +1476,36 @@ function RejillaTurnosPorFranja({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {FRANJAS_REJILLA.map((franja) => (
-              <TableRow key={franja}>
+            {franjasSemana.map((franja) => (
+              <TableRow
+                key={franja.id}
+                className={cn(franja.es_descanso && "bg-muted/40")}
+              >
                 <TableCell className="sticky left-0 whitespace-nowrap bg-background font-medium">
-                  <div className="flex items-center gap-1.5">
-                    {franja === "matutino" ? (
-                      <Sunrise className="h-3.5 w-3.5 text-muted-foreground" />
-                    ) : (
-                      <Sunset className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
-                    {ETIQUETA_FRANJA[franja]}
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5">
+                      {franja.es_descanso ? (
+                        <Sunset className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : franja.orden === 0 ? (
+                        <Sunrise className="h-3.5 w-3.5 text-muted-foreground" />
+                      ) : (
+                        <Sunset className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      {franja.nombre}
+                    </div>
+                    <div className="text-xs font-normal text-muted-foreground">
+                      {franja.es_descanso
+                        ? "(descanso)"
+                        : `${franja.inicio}–${franja.fin}`}
+                    </div>
                   </div>
                 </TableCell>
                 {dias.map((fecha) => {
-                  const turnosCelda = porCelda.get(`${franja}|${fecha}`) ?? [];
+                  const turnosCelda = porCelda.get(`${franja.id}|${fecha}`) ?? [];
                   const resaltada =
                     !!celdaResaltada &&
                     celdaResaltada.fecha === fecha &&
-                    celdaResaltada.franja === franja;
+                    celdaResaltada.franja === franja.id;
                   return (
                     <TableCell
                       key={fecha}
@@ -1517,7 +1551,8 @@ function CeldaFranjaDia({
 }: {
   lunes: string;
   fecha: string;
-  franja: FranjaTurno;
+  /** Franja viva de la semana (modelo "franjas por semana"). */
+  franja: FranjaSemana;
   turnos: TurnoRota[];
   equipo: MiembroRota[];
   cms: MiembroRota[];
@@ -1539,7 +1574,7 @@ function CeldaFranjaDia({
         lunes,
         fecha,
         miembro_id: miembroId,
-        franja,
+        franja_id: franja.id,
       };
       if (override) cuerpo.override = true;
       return api.crearTurno(cuerpo);
@@ -1588,7 +1623,7 @@ function CeldaFranjaDia({
           disabled={crear.isPending || cmsDisponibles.length === 0}
         >
           <SelectTrigger
-            aria-label={`Añadir persona a ${ETIQUETA_FRANJA[franja]} del ${fecha}`}
+            aria-label={`Añadir persona a ${franja.nombre} del ${fecha}`}
             className="h-7 w-full justify-start gap-1 border-dashed px-1.5 text-xs text-muted-foreground hover:text-foreground"
           >
             <Plus className="h-3 w-3" />
@@ -2215,7 +2250,7 @@ function FilaCoberturaEvento({
               >
                 <User className="h-3 w-3 text-muted-foreground" />
                 {c.miembro_nombre}
-                <span className="text-muted-foreground">· {ETIQUETA_FRANJA[c.franja]}</span>
+                <span className="text-muted-foreground">· {c.franja_nombre}</span>
                 {c.override && (
                   <AlertTriangle
                     className="h-3 w-3 text-amber-600"
@@ -2369,12 +2404,305 @@ function BotonConfigFranjas() {
         size="sm"
         variant="outline"
         onClick={() => setAbierto(true)}
-        title="Editar los rangos horarios de las franjas (mañana / tarde)"
+        title="Rangos de las 2 franjas por defecto (Mañana/Tarde) al sembrar una semana nueva"
       >
-        <Clock className="h-4 w-4" /> Franjas
+        <Clock className="h-4 w-4" /> Plantilla por defecto
       </Button>
       {abierto && <DialogConfigFranjas onCerrar={() => setAbierto(false)} />}
     </>
+  );
+}
+
+
+/** Boton "Editar franjas de esta semana" + dialog: CRUD de `rota_franjas` por semana. */
+function BotonFranjasDeSemana({ lunes }: { lunes: string }) {
+  const [abierto, setAbierto] = React.useState(false);
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setAbierto(true)}
+        title="Editar las franjas de esta semana concreta (añadir, renombrar, borrar)"
+      >
+        <Clock className="h-4 w-4" /> Franjas de esta semana
+      </Button>
+      {abierto && (
+        <DialogFranjasDeSemana lunes={lunes} onCerrar={() => setAbierto(false)} />
+      )}
+    </>
+  );
+}
+
+
+function DialogFranjasDeSemana({
+  lunes,
+  onCerrar,
+}: {
+  lunes: string;
+  onCerrar: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const claveLista = ["rota", "franjas", lunes] as const;
+  const q = useQuery({
+    queryKey: claveLista,
+    queryFn: ({ signal }) => api.listarFranjasSemana(lunes, signal),
+  });
+  const franjas = (q.data?.franjas ?? []).slice().sort((a, b) => a.orden - b.orden);
+
+  const invalidar = () => {
+    void queryClient.invalidateQueries({ queryKey: claveLista });
+    void queryClient.invalidateQueries({ queryKey: ["rota", "turnos"] });
+  };
+
+  const crear = useMutation({
+    mutationFn: (cuerpo: CuerpoCrearFranjaSemana) => api.crearFranjaSemana(lunes, cuerpo),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Franja añadida.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Dialog open onOpenChange={(v) => !v && onCerrar()}>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Franjas de esta semana ({lunes})</DialogTitle>
+          <DialogDescription>
+            Cada semana tiene sus franjas (nombre libre, rangos HH:MM, solapes
+            permitidos). La franja Descanso marca turnos de no-laboral: la persona NO
+            cubre eventos ese día pero tiene turno explícito.
+          </DialogDescription>
+        </DialogHeader>
+        {q.isPending ? (
+          <Skeleton className="h-32 w-full rounded-md" />
+        ) : (
+          <div className="space-y-2">
+            {franjas.map((f) => (
+              <FilaFranjaSemana key={f.id} franja={f} onCambio={invalidar} />
+            ))}
+            <FormCrearFranjaSemana
+              cargando={crear.isPending}
+              onCrear={(cuerpo) => crear.mutate(cuerpo)}
+            />
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onCerrar}>
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+function FilaFranjaSemana({
+  franja,
+  onCambio,
+}: {
+  franja: FranjaSemana;
+  onCambio: () => void;
+}) {
+  const [nombre, setNombre] = React.useState(franja.nombre);
+  const [inicio, setInicio] = React.useState(franja.inicio);
+  const [fin, setFin] = React.useState(franja.fin);
+  const [orden, setOrden] = React.useState(String(franja.orden));
+
+  const actualizar = useMutation({
+    mutationFn: () =>
+      api.actualizarFranjaSemana(franja.id, {
+        nombre: nombre !== franja.nombre ? nombre : undefined,
+        inicio: inicio !== franja.inicio ? inicio : undefined,
+        fin: fin !== franja.fin ? fin : undefined,
+        orden:
+          Number.parseInt(orden, 10) !== franja.orden
+            ? Number.parseInt(orden, 10)
+            : undefined,
+      }),
+    onSuccess: () => {
+      toast.success("Franja actualizada.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const borrar = useMutation({
+    mutationFn: (forzar: boolean) => api.borrarFranjaSemana(franja.id, { forzar }),
+    onSuccess: (res) => {
+      const sufijo =
+        res.turnos_borrados && res.turnos_borrados > 0
+          ? ` (${res.turnos_borrados} turnos también)`
+          : "";
+      toast.success(`Franja borrada${sufijo}.`);
+      onCambio();
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 409) {
+        const asociados = (e.cuerpo?.turnos_asociados as number | undefined) ?? 0;
+        if (
+          window.confirm(
+            `Tiene ${asociados} turnos asociados. ¿Borrar también esos turnos?`,
+          )
+        ) {
+          borrar.mutate(true);
+        }
+        return;
+      }
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const cambiada =
+    nombre !== franja.nombre ||
+    inicio !== franja.inicio ||
+    fin !== franja.fin ||
+    Number.parseInt(orden, 10) !== franja.orden;
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-end gap-2 rounded border px-2 py-2",
+        franja.es_descanso && "bg-muted/40",
+      )}
+    >
+      <div className="flex-1 min-w-32">
+        <Label className="text-xs text-muted-foreground">Nombre</Label>
+        <Input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          className="h-8"
+          disabled={franja.es_descanso}
+          title={
+            franja.es_descanso
+              ? "La franja de descanso no se renombra (borra y crea otra)"
+              : ""
+          }
+        />
+      </div>
+      <div className="w-24">
+        <Label className="text-xs text-muted-foreground">Inicio</Label>
+        <Input
+          value={inicio}
+          onChange={(e) => setInicio(e.target.value)}
+          placeholder="HH:MM"
+          className="h-8"
+          disabled={franja.es_descanso}
+        />
+      </div>
+      <div className="w-24">
+        <Label className="text-xs text-muted-foreground">Fin</Label>
+        <Input
+          value={fin}
+          onChange={(e) => setFin(e.target.value)}
+          placeholder="HH:MM"
+          className="h-8"
+          disabled={franja.es_descanso}
+        />
+      </div>
+      <div className="w-20">
+        <Label className="text-xs text-muted-foreground">Orden</Label>
+        <Input
+          value={orden}
+          onChange={(e) => setOrden(e.target.value)}
+          className="h-8"
+        />
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => actualizar.mutate()}
+        disabled={!cambiada || actualizar.isPending}
+      >
+        Guardar
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-destructive"
+        onClick={() => borrar.mutate(false)}
+        disabled={borrar.isPending}
+      >
+        Borrar
+      </Button>
+    </div>
+  );
+}
+
+
+function FormCrearFranjaSemana({
+  cargando,
+  onCrear,
+}: {
+  cargando: boolean;
+  onCrear: (cuerpo: CuerpoCrearFranjaSemana) => void;
+}) {
+  const [nombre, setNombre] = React.useState("");
+  const [inicio, setInicio] = React.useState("17:00");
+  const [fin, setFin] = React.useState("01:00");
+  const [orden, setOrden] = React.useState("2");
+  const [esDescanso, setEsDescanso] = React.useState(false);
+
+  const submit = () => {
+    if (!nombre.trim()) {
+      toast.error("Indica un nombre.");
+      return;
+    }
+    onCrear({
+      nombre: nombre.trim(),
+      inicio,
+      fin,
+      orden: Number.parseInt(orden, 10) || 0,
+      es_descanso: esDescanso,
+    });
+    setNombre("");
+  };
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded border border-dashed px-2 py-2">
+      <div className="flex-1 min-w-32">
+        <Label className="text-xs text-muted-foreground">Añadir franja</Label>
+        <Input
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Cobertura nocturna"
+          className="h-8"
+        />
+      </div>
+      <div className="w-24">
+        <Label className="text-xs text-muted-foreground">Inicio</Label>
+        <Input
+          value={inicio}
+          onChange={(e) => setInicio(e.target.value)}
+          className="h-8"
+        />
+      </div>
+      <div className="w-24">
+        <Label className="text-xs text-muted-foreground">Fin</Label>
+        <Input value={fin} onChange={(e) => setFin(e.target.value)} className="h-8" />
+      </div>
+      <div className="w-20">
+        <Label className="text-xs text-muted-foreground">Orden</Label>
+        <Input
+          value={orden}
+          onChange={(e) => setOrden(e.target.value)}
+          className="h-8"
+        />
+      </div>
+      <label className="flex items-center gap-1 text-xs">
+        <input
+          type="checkbox"
+          checked={esDescanso}
+          onChange={(e) => setEsDescanso(e.target.checked)}
+        />
+        Descanso
+      </label>
+      <Button size="sm" onClick={submit} disabled={cargando || !nombre.trim()}>
+        <Plus className="h-4 w-4" /> Añadir
+      </Button>
+    </div>
   );
 }
 

@@ -27,6 +27,8 @@ import type {
   CuerpoAprobarRota,
   CuerpoBorrarLoteIds,
   CuerpoCrearProgramaRota,
+  CuerpoActualizarFranjaSemana,
+  CuerpoCrearFranjaSemana,
   CuerpoCrearTurnoRota,
   CuerpoCrearTurnosLote,
   CuerpoDuplicarEventoRota,
@@ -148,6 +150,8 @@ import type {
   RespuestaProgramasRota,
   RespuestaConfigFranjas,
   CuerpoGuardarConfigFranjas,
+  FranjaSemana,
+  RespuestaFranjasSemana,
   CuerpoActualizarLoteTurnos,
   RespuestaActualizarLoteTurnos,
   CuerpoCopiarSemana,
@@ -973,6 +977,31 @@ export const api = {
       metodo: "PATCH",
       json: cuerpo,
     }),
+
+  // --- Franjas POR SEMANA (modelo "Mundial") ---
+  // CRUD de `rota_franjas` (N franjas por semana, solapes permitidos, soporte cruce de
+  // medianoche, franja Descanso explicita con `es_descanso=true`). GET siembra defaults
+  // (Mañana/Tarde/Descanso) si la semana esta vacia. POST/PATCH/DELETE exigen admin.
+  listarFranjasSemana: (lunes: string, signal?: AbortSignal) =>
+    peticion<RespuestaFranjasSemana>(
+      `/rota/semana/${encodeURIComponent(lunes)}/franjas`,
+      { signal },
+    ),
+  crearFranjaSemana: (lunes: string, cuerpo: CuerpoCrearFranjaSemana) =>
+    peticion<FranjaSemana>(
+      `/rota/semana/${encodeURIComponent(lunes)}/franjas`,
+      { metodo: "POST", json: cuerpo },
+    ),
+  actualizarFranjaSemana: (id: string, cuerpo: CuerpoActualizarFranjaSemana) =>
+    peticion<FranjaSemana>(`/rota/franjas/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  borrarFranjaSemana: (id: string, opts: { forzar?: boolean } = {}) =>
+    peticion<{ ok: true; turnos_borrados?: number }>(
+      `/rota/franjas/${encodeURIComponent(id)}${opts.forzar ? "?forzar=true" : ""}`,
+      { metodo: "DELETE" },
+    ),
 
   // --- Solicitudes de cambio de turno entre compañeros (#175) ---
   // Flujo: A crea -> B acepta/rechaza -> admin aprueba (ejecuta el swap sobre

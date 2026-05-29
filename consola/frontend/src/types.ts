@@ -1045,14 +1045,38 @@ export interface CuerpoActualizarAusenciaRota {
   motivo?: string;
 }
 
-/** Franja de un turno: mañana / tarde / descanso. */
-export type FranjaTurno = "matutino" | "vespertino" | "descanso";
+/** Franja de un turno LEGACY: literal mañana / tarde / descanso. Se mantiene como
+ * derivada en la respuesta para retrocompat con UI vieja; codigo nuevo usa
+ * `franja_id` + `franja_nombre` (modelo "franjas por semana"). */
+export type FranjaTurno = "matutino" | "vespertino" | "descanso" | string;
 
 /**
- * Un turno: una persona × un día × una franja. Modelo unificado tras la ola back3
- * (#177). NO está ligado a un evento — un turno es un horario. La cobertura se
- * calcula DERIVADA: para cada evento, qué turnos lo cubren por (fecha, franja).
- * Pueden existir turnos sin eventos y eventos sin turnos (cobertura "huérfana").
+ * Una franja de la semana (modelo "franjas por semana" / Mundial). Cada lunes tiene
+ * sus propias franjas (nombre libre, rangos `HH:MM`, solapes permitidos, soporte a
+ * franjas que cruzan medianoche con `fin <= inicio`). Una franja con `es_descanso=true`
+ * marca un turno explicito de "no laboral" (la persona no trabaja ese día); no cubre
+ * ningún evento en la vista de cobertura.
+ */
+export interface FranjaSemana {
+  id: string;
+  /** Lunes ISO (AAAA-MM-DD) de la semana a la que pertenece. */
+  lunes: string;
+  nombre: string;
+  /** "HH:MM" inclusivo. */
+  inicio: string;
+  /** "HH:MM" exclusivo. Si `fin <= inicio`, cruza medianoche. Para franjas de
+   * descanso suele ser "00:00" (decorativo: ni cubren eventos). */
+  fin: string;
+  /** Orden ascendente en la rejilla (la franja Descanso usa 999 por convencion). */
+  orden: number;
+  /** Si `true`, esta franja NO es laboral: el turno marca "descanso explicito". */
+  es_descanso: boolean;
+}
+
+/**
+ * Un turno: una persona × un día × una franja. NO está ligado a un evento — un turno
+ * es un horario. La cobertura se calcula DERIVADA: para cada evento, qué turnos lo
+ * cubren via las franjas vivas de la semana activas a su hora (UNION si solapan).
  */
 export interface TurnoRota {
   id: string;
@@ -1062,6 +1086,12 @@ export interface TurnoRota {
   fecha: string;
   miembro_id: string;
   miembro_nombre: string;
+  /** Modelo nuevo: id de `FranjaSemana` viva (UNIQUE por semana). */
+  franja_id: string;
+  /** Nombre legible de la franja (lo emite el backend para evitar joins en el cliente). */
+  franja_nombre: string;
+  /** Retrocompat: literal `matutino`/`vespertino`/`descanso` derivado del nombre de la
+   * franja para UI vieja. Codigo nuevo lee `franja_id`/`franja_nombre`. */
   franja: FranjaTurno;
   estado: EstadoTurnoRota;
   /** Cobertura forzada que rompe la rotación de sábados (la decide Elías). */
@@ -1081,11 +1111,38 @@ export interface RotaSemana {
   /** Las 7 fechas ISO (lunes->domingo) de la semana. */
   dias: string[];
   turnos: TurnoRota[];
+  /** Franjas vivas de la semana (modelo "franjas por semana"). El backend siembra
+   * por defecto Mañana/Tarde/Descanso si la semana esta vacia. */
+  franjas: FranjaSemana[];
   /** `true` => todos los turnos aprobados (publicado al equipo). */
   aprobada: boolean;
   total: number;
   /** Mensaje de confirmación (p. ej. tras aprobar). */
   mensaje?: string;
+}
+
+/** Respuesta de `GET /api/rota/semana/{lunes}/franjas`. */
+export interface RespuestaFranjasSemana {
+  franjas: FranjaSemana[];
+}
+
+/** Cuerpo de `POST /api/rota/semana/{lunes}/franjas`. */
+export interface CuerpoCrearFranjaSemana {
+  nombre: string;
+  /** "HH:MM". */
+  inicio: string;
+  /** "HH:MM". */
+  fin: string;
+  orden?: number;
+  es_descanso?: boolean;
+}
+
+/** Cuerpo de `PATCH /api/rota/franjas/{id}`. `es_descanso` NO se edita despues de crear. */
+export interface CuerpoActualizarFranjaSemana {
+  nombre?: string;
+  inicio?: string;
+  fin?: string;
+  orden?: number;
 }
 
 export interface CuerpoAprobarRota {
@@ -1094,7 +1151,7 @@ export interface CuerpoAprobarRota {
 }
 
 /**
- * Cuerpo `POST /api/rota/turnos`: crea un turno (persona × día × franja).
+ * Cuerpo `POST /api/rota/turnos`: crea un turno (persona × día × franja_id).
  * `lunes` opcional: si falta, la semana se deriva del lunes que contiene `fecha`.
  */
 export interface CuerpoCrearTurnoRota {
@@ -1102,7 +1159,8 @@ export interface CuerpoCrearTurnoRota {
   lunes?: string;
   fecha: string;
   miembro_id: string;
-  franja: FranjaTurno;
+  /** Id de la franja viva de la semana (modelo "franjas por semana"). */
+  franja_id: string;
   override?: boolean;
   motivo?: string;
   nota_relevo?: string;
@@ -1113,7 +1171,7 @@ export interface CuerpoCrearTurnoRota {
 export interface CuerpoActualizarTurnoRota {
   fecha?: string;
   miembro_id?: string;
-  franja?: FranjaTurno;
+  franja_id?: string;
   override?: boolean;
   motivo?: string;
   nota_relevo?: string;
@@ -1135,12 +1193,15 @@ export interface MisTurnosRota extends RotaSemana {
 
 // --- Cobertura DERIVADA (no persistida): para cada evento, qué turnos lo cubren
 
-/** Un turno que cubre un evento (por intersección (fecha, franja)). */
+/** Un turno que cubre un evento. */
 export interface TurnoCobertura {
   turno_id: string;
   miembro_id: string;
   miembro_nombre: string;
-  franja: FranjaTurno;
+  /** Id de la franja viva que aplicaba a la hora del evento. */
+  franja_id: string;
+  /** Nombre legible de la franja (servido por el backend). */
+  franja_nombre: string;
   override: boolean;
 }
 
@@ -1154,8 +1215,10 @@ export interface RespuestaCoberturaSemana {
   lunes: string;
   inicio: string;
   fin: string;
-  /** Rangos de franja vigentes (cabecera del cálculo). */
+  /** Rangos de franja vigentes (cabecera del cálculo legado). */
   franjas_config: ConfigFranjas;
+  /** Franjas vivas de la semana (modelo "franjas por semana"). */
+  franjas: FranjaSemana[];
   /** Eventos de la semana (sin `no_cubrir`) con su cobertura derivada. */
   eventos: CoberturaEvento[];
 }
@@ -1163,13 +1226,15 @@ export interface RespuestaCoberturaSemana {
 export interface RespuestaCoberturaEvento {
   evento: CoberturaEvento;
   franjas_config: ConfigFranjas;
+  /** Franjas vivas de la semana del evento. */
+  franjas: FranjaSemana[];
 }
 
 /** Cuerpo `POST /api/rota/turnos/{id}/duplicar`: overrides opcionales del clon. */
 export interface CuerpoDuplicarTurnoRota {
   fecha?: string;
   miembro_id?: string;
-  franja?: FranjaTurno;
+  franja_id?: string;
 }
 
 /** Cuerpo `POST /api/rota/turnos/lote`: crea N turnos en una sola petición. */
@@ -1199,7 +1264,11 @@ export type EstadoSwap =
   | "rechazado_admin"
   | "cancelado";
 
-/** Una solicitud de cambio de turno entre dos compañeros (snapshot de un swap). */
+/** Una solicitud de cambio de turno entre dos compañeros (snapshot de un swap).
+ *
+ * Tras el modelo "franjas por semana", los campos `franja_a`/`franja_b` ahora son
+ * `franja_id` (id de la franja viva de la semana del turno), no literales. Nombre de
+ * campo conservado por inercia (cambio de SEMANTICA del dato, no de columna). */
 export interface SwapTurno {
   id: string;
   solicitante_id: string;
@@ -1208,10 +1277,12 @@ export interface SwapTurno {
   destinatario_nombre: string;
   /** ISO (AAAA-MM-DD): día del turno del solicitante. */
   fecha_a: string;
-  franja_a: FranjaTurno;
+  /** `franja_id` del turno del solicitante. */
+  franja_a: string;
   /** ISO (AAAA-MM-DD): día del turno del destinatario. */
   fecha_b: string;
-  franja_b: FranjaTurno;
+  /** `franja_id` del turno del destinatario. */
+  franja_b: string;
   motivo: string;
   estado: EstadoSwap;
   respuesta_destinatario: string;
@@ -1228,13 +1299,14 @@ export interface SwapTurno {
   aplicado: string;
 }
 
-/** Cuerpo de `POST /api/rota/swaps`: A pide un cambio con B. */
+/** Cuerpo de `POST /api/rota/swaps`: A pide un cambio con B. `franja_a`/`franja_b` son
+ * `franja_id` reales (modelo "franjas por semana"). */
 export interface CuerpoCrearSwap {
   destinatario_id: string;
   fecha_a: string;
-  franja_a: FranjaTurno;
+  franja_a: string;
   fecha_b: string;
-  franja_b: FranjaTurno;
+  franja_b: string;
   motivo?: string;
 }
 
@@ -1462,7 +1534,7 @@ export interface CuerpoGuardarConfigFranjas {
 export interface CuerpoActualizarLoteTurnos {
   ids: string[];
   miembro_id?: string;
-  franja?: FranjaTurno;
+  franja_id?: string;
   /** Override de rotación de sábados; si falta y hay sábados que la requieren -> 409. */
   override?: boolean;
   motivo?: string;
