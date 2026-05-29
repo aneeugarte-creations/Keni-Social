@@ -42,8 +42,17 @@ const OPCIONES: OpcionMenu[] = [
  * los Ajustes (Mi cuenta, Configuración, Sugerencias y -para admin- Usuarios)
  * y la acción "Cerrar sesión" (POST /api/auth/logout → vuelve al login). El
  * usuario sale del contexto de sesión; si todavía no hay (carga), no pinta nada.
+ *
+ * Con `soloIcono` (rail colapsado) pinta solo el avatar como disparador del
+ * menú, sin el nombre/rol ni el chevron.
  */
-export function CuentaUsuario({ className }: { className?: string }) {
+export function CuentaUsuario({
+  className,
+  soloIcono = false,
+}: {
+  className?: string;
+  soloIcono?: boolean;
+}) {
   const { usuario, cerrarSesion } = useSesion();
   const [abierto, setAbierto] = React.useState(false);
   const [cerrando, setCerrando] = React.useState(false);
@@ -80,13 +89,20 @@ export function CuentaUsuario({ className }: { className?: string }) {
   const opcionesVisibles = OPCIONES.filter((o) => !o.soloAdmin || usuario.rol === "admin");
 
   return (
-    <div ref={contenedorRef} className={cn("relative w-full", className)}>
+    <div
+      ref={contenedorRef}
+      className={cn("relative", soloIcono ? "w-auto" : "w-full", className)}
+    >
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={abierto}
-        className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent"
+        aria-label={soloIcono ? `${usuario.usuario} · ${etiquetaRol(usuario.rol)}` : undefined}
+        className={cn(
+          "flex items-center rounded-md text-left transition-colors hover:bg-accent",
+          soloIcono ? "justify-center p-1.5" : "w-full gap-2.5 px-2 py-1.5",
+        )}
       >
         {/* Avatar de degradado (estilo Vercel). */}
         <span
@@ -96,22 +112,29 @@ export function CuentaUsuario({ className }: { className?: string }) {
           }}
           aria-hidden="true"
         />
-        <span className="min-w-0 flex-1 leading-tight">
-          <span className="block truncate text-sm font-medium text-foreground">
-            {usuario.usuario}
-          </span>
-          <span className="block truncate text-xs text-muted-foreground">
-            {etiquetaRol(usuario.rol)}
-          </span>
-        </span>
-        <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        {!soloIcono && (
+          <>
+            <span className="min-w-0 flex-1 leading-tight">
+              <span className="block truncate text-sm font-medium text-foreground">
+                {usuario.usuario}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {etiquetaRol(usuario.rol)}
+              </span>
+            </span>
+            <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+          </>
+        )}
       </button>
 
       {abierto && (
         <div
           role="menu"
           aria-label="Cuenta"
-          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md"
+          className={cn(
+            "absolute top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md",
+            soloIcono ? "left-0 w-48" : "left-0 right-0",
+          )}
         >
           {opcionesVisibles.map(({ ruta, etiqueta, icono: Icono }) => (
             <Link

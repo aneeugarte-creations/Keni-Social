@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
@@ -40,6 +40,35 @@ function stubFetch() {
   return fn;
 }
 
+/**
+ * localStorage de juguete (jsdom no siempre expone `clear`). Persiste el estado
+ * colapsado del rail; lo reseteamos entre tests.
+ */
+function instalarLocalStorage() {
+  let store: Record<string, string> = {};
+  const mock: Storage = {
+    get length() {
+      return Object.keys(store).length;
+    },
+    clear: () => {
+      store = {};
+    },
+    getItem: (k: string) => (k in store ? store[k] : null),
+    key: (i: number) => Object.keys(store)[i] ?? null,
+    removeItem: (k: string) => {
+      delete store[k];
+    },
+    setItem: (k: string, v: string) => {
+      store[k] = String(v);
+    },
+  };
+  vi.stubGlobal("localStorage", mock);
+}
+
+beforeEach(() => {
+  instalarLocalStorage();
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
@@ -61,7 +90,8 @@ function renderShell(ruta: string) {
         <MemoryRouter initialEntries={[ruta]}>
           <Routes>
             <Route path="/" element={<AppShell />}>
-              <Route index element={<div>contenido launcher</div>} />
+              {/* `/` ya no es launcher: redirige a /panel (como en el router real). */}
+              <Route index element={<Navigate to="/panel" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
               <Route path="panel" element={<div>contenido panel</div>} />
             </Route>
@@ -72,26 +102,37 @@ function renderShell(ruta: string) {
   );
 }
 
-describe("AppShell · visibilidad del sidebar", () => {
-  it("en el launcher `/` NO renderiza el sidebar", async () => {
+describe("AppShell · sidebar siempre presente", () => {
+  it("`/` redirige a `/panel` (ya no hay launcher)", async () => {
     renderShell("/");
-    expect(await screen.findByText("contenido launcher")).toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: /navegación principal/i })).not.toBeInTheDocument();
+    expect(await screen.findByText("contenido panel")).toBeInTheDocument();
   });
 
-  it("dentro de una app SÍ renderiza el sidebar (con Panel global y ⊞ Apps)", async () => {
+  it("dentro de una app renderiza el sidebar (con Panel global)", async () => {
     renderShell("/generacion");
     expect(await screen.findByText("contenido app")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole("link", { name: /^panel$/i })).toBeInTheDocument(),
     );
-    expect(screen.getByRole("link", { name: /^apps$/i })).toBeInTheDocument();
+    // Ya no hay control "⊞ Apps" (no hay launcher).
+    expect(screen.queryByRole("link", { name: /^apps$/i })).not.toBeInTheDocument();
   });
 
-  it("en `/panel` SÍ renderiza el sidebar", async () => {
+  it("en `/panel` también renderiza el sidebar", async () => {
     renderShell("/panel");
     expect(await screen.findByText("contenido panel")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
+  });
+
+  it("persiste el estado colapsado del rail en localStorage", async () => {
+    localStorage.setItem("keni:sidebar-colapsado", "1");
+    renderShell("/panel");
+    await screen.findByText("contenido panel");
+    // En rail (colapsado) aparece el botón "Expandir barra"; no el "Colapsar".
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: /^colapsar$/i })).not.toBeInTheDocument();
   });
 });
