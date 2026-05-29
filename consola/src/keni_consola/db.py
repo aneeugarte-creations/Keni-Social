@@ -551,6 +551,13 @@ def _crear_esquema(con: Any) -> None:
     # existen. La migracion la convierte (renombre + drop + renombre final) y deja la BD lista
     # para que el DDL declarativo NO haga nada (la tabla ya existe con la forma correcta).
     _migrar_modelo_turnos(con)
+    # Ola "franjas por semana": tiene que correr ANTES del DDL declarativo. Razon: el DDL
+    # declara `CREATE INDEX ... idx_rota_turnos_franja_id ON rota_turnos (franja_id)`, y en
+    # bases productivas la `rota_turnos` previa solo tiene columna `franja` (literal del
+    # modelo Ω3). Crear el indice sobre una columna inexistente revienta. La migracion
+    # asegura `rota_franjas` con `es_descanso`, añade `franja_id` a `rota_turnos`, mueve
+    # los datos y dropa `franja`. Tras esto, el DDL declarativo es idempotente.
+    _migrar_modelo_franjas(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_tareas(con)
@@ -559,11 +566,6 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
-    # Ola "franjas por semana": tras crear el DDL declarativo (que ya declara
-    # `rota_franjas` y `rota_turnos.franja_id`), migramos las filas legadas con
-    # `franja='matutino'/'vespertino'` a `franja_id` y borramos las de `franja='descanso'`.
-    # Idempotente: si ya no hay columna `franja`, no hace nada.
-    _migrar_modelo_franjas(con)
     con.commit()
 
 
@@ -915,8 +917,30 @@ def _migrar_modelo_franjas(con: Any) -> None:
     Si la BD ya esta en el modelo nuevo (no existe `franja`, solo `franja_id` con datos
     coherentes), no toca nada de turnos, pero igual se asegura de la columna `es_descanso`.
     """
+    # PASO 0: asegurar `rota_franjas`. La migracion ahora corre ANTES del DDL declarativo
+    # (porque ese DDL crea un indice sobre `franja_id`, que solo existe tras este paso). En
+    # bases productivas previas la tabla no estaba creada todavia, asi que la materializamos
+    # aqui de forma idempotente. El DDL declarativo posterior queda como no-op.
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS rota_franjas (
+            id           TEXT PRIMARY KEY,
+            lunes        TEXT NOT NULL,
+            nombre       TEXT NOT NULL,
+            inicio       TEXT NOT NULL,
+            fin          TEXT NOT NULL,
+            orden        INTEGER NOT NULL DEFAULT 0,
+            es_descanso  BOOLEAN NOT NULL DEFAULT FALSE,
+            UNIQUE (lunes, nombre)
+        )
+        """
+    )
+    con.execute("CREATE INDEX IF NOT EXISTS idx_rota_franjas_lunes ON rota_franjas (lunes)")
+
     # PASO 1: columna `es_descanso` en `rota_franjas` (idempotente). Necesario antes de
-    # sembrar para que el INSERT no falle en instancias legadas.
+    # sembrar para que el INSERT no falle en instancias legadas que crearon la tabla sin
+    # ese campo (predicado defensivo: tras PASO 0 siempre existira, pero mantenemos por si
+    # el CREATE IF NOT EXISTS encuentra una tabla previa).
     cols_franjas = _columnas_existentes(con, "rota_franjas")
     if cols_franjas and "es_descanso" not in cols_franjas:
         con.execute(
