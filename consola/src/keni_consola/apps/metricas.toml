@@ -9,6 +9,8 @@
 
 id = "metricas"
 etiqueta = "Analíticas"
+# Frase corta para la tarjeta del launcher (cajón de apps).
+descripcion = "Métricas, comercial y reportes"
 icono = "BarChart3"
 flag_activacion = "KENI_APP_METRICAS"
 permisos = ["editor", "admin"]

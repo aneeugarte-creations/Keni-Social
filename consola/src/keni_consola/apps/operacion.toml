@@ -8,6 +8,8 @@
 
 id = "operacion"
 etiqueta = "Operación"
+# Frase corta para la tarjeta del launcher (cajón de apps).
+descripcion = "Rota, parrilla y publicación"
 icono = "Send"
 flag_activacion = "KENI_APP_OPERACION"
 permisos = ["editor", "admin"]

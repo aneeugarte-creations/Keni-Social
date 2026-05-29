@@ -7,6 +7,7 @@ import { AppShell } from "@/components/layout/AppShell";
 // y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
+const Launcher = lazy(() => import("@/pages/Launcher"));
 const Panel = lazy(() => import("@/pages/Panel"));
 const Generacion = lazy(() => import("@/pages/Generacion"));
 const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
@@ -47,14 +48,15 @@ const Usuarios = lazy(() => import("@/pages/Usuarios"));
  * cuelgan de el. Cada "hub" (Investigación, Revisión, Analíticas, Parrilla,
  * Agentes) es a su vez un layout con tabs internos que renderiza sub-rutas.
  *
- * La landing `/` redirige a `/generacion` (uso diario).
+ * La landing `/` es el LAUNCHER (cajón de apps): tarjetas de las apps activas.
+ * Al entrar en una app, el sidebar se reduce a sus secciones (ver Sidebar).
  */
 export const router = createBrowserRouter([
   {
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to="/generacion" replace /> },
+      { index: true, element: <Launcher /> },
 
       // Diario
       { path: "panel", element: <Panel /> },
@@ -149,8 +151,8 @@ export const router = createBrowserRouter([
       { path: "proyectos", element: <Navigate to="/agentes" replace /> },
       { path: "carpetas", element: <Navigate to="/agentes" replace /> },
 
-      // Cualquier otra ruta: de vuelta al inicio.
-      { path: "*", element: <Navigate to="/generacion" replace /> },
+      // Cualquier otra ruta: de vuelta al launcher (cajón de apps).
+      { path: "*", element: <Navigate to="/" replace /> },
     ],
   },
 ]);

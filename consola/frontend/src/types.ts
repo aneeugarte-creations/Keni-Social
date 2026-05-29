@@ -2543,13 +2543,31 @@ export interface GrupoNavCatalogo {
   items: ItemNavCatalogo[];
 }
 
+/** Una entrada de nav de una app, tal como llega anidada en `AppCatalogo.nav`. */
+export interface ItemNavApp {
+  ruta: string;
+  etiqueta: string;
+  icono: string;
+  descripcion: string;
+  grupo: string;
+  grupo_orden: number;
+  orden: number;
+}
+
 /** Una app de catálogo activa (sin el shell). */
 export interface AppCatalogo {
   id: string;
   etiqueta: string;
   icono: string;
+  /** Frase corta para la tarjeta del launcher (cajón de apps). */
+  descripcion: string;
   permisos: string[];
   rutas_frontend: string[];
+  /**
+   * Entradas de nav de ESTA app (ordenadas). El launcher deriva de aquí la ruta
+   * primaria (primer item) y el sidebar con scope muestra solo estos items.
+   */
+  nav: ItemNavApp[];
 }
 
 /** Respuesta de `GET /api/catalogo`: apps activas + navegación data-driven. */

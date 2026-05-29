@@ -6,15 +6,12 @@ import { Outlet, useLocation } from "react-router-dom";
 import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
-import {
-  catalogoAGrupos,
-  NAVEGACION_DEFECTO,
-  type GrupoNav,
-} from "@/components/layout/navegacion";
+import { appDeRuta } from "@/components/layout/apps-scope";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { hidratarLimites } from "@/pages/publicaciones/meta";
+import type { AppCatalogo } from "@/types";
 
 /** Fallback mientras se descarga el chunk de una pagina (lazy/Suspense). */
 function CargandoPagina() {
@@ -25,13 +22,28 @@ function CargandoPagina() {
   );
 }
 
-/** Busca la etiqueta de la ruta activa para mostrarla como titulo en la topbar. */
-function tituloDeRuta(pathname: string, grupos: GrupoNav[]): string {
-  for (const grupo of grupos) {
-    const item = grupo.items.find((i) => pathname.startsWith(i.ruta));
-    if (item) return item.etiqueta;
+/**
+ * Título de la topbar según el path. En el launcher ("/") no hay app: "Tus apps".
+ * Dentro de una app, busca el item de nav que mejor matchea (prefijo más largo) y
+ * usa su etiqueta; si no, cae a la etiqueta de la app. Fuera de apps (Panel,
+ * ajustes) cae a "Consola".
+ */
+function tituloDeRuta(pathname: string, apps: AppCatalogo[]): string {
+  if (pathname === "/") return "Tus apps";
+  const app = appDeRuta(apps, pathname);
+  if (!app) return pathname.startsWith("/panel") ? "Panel" : "Consola";
+  let mejor = app.etiqueta;
+  let mejorLargo = -1;
+  for (const item of app.nav) {
+    if (
+      (pathname === item.ruta || pathname.startsWith(`${item.ruta}/`)) &&
+      item.ruta.length > mejorLargo
+    ) {
+      mejorLargo = item.ruta.length;
+      mejor = item.etiqueta;
+    }
   }
-  return "Consola";
+  return mejor;
 }
 
 /**
@@ -55,24 +67,22 @@ export function AppShell() {
     if (limitesQuery.data) hidratarLimites(limitesQuery.data.limites);
   }, [limitesQuery.data]);
 
-  // Catálogo de apps (ADR 0005): el título de la topbar sale de las mismas entradas
-  // de nav que el sidebar (data-driven). Comparte queryKey con el Sidebar, así se
-  // resuelve una sola vez. Cae a `NAVEGACION_DEFECTO` mientras carga / si falla.
+  // Catálogo de apps (cajón de apps · ADR 0005): el título de la topbar sale de la
+  // app actual y su nav (data-driven). Comparte queryKey con el Sidebar, así se
+  // resuelve una sola vez. Mientras carga, `apps` es [] y el título cae a "Consola".
   const catalogoQuery = useQuery({
     queryKey: ["catalogo"],
     queryFn: ({ signal }) => api.catalogo(signal),
     staleTime: Infinity,
   });
-  const gruposNav = catalogoQuery.data
-    ? catalogoAGrupos(catalogoQuery.data.navegacion)
-    : NAVEGACION_DEFECTO;
+  const apps = catalogoQuery.data?.apps ?? [];
 
   // Cierra el menu movil al cambiar de ruta.
   React.useEffect(() => {
     setMenuAbierto(false);
   }, [location.pathname]);
 
-  const titulo = tituloDeRuta(location.pathname, gruposNav);
+  const titulo = tituloDeRuta(location.pathname, apps);
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">

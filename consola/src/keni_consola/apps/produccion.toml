@@ -13,6 +13,9 @@
 
 id = "produccion"
 etiqueta = "Producción"
+# Frase corta para la tarjeta del launcher (cajón de apps): el "para qué" de la app
+# de un vistazo. El detalle por sección lo dan las descripciones de cada `[[nav]]`.
+descripcion = "Copy, clips, skills y verificación"
 # Nombre de icono de lucide-react (string). El frontend lo resuelve a un componente
 # vía un mapa string->LucideIcon en `navegacion.ts`.
 icono = "Sparkles"
