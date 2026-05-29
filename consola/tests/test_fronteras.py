@@ -115,17 +115,27 @@ def _modulos_destino(node: ast.ImportFrom) -> set[str]:
     Resuelve los patrones de import del repo a un nombre de módulo base `<Y>`:
       - `from ..dominio.<Y> import ...`  -> {<Y>}
       - `from ..api.<Y> import ...`      -> {<Y>}
+      - `from ..dominio import <Y>, <Z>` -> {<Y>, <Z>}   (submódulos importados)
+      - `from ..api import <Y>, <Z>`     -> {<Y>, <Z>}
       - `from ..<Y> import ...`          -> {<Y>}
       - `from .. import <Y>, <Z>`        -> {<Y>, <Z>}
     Los imports absolutos (keni_shared, keni_metricas, starlette…) se ignoran: no son
     relativos a `keni_consola`, por tanto nunca son módulos de una app.
+
+    OJO con `from ..dominio import <Y>` (forma "paquete import submódulo"): el módulo
+    cruzado es `<Y>` (un submódulo de `dominio/`), NO el paquete `dominio`. Resolverlo
+    a `dominio` dejaba escapar cruces reales (p.ej. `from ..dominio import publicaciones`
+    desde un router de otra app); por eso aquí los NOMBRES importados son los módulos.
     """
     if node.level < 1:
         return set()  # import absoluto: fuera del paquete, nunca es de una app
     mod = node.module or ""
     partes = mod.split(".") if mod else []
-    if partes and partes[0] in ("dominio", "api") and len(partes) >= 2:
-        return {partes[1]}
+    if partes and partes[0] in ("dominio", "api"):
+        if len(partes) >= 2:
+            return {partes[1]}  # from ..dominio.<Y> import ...
+        # from ..dominio import <Y>, <Z>: los submódulos importados son los módulos.
+        return {n.name for n in node.names}
     if partes:
         return {partes[0]}
     # `from .. import a, b` (sin módulo): los nombres SON los módulos.
@@ -228,11 +238,18 @@ def test_el_lint_detecta_una_violacion_sintetica():
     assert mapa.get("metricas") == "metricas"
     assert mapa.get("publicaciones") == "operacion"
 
-    fragmento = "from ..dominio.publicaciones import publicacion_a_dict\n"
-    arbol = ast.parse(fragmento)
-    node = next(n for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom))
-    destinos = _modulos_destino(node)
-    assert "publicaciones" in destinos, "el resolver no detectó el módulo importado"
+    # Las DOS formas de import deben resolverse a `publicaciones` (la dotada y la
+    # "paquete import submódulo", que antes evadía el resolver y dejaba escapar cruces).
+    for fragmento in (
+        "from ..dominio.publicaciones import publicacion_a_dict\n",
+        "from ..dominio import publicaciones\n",
+    ):
+        arbol = ast.parse(fragmento)
+        node = next(n for n in ast.walk(arbol) if isinstance(n, ast.ImportFrom))
+        destinos = _modulos_destino(node)
+        assert "publicaciones" in destinos, (
+            f"el resolver no detectó el módulo importado en: {fragmento!r}"
+        )
 
     app_origen = "metricas"
     cruce_prohibido = any(
