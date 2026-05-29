@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -123,6 +123,28 @@ describe("AppShell · sidebar siempre presente", () => {
     renderShell("/panel");
     expect(await screen.findByText("contenido panel")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
+  });
+
+  it("dentro de una app muestra breadcrumb 'App › Página' con la App clicable", async () => {
+    renderShell("/generacion");
+    await screen.findByText("contenido app");
+    // "Producción" es un ENLACE a su 1ª página (rutaPrimaria → /generacion).
+    const enlaceApp = await screen.findByRole("link", { name: /^producción$/i });
+    expect(enlaceApp).toHaveAttribute("href", "/generacion");
+    // "Generación" es la página actual (texto, marcada aria-current). Acotamos al
+    // breadcrumb (la misma etiqueta también aparece como hoja en el sidebar).
+    const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
+    const pagina = within(ruta).getByText("Generación");
+    expect(pagina).toHaveAttribute("aria-current", "page");
+  });
+
+  it("fuera de apps (Panel) muestra solo 'Panel', sin '›' ni enlace de app", async () => {
+    renderShell("/panel");
+    await screen.findByText("contenido panel");
+    const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
+    expect(ruta).toHaveTextContent("Panel");
+    // En el breadcrumb, "Panel" va como TEXTO (no como enlace de app) y no hay "›".
+    expect(ruta.querySelector("a")).toBeNull();
   });
 
   it("persiste el estado colapsado del rail en localStorage", async () => {

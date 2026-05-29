@@ -1,12 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, Menu, X } from "lucide-react";
+import { ChevronRight, Loader2, Menu, X } from "lucide-react";
 import * as React from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
+import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Wordmark } from "@/components/layout/Wordmark";
-import { appDeRuta } from "@/components/layout/apps-scope";
+import { appDeRuta, hojasDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -25,26 +26,48 @@ function CargandoPagina() {
 /** Clave de localStorage del estado colapsado del sidebar (rail). */
 const CLAVE_SIDEBAR_COLAPSADO = "keni:sidebar-colapsado";
 
+/** Etiquetas de las pantallas de shell (fuera de apps) que no son Panel. */
+const ETIQUETAS_SHELL: Record<string, string> = {
+  "/configuracion": "Configuración",
+  "/mi-cuenta": "Mi cuenta",
+  "/usuarios": "Usuarios",
+};
+
 /**
- * Título de la topbar según el path. Dentro de una app, busca el item de nav que
- * mejor matchea (prefijo más largo) y usa su etiqueta; si no, cae a la etiqueta
- * de la app. Fuera de apps (Panel, ajustes) cae a "Consola".
+ * Breadcrumb derivado del path. Dentro de una app devuelve `{ app, pagina }`:
+ * `app` (etiqueta + ruta primaria, para enlazarla) y `pagina` (la HOJA que mejor
+ * matchea por prefijo más largo entre `hojasDeApp`, que incluye las sub-páginas
+ * aplanadas de los hubs). Fuera de apps no hay `app`: Panel → "Panel"; ajustes →
+ * el nombre de la pantalla; resto → "Consola".
  */
-function tituloDeRuta(pathname: string, apps: AppCatalogo[]): string {
+interface Migaja {
+  app?: { etiqueta: string; ruta: string };
+  pagina: string;
+}
+
+function migajaDeRuta(pathname: string, apps: AppCatalogo[]): Migaja {
   const app = appDeRuta(apps, pathname);
-  if (!app) return pathname.startsWith("/panel") ? "Panel" : "Consola";
-  let mejor = app.etiqueta;
+  if (!app) {
+    if (pathname.startsWith("/panel")) return { pagina: "Panel" };
+    for (const [ruta, etiqueta] of Object.entries(ETIQUETAS_SHELL)) {
+      if (pathname === ruta || pathname.startsWith(`${ruta}/`)) return { pagina: etiqueta };
+    }
+    return { pagina: "Consola" };
+  }
+  // Hoja actual: prefijo más largo entre las hojas APLANADAS de la app (cubre las
+  // sub-páginas de hubs, p.ej. /analiticas/metricas). Cae a la etiqueta de la app.
+  let pagina = app.etiqueta;
   let mejorLargo = -1;
-  for (const item of app.nav) {
+  for (const hoja of hojasDeApp(app)) {
     if (
-      (pathname === item.ruta || pathname.startsWith(`${item.ruta}/`)) &&
-      item.ruta.length > mejorLargo
+      (pathname === hoja.ruta || pathname.startsWith(`${hoja.ruta}/`)) &&
+      hoja.ruta.length > mejorLargo
     ) {
-      mejorLargo = item.ruta.length;
-      mejor = item.etiqueta;
+      mejorLargo = hoja.ruta.length;
+      pagina = hoja.etiqueta;
     }
   }
-  return mejor;
+  return { app: { etiqueta: app.etiqueta, ruta: rutaPrimaria(app) }, pagina };
 }
 
 /**
@@ -101,11 +124,13 @@ export function AppShell() {
     setMenuAbierto(false);
   }, [location.pathname]);
 
-  const titulo = tituloDeRuta(location.pathname, apps);
+  const migaja = migajaDeRuta(location.pathname, apps);
 
   // El sidebar se muestra SIEMPRE ahora: ya no hay launcher `/` sin barra. Las
-  // apps viven dentro del sidebar como grupos de acordeón.
+  // apps viven dentro del sidebar como grupos de acordeón. `PaletaProvider` monta
+  // la paleta de comandos (⌘K) una sola vez y registra su listener global.
   return (
+    <PaletaProvider>
     <div className="flex h-screen w-full overflow-hidden bg-background">
       {/* Sidebar fijo (escritorio). En rail (colapsado) queda estrecho. */}
       <aside className="hidden md:block">
@@ -143,8 +168,28 @@ export function AppShell() {
             <Wordmark />
           </div>
 
-          {/* Titulo de la seccion activa (escritorio), estilo Vercel. */}
-          <h1 className="hidden text-sm font-medium text-foreground md:block">{titulo}</h1>
+          {/* Breadcrumb de la sección activa (escritorio): "App › Página". La
+              App es un enlace a su 1ª página; la Página es texto. Fuera de apps,
+              solo se muestra la pantalla (Panel / ajustes) sin "›". */}
+          <nav aria-label="Ruta" className="hidden min-w-0 items-center gap-1.5 text-sm md:flex">
+            {migaja.app && (
+              <>
+                <Link
+                  to={migaja.app.ruta}
+                  className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {migaja.app.etiqueta}
+                </Link>
+                <ChevronRight
+                  className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+                  aria-hidden="true"
+                />
+              </>
+            )}
+            <span className="truncate font-medium text-foreground" aria-current="page">
+              {migaja.pagina}
+            </span>
+          </nav>
 
           {/* Indicador de salud del sistema, alineado a la derecha de la topbar. */}
           <div className="ml-auto flex items-center">
@@ -162,5 +207,6 @@ export function AppShell() {
         </main>
       </div>
     </div>
+    </PaletaProvider>
   );
 }
