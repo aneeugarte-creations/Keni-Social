@@ -34,7 +34,9 @@ def test_rangos_validos_expone_los_del_schema(muestra):
 
 
 def test_fuentes_disponibles(muestra):
-    assert set(servicio.FUENTES_DISPONIBLES) == {"muestra", "real"}
+    # `metricool` (consumidor de la API REST de Metricool, ADR 0005 §B) se suma a
+    # las fuentes válidas junto a `muestra` (demo) y `real` (adaptadores propios).
+    assert set(servicio.FUENTES_DISPONIBLES) == {"muestra", "metricool", "real"}
 
 
 def test_cuenta_deportes_principal_y_hermanas(muestra):

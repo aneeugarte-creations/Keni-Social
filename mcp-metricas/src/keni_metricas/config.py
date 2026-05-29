@@ -17,9 +17,14 @@ from pathlib import Path
 from .fuentes.base import CuentaNoEncontrada, FuenteMetricas
 from .schema import Cuenta, Pieza, Plataforma, ResumenMetricas
 
-# Valores aceptados para `fuente`. `muestra` = datos offline (defecto); `real` =
-# adaptadores que pegan a las APIs reales (requiere credenciales).
-FUENTES_VALIDAS: frozenset[str] = frozenset({"muestra", "real"})
+# Valores aceptados para `fuente`:
+#   - `muestra`  = datos offline (defecto), sin red.
+#   - `metricool`= consumidor de la API REST de Metricool (B es consumidor, no
+#                  motor de ingesta; ADR 0005 §B). Requiere API token (plan
+#                  Advanced). Sin credenciales, degrada con honestidad a `muestra`.
+#   - `real`     = adaptadores propios por plataforma (Meta/YouTube/X/TikTok). NO se
+#                  usa para B (queda como capacidad histórica; ver ADR 0005 §B).
+FUENTES_VALIDAS: frozenset[str] = frozenset({"muestra", "metricool", "real"})
 
 
 class ConfigInvalida(ValueError):
@@ -60,12 +65,34 @@ class CuentaConfig:
 
 
 @dataclass
+class MetricoolConfig:
+    """Identidad y mapeo de marcas para la fuente `metricool` (API REST).
+
+    `user_token` va en la cabecera `X-Mc-Auth`; `user_id` y los `blog_id` por marca
+    van como query params. `marcas` mapea cada id de marca keni (`claro_sports`, …)
+    al `blogId` de Metricool y, opcionalmente, su nombre y plataformas.
+    """
+
+    user_token: str = ""
+    user_id: str = ""
+    # id_marca_keni -> {"blog_id": str, "nombre": str?, "plataformas": [str|Plataforma]?}
+    marcas: dict[str, dict] = field(default_factory=dict)
+
+    @property
+    def configurada(self) -> bool:
+        """True si hay credenciales suficientes para llamar a la API de Metricool."""
+        return bool(self.user_token and self.user_id and self.marcas)
+
+
+@dataclass
 class Config:
-    fuente: str = "muestra"  # "muestra" | "real"
+    fuente: str = "muestra"  # "muestra" | "metricool" | "real"
     cuentas: list[CuentaConfig] = field(default_factory=list)
     credenciales: dict[str, dict] = field(default_factory=dict)  # plataforma -> {clave: valor}
     # marcas (ids) que gestiona esta persona. Vacio = todas (compatibilidad).
     marcas: list[str] = field(default_factory=list)
+    # Identidad + mapeo de marcas para la fuente `metricool`.
+    metricool: MetricoolConfig = field(default_factory=MetricoolConfig)
 
 
 def _parsear_cuenta(idx: int, c: object) -> CuentaConfig:
@@ -111,6 +138,40 @@ def _parsear_cuenta(idx: int, c: object) -> CuentaConfig:
     return CuentaConfig(id=c["id"], nombre=c["nombre"], plataformas=plataformas)
 
 
+def _parsear_metricool(datos: dict) -> MetricoolConfig:
+    """Lee la sección `[metricool]` del config + overrides por env var.
+
+    Env (prioridad sobre el TOML): `METRICOOL_USER_TOKEN`, `METRICOOL_USER_ID`.
+    El mapeo de marcas (`id_marca -> blogId`) vive en el TOML
+    (`[metricool.marcas.<id>]`), porque es estructurado; no se pone en env.
+
+    NO valida agresivamente: si faltan piezas, `MetricoolConfig.configurada` será
+    False y `construir_fuente` degrada a `muestra` (degradación honesta, sin romper).
+    """
+    seccion = datos.get("metricool", {}) if isinstance(datos.get("metricool"), dict) else {}
+    user_token = os.environ.get("METRICOOL_USER_TOKEN") or seccion.get("user_token", "")
+    user_id = os.environ.get("METRICOOL_USER_ID") or str(seccion.get("user_id", "") or "")
+
+    marcas: dict[str, dict] = {}
+    crudas = seccion.get("marcas", {})
+    if isinstance(crudas, dict):
+        for mid, m in crudas.items():
+            if not isinstance(m, dict):
+                continue
+            blog_id = m.get("blog_id") or m.get("blogId")
+            if not blog_id:
+                continue
+            entrada: dict = {"blog_id": str(blog_id)}
+            if m.get("nombre"):
+                entrada["nombre"] = str(m["nombre"])
+            plats = m.get("plataformas")
+            if isinstance(plats, list):
+                entrada["plataformas"] = [str(p) for p in plats]
+            marcas[str(mid)] = entrada
+
+    return MetricoolConfig(user_token=str(user_token or ""), user_id=user_id, marcas=marcas)
+
+
 def cargar_config() -> Config:
     datos: dict = {}
     ruta = ruta_config()
@@ -154,6 +215,7 @@ def cargar_config() -> Config:
         cuentas=cuentas,
         credenciales=datos.get("credenciales", {}),
         marcas=marcas,
+        metricool=_parsear_metricool(datos),
     )
 
 
@@ -194,6 +256,36 @@ class FuenteScoped:
         return self._fuente.mejores_piezas(cuenta_id, rango, n)
 
 
+def _fuente_metricool(cfg: Config) -> FuenteMetricas:
+    """Construye `FuenteMetricol` o, sin credenciales, DEGRADA con honestidad.
+
+    Si no hay `user_token`/`user_id`/marcas mapeadas, no se inventan datos: se
+    devuelve la fuente `muestra` y se deja un aviso en el log (degradación honesta,
+    ADR 0005 §B / aceptación T2.B). El `doctor` reporta la fuente efectiva por
+    `fuente.nombre`, así que el aviso "sin credenciales" es visible.
+    """
+    from .fuentes.muestra import FuenteMuestra
+
+    mc = cfg.metricool
+    if not mc.configurada:
+        import logging
+
+        logging.getLogger("keni_metricas").warning(
+            "fuente 'metricool' seleccionada pero faltan credenciales "
+            "(METRICOOL_USER_TOKEN / METRICOOL_USER_ID / [metricool.marcas]); "
+            "se usa la fuente 'muestra' (datos de demo, sin inventar dato real)."
+        )
+        return FuenteMuestra()
+
+    from .fuentes.metricol import FuenteMetricol
+
+    return FuenteMetricol(
+        user_token=mc.user_token,
+        user_id=mc.user_id,
+        marcas=mc.marcas,
+    )
+
+
 def construir_fuente(cfg: Config | None = None) -> FuenteMetricas:
     """Crea la fuente activa segun la configuracion.
 
@@ -202,10 +294,12 @@ def construir_fuente(cfg: Config | None = None) -> FuenteMetricas:
     fuente se devuelve tal cual (comportamiento historico: todas las marcas).
     """
     cfg = cfg or cargar_config()
-    if cfg.fuente == "muestra":
+    if cfg.fuente == "metricool":
+        fuente: FuenteMetricas = _fuente_metricool(cfg)
+    elif cfg.fuente == "muestra":
         from .fuentes.muestra import FuenteMuestra
 
-        fuente: FuenteMetricas = FuenteMuestra()
+        fuente = FuenteMuestra()
     else:
         from .agregador import FuenteCompuesta
 

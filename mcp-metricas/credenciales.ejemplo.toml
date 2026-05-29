@@ -5,7 +5,24 @@
 # Por defecto fuente = "muestra" (datos offline): el MCP funciona sin configurar
 # nada. Cambia a "real" cuando tengas credenciales de las plataformas.
 
-fuente = "muestra"   # "muestra" | "real"
+fuente = "muestra"   # "muestra" | "metricool" | "real"
+
+# --- Fuente `metricool` (B es CONSUMIDOR de Metricool; ADR 0005 §B) -----------
+# Pon fuente = "metricool" para leer dato REAL de la API REST de Metricool (plan
+# Advanced -> API token). Si faltan credenciales, degrada solo a "muestra" (demo),
+# sin inventar dato real. `user_token` va en la cabecera X-Mc-Auth; `user_id` y los
+# `blog_id` por marca van como query params. El userToken se saca de Metricool en
+# Ajustes de la cuenta -> seccion API. Override por env: METRICOOL_USER_TOKEN,
+# METRICOOL_USER_ID.
+# [metricool]
+# user_token = "xxxxxxxx"   # X-Mc-Auth (token de API, plan Advanced)
+# user_id = "1234567"       # id de usuario de la cuenta Metricool
+# [metricool.marcas.claro_sports]   # id de marca keni -> blogId de Metricool
+# blog_id = "7654321"
+# nombre = "Claro Sports"
+# plataformas = ["facebook", "instagram", "x", "tiktok", "youtube"]  # opcional
+# [metricool.marcas.unotv]
+# blog_id = "7654322"
 
 # --- Acotamiento por marca (multiusuario) ------------------------------------
 # Si gestionas solo algunas marcas, declaralas aqui y el MCP SOLO mostrara esas
