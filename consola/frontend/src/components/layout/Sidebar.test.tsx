@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -64,6 +64,35 @@ function stubCatalogo() {
   vi.stubGlobal("fetch", fn);
   return fn;
 }
+
+/**
+ * localStorage de juguete (jsdom no siempre expone `clear`). Aísla el conjunto
+ * de apps abiertas (acordeón multi-abierto, persistido) entre tests.
+ */
+function instalarLocalStorage() {
+  let store: Record<string, string> = {};
+  const mock: Storage = {
+    get length() {
+      return Object.keys(store).length;
+    },
+    clear: () => {
+      store = {};
+    },
+    getItem: (k: string) => (k in store ? store[k] : null),
+    key: (i: number) => Object.keys(store)[i] ?? null,
+    removeItem: (k: string) => {
+      delete store[k];
+    },
+    setItem: (k: string, v: string) => {
+      store[k] = String(v);
+    },
+  };
+  vi.stubGlobal("localStorage", mock);
+}
+
+beforeEach(() => {
+  instalarLocalStorage();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -157,14 +186,64 @@ describe("Sidebar · acordeón de apps", () => {
     expect(screen.queryByRole("link", { name: /^métricas$/i })).not.toBeInTheDocument();
   });
 
-  it("acordeón: al abrir otra app se cierra la actual", async () => {
+  it("acordeón PERMISIVO: al abrir otra app NO se cierra la actual (multi-abierto)", async () => {
     renderSidebar("editor", "/generacion");
-    // Producción abierta de inicio.
+    // Producción abierta de inicio (app de la ruta actual).
     await screen.findByRole("link", { name: /generación/i });
-    // Abre Operación: se ven sus hojas y se cierran las de Producción.
+    // Abre Operación: se ven SUS hojas y SIGUEN viéndose las de Producción.
     fireEvent.click(screen.getByRole("button", { name: /operación/i }));
     expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /generación/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /generación/i })).toBeInTheDocument();
+  });
+
+  it("alterna el padre: un 2º clic en una app abierta la cierra (sin tocar las demás)", async () => {
+    renderSidebar("editor", "/generacion");
+    fireEvent.click(await screen.findByRole("button", { name: /operación/i }));
+    expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
+    // Cierra Operación: desaparecen sus hojas; Producción sigue abierta.
+    fireEvent.click(screen.getByRole("button", { name: /operación/i }));
+    expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /generación/i })).toBeInTheDocument();
+  });
+
+  it("persiste el conjunto de apps abiertas en localStorage", async () => {
+    renderSidebar("editor", "/generacion");
+    fireEvent.click(await screen.findByRole("button", { name: /operación/i }));
+    await screen.findByRole("link", { name: /publicaciones/i });
+    await waitFor(() => {
+      const guardado = JSON.parse(localStorage.getItem("keni:sidebar-apps-abiertas") ?? "[]");
+      expect(guardado).toEqual(expect.arrayContaining(["produccion", "operacion"]));
+    });
+  });
+
+  it("rehidrata el conjunto de apps abiertas desde localStorage", async () => {
+    // Operación quedó abierta de una sesión previa, aunque la ruta sea /panel.
+    localStorage.setItem("keni:sidebar-apps-abiertas", JSON.stringify(["operacion"]));
+    renderSidebar("editor", "/panel");
+    expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
+  });
+
+  it("las HOJAS van en TEXTO (sin icono) y la activa marca acento a la izquierda", async () => {
+    renderSidebar("editor", "/generacion");
+    const hoja = await screen.findByRole("link", { name: /generación/i });
+    // La hoja activa lleva la barra/acento a la izquierda (border-l-2 + border-foreground).
+    expect(hoja.className).toContain("border-l-2");
+    expect(hoja.className).toContain("border-foreground");
+    // Sin icono en la hoja: ningún <svg> dentro del enlace.
+    expect(hoja.querySelector("svg")).toBeNull();
+    // Una hoja inactiva tampoco lleva icono.
+    const inactiva = screen.getByRole("link", { name: /skills/i });
+    expect(inactiva.querySelector("svg")).toBeNull();
+  });
+
+  it("muestra un trigger de paleta (Buscar… + ⌘K) en vez del input falso 'F'", async () => {
+    renderSidebar("editor", "/generacion");
+    // Es un BOTÓN que abre la paleta, no un input de texto muerto.
+    const trigger = await screen.findByRole("button", { name: /buscar páginas/i });
+    expect(trigger).toBeInTheDocument();
+    expect(trigger).toHaveTextContent("⌘K");
+    // Ya no hay input de búsqueda ni el atajo "F".
+    expect(screen.queryByRole("textbox", { name: /buscar/i })).not.toBeInTheDocument();
   });
 
   it("el título de la app NO es click muerto: navega a su 1ª hoja y abre su acordeón", async () => {
