@@ -4578,12 +4578,6 @@ const ESTADOS_TERMINALES_SWAP: ReadonlySet<EstadoSwap> = new Set([
   "cancelado",
 ]);
 
-const FRANJAS_SWAP: { valor: FranjaTurno; etiqueta: string }[] = [
-  { valor: "matutino", etiqueta: "Mañana" },
-  { valor: "vespertino", etiqueta: "Tarde" },
-  { valor: "descanso", etiqueta: "Descanso" },
-];
-
 /** Formatea un timestamp ISO ("2026-05-25T18:42:11") como fecha-hora corta es-MX. */
 function formatearMomentoCorto(s: string): string {
   if (!s) return "";
@@ -4866,6 +4860,19 @@ function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
   );
 }
 
+/**
+ * Formulario SIMPLIFICADO para pedir un cambio de turno.
+ *
+ * Antes pedia 6 campos (compañero + fecha A + franja A + fecha B + franja B + motivo).
+ * Ahora son 3: "Mi turno" (Select sobre los turnos REALES del solicitante en la
+ * semana actual y la siguiente), "Turno deseado" (Select sobre los turnos de los
+ * demas CMs en el mismo rango) y motivo opcional. De cada Select derivamos
+ * `fecha`/`franja_id` (y `destinatario_id` del segundo). El backend sigue
+ * recibiendo el mismo cuerpo `crearSwap`.
+ *
+ * Rango: hardcoded a "semana actual + siguiente" (14 dias). Si la lista queda
+ * vacia avisamos al usuario en lugar de saltar a otra ventana.
+ */
 function FormularioNuevoSwap({
   miId,
   onCreado,
@@ -4873,128 +4880,149 @@ function FormularioNuevoSwap({
   miId: string;
   onCreado?: () => void;
 }) {
-  const equipoQ = useQuery({
-    queryKey: ["rota", "equipo"],
-    queryFn: ({ signal }) => api.rotaEquipo(signal),
+  // Semana actual y la siguiente: dos consultas, una por semana, para reusar el
+  // cache compartido con la pestaña Calendario.
+  const lunesActual = React.useMemo(() => lunesDeSemana(new Date()), []);
+  const lunesProxima = React.useMemo(() => lunesSiguiente(lunesActual, 1), [lunesActual]);
+
+  const semana1Q = useQuery({
+    queryKey: ["rota", "turnos", lunesActual] as const,
+    queryFn: ({ signal }) => api.listarTurnos({ lunes: lunesActual }, signal),
   });
-  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []).filter(
-    (m) => m.id !== miId,
+  const semana2Q = useQuery({
+    queryKey: ["rota", "turnos", lunesProxima] as const,
+    queryFn: ({ signal }) => api.listarTurnos({ lunes: lunesProxima }, signal),
+  });
+
+  const turnos: TurnoRota[] = React.useMemo(
+    () => [...(semana1Q.data?.turnos ?? []), ...(semana2Q.data?.turnos ?? [])],
+    [semana1Q.data, semana2Q.data],
   );
 
-  const [destinatarioId, setDestinatarioId] = React.useState("");
-  const [fechaA, setFechaA] = React.useState("");
-  const [franjaA, setFranjaA] = React.useState<FranjaTurno>("matutino");
-  const [fechaB, setFechaB] = React.useState("");
-  const [franjaB, setFranjaB] = React.useState<FranjaTurno>("matutino");
+  // Hoy en ISO: filtramos turnos pasados (no tiene sentido pedir cambio sobre
+  // un dia que ya paso). La franja descanso si la permitimos: el backend valida.
+  const hoyIso = React.useMemo(() => iso(new Date()), []);
+  const turnosFuturos = React.useMemo(
+    () => turnos.filter((t) => t.fecha >= hoyIso),
+    [turnos, hoyIso],
+  );
+
+  const turnosMios = React.useMemo(
+    () =>
+      turnosFuturos
+        .filter((t) => t.miembro_id === miId)
+        .slice()
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.franja_nombre.localeCompare(b.franja_nombre)),
+    [turnosFuturos, miId],
+  );
+  const turnosOtros = React.useMemo(
+    () =>
+      turnosFuturos
+        .filter((t) => t.miembro_id !== miId)
+        .slice()
+        .sort(
+          (a, b) =>
+            a.fecha.localeCompare(b.fecha) ||
+            a.franja_nombre.localeCompare(b.franja_nombre) ||
+            a.miembro_nombre.localeCompare(b.miembro_nombre),
+        ),
+    [turnosFuturos, miId],
+  );
+
+  // Las opciones del Select 1 codifican `${id}` y leemos el TurnoRota completo
+  // por busqueda en la lista. Idem el Select 2.
+  const [miTurnoId, setMiTurnoId] = React.useState("");
+  const [turnoDeseadoId, setTurnoDeseadoId] = React.useState("");
   const [motivo, setMotivo] = React.useState("");
 
-  const destinatario = equipo.find((m) => m.id === destinatarioId);
+  const miTurno = turnosMios.find((t) => t.id === miTurnoId);
+  const turnoDeseado = turnosOtros.find((t) => t.id === turnoDeseadoId);
 
   const crear = useMutation({
-    mutationFn: () =>
-      api.crearSwap({
-        destinatario_id: destinatarioId,
-        fecha_a: fechaA,
-        franja_a: franjaA,
-        fecha_b: fechaB,
-        franja_b: franjaB,
+    mutationFn: () => {
+      if (!miTurno || !turnoDeseado) throw new Error("Falta seleccionar los turnos.");
+      return api.crearSwap({
+        destinatario_id: turnoDeseado.miembro_id,
+        fecha_a: miTurno.fecha,
+        franja_a: miTurno.franja_id,
+        fecha_b: turnoDeseado.fecha,
+        franja_b: turnoDeseado.franja_id,
         motivo: motivo.trim(),
-      }),
+      });
+    },
     onSuccess: () => {
-      toast.success("Solicitud enviada. Tu compañero la verá en su lista de 'Por responder'.");
-      setDestinatarioId("");
-      setFechaA("");
-      setFranjaA("matutino");
-      setFechaB("");
-      setFranjaB("matutino");
+      toast.success("Solicitud enviada. Tu compañero la vera en la lista.");
+      setMiTurnoId("");
+      setTurnoDeseadoId("");
       setMotivo("");
       onCreado?.();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const cargando = semana1Q.isPending || semana2Q.isPending;
+  const motivoExcedido = motivo.length > 500;
   const puedeCrear =
-    destinatarioId !== "" &&
-    fechaA !== "" &&
-    fechaB !== "" &&
+    miTurnoId !== "" &&
+    turnoDeseadoId !== "" &&
+    !motivoExcedido &&
     !crear.isPending;
+
+  // Etiqueta de cada opcion: "Lun 8 jun · Mañana" o "Lun 8 jun · Mañana · Tezcu"
+  // segun si es opcion propia o de un compañero.
+  const etiquetaTurnoPropio = (t: TurnoRota) =>
+    `${formatearFechaCorta(t.fecha)} · ${t.franja_nombre}`;
+  const etiquetaTurnoOtros = (t: TurnoRota) =>
+    `${formatearFechaCorta(t.fecha)} · ${t.franja_nombre} · ${t.miembro_nombre}`;
+
+  if (cargando) {
+    return <Skeleton className="h-40 w-full rounded-md" />;
+  }
+  if (turnosMios.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+        No tienes turnos para cambiar en este rango (semana actual + siguiente).
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label>Compañero/a</Label>
-        <Select value={destinatarioId} onValueChange={setDestinatarioId}>
-          <SelectTrigger aria-label="Compañero al que pides el cambio">
-            <SelectValue placeholder="Elige a un compañero/a" />
+        <Label>Mi turno</Label>
+        <Select value={miTurnoId} onValueChange={setMiTurnoId}>
+          <SelectTrigger aria-label="Mi turno (el que cedo)">
+            <SelectValue placeholder="Elige uno de tus turnos" />
           </SelectTrigger>
           <SelectContent>
-            {equipo.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.nombre}
+            {turnosMios.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {etiquetaTurnoPropio(t)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Mi turno
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="swap-fecha-a">Día</Label>
-            <Input
-              id="swap-fecha-a"
-              type="date"
-              value={fechaA}
-              onChange={(e) => setFechaA(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Franja</Label>
-            <Select value={franjaA} onValueChange={(v) => setFranjaA(v as FranjaTurno)}>
-              <SelectTrigger aria-label="Franja de mi turno">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FRANJAS_SWAP.map((f) => (
-                  <SelectItem key={f.valor} value={f.valor}>
-                    {f.etiqueta}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Turno de {destinatario?.nombre || "tu compañero/a"}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="swap-fecha-b">Día</Label>
-            <Input
-              id="swap-fecha-b"
-              type="date"
-              value={fechaB}
-              onChange={(e) => setFechaB(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Franja</Label>
-            <Select value={franjaB} onValueChange={(v) => setFranjaB(v as FranjaTurno)}>
-              <SelectTrigger aria-label="Franja del turno del compañero">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {FRANJAS_SWAP.map((f) => (
-                  <SelectItem key={f.valor} value={f.valor}>
-                    {f.etiqueta}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      <div className="space-y-1.5">
+        <Label>Turno deseado</Label>
+        <Select value={turnoDeseadoId} onValueChange={setTurnoDeseadoId}>
+          <SelectTrigger aria-label="Turno deseado (el que quieres recibir)">
+            <SelectValue placeholder="Elige el turno con el que quieres cambiar" />
+          </SelectTrigger>
+          <SelectContent>
+            {turnosOtros.length === 0 ? (
+              <div className="p-2 text-xs text-muted-foreground">
+                No hay turnos de otros compañeros en este rango.
+              </div>
+            ) : (
+              turnosOtros.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {etiquetaTurnoOtros(t)}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="swap-motivo">
@@ -5004,10 +5032,15 @@ function FormularioNuevoSwap({
           id="swap-motivo"
           value={motivo}
           onChange={(e) => setMotivo(e.target.value)}
-          placeholder="Ej. Cita médica, evento familiar, examen…"
+          placeholder="Ej. Cita medica, evento familiar, examen…"
           rows={2}
           maxLength={500}
         />
+        {motivoExcedido && (
+          <div className="text-xs text-destructive">
+            El motivo no puede pasar de 500 caracteres.
+          </div>
+        )}
       </div>
       <div className="flex justify-end">
         <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
