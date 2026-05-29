@@ -110,6 +110,7 @@ import type {
   RespuestaProyectos,
   RespuestaRadar,
   RespuestaParrilla,
+  RespuestaProgramarMetricool,
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
   RespuestaGuardarModeloImagen,
@@ -801,6 +802,14 @@ export const api = {
   // Solo lectura: deriva del Radar. PROPONE el orden; publicar lo decide el humano.
   parrillaDia: (geo?: string, signal?: AbortSignal) =>
     peticion<RespuestaParrilla>(`/parrilla-dia${query({ geo })}`, { signal }),
+
+  // --- Programar/previsualizar una pieza en Metricool (respeta KENI_PUBLICAR_REAL) ---
+  // Con el gate OFF (default) es DRY-RUN: previsualiza el cuerpo, NO publica nada.
+  programarEnMetricool: (publicacionId: string) =>
+    peticion<RespuestaProgramarMetricool>(
+      `/publicaciones/${encodeURIComponent(publicacionId)}/metricool`,
+      { metodo: "POST" },
+    ),
 
   // --- Franjas (colas) ---
   franjas: (signal?: AbortSignal) => peticion<RespuestaFranjas>("/franjas", { signal }),

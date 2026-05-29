@@ -418,6 +418,38 @@ async def reciclar(request: Request) -> Response:
     return JSONResponse({"publicacion": _publicacion_a_dict(copia), "encolado": False})
 
 
+async def programar_metricool(request: Request) -> Response:
+    """Programa/previsualiza la pieza en Metricool a demanda (botón de la UI).
+
+    `POST /api/publicaciones/{id}/metricool`. Respeta el gate `KENI_PUBLICAR_REAL`:
+    con el flag OFF (default) es DRY-RUN (previsualiza el cuerpo que se enviaría,
+    NO publica ni persiste); con ON publica de verdad, persiste `id_post_metricool`
+    y pasa la pieza a `publicado`. -> `{resultado, publicacion}` | 400 | 404.
+    """
+    # Import local: `programador` es infra (no es router de ninguna app); el camino
+    # real solo se activa con el gate. Mantiene el módulo de API sin acoplarse a él.
+    from .. import programador
+
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    resultado = programador.programar_pieza_metricool(pub)
+    if not resultado.get("ok"):
+        return JSONResponse(
+            {"error": resultado.get("motivo") or "No se pudo programar en Metricool."},
+            status_code=400,
+        )
+    actualizada = repos.obtener_publicacion(publicacion_id)
+    return JSONResponse(
+        {
+            "resultado": resultado,
+            "publicacion": _publicacion_a_dict(actualizada) if actualizada else None,
+        }
+    )
+
+
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
@@ -426,6 +458,7 @@ RUTAS = [
     Route("/api/publicaciones/{publicacion_id}/encolar", encolar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/reciclar", reciclar, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),

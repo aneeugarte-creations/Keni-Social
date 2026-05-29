@@ -281,6 +281,80 @@ def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
     return repos.actualizar_publicacion(pub_id, campos_publicado)
 
 
+def programar_pieza_metricool(
+    pub: dict[str, Any], *, ahora: datetime | None = None
+) -> dict[str, Any]:
+    """Programa UNA pieza en Metricool a demanda (botón de la UI). Reusa los helpers.
+
+    Respeta el MISMO gate que el barrido (`KENI_PUBLICAR_REAL`):
+      - OFF (default): DRY-RUN. NO toca la red ni persiste: devuelve el cuerpo
+        EXACTO que se enviaria, para previsualizar. (`dry_run: true`.)
+      - ON: envia de verdad; si Metricool acepta, persiste `id_post_metricool` y
+        pasa la pieza a `publicado`. (`dry_run: false`.)
+
+    Degradacion honesta (nunca lanza): si faltan credenciales de la marca, no se
+    puede construir el borrador o falla la red, devuelve `ok: false` + `motivo`.
+    Forma del resultado:
+        {ok, dry_run, motivo?, redes, cuerpo?, id_post?, estados?}
+    """
+    ahora = ahora or datetime.now()
+    dry_run = not config.publicar_real()
+    marca_id = pub.get("marca") or ""
+
+    creds = _creds_metricool(marca_id)
+    if not creds:
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "motivo": (
+                f"La marca {marca_id!r} no tiene credenciales de Metricool configuradas "
+                f"([metricool.marcas.{marcas.id_metricas_de(marca_id)}])."
+            ),
+        }
+
+    borrador = _borrador_de_publicacion(pub)
+    if borrador is None:
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "motivo": "No se pudo construir el borrador (¿sin contenido o red no soportada?).",
+        }
+
+    try:
+        from keni_metricas.publicacion.metricool import AdaptadorPublicacionMetricool
+    except ImportError:
+        return {"ok": False, "dry_run": dry_run, "motivo": "keni_metricas no está disponible."}
+
+    try:
+        adaptador = AdaptadorPublicacionMetricool(creds=creds)
+        resultado = adaptador.programar(borrador, dry_run=dry_run, ahora=ahora)  # type: ignore[arg-type]
+    except Exception as e:  # noqa: BLE001 -- degrada con mensaje, no rompe el endpoint
+        _log.exception("Pieza %r: fallo al programar en Metricool a demanda.", pub.get("id"))
+        return {"ok": False, "dry_run": dry_run, "motivo": f"Fallo al contactar Metricool: {e}"}
+
+    base = {
+        "ok": True,
+        "dry_run": resultado.dry_run,
+        "redes": list(resultado.redes),
+        "cuerpo": resultado.peticion.body,
+    }
+    if resultado.dry_run:
+        # Preview: NO se persiste nada (no se publicó).
+        return base
+
+    # Camino REAL: Metricool aceptó el post -> persistir y marcar publicado.
+    id_post = resultado.id_post or ""
+    repos.actualizar_publicacion(
+        pub["id"],
+        {
+            "preparado_en": ahora.isoformat(timespec="seconds"),
+            "estado": "publicado",
+            "id_post_metricool": id_post,
+        },
+    )
+    return {**base, "id_post": id_post, "estados": dict(resultado.estados)}
+
+
 def preparar_vencidas(ahora: datetime | None = None) -> int:
     """Prepara (dry-run o real) todas las piezas programadas ya vencidas. Devuelve cuantas preparo.
 

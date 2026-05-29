@@ -846,6 +846,30 @@ export interface RespuestaParrilla {
   contexto: string;
 }
 
+/** Resultado de programar una pieza en Metricool (preview dry-run o publicación real). */
+export interface ResultadoProgramarMetricool {
+  ok: boolean;
+  /** true = solo se previsualizó (no se publicó); false = se publicó de verdad. */
+  dry_run: boolean;
+  /** Presente cuando ok=false: por qué no se pudo (sin credenciales, sin contenido…). */
+  motivo?: string;
+  /** Redes destino (nomenclatura Metricool: facebook/instagram/twitter/tiktok/youtube). */
+  redes?: string[];
+  /** Cuerpo exacto que se enviaría/envió al scheduler (preview). */
+  cuerpo?: Record<string, unknown>;
+  /** Id del post en Metricool (solo en publicación real). */
+  id_post?: string;
+  /** Estado por red devuelto por Metricool (solo en publicación real). */
+  estados?: Record<string, string>;
+}
+
+/** Respuesta de POST /api/publicaciones/{id}/metricool. */
+export interface RespuestaProgramarMetricool {
+  resultado: ResultadoProgramarMetricool;
+  /** Pieza tras el intento (actualizada a `publicado` si fue real); null si desapareció. */
+  publicacion: Publicacion | null;
+}
+
 export interface EntradaHistorial {
   id: string;
   skill: string;

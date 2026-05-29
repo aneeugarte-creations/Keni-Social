@@ -120,6 +120,23 @@ function TarjetaPublicacion({
     },
   });
 
+  const programarMetricool = useMutation({
+    mutationFn: () => api.programarEnMetricool(publicacion.id),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      const r = res.resultado;
+      const redes = (r.redes ?? []).join(", ") || "—";
+      if (r.dry_run) {
+        toast.success(
+          `Vista previa lista: se enviaría a Metricool (${redes}). No se publicó (modo dry-run).`,
+        );
+      } else {
+        toast.success(`Publicado en Metricool (${redes})${r.id_post ? ` · id ${r.id_post}` : ""}`);
+      }
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const alternarEvergreen = useMutation({
     mutationFn: () =>
       api.actualizarPublicacion(publicacion.id, { evergreen: !publicacion.evergreen }),
@@ -234,6 +251,23 @@ function TarjetaPublicacion({
               )}
             </Button>
           </Tooltip>
+          {(publicacion.estado === "aprobado" || publicacion.estado === "programado") && (
+            <Tooltip label="Programar en Metricool (preview si el envío real está apagado)">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Programar en Metricool"
+                onClick={() => programarMetricool.mutate()}
+                disabled={programarMetricool.isPending}
+              >
+                {programarMetricool.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+              </Button>
+            </Tooltip>
+          )}
           {publicacion.estado === "publicado" && (
             <Tooltip label="Ver métricas de esta marca">
               <Button asChild variant="ghost" size="icon" aria-label="Ver métricas">

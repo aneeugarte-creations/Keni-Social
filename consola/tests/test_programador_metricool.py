@@ -31,6 +31,7 @@ from keni_consola.programador import (
     _url_media_publica,
     piezas_vencidas,
     preparar_vencidas,
+    programar_pieza_metricool,
 )
 
 # --------------------------------------------------------------------------- #
@@ -234,6 +235,40 @@ def test_dryrun_flag_false_no_llama_metricool(entorno, monkeypatch):
     actualizada = repos.obtener_publicacion(pub["id"])
     assert actualizada["estado"] == "programado"
     assert not ruta.called
+
+
+# --------------------------------------------------------------------------- #
+# Boton manual: programar_pieza_metricool (a demanda desde la UI)             #
+# --------------------------------------------------------------------------- #
+
+
+def test_programar_pieza_metricool_dry_run_previsualiza(entorno, monkeypatch):
+    """Gate OFF: el boton manual PREVISUALIZA (dry-run), sin tocar la red ni persistir."""
+    monkeypatch.delenv("KENI_PUBLICAR_REAL", raising=False)
+    pub = _pub_programada(entorno, red="facebook", contenido="Hola")
+    with patch(
+        "keni_consola.programador._creds_metricool", return_value=_CREDS_PRUEBA
+    ), respx.mock(assert_all_called=False) as mc:
+        ruta = mc.post(_METRICOOL_URL, name="post").mock(Response(200, json=_RESP_OK))
+        res = programar_pieza_metricool(pub)
+    assert res["ok"] is True
+    assert res["dry_run"] is True
+    assert res["cuerpo"]["providers"] == [{"network": "facebook"}]
+    assert not ruta.called  # dry-run NO toca la red
+    # No persiste: sigue en programado, sin id_post.
+    actualizada = repos.obtener_publicacion(pub["id"])
+    assert actualizada["estado"] == "programado"
+    assert actualizada.get("id_post_metricool", "") == ""
+
+
+def test_programar_pieza_metricool_sin_creds(entorno, monkeypatch):
+    """Sin credenciales de la marca devuelve ok=False con motivo (no lanza)."""
+    monkeypatch.delenv("KENI_PUBLICAR_REAL", raising=False)
+    pub = _pub_programada(entorno, red="facebook", contenido="Hola")
+    with patch("keni_consola.programador._creds_metricool", return_value=None):
+        res = programar_pieza_metricool(pub)
+    assert res["ok"] is False
+    assert res["motivo"]
 
 
 # --------------------------------------------------------------------------- #

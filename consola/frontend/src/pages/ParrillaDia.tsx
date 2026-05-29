@@ -7,9 +7,11 @@ import {
   ListOrdered,
   RefreshCw,
   ScrollText,
+  Sparkles,
   Video,
 } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -205,8 +207,18 @@ function Columna({
 }
 
 function TarjetaItem({ item }: { item: ItemParrilla }) {
+  const navigate = useNavigate();
   const sub = SUBTIPO[item.subtipo] ?? SUBTIPO[""];
   const SubIcono = sub.Icono;
+
+  // Siembra la generación con el tema (título + por qué + enlaces); FlujoGeneracion
+  // lee `location.state.texto`. Solo PROPONE el texto base; el copy lo decide el humano.
+  function generarCopy() {
+    const texto = [item.titulo, item.por_que, ...item.enlaces.map((e) => e.url)]
+      .filter(Boolean)
+      .join("\n\n");
+    navigate("/generacion", { state: { texto, modo: "copy" } });
+  }
   return (
     <div className="flex gap-3 rounded-md border p-3">
       <div
@@ -270,6 +282,13 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
             ))}
           </ul>
         )}
+
+        <div className="pt-1">
+          <Button variant="outline" size="sm" onClick={generarCopy}>
+            <Sparkles className="h-3.5 w-3.5" />
+            Generar copy
+          </Button>
+        </div>
       </div>
     </div>
   );
