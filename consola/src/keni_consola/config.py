@@ -149,6 +149,16 @@ ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
 ENV_COMERCIAL_INTERVALO_HORAS = "KENI_COMERCIAL_INTERVALO_HORAS"
 ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
 
+# Publicacion real via Metricool (gate de seguridad; def OFF = dry-run).
+# `KENI_PUBLICAR_REAL=1` activa el posteo real al scheduler de Metricool en el
+# barrido del programador. Sin este flag (o con valor falso) el barrido SOLO
+# estampa `preparado_en` (dry-run): ningun post se envia a Metricool.
+# `KENI_CONSOLA_URL_PUBLICA` es la URL base publica de la consola (p.ej.
+# `https://social.kenitech.io`) necesaria para construir URLs absolutas de media
+# que Metricool pueda ingerir. Sin ella las media URLs NO se incluyen en el post.
+ENV_PUBLICAR_REAL = "KENI_PUBLICAR_REAL"
+ENV_CONSOLA_URL_PUBLICA = "KENI_CONSOLA_URL_PUBLICA"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -536,6 +546,29 @@ def programador_intervalo_segundos() -> float | None:
         return max(1.0, float(crudo))
     except ValueError:
         return None
+
+
+def publicar_real() -> bool:
+    """True si `KENI_PUBLICAR_REAL` esta a un valor afirmativo (gate de publicacion real).
+
+    Por defecto OFF (False): el programador opera en DRY-RUN. Pon `KENI_PUBLICAR_REAL=1`
+    (o `true`/`yes`/`on`) para activar el posteo real al scheduler de Metricool.
+    El humano sigue aprobando; esta flag solo autoriza al sistema a enviar lo ya
+    programado a Metricool cuando vence la fecha.
+    """
+    return _crudo(ENV_PUBLICAR_REAL).lower() in _VERDADEROS
+
+
+def consola_url_publica() -> str | None:
+    """URL base publica de la consola (`KENI_CONSOLA_URL_PUBLICA`), sin barra final.
+
+    Necesaria para construir URLs absolutas de media que Metricool pueda ingerir.
+    Ejemplo: `https://social.kenitech.io`. None si no esta configurada (en ese caso
+    el programador omite las URLs de media en el borrador enviado a Metricool y lo
+    registra en el log).
+    """
+    crudo = _crudo(ENV_CONSOLA_URL_PUBLICA)
+    return crudo.rstrip("/") if crudo else None
 
 
 # --------------------------------------------------------------------------- #

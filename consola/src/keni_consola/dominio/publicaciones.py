@@ -62,6 +62,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # (preparada, NO publicada de verdad: el posteo real esta GATED por #5/#8). ""
         # hasta que el programador la prepara al vencer su `fecha_programada`.
         "preparado_en": pub.get("preparado_en") or "",
+        # Id del post en Metricool cuando KENI_PUBLICAR_REAL esta activo y la pieza
+        # se envio al scheduler de Metricool. "" en dry-run y en piezas legadas.
+        "id_post_metricool": pub.get("id_post_metricool") or "",
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],

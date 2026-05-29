@@ -1,20 +1,37 @@
-"""Programador de publicaciones (#9, Fase 3): prepara las piezas vencidas EN DRY-RUN.
+"""Programador de publicaciones (#9, Fase 3): prepara/publica las piezas vencidas.
 
 Que hace y, sobre todo, que NO hace
 ===================================
 Una pieza APROBADA puede PROGRAMARSE para una fecha-hora (via `api/aprobacion.py`):
 pasa a estado `programado` con su `fecha_programada`. Este modulo es el reloj del
 servidor: un hilo demonio que, cuando una pieza programada VENCE (su
-`fecha_programada <= ahora`), la MARCA como "lista para publicar" estampando
-`preparado_en`. Corre 24-7 en el servidor compartido (ADR 0001), sin la maquina de
-nadie encendida.
+`fecha_programada <= ahora`), la PREPARA estampando `preparado_en` y, si el flag
+`KENI_PUBLICAR_REAL` esta activo, la entrega al scheduler de Metricool.
 
-GATING (frontera del producto, CRITICO): el posteo REAL a Meta/TikTok depende de #5
-(Meta App Review) y #8, que estan BLOQUEADOS/externos. Por eso el programador **NO
-publica en ninguna plataforma**: solo PREPARA (dry-run) y deja la pieza en `programado`
-con `preparado_en` puesto. La pieza NUNCA pasa sola a `publicado`: "el humano aprueba;
-el sistema no publica solo". Cuando #5/#8 aterricen, el posteo real se engancha aqui
-(en `_preparar`), sin cambiar el resto del flujo.
+GATING (frontera del producto, CRITICO):
+  - Por defecto (`KENI_PUBLICAR_REAL` ausente o falso) el barrido es DRY-RUN:
+    solo estampa `preparado_en` y deja la pieza en `programado`. NADA va a
+    Metricool. Comportamiento identico al anterior.
+  - Con `KENI_PUBLICAR_REAL=1` el barrido llama a `AdaptadorPublicacionMetricool`
+    con `dry_run=False` para la marca de la pieza. Si Metricool confirma, la pieza
+    pasa a `publicado` con `id_post_metricool` guardado. Si falla o la marca no
+    tiene credenciales, la pieza SIGUE en `programado` y el error se loguea sin
+    romper el barrido (degradacion honesta).
+  - "El humano aprueba; el sistema no publica solo": el humano programa la pieza
+    con una fecha; el sistema ejecuta el despacho al scheduler de Metricool cuando
+    vence esa fecha. Metricool luego publica en las redes sociales al momento
+    programado (autoPublish=true).
+
+FLOW: fila publicacion -> BorradorMetricool -> AdaptadorPublicacionMetricool -> Metricool
+  1. `pub["red"]` (id canonico, p.ej. "x") -> `Plataforma` de keni_metricas.
+  2. `pub["marca"]` (slug-guion, p.ej. "claro-sports") ->
+     `marcas.id_metricas_de(...)` (guion_bajo, p.ej. "claro_sports") ->
+     credenciales de MetricoolConfig.marcas_configuradas()[id_metricas].
+  3. `pub["imagen"]` (nombre de archivo) + `KENI_CONSOLA_URL_PUBLICA` ->
+     URL absoluta publica que Metricool puede ingerir. Sin URL publica, se omite
+     la media y se loguea (el post va solo con texto, si la red lo permite).
+  4. `pub["contenido"]` -> `BorradorMetricool.texto`.
+     `pub["fecha_programada"]` -> `BorradorMetricool.publicar_en`.
 
 El calculo de "que esta vencido" es una funcion PURA y DETERMINISTA (`piezas_vencidas`)
 que recibe `ahora` inyectado, para poder testearla sin reloj real ni hilo. El hilo
@@ -31,7 +48,7 @@ import time
 from datetime import datetime
 from typing import Any
 
-from . import config, repos
+from . import config, marcas, repos
 from .estados import ESTADO_PROGRAMADO
 
 _log = logging.getLogger("keni_consola.programador")
@@ -73,20 +90,199 @@ def piezas_vencidas(
     return vencidas
 
 
-def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
-    """Prepara UNA pieza vencida en DRY-RUN: estampa `preparado_en`. NO publica.
+# --------------------------------------------------------------------------- #
+# Resolucion de credenciales Metricool por marca (pura, testeable)             #
+# --------------------------------------------------------------------------- #
 
-    Deja la pieza en `programado` (no en `publicado`): la frontera del producto es que
-    el sistema no publica solo. Aqui es donde se engancharia el posteo real cuando #5/#8
-    aterricen (Meta App Review + cuentas reales), sin tocar el resto del flujo.
+
+def _creds_metricool(marca_id: str) -> dict | None:
+    """Credenciales Metricool para la marca `marca_id` (slug-guion) o None si no estan.
+
+    Carga la config de keni_metricas (TOML + env), traduce el id canonico al
+    id_metricas y resuelve user_token + user_id + blog_id. Devuelve None si la
+    marca no tiene credenciales completas (sin romper; el llamante degrada).
     """
-    return repos.actualizar_publicacion(
-        pub["id"], {"preparado_en": ahora.isoformat(timespec="seconds")}
+    try:
+        from keni_metricas.config import cargar_config
+    except ImportError:
+        _log.warning("keni_metricas no disponible; no se puede resolver creds Metricool.")
+        return None
+
+    id_mc = marcas.id_metricas_de(marca_id)  # slug-guion -> guion_bajo
+    try:
+        cfg = cargar_config()
+        configuradas = cfg.metricool.marcas_configuradas()
+    except Exception:  # noqa: BLE001 -- config rota no debe romper el barrido
+        _log.exception("Error cargando config de Metricool para marca %r.", marca_id)
+        return None
+
+    creds = configuradas.get(id_mc)
+    if not creds:
+        return None
+    return creds
+
+
+# --------------------------------------------------------------------------- #
+# Construccion del BorradorMetricool desde la fila de publicacion              #
+# --------------------------------------------------------------------------- #
+
+
+def _url_media_publica(nombre_imagen: str) -> str | None:
+    """URL absoluta de la imagen para que Metricool la ingiera, o None si no hay base.
+
+    Requiere `KENI_CONSOLA_URL_PUBLICA` (p.ej. `https://social.kenitech.io`). Sin
+    esa var el programador omite las media URLs del borrador y lo loguea.
+    """
+    if not nombre_imagen:
+        return None
+    base = config.consola_url_publica()
+    if not base:
+        return None
+    return f"{base}/api/media/{nombre_imagen}"
+
+
+def _borrador_de_publicacion(pub: dict[str, Any]) -> object | None:
+    """Construye un `BorradorMetricool` desde la fila de publicacion, o None si no aplica.
+
+    Devuelve None (sin lanzar) si:
+      - La red no es soportada por Metricool (no esta en Plataforma).
+      - La red exige media (instagram/tiktok/youtube) y no hay imagen con URL publica.
+      - El contenido (texto) esta vacio Y no hay media: nada que publicar.
+    Todos los casos se loguean a nivel WARNING para que sean trazables.
+    """
+    try:
+        from keni_metricas.publicacion.metricool import BorradorMetricool
+        from keni_metricas.publicacion.modelos import MediaRef, TipoMedia
+        from keni_metricas.schema import Plataforma
+        from pydantic import ValidationError
+    except ImportError:
+        _log.warning("keni_metricas no disponible; no se puede construir BorradorMetricool.")
+        return None
+
+    red_id = pub.get("red") or ""
+    try:
+        plataforma = Plataforma(red_id)
+    except ValueError:
+        _log.warning(
+            "Pieza %r: red %r no es una Plataforma soportada por Metricool; se omite.",
+            pub.get("id"), red_id,
+        )
+        return None
+
+    texto = (pub.get("contenido") or "").strip()
+    nombre_imagen = pub.get("imagen") or ""
+    media: list[MediaRef] = []
+
+    url_img = _url_media_publica(nombre_imagen)
+    if url_img:
+        media.append(MediaRef(tipo=TipoMedia.imagen, url=url_img))
+    elif nombre_imagen:
+        # Hay imagen pero sin URL publica: loguear que se va a omitir.
+        _log.warning(
+            "Pieza %r: hay imagen %r pero KENI_CONSOLA_URL_PUBLICA no esta configurada; "
+            "se publicara sin media. Configura la variable para incluirla.",
+            pub.get("id"), nombre_imagen,
+        )
+
+    # Parsear la fecha programada como datetime (ya paso la validacion de vencimiento,
+    # pero la reusamos para el campo publicar_en del borrador).
+    publicar_en = _parsear_fecha(pub.get("fecha_programada") or "")
+
+    try:
+        borrador = BorradorMetricool(
+            redes=[plataforma],
+            texto=texto,
+            media=media,
+            publicar_en=publicar_en,
+        )
+    except ValidationError as exc:
+        _log.warning(
+            "Pieza %r: no se pudo construir BorradorMetricool (%s); se omite.",
+            pub.get("id"), exc.errors()[0]["msg"] if exc.errors() else str(exc),
+        )
+        return None
+
+    return borrador
+
+
+# --------------------------------------------------------------------------- #
+# Preparacion de UNA pieza (enganche del posteo real)                          #
+# --------------------------------------------------------------------------- #
+
+
+def _preparar(pub: dict[str, Any], ahora: datetime) -> dict[str, Any] | None:
+    """Prepara UNA pieza vencida: estampa `preparado_en` y, si el gate esta activo,
+    entrega el borrador a Metricool.
+
+    Gate `KENI_PUBLICAR_REAL`:
+      - OFF (default): solo estampa `preparado_en` en dry-run. La pieza SIGUE en
+        `programado`. Comportamiento identico al anterior al enganche.
+      - ON: construye el borrador, resuelve las creds de la marca y llama al
+        adaptador con `dry_run=False`. Si Metricool acepta el post, la pieza pasa
+        a `publicado` y se guarda `id_post_metricool`. Si hay cualquier error
+        (creds faltantes, fallo de red, red no soportada), se loguea y la pieza
+        SIGUE en `programado` con `preparado_en` estampado (no rompe el barrido).
+    """
+    publicar_real_flag = config.publicar_real()
+
+    campos_base: dict[str, Any] = {"preparado_en": ahora.isoformat(timespec="seconds")}
+
+    if not publicar_real_flag:
+        # DRY-RUN: comportamiento original intacto.
+        return repos.actualizar_publicacion(pub["id"], campos_base)
+
+    # --- camino REAL: intentar entregar a Metricool ---------------------------
+    pub_id = pub["id"]
+    marca_id = pub.get("marca") or ""
+
+    creds = _creds_metricool(marca_id)
+    if not creds:
+        _log.warning(
+            "Pieza %r (marca %r): sin credenciales Metricool; se prepara en dry-run "
+            "y sigue en 'programado'. Configura [metricool.marcas.%s] con "
+            "user_token + user_id + blog_id.",
+            pub_id, marca_id, marcas.id_metricas_de(marca_id),
+        )
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    borrador = _borrador_de_publicacion(pub)
+    if borrador is None:
+        # Motivo ya logueado en `_borrador_de_publicacion`.
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    try:
+        from keni_metricas.publicacion.metricool import AdaptadorPublicacionMetricool
+    except ImportError:
+        _log.warning("keni_metricas no disponible; publicacion real imposible.")
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    try:
+        adaptador = AdaptadorPublicacionMetricool(creds=creds)
+        resultado = adaptador.programar(borrador, dry_run=False, ahora=ahora)  # type: ignore[arg-type]
+    except Exception:  # noqa: BLE001 -- cualquier fallo de red/auth no mata el barrido
+        _log.exception(
+            "Pieza %r: fallo al enviar a Metricool; se prepara en dry-run y sigue en 'programado'.",
+            pub_id,
+        )
+        return repos.actualizar_publicacion(pub_id, campos_base)
+
+    # Metricool acepto el post: marcar como publicado.
+    id_post = resultado.id_post or ""
+    estados_str = ", ".join(f"{r}={s}" for r, s in resultado.estados.items())
+    _log.info(
+        "Pieza %r publicada en Metricool: id_post=%r redes=[%s] estados={%s}",
+        pub_id, id_post, ", ".join(resultado.redes), estados_str,
     )
+    campos_publicado: dict[str, Any] = {
+        **campos_base,
+        "estado": "publicado",
+        "id_post_metricool": id_post,
+    }
+    return repos.actualizar_publicacion(pub_id, campos_publicado)
 
 
 def preparar_vencidas(ahora: datetime | None = None) -> int:
-    """Prepara (dry-run) todas las piezas programadas ya vencidas. Devuelve cuantas preparo.
+    """Prepara (dry-run o real) todas las piezas programadas ya vencidas. Devuelve cuantas preparo.
 
     Es lo que corre cada barrido del hilo y tambien se puede llamar a mano (test/CLI).
     Lee SOLO las piezas en estado `programado` (filtro en el indice), no todo el catalogo.
@@ -109,7 +305,7 @@ def _intervalo_segundos() -> float:
 
 
 def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Thread:
-    """Arranca un hilo demonio que prepara (dry-run) las piezas vencidas en bucle.
+    """Arranca un hilo demonio que prepara las piezas vencidas en bucle.
 
     Pensado para el servidor real (`__main__`), NO para `crear_app`: los tests crean la
     app sin arrancar esto. El hilo es daemon: muere al cerrar el proceso. Prepara una vez
@@ -124,9 +320,8 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
                 n = preparar_vencidas()
                 if n:
                     _log.info(
-                        "Programador: %d pieza(s) preparada(s) en DRY-RUN (sin publicar; "
-                        "posteo real gated por #5/#8).",
-                        n,
+                        "Programador: %d pieza(s) preparada(s) (KENI_PUBLICAR_REAL=%s).",
+                        n, config.publicar_real(),
                     )
             except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
                 _log.exception("Fallo en el barrido del programador.")
@@ -134,8 +329,9 @@ def iniciar_programador(intervalo_segundos: float | None = None) -> threading.Th
 
     hilo = threading.Thread(target=bucle, name="programador-publicaciones", daemon=True)
     hilo.start()
+    modo = "REAL (Metricool)" if config.publicar_real() else "DRY-RUN (sin publicar)"
     _log.info(
-        "Programador de publicaciones activo cada %.0f s (DRY-RUN: prepara, no publica).",
-        intervalo,
+        "Programador de publicaciones activo cada %.0f s (modo: %s).",
+        intervalo, modo,
     )
     return hilo

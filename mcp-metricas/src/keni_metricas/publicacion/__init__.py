@@ -1,34 +1,45 @@
-"""Publicacion en Meta (Facebook / Instagram) — DRY-RUN por defecto.
+"""Publicacion / programacion — DRY-RUN por defecto. Dos caminos:
 
-Este paquete anade el camino de PUBLICACION al servidor (que hasta ahora era
-solo de lectura). La postura del producto es **humano aprueba, nada se publica
-solo**: por eso `AdaptadorPublicacionMeta.publicar(...)` corre en **dry-run por
-defecto** y NO toca la red salvo que se pida explicitamente `dry_run=False` con
-un token real configurado. Es un andamiaje seguro, listo para cuando aterrice el
-App Review de Meta.
+1. **Metricool (recomendado, multi-red).** `metricool.AdaptadorPublicacionMetricool`
+   entrega el post al scheduler de Metricool con su fecha de publicacion, usando el
+   MISMO token por marca que la lectura de metricas (`fuentes.metricol`). Cubre
+   Facebook, Instagram, X (twitter), TikTok y YouTube por un solo endpoint, con
+   PROGRAMACION nativa (`publicationDate` + `autoPublish`) — sin pasar App Review de
+   Meta ni auditoria de TikTok, y sin cola propia.
 
-Piezas:
-- `modelos.Borrador`: el borrador editable (plataforma, cuenta, texto, media,
-  hashtags) que un humano aprueba antes de publicar.
-- `meta.AdaptadorPublicacionMeta`: traduce un `Borrador` a la(s) peticion(es)
-  exacta(s) de Graph API (Facebook feed/photo/video; Instagram container ->
-  publish). Reutiliza `_http.post_json` (solo lectura) para el POST real.
-- `cola.ColaPublicacion`: cola/agendador minimo en memoria para borradores ya
-  aprobados con hora opcional, porque la API de Meta no agenda IG nativamente.
+2. **Meta directo (gated).** `meta.AdaptadorPublicacionMeta` traduce un `Borrador` a
+   peticiones de Graph API (FB feed/photo/video; IG container -> publish). Depende de
+   App Review de Meta; `cola.ColaPublicacion` agenda IG porque Graph API no lo hace.
+
+La postura del producto es **humano aprueba, nada se publica solo**: ambos adaptadores
+corren en **dry-run por defecto** y NO tocan la red salvo que se pida `dry_run=False`
+con credenciales reales configuradas.
 """
 
 from __future__ import annotations
 
 from .cola import ColaPublicacion, ItemCola
 from .meta import AdaptadorPublicacionMeta, PeticionPublicacion
+from .metricool import (
+    AdaptadorPublicacionMetricool,
+    BorradorMetricool,
+    PeticionProgramada,
+    ProgramacionNoConfigurada,
+    ResultadoProgramacion,
+)
 from .modelos import Borrador, MediaRef, TipoMedia
 
 __all__ = [
     "AdaptadorPublicacionMeta",
+    "AdaptadorPublicacionMetricool",
     "Borrador",
+    "BorradorMetricool",
     "ColaPublicacion",
     "ItemCola",
     "MediaRef",
+    "PeticionProgramada",
     "PeticionPublicacion",
+    "ProgramacionNoConfigurada",
+    "ResultadoProgramacion",
     "TipoMedia",
 ]
