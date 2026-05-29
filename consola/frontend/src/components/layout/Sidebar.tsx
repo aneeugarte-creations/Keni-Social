@@ -359,13 +359,6 @@ export function Sidebar({
           </button>
         </div>
       )}
-
-      <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
-        <span>Herramienta local · 127.0.0.1</span>
-        <span className="ml-2 inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-muted-foreground">
-          beta
-        </span>
-      </div>
     </nav>
   );
 }
