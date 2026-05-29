@@ -84,6 +84,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   AusenciaRota,
+  CoordinacionTurno,
   CuerpoActualizarPiezaRota,
   CuerpoActualizarProgramaRota,
   CuerpoCrearFranjaSemana,
@@ -294,8 +295,7 @@ export default function Rota() {
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
-          <TabsTrigger value="swaps">Cambios de turno</TabsTrigger>
-          <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
+          <TabsTrigger value="cambios-ausencias">Cambios y ausencias</TabsTrigger>
           <TabsTrigger value="eventos">Eventos</TabsTrigger>
           <TabsTrigger value="programas">Programas</TabsTrigger>
         </TabsList>
@@ -306,11 +306,21 @@ export default function Rota() {
         <TabsContent value="mis-turnos">
           <MisTurnos lunes={lunes} setLunes={setLunes} />
         </TabsContent>
-        <TabsContent value="swaps">
-          <Swaps esAdmin={esAdmin} />
-        </TabsContent>
-        <TabsContent value="ausencias">
-          <Ausencias />
+        <TabsContent value="cambios-ausencias">
+          {/* Ola "fusionar": una sola pestaña con dos sub-tabs hermanas. Reusa los
+              componentes Swaps/Ausencias sin tocarlos. */}
+          <Tabs defaultValue="cambios" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="cambios">Cambios de turno</TabsTrigger>
+              <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
+            </TabsList>
+            <TabsContent value="cambios">
+              <Swaps esAdmin={esAdmin} />
+            </TabsContent>
+            <TabsContent value="ausencias">
+              <Ausencias />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
         <TabsContent value="eventos">
           <Eventos onIrAProgramas={() => setPestania("programas")} />
@@ -377,6 +387,10 @@ function LeyendaCobertura() {
       <span className="inline-flex items-center gap-1.5">
         <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Cambió
         (reprogramado, falta avisar)
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <ShieldCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> Coordinador
+        por celda
       </span>
     </div>
   );
@@ -595,9 +609,20 @@ function Calendario({
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
+  // Equipo completo (incluye sin cobertura): necesario para resolver candidatos a
+  // coordinador (ola "coord") como Mariana o Ale, que tienen `cobertura=false`.
+  const equipoTodosQ = useQuery({
+    queryKey: ["rota", "equipo", "todos"],
+    queryFn: ({ signal }) => api.rotaEquipoTodos(signal),
+  });
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
+  // Coordinador por celda (ola "coord"): un PUT por celda, lista por semana.
+  const coordinacionQ = useQuery({
+    queryKey: ["rota", "coordinacion", lunes] as const,
+    queryFn: ({ signal }) => api.listarCoordinacionSemana(lunes, signal),
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
@@ -607,6 +632,21 @@ function Calendario({
   // CMs activos de ClaroSports). Mismo desglose que la rejilla Turnos anterior.
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
   const cms = cmsClaroSports(equipoQ.data?.equipo ?? []);
+  // Candidatos a coordinador (ola "coord"): usuarios con `puede_coordinar=true`. Se
+  // sacan del equipo COMPLETO (no solo cobertura) porque hoy son Elias (cubre), Ale
+  // y Mariana (NO cubren). El admin gestiona el flag desde /usuarios.
+  const candidatosCoordinador = React.useMemo(
+    () => (equipoTodosQ.data?.equipo ?? []).filter((m) => m.puede_coordinar),
+    [equipoTodosQ.data?.equipo],
+  );
+  // Index de coordinaciones por (fecha|franja_id) -> CoordinacionTurno.
+  const coordinacionPorCelda = React.useMemo(() => {
+    const m = new Map<string, CoordinacionTurno>();
+    for (const c of coordinacionQ.data?.coordinacion ?? []) {
+      m.set(`${c.fecha}|${c.franja_id}`, c);
+    }
+    return m;
+  }, [coordinacionQ.data?.coordinacion]);
   const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
   // Franjas vivas de la semana, ordenadas por `orden` (la franja Descanso suele ir al
@@ -817,8 +857,11 @@ function Calendario({
     coberturaQ.isPending ||
     turnosQ.isPending ||
     ausenciasQ.isPending ||
-    equipoQ.isPending;
-  const error = coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error;
+    equipoQ.isPending ||
+    coordinacionQ.isPending;
+  const error =
+    coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error ||
+    coordinacionQ.error;
 
   return (
     <div className="space-y-4">
@@ -1016,6 +1059,9 @@ function Calendario({
                           const cmsDisponibles = cms.filter(
                             (m) => !yaEnCelda.has(m.id),
                           );
+                          const coordinacionCelda = coordinacionPorCelda.get(
+                            `${fecha}|${franja.id}`,
+                          );
                           return (
                             <CeldaDeRejilla
                               key={`${franja.id}-${fecha}`}
@@ -1028,6 +1074,9 @@ function Calendario({
                               editable={editable}
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
+                              coordinacion={coordinacionCelda}
+                              candidatosCoordinador={candidatosCoordinador}
+                              coordinacionEditable={esAdmin && !semana?.aprobada}
                               onEditarEvento={(e) => setEventoSeleccionado(e)}
                               onCambio={invalidar}
                             />
@@ -1057,6 +1106,137 @@ function Calendario({
 }
 
 /**
+ * Badge de COORDINADOR por celda (ola "coord"): muestra "Coord: <nombre>" o "Sin coord".
+ * Click (si editable) abre un Select con los candidatos (`puede_coordinar=true`); la X
+ * inline (solo si hay coordinador y editable) borra la asignación. Si la semana está
+ * aprobada o el usuario no es admin, queda en modo solo-lectura (sin Select ni X).
+ */
+function BadgeCoordinador({
+  lunes,
+  fecha,
+  franja,
+  coordinacion,
+  candidatos,
+  editable,
+  onCambio,
+}: {
+  lunes: string;
+  fecha: string;
+  franja: FranjaSemana;
+  coordinacion?: CoordinacionTurno;
+  candidatos: MiembroRota[];
+  editable: boolean;
+  onCambio: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  const asignar = useMutation({
+    mutationFn: (coordinador_id: string) =>
+      api.setCoordinador({
+        lunes,
+        fecha,
+        franja_id: franja.id,
+        coordinador_id,
+      }),
+    onSuccess: () => {
+      toast.success("Coordinador asignado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const quitar = useMutation({
+    mutationFn: () =>
+      api.quitarCoordinador({ fecha, franja_id: franja.id }),
+    onSuccess: () => {
+      toast.success("Coordinador quitado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const cargando = asignar.isPending || quitar.isPending;
+
+  if (!editable) {
+    // Solo lectura: si hay coordinador, lo mostramos; si no, badge muted "Sin coord".
+    return coordinacion ? (
+      <span
+        className="inline-flex max-w-full items-center gap-1 rounded border border-sky-300/70 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
+        title={`Coordina: ${coordinacion.coordinador_nombre}`}
+      >
+        <ShieldCheck className="h-3 w-3 shrink-0" />
+        <span className="truncate">
+          Coord: {coordinacion.coordinador_nombre || "—"}
+        </span>
+      </span>
+    ) : (
+      <span className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-border/60 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
+        Sin coord
+      </span>
+    );
+  }
+
+  // Editable: Select para asignar/cambiar + X para borrar (si hay).
+  return (
+    <div className="flex items-center gap-1">
+      <Select
+        value={coordinacion?.coordinador_id ?? ""}
+        open={open}
+        onOpenChange={setOpen}
+        onValueChange={(id) => {
+          if (!id) return;
+          asignar.mutate(id);
+        }}
+        disabled={cargando || candidatos.length === 0}
+      >
+        <SelectTrigger
+          aria-label={`Coordinador de ${franja.nombre} del ${fecha}`}
+          className={cn(
+            "h-6 flex-1 gap-1 px-1.5 text-[10px]",
+            coordinacion
+              ? "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
+              : "border-dashed border-border bg-background text-muted-foreground",
+          )}
+        >
+          <ShieldCheck className="h-3 w-3 shrink-0" />
+          <span className="truncate">
+            {coordinacion
+              ? `Coord: ${coordinacion.coordinador_nombre || "—"}`
+              : candidatos.length === 0
+                ? "Sin candidatos"
+                : "Sin coord"}
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          {candidatos.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {coordinacion && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+          aria-label="Quitar coordinador"
+          title="Quitar coordinador"
+          onClick={() => quitar.mutate()}
+          disabled={cargando}
+        >
+          {quitar.isPending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <X className="h-3 w-3" />
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * Una celda (franja × día) de la rejilla. Mantiene estado local para abrir el dropdown
  * desde dos puntos de entrada: el propio trigger del dropdown al pie de la celda y el
  * recuadro "Sin cubrir" cuando hay eventos sin coverage. La separación a componente es
@@ -1072,6 +1252,9 @@ function CeldaDeRejilla({
   editable,
   finde,
   ausenciaDe,
+  coordinacion,
+  candidatosCoordinador,
+  coordinacionEditable,
   onEditarEvento,
   onCambio,
 }: {
@@ -1084,6 +1267,12 @@ function CeldaDeRejilla({
   editable: boolean;
   finde: boolean;
   ausenciaDe: (miembroId: string, fecha: string) => AusenciaRota | undefined;
+  /** Coordinador asignado a esta celda (si lo hay). Ola "coord". */
+  coordinacion?: CoordinacionTurno;
+  /** Candidatos a coordinador (usuarios con `puede_coordinar=true`). */
+  candidatosCoordinador: MiembroRota[];
+  /** True si el admin puede editar la coordinación (semana NO aprobada). */
+  coordinacionEditable: boolean;
   onEditarEvento: (evento: EventoRota) => void;
   onCambio: () => void;
 }) {
@@ -1103,6 +1292,19 @@ function CeldaDeRejilla({
         finde && "bg-amber-50/20 dark:bg-amber-950/5",
       )}
     >
+      {/* Badge de coordinador (ola "coord"): siempre visible si hay coordinador o si
+          la celda es editable; en franja Descanso lo ocultamos porque no aplica. */}
+      {!franja.es_descanso && (
+        <BadgeCoordinador
+          lunes={lunes}
+          fecha={fecha}
+          franja={franja}
+          coordinacion={coordinacion}
+          candidatos={candidatosCoordinador}
+          editable={coordinacionEditable}
+          onCambio={onCambio}
+        />
+      )}
       {recuadros.length === 0 && !editable && (
         <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/60">
           {franja.es_descanso ? "—" : "Sin turno asignado"}
@@ -3066,12 +3268,16 @@ function Eventos({ onIrAProgramas }: { onIrAProgramas?: () => void }) {
     queryFn: ({ signal }) => api.rotaEventos(filtrosApi, signal),
   });
   const eventos = q.data?.eventos ?? [];
+  // "Último evento" (ola "simplificar"): heurística simple — el primero de la lista
+  // ordenada por la API (más reciente). El backend ya devuelve los eventos en orden
+  // descendente por `actualizado`/`fecha`; usamos `eventos[0]` para "Duplicar último".
+  const ultimoEventoUsuario = eventos[0] ?? null;
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota", "eventos"] });
 
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-        <NuevoEvento onCreado={invalidar} />
+        <NuevoEvento onCreado={invalidar} ultimoEventoUsuario={ultimoEventoUsuario} />
         <div className="space-y-3">
           <FiltrosEventos
             estado={estado}
@@ -3105,13 +3311,43 @@ function Eventos({ onIrAProgramas }: { onIrAProgramas?: () => void }) {
   );
 }
 
-function NuevoEvento({ onCreado }: { onCreado: () => void }) {
+/** Hoy en formato ISO AAAA-MM-DD (hora local; usa `Date` del navegador). */
+function hoyIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** ISO + N días (no recalcula la hora; se usa para "Duplicar último"). */
+function diasSiguientes(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function NuevoEvento({
+  onCreado,
+  ultimoEventoUsuario,
+}: {
+  onCreado: () => void;
+  /**
+   * El último evento creado por el USUARIO actual durante esta sesión del formulario
+   * (memoria local del componente padre, ola "simplificar"). Si está presente, el
+   * botón "Duplicar último" lo clona con fecha=hoy (o +1 si ya hay uno hoy).
+   */
+  ultimoEventoUsuario?: EventoRota | null;
+}) {
   const [titulo, setTitulo] = React.useState("");
-  const [fecha, setFecha] = React.useState("");
+  // Fecha default = hoy (ola "simplificar": el caso típico es dar de alta el evento del día).
+  const [fecha, setFecha] = React.useState<string>(() => hoyIso());
   const [hora, setHora] = React.useState("");
   const [contenido, setContenido] = React.useState("");
   const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
   const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
+  // Validación inline de hora HH:MM al submit (ola "simplificar"). El campo permite
+  // texto libre para no molestar mientras escribes; el error sale solo al intentar
+  // guardar y se borra al editar.
+  const [errorHora, setErrorHora] = React.useState<string | null>(null);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -3130,19 +3366,67 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
       setContenido("");
       setTipoCobertura("transmision");
       setPrioridad("media");
+      setErrorHora(null);
       onCreado();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  const duplicarUltimo = useMutation({
+    mutationFn: () => {
+      if (!ultimoEventoUsuario) return Promise.reject(new Error("Sin último evento"));
+      // Si el último ya es de hoy, avanza un día para evitar duplicado idéntico.
+      const fechaDestino =
+        ultimoEventoUsuario.fecha === hoyIso()
+          ? diasSiguientes(hoyIso(), 1)
+          : hoyIso();
+      return api.duplicarEventoRota(ultimoEventoUsuario.id, { fecha: fechaDestino });
+    },
+    onSuccess: () => {
+      toast.success("Evento duplicado.");
+      onCreado();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  function intentarCrear() {
+    // Validación HH:MM: `horaAMinutos` admite el formato canónico; rechazamos lo demás.
+    // La hora es OPCIONAL: si está vacía, se acepta tal cual (sin validar).
+    const trimmed = hora.trim();
+    if (trimmed && horaAMinutos(trimmed) === null) {
+      setErrorHora("Formato HH:MM (ej. 16:30).");
+      return;
+    }
+    setErrorHora(null);
+    crear.mutate();
+  }
 
   const puedeCrear = titulo.trim().length > 0 && fecha !== "" && !crear.isPending;
 
   return (
     <Card className="h-fit">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarPlus className="h-4 w-4" /> Nuevo evento
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarPlus className="h-4 w-4" /> Nuevo evento
+          </CardTitle>
+          {ultimoEventoUsuario && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => duplicarUltimo.mutate()}
+              disabled={duplicarUltimo.isPending}
+              title={`Duplicar «${ultimoEventoUsuario.titulo}»`}
+            >
+              {duplicarUltimo.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              Duplicar último
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
@@ -3165,10 +3449,17 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
             <Input
               id="ev-hora"
               value={hora}
-              onChange={(e) => setHora(e.target.value)}
+              onChange={(e) => {
+                setHora(e.target.value);
+                if (errorHora) setErrorHora(null);
+              }}
               placeholder="16:00"
               maxLength={40}
+              aria-invalid={errorHora ? true : undefined}
             />
+            {errorHora && (
+              <p className="text-xs text-destructive">{errorHora}</p>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -3220,7 +3511,7 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
           />
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          <Button onClick={intentarCrear} disabled={!puedeCrear}>
             {crear.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -4947,6 +5238,8 @@ function DialogAccionSwap({
 function Programas() {
   const queryClient = useQueryClient();
   const [soloActivos, setSoloActivos] = React.useState(false);
+  // Ola "simplificar": filtro de búsqueda (case-insensitive) sobre nombre/descripción.
+  const [busqueda, setBusqueda] = React.useState("");
   const clave = ["rota", "programas", soloActivos ? "activos" : "todos"] as const;
   const q = useQuery({
     queryKey: clave,
@@ -4956,7 +5249,17 @@ function Programas() {
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: ["rota", "programas"] });
   };
-  const programas = q.data?.programas ?? [];
+  const programas = React.useMemo(() => q.data?.programas ?? [], [q.data?.programas]);
+  // Filtro local (no toca la API: el backend no expone búsqueda y la lista es corta).
+  const programasFiltrados = React.useMemo(() => {
+    const term = busqueda.trim().toLowerCase();
+    if (!term) return programas;
+    return programas.filter(
+      (p) =>
+        p.nombre.toLowerCase().includes(term) ||
+        (p.descripcion ?? "").toLowerCase().includes(term),
+    );
+  }, [programas, busqueda]);
 
   return (
     <div className="space-y-4">
@@ -4983,6 +5286,17 @@ function Programas() {
         </CardHeader>
         <CardContent className="space-y-4">
           <NuevoPrograma onCreado={invalidar} />
+          {/* Búsqueda inline (ola "simplificar"): filtra por nombre/descripción. */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre o descripción…"
+              className="h-9 pl-8"
+              aria-label="Buscar programas"
+            />
+          </div>
           {q.isPending ? (
             <Skeleton className="h-32 w-full rounded-md" />
           ) : q.isError ? (
@@ -4998,6 +5312,12 @@ function Programas() {
               titulo="Sin programas"
               texto="Da de alta un programa con el formulario de arriba para que aparezca en el autocomplete de piezas."
             />
+          ) : programasFiltrados.length === 0 ? (
+            <EstadoVacio
+              icono={Search}
+              titulo="Sin resultados"
+              texto={`No hay programas que coincidan con «${busqueda}». Borra el filtro para verlos todos.`}
+            />
           ) : (
             <div className="overflow-x-auto rounded-md border bg-background">
               <Table>
@@ -5012,7 +5332,7 @@ function Programas() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {programas.map((p) => (
+                  {programasFiltrados.map((p) => (
                     <FilaPrograma key={p.id} programa={p} onCambio={invalidar} />
                   ))}
                 </TableBody>
@@ -5032,6 +5352,9 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
   const [color, setColor] = React.useState("#7c7c7c");
   const [inicio, setInicio] = React.useState("");
   const [fin, setFin] = React.useState("");
+  // Validación inline: fin >= inicio (ola "simplificar"). Si ambos están y el orden
+  // está mal, bloqueamos el submit y mostramos el mensaje pegado al campo.
+  const [errorFechas, setErrorFechas] = React.useState<string | null>(null);
 
   const crear = useMutation({
     mutationFn: () => {
@@ -5051,11 +5374,21 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
       setColor("#7c7c7c");
       setInicio("");
       setFin("");
+      setErrorFechas(null);
       setAbierto(false);
       onCreado();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  function intentarCrear() {
+    if (inicio && fin && fin < inicio) {
+      setErrorFechas("La fecha de fin no puede ser anterior al inicio.");
+      return;
+    }
+    setErrorFechas(null);
+    crear.mutate();
+  }
 
   if (!abierto) {
     return (
@@ -5104,7 +5437,10 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
             id="prog-inicio"
             type="date"
             value={inicio}
-            onChange={(e) => setInicio(e.target.value)}
+            onChange={(e) => {
+              setInicio(e.target.value);
+              if (errorFechas) setErrorFechas(null);
+            }}
             className="h-8 text-xs"
           />
         </div>
@@ -5116,31 +5452,30 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
             id="prog-fin"
             type="date"
             value={fin}
-            onChange={(e) => setFin(e.target.value)}
+            onChange={(e) => {
+              setFin(e.target.value);
+              if (errorFechas) setErrorFechas(null);
+            }}
             className="h-8 text-xs"
+            aria-invalid={errorFechas ? true : undefined}
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="prog-color" className="text-xs">
             Color
           </Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="prog-color"
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="h-8 w-14 cursor-pointer p-1"
-            />
-            <Input
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="h-8 flex-1 font-mono text-xs"
-              maxLength={20}
-              placeholder="#RRGGBB"
-            />
-          </div>
+          {/* Ola "simplificar": eliminamos el input hex de texto; con el picker basta. */}
+          <Input
+            id="prog-color"
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-8 w-14 cursor-pointer p-1"
+          />
         </div>
+        {errorFechas && (
+          <p className="text-xs text-destructive sm:col-span-2">{errorFechas}</p>
+        )}
       </div>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={() => setAbierto(false)}>
@@ -5148,7 +5483,7 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
         </Button>
         <Button
           size="sm"
-          onClick={() => crear.mutate()}
+          onClick={intentarCrear}
           disabled={!nombre.trim() || crear.isPending}
         >
           {crear.isPending ? (
@@ -5340,6 +5675,8 @@ function DialogEditarPrograma({
   const [inicio, setInicio] = React.useState(programa.inicio);
   const [fin, setFin] = React.useState(programa.fin);
   const [activo, setActivo] = React.useState(programa.activo);
+  // Ola "simplificar": validación inline `fin >= inicio` antes de PATCH.
+  const [errorFechas, setErrorFechas] = React.useState<string | null>(null);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -5369,6 +5706,15 @@ function DialogEditarPrograma({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  function intentarGuardar() {
+    if (inicio && fin && fin < inicio) {
+      setErrorFechas("La fecha de fin no puede ser anterior al inicio.");
+      return;
+    }
+    setErrorFechas(null);
+    guardar.mutate();
+  }
 
   const sinCambios =
     nombre.trim() === programa.nombre &&
@@ -5415,7 +5761,10 @@ function DialogEditarPrograma({
                 id="ep-inicio"
                 type="date"
                 value={inicio}
-                onChange={(e) => setInicio(e.target.value)}
+                onChange={(e) => {
+                  setInicio(e.target.value);
+                  if (errorFechas) setErrorFechas(null);
+                }}
               />
             </div>
             <div className="space-y-1.5">
@@ -5424,29 +5773,28 @@ function DialogEditarPrograma({
                 id="ep-fin"
                 type="date"
                 value={fin}
-                onChange={(e) => setFin(e.target.value)}
+                onChange={(e) => {
+                  setFin(e.target.value);
+                  if (errorFechas) setErrorFechas(null);
+                }}
+                aria-invalid={errorFechas ? true : undefined}
               />
             </div>
           </div>
+          {errorFechas && (
+            <p className="text-xs text-destructive">{errorFechas}</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="ep-color">Color</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="ep-color"
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="h-9 w-14 cursor-pointer p-1"
-                />
-                <Input
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="h-9 flex-1 font-mono text-xs"
-                  maxLength={20}
-                  placeholder="#RRGGBB"
-                />
-              </div>
+              {/* Ola "simplificar": eliminamos el input hex de texto. */}
+              <Input
+                id="ep-color"
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-9 w-14 cursor-pointer p-1"
+              />
             </div>
             <div className="flex items-end gap-2 pb-1">
               <Checkbox
@@ -5465,7 +5813,7 @@ function DialogEditarPrograma({
             Cancelar
           </Button>
           <Button
-            onClick={() => guardar.mutate()}
+            onClick={intentarGuardar}
             disabled={sinCambios || !nombre.trim() || guardar.isPending}
           >
             {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
