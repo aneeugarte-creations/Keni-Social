@@ -2040,10 +2040,18 @@ export interface ItemRss {
   usado: boolean;
 }
 
+/** Error de un feed concreto al refrescar la lista de items. */
+export interface ErrorFuenteRss {
+  fuente_id: string;
+  fuente_nombre: string;
+  /** Mensaje legible en español, sin tracebacks crudos. */
+  error: string;
+}
+
 export interface RespuestaItemsRss {
   items: ItemRss[];
-  /** Errores por feed al refrescar (mensajes legibles en español). */
-  errores: string[];
+  /** Errores por feed al refrescar (uno por feed que falló). */
+  errores: ErrorFuenteRss[];
 }
 
 /** Cuerpo para marcar un item como usado / no usado. */

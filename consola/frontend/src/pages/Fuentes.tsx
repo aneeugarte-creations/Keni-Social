@@ -78,7 +78,7 @@ function mensajeError(error: unknown): string {
  * mensajes y normaliza la puntuación inicial para una vista sobria.
  */
 function limpiarMensaje(texto: string): string {
-  return texto
+  return String(texto ?? "")
     .replace(/[✅❌⚠]/g, "")
     .replace(/️/g, "")
     .replace(/^[\s:;,.\-–—]+/, "")
@@ -667,8 +667,11 @@ function ItemsRecientes({
               Algunos feeds dieron error al refrescar
             </p>
             <ul className="ml-4 list-disc text-xs">
-              {errores.map((e, i) => (
-                <li key={i}>{limpiarMensaje(e)}</li>
+              {errores.map((e) => (
+                <li key={e.fuente_id}>
+                  <span className="font-medium text-foreground">{e.fuente_nombre}</span>:{" "}
+                  {limpiarMensaje(e.error)}
+                </li>
               ))}
             </ul>
           </div>
