@@ -444,7 +444,7 @@ function AyudaLeyenda() {
         <div
           role="dialog"
           aria-label="Leyenda del calendario"
-          className="absolute left-0 top-full z-50 mt-2 w-[20rem] max-w-[90vw] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md"
+          className="absolute right-0 top-full z-50 mt-2 w-[20rem] max-w-[90vw] rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-md"
         >
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Leyenda
@@ -620,7 +620,7 @@ function MasAusencias({ ausencias }: { ausencias: AusenciaRota[] }) {
       </button>
       {abierto && (
         <div
-          className="absolute left-0 top-full z-20 mt-1 flex w-max max-w-[14rem] flex-col gap-1 rounded-md border border-border bg-popover p-2 shadow-md"
+          className="absolute right-0 top-full z-20 mt-1 flex w-max max-w-[14rem] flex-col gap-1 rounded-md border border-border bg-popover p-2 shadow-md"
           role="dialog"
         >
           {ausencias.map((a) => (

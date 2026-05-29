@@ -75,6 +75,23 @@ export function MenuContextual({
     };
   }, [pos]);
 
+  // Tras montar el menú, mídelo y desplázalo si se sale del viewport. Sin esto, un
+  // trigger pegado al borde derecho deja el menú saliéndose por la derecha (o por
+  // la parte de abajo si la fila está al final del scroll).
+  React.useLayoutEffect(() => {
+    if (!pos || !menuRef.current) return;
+    const r = menuRef.current.getBoundingClientRect();
+    const margen = 8;
+    let { x, y } = pos;
+    if (r.right > window.innerWidth - margen) {
+      x = Math.max(margen, window.innerWidth - r.width - margen);
+    }
+    if (r.bottom > window.innerHeight - margen) {
+      y = Math.max(margen, window.innerHeight - r.height - margen);
+    }
+    if (x !== pos.x || y !== pos.y) setPos({ x, y });
+  }, [pos]);
+
   function alAbrir(e: React.MouseEvent) {
     e.preventDefault();
     setPos({ x: e.clientX, y: e.clientY });
