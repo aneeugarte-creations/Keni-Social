@@ -245,7 +245,7 @@ export default function RevisionEditorial() {
     generacion?.estado === "completado" ? generacion.resultado?.informe ?? null : null;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <PageHeader
         titulo="Revisión editorial"
         descripcion="Pega el copy que escribió el community manager y obtén un veredicto con typos, datos sospechosos, reglas legales y desviaciones de la voz de marca. Señala; no reescribe ni publica."

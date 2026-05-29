@@ -362,7 +362,7 @@ export default function Verificacion() {
     generacion?.estado === "completado" ? generacion.resultado?.verificacion ?? null : null;
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <PageHeader
         titulo="Verificación de video"
         descripcion="Pega el enlace de un video viral y comprueba si es nuevo o si ya circulaba desde antes (reciclado), antes de decidir si retomarlo."

@@ -222,7 +222,7 @@ export default function MiCuenta() {
   return (
     <>
       <PageHeader titulo="Mi cuenta" descripcion="Consulta tus datos y cambia tu contraseña." />
-      <div className="max-w-2xl space-y-6">
+      <div className="space-y-6">
         <SeccionTuCuenta />
         <SeccionCambiarPassword />
       </div>
