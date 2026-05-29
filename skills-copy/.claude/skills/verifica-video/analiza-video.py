@@ -20,6 +20,22 @@ AMX Contenido. NO da el veredicto final: junta evidencia objetiva y se la pasa a
                                                Sin red, sin clave, sin subir nada.
                                                LIMITE: cobertura baja; la ausencia de
                                                senales NO confirma autenticidad.
+  7. Señales de copyright/agencia (PASIVO) -> watermarks/menciones de agencias de distribucion
+                                               (Storyful, AP, Reuters, Getty, AFP, ViralHog,
+                                               Newsflare, Jukin, SWNS, Caters, etc.) en el OCR,
+                                               titulo y descripcion. Sin red, sin clave.
+                                               SUPUESTO: una integracion futura con la API de
+                                               Storyful o YouTube Content-ID se añadiria en la
+                                               funcion `verificar_copyright_api()` (marcada con
+                                               TODO:API-COPYRIGHT) sin tocar el resto del flujo.
+                                               LIMITE: heuristica local; un video puede estar
+                                               licenciado sin que ningun watermark sea visible.
+  8. Pais de origen (INFERENCIA)            -> hipotesis basada en idioma del OCR/titulo,
+                                               toponimos reconocibles y metadatos de plataforma.
+                                               Se entregan >= 2 fuentes de confirmacion
+                                               (busquedas dirigidas en el idioma local) SOLO
+                                               cuando hay senales suficientes. Si no, se dice
+                                               explicitamente que no hay datos suficientes.
 
 Privacidad: solo se usa lo que YA es publico (la miniatura que la plataforma sirve). Los
 fotogramas se guardan en LOCAL para que el humano los arrastre a la busqueda inversa; este
@@ -383,6 +399,452 @@ def _normaliza_campo(texto: str) -> str:
     return re.sub(r"\s+", " ", texto.lower().strip())
 
 
+# --------------------------------------------------------------------------- #
+# 7. Señales de copyright / agencia (heuristica, sin red, sin claves)         #
+# --------------------------------------------------------------------------- #
+
+# Agencias de distribucion de video viral conocidas.
+# Cada entrada: (nombre_canonico, [patrones_regex_o_literales]).
+# Los patrones se aplican en minusculas sobre el texto combinado (OCR + titulo + descripcion).
+# NOTA DE MANTENIMIENTO: actualizar esta lista cuando aparezcan nuevas agencias o cambien
+# sus marcas de agua. Orden: de mas a menos conocida en el mercado MX/LATAM.
+_AGENCIAS_COPYRIGHT: list[tuple[str, list[str]]] = [
+    ("Reuters",         [r"\breuters\b", r"\breuters\.com\b"]),
+    ("AP / Associated Press", [r"\bap\b", r"\bassociated press\b", r"\bap video\b", r"\baptn\b"]),
+    ("AFP",             [r"\bafp\b", r"\bagence france[- ]presse\b"]),
+    ("Getty Images",    [r"\bgetty\b", r"\bgetty images\b", r"\bistock\b"]),
+    ("Storyful",        [r"\bstoryful\b"]),
+    ("ViralHog",        [r"\bviralhog\b", r"\bviral hog\b"]),
+    ("Newsflare",       [r"\bnewsflare\b"]),
+    ("Jukin Media",     [r"\bjukin\b", r"\bjukin media\b"]),
+    ("SWNS",            [r"\bswns\b", r"\bswns\.com\b"]),
+    ("Caters News",     [r"\bcaters\b", r"\bcaters news\b"]),
+    ("Zenger News",     [r"\bzenger\b", r"\bzenger news\b"]),
+    ("Barcroft Media",  [r"\bbarcroft\b"]),
+    ("TMX / The Video Agency", [r"\btmx\b", r"\bthe video agency\b"]),
+    ("EFE",             [r"\befe\b", r"\bagencia efe\b"]),
+    ("NTD",             [r"\bntd\b", r"\bntd\.tv\b"]),
+    ("Clix",            [r"\bclix\b"]),
+    ("WatermarkHub",    [r"\bwatermarkhub\b"]),
+    ("Rumble",          [r"\brumble\.com\b"]),  # puede indicar licencia exclusiva
+]
+
+# TODO:API-COPYRIGHT: punto de extension para integracion futura con API de Storyful,
+# YouTube Content-ID u otro servicio de verificacion de derechos de pago.
+# Implementar aqui una funcion `verificar_copyright_api(url, titulo)` que reciba
+# los mismos datos y devuelva un dict compatible con `senales_copyright`.
+# El resto del flujo no necesita cambios: solo llamar a esa funcion en main()
+# y mezclar su resultado con el de `detectar_copyright()`.
+
+
+def detectar_copyright(
+    texto_ocr: str,
+    titulo: str,
+    descripcion: str,
+    dominio_origen: str,
+) -> dict:
+    """Detecta watermarks/menciones de agencias de copyright en el contenido del video.
+
+    Funcion PURA: recibe texto ya extraido; no toca red ni disco.
+    Devuelve:
+      - agencias_detectadas: lista de dicts {agencia, nivel_confianza, fuente, patron}
+      - resumen: descripcion breve para el reporte
+      - tiene_indicios: bool rapido para la skill
+    Niveles de confianza:
+      "alto"  -> mencion explicita en OCR (watermark visible en fotograma).
+      "medio" -> mencion en titulo o descripcion (puede ser credito editorial correcto).
+      "bajo"  -> mencion en dominio de origen o contexto ambiguo.
+    """
+    # Texto combinado por fuente para poder asignar nivel de confianza
+    fuentes: list[tuple[str, str]] = [
+        ("ocr",         texto_ocr.lower()),
+        ("titulo",      titulo.lower()     if titulo      else ""),
+        ("descripcion", descripcion.lower() if descripcion else ""),
+        ("dominio",     dominio_origen.lower() if dominio_origen else ""),
+    ]
+    nivel_por_fuente = {
+        "ocr":         "alto",
+        "titulo":      "medio",
+        "descripcion": "medio",
+        "dominio":     "bajo",
+    }
+
+    detectadas: list[dict] = []
+    agencias_vistas: set[str] = set()
+
+    for nombre_agencia, patrones in _AGENCIAS_COPYRIGHT:
+        for nombre_fuente, texto_fuente in fuentes:
+            if not texto_fuente:
+                continue
+            for patron in patrones:
+                if re.search(patron, texto_fuente):
+                    if nombre_agencia not in agencias_vistas:
+                        agencias_vistas.add(nombre_agencia)
+                        detectadas.append({
+                            "agencia":          nombre_agencia,
+                            "nivel_confianza":  nivel_por_fuente[nombre_fuente],
+                            "fuente":           nombre_fuente,
+                            "patron_detectado": patron,
+                        })
+                    break  # primera coincidencia de patron para esta agencia+fuente
+            if nombre_agencia in agencias_vistas:
+                break  # ya registrada: no duplicar por otras fuentes
+
+    tiene_indicios = bool(detectadas)
+    if detectadas:
+        nombres = [d["agencia"] for d in detectadas]
+        alto = [d["agencia"] for d in detectadas if d["nivel_confianza"] == "alto"]
+        if alto:
+            resumen = (
+                f"ATENCION: watermark(s) de agencia detectado(s) en el video: {alto}. "
+                "Verificar licencia antes de usar."
+            )
+        else:
+            resumen = (
+                f"Menciones de agencia(s) en titulo/descripcion: {nombres}. "
+                "Puede ser credito editorial correcto o indicar material licenciado."
+            )
+    else:
+        resumen = (
+            "No se detectaron watermarks ni menciones de agencias conocidas. "
+            "LIMITE: la ausencia no garantiza que el video sea de libre uso; "
+            "puede tener derechos sin watermark visible."
+        )
+
+    return {
+        "agencias_detectadas": detectadas,
+        "resumen":             resumen,
+        "tiene_indicios":      tiene_indicios,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 8. País de origen (inferencia de señales, sin red)                          #
+# --------------------------------------------------------------------------- #
+
+# Mapeo idioma detectado (codigo ISO 639-1 / nombre) -> pais(es) mas probables
+# y parametros de busqueda local en ese idioma.
+# Fuente: heuristica editorial; la cobertura es parcial y orientativa.
+_IDIOMAS_PAIS: dict[str, dict] = {
+    "th":  {"paises": ["Tailandia"], "codigo": "TH", "idioma_nombre": "tailandes",
+             "query_local": "ข่าว"},
+    "ja":  {"paises": ["Japon"], "codigo": "JP", "idioma_nombre": "japones",
+             "query_local": "ニュース"},
+    "ko":  {"paises": ["Corea del Sur", "Corea del Norte"], "codigo": "KR",
+             "idioma_nombre": "coreano", "query_local": "뉴스"},
+    "zh":  {"paises": ["China", "Taiwan", "Singapur"], "codigo": "CN",
+             "idioma_nombre": "chino", "query_local": "新闻"},
+    "ar":  {"paises": ["region arabe (indeterminado)"], "codigo": "AR",
+             "idioma_nombre": "arabe", "query_local": "أخبار"},
+    "hi":  {"paises": ["India"], "codigo": "IN", "idioma_nombre": "hindi",
+             "query_local": "समाचार"},
+    "ru":  {"paises": ["Rusia", "pais de habla rusa"], "codigo": "RU",
+             "idioma_nombre": "ruso", "query_local": "новости"},
+    "uk":  {"paises": ["Ucrania"], "codigo": "UA", "idioma_nombre": "ucraniano",
+             "query_local": "новини"},
+    "de":  {"paises": ["Alemania", "Austria", "Suiza"], "codigo": "DE",
+             "idioma_nombre": "aleman", "query_local": "Nachrichten"},
+    "fr":  {"paises": ["Francia", "pais francofono"], "codigo": "FR",
+             "idioma_nombre": "frances", "query_local": "actualités"},
+    "pt":  {"paises": ["Brasil", "Portugal"], "codigo": "BR",
+             "idioma_nombre": "portugues", "query_local": "notícias"},
+    "id":  {"paises": ["Indonesia"], "codigo": "ID", "idioma_nombre": "indonesio",
+             "query_local": "berita"},
+    "tr":  {"paises": ["Turquia"], "codigo": "TR", "idioma_nombre": "turco",
+             "query_local": "haber"},
+    "fa":  {"paises": ["Iran"], "codigo": "IR", "idioma_nombre": "persa/farsi",
+             "query_local": "خبر"},
+    "vi":  {"paises": ["Vietnam"], "codigo": "VN", "idioma_nombre": "vietnamita",
+             "query_local": "tin tức"},
+    "es":  {"paises": ["pais hispanohablante (indeterminado)"], "codigo": "ES",
+             "idioma_nombre": "espanol", "query_local": "noticias"},
+    "en":  {"paises": ["pais anglofono (indeterminado)"], "codigo": "US",
+             "idioma_nombre": "ingles", "query_local": "news"},
+    "pl":  {"paises": ["Polonia"], "codigo": "PL", "idioma_nombre": "polaco",
+             "query_local": "wiadomości"},
+    "nl":  {"paises": ["Paises Bajos", "Belgica"], "codigo": "NL",
+             "idioma_nombre": "neerlandes", "query_local": "nieuws"},
+    "it":  {"paises": ["Italia"], "codigo": "IT", "idioma_nombre": "italiano",
+             "query_local": "notizie"},
+}
+
+# Topónimos directos: palabras que por si solas identifican un pais con alta confianza.
+# Solo incluimos los que aparecen frecuentemente en coberturas virales.
+_TOPONIMOS_PAIS: list[tuple[str, str, str]] = [
+    # (patron_regex, pais, codigo_iso)
+    (r"\btailand[ia|e|s]\b",       "Tailandia",    "TH"),
+    (r"\bbangkok\b",               "Tailandia",    "TH"),
+    (r"\bjap[oa]n\b|\bjapon\b|\bjapan\b", "Japon", "JP"),
+    (r"\btokio\b|\btokyo\b|\bosaka\b",    "Japon", "JP"),
+    (r"\bcorea\b|\bseul\b|\bseoul\b",     "Corea del Sur", "KR"),
+    (r"\bchina\b|\bpek[íi]n\b|\bbeijing\b|\bshanghai\b", "China", "CN"),
+    (r"\bindia\b|\bmumbai\b|\bnueva delhi\b|\bnew delhi\b", "India", "IN"),
+    (r"\bpakistan\b|\bkarachi\b|\blahore\b",  "Pakistan",   "PK"),
+    (r"\bafganistan\b|\bkabul\b",            "Afganistan",  "AF"),
+    (r"\biran\b|\btehran\b|\bteher[áa]n\b",  "Iran",        "IR"),
+    (r"\biraq\b|\bbagdad\b|\bbaghdad\b",     "Irak",        "IQ"),
+    (r"\bsiria\b|\bdamasco\b|\baleppo\b",    "Siria",       "SY"),
+    (r"\brusia\b|\bmosc[úu]\b|\bmoscow\b",   "Rusia",       "RU"),
+    (r"\bucrania\b|\bkiev\b|\bkyiv\b",       "Ucrania",     "UA"),
+    (r"\btur[kq]u[íi]a\b|\bestanbul\b|\bankara\b", "Turquia", "TR"),
+    (r"\bbrasil\b|\bsao paulo\b|\br[íi]o de janeiro\b", "Brasil", "BR"),
+    (r"\bm[ée]xico\b|\bcdmx\b|\bguadalajara\b|\bmonterrey\b", "Mexico", "MX"),
+    (r"\bcolom[bv]ia\b|\bbogot[áa]\b|\bmedell[íi]n\b", "Colombia", "CO"),
+    (r"\bvenezuela\b|\bcaracas\b",           "Venezuela",   "VE"),
+    (r"\bper[úu]\b|\blima\b",               "Peru",        "PE"),
+    (r"\bargentina\b|\bbuenos aires\b",      "Argentina",   "AR"),
+    (r"\bchile\b|\bsantiago\b",             "Chile",       "CL"),
+    (r"\bestados unidos\b|\busa\b|\bwashington\b|\bnew york\b|\blos angeles\b",
+     "Estados Unidos", "US"),
+    (r"\breino unido\b|\blondres\b|\blondon\b|\buk\b|\bbirmingham\b",
+     "Reino Unido", "GB"),
+    (r"\bfrancia\b|\bpar[íi]s\b|\bparis\b", "Francia",     "FR"),
+    (r"\balemania\b|\bberl[íi]n\b|\bberlin\b|\bm[úu]nich\b", "Alemania", "DE"),
+    (r"\bindonesia\b|\bjakarta\b",           "Indonesia",   "ID"),
+    (r"\bfilipinas\b|\bmanila\b",            "Filipinas",   "PH"),
+    (r"\bvietnam\b|\bhanoi\b|\bho chi minh\b", "Vietnam",   "VN"),
+    (r"\bunited arab emirates\b|\bdub[áa]i\b|\babu dhabi\b", "Emiratos Arabes Unidos", "AE"),
+    (r"\bisrael\b|\btel aviv\b|\bjerusal[ée]n\b|\bjerusalem\b", "Israel", "IL"),
+    (r"\bgaza\b|\brafah\b",                  "Gaza / Palestina", "PS"),
+    (r"\begipto\b|\bel cairo\b|\bcairo\b",   "Egipto",     "EG"),
+    (r"\bnigeria\b|\blagos\b|\babuja\b",      "Nigeria",    "NG"),
+    (r"\bkenia\b|\bnairobi\b",               "Kenia",      "KE"),
+    (r"\bsudan\b|\bjartum\b|\bkhartoum\b",   "Sudan",      "SD"),
+    (r"\baustralia\b|\bsidney\b|\bmelbourne\b|\bsydney\b", "Australia", "AU"),
+]
+
+
+def _detectar_idioma_unicode(texto: str) -> str | None:
+    """Detecta el idioma por bloques Unicode: no usa red ni dependencias externas.
+
+    Solo identifica escrituras no-latinas y algunas latinas por caracteres exclusivos.
+    Devuelve el codigo ISO 639-1 o None si no se puede determinar.
+    """
+    if not texto or not texto.strip():
+        return None
+    # Contamos caracteres por bloque Unicode
+    conteos: dict[str, int] = {}
+    for ch in texto:
+        cp = ord(ch)
+        if 0x0E00 <= cp <= 0x0E7F:
+            conteos["th"] = conteos.get("th", 0) + 1   # tailandes
+        elif 0x3040 <= cp <= 0x30FF or 0x4E00 <= cp <= 0x9FFF:
+            # japones/chino (CJK compartido): usamos contexto de hiragana/katakana
+            if 0x3040 <= cp <= 0x30FF:
+                conteos["ja"] = conteos.get("ja", 0) + 1
+            else:
+                conteos["zh"] = conteos.get("zh", 0) + 1
+        elif 0xAC00 <= cp <= 0xD7A3:
+            conteos["ko"] = conteos.get("ko", 0) + 1   # hangul coreano
+        elif 0x0600 <= cp <= 0x06FF:
+            conteos["ar"] = conteos.get("ar", 0) + 1   # arabe/farsi
+        elif 0x0900 <= cp <= 0x097F:
+            conteos["hi"] = conteos.get("hi", 0) + 1   # devanagari (hindi)
+        elif 0x0400 <= cp <= 0x04FF:
+            # cirilico: ruso o ucraniano.
+            # Letras exclusivas del ucraniano moderno: і (U+0456/U+0406),
+            # ї (U+0457/U+0407), є (U+0454/U+0404), ґ (U+0491/U+0490).
+            # Les damos peso alto para que inclinen la balanza con pocos caracteres.
+            if ch in "іІїЇєЄґҐ":
+                conteos["uk"] = conteos.get("uk", 0) + 4  # letra exclusiva ucraniana
+            else:
+                conteos["ru"] = conteos.get("ru", 0) + 1
+        elif 0x0900 <= cp <= 0x097F:
+            conteos["hi"] = conteos.get("hi", 0) + 1
+        elif 0x0E80 <= cp <= 0x0EFF:
+            conteos["lo"] = conteos.get("lo", 0) + 1   # lao
+        elif 0x1000 <= cp <= 0x109F:
+            conteos["my"] = conteos.get("my", 0) + 1   # birmano
+        elif 0x0980 <= cp <= 0x09FF:
+            conteos["bn"] = conteos.get("bn", 0) + 1   # bengali
+
+    if not conteos:
+        return None  # solo latin; idioma indeterminado sin mas pistas
+    return max(conteos, key=lambda k: conteos[k])
+
+
+def inferir_pais_origen(
+    texto_ocr: str,
+    titulo: str,
+    descripcion: str,
+    idioma_plataforma: str,
+) -> dict:
+    """Infiere hipotesis de pais de origen a partir de señales disponibles.
+
+    Funcion PURA: recibe texto ya extraido; no toca red ni disco.
+    Devuelve:
+      - pais_hipotesis: nombre del pais o None si no hay señales suficientes.
+      - codigo_iso: codigo ISO 3166-1 alfa-2 o None.
+      - confianza: "alta" | "media" | "baja" | "insuficiente".
+      - senales_detectadas: lista de pistas que apoyan la hipotesis.
+      - fuentes_confirmacion: >= 2 URLs de busqueda dirigida en el idioma local
+        (o lista vacia si confianza == "insuficiente").
+      - nota: explicacion honesta de limitaciones.
+    """
+    senales_detectadas: list[str] = []
+    candidatos: dict[str, int] = {}  # codigo_iso -> puntuacion
+
+    # --- Texto combinado para topónimos ---
+    texto_combinado = " ".join(filter(None, [titulo, descripcion, texto_ocr])).lower()
+
+    # 1. Busqueda de topónimos en texto combinado (mayor confianza)
+    for patron, pais, codigo in _TOPONIMOS_PAIS:
+        if re.search(patron, texto_combinado, re.IGNORECASE):
+            candidatos[codigo] = candidatos.get(codigo, 0) + 3
+            senales_detectadas.append(f"Topónimo '{pais}' detectado en texto/titulo/descripcion")
+
+    # 2. Idioma por bloques Unicode en OCR (escritura no-latina = señal fuerte)
+    texto_para_idioma = " ".join(filter(None, [texto_ocr, titulo]))
+    codigo_idioma = _detectar_idioma_unicode(texto_para_idioma)
+    if codigo_idioma and codigo_idioma in _IDIOMAS_PAIS:
+        info_idioma = _IDIOMAS_PAIS[codigo_idioma]
+        paises_idioma = info_idioma["paises"]
+        # El idioma por unicode es señal fuerte para escrituras no-latinas
+        puntuacion = 4 if codigo_idioma not in ("en", "es", "fr", "de", "pt", "it", "nl") else 1
+        # Para idiomas que tienen un codigo de pais propio en _IDIOMAS_PAIS
+        codigo_pais_idioma = info_idioma.get("codigo", "")
+        if codigo_pais_idioma:
+            candidatos[codigo_pais_idioma] = candidatos.get(codigo_pais_idioma, 0) + puntuacion
+        senales_detectadas.append(
+            f"Escritura/idioma '{info_idioma['idioma_nombre']}' detectado (posible: {paises_idioma})"
+        )
+
+    # 3. Idioma de plataforma (señal debil: puede ser el idioma del que sube, no del origen)
+    if idioma_plataforma:
+        lang_norm = idioma_plataforma.lower().split("-")[0].split("_")[0]
+        if lang_norm in _IDIOMAS_PAIS:
+            info = _IDIOMAS_PAIS[lang_norm]
+            codigo_pais = info.get("codigo", "")
+            if codigo_pais:
+                candidatos[codigo_pais] = candidatos.get(codigo_pais, 0) + 1
+            senales_detectadas.append(
+                f"Idioma de la plataforma: '{info['idioma_nombre']}' (señal debil, "
+                "puede reflejar el idioma del que publica, no del pais del evento)"
+            )
+
+    # --- Determinar resultado ---
+    if not candidatos:
+        return {
+            "pais_hipotesis":      None,
+            "codigo_iso":          None,
+            "confianza":           "insuficiente",
+            "senales_detectadas":  senales_detectadas,
+            "fuentes_confirmacion": [],
+            "nota": (
+                "No se encontraron señales suficientes para inferir el pais de origen "
+                "(sin topónimos reconocibles, sin escritura no-latina, sin metadatos de "
+                "idioma). Verifica el pais manualmente revisando el contexto del video."
+            ),
+        }
+
+    # Codigo mas votado
+    mejor_codigo = max(candidatos, key=lambda k: candidatos[k])
+    puntuacion_max = candidatos[mejor_codigo]
+
+    # Confianza segun puntuacion acumulada
+    if puntuacion_max >= 6:
+        confianza = "alta"
+    elif puntuacion_max >= 3:
+        confianza = "media"
+    else:
+        confianza = "baja"
+
+    # Nombre del pais para mostrar
+    pais_nombre = mejor_codigo  # fallback: usar el codigo
+    for _, pais_t, codigo_t in _TOPONIMOS_PAIS:
+        if codigo_t == mejor_codigo:
+            pais_nombre = pais_t
+            break
+    if mejor_codigo in _IDIOMAS_PAIS:
+        paises_del_idioma = _IDIOMAS_PAIS[mejor_codigo]["paises"]
+        if paises_del_idioma:
+            pais_nombre = paises_del_idioma[0]
+
+    # Construir fuentes de confirmacion (busquedas dirigidas)
+    fuentes = _construir_fuentes_confirmacion(mejor_codigo, titulo or texto_ocr[:80])
+
+    nota = (
+        f"Hipotesis de pais con confianza {confianza}. "
+        "Las fuentes de confirmacion son enlaces de busqueda dirigida: el humano "
+        "debe verificar que los resultados corroboran el origen. "
+        "Esta inferencia es heuristica; no sustituye a la verificacion editorial."
+    )
+    if confianza == "baja":
+        nota = (
+            "Hipotesis de pais con confianza BAJA: hay pocas señales. "
+            "Toma la hipotesis como punto de partida y no como confirmacion. " + nota
+        )
+
+    return {
+        "pais_hipotesis":      pais_nombre,
+        "codigo_iso":          mejor_codigo,
+        "confianza":           confianza,
+        "senales_detectadas":  list(dict.fromkeys(senales_detectadas)),  # deduplica preservando orden
+        "fuentes_confirmacion": fuentes,
+        "nota":                nota,
+    }
+
+
+def _construir_fuentes_confirmacion(codigo_pais: str, termino_busqueda: str) -> list[dict]:
+    """Arma >= 2 fuentes de confirmacion: busquedas en Google y en el idioma local.
+
+    Las fuentes son enlaces listos para clic, no resultados scrapeados.
+    Si no hay informacion suficiente del idioma, devuelve busquedas en ingles y espanol.
+    """
+    fuentes: list[dict] = []
+    q_limpio = termino_busqueda.strip()[:120]
+    q_enc = urllib.parse.quote(q_limpio)
+
+    # _IDIOMAS_PAIS usa codigos de idioma en minusculas (ej. "th", "ja").
+    # codigo_pais es un codigo ISO 3166-1 alfa-2 en mayusculas (ej. "TH", "JP").
+    # Para la mayoria de los idiomas el codigo coincide (th/TH, ja/JP no... pero
+    # usamos el codigo de pais del _IDIOMAS_PAIS[lang]["codigo"] que es mayusculas).
+    # Hacemos busqueda inversa: idioma cuyo "codigo" coincide con codigo_pais.
+    info_idioma = None
+    for lang_code, info in _IDIOMAS_PAIS.items():
+        if info.get("codigo") == codigo_pais:
+            info_idioma = info
+            break
+    query_local = info_idioma["query_local"] if info_idioma else None
+    idioma_nombre = info_idioma["idioma_nombre"] if info_idioma else "local"
+
+    # Fuente 1: Google en el idioma local con el termino de busqueda
+    if query_local:
+        q_local_enc = urllib.parse.quote(f"{query_local} {q_limpio}")
+        fuentes.append({
+            "descripcion": f"Busqueda en Google ({idioma_nombre}) sobre el evento",
+            "url": f"https://www.google.com/search?q={q_local_enc}&lr=lang_{codigo_pais.lower()}&hl={codigo_pais.lower()}",
+            "tipo": "busqueda_google_idioma_local",
+        })
+    else:
+        # Fallback: busqueda en ingles
+        fuentes.append({
+            "descripcion": "Busqueda en Google (ingles) sobre el evento",
+            "url": f"https://www.google.com/search?q={q_enc}&hl=en",
+            "tipo": "busqueda_google_ingles",
+        })
+
+    # Fuente 2: Google News filtrado por pais/region
+    # hl_param: codigo de idioma (en minusculas) para el parametro hl= de Google
+    hl_param_keys = [lc for lc, inf in _IDIOMAS_PAIS.items() if inf.get("codigo") == codigo_pais]
+    hl_param = hl_param_keys[0] if hl_param_keys else "en"
+    fuentes.append({
+        "descripcion": f"Google News ({codigo_pais}) para el evento",
+        "url": f"https://news.google.com/search?q={q_enc}&hl={hl_param}-{codigo_pais}&gl={codigo_pais}&ceid={codigo_pais}:{hl_param}",
+        "tipo": "busqueda_google_news",
+    })
+
+    # Fuente 3 (opcional): DuckDuckGo en el idioma local (menos filtro de burbuja)
+    region_ddg = f"{codigo_pais.lower()}-{codigo_pais.lower()}"
+    fuentes.append({
+        "descripcion": f"DuckDuckGo (region {codigo_pais}) para el evento",
+        "url": f"https://duckduckgo.com/?q={q_enc}&kl={region_ddg}",
+        "tipo": "busqueda_duckduckgo_local",
+    })
+
+    return fuentes
+
+
 def metadatos_ia(video_path: Path | None, meta_base: dict) -> dict:
     """Lee metadatos extendidos buscando huellas de generadores de IA.
 
@@ -682,7 +1144,7 @@ def main() -> int:
     }
 
     # 1. Metadatos
-    _log("[1/6] Leyendo metadatos...")
+    _log("[1/8] Leyendo metadatos...")
     meta = metadatos_url(entrada) if es_url else metadatos_archivo(entrada)
     reporte["metadatos"] = meta
 
@@ -690,7 +1152,7 @@ def main() -> int:
     video_path: Path | None = None
     if es_url:
         if meta.get("disponible"):
-            _log("[2/6] Descargando el video (<=720p) para sacar fotogramas...")
+            _log("[2/8] Descargando el video (<=720p) para sacar fotogramas...")
             video_path, err = descargar(entrada, salida)
             if err:
                 reporte.setdefault("avisos", []).append(err)
@@ -709,9 +1171,9 @@ def main() -> int:
         if not _tiene("ffmpeg"):
             reporte.setdefault("avisos", []).append("ffmpeg no instalado: sin fotogramas ni OCR.")
         else:
-            _log(f"[3/6] Extrayendo {args.frames} fotogramas...")
+            _log(f"[3/8] Extrayendo {args.frames} fotogramas...")
             frames = extraer_fotogramas(video_path, frames_dir, args.frames)
-            _log(f"[4/6] OCR sobre {len(frames)} fotogramas...")
+            _log(f"[4/8] OCR sobre {len(frames)} fotogramas...")
             ocr = ocr_fotogramas(frames)
     else:
         reporte.setdefault("avisos", []).append(
@@ -722,13 +1184,13 @@ def main() -> int:
     reporte["fotogramas"] = [str(f) for f in frames]
 
     # 5. Busqueda inversa (sobre la miniatura publica) + Fact Check opcional
-    _log("[5/6] Construyendo enlaces de busqueda inversa y consultando Fact Check (si hay key)...")
+    _log("[5/8] Construyendo enlaces de busqueda inversa y consultando Fact Check (si hay key)...")
     reporte["busqueda_inversa"] = enlaces_busqueda_inversa(meta.get("miniatura"))
     reporte["busqueda_inversa"]["fotogramas_guardados_en"] = str(frames_dir) if frames else None
     reporte["fact_check"] = fact_check(meta.get("titulo") or args.contexto)
 
     # 6. Senales de IA generativa (pasivo: metadatos extendidos + OCR watermarks)
-    _log("[6/6] Buscando senales de IA generativa (metadatos, C2PA, watermarks)...")
+    _log("[6/8] Buscando senales de IA generativa (metadatos, C2PA, watermarks)...")
     meta_ia = metadatos_ia(video_path, meta)
     reporte["ia_generativa"] = meta_ia
     senales_ia = senales_ia_generativa(meta_ia, ocr)
@@ -746,6 +1208,35 @@ def main() -> int:
         ),
     }]
 
+    # 7. Señales de copyright / agencia
+    _log("[7/8] Buscando señales de copyright y agencias de distribucion...")
+    texto_ocr_str = ocr.get("texto") or ""
+    titulo_str = meta.get("titulo") or ""
+    descripcion_str = meta.get("descripcion") or ""
+    # Dominio de origen: extraer del URL si es URL
+    dominio_origen = ""
+    if es_url:
+        try:
+            dominio_origen = urllib.parse.urlparse(entrada).netloc
+        except Exception:  # noqa: BLE001
+            dominio_origen = ""
+    reporte["senales_copyright"] = detectar_copyright(
+        texto_ocr=texto_ocr_str,
+        titulo=titulo_str,
+        descripcion=descripcion_str,
+        dominio_origen=dominio_origen,
+    )
+
+    # 8. Pais de origen (inferencia)
+    _log("[8/8] Infiriendo pais de origen...")
+    idioma_plataforma = meta.get("language") or meta.get("language_preference") or ""
+    reporte["pais_origen"] = inferir_pais_origen(
+        texto_ocr=texto_ocr_str,
+        titulo=titulo_str,
+        descripcion=descripcion_str,
+        idioma_plataforma=idioma_plataforma,
+    )
+
     # Escribir reporte
     ruta_reporte = salida / "reporte.json"
     ruta_reporte.write_text(json.dumps(reporte, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -759,9 +1250,18 @@ def main() -> int:
     _log(f"OCR anos   : {ocr.get('anios')}   fechas: {ocr.get('fechas')}")
     for s in reporte["senales"]:
         _log(f"  [{s['nivel'].upper()}] {s['texto']}")
-    _log(f"--- Senales IA generativa ---")
+    _log("--- Senales IA generativa ---")
     for s in reporte["senales_ia"]:
         _log(f"  [{s['nivel'].upper()}] {s['texto']}")
+    _log("--- Copyright / agencias ---")
+    _log(f"  {reporte['senales_copyright']['resumen']}")
+    for ag in reporte["senales_copyright"]["agencias_detectadas"]:
+        _log(f"  [{ag['nivel_confianza'].upper()}] {ag['agencia']} (via {ag['fuente']})")
+    _log("--- Pais de origen ---")
+    po = reporte["pais_origen"]
+    _log(f"  Hipotesis: {po.get('pais_hipotesis') or 'desconocido'}  confianza: {po.get('confianza')}")
+    for s in po.get("senales_detectadas") or []:
+        _log(f"    - {s}")
     _log(f"Fotogramas : {frames_dir if frames else '(ninguno)'}")
     _log("===================")
 

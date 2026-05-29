@@ -1,6 +1,6 @@
 ---
 name: verifica-video
-description: Dado el ENLACE de un video viral (o un archivo local), dice si parece NUEVO o si ya CIRCULABA desde antes (material reciclado / re-viralizado), para decidir rápido si retomarlo. Resuelve el "pego el link y dime si es de verdad reciente o si ya salió hace años" del equipo de AMX Contenido (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación), que hoy se come 20 minutos por video revisando comentarios, calidad, marcas de cámara y fechas. Corre un análisis LOCAL y GRATIS (analiza-video.py): saca la fecha de subida con yt-dlp, fotogramas con ffmpeg, lee fechas/años en pantalla con OCR (tesseract), arma enlaces de BÚSQUEDA INVERSA listos para clic (Google Lens / Yandex / TinEye ordenado por más antiguo / Bing) sobre la miniatura pública, y consulta la Fact Check API si hay key. NO scrapea ni sube nada; la búsqueda inversa la confirma el humano con un clic. NO descarga material privado ni publica. Abre con el bloque veredicto + leyenda como las demás skills. El humano decide. Úsala para "verifica este video", "¿este video es nuevo o ya circulaba?", "¿de cuándo es este video?", "data este clip antes de que lo retomemos".
+description: Dado el ENLACE de un video viral (o un archivo local), dice si parece NUEVO o si ya CIRCULABA desde antes (material reciclado / re-viralizado), detecta señales de COPYRIGHT de agencias (Storyful, AP, Reuters, Getty, AFP, ViralHog, etc.) e infiere el PAÍS DE ORIGEN con al menos 2 fuentes de confirmación, para decidir rápido si retomarlo y sin qué riesgo legal. Resuelve el "pego el link y dime si es de verdad reciente, de dónde viene y si tiene derechos" del equipo de AMX Contenido (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación). Corre un análisis LOCAL y GRATIS (analiza-video.py): saca la fecha de subida con yt-dlp, fotogramas con ffmpeg, lee fechas/años/watermarks en pantalla con OCR (tesseract), detecta agencias por heurística (OCR + título + descripción + dominio), infiere país por topónimos y escritura Unicode, arma enlaces de BÚSQUEDA INVERSA listos para clic y consulta la Fact Check API si hay key. NO scrapea ni sube nada. El humano decide. Úsala para "verifica este video", "¿este video es nuevo o ya circulaba?", "¿de cuándo es este video?", "¿tiene derechos?", "¿de dónde es este clip?".
 allowed-tools: Read, Glob, Bash(python3:*), Bash(yt-dlp:*), Bash(ffmpeg:*), Bash(ffprobe:*), Bash(tesseract:*), Bash(date:*), Bash(bash:*)
 ---
 
@@ -39,6 +39,8 @@ Leyenda: ✅ = no hay pistas de que sea viejo (pero confírmalo) · ⚠️ = se�
 - **No es un detector de deepfakes** ni un juez de veracidad del hecho: responde **"¿es nuevo o ya circulaba?"**, que es el filtro de procedencia. La veracidad del contenido se revisa con el resto del criterio editorial.
 - **No da por buena su propia lectura como verdad.** El OCR se equivoca (un marcador, un dorsal o una placa pueden parecer un año); cuando hay duda, lo marca y deja la confirmación al humano.
 - **No garantiza detectar vídeo generado con IA.** Lee señales pasivas (metadatos C2PA/EXIF, watermarks visibles en OCR) pero **la ausencia de señales NO confirma autenticidad**. Los generadores modernos de alta calidad (Veo 3, Kling 2.5, Runway Gen-4) no dejan huellas detectables con herramientas locales cuando se distribuyen sin watermark. La detección de IA es intrínsecamente limitada y no sustituye al criterio editorial.
+- **La detección de copyright es heurística local.** Detecta watermarks y menciones de agencias conocidas en el texto del video (OCR) y en título/descripción, pero **un video puede tener derechos sin watermark visible ni mención textual**. La ausencia de señal no es libre de derechos. Para verificación definitiva de licencias, consulta directamente con las agencias (Storyful, AP, etc.). Una integración futura con APIs de pago (Storyful API, YouTube Content-ID) está documentada como punto de extensión en `analiza-video.py` (`TODO:API-COPYRIGHT`).
+- **La inferencia de país es orientativa.** Se basa en topónimos reconocibles y en la escritura Unicode del texto extraído por OCR y del título/descripción. Si el video no tiene texto reconocible ni escritura no-latina, el campo `pais_origen.confianza` valdrá `"insuficiente"` y no se generarán fuentes de confirmación. Las fuentes entregadas son **búsquedas dirigidas** (enlaces listos para clic), no resultados verificados.
 
 ## Pasos
 
@@ -48,7 +50,7 @@ Leyenda: ✅ = no hay pistas de que sea viejo (pero confírmalo) · ⚠️ = se�
    ```
    - Imprime el progreso en stderr y, en la última línea, `REPORTE=<ruta del reporte.json>`. **Lee ese `reporte.json`** con `Read`.
    - Si falla por falta de **yt-dlp** (`brew install yt-dlp` o `pipx install yt-dlp`), **ffmpeg** o **tesseract**, dilo claro y para: el usuario debe instalarlos. No inventes metadatos ni fechas.
-   - El reporte trae: `metadatos` (incluida la **fecha de subida** y la **miniatura**), `ocr` (años/fechas/horas leídos en pantalla), `busqueda_inversa` (enlaces y carpeta de fotogramas), `fact_check` (si había key), `senales` (pistas de recirculación clasificadas alto/medio/bajo), `ia_generativa` (metadatos extendidos de IA) y `senales_ia` (pistas de origen de IA generativa).
+   - El reporte trae: `metadatos` (incluida la **fecha de subida** y la **miniatura**), `ocr` (años/fechas/horas leídos en pantalla), `busqueda_inversa` (enlaces y carpeta de fotogramas), `fact_check` (si había key), `senales` (pistas de recirculación clasificadas alto/medio/bajo), `ia_generativa` (metadatos extendidos de IA), `senales_ia` (pistas de origen de IA generativa), **`senales_copyright`** (agencias detectadas con nivel de confianza y fuente) y **`pais_origen`** (hipótesis de país, código ISO, confianza y fuentes de confirmación).
 
 2. **Mira los fotogramas tú mismo.** El reporte lista `fotogramas` (rutas locales). **Léelos con `Read`** (ves imágenes de forma nativa) y busca lo que el equipo busca a mano:
    - **Marca de cámara de seguridad / fecha-hora incrustada** (p. ej. `2013-05-12 03:14:07`).
@@ -76,6 +78,8 @@ Leyenda: ✅ = no hay pistas de que sea viejo (pero confírmalo) · ⚠️ = se�
    - **Coherencia** entre lo que se afirma del video y lo que ves.
    - **Búsqueda inversa**: ¿abierta/confirmada? Si nadie hizo clic, dilo y mantén el veredicto en ⚠️.
    - **Señales de IA generativa**: ¿qué encontró el paso 6 del reporte (`senales_ia`)? ¿Hay C2PA, metadatos de software, watermarks en OCR, o artefactos visuales? Si hay señales → ⚠️ con descripción. Si no hay → ⚠️ con nota de que la ausencia no confirma autenticidad. Nunca ✅ en este punto solo por ausencia de señales.
+   - **Copyright / agencias** (`senales_copyright`): ¿hay `agencias_detectadas`? Si `nivel_confianza == "alto"` (watermark en OCR) → ❌ con la agencia. Si `"medio"` (en título/descripción) → ⚠️, puede ser crédito editorial correcto, confirmalo. Si vacío → ⚠️ con la nota de que la ausencia no garantiza libre uso.
+   - **País de origen** (`pais_origen`): reporta la hipótesis, el nivel de confianza y entrega las fuentes de confirmación para que el humano haga clic. Si `confianza == "insuficiente"`, dilo explícitamente.
    - **Veredicto:** `❌ RECICLADO` solo con evidencia que tú puedas señalar; `✅` solo si todo sale limpio incluida la búsqueda inversa; si no, `⚠️` con la lista corta de qué confirmar.
 
 ## Formato de salida (plantilla)
@@ -100,12 +104,28 @@ Se afirma que: <contexto | no indicado>
 - Google Lens: <enlace>   ·   Yandex: <enlace>   ·   Bing: <enlace>
 - Para afinar, arrastra los fotogramas de: <carpeta> a Google Lens / Yandex.
 
+## Copyright / agencias
+- <agencia> — nivel: <alto|medio|bajo> — detectado en: <ocr|titulo|descripcion>
+  (Si hay nivel alto: "⚠️ ATENCIÓN: watermark visible — verificar licencia")
+  (Si vacío: "No se detectaron watermarks ni menciones. La ausencia no garantiza libre uso.")
+
+## País de origen (hipótesis)
+- Hipótesis: <país | "sin señales suficientes">   Confianza: <alta|media|baja|insuficiente>
+- Señales detectadas: <topónimos, escritura, idioma plataforma>
+- Fuentes para confirmar (haz clic):
+  1. <descripcion fuente 1> — <url>
+  2. <descripcion fuente 2> — <url>
+  3. <descripcion fuente 3 opcional> — <url>
+  (Si insuficiente: "No se generan fuentes — verifica el origen manualmente")
+
 ## Auto-verificación
 - [✅/⚠️/❌] Fecha de subida obtenida — <detalle>
 - [✅/⚠️/❌] Años/fechas en pantalla confirmados contra el fotograma (no ruido de OCR) — <detalle>
 - [✅/⚠️/❌] Coherencia entre lo afirmado y lo que se ve — <detalle>
 - [✅/⚠️/❌] Búsqueda inversa abierta/confirmada — <detalle o "pendiente: haz clic">
 - [⚠️] Señales de IA generativa — <resumen de senales_ia: metadatos, C2PA, watermarks, artefactos visuales. Si no hay señales: "no se encontraron señales automáticas; la ausencia no confirma autenticidad">
+- [✅/⚠️/❌] Copyright / agencias — <agencias detectadas o "ninguna detectada — la ausencia no es libre uso">
+- [✅/⚠️/❌] País de origen — <hipótesis y confianza; si insuficiente, explicarlo>
 Veredicto: <❌ RECICLADO — evidencia / ✅ SIN SEÑALES — todo limpio / ⚠️ REVISAR — qué confirmar>
 
 ⚠️ Nada se ha publicado ni subido. Esto ASISTE tu decisión; la búsqueda inversa la confirmas tú con un clic, el OCR puede equivocarse, y la detección de IA es limitada (la ausencia de señales no confirma autenticidad). La decisión de retomar o descartar es tuya.
