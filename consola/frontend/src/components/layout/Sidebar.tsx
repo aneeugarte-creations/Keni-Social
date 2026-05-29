@@ -4,11 +4,9 @@ import * as React from "react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
-import { appDeRuta, gruposDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
-import { subPestanasDe } from "@/components/layout/hub-tabs";
-import { iconoDe, navegacionParaRol } from "@/components/layout/navegacion";
+import { appDeRuta, hojasDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
+import { iconoDe } from "@/components/layout/navegacion";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { AppCatalogo } from "@/types";
@@ -70,8 +68,8 @@ function clasesPadre(activa: boolean) {
   );
 }
 
-/** Clases de una SUB-pestaña (indentada, tipografía algo menor que el padre). */
-function clasesSubItem({ isActive }: { isActive: boolean }) {
+/** Clases de una HOJA (nivel 2, indentada bajo el padre-app). */
+function clasesHoja({ isActive }: { isActive: boolean }) {
   return cn(
     "flex items-center gap-2 rounded-md py-1.5 pl-9 pr-3 text-[13px] transition-colors",
     isActive
@@ -91,72 +89,40 @@ function clasesIconoRail(activa: boolean) {
 }
 
 /**
- * Las secciones de UNA app, ya filtradas por rol. Cada sección que sea hub
- * expande sus sub-pestañas indentadas debajo (registro compartido `hub-tabs`).
- * Sin encabezado de sección: el nombre de la app (el padre) ya nombra el grupo.
+ * Las HOJAS de UNA app: nivel 2 PLANO del sidebar. `hojasDeApp` aplana la nav
+ * (los hubs aportan sus sub-pestañas como hojas directas; el resto aporta su
+ * propia entrada), así que NO hay nivel-hub ni encabezados de sección: el nombre
+ * de la app (el padre) ya nombra el grupo. 2 niveles máximo: App → hoja.
  */
-function SeccionesDeApp({
+function HojasDeApp({
   app,
-  esAdmin,
   onNavegar,
 }: {
   app: AppCatalogo;
-  esAdmin: boolean;
   onNavegar?: () => void;
 }) {
-  const grupos = gruposDeApp(app);
-  const navegacion = navegacionParaRol(esAdmin, grupos);
+  const hojas = hojasDeApp(app);
 
   return (
-    <div className="mt-0.5 space-y-0.5">
-      {navegacion.map((grupo, idx) =>
-        grupo.items.map((item) => {
-          const Icono = item.icono;
-          const subPestanas = subPestanasDe(item.ruta);
-          return (
-            <div key={item.ruta || `__bloque-${idx}`}>
-              <NavLink
-                to={item.ruta}
-                onClick={onNavegar}
-                title={item.descripcion}
-                // Un hub comparte prefijo con sus sub-rutas: si tiene
-                // sub-pestañas, marca activo solo en match exacto para no
-                // resaltar el padre a la vez que la pestaña.
-                end={subPestanas ? true : undefined}
-                className={({ isActive }) =>
-                  cn(clasesItem({ isActive }), "pl-9")
-                }
-              >
-                <Icono className="h-4 w-4 shrink-0" />
-                <span>{item.etiqueta}</span>
-              </NavLink>
-              {subPestanas && (
-                <ul className="mt-0.5 space-y-0.5">
-                  {subPestanas.map((tab) => {
-                    const IconoTab = tab.icono;
-                    return (
-                      <li key={tab.ruta}>
-                        <NavLink
-                          to={tab.ruta}
-                          end={tab.end}
-                          onClick={onNavegar}
-                          className={({ isActive }) =>
-                            cn(clasesSubItem({ isActive }), "pl-[3.25rem]")
-                          }
-                        >
-                          <IconoTab className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          <span>{tab.etiqueta}</span>
-                        </NavLink>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          );
-        }),
-      )}
-    </div>
+    <ul className="mt-0.5 space-y-0.5">
+      {hojas.map((hoja) => {
+        const Icono = hoja.icono;
+        return (
+          <li key={hoja.ruta}>
+            <NavLink
+              to={hoja.ruta}
+              end={hoja.end}
+              onClick={onNavegar}
+              title={hoja.descripcion}
+              className={({ isActive }) => clasesHoja({ isActive })}
+            >
+              <Icono className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{hoja.etiqueta}</span>
+            </NavLink>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -183,10 +149,8 @@ export function Sidebar({
   colapsado?: boolean;
   onToggleColapsar?: () => void;
 }) {
-  const { usuario } = useSesion();
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const esAdmin = usuario?.rol === "admin";
 
   // Sidebar DATA-DRIVEN (cajón de apps · ADR 0005): se hidrata de `/api/catalogo`
   // (apps activas + su nav, filtradas por los flags del backend). Ya no hay
@@ -312,12 +276,18 @@ export function Sidebar({
                 <button
                   type="button"
                   aria-expanded={abierta}
-                  aria-controls={`app-secciones-${app.id}`}
+                  aria-controls={`app-hojas-${app.id}`}
                   className={clasesPadre(activa)}
-                  onClick={() =>
-                    // Acordeón: alternar; abrir una cierra la demás.
-                    setAppAbierta((actual) => (actual === app.id ? undefined : app.id))
-                  }
+                  onClick={() => {
+                    // El título de la app NO es un click muerto: abre su acordeón
+                    // (cierra las demás) Y navega a su 1ª hoja. Si la app ya está
+                    // abierta, solo togglea cerrado (sin re-navegar de balde).
+                    setAppAbierta((actual) => (actual === app.id ? undefined : app.id));
+                    if (app.id !== appAbierta && !activa) {
+                      navigate(rutaPrimaria(app));
+                      onNavegar?.();
+                    }
+                  }}
                 >
                   <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="flex-1 text-left">{app.etiqueta}</span>
@@ -330,8 +300,8 @@ export function Sidebar({
                   />
                 </button>
                 {abierta && (
-                  <div id={`app-secciones-${app.id}`}>
-                    <SeccionesDeApp app={app} esAdmin={esAdmin} onNavegar={onNavegar} />
+                  <div id={`app-hojas-${app.id}`}>
+                    <HojasDeApp app={app} onNavegar={onNavegar} />
                   </div>
                 )}
               </li>

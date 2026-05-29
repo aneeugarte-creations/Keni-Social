@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
 import { Sidebar } from "@/components/layout/Sidebar";
-import { appDeRuta, gruposDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
+import { appDeRuta, gruposDeApp, hojasDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { AppCatalogo, RolUsuario } from "@/types";
 
@@ -135,30 +135,46 @@ describe("Sidebar · acordeón de apps", () => {
     expect(screen.queryByRole("link", { name: /^apps$/i })).not.toBeInTheDocument();
   });
 
-  it("la app de la ruta actual se abre automáticamente y expande sus secciones + sub-pestañas", async () => {
+  it("la app de la ruta actual se abre automáticamente y expande sus HOJAS planas (sin nivel-hub)", async () => {
     renderSidebar("editor", "/generacion");
-    // Producción está abierta: se ven sus secciones.
+    // Producción está abierta: se ven sus hojas planas (nivel 2 directo).
     expect(await screen.findByRole("link", { name: /generación/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^investigación$/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /skills/i })).toBeInTheDocument();
-    // El hub Investigación expande sus sub-pestañas indentadas.
+    // NO hay nivel-hub: "Investigación" y "Revisión" desaparecen como entrada;
+    // se aplanan a sus sub-pestañas como hojas directas.
+    expect(screen.queryByRole("link", { name: /^investigación$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^revisión$/i })).not.toBeInTheDocument();
+    // Las sub-pestañas del hub Investigación son ahora hojas directas.
     expect(screen.getByRole("link", { name: /fuentes/i })).toHaveAttribute("href", "/investigacion/fuentes");
     expect(screen.getByRole("link", { name: /termómetro/i })).toBeInTheDocument();
-    // El hub Agentes expande catálogo + Actividad IA.
+    // Las del hub Revisión también (Editorial, Verificación).
+    expect(screen.getByRole("link", { name: /editorial/i })).toHaveAttribute("href", "/revision/editorial");
+    expect(screen.getByRole("link", { name: /verificación/i })).toHaveAttribute("href", "/revision/verificacion");
+    // El hub Agentes aplana catálogo + Actividad IA.
     expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/agentes/actividad");
-    // Las OTRAS apps están cerradas: no se ven sus secciones.
+    // Las OTRAS apps están cerradas: no se ven sus hojas.
     expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^analíticas$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^métricas$/i })).not.toBeInTheDocument();
   });
 
   it("acordeón: al abrir otra app se cierra la actual", async () => {
     renderSidebar("editor", "/generacion");
     // Producción abierta de inicio.
     await screen.findByRole("link", { name: /generación/i });
-    // Abre Operación: se ven sus secciones y se cierran las de Producción.
+    // Abre Operación: se ven sus hojas y se cierran las de Producción.
     fireEvent.click(screen.getByRole("button", { name: /operación/i }));
     expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /generación/i })).not.toBeInTheDocument();
+  });
+
+  it("el título de la app NO es click muerto: navega a su 1ª hoja y abre su acordeón", async () => {
+    renderSidebar("editor", "/panel");
+    // Desde /panel, click en Métricas debe navegar a su 1ª HOJA aplanada
+    // (Analíticas es un hub → /analiticas/metricas, NO /analiticas).
+    fireEvent.click(await screen.findByRole("button", { name: /métricas/i }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/analiticas/metricas"));
+    // Y su acordeón queda abierto: se ven sus hojas (Métricas, Comercial…).
+    expect(screen.getByRole("link", { name: /comercial/i })).toHaveAttribute("href", "/analiticas/comercial");
   });
 
   it("no pone encabezados de sección: el nombre de la app ya nombra el grupo", async () => {
@@ -235,9 +251,32 @@ describe("Sidebar · rail colapsable", () => {
 describe("apps-scope · helpers", () => {
   const apps = CATALOGO.apps as AppCatalogo[];
 
-  it("rutaPrimaria es el primer item de nav", () => {
+  it("rutaPrimaria es la PRIMERA HOJA (aplana hubs a su 1ª sub-pestaña)", () => {
+    // Producción: 1ª entrada /generacion no es hub → se queda igual.
     expect(rutaPrimaria(apps[0])).toBe("/generacion");
+    // Métricas: 1ª entrada /analiticas ES hub → resuelve a su 1ª sub-pestaña.
+    expect(rutaPrimaria(apps[1])).toBe("/analiticas/metricas");
+    // Operación: 1ª entrada /publicaciones no es hub → se queda igual.
     expect(rutaPrimaria(apps[2])).toBe("/publicaciones");
+  });
+
+  it("hojasDeApp aplana hubs a sub-pestañas y conserva las no-hub", () => {
+    const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
+    expect(hojas).toEqual([
+      "/generacion",
+      // /investigacion (hub) → sus 4 sub-pestañas
+      "/investigacion/fuentes",
+      "/investigacion/termometro",
+      "/investigacion/radar",
+      "/investigacion/parrilla-dia",
+      // /revision (hub) → sus 2 sub-pestañas
+      "/revision/editorial",
+      "/revision/verificacion",
+      "/skills",
+      // /agentes (hub) → catálogo + actividad
+      "/agentes",
+      "/agentes/actividad",
+    ]);
   });
 
   it("appDeRuta resuelve por prefijo más largo", () => {

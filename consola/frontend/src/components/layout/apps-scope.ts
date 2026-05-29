@@ -10,18 +10,69 @@
  * Nada está hardcodeado: activar/añadir una app en el backend la hace aparecer
  * sola; desactivarla la quita del launcher y deja de matchear sus rutas.
  */
+import type { LucideIcon } from "lucide-react";
+
 import type { AppCatalogo } from "@/types";
 
+import { subPestanasDe } from "./hub-tabs";
 import { iconoDe } from "./navegacion";
 import type { GrupoNav, ItemNav } from "./navegacion";
 
 /**
- * Ruta primaria de una app: el primer item de su nav (el backend ya la entrega
- * ordenada por grupo/orden). Si por lo que sea no tuviera nav, cae a la primera
- * de sus `rutas_frontend`, y en último caso a "/".
+ * Una HOJA de navegación de una app: la entrada terminal que el sidebar pinta
+ * como nivel 2 (no hay nivel-hub intermedio). Se deriva aplanando la nav de la
+ * app: cada entrada que sea un hub (tiene sub-pestañas en `hub-tabs`) aporta SUS
+ * sub-pestañas como hojas; el resto aporta la propia entrada.
+ */
+export interface HojaApp {
+  ruta: string;
+  etiqueta: string;
+  icono: LucideIcon;
+  /** Tooltip/accesibilidad (solo lo traen las entradas de nav, no las pestañas). */
+  descripcion?: string;
+  /** Marca activo solo en match exacto (pestaña "raíz" de un hub, p.ej. /agentes). */
+  end?: boolean;
+}
+
+/**
+ * Hojas PLANAS de una app (nivel 2 del sidebar), respetando el orden de la nav.
+ * Aplana los hubs: por cada entrada de nav, si es un hub (`subPestanasDe(ruta)`
+ * existe) emite sus sub-pestañas; si no, emite la propia entrada. Resultado: una
+ * lista de páginas-hoja sin cabeceras de sección ni nivel-hub.
+ */
+export function hojasDeApp(app: AppCatalogo): HojaApp[] {
+  const hojas: HojaApp[] = [];
+  for (const item of app.nav) {
+    const subPestanas = subPestanasDe(item.ruta);
+    if (subPestanas) {
+      for (const tab of subPestanas) {
+        hojas.push({
+          ruta: tab.ruta,
+          etiqueta: tab.etiqueta,
+          icono: tab.icono,
+          end: tab.end,
+        });
+      }
+    } else {
+      hojas.push({
+        ruta: item.ruta,
+        etiqueta: item.etiqueta,
+        icono: iconoDe(item.icono),
+        descripcion: item.descripcion,
+      });
+    }
+  }
+  return hojas;
+}
+
+/**
+ * Ruta primaria de una app: su PRIMERA HOJA (nivel 2 ya aplanado). Si la primera
+ * entrada de nav es un hub (p.ej. Métricas → Analíticas), resuelve a su primera
+ * sub-pestaña (`/analiticas/metricas`), no a la ruta-hub. Si no tuviera hojas,
+ * cae a la primera de sus `rutas_frontend`, y en último caso a "/".
  */
 export function rutaPrimaria(app: AppCatalogo): string {
-  return app.nav[0]?.ruta ?? app.rutas_frontend[0] ?? "/";
+  return hojasDeApp(app)[0]?.ruta ?? app.rutas_frontend[0] ?? "/";
 }
 
 /**
