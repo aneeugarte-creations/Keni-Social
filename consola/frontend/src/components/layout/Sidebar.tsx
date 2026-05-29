@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 import * as React from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
-import { catalogoAGrupos, navegacionParaRol } from "@/components/layout/navegacion";
+import { appDeRuta, gruposDeApp } from "@/components/layout/apps-scope";
+import { navegacionParaRol } from "@/components/layout/navegacion";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -53,21 +54,22 @@ function BuscadorSidebar() {
  */
 export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
   const { usuario } = useSesion();
+  const { pathname } = useLocation();
 
-  // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo` (apps activas +
-  // entradas de nav, filtradas por los flags del backend). Mientras carga —o si la
-  // petición falla— usamos `NAVEGACION_DEFECTO` (espejo baked-in) vía el default de
-  // `navegacionParaRol`, así el sidebar nunca aparece vacío. `staleTime: Infinity`:
-  // el catálogo solo cambia con un redeploy (flags), no merece re-fetch en uso.
+  // Sidebar DATA-DRIVEN con SCOPE por app (cajón de apps · ADR 0005): se hidrata de
+  // `/api/catalogo` (apps activas + su nav, filtradas por los flags del backend).
+  // Detectamos la app ACTUAL según el path y mostramos SOLO su nav; en el launcher
+  // ("/") o en rutas del shell no hay app y la nav queda vacía (ver `appDeRuta`).
+  // `staleTime: Infinity`: el catálogo solo cambia con un redeploy (flags).
   const catalogoQuery = useQuery({
     queryKey: ["catalogo"],
     queryFn: ({ signal }) => api.catalogo(signal),
     staleTime: Infinity,
   });
 
-  const grupos = catalogoQuery.data
-    ? catalogoAGrupos(catalogoQuery.data.navegacion)
-    : undefined;
+  const apps = catalogoQuery.data?.apps ?? [];
+  const appActual = appDeRuta(apps, pathname);
+  const grupos = appActual ? gruposDeApp(appActual) : [];
   const navegacion = navegacionParaRol(usuario?.rol === "admin", grupos);
 
   return (
@@ -77,6 +79,23 @@ export function Sidebar({ onNavegar }: { onNavegar?: () => void }) {
     >
       <div className="flex h-12 items-center border-b border-border px-2">
         <CuentaUsuario />
+      </div>
+
+      {/* Volver al cajón de apps (launcher). Persistente dentro de cualquier app. */}
+      <div className="px-3 pt-3">
+        <NavLink
+          to="/"
+          onClick={onNavegar}
+          className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Apps</span>
+        </NavLink>
+        {appActual && (
+          <p className="px-3 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            {appActual.etiqueta}
+          </p>
+        )}
       </div>
 
       <div className="px-3 pt-3">

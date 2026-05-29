@@ -40,6 +40,29 @@ def test_apps_de_catalogo_excluyen_el_shell():
     assert ids == ["metricas", "operacion", "produccion"]
 
 
+def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
+    # El launcher (cajón de apps) pinta una tarjeta por app con su `descripcion`
+    # top-level y deriva la ruta primaria del PRIMER item de `nav`.
+    cat = registro.catalogo(_entorno())
+    porid = {a["id"]: a for a in cat["apps"]}
+
+    # Descripción top-level (frase de la tarjeta) en cada app de catálogo.
+    assert porid["produccion"]["descripcion"] == "Copy, clips, skills y verificación"
+    assert porid["metricas"]["descripcion"] == "Métricas, comercial y reportes"
+    assert porid["operacion"]["descripcion"] == "Rota, parrilla y publicación"
+
+    # Cada app trae su nav (items con ruta/etiqueta/icono), ordenada.
+    for app in cat["apps"]:
+        assert app["nav"], f"{app['id']} sin nav"
+        for item in app["nav"]:
+            assert {"ruta", "etiqueta", "icono", "descripcion"} <= set(item)
+
+    # La ruta primaria (primer item) de cada app es la esperada.
+    assert porid["produccion"]["nav"][0]["ruta"] == "/generacion"
+    assert porid["metricas"]["nav"][0]["ruta"] == "/analiticas"
+    assert porid["operacion"]["nav"][0]["ruta"] == "/publicaciones"
+
+
 def test_catalogo_reproduce_el_sidebar_de_hoy():
     cat = registro.catalogo(_entorno())
     grupos = [[i["etiqueta"] for i in g["items"]] for g in cat["navegacion"]]

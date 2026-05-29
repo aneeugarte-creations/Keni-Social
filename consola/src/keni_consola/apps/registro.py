@@ -59,6 +59,7 @@ class App:
     id: str
     etiqueta: str
     icono: str
+    descripcion: str
     flag_activacion: str
     permisos: tuple[str, ...]
     modulos_backend: tuple[str, ...]
@@ -93,6 +94,7 @@ def _parsear_manifest(ruta: Path) -> App:
         id=str(datos["id"]),
         etiqueta=str(datos["etiqueta"]),
         icono=str(datos["icono"]),
+        descripcion=str(datos.get("descripcion", "")),
         flag_activacion=str(datos["flag_activacion"]),
         permisos=tuple(str(p) for p in datos.get("permisos", [])),
         modulos_backend=tuple(str(m) for m in datos.get("modulos_backend", [])),
@@ -189,8 +191,26 @@ def catalogo(entorno: dict[str, str] | None = None) -> dict:
             "id": a.id,
             "etiqueta": a.etiqueta,
             "icono": a.icono,
+            "descripcion": a.descripcion,
             "permisos": list(a.permisos),
             "rutas_frontend": list(a.rutas_frontend),
+            # Nav de ESTA app (ordenada por grupo/orden, como el sidebar). El
+            # launcher la usa para: (a) la ruta primaria de la tarjeta (primer
+            # item) y (b) el sidebar con scope (solo los items de la app actual).
+            "nav": [
+                {
+                    "ruta": i.ruta,
+                    "etiqueta": i.etiqueta,
+                    "icono": i.icono,
+                    "descripcion": i.descripcion,
+                    "grupo": i.grupo,
+                    "grupo_orden": i.grupo_orden,
+                    "orden": i.orden,
+                }
+                for i in sorted(
+                    a.nav, key=lambda e: (e.grupo_orden, e.grupo, e.orden, e.ruta)
+                )
+            ],
         }
         for a in apps_activas(entorno)
     ]
