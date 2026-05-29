@@ -1,9 +1,10 @@
 """Tests de la API Conexiones (/api/conexiones). OFFLINE: NUNCA se toca la red.
 
 Cubre la clave de imagen IA (estado/guardar/probar-mockeado/borrar, incl. "no
-configurada") y los tokens de redes (estado/set/remove sobre un config.toml de
-metricas temporal). En "probar" se parchea `_PROBADOR`: jamas se llama a OpenRouter.
-La clave nunca debe aparecer en ninguna respuesta de la API.
+configurada") y las credenciales de Metricool POR MARCA (estado/guardar/probar/borrar
++ descubrimiento de marcas via `/perfiles`) sobre un config.toml de metricas temporal.
+En "probar" se parchea `_PROBADOR`/`_PROBADOR_MC`/`_PROBADOR_PERFILES`: jamas se llama
+a la red. Ningun secreto debe aparecer en ninguna respuesta de la API.
 
 AUTORIZACION (#153, ESTRICTO por #150): los endpoints de conexiones son SOLO ADMIN y el
 TOKEN de mantenimiento NO es admin (#150). Por eso estos tests funcionales usan un
@@ -202,91 +203,14 @@ def test_imagen_modelo_no_borra_la_clave(cliente):
 
 
 # --------------------------------------------------------------------------- #
-# Redes sociales                                                              #
-# --------------------------------------------------------------------------- #
-
-_PLACEHOLDER = "PENDIENTE_PON_TU_TOKEN_AQUI"
-_TOKEN_RED = "tok-red-SECRETO-9999"
-
-
-def _ruta_metricas() -> str:
-    return os.environ["KENI_METRICAS_CONFIG"]
-
-
-def test_redes_estado_inicial_todo_desconectado(cliente):
-    r = cliente.get("/api/conexiones/redes")
-    assert r.status_code == 200
-    redes = {x["plataforma"]: x for x in r.json()["redes"]}
-    assert set(redes) == {"meta", "youtube", "x", "tiktok"}
-    assert redes["meta"]["nombre"] == "Meta (Facebook/Instagram)"
-    assert all(x["conectado"] is False for x in redes.values())
-
-
-def test_redes_set_conecta_y_persiste(cliente):
-    r = cliente.put("/api/conexiones/redes/meta", json={"token": _TOKEN_RED})
-    assert r.status_code == 200
-    assert r.json()["conectado"] is True
-    # el token NO se devuelve
-    assert _TOKEN_RED not in r.text
-    # estado refleja conectado, sin exponer el token
-    redes = {x["plataforma"]: x for x in cliente.get("/api/conexiones/redes").json()["redes"]}
-    assert redes["meta"]["conectado"] is True
-    assert _TOKEN_RED not in cliente.get("/api/conexiones/redes").text
-    # persiste en el config.toml de metricas en el campo correcto
-    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
-    assert datos["credenciales"]["meta"]["access_token"] == _TOKEN_RED
-
-
-def test_redes_set_token_vacio_400(cliente):
-    r = cliente.put("/api/conexiones/redes/meta", json={"token": "  "})
-    assert r.status_code == 400
-
-
-def test_redes_plataforma_desconocida_400(cliente):
-    r = cliente.put("/api/conexiones/redes/inventada", json={"token": "x"})
-    assert r.status_code == 400
-    r2 = cliente.delete("/api/conexiones/redes/inventada")
-    assert r2.status_code == 400
-
-
-def test_redes_borrar_desconecta(cliente):
-    cliente.put("/api/conexiones/redes/youtube", json={"token": _TOKEN_RED})
-    r = cliente.delete("/api/conexiones/redes/youtube")
-    assert r.status_code == 200
-    redes = {x["plataforma"]: x for x in cliente.get("/api/conexiones/redes").json()["redes"]}
-    assert redes["youtube"]["conectado"] is False
-    # tras borrar, el campo queda en el placeholder (no se devuelve el real)
-    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
-    assert datos["credenciales"]["youtube"]["access_token"] == _PLACEHOLDER
-
-
-def test_redes_set_preserva_otros_bloques(cliente):
-    cliente.put("/api/conexiones/redes/meta", json={"token": "meta-token"})
-    cliente.put("/api/conexiones/redes/x", json={"token": "x-token"})
-    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
-    # ambos bloques coexisten, en su campo de token propio
-    assert datos["credenciales"]["meta"]["access_token"] == "meta-token"
-    assert datos["credenciales"]["x"]["bearer_token"] == "x-token"
-
-
-def test_redes_x_usa_bearer_token(cliente):
-    cliente.put("/api/conexiones/redes/x", json={"token": _TOKEN_RED})
-    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
-    # X usa bearer_token (derivado de CAMPO_TOKEN), no access_token
-    assert datos["credenciales"]["x"]["bearer_token"] == _TOKEN_RED
-    assert "access_token" not in datos["credenciales"]["x"]
-
-
-def test_redes_config_0600(cliente):
-    cliente.put("/api/conexiones/redes/meta", json={"token": _TOKEN_RED})
-    assert (os.stat(_ruta_metricas()).st_mode & 0o777) == 0o600
-
-
-# --------------------------------------------------------------------------- #
 # Metricool por marca                                                         #
 # --------------------------------------------------------------------------- #
 
 _TOKEN_MC = "mc-user-token-SECRETO-7777"
+
+
+def _ruta_metricas() -> str:
+    return os.environ["KENI_METRICAS_CONFIG"]
 
 
 def _una_marca_metricool() -> str:
@@ -445,6 +369,117 @@ def test_metricool_probar_rechazada_mockeada(cliente, monkeypatch):
     r = cliente.post(f"/api/conexiones/metricool/{marca}/probar")
     assert r.json()["ok"] is False
     assert "rechaz" in r.json()["detalle"].lower()
+
+
+# --------------------------------------------------------------------------- #
+# Metricool: descubrimiento de marcas (/perfiles)                             #
+# --------------------------------------------------------------------------- #
+
+
+def test_metricool_perfiles_ok_mockeado(cliente, monkeypatch):
+    """Con token+userId + probador MOCK (sin red) => lista de {blog_id,label}, sin token."""
+    recibido = {}
+
+    def _mock(user_token, user_id):
+        recibido["token"] = user_token
+        recibido["user_id"] = user_id
+        return True, "Marcas encontradas.", [
+            {"blog_id": "111", "label": "Claro Sports"},
+            {"blog_id": "222", "label": "Uno TV"},
+        ]
+
+    monkeypatch.setattr(conexiones, "_PROBADOR_PERFILES", _mock)
+    r = cliente.post(
+        "/api/conexiones/metricool/perfiles",
+        json={"user_token": _TOKEN_MC, "user_id": "999"},
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo == {
+        "marcas": [
+            {"blog_id": "111", "label": "Claro Sports"},
+            {"blog_id": "222", "label": "Uno TV"},
+        ]
+    }
+    # el probador recibio el token+userId, pero el token NUNCA sale al cliente
+    assert recibido["token"] == _TOKEN_MC
+    assert recibido["user_id"] == "999"
+    assert _TOKEN_MC not in r.text
+
+
+def test_metricool_perfiles_no_persiste_nada(cliente, monkeypatch):
+    """`/perfiles` NO escribe en el config: el estado de las marcas sigue intacto."""
+    monkeypatch.setattr(
+        conexiones,
+        "_PROBADOR_PERFILES",
+        lambda *_a: (True, "ok", [{"blog_id": "111", "label": "X"}]),
+    )
+    import os as _os
+
+    antes = _os.path.exists(_ruta_metricas())
+    cliente.post(
+        "/api/conexiones/metricool/perfiles",
+        json={"user_token": _TOKEN_MC, "user_id": "999"},
+    )
+    # ninguna marca quedo conectada y, si el fichero no existia, sigue sin existir
+    marcas = cliente.get("/api/conexiones/metricool").json()["marcas"]
+    assert all(m["conectado"] is False for m in marcas)
+    if not antes:
+        assert not _os.path.exists(_ruta_metricas())
+
+
+def test_metricool_perfiles_campos_faltantes_400(cliente):
+    r = cliente.post("/api/conexiones/metricool/perfiles", json={"user_token": "t"})
+    assert r.status_code == 400  # falta user_id
+    r2 = cliente.post("/api/conexiones/metricool/perfiles", json={"user_id": "1"})
+    assert r2.status_code == 400  # falta user_token
+    r3 = cliente.post(
+        "/api/conexiones/metricool/perfiles", json={"user_token": "  ", "user_id": "1"}
+    )
+    assert r3.status_code == 400  # token vacio
+
+
+def test_metricool_perfiles_auth_falla_502(cliente, monkeypatch):
+    """Si Metricool rechaza el token, error claro en espanol y sin filtrar el token."""
+    monkeypatch.setattr(
+        conexiones,
+        "_PROBADOR_PERFILES",
+        lambda *_a: (False, "Metricool rechazó el token o el userId.", []),
+    )
+    r = cliente.post(
+        "/api/conexiones/metricool/perfiles",
+        json={"user_token": _TOKEN_MC, "user_id": "999"},
+    )
+    assert r.status_code == 502
+    assert "rechaz" in r.json()["error"].lower()
+    assert _TOKEN_MC not in r.text
+
+
+def test_parsear_perfiles_defensivo():
+    """`_parsear_perfiles` acepta lista o dict y varios alias de id/label."""
+    from keni_consola.api.conexiones import _parsear_perfiles
+
+    # lista directa con alias mixtos
+    out = _parsear_perfiles(
+        [
+            {"blogId": 111, "label": "A"},
+            {"id": "222", "name": "B"},
+            {"blog_id": "333"},  # sin label -> cae al propio id
+            {"label": "sin id"},  # sin id -> descartado
+        ]
+    )
+    assert out == [
+        {"blog_id": "111", "label": "A"},
+        {"blog_id": "222", "label": "B"},
+        {"blog_id": "333", "label": "333"},
+    ]
+    # dict envolviendo la lista bajo una clave comun
+    assert _parsear_perfiles({"profiles": [{"blogId": "9", "title": "T"}]}) == [
+        {"blog_id": "9", "label": "T"}
+    ]
+    # formas no reconocidas -> lista vacia
+    assert _parsear_perfiles(None) == []
+    assert _parsear_perfiles({"otra": 1}) == []
 
 
 # --------------------------------------------------------------------------- #

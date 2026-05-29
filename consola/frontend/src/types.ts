@@ -2114,28 +2114,6 @@ export interface RespuestaProbarConexionImagen {
   mensaje: string;
 }
 
-/** Estado de conexión de una red social. */
-export interface RedConexion {
-  plataforma: string;
-  nombre: string;
-  conectado: boolean;
-}
-
-export interface RespuestaConexionesRedes {
-  redes: RedConexion[];
-}
-
-/** Cuerpo para conectar (guardar token de) una red social. */
-export interface CuerpoConectarRed {
-  token: string;
-}
-
-/** Respuesta al conectar una red social. */
-export interface RespuestaConectarRed {
-  conectado: boolean;
-  mensaje: string;
-}
-
 /** Estado de conexión de Metricool para UNA marca (sin exponer el token). */
 export interface MarcaMetricool {
   marca: string;
@@ -2149,6 +2127,23 @@ export interface MarcaMetricool {
 
 export interface RespuestaMetricool {
   marcas: MarcaMetricool[];
+}
+
+/** Cuerpo para descubrir las marcas (blogId) de un token de Metricool. */
+export interface CuerpoPerfilesMetricool {
+  user_token: string;
+  user_id: string;
+}
+
+/** Una marca de Metricool descubierta vía simpleProfiles (sin token). */
+export interface PerfilMetricool {
+  blog_id: string;
+  label: string;
+}
+
+/** Respuesta al descubrir marcas: lista de {blog_id, label}. */
+export interface RespuestaPerfilesMetricool {
+  marcas: PerfilMetricool[];
 }
 
 /** Cuerpo para guardar las credenciales de Metricool de una marca. */

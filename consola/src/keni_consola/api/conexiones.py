@@ -1,4 +1,4 @@
-"""API Conexiones: clave del proveedor de imagen IA + tokens de redes sociales.
+"""API Conexiones: clave del proveedor de imagen IA + credenciales de Metricool.
 
 Dos areas, una misma regla de oro: los SECRETOS no salen nunca al navegador. Solo
 se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
@@ -10,16 +10,17 @@ se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
     POST   /api/conexiones/imagen/probar   -> valida la clave con una llamada BARATA
     DELETE /api/conexiones/imagen          -> borra la clave
 
-  REDES SOCIALES (config.toml de metricas, via `keni_metricas.asistente`):
-    GET    /api/conexiones/redes               -> estado por plataforma (conectado bool)
-    PUT    /api/conexiones/redes/{plataforma}  -> pega el token (no lo devuelve)
-    DELETE /api/conexiones/redes/{plataforma}  -> quita el token (placeholder)
-
   METRICOOL POR MARCA (config.toml de metricas, [metricool.marcas.<id>]):
     GET    /api/conexiones/metricool              -> estado por marca (sin token)
     PUT    /api/conexiones/metricool/{marca}      -> guarda user_token/user_id/blog_id
     DELETE /api/conexiones/metricool/{marca}      -> quita esa marca
     POST   /api/conexiones/metricool/{marca}/probar -> prueba EN VIVO (sin exponer token)
+    POST   /api/conexiones/metricool/perfiles     -> descubre las marcas (blogId) de un token
+
+Las metricas se consumen VIA Metricool (ADR 0005 §B): NO hay ingesta propia por
+plataforma. La antigua seccion "Redes sociales" (un token global por plataforma que
+alimentaba la fuente `real`/`FuenteCompuesta`) se RETIRO de Conexiones; el plumbing
+de esa fuente sigue en `keni_metricas`, pero ya no se gestiona desde aqui.
 
 REUTILIZA los helpers de metricas (`leer_config_existente` + `fusionar_config` +
 `escribir_config_atomico`) para escribir el config.toml de forma atomica y segura;
@@ -27,7 +28,7 @@ NO duplica esa logica. Errores en espanol, sin tracebacks, sin filtrar secretos.
 
 SOLO ADMIN (#153)
 =================
-La clave del proveedor de imagen y los tokens de redes son SECRETOS GLOBALES y
+La clave del proveedor de imagen y los tokens de Metricool son SECRETOS GLOBALES y
 COMPARTIDOS (un unico fichero por despliegue). Antes cualquier usuario autenticado
 podia leerlos/mutarlos; eso es una fuga de datos en un servicio multiusuario. Ahora
 TODOS los endpoints de conexiones (lectura Y mutacion) exigen rol ADMIN: un editor
@@ -54,25 +55,6 @@ from .._http_json import leer_json
 _MSG_SOLO_ADMIN = (
     "Solo un administrador puede ver o cambiar las conexiones (claves y tokens)."
 )
-
-# Nombres legibles por plataforma de redes (las plataformas se DERIVAN de
-# `asistente.CAMPO_TOKEN`, no se hardcodean aparte).
-_NOMBRE_RED: dict[str, str] = {
-    "meta": "Meta (Facebook/Instagram)",
-    "youtube": "YouTube",
-    "x": "X",
-    "tiktok": "TikTok",
-}
-
-
-def _plataformas() -> tuple[str, ...]:
-    """Plataformas de redes reconocidas, derivadas de `asistente.CAMPO_TOKEN`."""
-    return tuple(asistente.CAMPO_TOKEN.keys())
-
-
-def _nombre_red(plataforma: str) -> str:
-    """Nombre legible de una plataforma (cae al propio id si no hay etiqueta)."""
-    return _NOMBRE_RED.get(plataforma, plataforma)
 
 
 # --------------------------------------------------------------------------- #
@@ -215,112 +197,13 @@ async def imagen_probar(request: Request) -> Response:
 
 
 # --------------------------------------------------------------------------- #
-# Redes sociales (config.toml de metricas)                                    #
+# Metricool (credenciales POR MARCA en el config.toml de metricas)            #
 # --------------------------------------------------------------------------- #
 
 
 def _config_existente() -> dict:
     """Lee el config.toml de metricas existente ({} si no existe). Solo lectura."""
     return asistente.leer_config_existente(ruta_config())
-
-
-def _token_bloque(cfg: dict, plataforma: str) -> str | None:
-    """Token actual del bloque de una plataforma (o None si falta)."""
-    creds = cfg.get("credenciales")
-    creds = creds if isinstance(creds, dict) else {}
-    bloque = creds.get(plataforma)
-    bloque = bloque if isinstance(bloque, dict) else {}
-    campo = asistente.CAMPO_TOKEN.get(plataforma)
-    valor = bloque.get(campo) if campo else None
-    return valor if isinstance(valor, str) else None
-
-
-def _conectado(token: str | None) -> bool:
-    """True si el token existe y no es el placeholder (= la red esta conectada)."""
-    return bool(token) and token != asistente.PLACEHOLDER_TOKEN
-
-
-async def redes_estado(request: Request) -> Response:
-    """GET: estado de conexion por plataforma de redes (sin exponer ningun token).
-
-    SOLO ADMIN (#153): un editor recibe 403 (no ve el estado de los tokens globales).
-    """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
-    cfg = _config_existente()
-    redes = [
-        {
-            "plataforma": p,
-            "nombre": _nombre_red(p),
-            "conectado": _conectado(_token_bloque(cfg, p)),
-        }
-        for p in _plataformas()
-    ]
-    return JSONResponse({"redes": redes})
-
-
-def _escribir_token(plataforma: str, token: str) -> None:
-    """Escribe el token de una plataforma en el config.toml de metricas (atomico).
-
-    REUTILIZA los helpers de metricas: lee el existente, fusiona SOLO el campo del
-    token de ese bloque (sin clobberar app_id/secret ni otros bloques) y escribe de
-    forma atomica con permisos `0600`.
-    """
-    ruta = ruta_config()
-    existente = asistente.leer_config_existente(ruta)
-    campo = asistente.CAMPO_TOKEN[plataforma]
-    nuevo = {"credenciales": {plataforma: {campo: token}}}
-    fusionado = asistente.fusionar_config(existente, nuevo)
-    asistente.escribir_config_atomico(ruta, fusionado)
-
-
-async def redes_guardar(request: Request) -> Response:
-    """PUT: pega el token de una plataforma (JSON `{token}`). No lo devuelve.
-
-    SOLO ADMIN (#153): un editor recibe 403.
-    """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
-    plataforma = request.path_params["plataforma"]
-    if plataforma not in asistente.CAMPO_TOKEN:
-        return JSONResponse({"error": "Plataforma desconocida."}, status_code=400)
-    datos = await leer_json(request)
-    token = datos.get("token")
-    if not isinstance(token, str) or not token.strip():
-        return JSONResponse({"error": "Falta el token de la red."}, status_code=400)
-    try:
-        _escribir_token(plataforma, token.strip())
-    except OSError:
-        return JSONResponse(
-            {"error": "No se pudo guardar el token de la red."}, status_code=500
-        )
-    return JSONResponse(
-        {"conectado": True, "mensaje": f"{_nombre_red(plataforma)} conectada."}
-    )
-
-
-async def redes_borrar(request: Request) -> Response:
-    """DELETE: quita el token de una plataforma (lo deja en el placeholder).
-
-    SOLO ADMIN (#153): un editor recibe 403.
-    """
-    if not permisos.es_admin(request):
-        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
-    plataforma = request.path_params["plataforma"]
-    if plataforma not in asistente.CAMPO_TOKEN:
-        return JSONResponse({"error": "Plataforma desconocida."}, status_code=400)
-    try:
-        _escribir_token(plataforma, asistente.PLACEHOLDER_TOKEN)
-    except OSError:
-        return JSONResponse(
-            {"error": "No se pudo quitar el token de la red."}, status_code=500
-        )
-    return JSONResponse({"mensaje": f"{_nombre_red(plataforma)} desconectada."})
-
-
-# --------------------------------------------------------------------------- #
-# Metricool (credenciales POR MARCA en el config.toml de metricas)            #
-# --------------------------------------------------------------------------- #
 #
 # A diferencia de las redes (un token global por plataforma), Metricool guarda
 # credenciales POR MARCA: en AMX cada marca es una cuenta Metricool distinta, con
@@ -525,16 +408,119 @@ async def metricool_probar(request: Request) -> Response:
     return JSONResponse({"ok": ok, "detalle": detalle})
 
 
+def _listar_perfiles(user_token: str, user_id: str) -> tuple[bool, str, list[dict]]:
+    """Descubre las marcas (blogId) de un user_token via `GET /admin/simpleProfiles`.
+
+    Autentica con `X-Mc-Auth: <user_token>` + query `userId=<user_id>` (igual que
+    `FuenteMetricol`). NO persiste nada y NO devuelve el token. El parseo es DEFENSIVO
+    (varios alias por id/label) porque la forma exacta de cada perfil no esta fijada en
+    el swagger. Punto INYECTABLE/mockeable (`_PROBADOR_PERFILES`): los tests lo parchean
+    para NUNCA tocar la red. Devuelve `(ok, mensaje, marcas)` donde cada marca es
+    `{"blog_id": str, "label": str}`.
+    """
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover -- httpx es dependencia transitiva
+        return False, "Falta la librería para consultar Metricool en este equipo.", []
+    try:
+        respuesta = httpx.get(
+            "https://app.metricool.com/api/admin/simpleProfiles",
+            headers={"X-Mc-Auth": user_token},
+            params={"userId": user_id},
+            timeout=30,
+            follow_redirects=False,
+        )
+    except Exception:  # noqa: BLE001 -- cualquier fallo de red: mensaje en espanol
+        return False, "No se pudo contactar con Metricool.", []
+    if respuesta.status_code in (401, 403):
+        return False, "Metricool rechazó el token o el userId.", []
+    if respuesta.status_code != 200:
+        return False, "Metricool devolvió un error al listar las marcas.", []
+    try:
+        cuerpo = respuesta.json()
+    except ValueError:
+        return False, "Metricool devolvió una respuesta no válida.", []
+    marcas = _parsear_perfiles(cuerpo)
+    if not marcas:
+        return False, "Metricool no devolvió ninguna marca para este token.", []
+    return True, "Marcas encontradas.", marcas
+
+
+def _parsear_perfiles(cuerpo: object) -> list[dict]:
+    """Parsea DEFENSIVAMENTE la respuesta de `simpleProfiles` a `[{blog_id, label}]`.
+
+    Acepta tanto una lista de perfiles como un dict con la lista bajo claves comunes
+    (`profiles`/`data`/`blogs`/`results`). De cada perfil toma el id por varios alias
+    (`blogId`/`id`/`blog_id`) y la etiqueta (`label`/`name`/`title`/`brand`). Descarta
+    los que no tengan id; cae a su propio id como label si falta.
+    """
+    perfiles = cuerpo
+    if isinstance(cuerpo, dict):
+        for clave in ("profiles", "data", "blogs", "results", "simpleProfiles"):
+            valor = cuerpo.get(clave)
+            if isinstance(valor, list):
+                perfiles = valor
+                break
+    if not isinstance(perfiles, list):
+        return []
+    marcas: list[dict] = []
+    for perfil in perfiles:
+        if not isinstance(perfil, dict):
+            continue
+        bid = None
+        for clave in ("blogId", "blog_id", "id"):
+            valor = perfil.get(clave)
+            if valor not in (None, ""):
+                bid = str(valor)
+                break
+        if bid is None:
+            continue
+        label = None
+        for clave in ("label", "name", "title", "brand", "blogName"):
+            valor = perfil.get(clave)
+            if isinstance(valor, str) and valor.strip():
+                label = valor.strip()
+                break
+        marcas.append({"blog_id": bid, "label": label or bid})
+    return marcas
+
+
+# Punto INYECTABLE: lo unico que toca la red al descubrir marcas. Los tests lo parchean.
+_PROBADOR_PERFILES = _listar_perfiles
+
+
+async def metricool_perfiles(request: Request) -> Response:
+    """POST: descubre las marcas (blogId) de un token de Metricool. SOLO ADMIN (#153).
+
+    Body `{user_token, user_id}`. Llama a `GET /admin/simpleProfiles` y devuelve
+    `{"marcas": [{"blog_id", "label"}, ...]}`. NO persiste NADA (el config.toml no se
+    toca) y NO devuelve el token en ningun caso. Si la auth falla o no hay marcas,
+    responde con un error claro en espanol.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    datos = await leer_json(request)
+    user_token = datos.get("user_token")
+    user_id = datos.get("user_id")
+    if not isinstance(user_token, str) or not user_token.strip():
+        return JSONResponse({"error": "Falta el token de Metricool."}, status_code=400)
+    if not isinstance(user_id, str) or not user_id.strip():
+        return JSONResponse({"error": "Falta el user_id."}, status_code=400)
+    ok, mensaje, marcas = _PROBADOR_PERFILES(user_token.strip(), user_id.strip())
+    if not ok:
+        return JSONResponse({"error": mensaje}, status_code=502)
+    # Solo blog_id + label salen al cliente; el token NUNCA se eco ni se persiste.
+    return JSONResponse({"marcas": marcas})
+
+
 RUTAS = [
     Route("/api/conexiones/imagen", imagen_estado, methods=["GET"]),
     Route("/api/conexiones/imagen", imagen_guardar, methods=["PUT"]),
     Route("/api/conexiones/imagen", imagen_borrar, methods=["DELETE"]),
     Route("/api/conexiones/imagen/modelo", imagen_modelo_guardar, methods=["PUT"]),
     Route("/api/conexiones/imagen/probar", imagen_probar, methods=["POST"]),
-    Route("/api/conexiones/redes", redes_estado, methods=["GET"]),
-    Route("/api/conexiones/redes/{plataforma}", redes_guardar, methods=["PUT"]),
-    Route("/api/conexiones/redes/{plataforma}", redes_borrar, methods=["DELETE"]),
     Route("/api/conexiones/metricool", metricool_estado, methods=["GET"]),
+    Route("/api/conexiones/metricool/perfiles", metricool_perfiles, methods=["POST"]),
     Route("/api/conexiones/metricool/{marca}", metricool_guardar, methods=["PUT"]),
     Route("/api/conexiones/metricool/{marca}", metricool_borrar, methods=["DELETE"]),
     Route("/api/conexiones/metricool/{marca}/probar", metricool_probar, methods=["POST"]),

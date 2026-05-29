@@ -1,6 +1,6 @@
 """Permisos por rol en /api/conexiones (#153): SOLO ADMIN.
 
-La clave del proveedor de imagen (`secretos.toml`) y los tokens de redes
+La clave del proveedor de imagen (`secretos.toml`) y las credenciales de Metricool
 (`config.toml` de metricas) son SECRETOS GLOBALES y compartidos. Antes cualquier
 usuario autenticado podia leerlos/mutarlos; ahora TODOS los endpoints de conexiones
 (lectura Y mutacion) exigen rol admin:
@@ -72,7 +72,6 @@ def _cli_token() -> TestClient:
 # Endpoints (metodo, ruta, json) que tocan secretos globales: TODOS solo-admin.
 _LECTURAS = [
     ("GET", "/api/conexiones/imagen", None),
-    ("GET", "/api/conexiones/redes", None),
     ("GET", "/api/conexiones/metricool", None),
 ]
 _MUTACIONES = [
@@ -80,8 +79,6 @@ _MUTACIONES = [
     ("DELETE", "/api/conexiones/imagen", None),
     ("PUT", "/api/conexiones/imagen/modelo", {"modelo": "openai/gpt-5-image"}),
     ("POST", "/api/conexiones/imagen/probar", None),
-    ("PUT", "/api/conexiones/redes/meta", {"token": _TOKEN_RED}),
-    ("DELETE", "/api/conexiones/redes/meta", None),
     (
         "PUT",
         "/api/conexiones/metricool/claro_sports",
@@ -89,6 +86,11 @@ _MUTACIONES = [
     ),
     ("DELETE", "/api/conexiones/metricool/claro_sports", None),
     ("POST", "/api/conexiones/metricool/claro_sports/probar", None),
+    (
+        "POST",
+        "/api/conexiones/metricool/perfiles",
+        {"user_token": _TOKEN_RED, "user_id": "1"},
+    ),
 ]
 
 
@@ -159,15 +161,20 @@ def test_admin_lee_y_guarda_conexiones(entorno):
     assert _CLAVE_IMG not in r.text
 
 
-def test_admin_guarda_token_de_red(entorno):
+def test_admin_guarda_credencial_metricool(entorno):
     c = _cli_como("admin")
-    r = c.put("/api/conexiones/redes/meta", json={"token": _TOKEN_RED}, headers=_ORIGIN)
+    r = c.put(
+        "/api/conexiones/metricool/claro_sports",
+        json={"user_token": _TOKEN_RED, "user_id": "1", "blog_id": "9"},
+        headers=_ORIGIN,
+    )
     assert r.status_code == 200
-    redes = {x["plataforma"]: x for x in c.get("/api/conexiones/redes").json()["redes"]}
-    assert redes["meta"]["conectado"] is True
+    marcas = {m["marca"]: m for m in c.get("/api/conexiones/metricool").json()["marcas"]}
+    assert marcas["claro_sports"]["conectado"] is True
     # Persiste en el config de metricas (el token real no se devuelve por la API).
     datos = tomllib.loads(open(os.environ["KENI_METRICAS_CONFIG"], encoding="utf-8").read())
-    assert datos["credenciales"]["meta"]["access_token"] == _TOKEN_RED
+    assert datos["metricool"]["marcas"]["claro_sports"]["user_token"] == _TOKEN_RED
+    assert _TOKEN_RED not in r.text
 
 
 def test_token_mantenimiento_no_gestiona_conexiones_403(entorno):
@@ -178,8 +185,12 @@ def test_token_mantenimiento_no_gestiona_conexiones_403(entorno):
     """
     c = _cli_token()
     assert c.get("/api/conexiones/imagen").status_code == 403
-    assert c.get("/api/conexiones/redes").status_code == 403
-    r = c.put("/api/conexiones/redes/youtube", json={"token": _TOKEN_RED}, headers=_ORIGIN)
+    assert c.get("/api/conexiones/metricool").status_code == 403
+    r = c.put(
+        "/api/conexiones/metricool/claro_sports",
+        json={"user_token": _TOKEN_RED, "user_id": "1", "blog_id": "1"},
+        headers=_ORIGIN,
+    )
     assert r.status_code == 403
     # El secreto nunca aparece en el cuerpo del rechazo.
     assert _TOKEN_RED not in r.text
