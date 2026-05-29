@@ -307,20 +307,10 @@ export default function Rota() {
           <MisTurnos lunes={lunes} setLunes={setLunes} />
         </TabsContent>
         <TabsContent value="cambios-ausencias">
-          {/* Ola "fusionar": una sola pestaña con dos sub-tabs hermanas. Reusa los
-              componentes Swaps/Ausencias sin tocarlos. */}
-          <Tabs defaultValue="cambios" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="cambios">Cambios de turno</TabsTrigger>
-              <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
-            </TabsList>
-            <TabsContent value="cambios">
-              <Swaps esAdmin={esAdmin} />
-            </TabsContent>
-            <TabsContent value="ausencias">
-              <Ausencias />
-            </TabsContent>
-          </Tabs>
+          {/* Ola "fusion real": una sola vista que mezcla cambios de turno y
+              ausencias en una lista cronologica unica, con filtros por tipo y
+              estado. Sin sub-tabs. */}
+          <CambiosYAusencias esAdmin={esAdmin} />
         </TabsContent>
         <TabsContent value="eventos">
           <Eventos onIrAProgramas={() => setPestania("programas")} />
@@ -2804,46 +2794,7 @@ function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
   );
 }
 
-// --- Pestaña: ausencias / vacaciones ---------------------------------------
-
-function Ausencias() {
-  const queryClient = useQueryClient();
-  const clave = ["rota", "ausencias"] as const;
-  const q = useQuery({ queryKey: clave, queryFn: ({ signal }) => api.rotaAusencias({}, signal) });
-  const equipoQ = useQuery({
-    queryKey: ["rota", "equipo"],
-    queryFn: ({ signal }) => api.rotaEquipo(signal),
-  });
-  const ausencias = q.data?.ausencias ?? [];
-  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
-  const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-      <NuevaAusencia equipo={equipo} onCreada={invalidar} />
-      <div className="space-y-3">
-        {q.isPending ? (
-          <Skeleton className="h-40 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudieron cargar las ausencias"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : ausencias.length === 0 ? (
-          <EstadoVacio
-            icono={CalendarOff}
-            titulo="Sin ausencias"
-            texto="Registra vacaciones, descansos o bajas para que el horario propuesto las respete."
-          />
-        ) : (
-          ausencias.map((a) => <TarjetaAusencia key={a.id} ausencia={a} onCambio={invalidar} />)
-        )}
-      </div>
-    </div>
-  );
-}
+// --- Formulario de nueva ausencia (reutilizado por CambiosYAusencias) -------
 
 function NuevaAusencia({
   equipo,
@@ -2873,78 +2824,73 @@ function NuevaAusencia({
 
   const puedeCrear = miembroId !== "" && desde !== "" && hasta !== "" && !crear.isPending;
 
+  // Sin wrapper Card: lo aporta el caller (CambiosYAusencias monta el formulario
+  // colapsable dentro de su propio recuadro y elige el titulo segun el tipo).
   return (
-    <Card className="h-fit">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarOff className="h-4 w-4" /> Nueva ausencia
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label>Persona</Label>
+        <Select value={miembroId} onValueChange={setMiembroId}>
+          <SelectTrigger aria-label="Persona">
+            <SelectValue placeholder="Elige a un miembro" />
+          </SelectTrigger>
+          <SelectContent>
+            {equipo.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Tipo</Label>
+        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
+          <SelectTrigger aria-label="Tipo de ausencia">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIPOS_AUSENCIA.map((t) => (
+              <SelectItem key={t.valor} value={t.valor}>
+                {t.etiqueta}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label>Persona</Label>
-          <Select value={miembroId} onValueChange={setMiembroId}>
-            <SelectTrigger aria-label="Persona">
-              <SelectValue placeholder="Elige a un miembro" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipo.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Tipo</Label>
-          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
-            <SelectTrigger aria-label="Tipo de ausencia">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TIPOS_AUSENCIA.map((t) => (
-                <SelectItem key={t.valor} value={t.valor}>
-                  {t.etiqueta}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="au-desde">Desde</Label>
-            <Input id="au-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="au-hasta">Hasta</Label>
-            <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-          </div>
+          <Label htmlFor="au-desde">Desde</Label>
+          <Input id="au-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="au-motivo">
-            Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <Input
-            id="au-motivo"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Ej. Vacaciones de verano"
-            maxLength={200}
-          />
+          <Label htmlFor="au-hasta">Hasta</Label>
+          <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </div>
-        <div className="flex justify-end">
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
-            {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Registrar
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="au-motivo">
+          Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
+        <Input
+          id="au-motivo"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ej. Vacaciones de verano"
+          maxLength={200}
+        />
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          {crear.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Registrar ausencia
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -2972,6 +2918,9 @@ function TarjetaAusencia({
       <CardContent className="flex items-start justify-between gap-3 p-4">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="font-normal">
+              <CalendarOff className="mr-1 h-3 w-3" /> Ausencia
+            </Badge>
             <span className="font-medium">{ausencia.miembro_nombre || "—"}</span>
             <Badge variant="secondary" className="font-normal">
               {etiquetaTipo}
@@ -4648,69 +4597,282 @@ function formatearMomentoCorto(s: string): string {
   });
 }
 
-function Swaps({ esAdmin }: { esAdmin: boolean }) {
+/**
+ * Vista FUSIONADA de Cambios de turno + Ausencias en una sola lista cronologica.
+ *
+ * La iteracion previa intento fusionar con sub-tabs (Cambios / Ausencias hermanas);
+ * el usuario lo rechazo: aqui no hay sub-tabs. Una unica cabecera, un boton "Nueva
+ * solicitud" que abre un formulario colapsable con selector de tipo, una banda de
+ * chips para filtrar (tipo + estado) y una lista mezclada de tarjetas (cada una
+ * con su badge de tipo: "Cambio" o "Ausencia").
+ *
+ * Sigue habiendo dos consultas backend (swaps y ausencias) porque cada recurso es
+ * independiente; la fusion ocurre en cliente. Conserva el contrato actual de los
+ * endpoints REST.
+ */
+function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
   const { usuario } = useSesion();
-  // Sin sesión (token de mantenimiento) no hay "yo": el backend devuelve [] para
-  // las consultas con `mio=true`. Lo decimos honestamente y no listamos nada.
-  if (!usuario) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          Inicia sesión para gestionar tus cambios de turno con el equipo.
-        </CardContent>
-      </Card>
-    );
-  }
+  const queryClient = useQueryClient();
+
+  // Filtros locales (sin URL, solo estado): tipo y estado.
+  const [filtroTipo, setFiltroTipo] = React.useState<"todo" | "cambios" | "ausencias">("todo");
+  const [filtroEstado, setFiltroEstado] = React.useState<"activos" | "historial">("activos");
+  const [formAbierto, setFormAbierto] = React.useState(false);
+  const [tipoSolicitud, setTipoSolicitud] = React.useState<"cambio" | "ausencia">("cambio");
+
+  // El usuario admin ve todos los swaps (incluyendo "Para aprobar" donde no es
+  // parte). El resto solo ve los swaps en los que participa (`mio=true`).
+  const filtrosSwaps: FiltrosSwaps = esAdmin ? {} : { mio: true };
+  const swapsQ = useQuery({
+    enabled: usuario !== null,
+    queryKey: ["rota", "swaps", filtrosSwaps] as const,
+    queryFn: ({ signal }) => api.listarSwaps(filtrosSwaps, signal),
+  });
+  const ausenciasQ = useQuery({
+    queryKey: ["rota", "ausencias"] as const,
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
+  const equipoQ = useQuery({
+    queryKey: ["rota", "equipo"],
+    queryFn: ({ signal }) => api.rotaEquipo(signal),
+  });
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
+
+  const invalidarSwaps = () =>
+    void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });
+  const invalidarAusencias = () =>
+    void queryClient.invalidateQueries({ queryKey: ["rota", "ausencias"] });
+
+  // Cargando: si AMBOS estan pendientes (mostramos skeleton); de lo contrario
+  // mezclamos lo que tengamos (evitamos parpadeos al cambiar de filtro).
+  const cargandoTodo =
+    (usuario !== null && swapsQ.isPending) || ausenciasQ.isPending;
+  const errorSwaps = swapsQ.isError;
+  const errorAusencias = ausenciasQ.isError;
+
+  // Lista cronologica unificada: cada item es discriminado por `tipo` para que
+  // el render decida que tarjeta usar. Orden DESC: el mas reciente primero.
+  // - Swaps tienen `creado` (timestamp ISO).
+  // - Ausencias NO tienen timestamp de creacion en el backend; usamos `desde`
+  //   como proxy de "cuando entra en juego" (tradeoff conocido: si en futuro el
+  //   backend persiste `creado_en`, se reemplaza por ese campo).
+  type ItemSwap = { tipo: "cambio"; orden: string; swap: SwapTurno };
+  type ItemAusencia = { tipo: "ausencia"; orden: string; ausencia: AusenciaRota };
+  type ItemSolicitud = ItemSwap | ItemAusencia;
+
+  const items: ItemSolicitud[] = React.useMemo(() => {
+    const lista: ItemSolicitud[] = [];
+    const swaps = swapsQ.data?.swaps ?? [];
+    const ausencias = ausenciasQ.data?.ausencias ?? [];
+
+    const esSwapActivo = (s: SwapTurno) => !ESTADOS_TERMINALES_SWAP.has(s.estado);
+    // Heuristica para ausencias: "activa" = aun no ha terminado (hasta >= hoy).
+    const hoy = iso(new Date());
+    const esAusenciaActiva = (a: AusenciaRota) => (a.hasta || "") >= hoy;
+
+    if (filtroTipo !== "ausencias") {
+      for (const s of swaps) {
+        const activo = esSwapActivo(s);
+        if (filtroEstado === "activos" && !activo) continue;
+        if (filtroEstado === "historial" && activo) continue;
+        lista.push({ tipo: "cambio", orden: s.creado || s.actualizado || "", swap: s });
+      }
+    }
+    if (filtroTipo !== "cambios") {
+      for (const a of ausencias) {
+        const activa = esAusenciaActiva(a);
+        if (filtroEstado === "activos" && !activa) continue;
+        if (filtroEstado === "historial" && activa) continue;
+        lista.push({ tipo: "ausencia", orden: a.desde || "", ausencia: a });
+      }
+    }
+    lista.sort((x, y) => (y.orden || "").localeCompare(x.orden || ""));
+    return lista;
+  }, [swapsQ.data, ausenciasQ.data, filtroTipo, filtroEstado]);
+
+  // Sin sesion no hay "yo": el backend devuelve [] para `mio=true` y la creacion
+  // de swap requiere usuario logueado. Avisamos honestamente.
+  const sinSesion = usuario === null;
 
   return (
-    <div className="space-y-6">
-      <FormularioNuevoSwap miId={usuario.id} />
-      <SeccionSwaps
-        titulo="Por responder"
-        descripcion="Compañeros que te piden un cambio. Acepta o rechaza."
-        icono={ArrowLeftRight}
-        filtros={{ destinatario_id: usuario.id, estado: "propuesto" }}
-        miId={usuario.id}
-        esAdmin={esAdmin}
-        vacio="No tienes solicitudes esperando tu respuesta."
-      />
-      <SeccionSwaps
-        titulo="Solicité"
-        descripcion="Cambios que pediste tú. Puedes cancelar mientras no sean terminales."
-        icono={Send}
-        filtros={{ solicitante_id: usuario.id }}
-        soloEstados="no_terminales"
-        miId={usuario.id}
-        esAdmin={esAdmin}
-        vacio="No tienes solicitudes activas. Pide un cambio con el formulario de arriba."
-      />
-      {esAdmin && (
-        <SeccionSwaps
-          titulo="Para aprobar"
-          descripcion="Cambios que ya aceptaron entre compañeros: tú decides si se aplican al horario."
-          icono={ShieldCheck}
-          filtros={{ estado: "aceptado" }}
-          miId={usuario.id}
-          esAdmin={esAdmin}
-          vacio="No hay cambios pendientes de tu aprobación."
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ArrowLeftRight className="h-4 w-4" /> Cambios y ausencias
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pide un cambio de turno con un compañero o registra una ausencia
+                (vacaciones, descanso, baja). Aparece todo en una lista, mas reciente
+                arriba.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant={formAbierto ? "outline" : "default"}
+              onClick={() => setFormAbierto((v) => !v)}
+              disabled={sinSesion && !equipo.length}
+            >
+              {formAbierto ? (
+                <>
+                  <X className="h-4 w-4" /> Cerrar
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" /> Nueva solicitud
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        {formAbierto && (
+          <CardContent className="space-y-4 border-t pt-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Tipo
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                <ChipToggle
+                  activo={tipoSolicitud === "cambio"}
+                  onClick={() => setTipoSolicitud("cambio")}
+                >
+                  <ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> Cambio de turno
+                </ChipToggle>
+                <ChipToggle
+                  activo={tipoSolicitud === "ausencia"}
+                  onClick={() => setTipoSolicitud("ausencia")}
+                >
+                  <CalendarOff className="mr-1 h-3.5 w-3.5" /> Ausencia
+                </ChipToggle>
+              </div>
+            </div>
+            {tipoSolicitud === "cambio" ? (
+              sinSesion ? (
+                <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                  Inicia sesion para pedir un cambio de turno con tus compañeros.
+                </div>
+              ) : (
+                <FormularioNuevoSwap
+                  miId={usuario.id}
+                  onCreado={() => {
+                    invalidarSwaps();
+                    setFormAbierto(false);
+                  }}
+                />
+              )
+            ) : (
+              <NuevaAusencia
+                equipo={equipo}
+                onCreada={() => {
+                  invalidarAusencias();
+                  setFormAbierto(false);
+                }}
+              />
+            )}
+          </CardContent>
+        )}
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Tipo
+        </span>
+        <ChipToggle activo={filtroTipo === "todo"} onClick={() => setFiltroTipo("todo")}>
+          Todo
+        </ChipToggle>
+        <ChipToggle activo={filtroTipo === "cambios"} onClick={() => setFiltroTipo("cambios")}>
+          Cambios
+        </ChipToggle>
+        <ChipToggle
+          activo={filtroTipo === "ausencias"}
+          onClick={() => setFiltroTipo("ausencias")}
+        >
+          Ausencias
+        </ChipToggle>
+        <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Estado
+        </span>
+        <ChipToggle
+          activo={filtroEstado === "activos"}
+          onClick={() => setFiltroEstado("activos")}
+        >
+          Activos
+        </ChipToggle>
+        <ChipToggle
+          activo={filtroEstado === "historial"}
+          onClick={() => setFiltroEstado("historial")}
+        >
+          Historial
+        </ChipToggle>
+      </div>
+
+      {errorSwaps && (
+        <BloqueError
+          titulo="No se pudieron cargar los cambios de turno"
+          mensaje={mensajeError(swapsQ.error)}
+          onReintentar={() => void swapsQ.refetch()}
+          cargando={swapsQ.isFetching}
         />
       )}
-      <SeccionSwaps
-        titulo="Historial"
-        descripcion="Tus cambios ya cerrados (aplicados, rechazados o cancelados)."
-        icono={Clock}
-        filtros={{ mio: true }}
-        soloEstados="terminales"
-        miId={usuario.id}
-        esAdmin={esAdmin}
-        vacio="Aún no tienes cambios cerrados."
-      />
+      {errorAusencias && (
+        <BloqueError
+          titulo="No se pudieron cargar las ausencias"
+          mensaje={mensajeError(ausenciasQ.error)}
+          onReintentar={() => void ausenciasQ.refetch()}
+          cargando={ausenciasQ.isFetching}
+        />
+      )}
+
+      {cargandoTodo ? (
+        <Skeleton className="h-40 w-full rounded-md" />
+      ) : items.length === 0 ? (
+        <EstadoVacio
+          icono={ArrowLeftRight}
+          titulo={
+            filtroEstado === "historial"
+              ? "Sin historial"
+              : "Sin solicitudes activas"
+          }
+          texto={
+            filtroEstado === "historial"
+              ? "Aqui apareceran los cambios cerrados y las ausencias ya pasadas."
+              : "Crea una con el boton 'Nueva solicitud'."
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {items.map((it) =>
+            it.tipo === "cambio" ? (
+              <TarjetaSwap
+                key={`swap-${it.swap.id}`}
+                swap={it.swap}
+                miId={usuario?.id ?? ""}
+                esAdmin={esAdmin}
+              />
+            ) : (
+              <TarjetaAusencia
+                key={`au-${it.ausencia.id}`}
+                ausencia={it.ausencia}
+                onCambio={invalidarAusencias}
+              />
+            ),
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function FormularioNuevoSwap({ miId }: { miId: string }) {
-  const queryClient = useQueryClient();
+function FormularioNuevoSwap({
+  miId,
+  onCreado,
+}: {
+  miId: string;
+  onCreado?: () => void;
+}) {
   const equipoQ = useQuery({
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
@@ -4746,7 +4908,7 @@ function FormularioNuevoSwap({ miId }: { miId: string }) {
       setFechaB("");
       setFranjaB("matutino");
       setMotivo("");
-      void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });
+      onCreado?.();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -4758,185 +4920,106 @@ function FormularioNuevoSwap({ miId }: { miId: string }) {
     !crear.isPending;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ArrowLeftRight className="h-4 w-4" /> Pedir cambio de turno
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Compañero/a</Label>
-          <Select value={destinatarioId} onValueChange={setDestinatarioId}>
-            <SelectTrigger aria-label="Compañero al que pides el cambio">
-              <SelectValue placeholder="Elige a un compañero/a" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipo.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Mi turno
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="swap-fecha-a">Día</Label>
-              <Input
-                id="swap-fecha-a"
-                type="date"
-                value={fechaA}
-                onChange={(e) => setFechaA(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Franja</Label>
-              <Select value={franjaA} onValueChange={(v) => setFranjaA(v as FranjaTurno)}>
-                <SelectTrigger aria-label="Franja de mi turno">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FRANJAS_SWAP.map((f) => (
-                    <SelectItem key={f.valor} value={f.valor}>
-                      {f.etiqueta}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label>Compañero/a</Label>
+        <Select value={destinatarioId} onValueChange={setDestinatarioId}>
+          <SelectTrigger aria-label="Compañero al que pides el cambio">
+            <SelectValue placeholder="Elige a un compañero/a" />
+          </SelectTrigger>
+          <SelectContent>
+            {equipo.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Mi turno
           </div>
-          <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Turno de {destinatario?.nombre || "tu compañero/a"}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="swap-fecha-b">Día</Label>
-              <Input
-                id="swap-fecha-b"
-                type="date"
-                value={fechaB}
-                onChange={(e) => setFechaB(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Franja</Label>
-              <Select value={franjaB} onValueChange={(v) => setFranjaB(v as FranjaTurno)}>
-                <SelectTrigger aria-label="Franja del turno del compañero">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FRANJAS_SWAP.map((f) => (
-                    <SelectItem key={f.valor} value={f.valor}>
-                      {f.etiqueta}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="swap-fecha-a">Día</Label>
+            <Input
+              id="swap-fecha-a"
+              type="date"
+              value={fechaA}
+              onChange={(e) => setFechaA(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Franja</Label>
+            <Select value={franjaA} onValueChange={(v) => setFranjaA(v as FranjaTurno)}>
+              <SelectTrigger aria-label="Franja de mi turno">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FRANJAS_SWAP.map((f) => (
+                  <SelectItem key={f.valor} value={f.valor}>
+                    {f.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="swap-motivo">
-            Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <Textarea
-            id="swap-motivo"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Ej. Cita médica, evento familiar, examen…"
-            rows={2}
-            maxLength={500}
-          />
-        </div>
-        <div className="flex justify-end">
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
-            {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            Solicitar cambio
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-/**
- * Una sección de la pestaña de Swaps: lista filtrada de tarjetas, con un filtro
- * adicional cliente (`soloEstados`) para dividir "Solicité" entre activos y los
- * "Historial" (terminales), reaprovechando la misma consulta backend.
- */
-function SeccionSwaps({
-  titulo,
-  descripcion,
-  icono: Icono,
-  filtros,
-  soloEstados,
-  miId,
-  esAdmin,
-  vacio,
-}: {
-  titulo: string;
-  descripcion: string;
-  icono: typeof ArrowLeftRight;
-  filtros: FiltrosSwaps;
-  /** Filtro extra cliente: deja solo (no_)terminales. Sin valor = sin filtro. */
-  soloEstados?: "terminales" | "no_terminales";
-  miId: string;
-  esAdmin: boolean;
-  vacio: string;
-}) {
-  const clave = ["rota", "swaps", filtros] as const;
-  const q = useQuery({
-    queryKey: clave,
-    queryFn: ({ signal }) => api.listarSwaps(filtros, signal),
-  });
-
-  const swaps = React.useMemo(() => {
-    const todos = q.data?.swaps ?? [];
-    if (!soloEstados) return todos;
-    const esTerminal = (s: SwapTurno) => ESTADOS_TERMINALES_SWAP.has(s.estado);
-    return soloEstados === "terminales" ? todos.filter(esTerminal) : todos.filter((s) => !esTerminal(s));
-  }, [q.data, soloEstados]);
-
-  return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Icono className="h-4 w-4" /> {titulo}
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {descripcion}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {q.isPending ? (
-          <Skeleton className="h-24 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudieron cargar los cambios de turno"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : swaps.length === 0 ? (
-          <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-            {vacio}
+        <div className="space-y-3 rounded-md border bg-muted/30 p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Turno de {destinatario?.nombre || "tu compañero/a"}
           </div>
-        ) : (
-          swaps.map((s) => (
-            <TarjetaSwap key={s.id} swap={s} miId={miId} esAdmin={esAdmin} />
-          ))
-        )}
-      </CardContent>
-    </Card>
+          <div className="space-y-1.5">
+            <Label htmlFor="swap-fecha-b">Día</Label>
+            <Input
+              id="swap-fecha-b"
+              type="date"
+              value={fechaB}
+              onChange={(e) => setFechaB(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Franja</Label>
+            <Select value={franjaB} onValueChange={(v) => setFranjaB(v as FranjaTurno)}>
+              <SelectTrigger aria-label="Franja del turno del compañero">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FRANJAS_SWAP.map((f) => (
+                  <SelectItem key={f.valor} value={f.valor}>
+                    {f.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="swap-motivo">
+          Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
+        <Textarea
+          id="swap-motivo"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ej. Cita médica, evento familiar, examen…"
+          rows={2}
+          maxLength={500}
+        />
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          {crear.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+          Solicitar cambio
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -4979,6 +5062,9 @@ function TarjetaSwap({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant="outline" className="font-normal">
+              <ArrowLeftRight className="mr-1 h-3 w-3" /> Cambio
+            </Badge>
             <span className="font-medium">{swap.solicitante_nombre}</span>
             <ArrowLeftRight className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="font-medium">{swap.destinatario_nombre}</span>
