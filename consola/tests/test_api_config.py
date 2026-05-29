@@ -87,7 +87,7 @@ def test_get_config_contrato(cfg_metricas):
         "credenciales_presentes",
     }
     assert datos["fuente"] == "muestra"
-    assert set(datos["fuentes_validas"]) == {"muestra", "real"}
+    assert set(datos["fuentes_validas"]) == {"muestra", "metricool", "real"}
     assert datos["marcas"] == ["unotv"]
     # marcas_disponibles: lista de {id, nombre}.
     ids = {m["id"] for m in datos["marcas_disponibles"]}

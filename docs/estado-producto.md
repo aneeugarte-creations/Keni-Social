@@ -29,7 +29,16 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   (alcance, engagement, mejores piezas, comparación de periodos, tendencia histórica, picos), con
   histórico propio en SQLite local. Genera un **dashboard HTML autocontenido** (sin JS, sin CDN,
   sin red; se abre con doble clic y funciona offline) con KPIs, ranking por marca, sparklines y
-  picos. **Hoy funciona con datos de muestra** representativos de las cinco marcas.
+  picos. Lee dato real **vía Metricool** (`FuenteMetricol`, API REST; AMX en plan Advanced) como
+  una fuente más detrás de `FuenteMetricas`; sin token configurado **degrada a datos de muestra**
+  representativos de las cinco marcas (nunca inventa cifras).
+- **Catálogo de apps con fronteras verificadas (separación A/B/C + shell).** La Consola está
+  organizada como catálogo de apps de producto (Producción · Métricas · Operación) + un shell
+  transversal, cada una activable por flag, con un **lint de fronteras en CI** que impide que una
+  app importe las tripas de otra (los cruces legítimos van por contratos explícitos). El sidebar se
+  genera de los manifests y los tests corren con *scoping* por app. Decisión en
+  [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md); detalle en
+  [`arquitectura.md`](arquitectura.md) §3.
 - **Preview de publicación en dry-run.** Muestra exactamente qué se publicaría en cada red sin
   publicar ni subir media.
 - **Instalación como plugin de Claude Code.** Dos comandos, sin permisos de administrador, con
@@ -47,9 +56,13 @@ Arquitectura y hitos al detalle en [`arquitectura.md`](arquitectura.md).
 
 ## 2. Qué está PAUSADO (por gating externo)
 
-Lo que falta para *datos reales* y *publicación real* **no depende de nosotros**: depende de
-aprobaciones y costes de las plataformas. El **código de los adaptadores ya existe** y degrada
-con elegancia cuando no hay credenciales; lo que está bloqueado es el permiso para encenderlos.
+**Leer métricas reales ya NO está bloqueado:** B lee dato real **vía Metricool** (AMX en plan
+**Advanced** → API token), como un adapter detrás de `FuenteMetricas`; no construimos ingesta
+propia por plataforma (ver [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md)
+§B). Lo único que sigue dependiendo de aprobaciones externas es la **publicación real** a cada red.
+El código de degradación ya existe; lo gated es el permiso de *publicar*, no de *leer*. La tabla de
+abajo aplica, por tanto, a la **publicación directa** (las lecturas por plataforma ya no son
+nuestro camino: las cubre Metricool).
 
 | Capacidad | Bloqueo externo | Estado |
 |---|---|---|
@@ -68,12 +81,13 @@ La estrategia es **complementar, no reemplazar** al incumbente (AMX ya tiene Met
 por el hueco diario del community manager, no por la analítica/publicación de primera. Por fases,
 alineadas al estado real (detalle en [`analisis-competitivo.md`](analisis-competitivo.md) §3 y §5):
 
-1. **Fase 0 — vender lo listo (hoy).** Copy desde texto, clip→copy local, métricas-insight con
-   muestra y preview dry-run. No depende de ninguna aprobación: es lo que se demuestra y se cobra.
-2. **Fase 1 — datos reales y modo alojado.** Conforme caen los permisos (§2): métricas reales por
-   marca y el modo alojado por Keni con **System User de Meta (tokens que no caducan)**, que ataca
-   de frente las desconexiones de Metricool. Cada hito que cae es un upsell natural, no una
-   promesa que devalúe la venta inicial.
+1. **Fase 0 — vender lo listo (hoy).** Copy desde texto, clip→copy local, **métricas-insight con
+   dato real vía Metricool (Advanced)** y preview dry-run. No depende de App Review: es lo que se
+   demuestra y se cobra.
+2. **Fase 1 — publicación real y modo alojado.** Las métricas reales por marca ya llegan vía
+   Metricool (§1). Lo que entra aquí, conforme caen los permisos (§2), es la **publicación real** a
+   cada red y el modo alojado por Keni con **System User de Meta (tokens que no caducan)**. Cada
+   hito que cae es un upsell natural, no una promesa que devalúe la venta inicial.
 3. **Fase 2 — publicación y siguientes mejoras de UX.** Publicación real tras App Review y las
    mejoras priorizadas en [`ux-roadmap.md`](ux-roadmap.md) (olas 2 y 3): quick-start "empieza aquí
    en 10 min", dashboard exportable a PDF, loop de vuelta a la acción (el dashboard sugiere "pide

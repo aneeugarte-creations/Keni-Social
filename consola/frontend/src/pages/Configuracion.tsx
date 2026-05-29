@@ -53,12 +53,13 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { useTema } from "@/hooks/tema-contexto";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { RedConexion } from "@/types";
+import type { MarcaMetricool, RedConexion } from "@/types";
 
 const CLAVE_CONFIG = ["config"];
 const CLAVE_ESFUERZO = ["config", "esfuerzo"];
 const CLAVE_IMAGEN = ["conexiones", "imagen"];
 const CLAVE_REDES = ["conexiones", "redes"];
+const CLAVE_METRICOOL = ["conexiones", "metricool"];
 
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
@@ -551,6 +552,277 @@ function SeccionRedes() {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sección: Métricas (Metricool) por marca                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Tarjeta de UNA marca de Metricool. Cada marca es una cuenta Metricool distinta:
+ * tiene su PROPIO token (write-only, nunca se muestra), user_id y blog_id. Botones
+ * Guardar / Probar (en vivo) / Quitar. El token solo se envía; del servidor llega
+ * el estado (conectado, pista de user_id y blog_id), nunca el token.
+ */
+function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
+  const queryClient = useQueryClient();
+  const [userToken, setUserToken] = React.useState("");
+  const [userId, setUserId] = React.useState(marca.user_id_pista ?? "");
+  const [blogId, setBlogId] = React.useState(marca.blog_id ?? "");
+  const [confirmarQuitar, setConfirmarQuitar] = React.useState(false);
+  const [resultadoPrueba, setResultadoPrueba] = React.useState<{
+    ok: boolean;
+    mensaje: string;
+  } | null>(null);
+
+  // Sincroniza user_id/blog_id no secretos con lo que reporta el servidor.
+  React.useEffect(() => {
+    setUserId(marca.user_id_pista ?? "");
+    setBlogId(marca.blog_id ?? "");
+  }, [marca.user_id_pista, marca.blog_id]);
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.guardarMetricool(marca.marca, {
+        user_token: userToken,
+        user_id: userId,
+        blog_id: blogId,
+      }),
+    onSuccess: (res) => {
+      toast.success(res.mensaje || `${marca.etiqueta} conectada.`);
+      setUserToken(""); // El token nunca se conserva en cliente.
+      setResultadoPrueba(null);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const probar = useMutation({
+    mutationFn: () => api.probarMetricool(marca.marca),
+    onSuccess: (res) => {
+      setResultadoPrueba({ ok: res.ok, mensaje: res.detalle });
+      if (res.ok) toast.success(res.detalle || "Conexión correcta.");
+      else toast.error(res.detalle || "La prueba falló.");
+    },
+    onError: (e) => {
+      setResultadoPrueba({ ok: false, mensaje: mensajeError(e) });
+      toast.error(mensajeError(e));
+    },
+  });
+
+  const quitar = useMutation({
+    mutationFn: () => api.eliminarMetricool(marca.marca),
+    onSuccess: (res) => {
+      toast.success(res?.mensaje ?? `${marca.etiqueta} desconectada.`);
+      setUserToken("");
+      setResultadoPrueba(null);
+      setConfirmarQuitar(false);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const ocupado = guardar.isPending || probar.isPending || quitar.isPending;
+  const idTok = `mc-token-${marca.marca}`;
+  const idUid = `mc-userid-${marca.marca}`;
+  const idBlog = `mc-blogid-${marca.marca}`;
+  // Para guardar hacen falta los tres campos (token + user_id + blog_id).
+  const puedeGuardar =
+    userToken.trim() !== "" && userId.trim() !== "" && blogId.trim() !== "";
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">{marca.etiqueta}</span>
+        {marca.conectado ? (
+          <Badge variant="ok">Conectado</Badge>
+        ) : (
+          <Badge variant="secondary">Sin conectar</Badge>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor={idTok} className="text-xs text-muted-foreground">
+          Token de Metricool (user_token)
+        </Label>
+        <Input
+          id={idTok}
+          type="password"
+          autoComplete="off"
+          value={userToken}
+          onChange={(e) => setUserToken(e.target.value)}
+          placeholder={
+            marca.conectado ? "•••••••••• (escribe para reemplazar)" : "Pega el token aquí"
+          }
+          disabled={ocupado}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
+          <Label htmlFor={idUid} className="text-xs text-muted-foreground">
+            User ID
+          </Label>
+          <Input
+            id={idUid}
+            autoComplete="off"
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            placeholder="userId"
+            disabled={ocupado}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={idBlog} className="text-xs text-muted-foreground">
+            Blog ID
+          </Label>
+          <Input
+            id={idBlog}
+            autoComplete="off"
+            value={blogId}
+            onChange={(e) => setBlogId(e.target.value)}
+            placeholder="blogId"
+            disabled={ocupado}
+          />
+        </div>
+      </div>
+
+      {resultadoPrueba && (
+        <p
+          className={cn(
+            "flex items-center gap-1.5 text-sm",
+            resultadoPrueba.ok ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+          )}
+        >
+          {resultadoPrueba.ok ? (
+            <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
+          ) : (
+            <X className="h-4 w-4 shrink-0" aria-hidden="true" />
+          )}
+          {resultadoPrueba.mensaje}
+        </p>
+      )}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={() => guardar.mutate()} disabled={ocupado || !puedeGuardar}>
+          {guardar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Save className="h-4 w-4" />
+          )}
+          {guardar.isPending ? "Guardando…" : marca.conectado ? "Reemplazar" : "Guardar"}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => probar.mutate()}
+          disabled={ocupado || !marca.conectado}
+          title={!marca.conectado ? "Guarda la credencial antes de probar." : undefined}
+        >
+          {probar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ShieldCheck className="h-4 w-4" />
+          )}
+          {probar.isPending ? "Probando…" : "Probar"}
+        </Button>
+        {marca.conectado && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => setConfirmarQuitar(true)}
+            disabled={ocupado}
+          >
+            <Trash2 className="h-4 w-4" />
+            Quitar
+          </Button>
+        )}
+      </div>
+
+      <Dialog open={confirmarQuitar} onOpenChange={setConfirmarQuitar}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Desconectar {marca.etiqueta}</DialogTitle>
+            <DialogDescription>
+              Se eliminará la credencial de Metricool guardada para esta marca. Podrás volver a
+              conectarla pegando un token nuevo. ¿Quieres continuar?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmarQuitar(false)}
+              disabled={quitar.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => quitar.mutate()}
+              disabled={quitar.isPending}
+            >
+              {quitar.isPending ? "Quitando…" : "Quitar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SeccionMetricool() {
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    queryKey: CLAVE_METRICOOL,
+    queryFn: ({ signal }) => api.conexionesMetricool(signal),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">Métricas (Metricool)</CardTitle>
+        <CardDescription>
+          Conecta cada marca con su cuenta de Metricool. Cada marca tiene su propio token, user ID
+          y blog ID.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 pt-0">
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-primary/5 p-3">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground">
+            En AMX cada marca es una <strong>cuenta de Metricool distinta</strong>. El token se
+            guarda <strong>solo en esta máquina</strong>, es <strong>revocable</strong> y nunca se
+            muestra. Usa «Probar» para validar la conexión en vivo.
+          </p>
+        </div>
+
+        {isPending ? (
+          <div className="space-y-3">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Skeleton key={i} className="h-44 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar las marcas de Metricool"
+            mensaje={mensajeError(error)}
+            onReintentar={() => void refetch()}
+            cargando={isFetching}
+          />
+        ) : data.marcas.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No hay marcas disponibles para conectar.
+          </p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {data.marcas.map((marca) => (
+              <TarjetaMetricool key={marca.marca} marca={marca} />
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /* Sección: Imagen con IA                                             */
 /* ------------------------------------------------------------------ */
 
@@ -888,6 +1160,7 @@ export default function Configuracion() {
         if (puedeVerConexiones) {
           void queryClient.invalidateQueries({ queryKey: CLAVE_IMAGEN });
           void queryClient.invalidateQueries({ queryKey: CLAVE_REDES });
+          void queryClient.invalidateQueries({ queryKey: CLAVE_METRICOOL });
         }
       }}
       disabled={refrescando}
@@ -908,8 +1181,9 @@ export default function Configuracion() {
       <div className="space-y-6">
         <SeccionDatos />
         <SeccionEsfuerzo />
-        {/* Redes e Imagen IA: solo admin (secretos globales, #153). */}
+        {/* Redes, Metricool e Imagen IA: solo admin (secretos globales, #153). */}
         {puedeVerConexiones && <SeccionRedes />}
+        {puedeVerConexiones && <SeccionMetricool />}
         {puedeVerConexiones && <SeccionImagen />}
         <SeccionApariencia />
       </div>

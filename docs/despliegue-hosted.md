@@ -3,7 +3,7 @@
 Esta es la **mitad *hosted* de la arquitectura híbrida** de `keni-metricas`:
 
 - **Local por persona (stdio).** El MCP corre en la máquina de cada quien con sus propias credenciales, que nunca salen del equipo. Ver `docs/despliegue-local.md` y `docs/credenciales.md`. Es el modo por defecto.
-- **Hosted por Keni (HTTP).** Keni hospeda el MCP de métricas de forma central y lo expone sobre **streamable-HTTP**, usando **tokens de Meta de System User** (que **no caducan**). Así se elimina el dolor estilo Metricool de "se desconectó el token" causado por los tokens de usuario de ~60 días.
+- **Hosted por Keni (HTTP).** Keni hospeda el MCP de métricas de forma central y lo expone sobre **streamable-HTTP**, usando **tokens de Meta de System User** (que **no caducan**). Así no hay renovación manual del token cada ~60 días, como sí ocurre con los tokens de usuario.
 
 Ambos modos son el mismo servidor: solo cambia el **transporte**.
 

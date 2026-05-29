@@ -23,7 +23,7 @@ Copia `mcp-metricas/credenciales.ejemplo.toml` a `~/.config/keni-metricas/config
 
 ## Meta: token de System User (no caduca)
 
-Los tokens de usuario de Meta **caducan a los ~60 días** y hay que renovarlos a mano; ese es justo el dolor de las herramientas tipo Metricool, que se "desconectan" solas. La alternativa es un **token de System User** de Business Manager, que **no caduca** y es el que usa el despliegue *hosted* de Keni (ver `docs/despliegue-hosted.md`).
+Los tokens de usuario de Meta **caducan a los ~60 días** y hay que renovarlos a mano. La alternativa es un **token de System User** de Business Manager, que **no caduca** (no hay renovación manual cada ~60 días) y es el que usa el despliegue *hosted* de Keni (ver `docs/despliegue-hosted.md`).
 
 **Cómo obtenerlo** (Meta Business Manager / Business Settings):
 

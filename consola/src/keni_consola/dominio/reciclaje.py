@@ -34,6 +34,7 @@ from datetime import date, datetime
 from typing import Any
 
 from .. import marcas, redes
+from . import publicaciones as contrato_publicaciones
 
 # --------------------------------------------------------------------------- #
 # Parametros de la heuristica (constantes, faciles de auditar/ajustar)         #
@@ -317,3 +318,22 @@ def candidatas_reciclaje(
 
     candidatas.sort(key=lambda c: (-c["puntuacion"], c["titulo"]))
     return candidatas[: max(0, limite)]
+
+
+def sugerencias_de_reciclaje(
+    marca: str | None = None,
+    red: str | None = None,
+    *,
+    hoy: date | None = None,
+    limite: int = MAX_CANDIDATAS,
+) -> list[dict[str, Any]]:
+    """Lista las candidatas leyendo el universo de C por su CONTRATO de lectura.
+
+    Reciclaje (app A) NO consulta el almacén de C directamente: pide el universo de
+    piezas a la función-contrato de solo lectura que C expone
+    (`dominio.publicaciones.listar_para_reciclaje`, ADR 0005 §Seams #2) y aplica encima
+    su heurística. Así el cruce A→C pasa por un símbolo público de C, no por las tripas
+    de C ni por una query ad-hoc en el router.
+    """
+    universo = contrato_publicaciones.listar_para_reciclaje(marca=marca, red=red)
+    return candidatas_reciclaje(universo, hoy=hoy, limite=limite)

@@ -35,6 +35,7 @@ import type {
   CuerpoDuplicarPiezaRota,
   CuerpoDuplicarTurnoRota,
   CuerpoConectarRed,
+  CuerpoGuardarMetricool,
   CuerpoCrearCarpeta,
   CuerpoCrearFranja,
   CuerpoCrearRun,
@@ -81,8 +82,12 @@ import type {
   RespuestaAgente,
   RespuestaAgentes,
   RespuestaCarpetas,
+  RespuestaCatalogo,
   RespuestaConectarRed,
   RespuestaConexionesRedes,
+  RespuestaMetricool,
+  RespuestaGuardarMetricool,
+  RespuestaProbarMetricool,
   RespuestaConexionImagen,
   RespuestaConfig,
   RespuestaCrearCarpeta,
@@ -430,6 +435,11 @@ async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: stri
 }
 
 export const api = {
+  // --- Catálogo de apps (ADR 0005): apps activas + navegación data-driven ---
+  // El sidebar se hidrata de aquí en vez de hardcodear las entradas. Filtra por los
+  // flags de activación del backend; desactivar una app la oculta sin tocar el front.
+  catalogo: (signal?: AbortSignal) => peticion<RespuestaCatalogo>("/catalogo", { signal }),
+
   // --- Autenticación (sesión por cookie) ---
   // El login depende de la cookie de sesión que pone el backend; `api.ts` ya
   // manda las cabeceras de auth (#134) en cada petición para las mutaciones.
@@ -1129,6 +1139,25 @@ export const api = {
     peticion<RespuestaMensaje>(`/conexiones/redes/${encodeURIComponent(plataforma)}`, {
       metodo: "DELETE",
     }),
+
+  // Metricool por marca: cada marca es una cuenta Metricool con su propio token.
+  // El user_token es write-only: solo se envía (PUT); del servidor llega el estado.
+  conexionesMetricool: (signal?: AbortSignal) =>
+    peticion<RespuestaMetricool>("/conexiones/metricool", { signal }),
+  guardarMetricool: (marca: string, cuerpo: CuerpoGuardarMetricool) =>
+    peticion<RespuestaGuardarMetricool>(`/conexiones/metricool/${encodeURIComponent(marca)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarMetricool: (marca: string) =>
+    peticion<RespuestaMensaje>(`/conexiones/metricool/${encodeURIComponent(marca)}`, {
+      metodo: "DELETE",
+    }),
+  probarMetricool: (marca: string) =>
+    peticion<RespuestaProbarMetricool>(
+      `/conexiones/metricool/${encodeURIComponent(marca)}/probar`,
+      { metodo: "POST" },
+    ),
 
   // --- Buzón de sugerencias ---
   sugerencias: (signal?: AbortSignal) =>

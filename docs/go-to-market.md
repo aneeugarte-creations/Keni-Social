@@ -17,15 +17,16 @@ Documento de estrategia comercial para `keni-social`. Cliente de entrada: **AMX 
 mexicana, que se monta encima de lo que el equipo ya usa.** No entra a pelear la analítica ni
 la publicación de primera; entra por donde la herramienta actual no llega.
 
-El cliente ya tiene **Metricool**: fuerte en analítica, pero débil en copy con IA, sin español
-de México real, y con cortes de publicación por la desconexión de tokens cada 60 días. Ahí está
-el hueco.
+El cliente ya tiene **Metricool**: fuerte en analítica, pero débil en copy con IA y sin español
+de México real. Ahí está el hueco.
 
 Estrategia de entrada en una frase: **complementar Metricool, no reemplazarlo.** Lideramos con
 lo que Metricool no puede hacer —copy es-MX confiable a partir del propio video del equipo, con
-verificación honesta, procesado en local— y dejamos que Metricool siga siendo el tablero de
-métricas histórico mientras nosotros demostramos valor. La publicación llega después, por fases,
-cuando ya tenemos confianza ganada y los permisos externos resueltos.
+verificación honesta, procesado en local— y, en métricas, nos **apoyamos** en Metricool: leemos
+sus datos vía su API (plan Advanced) y añadimos encima la capa de insight, narrativa y reporte
+es-MX. Metricool sigue siendo el tablero de métricas mientras nosotros demostramos valor. La
+publicación llega después, por fases, cuando ya tenemos confianza ganada y los permisos externos
+resueltos.
 
 Qué decimos y qué no:
 
@@ -65,9 +66,10 @@ resuelve:
 2. **Video/audio → copy.** De una entrevista o declaración: copy por plataforma **más las mejores
    citas con marca de tiempo** (punto de corte exacto para el clip). El audio se transcribe en
    local y nunca sale de la máquina. Esto elimina el "escúchate la hora de podcast a ver qué sirve".
-3. **Reportes para Mariana/Bernardo.** El MCP de métricas consolida todas las marcas y plataformas
-   en un informe, avisa de picos/anomalías y, ahora, marca la cobertura de los datos. Esto le da al
-   nivel decisor una razón para querer la herramienta aunque no la toque a diario.
+3. **Reportes para Mariana/Bernardo.** El MCP de métricas lee de Metricool (vía su API, plan
+   Advanced) y consolida todas las marcas y plataformas en un informe con narrativa es-MX, avisa de
+   picos/anomalías y marca la cobertura de los datos. Esto le da al nivel decisor una razón para
+   querer la herramienta aunque no la toque a diario.
 
 La cuña es deliberadamente lo más portátil del producto: estos dolores existen en **cualquier**
 equipo de contenido, así que lo que validemos con AMX es replicable con el siguiente cliente.
@@ -144,7 +146,7 @@ Dos componentes:
 |---|---|---|
 | **Por puesto CM** | **$45/puesto/mes** | igual que entrada (+ asiento Claude). |
 | **Add-on métricas/marca** | **$60/marca/mes** | MCP consolidado, picos, cobertura; modo alojado. |
-| **Plataforma base (por equipo)** | **$300/mes** | soporte, mantenimiento del corpus editorial, MCP alojado con tokens System User (sin cortes a los 60 días), onboarding. |
+| **Plataforma base (por equipo)** | **$300/mes** | soporte, mantenimiento del corpus editorial, MCP alojado (lectura de métricas vía Metricool API; publicación hosted con tokens System User), onboarding. |
 
 **Ejemplo numérico para AMX** (5 CM, 5 marcas, suite, supuesto ilustrativo):
 
@@ -192,8 +194,9 @@ Listo y sin dependencias externas:
 - **Copy desde video/audio** (`clip-a-copy`): transcripción **en local** + citas con marca de
   tiempo. (Requiere whisper.cpp + ffmpeg en un Mac Apple Silicon designado; todo gratis, sin nube.)
 - **Métricas-insight** (MCP): reporte consolidado multi-marca, mejores piezas, comparación de
-  periodos, picos/anomalías, surfacing de cobertura. Funciona ya con **datos de muestra**; los datos
-  reales por plataforma se encienden conforme caen los permisos externos.
+  periodos, picos/anomalías, surfacing de cobertura. **Lee datos reales de Metricool vía su API**
+  (AMX está en plan Advanced → token de API disponible) y añade encima la capa de insight y
+  narrativa es-MX; no reemplaza la analítica de Metricool, se apoya en ella.
 - **Preview de publicación en dry-run** (`publica-meta` / pre-vuelo beta): prepara y previsualiza la
   publicación con gate humano. **No publica de verdad** — es el ensayo previo a la publicación real.
 
@@ -204,9 +207,8 @@ Esta fase ya justifica la **opción de entrada** y la **suite sin publicación**
 - Adaptadores reales por plataforma (Meta FB/IG, YouTube, X, TikTok) — el código ya está; se
   habilita por red conforme caen los bloqueos: **Meta App Review (3–6 semanas realistas)**,
   auditoría de TikTok, decisión de coste de X.
-- Modo **alojado por Keni** con **tokens System User de Meta (no caducan)** → elimina el dolor de
-  Metricool de "se desconectó el token cada 60 días". Este es un argumento de venta directo contra
-  el incumbente.
+- Modo **alojado por Keni** con **tokens System User de Meta (no caducan)** → propiedad del camino
+  de publicación hosted (ver Fase 2): la conexión que publica no requiere reautenticación periódica.
 
 ### Fase 2 — Publicación (tras App Review aprobada)
 

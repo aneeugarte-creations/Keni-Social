@@ -1,0 +1,110 @@
+# Manifest de la app A · Producción (ADR 0005 §A).
+#
+# El motor editorial: convierte input crudo (nota, clip, URL, tendencia) en
+# contenido publicable y verificado. Es el moat; sin gating (vendible hoy).
+#
+# Este fichero es DECLARATIVO: lo lee `apps/registro.py`, que arma el catálogo y
+# (vía `api/catalogo.py`) hidrata el sidebar. Añadir/activar una app NO obliga a
+# tocar `navegacion.ts` ni `app.py`.
+#
+# NOTA TOML: todas las claves de nivel superior (escalares y arrays como
+# `modulos_backend`/`rutas_frontend`) van ANTES de los `[[nav]]`; una vez abierto un
+# array-de-tablas, las claves siguientes pertenecerían a esa tabla, no a la raíz.
+
+id = "produccion"
+etiqueta = "Producción"
+# Nombre de icono de lucide-react (string). El frontend lo resuelve a un componente
+# vía un mapa string->LucideIcon en `navegacion.ts`.
+icono = "Sparkles"
+# Env var que ACTIVA/DESACTIVA la app. Vacía/ausente => activa por defecto (el repo
+# arranca IGUAL que hoy). "0"/"false"/"no" la oculta del catálogo.
+flag_activacion = "KENI_APP_PRODUCCION"
+permisos = ["editor", "admin"]
+
+# Módulos backend (`api/<modulo>.py`) que POSEE esta app. Lo usa el lint de fronteras
+# para mapear cada router a su app.
+modulos_backend = [
+  "agentes",
+  "generaciones",
+  "hashtags",
+  "plantillas",
+  "skills_catalogo_api",
+  "skills_generacion_api",
+  "qa_editorial",
+  "verificaciones",
+  "reciclaje",
+  "rss",
+  "termometro",
+  "radar",
+]
+
+# Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
+# test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
+rutas_frontend = [
+  "/generacion",
+  "/investigacion",
+  "/investigacion/fuentes",
+  "/investigacion/termometro",
+  "/investigacion/radar",
+  "/revision",
+  "/revision/editorial",
+  "/revision/verificacion",
+  "/skills",
+  "/agentes",
+  "/agentes/actividad",
+  "/agentes/:id",
+]
+
+# Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
+# `ruta` es el path que ya resuelve `router.tsx`; el sidebar no expande sub-rutas.
+#
+# El sidebar tiene 3 bloques visuales SIN encabezado (separadores discretos). Cada
+# entrada declara a qué bloque pertenece (`grupo` + `grupo_orden`) y su `orden`
+# dentro del bloque. El bloque es VISUAL y se desacopla del dueño de la app: Skills
+# y Agentes son de Producción pero viven en el bloque "operacion" del sidebar, igual
+# que hoy. Bloques: vistazo(10) · dia(20) · operacion(30).
+
+[[nav]]
+ruta = "/generacion"
+etiqueta = "Generación"
+icono = "Sparkles"
+descripcion = "Crea copy o imágenes con las skills editoriales. Pestañas Copy / Imágenes."
+grupo = "dia"
+grupo_orden = 20
+orden = 10
+
+[[nav]]
+ruta = "/investigacion"
+etiqueta = "Investigación"
+icono = "Search"
+descripcion = "Fuentes RSS, panorama mundial y tendencias virales. Pestañas Fuentes / Termómetro / Radar."
+grupo = "dia"
+grupo_orden = 20
+orden = 20
+
+[[nav]]
+ruta = "/revision"
+etiqueta = "Revisión"
+icono = "ShieldCheck"
+descripcion = "QA editorial y verificación de imágenes/videos antes de publicar. Pestañas Editorial / Verificación."
+grupo = "dia"
+grupo_orden = 20
+orden = 30
+
+[[nav]]
+ruta = "/skills"
+etiqueta = "Skills"
+icono = "Wand2"
+descripcion = "Catálogo de skills editoriales: campos, plantilla y SKILL.md."
+grupo = "operacion"
+grupo_orden = 30
+orden = 30
+
+[[nav]]
+ruta = "/agentes"
+etiqueta = "Agentes"
+icono = "Bot"
+descripcion = "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones. Pestañas Agentes / Actividad IA."
+grupo = "operacion"
+grupo_orden = 30
+orden = 40

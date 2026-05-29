@@ -1,0 +1,67 @@
+# Woodpecker: tests de la app A · PRODUCCIÓN (test scoping por ruta, plan §1.5).
+# Espejo del job `tests-app-produccion` de .github/workflows/ci.yml.
+#
+# Un cambio en los módulos de A (api/agentes, generaciones, skills*, rss, radar,
+# termometro, reciclaje, qa_editorial, verificaciones, hashtags, plantillas) corre
+# SOLO los tests de A + el contrato de fronteras (pipeline `fronteras`) + keni-shared.
+# El aislamiento de apps (lo garantiza el lint de fronteras) hace seguro NO correr la
+# suite completa. Un cambio en keni-shared dispara la suite COMPLETA (`tests-python`).
+when:
+  - event: [push, pull_request]
+    path:
+      include:
+        - "consola/src/keni_consola/api/agentes.py"
+        - "consola/src/keni_consola/api/generaciones.py"
+        - "consola/src/keni_consola/api/hashtags.py"
+        - "consola/src/keni_consola/api/plantillas.py"
+        - "consola/src/keni_consola/api/skills*.py"
+        - "consola/src/keni_consola/api/qa_editorial.py"
+        - "consola/src/keni_consola/api/verificaciones.py"
+        - "consola/src/keni_consola/api/reciclaje.py"
+        - "consola/src/keni_consola/api/rss.py"
+        - "consola/src/keni_consola/api/termometro.py"
+        - "consola/src/keni_consola/api/radar.py"
+        - "consola/src/keni_consola/dominio/{hashtags,qa_editorial,reciclaje,skills,extraccion_url}.py"
+        - "consola/src/keni_consola/apps/produccion.toml"
+
+services:
+  - name: postgres
+    image: postgres:16
+    environment:
+      POSTGRES_USER: keni
+      POSTGRES_PASSWORD: keni
+      POSTGRES_DB: keni_test
+
+steps:
+  - name: pytest-produccion
+    image: python:3.11
+    environment:
+      KENI_TEST_DATABASE_URL: postgresql://keni:keni@postgres:5432/keni_test
+    commands:
+      - python -m pip install --upgrade pip
+      - python -m pip install -e './keni-shared[dev]' -e './mcp-metricas[dev]' -e './consola[dev]'
+      - for i in $(seq 1 30); do python -c "import os,psycopg; psycopg.connect(os.environ['KENI_TEST_DATABASE_URL']).close()" 2>/dev/null && break; echo "esperando postgres ($i)"; sleep 1; done
+      # keni-shared SIEMPRE (base común) + el contrato de fronteras + los tests de A.
+      - python -m pytest keni-shared/tests -q
+      - python -m pytest consola/tests/test_fronteras.py consola/tests/test_catalogo.py -q
+      - >-
+        python -m pytest -q
+        consola/tests/test_api_agentes.py
+        consola/tests/test_api_agentes_abiertos.py
+        consola/tests/test_api_agentes_runner.py
+        consola/tests/test_generaciones.py
+        consola/tests/test_api_hashtags.py
+        consola/tests/test_api_plantillas.py
+        consola/tests/test_skills_piezas.py
+        consola/tests/test_skills_url.py
+        consola/tests/test_skills_imagenes.py
+        consola/tests/test_skills_catalogo.py
+        consola/tests/test_api_qa_editorial.py
+        consola/tests/test_api_verificaciones.py
+        consola/tests/test_api_reciclaje.py
+        consola/tests/test_reciclaje_dominio.py
+        consola/tests/test_api_rss.py
+        consola/tests/test_api_termometro.py
+        consola/tests/test_api_radar.py
+        consola/tests/test_radar.py
+        consola/tests/test_metricas_runs.py

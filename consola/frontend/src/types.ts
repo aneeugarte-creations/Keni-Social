@@ -2136,6 +2136,40 @@ export interface RespuestaConectarRed {
   mensaje: string;
 }
 
+/** Estado de conexión de Metricool para UNA marca (sin exponer el token). */
+export interface MarcaMetricool {
+  marca: string;
+  etiqueta: string;
+  conectado: boolean;
+  /** Pista no sensible del user_id (solo si está conectada). */
+  user_id_pista?: string;
+  /** blogId de Metricool (solo si está conectada; no es secreto). */
+  blog_id?: string;
+}
+
+export interface RespuestaMetricool {
+  marcas: MarcaMetricool[];
+}
+
+/** Cuerpo para guardar las credenciales de Metricool de una marca. */
+export interface CuerpoGuardarMetricool {
+  user_token: string;
+  user_id: string;
+  blog_id: string;
+}
+
+/** Respuesta al guardar una credencial de Metricool. */
+export interface RespuestaGuardarMetricool {
+  conectado: boolean;
+  mensaje: string;
+}
+
+/** Respuesta de la prueba en vivo de una credencial de Metricool. */
+export interface RespuestaProbarMetricool {
+  ok: boolean;
+  detalle: string;
+}
+
 // --- Buzón de sugerencias ---
 
 export interface Sugerencia {
@@ -2492,4 +2526,39 @@ export interface CuerpoActualizarUsuario {
   puede_coordinar?: boolean;
   /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
   marcas?: string[];
+}
+
+// --- Catálogo de apps (ADR 0005 · GET /api/catalogo) ------------------------
+// El sidebar se hidrata de aquí: el backend declara las apps ACTIVAS (según flags)
+// y sus entradas de navegación. El icono llega como STRING (nombre de icono lucide)
+// y el frontend lo resuelve a un componente vía un mapa en `navegacion.ts`.
+
+/** Una entrada de navegación del sidebar tal como llega del catálogo. */
+export interface ItemNavCatalogo {
+  ruta: string;
+  etiqueta: string;
+  /** Nombre del icono lucide (p. ej. "Sparkles"); se mapea a un componente. */
+  icono: string;
+  descripcion: string;
+}
+
+/** Un bloque del sidebar (sin encabezado si `etiqueta` es ""). */
+export interface GrupoNavCatalogo {
+  etiqueta: string;
+  items: ItemNavCatalogo[];
+}
+
+/** Una app de catálogo activa (sin el shell). */
+export interface AppCatalogo {
+  id: string;
+  etiqueta: string;
+  icono: string;
+  permisos: string[];
+  rutas_frontend: string[];
+}
+
+/** Respuesta de `GET /api/catalogo`: apps activas + navegación data-driven. */
+export interface RespuestaCatalogo {
+  apps: AppCatalogo[];
+  navegacion: GrupoNavCatalogo[];
 }

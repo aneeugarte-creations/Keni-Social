@@ -81,8 +81,8 @@ Solo necesarias para **datos reales** de métricas (con `fuente = muestra` no ha
 - **Dónde viven:** en `~/.config/keni-metricas/config.toml` de cada persona (está en
   `.gitignore`, no se versiona). Se copia de `mcp-metricas/credenciales.ejemplo.toml`. Si falta
   un bloque, esa plataforma se omite con aviso (degradación elegante).
-- **Meta — System User:** para no sufrir las desconexiones tipo Metricool (los tokens de usuario
-  caducan ~60 días), usa un token de **System User** de Business Manager, que **no caduca**.
+- **Meta — System User:** para evitar la renovación manual del token cada ~60 días (los tokens de
+  usuario caducan), usa un token de **System User** de Business Manager, que **no caduca**.
   Cómo generarlo paso a paso y cómo marcarlo (`tipo_token = "system_user"`):
   [`credenciales.md`](credenciales.md), sección "Meta: token de System User". Es el token que usa
   el despliegue **alojado**.

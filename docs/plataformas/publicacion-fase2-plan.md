@@ -48,7 +48,7 @@ abajo conserva esa postura: el dry-run es el defecto, y el salto a real es un ga
 
 Detalle completo en [`meta-app-review.md §6`](meta-app-review.md). Resumen para el plan:
 
-- Token de **System User** de Business Manager → **no caduca** → sin desconexiones tipo Metricool.
+- Token de **System User** de Business Manager → **no caduca** → sin renovación manual cada ~60 días.
 - El **mismo token** lee y publica (la publicación reutiliza el cliente HTTP de lectura,
   `publicacion/meta.py` importa `_http.post_json` y la constante `BASE`/`TIPO_SYSTEM_USER` de
   `fuentes/meta.py`).

@@ -634,17 +634,19 @@ async def historial_guardar(request: Request) -> Response:
         return JSONResponse(
             {"error": "La red indicada no está entre las redes pedidas."}, status_code=400
         )
-    pub = repos.crear_publicacion(
+    # Handoff A->C (ADR 0005 §Seams #1): el borrador se deposita en C por su
+    # funcion-contrato `crear_borrador` (reexpuesta en la fachada `skills`), no por
+    # `repos.crear_publicacion` directo. C garantiza el estado inicial `borrador`.
+    pub = skills.crear_borrador(
         marca,
         red,
         titulo=titulo,
         contenido=entrada["resultado"],
-        estado="borrador",
         veredicto=verdicto,
         origen=historial_id,
         autor=autor,
     )
-    return JSONResponse({"publicaciones": [skills._publicacion_a_dict(pub)]})
+    return JSONResponse({"publicaciones": [pub]})
 
 
 # Rutas: las que tienen segmento ESTATICO (`ejecutar`, `ejecutar-archivo`, `historial`)

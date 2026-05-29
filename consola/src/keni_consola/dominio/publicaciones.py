@@ -1,19 +1,34 @@
-"""Dominio PUBLICACIONES: serializacion de una publicacion a su forma publica (API/UI).
+"""Dominio PUBLICACIONES (app C · Operación): CONTRATO de C hacia el resto del catálogo.
 
-`publicacion_a_dict` resuelve los nombres legibles de marca y red y la URL de la imagen.
-Antes era un helper PRIVADO de `api/publicaciones.py` (`_publicacion_a_dict`) que
-`api/skills.py` importaba por su nombre con guion bajo (hallazgo H6/N7): un handler HTTP
-tomando un simbolo privado de otro handler. Se sube aqui, al dominio, para que ambos
-handlers lo consuman desde un sitio comun y publico, sin acoplarse entre si.
+Este módulo es el punto ÚNICO y explícito por el que otras apps tocan las piezas de C
+(`publicaciones`). Expone tres clases de contrato, todos nombrados y propiedad de C:
 
-Solo depende de los catalogos `marcas` y `redes` (modulos hoja): no importa de `api/`.
+  - SERIALIZACIÓN: `publicacion_a_dict` (forma pública de una pieza para API/UI).
+  - LECTURA (solo lectura, ADR 0005 §Seams #2/#3): `listar_para_reciclaje` (universo que
+    consume `reciclaje` de A) y `cola_de_aprobacion` / `proximas_programadas` (lo que
+    agrega el `panel` del shell). Devuelven la forma pública de C; el consumidor NO arma
+    su propia consulta contra el almacén ni conoce los estados internos de C.
+  - HANDOFF A→C (ADR 0005 §Seams #1): `crear_borrador` (una generación de A deposita un
+    borrador en C). Es la ÚNICA puerta de creación que A usa; A no llama a `repos`
+    directamente ni decide el estado inicial de la pieza.
+
+Por qué aquí: `publicacion_a_dict` ya vivía aquí (subido desde el handler de C tras H6/N7).
+Convertir las lecturas/escrituras cruzadas en funciones-contrato de C —en vez de que A y
+el shell repitan llamadas a `repos.listar_publicaciones`/`repos.crear_publicacion` y
+re-serialicen a mano— hace explícito el seam: el cruce pasa por un símbolo PÚBLICO que C
+posee, no por las tripas de C. La capa de datos (`repos`/`estados`) es infra compartida
+(ADR 0005 §Seams #6): este módulo la usa por dentro; los consumidores ya no.
+
+Solo depende de los catalogos `marcas`/`redes` (hoja), la fachada de datos `repos` y las
+constantes neutras `estados` (infra compartida): no importa de `api/`.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from .. import marcas, redes
+from .. import marcas, redes, repos
+from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 
 
 def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
@@ -55,3 +70,91 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "imagen_url": f"/api/media/{imagen}" if imagen else "",
         "evergreen": bool(pub.get("evergreen")),
     }
+
+
+# --------------------------------------------------------------------------- #
+# CONTRATO DE LECTURA de C (ADR 0005 §Seams #2/#3): solo lectura, sin estado.   #
+# Lo consumen `reciclaje` (A) y el `panel` (shell) en vez de consultar `repos`   #
+# por su cuenta. C decide QUÉ universo expone y con qué forma; el consumidor no   #
+# conoce los estados internos ni arma la query.                                 #
+# --------------------------------------------------------------------------- #
+
+
+def listar_para_reciclaje(
+    marca: str | None = None, red: str | None = None
+) -> list[dict[str, Any]]:
+    """Universo de piezas que A·`reciclaje` necesita para proponer candidatas (LECTURA).
+
+    Devuelve TODAS las piezas del (marca, red) filtrado, en cualquier estado y SIN
+    serializar a la forma pública: la heurística de reciclaje trabaja sobre los campos
+    crudos (titulo/contenido/estado/fechas/evergreen) y necesita ver borradores y
+    programadas para no reproponer lo ya reciclado, y las publicadas para el cruce de
+    temas. Es el contrato de lectura de C: A ya no llama a `repos.listar_publicaciones`.
+    """
+    return repos.listar_publicaciones(marca=marca, red=red)
+
+
+def cola_de_aprobacion() -> list[dict[str, Any]]:
+    """Piezas en la COLA DE APROBACIÓN de C (estado `en_revision`), forma pública (LECTURA).
+
+    Contrato de C para el `panel` del shell: el panel solo necesita el conteo, pero C
+    expone la lista (forma pública) y deja que el shell la agregue. El shell no conoce el
+    literal del estado `en_revision`; lo encapsula C.
+    """
+    return [publicacion_a_dict(p) for p in repos.listar_publicaciones(estado=ESTADO_EN_REVISION)]
+
+
+def proximas_programadas(limite: int) -> tuple[list[dict[str, Any]], int]:
+    """Próximas piezas PROGRAMADAS de C, ordenadas por inminencia + total (LECTURA).
+
+    Contrato de C para el `panel`: devuelve `(items, total)` donde `items` son las
+    `limite` piezas en estado `programado` más inminentes (por `fecha_programada`
+    ascendente; las sin fecha al final) en forma pública, y `total` el número total de
+    programadas. El shell no conoce el literal `programado` ni el criterio de orden: los
+    encapsula C.
+    """
+    programadas = repos.listar_publicaciones(estado=ESTADO_PROGRAMADO)
+    programadas.sort(key=lambda p: p.get("fecha_programada") or "9999")
+    items = [publicacion_a_dict(p) for p in programadas[: max(0, limite)]]
+    return items, len(programadas)
+
+
+# --------------------------------------------------------------------------- #
+# CONTRATO DE HANDOFF A→C (ADR 0005 §Seams #1): A deposita un BORRADOR en C.     #
+# Única puerta de creación cruzada: A no llama a `repos.crear_publicacion` ni     #
+# decide el estado inicial; C garantiza que el handoff nace siempre `borrador`.  #
+# --------------------------------------------------------------------------- #
+
+
+def crear_borrador(
+    marca: str,
+    red: str,
+    *,
+    titulo: str = "",
+    contenido: str = "",
+    veredicto: str = "",
+    origen: str = "",
+    imagen: str = "",
+    evergreen: bool = False,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Crea un BORRADOR en C a partir de una generación de A y lo devuelve serializado.
+
+    Contrato de handoff A→C (ADR 0005 §Seams #1): una generación de copy/imagen deposita
+    su resultado como pieza editable en C. El estado inicial SIEMPRE es `borrador`
+    (no se expone `estado`: A no puede crear nada ya aprobado/programado por esta vía);
+    el resto del flujo (revisión, programación, publicación) es responsabilidad de C.
+    """
+    pub = repos.crear_publicacion(
+        marca,
+        red,
+        titulo=titulo,
+        contenido=contenido,
+        estado="borrador",
+        veredicto=veredicto,
+        origen=origen,
+        imagen=imagen,
+        evergreen=evergreen,
+        autor=autor,
+    )
+    return publicacion_a_dict(pub)

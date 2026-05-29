@@ -73,6 +73,7 @@ def _cli_token() -> TestClient:
 _LECTURAS = [
     ("GET", "/api/conexiones/imagen", None),
     ("GET", "/api/conexiones/redes", None),
+    ("GET", "/api/conexiones/metricool", None),
 ]
 _MUTACIONES = [
     ("PUT", "/api/conexiones/imagen", {"api_key": _CLAVE_IMG}),
@@ -81,6 +82,13 @@ _MUTACIONES = [
     ("POST", "/api/conexiones/imagen/probar", None),
     ("PUT", "/api/conexiones/redes/meta", {"token": _TOKEN_RED}),
     ("DELETE", "/api/conexiones/redes/meta", None),
+    (
+        "PUT",
+        "/api/conexiones/metricool/claro_sports",
+        {"user_token": _TOKEN_RED, "user_id": "1", "blog_id": "1"},
+    ),
+    ("DELETE", "/api/conexiones/metricool/claro_sports", None),
+    ("POST", "/api/conexiones/metricool/claro_sports/probar", None),
 ]
 
 

@@ -1,0 +1,56 @@
+# Manifest del Shell · servicios transversales (ADR 0005 §Shell).
+#
+# NO es una app de catálogo: agrupa los servicios comunes que el shell ofrece a
+# A/B/C (auth, sesión, catálogo, secretos, media, settings). Sus rutas viven en la
+# home / el dropdown de ajustes del avatar, no como entradas de catálogo.
+#
+# `es_app = false` => `api/catalogo.py` lo EXCLUYE de las apps activas (no aparece
+# en `apps`). Se declara igualmente para que el lint de fronteras mapee sus módulos a
+# la unidad "shell" (todo→shell permitido; shell→app solo por los seams de la
+# allowlist) y para que SÍ aporte su entrada de nav (Panel).
+#
+# Claves de nivel superior ANTES de `[[nav]]` (regla TOML).
+
+id = "shell"
+etiqueta = "Shell"
+icono = "Settings"
+es_app = false
+flag_activacion = "KENI_APP_SHELL"
+permisos = ["editor", "admin"]
+
+modulos_backend = [
+  "auth",
+  "usuarios",
+  "config",
+  "estado",
+  "conexiones",
+  "limites",
+  "media",
+  "panel",
+  "sugerencias",
+  "carpetas",
+  "proyectos",
+]
+
+# Rutas frontend del shell (home + ajustes del dropdown del avatar). Salvo Panel, no
+# generan entradas de catálogo; se listan para el test scoping y para que
+# `router.tsx` sepa que son paths legítimos del shell.
+rutas_frontend = [
+  "/panel",
+  "/mi-cuenta",
+  "/configuracion",
+  "/sugerencias",
+  "/usuarios",
+]
+
+# Panel es la única ruta del shell que SÍ vive en el sidebar (el "vistazo" inicial,
+# primer bloque); el resto de servicios del shell cuelgan del dropdown del avatar.
+# Aunque el shell NO sea app de catálogo, SÍ aporta esta entrada de nav.
+[[nav]]
+ruta = "/panel"
+etiqueta = "Panel"
+icono = "LayoutDashboard"
+descripcion = "Un vistazo: rendimiento del periodo, cola de aprobación y próximas publicaciones programadas."
+grupo = "vistazo"
+grupo_orden = 10
+orden = 10

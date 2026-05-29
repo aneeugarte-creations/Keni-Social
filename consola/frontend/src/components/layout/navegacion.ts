@@ -11,6 +11,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import type { GrupoNavCatalogo } from "@/types";
+
 export interface ItemNav {
   ruta: string;
   etiqueta: string;
@@ -32,19 +34,40 @@ export interface GrupoNav {
 }
 
 /**
- * Sidebar principal: solo 9 entradas, agrupadas en bloques sin encabezado
- * (separadores visuales).
+ * Mapa nombre-de-icono (string) -> componente LucideIcon. El catálogo
+ * (`GET /api/catalogo`, ADR 0005) entrega el icono como STRING (el nombre del
+ * icono lucide declarado en el manifest TOML de la app); aquí lo resolvemos al
+ * componente. Si un manifest usa un icono que no está en este mapa, caemos a
+ * `Sparkles` (visible, no rompe el render) — añade el icono a este mapa.
+ */
+export const ICONOS: Record<string, LucideIcon> = {
+  BarChart3,
+  Bot,
+  CalendarClock,
+  LayoutDashboard,
+  Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
+};
+
+/** Resuelve un nombre de icono del catálogo a su componente (fallback Sparkles). */
+export function iconoDe(nombre: string): LucideIcon {
+  return ICONOS[nombre] ?? Sparkles;
+}
+
+/**
+ * Navegación POR DEFECTO (fallback): espejo EXACTO del sidebar generado por el
+ * catálogo, para el primer pintado (antes de hidratar desde `/api/catalogo`) y por
+ * si la petición del catálogo falla. La fuente de verdad es el backend
+ * (manifests TOML); esto solo evita un sidebar vacío mientras carga.
  *
  * - Vistazo: Panel.
  * - Producción del día: Generación, Investigación, Revisión, Analíticas.
  * - Operación: Publicaciones, Parrilla, Skills, Agentes.
- *
- * Investigación, Revisión, Analíticas, Parrilla y Agentes son hubs con tabs
- * internos (sub-rutas); el sidebar no los expande, así se mantiene corto y
- * descubrible. Los ajustes (Mi cuenta, Configuración, Sugerencias, Usuarios)
- * NO viven en el sidebar: cuelgan del dropdown del avatar.
  */
-export const NAVEGACION: GrupoNav[] = [
+export const NAVEGACION_DEFECTO: GrupoNav[] = [
   {
     etiqueta: "",
     items: [
@@ -124,13 +147,40 @@ export const NAVEGACION: GrupoNav[] = [
 ];
 
 /**
+ * Convierte la navegación del catálogo (`GET /api/catalogo`) en los grupos que
+ * consume el sidebar, resolviendo cada icono-string a su componente. Esta es la
+ * vía DATA-DRIVEN: añadir/activar una app NO obliga a editar este fichero, basta
+ * con su manifest TOML en el backend.
+ */
+export function catalogoAGrupos(grupos: GrupoNavCatalogo[]): GrupoNav[] {
+  return grupos.map((grupo) => ({
+    etiqueta: grupo.etiqueta,
+    items: grupo.items.map((item) => ({
+      ruta: item.ruta,
+      etiqueta: item.etiqueta,
+      icono: iconoDe(item.icono),
+      descripcion: item.descripcion,
+    })),
+  }));
+}
+
+/**
  * Filtra la navegación según el rol. Los ítems admin del sidebar se ocultan
  * para no-admin (hoy ya no hay ninguno: Usuarios bajó al dropdown del avatar
  * y se filtra allí). Se descartan los grupos que quedan vacíos.
+ *
+ * `grupos` permite inyectar la navegación hidratada del catálogo; si se omite, usa
+ * `NAVEGACION_DEFECTO` (el espejo baked-in), de modo que el sidebar se renderiza
+ * igual aunque el catálogo aún no haya cargado.
  */
-export function navegacionParaRol(esAdmin: boolean): GrupoNav[] {
-  return NAVEGACION.map((grupo) => ({
-    ...grupo,
-    items: grupo.items.filter((item) => !item.soloAdmin || esAdmin),
-  })).filter((grupo) => grupo.items.length > 0);
+export function navegacionParaRol(
+  esAdmin: boolean,
+  grupos: GrupoNav[] = NAVEGACION_DEFECTO,
+): GrupoNav[] {
+  return grupos
+    .map((grupo) => ({
+      ...grupo,
+      items: grupo.items.filter((item) => !item.soloAdmin || esAdmin),
+    }))
+    .filter((grupo) => grupo.items.length > 0);
 }

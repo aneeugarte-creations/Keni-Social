@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
@@ -18,14 +19,24 @@ function valorSesion(rol: RolUsuario): ValorSesion {
   };
 }
 
-/** Render del sidebar con un usuario de sesión simulado del rol indicado. */
+/**
+ * Render del sidebar con un usuario de sesión simulado del rol indicado. El Sidebar
+ * es data-driven (hidrata de `/api/catalogo` vía React Query), así que necesita un
+ * QueryClientProvider; sin datos del catálogo, cae a `NAVEGACION_DEFECTO` (el espejo
+ * baked-in), que es justo lo que estas pruebas estructurales verifican.
+ */
 function renderSidebar(rol: RolUsuario) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return render(
-    <SesionContexto.Provider value={valorSesion(rol)}>
-      <MemoryRouter>
-        <Sidebar />
-      </MemoryRouter>
-    </SesionContexto.Provider>,
+    <QueryClientProvider client={queryClient}>
+      <SesionContexto.Provider value={valorSesion(rol)}>
+        <MemoryRouter>
+          <Sidebar />
+        </MemoryRouter>
+      </SesionContexto.Provider>
+    </QueryClientProvider>,
   );
 }
 

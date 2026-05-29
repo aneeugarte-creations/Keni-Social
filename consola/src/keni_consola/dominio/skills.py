@@ -73,7 +73,7 @@ from pathlib import Path
 
 from .. import config, generaciones, marcas, redes, repos, skills_catalogo
 from . import jobspec, stream
-from .publicaciones import publicacion_a_dict
+from . import publicaciones as contrato_publicaciones
 
 # Instruccion ADITIVA de estilo que se anade a TODO prompt de generacion: el copy
 # no debe llevar emojis. Es defensa en profundidad; ademas `quitar_emojis` los borra
@@ -231,8 +231,13 @@ def crear_publicaciones_desde_piezas(
 
     Cada pieza aporta `red` y `contenido`. Si `redes_filtro` no es None, solo se
     crean las piezas cuya red este en el filtro. `marca`/`titulo`/`verdicto`/`origen`
-    son comunes a todas. El estado siempre nace como `borrador`. `autor` (atribucion
-    por usuario, #130 Fase 1) se propaga a cada publicacion creada.
+    son comunes a todas. `autor` (atribucion por usuario, #130 Fase 1) se propaga a cada
+    publicacion creada.
+
+    HANDOFF A->C (ADR 0005 §Seams #1): la generacion de A deposita cada pieza como
+    BORRADOR en C por la funcion-contrato `dominio.publicaciones.crear_borrador` (no por
+    `repos.crear_publicacion` ni decidiendo aqui el estado): C garantiza que nace
+    `borrador` y devuelve la pieza ya en su forma publica.
     """
     creadas: list[dict[str, object]] = []
     for pieza in piezas:
@@ -244,17 +249,17 @@ def crear_publicaciones_desde_piezas(
             continue
         if not isinstance(contenido, str):
             contenido = ""
-        pub = repos.crear_publicacion(
-            marca,
-            red,
-            titulo=titulo,
-            contenido=contenido,
-            estado="borrador",
-            veredicto=verdicto,
-            origen=origen,
-            autor=autor,
+        creadas.append(
+            contrato_publicaciones.crear_borrador(
+                marca,
+                red,
+                titulo=titulo,
+                contenido=contenido,
+                veredicto=verdicto,
+                origen=origen,
+                autor=autor,
+            )
         )
-        creadas.append(publicacion_a_dict(pub))
     return creadas
 
 

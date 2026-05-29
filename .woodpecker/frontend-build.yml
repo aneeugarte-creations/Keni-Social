@@ -3,8 +3,18 @@
 # `npm run build` corre `tsc -b && vite build`: falla si el typecheck o el build
 # de Vite se rompen. El bundle versionado en consola/src/keni_consola/webapp/ no
 # se recommitea aqui; solo se comprueba que sigue compilando.
+# TEST SCOPING (plan §1.5): solo corre cuando cambia el frontend (o sus tipos
+# generados / el contrato), y SIEMPRE en push a `main` (el deploy `depends_on:
+# frontend-build` lo necesita) y a mano.
 when:
-  - event: [push, pull_request, manual]
+  - event: [push, pull_request]
+    path:
+      include:
+        - "consola/frontend/**"
+        - "consola/src/keni_consola/esquema_api/**"
+  - event: push
+    branch: main
+  - event: manual
 
 steps:
   - name: build

@@ -188,8 +188,9 @@ def enmascarar_token(token: str | None, visibles: int = 4) -> str:
 
 
 # Claves de credenciales cuyo valor es un secreto y NUNCA debe mostrarse en claro.
+# `user_token` es el token de Metricool por marca ([metricool.marcas.<id>]).
 CLAVES_SECRETAS: frozenset[str] = frozenset(
-    {"access_token", "bearer_token", "refresh_token", "app_secret", "client_secret"}
+    {"access_token", "bearer_token", "refresh_token", "app_secret", "client_secret", "user_token"}
 )
 
 

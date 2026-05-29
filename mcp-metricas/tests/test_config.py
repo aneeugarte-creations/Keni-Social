@@ -41,6 +41,60 @@ def test_fuente_real_por_env(monkeypatch, tmp_path):
     assert fuente.nombre == "real"
 
 
+# --- T2.B: fuente `metricool` (consumidor de la API REST) --------------------
+def test_metricool_sin_credenciales_degrada_a_muestra(monkeypatch, tmp_path):
+    """fuente='metricool' sin token configurado -> degrada a `muestra`, sin romper."""
+    monkeypatch.delenv("METRICOOL_USER_TOKEN", raising=False)
+    monkeypatch.delenv("METRICOOL_USER_ID", raising=False)
+    _escribir_config(monkeypatch, tmp_path, 'fuente = "metricool"\n')
+    fuente = construir_fuente(cargar_config())
+    assert isinstance(fuente, FuenteMuestra)
+    assert fuente.nombre == "muestra"
+
+
+def test_metricool_credenciales_por_toml(monkeypatch, tmp_path):
+    """El mapeo de marcas (blogId) y la identidad se leen del TOML."""
+    monkeypatch.delenv("METRICOOL_USER_TOKEN", raising=False)
+    monkeypatch.delenv("METRICOOL_USER_ID", raising=False)
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        'fuente = "metricool"\n'
+        "[metricool]\n"
+        'user_token = "TOK"\n'
+        'user_id = "999"\n'
+        "[metricool.marcas.claro_sports]\n"
+        'blog_id = "1234567"\n'
+        'nombre = "Claro Sports"\n',
+    )
+    cfg = cargar_config()
+    assert cfg.metricool.configurada
+    assert cfg.metricool.user_token == "TOK"
+    assert cfg.metricool.marcas["claro_sports"]["blog_id"] == "1234567"
+    # construir_fuente devuelve el adapter real (no muestra) con credenciales.
+    from keni_metricas.fuentes.metricol import FuenteMetricol
+
+    assert isinstance(construir_fuente(cfg), FuenteMetricol)
+
+
+def test_metricool_env_pisa_toml(monkeypatch, tmp_path):
+    """METRICOOL_USER_TOKEN / METRICOOL_USER_ID tienen prioridad sobre el TOML."""
+    _escribir_config(
+        monkeypatch,
+        tmp_path,
+        "[metricool]\n"
+        'user_token = "DEL_TOML"\n'
+        'user_id = "111"\n'
+        "[metricool.marcas.m]\n"
+        'blog_id = "1"\n',
+    )
+    monkeypatch.setenv("METRICOOL_USER_TOKEN", "DEL_ENV")
+    monkeypatch.setenv("METRICOOL_USER_ID", "222")
+    cfg = cargar_config()
+    assert cfg.metricool.user_token == "DEL_ENV"
+    assert cfg.metricool.user_id == "222"
+
+
 # --- B1: TOML mal formado -> ConfigInvalida en espanol, sin traceback tomllib --
 def test_b1_toml_mal_formado_lanza_config_invalida(monkeypatch, tmp_path):
     ruta = _escribir_config(monkeypatch, tmp_path, 'fuente = "muestra"\n[[cuenta]\nid = "x"\n')
