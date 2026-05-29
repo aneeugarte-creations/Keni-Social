@@ -657,7 +657,6 @@ function Calendario({
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
-  const invalidarTurnos = () => void queryClient.invalidateQueries({ queryKey: claveTurnos });
 
   // `equipo` para la edición avanzada del chip (DialogEditarTurno admite reasignar a
   // cualquier miembro de la rota), y `cms` para el dropdown "+ Añadir persona" (sólo
@@ -685,6 +684,11 @@ function Calendario({
 
   // Modal de edición rápida (chip click → edita el evento sin salir del calendario).
   const [eventoSeleccionado, setEventoSeleccionado] = React.useState<EventoRota | null>(null);
+
+  // Modo edición: si admin, arranca apagado. Los botones de CRUD (dropdown por celda, menú
+  // contextual del chip, copiar/aprobar/despublicar/franjas/plantilla) sólo se muestran
+  // cuando está activo. Evita clics accidentales y mantiene la vista limpia por defecto.
+  const [modoEdicion, setModoEdicion] = React.useState(false);
 
   // Resaltado one-shot de la celda objetivo cuando llegamos desde Cobertura. La
   // celda se identifica por `franja_id`: el prelleno legado trae el nombre de la
@@ -894,7 +898,9 @@ function Calendario({
   const inicio = semana?.inicio ?? coberturaQ.data?.inicio ?? dias[0] ?? "";
   const fin = semana?.fin ?? coberturaQ.data?.fin ?? dias[6] ?? "";
   const nCambiados = eventosCobertura.filter((e) => e.cambiado).length;
-  const editable = !semana?.aprobada;
+  // `editable` requiere admin + modo edición + semana no aprobada. Los CMs no admin
+  // siempre ven la vista en solo-lectura; el admin debe pulsar "Editar" explícitamente.
+  const editable = esAdmin && modoEdicion && !semana?.aprobada;
   const cargando =
     coberturaQ.isPending ||
     turnosQ.isPending ||
@@ -922,57 +928,79 @@ function Calendario({
               Borrador
             </Badge>
           ) : null}
-          <Button
-            variant="outline"
-            onClick={() => copiarAnterior.mutate()}
-            disabled={copiarAnterior.isPending || semana?.aprobada}
-            title="Copia los turnos de la semana anterior con offset +7 días"
-          >
-            {copiarAnterior.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Copy className="h-4 w-4" />
-            )}
-            Copiar semana anterior
-          </Button>
-          {esAdmin && !semana?.aprobada && (
-            <Button
-              variant="secondary"
-              onClick={() => aprobar.mutate()}
-              disabled={aprobar.isPending || turnos.length === 0}
-            >
-              {aprobar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
-              Aprobar y publicar
-            </Button>
-          )}
-          {esAdmin && semana?.aprobada && (
+          {esAdmin && !modoEdicion && (
             <Button
               variant="outline"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "La semana volverá a ser editable. ¿Despublicar los turnos?",
-                  )
-                )
-                  despublicar.mutate();
-              }}
-              disabled={despublicar.isPending}
-              title="Volver a borrador para editar"
+              onClick={() => setModoEdicion(true)}
+              title="Activa el modo edición para añadir/quitar personas y publicar"
             >
-              {despublicar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CalendarOff className="h-4 w-4" />
-              )}
-              Despublicar
+              <Pencil className="h-4 w-4" />
+              Editar
             </Button>
           )}
-          {esAdmin && <BotonFranjasDeSemana lunes={lunes} />}
-          {esAdmin && <BotonConfigFranjas />}
+          {esAdmin && modoEdicion && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => copiarAnterior.mutate()}
+                disabled={copiarAnterior.isPending || semana?.aprobada}
+                title="Copia los turnos de la semana anterior con offset +7 días"
+              >
+                {copiarAnterior.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+                Copiar semana anterior
+              </Button>
+              {!semana?.aprobada && (
+                <Button
+                  variant="secondary"
+                  onClick={() => aprobar.mutate()}
+                  disabled={aprobar.isPending || turnos.length === 0}
+                >
+                  {aprobar.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  Aprobar y publicar
+                </Button>
+              )}
+              {semana?.aprobada && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "La semana volverá a ser editable. ¿Despublicar los turnos?",
+                      )
+                    )
+                      despublicar.mutate();
+                  }}
+                  disabled={despublicar.isPending}
+                  title="Volver a borrador para editar"
+                >
+                  {despublicar.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CalendarOff className="h-4 w-4" />
+                  )}
+                  Despublicar
+                </Button>
+              )}
+              <BotonFranjasDeSemana lunes={lunes} />
+              <BotonConfigFranjas />
+              <Button
+                variant="ghost"
+                onClick={() => setModoEdicion(false)}
+                title="Salir del modo edición"
+              >
+                <X className="h-4 w-4" />
+                Salir
+              </Button>
+            </>
+          )}
           <Button variant="outline" onClick={() => api.exportarRota("xlsx", { lunes })}>
             <Download className="h-4 w-4" /> Excel
           </Button>
@@ -1124,7 +1152,7 @@ function Calendario({
                                     }
                                     editable={editable}
                                     onEditarEvento={(e) => setEventoSeleccionado(e)}
-                                    onCambio={invalidarTurnos}
+                                    onCambio={invalidar}
                                   />
                                 ))
                               )}
@@ -1134,7 +1162,7 @@ function Calendario({
                                   fecha={fecha}
                                   franja={franja}
                                   cmsDisponibles={cmsDisponibles}
-                                  onCambio={invalidarTurnos}
+                                  onCambio={invalidar}
                                 />
                               )}
                             </div>
