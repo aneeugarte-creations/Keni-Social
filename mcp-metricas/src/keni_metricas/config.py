@@ -66,22 +66,64 @@ class CuentaConfig:
 
 @dataclass
 class MetricoolConfig:
-    """Identidad y mapeo de marcas para la fuente `metricool` (API REST).
+    """Credenciales POR MARCA para la fuente `metricool` (API REST).
 
-    `user_token` va en la cabecera `X-Mc-Auth`; `user_id` y los `blog_id` por marca
-    van como query params. `marcas` mapea cada id de marca keni (`claro_sports`, …)
-    al `blogId` de Metricool y, opcionalmente, su nombre y plataformas.
+    El modelo PRIMARIO es per-marca: en AMX cada marca es de hecho una cuenta
+    Metricool distinta, con su PROPIO `user_token` (cabecera `X-Mc-Auth`),
+    `user_id` y `blog_id` (ambos query params). Cada marca vive en
+    `[metricool.marcas.<id>]` con esos tres campos (y opcional `nombre`,
+    `plataformas`).
+
+    `user_token`/`user_id` de nivel `[metricool]` (o las env
+    `METRICOOL_USER_TOKEN`/`METRICOOL_USER_ID`) son solo un DEFAULT de
+    compatibilidad: una marca que no fije el suyo los hereda. El blog_id NUNCA
+    se hereda (es propio de cada marca).
+
+    Una marca está CONFIGURADA si resuelve los tres: token + user_id + blog_id.
     """
 
+    # Defaults de compatibilidad (nivel `[metricool]` / env). NO son el modelo
+    # primario: solo rellenan las marcas que no traigan su propio token/user_id.
     user_token: str = ""
     user_id: str = ""
-    # id_marca_keni -> {"blog_id": str, "nombre": str?, "plataformas": [str|Plataforma]?}
+    # id_marca_keni -> {"blog_id": str, "user_token": str?, "user_id": str?,
+    #                   "nombre": str?, "plataformas": [str|Plataforma]?}
     marcas: dict[str, dict] = field(default_factory=dict)
+
+    def token_de(self, marca: dict) -> str:
+        """Token de una marca: el propio, o el default `[metricool]`/env."""
+        return str(marca.get("user_token") or self.user_token or "")
+
+    def user_id_de(self, marca: dict) -> str:
+        """user_id de una marca: el propio, o el default `[metricool]`/env."""
+        return str(marca.get("user_id") or self.user_id or "")
+
+    def marca_configurada(self, marca: dict) -> bool:
+        """True si la marca resuelve token + user_id + blog_id (los tres)."""
+        return bool(self.token_de(marca) and self.user_id_de(marca) and marca.get("blog_id"))
+
+    def marcas_configuradas(self) -> dict[str, dict]:
+        """Subconjunto de `marcas` que tiene credenciales completas (resueltas).
+
+        Cada entrada se devuelve con `user_token`/`user_id` YA RESUELTOS (propios o
+        heredados del default), de modo que `FuenteMetricol` no vuelve a mirar el
+        default: cada marca lleva sus tres credenciales explícitas.
+        """
+        salida: dict[str, dict] = {}
+        for mid, m in self.marcas.items():
+            if not self.marca_configurada(m):
+                continue
+            resuelta = dict(m)
+            resuelta["user_token"] = self.token_de(m)
+            resuelta["user_id"] = self.user_id_de(m)
+            resuelta["blog_id"] = str(m["blog_id"])
+            salida[mid] = resuelta
+        return salida
 
     @property
     def configurada(self) -> bool:
-        """True si hay credenciales suficientes para llamar a la API de Metricool."""
-        return bool(self.user_token and self.user_id and self.marcas)
+        """True si AL MENOS UNA marca tiene credenciales completas."""
+        return bool(self.marcas_configuradas())
 
 
 @dataclass
@@ -139,14 +181,18 @@ def _parsear_cuenta(idx: int, c: object) -> CuentaConfig:
 
 
 def _parsear_metricool(datos: dict) -> MetricoolConfig:
-    """Lee la sección `[metricool]` del config + overrides por env var.
+    """Lee la sección `[metricool]` del config: credenciales POR MARCA.
 
-    Env (prioridad sobre el TOML): `METRICOOL_USER_TOKEN`, `METRICOOL_USER_ID`.
-    El mapeo de marcas (`id_marca -> blogId`) vive en el TOML
-    (`[metricool.marcas.<id>]`), porque es estructurado; no se pone en env.
+    Modelo PRIMARIO (per-marca): cada `[metricool.marcas.<id>]` trae su propio
+    `user_token`, `user_id` y `blog_id` (y opcional `nombre`, `plataformas`).
 
-    NO valida agresivamente: si faltan piezas, `MetricoolConfig.configurada` será
-    False y `construir_fuente` degrada a `muestra` (degradación honesta, sin romper).
+    Compatibilidad: `user_token`/`user_id` de nivel `[metricool]` —o las env
+    `METRICOOL_USER_TOKEN`/`METRICOOL_USER_ID` (con prioridad sobre el TOML)— se
+    usan como DEFAULT para marcas que no fijen el suyo. El `blog_id` no se hereda.
+
+    NO valida agresivamente: si ninguna marca queda configurada,
+    `MetricoolConfig.configurada` será False y `construir_fuente` degrada a
+    `muestra` (degradación honesta, sin romper).
     """
     seccion = datos.get("metricool", {}) if isinstance(datos.get("metricool"), dict) else {}
     user_token = os.environ.get("METRICOOL_USER_TOKEN") or seccion.get("user_token", "")
@@ -158,15 +204,24 @@ def _parsear_metricool(datos: dict) -> MetricoolConfig:
         for mid, m in crudas.items():
             if not isinstance(m, dict):
                 continue
+            entrada: dict = {}
             blog_id = m.get("blog_id") or m.get("blogId")
-            if not blog_id:
-                continue
-            entrada: dict = {"blog_id": str(blog_id)}
+            if blog_id:
+                entrada["blog_id"] = str(blog_id)
+            # Credenciales propias de la marca (el modelo primario). Si faltan, la
+            # marca heredará el default `[metricool]`/env vía MetricoolConfig.
+            if m.get("user_token"):
+                entrada["user_token"] = str(m["user_token"])
+            if m.get("user_id") not in (None, ""):
+                entrada["user_id"] = str(m["user_id"])
             if m.get("nombre"):
                 entrada["nombre"] = str(m["nombre"])
             plats = m.get("plataformas")
             if isinstance(plats, list):
                 entrada["plataformas"] = [str(p) for p in plats]
+            # Conserva la marca aunque le falten credenciales: así el estado per-marca
+            # (consola GET) sabe que existe pero está "sin conectar". La omisión real
+            # la hace `marcas_configuradas()` al construir la fuente.
             marcas[str(mid)] = entrada
 
     return MetricoolConfig(user_token=str(user_token or ""), user_id=user_id, marcas=marcas)
@@ -267,23 +322,23 @@ def _fuente_metricool(cfg: Config) -> FuenteMetricas:
     from .fuentes.muestra import FuenteMuestra
 
     mc = cfg.metricool
-    if not mc.configurada:
+    configuradas = mc.marcas_configuradas()
+    if not configuradas:
         import logging
 
         logging.getLogger("keni_metricas").warning(
-            "fuente 'metricool' seleccionada pero faltan credenciales "
-            "(METRICOOL_USER_TOKEN / METRICOOL_USER_ID / [metricool.marcas]); "
+            "fuente 'metricool' seleccionada pero ninguna marca tiene credenciales "
+            "completas (cada [metricool.marcas.<id>] necesita user_token + user_id + "
+            "blog_id; admite default [metricool]/METRICOOL_USER_TOKEN/USER_ID); "
             "se usa la fuente 'muestra' (datos de demo, sin inventar dato real)."
         )
         return FuenteMuestra()
 
+    # Las marcas SIN credenciales completas se OMITEN honestamente: solo pasan las
+    # configuradas, cada una con su token/user_id/blog_id YA resueltos.
     from .fuentes.metricol import FuenteMetricol
 
-    return FuenteMetricol(
-        user_token=mc.user_token,
-        user_id=mc.user_id,
-        marcas=mc.marcas,
-    )
+    return FuenteMetricol(marcas=configuradas)
 
 
 def construir_fuente(cfg: Config | None = None) -> FuenteMetricas:

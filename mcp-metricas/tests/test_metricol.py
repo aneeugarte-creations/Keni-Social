@@ -24,6 +24,8 @@ RANGO = "semana"
 
 MARCAS = {
     "claro_sports": {
+        "user_token": "TOK",
+        "user_id": "999",
         "blog_id": "1234567",
         "nombre": "Claro Sports",
         "plataformas": [Plataforma.instagram],
@@ -32,12 +34,7 @@ MARCAS = {
 
 
 def _fuente(cliente: httpx.Client) -> FuenteMetricol:
-    return FuenteMetricol(
-        user_token="TOK",
-        user_id="999",
-        marcas=MARCAS,
-        cliente=cliente,
-    )
+    return FuenteMetricol(marcas=MARCAS, cliente=cliente)
 
 
 def _serie(valor: float) -> dict:
@@ -173,20 +170,34 @@ def test_cuentas_lista_marcas_configuradas():
 
 def test_sin_token_degrada_a_muestra():
     """fuente='metricool' sin credenciales -> FuenteMuestra (no inventa dato real)."""
-    cfg = Config(fuente="metricool", metricool=MetricoolConfig())  # sin token
+    cfg = Config(fuente="metricool", metricool=MetricoolConfig())  # sin marcas
     fuente = construir_fuente(cfg)
     assert isinstance(fuente, FuenteMuestra)
     assert fuente.nombre == "muestra"
 
 
-def test_con_credenciales_construye_metricol():
-    """Con token + userId + marcas, construir_fuente devuelve FuenteMetricol."""
+def test_marca_sin_credenciales_completas_degrada_a_muestra():
+    """Una marca sin token/user_id propios NI default => no configurada => muestra."""
+    cfg = Config(
+        fuente="metricool",
+        metricool=MetricoolConfig(marcas={"claro_sports": {"blog_id": "1234567"}}),
+    )
+    fuente = construir_fuente(cfg)
+    assert isinstance(fuente, FuenteMuestra)
+
+
+def test_con_credenciales_por_marca_construye_metricol():
+    """Con token + userId + blogId PROPIOS de la marca, devuelve FuenteMetricol."""
     cfg = Config(
         fuente="metricool",
         metricool=MetricoolConfig(
-            user_token="TOK",
-            user_id="999",
-            marcas={"claro_sports": {"blog_id": "1234567"}},
+            marcas={
+                "claro_sports": {
+                    "user_token": "TOK",
+                    "user_id": "999",
+                    "blog_id": "1234567",
+                }
+            },
         ),
     )
     fuente = construir_fuente(cfg)
@@ -194,9 +205,89 @@ def test_con_credenciales_construye_metricol():
     assert fuente.nombre == "metricool"
 
 
+def test_default_global_completa_marca_sin_token():
+    """`[metricool] user_token/user_id` (default) completan una marca con solo blog_id."""
+    mc = MetricoolConfig(
+        user_token="GLOBAL",
+        user_id="111",
+        marcas={"claro_sports": {"blog_id": "1234567"}},
+    )
+    assert mc.configurada
+    resueltas = mc.marcas_configuradas()
+    assert resueltas["claro_sports"]["user_token"] == "GLOBAL"
+    assert resueltas["claro_sports"]["user_id"] == "111"
+
+
+def test_marca_propia_gana_al_default():
+    """El token/user_id PROPIOS de la marca prevalecen sobre el default global."""
+    mc = MetricoolConfig(
+        user_token="GLOBAL",
+        user_id="111",
+        marcas={
+            "claro_sports": {"user_token": "PROPIO", "user_id": "222", "blog_id": "1"},
+        },
+    )
+    resueltas = mc.marcas_configuradas()
+    assert resueltas["claro_sports"]["user_token"] == "PROPIO"
+    assert resueltas["claro_sports"]["user_id"] == "222"
+
+
+def test_solo_marcas_configuradas_pasan_a_la_fuente():
+    """Marcas sin credenciales completas se OMITEN; solo las completas llegan."""
+    mc = MetricoolConfig(
+        marcas={
+            "claro_sports": {"user_token": "T1", "user_id": "1", "blog_id": "b1"},
+            "unotv": {"blog_id": "b2"},  # sin token ni default -> omitida
+        }
+    )
+    configuradas = mc.marcas_configuradas()
+    assert set(configuradas) == {"claro_sports"}
+
+
 def test_metricool_config_configurada():
     assert not MetricoolConfig().configurada
-    assert not MetricoolConfig(user_token="t").configurada  # falta user_id + marcas
+    # token global pero sin marcas -> no hay nada que configurar
+    assert not MetricoolConfig(user_token="t", user_id="1").configurada
+    # marca con blog_id pero sin token ni default -> no configurada
+    assert not MetricoolConfig(marcas={"m": {"blog_id": "1"}}).configurada
+    # marca con sus tres credenciales propias -> configurada
     assert MetricoolConfig(
-        user_token="t", user_id="1", marcas={"m": {"blog_id": "1"}}
+        marcas={"m": {"user_token": "t", "user_id": "1", "blog_id": "1"}}
     ).configurada
+
+
+@respx.mock
+def test_fuente_resuelve_credenciales_distintas_por_marca():
+    """Dos marcas (cuentas Metricool distintas) -> headers/params PROPIOS cada una."""
+    capturadas: list[httpx.Request] = []
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        capturadas.append(request)
+        return httpx.Response(200, json=_serie(1))
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    marcas = {
+        "claro_sports": {
+            "user_token": "TOK_CS",
+            "user_id": "111",
+            "blog_id": "blogCS",
+            "plataformas": [Plataforma.instagram],
+        },
+        "unotv": {
+            "user_token": "TOK_UNO",
+            "user_id": "222",
+            "blog_id": "blogUNO",
+            "plataformas": [Plataforma.instagram],
+        },
+    }
+    with httpx.Client() as cli:
+        f = FuenteMetricol(marcas=marcas, cliente=cli)
+        f.resumen("claro_sports", RANGO)
+        f.resumen("unotv", RANGO)
+
+    por_token = {r.headers.get("X-Mc-Auth"): r for r in capturadas}
+    assert set(por_token) == {"TOK_CS", "TOK_UNO"}
+    assert por_token["TOK_CS"].url.params.get("userId") == "111"
+    assert por_token["TOK_CS"].url.params.get("blogId") == "blogCS"
+    assert por_token["TOK_UNO"].url.params.get("userId") == "222"
+    assert por_token["TOK_UNO"].url.params.get("blogId") == "blogUNO"

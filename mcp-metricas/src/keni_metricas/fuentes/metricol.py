@@ -161,11 +161,16 @@ def _fecha(v, defecto: date) -> date:
 class FuenteMetricol:
     """Implementa `FuenteMetricas` leyendo de la API REST de Metricool.
 
+    Credenciales POR MARCA: en AMX cada marca es una cuenta Metricool distinta,
+    así que cada una trae su PROPIO ``user_token`` (cabecera ``X-Mc-Auth``),
+    ``user_id`` y ``blog_id`` (query params). NO hay identidad global.
+
     Parámetros:
-      - ``user_token`` / ``user_id``: identidad de la cuenta Metricool.
-      - ``marcas``: mapeo ``id_marca_keni -> {"blog_id": ..., "nombre": ...,
-        "plataformas": [Plataforma...]}``. El ``blog_id`` es el ``blogId`` de
-        Metricool de esa marca.
+      - ``marcas``: mapeo ``id_marca_keni -> {"user_token": ..., "user_id": ...,
+        "blog_id": ..., "nombre": ..., "plataformas": [Plataforma...]}``. Solo
+        deben pasarse marcas con credenciales completas (``config.py`` ya filtra
+        y resuelve los defaults antes de construir la fuente); las demás se omiten
+        aguas arriba.
       - ``cliente``: ``httpx.Client`` inyectable (tests con respx).
     """
 
@@ -173,22 +178,22 @@ class FuenteMetricol:
 
     def __init__(
         self,
-        user_token: str,
-        user_id: str,
         marcas: dict[str, dict],
         cliente: httpx.Client | None = None,
     ):
-        self._token = user_token
-        self._user_id = user_id
         self._marcas = marcas
         self._cli = cliente or cliente_http()
 
-    # --- identidad / HTTP ---------------------------------------------------
-    def _headers(self) -> dict:
-        return {"X-Mc-Auth": self._token}
+    # --- identidad / HTTP (resuelta POR MARCA) ------------------------------
+    def _headers(self, cuenta_id: str) -> dict:
+        return {"X-Mc-Auth": str(self._marca(cuenta_id).get("user_token", ""))}
 
-    def _params_base(self, blog_id: str) -> dict:
-        return {"userId": self._user_id, "blogId": blog_id}
+    def _params_base(self, cuenta_id: str) -> dict:
+        marca = self._marca(cuenta_id)
+        return {
+            "userId": str(marca.get("user_id", "")),
+            "blogId": str(marca.get("blog_id", "")),
+        }
 
     def _marca(self, cuenta_id: str) -> dict:
         if cuenta_id not in self._marcas:
@@ -196,7 +201,8 @@ class FuenteMetricol:
 
             disponibles = ", ".join(self._marcas) or "(ninguna configurada)"
             raise CuentaNoEncontrada(
-                f"Cuenta {cuenta_id!r} no encontrada. Disponibles: {disponibles}."
+                f"Cuenta {cuenta_id!r} no encontrada o sin credenciales de Metricool. "
+                f"Disponibles: {disponibles}."
             )
         return self._marcas[cuenta_id]
 
@@ -217,14 +223,13 @@ class FuenteMetricol:
 
     def resumen(self, cuenta_id: str, rango: str) -> ResumenMetricas:
         marca = self._marca(cuenta_id)
-        blog_id = str(marca.get("blog_id", ""))
         desde, hasta, _ = resolver_rango(rango)
         plats = self._plataformas(marca)
 
         por_plataforma: list[MetricaPlataforma] = []
         cobertura = Cobertura()
         for plat in plats:
-            m = self._metrica_plataforma(blog_id, plat, desde, hasta)
+            m = self._metrica_plataforma(cuenta_id, plat, desde, hasta)
             if m is None:
                 cobertura.omitidas.append(plat)
                 cobertura.motivo[plat.value] = MotivoOmision.error_api
@@ -259,16 +264,16 @@ class FuenteMetricol:
         )
 
     def _metrica_plataforma(
-        self, blog_id: str, plat: Plataforma, desde: date, hasta: date
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
     ) -> MetricaPlataforma | None:
         """Métricas de UNA plataforma (None si la API falla → cobertura la omite)."""
         try:
             metricas = _METRICAS_RED[plat]
-            vis = self._agregado(blog_id, plat, metricas[_METRICA_VIS], desde, hasta)
-            inter = self._agregado(blog_id, plat, metricas[_METRICA_INT], desde, hasta)
+            vis = self._agregado(cuenta_id, plat, metricas[_METRICA_VIS], desde, hasta)
+            inter = self._agregado(cuenta_id, plat, metricas[_METRICA_INT], desde, hasta)
             alcance = None
             if plat in PLATAFORMAS_CON_ALCANCE and _METRICA_ALC in metricas:
-                alcance = self._agregado(blog_id, plat, metricas[_METRICA_ALC], desde, hasta)
+                alcance = self._agregado(cuenta_id, plat, metricas[_METRICA_ALC], desde, hasta)
             return MetricaPlataforma(
                 plataforma=plat,
                 visualizaciones=vis,
@@ -277,11 +282,11 @@ class FuenteMetricol:
                 engagement_pct=engagement_pct(inter, vis),
             )
         except Exception as e:  # noqa: BLE001 — degrada sin romper (como AdaptadorBase)
-            log.warning("metricool: métricas %s/%s fallaron: %s", plat.value, blog_id, e)
+            log.warning("metricool: métricas %s/%s fallaron: %s", plat.value, cuenta_id, e)
             return None
 
     def _agregado(
-        self, blog_id: str, plat: Plataforma, metrica: str, desde: date, hasta: date
+        self, cuenta_id: str, plat: Plataforma, metrica: str, desde: date, hasta: date
     ) -> int:
         """Valor agregado del periodo para (red, métrica) vía /v2/analytics/timelines.
 
@@ -293,13 +298,13 @@ class FuenteMetricol:
             self._cli,
             f"{BASE}/v2/analytics/timelines",
             params={
-                **self._params_base(blog_id),
+                **self._params_base(cuenta_id),
                 "network": _RED_METRICOOL[plat],
                 "metric": metrica,
                 "from": desde.isoformat() + "T00:00:00",
                 "to": hasta.isoformat() + "T23:59:59",
             },
-            headers=self._headers(),
+            headers=self._headers(cuenta_id),
         )
         series = datos.get("data") or []
         total = 0.0
@@ -316,16 +321,15 @@ class FuenteMetricol:
         if n == 0:
             return []
         marca = self._marca(cuenta_id)
-        blog_id = str(marca.get("blog_id", ""))
         desde, hasta, _ = resolver_rango(rango)
         piezas: list[Pieza] = []
         for plat in self._plataformas(marca):
-            piezas.extend(self._piezas_plataforma(blog_id, plat, desde, hasta, n))
+            piezas.extend(self._piezas_plataforma(cuenta_id, plat, desde, hasta, n))
         piezas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return piezas[:n]
 
     def _piezas_plataforma(
-        self, blog_id: str, plat: Plataforma, desde: date, hasta: date, n: int
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date, n: int
     ) -> list[Pieza]:
         """Posts de una plataforma (degrada a [] si la API falla)."""
         try:
@@ -333,14 +337,14 @@ class FuenteMetricol:
                 self._cli,
                 f"{BASE}/v2/analytics/posts/{_RED_METRICOOL[plat]}",
                 params={
-                    **self._params_base(blog_id),
+                    **self._params_base(cuenta_id),
                     "from": desde.isoformat() + "T00:00:00",
                     "to": hasta.isoformat() + "T23:59:59",
                 },
-                headers=self._headers(),
+                headers=self._headers(cuenta_id),
             )
         except Exception as e:  # noqa: BLE001
-            log.warning("metricool: piezas %s/%s fallaron: %s", plat.value, blog_id, e)
+            log.warning("metricool: piezas %s/%s fallaron: %s", plat.value, cuenta_id, e)
             return []
         piezas: list[Pieza] = []
         for post in datos.get("data") or []:
