@@ -15,6 +15,12 @@ se reporta presencia/estado y, como mucho, una PISTA (`····last4`).
     PUT    /api/conexiones/redes/{plataforma}  -> pega el token (no lo devuelve)
     DELETE /api/conexiones/redes/{plataforma}  -> quita el token (placeholder)
 
+  METRICOOL POR MARCA (config.toml de metricas, [metricool.marcas.<id>]):
+    GET    /api/conexiones/metricool              -> estado por marca (sin token)
+    PUT    /api/conexiones/metricool/{marca}      -> guarda user_token/user_id/blog_id
+    DELETE /api/conexiones/metricool/{marca}      -> quita esa marca
+    POST   /api/conexiones/metricool/{marca}/probar -> prueba EN VIVO (sin exponer token)
+
 REUTILIZA los helpers de metricas (`leer_config_existente` + `fusionar_config` +
 `escribir_config_atomico`) para escribir el config.toml de forma atomica y segura;
 NO duplica esa logica. Errores en espanol, sin tracebacks, sin filtrar secretos.
@@ -312,6 +318,213 @@ async def redes_borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": f"{_nombre_red(plataforma)} desconectada."})
 
 
+# --------------------------------------------------------------------------- #
+# Metricool (credenciales POR MARCA en el config.toml de metricas)            #
+# --------------------------------------------------------------------------- #
+#
+# A diferencia de las redes (un token global por plataforma), Metricool guarda
+# credenciales POR MARCA: en AMX cada marca es una cuenta Metricool distinta, con
+# su PROPIO user_token (X-Mc-Auth) + user_id + blog_id. Se persisten en
+# `[metricool.marcas.<id>]` del config.toml de metricas, vía los MISMOS helpers
+# del asistente (atomico 0600). `user_token` esta en `asistente.CLAVES_SECRETAS`:
+# nunca se devuelve por la API ni se loguea; del estado solo sale presencia +
+# una PISTA no sensible del user_id (no secreto) y el blog_id.
+
+
+def _marcas_metricool() -> list[tuple[str, str]]:
+    """Marcas (id_metricas, etiqueta) que pueden tener credenciales de Metricool.
+
+    Fuente UNICA: `keni_shared.marcas.opciones_metricas()` (la clave es el
+    `id_metricas`, que es justo la clave de `[metricool.marcas.<id>]`).
+    """
+    from keni_shared import marcas as marcas_catalogo
+
+    return marcas_catalogo.opciones_metricas()
+
+
+def _es_marca_metricool(marca: str) -> bool:
+    """True si `marca` es un id_metricas real del catalogo de marcas."""
+    return any(marca == mid for mid, _ in _marcas_metricool())
+
+
+def _marca_metricool(cfg: dict, marca: str) -> dict:
+    """Tabla `[metricool.marcas.<marca>]` del config ({} si no existe)."""
+    mc = cfg.get("metricool")
+    mc = mc if isinstance(mc, dict) else {}
+    marcas = mc.get("marcas")
+    marcas = marcas if isinstance(marcas, dict) else {}
+    tabla = marcas.get(marca)
+    return tabla if isinstance(tabla, dict) else {}
+
+
+def _credencial(tabla: dict, clave: str) -> str:
+    """Valor str de una clave de la tabla de marca (cae a '' si falta o no es str)."""
+    valor = tabla.get(clave)
+    return valor if isinstance(valor, str) else ("" if valor is None else str(valor))
+
+
+def _metricool_conectada(tabla: dict) -> bool:
+    """True si la marca tiene los tres campos (token + user_id + blog_id) no vacios.
+
+    El token no debe ser el placeholder (= sin token real). El default global
+    `[metricool] user_token/user_id` NO se considera aqui: el estado refleja lo que
+    esta GUARDADO para ESA marca (la consola gestiona credenciales por marca).
+    """
+    token = _credencial(tabla, "user_token")
+    return bool(
+        token
+        and token != asistente.PLACEHOLDER_TOKEN
+        and _credencial(tabla, "user_id")
+        and _credencial(tabla, "blog_id")
+    )
+
+
+def _pista_user_id(user_id: str) -> str:
+    """Pista NO sensible del user_id (no es secreto): se devuelve tal cual si existe."""
+    return user_id
+
+
+async def metricool_estado(request: Request) -> Response:
+    """GET: estado por marca de Metricool (sin exponer NUNCA el user_token).
+
+    Lista TODAS las marcas del catalogo con su estado conectado/desconectado y, si
+    estan, una pista del user_id (no secreto) y el blog_id. SOLO ADMIN (#153).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    cfg = _config_existente()
+    marcas = []
+    for mid, etiqueta in _marcas_metricool():
+        tabla = _marca_metricool(cfg, mid)
+        conectado = _metricool_conectada(tabla)
+        entrada: dict = {"marca": mid, "etiqueta": etiqueta, "conectado": conectado}
+        if conectado:
+            entrada["user_id_pista"] = _pista_user_id(_credencial(tabla, "user_id"))
+            entrada["blog_id"] = _credencial(tabla, "blog_id")
+        marcas.append(entrada)
+    return JSONResponse({"marcas": marcas})
+
+
+def _escribir_marca_metricool(marca: str, valores: dict[str, str]) -> None:
+    """Persiste `[metricool.marcas.<marca>]` en el config.toml (atomico 0600).
+
+    REUTILIZA los helpers del asistente: lee el existente, fusiona SOLO esta marca
+    (sin clobberar otras marcas ni otras secciones) y escribe de forma atomica.
+    """
+    ruta = ruta_config()
+    existente = asistente.leer_config_existente(ruta)
+    nuevo = {"metricool": {"marcas": {marca: valores}}}
+    fusionado = asistente.fusionar_config(existente, nuevo)
+    asistente.escribir_config_atomico(ruta, fusionado)
+
+
+async def metricool_guardar(request: Request) -> Response:
+    """PUT: guarda las credenciales de UNA marca (JSON `{user_token, user_id, blog_id}`).
+
+    No devuelve el token. Valida que `{marca}` es una marca real y que los tres
+    campos vienen no vacios. SOLO ADMIN (#153).
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    datos = await leer_json(request)
+    campos = {}
+    for clave, etiqueta in (
+        ("user_token", "el token de Metricool"),
+        ("user_id", "el user_id"),
+        ("blog_id", "el blog_id"),
+    ):
+        valor = datos.get(clave)
+        if not isinstance(valor, str) or not valor.strip():
+            return JSONResponse({"error": f"Falta {etiqueta}."}, status_code=400)
+        campos[clave] = valor.strip()
+    try:
+        _escribir_marca_metricool(marca, campos)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo guardar la credencial de Metricool."}, status_code=500
+        )
+    return JSONResponse({"conectado": True, "mensaje": "Credencial de Metricool guardada."})
+
+
+async def metricool_borrar(request: Request) -> Response:
+    """DELETE: quita la marca de `[metricool.marcas.<marca>]`. SOLO ADMIN (#153)."""
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    ruta = ruta_config()
+    try:
+        cfg = asistente.leer_config_existente(ruta)
+        marcas = cfg.get("metricool", {}).get("marcas") if isinstance(cfg.get("metricool"), dict) else None
+        if isinstance(marcas, dict) and marca in marcas:
+            del marcas[marca]
+            asistente.escribir_config_atomico(ruta, cfg)
+    except OSError:
+        return JSONResponse(
+            {"error": "No se pudo quitar la credencial de Metricool."}, status_code=500
+        )
+    return JSONResponse({"mensaje": "Credencial de Metricool eliminada."})
+
+
+def _probar_metricool(user_token: str, user_id: str, blog_id: str) -> tuple[bool, str]:
+    """Prueba EN VIVO una credencial de Metricool con un GET de lectura barato.
+
+    Llama a `/admin/simpleProfiles` (lista de marcas del usuario): autentica con
+    `X-Mc-Auth` + `userId` + `blogId` y, si responde 200, la credencial es valida.
+    NO expone el token en ningun mensaje. Punto INYECTABLE/mockeable (`_PROBADOR_MC`).
+    """
+    try:
+        import httpx
+    except ImportError:  # pragma: no cover -- httpx es dependencia transitiva
+        return False, "Falta la librería para probar la conexión en este equipo."
+    try:
+        respuesta = httpx.get(
+            "https://app.metricool.com/api/admin/simpleProfiles",
+            headers={"X-Mc-Auth": user_token},
+            params={"userId": user_id, "blogId": blog_id},
+            timeout=30,
+            follow_redirects=False,
+        )
+    except Exception:  # noqa: BLE001 -- cualquier fallo de red: mensaje en espanol
+        return False, "No se pudo contactar con Metricool."
+    if respuesta.status_code == 200:
+        return True, "La credencial de Metricool funciona."
+    if respuesta.status_code in (401, 403):
+        return False, "Metricool rechazó la credencial (token o IDs incorrectos)."
+    return False, "Metricool devolvió un error al validar la credencial."
+
+
+# Punto INYECTABLE: lo unico que toca la red al "probar". Los tests lo parchean.
+_PROBADOR_MC = _probar_metricool
+
+
+async def metricool_probar(request: Request) -> Response:
+    """POST: prueba EN VIVO la credencial GUARDADA de una marca. SOLO ADMIN (#153).
+
+    Usa el token YA guardado de la marca (nunca llega por el body, nunca sale por la
+    respuesta). Si falta alguna credencial, responde `{ok:false}` con mensaje claro.
+    """
+    if not permisos.es_admin(request):
+        return permisos.rechazo_solo_admin(_MSG_SOLO_ADMIN)
+    marca = request.path_params["marca"]
+    if not _es_marca_metricool(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    tabla = _marca_metricool(_config_existente(), marca)
+    token = _credencial(tabla, "user_token")
+    user_id = _credencial(tabla, "user_id")
+    blog_id = _credencial(tabla, "blog_id")
+    if not (token and token != asistente.PLACEHOLDER_TOKEN and user_id and blog_id):
+        return JSONResponse(
+            {"ok": False, "mensaje": "Esta marca no tiene credenciales completas guardadas."}
+        )
+    ok, detalle = _PROBADOR_MC(token, user_id, blog_id)
+    return JSONResponse({"ok": ok, "detalle": detalle})
+
+
 RUTAS = [
     Route("/api/conexiones/imagen", imagen_estado, methods=["GET"]),
     Route("/api/conexiones/imagen", imagen_guardar, methods=["PUT"]),
@@ -321,4 +534,8 @@ RUTAS = [
     Route("/api/conexiones/redes", redes_estado, methods=["GET"]),
     Route("/api/conexiones/redes/{plataforma}", redes_guardar, methods=["PUT"]),
     Route("/api/conexiones/redes/{plataforma}", redes_borrar, methods=["DELETE"]),
+    Route("/api/conexiones/metricool", metricool_estado, methods=["GET"]),
+    Route("/api/conexiones/metricool/{marca}", metricool_guardar, methods=["PUT"]),
+    Route("/api/conexiones/metricool/{marca}", metricool_borrar, methods=["DELETE"]),
+    Route("/api/conexiones/metricool/{marca}/probar", metricool_probar, methods=["POST"]),
 ]

@@ -283,6 +283,171 @@ def test_redes_config_0600(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# Metricool por marca                                                         #
+# --------------------------------------------------------------------------- #
+
+_TOKEN_MC = "mc-user-token-SECRETO-7777"
+
+
+def _una_marca_metricool() -> str:
+    """Un id_metricas real del catalogo (clave de [metricool.marcas.<id>])."""
+    from keni_shared import marcas
+
+    return marcas.opciones_metricas()[0][0]
+
+
+def test_metricool_estado_inicial_todo_desconectado(cliente):
+    r = cliente.get("/api/conexiones/metricool")
+    assert r.status_code == 200
+    marcas = r.json()["marcas"]
+    assert marcas, "deberia listar las marcas del catalogo"
+    assert all(m["conectado"] is False for m in marcas)
+    # cada entrada trae marca + etiqueta; sin token jamas
+    assert all({"marca", "etiqueta", "conectado"} <= set(m) for m in marcas)
+    # sin conectar no se exponen ni user_id ni blog_id
+    assert all("user_id_pista" not in m for m in marcas)
+
+
+def test_metricool_guardar_persiste_y_conecta(cliente):
+    marca = _una_marca_metricool()
+    r = cliente.put(
+        f"/api/conexiones/metricool/{marca}",
+        json={"user_token": _TOKEN_MC, "user_id": "999", "blog_id": "12345"},
+    )
+    assert r.status_code == 200
+    assert r.json()["conectado"] is True
+    # el token NO se devuelve
+    assert _TOKEN_MC not in r.text
+
+    # el estado refleja conectado, con pista de user_id + blog_id, SIN token
+    marcas = {m["marca"]: m for m in cliente.get("/api/conexiones/metricool").json()["marcas"]}
+    assert marcas[marca]["conectado"] is True
+    assert marcas[marca]["user_id_pista"] == "999"
+    assert marcas[marca]["blog_id"] == "12345"
+    assert _TOKEN_MC not in cliente.get("/api/conexiones/metricool").text
+
+    # persiste en [metricool.marcas.<marca>] con los tres campos
+    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
+    entrada = datos["metricool"]["marcas"][marca]
+    assert entrada["user_token"] == _TOKEN_MC
+    assert entrada["user_id"] == "999"
+    assert entrada["blog_id"] == "12345"
+
+
+def test_metricool_guardar_campos_faltantes_400(cliente):
+    marca = _una_marca_metricool()
+    r = cliente.put(f"/api/conexiones/metricool/{marca}", json={"user_token": "t", "user_id": "1"})
+    assert r.status_code == 400  # falta blog_id
+    r2 = cliente.put(
+        f"/api/conexiones/metricool/{marca}",
+        json={"user_token": "  ", "user_id": "1", "blog_id": "1"},
+    )
+    assert r2.status_code == 400  # token vacio
+
+
+def test_metricool_marca_desconocida_400(cliente):
+    r = cliente.put(
+        "/api/conexiones/metricool/inventada",
+        json={"user_token": "t", "user_id": "1", "blog_id": "1"},
+    )
+    assert r.status_code == 400
+    assert r.json()["error"] == "Marca desconocida."
+    assert cliente.delete("/api/conexiones/metricool/inventada").status_code == 400
+    assert cliente.post("/api/conexiones/metricool/inventada/probar").status_code == 400
+
+
+def test_metricool_borrar_quita_la_marca(cliente):
+    marca = _una_marca_metricool()
+    cliente.put(
+        f"/api/conexiones/metricool/{marca}",
+        json={"user_token": _TOKEN_MC, "user_id": "999", "blog_id": "12345"},
+    )
+    r = cliente.delete(f"/api/conexiones/metricool/{marca}")
+    assert r.status_code == 200
+    marcas = {m["marca"]: m for m in cliente.get("/api/conexiones/metricool").json()["marcas"]}
+    assert marcas[marca]["conectado"] is False
+    # ya no figura en el config
+    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
+    assert marca not in datos.get("metricool", {}).get("marcas", {})
+
+
+def test_metricool_guardar_preserva_otras_marcas(cliente):
+    from keni_shared import marcas as catalogo
+
+    opciones = catalogo.opciones_metricas()
+    if len(opciones) < 2:  # pragma: no cover -- catalogo siempre trae >1 marca
+        return
+    m1, m2 = opciones[0][0], opciones[1][0]
+    cliente.put(
+        f"/api/conexiones/metricool/{m1}",
+        json={"user_token": "t1", "user_id": "1", "blog_id": "b1"},
+    )
+    cliente.put(
+        f"/api/conexiones/metricool/{m2}",
+        json={"user_token": "t2", "user_id": "2", "blog_id": "b2"},
+    )
+    datos = tomllib.loads(open(_ruta_metricas(), encoding="utf-8").read())
+    marcas = datos["metricool"]["marcas"]
+    assert marcas[m1]["user_token"] == "t1"
+    assert marcas[m2]["user_token"] == "t2"
+
+
+def test_metricool_config_0600(cliente):
+    marca = _una_marca_metricool()
+    cliente.put(
+        f"/api/conexiones/metricool/{marca}",
+        json={"user_token": _TOKEN_MC, "user_id": "1", "blog_id": "1"},
+    )
+    assert (os.stat(_ruta_metricas()).st_mode & 0o777) == 0o600
+
+
+def test_metricool_probar_sin_credenciales(cliente):
+    marca = _una_marca_metricool()
+    r = cliente.post(f"/api/conexiones/metricool/{marca}/probar")
+    assert r.status_code == 200
+    assert r.json()["ok"] is False
+
+
+def test_metricool_probar_ok_mockeado(cliente, monkeypatch):
+    """Con credenciales guardadas + probador MOCK (sin red) => {ok:true}."""
+    marca = _una_marca_metricool()
+    cliente.put(
+        f"/api/conexiones/metricool/{marca}",
+        json={"user_token": _TOKEN_MC, "user_id": "999", "blog_id": "12345"},
+    )
+    recibido = {}
+
+    def _mock(token, user_id, blog_id):
+        recibido["token"] = token
+        recibido["user_id"] = user_id
+        recibido["blog_id"] = blog_id
+        return True, "La credencial funciona."
+
+    monkeypatch.setattr(conexiones, "_PROBADOR_MC", _mock)
+    r = cliente.post(f"/api/conexiones/metricool/{marca}/probar")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "detalle": "La credencial funciona."}
+    # el probador recibio el token guardado, pero este no sale al cliente
+    assert recibido["token"] == _TOKEN_MC
+    assert recibido["user_id"] == "999"
+    assert _TOKEN_MC not in r.text
+
+
+def test_metricool_probar_rechazada_mockeada(cliente, monkeypatch):
+    marca = _una_marca_metricool()
+    cliente.put(
+        f"/api/conexiones/metricool/{marca}",
+        json={"user_token": _TOKEN_MC, "user_id": "1", "blog_id": "1"},
+    )
+    monkeypatch.setattr(
+        conexiones, "_PROBADOR_MC", lambda *_a: (False, "Metricool rechazó la credencial.")
+    )
+    r = cliente.post(f"/api/conexiones/metricool/{marca}/probar")
+    assert r.json()["ok"] is False
+    assert "rechaz" in r.json()["detalle"].lower()
+
+
+# --------------------------------------------------------------------------- #
 # Seguridad: follow_redirects=False en _probar_openrouter (#117)              #
 # --------------------------------------------------------------------------- #
 
