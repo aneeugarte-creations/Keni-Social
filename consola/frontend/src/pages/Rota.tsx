@@ -471,6 +471,7 @@ function MenuMasAcciones({
   onCopiarAnterior,
   onAbrirFranjasSemana,
   onAbrirPlantillaFranjas,
+  onAbrirCarga,
   onExportExcel,
   onExportCsv,
   copiarPendiente,
@@ -480,6 +481,7 @@ function MenuMasAcciones({
   onCopiarAnterior: () => void;
   onAbrirFranjasSemana: () => void;
   onAbrirPlantillaFranjas: () => void;
+  onAbrirCarga: () => void;
   onExportExcel: () => void;
   onExportCsv: () => void;
   copiarPendiente: boolean;
@@ -505,6 +507,12 @@ function MenuMasAcciones({
     });
     items.push({ separador: true });
   }
+  items.push({
+    etiqueta: "Carga del equipo",
+    icono: Users,
+    onClick: onAbrirCarga,
+  });
+  items.push({ separador: true });
   items.push({
     etiqueta: "Descargar Excel",
     icono: Download,
@@ -834,6 +842,9 @@ function Calendario({
   // el menú "Más", así que la apertura se gobierna desde aquí.
   const [abrirFranjasSemana, setAbrirFranjasSemana] = React.useState(false);
   const [abrirPlantillaFranjas, setAbrirPlantillaFranjas] = React.useState(false);
+  // Resumen "Carga del equipo": antes vivía como panel colapsable bajo el calendario;
+  // ahora se abre bajo demanda desde el menú "Más" (popup), para no alargar la vista.
+  const [abrirCarga, setAbrirCarga] = React.useState(false);
 
   // Mutaciones de cabecera (de la antigua pestaña Turnos): aprobar / despublicar /
   // copiar semana anterior. Sin cambios funcionales — sólo migradas aquí.
@@ -1099,6 +1110,7 @@ function Calendario({
             onCopiarAnterior={() => copiarAnterior.mutate()}
             onAbrirFranjasSemana={() => setAbrirFranjasSemana(true)}
             onAbrirPlantillaFranjas={() => setAbrirPlantillaFranjas(true)}
+            onAbrirCarga={() => setAbrirCarga(true)}
             onExportExcel={() => api.exportarRota("xlsx", { lunes })}
             onExportCsv={() => api.exportarRota("csv", { lunes })}
           />
@@ -1266,7 +1278,9 @@ function Calendario({
         />
       )}
 
-      <PanelCarga lunes={lunes} />
+      {abrirCarga && (
+        <DialogCargaEquipo lunes={lunes} onCerrar={() => setAbrirCarga(false)} />
+      )}
     </div>
   );
 }
@@ -2309,90 +2323,89 @@ function DialogEditarTurno({
 }
 
 
-// --- Panel "Carga del equipo" (colapsable) ---------------------------------
+// --- Popup "Carga del equipo" -----------------------------------------------
 
-function PanelCarga({ lunes }: { lunes: string }) {
-  const [abierto, setAbierto] = React.useState(false);
+/**
+ * Resumen de carga del equipo de la semana, en un diálogo. Antes era un panel
+ * colapsable bajo el calendario; ahora se invoca bajo demanda desde el menú "Más"
+ * para no alargar la vista. El componente sólo se monta cuando el popup está abierto,
+ * así que la query arranca al abrir.
+ */
+function DialogCargaEquipo({ lunes, onCerrar }: { lunes: string; onCerrar: () => void }) {
   const q = useQuery({
     queryKey: ["rota", "carga", lunes],
     queryFn: ({ signal }) => api.cargaRota({ lunes }, signal),
-    enabled: abierto && !!lunes,
+    enabled: !!lunes,
   });
   const miembros = q.data?.miembros ?? [];
   return (
-    <Card>
-      <CardHeader className="cursor-pointer pb-3" onClick={() => setAbierto((v) => !v)}>
-        <CardTitle className="flex items-center justify-between text-base">
-          <span className="flex items-center gap-2">
+    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <Users className="h-4 w-4" /> Carga del equipo
-          </span>
-          {abierto ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </CardTitle>
-      </CardHeader>
-      {abierto && (
-        <CardContent className="p-0">
-          {q.isPending ? (
-            <Skeleton className="h-24 w-full rounded-none" />
-          ) : q.isError ? (
-            <BloqueError
-              titulo="No se pudo cargar el resumen"
-              mensaje={mensajeError(q.error)}
-              onReintentar={() => void q.refetch()}
-              cargando={q.isFetching}
-            />
-          ) : miembros.length === 0 ? (
-            <EstadoVacio
-              icono={Users}
-              titulo="Sin datos"
-              texto="No hay miembros del equipo todavía."
-            />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Persona</TableHead>
-                  <TableHead className="text-right">Eventos</TableHead>
-                  <TableHead className="text-right">Días trabajados</TableHead>
-                  <TableHead>Sábado</TableHead>
-                  <TableHead className="text-right">Descansos</TableHead>
+          </DialogTitle>
+          <DialogDescription>
+            Cuánto trabajo lleva cada persona esta semana.
+          </DialogDescription>
+        </DialogHeader>
+        {q.isPending ? (
+          <Skeleton className="h-24 w-full" />
+        ) : q.isError ? (
+          <BloqueError
+            titulo="No se pudo cargar el resumen"
+            mensaje={mensajeError(q.error)}
+            onReintentar={() => void q.refetch()}
+            cargando={q.isFetching}
+          />
+        ) : miembros.length === 0 ? (
+          <EstadoVacio
+            icono={Users}
+            titulo="Sin datos"
+            texto="No hay miembros del equipo todavía."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Persona</TableHead>
+                <TableHead className="text-right">Eventos</TableHead>
+                <TableHead className="text-right">Días trabajados</TableHead>
+                <TableHead>Sábado</TableHead>
+                <TableHead className="text-right">Descansos</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {miembros.map((m) => (
+                <TableRow key={m.miembro_id}>
+                  <TableCell className="font-medium">{m.nombre}</TableCell>
+                  <TableCell
+                    className={
+                      m.eventos >= 7
+                        ? "text-right font-medium text-red-600 dark:text-red-400"
+                        : "text-right"
+                    }
+                  >
+                    {m.eventos}
+                  </TableCell>
+                  <TableCell className="text-right">{m.dias_trabajados}</TableCell>
+                  <TableCell>
+                    {m.sabado ? (
+                      <Badge variant="outline" className="font-normal">
+                        Sábado
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">{m.descansos}</TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {miembros.map((m) => (
-                  <TableRow key={m.miembro_id}>
-                    <TableCell className="font-medium">{m.nombre}</TableCell>
-                    <TableCell
-                      className={
-                        m.eventos >= 7
-                          ? "text-right font-medium text-red-600 dark:text-red-400"
-                          : "text-right"
-                      }
-                    >
-                      {m.eventos}
-                    </TableCell>
-                    <TableCell className="text-right">{m.dias_trabajados}</TableCell>
-                    <TableCell>
-                      {m.sabado ? (
-                        <Badge variant="outline" className="font-normal">
-                          Sábado
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">{m.descansos}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      )}
-    </Card>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
