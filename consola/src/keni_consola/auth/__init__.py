@@ -51,6 +51,7 @@ from .usuarios import (
     establecer_password,
     listar_usuarios,
     obtener_usuario_por_id,
+    reemplazar_marcas_de_usuario,
     verificar_password_actual,
 )
 
@@ -72,6 +73,7 @@ __all__ = [
     "establecer_password",
     "borrar_usuario",
     "actualizar_perfil",
+    "reemplazar_marcas_de_usuario",
     "autenticar",
     "verificar_password_actual",
     "MAX_INTENTOS_FALLIDOS",

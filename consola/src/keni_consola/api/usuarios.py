@@ -2,11 +2,17 @@
 
 Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
 
-  - GET    /api/usuarios            -> {usuarios: [{id, usuario, rol, creado, ultimo_acceso}]}
+  - GET    /api/usuarios            -> {usuarios: [{id, usuario, rol, creado,
+                                      ultimo_acceso, cargo, cobertura, marcas}]}
   - POST   /api/usuarios            {usuario, password, rol} -> 201 {id, usuario, rol};
                                       409 si el nombre ya existe.
-  - PATCH  /api/usuarios/{id}       {rol?, password?} -> 200 (cambia rol / resetea pass).
+  - PATCH  /api/usuarios/{id}       {rol?, password?, cargo?, cobertura?, marcas?} -> 200.
   - DELETE /api/usuarios/{id}       -> 204.
+
+PATCH (ampliacion "feat/roles-marcas"): ademas de rol/password, el admin puede actualizar
+`cargo` (allowlist `CARGOS_USUARIO`), `cobertura` (bool) y `marcas` (lista de ids canonicos
+del catalogo de `keni_shared.marcas`). Las marcas se REEMPLAZAN al conjunto enviado (lista
+vacia = desasignar todas). Cada valor invalido devuelve 400 con el mensaje accionable.
 
 GUARDAS de integridad (no quedarse sin acceso de admin):
   - No borrar al ULTIMO admin.
@@ -29,9 +35,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from keni_shared import marcas as marcas_catalogo
+
 from .. import auth, permisos
 from .._http_json import leer_json
-from ..estados import ROL_ADMIN, ROLES_USUARIO
+from ..estados import CARGOS_USUARIO, ROL_ADMIN, ROLES_USUARIO
 from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -68,7 +76,11 @@ def _rechazo_no_admin() -> Response:
 
 
 async def listar(request: Request) -> Response:
-    """GET /api/usuarios: lista de cuentas (sin salt/hash)."""
+    """GET /api/usuarios: lista de cuentas (sin salt/hash).
+
+    Cada fila incluye `cargo`/`cobertura`/`marcas` para la pagina de Usuarios (organigrama
+    AMX). `marcas` siempre es una lista (vacia si el usuario no tiene marcas asignadas).
+    """
     if not _es_admin(request):
         return _rechazo_no_admin()
     usuarios = [
@@ -78,6 +90,9 @@ async def listar(request: Request) -> Response:
             "rol": u["rol"],
             "creado": u["creado"],
             "ultimo_acceso": u["ultimo_acceso"],
+            "cargo": u.get("cargo", "") or "",
+            "cobertura": bool(u.get("cobertura")),
+            "marcas": list(u.get("marcas") or []),
         }
         for u in auth.listar_usuarios()
     ]
@@ -147,9 +162,20 @@ async def crear(request: Request) -> Response:
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/usuarios/{id}: cambia rol y/o resetea contrasena.
+    """PATCH /api/usuarios/{id}: cambia rol/contrasena/cargo/cobertura/marcas.
 
-    Guarda: no degradar al ULTIMO admin a editor (dejaria 0 admins).
+    Cuerpo (todo opcional, manda solo lo que cambia):
+      - `rol`        admin|editor (allowlist `ROLES_USUARIO`).
+      - `password`   contrasena nueva (reset por admin; obliga al cambio al proximo login).
+      - `cargo`      allowlist `CARGOS_USUARIO`; "" para desclasificar.
+      - `cobertura`  bool: True/False (entra o no en la rota de turnos).
+      - `marcas`     lista de ids canonicos del catalogo (`keni_shared.marcas`); reemplaza
+                     el conjunto del usuario. `[]` desasigna todas.
+
+    Guardas:
+      - No degradar al ULTIMO admin a editor (dejaria 0 admins).
+      - Cargos invalidos -> 400 con la allowlist.
+      - Marcas invalidas -> 400 con la lista canonica.
     """
     if not _es_admin(request):
         return _rechazo_no_admin()
@@ -161,9 +187,19 @@ async def actualizar(request: Request) -> Response:
     datos = await leer_json(request)
     nuevo_rol = datos.get("rol")
     nueva_password = datos.get("password")
-    if nuevo_rol is None and nueva_password is None:
+    nuevo_cargo = datos.get("cargo")
+    nueva_cobertura = datos.get("cobertura")
+    nuevas_marcas = datos.get("marcas")
+    if (
+        nuevo_rol is None
+        and nueva_password is None
+        and nuevo_cargo is None
+        and nueva_cobertura is None
+        and nuevas_marcas is None
+    ):
         return JSONResponse(
-            {"error": "Indica un rol nuevo o una contraseña nueva."}, status_code=400
+            {"error": "Indica un campo a modificar (rol, contraseña, cargo, cobertura o marcas)."},
+            status_code=400,
         )
 
     if nuevo_rol is not None:
@@ -186,11 +222,57 @@ async def actualizar(request: Request) -> Response:
             status_code=400,
         )
 
+    if nuevo_cargo is not None:
+        if not isinstance(nuevo_cargo, str):
+            return JSONResponse({"error": "Cargo inválido."}, status_code=400)
+        if nuevo_cargo and nuevo_cargo not in CARGOS_USUARIO:
+            return JSONResponse(
+                {"error": f"Cargo desconocido: {nuevo_cargo!r}."},
+                status_code=400,
+            )
+
+    if nueva_cobertura is not None and not isinstance(nueva_cobertura, bool):
+        return JSONResponse(
+            {"error": "El campo 'cobertura' debe ser true o false."}, status_code=400
+        )
+
+    if nuevas_marcas is not None:
+        if not isinstance(nuevas_marcas, list) or not all(
+            isinstance(m, str) for m in nuevas_marcas
+        ):
+            return JSONResponse(
+                {"error": "El campo 'marcas' debe ser una lista de identificadores."},
+                status_code=400,
+            )
+        validas = set(marcas_catalogo.ids())
+        invalidas = [m for m in nuevas_marcas if m not in validas]
+        if invalidas:
+            return JSONResponse(
+                {
+                    "error": (
+                        f"Marca(s) desconocida(s): {', '.join(invalidas)}. "
+                        f"Usa una de: {', '.join(sorted(validas))}."
+                    )
+                },
+                status_code=400,
+            )
+
     if nuevo_rol is not None:
         auth.cambiar_rol(usuario_id, nuevo_rol)
     if nueva_password is not None:
         # Reset por el admin: la cuenta debera cambiarla en su proximo acceso.
         auth.establecer_password(usuario_id, nueva_password, debe_cambiar_password=True)
+    if (
+        nuevo_cargo is not None
+        or nueva_cobertura is not None
+        or nuevas_marcas is not None
+    ):
+        auth.actualizar_perfil(
+            usuario_id,
+            cargo=nuevo_cargo if nuevo_cargo is not None else None,
+            cobertura=nueva_cobertura if nueva_cobertura is not None else None,
+            marcas=list(nuevas_marcas) if nuevas_marcas is not None else None,
+        )
 
     actualizado = auth.obtener_usuario_por_id(usuario_id)
     return JSONResponse(
@@ -198,6 +280,9 @@ async def actualizar(request: Request) -> Response:
             "id": actualizado["id"],
             "usuario": actualizado["usuario"],
             "rol": actualizado["rol"],
+            "cargo": actualizado.get("cargo", "") or "",
+            "cobertura": bool(actualizado.get("cobertura")),
+            "marcas": list(actualizado.get("marcas") or []),
         }
     )
 

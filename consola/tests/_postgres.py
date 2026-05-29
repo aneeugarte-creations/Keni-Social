@@ -28,7 +28,11 @@ import pytest
 ENV_TEST_DATABASE_URL = "KENI_TEST_DATABASE_URL"
 
 # Tablas operacionales que se truncan entre tests (todas las del esquema de `db.py`).
+# `usuarios_marcas` (N:M del organigrama AMX) se trunca via `usuarios CASCADE` pero la
+# listamos explicitamente por defensa (truncar a la cabeza ahorra el cascade impredecible
+# si el orden de las tablas cambiara).
 _TABLAS = (
+    "usuarios_marcas",
     "sesiones",
     "usuarios",
     "tareas",

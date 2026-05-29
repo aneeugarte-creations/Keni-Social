@@ -102,13 +102,18 @@ def test_bootstrap_respeta_admin_user_env(entorno, monkeypatch):
 
 
 def test_sembrar_equipo_crea_los_16(entorno):
-    """El seed deja en la BD los 16 usuarios del organigrama AMX."""
+    """El seed deja en la BD los 16 usuarios del organigrama AMX.
+
+    Tras la ola "feat/roles-marcas" el calendario de cobertura tiene 9 personas (Daiana
+    sale del calendario; va a Fundacion como creativo de vertical).
+    """
     auth.sembrar_equipo()
     usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
     assert set(u for u, *_ in auth.EQUIPO_AMX) <= set(usuarios)
-    # 10 cubren (community managers + content managers + Elias + Yustine + Jonathan + Jose).
+    # 9 cubren: 3 community managers ClaroSports (Tezcu, Luis, Roger) + 2 content managers
+    # UnoTV (Lalo, Angel) + Elias + Yustine + Jonathan + Jose. Daiana YA NO cubre.
     cubren = [u for u in usuarios.values() if u["cobertura"]]
-    assert len(cubren) == 10
+    assert len(cubren) == 9
     assert usuarios["bernardo"]["rol"] == "admin"
     assert usuarios["bernardo"]["cargo"] == "director"
     assert usuarios["bernardo"]["cobertura"] is False
@@ -126,14 +131,83 @@ def test_sembrar_equipo_es_idempotente(entorno):
 
 
 def test_sembrar_equipo_sincroniza_cargo_y_cobertura(entorno):
-    """Si un usuario ya existe con otros valores, el seed los pone al dia (sin tocar pass)."""
+    """Si un usuario ya existe con cargo del catalogo VIEJO, el seed lo pone al dia.
+
+    Tezcu se crea sin cargo (""); como su cargo esta en el catalogo viejo (cadena vacia),
+    el seed lo migra a `community_manager` y le asigna la cobertura/marcas del organigrama.
+    La contrasena NO se pisa.
+    """
     auth.crear_usuario("tezcu", "Otra-Pass-Fuerte-Lol-1234", "editor")
     auth.sembrar_equipo()
     tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
     assert tezcu["cargo"] == "community_manager"
     assert tezcu["cobertura"] is True
+    assert tezcu["marcas"] == ["claro-sports"]
     # La pass NO se ha pisado: la del crear_usuario original sigue valiendo.
     assert auth.autenticar("tezcu", "Otra-Pass-Fuerte-Lol-1234") is not None
+
+
+def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
+    """Cada usuario del organigrama recibe SUS verticales (N:M).
+
+    Casos clave:
+      - Bernardo: las 5 marcas (claro-sports, unotv, piso-15, nacion-gamer, fundacion).
+      - Daiana:   ['fundacion'] (NO claro-sports), y `cobertura=False` (sale del calendario).
+      - Yustine:  ['claro-sports', 'piso-15', 'unotv'] (cubre 3 verticales).
+      - Jonathan: ['nacion-gamer'].
+    """
+    auth.sembrar_equipo()
+    usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
+
+    assert sorted(usuarios["bernardo"]["marcas"]) == sorted(
+        ["claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion"]
+    )
+    # Correccion critica: Daiana NO es de claro-sports.
+    assert usuarios["daiana"]["cargo"] == "creativo_vertical"
+    assert usuarios["daiana"]["cobertura"] is False
+    assert usuarios["daiana"]["marcas"] == ["fundacion"]
+    assert usuarios["yustine"]["marcas"] == ["claro-sports", "piso-15", "unotv"]
+    assert usuarios["jonathan"]["marcas"] == ["nacion-gamer"]
+
+
+def test_sembrar_equipo_corrige_daiana_aunque_este_editada(entorno):
+    """La correccion de Daiana es INCONDICIONAL: sale del calendario tras este seed.
+
+    Aunque el admin la hubiera dejado mal (CM cubriendo claro-sports), el bootstrap la
+    sobreescribe a `creativo_vertical` + `cobertura=False` + ['fundacion']. Es la
+    correccion explicita que motiva esta ola.
+    """
+    auth.crear_usuario(
+        "daiana",
+        "Pass-Daiana-1234567",
+        "editor",
+        cargo="community_manager",
+        cobertura=True,
+        marcas=["claro-sports"],
+    )
+    auth.sembrar_equipo()
+    daiana = next(u for u in auth.listar_usuarios() if u["usuario"] == "daiana")
+    assert daiana["cargo"] == "creativo_vertical"
+    assert daiana["cobertura"] is False
+    assert daiana["marcas"] == ["fundacion"]
+
+
+def test_sembrar_equipo_respeta_cargos_personalizados_del_nuevo_catalogo(entorno):
+    """Si el admin ya migro el cargo a uno del catalogo NUEVO, el seed lo respeta.
+
+    Salvo Daiana, que tiene la correccion incondicional. Para el resto, si un admin
+    cambio el cargo a un valor distinto del catalogo nuevo (p. ej. `coordinador_invitados`),
+    re-correr el seed no debe revertirlo.
+    """
+    auth.sembrar_equipo()
+    # Admin migra a Diana a un cargo del catalogo nuevo distinto del organigrama.
+    diana = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
+    auth.actualizar_perfil(diana["id"], cargo="coordinador_invitados")
+    # Re-correr el seed.
+    auth.sembrar_equipo()
+    diana_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "diana")
+    # El cargo del catalogo NUEVO se respeta (no se revierte a `coordinador_redes`).
+    assert diana_post["cargo"] == "coordinador_invitados"
 
 
 # --------------------------------------------------------------------------- #
@@ -375,9 +449,12 @@ def test_listar_usuarios_como_admin(entorno):
     assert r.status_code == 200
     nombres = {u["usuario"] for u in r.json()["usuarios"]}
     assert "jefa" in nombres
-    # NUNCA se exponen salt/hash.
+    # NUNCA se exponen salt/hash. Tras "feat/roles-marcas" la fila incluye cargo/cobertura/marcas.
     for u in r.json()["usuarios"]:
-        assert set(u) == {"id", "usuario", "rol", "creado", "ultimo_acceso"}
+        assert set(u) == {
+            "id", "usuario", "rol", "creado", "ultimo_acceso",
+            "cargo", "cobertura", "marcas",
+        }
 
 
 def test_editor_no_puede_listar_usuarios_403(entorno):
@@ -480,6 +557,182 @@ def test_patch_usuario_inexistente_404(entorno):
     _login(c, "jefa", CLAVE)
     r = c.patch("/api/usuarios/noexiste", json={"rol": "admin"}, headers=_ORIGIN)
     assert r.status_code == 404
+
+
+def test_patch_cambia_cargo_y_cobertura(entorno):
+    """El admin puede ajustar cargo/cobertura sin tocar rol ni contrasena."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"cargo": "community_manager", "cobertura": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["cargo"] == "community_manager"
+    assert cuerpo["cobertura"] is True
+    assert cuerpo["marcas"] == []
+    # Persistido:
+    actualizado = auth.obtener_usuario_por_id(ed["id"])
+    assert actualizado["cargo"] == "community_manager"
+    assert actualizado["cobertura"] is True
+
+
+def test_patch_cargo_invalido_400(entorno):
+    """Cargo fuera del catalogo -> 400 con mensaje accionable."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"cargo": "lo-que-sea"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    assert "Cargo" in r.json()["error"]
+
+
+def test_patch_asigna_marcas_reemplaza_conjunto(entorno):
+    """PATCH con marcas REEMPLAZA el conjunto N:M (idempotente, deduplica)."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    # 1) Asignar 2 marcas.
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": ["claro-sports", "unotv"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert sorted(r.json()["marcas"]) == ["claro-sports", "unotv"]
+    # 2) Reducir a 1 marca: la otra debe desaparecer.
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": ["claro-sports"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert r.json()["marcas"] == ["claro-sports"]
+    # 3) Vaciar lista: ninguna marca.
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": []},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert r.json()["marcas"] == []
+
+
+def test_patch_marcas_invalidas_400(entorno):
+    """Si alguna marca no esta en el catalogo canonico -> 400 con la lista valida."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": ["unotv", "marca-inventada"]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    assert "marca-inventada" in r.json()["error"]
+
+
+def test_patch_marcas_tipo_invalido_400(entorno):
+    """`marcas` debe ser lista de strings; un valor no-lista o no-string -> 400."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": "claro-sports"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": [1, 2]},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+
+
+def test_patch_marcas_no_pisa_rol_ni_password(entorno):
+    """PATCH con marcas no toca rol/contrasena ni invalida la sesion."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"marcas": ["fundacion"]},
+        headers=_ORIGIN,
+    )
+    # `ed` sigue siendo editor y la contrasena no se ha tocado.
+    actualizado = auth.obtener_usuario_por_id(ed["id"])
+    assert actualizado["rol"] == "editor"
+    assert auth.autenticar("ed", CLAVE) is not None
+
+
+def test_get_usuarios_incluye_marcas(entorno):
+    """GET /api/usuarios incluye `marcas` (lista) en cada fila."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear(
+        "ed", CLAVE, "editor",
+        cargo="community_manager", cobertura=True, marcas=["claro-sports"],
+    )
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.get("/api/usuarios", headers=_ORIGIN)
+    assert r.status_code == 200
+    por_id = {u["id"]: u for u in r.json()["usuarios"]}
+    assert por_id[ed["id"]]["marcas"] == ["claro-sports"]
+    assert por_id[ed["id"]]["cargo"] == "community_manager"
+    assert por_id[ed["id"]]["cobertura"] is True
+
+
+def test_patch_sin_cambios_400(entorno):
+    """PATCH sin ningun campo -> 400 con mensaje accionable."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(f"/api/usuarios/{ed['id']}", json={}, headers=_ORIGIN)
+    assert r.status_code == 400
+
+
+def test_catalogo_cargos_incluye_los_nuevos(entorno):
+    """Sanidad: el catalogo `CARGOS_USUARIO` cubre los cargos del organigrama AMX."""
+    from keni_consola.estados import CARGOS_USUARIO
+    for cargo in (
+        "coordinador_redes",
+        "coordinador_youtube",
+        "gerente_podcast",
+        "creativo_vertical",
+        "editorial_youtube",
+        "coordinador_invitados",
+        "coordinador_operativo",
+        "fotografia_qa",
+        "editor_video",
+        "disenador",
+    ):
+        assert cargo in CARGOS_USUARIO
+
+
+def test_listar_usuarios_repo_persiste_marcas(entorno):
+    """Persistencia N:M: lo que se crea con `crear_usuario(marcas=...)` sale en `listar_usuarios`."""
+    auth.crear_usuario(
+        "mary", CLAVE, "editor",
+        cargo="community_manager", cobertura=True, marcas=["claro-sports", "unotv"],
+    )
+    por_nombre = {u["usuario"]: u for u in auth.listar_usuarios()}
+    assert sorted(por_nombre["mary"]["marcas"]) == ["claro-sports", "unotv"]
 
 
 def test_delete_usuario(entorno):

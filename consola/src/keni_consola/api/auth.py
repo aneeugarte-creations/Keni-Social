@@ -104,6 +104,10 @@ async def me(request: Request) -> Response:
     usuario = getattr(request.state, "usuario", None)
     if usuario is None:
         return JSONResponse({"error": "No hay sesión iniciada."}, status_code=401)
+    # `marcas` (organigrama AMX): se consultan SIEMPRE porque la sesion del middleware
+    # no las arrastra (la cookie no carga la tabla N:M). La pagina de Mi cuenta y el filtro
+    # de la rota las usan para saber a que verticales pertenece la persona.
+    refrescado = auth.obtener_usuario_por_id(usuario["id"]) or {}
     return JSONResponse(
         {
             "usuario": {
@@ -113,6 +117,9 @@ async def me(request: Request) -> Response:
                 "debe_cambiar_password": usuario["debe_cambiar_password"],
                 "creado": usuario.get("creado", ""),
                 "ultimo_acceso": usuario.get("ultimo_acceso", ""),
+                "cargo": refrescado.get("cargo", "") or usuario.get("cargo", "") or "",
+                "cobertura": bool(refrescado.get("cobertura") or usuario.get("cobertura")),
+                "marcas": list(refrescado.get("marcas") or []),
             }
         }
     )

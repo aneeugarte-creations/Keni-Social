@@ -118,6 +118,25 @@ def test_equipo_todos_incluye_no_cobertura(cliente):
     assert {"cubre", "nocubre"} <= nombres
 
 
+def test_equipo_incluye_marcas_de_cada_miembro(cliente):
+    """`/api/rota/equipo` incluye `marcas` por miembro (organigrama AMX).
+
+    El frontend filtra por vertical en el cliente; el backend devuelve el conjunto sin
+    filtrar y la rota actual se limita a `claro-sports` en la UI.
+    """
+    auth.crear_usuario(
+        "cs", CLAVE, "editor", cobertura=True, marcas=["claro-sports"],
+    )
+    auth.crear_usuario(
+        "ng", CLAVE, "editor", cobertura=True, marcas=["nacion-gamer"],
+    )
+    r = cliente.get("/api/rota/equipo")
+    assert r.status_code == 200
+    por_nombre = {m["nombre"]: m for m in r.json()["equipo"]}
+    assert por_nombre["cs"]["marcas"] == ["claro-sports"]
+    assert por_nombre["ng"]["marcas"] == ["nacion-gamer"]
+
+
 # --------------------------------------------------------------------------- #
 # Eventos / transmisiones (CRUD)                                              #
 # --------------------------------------------------------------------------- #

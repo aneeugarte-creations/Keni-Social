@@ -41,13 +41,20 @@ _COLUMNAS_USUARIO_PUBLICAS = (
 _SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
 
 
-def _fila_a_usuario_publico(fila: Any) -> dict[str, Any]:
+def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[str, Any]:
     """Forma PUBLICA de un usuario para la API (NUNCA salt/hash).
 
     `cargo` es la FUNCION del equipo ("director", "community_manager"...). `cobertura` es
     el flag que dice si esa persona entra en la rota de turnos. Ambos vacios/`False` por
     defecto para usuarios legados.
+
+    `marcas` (organigrama AMX): lista de ids canonicos de las verticales a las que
+    pertenece la persona (`["claro-sports", "unotv"]`). Llega de la tabla N:M
+    `usuarios_marcas`. Si el caller ya las consulto pasa la lista; en caso contrario se
+    consulta aqui (una query por usuario) para mantener la forma publica completa.
     """
+    if marcas is None:
+        marcas = _marcas_de_usuario(fila["id"])
     return {
         "id": fila["id"],
         "usuario": fila["usuario"],
@@ -57,7 +64,86 @@ def _fila_a_usuario_publico(fila: Any) -> dict[str, Any]:
         "ultimo_acceso": fila["ultimo_acceso"],
         "cargo": fila["cargo"],
         "cobertura": bool(fila["cobertura"]),
+        "marcas": marcas,
     }
+
+
+def _marcas_de_usuario(usuario_id: str, con: Any | None = None) -> list[str]:
+    """Lista de marcas (ids canonicos) de un usuario, ordenadas alfabeticamente.
+
+    Si se pasa `con`, REUSA esa conexion (para batches o transacciones); si no, abre la
+    suya. Vacio si el usuario no tiene marcas asignadas (caso normal en usuarios legados
+    antes del organigrama AMX).
+    """
+    cerrar = False
+    if con is None:
+        con = db.conectar()
+        cerrar = True
+    try:
+        filas = con.execute(
+            "SELECT marca_id FROM usuarios_marcas WHERE usuario_id = ? ORDER BY marca_id ASC",
+            (usuario_id,),
+        ).fetchall()
+    finally:
+        if cerrar:
+            con.close()
+    return [f["marca_id"] for f in filas]
+
+
+def _marcas_de_usuarios(usuario_ids: list[str], con: Any | None = None) -> dict[str, list[str]]:
+    """Mapa `id -> [marcas]` para un lote de usuarios (evita N+1 en `listar_usuarios`)."""
+    if not usuario_ids:
+        return {}
+    cerrar = False
+    if con is None:
+        con = db.conectar()
+        cerrar = True
+    try:
+        # Construimos placeholders parametrizados (los ids vienen de la BD, no del usuario,
+        # pero igualmente nunca f-string con datos).
+        marcadores = ", ".join(["?"] * len(usuario_ids))
+        filas = con.execute(
+            "SELECT usuario_id, marca_id FROM usuarios_marcas "
+            f"WHERE usuario_id IN ({marcadores}) ORDER BY usuario_id ASC, marca_id ASC",
+            tuple(usuario_ids),
+        ).fetchall()
+    finally:
+        if cerrar:
+            con.close()
+    indice: dict[str, list[str]] = {uid: [] for uid in usuario_ids}
+    for fila in filas:
+        indice.setdefault(fila["usuario_id"], []).append(fila["marca_id"])
+    return indice
+
+
+def reemplazar_marcas_de_usuario(usuario_id: str, marcas: list[str]) -> bool:
+    """Reemplaza el conjunto de marcas de un usuario (DELETE + INSERT en una transaccion).
+
+    Devuelve True si el usuario existia, False si no (no se hace nada). La capa API valida
+    cada `marca_id` contra el catalogo canonico ANTES de llegar aqui; este modulo solo
+    persiste. Idempotente: si la lista nueva coincide con la actual, el resultado neto es
+    el mismo (las filas se reescriben pero el contenido no cambia).
+
+    Acepta strings duplicados (los deduplica) y los ordena para que el orden de insercion
+    sea estable (no relevante para correccion, pero ayuda al log/diff).
+    """
+    con = db.conectar()
+    try:
+        existe = con.execute(
+            "SELECT 1 FROM usuarios WHERE id = ?", (usuario_id,)
+        ).fetchone()
+        if existe is None:
+            return False
+        con.execute("DELETE FROM usuarios_marcas WHERE usuario_id = ?", (usuario_id,))
+        for marca in sorted(set(marcas)):
+            con.execute(
+                "INSERT INTO usuarios_marcas (usuario_id, marca_id) VALUES (?, ?)",
+                (usuario_id, marca),
+            )
+        con.commit()
+        return True
+    finally:
+        con.close()
 
 
 # --------------------------------------------------------------------------- #
@@ -73,12 +159,15 @@ def crear_usuario(
     debe_cambiar_password: bool = False,
     cargo: str = "",
     cobertura: bool = False,
+    marcas: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Inserta un usuario nuevo y lo devuelve (forma publica). None si el nombre ya existe.
 
-    NO valida fuerza/rol/cargo (lo hace la API contra sus mensajes); aqui solo persiste.
-    `cargo` es texto libre validado en la API (allowlist en `estados.CARGOS_USUARIO`);
-    `cobertura` indica si la persona entra en la rota de turnos (`False` por defecto).
+    NO valida fuerza/rol/cargo/marcas (lo hace la API contra sus mensajes); aqui solo
+    persiste. `cargo` es texto libre validado en la API (allowlist en
+    `estados.CARGOS_USUARIO`); `cobertura` indica si la persona entra en la rota de
+    turnos (`False` por defecto). `marcas` (organigrama AMX): lista de ids canonicos de
+    verticales (`["claro-sports", "unotv"]`); vacio/`None` deja al usuario sin marcas.
     """
     salt_hex, hash_hex = hashear_password(password)
     nuevo = {
@@ -108,6 +197,14 @@ def crear_usuario(
                 nuevo["cargo"], nuevo["cobertura"],
             ),
         )
+        # Marcas del organigrama (N:M): sembrarlas en la misma conexion para que el
+        # alta del usuario quede COMPLETA si la transaccion confirma.
+        marcas_norm = sorted(set(marcas or []))
+        for marca in marcas_norm:
+            con.execute(
+                "INSERT INTO usuarios_marcas (usuario_id, marca_id) VALUES (?, ?)",
+                (nuevo["id"], marca),
+            )
         con.commit()
     except motor_db.IntegrityError:
         return None  # usuario UNIQUE: ya existe (neutro: SQLite o Postgres)
@@ -122,19 +219,25 @@ def crear_usuario(
         "ultimo_acceso": nuevo["ultimo_acceso"],
         "cargo": nuevo["cargo"],
         "cobertura": bool(nuevo["cobertura"]),
+        "marcas": marcas_norm,
     }
 
 
 def listar_usuarios() -> list[dict[str, Any]]:
-    """Todos los usuarios (forma publica), por nombre ascendente."""
+    """Todos los usuarios (forma publica), por nombre ascendente.
+
+    Cada usuario incluye su lista de `marcas` (organigrama AMX). Para evitar N+1, se hace
+    una sola consulta a `usuarios_marcas` y se indexa por `usuario_id`.
+    """
     con = db.conectar()
     try:
         filas = con.execute(
             f"SELECT {_SELECT_USUARIO_PUBLICO} FROM usuarios ORDER BY usuario ASC"
         ).fetchall()
+        marcas_por_uid = _marcas_de_usuarios([f["id"] for f in filas], con=con)
     finally:
         con.close()
-    return [_fila_a_usuario_publico(f) for f in filas]
+    return [_fila_a_usuario_publico(f, marcas_por_uid.get(f["id"], [])) for f in filas]
 
 
 def obtener_usuario_por_id(usuario_id: str) -> dict[str, Any] | None:
@@ -145,18 +248,26 @@ def obtener_usuario_por_id(usuario_id: str) -> dict[str, Any] | None:
             f"SELECT {_SELECT_USUARIO_PUBLICO} FROM usuarios WHERE id = ?",
             (usuario_id,),
         ).fetchone()
+        if fila is None:
+            return None
+        marcas = _marcas_de_usuario(usuario_id, con=con)
     finally:
         con.close()
-    return _fila_a_usuario_publico(fila) if fila is not None else None
+    return _fila_a_usuario_publico(fila, marcas)
 
 
 def actualizar_perfil(
-    usuario_id: str, *, cargo: str | None = None, cobertura: bool | None = None
+    usuario_id: str,
+    *,
+    cargo: str | None = None,
+    cobertura: bool | None = None,
+    marcas: list[str] | None = None,
 ) -> bool:
-    """Actualiza `cargo` y/o `cobertura` de un usuario; True si existia.
+    """Actualiza `cargo`, `cobertura` y/o `marcas` de un usuario; True si existia.
 
-    NO aplica guardas (lo hace la API contra `CARGOS_USUARIO`). Pasar `None` deja el
-    campo intacto; `cargo=""` lo limpia.
+    NO aplica guardas (lo hace la API contra `CARGOS_USUARIO` y el catalogo de marcas).
+    Pasar `None` deja el campo intacto; `cargo=""` lo limpia; `marcas=[]` borra todas las
+    asignaciones N:M de ese usuario; `marcas=[...]` las REEMPLAZA al conjunto dado.
     """
     campos: list[str] = []
     valores: list[Any] = []
@@ -166,18 +277,27 @@ def actualizar_perfil(
     if cobertura is not None:
         campos.append("cobertura = ?")
         valores.append(1 if cobertura else 0)
-    if not campos:
+    # Sin campos directos ni marcas -> simple existencia.
+    if not campos and marcas is None:
         return obtener_usuario_por_id(usuario_id) is not None
-    valores.append(usuario_id)
-    con = db.conectar()
-    try:
-        cur = con.execute(
-            f"UPDATE usuarios SET {', '.join(campos)} WHERE id = ?", tuple(valores)
-        )
-        con.commit()
-        return cur.rowcount > 0
-    finally:
-        con.close()
+    if campos:
+        valores.append(usuario_id)
+        con = db.conectar()
+        try:
+            cur = con.execute(
+                f"UPDATE usuarios SET {', '.join(campos)} WHERE id = ?", tuple(valores)
+            )
+            con.commit()
+            existia = cur.rowcount > 0
+        finally:
+            con.close()
+        if not existia:
+            return False
+    if marcas is not None:
+        if not reemplazar_marcas_de_usuario(usuario_id, marcas):
+            # El usuario no existe (caso ya cubierto si no habia campos directos arriba).
+            return False
+    return True
 
 
 def _fila_credenciales(con: Any, usuario: str) -> Any:
@@ -300,6 +420,7 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             (ahora_iso, fila["id"]),
         )
         con.commit()
+        marcas = _marcas_de_usuario(fila["id"], con=con)
         return {
             "id": fila["id"],
             "usuario": fila["usuario"],
@@ -309,6 +430,7 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "ultimo_acceso": ahora_iso,
             "cargo": fila["cargo"],
             "cobertura": bool(fila["cobertura"]),
+            "marcas": marcas,
         }
     finally:
         con.close()

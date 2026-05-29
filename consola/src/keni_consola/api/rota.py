@@ -112,6 +112,26 @@ def _equipo(solo_cobertura: bool = True) -> list[dominio.Miembro]:
     return [dominio.Miembro(id=u["id"], nombre=u["usuario"]) for u in usuarios]
 
 
+def _equipo_dict(solo_cobertura: bool = True) -> list[dict[str, Any]]:
+    """Como `_equipo`, pero con marcas N:M para que el frontend pueda filtrar por vertical.
+
+    Hoy la rota solo cubre Claro Sports; con `marcas` el front puede limitar el equipo a
+    los que pertenecen a esa marca (Daiana ya sale por `cobertura=False`, pero Jonathan
+    cubre nacion-gamer y NO debe aparecer en la rota de ClaroSports).
+    """
+    usuarios = auth.listar_usuarios()
+    if solo_cobertura:
+        usuarios = [u for u in usuarios if u.get("cobertura")]
+    return [
+        {
+            "id": u["id"],
+            "nombre": u["usuario"],
+            "marcas": list(u.get("marcas") or []),
+        }
+        for u in usuarios
+    ]
+
+
 def _nombres_equipo() -> dict[str, str]:
     """Mapa id->nombre del equipo COMPLETO (todos los usuarios).
 
@@ -192,12 +212,14 @@ def _turno_a_dict(turno: dict[str, Any], nombres: dict[str, str]) -> dict[str, A
 async def equipo(request: Request) -> Response:
     """GET /api/rota/equipo: miembros asignables a la rota (cobertura=True).
 
-    `?todos=1` devuelve el equipo COMPLETO (incluido el personal sin cobertura), util
-    para casos excepcionales donde el admin quiere asignar a alguien que normalmente no
-    cubre.
+    Cada miembro incluye `marcas` (organigrama AMX) para que el frontend pueda filtrar
+    por vertical: hoy la rota cubre solo ClaroSports y solo deben aparecer quienes la
+    tengan en `marcas`. `?todos=1` devuelve el equipo COMPLETO (incluido el personal sin
+    cobertura), util para casos excepcionales donde el admin quiere asignar a alguien que
+    normalmente no cubre.
     """
     todos = (request.query_params.get("todos") or "").strip().lower() in {"1", "true", "yes"}
-    miembros = [{"id": m.id, "nombre": m.nombre} for m in _equipo(solo_cobertura=not todos)]
+    miembros = _equipo_dict(solo_cobertura=not todos)
     return JSONResponse({"equipo": miembros})
 
 

@@ -288,6 +288,20 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sesiones_usuario ON sesiones (usuario_id)",
+    # Relacion N:M usuarios <-> marcas (organigrama AMX, transcripciones de Bernardo):
+    # una persona puede pertenecer a varias verticales/marcas (Yustine cubre ClaroSports +
+    # UnoTV + Piso 15; Bernardo a todas). `marca_id` se valida en la capa API contra el
+    # catalogo canonico (`keni_shared.marcas`) — no es FK en la BD porque las marcas viven
+    # en TOML/codigo, no en SQL. Borrar un usuario propaga (ON DELETE CASCADE).
+    """
+    CREATE TABLE IF NOT EXISTS usuarios_marcas (
+        usuario_id  TEXT NOT NULL,
+        marca_id    TEXT NOT NULL,
+        PRIMARY KEY (usuario_id, marca_id),
+        FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_usuarios_marcas_marca ON usuarios_marcas (marca_id)",
     # `tipo_cobertura`/`prioridad`/`cambiado`/`actualizado` (ola B): el evento ya no es
     # solo "que sacar"; lleva COMO se cubre (transmision|imagenes|no_cubrir), su PRIORIDAD
     # y si se REPROGRAMO (`cambiado`=1: hay que volver a avisar al equipo). `actualizado`
