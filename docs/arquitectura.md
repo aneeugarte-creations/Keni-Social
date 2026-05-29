@@ -49,7 +49,7 @@ Añadir una plataforma = un adaptador nuevo, sin tocar las tools. El esquema (`s
 
 **Dos modos de despliegue** (arquitectura híbrida del producto):
 - **Local por persona** — MCP por stdio, credenciales en la máquina de cada quien (ver `despliegue-local.md`, `credenciales.md`). Máxima privacidad.
-- **Alojado por Keni** — MCP por HTTP con **System User tokens de Meta** (no caducan: evita las desconexiones tipo Metricool) y OAuth centralizado, para máquinas bloqueadas (ver `despliegue-hosted.md`). Solo expone números agregados.
+- **Alojado por Keni** — MCP por HTTP con **System User tokens de Meta** (no caducan: sin renovación manual cada ~60 días) y OAuth centralizado, para máquinas bloqueadas (ver `despliegue-hosted.md`). Solo expone números agregados.
 
 Distribución: todo el conjunto (skills + MCP) se instala y actualiza como **plugin de Claude Code** desde un marketplace privado (ver `README.md`). La voz personal de cada quien vive en `~/.config/keni-social/voces/` para sobrevivir a las actualizaciones.
 

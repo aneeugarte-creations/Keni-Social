@@ -250,9 +250,9 @@ que un humano aprueba** (cola de aprobación con doble revisión, #9) y **el sis
 
 ## 6. System User token (no caduca) — *(plan: Keni · genera: humano tras aprobación)*
 
-**Por qué.** Los tokens de **usuario** de Meta caducan a ~60 días y hay que renovarlos a mano: es el
-dolor de Metricool ("se desconecta" sola). El **System User** de Business Manager da un token que
-**no caduca**, y es la mitad *hosted* de la arquitectura (`../despliegue-hosted.md`). El adaptador lo
+**Por qué.** Los tokens de **usuario** de Meta caducan a ~60 días y hay que renovarlos a mano. El
+**System User** de Business Manager da un token que **no caduca** (sin renovación manual cada ~60
+días), y es la mitad *hosted* de la arquitectura (`../despliegue-hosted.md`). El adaptador lo
 marca con `tipo_token = "system_user"` para **no intentar renovarlo** (refresh = no-op; ver
 `fuentes/meta.py`). El mismo token sirve para **leer y publicar** (escenas §4), porque la
 publicación reutiliza el cliente HTTP de lectura.

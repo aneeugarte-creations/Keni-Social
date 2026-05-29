@@ -24,10 +24,11 @@ reutilizable con el siguiente cliente.
   por plataforma **más las mejores citas con su minuto y segundo**, para que el editor sepa
   exactamente qué cortar. Se acabó el "escúchate la hora de podcast a ver qué sirve". El audio
   **se transcribe dentro de la máquina del equipo** (whisper.cpp), sin subirse a ninguna nube.
-- **Consolidar métricas dispersas.** Reúne en un solo informe las cifras de todas las marcas y
-  plataformas (alcance, engagement, qué piezas funcionaron mejor), avisa de lo que despunta, y lo
-  presenta en un **tablero (dashboard) que se abre con doble clic, sin internet**, listo para
-  llevar a una junta con Bernardo.
+- **Consolidar métricas dispersas.** Lee las cifras de todas las marcas y plataformas desde
+  **Metricool** (vía su API, plan Advanced) y las reúne en un solo informe (alcance, engagement, qué
+  piezas funcionaron mejor) con narrativa es-MX, avisa de lo que despunta, y lo presenta en un
+  **tablero (dashboard) que se abre con doble clic, sin internet**, listo para llevar a una junta
+  con Bernardo. No reemplaza a Metricool: se apoya en él y añade encima la lectura del "por qué".
 
 ## Por qué es distinto (lo que la competencia no hace)
 
@@ -45,9 +46,9 @@ Tres cosas que ninguna herramienta del mercado ofrece junta (ver
 - **Privacidad por diseño, no por promesa.** Los videos y audios se transcriben en local; las
   llaves de acceso a las redes viven en la máquina de cada persona, no en el sistema. A servicios
   externos solo viaja texto de copy y números agregados. (Detalle en
-  [`flujo-de-datos-privacidad.md`](flujo-de-datos-privacidad.md).) En el modo alojado por Keni,
-  los tokens de Meta son **System User: no caducan**, lo que elimina las desconexiones cada ~60
-  días que sufren las herramientas tipo Metricool.
+  [`flujo-de-datos-privacidad.md`](flujo-de-datos-privacidad.md).) En el modo alojado por Keni, la
+  publicación usa tokens de Meta **System User: no caducan**, así que la conexión que publica no
+  necesita reautenticación periódica.
 
 ## Qué NO hace (todavía)
 
@@ -79,7 +80,8 @@ publicaría, sin publicar).
 ## Estado
 
 En **beta, en uso con AMX**: el producto es real y opera en el flujo del equipo. El copy desde
-texto y desde video ya funciona hoy, y las métricas funcionan con datos de muestra. Los datos reales de cada plataforma se van encendiendo conforme
-caen los permisos externos de cada red (revisiones de Meta, auditoría de TikTok, coste de X). El
-panorama completo —qué está listo, qué está pausado y el camino a producto vendible— está en
+texto y desde video ya funciona hoy, y las métricas leen datos reales desde Metricool (vía su API,
+plan Advanced). La publicación directa a cada red se va encendiendo conforme caen los permisos
+externos (revisiones de Meta, auditoría de TikTok, coste de X). El panorama completo —qué está
+listo, qué está pausado y el camino a producto vendible— está en
 [`estado-producto.md`](estado-producto.md).

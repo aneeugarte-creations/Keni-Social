@@ -6,6 +6,9 @@
 - **Issues:** #140 (épica) · #130 (ADR 0001, runtime) · #137 · #9 · #135 · #133
 - **Componente:** arquitectura interna del servicio (`consola/` + generación sandboxeada + MCP)
 - **Relación:** **complementa** a [ADR 0001](0001-runtime-servicio-compartido.md); no lo supersede.
+  El **agrupamiento concreto del catálogo por unidad de producto** (qué apps existen y por qué)
+  lo fija [ADR 0005](0005-agrupamiento-catalogo-por-unidad-de-producto.md); este ADR define el
+  **mecanismo** (catálogo data-driven + fronteras), 0005 define **el contenido** (las 3 apps).
 
 ---
 

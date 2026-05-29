@@ -49,8 +49,8 @@ una ola reciente de funciones de IA encima del mismo modelo. Se puede leer en cu
   caracteres pero no captura la marca". Para un medio mexicano con voz propia por marca, esto es un
   dolor real, no cosmético.
 - **El modelo SaaS multi-tenant en la nube** obliga a subir audio/video a servidores externos para
-  transcribir y a entregar las llaves de las redes a un tercero, con desconexiones de token
-  recurrentes. Es una limitación de arquitectura, no de configuración.
+  transcribir y a entregar las llaves de las redes a un tercero. Es una limitación de arquitectura,
+  no de configuración.
 
 ---
 
@@ -66,12 +66,12 @@ Leyenda: ✅ sí / fuerte · ⚠️ parcial o con limitaciones · ❌ no / ausen
 | **Video/audio → copy** | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ alt-text | ❌ | ❌ | ✅ (clip-a-copy) |
 | **Transcripción 100% LOCAL (audio no sale)** | ❌ (nube) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ whisper.cpp en la máquina |
 | **Citas con marca de tiempo (puntos de corte)** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
-| **Métricas multi-marca / multi-plataforma** | ✅ | ✅ | ⚠️ básico | ✅ | ⚠️ | ✅ | ✅ | ❌ | ⚠️ muestra lista; real escalonado |
+| **Métricas multi-marca / multi-plataforma** | ✅ | ✅ | ⚠️ básico | ✅ | ⚠️ | ✅ | ✅ | ❌ | ✅ real vía Metricool (Advanced) + capa de insight es-MX |
 | **MCP conversacional (agente lee tus datos)** | ✅ (hosted, OAuth) | ⚠️ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ⚠️ agentes | ✅ (núcleo del producto) |
 | **Programación / scheduling** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ (no existe aún) |
 | **Publicación directa a redes** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ dry-run hoy; real tras App Review |
 | **Llaves locales / sin entregar credenciales a un SaaS** | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ BYOK tokens IA | ❌ | ❌ | ✅ tokens en config local |
-| **Tokens Meta que no caducan (System User)** | ❌ (cortes ~60 días) | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | n/a | ✅ modo alojado |
+| **Publicación hosted con tokens Meta System User (no caducan)** | n/a | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | n/a | ✅ modo alojado (Fase 2) |
 | **El humano siempre aprueba (no publica solo)** | config | config | config | config | config | config | config | n/a | ✅ por diseño |
 | **Modelo** | SaaS multi-tenant | SaaS multi-tenant | SaaS multi-tenant | SaaS multi-tenant | SaaS multi-tenant | SaaS/enterprise | SaaS | SaaS | **Local por persona + alojado opcional; plugin de Claude Code** |
 | **Precio aprox. (mayo 2026)** | ~$22–267/mes (+$5/mes X) (aprox.) | ~$99–249/asiento/mes (aprox.) | ~$5–12/canal/mes (aprox.) | ~$79–399/asiento/mes (aprox.) | ~$25–80/mes (aprox.) | ~$249–299/asiento o $35k–50k+/año (aprox.) | ~$999–1,999+/mes (no verificado, sin lista) | ~$39–59/asiento/mes (aprox.) | capa Keni ~$45/puesto + add-on/marca (propuesta, no cerrada) |
@@ -92,9 +92,10 @@ Leyenda: ✅ sí / fuerte · ⚠️ parcial o con limitaciones · ❌ no / ausen
 
 ### 3.1 La cuña de entrada (el dolor que el incumbente no resuelve)
 
-AMX ya tiene Metricool: fuerte en analítica, débil en copy con IA, sin español de México real, y con
-cortes de publicación por la desconexión de tokens. keni-social **no entra a pelear la analítica ni
-la publicación de primera**; entra por el hueco diario del community manager:
+AMX ya tiene Metricool: fuerte en analítica, débil en copy con IA y sin español de México real.
+keni-social **no entra a pelear la analítica ni la publicación de primera** —en métricas se
+**apoya** en Metricool, leyendo sus datos vía API (plan Advanced)—; entra por el hueco diario del
+community manager:
 
 1. **Copy + tropicalización es-MX.** El material llega con giros de España; hoy el CM lo rehace a
    mano. La skill lo entrega en la voz de la marca, listo para revisar, no para reescribir. Esto
@@ -104,9 +105,10 @@ la publicación de primera**; entra por el hueco diario del community manager:
    con marca de tiempo** (el punto de corte exacto). El audio se transcribe en la máquina y nunca
    sale. Elimina el "escúchate la hora de podcast a ver qué sirve". Capacidad que ningún competidor
    ofrece, y menos en local.
-3. **Reportes consolidados para Mariana/Bernardo.** El MCP consolida marcas y plataformas, marca
-   picos/anomalías y la cobertura de los datos. Le da al decisor una razón para querer la herramienta
-   aunque no la toque a diario.
+3. **Reportes consolidados para Mariana/Bernardo.** El MCP lee de Metricool (vía API, plan Advanced),
+   consolida marcas y plataformas con narrativa es-MX, marca picos/anomalías y la cobertura de los
+   datos. No compite con la analítica de Metricool: se apoya en ella y añade la capa del "por qué".
+   Le da al decisor una razón para querer la herramienta aunque no la toque a diario.
 
 La cuña es deliberadamente lo más **portátil** del producto: estos dolores existen en cualquier
 equipo de contenido en español de México, así que lo validado con AMX es replicable con el cliente nº2.
@@ -125,9 +127,9 @@ equipo de contenido en español de México, así que lo validado con AMX es repl
    viaja texto de copy y números agregados. Es verificable y está documentado para una revisión de
    privacidad (`flujo-de-datos-privacidad.md`). Las SaaS en la nube no pueden ofrecer esto
    estructuralmente: deben subir el audio y custodiar las llaves.
-4. **System User de Meta (tokens que no caducan) en el modo alojado.** Ataca directamente el dolor
-   recurrente de Metricool y similares: las desconexiones de token (LinkedIn cada ~2 meses, X
-   revocable en cualquier momento, expiraciones varias) que tumban publicaciones programadas.
+4. **System User de Meta (tokens que no caducan) en el modo alojado.** Propiedad del camino de
+   **publicación hosted** (Fase 2): la conexión que publica a Meta no requiere reautenticación
+   periódica, lo que da una base estable para programar y publicar sin reconexiones manuales.
 
 ### 3.3 Para Keni como negocio B2B (capacitación + herramienta)
 
@@ -164,19 +166,20 @@ diferenciador de negocio es doble:
    **pipeline completo**: local + citas con marca de tiempo + mismo contexto editorial + verificación
    de ASR. Hay que vender el pipeline, no la transcripción suelta.
 
-4. **Dependencia de aprobaciones externas para publicar/medir.** Publicación y métricas reales
-   dependen de **Meta App Review / Advanced Access** (2–6 semanas, rechazos comunes, cada rechazo
-   reinicia), **auditoría de TikTok** (2–6 semanas, contenido en privado hasta aprobar, máx. 5
-   usuarios sin auditar), **coste de X** (sin tier nuevo de Basic/Pro; pago por uso, posts con URL
-   ~$0.20, Enterprise desde $50k/mes) y los límites de YouTube/Meta. Mientras tanto, el incumbente ya
-   publica.
+4. **Dependencia de aprobaciones externas para publicar.** La **publicación directa** depende de
+   **Meta App Review / Advanced Access** (2–6 semanas, rechazos comunes, cada rechazo reinicia),
+   **auditoría de TikTok** (2–6 semanas, contenido en privado hasta aprobar, máx. 5 usuarios sin
+   auditar), **coste de X** (sin tier nuevo de Basic/Pro; pago por uso, posts con URL ~$0.20,
+   Enterprise desde $50k/mes) y los límites de YouTube/Meta. Mientras tanto, el incumbente ya publica.
+   (Las **métricas reales no dependen de esto**: se leen de Metricool vía su API, plan Advanced.)
    *Mitigación:* la oferta de Fase 0 **no depende** de ninguna aprobación; el piloto genera valor sin
    esperar a Meta. No prometer fechas de publicación que no controlamos.
 
-5. **Dependencia del incumbente en métricas históricas.** Mientras Metricool tenga el histórico, el
-   cliente no migra del todo.
-   *Mitigación:* posicionarse como complemento aditivo y construir histórico propio (el MCP guarda
-   cada lectura en SQLite local) para invertir la dependencia con el tiempo.
+5. **Dependencia de Metricool como fuente de métricas.** En métricas, keni-social **lee de Metricool
+   vía su API** (plan Advanced); si el cliente deja Metricool o cambia de plan, esa fuente se corta.
+   *Mitigación:* es una dependencia asumida y alineada con el posicionamiento "complementar, no
+   reemplazar"; además el MCP guarda cada lectura en SQLite local, construyendo histórico propio que
+   reduce la dependencia con el tiempo.
 
 6. **Coste de insumo visible (Claude for Teams ~$30/asiento).** Es un coste que el cliente ve además
    de la capa Keni.
@@ -211,14 +214,16 @@ diferenciador de negocio es doble:
    la vez diferenciador comercial y desactivador de la objeción de Legal/IT corporativo. Anticiparlo,
    no esperar a que lo pidan.
 
-5. **Convertir las desconexiones de token del incumbente en mensaje directo.** "Con System User de
-   Meta los tokens no caducan: se acabaron los cortes cada 60 días" es un dolor concreto y verificable
-   de Metricool/categoría. Reservarlo para la Fase 1 (alojado), cuando ya se entregue.
+5. **Apoyarse en Metricool para métricas, no competir contra su analítica.** keni-social lee los
+   datos de Metricool vía su API (plan Advanced) y añade encima la capa de insight/narrativa es-MX
+   (deck del lunes, el "por qué" diario, reporte conversacional). El mensaje es "complementar, no
+   reemplazar": ahora literalmente leemos de Metricool. El System User de Meta (tokens que no caducan)
+   se reserva como propiedad del camino de **publicación hosted** (Fase 2), no como ataque a Metricool.
 
 6. **Vender por fases alineadas al estado real del producto.** Cobrar por lo listo (Fase 0: copy
-   texto, copy video local, métricas-insight con muestra, preview dry-run). Cada hito que cae (datos
-   reales → publicación → scheduling/dashboard) es un upsell natural, no una promesa que devalúe la
-   venta inicial. No vender humo.
+   texto, copy video local, métricas-insight real vía Metricool, preview dry-run). Cada hito que cae
+   (publicación → scheduling/dashboard) es un upsell natural, no una promesa que devalúe la venta
+   inicial. No vender humo.
 
 7. **Tratar el piloto AMX como plantilla del cliente nº2.** La cuña (es-MX, video→copy, reportes) es
    portátil a cualquier equipo de contenido en español de México. Medir el piloto con engagement como
@@ -230,7 +235,7 @@ diferenciador de negocio es doble:
 ## Fuentes
 
 - Metricool — pricing: <https://metricool.com/pricing/> · <https://www.socialchamp.com/blog/metricool-pricing/> · <https://costbench.com/software/social-media-management/metricool/>
-- Metricool — desconexiones y duración de tokens: <https://help.metricool.com/en/article/duration-of-connections-and-tokens-on-social-networks-with-metricool-ztqu6k/> · <https://help.metricool.com/en/article/what-happens-when-a-social-network-is-disconnected-in-metricool-1klqhq/> · <https://help.metricool.com/en/article/best-practices-to-minimize-disconnections-on-social-networks-1fmoqe/>
+- Metricool — API (plan Advanced, fuente de métricas que consume keni-social): <https://help.metricool.com/en/article/duration-of-connections-and-tokens-on-social-networks-with-metricool-ztqu6k/>
 - Metricool — MCP para redes: <https://metricool.com/what-is-mcp-for-social-media/>
 - Hootsuite — planes y OwlyWriter/OwlyGPT: <https://www.hootsuite.com/plans> · <https://socialrails.com/blog/hootsuite-review> · <https://www.temperstack.com/plans/hootsuite/>
 - Buffer — pricing y AI Assistant: <https://socialrails.com/blog/buffer-review> · <https://socialrails.com/blog/buffer-pricing>
