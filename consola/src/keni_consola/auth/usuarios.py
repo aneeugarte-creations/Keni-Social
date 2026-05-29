@@ -31,12 +31,12 @@ BLOQUEO_MINUTOS = 5
 # --------------------------------------------------------------------------- #
 
 
-# Columnas PUBLICAS del usuario, en orden estable. `cargo` y `cobertura` se anadieron a
-# `usuarios` con `_migrar_columnas_usuarios`; todo SELECT pasa por aqui para que tipos y
-# columnas no se desincronicen.
+# Columnas PUBLICAS del usuario, en orden estable. `cargo`, `cobertura` y
+# `puede_coordinar` se anadieron a `usuarios` con `_migrar_columnas_usuarios`; todo SELECT
+# pasa por aqui para que tipos y columnas no se desincronicen.
 _COLUMNAS_USUARIO_PUBLICAS = (
     "id", "usuario", "rol", "debe_cambiar_password", "creado", "ultimo_acceso",
-    "cargo", "cobertura",
+    "cargo", "cobertura", "puede_coordinar",
 )
 _SELECT_USUARIO_PUBLICO = ", ".join(_COLUMNAS_USUARIO_PUBLICAS)
 
@@ -45,8 +45,9 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
     """Forma PUBLICA de un usuario para la API (NUNCA salt/hash).
 
     `cargo` es la FUNCION del equipo ("director", "community_manager"...). `cobertura` es
-    el flag que dice si esa persona entra en la rota de turnos. Ambos vacios/`False` por
-    defecto para usuarios legados.
+    el flag que dice si esa persona entra en la rota de turnos. `puede_coordinar` indica si
+    es candidato a coordinador por celda (ola "coord"). Todos vacios/`False` por defecto
+    para usuarios legados.
 
     `marcas` (organigrama AMX): lista de ids canonicos de las verticales a las que
     pertenece la persona (`["claro-sports", "unotv"]`). Llega de la tabla N:M
@@ -64,6 +65,7 @@ def _fila_a_usuario_publico(fila: Any, marcas: list[str] | None = None) -> dict[
         "ultimo_acceso": fila["ultimo_acceso"],
         "cargo": fila["cargo"],
         "cobertura": bool(fila["cobertura"]),
+        "puede_coordinar": bool(fila["puede_coordinar"]),
         "marcas": marcas,
     }
 
@@ -159,6 +161,7 @@ def crear_usuario(
     debe_cambiar_password: bool = False,
     cargo: str = "",
     cobertura: bool = False,
+    puede_coordinar: bool = False,
     marcas: list[str] | None = None,
 ) -> dict[str, Any] | None:
     """Inserta un usuario nuevo y lo devuelve (forma publica). None si el nombre ya existe.
@@ -166,8 +169,10 @@ def crear_usuario(
     NO valida fuerza/rol/cargo/marcas (lo hace la API contra sus mensajes); aqui solo
     persiste. `cargo` es texto libre validado en la API (allowlist en
     `estados.CARGOS_USUARIO`); `cobertura` indica si la persona entra en la rota de
-    turnos (`False` por defecto). `marcas` (organigrama AMX): lista de ids canonicos de
-    verticales (`["claro-sports", "unotv"]`); vacio/`None` deja al usuario sin marcas.
+    turnos (`False` por defecto). `puede_coordinar` indica si es candidato a coordinador
+    por celda (ola "coord"; `False` por defecto). `marcas` (organigrama AMX): lista de
+    ids canonicos de verticales (`["claro-sports", "unotv"]`); vacio/`None` deja al
+    usuario sin marcas.
     """
     salt_hex, hash_hex = hashear_password(password)
     nuevo = {
@@ -183,18 +188,20 @@ def crear_usuario(
         "ultimo_acceso": "",
         "cargo": cargo,
         "cobertura": 1 if cobertura else 0,
+        "puede_coordinar": bool(puede_coordinar),
     }
     con = db.conectar()
     try:
         con.execute(
             "INSERT INTO usuarios (id, usuario, rol, salt, hash, debe_cambiar_password, "
-            "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
+            "puede_coordinar) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 nuevo["id"], nuevo["usuario"], nuevo["rol"], nuevo["salt"], nuevo["hash"],
                 nuevo["debe_cambiar_password"], nuevo["intentos_fallidos"],
                 nuevo["bloqueo_hasta"], nuevo["creado"], nuevo["ultimo_acceso"],
-                nuevo["cargo"], nuevo["cobertura"],
+                nuevo["cargo"], nuevo["cobertura"], nuevo["puede_coordinar"],
             ),
         )
         # Marcas del organigrama (N:M): sembrarlas en la misma conexion para que el
@@ -219,6 +226,7 @@ def crear_usuario(
         "ultimo_acceso": nuevo["ultimo_acceso"],
         "cargo": nuevo["cargo"],
         "cobertura": bool(nuevo["cobertura"]),
+        "puede_coordinar": bool(nuevo["puede_coordinar"]),
         "marcas": marcas_norm,
     }
 
@@ -261,13 +269,16 @@ def actualizar_perfil(
     *,
     cargo: str | None = None,
     cobertura: bool | None = None,
+    puede_coordinar: bool | None = None,
     marcas: list[str] | None = None,
 ) -> bool:
-    """Actualiza `cargo`, `cobertura` y/o `marcas` de un usuario; True si existia.
+    """Actualiza `cargo`, `cobertura`, `puede_coordinar` y/o `marcas`; True si existia.
 
     NO aplica guardas (lo hace la API contra `CARGOS_USUARIO` y el catalogo de marcas).
     Pasar `None` deja el campo intacto; `cargo=""` lo limpia; `marcas=[]` borra todas las
     asignaciones N:M de ese usuario; `marcas=[...]` las REEMPLAZA al conjunto dado.
+    `puede_coordinar` (ola "coord"): bool que marca al usuario como candidato a coordinador
+    por celda en el calendario.
     """
     campos: list[str] = []
     valores: list[Any] = []
@@ -277,6 +288,9 @@ def actualizar_perfil(
     if cobertura is not None:
         campos.append("cobertura = ?")
         valores.append(1 if cobertura else 0)
+    if puede_coordinar is not None:
+        campos.append("puede_coordinar = ?")
+        valores.append(bool(puede_coordinar))
     # Sin campos directos ni marcas -> simple existencia.
     if not campos and marcas is None:
         return obtener_usuario_por_id(usuario_id) is not None
@@ -307,7 +321,8 @@ def _fila_credenciales(con: Any, usuario: str) -> Any:
     """
     return con.execute(
         "SELECT id, usuario, rol, salt, hash, debe_cambiar_password, "
-        "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura "
+        "intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso, cargo, cobertura, "
+        "puede_coordinar "
         "FROM usuarios WHERE usuario = ?",
         (usuario,),
     ).fetchone()
@@ -430,6 +445,7 @@ def autenticar(usuario: str, password: str) -> dict[str, Any] | None:
             "ultimo_acceso": ahora_iso,
             "cargo": fila["cargo"],
             "cobertura": bool(fila["cobertura"]),
+            "puede_coordinar": bool(fila["puede_coordinar"]),
             "marcas": marcas,
         }
     finally:

@@ -3,10 +3,12 @@
 Endpoints (todos bajo `/api/usuarios`, CONTRATO con el frontend):
 
   - GET    /api/usuarios            -> {usuarios: [{id, usuario, rol, creado,
-                                      ultimo_acceso, cargo, cobertura, marcas}]}
+                                      ultimo_acceso, cargo, cobertura, puede_coordinar,
+                                      marcas}]}
   - POST   /api/usuarios            {usuario, password, rol} -> 201 {id, usuario, rol};
                                       409 si el nombre ya existe.
-  - PATCH  /api/usuarios/{id}       {rol?, password?, cargo?, cobertura?, marcas?} -> 200.
+  - PATCH  /api/usuarios/{id}       {rol?, password?, cargo?, cobertura?,
+                                      puede_coordinar?, marcas?} -> 200.
   - DELETE /api/usuarios/{id}       -> 204.
 
 PATCH (ampliacion "feat/roles-marcas"): ademas de rol/password, el admin puede actualizar
@@ -92,6 +94,7 @@ async def listar(request: Request) -> Response:
             "ultimo_acceso": u["ultimo_acceso"],
             "cargo": u.get("cargo", "") or "",
             "cobertura": bool(u.get("cobertura")),
+            "puede_coordinar": bool(u.get("puede_coordinar")),
             "marcas": list(u.get("marcas") or []),
         }
         for u in auth.listar_usuarios()
@@ -162,15 +165,16 @@ async def crear(request: Request) -> Response:
 
 
 async def actualizar(request: Request) -> Response:
-    """PATCH /api/usuarios/{id}: cambia rol/contrasena/cargo/cobertura/marcas.
+    """PATCH /api/usuarios/{id}: cambia rol/contrasena/cargo/cobertura/puede_coordinar/marcas.
 
     Cuerpo (todo opcional, manda solo lo que cambia):
-      - `rol`        admin|editor (allowlist `ROLES_USUARIO`).
-      - `password`   contrasena nueva (reset por admin; obliga al cambio al proximo login).
-      - `cargo`      allowlist `CARGOS_USUARIO`; "" para desclasificar.
-      - `cobertura`  bool: True/False (entra o no en la rota de turnos).
-      - `marcas`     lista de ids canonicos del catalogo (`keni_shared.marcas`); reemplaza
-                     el conjunto del usuario. `[]` desasigna todas.
+      - `rol`              admin|editor (allowlist `ROLES_USUARIO`).
+      - `password`         contrasena nueva (reset por admin; obliga al cambio al proximo login).
+      - `cargo`            allowlist `CARGOS_USUARIO`; "" para desclasificar.
+      - `cobertura`        bool: True/False (entra o no en la rota de turnos).
+      - `puede_coordinar`  bool: True/False (candidato a coordinador por celda; ola "coord").
+      - `marcas`           lista de ids canonicos del catalogo (`keni_shared.marcas`); reemplaza
+                           el conjunto del usuario. `[]` desasigna todas.
 
     Guardas:
       - No degradar al ULTIMO admin a editor (dejaria 0 admins).
@@ -189,16 +193,23 @@ async def actualizar(request: Request) -> Response:
     nueva_password = datos.get("password")
     nuevo_cargo = datos.get("cargo")
     nueva_cobertura = datos.get("cobertura")
+    nuevo_puede_coordinar = datos.get("puede_coordinar")
     nuevas_marcas = datos.get("marcas")
     if (
         nuevo_rol is None
         and nueva_password is None
         and nuevo_cargo is None
         and nueva_cobertura is None
+        and nuevo_puede_coordinar is None
         and nuevas_marcas is None
     ):
         return JSONResponse(
-            {"error": "Indica un campo a modificar (rol, contraseña, cargo, cobertura o marcas)."},
+            {
+                "error": (
+                    "Indica un campo a modificar "
+                    "(rol, contraseña, cargo, cobertura, puede_coordinar o marcas)."
+                )
+            },
             status_code=400,
         )
 
@@ -236,6 +247,12 @@ async def actualizar(request: Request) -> Response:
             {"error": "El campo 'cobertura' debe ser true o false."}, status_code=400
         )
 
+    if nuevo_puede_coordinar is not None and not isinstance(nuevo_puede_coordinar, bool):
+        return JSONResponse(
+            {"error": "El campo 'puede_coordinar' debe ser true o false."},
+            status_code=400,
+        )
+
     if nuevas_marcas is not None:
         if not isinstance(nuevas_marcas, list) or not all(
             isinstance(m, str) for m in nuevas_marcas
@@ -265,12 +282,16 @@ async def actualizar(request: Request) -> Response:
     if (
         nuevo_cargo is not None
         or nueva_cobertura is not None
+        or nuevo_puede_coordinar is not None
         or nuevas_marcas is not None
     ):
         auth.actualizar_perfil(
             usuario_id,
             cargo=nuevo_cargo if nuevo_cargo is not None else None,
             cobertura=nueva_cobertura if nueva_cobertura is not None else None,
+            puede_coordinar=(
+                nuevo_puede_coordinar if nuevo_puede_coordinar is not None else None
+            ),
             marcas=list(nuevas_marcas) if nuevas_marcas is not None else None,
         )
 
@@ -282,6 +303,7 @@ async def actualizar(request: Request) -> Response:
             "rol": actualizado["rol"],
             "cargo": actualizado.get("cargo", "") or "",
             "cobertura": bool(actualizado.get("cobertura")),
+            "puede_coordinar": bool(actualizado.get("puede_coordinar")),
             "marcas": list(actualizado.get("marcas") or []),
         }
     )

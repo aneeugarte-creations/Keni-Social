@@ -119,6 +119,9 @@ async def me(request: Request) -> Response:
                 "ultimo_acceso": usuario.get("ultimo_acceso", ""),
                 "cargo": refrescado.get("cargo", "") or usuario.get("cargo", "") or "",
                 "cobertura": bool(refrescado.get("cobertura") or usuario.get("cobertura")),
+                "puede_coordinar": bool(
+                    refrescado.get("puede_coordinar") or usuario.get("puede_coordinar")
+                ),
                 "marcas": list(refrescado.get("marcas") or []),
             }
         }

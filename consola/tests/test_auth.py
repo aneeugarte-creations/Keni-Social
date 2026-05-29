@@ -170,6 +170,54 @@ def test_sembrar_equipo_asigna_marcas_del_organigrama(entorno):
     assert usuarios["jonathan"]["marcas"] == ["nacion-gamer"]
 
 
+def test_sembrar_equipo_marca_puede_coordinar_para_los_tres(entorno):
+    """El seed pone `puede_coordinar=True` para Elias, Ale, Mariana; False para el resto.
+
+    Es el listado canonico de candidatos a coordinador (ola "coord"). Los tres se
+    sobreescriben INCONDICIONALMENTE; el resto del equipo queda con el default `False`.
+    """
+    auth.sembrar_equipo()
+    usuarios = {u["usuario"]: u for u in auth.listar_usuarios()}
+    assert usuarios["elias"]["puede_coordinar"] is True
+    assert usuarios["ale"]["puede_coordinar"] is True
+    assert usuarios["mariana"]["puede_coordinar"] is True
+    for usuario in ("bernardo", "tezcu", "luis", "roger", "lalo", "angel", "diana",
+                    "maira", "daiana", "jonathan", "jose", "yustine", "laloyt"):
+        assert usuarios[usuario]["puede_coordinar"] is False
+
+
+def test_sembrar_equipo_respeta_puede_coordinar_personalizado(entorno):
+    """Si el admin marca `puede_coordinar=True` a alguien fuera del seed, NO se revierte.
+
+    Tezcu no esta en el listado canonico pero si el admin lo habilita como coordinador,
+    re-correr el seed no debe quitarselo.
+    """
+    auth.sembrar_equipo()
+    tezcu = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
+    auth.actualizar_perfil(tezcu["id"], puede_coordinar=True)
+    auth.sembrar_equipo()
+    tezcu_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "tezcu")
+    assert tezcu_post["puede_coordinar"] is True
+
+
+def test_sembrar_equipo_corrige_puede_coordinar_de_los_tres(entorno):
+    """Si Elias/Ale/Mariana tienen `puede_coordinar=False` por error, el seed lo restaura.
+
+    Los tres son los canonicos (`_USUARIOS_PUEDE_COORDINAR_FORZADO`): el seed los
+    sobreescribe INCONDICIONALMENTE a True tras cada deploy.
+    """
+    auth.sembrar_equipo()
+    ale = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
+    # Simula un admin que se lo quitara por error.
+    auth.actualizar_perfil(ale["id"], puede_coordinar=False)
+    asegurado = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
+    assert asegurado["puede_coordinar"] is False
+    # Re-correr el seed lo restaura.
+    auth.sembrar_equipo()
+    ale_post = next(u for u in auth.listar_usuarios() if u["usuario"] == "ale")
+    assert ale_post["puede_coordinar"] is True
+
+
 def test_sembrar_equipo_corrige_daiana_aunque_este_editada(entorno):
     """La correccion de Daiana es INCONDICIONAL: sale del calendario tras este seed.
 
@@ -449,11 +497,12 @@ def test_listar_usuarios_como_admin(entorno):
     assert r.status_code == 200
     nombres = {u["usuario"] for u in r.json()["usuarios"]}
     assert "jefa" in nombres
-    # NUNCA se exponen salt/hash. Tras "feat/roles-marcas" la fila incluye cargo/cobertura/marcas.
+    # NUNCA se exponen salt/hash. Tras "feat/roles-marcas" la fila incluye cargo/cobertura/marcas;
+    # ola "coord" anade `puede_coordinar`.
     for u in r.json()["usuarios"]:
         assert set(u) == {
             "id", "usuario", "rol", "creado", "ultimo_acceso",
-            "cargo", "cobertura", "marcas",
+            "cargo", "cobertura", "puede_coordinar", "marcas",
         }
 
 
@@ -579,6 +628,66 @@ def test_patch_cambia_cargo_y_cobertura(entorno):
     actualizado = auth.obtener_usuario_por_id(ed["id"])
     assert actualizado["cargo"] == "community_manager"
     assert actualizado["cobertura"] is True
+
+
+def test_patch_cambia_puede_coordinar(entorno):
+    """El admin puede marcar/desmarcar `puede_coordinar` sin tocar otros campos."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    # Default = False.
+    asegurado_pre = auth.obtener_usuario_por_id(ed["id"])
+    assert asegurado_pre["puede_coordinar"] is False
+    # Activar.
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"puede_coordinar": True},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["puede_coordinar"] is True
+    actualizado = auth.obtener_usuario_por_id(ed["id"])
+    assert actualizado["puede_coordinar"] is True
+    # Desactivar.
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"puede_coordinar": False},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200
+    assert r.json()["puede_coordinar"] is False
+
+
+def test_patch_puede_coordinar_tipo_invalido_400(entorno):
+    """`puede_coordinar` no-bool -> 400 con mensaje accionable."""
+    _crear("jefa", CLAVE, "admin")
+    ed = _crear("ed", CLAVE, "editor")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.patch(
+        f"/api/usuarios/{ed['id']}",
+        json={"puede_coordinar": "si"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    assert "puede_coordinar" in r.json()["error"]
+
+
+def test_crear_usuario_default_puede_coordinar_false(entorno):
+    """Un usuario creado por la API NO arranca como coordinador (default False)."""
+    _crear("jefa", CLAVE, "admin")
+    c = _cli()
+    _login(c, "jefa", CLAVE)
+    r = c.post(
+        "/api/usuarios",
+        json={"usuario": "nuevo", "password": CLAVE, "rol": "editor"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 201
+    creado = auth.obtener_usuario_por_id(r.json()["id"])
+    assert creado["puede_coordinar"] is False
 
 
 def test_patch_cargo_invalido_400(entorno):

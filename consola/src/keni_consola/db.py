@@ -168,6 +168,9 @@ __all__ = [
     "ultimo_snapshot_comercial",
     "actualizar_swap_turno",
     "aplicar_swap_turno",
+    "listar_coordinacion_semana",
+    "set_coordinador_rota",
+    "quitar_coordinador_rota",
 ]
 
 
@@ -280,7 +283,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         creado                 TEXT NOT NULL DEFAULT '',
         ultimo_acceso          TEXT NOT NULL DEFAULT '',
         cargo                  TEXT NOT NULL DEFAULT '',
-        cobertura              INTEGER NOT NULL DEFAULT 0
+        cobertura              INTEGER NOT NULL DEFAULT 0,
+        puede_coordinar        BOOLEAN NOT NULL DEFAULT FALSE
     )
     """,
     """
@@ -507,6 +511,25 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_destinatario ON rota_swaps_turno (destinatario_id)",
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_estado ON rota_swaps_turno (estado)",
     "CREATE INDEX IF NOT EXISTS idx_rota_swaps_fechas ON rota_swaps_turno (fecha_a, fecha_b)",
+    # COORDINADOR POR TURNO (ola "coord"): cada celda del calendario (fecha, franja_id) puede
+    # tener UN coordinador asignado, INDEPENDIENTE del turno de CM. Los candidatos son los
+    # usuarios con `puede_coordinar=true` (hoy Elias, Ale, Mariana; lo decide el admin desde
+    # /usuarios). UNIQUE(fecha, franja_id): una celda = un coordinador. La tabla es nueva
+    # (no hay migracion historica). Borrar un turno o cambiar franja NO borra la coordinacion.
+    """
+    CREATE TABLE IF NOT EXISTS rota_coordinacion (
+        id              TEXT PRIMARY KEY,
+        lunes           TEXT NOT NULL,
+        fecha           TEXT NOT NULL,
+        franja_id       TEXT NOT NULL,
+        coordinador_id  TEXT NOT NULL,
+        creado          TEXT NOT NULL DEFAULT '',
+        actualizado     TEXT NOT NULL DEFAULT '',
+        UNIQUE (fecha, franja_id)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_rota_coord_lunes ON rota_coordinacion (lunes)",
+    "CREATE INDEX IF NOT EXISTS idx_rota_coord_franja ON rota_coordinacion (franja_id)",
     # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
@@ -1158,12 +1181,14 @@ def _migrar_columnas_programas(con: Any) -> None:
 
 
 # Columnas que se anadieron a `usuarios` despues del esquema original (cargo + cobertura
-# del equipo real, transcripciones AMX). Una BD creada antes no las tiene; legado ->
-# `cargo=''` (sin clasificar) y `cobertura=0` (no entra en rota). Cada par es (columna,
+# del equipo real, transcripciones AMX; `puede_coordinar` ola "coord"). Una BD creada
+# antes no las tiene; legado -> `cargo=''` (sin clasificar), `cobertura=0` (no entra en
+# rota), `puede_coordinar=false` (no es candidato a coordinador). Cada par es (columna,
 # fragmento de tipo/DEFAULT).
 _COLUMNAS_USUARIOS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("cargo", "TEXT NOT NULL DEFAULT ''"),
     ("cobertura", "INTEGER NOT NULL DEFAULT 0"),
+    ("puede_coordinar", "BOOLEAN NOT NULL DEFAULT FALSE"),
 )
 
 
@@ -3814,3 +3839,95 @@ def job_cancelado(job_id: str) -> bool:
     finally:
         con.close()
     return bool(fila["cancelado"]) if fila is not None else False
+
+
+# --------------------------------------------------------------------------- #
+# Coordinador por turno (ola "coord"): CRUD de `rota_coordinacion`             #
+# --------------------------------------------------------------------------- #
+#
+# Cada celda del calendario (combinacion fecha + franja_id) puede tener UN coordinador.
+# Los candidatos son los usuarios con `puede_coordinar=true` (la API lo valida; aqui solo
+# persistimos). UNIQUE(fecha, franja_id): un upsert reemplaza el coordinador previo.
+# La coordinacion es INDEPENDIENTE del turno de CM: borrar un turno o cambiar franja NO
+# borra la coordinacion (el admin la mantiene aparte).
+
+_COLS_COORDINACION = (
+    "id", "lunes", "fecha", "franja_id", "coordinador_id", "creado", "actualizado",
+)
+_SELECT_COORDINACION = f"SELECT {', '.join(_COLS_COORDINACION)} FROM rota_coordinacion"
+
+
+def _fila_a_coordinacion(fila: Any) -> dict[str, Any]:
+    return {col: fila[col] for col in _COLS_COORDINACION}
+
+
+def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
+    """Coordinaciones de la semana cuyo lunes es `lunes`, ordenadas por fecha y franja."""
+    if not lunes:
+        return []
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_COORDINACION} WHERE lunes = ? ORDER BY fecha ASC, franja_id ASC",
+            (lunes,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_coordinacion(f) for f in filas]
+
+
+def set_coordinador_rota(
+    lunes: str, fecha: str, franja_id: str, coordinador_id: str
+) -> dict[str, Any]:
+    """UPSERT por (fecha, franja_id): asigna `coordinador_id` a la celda; devuelve la fila.
+
+    Si ya hay coordinador en esa celda, se REEMPLAZA (actualiza `coordinador_id` y
+    `actualizado`). Si no hay, se crea con `creado` = `actualizado` = ahora. La capa API
+    valida que `coordinador_id` corresponda a un usuario con `puede_coordinar=true`.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        fila_existente = con.execute(
+            "SELECT id FROM rota_coordinacion WHERE fecha = ? AND franja_id = ?",
+            (fecha, franja_id),
+        ).fetchone()
+        if fila_existente is not None:
+            con.execute(
+                "UPDATE rota_coordinacion SET coordinador_id = ?, lunes = ?, "
+                "actualizado = ? WHERE id = ?",
+                (coordinador_id, lunes, ahora, fila_existente["id"]),
+            )
+            con.commit()
+            fila = con.execute(
+                f"{_SELECT_COORDINACION} WHERE id = ?", (fila_existente["id"],)
+            ).fetchone()
+            return _fila_a_coordinacion(fila)
+        nuevo_id = uuid.uuid4().hex[:12]
+        con.execute(
+            "INSERT INTO rota_coordinacion "
+            "(id, lunes, fecha, franja_id, coordinador_id, creado, actualizado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (nuevo_id, lunes, fecha, franja_id, coordinador_id, ahora, ahora),
+        )
+        con.commit()
+        fila = con.execute(
+            f"{_SELECT_COORDINACION} WHERE id = ?", (nuevo_id,)
+        ).fetchone()
+        return _fila_a_coordinacion(fila)
+    finally:
+        con.close()
+
+
+def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:
+    """Borra la coordinacion de la celda (fecha, franja_id). True si habia algo que borrar."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM rota_coordinacion WHERE fecha = ? AND franja_id = ?",
+            (fecha, franja_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
