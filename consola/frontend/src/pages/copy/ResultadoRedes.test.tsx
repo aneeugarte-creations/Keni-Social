@@ -34,6 +34,7 @@ function mkPublicacion(overrides: Partial<Publicacion> = {}): Publicacion {
     revisor_nombre: "",
     revisado_en: "",
     preparado_en: "",
+    id_post_metricool: "",
     imagen: "",
     imagen_url: "",
     fecha_programada: "",
