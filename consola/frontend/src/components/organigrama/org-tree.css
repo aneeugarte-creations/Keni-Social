@@ -7,10 +7,26 @@
  * El color de las líneas sale de `--org-line` (lo respeta el tema: usa el borde shadcn).
  */
 
-.org-scroll {
+/* Contenedor que ENCAJA el árbol sin scroll: el JS calcula un `scale` para que quepa
+ * entero. `overflow: hidden` recorta el hueco sobrante de la caja natural (las transforms
+ * no encogen el layout, solo el pintado). El árbol se centra arriba. */
+.org-fit {
   --org-line: hsl(var(--border));
-  overflow-x: auto;
-  padding: 0.5rem 0.25rem 1.25rem;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  /* Sin padding: el alto del contenedor lo fija el JS al alto YA escalado del árbol; un
+   * padding (con box-sizing border-box) recortaría la fila inferior. El aire visual lo da
+   * el padding interno del propio árbol. */
+  padding: 0;
+}
+
+.org-fit-inner {
+  width: max-content;
+  padding: 0.75rem 0.75rem 1rem;
+  transform-origin: top center;
 }
 
 .org-tree {
@@ -93,24 +109,13 @@
   display: none;
 }
 
-/* Panel de zona (área por marca): caja tintada con etiqueta. */
+/* Panel de zona (área por marca): caja tintada. El color identifica el área (la leyenda
+ * de arriba mapea color -> marca); ya no lleva etiqueta de texto dentro del árbol. */
 .org-zona {
   border-radius: 0.75rem;
   border: 1px solid var(--zona-color, var(--org-line));
   background: var(--zona-bg, transparent);
-  padding: 0.25rem 0.5rem 0.75rem;
-}
-
-.org-zona > .org-zona-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--zona-color);
-  margin: 0.25rem 0 0;
+  padding: 0.5rem 0.75rem 0.75rem;
 }
 
 @media (prefers-reduced-motion: no-preference) {
