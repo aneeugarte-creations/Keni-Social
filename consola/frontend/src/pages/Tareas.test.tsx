@@ -49,22 +49,12 @@ const TAREAS = [
   },
 ];
 
-const EVENTOS_SIN_CUBRIR: {
-  id: string;
-  titulo: string;
-  fecha: string;
-  hora: string;
-  contenido: string;
-  tipo_cobertura: "transmision" | "imagenes" | "no_cubrir";
-  prioridad: "alta" | "media" | "baja";
-}[] = [];
-
 /** Stub de fetch: GET /api/tareas devuelve el payload; el resto responde {}. */
 function stubFetch(
   tareas = TAREAS,
   proyectos = PROYECTOS,
   usuarios = USUARIOS,
-  eventos_sin_cubrir = EVENTOS_SIN_CUBRIR,
+  eventos_sin_cubrir: unknown[] = [],
 ) {
   const fn = vi.fn(async (url: string | URL, init?: RequestInit) => {
     const ruta = String(url);
@@ -120,11 +110,12 @@ describe("Tareas (vista de pendientes)", () => {
     expect(within(barra).getByText("1 hecha")).toBeInTheDocument();
   });
 
-  it("muestra el responsable y el enlace de acción de un pendiente", async () => {
+  it("muestra el responsable y el enlace de acción (heredado) de un pendiente", async () => {
     stubFetch();
     renderConProviders(<Tareas />);
 
-    // La tarjeta de t1 lleva responsable "luis" (en su selector) y un enlace de acción.
+    // La tarjeta de t1 lleva responsable "luis" (en su selector) y un enlace de acción
+    // heredado (los pendientes nuevos ya no capturan enlace, pero los antiguos lo muestran).
     await screen.findByText("Revisar copy de las 8");
     expect(screen.getByRole("link", { name: /abrir enlace de acción/i })).toHaveAttribute(
       "href",
@@ -148,11 +139,36 @@ describe("Tareas (vista de pendientes)", () => {
     const boton = await screen.findByRole("button", { name: /crear pendiente/i });
     expect(boton).toBeDisabled();
 
-    // Proyecto es OPCIONAL: basta con escribir un título para habilitar el botón.
     fireEvent.change(screen.getByLabelText("Título"), {
       target: { value: "Nueva tarea de prueba" },
     });
     await waitFor(() => expect(boton).toBeEnabled());
+  });
+
+  it("crea un pendiente solo con título (sin proyecto, evento ni enlace)", async () => {
+    const fn = stubFetch();
+    renderConProviders(<Tareas />);
+
+    const titulo = await screen.findByLabelText("Título");
+    fireEvent.change(titulo, { target: { value: "Pendiente libre" } });
+    const boton = screen.getByRole("button", { name: /crear pendiente/i });
+    await waitFor(() => expect(boton).toBeEnabled());
+    fireEvent.click(boton);
+
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/api/tareas") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(post).toBeTruthy();
+      const cuerpo = JSON.parse(String((post![1] as RequestInit).body));
+      expect(cuerpo.titulo).toBe("Pendiente libre");
+      // El formulario simplificado ya no manda proyecto, evento ni enlace.
+      expect(cuerpo.proyecto).toBeUndefined();
+      expect(cuerpo.evento_id).toBeUndefined();
+      expect(cuerpo.enlace).toBeUndefined();
+    });
   });
 
   it("avanza el estado de un pendiente con un PATCH al backend (pendiente -> en curso)", async () => {
@@ -174,83 +190,22 @@ describe("Tareas (vista de pendientes)", () => {
     });
   });
 
-  it("permite crear un pendiente sin proyecto cuando la allowlist está vacía", async () => {
-    const fn = stubFetch(TAREAS, []);
-    renderConProviders(<Tareas />);
-
-    // Sin proyectos: el formulario sigue disponible y el campo Proyecto queda
-    // en "(sin proyecto)". Con título basta para habilitar "Crear pendiente".
-    const titulo = await screen.findByLabelText("Título");
-    fireEvent.change(titulo, { target: { value: "Pendiente libre" } });
-    const boton = screen.getByRole("button", { name: /crear pendiente/i });
-    await waitFor(() => expect(boton).toBeEnabled());
-    fireEvent.click(boton);
-
-    await waitFor(() => {
-      const post = fn.mock.calls.find(
-        ([url, init]) =>
-          String(url).includes("/api/tareas") &&
-          (init?.method ?? "").toUpperCase() === "POST",
-      );
-      expect(post).toBeTruthy();
-      const cuerpo = JSON.parse(String((post![1] as RequestInit).body));
-      expect(cuerpo.titulo).toBe("Pendiente libre");
-      expect(cuerpo.proyecto).toBe("");
-      expect(cuerpo.evento_id).toBeUndefined();
-    });
-  });
-
-  it("muestra eventos sin cubrir y, al hacer clic, prepopula el formulario", async () => {
-    const eventos = [
-      {
-        id: "ev1",
-        titulo: "Cruz Azul vs Tigres",
-        fecha: "2026-05-29",
-        hora: "21:00",
-        contenido: "Partido amistoso",
-        tipo_cobertura: "transmision" as const,
-        prioridad: "alta" as const,
-      },
-    ];
-    stubFetch(TAREAS, PROYECTOS, USUARIOS, eventos);
-    renderConProviders(<Tareas />);
-
-    // Sección "Eventos sin cubrir" aparece arriba con el chip del evento.
-    expect(
-      await screen.findByText(/eventos sin cubrir esta semana y la siguiente/i),
-    ).toBeInTheDocument();
-    const chip = screen.getByRole("button", { name: /cruz azul vs tigres/i });
-    fireEvent.click(chip);
-
-    // El título del formulario se rellena con "Cubrir: ...".
-    const titulo = screen.getByLabelText("Título") as HTMLInputElement;
-    await waitFor(() => {
-      expect(titulo.value).toContain("Cruz Azul vs Tigres");
-      expect(titulo.value).toContain("2026-05-29");
-    });
-  });
-
-  it("filtra los pendientes por proyecto", async () => {
-    // Dos proyectos, una tarea en cada uno.
-    const proyectos = [
-      { id: "p-a", nombre: "Proyecto A", existe: true },
-      { id: "p-b", nombre: "Proyecto B", existe: true },
-    ];
+  it("filtra los pendientes por responsable", async () => {
     const tareas = [
-      { ...TAREAS[0], id: "ta", proyecto: "p-a", titulo: "De A", estado: "pendiente" },
-      { ...TAREAS[0], id: "tb", proyecto: "p-b", titulo: "De B", estado: "pendiente" },
+      { ...TAREAS[0], id: "ta", titulo: "De ana", responsable_id: "u1", responsable_nombre: "ana" },
+      { ...TAREAS[0], id: "tb", titulo: "De luis", responsable_id: "u2", responsable_nombre: "luis" },
     ];
-    stubFetch(tareas, proyectos);
+    stubFetch(tareas);
     renderConProviders(<Tareas />);
 
     // Sin filtro se ven ambas.
-    expect(await screen.findByText("De A")).toBeInTheDocument();
-    expect(screen.getByText("De B")).toBeInTheDocument();
+    expect(await screen.findByText("De ana")).toBeInTheDocument();
+    expect(screen.getByText("De luis")).toBeInTheDocument();
 
-    // Filtrar a "Proyecto A" deja solo su pendiente.
-    fireEvent.click(screen.getByRole("combobox", { name: /filtrar por proyecto/i }));
-    fireEvent.click(await screen.findByRole("option", { name: "Proyecto A" }));
-    await waitFor(() => expect(screen.queryByText("De B")).not.toBeInTheDocument());
-    expect(screen.getByText("De A")).toBeInTheDocument();
+    // Filtrar a "ana" deja solo su pendiente.
+    fireEvent.click(screen.getByRole("combobox", { name: /filtrar por responsable/i }));
+    fireEvent.click(await screen.findByRole("option", { name: "ana" }));
+    await waitFor(() => expect(screen.queryByText("De luis")).not.toBeInTheDocument());
+    expect(screen.getByText("De ana")).toBeInTheDocument();
   });
 });
