@@ -69,7 +69,8 @@ const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }]
  */
 function limpiarMensaje(texto: string): string {
   return texto
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️]/gu, "")
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/gu, "")
+    .replace(/️/g, "")
     .replace(/\s+/g, " ")
     .replace(/\s+([.,;:!?])/g, "$1")
     .trim();

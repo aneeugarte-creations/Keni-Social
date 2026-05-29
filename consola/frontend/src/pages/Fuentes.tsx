@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  AlertCircle,
   CheckCircle2,
   CircleSlash,
   ExternalLink,
@@ -80,7 +79,8 @@ function mensajeError(error: unknown): string {
  */
 function limpiarMensaje(texto: string): string {
   return texto
-    .replace(/[✅❌⚠️]/g, "")
+    .replace(/[✅❌⚠]/g, "")
+    .replace(/️/g, "")
     .replace(/^[\s:;,.\-–—]+/, "")
     .trim();
 }
