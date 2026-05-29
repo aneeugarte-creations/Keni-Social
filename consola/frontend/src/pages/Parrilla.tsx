@@ -4,8 +4,8 @@ import { Outlet } from "react-router-dom";
 import { TabsHub, type ItemTabHub } from "@/components/layout/TabsHub";
 
 const TABS: ItemTabHub[] = [
-  { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
   { ruta: "/parrilla/calendario", etiqueta: "Calendario", icono: CalendarClock },
+  { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
 ];
 
 /**
