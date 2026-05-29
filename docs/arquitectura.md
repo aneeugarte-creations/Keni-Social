@@ -35,7 +35,10 @@ Servidor MCP (Python/FastMCP), ejecutable por **stdio** (local) o **HTTP** (aloj
 tools (listar_cuentas, metricas_resumen, mejores_piezas, comparar_periodos,
        tendencia_historica, reporte_consolidado, picos)
    ├─ FuenteMetricas
-   │    ├─ FuenteMuestra        (datos offline deterministas; default)
+   │    ├─ FuenteMuestra        (datos offline deterministas; default / fallback)
+   │    ├─ FuenteMetricol       (API REST de Metricool; AMX en plan Advanced)
+   │    │     consume lo que Metricool ya consolidó (no ingesta propia por red);
+   │    │     degrada a `muestra` si falta el token. Camino de dato real recomendado.
    │    └─ FuenteCompuesta      (real)
    │         └─ un AdaptadorPlataforma por red, tras una interfaz común:
    │            meta · youtube · x · tiktok   (degradan si no hay credenciales)
@@ -79,6 +82,34 @@ obligatoria en local y hosted; `deploy/dev/docker-compose.yml` levanta un Postgr
 El contenido editorial sigue en **YAML por marca** (`ficheros.py`) con su índice SQLite
 regenerable (`indice.py`). El histórico de métricas del MCP (SQLite local por persona) es
 otro almacén distinto y no se ve afectado.
+
+### Catálogo de apps (A/B/C + shell)
+
+La Consola es un **catálogo de apps** (no un monolito enmarañado ni microservicios): un
+único deployable que reúne tres apps de producto + un shell transversal, con fronteras
+**verificadas en CI**. Decisión en [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md)
+sobre el mecanismo de [ADR 0002](adr/0002-descomposicion-monolito-modular-catalogo-apps.md).
+
+- **A · Producción** (el moat): generación de copy/imagen, skills, investigación, revisión,
+  agentes. Asíncrona + worker (`claude -p`) + whisper local.
+- **B · Métricas**: lectura/insight/reporte. **Consumidora de Metricool** (`FuenteMetricol`),
+  no ingesta propia por red; read-through con caché e histórico.
+- **C · Operación**: rota, pendientes, parrilla, aprobación. CRUD transaccional multiusuario
+  sobre Postgres; la **publicación real** enciende con App Review.
+- **Shell** (no es app): auth, config, secretos, media, catálogo, panel. Base transversal.
+
+Cómo se sostiene en el código:
+- **Manifest por app** (`consola/src/keni_consola/apps/<app>.toml` + `apps/registro.py`): declara
+  qué módulos `api/*` posee cada app, sus rutas y su **flag de activación** (`KENI_APP_*`).
+- **`GET /api/catalogo`** devuelve solo las apps **activas** (según flags); el sidebar del
+  frontend se **hidrata de ahí** (`navegacion.ts` ya no hardcodea): añadir/activar una app no
+  edita la navegación a mano.
+- **Lint de fronteras** (`consola/tests/test_fronteras.py`): falla si un router de una app importa
+  internals de otra, salvo los **seams** declarados (allowlist con justificación). Los cruces
+  legítimos van por **funciones-contrato** que la app dueña expone (p.ej. `dominio.publicaciones.
+  crear_borrador` para el handoff A→C, o `cola_de_aprobacion`/`proximas_programadas` que lee el panel).
+- **Test scoping** en CI: el aislamiento de apps permite correr **solo los tests de la app tocada**
+  (+ contrato + `keni-shared`) por filtro de rutas; un cambio en `keni-shared` corre la suite completa.
 
 ### Versionado de esquema de los YAML
 

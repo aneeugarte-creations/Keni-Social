@@ -29,7 +29,16 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   (alcance, engagement, mejores piezas, comparación de periodos, tendencia histórica, picos), con
   histórico propio en SQLite local. Genera un **dashboard HTML autocontenido** (sin JS, sin CDN,
   sin red; se abre con doble clic y funciona offline) con KPIs, ranking por marca, sparklines y
-  picos. **Hoy funciona con datos de muestra** representativos de las cinco marcas.
+  picos. Lee dato real **vía Metricool** (`FuenteMetricol`, API REST; AMX en plan Advanced) como
+  una fuente más detrás de `FuenteMetricas`; sin token configurado **degrada a datos de muestra**
+  representativos de las cinco marcas (nunca inventa cifras).
+- **Catálogo de apps con fronteras verificadas (separación A/B/C + shell).** La Consola está
+  organizada como catálogo de apps de producto (Producción · Métricas · Operación) + un shell
+  transversal, cada una activable por flag, con un **lint de fronteras en CI** que impide que una
+  app importe las tripas de otra (los cruces legítimos van por contratos explícitos). El sidebar se
+  genera de los manifests y los tests corren con *scoping* por app. Decisión en
+  [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md); detalle en
+  [`arquitectura.md`](arquitectura.md) §3.
 - **Preview de publicación en dry-run.** Muestra exactamente qué se publicaría en cada red sin
   publicar ni subir media.
 - **Instalación como plugin de Claude Code.** Dos comandos, sin permisos de administrador, con

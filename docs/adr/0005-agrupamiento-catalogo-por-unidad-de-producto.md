@@ -1,6 +1,6 @@
 # ADR 0005 — Agrupamiento del catálogo por unidad de producto (A/B/C) + shell
 
-- **Estado:** Propuesto (borrador para revisar)
+- **Estado:** Aceptado e implementado (2026-05-29) — manifests + catálogo data-driven + lint de fronteras + seams saneados + `FuenteMetricol` en `main`.
 - **Fecha:** 2026-05-29
 - **Decisores:** equipo keni-social / innovación
 - **Componente:** organización del catálogo de apps (`consola/`)

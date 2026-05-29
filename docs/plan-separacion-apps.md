@@ -1,6 +1,6 @@
 # Plan de separación en apps — runbook de agentes
 
-- **Fecha:** 2026-05-29 · **Estado:** listo para ejecutar
+- **Fecha:** 2026-05-29 · **Estado:** ejecutado (2026-05-29) — T0 + seams (T1.1–1.3) + T2.B + manifests A/C/S + verificación integral, todo en `main` local (pendiente push a origin).
 - **Decisión que ejecuta:** [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md)
   (apps A/B/C + shell) sobre el mecanismo de [ADR 0002](adr/0002-descomposicion-monolito-modular-catalogo-apps.md)
   (catálogo data-driven + fronteras enforced).
