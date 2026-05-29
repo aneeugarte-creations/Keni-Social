@@ -36,6 +36,7 @@ modulos_backend = [
   "rss",
   "termometro",
   "radar",
+  "parrilla",
 ]
 
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el

@@ -305,6 +305,7 @@ class Publicacion(TypedDict):
     revisor_nombre: str
     revisado_en: str
     preparado_en: str
+    id_post_metricool: str
     fecha_creacion: str
     fecha_actualizacion: str
     fecha_programada: str
