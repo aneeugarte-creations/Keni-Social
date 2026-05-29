@@ -902,10 +902,16 @@ export interface CuerpoActualizarTarea {
 
 // --- Rota de horarios del equipo (F4 · #144) ---
 
-/** Un miembro del equipo (un usuario de la consola) disponible para la rota. */
+/** Un miembro del equipo (un usuario de la consola) disponible para la rota.
+ *
+ * `marcas` viene del organigrama AMX (ola `feat/roles-marcas`): ids canónicos de las
+ * verticales a las que pertenece (claro-sports, unotv...). La rota hoy solo cubre
+ * ClaroSports; el front filtra por `marcas.includes("claro-sports")`.
+ */
 export interface MiembroRota {
   id: string;
   nombre: string;
+  marcas?: string[];
 }
 
 export interface RespuestaEquipoRota {
@@ -2183,11 +2189,14 @@ export type RolUsuario = "admin" | "editor";
 
 /**
  * Cargo (función) de un usuario en el equipo. Ortogonal al rol de permisos: describe
- * QUÉ hace la persona (community manager, director, coordinador...). Allowlist
+ * QUÉ hace la persona (community manager, director, coordinador de redes...). Allowlist
  * sincronizada con `keni_consola.estados.CARGOS_USUARIO`; cadena vacía = sin
- * clasificar (usuarios legados antes de la migración).
+ * clasificar (usuarios legados antes de la migración). Tras la ola
+ * `feat/roles-marcas` (organigrama AMX dictado por Bernardo) se añaden cargos
+ * específicos por vertical/función; los valores viejos se conservan por retrocompat.
  */
 export type CargoUsuario =
+  // Catalogo original (retrocompat):
   | "director"
   | "gerente"
   | "coordinador"
@@ -2198,10 +2207,22 @@ export type CargoUsuario =
   | "editorial"
   | "estrategia"
   | "fotografia"
+  // Ampliacion del organigrama AMX:
+  | "coordinador_redes"
+  | "coordinador_youtube"
+  | "gerente_podcast"
+  | "creativo_vertical"
+  | "editorial_youtube"
+  | "coordinador_invitados"
+  | "coordinador_operativo"
+  | "fotografia_qa"
+  | "editor_video"
+  | "disenador"
   | "";
 
 /** Etiqueta legible para cada cargo (para selects/badges/listados). */
 export const ETIQUETA_CARGO: Record<Exclude<CargoUsuario, "">, string> = {
+  // Catalogo original:
   director: "Director",
   gerente: "Gerente",
   coordinador: "Coordinador",
@@ -2210,9 +2231,48 @@ export const ETIQUETA_CARGO: Record<Exclude<CargoUsuario, "">, string> = {
   redactor: "Redactor",
   guionista: "Guionista",
   editorial: "Editorial",
-  estrategia: "Estrategia",
+  estrategia: "Estrategia digital",
   fotografia: "Fotografía",
+  // Ampliacion organigrama AMX:
+  coordinador_redes: "Coordinador de redes",
+  coordinador_youtube: "Coordinador de YouTube",
+  gerente_podcast: "Gerente de podcast",
+  creativo_vertical: "Creativo de vertical",
+  editorial_youtube: "Editorial YouTube",
+  coordinador_invitados: "Coordinador de invitados",
+  coordinador_operativo: "Coordinador operativo",
+  fotografia_qa: "Fotografía + QA",
+  editor_video: "Editor de video",
+  disenador: "Diseñador",
 };
+
+/**
+ * Orden estable de los cargos para los selectores (agrupa primero los del organigrama
+ * AMX y deja al final los del catalogo legado por si quedan usuarios sin migrar).
+ */
+export const CARGOS_ORDENADOS: Exclude<CargoUsuario, "">[] = [
+  "director",
+  "coordinador_redes",
+  "coordinador_youtube",
+  "coordinador_operativo",
+  "coordinador_invitados",
+  "gerente_podcast",
+  "content_manager",
+  "community_manager",
+  "creativo_vertical",
+  "editorial_youtube",
+  "redactor",
+  "fotografia_qa",
+  "editor_video",
+  "disenador",
+  // Catalogo legado (al final):
+  "gerente",
+  "coordinador",
+  "editorial",
+  "guionista",
+  "estrategia",
+  "fotografia",
+];
 
 /** Etiqueta legible de un cargo (vacío => "Sin cargo"). */
 export function etiquetaCargo(cargo: CargoUsuario): string {
@@ -2238,6 +2298,12 @@ export interface UsuarioSesion {
   cargo?: CargoUsuario;
   /** `true` => esta persona entra en la rota de turnos (cobertura). */
   cobertura?: boolean;
+  /**
+   * Verticales/marcas a las que pertenece (relación N:M con `keni_shared.marcas`).
+   * Una persona puede estar en varias (Yustine: claro-sports + unotv + piso-15).
+   * Solo llega por `GET /api/auth/me`; el login no lo incluye.
+   */
+  marcas?: string[];
 }
 
 /** Respuesta de `POST /api/auth/login` y `GET /api/auth/me`. */
@@ -2270,6 +2336,11 @@ export interface UsuarioAdmin {
   cargo?: CargoUsuario;
   /** `true` => esta persona entra en la rota de turnos. */
   cobertura?: boolean;
+  /**
+   * Verticales/marcas a las que pertenece (relación N:M; ids canónicos del catálogo).
+   * Siempre llega (lista vacía si no tiene marcas asignadas). Ola `feat/roles-marcas`.
+   */
+  marcas?: string[];
 }
 
 /** Respuesta de `GET /api/usuarios`: el backend envuelve la lista en `{ usuarios }`. */
@@ -2285,10 +2356,17 @@ export interface CuerpoCrearUsuario {
 }
 
 /**
- * Cuerpo de `PATCH /api/usuarios/{id}`: cambiar rol y/o resetear contraseña.
- * Ambos campos son opcionales (se manda solo lo que cambia).
+ * Cuerpo de `PATCH /api/usuarios/{id}`: cambiar rol, resetear contraseña, o editar
+ * cargo/cobertura/marcas del organigrama AMX. Todos opcionales (se manda solo lo que
+ * cambia). `marcas` reemplaza el conjunto entero (lista vacía = desasignar todas).
  */
 export interface CuerpoActualizarUsuario {
   rol?: RolUsuario;
   password?: string;
+  /** Cargo del catálogo (`CARGOS_USUARIO`); "" desclasifica. */
+  cargo?: CargoUsuario;
+  /** Cobertura: entra o no en la rota de turnos. */
+  cobertura?: boolean;
+  /** Lista de ids canónicos del catálogo de marcas; reemplaza el conjunto. */
+  marcas?: string[];
 }

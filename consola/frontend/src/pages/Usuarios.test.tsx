@@ -16,6 +16,9 @@ const USUARIOS = [
     rol: "admin",
     creado: "2026-01-10T10:00:00",
     ultimo_acceso: "2026-05-20T08:00:00",
+    cargo: "director",
+    cobertura: false,
+    marcas: ["claro-sports", "unotv"],
   },
   {
     id: "u1",
@@ -23,8 +26,21 @@ const USUARIOS = [
     rol: "editor",
     creado: "2026-02-01T10:00:00",
     ultimo_acceso: null,
+    cargo: "community_manager",
+    cobertura: true,
+    marcas: ["claro-sports"],
   },
 ];
+
+const OPCIONES_PUBLICACIONES = {
+  marcas: [
+    { id: "claro-sports", nombre: "Claro Sports" },
+    { id: "unotv", nombre: "UnoTV" },
+    { id: "fundacion", nombre: "Fundación" },
+  ],
+  redes: [],
+  estados: [],
+};
 
 interface Captura {
   url: string;
@@ -50,25 +66,38 @@ function stubFetch(opciones: { usuariosStatus?: number; capturas?: Captura[] } =
       if (ruta.includes("/api/auth/me")) {
         return new Response(JSON.stringify({ usuario: ADMIN }), { status: 200 });
       }
+      // Catalogo de marcas para el selector multi (lo expone publicaciones/opciones).
+      if (ruta.includes("/api/publicaciones/opciones")) {
+        return new Response(JSON.stringify(OPCIONES_PUBLICACIONES), { status: 200 });
+      }
       // POST /api/usuarios (crear)
       if (ruta.endsWith("/api/usuarios") && metodo === "POST") {
-        return new Response(JSON.stringify({ id: "u2", usuario: body?.usuario, rol: body?.rol }), {
-          status: 201,
-        });
+        return new Response(
+          JSON.stringify({ id: "u2", usuario: body?.usuario, rol: body?.rol }),
+          { status: 201 },
+        );
       }
       // PATCH/DELETE /api/usuarios/{id}
       if (ruta.includes("/api/usuarios/")) {
         if (metodo === "DELETE") return new Response(null, { status: 204 });
-        return new Response(JSON.stringify({ id: "u1", usuario: "ana", rol: body?.rol ?? "editor" }), {
-          status: 200,
-        });
+        return new Response(
+          JSON.stringify({
+            id: "u1",
+            usuario: "ana",
+            rol: body?.rol ?? "editor",
+            cargo: body?.cargo ?? "community_manager",
+            cobertura: body?.cobertura ?? true,
+            marcas: body?.marcas ?? ["claro-sports"],
+          }),
+          { status: 200 },
+        );
       }
-      // GET /api/usuarios (listado)
+      // GET /api/usuarios (listado): el backend envuelve la lista en {usuarios:[...]}.
       if (ruta.includes("/api/usuarios")) {
         if (usuariosStatus !== 200) {
           return new Response(JSON.stringify({ error: "prohibido" }), { status: usuariosStatus });
         }
-        return new Response(JSON.stringify(USUARIOS), { status: 200 });
+        return new Response(JSON.stringify({ usuarios: USUARIOS }), { status: 200 });
       }
       return new Response("{}", { status: 200 });
     }),
@@ -96,13 +125,17 @@ describe("Usuarios · administración", () => {
     vi.unstubAllGlobals();
   });
 
-  it("lista los usuarios", async () => {
+  it("lista los usuarios con sus columnas de organigrama", async () => {
     stubFetch();
     renderUsuarios();
 
     expect(await screen.findByText("ana")).toBeInTheDocument();
     expect(screen.getByText("admin")).toBeInTheDocument();
-    // El "último acceso" nulo se muestra como guion.
+    // Cabeceras nuevas de la ola feat/roles-marcas:
+    expect(screen.getByRole("columnheader", { name: /cargo/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /cobertura/i })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: /marcas/i })).toBeInTheDocument();
+    // El "último acceso" nulo se muestra como guion (al menos una vez).
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });
 

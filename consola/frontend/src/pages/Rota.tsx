@@ -115,6 +115,24 @@ const CABECERA = {
     "Calendario de eventos (con su tipo de cobertura: transmisión, solo imágenes o no cubrir) y reprogramaciones marcadas, rota de cobertura y horarios/turnos del equipo. Tú decides qué cubre cada quien; la consola te muestra huecos, repite sábados y carga por persona, y tú apruebas antes de publicar al equipo.",
 };
 
+// Marca a la que pertenece esta rota.
+// Hoy la rota es solo de ClaroSports. Multi-marca pendiente (refactor de `rota_eventos`
+// para segregar por marca). De momento, filtramos en el front a los miembros que tienen
+// `claro-sports` en sus marcas; el banner avisa explícitamente del alcance.
+const MARCA_ROTA = "claro-sports" as const;
+const ETIQUETA_MARCA_ROTA = "ClaroSports";
+
+/**
+ * Filtra el equipo devuelto por `/api/rota/equipo` a los miembros que cubren la marca
+ * de esta rota. Si la respuesta NO trae `marcas` (backend antiguo), no se filtra
+ * (degradación segura: vuelve al comportamiento anterior, todos los `cobertura=True`).
+ */
+function filtrarEquipoPorMarca(equipo: MiembroRota[]): MiembroRota[] {
+  const algunoTraeMarcas = equipo.some((m) => Array.isArray(m.marcas));
+  if (!algunoTraeMarcas) return equipo;
+  return equipo.filter((m) => (m.marcas ?? []).includes(MARCA_ROTA));
+}
+
 // Etiquetas legibles de cada franja del turno de trabajo.
 const ETIQUETA_FRANJA: Record<FranjaTurno, string> = {
   matutino: "Mañana",
@@ -284,7 +302,15 @@ export default function Rota() {
 
   return (
     <>
-      <PageHeader {...CABECERA} />
+      <PageHeader
+        {...CABECERA}
+        acciones={
+          // Hoy la rota es solo de ClaroSports. Multi-marca pendiente.
+          <Badge variant="outline" className="font-normal" data-testid="banner-marca-rota">
+            Marca: {ETIQUETA_MARCA_ROTA}
+          </Badge>
+        }
+      />
       <Tabs value={pestania} onValueChange={setPestania} className="space-y-4">
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
@@ -1147,7 +1173,7 @@ function Turnos({
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
   });
 
-  const equipo = equipoQ.data?.equipo ?? [];
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
   const ausencias = ausenciasQ.data?.ausencias ?? [];
   const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
@@ -3059,7 +3085,7 @@ function Ausencias() {
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
   const ausencias = q.data?.ausencias ?? [];
-  const equipo = equipoQ.data?.equipo ?? [];
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
 
   return (
@@ -4870,7 +4896,9 @@ function FormularioNuevoSwap({ miId }: { miId: string }) {
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
-  const equipo = (equipoQ.data?.equipo ?? []).filter((m) => m.id !== miId);
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []).filter(
+    (m) => m.id !== miId,
+  );
 
   const [destinatarioId, setDestinatarioId] = React.useState("");
   const [fechaA, setFechaA] = React.useState("");
