@@ -45,6 +45,7 @@ _TABLAS = (
     "rota_programas",
     "rota_eventos",
     "rota_swaps_turno",
+    "rota_coordinacion",
     "jobs",
 )
 

@@ -2981,6 +2981,132 @@ async def actualizar_franja_de_semana(request: Request) -> Response:
     return JSONResponse(_franja_semana_a_dict(actualizada))
 
 
+# --------------------------------------------------------------------------- #
+# Coordinador por turno (ola "coord")                                          #
+# --------------------------------------------------------------------------- #
+#
+# Cada celda (fecha, franja_id) puede tener UN coordinador asignado entre los usuarios
+# con `puede_coordinar=true`. La coordinacion es INDEPENDIENTE de los turnos de CM:
+# borrar un turno o cambiar franja no la afecta. Si la semana esta aprobada, los CMs
+# siguen viendo el badge (read-only); solo el admin puede editar.
+
+
+async def listar_coordinacion_de_semana(request: Request) -> Response:
+    """GET /api/rota/semana/{lunes}/coordinacion: coordinador por celda de la semana.
+
+    Devuelve `{coordinacion: [{fecha, franja_id, coordinador_id, coordinador_nombre}]}`.
+    El nombre se resuelve por lookup contra el equipo COMPLETO (no solo `cobertura`):
+    asi un coordinador asignado que luego pierde el flag `puede_coordinar` sigue
+    saliendo con su nombre (el front lo muestra; el admin decide si cambiarlo).
+    """
+    lunes = dominio.lunes_de_semana_iso(request.path_params["lunes"])
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica un lunes válido (AAAA-MM-DD)."}, status_code=400
+        )
+    nombres = _nombres_equipo()
+    coordinacion = repos.listar_coordinacion_semana(lunes)
+    return JSONResponse(
+        {
+            "lunes": lunes,
+            "coordinacion": [
+                {
+                    "fecha": c["fecha"],
+                    "franja_id": c["franja_id"],
+                    "coordinador_id": c["coordinador_id"],
+                    "coordinador_nombre": nombres.get(c["coordinador_id"], ""),
+                }
+                for c in coordinacion
+            ],
+        }
+    )
+
+
+def _candidato_a_coordinador(usuario_id: str) -> bool:
+    """True si el usuario existe y tiene `puede_coordinar=true`."""
+    u = auth.obtener_usuario_por_id(usuario_id)
+    return bool(u and u.get("puede_coordinar"))
+
+
+async def set_coordinador_de_celda(request: Request) -> Response:
+    """PUT /api/rota/coordinacion: asigna un coordinador a (fecha, franja_id).
+
+    Cuerpo: `{lunes, fecha, franja_id, coordinador_id}`. Solo admin. Valida que el
+    coordinador tenga `puede_coordinar=true`. Devuelve el registro upsertado con
+    `coordinador_nombre` resuelto.
+    """
+    if not _es_admin(request):
+        return JSONResponse(
+            {"error": "Solo un admin puede asignar el coordinador."}, status_code=403
+        )
+    datos = await leer_json(request)
+    lunes_crudo = str(datos.get("lunes", "")).strip()
+    fecha = str(datos.get("fecha", "")).strip()
+    franja_id = str(datos.get("franja_id", "")).strip()
+    coordinador_id = str(datos.get("coordinador_id", "")).strip()
+    lunes = dominio.lunes_de_semana_iso(lunes_crudo) if lunes_crudo else ""
+    if not lunes:
+        return JSONResponse(
+            {"error": "Indica el `lunes` de la semana (AAAA-MM-DD)."}, status_code=400
+        )
+    if not _fecha_valida(fecha):
+        return JSONResponse(
+            {"error": "Indica una `fecha` válida (AAAA-MM-DD)."}, status_code=400
+        )
+    if not franja_id:
+        return JSONResponse(
+            {"error": "Indica la `franja_id`."}, status_code=400
+        )
+    if not coordinador_id:
+        return JSONResponse(
+            {"error": "Indica el `coordinador_id`."}, status_code=400
+        )
+    if not _candidato_a_coordinador(coordinador_id):
+        return JSONResponse(
+            {
+                "error": (
+                    "El usuario indicado no es candidato a coordinador "
+                    "(necesita `puede_coordinar=true`)."
+                )
+            },
+            status_code=400,
+        )
+    registro = repos.set_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
+    nombres = _nombres_equipo()
+    return JSONResponse(
+        {
+            "fecha": registro["fecha"],
+            "franja_id": registro["franja_id"],
+            "coordinador_id": registro["coordinador_id"],
+            "coordinador_nombre": nombres.get(registro["coordinador_id"], ""),
+        }
+    )
+
+
+async def quitar_coordinador_de_celda(request: Request) -> Response:
+    """DELETE /api/rota/coordinacion: borra el coordinador de (fecha, franja_id).
+
+    Cuerpo: `{fecha, franja_id}`. Solo admin. Idempotente: 200 incluso si no habia.
+    """
+    if not _es_admin(request):
+        return JSONResponse(
+            {"error": "Solo un admin puede quitar el coordinador."}, status_code=403
+        )
+    datos = await leer_json(request) or {}
+    fecha = str(datos.get("fecha", "")).strip()
+    franja_id = str(datos.get("franja_id", "")).strip()
+    if not _fecha_valida(fecha):
+        return JSONResponse(
+            {"error": "Indica una `fecha` válida (AAAA-MM-DD)."}, status_code=400
+        )
+    if not franja_id:
+        return JSONResponse(
+            {"error": "Indica la `franja_id`."}, status_code=400
+        )
+    borrado = repos.quitar_coordinador_rota(fecha, franja_id)
+    return JSONResponse({"ok": True, "borrado": borrado})
+
+
 async def borrar_franja_de_semana(request: Request) -> Response:
     """DELETE /api/rota/franjas/{franja_id}[?forzar=true]: borra una franja.
 
@@ -3045,6 +3171,11 @@ RUTAS = [
     Route("/api/rota/semana/{lunes}/franjas", crear_franja_de_semana, methods=["POST"]),
     Route("/api/rota/franjas/{franja_id}", actualizar_franja_de_semana, methods=["PATCH"]),
     Route("/api/rota/franjas/{franja_id}", borrar_franja_de_semana, methods=["DELETE"]),
+    # Coordinador por turno (ola "coord"): cada celda (fecha, franja_id) puede tener UN
+    # coordinador asignado entre usuarios con `puede_coordinar=true`.
+    Route("/api/rota/semana/{lunes}/coordinacion", listar_coordinacion_de_semana, methods=["GET"]),
+    Route("/api/rota/coordinacion", set_coordinador_de_celda, methods=["PUT"]),
+    Route("/api/rota/coordinacion", quitar_coordinador_de_celda, methods=["DELETE"]),
     # Cobertura DERIVADA (vista, sin persistencia).
     Route("/api/rota/cobertura", cobertura_semana, methods=["GET"]),
     Route("/api/rota/cobertura/evento/{evento_id}", cobertura_evento, methods=["GET"]),

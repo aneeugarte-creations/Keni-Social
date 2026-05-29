@@ -141,6 +141,10 @@ import type {
   RespuestaCrearTurnosLote,
   RespuestaCoberturaSemana,
   RespuestaCoberturaEvento,
+  RespuestaCoordinacionSemana,
+  CoordinacionTurno,
+  CuerpoSetCoordinador,
+  CuerpoQuitarCoordinador,
   RotaSemana,
   MisTurnosRota,
   CuerpoCrearAusenciaRota,
@@ -814,6 +818,13 @@ export const api = {
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>
     peticion<RespuestaEquipoRota>("/rota/equipo", { signal }),
+  /**
+   * Equipo COMPLETO (incluye quienes no cubren, p. ej. coordinadores con
+   * `cobertura=false`). Necesario para resolver candidatos a coordinador (ola "coord")
+   * que pueden no estar en el equipo de rota habitual.
+   */
+  rotaEquipoTodos: (signal?: AbortSignal) =>
+    peticion<RespuestaEquipoRota>("/rota/equipo?todos=1", { signal }),
   rotaEventos: (
     params: {
       desde?: string;
@@ -892,6 +903,22 @@ export const api = {
       `/rota/cobertura/evento/${encodeURIComponent(eventoId)}`,
       { signal },
     ),
+
+  // --- Coordinador por turno (ola "coord") ---
+  // Una celda (fecha, franja_id) puede tener UN coordinador entre los usuarios con
+  // `puede_coordinar=true`. La coordinación es independiente del turno de CM.
+  listarCoordinacionSemana: (lunes: string, signal?: AbortSignal) =>
+    peticion<RespuestaCoordinacionSemana>(
+      `/rota/semana/${encodeURIComponent(lunes)}/coordinacion`,
+      { signal },
+    ),
+  setCoordinador: (cuerpo: CuerpoSetCoordinador) =>
+    peticion<CoordinacionTurno>("/rota/coordinacion", { metodo: "PUT", json: cuerpo }),
+  quitarCoordinador: (cuerpo: CuerpoQuitarCoordinador) =>
+    peticion<{ ok: true; borrado: boolean }>("/rota/coordinacion", {
+      metodo: "DELETE",
+      json: cuerpo,
+    }),
 
   // --- Gestión de turnos: ausencias / vacaciones (F4 · #144, ola A) ---
   rotaAusencias: (params: { miembro_id?: string } = {}, signal?: AbortSignal) =>

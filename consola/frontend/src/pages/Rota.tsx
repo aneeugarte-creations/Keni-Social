@@ -84,6 +84,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   AusenciaRota,
+  CoordinacionTurno,
   CuerpoActualizarPiezaRota,
   CuerpoActualizarProgramaRota,
   CuerpoCrearFranjaSemana,
@@ -294,8 +295,7 @@ export default function Rota() {
         <TabsList>
           <TabsTrigger value="calendario">Calendario</TabsTrigger>
           <TabsTrigger value="mis-turnos">Mis turnos</TabsTrigger>
-          <TabsTrigger value="swaps">Cambios de turno</TabsTrigger>
-          <TabsTrigger value="ausencias">Ausencias</TabsTrigger>
+          <TabsTrigger value="cambios-ausencias">Cambios y ausencias</TabsTrigger>
           <TabsTrigger value="eventos">Eventos</TabsTrigger>
           <TabsTrigger value="programas">Programas</TabsTrigger>
         </TabsList>
@@ -306,11 +306,11 @@ export default function Rota() {
         <TabsContent value="mis-turnos">
           <MisTurnos lunes={lunes} setLunes={setLunes} />
         </TabsContent>
-        <TabsContent value="swaps">
-          <Swaps esAdmin={esAdmin} />
-        </TabsContent>
-        <TabsContent value="ausencias">
-          <Ausencias />
+        <TabsContent value="cambios-ausencias">
+          {/* Ola "fusion real": una sola vista que mezcla cambios de turno y
+              ausencias en una lista cronologica unica, con filtros por tipo y
+              estado. Sin sub-tabs. */}
+          <CambiosYAusencias esAdmin={esAdmin} />
         </TabsContent>
         <TabsContent value="eventos">
           <Eventos onIrAProgramas={() => setPestania("programas")} />
@@ -377,6 +377,10 @@ function LeyendaCobertura() {
       <span className="inline-flex items-center gap-1.5">
         <BellRing className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Cambió
         (reprogramado, falta avisar)
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <ShieldCheck className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" /> Coordinador
+        por celda
       </span>
     </div>
   );
@@ -595,9 +599,20 @@ function Calendario({
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
+  // Equipo completo (incluye sin cobertura): necesario para resolver candidatos a
+  // coordinador (ola "coord") como Mariana o Ale, que tienen `cobertura=false`.
+  const equipoTodosQ = useQuery({
+    queryKey: ["rota", "equipo", "todos"],
+    queryFn: ({ signal }) => api.rotaEquipoTodos(signal),
+  });
   const ausenciasQ = useQuery({
     queryKey: ["rota", "ausencias"] as const,
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
+  // Coordinador por celda (ola "coord"): un PUT por celda, lista por semana.
+  const coordinacionQ = useQuery({
+    queryKey: ["rota", "coordinacion", lunes] as const,
+    queryFn: ({ signal }) => api.listarCoordinacionSemana(lunes, signal),
   });
 
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
@@ -607,6 +622,21 @@ function Calendario({
   // CMs activos de ClaroSports). Mismo desglose que la rejilla Turnos anterior.
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
   const cms = cmsClaroSports(equipoQ.data?.equipo ?? []);
+  // Candidatos a coordinador (ola "coord"): usuarios con `puede_coordinar=true`. Se
+  // sacan del equipo COMPLETO (no solo cobertura) porque hoy son Elias (cubre), Ale
+  // y Mariana (NO cubren). El admin gestiona el flag desde /usuarios.
+  const candidatosCoordinador = React.useMemo(
+    () => (equipoTodosQ.data?.equipo ?? []).filter((m) => m.puede_coordinar),
+    [equipoTodosQ.data?.equipo],
+  );
+  // Index de coordinaciones por (fecha|franja_id) -> CoordinacionTurno.
+  const coordinacionPorCelda = React.useMemo(() => {
+    const m = new Map<string, CoordinacionTurno>();
+    for (const c of coordinacionQ.data?.coordinacion ?? []) {
+      m.set(`${c.fecha}|${c.franja_id}`, c);
+    }
+    return m;
+  }, [coordinacionQ.data?.coordinacion]);
   const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
   // Franjas vivas de la semana, ordenadas por `orden` (la franja Descanso suele ir al
@@ -817,8 +847,11 @@ function Calendario({
     coberturaQ.isPending ||
     turnosQ.isPending ||
     ausenciasQ.isPending ||
-    equipoQ.isPending;
-  const error = coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error;
+    equipoQ.isPending ||
+    coordinacionQ.isPending;
+  const error =
+    coberturaQ.error || turnosQ.error || ausenciasQ.error || equipoQ.error ||
+    coordinacionQ.error;
 
   return (
     <div className="space-y-4">
@@ -1016,6 +1049,9 @@ function Calendario({
                           const cmsDisponibles = cms.filter(
                             (m) => !yaEnCelda.has(m.id),
                           );
+                          const coordinacionCelda = coordinacionPorCelda.get(
+                            `${fecha}|${franja.id}`,
+                          );
                           return (
                             <CeldaDeRejilla
                               key={`${franja.id}-${fecha}`}
@@ -1028,6 +1064,9 @@ function Calendario({
                               editable={editable}
                               finde={esFinDeSemana(fecha)}
                               ausenciaDe={ausenciaDe}
+                              coordinacion={coordinacionCelda}
+                              candidatosCoordinador={candidatosCoordinador}
+                              coordinacionEditable={esAdmin && !semana?.aprobada}
                               onEditarEvento={(e) => setEventoSeleccionado(e)}
                               onCambio={invalidar}
                             />
@@ -1057,6 +1096,137 @@ function Calendario({
 }
 
 /**
+ * Badge de COORDINADOR por celda (ola "coord"): muestra "Coord: <nombre>" o "Sin coord".
+ * Click (si editable) abre un Select con los candidatos (`puede_coordinar=true`); la X
+ * inline (solo si hay coordinador y editable) borra la asignación. Si la semana está
+ * aprobada o el usuario no es admin, queda en modo solo-lectura (sin Select ni X).
+ */
+function BadgeCoordinador({
+  lunes,
+  fecha,
+  franja,
+  coordinacion,
+  candidatos,
+  editable,
+  onCambio,
+}: {
+  lunes: string;
+  fecha: string;
+  franja: FranjaSemana;
+  coordinacion?: CoordinacionTurno;
+  candidatos: MiembroRota[];
+  editable: boolean;
+  onCambio: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  const asignar = useMutation({
+    mutationFn: (coordinador_id: string) =>
+      api.setCoordinador({
+        lunes,
+        fecha,
+        franja_id: franja.id,
+        coordinador_id,
+      }),
+    onSuccess: () => {
+      toast.success("Coordinador asignado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const quitar = useMutation({
+    mutationFn: () =>
+      api.quitarCoordinador({ fecha, franja_id: franja.id }),
+    onSuccess: () => {
+      toast.success("Coordinador quitado.");
+      onCambio();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const cargando = asignar.isPending || quitar.isPending;
+
+  if (!editable) {
+    // Solo lectura: si hay coordinador, lo mostramos; si no, badge muted "Sin coord".
+    return coordinacion ? (
+      <span
+        className="inline-flex max-w-full items-center gap-1 rounded border border-sky-300/70 bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
+        title={`Coordina: ${coordinacion.coordinador_nombre}`}
+      >
+        <ShieldCheck className="h-3 w-3 shrink-0" />
+        <span className="truncate">
+          Coord: {coordinacion.coordinador_nombre || "—"}
+        </span>
+      </span>
+    ) : (
+      <span className="inline-flex max-w-full items-center gap-1 rounded border border-dashed border-border/60 bg-background px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
+        Sin coord
+      </span>
+    );
+  }
+
+  // Editable: Select para asignar/cambiar + X para borrar (si hay).
+  return (
+    <div className="flex items-center gap-1">
+      <Select
+        value={coordinacion?.coordinador_id ?? ""}
+        open={open}
+        onOpenChange={setOpen}
+        onValueChange={(id) => {
+          if (!id) return;
+          asignar.mutate(id);
+        }}
+        disabled={cargando || candidatos.length === 0}
+      >
+        <SelectTrigger
+          aria-label={`Coordinador de ${franja.nombre} del ${fecha}`}
+          className={cn(
+            "h-6 flex-1 gap-1 px-1.5 text-[10px]",
+            coordinacion
+              ? "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300"
+              : "border-dashed border-border bg-background text-muted-foreground",
+          )}
+        >
+          <ShieldCheck className="h-3 w-3 shrink-0" />
+          <span className="truncate">
+            {coordinacion
+              ? `Coord: ${coordinacion.coordinador_nombre || "—"}`
+              : candidatos.length === 0
+                ? "Sin candidatos"
+                : "Sin coord"}
+          </span>
+        </SelectTrigger>
+        <SelectContent>
+          {candidatos.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.nombre}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {coordinacion && (
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+          aria-label="Quitar coordinador"
+          title="Quitar coordinador"
+          onClick={() => quitar.mutate()}
+          disabled={cargando}
+        >
+          {quitar.isPending ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <X className="h-3 w-3" />
+          )}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/**
  * Una celda (franja × día) de la rejilla. Mantiene estado local para abrir el dropdown
  * desde dos puntos de entrada: el propio trigger del dropdown al pie de la celda y el
  * recuadro "Sin cubrir" cuando hay eventos sin coverage. La separación a componente es
@@ -1072,6 +1242,9 @@ function CeldaDeRejilla({
   editable,
   finde,
   ausenciaDe,
+  coordinacion,
+  candidatosCoordinador,
+  coordinacionEditable,
   onEditarEvento,
   onCambio,
 }: {
@@ -1084,6 +1257,12 @@ function CeldaDeRejilla({
   editable: boolean;
   finde: boolean;
   ausenciaDe: (miembroId: string, fecha: string) => AusenciaRota | undefined;
+  /** Coordinador asignado a esta celda (si lo hay). Ola "coord". */
+  coordinacion?: CoordinacionTurno;
+  /** Candidatos a coordinador (usuarios con `puede_coordinar=true`). */
+  candidatosCoordinador: MiembroRota[];
+  /** True si el admin puede editar la coordinación (semana NO aprobada). */
+  coordinacionEditable: boolean;
   onEditarEvento: (evento: EventoRota) => void;
   onCambio: () => void;
 }) {
@@ -1103,6 +1282,19 @@ function CeldaDeRejilla({
         finde && "bg-amber-50/20 dark:bg-amber-950/5",
       )}
     >
+      {/* Badge de coordinador (ola "coord"): siempre visible si hay coordinador o si
+          la celda es editable; en franja Descanso lo ocultamos porque no aplica. */}
+      {!franja.es_descanso && (
+        <BadgeCoordinador
+          lunes={lunes}
+          fecha={fecha}
+          franja={franja}
+          coordinacion={coordinacion}
+          candidatos={candidatosCoordinador}
+          editable={coordinacionEditable}
+          onCambio={onCambio}
+        />
+      )}
       {recuadros.length === 0 && !editable && (
         <div className="rounded-md border border-dashed border-border/60 px-2 py-3 text-center text-[11px] text-muted-foreground/60">
           {franja.es_descanso ? "—" : "Sin turno asignado"}
@@ -2602,46 +2794,7 @@ function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
   );
 }
 
-// --- Pestaña: ausencias / vacaciones ---------------------------------------
-
-function Ausencias() {
-  const queryClient = useQueryClient();
-  const clave = ["rota", "ausencias"] as const;
-  const q = useQuery({ queryKey: clave, queryFn: ({ signal }) => api.rotaAusencias({}, signal) });
-  const equipoQ = useQuery({
-    queryKey: ["rota", "equipo"],
-    queryFn: ({ signal }) => api.rotaEquipo(signal),
-  });
-  const ausencias = q.data?.ausencias ?? [];
-  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
-  const invalidar = () => void queryClient.invalidateQueries({ queryKey: clave });
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-      <NuevaAusencia equipo={equipo} onCreada={invalidar} />
-      <div className="space-y-3">
-        {q.isPending ? (
-          <Skeleton className="h-40 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudieron cargar las ausencias"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : ausencias.length === 0 ? (
-          <EstadoVacio
-            icono={CalendarOff}
-            titulo="Sin ausencias"
-            texto="Registra vacaciones, descansos o bajas para que el horario propuesto las respete."
-          />
-        ) : (
-          ausencias.map((a) => <TarjetaAusencia key={a.id} ausencia={a} onCambio={invalidar} />)
-        )}
-      </div>
-    </div>
-  );
-}
+// --- Formulario de nueva ausencia (reutilizado por CambiosYAusencias) -------
 
 function NuevaAusencia({
   equipo,
@@ -2671,78 +2824,73 @@ function NuevaAusencia({
 
   const puedeCrear = miembroId !== "" && desde !== "" && hasta !== "" && !crear.isPending;
 
+  // Sin wrapper Card: lo aporta el caller (CambiosYAusencias monta el formulario
+  // colapsable dentro de su propio recuadro y elige el titulo segun el tipo).
   return (
-    <Card className="h-fit">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarOff className="h-4 w-4" /> Nueva ausencia
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label>Persona</Label>
+        <Select value={miembroId} onValueChange={setMiembroId}>
+          <SelectTrigger aria-label="Persona">
+            <SelectValue placeholder="Elige a un miembro" />
+          </SelectTrigger>
+          <SelectContent>
+            {equipo.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Tipo</Label>
+        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
+          <SelectTrigger aria-label="Tipo de ausencia">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIPOS_AUSENCIA.map((t) => (
+              <SelectItem key={t.valor} value={t.valor}>
+                {t.etiqueta}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1.5">
-          <Label>Persona</Label>
-          <Select value={miembroId} onValueChange={setMiembroId}>
-            <SelectTrigger aria-label="Persona">
-              <SelectValue placeholder="Elige a un miembro" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipo.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1.5">
-          <Label>Tipo</Label>
-          <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
-            <SelectTrigger aria-label="Tipo de ausencia">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {TIPOS_AUSENCIA.map((t) => (
-                <SelectItem key={t.valor} value={t.valor}>
-                  {t.etiqueta}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="au-desde">Desde</Label>
-            <Input id="au-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="au-hasta">Hasta</Label>
-            <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
-          </div>
+          <Label htmlFor="au-desde">Desde</Label>
+          <Input id="au-desde" type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="au-motivo">
-            Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <Input
-            id="au-motivo"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Ej. Vacaciones de verano"
-            maxLength={200}
-          />
+          <Label htmlFor="au-hasta">Hasta</Label>
+          <Input id="au-hasta" type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </div>
-        <div className="flex justify-end">
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
-            {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Registrar
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="au-motivo">
+          Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
+        <Input
+          id="au-motivo"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ej. Vacaciones de verano"
+          maxLength={200}
+        />
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          {crear.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Registrar ausencia
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -2770,6 +2918,9 @@ function TarjetaAusencia({
       <CardContent className="flex items-start justify-between gap-3 p-4">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="font-normal">
+              <CalendarOff className="mr-1 h-3 w-3" /> Ausencia
+            </Badge>
             <span className="font-medium">{ausencia.miembro_nombre || "—"}</span>
             <Badge variant="secondary" className="font-normal">
               {etiquetaTipo}
@@ -3066,12 +3217,16 @@ function Eventos({ onIrAProgramas }: { onIrAProgramas?: () => void }) {
     queryFn: ({ signal }) => api.rotaEventos(filtrosApi, signal),
   });
   const eventos = q.data?.eventos ?? [];
+  // "Último evento" (ola "simplificar"): heurística simple — el primero de la lista
+  // ordenada por la API (más reciente). El backend ya devuelve los eventos en orden
+  // descendente por `actualizado`/`fecha`; usamos `eventos[0]` para "Duplicar último".
+  const ultimoEventoUsuario = eventos[0] ?? null;
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: ["rota", "eventos"] });
 
   return (
     <div className="space-y-6">
       <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-        <NuevoEvento onCreado={invalidar} />
+        <NuevoEvento onCreado={invalidar} ultimoEventoUsuario={ultimoEventoUsuario} />
         <div className="space-y-3">
           <FiltrosEventos
             estado={estado}
@@ -3105,13 +3260,43 @@ function Eventos({ onIrAProgramas }: { onIrAProgramas?: () => void }) {
   );
 }
 
-function NuevoEvento({ onCreado }: { onCreado: () => void }) {
+/** Hoy en formato ISO AAAA-MM-DD (hora local; usa `Date` del navegador). */
+function hoyIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/** ISO + N días (no recalcula la hora; se usa para "Duplicar último"). */
+function diasSiguientes(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function NuevoEvento({
+  onCreado,
+  ultimoEventoUsuario,
+}: {
+  onCreado: () => void;
+  /**
+   * El último evento creado por el USUARIO actual durante esta sesión del formulario
+   * (memoria local del componente padre, ola "simplificar"). Si está presente, el
+   * botón "Duplicar último" lo clona con fecha=hoy (o +1 si ya hay uno hoy).
+   */
+  ultimoEventoUsuario?: EventoRota | null;
+}) {
   const [titulo, setTitulo] = React.useState("");
-  const [fecha, setFecha] = React.useState("");
+  // Fecha default = hoy (ola "simplificar": el caso típico es dar de alta el evento del día).
+  const [fecha, setFecha] = React.useState<string>(() => hoyIso());
   const [hora, setHora] = React.useState("");
   const [contenido, setContenido] = React.useState("");
   const [tipoCobertura, setTipoCobertura] = React.useState<TipoCoberturaEvento>("transmision");
   const [prioridad, setPrioridad] = React.useState<PrioridadEvento>("media");
+  // Validación inline de hora HH:MM al submit (ola "simplificar"). El campo permite
+  // texto libre para no molestar mientras escribes; el error sale solo al intentar
+  // guardar y se borra al editar.
+  const [errorHora, setErrorHora] = React.useState<string | null>(null);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -3130,19 +3315,67 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
       setContenido("");
       setTipoCobertura("transmision");
       setPrioridad("media");
+      setErrorHora(null);
       onCreado();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  const duplicarUltimo = useMutation({
+    mutationFn: () => {
+      if (!ultimoEventoUsuario) return Promise.reject(new Error("Sin último evento"));
+      // Si el último ya es de hoy, avanza un día para evitar duplicado idéntico.
+      const fechaDestino =
+        ultimoEventoUsuario.fecha === hoyIso()
+          ? diasSiguientes(hoyIso(), 1)
+          : hoyIso();
+      return api.duplicarEventoRota(ultimoEventoUsuario.id, { fecha: fechaDestino });
+    },
+    onSuccess: () => {
+      toast.success("Evento duplicado.");
+      onCreado();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  function intentarCrear() {
+    // Validación HH:MM: `horaAMinutos` admite el formato canónico; rechazamos lo demás.
+    // La hora es OPCIONAL: si está vacía, se acepta tal cual (sin validar).
+    const trimmed = hora.trim();
+    if (trimmed && horaAMinutos(trimmed) === null) {
+      setErrorHora("Formato HH:MM (ej. 16:30).");
+      return;
+    }
+    setErrorHora(null);
+    crear.mutate();
+  }
 
   const puedeCrear = titulo.trim().length > 0 && fecha !== "" && !crear.isPending;
 
   return (
     <Card className="h-fit">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarPlus className="h-4 w-4" /> Nuevo evento
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <CalendarPlus className="h-4 w-4" /> Nuevo evento
+          </CardTitle>
+          {ultimoEventoUsuario && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => duplicarUltimo.mutate()}
+              disabled={duplicarUltimo.isPending}
+              title={`Duplicar «${ultimoEventoUsuario.titulo}»`}
+            >
+              {duplicarUltimo.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Copy className="h-3.5 w-3.5" />
+              )}
+              Duplicar último
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
@@ -3165,10 +3398,17 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
             <Input
               id="ev-hora"
               value={hora}
-              onChange={(e) => setHora(e.target.value)}
+              onChange={(e) => {
+                setHora(e.target.value);
+                if (errorHora) setErrorHora(null);
+              }}
               placeholder="16:00"
               maxLength={40}
+              aria-invalid={errorHora ? true : undefined}
             />
+            {errorHora && (
+              <p className="text-xs text-destructive">{errorHora}</p>
+            )}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
@@ -3220,7 +3460,7 @@ function NuevoEvento({ onCreado }: { onCreado: () => void }) {
           />
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          <Button onClick={intentarCrear} disabled={!puedeCrear}>
             {crear.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
@@ -4338,12 +4578,6 @@ const ESTADOS_TERMINALES_SWAP: ReadonlySet<EstadoSwap> = new Set([
   "cancelado",
 ]);
 
-const FRANJAS_SWAP: { valor: FranjaTurno; etiqueta: string }[] = [
-  { valor: "matutino", etiqueta: "Mañana" },
-  { valor: "vespertino", etiqueta: "Tarde" },
-  { valor: "descanso", etiqueta: "Descanso" },
-];
-
 /** Formatea un timestamp ISO ("2026-05-25T18:42:11") como fecha-hora corta es-MX. */
 function formatearMomentoCorto(s: string): string {
   if (!s) return "";
@@ -4357,295 +4591,468 @@ function formatearMomentoCorto(s: string): string {
   });
 }
 
-function Swaps({ esAdmin }: { esAdmin: boolean }) {
+/**
+ * Vista FUSIONADA de Cambios de turno + Ausencias en una sola lista cronologica.
+ *
+ * La iteracion previa intento fusionar con sub-tabs (Cambios / Ausencias hermanas);
+ * el usuario lo rechazo: aqui no hay sub-tabs. Una unica cabecera, un boton "Nueva
+ * solicitud" que abre un formulario colapsable con selector de tipo, una banda de
+ * chips para filtrar (tipo + estado) y una lista mezclada de tarjetas (cada una
+ * con su badge de tipo: "Cambio" o "Ausencia").
+ *
+ * Sigue habiendo dos consultas backend (swaps y ausencias) porque cada recurso es
+ * independiente; la fusion ocurre en cliente. Conserva el contrato actual de los
+ * endpoints REST.
+ */
+function CambiosYAusencias({ esAdmin }: { esAdmin: boolean }) {
   const { usuario } = useSesion();
-  // Sin sesión (token de mantenimiento) no hay "yo": el backend devuelve [] para
-  // las consultas con `mio=true`. Lo decimos honestamente y no listamos nada.
-  if (!usuario) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          Inicia sesión para gestionar tus cambios de turno con el equipo.
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <FormularioNuevoSwap miId={usuario.id} />
-      <SeccionSwaps
-        titulo="Por responder"
-        descripcion="Compañeros que te piden un cambio. Acepta o rechaza."
-        icono={ArrowLeftRight}
-        filtros={{ destinatario_id: usuario.id, estado: "propuesto" }}
-        miId={usuario.id}
-        esAdmin={esAdmin}
-        vacio="No tienes solicitudes esperando tu respuesta."
-      />
-      <SeccionSwaps
-        titulo="Solicité"
-        descripcion="Cambios que pediste tú. Puedes cancelar mientras no sean terminales."
-        icono={Send}
-        filtros={{ solicitante_id: usuario.id }}
-        soloEstados="no_terminales"
-        miId={usuario.id}
-        esAdmin={esAdmin}
-        vacio="No tienes solicitudes activas. Pide un cambio con el formulario de arriba."
-      />
-      {esAdmin && (
-        <SeccionSwaps
-          titulo="Para aprobar"
-          descripcion="Cambios que ya aceptaron entre compañeros: tú decides si se aplican al horario."
-          icono={ShieldCheck}
-          filtros={{ estado: "aceptado" }}
-          miId={usuario.id}
-          esAdmin={esAdmin}
-          vacio="No hay cambios pendientes de tu aprobación."
-        />
-      )}
-      <SeccionSwaps
-        titulo="Historial"
-        descripcion="Tus cambios ya cerrados (aplicados, rechazados o cancelados)."
-        icono={Clock}
-        filtros={{ mio: true }}
-        soloEstados="terminales"
-        miId={usuario.id}
-        esAdmin={esAdmin}
-        vacio="Aún no tienes cambios cerrados."
-      />
-    </div>
-  );
-}
-
-function FormularioNuevoSwap({ miId }: { miId: string }) {
   const queryClient = useQueryClient();
+
+  // Filtros locales (sin URL, solo estado): tipo y estado.
+  const [filtroTipo, setFiltroTipo] = React.useState<"todo" | "cambios" | "ausencias">("todo");
+  const [filtroEstado, setFiltroEstado] = React.useState<"activos" | "historial">("activos");
+  const [formAbierto, setFormAbierto] = React.useState(false);
+  const [tipoSolicitud, setTipoSolicitud] = React.useState<"cambio" | "ausencia">("cambio");
+
+  // El usuario admin ve todos los swaps (incluyendo "Para aprobar" donde no es
+  // parte). El resto solo ve los swaps en los que participa (`mio=true`).
+  const filtrosSwaps: FiltrosSwaps = esAdmin ? {} : { mio: true };
+  const swapsQ = useQuery({
+    enabled: usuario !== null,
+    queryKey: ["rota", "swaps", filtrosSwaps] as const,
+    queryFn: ({ signal }) => api.listarSwaps(filtrosSwaps, signal),
+  });
+  const ausenciasQ = useQuery({
+    queryKey: ["rota", "ausencias"] as const,
+    queryFn: ({ signal }) => api.rotaAusencias({}, signal),
+  });
   const equipoQ = useQuery({
     queryKey: ["rota", "equipo"],
     queryFn: ({ signal }) => api.rotaEquipo(signal),
   });
-  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []).filter(
-    (m) => m.id !== miId,
-  );
+  const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
 
-  const [destinatarioId, setDestinatarioId] = React.useState("");
-  const [fechaA, setFechaA] = React.useState("");
-  const [franjaA, setFranjaA] = React.useState<FranjaTurno>("matutino");
-  const [fechaB, setFechaB] = React.useState("");
-  const [franjaB, setFranjaB] = React.useState<FranjaTurno>("matutino");
-  const [motivo, setMotivo] = React.useState("");
+  const invalidarSwaps = () =>
+    void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });
+  const invalidarAusencias = () =>
+    void queryClient.invalidateQueries({ queryKey: ["rota", "ausencias"] });
 
-  const destinatario = equipo.find((m) => m.id === destinatarioId);
+  // Cargando: si AMBOS estan pendientes (mostramos skeleton); de lo contrario
+  // mezclamos lo que tengamos (evitamos parpadeos al cambiar de filtro).
+  const cargandoTodo =
+    (usuario !== null && swapsQ.isPending) || ausenciasQ.isPending;
+  const errorSwaps = swapsQ.isError;
+  const errorAusencias = ausenciasQ.isError;
 
-  const crear = useMutation({
-    mutationFn: () =>
-      api.crearSwap({
-        destinatario_id: destinatarioId,
-        fecha_a: fechaA,
-        franja_a: franjaA,
-        fecha_b: fechaB,
-        franja_b: franjaB,
-        motivo: motivo.trim(),
-      }),
-    onSuccess: () => {
-      toast.success("Solicitud enviada. Tu compañero la verá en su lista de 'Por responder'.");
-      setDestinatarioId("");
-      setFechaA("");
-      setFranjaA("matutino");
-      setFechaB("");
-      setFranjaB("matutino");
-      setMotivo("");
-      void queryClient.invalidateQueries({ queryKey: ["rota", "swaps"] });
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
+  // Lista cronologica unificada: cada item es discriminado por `tipo` para que
+  // el render decida que tarjeta usar. Orden DESC: el mas reciente primero.
+  // - Swaps tienen `creado` (timestamp ISO).
+  // - Ausencias NO tienen timestamp de creacion en el backend; usamos `desde`
+  //   como proxy de "cuando entra en juego" (tradeoff conocido: si en futuro el
+  //   backend persiste `creado_en`, se reemplaza por ese campo).
+  type ItemSwap = { tipo: "cambio"; orden: string; swap: SwapTurno };
+  type ItemAusencia = { tipo: "ausencia"; orden: string; ausencia: AusenciaRota };
+  type ItemSolicitud = ItemSwap | ItemAusencia;
 
-  const puedeCrear =
-    destinatarioId !== "" &&
-    fechaA !== "" &&
-    fechaB !== "" &&
-    !crear.isPending;
+  const items: ItemSolicitud[] = React.useMemo(() => {
+    const lista: ItemSolicitud[] = [];
+    const swaps = swapsQ.data?.swaps ?? [];
+    const ausencias = ausenciasQ.data?.ausencias ?? [];
+
+    const esSwapActivo = (s: SwapTurno) => !ESTADOS_TERMINALES_SWAP.has(s.estado);
+    // Heuristica para ausencias: "activa" = aun no ha terminado (hasta >= hoy).
+    const hoy = iso(new Date());
+    const esAusenciaActiva = (a: AusenciaRota) => (a.hasta || "") >= hoy;
+
+    if (filtroTipo !== "ausencias") {
+      for (const s of swaps) {
+        const activo = esSwapActivo(s);
+        if (filtroEstado === "activos" && !activo) continue;
+        if (filtroEstado === "historial" && activo) continue;
+        lista.push({ tipo: "cambio", orden: s.creado || s.actualizado || "", swap: s });
+      }
+    }
+    if (filtroTipo !== "cambios") {
+      for (const a of ausencias) {
+        const activa = esAusenciaActiva(a);
+        if (filtroEstado === "activos" && !activa) continue;
+        if (filtroEstado === "historial" && activa) continue;
+        lista.push({ tipo: "ausencia", orden: a.desde || "", ausencia: a });
+      }
+    }
+    lista.sort((x, y) => (y.orden || "").localeCompare(x.orden || ""));
+    return lista;
+  }, [swapsQ.data, ausenciasQ.data, filtroTipo, filtroEstado]);
+
+  // Sin sesion no hay "yo": el backend devuelve [] para `mio=true` y la creacion
+  // de swap requiere usuario logueado. Avisamos honestamente.
+  const sinSesion = usuario === null;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <ArrowLeftRight className="h-4 w-4" /> Pedir cambio de turno
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-1.5">
-          <Label>Compañero/a</Label>
-          <Select value={destinatarioId} onValueChange={setDestinatarioId}>
-            <SelectTrigger aria-label="Compañero al que pides el cambio">
-              <SelectValue placeholder="Elige a un compañero/a" />
-            </SelectTrigger>
-            <SelectContent>
-              {equipo.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.nombre}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Mi turno
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ArrowLeftRight className="h-4 w-4" /> Cambios y ausencias
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Pide un cambio de turno con un compañero o registra una ausencia
+                (vacaciones, descanso, baja). Aparece todo en una lista, mas reciente
+                arriba.
+              </p>
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="swap-fecha-a">Día</Label>
-              <Input
-                id="swap-fecha-a"
-                type="date"
-                value={fechaA}
-                onChange={(e) => setFechaA(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Franja</Label>
-              <Select value={franjaA} onValueChange={(v) => setFranjaA(v as FranjaTurno)}>
-                <SelectTrigger aria-label="Franja de mi turno">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FRANJAS_SWAP.map((f) => (
-                    <SelectItem key={f.valor} value={f.valor}>
-                      {f.etiqueta}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant={formAbierto ? "outline" : "default"}
+              onClick={() => setFormAbierto((v) => !v)}
+              disabled={sinSesion && !equipo.length}
+            >
+              {formAbierto ? (
+                <>
+                  <X className="h-4 w-4" /> Cerrar
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" /> Nueva solicitud
+                </>
+              )}
+            </Button>
           </div>
-          <div className="space-y-3 rounded-md border bg-muted/30 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Turno de {destinatario?.nombre || "tu compañero/a"}
-            </div>
+        </CardHeader>
+        {formAbierto && (
+          <CardContent className="space-y-4 border-t pt-4">
             <div className="space-y-1.5">
-              <Label htmlFor="swap-fecha-b">Día</Label>
-              <Input
-                id="swap-fecha-b"
-                type="date"
-                value={fechaB}
-                onChange={(e) => setFechaB(e.target.value)}
-              />
+              <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                Tipo
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                <ChipToggle
+                  activo={tipoSolicitud === "cambio"}
+                  onClick={() => setTipoSolicitud("cambio")}
+                >
+                  <ArrowLeftRight className="mr-1 h-3.5 w-3.5" /> Cambio de turno
+                </ChipToggle>
+                <ChipToggle
+                  activo={tipoSolicitud === "ausencia"}
+                  onClick={() => setTipoSolicitud("ausencia")}
+                >
+                  <CalendarOff className="mr-1 h-3.5 w-3.5" /> Ausencia
+                </ChipToggle>
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Franja</Label>
-              <Select value={franjaB} onValueChange={(v) => setFranjaB(v as FranjaTurno)}>
-                <SelectTrigger aria-label="Franja del turno del compañero">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {FRANJAS_SWAP.map((f) => (
-                    <SelectItem key={f.valor} value={f.valor}>
-                      {f.etiqueta}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="swap-motivo">
-            Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-          </Label>
-          <Textarea
-            id="swap-motivo"
-            value={motivo}
-            onChange={(e) => setMotivo(e.target.value)}
-            placeholder="Ej. Cita médica, evento familiar, examen…"
-            rows={2}
-            maxLength={500}
-          />
-        </div>
-        <div className="flex justify-end">
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
-            {crear.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {tipoSolicitud === "cambio" ? (
+              sinSesion ? (
+                <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+                  Inicia sesion para pedir un cambio de turno con tus compañeros.
+                </div>
+              ) : (
+                <FormularioNuevoSwap
+                  miId={usuario.id}
+                  onCreado={() => {
+                    invalidarSwaps();
+                    setFormAbierto(false);
+                  }}
+                />
+              )
             ) : (
-              <Send className="h-4 w-4" />
+              <NuevaAusencia
+                equipo={equipo}
+                onCreada={() => {
+                  invalidarAusencias();
+                  setFormAbierto(false);
+                }}
+              />
             )}
-            Solicitar cambio
-          </Button>
+          </CardContent>
+        )}
+      </Card>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Tipo
+        </span>
+        <ChipToggle activo={filtroTipo === "todo"} onClick={() => setFiltroTipo("todo")}>
+          Todo
+        </ChipToggle>
+        <ChipToggle activo={filtroTipo === "cambios"} onClick={() => setFiltroTipo("cambios")}>
+          Cambios
+        </ChipToggle>
+        <ChipToggle
+          activo={filtroTipo === "ausencias"}
+          onClick={() => setFiltroTipo("ausencias")}
+        >
+          Ausencias
+        </ChipToggle>
+        <span className="ml-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Estado
+        </span>
+        <ChipToggle
+          activo={filtroEstado === "activos"}
+          onClick={() => setFiltroEstado("activos")}
+        >
+          Activos
+        </ChipToggle>
+        <ChipToggle
+          activo={filtroEstado === "historial"}
+          onClick={() => setFiltroEstado("historial")}
+        >
+          Historial
+        </ChipToggle>
+      </div>
+
+      {errorSwaps && (
+        <BloqueError
+          titulo="No se pudieron cargar los cambios de turno"
+          mensaje={mensajeError(swapsQ.error)}
+          onReintentar={() => void swapsQ.refetch()}
+          cargando={swapsQ.isFetching}
+        />
+      )}
+      {errorAusencias && (
+        <BloqueError
+          titulo="No se pudieron cargar las ausencias"
+          mensaje={mensajeError(ausenciasQ.error)}
+          onReintentar={() => void ausenciasQ.refetch()}
+          cargando={ausenciasQ.isFetching}
+        />
+      )}
+
+      {cargandoTodo ? (
+        <Skeleton className="h-40 w-full rounded-md" />
+      ) : items.length === 0 ? (
+        <EstadoVacio
+          icono={ArrowLeftRight}
+          titulo={
+            filtroEstado === "historial"
+              ? "Sin historial"
+              : "Sin solicitudes activas"
+          }
+          texto={
+            filtroEstado === "historial"
+              ? "Aqui apareceran los cambios cerrados y las ausencias ya pasadas."
+              : "Crea una con el boton 'Nueva solicitud'."
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {items.map((it) =>
+            it.tipo === "cambio" ? (
+              <TarjetaSwap
+                key={`swap-${it.swap.id}`}
+                swap={it.swap}
+                miId={usuario?.id ?? ""}
+                esAdmin={esAdmin}
+              />
+            ) : (
+              <TarjetaAusencia
+                key={`au-${it.ausencia.id}`}
+                ausencia={it.ausencia}
+                onCambio={invalidarAusencias}
+              />
+            ),
+          )}
         </div>
-      </CardContent>
-    </Card>
+      )}
+    </div>
   );
 }
 
 /**
- * Una sección de la pestaña de Swaps: lista filtrada de tarjetas, con un filtro
- * adicional cliente (`soloEstados`) para dividir "Solicité" entre activos y los
- * "Historial" (terminales), reaprovechando la misma consulta backend.
+ * Formulario SIMPLIFICADO para pedir un cambio de turno.
+ *
+ * Antes pedia 6 campos (compañero + fecha A + franja A + fecha B + franja B + motivo).
+ * Ahora son 3: "Mi turno" (Select sobre los turnos REALES del solicitante en la
+ * semana actual y la siguiente), "Turno deseado" (Select sobre los turnos de los
+ * demas CMs en el mismo rango) y motivo opcional. De cada Select derivamos
+ * `fecha`/`franja_id` (y `destinatario_id` del segundo). El backend sigue
+ * recibiendo el mismo cuerpo `crearSwap`.
+ *
+ * Rango: hardcoded a "semana actual + siguiente" (14 dias). Si la lista queda
+ * vacia avisamos al usuario en lugar de saltar a otra ventana.
  */
-function SeccionSwaps({
-  titulo,
-  descripcion,
-  icono: Icono,
-  filtros,
-  soloEstados,
+function FormularioNuevoSwap({
   miId,
-  esAdmin,
-  vacio,
+  onCreado,
 }: {
-  titulo: string;
-  descripcion: string;
-  icono: typeof ArrowLeftRight;
-  filtros: FiltrosSwaps;
-  /** Filtro extra cliente: deja solo (no_)terminales. Sin valor = sin filtro. */
-  soloEstados?: "terminales" | "no_terminales";
   miId: string;
-  esAdmin: boolean;
-  vacio: string;
+  onCreado?: () => void;
 }) {
-  const clave = ["rota", "swaps", filtros] as const;
-  const q = useQuery({
-    queryKey: clave,
-    queryFn: ({ signal }) => api.listarSwaps(filtros, signal),
+  // Semana actual y la siguiente: dos consultas, una por semana, para reusar el
+  // cache compartido con la pestaña Calendario.
+  const lunesActual = React.useMemo(() => lunesDeSemana(new Date()), []);
+  const lunesProxima = React.useMemo(() => lunesSiguiente(lunesActual, 1), [lunesActual]);
+
+  const semana1Q = useQuery({
+    queryKey: ["rota", "turnos", lunesActual] as const,
+    queryFn: ({ signal }) => api.listarTurnos({ lunes: lunesActual }, signal),
+  });
+  const semana2Q = useQuery({
+    queryKey: ["rota", "turnos", lunesProxima] as const,
+    queryFn: ({ signal }) => api.listarTurnos({ lunes: lunesProxima }, signal),
   });
 
-  const swaps = React.useMemo(() => {
-    const todos = q.data?.swaps ?? [];
-    if (!soloEstados) return todos;
-    const esTerminal = (s: SwapTurno) => ESTADOS_TERMINALES_SWAP.has(s.estado);
-    return soloEstados === "terminales" ? todos.filter(esTerminal) : todos.filter((s) => !esTerminal(s));
-  }, [q.data, soloEstados]);
+  const turnos: TurnoRota[] = React.useMemo(
+    () => [...(semana1Q.data?.turnos ?? []), ...(semana2Q.data?.turnos ?? [])],
+    [semana1Q.data, semana2Q.data],
+  );
+
+  // Hoy en ISO: filtramos turnos pasados (no tiene sentido pedir cambio sobre
+  // un dia que ya paso). La franja descanso si la permitimos: el backend valida.
+  const hoyIso = React.useMemo(() => iso(new Date()), []);
+  const turnosFuturos = React.useMemo(
+    () => turnos.filter((t) => t.fecha >= hoyIso),
+    [turnos, hoyIso],
+  );
+
+  const turnosMios = React.useMemo(
+    () =>
+      turnosFuturos
+        .filter((t) => t.miembro_id === miId)
+        .slice()
+        .sort((a, b) => a.fecha.localeCompare(b.fecha) || a.franja_nombre.localeCompare(b.franja_nombre)),
+    [turnosFuturos, miId],
+  );
+  const turnosOtros = React.useMemo(
+    () =>
+      turnosFuturos
+        .filter((t) => t.miembro_id !== miId)
+        .slice()
+        .sort(
+          (a, b) =>
+            a.fecha.localeCompare(b.fecha) ||
+            a.franja_nombre.localeCompare(b.franja_nombre) ||
+            a.miembro_nombre.localeCompare(b.miembro_nombre),
+        ),
+    [turnosFuturos, miId],
+  );
+
+  // Las opciones del Select 1 codifican `${id}` y leemos el TurnoRota completo
+  // por busqueda en la lista. Idem el Select 2.
+  const [miTurnoId, setMiTurnoId] = React.useState("");
+  const [turnoDeseadoId, setTurnoDeseadoId] = React.useState("");
+  const [motivo, setMotivo] = React.useState("");
+
+  const miTurno = turnosMios.find((t) => t.id === miTurnoId);
+  const turnoDeseado = turnosOtros.find((t) => t.id === turnoDeseadoId);
+
+  const crear = useMutation({
+    mutationFn: () => {
+      if (!miTurno || !turnoDeseado) throw new Error("Falta seleccionar los turnos.");
+      return api.crearSwap({
+        destinatario_id: turnoDeseado.miembro_id,
+        fecha_a: miTurno.fecha,
+        franja_a: miTurno.franja_id,
+        fecha_b: turnoDeseado.fecha,
+        franja_b: turnoDeseado.franja_id,
+        motivo: motivo.trim(),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Solicitud enviada. Tu compañero la vera en la lista.");
+      setMiTurnoId("");
+      setTurnoDeseadoId("");
+      setMotivo("");
+      onCreado?.();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const cargando = semana1Q.isPending || semana2Q.isPending;
+  const motivoExcedido = motivo.length > 500;
+  const puedeCrear =
+    miTurnoId !== "" &&
+    turnoDeseadoId !== "" &&
+    !motivoExcedido &&
+    !crear.isPending;
+
+  // Etiqueta de cada opcion: "Lun 8 jun · Mañana" o "Lun 8 jun · Mañana · Tezcu"
+  // segun si es opcion propia o de un compañero.
+  const etiquetaTurnoPropio = (t: TurnoRota) =>
+    `${formatearFechaCorta(t.fecha)} · ${t.franja_nombre}`;
+  const etiquetaTurnoOtros = (t: TurnoRota) =>
+    `${formatearFechaCorta(t.fecha)} · ${t.franja_nombre} · ${t.miembro_nombre}`;
+
+  if (cargando) {
+    return <Skeleton className="h-40 w-full rounded-md" />;
+  }
+  if (turnosMios.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
+        No tienes turnos para cambiar en este rango (semana actual + siguiente).
+      </div>
+    );
+  }
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Icono className="h-4 w-4" /> {titulo}
-          <span className="ml-2 text-xs font-normal text-muted-foreground">
-            {descripcion}
-          </span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {q.isPending ? (
-          <Skeleton className="h-24 w-full rounded-md" />
-        ) : q.isError ? (
-          <BloqueError
-            titulo="No se pudieron cargar los cambios de turno"
-            mensaje={mensajeError(q.error)}
-            onReintentar={() => void q.refetch()}
-            cargando={q.isFetching}
-          />
-        ) : swaps.length === 0 ? (
-          <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-            {vacio}
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label>Mi turno</Label>
+        <Select value={miTurnoId} onValueChange={setMiTurnoId}>
+          <SelectTrigger aria-label="Mi turno (el que cedo)">
+            <SelectValue placeholder="Elige uno de tus turnos" />
+          </SelectTrigger>
+          <SelectContent>
+            {turnosMios.map((t) => (
+              <SelectItem key={t.id} value={t.id}>
+                {etiquetaTurnoPropio(t)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label>Turno deseado</Label>
+        <Select value={turnoDeseadoId} onValueChange={setTurnoDeseadoId}>
+          <SelectTrigger aria-label="Turno deseado (el que quieres recibir)">
+            <SelectValue placeholder="Elige el turno con el que quieres cambiar" />
+          </SelectTrigger>
+          <SelectContent>
+            {turnosOtros.length === 0 ? (
+              <div className="p-2 text-xs text-muted-foreground">
+                No hay turnos de otros compañeros en este rango.
+              </div>
+            ) : (
+              turnosOtros.map((t) => (
+                <SelectItem key={t.id} value={t.id}>
+                  {etiquetaTurnoOtros(t)}
+                </SelectItem>
+              ))
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="swap-motivo">
+          Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
+        <Textarea
+          id="swap-motivo"
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ej. Cita medica, evento familiar, examen…"
+          rows={2}
+          maxLength={500}
+        />
+        {motivoExcedido && (
+          <div className="text-xs text-destructive">
+            El motivo no puede pasar de 500 caracteres.
           </div>
-        ) : (
-          swaps.map((s) => (
-            <TarjetaSwap key={s.id} swap={s} miId={miId} esAdmin={esAdmin} />
-          ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+      <div className="flex justify-end">
+        <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          {crear.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+          Solicitar cambio
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -4688,6 +5095,9 @@ function TarjetaSwap({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Badge variant="outline" className="font-normal">
+              <ArrowLeftRight className="mr-1 h-3 w-3" /> Cambio
+            </Badge>
             <span className="font-medium">{swap.solicitante_nombre}</span>
             <ArrowLeftRight className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="font-medium">{swap.destinatario_nombre}</span>
@@ -4947,6 +5357,8 @@ function DialogAccionSwap({
 function Programas() {
   const queryClient = useQueryClient();
   const [soloActivos, setSoloActivos] = React.useState(false);
+  // Ola "simplificar": filtro de búsqueda (case-insensitive) sobre nombre/descripción.
+  const [busqueda, setBusqueda] = React.useState("");
   const clave = ["rota", "programas", soloActivos ? "activos" : "todos"] as const;
   const q = useQuery({
     queryKey: clave,
@@ -4956,7 +5368,17 @@ function Programas() {
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: ["rota", "programas"] });
   };
-  const programas = q.data?.programas ?? [];
+  const programas = React.useMemo(() => q.data?.programas ?? [], [q.data?.programas]);
+  // Filtro local (no toca la API: el backend no expone búsqueda y la lista es corta).
+  const programasFiltrados = React.useMemo(() => {
+    const term = busqueda.trim().toLowerCase();
+    if (!term) return programas;
+    return programas.filter(
+      (p) =>
+        p.nombre.toLowerCase().includes(term) ||
+        (p.descripcion ?? "").toLowerCase().includes(term),
+    );
+  }, [programas, busqueda]);
 
   return (
     <div className="space-y-4">
@@ -4983,6 +5405,17 @@ function Programas() {
         </CardHeader>
         <CardContent className="space-y-4">
           <NuevoPrograma onCreado={invalidar} />
+          {/* Búsqueda inline (ola "simplificar"): filtra por nombre/descripción. */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar por nombre o descripción…"
+              className="h-9 pl-8"
+              aria-label="Buscar programas"
+            />
+          </div>
           {q.isPending ? (
             <Skeleton className="h-32 w-full rounded-md" />
           ) : q.isError ? (
@@ -4998,6 +5431,12 @@ function Programas() {
               titulo="Sin programas"
               texto="Da de alta un programa con el formulario de arriba para que aparezca en el autocomplete de piezas."
             />
+          ) : programasFiltrados.length === 0 ? (
+            <EstadoVacio
+              icono={Search}
+              titulo="Sin resultados"
+              texto={`No hay programas que coincidan con «${busqueda}». Borra el filtro para verlos todos.`}
+            />
           ) : (
             <div className="overflow-x-auto rounded-md border bg-background">
               <Table>
@@ -5012,7 +5451,7 @@ function Programas() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {programas.map((p) => (
+                  {programasFiltrados.map((p) => (
                     <FilaPrograma key={p.id} programa={p} onCambio={invalidar} />
                   ))}
                 </TableBody>
@@ -5032,6 +5471,9 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
   const [color, setColor] = React.useState("#7c7c7c");
   const [inicio, setInicio] = React.useState("");
   const [fin, setFin] = React.useState("");
+  // Validación inline: fin >= inicio (ola "simplificar"). Si ambos están y el orden
+  // está mal, bloqueamos el submit y mostramos el mensaje pegado al campo.
+  const [errorFechas, setErrorFechas] = React.useState<string | null>(null);
 
   const crear = useMutation({
     mutationFn: () => {
@@ -5051,11 +5493,21 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
       setColor("#7c7c7c");
       setInicio("");
       setFin("");
+      setErrorFechas(null);
       setAbierto(false);
       onCreado();
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  function intentarCrear() {
+    if (inicio && fin && fin < inicio) {
+      setErrorFechas("La fecha de fin no puede ser anterior al inicio.");
+      return;
+    }
+    setErrorFechas(null);
+    crear.mutate();
+  }
 
   if (!abierto) {
     return (
@@ -5104,7 +5556,10 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
             id="prog-inicio"
             type="date"
             value={inicio}
-            onChange={(e) => setInicio(e.target.value)}
+            onChange={(e) => {
+              setInicio(e.target.value);
+              if (errorFechas) setErrorFechas(null);
+            }}
             className="h-8 text-xs"
           />
         </div>
@@ -5116,31 +5571,30 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
             id="prog-fin"
             type="date"
             value={fin}
-            onChange={(e) => setFin(e.target.value)}
+            onChange={(e) => {
+              setFin(e.target.value);
+              if (errorFechas) setErrorFechas(null);
+            }}
             className="h-8 text-xs"
+            aria-invalid={errorFechas ? true : undefined}
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="prog-color" className="text-xs">
             Color
           </Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="prog-color"
-              type="color"
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="h-8 w-14 cursor-pointer p-1"
-            />
-            <Input
-              value={color}
-              onChange={(e) => setColor(e.target.value)}
-              className="h-8 flex-1 font-mono text-xs"
-              maxLength={20}
-              placeholder="#RRGGBB"
-            />
-          </div>
+          {/* Ola "simplificar": eliminamos el input hex de texto; con el picker basta. */}
+          <Input
+            id="prog-color"
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-8 w-14 cursor-pointer p-1"
+          />
         </div>
+        {errorFechas && (
+          <p className="text-xs text-destructive sm:col-span-2">{errorFechas}</p>
+        )}
       </div>
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={() => setAbierto(false)}>
@@ -5148,7 +5602,7 @@ function NuevoPrograma({ onCreado }: { onCreado: () => void }) {
         </Button>
         <Button
           size="sm"
-          onClick={() => crear.mutate()}
+          onClick={intentarCrear}
           disabled={!nombre.trim() || crear.isPending}
         >
           {crear.isPending ? (
@@ -5340,6 +5794,8 @@ function DialogEditarPrograma({
   const [inicio, setInicio] = React.useState(programa.inicio);
   const [fin, setFin] = React.useState(programa.fin);
   const [activo, setActivo] = React.useState(programa.activo);
+  // Ola "simplificar": validación inline `fin >= inicio` antes de PATCH.
+  const [errorFechas, setErrorFechas] = React.useState<string | null>(null);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -5369,6 +5825,15 @@ function DialogEditarPrograma({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+
+  function intentarGuardar() {
+    if (inicio && fin && fin < inicio) {
+      setErrorFechas("La fecha de fin no puede ser anterior al inicio.");
+      return;
+    }
+    setErrorFechas(null);
+    guardar.mutate();
+  }
 
   const sinCambios =
     nombre.trim() === programa.nombre &&
@@ -5415,7 +5880,10 @@ function DialogEditarPrograma({
                 id="ep-inicio"
                 type="date"
                 value={inicio}
-                onChange={(e) => setInicio(e.target.value)}
+                onChange={(e) => {
+                  setInicio(e.target.value);
+                  if (errorFechas) setErrorFechas(null);
+                }}
               />
             </div>
             <div className="space-y-1.5">
@@ -5424,29 +5892,28 @@ function DialogEditarPrograma({
                 id="ep-fin"
                 type="date"
                 value={fin}
-                onChange={(e) => setFin(e.target.value)}
+                onChange={(e) => {
+                  setFin(e.target.value);
+                  if (errorFechas) setErrorFechas(null);
+                }}
+                aria-invalid={errorFechas ? true : undefined}
               />
             </div>
           </div>
+          {errorFechas && (
+            <p className="text-xs text-destructive">{errorFechas}</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="ep-color">Color</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  id="ep-color"
-                  type="color"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="h-9 w-14 cursor-pointer p-1"
-                />
-                <Input
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="h-9 flex-1 font-mono text-xs"
-                  maxLength={20}
-                  placeholder="#RRGGBB"
-                />
-              </div>
+              {/* Ola "simplificar": eliminamos el input hex de texto. */}
+              <Input
+                id="ep-color"
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-9 w-14 cursor-pointer p-1"
+              />
             </div>
             <div className="flex items-end gap-2 pb-1">
               <Checkbox
@@ -5465,7 +5932,7 @@ function DialogEditarPrograma({
             Cancelar
           </Button>
           <Button
-            onClick={() => guardar.mutate()}
+            onClick={intentarGuardar}
             disabled={sinCambios || !nombre.trim() || guardar.isPending}
           >
             {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

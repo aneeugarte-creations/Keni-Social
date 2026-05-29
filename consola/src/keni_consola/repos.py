@@ -991,6 +991,28 @@ def sembrar_franjas_por_defecto(lunes: str) -> list[dict[str, Any]]:
     return db.sembrar_franjas_por_defecto(lunes)
 
 
+# --------------------------------------------------------------------------- #
+# Coordinador por turno (ola "coord")                                          #
+# --------------------------------------------------------------------------- #
+
+
+def listar_coordinacion_semana(lunes: str) -> list[dict[str, Any]]:
+    """Coordinaciones de la semana (delegado en `db.py`)."""
+    return db.listar_coordinacion_semana(lunes)
+
+
+def set_coordinador_rota(
+    lunes: str, fecha: str, franja_id: str, coordinador_id: str
+) -> dict[str, Any]:
+    """UPSERT por (fecha, franja_id) del coordinador asignado a la celda."""
+    return db.set_coordinador_rota(lunes, fecha, franja_id, coordinador_id)
+
+
+def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:
+    """Borra la coordinacion de la celda (fecha, franja_id)."""
+    return db.quitar_coordinador_rota(fecha, franja_id)
+
+
 def obtener_franjas_config() -> dict[str, str]:
     return db.obtener_franjas_config()
 

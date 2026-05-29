@@ -10,6 +10,9 @@ Cada persona tiene:
                   + redactor + creativo de vertical de Nacion Gamer + editorial YT cubren;
                   directivos, gerencia podcast, coordinacion de redes/operativa, fotografia
                   + QA, creativo de Fundacion y coordinacion de YouTube NO cubren.
+  - `puede_coordinar` : True si es candidato a coordinador por celda en el calendario
+                  (ola "coord"). Hoy: Elias, Ale, Mariana. El admin puede ampliar la lista
+                  desde /usuarios marcando el flag a quien quiera.
   - `marcas`    : ids canonicos de las VERTICALES a las que pertenece (relacion N:M en la
                   tabla `usuarios_marcas`). Una persona puede estar en varias
                   (Yustine: claro-sports + unotv + piso-15; Bernardo: las 5).
@@ -47,33 +50,41 @@ _logger = logging.getLogger(NOMBRE_LOGGER)
 # Cada persona se la cambia al entrar; este valor solo vive en el seed inicial.
 PASSWORD_INICIAL = "cambiar"
 
-# Equipo real (16): (usuario, rol_permisos, cargo, cobertura, marcas).
+# Equipo real (16): (usuario, rol_permisos, cargo, cobertura, puede_coordinar, marcas).
 # Bernardo dicto el organigrama en la segunda audiencia; estas son las
 # verticales/funciones reales por persona. `cobertura=True` = entra en la rota de turnos
 # (Claro Sports fin de semana son Tezcu+Luis+Roger+Elias; UnoTV son Lalo+Angel; Yustine
 # refuerza WhatsApp UnoTV pero entra en cobertura; Jonathan cubre Nacion Gamer).
-EQUIPO_AMX: tuple[tuple[str, str, str, bool, tuple[str, ...]], ...] = (
-    ("bernardo", ROL_ADMIN, "director", False,
+# `puede_coordinar=True` (ola "coord"): candidato a coordinador por celda. Hoy son tres
+# (Elias, Ale, Mariana); el admin lo decide desde /usuarios.
+EQUIPO_AMX: tuple[tuple[str, str, str, bool, bool, tuple[str, ...]], ...] = (
+    ("bernardo", ROL_ADMIN, "director", False, False,
      ("claro-sports", "unotv", "piso-15", "nacion-gamer", "fundacion")),
-    ("diana", ROL_EDITOR, "coordinador_redes", False, ("unotv", "piso-15", "fundacion")),
-    ("elias", ROL_EDITOR, "coordinador_redes", True, ("claro-sports",)),
-    ("maira", ROL_EDITOR, "gerente_podcast", False, ("piso-15",)),
-    ("lalo", ROL_EDITOR, "content_manager", True, ("unotv",)),
-    ("angel", ROL_EDITOR, "content_manager", True, ("unotv",)),
-    ("tezcu", ROL_EDITOR, "community_manager", True, ("claro-sports",)),
-    ("luis", ROL_EDITOR, "community_manager", True, ("claro-sports",)),
-    ("roger", ROL_EDITOR, "community_manager", True, ("claro-sports",)),
+    ("diana", ROL_EDITOR, "coordinador_redes", False, False, ("unotv", "piso-15", "fundacion")),
+    ("elias", ROL_EDITOR, "coordinador_redes", True, True, ("claro-sports",)),
+    ("maira", ROL_EDITOR, "gerente_podcast", False, False, ("piso-15",)),
+    ("lalo", ROL_EDITOR, "content_manager", True, False, ("unotv",)),
+    ("angel", ROL_EDITOR, "content_manager", True, False, ("unotv",)),
+    ("tezcu", ROL_EDITOR, "community_manager", True, False, ("claro-sports",)),
+    ("luis", ROL_EDITOR, "community_manager", True, False, ("claro-sports",)),
+    ("roger", ROL_EDITOR, "community_manager", True, False, ("claro-sports",)),
     # Daiana: NO es de ClaroSports (era un error). Es creativa de Fundacion; fuera de la
     # rota de cobertura. Esta fila es la CORRECCION explicita que motiva esta ola.
-    ("daiana", ROL_EDITOR, "creativo_vertical", False, ("fundacion",)),
-    ("mariana", ROL_EDITOR, "coordinador_operativo", False, ("claro-sports",)),
-    ("ale", ROL_EDITOR, "fotografia_qa", False, ("claro-sports",)),
-    ("jonathan", ROL_EDITOR, "creativo_vertical", True, ("nacion-gamer",)),
-    ("jose", ROL_EDITOR, "redactor", True, ("unotv",)),
-    ("yustine", ROL_EDITOR, "editorial_youtube", True, ("claro-sports", "unotv", "piso-15")),
-    ("laloyt", ROL_EDITOR, "coordinador_youtube", False,
+    ("daiana", ROL_EDITOR, "creativo_vertical", False, False, ("fundacion",)),
+    ("mariana", ROL_EDITOR, "coordinador_operativo", False, True, ("claro-sports",)),
+    ("ale", ROL_EDITOR, "fotografia_qa", False, True, ("claro-sports",)),
+    ("jonathan", ROL_EDITOR, "creativo_vertical", True, False, ("nacion-gamer",)),
+    ("jose", ROL_EDITOR, "redactor", True, False, ("unotv",)),
+    ("yustine", ROL_EDITOR, "editorial_youtube", True, False, ("claro-sports", "unotv", "piso-15")),
+    ("laloyt", ROL_EDITOR, "coordinador_youtube", False, False,
      ("claro-sports", "unotv", "piso-15", "nacion-gamer")),
 )
+
+# Usuarios cuyo `puede_coordinar` se sobreescribe INCONDICIONALMENTE en cada seed (ola
+# "coord"). Es el listado canonico que pide el negocio: Elias (admin de redes
+# ClaroSports), Ale (foto/QA), Mariana (coordinador operativo). El resto se sembra
+# correctivamente solo si nadie lo ha tocado (ver `sembrar_equipo`).
+_USUARIOS_PUEDE_COORDINAR_FORZADO: frozenset[str] = frozenset({"elias", "ale", "mariana"})
 
 
 # Cargos del catalogo VIEJO que la ola anterior usaba en `EQUIPO_AMX`. Si un usuario aun
@@ -92,11 +103,17 @@ def sembrar_equipo() -> None:
     """Asegura los 16 usuarios del equipo AMX en la BD (idempotente).
 
     - Usuarios nuevos: se crean con `PASSWORD_INICIAL` y `debe_cambiar_password=True`,
-      con su cargo, cobertura y marcas del organigrama.
+      con su cargo, cobertura, `puede_coordinar` y marcas del organigrama.
     - Usuarios ya existentes: NO se toca la contrasena ni el rol; solo se sincronizan
       `cargo` y `cobertura` cuando el cargo actual es del catalogo VIEJO (un admin que
       lo haya cambiado a un cargo del NUEVO catalogo se respeta), y se REEMPLAZA el
       conjunto de marcas N:M para reflejar el organigrama vigente.
+    - `puede_coordinar` (ola "coord"): para los 3 usuarios canonicos (Elias, Ale,
+      Mariana) se sobreescribe INCONDICIONALMENTE en cada seed (garantiza el estado
+      deseado tras el deploy aunque el admin lo hubiera editado). Para el resto, solo
+      se sembra correctivamente si nadie lo ha tocado (es decir, si difiere del seed Y
+      el valor actual es el default `False`); asi un admin que lo haya activado a mano
+      no pierde su cambio.
     - Caso especial Daiana (sacarla del calendario de ClaroSports): se sobreescribe
       INCONDICIONALMENTE su cargo/cobertura/marcas a (`creativo_vertical`, False,
       ["fundacion"]). Es la correccion critica que motiva esta ola y debe quedar
@@ -109,7 +126,7 @@ def sembrar_equipo() -> None:
     nuevos = 0
     actualizados = 0
     corregidos_daiana = 0
-    for usuario, _rol, cargo, cobertura, marcas in EQUIPO_AMX:
+    for usuario, _rol, cargo, cobertura, puede_coordinar_seed, marcas in EQUIPO_AMX:
         marcas_lista = list(marcas)
         if usuario in existentes:
             actual = existentes[usuario]
@@ -136,6 +153,19 @@ def sembrar_equipo() -> None:
             )
             cambia_cobertura = bool(actual.get("cobertura")) != cobertura and cambia_cargo
             cambia_marcas = marcas_actuales != sorted(marcas_lista)
+            # `puede_coordinar`: para los 3 canonicos se sobreescribe SIEMPRE; para el
+            # resto solo se aplica correctivamente si el valor actual es el default
+            # `False` Y difiere del seed (el admin no lo ha tocado a True).
+            puede_coordinar_actual = bool(actual.get("puede_coordinar"))
+            forzado = usuario in _USUARIOS_PUEDE_COORDINAR_FORZADO
+            cambia_puede = False
+            if forzado:
+                if puede_coordinar_actual != puede_coordinar_seed:
+                    cambia_puede = True
+            elif puede_coordinar_actual != puede_coordinar_seed and not puede_coordinar_actual:
+                # Solo correctivo si el admin no lo ha tocado a True.
+                cambia_puede = True
+
             # Aplica solo lo que toca; si el admin ya migro el cargo a uno del nuevo
             # catalogo, lo respetamos (no pisamos `cargo` ni `cobertura`).
             kwargs: dict[str, object] = {}
@@ -145,6 +175,8 @@ def sembrar_equipo() -> None:
                 kwargs["cobertura"] = cobertura
             if cambia_marcas:
                 kwargs["marcas"] = marcas_lista
+            if cambia_puede:
+                kwargs["puede_coordinar"] = puede_coordinar_seed
             if kwargs:
                 actualizar_perfil(actual["id"], **kwargs)  # type: ignore[arg-type]
                 actualizados += 1
@@ -156,13 +188,15 @@ def sembrar_equipo() -> None:
             debe_cambiar_password=True,
             cargo=cargo,
             cobertura=cobertura,
+            puede_coordinar=puede_coordinar_seed,
             marcas=marcas_lista,
         )
         if creado is not None:
             nuevos += 1
     if nuevos or actualizados or corregidos_daiana:
         _logger.info(
-            "Seed equipo AMX: %d usuarios creados, %d actualizados (cargo/cobertura/marcas), "
+            "Seed equipo AMX: %d usuarios creados, %d actualizados "
+            "(cargo/cobertura/puede_coordinar/marcas), "
             "%d correctivos de Daiana aplicados.",
             nuevos,
             actualizados,
