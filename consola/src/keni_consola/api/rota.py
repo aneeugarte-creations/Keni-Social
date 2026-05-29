@@ -113,11 +113,14 @@ def _equipo(solo_cobertura: bool = True) -> list[dominio.Miembro]:
 
 
 def _equipo_dict(solo_cobertura: bool = True) -> list[dict[str, Any]]:
-    """Como `_equipo`, pero con marcas N:M para que el frontend pueda filtrar por vertical.
+    """Como `_equipo`, pero con marcas N:M, `cargo` y `cobertura` para que el frontend
+    pueda filtrar por vertical y por funcion en el organigrama.
 
     Hoy la rota solo cubre Claro Sports; con `marcas` el front puede limitar el equipo a
     los que pertenecen a esa marca (Daiana ya sale por `cobertura=False`, pero Jonathan
-    cubre nacion-gamer y NO debe aparecer en la rota de ClaroSports).
+    cubre nacion-gamer y NO debe aparecer en la rota de ClaroSports). `cargo` permite
+    ademas restringir la rejilla de Turnos a community managers (los coordinadores
+    siguen en el equipo, pero no aparecen en la grilla de asignacion por franja).
     """
     usuarios = auth.listar_usuarios()
     if solo_cobertura:
@@ -127,6 +130,8 @@ def _equipo_dict(solo_cobertura: bool = True) -> list[dict[str, Any]]:
             "id": u["id"],
             "nombre": u["usuario"],
             "marcas": list(u.get("marcas") or []),
+            "cargo": u.get("cargo") or "",
+            "cobertura": bool(u.get("cobertura")),
         }
         for u in usuarios
     ]

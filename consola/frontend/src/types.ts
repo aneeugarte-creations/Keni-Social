@@ -907,11 +907,20 @@ export interface CuerpoActualizarTarea {
  * `marcas` viene del organigrama AMX (ola `feat/roles-marcas`): ids canónicos de las
  * verticales a las que pertenece (claro-sports, unotv...). La rota hoy solo cubre
  * ClaroSports; el front filtra por `marcas.includes("claro-sports")`.
+ *
+ * `cargo` (funcion en el organigrama, p.ej. `community_manager`, `coordinador_redes`) y
+ * `cobertura` (¿esta miembro disponible para cubrir turnos?) permiten al frontend
+ * restringir la rejilla "Turnos por franja" a los CMs activos sin tener que pedir cada
+ * usuario individualmente.
  */
 export interface MiembroRota {
   id: string;
   nombre: string;
   marcas?: string[];
+  /** Cargo del organigrama (p.ej. `community_manager`). "" si no esta seteado. */
+  cargo?: string;
+  /** Si el miembro esta disponible para cubrir turnos hoy. */
+  cobertura?: boolean;
 }
 
 export interface RespuestaEquipoRota {

@@ -20,8 +20,6 @@ import {
   HeartPulse,
   ImageIcon,
   Loader2,
-  MessageSquare,
-  Moon,
   Pencil,
   Plane,
   Plus,
@@ -1128,20 +1126,60 @@ function DialogEditarEvento({
   );
 }
 
-// --- Pestaña: Turnos (CRUD primario sobre persona × día × franja) ----------
+// --- Pestaña: Turnos (rejilla franja × día con asignaciones por dropdown) --
 //
 // Modelo nuevo (ola back3): un turno NO está ligado a un evento. Es el horario
-// que cada persona tiene en (fecha, franja). La cobertura es derivada (otra
-// pestaña). Aquí está el CRUD completo: crear (formulario / dialog), editar
-// inline en la rejilla, multi-select para acciones en lote, borrar, duplicar,
-// copiar semana, aprobar la semana.
+// que cada persona tiene en (fecha, franja). La cobertura es derivada.
+//
+// La rejilla anterior tenía eje Y = persona × eje X = día, con una celda por
+// miembro. El usuario rechazó esa vista: lo importante en producción es ver
+// "¿quién cubre la mañana del martes?". Por eso ahora el eje Y son las dos
+// FRANJAS de trabajo (Mañana, Tarde — el descanso es ausencia de turno y no se
+// muestra como fila) y cada celda lista en chips a los community managers ya
+// asignados y ofrece un dropdown compacto "Añadir persona" con los CMs activos
+// de ClaroSports que aún no estén en esa celda. Click en una persona del
+// dropdown crea el turno; SIN dialog. La edición avanzada (motivo, nota relevo,
+// reasignar, cambiar franja) sigue accesible con click derecho sobre el chip.
+//
+// La selección múltiple + popover de acciones de lote se retira en esta vista:
+// con eje Y por franja, la acción "asignar lote de turnos a alguien" deja de
+// tener sentido (cada chip ya está asociado a una persona). El "Borrar" masivo
+// se sustituye por el botón individual de cada chip. Justificación en el commit.
 
-/** Args para abrir el dialog "Nuevo turno" desde otras pestañas. */
+/**
+ * Args para resaltar una celda concreta cuando el usuario llega a esta pestaña
+ * desde Cobertura ("Crear turno para esa franja+fecha"). NO abre dialog: solo
+ * pinta un anillo de atención en la celda durante unos segundos para que el
+ * usuario use el dropdown.
+ */
 type PrellenoNuevoTurno = {
   fecha?: string;
   franja?: FranjaTurno;
   miembro_id?: string;
 };
+
+/** Franjas que aparecen como filas. `descanso` queda fuera: es "no asignado". */
+const FRANJAS_REJILLA: readonly FranjaTurno[] = ["matutino", "vespertino"] as const;
+
+/**
+ * Restringe el equipo a los community managers cubriendo ClaroSports activos.
+ *
+ * Aplica los tres filtros pedidos por Bernardo:
+ *  - `marcas.includes("claro-sports")` (vertical correcta).
+ *  - `cobertura === true` (la persona está disponible para cubrir hoy).
+ *  - `cargo === "community_manager"` (los coordinadores quedan fuera; Elías
+ *    coordina pero no se asigna a una franja).
+ *
+ * Si los tres filtros dejan la lista vacía (puede ocurrir en entornos donde el
+ * seed de cargos del organigrama AMX aún no se ha aplicado a la BD), degrada al
+ * filtro por marca+cobertura para no romper la rejilla.
+ */
+function cmsClaroSports(equipo: MiembroRota[]): MiembroRota[] {
+  const porMarca = filtrarEquipoPorMarca(equipo).filter((m) => m.cobertura !== false);
+  const estrictos = porMarca.filter((m) => m.cargo === "community_manager");
+  if (estrictos.length > 0) return estrictos;
+  return porMarca;
+}
 
 function Turnos({
   lunes,
@@ -1153,7 +1191,7 @@ function Turnos({
   lunes: string;
   setLunes: (l: string) => void;
   esAdmin: boolean;
-  /** Si llega un prelleno (atajo desde Cobertura), abrimos el dialog auto-rellenado. */
+  /** Si llega un prelleno (atajo desde Cobertura), resaltamos la celda objetivo. */
   prelleno: PrellenoNuevoTurno | null;
   limpiarPrelleno: () => void;
 }) {
@@ -1173,7 +1211,11 @@ function Turnos({
     queryFn: ({ signal }) => api.rotaAusencias({}, signal),
   });
 
+  // `equipo` para la edición avanzada del chip (DialogEditarTurno admite
+  // reasignar a cualquier miembro de la rota), y `cms` para el dropdown de la
+  // rejilla (solo CMs activos de ClaroSports).
   const equipo = filtrarEquipoPorMarca(equipoQ.data?.equipo ?? []);
+  const cms = cmsClaroSports(equipoQ.data?.equipo ?? []);
   const ausencias = ausenciasQ.data?.ausencias ?? [];
   const semana = turnosQ.data;
   const turnos = React.useMemo(() => semana?.turnos ?? [], [semana?.turnos]);
@@ -1181,14 +1223,19 @@ function Turnos({
   const invalidarTodo = () => void queryClient.invalidateQueries({ queryKey: ["rota"] });
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: claveTurnos });
 
-  // Estado del dialog "Nuevo turno" (con o sin prelleno).
-  const [dialogNuevo, setDialogNuevo] = React.useState<PrellenoNuevoTurno | null>(null);
-  // Si llega un prelleno desde otra pestaña, ábrelo una vez y consúmelo.
+  // Resaltado one-shot de la celda objetivo cuando llegamos desde Cobertura.
+  const [celdaResaltada, setCeldaResaltada] = React.useState<{
+    fecha: string;
+    franja: FranjaTurno;
+  } | null>(null);
   React.useEffect(() => {
-    if (prelleno) {
-      setDialogNuevo(prelleno);
+    if (prelleno?.fecha && prelleno.franja && prelleno.franja !== "descanso") {
+      setCeldaResaltada({ fecha: prelleno.fecha, franja: prelleno.franja });
       limpiarPrelleno();
+      const t = window.setTimeout(() => setCeldaResaltada(null), 4000);
+      return () => window.clearTimeout(t);
     }
+    if (prelleno) limpiarPrelleno();
   }, [prelleno, limpiarPrelleno]);
 
   const aprobar = useMutation({
@@ -1223,36 +1270,6 @@ function Turnos({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Filtros por miembro (multi-toggle).
-  const [filtros, setFiltros] = React.useState<Set<string>>(new Set());
-  const turnosFiltrados = React.useMemo(() => {
-    if (filtros.size === 0) return turnos;
-    return turnos.filter((t) => filtros.has(t.miembro_id));
-  }, [turnos, filtros]);
-
-  // Selección múltiple sobre la rejilla.
-  const [seleccionados, setSeleccionados] = React.useState<Set<string>>(new Set());
-  React.useEffect(() => {
-    setSeleccionados(new Set());
-  }, [lunes]);
-  const toggleSeleccionado = (id: string) =>
-    setSeleccionados((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  // Popover de acciones de lote: se abre con click izquierdo sobre una celda ya
-  // seleccionada, en la posición (x,y) del cursor. Reemplaza al antiguo panel
-  // superior. Si la selección queda vacía, ciérralo automáticamente.
-  const [posPopoverLote, setPosPopoverLote] = React.useState<{ x: number; y: number } | null>(
-    null,
-  );
-  React.useEffect(() => {
-    if (seleccionados.size === 0 && posPopoverLote) setPosPopoverLote(null);
-  }, [seleccionados, posPopoverLote]);
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1272,13 +1289,6 @@ function Turnos({
               Borrador
             </Badge>
           ) : null}
-          <Button
-            size="sm"
-            onClick={() => setDialogNuevo({})}
-            disabled={semana?.aprobada}
-          >
-            <Plus className="h-4 w-4" /> Nuevo turno
-          </Button>
           <Button
             variant="outline"
             onClick={() => copiarAnterior.mutate()}
@@ -1338,8 +1348,6 @@ function Turnos({
         </div>
       </div>
 
-      <FiltrosMiembro equipo={equipo} filtros={filtros} setFiltros={setFiltros} />
-
       {turnosQ.isPending ? (
         <Skeleton className="h-48 w-full rounded-md" />
       ) : turnosQ.isError ? (
@@ -1349,97 +1357,58 @@ function Turnos({
           onReintentar={() => void turnosQ.refetch()}
           cargando={turnosQ.isFetching}
         />
-      ) : turnos.length === 0 ? (
-        <EstadoVacio
-          icono={CalendarDays}
-          titulo="Sin turnos para esta semana"
-          texto="Crea el primero con «Nuevo turno» o copia la semana anterior."
-        />
       ) : (
-        <RejillaTurnos
+        <RejillaTurnosPorFranja
+          lunes={lunes}
           semana={(semana as RotaSemana) ?? null}
-          turnos={turnosFiltrados}
+          turnos={turnos}
           equipo={equipo}
+          cms={cms}
           ausencias={ausencias}
           editable={!semana?.aprobada}
+          celdaResaltada={celdaResaltada}
           onCambio={invalidar}
-          seleccionados={seleccionados}
-          onToggleSeleccionado={toggleSeleccionado}
-          onPedirNuevoTurno={(args) => setDialogNuevo(args)}
-          onAbrirPopoverLote={(x, y) => setPosPopoverLote({ x, y })}
-        />
-      )}
-
-      {posPopoverLote && seleccionados.size > 0 && (
-        <PopoverSeleccionLote
-          pos={posPopoverLote}
-          seleccionados={seleccionados}
-          equipo={equipo}
-          onCerrar={() => setPosPopoverLote(null)}
-          onAplicado={() => {
-            setPosPopoverLote(null);
-            setSeleccionados(new Set());
-            invalidarTodo();
-          }}
-          onLimpiar={() => {
-            setPosPopoverLote(null);
-            setSeleccionados(new Set());
-          }}
         />
       )}
 
       <PanelCarga lunes={lunes} />
-
-      {dialogNuevo && (
-        <DialogNuevoTurno
-          lunes={lunes}
-          equipo={equipo}
-          inicial={dialogNuevo}
-          onCerrar={() => setDialogNuevo(null)}
-          onCreado={() => {
-            setDialogNuevo(null);
-            invalidarTodo();
-          }}
-        />
-      )}
     </div>
   );
 }
 
-// --- Rejilla persona × día con celdas editables ---------------------------
+// --- Rejilla franja × día -------------------------------------------------
 
-function RejillaTurnos({
+function RejillaTurnosPorFranja({
+  lunes,
   semana,
   turnos,
   equipo,
+  cms,
   ausencias,
   editable,
+  celdaResaltada,
   onCambio,
-  seleccionados,
-  onToggleSeleccionado,
-  onPedirNuevoTurno,
-  onAbrirPopoverLote,
 }: {
+  lunes: string;
   semana: RotaSemana | null;
   turnos: TurnoRota[];
+  /** Equipo completo de ClaroSports (incluye coordinadores) para edición avanzada. */
   equipo: MiembroRota[];
+  /** CMs activos de ClaroSports: los únicos asignables desde el dropdown. */
+  cms: MiembroRota[];
   ausencias: AusenciaRota[];
   editable: boolean;
+  celdaResaltada: { fecha: string; franja: FranjaTurno } | null;
   onCambio: () => void;
-  seleccionados: Set<string>;
-  onToggleSeleccionado: (id: string) => void;
-  onPedirNuevoTurno: (args: PrellenoNuevoTurno) => void;
-  /** Click izquierdo sobre una celda ya seleccionada: abrir popover de lote en (x,y). */
-  onAbrirPopoverLote?: (x: number, y: number) => void;
 }) {
   const dias = semana?.dias ?? [];
-  // Indexa los turnos por (miembro, fecha). El backend garantiza unicidad por
-  // (miembro, fecha, franja), pero una persona puede tener varios turnos en el
-  // mismo día (raro). Mostramos todos en pila por celda.
+  // Indexa los turnos por (franja, fecha). Una celda agrupa todos los CMs (y
+  // turnos en general) asignados a esa franja+día — el descanso queda fuera y
+  // no se muestra como fila.
   const porCelda = React.useMemo(() => {
     const m = new Map<string, TurnoRota[]>();
     for (const t of turnos) {
-      const k = `${t.miembro_id}|${t.fecha}`;
+      const k = `${t.franja}|${t.fecha}`;
       const lista = m.get(k) ?? [];
       lista.push(t);
       m.set(k, lista);
@@ -1447,10 +1416,20 @@ function RejillaTurnos({
     return m;
   }, [turnos]);
 
-  const estaAusente = (miembroId: string, fecha: string): AusenciaRota | undefined =>
-    ausencias.find((a) => a.miembro_id === miembroId && a.desde <= fecha && fecha <= a.hasta);
+  const ausenciasPorMiembro = React.useMemo(() => {
+    const m = new Map<string, AusenciaRota[]>();
+    for (const a of ausencias) {
+      const lista = m.get(a.miembro_id) ?? [];
+      lista.push(a);
+      m.set(a.miembro_id, lista);
+    }
+    return m;
+  }, [ausencias]);
 
-  const filas = [...equipo].sort((a, b) => a.nombre.localeCompare(b.nombre));
+  const ausenciaDe = (miembroId: string, fecha: string): AusenciaRota | undefined =>
+    (ausenciasPorMiembro.get(miembroId) ?? []).find(
+      (a) => a.desde <= fecha && fecha <= a.hasta,
+    );
 
   return (
     <Card>
@@ -1458,11 +1437,13 @@ function RejillaTurnos({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="sticky left-0 bg-background">Persona</TableHead>
+              <TableHead className="sticky left-0 w-28 bg-background">Franja</TableHead>
               {dias.map((fecha) => (
                 <TableHead
                   key={fecha}
-                  className={esFinDeSemana(fecha) ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined}
+                  className={
+                    esFinDeSemana(fecha) ? "bg-amber-50/40 dark:bg-amber-950/10" : undefined
+                  }
                 >
                   <div className="capitalize">{diaCorto(fecha)}</div>
                   <div className="text-xs font-normal text-muted-foreground">
@@ -1473,69 +1454,44 @@ function RejillaTurnos({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filas.map((m) => (
-              <TableRow key={m.id}>
+            {FRANJAS_REJILLA.map((franja) => (
+              <TableRow key={franja}>
                 <TableCell className="sticky left-0 whitespace-nowrap bg-background font-medium">
-                  {m.nombre}
+                  <div className="flex items-center gap-1.5">
+                    {franja === "matutino" ? (
+                      <Sunrise className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <Sunset className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    {ETIQUETA_FRANJA[franja]}
+                  </div>
                 </TableCell>
                 {dias.map((fecha) => {
-                  const ausencia = estaAusente(m.id, fecha);
-                  const turnosCelda = porCelda.get(`${m.id}|${fecha}`) ?? [];
-                  const finde = esFinDeSemana(fecha);
+                  const turnosCelda = porCelda.get(`${franja}|${fecha}`) ?? [];
+                  const resaltada =
+                    !!celdaResaltada &&
+                    celdaResaltada.fecha === fecha &&
+                    celdaResaltada.franja === franja;
                   return (
                     <TableCell
                       key={fecha}
-                      className={
-                        finde ? "align-top bg-amber-50/30 dark:bg-amber-950/10" : "align-top"
-                      }
+                      className={cn(
+                        "align-top",
+                        esFinDeSemana(fecha) && "bg-amber-50/30 dark:bg-amber-950/10",
+                        resaltada && "ring-2 ring-amber-400 ring-inset",
+                      )}
                     >
-                      <div className="space-y-1.5">
-                        {ausencia && (
-                          <Tooltip
-                            label={
-                              ausencia.motivo
-                                ? `${ausencia.tipo}: ${ausencia.motivo}`
-                                : `${ausencia.tipo} del ${ausencia.desde} al ${ausencia.hasta}`
-                            }
-                          >
-                            <Badge variant="secondary" className="font-normal">
-                              <Plane className="mr-1 h-3 w-3" />
-                              {TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ??
-                                "Ausente"}
-                            </Badge>
-                          </Tooltip>
-                        )}
-                        {turnosCelda.length === 0 ? (
-                          editable ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-full justify-start gap-1 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                              onClick={() =>
-                                onPedirNuevoTurno({ fecha, miembro_id: m.id })
-                              }
-                            >
-                              <Plus className="h-3 w-3" /> Añadir
-                            </Button>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">—</span>
-                          )
-                        ) : (
-                          turnosCelda.map((t) => (
-                            <CeldaTurno
-                              key={t.id}
-                              turno={t}
-                              equipo={equipo}
-                              editable={editable}
-                              ausencia={ausencia}
-                              onCambio={onCambio}
-                              seleccionado={seleccionados.has(t.id)}
-                              onToggleSeleccionado={onToggleSeleccionado}
-                              onAbrirPopoverLote={onAbrirPopoverLote}
-                            />
-                          ))
-                        )}
-                      </div>
+                      <CeldaFranjaDia
+                        lunes={lunes}
+                        fecha={fecha}
+                        franja={franja}
+                        turnos={turnosCelda}
+                        equipo={equipo}
+                        cms={cms}
+                        ausenciaDe={ausenciaDe}
+                        editable={editable}
+                        onCambio={onCambio}
+                      />
                     </TableCell>
                   );
                 })}
@@ -1548,66 +1504,156 @@ function RejillaTurnos({
   );
 }
 
-function CeldaTurno({
-  turno,
+function CeldaFranjaDia({
+  lunes,
+  fecha,
+  franja,
+  turnos,
   equipo,
+  cms,
+  ausenciaDe,
   editable,
-  ausencia,
   onCambio,
-  seleccionado,
-  onToggleSeleccionado,
-  onAbrirPopoverLote,
 }: {
-  turno: TurnoRota;
+  lunes: string;
+  fecha: string;
+  franja: FranjaTurno;
+  turnos: TurnoRota[];
   equipo: MiembroRota[];
+  cms: MiembroRota[];
+  ausenciaDe: (miembroId: string, fecha: string) => AusenciaRota | undefined;
   editable: boolean;
-  /** Si la persona tiene una ausencia que cubre el día de este turno. */
-  ausencia?: AusenciaRota;
   onCambio: () => void;
-  seleccionado: boolean;
-  onToggleSeleccionado: (id: string) => void;
-  /** Si el turno ya está seleccionado, un click izquierdo en la celda (no en el checkbox) abre el popover de acciones de lote. */
-  onAbrirPopoverLote?: (x: number, y: number) => void;
 }) {
   // Override pendiente por regla de sábado (la persona repite el sábado anterior).
-  const [pendienteSabado, setPendienteSabado] = React.useState<FranjaTurno | null>(null);
-  // Override pendiente por AUSENCIA (la persona está ausente ese día).
-  const [pendienteAusencia, setPendienteAusencia] = React.useState<{
-    franja: FranjaTurno;
-    ausencia: AusenciaRota;
+  // El backend devuelve 409 con `requiere_override`; preguntamos al usuario y
+  // reintentamos con override=true. Misma UX que la rejilla anterior.
+  const [pendienteOverride, setPendienteOverride] = React.useState<{
+    miembroId: string;
+    mensaje: string;
   } | null>(null);
-  const [editandoDetalles, setEditandoDetalles] = React.useState(false);
 
-  const actualizar = useMutation({
-    mutationFn: (cuerpo: {
-      franja?: FranjaTurno;
-      miembro_id?: string;
-      override?: boolean;
-      motivo?: string;
-      nota_relevo?: string;
-    }) => api.actualizarTurno(turno.id, cuerpo),
+  const crear = useMutation({
+    mutationFn: ({ miembroId, override }: { miembroId: string; override: boolean }) => {
+      const cuerpo: CuerpoCrearTurnoRota = {
+        lunes,
+        fecha,
+        miembro_id: miembroId,
+        franja,
+      };
+      if (override) cuerpo.override = true;
+      return api.crearTurno(cuerpo);
+    },
     onSuccess: () => {
-      setPendienteSabado(null);
-      setPendienteAusencia(null);
+      setPendienteOverride(null);
+      toast.success("Turno creado.");
       onCambio();
     },
     onError: (e, variables) => {
-      if (e instanceof ApiError && e.status === 409 && variables.franja) {
-        const cuerpo = (e.cuerpo ?? {}) as {
-          requiere_override?: boolean;
-          ausencia?: AusenciaRota;
-        };
-        if (cuerpo.requiere_override && cuerpo.ausencia) {
-          setPendienteAusencia({ franja: variables.franja, ausencia: cuerpo.ausencia });
-          return;
-        }
-        setPendienteSabado(variables.franja);
-        toast.warning(mensajeError(e));
+      if (
+        e instanceof ApiError &&
+        e.status === 409 &&
+        (e.cuerpo?.requiere_override as boolean | undefined)
+      ) {
+        setPendienteOverride({ miembroId: variables.miembroId, mensaje: e.message });
         return;
       }
       toast.error(mensajeError(e));
     },
   });
+
+  // Los CMs ya asignados a esta celda no deberían aparecer en el dropdown.
+  const miembrosYaEnCelda = new Set(turnos.map((t) => t.miembro_id));
+  const cmsDisponibles = cms.filter((m) => !miembrosYaEnCelda.has(m.id));
+
+  return (
+    <div className="space-y-1.5">
+      {turnos.map((t) => (
+        <ChipTurnoCM
+          key={t.id}
+          turno={t}
+          equipo={equipo}
+          ausencia={ausenciaDe(t.miembro_id, t.fecha)}
+          editable={editable}
+          onCambio={onCambio}
+        />
+      ))}
+      {editable && (
+        <Select
+          value=""
+          onValueChange={(miembroId) => {
+            if (!miembroId) return;
+            crear.mutate({ miembroId, override: false });
+          }}
+          disabled={crear.isPending || cmsDisponibles.length === 0}
+        >
+          <SelectTrigger
+            aria-label={`Añadir persona a ${ETIQUETA_FRANJA[franja]} del ${fecha}`}
+            className="h-7 w-full justify-start gap-1 border-dashed px-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <Plus className="h-3 w-3" />
+            <span className="truncate">
+              {cmsDisponibles.length === 0 ? "Todos asignados" : "Añadir persona"}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            {cmsDisponibles.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+      {pendienteOverride && (
+        <Dialog open onOpenChange={(o) => !o && setPendienteOverride(null)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>¿Forzar la cobertura?</DialogTitle>
+              <DialogDescription>{pendienteOverride.mensaje}</DialogDescription>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Esta persona ya cubrió el sábado anterior. Confirma solo si es una cobertura
+              estratégica intencional.
+            </p>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setPendienteOverride(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
+                onClick={() =>
+                  crear.mutate({ miembroId: pendienteOverride.miembroId, override: true })
+                }
+                disabled={crear.isPending}
+              >
+                {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                <AlertTriangle className="h-4 w-4" /> Forzar override
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+function ChipTurnoCM({
+  turno,
+  equipo,
+  ausencia,
+  editable,
+  onCambio,
+}: {
+  turno: TurnoRota;
+  /** Equipo de la rota (para que `DialogEditarTurno` pueda reasignar). */
+  equipo: MiembroRota[];
+  ausencia?: AusenciaRota;
+  editable: boolean;
+  onCambio: () => void;
+}) {
+  const [editandoDetalles, setEditandoDetalles] = React.useState(false);
 
   const borrar = useMutation({
     mutationFn: () => api.borrarTurno(turno.id),
@@ -1625,7 +1671,6 @@ function CeldaTurno({
       onCambio();
     },
     onError: (e) => {
-      // Choque con turno existente (común al duplicar sin cambiar nada).
       if (e instanceof ApiError && e.status === 409) {
         toast.info(e.message);
         return;
@@ -1634,45 +1679,34 @@ function CeldaTurno({
     },
   });
 
-  if (!editable) {
-    return (
-      <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">{ETIQUETA_FRANJA[turno.franja]}</span>
-          {turno.override && <AlertTriangle className="h-3 w-3 text-amber-600" />}
-        </div>
-        {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
-        {turno.motivo && (
-          <div className="text-[10px] text-muted-foreground">{turno.motivo}</div>
-        )}
-      </div>
+  // Tooltip con motivo + ausencia + nota relevo, para no cargar la celda.
+  const tooltipPartes: string[] = [];
+  if (turno.motivo) tooltipPartes.push(`Motivo: ${turno.motivo}`);
+  if (turno.nota_relevo) tooltipPartes.push(`Relevo: ${turno.nota_relevo}`);
+  if (ausencia)
+    tooltipPartes.push(
+      `Ausente (${ausencia.tipo})${ausencia.motivo ? `: ${ausencia.motivo}` : ""}`,
     );
+  const tieneTooltip = tooltipPartes.length > 0;
+  const etiquetaTooltip = tooltipPartes.join(" · ");
+
+  if (!editable) {
+    const chip = (
+      <span className="inline-flex max-w-full items-center gap-1 rounded border bg-muted/40 px-1.5 py-0.5 text-xs">
+        <User className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <span className="truncate">{turno.miembro_nombre}</span>
+        {turno.override && (
+          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
+        )}
+        {ausencia && !turno.override && (
+          <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
+        )}
+      </span>
+    );
+    return tieneTooltip ? <Tooltip label={etiquetaTooltip}>{chip}</Tooltip> : chip;
   }
 
-  // Items del menú contextual (right-click): TODA la edición vive aquí.
-  // Reduce ruido visual en la celda: ni botones, ni selector inline. La celda solo
-  // muestra franja + override/ausente + nota/motivo; el resto se descubre con
-  // botón derecho.
   const itemsMenu: EntradaMenuContextual[] = [
-    {
-      etiqueta: "Mañana",
-      icono: Sunrise,
-      activo: turno.franja === "matutino",
-      onClick: () => actualizar.mutate({ franja: "matutino" }),
-    },
-    {
-      etiqueta: "Tarde",
-      icono: Sunset,
-      activo: turno.franja === "vespertino",
-      onClick: () => actualizar.mutate({ franja: "vespertino" }),
-    },
-    {
-      etiqueta: "Descanso",
-      icono: Moon,
-      activo: turno.franja === "descanso",
-      onClick: () => actualizar.mutate({ franja: "descanso" }),
-    },
-    { separador: true },
     {
       etiqueta: "Editar detalles…",
       icono: Pencil,
@@ -1690,121 +1724,55 @@ function CeldaTurno({
       icono: Trash2,
       destructivo: true,
       onClick: () => {
-        if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`))
-          borrar.mutate();
+        if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`)) borrar.mutate();
       },
       deshabilitado: borrar.isPending,
     },
   ];
 
-  return (
+  const chip = (
     <MenuContextual items={itemsMenu}>
-      <div
-        className={cn(
-          "space-y-1.5 rounded-md border bg-background p-1.5",
-          seleccionado && onAbrirPopoverLote && "cursor-pointer",
+      <span className="inline-flex max-w-full cursor-default items-center gap-1 rounded border bg-background px-1.5 py-0.5 text-xs">
+        <User className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <span className="truncate">{turno.miembro_nombre}</span>
+        {turno.override && (
+          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" aria-label="override" />
         )}
-        onClick={(e) => {
-          // Click izquierdo en celda ya seleccionada abre el popover de acciones
-          // de lote. Ignora clicks que vienen de elementos interactivos internos
-          // (checkbox, botón "Forzar cobertura") para no interceptarlos: el
-          // checkbox detiene la propagación con stopPropagation, pero por
-          // robustez también filtramos cualquier <button>/<input>/<a> aquí.
-          if (!seleccionado || !onAbrirPopoverLote) return;
-          const objetivo = e.target as HTMLElement;
-          if (objetivo.closest("button, input, a, [role='checkbox']")) return;
-          onAbrirPopoverLote(e.clientX, e.clientY);
-        }}
-      >
-        <div className="flex items-start gap-1.5">
-          {/* Envuelve el Checkbox en un span para parar la propagación: así un
-              click en el checkbox solo togglea, sin disparar el click izquierdo
-              de la celda que abre el popover de acciones de lote. */}
-          <span onClick={(e) => e.stopPropagation()} className="mt-1.5">
-            <Checkbox
-              aria-label={`Seleccionar turno de ${turno.miembro_nombre} el ${turno.fecha}`}
-              checked={seleccionado}
-              onCheckedChange={() => onToggleSeleccionado(turno.id)}
-            />
-          </span>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="text-xs font-medium">{ETIQUETA_FRANJA[turno.franja]}</div>
-            <div className="flex flex-wrap items-center gap-1">
-              {turno.override && (
-                <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
-                  <AlertTriangle className="h-2.5 w-2.5" /> override
-                </Badge>
-              )}
-              {ausencia && !turno.override && (
-                <Badge variant="aviso" className="h-4 gap-0.5 px-1 text-[10px] font-normal">
-                  <Plane className="h-2.5 w-2.5" /> ausente
-                </Badge>
-              )}
-            </div>
-            {turno.nota_relevo && <NotaRelevo nota={turno.nota_relevo} />}
-            {turno.motivo && (
-              <div className="text-[10px] text-muted-foreground">{turno.motivo}</div>
-            )}
-          </div>
-        </div>
-      {pendienteSabado && (
-        <Button
-          size="sm"
-          variant="outline"
-          className="w-full text-amber-700 dark:text-amber-400"
-          onClick={() => actualizar.mutate({ franja: pendienteSabado, override: true })}
-          disabled={actualizar.isPending}
+        {ausencia && !turno.override && (
+          <Plane className="h-3 w-3 shrink-0 text-orange-600" aria-label="ausente" />
+        )}
+        <button
+          type="button"
+          aria-label={`Borrar turno de ${turno.miembro_nombre}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (borrar.isPending) return;
+            if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`)) borrar.mutate();
+          }}
+          disabled={borrar.isPending}
+          className="ml-0.5 rounded text-muted-foreground hover:text-destructive disabled:opacity-50"
         >
-          <AlertTriangle className="h-3.5 w-3.5" /> Forzar cobertura (override)
-        </Button>
-      )}
-      {pendienteAusencia && (
-        <Dialog open onOpenChange={(o) => !o && setPendienteAusencia(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Esa persona está ausente</DialogTitle>
-              <DialogDescription>
-                {pendienteAusencia.ausencia.miembro_nombre} está{" "}
-                {pendienteAusencia.ausencia.tipo} del {pendienteAusencia.ausencia.desde} al{" "}
-                {pendienteAusencia.ausencia.hasta}.
-                {pendienteAusencia.ausencia.motivo
-                  ? ` Motivo: ${pendienteAusencia.ausencia.motivo}.`
-                  : ""}{" "}
-                ¿Forzar override de todas formas?
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setPendienteAusencia(null)}>
-                Cancelar
-              </Button>
-              <Button
-                variant="outline"
-                className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
-                onClick={() =>
-                  actualizar.mutate({ franja: pendienteAusencia.franja, override: true })
-                }
-                disabled={actualizar.isPending}
-              >
-                {actualizar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                <AlertTriangle className="h-4 w-4" /> Forzar override
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-        {editandoDetalles && (
-          <DialogEditarTurno
-            turno={turno}
-            equipo={equipo}
-            onCerrar={() => setEditandoDetalles(false)}
-            onGuardado={() => {
-              setEditandoDetalles(false);
-              onCambio();
-            }}
-          />
-        )}
-      </div>
+          {borrar.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+        </button>
+      </span>
     </MenuContextual>
+  );
+
+  return (
+    <>
+      {tieneTooltip ? <Tooltip label={etiquetaTooltip}>{chip}</Tooltip> : chip}
+      {editandoDetalles && (
+        <DialogEditarTurno
+          turno={turno}
+          equipo={equipo}
+          onCerrar={() => setEditandoDetalles(false)}
+          onGuardado={() => {
+            setEditandoDetalles(false);
+            onCambio();
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -1983,520 +1951,6 @@ function DialogEditarTurno({
   );
 }
 
-/** Dialog "Nuevo turno": crea un turno (persona × fecha × franja). */
-function DialogNuevoTurno({
-  lunes,
-  equipo,
-  inicial,
-  onCerrar,
-  onCreado,
-}: {
-  lunes: string;
-  equipo: MiembroRota[];
-  inicial: PrellenoNuevoTurno;
-  onCerrar: () => void;
-  onCreado: () => void;
-}) {
-  const desde = lunes;
-  const [fecha, setFecha] = React.useState(inicial.fecha ?? desde);
-  const [miembroId, setMiembroId] = React.useState(inicial.miembro_id ?? "");
-  const [franja, setFranja] = React.useState<FranjaTurno>(inicial.franja ?? "matutino");
-  const [motivo, setMotivo] = React.useState("");
-  const [notaRelevo, setNotaRelevo] = React.useState("");
-  const [pendienteOverride, setPendienteOverride] = React.useState<{ mensaje: string } | null>(
-    null,
-  );
-
-  const crear = useMutation({
-    mutationFn: (override: boolean) => {
-      const cuerpo: CuerpoCrearTurnoRota = {
-        lunes,
-        fecha,
-        miembro_id: miembroId,
-        franja,
-        motivo: motivo.trim() || undefined,
-        nota_relevo: notaRelevo.trim() || undefined,
-      };
-      if (override) cuerpo.override = true;
-      return api.crearTurno(cuerpo);
-    },
-    onSuccess: () => {
-      toast.success("Turno creado.");
-      onCreado();
-    },
-    onError: (e) => {
-      if (
-        e instanceof ApiError &&
-        e.status === 409 &&
-        (e.cuerpo?.requiere_override as boolean | undefined)
-      ) {
-        setPendienteOverride({ mensaje: e.message });
-        return;
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
-  const puedeCrear = fecha !== "" && miembroId !== "" && !crear.isPending;
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Nuevo turno</DialogTitle>
-          <DialogDescription>
-            Un turno es una persona en una fecha y franja. NO se asocia a ningún evento:
-            la cobertura se calcula a partir de los turnos y los eventos de la semana.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="nt-fecha">Fecha</Label>
-              <Input
-                id="nt-fecha"
-                type="date"
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Franja</Label>
-              <Select value={franja} onValueChange={(v) => setFranja(v as FranjaTurno)}>
-                <SelectTrigger aria-label="Franja del turno">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="matutino">Mañana</SelectItem>
-                  <SelectItem value="vespertino">Tarde</SelectItem>
-                  <SelectItem value="descanso">Descanso</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Persona</Label>
-            <Select value={miembroId} onValueChange={setMiembroId}>
-              <SelectTrigger aria-label="Persona del turno">
-                <SelectValue placeholder="Elige a un miembro" />
-              </SelectTrigger>
-              <SelectContent>
-                {equipo.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="nt-motivo">
-              Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
-            <Input
-              id="nt-motivo"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              maxLength={200}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="nt-nota">
-              Nota de relevo <span className="font-normal text-muted-foreground">(opcional)</span>
-            </Label>
-            <Textarea
-              id="nt-nota"
-              value={notaRelevo}
-              onChange={(e) => setNotaRelevo(e.target.value)}
-              rows={2}
-              maxLength={1000}
-            />
-          </div>
-          {pendienteOverride && (
-            <div className="rounded-md border border-amber-300/60 bg-amber-50/40 p-3 text-sm text-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
-              <p className="font-medium">{pendienteOverride.mensaje}</p>
-              <p className="mt-1 text-xs">
-                Confirma solo si es una cobertura estratégica intencional.
-              </p>
-            </div>
-          )}
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onCerrar}>
-            Cancelar
-          </Button>
-          {pendienteOverride ? (
-            <Button
-              variant="outline"
-              className="text-amber-700 hover:text-amber-700 dark:text-amber-400"
-              onClick={() => crear.mutate(true)}
-              disabled={crear.isPending}
-            >
-              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              <AlertTriangle className="h-4 w-4" /> Forzar override
-            </Button>
-          ) : (
-            <Button onClick={() => crear.mutate(false)} disabled={!puedeCrear}>
-              {crear.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Crear turno
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// --- Filtros por miembro (chip toggles) ------------------------------------
-
-function FiltrosMiembro({
-  equipo,
-  filtros,
-  setFiltros,
-}: {
-  equipo: MiembroRota[];
-  filtros: Set<string>;
-  setFiltros: React.Dispatch<React.SetStateAction<Set<string>>>;
-}) {
-  const toggle = (id: string) =>
-    setFiltros((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  if (equipo.length === 0) return null;
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="text-muted-foreground">Filtra por persona:</span>
-      {equipo.map((m) => {
-        const activo = filtros.has(m.id);
-        return (
-          <Button
-            key={m.id}
-            size="sm"
-            variant={activo ? "default" : "outline"}
-            className="h-7 px-2"
-            onClick={() => toggle(m.id)}
-          >
-            {m.nombre}
-          </Button>
-        );
-      })}
-      {filtros.size > 0 && (
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 px-2 text-muted-foreground"
-          onClick={() => setFiltros(new Set())}
-        >
-          <X className="h-3.5 w-3.5" /> Limpiar
-        </Button>
-      )}
-    </div>
-  );
-}
-
-// --- Popover de acciones de lote (click izquierdo en celda seleccionada) ---
-//
-// Antes era una "barra superior" (Card flotante) que aparecía al seleccionar 1+
-// celdas. Ahora es un popover en `position: fixed`, abierto en la posición del
-// cursor cuando el usuario hace click izquierdo sobre una celda ya seleccionada
-// (mismo patrón visual que `MenuContextual`, pero disparado con click izquierdo
-// y mostrando acciones de lote). Se cierra con click fuera o tecla Escape.
-
-function PopoverSeleccionLote({
-  pos,
-  seleccionados,
-  equipo,
-  onCerrar,
-  onAplicado,
-  onLimpiar,
-}: {
-  pos: { x: number; y: number };
-  seleccionados: Set<string>;
-  equipo: MiembroRota[];
-  /** Cerrar sin tocar la selección (click fuera / Escape). */
-  onCerrar: () => void;
-  /** Hubo una mutación con éxito: limpia selección + invalida queries. */
-  onAplicado: () => void;
-  /** Cancelar selección: limpia selección + cierra. */
-  onLimpiar: () => void;
-}) {
-  const popoverRef = React.useRef<HTMLDivElement>(null);
-  const [miembroId, setMiembroId] = React.useState("");
-  const [override, setOverride] = React.useState<{
-    miembroId: string;
-    franja: FranjaTurno | "";
-    mensaje: string;
-    ids: string[];
-  } | null>(null);
-
-  // Click fuera / Escape cierran el popover (igual que MenuContextual). Si el
-  // diálogo de override está abierto, lo dejamos manejar sus propios cierres.
-  React.useEffect(() => {
-    function alPulsarFuera(e: MouseEvent) {
-      if (override) return;
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
-        onCerrar();
-      }
-    }
-    function alTeclear(e: KeyboardEvent) {
-      if (override) return;
-      if (e.key === "Escape") onCerrar();
-    }
-    document.addEventListener("mousedown", alPulsarFuera);
-    document.addEventListener("keydown", alTeclear);
-    return () => {
-      document.removeEventListener("mousedown", alPulsarFuera);
-      document.removeEventListener("keydown", alTeclear);
-    };
-  }, [onCerrar, override]);
-
-  const aplicar = useMutation({
-    mutationFn: (vars: {
-      miembroId: string;
-      franja: FranjaTurno | "";
-      override: boolean;
-    }) => {
-      const cuerpo: {
-        ids: string[];
-        miembro_id?: string;
-        franja?: FranjaTurno;
-        override?: boolean;
-      } = {
-        ids: [...seleccionados],
-      };
-      if (vars.miembroId !== "") cuerpo.miembro_id = vars.miembroId;
-      if (vars.franja !== "") cuerpo.franja = vars.franja;
-      if (vars.override) cuerpo.override = true;
-      return api.actualizarTurnosLote(cuerpo);
-    },
-    onSuccess: (res) => {
-      toast.success(`Actualizados ${res.actualizados} turnos.`);
-      setOverride(null);
-      setMiembroId("");
-      onAplicado();
-    },
-    onError: (e, vars) => {
-      if (e instanceof ApiError && e.status === 409) {
-        const ids = (e.cuerpo?.ids_que_requieren_override as string[] | undefined) ?? [];
-        setOverride({
-          miembroId: vars.miembroId,
-          franja: vars.franja,
-          mensaje: e.message,
-          ids,
-        });
-        return;
-      }
-      toast.error(mensajeError(e));
-    },
-  });
-
-  // `miembro_id=""` desasigna en el backend (alineado con el PATCH 1:1).
-  const quitarMiembro = useMutation({
-    mutationFn: () =>
-      api.actualizarTurnosLote({ ids: [...seleccionados], miembro_id: "" }),
-    onSuccess: (res) => {
-      toast.success(`Quitada asignación a ${res.actualizados} turnos.`);
-      onAplicado();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const borrarSeleccion = useMutation({
-    mutationFn: () => api.borrarTurnosLote({ ids: [...seleccionados] }),
-    onSuccess: (res) => {
-      const ne = res.no_encontrados?.length ?? 0;
-      toast.success(
-        ne > 0
-          ? `Borrados ${res.borrados} turnos (${ne} ya no existían).`
-          : `Borrados ${res.borrados} turnos.`,
-      );
-      onAplicado();
-    },
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-
-  const ocupado =
-    aplicar.isPending || quitarMiembro.isPending || borrarSeleccion.isPending;
-  const n = seleccionados.size;
-  const etiquetaTurnos = `${n} ${n === 1 ? "turno" : "turnos"}`;
-
-  return (
-    <>
-      <div
-        ref={popoverRef}
-        role="menu"
-        aria-label="Acciones de lote sobre la selección"
-        className="fixed z-50 w-64 rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-md"
-        style={{ left: pos.x, top: pos.y }}
-      >
-        <div className="mb-2 text-xs font-medium text-muted-foreground">
-          {etiquetaTurnos} seleccionado{n === 1 ? "" : "s"}
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Asignar a</Label>
-          <div className="flex gap-1.5">
-            <Select value={miembroId} onValueChange={setMiembroId}>
-              <SelectTrigger
-                aria-label="Persona para el lote"
-                className="h-8 flex-1 text-xs"
-              >
-                <SelectValue placeholder="Elige persona" />
-              </SelectTrigger>
-              <SelectContent>
-                {equipo.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              size="sm"
-              className="h-8 px-2"
-              onClick={() =>
-                aplicar.mutate({ miembroId, franja: "", override: false })
-              }
-              disabled={miembroId === "" || ocupado}
-            >
-              {aplicar.isPending ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                "Aplicar"
-              )}
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-3 space-y-1">
-          <Label className="text-[10px] text-muted-foreground">Cambiar franja</Label>
-          <div className="flex gap-1.5">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 flex-1 px-1.5"
-              onClick={() =>
-                aplicar.mutate({ miembroId: "", franja: "matutino", override: false })
-              }
-              disabled={ocupado}
-            >
-              <Sunrise className="h-3.5 w-3.5" /> Mañana
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 flex-1 px-1.5"
-              onClick={() =>
-                aplicar.mutate({ miembroId: "", franja: "vespertino", override: false })
-              }
-              disabled={ocupado}
-            >
-              <Sunset className="h-3.5 w-3.5" /> Tarde
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 flex-1 px-1.5"
-              onClick={() =>
-                aplicar.mutate({ miembroId: "", franja: "descanso", override: false })
-              }
-              disabled={ocupado}
-            >
-              <Moon className="h-3.5 w-3.5" /> Descanso
-            </Button>
-          </div>
-        </div>
-
-        <div className="my-2 border-t border-border" aria-hidden="true" />
-
-        <button
-          type="button"
-          role="menuitem"
-          disabled={ocupado}
-          onClick={() => quitarMiembro.mutate()}
-          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {quitarMiembro.isPending ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-          ) : (
-            <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
-          )}
-          <span className="flex-1">Quitar asignación</span>
-        </button>
-
-        <button
-          type="button"
-          role="menuitem"
-          disabled={ocupado}
-          onClick={() => {
-            if (
-              window.confirm(
-                `¿Borrar ${n} turno${n === 1 ? "" : "s"}?`,
-              )
-            )
-              borrarSeleccion.mutate();
-          }}
-          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {borrarSeleccion.isPending ? (
-            <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4 shrink-0 text-destructive" />
-          )}
-          <span className="flex-1">Borrar {etiquetaTurnos}</span>
-        </button>
-
-        <div className="my-2 border-t border-border" aria-hidden="true" />
-
-        <button
-          type="button"
-          role="menuitem"
-          onClick={onLimpiar}
-          className="flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-accent"
-        >
-          <X className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1">Cancelar selección</span>
-        </button>
-      </div>
-
-      {override && (
-        <Dialog open onOpenChange={(o) => !o && setOverride(null)}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>¿Forzar la cobertura?</DialogTitle>
-              <DialogDescription>{override.mensaje}</DialogDescription>
-            </DialogHeader>
-            <p className="text-sm text-muted-foreground">
-              {override.ids.length}{" "}
-              {override.ids.length === 1 ? "turno repite" : "turnos repiten"} el sábado
-              anterior. Confirma solo si es una cobertura estratégica intencional.
-            </p>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setOverride(null)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() =>
-                  aplicar.mutate({
-                    miembroId: override.miembroId,
-                    franja: override.franja,
-                    override: true,
-                  })
-                }
-                disabled={aplicar.isPending}
-              >
-                <AlertTriangle className="h-4 w-4" /> Forzar cobertura
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-    </>
-  );
-}
 
 // --- Panel "Carga del equipo" (colapsable) ---------------------------------
 
@@ -3056,23 +2510,6 @@ function DialogConfigFranjas({ onCerrar }: { onCerrar: () => void }) {
     </Dialog>
   );
 }
-
-function NotaRelevo({ nota }: { nota: string }) {
-  const limpia = nota.trim();
-  if (!limpia) return null;
-  const RESUMEN_MAX = 30;
-  const resumen = limpia.length > RESUMEN_MAX ? `${limpia.slice(0, RESUMEN_MAX)}…` : limpia;
-  return (
-    <div
-      className="flex items-start gap-1 text-[11px] text-muted-foreground"
-      title={limpia}
-    >
-      <MessageSquare className="mt-0.5 h-3 w-3 shrink-0" aria-hidden />
-      <span className="truncate">{resumen}</span>
-    </div>
-  );
-}
-
 
 // --- Pestaña: ausencias / vacaciones ---------------------------------------
 
