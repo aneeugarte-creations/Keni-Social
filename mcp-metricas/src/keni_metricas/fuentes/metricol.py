@@ -50,7 +50,7 @@ documentados también en el reporte de la tarea):
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 import httpx
 
@@ -58,6 +58,7 @@ from ..schema import (
     PLATAFORMAS_CON_ALCANCE,
     Cobertura,
     Cuenta,
+    MetricaPieza,
     MetricaPlataforma,
     MotivoOmision,
     Periodo,
@@ -372,6 +373,57 @@ class FuenteMetricol:
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(post, _ALIAS_URL),
         )
+
+    def metricas_de_post(
+        self, cuenta_id: str, plat: Plataforma, id_post: str, *, dias: int = 90
+    ) -> MetricaPieza | None:
+        """Rendimiento de UN post concreto (por `id_post` de Metricool) o None si no aparece.
+
+        Busca el post en `/v2/analytics/posts/{network}` dentro de una ventana de los
+        ultimos `dias` (un post programado desde la Consola es reciente) y casa por id
+        contra cualquiera de los alias de id (`_ALIAS_ID`). Degrada a None si la API
+        falla o el id no aparece todavia (Metricool tarda en consolidar): el llamante
+        marca `encontrado=False` en vez de inventar ceros (misma honestidad que el resto).
+        """
+        if not id_post or plat not in _RED_METRICOOL:
+            return None
+        hasta = date.today()
+        desde = hasta - timedelta(days=max(dias, 1))
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/posts/{_RED_METRICOOL[plat]}",
+                params={
+                    **self._params_base(cuenta_id),
+                    "from": desde.isoformat() + "T00:00:00",
+                    "to": hasta.isoformat() + "T23:59:59",
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 -- degrada sin romper, como el resto
+            log.warning("metricool: post %s/%s/%s fallo: %s", plat.value, cuenta_id, id_post, e)
+            return None
+        objetivo = str(id_post)
+        for post in datos.get("data") or []:
+            if not isinstance(post, dict):
+                continue
+            ids = {str(_primero(post, (alias,), "")) for alias in _ALIAS_ID}
+            if objetivo not in ids:
+                continue
+            vis = _entero(_primero(post, _ALIAS_VIS, 0))
+            inter = _entero(_primero(post, _ALIAS_INT, 0))
+            return MetricaPieza(
+                id_post=objetivo,
+                plataforma=plat,
+                encontrado=True,
+                visualizaciones=vis,
+                interacciones=inter,
+                engagement_pct=engagement_pct(inter, vis),
+                url=_primero(post, _ALIAS_URL),
+                publicado=_fecha(_primero(post, _ALIAS_FECHA), hasta),
+                fuente=self.nombre,
+            )
+        return None
 
     def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:
         """Serie diaria del periodo (visualizaciones + interacciones) sumada entre plataformas.

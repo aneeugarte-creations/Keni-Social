@@ -143,6 +143,7 @@ import type {
   RespuestaSugerencias,
   RespuestaContenido,
   RespuestaContenidoItem,
+  RespuestaMetricasContenido,
   RespuestaPlataforma,
   RespuestaTareas,
   RespuestaEquipoRota,
@@ -899,6 +900,9 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+  /** Rendimiento real (Metricool) por pieza publicada del tablero. Mapa por `contenido_plataforma.id`. */
+  metricasContenido: (signal?: AbortSignal) =>
+    peticion<RespuestaMetricasContenido>("/contenido/metricas", { signal }),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>

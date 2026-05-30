@@ -1,7 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BarChart3,
   CalendarClock,
   ClipboardList,
+  Eye,
+  Heart,
   Loader2,
   ListTodo,
   Plus,
@@ -45,9 +48,18 @@ import type {
   ContenidoPlataforma,
   CuerpoCrearContenido,
   EstadoContenidoPlataforma,
+  MetricaPieza,
 } from "@/types";
 
 const CLAVE = ["contenido"] as const;
+const CLAVE_METRICAS = ["contenido", "metricas"] as const;
+
+/** Formatea un entero grande de forma compacta (es-MX): 1.2M, 340 mil, 850. */
+function formatearCifra(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1_000) return `${Math.round(n / 1000)} mil`;
+  return String(n);
+}
 
 const CABECERA = {
   titulo: "Tablero de contenido",
@@ -114,11 +126,20 @@ export default function Tablero() {
     queryKey: CLAVE,
     queryFn: ({ signal }) => api.contenido({}, signal),
   });
+  // Rendimiento real (Metricool) por pieza publicada: query SEPARADA para que el tablero
+  // pinte al instante y las métricas (más lentas: golpean Metricool) lleguen después.
+  const metricasQuery = useQuery({
+    queryKey: CLAVE_METRICAS,
+    queryFn: ({ signal }) => api.metricasContenido(signal),
+    // Frescas 5 min en cliente; el back ya cachea con su propio TTL.
+    staleTime: 5 * 60 * 1000,
+  });
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [filtroResponsable, setFiltroResponsable] = React.useState(TODOS);
 
   const contenidos = React.useMemo(() => query.data?.contenidos ?? [], [query.data]);
   const catalogos = query.data?.catalogos;
+  const metricas = metricasQuery.data?.metricas;
 
   const visibles = React.useMemo(() => {
     if (filtroResponsable === TODOS) return contenidos;
@@ -177,7 +198,12 @@ export default function Tablero() {
             return (
               <Seccion key={s.flujo} titulo={s.titulo} cantidad={items.length}>
                 {items.map((c) => (
-                  <TarjetaContenido key={c.id} contenido={c} catalogos={catalogos!} />
+                  <TarjetaContenido
+                    key={c.id}
+                    contenido={c}
+                    catalogos={catalogos!}
+                    metricas={metricas}
+                  />
                 ))}
               </Seccion>
             );
@@ -185,7 +211,12 @@ export default function Tablero() {
           {tareas.length > 0 && (
             <Seccion titulo="Tareas del equipo" cantidad={tareas.length}>
               {tareas.map((c) => (
-                <TarjetaContenido key={c.id} contenido={c} catalogos={catalogos!} />
+                <TarjetaContenido
+                  key={c.id}
+                  contenido={c}
+                  catalogos={catalogos!}
+                  metricas={metricas}
+                />
               ))}
             </Seccion>
           )}
@@ -264,9 +295,11 @@ function FiltroResponsable({
 function TarjetaContenido({
   contenido,
   catalogos,
+  metricas,
 }: {
   contenido: Contenido;
   catalogos: CatalogosContenido;
+  metricas?: Record<string, MetricaPieza>;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
@@ -382,7 +415,12 @@ function TarjetaContenido({
               </p>
             ) : (
               contenido.plataformas.map((p) => (
-                <FilaPlataforma key={p.id} contenidoId={contenido.id} plataforma={p} />
+                <FilaPlataforma
+                  key={p.id}
+                  contenidoId={contenido.id}
+                  plataforma={p}
+                  metrica={metricas?.[p.id]}
+                />
               ))
             )}
             {redesDisponibles.length > 0 && (
@@ -436,9 +474,11 @@ function TarjetaContenido({
 function FilaPlataforma({
   contenidoId,
   plataforma,
+  metrica,
 }: {
   contenidoId: string;
   plataforma: ContenidoPlataforma;
+  metrica?: MetricaPieza;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
@@ -456,7 +496,8 @@ function FilaPlataforma({
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-muted/30 px-2 py-1.5">
+    <div className="space-y-1.5 rounded-md bg-muted/30 px-2 py-1.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <Badge variant="outline" className="w-20 justify-center font-normal">
         {plataforma.red_nombre}
       </Badge>
@@ -518,6 +559,72 @@ function FilaPlataforma({
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </Tooltip>
+      </div>
+      <RendimientoPieza plataforma={plataforma} metrica={metrica} />
+    </div>
+  );
+}
+
+/** Sub-fila de rendimiento real (Metricool) de una pieza ya publicada.
+ *
+ * Solo aparece si la fila tiene `id_post_metricool` (ya se empujó a Metricool). Mientras
+ * llegan las métricas, o si Metricool aún no tiene datos del post, muestra un texto
+ * honesto en vez de ceros falsos. Las cifras son las que Metricool —la fuente pagada—
+ * ya consolidó; no hay adaptador por red.
+ */
+function RendimientoPieza({
+  plataforma,
+  metrica,
+}: {
+  plataforma: ContenidoPlataforma;
+  metrica?: MetricaPieza;
+}) {
+  // Sin id_post_metricool no hay nada que medir todavía (no publicada vía Metricool).
+  if (!plataforma.id_post_metricool) return null;
+
+  const base = "flex flex-wrap items-center gap-x-3 gap-y-0.5 pl-[5.5rem] text-xs";
+
+  if (!metrica) {
+    return (
+      <div className={cn(base, "text-muted-foreground/70")}>
+        <BarChart3 className="h-3 w-3" />
+        <span>Cargando rendimiento…</span>
+      </div>
+    );
+  }
+  if (!metrica.encontrado) {
+    return (
+      <div className={cn(base, "text-muted-foreground/70")}>
+        <BarChart3 className="h-3 w-3" />
+        <span>Sin datos de rendimiento todavía</span>
+      </div>
+    );
+  }
+  const esMuestra = metrica.fuente === "muestra";
+  return (
+    <div className={cn(base, "text-muted-foreground")}>
+      <Tooltip label="Visualizaciones">
+        <span className="flex items-center gap-1">
+          <Eye className="h-3 w-3" />
+          {formatearCifra(metrica.visualizaciones)}
+        </span>
+      </Tooltip>
+      <Tooltip label="Interacciones">
+        <span className="flex items-center gap-1">
+          <Heart className="h-3 w-3" />
+          {formatearCifra(metrica.interacciones)}
+        </span>
+      </Tooltip>
+      <Tooltip label="Engagement">
+        <span className="flex items-center gap-1 font-medium text-foreground">
+          {metrica.engagement_pct.toFixed(1)}% eng.
+        </span>
+      </Tooltip>
+      {esMuestra && (
+        <Badge variant="aviso" className="h-4 px-1 text-[10px] font-normal">
+          muestra
+        </Badge>
+      )}
     </div>
   );
 }

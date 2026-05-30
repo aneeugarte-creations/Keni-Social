@@ -322,6 +322,18 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.serie_diaria(cuenta_id, rango)
 
+    def metricas_de_post(self, cuenta_id: str, plat, id_post: str, **kw):
+        """Delega el rendimiento de un post si la fuente envuelta lo expone (dispatch opcional).
+
+        Solo muestra/Metricool lo implementan (las 'real' compuestas no). Si la envuelta
+        no la tiene, propaga `AttributeError` para que el llamante (`servicio`) degrade a
+        "sin datos" — igual que `serie_diaria` (no se enmascara el wrap).
+        """
+        if not hasattr(self._fuente, "metricas_de_post"):
+            raise AttributeError("la fuente envuelta no expone metricas_de_post")
+        self._verificar(cuenta_id)
+        return self._fuente.metricas_de_post(cuenta_id, plat, id_post, **kw)
+
 
 def _fuente_metricool(cfg: Config) -> FuenteMetricas:
     """Construye `FuenteMetricol` o, sin credenciales, una fuente Metricool VACÍA.

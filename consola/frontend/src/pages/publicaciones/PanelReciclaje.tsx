@@ -7,6 +7,7 @@ import {
   Repeat,
   Sparkles,
   Sprout,
+  TrendingUp,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -37,6 +38,11 @@ const META_MOTIVO: Record<
   MotivoReciclaje,
   { etiqueta: string; icono: typeof Sparkles; clase: string }
 > = {
+  rendimiento: {
+    etiqueta: "Rindió bien",
+    icono: TrendingUp,
+    clase: "border-amber-500/40 text-amber-700 dark:text-amber-300",
+  },
   efemeride: {
     etiqueta: "Efeméride",
     icono: CalendarHeart,
@@ -81,6 +87,11 @@ function FilaSugerencia({
           <span>· {sugerencia.marca_nombre}</span>
           {sugerencia.fecha_creacion && (
             <span>· publicado {tiempoRelativo(sugerencia.fecha_creacion)}</span>
+          )}
+          {sugerencia.rendimiento?.encontrado && (
+            <span className="font-medium text-amber-700 dark:text-amber-300">
+              · {sugerencia.rendimiento.engagement_pct.toFixed(1)}% engagement
+            </span>
           )}
         </div>
         <p className="text-sm text-muted-foreground">{sugerencia.motivo_detalle}</p>
@@ -192,8 +203,9 @@ export function PanelReciclaje({
         {abierto && (
           <div className="space-y-2 border-t border-border/60 px-4 py-3">
             <p className="text-sm text-muted-foreground">
-              Contenido de archivo que merece retomarse: vuelve a ser relevante por una
-              efeméride próxima, es perenne madurado o su tema vuelve a circular.
+              Contenido de archivo que merece retomarse: ya rindió bien en Metricool,
+              vuelve a ser relevante por una efeméride próxima, es perenne madurado o su
+              tema vuelve a circular.
             </p>
             {sugerencias.map((s) => (
               <FilaSugerencia

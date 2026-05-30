@@ -1055,6 +1055,31 @@ export interface ContenidoPlataforma {
   hora_post: string;
   enlace: string;
   evergreen: boolean;
+  /** Id del post en Metricool (lo estampa el programador al publicar). "" si aún no se publicó. */
+  id_post_metricool: string;
+}
+
+/** Rendimiento REAL de una pieza ya publicada, leído de Metricool por su `id_post_metricool`. */
+export interface MetricaPieza {
+  id_post: string;
+  plataforma: string;
+  /** `false` si Metricool aún no tiene datos del post (la UI muestra "sin datos todavía"). */
+  encontrado: boolean;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  url: string | null;
+  publicado: string | null;
+  /** "muestra" (demo) o "metricool" (datos reales). */
+  fuente: string;
+  /** Cuándo se leyó de Metricool (ISO); "" si no encontrado. */
+  generado_en: string;
+}
+
+/** Respuesta de `GET /api/contenido/metricas`: rendimiento por `contenido_plataforma.id`. */
+export interface RespuestaMetricasContenido {
+  /** Mapa id de fila por plataforma → su rendimiento (solo las que tienen id_post_metricool). */
+  metricas: Record<string, MetricaPieza>;
 }
 
 /** Un item del tablero: contenido publicable (con plataformas) o tarea libre del equipo. */
@@ -2035,8 +2060,12 @@ export interface CuerpoDuplicarPublicacion {
 
 // --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
 
-/** Motivo por el que el archivo sugiere retomar una pieza (heurística explicable). */
-export type MotivoReciclaje = "efemeride" | "perenne" | "recurrente";
+/** Motivo por el que el archivo sugiere retomar una pieza (heurística explicable).
+ *
+ * `rendimiento`: la pieza YA rindió bien (engagement real medido en Metricool) → repostear.
+ * Es la señal más fuerte (datos reales, no solo contexto). El resto son contextuales.
+ */
+export type MotivoReciclaje = "rendimiento" | "efemeride" | "perenne" | "recurrente";
 
 /** Una pieza de archivo que la heurística propone reciclar, con su motivo. */
 export interface SugerenciaReciclaje {
@@ -2054,13 +2083,17 @@ export interface SugerenciaReciclaje {
   motivo_detalle: string;
   /** Puntuación interna para ordenar (mayor = más prioritaria). */
   puntuacion: number;
+  /** Rendimiento real (Metricool) cuando el motivo es `rendimiento`; `null` si no aplica. */
+  rendimiento: MetricaPieza | null;
 }
 
-/** Parámetros (días) de la heurística, para que la UI los pueda mostrar. */
+/** Parámetros (días/umbral) de la heurística, para que la UI los pueda mostrar. */
 export interface ParametrosReciclaje {
   ventana_efemeride_dias: number;
   edad_minima_perenne_dias: number;
   edad_minima_antiguedad_dias: number;
+  /** Engagement (%) mínimo para considerar que una pieza "rindió bien". */
+  umbral_engagement_rendimiento: number;
 }
 
 /** Respuesta de `GET /api/reciclaje/sugerencias`. */

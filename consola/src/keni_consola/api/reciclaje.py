@@ -48,6 +48,7 @@ async def sugerencias(request: Request) -> Response:
                 "ventana_efemeride_dias": reciclaje.VENTANA_EFEMERIDE_DIAS,
                 "edad_minima_perenne_dias": reciclaje.EDAD_MINIMA_PERENNE_DIAS,
                 "edad_minima_antiguedad_dias": reciclaje.EDAD_MINIMA_ANTIGUEDAD_DIAS,
+                "umbral_engagement_rendimiento": reciclaje.UMBRAL_ENGAGEMENT_RENDIMIENTO,
             },
         }
     )

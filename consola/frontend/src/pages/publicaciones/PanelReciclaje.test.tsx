@@ -20,6 +20,7 @@ const SUGERENCIAS: SugerenciaReciclaje[] = [
     motivo: "efemeride",
     motivo_detalle: "Día de las Madres es en 5 días: este contenido vuelve a ser relevante.",
     puntuacion: 1016,
+    rendimiento: null,
   },
 ];
 
@@ -27,6 +28,7 @@ const PARAMETROS = {
   ventana_efemeride_dias: 21,
   edad_minima_perenne_dias: 30,
   edad_minima_antiguedad_dias: 60,
+  umbral_engagement_rendimiento: 3.5,
 };
 
 /** Stub de fetch: GET sugerencias devuelve `sugerencias`; POST /reciclar responde ok. */
