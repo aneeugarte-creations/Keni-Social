@@ -25,9 +25,9 @@ def test_analitica_piezas_marca(muestra):
     assert a["total"] > 0
     assert len(a["top"]) == 5
     assert len(a["peores"]) == 5
-    # top ordenado por engagement desc; peores no solapan con top.
-    engs = [p["engagement_pct"] for p in a["top"]]
-    assert engs == sorted(engs, reverse=True)
+    # top ordenado por VISUALIZACIONES desc; peores no solapan con top.
+    vistas = [p["visualizaciones"] for p in a["top"]]
+    assert vistas == sorted(vistas, reverse=True)
     ids_top = {p["id"] for p in a["top"]}
     ids_peor = {p["id"] for p in a["peores"]}
     assert not (ids_top & ids_peor)

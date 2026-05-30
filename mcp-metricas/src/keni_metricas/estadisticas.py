@@ -69,13 +69,14 @@ def buckets_engagement(piezas: Sequence[Pieza]) -> list[DistribucionBucket]:
 
 
 def top_y_peores(piezas: Sequence[Pieza], n: int = 5) -> tuple[list[Pieza], list[Pieza]]:
-    """`(top, peores)` por engagement. Los peores NO solapan con el top.
+    """`(top, peores)` por VISUALIZACIONES. Los peores NO solapan con el top.
 
-    Ordena por engagement descendente: top = las `n` primeras; peores = las `n` mas
-    bajas DE LAS RESTANTES (peor primero). Si hay <= n piezas, peores es []: cuando
-    todo cabe en el top no hay "peores" que mostrar.
+    Ordena por visualizaciones descendente: top = las `n` mas vistas; peores = las `n`
+    menos vistas DE LAS RESTANTES (la menos vista primero). Si hay <= n piezas, peores
+    es []: cuando todo cabe en el top no hay "peores" que mostrar. (Se ordena por vistas
+    —no por engagement— para que "top videos" sea lo intuitivo: los mas vistos.)
     """
-    ordenadas = sorted(piezas, key=lambda p: p.engagement_pct, reverse=True)
+    ordenadas = sorted(piezas, key=lambda p: p.visualizaciones, reverse=True)
     top = ordenadas[:n]
     restantes = ordenadas[n:]
     peores = list(reversed(restantes[-n:])) if restantes else []
