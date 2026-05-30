@@ -1,7 +1,7 @@
 {
   "name": "keni-social",
-  "version": "0.2.0",
-  "description": "Sistemas de producción de Keni para equipos de redes sociales: skills que convierten una nota, varios cables o un clip en copy publicable (voz de marca, tropicalización mexicana, formato por plataforma y auto-verificación) más el servidor MCP de métricas multi-marca (Meta, YouTube, X, TikTok).",
+  "version": "0.3.0",
+  "description": "Sistemas de producción de Keni para equipos de redes sociales: skills que convierten una nota, varios cables o un clip en copy publicable (voz de marca, tropicalización mexicana, formato por plataforma y auto-verificación), el servidor MCP de métricas multi-marca (Meta, YouTube, X, TikTok) y el MCP de tablero para crear/mover/listar contenido de la Consola desde Claude Code.",
   "author": {
     "name": "Keni Engineering"
   },
@@ -12,6 +12,7 @@
     "redes-sociales",
     "copy",
     "metricas",
+    "tablero",
     "mcp",
     "amx"
   ],
@@ -24,6 +25,18 @@
         "${CLAUDE_PLUGIN_ROOT}/mcp-metricas",
         "keni-metricas"
       ]
+    },
+    "keni-tablero": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "${CLAUDE_PLUGIN_ROOT}/mcp-tablero",
+        "keni-tablero"
+      ],
+      "env": {
+        "KENI_CONSOLA_URL": "${KENI_CONSOLA_URL}",
+        "KENI_CONSOLA_TOKEN": "${KENI_CONSOLA_TOKEN}"
+      }
     }
   }
 }

@@ -701,6 +701,47 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_marca ON biblioteca_media (marca)",
     "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_tipo ON biblioteca_media (tipo)",
     "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_aprobado ON biblioteca_media (aprobado)",
+    # Webhooks SALIENTES (eventos internos del tablero): una fila por suscripcion. Cada
+    # webhook escucha N tipos de evento (`eventos`, lista JSON; ""/[] = todos) y, al
+    # dispararse, recibe un POST JSON a `url`. `secreto` (opcional) firma cada entrega con
+    # HMAC-SHA256 en la cabecera `X-Keni-Signature` (mismo patron que Mixpost: X-Signature).
+    # `formato` decide la forma del payload: `generico` (def, evento crudo) | `slack`
+    # (`{"text": ...}`). SAFE BY DEFAULT: sin webhooks activos, NADA sale a la red.
+    """
+    CREATE TABLE IF NOT EXISTS webhooks (
+        id           TEXT PRIMARY KEY,
+        nombre       TEXT NOT NULL DEFAULT '',
+        url          TEXT NOT NULL DEFAULT '',
+        eventos      TEXT NOT NULL DEFAULT '',
+        formato      TEXT NOT NULL DEFAULT 'generico',
+        secreto      TEXT NOT NULL DEFAULT '',
+        activo        INTEGER NOT NULL DEFAULT 1,
+        ultimo_estado TEXT NOT NULL DEFAULT '',
+        ultimo_en     TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_webhooks_activo ON webhooks (activo)",
+    # Bitacora de eventos internos EMITIDOS (auditoria + idempotencia del barrido de
+    # vencimientos: una `clave_idempotencia` ya registrada no se re-emite). `payload` es el
+    # dict del evento serializado a JSON. No guarda secretos.
+    """
+    CREATE TABLE IF NOT EXISTS eventos_internos (
+        id                  TEXT PRIMARY KEY,
+        tipo                TEXT NOT NULL DEFAULT '',
+        contenido_id        TEXT NOT NULL DEFAULT '',
+        plataforma_id       TEXT NOT NULL DEFAULT '',
+        clave_idempotencia  TEXT NOT NULL DEFAULT '',
+        payload             TEXT NOT NULL DEFAULT '',
+        creado              TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_eventos_internos_tipo ON eventos_internos (tipo)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_eventos_internos_idem "
+    "ON eventos_internos (clave_idempotencia)",
 )
 
 
@@ -3787,6 +3828,285 @@ def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
     finally:
         con.close()
     return item
+
+
+# --------------------------------------------------------------------------- #
+# Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
+# --------------------------------------------------------------------------- #
+# `webhooks` = suscripciones a eventos internos del tablero (pieza aprobada / contenido
+# vencido). `eventos_internos` = bitacora de lo EMITIDO (auditoria + idempotencia del
+# barrido de vencimientos). El reparto a la red lo hace `dominio/eventos.py`; aqui solo
+# se persiste. SAFE BY DEFAULT: sin webhooks activos no sale nada a la red.
+
+_COLS_WEBHOOK = (
+    "id",
+    "nombre",
+    "url",
+    "eventos",
+    "formato",
+    "secreto",
+    "activo",
+    "ultimo_estado",
+    "ultimo_en",
+    "autor_id",
+    "autor_nombre",
+    "creado",
+    "actualizado",
+)
+_SELECT_WEBHOOK = f"SELECT {', '.join(_COLS_WEBHOOK)} FROM webhooks"
+# Campos editables (lista blanca). `id`/`creado`/`autor_*` no se editan; `ultimo_*` los
+# estampa el repartidor, no la API.
+_CAMPOS_EDITABLES_WEBHOOK: tuple[str, ...] = (
+    "nombre",
+    "url",
+    "eventos",
+    "formato",
+    "secreto",
+    "activo",
+    "ultimo_estado",
+    "ultimo_en",
+)
+
+
+def _fila_a_webhook(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `webhooks` en dict (`eventos` como lista, `activo` como bool).
+
+    NUNCA expone el `secreto` (credencial): se devuelve `tiene_secreto` (bool) en su lugar.
+    """
+    wh: dict[str, Any] = {col: fila[col] for col in _COLS_WEBHOOK}
+    wh["activo"] = bool(fila["activo"])
+    try:
+        eventos = json.loads(wh["eventos"]) if wh["eventos"] else []
+    except (ValueError, TypeError):
+        eventos = []
+    wh["eventos"] = eventos if isinstance(eventos, list) else []
+    wh["tiene_secreto"] = bool(wh.pop("secreto", ""))
+    return wh
+
+
+def crear_webhook(
+    *,
+    nombre: str = "",
+    url: str = "",
+    eventos: list[str] | None = None,
+    formato: str = "generico",
+    secreto: str = "",
+    activo: bool = True,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+) -> dict[str, Any]:
+    """Inserta una suscripcion de webhook y la devuelve (sin exponer el secreto). NO valida."""
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "nombre": nombre or "",
+        "url": url or "",
+        "eventos": json.dumps(list(eventos or [])),
+        "formato": formato or "generico",
+        "secreto": secreto or "",
+        "activo": 1 if activo else 0,
+        "ultimo_estado": "",
+        "ultimo_en": "",
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "creado": ahora,
+        "actualizado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_WEBHOOK)
+        con.execute(
+            f"INSERT INTO webhooks ({', '.join(_COLS_WEBHOOK)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_WEBHOOK),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_webhook(fila)
+
+
+def listar_webhooks(*, solo_activos: bool = False) -> list[dict[str, Any]]:
+    """Lista las suscripciones de webhook (sin exponer secretos). Orden estable por creacion."""
+    sql = _SELECT_WEBHOOK
+    if solo_activos:
+        sql += " WHERE activo = 1"
+    sql += " ORDER BY creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_webhook(f) for f in filas]
+
+
+def listar_webhooks_para(evento: str) -> list[dict[str, Any]]:
+    """Webhooks ACTIVOS que escuchan `evento` (lista vacia => escucha todos). Incluye el secreto.
+
+    Uso INTERNO del repartidor: a diferencia de `listar_webhooks`, devuelve el `secreto`
+    crudo (lo necesita para firmar). NO exponer este resultado por la API.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(f"{_SELECT_WEBHOOK} WHERE activo = 1").fetchall()
+    finally:
+        con.close()
+    salida: list[dict[str, Any]] = []
+    for f in filas:
+        try:
+            eventos = json.loads(f["eventos"]) if f["eventos"] else []
+        except (ValueError, TypeError):
+            eventos = []
+        if eventos and evento not in eventos:
+            continue
+        salida.append({col: f[col] for col in _COLS_WEBHOOK})
+    return salida
+
+
+def obtener_webhook(webhook_id: str) -> dict[str, Any] | None:
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_WEBHOOK} WHERE id = ?", (webhook_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_webhook(fila) if fila is not None else None
+
+
+def obtener_webhook_con_secreto(webhook_id: str) -> dict[str, Any] | None:
+    """Una suscripcion por id CON su secreto crudo (uso interno: probar/repartir). None si no existe.
+
+    A diferencia de `obtener_webhook`, expone el `secreto` para firmar la entrega. NO
+    devolver este dict por la API.
+    """
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_WEBHOOK} WHERE id = ?", (webhook_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return {col: fila[col] for col in _COLS_WEBHOOK} if fila is not None else None
+
+
+def actualizar_webhook(
+    webhook_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una suscripcion; None si no existe. Filtra a la lista blanca."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_WEBHOOK}
+    if "eventos" in cambios and isinstance(cambios["eventos"], list):
+        cambios["eventos"] = json.dumps(cambios["eventos"])
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    if not cambios:
+        return obtener_webhook(webhook_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, webhook_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE webhooks SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_WEBHOOK} WHERE id = ?", (webhook_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_webhook(fila) if fila is not None else None
+
+
+def borrar_webhook(webhook_id: str) -> bool:
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM webhooks WHERE id = ?", (webhook_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def registrar_evento_interno(
+    *,
+    tipo: str,
+    contenido_id: str = "",
+    plataforma_id: str = "",
+    clave_idempotencia: str = "",
+    payload: dict[str, Any] | None = None,
+) -> bool:
+    """Registra un evento interno en la bitacora. False si su `clave_idempotencia` ya existia.
+
+    La clave de idempotencia (UNIQUE) evita re-emitir el mismo vencimiento en cada barrido:
+    si el INSERT choca con la constraint, devolvemos False sin tocar nada. Una clave vacia
+    NO desduplica (cada llamada inserta): usala para eventos de transicion (siempre unicos).
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "tipo": tipo,
+        "contenido_id": contenido_id or "",
+        "plataforma_id": plataforma_id or "",
+        # Sin clave explicita, una unica por id: nunca desduplica (cada emision se registra).
+        "clave_idempotencia": clave_idempotencia or uuid.uuid4().hex,
+        "payload": json.dumps(payload or {}, ensure_ascii=False),
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO eventos_internos "
+            "(id, tipo, contenido_id, plataforma_id, clave_idempotencia, payload, creado) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                fila["id"], fila["tipo"], fila["contenido_id"], fila["plataforma_id"],
+                fila["clave_idempotencia"], fila["payload"], fila["creado"],
+            ),
+        )
+        con.commit()
+        return True
+    except IntegrityError:
+        # UNIQUE (clave_idempotencia): el evento ya se emitio antes, no se repite.
+        # `_ConexionPg` ya hizo rollback (paridad con el resto de call sites).
+        return False
+    finally:
+        con.close()
+
+
+def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
+    """Ultimos eventos internos emitidos (bitacora), mas recientes primero."""
+    limite = max(1, min(int(limite), 500))
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT id, tipo, contenido_id, plataforma_id, clave_idempotencia, payload, creado "
+            "FROM eventos_internos ORDER BY creado DESC, id DESC LIMIT ?",
+            (limite,),
+        ).fetchall()
+    finally:
+        con.close()
+    salida: list[dict[str, Any]] = []
+    for f in filas:
+        try:
+            payload = json.loads(f["payload"]) if f["payload"] else {}
+        except (ValueError, TypeError):
+            payload = {}
+        salida.append(
+            {
+                "id": f["id"],
+                "tipo": f["tipo"],
+                "contenido_id": f["contenido_id"],
+                "plataforma_id": f["plataforma_id"],
+                "payload": payload,
+                "creado": f["creado"],
+            }
+        )
+    return salida
 
 
 # --------------------------------------------------------------------------- #

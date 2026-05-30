@@ -165,6 +165,15 @@ ENV_CONSOLA_URL_PUBLICA = "KENI_CONSOLA_URL_PUBLICA"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
+# Eventos internos del tablero (pieza aprobada / contenido vencido). El barrido que
+# detecta vencimientos y dispara los webhooks salientes corre como hilo demonio en el
+# servidor real (igual que el programador). El reparto a la red es OPT-IN: sin webhooks
+# activos no hay ninguna peticion de salida.
+ENV_EVENTOS_INTERVALO_SEGUNDOS = "KENI_EVENTOS_INTERVALO_SEGUNDOS"
+# Apaga del todo el barrido de vencimientos (la emision por transiciones sigue activa,
+# solo deja de escanear el reloj). `0`/`false` => no arranca el hilo.
+ENV_EVENTOS_VENCIMIENTOS = "KENI_EVENTOS_VENCIMIENTOS"
+
 # Persistencia (#130 / ADR 0004): Postgres OBLIGATORIO para la operacional + object storage
 # S3/Garage opcional para la media. NOMBRES EXACTOS de `deploy/docker-compose.yml`/
 # `.env.example` (NO se renombran). `DATABASE_URL` (o sus componentes `POSTGRES_*`) es
@@ -215,6 +224,10 @@ WORKER_SONDEO_SEGUNDOS_DEF = 0.5
 # Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
 # 4h da margen sin golpear las APIs externas en cada apertura.
 METRICAS_REFRESCO_HORAS_DEF = 4
+
+# Cadencia del barrido de eventos internos (vencimientos del tablero). 5 min basta: el
+# vencimiento es por DIA (`fecha_entrega`), no hace falta granularidad fina.
+EVENTOS_INTERVALO_SEGUNDOS_DEF = 300.0
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -556,6 +569,29 @@ def programador_intervalo_segundos() -> float | None:
 def metricas_refresco_horas() -> int:
     """Cada cuantas horas refresca la cache de metricas el daemon (`KENI_METRICAS_REFRESCO_HORAS`, def 4, min 1)."""
     return _entero(ENV_METRICAS_REFRESCO_HORAS, METRICAS_REFRESCO_HORAS_DEF, minimo=1)
+
+
+def eventos_intervalo_segundos() -> float:
+    """Intervalo del barrido de vencimientos del tablero en s (`KENI_EVENTOS_INTERVALO_SEGUNDOS`, min 1.0, def 300)."""
+    crudo = os.environ.get(ENV_EVENTOS_INTERVALO_SEGUNDOS)
+    if not crudo:
+        return EVENTOS_INTERVALO_SEGUNDOS_DEF
+    try:
+        return max(1.0, float(crudo))
+    except ValueError:
+        return EVENTOS_INTERVALO_SEGUNDOS_DEF
+
+
+def eventos_vencimientos_activos() -> bool:
+    """True (def) si el barrido de vencimientos debe arrancar. `KENI_EVENTOS_VENCIMIENTOS=0` lo apaga.
+
+    Solo controla el HILO que escanea el reloj; la emision de eventos por transicion
+    (pieza aprobada/publicada) NO depende de esto.
+    """
+    crudo = _crudo(ENV_EVENTOS_VENCIMIENTOS)
+    if not crudo:
+        return True
+    return crudo.lower() in _VERDADEROS
 
 
 def publicar_real() -> bool:

@@ -153,6 +153,11 @@ import type {
   RespuestaContenido,
   RespuestaContenidoItem,
   RespuestaPlataforma,
+  RespuestaWebhooks,
+  RespuestaWebhook,
+  RespuestaProbarWebhook,
+  CuerpoCrearWebhook,
+  CuerpoActualizarWebhook,
   RespuestaTareas,
   RespuestaEquipoRota,
   RespuestaEventosRota,
@@ -985,6 +990,23 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+
+  // --- Webhooks salientes + eventos internos del tablero ---
+  webhooks: (signal?: AbortSignal) =>
+    peticion<RespuestaWebhooks>("/webhooks", { signal }),
+  crearWebhook: (cuerpo: CuerpoCrearWebhook) =>
+    peticion<RespuestaWebhook>("/webhooks", { metodo: "POST", json: cuerpo }),
+  actualizarWebhook: (id: string, cuerpo: CuerpoActualizarWebhook) =>
+    peticion<RespuestaWebhook>(`/webhooks/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarWebhook: (id: string) =>
+    peticion<RespuestaMensaje>(`/webhooks/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  probarWebhook: (id: string) =>
+    peticion<RespuestaProbarWebhook>(`/webhooks/${encodeURIComponent(id)}/probar`, {
+      metodo: "POST",
+    }),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>

@@ -44,6 +44,7 @@ const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
 // Ajustes (ahora solo accesibles via dropdown del avatar).
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
+const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 const Usuarios = lazy(() => import("@/pages/Usuarios"));
 
@@ -142,6 +143,9 @@ export const router = createBrowserRouter([
       { path: "mi-cuenta", element: <MiCuenta /> },
       { path: "configuracion", element: <Configuracion /> },
       { path: "sugerencias", element: <Sugerencias /> },
+      // Webhooks salientes: solo admin (el backend devuelve 403 si no; la pagina avisa
+      // al entrar por URL directa). Gestionar webhooks = abrir la red de salida.
+      { path: "webhooks", element: <Webhooks /> },
       // Gestion de usuarios: solo admin (el backend devuelve 403 si no, y la
       // propia pagina muestra el aviso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },

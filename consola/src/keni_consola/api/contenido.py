@@ -25,6 +25,7 @@ from starlette.routing import Route
 
 from .. import auth, marcas, redes, repos
 from .._http_json import leer_json
+from ..dominio import eventos
 from ..estados import (
     CLASES_CONTENIDO,
     ESTADOS_CONTENIDO,
@@ -326,6 +327,13 @@ async def agregar_plataforma(request: Request) -> Response:
     return JSONResponse({"plataforma": _plataforma_a_dict(plat)})
 
 
+# Estado de plataforma -> evento interno que se emite al ENTRAR en ese estado.
+_EVENTO_POR_ESTADO: dict[str, str] = {
+    "aprobado": "pieza.aprobada",
+    "publicado": "pieza.publicada",
+}
+
+
 async def actualizar_plataforma(request: Request) -> Response:
     """PATCH /api/contenido/{id}/plataformas/{plataforma_id}: estado/checklist/copy/...."""
     plataforma_id = request.path_params["plataforma_id"]
@@ -347,9 +355,33 @@ async def actualizar_plataforma(request: Request) -> Response:
     if not campos:
         return JSONResponse({"error": "Indica algún campo a actualizar."}, status_code=400)
 
+    # Estado ANTERIOR (para emitir el evento solo en la TRANSICION, no en cada PATCH).
+    previa = repos.obtener_contenido_plataforma(plataforma_id)
+    estado_anterior = previa.get("estado") if previa else None
+
     plat = repos.actualizar_contenido_plataforma(plataforma_id, campos)
     if plat is None:
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
+
+    nuevo_estado = plat.get("estado")
+    tipo_evento = _EVENTO_POR_ESTADO.get(nuevo_estado or "")
+    if tipo_evento is not None and nuevo_estado != estado_anterior:
+        padre = repos.obtener_contenido(plat.get("contenido_id", "")) or {}
+        eventos.emitir(
+            tipo_evento,
+            {
+                "contenido_id": plat.get("contenido_id", ""),
+                "plataforma_id": plataforma_id,
+                "red": plat.get("red", ""),
+                "red_nombre": _red_nombre(plat.get("red", "")),
+                "titulo": padre.get("titulo", ""),
+                "marca": padre.get("marca", ""),
+                "marca_nombre": marcas.etiqueta_de(padre["marca"]) if padre.get("marca") else "",
+                "estado": nuevo_estado,
+            },
+            contenido_id=plat.get("contenido_id", ""),
+            plataforma_id=plataforma_id,
+        )
     return JSONResponse({"plataforma": _plataforma_a_dict(plat)})
 
 

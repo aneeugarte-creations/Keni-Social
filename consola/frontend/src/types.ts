@@ -1167,6 +1167,82 @@ export interface CuerpoDesdeRadar {
   descripcion?: string;
 }
 
+// --- Webhooks salientes + eventos internos del tablero ---
+
+/** Tipos de evento interno que un webhook puede escuchar (espejo de `dominio/eventos.TIPOS_EVENTO`). */
+export type TipoEventoInterno = "pieza.aprobada" | "pieza.publicada" | "contenido.vencido";
+
+/** Forma del payload del POST saliente: `generico` (evento crudo) | `slack` (`{text}`). */
+export type FormatoWebhook = "generico" | "slack";
+
+/** Una suscripción de webhook. El `secreto` NUNCA se expone: solo `tiene_secreto`. */
+export interface Webhook {
+  id: string;
+  nombre: string;
+  url: string;
+  /** Eventos escuchados; lista vacía = escucha TODOS. */
+  eventos: TipoEventoInterno[];
+  formato: FormatoWebhook;
+  /** True si tiene secreto (firma HMAC); el valor del secreto no se devuelve. */
+  tiene_secreto: boolean;
+  activo: boolean;
+  /** Resultado de la última entrega (p.ej. "ok: HTTP 200" / "error: timeout"). */
+  ultimo_estado: string;
+  ultimo_en: string;
+  autor_id: string;
+  autor_nombre: string;
+  creado: string;
+  actualizado: string;
+}
+
+/** Un evento interno ya emitido (bitácora). */
+export interface EventoInterno {
+  id: string;
+  tipo: TipoEventoInterno;
+  contenido_id: string;
+  plataforma_id: string;
+  payload: Record<string, unknown>;
+  creado: string;
+}
+
+export interface CatalogoWebhooks {
+  eventos: TipoEventoInterno[];
+  formatos: FormatoWebhook[];
+}
+
+export interface RespuestaWebhooks {
+  webhooks: Webhook[];
+  catalogo: CatalogoWebhooks;
+  eventos_recientes: EventoInterno[];
+}
+
+export interface RespuestaWebhook {
+  webhook: Webhook;
+}
+
+export interface CuerpoCrearWebhook {
+  nombre?: string;
+  url: string;
+  eventos?: TipoEventoInterno[];
+  formato?: FormatoWebhook;
+  secreto?: string;
+  activo?: boolean;
+}
+
+export interface CuerpoActualizarWebhook {
+  nombre?: string;
+  url?: string;
+  eventos?: TipoEventoInterno[];
+  formato?: FormatoWebhook;
+  secreto?: string;
+  activo?: boolean;
+}
+
+export interface RespuestaProbarWebhook {
+  ok: boolean;
+  estado: string;
+}
+
 // --- Rota de horarios del equipo (F4 · #144) ---
 
 /** Un miembro del equipo (un usuario de la consola) disponible para la rota.
