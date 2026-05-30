@@ -1150,6 +1150,71 @@ def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
     return db.listar_eventos_internos(limite=limite)
 
 
+# --------------------------------------------------------------------------- #
+# Etiquetas editoriales (campaña / vertical / tipo) y su N:M con `contenido`     #
+# --------------------------------------------------------------------------- #
+# Clasifican transversalmente las piezas del tablero. `marca=''` = etiqueta global.
+# La fachada delega 1:1 en `db.py`; la validacion vive en `api/etiquetas`.
+
+
+def crear_etiqueta(
+    *,
+    nombre: str,
+    clase: str = "campania",
+    marca: str = "",
+    color: str = "",
+    activo: bool = True,
+    id: str = "",
+) -> dict[str, Any]:
+    """Crea una etiqueta editorial. Delegado en `db.py`."""
+    return db.crear_etiqueta(
+        nombre=nombre, clase=clase, marca=marca, color=color, activo=activo, id=id
+    )
+
+
+def listar_etiquetas(
+    *, marca: str | None = None, clase: str | None = None, solo_activas: bool = False
+) -> list[dict[str, Any]]:
+    """Lista etiquetas (`marca` incluye las globales). Delegado en `db.py`."""
+    return db.listar_etiquetas(marca=marca, clase=clase, solo_activas=solo_activas)
+
+
+def obtener_etiqueta(etiqueta_id: str) -> dict[str, Any] | None:
+    return db.obtener_etiqueta(etiqueta_id)
+
+
+def existe_etiqueta_nombre(
+    nombre: str, clase: str, marca: str, *, excluir_id: str = ""
+) -> bool:
+    return db.existe_etiqueta_nombre(nombre, clase, marca, excluir_id=excluir_id)
+
+
+def actualizar_etiqueta(
+    etiqueta_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_etiqueta(etiqueta_id, campos)
+
+
+def borrar_etiqueta(etiqueta_id: str) -> bool:
+    return db.borrar_etiqueta(etiqueta_id)
+
+
+def asignar_etiqueta(contenido_id: str, etiqueta_id: str) -> None:
+    db.asignar_etiqueta(contenido_id, etiqueta_id)
+
+
+def quitar_etiqueta(contenido_id: str, etiqueta_id: str) -> bool:
+    return db.quitar_etiqueta(contenido_id, etiqueta_id)
+
+
+def etiquetas_por_contenido() -> dict[str, list[str]]:
+    return db.etiquetas_por_contenido()
+
+
+def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
+    return db.ids_contenido_con_etiqueta(etiqueta_id)
+
+
 def duplicar_evento_rota(
     evento_id: str,
     *,

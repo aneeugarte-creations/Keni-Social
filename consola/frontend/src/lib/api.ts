@@ -49,8 +49,10 @@ import type {
   CuerpoCrearPublicacionesLote,
   CuerpoCrearSkill,
   CuerpoActualizarContenido,
+  CuerpoActualizarEtiqueta,
   CuerpoActualizarPlataforma,
   CuerpoCrearContenido,
+  CuerpoCrearEtiqueta,
   CuerpoCrearTarea,
   CuerpoDesdeRadar,
   CuerpoCrearEventoRota,
@@ -158,6 +160,9 @@ import type {
   RespuestaProbarWebhook,
   CuerpoCrearWebhook,
   CuerpoActualizarWebhook,
+  RespuestaEtiquetas,
+  RespuestaEtiqueta,
+  RespuestaEtiquetasContenido,
   RespuestaTareas,
   RespuestaEquipoRota,
   RespuestaEventosRota,
@@ -948,6 +953,7 @@ export const api = {
       responsable_id?: string;
       estado?: string;
       clase?: string;
+      etiqueta?: string;
       desde?: string;
       hasta?: string;
     } = {},
@@ -990,6 +996,38 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+  asignarEtiquetaContenido: (contenidoId: string, etiqueta_id: string) =>
+    peticion<RespuestaEtiquetasContenido>(
+      `/contenido/${encodeURIComponent(contenidoId)}/etiquetas`,
+      { metodo: "POST", json: { etiqueta_id } },
+    ),
+  quitarEtiquetaContenido: (contenidoId: string, etiquetaId: string) =>
+    peticion<RespuestaEtiquetasContenido>(
+      `/contenido/${encodeURIComponent(contenidoId)}/etiquetas/${encodeURIComponent(etiquetaId)}`,
+      { metodo: "DELETE" },
+    ),
+
+  // --- Catálogo de etiquetas editoriales (campaña / vertical / tipo) ---
+  etiquetas: (
+    params: { marca?: string; clase?: string; activas?: boolean } = {},
+    signal?: AbortSignal,
+  ) => {
+    const qs = new URLSearchParams();
+    if (params.marca !== undefined) qs.set("marca", params.marca);
+    if (params.clase) qs.set("clase", params.clase);
+    if (params.activas) qs.set("activas", "1");
+    const cola = qs.toString();
+    return peticion<RespuestaEtiquetas>(`/etiquetas${cola ? `?${cola}` : ""}`, { signal });
+  },
+  crearEtiqueta: (cuerpo: CuerpoCrearEtiqueta) =>
+    peticion<RespuestaEtiqueta>("/etiquetas", { metodo: "POST", json: cuerpo }),
+  actualizarEtiqueta: (id: string, cuerpo: CuerpoActualizarEtiqueta) =>
+    peticion<RespuestaEtiqueta>(`/etiquetas/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarEtiqueta: (id: string) =>
+    peticion<RespuestaMensaje>(`/etiquetas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Webhooks salientes + eventos internos del tablero ---
   webhooks: (signal?: AbortSignal) =>
