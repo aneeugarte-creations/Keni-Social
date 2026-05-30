@@ -32,6 +32,7 @@ from ..schema import (
     PLATAFORMAS_CON_ALCANCE,
     Cobertura,
     Cuenta,
+    MetricaPieza,
     MetricaPlataforma,
     Periodo,
     Pieza,
@@ -410,6 +411,53 @@ class FuenteMuestra:
         ]
         candidatas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return candidatas[:n]
+
+    def metricas_de_post(
+        self, cuenta_id: str, plat: Plataforma, id_post: str, *, dias: int = 90
+    ) -> MetricaPieza | None:
+        """Rendimiento sintetico y determinista de UN post (por id) para demo/tests offline.
+
+        Como la muestra no tiene un "almacen" de posts reales por id, deriva cifras
+        creibles y ESTABLES sembrando con (cuenta, red, id): el mismo id devuelve
+        siempre los mismos numeros. Asi la tarjeta del tablero pinta rendimiento
+        consistente sin fuente real. `dias` se ignora (no hay ventana real). Devuelve
+        None si la cuenta no existe (la marca no esta en alcance), igual que el resto.
+        """
+        if not id_post:
+            return None
+        _, base_mes, plats, _ = self._marca(cuenta_id)
+        if plat not in plats:
+            # La red no es de esta marca: aun asi damos una cifra estable (el post
+            # pudo crearse en una red que la muestra no perfila), con peso por defecto.
+            peso = _PESO.get(plat, 0.1)
+        else:
+            peso = _PESO[plat]
+        factor = _ENG_FACTOR.get(cuenta_id, 1.0)
+        eng_min, eng_max = _ENG.get(plat, (1.0, 4.0))
+        eng = round(
+            _entre(_rand(cuenta_id, plat, id_post, "e"), eng_min, eng_max * 1.2) * factor, 1
+        )
+        # Visualizaciones de UN post: una fraccion pequena del volumen mensual de la red.
+        vistas = int(
+            base_mes * peso * _entre(_rand(cuenta_id, plat, id_post, "v"), 0.01, 0.10)
+        )
+        inter = int(vistas * eng / 100)
+        dia = date.today() - timedelta(
+            days=int(_rand(cuenta_id, plat, id_post, "d") * 14)
+        )
+        return MetricaPieza(
+            id_post=str(id_post),
+            plataforma=plat,
+            encontrado=True,
+            visualizaciones=vistas,
+            interacciones=inter,
+            engagement_pct=eng,
+            url=_URL_BASE.get(plat, "https://example.com/{pid}").format(
+                cuenta=cuenta_id, pid=id_post
+            ),
+            publicado=dia,
+            fuente=self.nombre,
+        )
 
     def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:
         """Serie diaria sintetica y determinista para demo/tests offline.

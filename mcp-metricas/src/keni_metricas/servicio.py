@@ -36,7 +36,9 @@ from .schema import (
     RANGO_SEMANA_CERRADA,
     RANGOS_DIAS,
     AnaliticaPiezas,
+    MetricaPieza,
     Periodo,
+    Plataforma,
     PuntoSerie,
     SerieDiaria,
     etiqueta_rango,
@@ -86,6 +88,7 @@ __all__ = [
     "analisis_diario_markdown",
     "construir_analitica_piezas",
     "construir_tendencia_diaria",
+    "construir_metricas_pieza",
     "etiqueta_rango",
     "construir_reporte_deportes",
     "render_reporte_deportes_pptx",
@@ -260,6 +263,55 @@ def construir_tendencia_diaria(rango: str = "mes", marca: str | None = None) -> 
         puntos=puntos,
     )
     return serie.model_dump(mode="json")
+
+
+def construir_metricas_pieza(marca: str, red: str, id_post: str) -> dict:
+    """Rendimiento REAL de UNA pieza ya publicada (por su `id_post` de Metricool).
+
+    `marca` es el id_metricas (guion_bajo) de la cuenta; `red` la plataforma keni
+    ('facebook'|'instagram'|'x'|'tiktok'|'youtube'); `id_post` el id que devolvio el
+    scheduler de Metricool al programar (lo guarda la Consola en
+    `contenido_plataforma.id_post_metricool`). Lo consume el tablero para pintar el
+    rendimiento en cada tarjeta SIN adaptadores por red: una sola lectura sobre la
+    fuente activa (Metricool de pago en prod; muestra en demo).
+
+    Devuelve un dict JSON-serializable (`MetricaPieza`). Si la red no es valida, la
+    fuente no expone la lectura por post (fuentes 'real' compuestas), o Metricool aun
+    no tiene datos del post, devuelve `encontrado=False` (la UI muestra "sin datos
+    todavia", nunca ceros falsos). Propaga `CuentaNoEncontrada` (marca fuera de alcance).
+    """
+    try:
+        plat = Plataforma(red)
+    except ValueError:
+        return _pieza_sin_datos(id_post, red).model_dump(mode="json")
+
+    fuente = _fuente(marca)
+    leer = getattr(fuente, "metricas_de_post", None)
+    if leer is None:
+        return _pieza_sin_datos(id_post, plat.value).model_dump(mode="json")
+    try:
+        metrica = leer(marca, plat, id_post)
+    except AttributeError:
+        # La fuente envuelta no lo implementa (FuenteScoped lo propaga): degrada.
+        metrica = None
+    if metrica is None:
+        metrica = _pieza_sin_datos(id_post, plat.value)
+    return metrica.model_dump(mode="json")
+
+
+def _pieza_sin_datos(id_post: str, red: str) -> MetricaPieza:
+    """`MetricaPieza` vacia (encontrado=False) para 'sin datos todavia' sin romper.
+
+    Usa una plataforma valida si `red` lo es; si no, cae a facebook como placeholder
+    (el campo `encontrado=False` ya le dice a la UI que no hay rendimiento real).
+    """
+    try:
+        plat = Plataforma(red)
+    except ValueError:
+        plat = Plataforma.facebook
+    return MetricaPieza(
+        id_post=str(id_post), plataforma=plat, encontrado=False, fuente=nombre_fuente()
+    )
 
 
 def construir_reporte_deportes(

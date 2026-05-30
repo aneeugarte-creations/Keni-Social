@@ -154,6 +154,7 @@ import type {
   RespuestaSugerencias,
   RespuestaContenido,
   RespuestaContenidoItem,
+  RespuestaMetricasContenido,
   RespuestaPlataforma,
   RespuestaWebhooks,
   RespuestaWebhook,
@@ -1045,6 +1046,9 @@ export const api = {
     peticion<RespuestaProbarWebhook>(`/webhooks/${encodeURIComponent(id)}/probar`, {
       metodo: "POST",
     }),
+  /** Rendimiento real (Metricool) por pieza publicada del tablero. Mapa por `contenido_plataforma.id`. */
+  metricasContenido: (signal?: AbortSignal) =>
+    peticion<RespuestaMetricasContenido>("/contenido/metricas", { signal }),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>

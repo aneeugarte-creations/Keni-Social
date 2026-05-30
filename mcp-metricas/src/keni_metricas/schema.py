@@ -168,6 +168,29 @@ class Pieza(BaseModel):
     url: str | None = None
 
 
+class MetricaPieza(BaseModel):
+    """Rendimiento REAL de UNA pieza ya publicada, identificada por su id de Metricool.
+
+    A diferencia de `Pieza` (que describe una de las "mejores piezas" de un periodo,
+    descubierta desde la lista de posts), esto es el rendimiento de un post CONCRETO
+    que el equipo ya programo/publico desde la Consola: se busca por `id_post_metricool`
+    (el id que devolvio el scheduler de Metricool al programar) para pintarlo en la
+    tarjeta del tablero. `encontrado=False` cuando Metricool aun no tiene datos del
+    post (recien publicado) o el id no aparece: la UI muestra "sin datos todavia" en
+    vez de ceros falsos.
+    """
+
+    id_post: str
+    plataforma: Plataforma
+    encontrado: bool = False
+    visualizaciones: int = 0
+    interacciones: int = 0
+    engagement_pct: float = 0.0
+    url: str | None = None
+    publicado: date | None = None
+    fuente: str = "desconocida"
+
+
 class EstadisticasNumericas(BaseModel):
     """Resumen estadistico de una serie de valores (engagement o visualizaciones).
 

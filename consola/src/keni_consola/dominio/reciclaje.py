@@ -11,15 +11,25 @@ su `motivo` (etiqueta), su `detalle` (frase para la UI) y una `puntuacion` para 
 Solo LECTURA: no toca persistencia, recibe las publicaciones ya cargadas.
 
 SENALES (de mas a menos fuerte):
-  1. EFEMERIDE / estacional — el titulo/contenido casa con una efemeride MX que cae
-     dentro de una ventana proxima (por defecto 21 dias). Es la senal mas fuerte:
-     el contexto vuelve a hacer la pieza relevante AHORA.
-  2. PERENNE MADURADA — la pieza esta marcada `evergreen` (el equipo ya la juzgo
-     reutilizable: el mejor proxy de "rindio bien") y ha pasado suficiente tiempo
-     desde su ultima actividad para volver a sacarla sin saturar.
-  3. ANTIGUEDAD + TEMA RECURRENTE — pieza publicada hace tiempo cuyo tema reaparece
+  1. RENDIMIENTO REAL — la pieza ya se publico via Metricool (`id_post_metricool`) y su
+     rendimiento REAL (engagement leido de Metricool, la fuente de pago) la coloca entre
+     las mejores del archivo. Es la senal mas fuerte y mas honesta: "esto YA funciono,
+     vuelve a sacarlo (repost / evergreen)". Solo aplica si hay datos de rendimiento.
+  2. EFEMERIDE / estacional — el titulo/contenido casa con una efemeride MX que cae
+     dentro de una ventana proxima (por defecto 21 dias): el contexto vuelve a hacer la
+     pieza relevante AHORA.
+  3. PERENNE MADURADA — la pieza esta marcada `evergreen` (el equipo ya la juzgo
+     reutilizable) y ha pasado suficiente tiempo desde su ultima actividad para volver a
+     sacarla sin saturar.
+  4. ANTIGUEDAD + TEMA RECURRENTE — pieza publicada hace tiempo cuyo tema reaparece
      en piezas mas recientes de la MISMA marca (palabras clave compartidas): senal
      de que el tema "vuelve a circular".
+
+El RENDIMIENTO se inyecta como una funcion `rendimiento(marca, red, id_post) -> dict`
+(el contrato de `metricas_pieza.rendimiento`), para que el dominio siga siendo PURO y
+testeable sin tocar la red: la heuristica solo lee `engagement_pct`/`visualizaciones`/
+`encontrado` del dict. Sin esa funcion (o sin `id_post_metricool`), la senal de
+rendimiento simplemente no aplica y el resto de la heuristica funciona igual.
 
 Solo se consideran piezas en estado `publicado` (archivo real). Se EXCLUYEN las que ya
 tienen una copia reciente (mismo titulo/marca/red en estado borrador o programado):
@@ -30,11 +40,16 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 
 from .. import marcas, redes
 from . import publicaciones as contrato_publicaciones
+
+# Firma del lookup de rendimiento que se inyecta (contrato de `metricas_pieza.rendimiento`):
+# (marca, red, id_post) -> dict con al menos `encontrado`, `engagement_pct`, `visualizaciones`.
+Rendimiento = Callable[[str, str, str], dict[str, Any]]
 
 # --------------------------------------------------------------------------- #
 # Parametros de la heuristica (constantes, faciles de auditar/ajustar)         #
@@ -48,16 +63,22 @@ EDAD_MINIMA_PERENNE_DIAS = 30
 EDAD_MINIMA_ANTIGUEDAD_DIAS = 60
 # Minimo de palabras clave compartidas para considerar un tema "recurrente".
 MIN_PALABRAS_TEMA_RECURRENTE = 2
+# Engagement (%) minimo para que una pieza ya publicada cuente como "rindio bien" y
+# merezca repostearse. Calibrado a la realidad del cliente (Claro Sports ~2-3%
+# combinado; un post por encima de ~3.5% es claramente sobresaliente). Editable.
+UMBRAL_ENGAGEMENT_RENDIMIENTO = 3.5
 # Tope de candidatas devueltas (la UI muestra una lista discreta, no un volcado).
 MAX_CANDIDATAS = 12
 
 # Motivos (etiquetas estables que la UI pinta con su propio icono/color).
+MOTIVO_RENDIMIENTO = "rendimiento"
 MOTIVO_EFEMERIDE = "efemeride"
 MOTIVO_PERENNE = "perenne"
 MOTIVO_RECURRENTE = "recurrente"
 
-# Puntuacion base por motivo (la efemeride manda; desempata la edad).
+# Puntuacion base por motivo (el rendimiento real manda; luego la efemeride).
 _PESO_MOTIVO = {
+    MOTIVO_RENDIMIENTO: 2000,
     MOTIVO_EFEMERIDE: 1000,
     MOTIVO_PERENNE: 500,
     MOTIVO_RECURRENTE: 250,
@@ -174,15 +195,66 @@ def _detalle_pieza(pub: dict[str, Any]) -> dict[str, Any]:
 
 
 def _candidata(
-    pub: dict[str, Any], motivo: str, detalle: str, puntuacion: int
+    pub: dict[str, Any],
+    motivo: str,
+    detalle: str,
+    puntuacion: int,
+    rendimiento: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Construye el dict de una candidata de reciclaje para la API/UI."""
+    """Construye el dict de una candidata de reciclaje para la API/UI.
+
+    `rendimiento` (opcional) es el dict de `MetricaPieza` cuando la pieza tiene datos
+    reales de Metricool; la UI lo pinta (engagement/visualizaciones) en la candidata,
+    sobre todo para el motivo `rendimiento`. `None` si no hay datos.
+    """
     return {
         **_detalle_pieza(pub),
         "motivo": motivo,
         "motivo_detalle": detalle,
         "puntuacion": puntuacion,
+        "rendimiento": rendimiento,
     }
+
+
+def _miles(n: int) -> str:
+    """Formatea un entero grande de forma compacta y legible (es-MX): 1.2M, 340 mil."""
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}".rstrip("0").rstrip(".") + "M"
+    if n >= 1_000:
+        return f"{n // 1000} mil"
+    return str(n)
+
+
+def _por_rendimiento(
+    pub: dict[str, Any], rendimiento: Rendimiento | None
+) -> tuple[str, int, dict[str, Any]] | None:
+    """Detalle+bonus+datos si la pieza ya publicada RINDIO bien (engagement real); None si no.
+
+    Solo aplica a piezas con `id_post_metricool` (ya empujadas a Metricool) cuando el
+    lookup inyectado devuelve rendimiento ENCONTRADO con engagement >=
+    `UMBRAL_ENGAGEMENT_RENDIMIENTO`. El bonus escala con el engagement (a mayor
+    rendimiento, mas arriba en la lista): asi el mejor contenido se propone primero.
+    """
+    if rendimiento is None:
+        return None
+    id_post = pub.get("id_post_metricool") or ""
+    if not id_post:
+        return None
+    datos = rendimiento(pub.get("marca", ""), pub.get("red", ""), id_post)
+    if not datos.get("encontrado"):
+        return None
+    eng = float(datos.get("engagement_pct") or 0.0)
+    if eng < UMBRAL_ENGAGEMENT_RENDIMIENTO:
+        return None
+    vis = int(datos.get("visualizaciones") or 0)
+    detalle = (
+        f"Rindió muy bien: {eng:.1f}% de engagement"
+        + (f" y {_miles(vis)} visualizaciones" if vis else "")
+        + ". Repostéalo o márcalo evergreen."
+    )
+    # Bonus proporcional al engagement (x100 para que un 5.0% pese mas que un 3.6%).
+    bonus = int(eng * 100)
+    return (detalle, bonus, datos)
 
 
 def _por_efemeride(
@@ -276,15 +348,18 @@ def candidatas_reciclaje(
     *,
     hoy: date | None = None,
     limite: int = MAX_CANDIDATAS,
+    rendimiento: Rendimiento | None = None,
 ) -> list[dict[str, Any]]:
     """Propone piezas de archivo a reciclar, cada una con su motivo explicable.
 
     `publicaciones` son TODAS las piezas (de cualquier estado): las pendientes
     (borrador/programado) se usan para no reproponer lo ya reciclado, y las
     publicadas recientes para detectar temas recurrentes. Solo las piezas en estado
-    `publicado` son candidatas. Devuelve como mucho `limite`, ordenadas por
-    puntuacion (efemeride > perenne > recurrente; desempata la senal interna),
-    UNA candidata por pieza (gana su motivo mas fuerte).
+    `publicado` son candidatas. `rendimiento` (opcional) es el lookup de rendimiento
+    real por pieza (Metricool); si se pasa, las piezas que YA rindieron bien se
+    proponen como la senal mas fuerte. Devuelve como mucho `limite`, ordenadas por
+    puntuacion (rendimiento > efemeride > perenne > recurrente; desempata la senal
+    interna), UNA candidata por pieza (gana su motivo mas fuerte).
     """
     if hoy is None:
         hoy = date.today()
@@ -302,19 +377,23 @@ def candidatas_reciclaje(
         if _ya_reciclada(pub, pendientes):
             continue
         # Para cada pieza elegimos su MOTIVO mas fuerte (no duplicamos la pieza).
-        opciones: list[tuple[str, str, int]] = []
+        opciones: list[tuple[str, str, int, dict[str, Any] | None]] = []
+        if (rd := _por_rendimiento(pub, rendimiento)) is not None:
+            opciones.append(
+                (MOTIVO_RENDIMIENTO, rd[0], _PESO_MOTIVO[MOTIVO_RENDIMIENTO] + rd[1], rd[2])
+            )
         if (ef := _por_efemeride(pub, hoy)) is not None:
-            opciones.append((MOTIVO_EFEMERIDE, ef[0], _PESO_MOTIVO[MOTIVO_EFEMERIDE] + ef[1]))
+            opciones.append((MOTIVO_EFEMERIDE, ef[0], _PESO_MOTIVO[MOTIVO_EFEMERIDE] + ef[1], None))
         if (pe := _por_perenne(pub, hoy)) is not None:
-            opciones.append((MOTIVO_PERENNE, pe[0], _PESO_MOTIVO[MOTIVO_PERENNE] + pe[1]))
+            opciones.append((MOTIVO_PERENNE, pe[0], _PESO_MOTIVO[MOTIVO_PERENNE] + pe[1], None))
         if (re_ := _por_recurrente(pub, hoy, temas)) is not None:
             opciones.append(
-                (MOTIVO_RECURRENTE, re_[0], _PESO_MOTIVO[MOTIVO_RECURRENTE] + re_[1])
+                (MOTIVO_RECURRENTE, re_[0], _PESO_MOTIVO[MOTIVO_RECURRENTE] + re_[1], None)
             )
         if not opciones:
             continue
-        motivo, detalle, puntuacion = max(opciones, key=lambda o: o[2])
-        candidatas.append(_candidata(pub, motivo, detalle, puntuacion))
+        motivo, detalle, puntuacion, datos = max(opciones, key=lambda o: o[2])
+        candidatas.append(_candidata(pub, motivo, detalle, puntuacion, datos))
 
     candidatas.sort(key=lambda c: (-c["puntuacion"], c["titulo"]))
     return candidatas[: max(0, limite)]
@@ -326,6 +405,7 @@ def sugerencias_de_reciclaje(
     *,
     hoy: date | None = None,
     limite: int = MAX_CANDIDATAS,
+    rendimiento: Rendimiento | None = None,
 ) -> list[dict[str, Any]]:
     """Lista las candidatas leyendo el universo de C por su CONTRATO de lectura.
 
@@ -334,6 +414,15 @@ def sugerencias_de_reciclaje(
     (`dominio.publicaciones.listar_para_reciclaje`, ADR 0005 §Seams #2) y aplica encima
     su heurística. Así el cruce A→C pasa por un símbolo público de C, no por las tripas
     de C ni por una query ad-hoc en el router.
+
+    `rendimiento`: lookup de rendimiento real por pieza. Por defecto usa
+    `metricas_pieza.rendimiento` (lee Metricool, cacheado), de modo que el router NO
+    tiene que cablearlo; los tests pueden inyectar un stub puro. Se importa de forma
+    perezosa para no acoplar el dominio al módulo de métricas en tiempo de import.
     """
+    if rendimiento is None:
+        from .. import metricas_pieza
+
+        rendimiento = metricas_pieza.rendimiento
     universo = contrato_publicaciones.listar_para_reciclaje(marca=marca, red=red)
-    return candidatas_reciclaje(universo, hoy=hoy, limite=limite)
+    return candidatas_reciclaje(universo, hoy=hoy, limite=limite, rendimiento=rendimiento)
