@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ExternalLink,
   Film,
   Images,
   LayoutList,
   ListOrdered,
+  ListPlus,
+  Loader2,
   RefreshCw,
   ScrollText,
   Sparkles,
@@ -12,6 +14,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -219,6 +222,21 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
       .join("\n\n");
     navigate("/generacion", { state: { texto, modo: "copy" } });
   }
+
+  // Promueve el tema al tablero del CM como "importante del día" (origen Radar). El CM
+  // luego elige plataformas y responsable allí. Prioridad alta para los 3 primeros.
+  const llevarAlTablero = useMutation({
+    mutationFn: () =>
+      api.contenidoDesdeRadar({
+        titulo: item.titulo,
+        descripcion: [item.por_que, ...item.enlaces.map((e) => e.url)]
+          .filter(Boolean)
+          .join("\n"),
+        prioridad: item.orden <= 3 ? "alta" : "media",
+      }),
+    onSuccess: () => toast.success("Llevado al tablero (Importante del día)."),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
   return (
     <div className="flex gap-3 rounded-md border p-3">
       <div
@@ -283,10 +301,23 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
           </ul>
         )}
 
-        <div className="pt-1">
+        <div className="flex flex-wrap gap-2 pt-1">
           <Button variant="outline" size="sm" onClick={generarCopy}>
             <Sparkles className="h-3.5 w-3.5" />
             Generar copy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => llevarAlTablero.mutate()}
+            disabled={llevarAlTablero.isPending}
+          >
+            {llevarAlTablero.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ListPlus className="h-3.5 w-3.5" />
+            )}
+            Llevar al tablero
           </Button>
         </div>
       </div>
