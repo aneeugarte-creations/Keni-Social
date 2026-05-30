@@ -165,25 +165,28 @@ def test_cuentas_lista_marcas_configuradas():
     assert cuentas[0].plataformas == [Plataforma.instagram]
 
 
-# --- Degradación honesta sin token -----------------------------------------
+# --- Sin credenciales: fuente vacía, NO datos de muestra --------------------
 
 
-def test_sin_token_degrada_a_muestra():
-    """fuente='metricool' sin credenciales -> FuenteMuestra (no inventa dato real)."""
+def test_sin_token_no_muestra_datos_falsos():
+    """fuente='metricool' sin credenciales -> Metricool VACÍA (sin cuentas), no muestra."""
     cfg = Config(fuente="metricool", metricool=MetricoolConfig())  # sin marcas
     fuente = construir_fuente(cfg)
-    assert isinstance(fuente, FuenteMuestra)
-    assert fuente.nombre == "muestra"
+    assert isinstance(fuente, FuenteMetricol)
+    assert not isinstance(fuente, FuenteMuestra)
+    assert fuente.nombre == "metricool"
+    assert fuente.cuentas() == []  # estado vacío honesto, sin inventar cifras
 
 
-def test_marca_sin_credenciales_completas_degrada_a_muestra():
-    """Una marca sin token/user_id propios NI default => no configurada => muestra."""
+def test_marca_sin_credenciales_completas_queda_vacia():
+    """Una marca sin token/user_id propios NI default => no configurada => fuente vacía."""
     cfg = Config(
         fuente="metricool",
         metricool=MetricoolConfig(marcas={"claro_sports": {"blog_id": "1234567"}}),
     )
     fuente = construir_fuente(cfg)
-    assert isinstance(fuente, FuenteMuestra)
+    assert isinstance(fuente, FuenteMetricol)
+    assert fuente.cuentas() == []
 
 
 def test_con_credenciales_por_marca_construye_metricol():

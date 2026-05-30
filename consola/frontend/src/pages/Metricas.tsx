@@ -2,7 +2,6 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -68,11 +67,7 @@ export default function Metricas() {
 
 function CabeceraMetricas({ acciones }: { acciones?: React.ReactNode }) {
   return (
-    <PageHeader
-      titulo="Métricas"
-      descripcion="Visualizaciones, alcance e interacciones de tus marcas, con comparativas entre periodos."
-      acciones={acciones}
-    />
+    <PageHeader titulo="Métricas" acciones={acciones} />
   );
 }
 
@@ -143,16 +138,13 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
       ) : (
         <div className="space-y-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-sm text-muted-foreground">
-                Mostrando{" "}
-                <span className="font-medium text-foreground">
-                  {reporteQuery.data.marca || ETIQUETA_TODAS}
-                </span>{" "}
-                · {reporteQuery.data.etiqueta_rango}
-              </p>
-              <BadgeFuente fuente={reporteQuery.data.fuente} />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Mostrando{" "}
+              <span className="font-medium text-foreground">
+                {reporteQuery.data.marca || ETIQUETA_TODAS}
+              </span>{" "}
+              · {reporteQuery.data.etiqueta_rango}
+            </p>
             <Descargas rango={rango} marca={marca_} />
           </div>
 
@@ -163,7 +155,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <AnalisisDiario marcaActual={marca} rangoActual={rango} />
           <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
-          <TablaCuentas cuentas={reporteQuery.data.cuentas} fuente={reporteQuery.data.fuente} />
+          <TablaCuentas cuentas={reporteQuery.data.cuentas} />
           <PiezasAnalitica opciones={opciones} rangoActual={rango} />
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>

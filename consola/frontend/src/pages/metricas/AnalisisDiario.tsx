@@ -12,9 +12,8 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { BadgeDelta, type DeltaType } from "@tremor/react";
-import { AlertCircle, ArrowRight, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { AlertCircle, ArrowRight, RefreshCw, Sparkles } from "lucide-react";
 
-import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,15 +54,11 @@ export function AnalisisDiario({
 
   return (
     <Card>
-      <CardHeader className="gap-1 pb-4">
+      <CardHeader className="pb-4">
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
           <CardTitle className="text-base">Lectura del periodo</CardTitle>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Qué se movió y por qué, con la pieza que lo explica y el siguiente paso. La
-          decisión final de qué cambiar es del equipo.
-        </p>
       </CardHeader>
 
       <CardContent className="space-y-5">
@@ -91,32 +86,15 @@ function CuerpoAnalisis({ data }: { data: Analisis }) {
   const hayMovimientos = data.movimientos.length > 0;
   return (
     <>
-      {/* Aviso destacado de datos de muestra (issue #131): que no se confundan
-          cifras ficticias con reales. */}
-      {data.es_muestra && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
-          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            <strong>Datos de muestra — no son cifras reales.</strong> Esta lectura es una
-            demostración; no tomes decisiones con estos números. Conecta una fuente real
-            para leer el periodo de verdad.
-          </span>
-        </div>
-      )}
-
       {data.cobertura_parcial.length > 0 && (
         <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>
-            Cobertura parcial en {data.cobertura_parcial.join(", ")}: la lectura puede estar
-            incompleta (los ceros de una plataforma sin datos no son reales).
-          </span>
+          <span>Cobertura parcial en {data.cobertura_parcial.join(", ")}.</span>
         </div>
       )}
 
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         Periodo: <span className="font-medium text-foreground">{data.etiqueta_rango}</span>
-        <BadgeFuente fuente={data.fuente} className="ml-1" />
       </div>
 
       {/* Lo que se movió. */}

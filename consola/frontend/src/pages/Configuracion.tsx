@@ -1,9 +1,8 @@
 /**
  * Página de Ajustes (Configuración). Reúne en una sola pantalla:
- *   1. Fuente de datos (muestra / real).
- *   2. Alcance de marcas (qué marcas se incluyen).
- *   3. Métricas (Metricool) por marca: token + userId → descubrir blogId → guardar.
- *   4. Imagen con IA (clave del proveedor para «Generar con IA»).
+ *   1. Alcance de marcas (qué marcas se incluyen).
+ *   2. Métricas (Metricool) por marca: token + userId → descubrir blogId → guardar.
+ *   3. Imagen con IA (clave del proveedor para «Generar con IA»).
  *
  * Las métricas se consumen vía Metricool (ADR 0005 §B): la antigua sección "Redes
  * sociales" (tokens por plataforma para la ingesta propia) se retiró. La sección de
@@ -83,26 +82,8 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
 }
 
-/** Etiqueta legible por fuente de datos. */
-function etiquetaFuente(fuente: string): string {
-  if (fuente === "muestra") return "Datos de muestra";
-  if (fuente === "real") return "Datos reales";
-  return fuente;
-}
-
-/** Descripción de ayuda por fuente de datos. */
-function descripcionFuente(fuente: string): string {
-  if (fuente === "muestra") {
-    return "Usa datos de ejemplo. Ideal para probar la consola sin conectar credenciales.";
-  }
-  if (fuente === "real") {
-    return "Usa los datos reales de las plataformas conectadas.";
-  }
-  return "";
-}
-
 /* ------------------------------------------------------------------ */
-/* Sección: Fuente de datos + Alcance de marcas                       */
+/* Sección: Alcance de marcas                                         */
 /* ------------------------------------------------------------------ */
 
 /** Esqueleto de carga de la sección de datos/marcas. */
@@ -156,11 +137,11 @@ function SeccionDatos() {
     setMarcas((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
   }
 
-  // ¿Hay cambios respecto a lo guardado?
+  // ¿Hay cambios respecto a lo guardado? (solo el alcance de marcas es editable; la
+  // `fuente` es Metricool y ya no se elige desde la UI, viaja como passthrough.)
   const hayCambios =
     data !== undefined &&
-    (fuente !== data.fuente ||
-      marcas.length !== data.marcas.length ||
+    (marcas.length !== data.marcas.length ||
       marcas.some((m) => !data.marcas.includes(m)));
 
   if (isPending) return <EsqueletoConfig />;
@@ -178,45 +159,6 @@ function SeccionDatos() {
 
   return (
     <>
-      {/* Fuente de datos */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Fuente de datos</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 pt-0">
-          {data.fuentes_validas.map((f) => {
-            const seleccionada = fuente === f;
-            return (
-              <label
-                key={f}
-                className={cn(
-                  "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-                  seleccionada ? "border-primary bg-primary/5" : "border-border hover:bg-accent",
-                )}
-              >
-                <input
-                  type="radio"
-                  name="fuente"
-                  value={f}
-                  checked={seleccionada}
-                  onChange={() => setFuente(f)}
-                  disabled={guardar.isPending}
-                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
-                />
-                <span className="space-y-0.5">
-                  <span className="block text-sm font-medium">{etiquetaFuente(f)}</span>
-                  {descripcionFuente(f) && (
-                    <span className="block text-xs text-muted-foreground">
-                      {descripcionFuente(f)}
-                    </span>
-                  )}
-                </span>
-              </label>
-            );
-          })}
-        </CardContent>
-      </Card>
-
       {/* Alcance (marcas) */}
       <Card>
         <CardHeader className="pb-1">
@@ -264,7 +206,7 @@ function SeccionDatos() {
       <div className="flex items-center gap-3">
         <Button
           onClick={() => guardar.mutate()}
-          disabled={guardar.isPending || !hayCambios || fuente === ""}
+          disabled={guardar.isPending || !hayCambios}
         >
           <Save className={cn("h-4 w-4", guardar.isPending && "animate-pulse")} />
           {guardar.isPending ? "Guardando…" : "Guardar cambios"}
@@ -1066,7 +1008,7 @@ export default function Configuracion() {
     <>
       <PageHeader
         titulo="Configuración"
-        descripcion="Fuente de datos, marcas, Metricool y clave de imagen IA. Los secretos se guardan solo en esta máquina."
+        descripcion="Marcas, Metricool y clave de imagen IA. Los secretos se guardan solo en esta máquina."
         acciones={acciones}
       />
 

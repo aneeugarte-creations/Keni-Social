@@ -3,6 +3,7 @@ import { ChevronRight, Loader2, Menu, X } from "lucide-react";
 import * as React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
+import { FronteraError } from "@/components/comunes/FronteraError";
 import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -200,9 +201,14 @@ export function AppShell() {
         <main className={cn("flex-1 overflow-y-auto")}>
           {/* Contenido a ancho completo (estilo Vercel/edit-consola), no centrado. */}
           <div className="w-full px-6 py-6 lg:px-8">
-            <React.Suspense fallback={<CargandoPagina />}>
-              <Outlet />
-            </React.Suspense>
+            {/* Frontera de error por ruta: aísla un fallo de página (TypeError,
+                chunk lazy de un deploy nuevo) en vez de tumbar toda la app. La
+                `key` por pathname la remonta al navegar, limpiando el estado. */}
+            <FronteraError key={location.pathname}>
+              <React.Suspense fallback={<CargandoPagina />}>
+                <Outlet />
+              </React.Suspense>
+            </FronteraError>
           </div>
         </main>
       </div>

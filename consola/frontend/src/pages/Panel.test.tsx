@@ -82,11 +82,10 @@ describe("Panel (dashboard ligero)", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra el resumen de métricas con el badge de fuente de muestra", async () => {
+  it("muestra el resumen de métricas", async () => {
     stubFetch();
     renderConProviders(<Panel />);
     expect(await screen.findByText("Visualizaciones")).toBeInTheDocument();
-    expect(screen.getByText("Datos de muestra")).toBeInTheDocument();
   });
 
   it("cuenta las piezas que esperan revisión", async () => {

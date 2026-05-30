@@ -3,7 +3,6 @@ import { Download, Eye, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -265,9 +264,6 @@ function Previsualizacion({ rep }: { rep: ReporteDeportes }) {
           Vista previa — {rep.cuenta.nombre}
           {periodo ? ` (${periodo})` : ` (${rep.rango})`}
         </h3>
-        {/* Procedencia de los datos: muestra (ficticios) vs reales. Lectura
-            defensiva: si `fuente` falta no se afirma nada (#90/residuo Ola 2). */}
-        <BadgeFuente fuente={rep.fuente} />
       </div>
       <div className="grid gap-4 md:grid-cols-3">
         {rep.mejores_por_plataforma.map((b) => (

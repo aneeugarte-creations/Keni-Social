@@ -11,7 +11,6 @@ import { AreaChart } from "@tremor/react";
 import { LineChart as LineChartIcon } from "lucide-react";
 import * as React from "react";
 
-import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -73,7 +72,6 @@ export function TendenciaDiaria({
           <div className="flex items-center gap-2">
             <LineChartIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
             <CardTitle className="text-base">Tendencia diaria</CardTitle>
-            <BadgeFuente fuente={data?.fuente} className="ml-1" />
           </div>
           <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
             <SelectTrigger className="w-[170px]" aria-label="Métrica de la tendencia">
