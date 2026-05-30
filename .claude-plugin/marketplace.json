@@ -9,8 +9,8 @@
     {
       "name": "keni-social",
       "source": "./",
-      "description": "Skills de copy para redes (nota/cable/clip -> copy publicable, voz de marca, tropicalización mexicana, auto-verificación) y servidor MCP de métricas multi-marca para el equipo de AMX Contenido (UnoTV / Claro Sports).",
-      "version": "0.2.0",
+      "description": "Suite completa: skills de copy para redes (nota/cable/clip -> copy publicable, voz de marca, tropicalización mexicana, auto-verificación), MCP de métricas multi-marca (solo lectura) y MCP de tablero (crear/mover/listar contenido de la Consola) para el equipo de AMX Contenido (UnoTV / Claro Sports).",
+      "version": "0.3.0",
       "author": {
         "name": "Keni Engineering"
       },
@@ -22,7 +22,28 @@
         "redes-sociales",
         "copy",
         "metricas",
+        "tablero",
         "mcp",
+        "amx"
+      ]
+    },
+    {
+      "name": "keni-skills-editoriales",
+      "source": "./plugins/keni-skills-editoriales",
+      "description": "Solo las skills editoriales (sin MCPs): para equipos que quieren el copy publicable y el QA editorial de Keni sin la Consola ni las métricas.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Keni Engineering"
+      },
+      "homepage": "https://github.com/kenitech-io/keni-social",
+      "repository": "https://github.com/kenitech-io/keni-social",
+      "license": "Proprietary",
+      "category": "productivity",
+      "keywords": [
+        "redes-sociales",
+        "copy",
+        "editorial",
+        "skills",
         "amx"
       ]
     }

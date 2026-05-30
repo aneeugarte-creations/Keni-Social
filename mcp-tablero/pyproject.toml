@@ -1,0 +1,36 @@
+[project]
+name = "keni-tablero"
+version = "0.1.0"
+description = "Servidor MCP para CONTROLAR el tablero de contenido de la Consola Keni desde Claude Code (crear/mover/listar)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+authors = [{ name = "Keni Engineering" }]
+dependencies = [
+    "mcp>=1.2.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "respx>=0.21", "anyio>=4", "ruff>=0.6"]
+
+[project.scripts]
+keni-tablero = "keni_tablero.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/keni_tablero"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
