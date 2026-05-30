@@ -1215,6 +1215,100 @@ def ids_contenido_con_etiqueta(etiqueta_id: str) -> set[str]:
     return db.ids_contenido_con_etiqueta(etiqueta_id)
 
 
+# --------------------------------------------------------------------------- #
+# Ola COLABORACION: comentarios + versiones de copy + aprobacion multinivel    #
+# --------------------------------------------------------------------------- #
+# Tres familias APENDIDAS al tablero de contenido (Planable-style). La fachada solo
+# delega en `db.py`; la validacion y la logica de cadena viven en la API/dominio.
+
+
+def crear_comentario(
+    *,
+    contenido_id: str,
+    plataforma_id: str = "",
+    texto: str,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    return db.crear_comentario(
+        contenido_id=contenido_id,
+        plataforma_id=plataforma_id,
+        texto=texto,
+        autor=autor,
+    )
+
+
+def listar_comentarios(
+    contenido_id: str, plataforma_id: str | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_comentarios(contenido_id, plataforma_id)
+
+
+def obtener_comentario(comentario_id: str) -> dict[str, Any] | None:
+    return db.obtener_comentario(comentario_id)
+
+
+def actualizar_comentario(
+    comentario_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_comentario(comentario_id, campos)
+
+
+def borrar_comentario(comentario_id: str) -> bool:
+    return db.borrar_comentario(comentario_id)
+
+
+def registrar_copy_version(
+    *,
+    plataforma_id: str,
+    contenido_id: str,
+    copy: str,
+    autor: dict[str, str] | None = None,
+    nota: str = "",
+) -> dict[str, Any]:
+    return db.registrar_copy_version(
+        plataforma_id=plataforma_id,
+        contenido_id=contenido_id,
+        copy=copy,
+        autor=autor,
+        nota=nota,
+    )
+
+
+def listar_copy_versiones(plataforma_id: str) -> list[dict[str, Any]]:
+    return db.listar_copy_versiones(plataforma_id)
+
+
+def obtener_copy_version(version_id: str) -> dict[str, Any] | None:
+    return db.obtener_copy_version(version_id)
+
+
+def crear_cadena_aprobacion(
+    *,
+    plataforma_id: str,
+    contenido_id: str,
+    etiquetas: list[str],
+) -> list[dict[str, Any]]:
+    return db.crear_cadena_aprobacion(
+        plataforma_id=plataforma_id,
+        contenido_id=contenido_id,
+        etiquetas=etiquetas,
+    )
+
+
+def listar_aprobaciones(plataforma_id: str) -> list[dict[str, Any]]:
+    return db.listar_aprobaciones(plataforma_id)
+
+
+def obtener_aprobacion(aprobacion_id: str) -> dict[str, Any] | None:
+    return db.obtener_aprobacion(aprobacion_id)
+
+
+def actualizar_aprobacion(
+    aprobacion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_aprobacion(aprobacion_id, campos)
+
+
 def duplicar_evento_rota(
     evento_id: str,
     *,

@@ -10,6 +10,7 @@ import {
   Loader2,
   LayoutGrid,
   ListTodo,
+  MessageSquare,
   Plus,
   Rows3,
   Smartphone,
@@ -22,6 +23,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
@@ -567,6 +569,7 @@ function TarjetaContenido({
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
   const [asistenteAbierto, setAsistenteAbierto] = React.useState(false);
+  const [colaboracionAbierta, setColaboracionAbierta] = React.useState(false);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -672,6 +675,17 @@ function TarjetaContenido({
                 </Button>
               </Tooltip>
             )}
+            <Tooltip label="Colaboración (comentarios, versiones, aprobación)">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Colaboración"
+                className="text-muted-foreground"
+                onClick={() => setColaboracionAbierta(true)}
+              >
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            </Tooltip>
             <Tooltip label="Borrar">
               <Button
                 variant="ghost"
@@ -807,6 +821,11 @@ function TarjetaContenido({
           onAplicado={invalidar}
         />
       )}
+      <PanelColaboracion
+        contenido={contenido}
+        abierto={colaboracionAbierta}
+        onCerrar={() => setColaboracionAbierta(false)}
+      />
     </Card>
   );
 }
