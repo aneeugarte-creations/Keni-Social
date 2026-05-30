@@ -42,14 +42,22 @@ def test_fuente_real_por_env(monkeypatch, tmp_path):
 
 
 # --- T2.B: fuente `metricool` (consumidor de la API REST) --------------------
-def test_metricool_sin_credenciales_degrada_a_muestra(monkeypatch, tmp_path):
-    """fuente='metricool' sin token configurado -> degrada a `muestra`, sin romper."""
+def test_metricool_sin_credenciales_no_muestra_datos_falsos(monkeypatch, tmp_path):
+    """fuente='metricool' sin token -> fuente Metricool VACÍA (sin cuentas), no `muestra`.
+
+    El producto no debe mostrar datos de demostración: sin credenciales se ve un estado
+    vacío honesto (sin cuentas), nunca cifras inventadas.
+    """
+    from keni_metricas.fuentes.metricol import FuenteMetricol
+
     monkeypatch.delenv("METRICOOL_USER_TOKEN", raising=False)
     monkeypatch.delenv("METRICOOL_USER_ID", raising=False)
     _escribir_config(monkeypatch, tmp_path, 'fuente = "metricool"\n')
     fuente = construir_fuente(cargar_config())
-    assert isinstance(fuente, FuenteMuestra)
-    assert fuente.nombre == "muestra"
+    assert isinstance(fuente, FuenteMetricol)
+    assert fuente.nombre == "metricool"
+    assert not isinstance(fuente, FuenteMuestra)
+    assert fuente.cuentas() == []  # sin credenciales: ninguna cuenta, ningún dato
 
 
 def test_metricool_credenciales_por_toml(monkeypatch, tmp_path):

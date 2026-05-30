@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
@@ -133,12 +132,9 @@ export default function Panel() {
         <div className="space-y-6">
           {/* Resumen de métricas (reusa el camino de lectura de Métricas). */}
           <section className="space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-sm font-medium text-muted-foreground">
-                Rendimiento de la semana
-              </h3>
-              <BadgeFuente fuente={data.metricas.fuente} />
-            </div>
+            <h3 className="text-sm font-medium text-muted-foreground">
+              Rendimiento de la semana
+            </h3>
             {data.metricas.disponible && data.metricas.total ? (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <TarjetaKpi

@@ -15,7 +15,6 @@ import { BarChart } from "@tremor/react";
 import { BarChart3, ExternalLink } from "lucide-react";
 import * as React from "react";
 
-import { BadgeFuente } from "@/components/comunes/BadgeFuente";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -109,7 +108,6 @@ function ContenidoPiezas({ marca, rango }: { marca?: string; rango?: string }) {
         engagement={data.engagement}
         visualizaciones={data.visualizaciones}
         total={data.total}
-        fuente={data.fuente}
       />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -126,12 +124,10 @@ function TiraEstadisticas({
   engagement,
   visualizaciones,
   total,
-  fuente,
 }: {
   engagement: EstadisticasNumericas;
   visualizaciones: EstadisticasNumericas;
   total: number;
-  fuente: string;
 }) {
   return (
     <div className="space-y-3">
@@ -146,7 +142,6 @@ function TiraEstadisticas({
             {visualizaciones.media == null ? "—" : numeroCompacto(visualizaciones.media)}
           </span>
         </span>
-        <BadgeFuente fuente={fuente} className="ml-1" />
       </p>
       {/* Estadísticas de engagement: el indicador comparable entre piezas (#138). */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
