@@ -161,6 +161,27 @@ ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
 ENV_PUBLICAR_REAL = "KENI_PUBLICAR_REAL"
 ENV_CONSOLA_URL_PUBLICA = "KENI_CONSOLA_URL_PUBLICA"
 
+# Pre-aprobacion de piezas de BAJO RIESGO (fase3 auto-planificacion). Flag admin,
+# CONSERVADOR por defecto (OFF): cuando se activa, al crear la cadena de aprobacion de una
+# pieza de bajo riesgo (evergreen reutilizado sin cambios, o solo canal web/no-social) se
+# auto-aprueban los niveles INFERIORES de la cadena, dejando SIEMPRE el ultimo nivel a un
+# humano. Trazable: el decisor auto se sella como "auto". `KENI_AUTO_PREAPROBACION=1` lo
+# enciende; sin el (o falsy), la cadena nace toda `pendiente` como hasta ahora.
+ENV_AUTO_PREAPROBACION = "KENI_AUTO_PREAPROBACION"
+
+# Auto-promocion del Radar de tendencias a "lo importante del dia" (fase3 auto-planificacion).
+# `KENI_RADAR_AUTO=1` arranca el daemon que, cada N horas, promueve los temas que superan el
+# umbral de señal a contenido `flujo='importante'` (origen 'radar-auto'). CONSERVADOR por
+# defecto (OFF) y con umbral ALTO: nada llega al tablero sin superar la señal minima, y el
+# equipo siempre puede revisar/borrar. El endpoint `/api/radar/auto/*` permite revisar la
+# bandeja y ejecutar el batch a demanda independientemente del daemon.
+ENV_RADAR_AUTO = "KENI_RADAR_AUTO"
+ENV_RADAR_AUTO_UMBRAL = "KENI_RADAR_AUTO_UMBRAL"
+ENV_RADAR_AUTO_GEO = "KENI_RADAR_AUTO_GEO"
+ENV_RADAR_AUTO_INTERVALO_HORAS = "KENI_RADAR_AUTO_INTERVALO_HORAS"
+ENV_RADAR_AUTO_MAX = "KENI_RADAR_AUTO_MAX"
+ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -228,6 +249,13 @@ METRICAS_REFRESCO_HORAS_DEF = 4
 # Cadencia del barrido de eventos internos (vencimientos del tablero). 5 min basta: el
 # vencimiento es por DIA (`fecha_entrega`), no hace falta granularidad fina.
 EVENTOS_INTERVALO_SEGUNDOS_DEF = 300.0
+
+# Defaults de la auto-promocion del Radar (fase3). Umbral ALTO (solo lo muy viral entra
+# solo), intervalo holgado (no golpear Google Trends), pocos temas por barrido (no inundar).
+RADAR_AUTO_UMBRAL_DEF = 50_000
+RADAR_AUTO_GEO_DEF = "MX"
+RADAR_AUTO_INTERVALO_HORAS_DEF = 6
+RADAR_AUTO_MAX_DEF = 3
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -603,6 +631,64 @@ def publicar_real() -> bool:
     programado a Metricool cuando vence la fecha.
     """
     return _crudo(ENV_PUBLICAR_REAL).lower() in _VERDADEROS
+
+
+def auto_preaprobacion() -> bool:
+    """True si la pre-aprobacion de piezas de bajo riesgo esta activa (`KENI_AUTO_PREAPROBACION`).
+
+    Def OFF (False, conservador): la cadena de aprobacion nace toda `pendiente`. Con el flag
+    a un valor afirmativo, al crear la cadena de una pieza de bajo riesgo se auto-aprueban
+    los niveles inferiores (nunca el ultimo, que queda a un humano). Trazable como "auto".
+    """
+    return _crudo(ENV_AUTO_PREAPROBACION).lower() in _VERDADEROS
+
+
+def radar_auto_activo() -> bool:
+    """True si el daemon de auto-promocion del Radar debe arrancar (`KENI_RADAR_AUTO`).
+
+    Def OFF (conservador): el Radar solo propone (la promocion la decide el equipo). Con el
+    flag a un valor afirmativo, un hilo demonio promueve periodicamente los temas que superan
+    el umbral de señal a `flujo='importante'` (origen 'radar-auto'), revisable en el tablero.
+    """
+    return _crudo(ENV_RADAR_AUTO).lower() in _VERDADEROS
+
+
+def radar_auto_umbral() -> int:
+    """Umbral MINIMO de señal (`senal` del tema) para auto-promover (`KENI_RADAR_AUTO_UMBRAL`).
+
+    Def ALTO (50000) a proposito: solo lo MUY viral entra solo. Min 1 (un umbral <=0 no tiene
+    sentido: promoveria cualquier cosa). La `senal` es el trafico aproximado de Google Trends
+    (ver `radar.traduce_trafico`): 50K+ es una tendencia fuerte de verdad.
+    """
+    return _entero(ENV_RADAR_AUTO_UMBRAL, RADAR_AUTO_UMBRAL_DEF, minimo=1)
+
+
+def radar_auto_geo() -> str:
+    """Geo del Radar para la auto-promocion (`KENI_RADAR_AUTO_GEO`, def MX, mayusculas)."""
+    return _crudo(ENV_RADAR_AUTO_GEO).upper() or RADAR_AUTO_GEO_DEF
+
+
+def radar_auto_intervalo_horas() -> int:
+    """Cada cuantas horas barre el daemon del Radar (`KENI_RADAR_AUTO_INTERVALO_HORAS`, def 6, min 1)."""
+    return _entero(ENV_RADAR_AUTO_INTERVALO_HORAS, RADAR_AUTO_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def radar_auto_max() -> int:
+    """Maximo de temas a auto-promover por barrido (`KENI_RADAR_AUTO_MAX`, def 3, min 1).
+
+    Cota de seguridad: aunque muchos temas superen el umbral, no inundamos el tablero; se
+    promueven los N de MAYOR señal por barrido.
+    """
+    return _entero(ENV_RADAR_AUTO_MAX, RADAR_AUTO_MAX_DEF, minimo=1)
+
+
+def radar_auto_marca() -> str:
+    """Marca (id canonico) a asignar a las piezas auto-promovidas (`KENI_RADAR_AUTO_MARCA`).
+
+    "" (def) = sin marca (el equipo la asigna luego). Si se fija una marca invalida, el
+    llamante la ignora (cae a sin marca): no se confia ciegamente del entorno.
+    """
+    return _crudo(ENV_RADAR_AUTO_MARCA)
 
 
 def consola_url_publica() -> str | None:

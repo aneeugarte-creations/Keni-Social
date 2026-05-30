@@ -55,6 +55,10 @@ import type {
   CuerpoCrearEtiqueta,
   CuerpoCrearTarea,
   CuerpoDesdeRadar,
+  CuerpoSugerirHora,
+  RespuestaSugerirHora,
+  RespuestaBandejaRadarAuto,
+  RespuestaEjecutarRadarAuto,
   CuerpoCrearEventoRota,
   CuerpoCrearPiezaRota,
   CuerpoDuplicarPublicacion,
@@ -995,6 +999,14 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+  // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).
+  sugerirHora: (cuerpo: CuerpoSugerirHora) =>
+    peticion<RespuestaSugerirHora>("/planificacion/sugerir-hora", { metodo: "POST", json: cuerpo }),
+  // Fase3 auto-planificación: bandeja revisable + ejecución de la auto-promoción del Radar.
+  bandejaRadarAuto: (signal?: AbortSignal) =>
+    peticion<RespuestaBandejaRadarAuto>("/radar/auto/bandeja", { signal }),
+  ejecutarRadarAuto: () =>
+    peticion<RespuestaEjecutarRadarAuto>("/radar/auto/ejecutar", { metodo: "POST" }),
   asignarEtiquetaContenido: (contenidoId: string, etiqueta_id: string) =>
     peticion<RespuestaEtiquetasContenido>(
       `/contenido/${encodeURIComponent(contenidoId)}/etiquetas`,
