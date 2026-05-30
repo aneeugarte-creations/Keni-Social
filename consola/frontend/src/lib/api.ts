@@ -277,7 +277,17 @@ async function infoDeError(
   }
   try {
     const texto = (await res.text()).trim();
-    if (texto) return { mensaje: texto, cuerpo: null };
+    // Si el back está caído/reiniciando, la petición a /api puede caer al nginx del
+    // front, que responde una página HTML (p. ej. "405 Not Allowed"). No volcamos ese
+    // HTML crudo en la UI: damos un mensaje legible. Igual para 502/503/504 del proxy.
+    const pareceHtml = texto.startsWith("<");
+    if (texto && !pareceHtml) return { mensaje: texto, cuerpo: null };
+    if (pareceHtml || res.status === 405 || (res.status >= 502 && res.status <= 504)) {
+      return {
+        mensaje: "La consola no está disponible ahora mismo. Espera unos segundos y vuelve a intentarlo.",
+        cuerpo: null,
+      };
+    }
   } catch {
     // Sin cuerpo legible.
   }

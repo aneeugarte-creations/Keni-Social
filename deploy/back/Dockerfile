@@ -57,9 +57,13 @@ USER keni
 EXPOSE 8765
 VOLUME ["/data"]
 
-# GET / no exige token (sirve el SPA/placeholder): vale como healthcheck.
+# Liveness por /healthz: 200 JSON barato, sin token ni BD, y SIN pasar por el
+# servido del SPA. Antes pegabamos a `/` (FileResponse + todo el middleware): bajo
+# carga del unico worker uvicorn podia tardar y fallar el chequeo, marcando el
+# contenedor "unhealthy". Como Traefik NO enruta a contenedores no-sanos, eso tiraba
+# el router `back` y los POST /api caian al nginx del front -> "405 Not Allowed".
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS http://localhost:8765/ >/dev/null || exit 1
+  CMD curl -fsS http://localhost:8765/healthz >/dev/null || exit 1
 
 # --factory: `crear_app()` resuelve token (KENI_CONSOLA_TOKEN) y bootstrapea el
 #   admin (#130) desde env. Bind 0.0.0.0 es seguro: el contenedor NO publica
