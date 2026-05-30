@@ -1285,6 +1285,68 @@ export interface CuerpoDesdeRadar {
   descripcion?: string;
 }
 
+// --- Fase3 auto-planificación: sugerencia de hora + auto-promoción del Radar ---
+
+/** `POST /api/planificacion/sugerir-hora`: pide la mejor fecha-hora para una marca/red. */
+export interface CuerpoSugerirHora {
+  /** Id canónico de la marca (slug-guion, como en el tablero). */
+  marca: string;
+  /** Red canónica (p. ej. "x", "instagram"). */
+  red: string;
+  /** Periodo del histórico a considerar (def "mes"). */
+  rango?: string;
+}
+
+/** Una sugerencia de fecha-hora óptima de publicación (`dominio.planificacion.Sugerencia`). */
+export interface SugerenciaHora {
+  /** Fecha-hora propuesta, ISO 'YYYY-MM-DDTHH:MM' (lo que entiende el programador). */
+  fecha: string;
+  /** Peso histórico del día de la semana de esa fecha (0 si no hay histórico). */
+  score: number;
+  /** Por qué se eligió, en español (día que más rinde / próximo hueco libre). */
+  motivo: string;
+  /** `true` si está respaldada por el histórico; `false` si es mero "próximo hueco". */
+  con_historico: boolean;
+}
+
+/** Respuesta de `POST /api/planificacion/sugerir-hora`. */
+export interface RespuestaSugerirHora {
+  /** La sugerencia, o `null` si no hay franjas/huecos (entonces `motivo` lo explica). */
+  sugerencia: SugerenciaHora | null;
+  /** Motivo cuando no hay sugerencia ("" si sí la hay). */
+  motivo: string;
+}
+
+/** Config viva de la auto-promoción del Radar (espejo de `radar_auto`/`config`). */
+export interface ConfigRadarAuto {
+  /** `true` si el daemon está activo (`KENI_RADAR_AUTO`). */
+  activo: boolean;
+  /** Umbral mínimo de señal para auto-promover. */
+  umbral: number;
+  /** Geo del Radar (id ISO, p. ej. "MX"). */
+  geo: string;
+  /** Máximo de temas a promover por barrido. */
+  max_por_barrido: number;
+  /** Cada cuántas horas barre el daemon. */
+  intervalo_horas: number;
+  /** Marca (id canónico) asignada a las piezas auto-promovidas ("" = sin marca). */
+  marca: string;
+}
+
+/** Respuesta de `GET /api/radar/auto/bandeja`: temas que se promoverían ahora. */
+export interface RespuestaBandejaRadarAuto {
+  config: ConfigRadarAuto;
+  /** Temas que superarían el umbral y entrarían (sin escribir nada). */
+  temas: TemaRadar[];
+  total: number;
+}
+
+/** Respuesta de `POST /api/radar/auto/ejecutar`: piezas promovidas a "importante". */
+export interface RespuestaEjecutarRadarAuto {
+  promovidos: Contenido[];
+  total: number;
+}
+
 // --- Webhooks salientes + eventos internos del tablero ---
 
 /** Tipos de evento interno que un webhook puede escuchar (espejo de `dominio/eventos.TIPOS_EVENTO`). */

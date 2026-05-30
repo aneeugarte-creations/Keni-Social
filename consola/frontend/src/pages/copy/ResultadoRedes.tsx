@@ -11,6 +11,7 @@ import {
   Loader2,
   Pencil,
   Save,
+  Sparkles,
   Sprout,
   Trash2,
 } from "lucide-react";
@@ -201,6 +202,23 @@ function PanelPublicacion({
         setFechaLocal(isoADatetimeLocal(fecha));
       }
       toast.success("Publicación añadida a la cola", { description: <EnlacePublicaciones /> });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Fase3 auto-planificación: "Sugerir mejor hora". Pide al backend el mejor hueco según el
+  // histórico de engagement (Metricool) + las franjas libres, y lo aplica con 1 clic (pone el
+  // estado en "programado" y rellena la fecha). No programa por sí solo: deja al usuario guardar.
+  const sugerirHora = useMutation({
+    mutationFn: () => api.sugerirHora({ marca: publicacion.marca, red }),
+    onSuccess: (res) => {
+      if (!res.sugerencia) {
+        toast.info(res.motivo || "No hay una mejor hora sugerible para esta marca/red.");
+        return;
+      }
+      setEstado("programado");
+      setFechaLocal(isoADatetimeLocal(res.sugerencia.fecha));
+      toast.success("Mejor hora sugerida", { description: res.sugerencia.motivo });
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -396,6 +414,20 @@ function PanelPublicacion({
             <CalendarPlus className="h-4 w-4" />
           )}
           Programar/Encolar
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => sugerirHora.mutate()}
+          disabled={sugerirHora.isPending}
+          title="Sugerir la mejor hora según el histórico de engagement y las franjas libres"
+        >
+          {sugerirHora.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          Sugerir mejor hora
         </Button>
         <Button variant="outline" size="sm" onClick={() => void copiar()}>
           {copiado ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}

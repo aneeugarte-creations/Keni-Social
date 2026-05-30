@@ -37,7 +37,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import repos
+from .. import config, repos
 from .._http_json import leer_json
 from ..dominio import colaboracion
 from ..estados import CADENA_APROBACION_DEFECTO, ROL_ADMIN
@@ -296,7 +296,36 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
         contenido_id=plat.get("contenido_id", ""),
         etiquetas=etiquetas,
     )
+    # --- fase3 (auto-planificacion): PRE-APROBACION de piezas de bajo riesgo -----------
+    # Gateado por flag admin (def OFF). Si esta activo Y la pieza es de bajo riesgo
+    # (evergreen reutilizado sin cambios, o solo canal web/no-social), auto-aprueba los
+    # niveles INFERIORES de la cadena recien creada, dejando el ULTIMO a un humano. Trazable
+    # (decisor "auto"). Si todo lo demas queda aprobado, la cadena solo espera el nivel final.
+    _aplicar_preaprobacion_bajo_riesgo(plataforma_id, plat)
+    # --- fin fase3 ----------------------------------------------------------------------
     return JSONResponse(_cadena_publica(plataforma_id), status_code=201)
+
+
+def _aplicar_preaprobacion_bajo_riesgo(
+    plataforma_id: str, plat: dict[str, object]
+) -> None:
+    """Auto-aprueba los niveles inferiores si la pieza es de bajo riesgo y el flag esta ON.
+
+    Best-effort y SIN tocar el contrato de aprobacion: reutiliza la MISMA escritura de nivel
+    (`repos.actualizar_aprobacion`) que una decision manual, solo que con el decisor reservado
+    AUTO. El ultimo nivel NUNCA se auto-aprueba (la logica pura lo garantiza), asi que la pieza
+    jamas queda totalmente aprobada por la maquina: siempre espera al humano final.
+    """
+    if not config.auto_preaprobacion():
+        return
+    contenido = repos.obtener_contenido(plat.get("contenido_id", "") or "")
+    if not colaboracion.es_pieza_bajo_riesgo(plat, contenido):
+        return
+    cadena = repos.listar_aprobaciones(plataforma_id)
+    for nivel_id, campos in colaboracion.autoaprobaciones_iniciales(
+        cadena, activa=True, bajo_riesgo=True
+    ):
+        repos.actualizar_aprobacion(nivel_id, campos)
 
 
 async def decidir_nivel(request: Request) -> Response:

@@ -160,6 +160,15 @@ def main() -> int:
 
         iniciar_worker_inproceso()
 
+    # Auto-promocion del Radar (fase3 auto-planificacion): un hilo demonio que, si
+    # `KENI_RADAR_AUTO` esta activo (def OFF), promueve cada N horas los temas del Radar que
+    # superan el umbral de señal a contenido `flujo='importante'` (revisable en el tablero).
+    # SAFE BY DEFAULT: sin el flag no arranca (el Radar sigue siendo solo-propone). Vive aqui
+    # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
+    from .radar_auto import iniciar_radar_auto
+
+    iniciar_radar_auto()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

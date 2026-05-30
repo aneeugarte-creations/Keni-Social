@@ -149,3 +149,97 @@ def decidir(
         },
         None,
     )
+
+
+# --------------------------------------------------------------------------- #
+# Fase3 (auto-planificacion): PRE-APROBACION de piezas de BAJO RIESGO          #
+# --------------------------------------------------------------------------- #
+#
+# "El equipo solo crea piezas; la operativa es automatica": para piezas de BAJO RIESGO no
+# deberia hacer falta que un humano pulse "aprobar" en CADA nivel de la cadena. Esta logica
+# PURA decide que niveles se pueden auto-aprobar al CREAR la cadena, dejando SIEMPRE el
+# ULTIMO nivel a una decision humana (el "par de ojos" final no se salta nunca).
+#
+# CONSERVADOR Y GATEADO: solo aplica si el llamante pasa `activa=True` (flag admin
+# `KENI_AUTO_PREAPROBACION`, def OFF) Y la pieza es de bajo riesgo. Si no, no auto-aprueba
+# nada (todos los niveles nacen `pendiente`, comportamiento de siempre). TRAZABLE: el decisor
+# auto se sella con un id/nombre reservado ("auto") para que la UI distinga lo automatico.
+
+# Identidad reservada del decisor AUTOMATICO (trazabilidad: la UI puede pintarlo distinto).
+DECISOR_AUTO_ID = "auto"
+DECISOR_AUTO_NOMBRE = "Pre-aprobación automática"
+
+
+def es_pieza_bajo_riesgo(
+    plataforma: dict[str, Any] | None, contenido: dict[str, Any] | None
+) -> bool:
+    """True si una pieza es de BAJO RIESGO para la pre-aprobacion (PURA, sin efectos).
+
+    Dos casos CONSERVADORES (ambos editorialmente seguros):
+      1. SOLO canal web / NO-social: la fila por plataforma es del canal "web" (la nota en el
+         sitio), que NO entra en las redes sociales (Metricool) ni en las skills de copy. Un
+         error aqui no llega a una red social.
+      2. EVERGREEN REUTILIZADO SIN CAMBIOS: el contenido padre es `flujo='evergreen'` (always-on,
+         ya validado en su dia) y la fila NO tiene copy nuevo pendiente (`falta_copy` es falso),
+         es decir, se reutiliza tal cual sin reescritura.
+
+    Cualquier otra pieza (importante del dia, evento, copy nuevo en una red social) NO es de
+    bajo riesgo: devuelve False y la cadena se decide a mano como siempre.
+    """
+    plataforma = plataforma or {}
+    contenido = contenido or {}
+
+    red = (plataforma.get("red") or "").strip().lower()
+    # Caso 1: canal web (no-social). El unico canal del tablero que no es una red social.
+    if red == "web":
+        return True
+
+    # Caso 2: evergreen reutilizado sin copy nuevo pendiente.
+    flujo = (contenido.get("flujo") or "").strip().lower()
+    falta_copy = bool(plataforma.get("falta_copy", False))
+    return flujo == "evergreen" and not falta_copy
+
+
+def autoaprobaciones_iniciales(
+    cadena: list[dict[str, Any]],
+    *,
+    activa: bool,
+    bajo_riesgo: bool,
+) -> list[tuple[str, dict[str, Any]]]:
+    """Niveles a auto-aprobar al CREAR la cadena de una pieza de bajo riesgo (PURA).
+
+    Devuelve una lista de `(nivel_id, campos)` con los niveles que deben quedar `aprobado`
+    automaticamente, en ORDEN. Reglas (todas conservadoras):
+      - Si `activa` es False o `bajo_riesgo` es False -> lista VACIA (no se auto-aprueba nada).
+      - El ULTIMO nivel NUNCA se auto-aprueba: la decision final siempre es humana. Por eso
+        una cadena de 1 SOLO nivel tampoco se toca (su unico nivel ES el final).
+      - Se auto-aprueban TODOS los niveles MENOS el ultimo, por orden ascendente de `nivel`.
+
+    `campos` son los mismos que escribiria una decision manual (decision/decisor/comentario/
+    sello), pero con el decisor reservado AUTO para que quede TRAZA de que fue automatico.
+    El llamante (api/colaboracion) los aplica con `repos.actualizar_aprobacion`.
+    """
+    if not activa or not bajo_riesgo:
+        return []
+    ordenada = sorted(cadena, key=lambda n: n.get("nivel", 0))
+    if len(ordenada) <= 1:
+        return []  # un solo nivel = el final; no se salta el ultimo par de ojos
+    sello = _ahora_iso()
+    decididos: list[tuple[str, dict[str, Any]]] = []
+    for nivel in ordenada[:-1]:  # todos menos el ultimo
+        nivel_id = nivel.get("id", "")
+        if not nivel_id:
+            continue
+        decididos.append(
+            (
+                nivel_id,
+                {
+                    "decision": DECISION_APROBADO,
+                    "decisor_id": DECISOR_AUTO_ID,
+                    "decisor_nombre": DECISOR_AUTO_NOMBRE,
+                    "comentario": "Pre-aprobado automáticamente (pieza de bajo riesgo).",
+                    "decidido_en": sello,
+                },
+            )
+        )
+    return decididos
