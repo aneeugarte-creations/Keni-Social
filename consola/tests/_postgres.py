@@ -94,12 +94,21 @@ def limpiar_postgres(url: str) -> None:
     """
     import psycopg
 
+    # UN solo TRUNCATE multi-tabla (Postgres lo permite) en vez de N round-trips: esta
+    # funcion corre 2x por test sobre ~1000 tests, asi que pasar de ~30 sentencias a 1
+    # recorta el coste dominante de la suite en CI. Fallback per-tabla SOLO en el primer
+    # uso, cuando aun no existe el esquema (un TRUNCATE batch falla entero si una tabla no
+    # existe; el loop tolerante lo absorbe). Tras ese primer uso siempre va el camino rapido.
+    lista = ", ".join(_TABLAS)
     with psycopg.connect(url, autocommit=True) as con:
-        for tabla in _TABLAS:
-            try:
-                con.execute(f"TRUNCATE TABLE {tabla} CASCADE")  # noqa: S608 -- allowlist fija
-            except psycopg.errors.UndefinedTable:
-                pass
+        try:
+            con.execute(f"TRUNCATE TABLE {lista} CASCADE")  # noqa: S608 -- allowlist fija
+        except psycopg.errors.UndefinedTable:
+            for tabla in _TABLAS:
+                try:
+                    con.execute(f"TRUNCATE TABLE {tabla} CASCADE")  # noqa: S608 -- allowlist fija
+                except psycopg.errors.UndefinedTable:
+                    pass
 
 
 @pytest.fixture

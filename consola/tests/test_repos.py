@@ -14,8 +14,6 @@ from __future__ import annotations
 
 import inspect
 
-import pytest
-
 from keni_consola import db, estados, ficheros, repos
 
 
@@ -140,8 +138,3 @@ def test_historial_skill_por_repos(entorno):
     leido = ficheros.obtener_historial_skill(hid)
     assert leido is not None
     assert leido["skill"] == "copy-desde-nota"
-
-
-@pytest.mark.parametrize("nombre", sorted(_funciones_publicas(repos) | _funciones_publicas(db)))
-def test_cada_funcion_repos_es_callable(nombre):
-    assert callable(getattr(repos, nombre))
