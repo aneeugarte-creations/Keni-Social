@@ -176,7 +176,7 @@ export default function Panel() {
                   Cola de aprobación
                 </CardTitle>
                 <Button asChild variant="ghost" size="sm">
-                  <Link to="/publicaciones">Ver todo</Link>
+                  <Link to="/parrilla/pendientes">Ver todo</Link>
                 </Button>
               </CardHeader>
               <CardContent>
@@ -245,10 +245,10 @@ export default function Panel() {
                 <EstadoVacio
                   icono={CalendarClock}
                   titulo="Nada programado todavía"
-                  texto="Aprueba una pieza y prográmala desde Publicaciones."
+                  texto="Aprueba una pieza y prográmala desde el tablero."
                   accion={
                     <Button asChild variant="outline" size="sm">
-                      <Link to="/publicaciones">Ir a Publicaciones</Link>
+                      <Link to="/parrilla/pendientes">Ir al tablero</Link>
                     </Button>
                   }
                 />

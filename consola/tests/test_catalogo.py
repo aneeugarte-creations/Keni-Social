@@ -20,7 +20,9 @@ from keni_consola.apps import registro
 _SIDEBAR_HOY = [
     ["Panel"],
     ["Generación", "Investigación", "Revisión", "Analíticas"],
-    ["Publicaciones", "Parrilla", "Skills", "Agentes", "Activos"],
+    # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
+    # tablero (Parrilla) es la superficie única de contenido.
+    ["Parrilla", "Skills", "Agentes", "Activos"],
 ]
 
 
@@ -60,7 +62,7 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # La ruta primaria (primer item) de cada app es la esperada.
     assert porid["produccion"]["nav"][0]["ruta"] == "/generacion"
     assert porid["metricas"]["nav"][0]["ruta"] == "/analiticas"
-    assert porid["operacion"]["nav"][0]["ruta"] == "/publicaciones"
+    assert porid["operacion"]["nav"][0]["ruta"] == "/parrilla"
 
 
 def test_catalogo_reproduce_el_sidebar_de_hoy():
@@ -79,7 +81,6 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/investigacion"] == "Search"
     assert iconos["/revision"] == "ShieldCheck"
     assert iconos["/analiticas"] == "BarChart3"
-    assert iconos["/publicaciones"] == "Send"
     assert iconos["/parrilla"] == "CalendarClock"
     assert iconos["/skills"] == "Wand2"
     assert iconos["/agentes"] == "Bot"
@@ -94,7 +95,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/analiticas" not in rutas
     # Las demás siguen.
-    assert "/generacion" in rutas and "/publicaciones" in rutas and "/panel" in rutas
+    assert "/generacion" in rutas and "/parrilla" in rutas and "/panel" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():

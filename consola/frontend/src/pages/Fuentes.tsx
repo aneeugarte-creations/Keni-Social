@@ -912,7 +912,7 @@ function DialogoGenerar({
         n > 0
           ? `Generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
           : "Copy generado",
-        { action: { label: "Ver publicaciones", onClick: () => navigate("/publicaciones") } },
+        { action: { label: "Ver en el tablero", onClick: () => navigate("/parrilla/pendientes") } },
       );
       void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
@@ -982,9 +982,9 @@ function DialogoGenerar({
             <ProgresoGeneracion generacion={generacion} />
           )}
           <p className="text-xs text-muted-foreground">
-            Se crea un borrador por red en{" "}
-            <Link to="/publicaciones" className="underline hover:text-foreground">
-              Publicaciones
+            Se crea un borrador por red en el{" "}
+            <Link to="/parrilla/pendientes" className="underline hover:text-foreground">
+              tablero
             </Link>{" "}
             y la noticia queda marcada como usada.
           </p>

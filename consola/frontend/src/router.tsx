@@ -9,7 +9,6 @@ import { AppShell } from "@/components/layout/AppShell";
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
 const Generacion = lazy(() => import("@/pages/Generacion"));
-const Publicaciones = lazy(() => import("@/pages/Publicaciones"));
 const Skills = lazy(() => import("@/pages/Skills"));
 
 // Hubs (layouts con tabs internos) y sus subpaginas.
@@ -66,7 +65,6 @@ export const router = createBrowserRouter([
       // Diario
       { path: "panel", element: <Panel /> },
       { path: "generacion", element: <Generacion /> },
-      { path: "publicaciones", element: <Publicaciones /> },
       { path: "skills", element: <Skills /> },
 
       // Hub Investigación
@@ -162,6 +160,9 @@ export const router = createBrowserRouter([
       { path: "reporte-deportes", element: <Navigate to="/analiticas/reporte-deportes" replace /> },
       { path: "tareas", element: <Navigate to="/parrilla/pendientes" replace /> },
       { path: "rota", element: <Navigate to="/parrilla/calendario" replace /> },
+      // Publicaciones se FUSIONÓ en el tablero (#fase2): el tablero es la superficie
+      // única de contenido (modos Tablero/Publicaciones/Calendario).
+      { path: "publicaciones", element: <Navigate to="/parrilla/pendientes" replace /> },
       { path: "monitor", element: <Navigate to="/agentes/actividad" replace /> },
       // Fusiones anteriores (mantener compatibilidad):
       { path: "generar-copy", element: <Navigate to="/generacion" replace /> },

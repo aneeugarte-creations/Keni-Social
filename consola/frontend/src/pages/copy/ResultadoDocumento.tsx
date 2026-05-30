@@ -34,11 +34,11 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-/** Enlace de éxito a Publicaciones que se muestra en el toast. */
+/** Enlace de éxito al tablero (modo Publicaciones) que se muestra en el toast. */
 function EnlacePublicaciones() {
   return (
-    <Link to="/publicaciones" className="inline-flex items-center gap-1 underline">
-      Ver en Publicaciones
+    <Link to="/parrilla/pendientes" className="inline-flex items-center gap-1 underline">
+      Ver en el tablero
       <ExternalLink className="h-3 w-3" />
     </Link>
   );

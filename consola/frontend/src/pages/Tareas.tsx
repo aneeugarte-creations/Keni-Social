@@ -1,11 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import {
   BarChart3,
   CalendarClock,
+  CalendarDays,
   Check,
   ChevronDown,
   ClipboardList,
   Eye,
+  FileText,
+  Hash,
   Heart,
   Loader2,
   LayoutGrid,
@@ -13,6 +17,7 @@ import {
   MessageSquare,
   Plus,
   Rows3,
+  Send,
   Smartphone,
   Sparkles,
   Tag,
@@ -20,6 +25,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
+import { Link, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
@@ -50,11 +56,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { limiteRed } from "@/pages/publicaciones/meta";
+import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
+import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
+import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
+import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
+import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
+import { VistaLista } from "@/pages/publicaciones/VistaLista";
+import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
+import { FILTRO_TODOS, FiltrosPublicaciones } from "@/pages/publicaciones/Filtros";
+import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { cn } from "@/lib/utils";
 import type {
   CatalogosContenido,
@@ -65,7 +81,10 @@ import type {
   EtiquetaCatalogo,
   MetricaPieza,
   ModoAsistenteContenido,
+  OpcionesPublicaciones,
   PiezaGenerada,
+  Publicacion,
+  RespuestaContenido,
   VariableCopy,
 } from "@/types";
 
@@ -92,8 +111,23 @@ const WORKSPACE_TODAS = "__todas__";
 /** localStorage: workspace (marca) activo + vista del tablero, para que sobrevivan al refresco. */
 const CLAVE_WORKSPACE = "keni.tablero.workspace";
 const CLAVE_VISTA = "keni.tablero.vista";
+const CLAVE_MODO = "keni.tablero.modo";
 
+/** Densidad de la sección del tablero: lista / cuadrícula / feed. */
 type Vista = "lista" | "grid" | "feed";
+
+/**
+ * MODO del tablero (superficie única de contenido, #fase2):
+ *   - `tablero`: el contenido del día por flujo (importante/evergreen/evento) + tareas.
+ *   - `publicaciones`: las PUBLICACIONES (es_publicacion) en lista, con su gestión completa.
+ *   - `calendario`: las publicaciones PROGRAMADAS en una rejilla mensual.
+ *
+ * Las publicaciones y el contenido del tablero comparten el MISMO dato (una publicación es
+ * una fila `contenido_plataforma` con `es_publicacion=1`). El modo solo cambia la lente:
+ * `tablero` lee `/api/contenido`; `publicaciones`/`calendario` leen `/api/publicaciones`
+ * (misma BD, forma `Publicacion` con su editor rico ya existente).
+ */
+type Modo = "tablero" | "publicaciones" | "calendario";
 
 /** Secciones del tablero por flujo (el orden manda en pantalla). */
 const SECCIONES: { flujo: Contenido["flujo"]; titulo: string }[] = [
@@ -176,14 +210,27 @@ export default function Tablero() {
   });
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
   const [gestionEtiquetas, setGestionEtiquetas] = React.useState(false);
+  const [gestionFranjas, setGestionFranjas] = React.useState(false);
+  const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [filtroResponsable, setFiltroResponsable] = React.useState(TODOS);
   const [filtroEtiqueta, setFiltroEtiqueta] = React.useState(TODOS);
-  const [workspace, setWorkspace] = React.useState<string>(() =>
-    leerLS(CLAVE_WORKSPACE, WORKSPACE_TODAS),
-  );
+  // Deep-link opcional: `?marca=` fija el workspace y `?modo=` el modo (lo usa, p.ej.,
+  // la pestaña Contenido de un agente para abrir el tablero ya filtrado por esa marca).
+  const location = useLocation();
+  const [workspace, setWorkspace] = React.useState<string>(() => {
+    const desdeUrl = new URLSearchParams(location.search).get("marca");
+    return desdeUrl || leerLS(CLAVE_WORKSPACE, WORKSPACE_TODAS);
+  });
   const [vista, setVista] = React.useState<Vista>(
     () => leerLS(CLAVE_VISTA, "lista") as Vista,
   );
+  const [modo, setModo] = React.useState<Modo>(() => {
+    const desdeUrl = new URLSearchParams(location.search).get("modo");
+    if (desdeUrl === "publicaciones" || desdeUrl === "calendario" || desdeUrl === "tablero") {
+      return desdeUrl;
+    }
+    return leerLS(CLAVE_MODO, "tablero") as Modo;
+  });
 
   React.useEffect(() => {
     try {
@@ -199,6 +246,13 @@ export default function Tablero() {
       /* idem */
     }
   }, [vista]);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(CLAVE_MODO, modo);
+    } catch {
+      /* idem */
+    }
+  }, [modo]);
 
   const contenidos = React.useMemo(() => query.data?.contenidos ?? [], [query.data]);
   const catalogos = query.data?.catalogos;
@@ -261,16 +315,41 @@ export default function Tablero() {
       <PageHeader
         {...CABECERA}
         acciones={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild title="Catálogo de plantillas de contenido">
+              <Link to="/activos/plantillas">
+                <FileText className="h-4 w-4" />
+                Plantillas
+              </Link>
+            </Button>
             <Button
               variant="outline"
+              size="sm"
+              onClick={() => setGestionHashtags(true)}
+              title="Gestionar grupos de hashtags"
+            >
+              <Hash className="h-4 w-4" />
+              Hashtags
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setGestionFranjas(true)}
+              title="Gestionar franjas de la cola de publicación"
+            >
+              <CalendarClock className="h-4 w-4" />
+              Franjas
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setGestionEtiquetas(true)}
               disabled={query.isPending}
             >
               <Tag className="h-4 w-4" />
               Etiquetas
             </Button>
-            <Button onClick={() => setDialogoAbierto(true)} disabled={query.isPending}>
+            <Button size="sm" onClick={() => setDialogoAbierto(true)} disabled={query.isPending}>
               <Plus className="h-4 w-4" />
               Nuevo contenido
             </Button>
@@ -278,9 +357,48 @@ export default function Tablero() {
         }
       />
 
-      {catalogos && (
-        <BarraControles
+      {/* Selector de MODO: la lente sobre el MISMO dato (contenido vs publicaciones). */}
+      <div className="mb-3 mt-1">
+        <Tabs value={modo} onValueChange={(v) => setModo(v as Modo)}>
+          <TabsList>
+            <TabsTrigger value="tablero" className="gap-1.5">
+              <ListTodo className="h-4 w-4" />
+              Tablero
+            </TabsTrigger>
+            <TabsTrigger value="publicaciones" className="gap-1.5">
+              <Send className="h-4 w-4" />
+              Publicaciones
+            </TabsTrigger>
+            <TabsTrigger value="calendario" className="gap-1.5">
+              <CalendarDays className="h-4 w-4" />
+              Calendario
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Sugerencias proactivas de reciclaje (#110): visibles en cualquier modo;
+          se ocultan solas si no hay candidatas. Respetan el workspace activo. */}
+      <PanelReciclaje
+        filtros={{ marca: workspace === WORKSPACE_TODAS ? undefined : workspace }}
+        onGestionarFranjas={() => setGestionFranjas(true)}
+      />
+
+      {modo !== "tablero" ? (
+        <VistaPublicaciones
+          modo={modo}
+          workspace={workspace}
+          onGestionarFranjas={() => setGestionFranjas(true)}
+        />
+      ) : (
+        <ModoTablero
+          query={query}
           catalogos={catalogos}
+          contenidos={contenidos}
+          visibles={visibles}
+          tareas={tareas}
+          renderItem={renderItem}
+          contenedorClase={contenedorClase}
           workspace={workspace}
           onWorkspace={setWorkspace}
           filtroResponsable={filtroResponsable}
@@ -290,6 +408,88 @@ export default function Tablero() {
           etiquetasWorkspace={etiquetasWorkspace}
           vista={vista}
           onVista={setVista}
+        />
+      )}
+
+      {catalogos && (
+        <DialogoNuevo
+          abierto={dialogoAbierto}
+          onCerrar={() => setDialogoAbierto(false)}
+          catalogos={catalogos}
+          workspace={workspace}
+          etiquetasWorkspace={etiquetasWorkspace}
+        />
+      )}
+      <DialogoEtiquetas
+        abierto={gestionEtiquetas}
+        onCerrar={() => setGestionEtiquetas(false)}
+        marcas={catalogos?.marcas ?? []}
+      />
+      <GestionFranjas
+        abierto={gestionFranjas}
+        onCerrar={() => setGestionFranjas(false)}
+        marcas={catalogos?.marcas ?? []}
+        redes={catalogos?.redes ?? []}
+      />
+      <GestionHashtags
+        abierto={gestionHashtags}
+        onCerrar={() => setGestionHashtags(false)}
+        marcas={catalogos?.marcas ?? []}
+      />
+    </>
+  );
+}
+
+/** El MODO tablero: secciones por flujo + tareas (la vista original del tablero). */
+function ModoTablero({
+  query,
+  catalogos,
+  contenidos,
+  visibles,
+  tareas,
+  renderItem,
+  contenedorClase,
+  workspace,
+  onWorkspace,
+  filtroResponsable,
+  onResponsable,
+  filtroEtiqueta,
+  onEtiqueta,
+  etiquetasWorkspace,
+  vista,
+  onVista,
+}: {
+  query: UseQueryResult<RespuestaContenido>;
+  catalogos: CatalogosContenido | undefined;
+  contenidos: Contenido[];
+  visibles: Contenido[];
+  tareas: Contenido[];
+  renderItem: (c: Contenido) => React.ReactNode;
+  contenedorClase: string;
+  workspace: string;
+  onWorkspace: (v: string) => void;
+  filtroResponsable: string;
+  onResponsable: (v: string) => void;
+  filtroEtiqueta: string;
+  onEtiqueta: (v: string) => void;
+  etiquetasWorkspace: EtiquetaCatalogo[];
+  vista: Vista;
+  onVista: (v: Vista) => void;
+}) {
+  return (
+    <>
+      {catalogos && (
+        <BarraControles
+          catalogos={catalogos}
+          workspace={workspace}
+          onWorkspace={onWorkspace}
+          filtroResponsable={filtroResponsable}
+          onResponsable={onResponsable}
+          filtroEtiqueta={filtroEtiqueta}
+          onEtiqueta={onEtiqueta}
+          etiquetasWorkspace={etiquetasWorkspace}
+          vista={vista}
+          onVista={onVista}
         />
       )}
 
@@ -337,22 +537,205 @@ export default function Tablero() {
           )}
         </div>
       )}
-
-      {catalogos && (
-        <DialogoNuevo
-          abierto={dialogoAbierto}
-          onCerrar={() => setDialogoAbierto(false)}
-          catalogos={catalogos}
-          workspace={workspace}
-          etiquetasWorkspace={etiquetasWorkspace}
-        />
-      )}
-      <DialogoEtiquetas
-        abierto={gestionEtiquetas}
-        onCerrar={() => setGestionEtiquetas(false)}
-        marcas={catalogos?.marcas ?? []}
-      />
     </>
+  );
+}
+
+/**
+ * Modos PUBLICACIONES y CALENDARIO del tablero (superficie única, #fase2).
+ *
+ * Lee `/api/publicaciones` (misma BD que `/api/contenido`: una publicación ES una fila
+ * `contenido_plataforma` con `es_publicacion=1`) y reutiliza el editor rico ya existente
+ * (`VistaLista`/`VistaCalendario`/`DialogoEditar`/`DialogoDuplicar`) en vez de duplicarlo.
+ * Su query está gateada por modo: en modo `tablero` no se monta, así el resto del tablero
+ * sigue dependiendo solo de `/api/contenido`.
+ */
+function VistaPublicaciones({
+  modo,
+  workspace,
+  onGestionarFranjas,
+}: {
+  modo: Exclude<Modo, "tablero">;
+  workspace: string;
+  onGestionarFranjas: () => void;
+}) {
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+  });
+
+  if (opcionesQuery.isPending) {
+    return (
+      <div className="mt-4 space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+  if (opcionesQuery.isError) {
+    return (
+      <BloqueError
+        titulo="No se pudieron cargar las publicaciones"
+        mensaje={mensajeError(opcionesQuery.error)}
+        onReintentar={() => void opcionesQuery.refetch()}
+        cargando={opcionesQuery.isFetching}
+      />
+    );
+  }
+
+  return (
+    <GestionPublicaciones
+      modo={modo}
+      workspace={workspace}
+      opciones={opcionesQuery.data}
+      onGestionarFranjas={onGestionarFranjas}
+    />
+  );
+}
+
+const TAM_PAGINA_PUB = 30;
+
+function GestionPublicaciones({
+  modo,
+  workspace,
+  opciones,
+  onGestionarFranjas,
+}: {
+  modo: Exclude<Modo, "tablero">;
+  workspace: string;
+  opciones: OpcionesPublicaciones;
+  onGestionarFranjas: () => void;
+}) {
+  // El workspace activo del tablero PRE-FILTRA por marca; aún se puede afinar marca/red/estado.
+  const marcaWorkspace = workspace === WORKSPACE_TODAS ? FILTRO_TODOS : workspace;
+  const [marca, setMarca] = React.useState(marcaWorkspace);
+  const [red, setRed] = React.useState(FILTRO_TODOS);
+  const [estado, setEstado] = React.useState(FILTRO_TODOS);
+  const [soloPerennes, setSoloPerennes] = React.useState(false);
+  const [paginas, setPaginas] = React.useState(1);
+  const [editando, setEditando] = React.useState<Publicacion | null>(null);
+  const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
+
+  // Si cambia el workspace del tablero, adopta su marca (a menos que el usuario ya afinó).
+  React.useEffect(() => {
+    setMarca(marcaWorkspace);
+  }, [marcaWorkspace]);
+
+  const calendario = modo === "calendario";
+  const limite = calendario ? undefined : paginas * TAM_PAGINA_PUB;
+
+  const filtros = {
+    marca: marca === FILTRO_TODOS ? undefined : marca,
+    red: red === FILTRO_TODOS ? undefined : red,
+    estado: calendario || estado === FILTRO_TODOS ? undefined : estado,
+    evergreen: soloPerennes ? "1" : undefined,
+    limite: limite != null ? String(limite) : undefined,
+    desplazamiento: undefined,
+  };
+
+  React.useEffect(() => {
+    setPaginas(1);
+  }, [marca, red, estado, soloPerennes, modo]);
+
+  const query = useQuery({
+    queryKey: [
+      ...CLAVE_PUBLICACIONES,
+      "lista",
+      filtros.marca ?? "",
+      filtros.red ?? "",
+      filtros.estado ?? "",
+      filtros.evergreen ?? "",
+      filtros.limite ?? "",
+    ],
+    queryFn: ({ signal }) => api.publicaciones(filtros, signal),
+  });
+
+  const publicaciones = query.data?.publicaciones ?? [];
+  const total = query.data?.paginacion?.total ?? publicaciones.length;
+  const hayMas = !calendario && publicaciones.length < total;
+  const filtrando =
+    marca !== FILTRO_TODOS || red !== FILTRO_TODOS || estado !== FILTRO_TODOS || soloPerennes;
+
+  return (
+    <div className="mt-2">
+      <div className="mb-4">
+        <FiltrosPublicaciones
+          opciones={opciones}
+          marca={marca}
+          red={red}
+          estado={estado}
+          soloPerennes={soloPerennes}
+          onMarca={setMarca}
+          onRed={setRed}
+          onEstado={setEstado}
+          onSoloPerennes={setSoloPerennes}
+        />
+      </div>
+
+      {query.isPending ? (
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : query.isError ? (
+        <BloqueError
+          titulo="No se pudieron cargar las publicaciones"
+          mensaje={mensajeError(query.error)}
+          onReintentar={() => void query.refetch()}
+          cargando={query.isFetching}
+        />
+      ) : calendario ? (
+        <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} />
+      ) : publicaciones.length === 0 ? (
+        <EstadoVacio
+          icono={Send}
+          titulo={filtrando ? "Sin resultados con estos filtros" : "Aún no hay publicaciones"}
+          texto={
+            filtrando
+              ? "Prueba a cambiar o limpiar los filtros."
+              : "Genera un copy y guárdalo como publicación, o créalo en el tablero."
+          }
+        />
+      ) : (
+        <>
+          <VistaLista
+            publicaciones={publicaciones}
+            onEditar={setEditando}
+            onDuplicar={setDuplicando}
+            onGestionarFranjas={onGestionarFranjas}
+          />
+          {hayMas && (
+            <div className="mt-4 flex flex-col items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPaginas((p) => p + 1)}
+                disabled={query.isFetching}
+              >
+                {query.isFetching ? "Cargando…" : "Cargar más"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Mostrando {publicaciones.length} de {total}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      <DialogoEditar
+        publicacion={editando}
+        estados={opciones.estados}
+        onCerrar={() => setEditando(null)}
+      />
+      <DialogoDuplicar
+        publicacion={duplicando}
+        marcas={opciones.marcas}
+        redes={opciones.redes}
+        onCerrar={() => setDuplicando(null)}
+      />
+    </div>
   );
 }
 
@@ -621,6 +1004,16 @@ function TarjetaContenido({
           <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium leading-snug">{contenido.titulo}</span>
+              {contenido.plataformas.some((p) => p.es_publicacion) && (
+                <Badge
+                  variant="outline"
+                  className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
+                  title="Esta pieza es una publicación (gestionable también en el modo Publicaciones/Calendario)"
+                >
+                  <Send className="h-3 w-3" />
+                  Publicación
+                </Badge>
+              )}
               {contenido.marca_nombre && (
                 <Badge variant="outline" className="font-normal">
                   {contenido.marca_nombre}
@@ -663,29 +1056,31 @@ function TarjetaContenido({
               </SelectContent>
             </Select>
             {contenido.clase === "contenido" && (
-              <Tooltip label="Asistente IA">
+              <Tooltip label="Generar / mejorar copy con IA (voz de marca + verificación)">
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Asistente IA"
-                  className="text-muted-foreground hover:text-primary"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-primary"
                   onClick={() => setAsistenteAbierto(true)}
                 >
-                  <Sparkles className="h-4 w-4" />
+                  <Sparkles className="h-3.5 w-3.5" />
+                  IA
                 </Button>
               </Tooltip>
             )}
-            <Tooltip label="Colaboración (comentarios, versiones, aprobación)">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Colaboración"
-                className="text-muted-foreground"
-                onClick={() => setColaboracionAbierta(true)}
-              >
-                <MessageSquare className="h-4 w-4" />
-              </Button>
-            </Tooltip>
+            {contenido.clase === "contenido" && (
+              <Tooltip label="Detalle de la pieza: comentarios, versiones de copy y cadena de aprobación">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+                  onClick={() => setColaboracionAbierta(true)}
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  Detalle
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip label="Borrar">
               <Button
                 variant="ghost"

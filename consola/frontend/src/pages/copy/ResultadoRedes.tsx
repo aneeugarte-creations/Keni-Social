@@ -103,11 +103,11 @@ function BadgeVeredicto({ veredicto }: { veredicto: Veredicto }) {
   return <Badge variant={m.variante}>{m.nombre}</Badge>;
 }
 
-/** Enlace de éxito a Publicaciones que se muestra en el toast. */
+/** Enlace de éxito al tablero (modo Publicaciones) que se muestra en el toast. */
 function EnlacePublicaciones() {
   return (
-    <Link to="/publicaciones" className="inline-flex items-center gap-1 underline">
-      Ver en Publicaciones
+    <Link to="/parrilla/pendientes" className="inline-flex items-center gap-1 underline">
+      Ver en el tablero
       <ExternalLink className="h-3 w-3" />
     </Link>
   );
@@ -599,9 +599,9 @@ export function ResultadoRedes({
           <div className="flex items-center gap-1.5 rounded-md bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             <span>
-              Guardadas como borradores en{" "}
-              <Link to="/publicaciones" className="inline-flex items-center gap-1 font-medium underline">
-                Publicaciones
+              Guardadas como borradores en el{" "}
+              <Link to="/parrilla/pendientes" className="inline-flex items-center gap-1 font-medium underline">
+                tablero
                 <ExternalLink className="h-3 w-3" />
               </Link>
             </span>

@@ -1059,6 +1059,8 @@ export interface ContenidoPlataforma {
   evergreen: boolean;
   /** Id del post en Metricool (lo estampa el programador al publicar). "" si aún no se publicó. */
   id_post_metricool: string;
+  /** `true` si esta fila es una PUBLICACIÓN (es_publicacion=1): nació en el flujo de publicación. */
+  es_publicacion: boolean;
 }
 
 /** Rendimiento REAL de una pieza ya publicada, leído de Metricool por su `id_post_metricool`. */

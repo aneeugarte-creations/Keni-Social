@@ -8,10 +8,10 @@ import type { AgenteDetalle } from "@/types";
 /**
  * Pestaña «Contenido»: publicaciones asociadas a este agente.
  *
- * Para una marca, el `id` es el id canónico de la marca, así que enlazamos a
- * `/publicaciones?marca={id}` (la página de Publicaciones preselecciona esa
- * marca). Un agente genérico no es una marca del catálogo de publicaciones:
- * mostrará 0 publicaciones, así que lo indicamos con gracia y sin enlace.
+ * Para una marca, el `id` es el id canónico de la marca, así que enlazamos al
+ * tablero con `/parrilla/pendientes?marca={id}&modo=publicaciones` (el tablero fija
+ * ese workspace y abre el modo Publicaciones). Un agente genérico no es una marca del
+ * catálogo: mostrará 0 publicaciones, así que lo indicamos con gracia y sin enlace.
  */
 export function PestanaContenido({
   agente,
@@ -24,7 +24,7 @@ export function PestanaContenido({
   /** `true` si es una marca de serie; `false` para agentes genéricos. */
   esMarca: boolean;
 }) {
-  const enlace = `/publicaciones?marca=${encodeURIComponent(agente.id)}`;
+  const enlace = `/parrilla/pendientes?marca=${encodeURIComponent(agente.id)}&modo=publicaciones`;
 
   return (
     <Card>
@@ -41,8 +41,7 @@ export function PestanaContenido({
               Este agente tiene{" "}
               <span className="font-medium text-foreground">{nPublicaciones}</span>{" "}
               {nPublicaciones === 1 ? "publicación" : "publicaciones"}. Gestiónalas
-              (aprobar, programar, publicar) en la sección Publicaciones, ya filtrada por
-              esta marca.
+              (aprobar, programar, publicar) en el tablero, ya filtrado por esta marca.
             </p>
             <Button asChild>
               <Link to={enlace}>
@@ -56,7 +55,7 @@ export function PestanaContenido({
             Los agentes genéricos no están ligados a una marca del catálogo de
             publicaciones, por lo que aquí no aparecen publicaciones. Usa este agente
             para contexto y ejecuciones; el contenido publicable se gestiona desde las
-            marcas en la sección Publicaciones.
+            marcas en el tablero.
           </p>
         )}
       </CardContent>

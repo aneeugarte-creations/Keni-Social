@@ -29,6 +29,10 @@ modulos_backend = [
 ]
 
 rutas_frontend = [
+  # Publicaciones se FUSIONÓ en el tablero (#fase2): el tablero (/parrilla/pendientes) es
+  # la superficie ÚNICA de contenido (modos Tablero/Publicaciones/Calendario). Se mantiene
+  # la ruta en el scope para que la redirección legacy /publicaciones -> /parrilla/pendientes
+  # (ver router.tsx) resuelva dentro de esta app; ya NO tiene entrada de nav propia.
   "/publicaciones",
   "/parrilla",
   "/parrilla/pendientes",
@@ -38,19 +42,10 @@ rutas_frontend = [
 ]
 
 [[nav]]
-ruta = "/publicaciones"
-etiqueta = "Publicaciones"
-icono = "Send"
-descripcion = "Gestiona borradores, aprueba, programa y publica."
-grupo = "operacion"
-grupo_orden = 30
-orden = 10
-
-[[nav]]
 ruta = "/parrilla"
 etiqueta = "Parrilla"
 icono = "CalendarClock"
-descripcion = "Pendientes del equipo y calendario semanal con la rota de cobertura. Pestañas Pendientes / Calendario."
+descripcion = "Tablero de contenido del equipo (importante/evergreen/eventos + publicaciones), calendario y rota de cobertura."
 grupo = "operacion"
 grupo_orden = 30
-orden = 20
+orden = 10
