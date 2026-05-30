@@ -1,10 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarClock,
+  Check,
+  ChevronDown,
   ClipboardList,
+  Eye,
   Loader2,
   ListTodo,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react";
 import * as React from "react";
@@ -13,7 +17,9 @@ import { toast } from "sonner";
 import { Autor } from "@/components/comunes/Autor";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,7 +43,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
+import { limiteRed } from "@/pages/publicaciones/meta";
 import { cn } from "@/lib/utils";
 import type {
   CatalogosContenido,
@@ -45,6 +53,9 @@ import type {
   ContenidoPlataforma,
   CuerpoCrearContenido,
   EstadoContenidoPlataforma,
+  ModoAsistenteContenido,
+  PiezaGenerada,
+  VariableCopy,
 } from "@/types";
 
 const CLAVE = ["contenido"] as const;
@@ -270,6 +281,7 @@ function TarjetaContenido({
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
+  const [asistenteAbierto, setAsistenteAbierto] = React.useState(false);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -348,6 +360,19 @@ function TarjetaContenido({
                 ))}
               </SelectContent>
             </Select>
+            {contenido.clase === "contenido" && (
+              <Tooltip label="Asistente IA">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Asistente IA"
+                  className="text-muted-foreground hover:text-primary"
+                  onClick={() => setAsistenteAbierto(true)}
+                >
+                  <Sparkles className="h-4 w-4" />
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip label="Borrar">
               <Button
                 variant="ghost"
@@ -382,7 +407,12 @@ function TarjetaContenido({
               </p>
             ) : (
               contenido.plataformas.map((p) => (
-                <FilaPlataforma key={p.id} contenidoId={contenido.id} plataforma={p} />
+                <FilaPlataforma
+                  key={p.id}
+                  contenidoId={contenido.id}
+                  plataforma={p}
+                  variables={catalogos.variables}
+                />
               ))
             )}
             {redesDisponibles.length > 0 && (
@@ -429,6 +459,14 @@ function TarjetaContenido({
           </Select>
         </div>
       </CardContent>
+      {contenido.clase === "contenido" && (
+        <DialogoAsistente
+          abierto={asistenteAbierto}
+          onCerrar={() => setAsistenteAbierto(false)}
+          contenido={contenido}
+          onAplicado={invalidar}
+        />
+      )}
     </Card>
   );
 }
@@ -436,12 +474,15 @@ function TarjetaContenido({
 function FilaPlataforma({
   contenidoId,
   plataforma,
+  variables,
 }: {
   contenidoId: string;
   plataforma: ContenidoPlataforma;
+  variables: VariableCopy[];
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
+  const [editorAbierto, setEditorAbierto] = React.useState(false);
 
   const actualizar = useMutation({
     mutationFn: (cuerpo: Parameters<typeof api.actualizarPlataforma>[2]) =>
@@ -456,7 +497,8 @@ function FilaPlataforma({
   });
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md bg-muted/30 px-2 py-1.5">
+    <div className="space-y-1.5 rounded-md bg-muted/30 px-2 py-1.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       <Badge variant="outline" className="w-20 justify-center font-normal">
         {plataforma.red_nombre}
       </Badge>
@@ -506,18 +548,175 @@ function FilaPlataforma({
           );
         })}
       </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="ml-auto h-7 gap-1 px-2 text-xs text-muted-foreground"
+        onClick={() => setEditorAbierto((v) => !v)}
+        aria-expanded={editorAbierto}
+      >
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 transition-transform", editorAbierto && "rotate-180")}
+        />
+        Copy
+        {plataforma.copy ? (
+          <Badge variant="ok" className="h-4 px-1 font-normal">
+            <Check className="h-3 w-3" />
+          </Badge>
+        ) : null}
+      </Button>
       <Tooltip label="Quitar plataforma">
         <Button
           variant="ghost"
           size="icon"
           aria-label={`Quitar ${plataforma.red_nombre}`}
-          className="ml-auto h-7 w-7 text-muted-foreground hover:text-destructive"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
           onClick={() => borrar.mutate()}
           disabled={borrar.isPending}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </Tooltip>
+    </div>
+      {editorAbierto && (
+        <EditorCopy
+          contenidoId={contenidoId}
+          plataforma={plataforma}
+          variables={variables}
+          guardando={actualizar.isPending}
+          onGuardar={(copy) => actualizar.mutate({ copy })}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Editor del copy de UNA fila por plataforma: variantes por red con contador/límite de
+ * caracteres, inserción de variables `{...}` y previa con las variables ya sustituidas
+ * (vía `POST /api/contenido/{id}/preview`). Guarda en `contenido_plataforma.copy`.
+ */
+function EditorCopy({
+  contenidoId,
+  plataforma,
+  variables,
+  guardando,
+  onGuardar,
+}: {
+  contenidoId: string;
+  plataforma: ContenidoPlataforma;
+  variables: VariableCopy[];
+  guardando: boolean;
+  onGuardar: (copy: string) => void;
+}) {
+  const [texto, setTexto] = React.useState(plataforma.copy);
+  const [verPrevia, setVerPrevia] = React.useState(false);
+  const areaRef = React.useRef<HTMLTextAreaElement>(null);
+  const limite = limiteRed(plataforma.red);
+  const sucio = texto !== plataforma.copy;
+
+  // El copy del servidor cambió (p.ej. lo rellenó el asistente IA): si NO hay edición
+  // local sin guardar respecto al valor anterior del servidor, adoptamos el nuevo. Así no
+  // pisamos lo que el usuario está escribiendo, pero sí reflejamos un relleno externo.
+  const servidorRef = React.useRef(plataforma.copy);
+  React.useEffect(() => {
+    if (plataforma.copy !== servidorRef.current) {
+      setTexto((prev) => (prev === servidorRef.current ? plataforma.copy : prev));
+      servidorRef.current = plataforma.copy;
+    }
+  }, [plataforma.copy]);
+
+  // Previa: expande las variables del texto contra el contexto del contenido. Debounced.
+  const previa = useQuery({
+    queryKey: ["contenido-preview", contenidoId, texto],
+    queryFn: ({ signal }) => api.previewContenido(contenidoId, texto, signal),
+    enabled: verPrevia && texto.includes("{"),
+    staleTime: 30_000,
+  });
+
+  const insertarVariable = (ejemplo: string) => {
+    const area = areaRef.current;
+    if (!area) {
+      setTexto((t) => t + ejemplo);
+      return;
+    }
+    const inicio = area.selectionStart ?? texto.length;
+    const fin = area.selectionEnd ?? texto.length;
+    setTexto(texto.slice(0, inicio) + ejemplo + texto.slice(fin));
+    requestAnimationFrame(() => {
+      area.focus();
+      const pos = inicio + ejemplo.length;
+      area.setSelectionRange(pos, pos);
+    });
+  };
+
+  const previaTexto = previa.data?.preview ?? texto;
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-background/60 p-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor={`copy-${plataforma.id}`} className="text-xs text-muted-foreground">
+          Copy para {plataforma.red_nombre}
+        </Label>
+        <ContadorCaracteres caracteres={texto.length} limite={limite} />
+      </div>
+      <AutoTextarea
+        ref={areaRef}
+        id={`copy-${plataforma.id}`}
+        value={texto}
+        onChange={(e) => setTexto(e.target.value)}
+        placeholder={`Escribe el copy para ${plataforma.red_nombre}. Usa {marca}, {fecha}…`}
+        maxHeight={320}
+        className="min-h-[5rem] font-mono text-sm"
+      />
+      {variables.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-xs text-muted-foreground">Insertar:</span>
+          {variables.map((v) => (
+            <Tooltip key={v.clave} label={v.etiqueta}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-6 px-1.5 font-mono text-[11px]"
+                onClick={() => insertarVariable(v.ejemplo)}
+              >
+                {v.ejemplo}
+              </Button>
+            </Tooltip>
+          ))}
+        </div>
+      )}
+      {verPrevia && (
+        <div className="rounded-md bg-muted/50 p-2">
+          <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Previa (variables sustituidas)
+          </p>
+          <p className="whitespace-pre-wrap text-sm">
+            {previaTexto || <span className="text-muted-foreground/60">Sin copy.</span>}
+          </p>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <Button
+          size="sm"
+          className="h-7"
+          onClick={() => onGuardar(texto)}
+          disabled={!sucio || guardando}
+        >
+          {guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          Guardar copy
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 gap-1"
+          onClick={() => setVerPrevia((v) => !v)}
+        >
+          <Eye className="h-3.5 w-3.5" />
+          {verPrevia ? "Ocultar previa" : "Previa"}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -755,6 +954,175 @@ function DialogoNuevo({
               <Plus className="h-4 w-4" />
             )}
             Crear
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Modos del asistente IA con su etiqueta y descripción para la UI. */
+const MODOS_ASISTENTE: { modo: ModoAsistenteContenido; etiqueta: string; ayuda: string }[] = [
+  { modo: "generar", etiqueta: "Generar copy", ayuda: "Una variante por red, lista para revisar." },
+  { modo: "variantes", etiqueta: "3 variantes", ayuda: "Tres enfoques alternativos para elegir." },
+  { modo: "resumir", etiqueta: "Resumir", ayuda: "Condensa el brief a lo esencial por red." },
+];
+
+/**
+ * Asistente IA del tablero sobre un `contenido`: genera / resume / 3 variantes
+ * reutilizando las skills de copy (voz de marca + tropicalización MX + verificación).
+ * Lanza un trabajo en segundo plano, lo sigue token a token y, al completarse, ofrece
+ * APLICAR cada pieza generada al `copy` de su fila `contenido_plataforma`.
+ */
+function DialogoAsistente({
+  abierto,
+  onCerrar,
+  contenido,
+  onAplicado,
+}: {
+  abierto: boolean;
+  onCerrar: () => void;
+  contenido: Contenido;
+  onAplicado: () => void;
+}) {
+  const [modo, setModo] = React.useState<ModoAsistenteContenido>("generar");
+  const seguimiento = useGeneracion();
+  const { generacion, ejecutando, iniciar, limpiar } = seguimiento;
+
+  const lanzar = useMutation({
+    mutationFn: () => api.asistenteContenido(contenido.id, { modo }),
+    onSuccess: (r) => iniciar(r.generacion),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Filas por red del contenido: mapa red -> fila, para aplicar la pieza correcta.
+  const filaPorRed = React.useMemo(() => {
+    const m = new Map<string, ContenidoPlataforma>();
+    for (const p of contenido.plataformas) m.set(p.red, p);
+    return m;
+  }, [contenido.plataformas]);
+
+  const aplicar = useMutation({
+    mutationFn: ({ plataformaId, copy }: { plataformaId: string; copy: string }) =>
+      api.actualizarPlataforma(contenido.id, plataformaId, { copy }),
+    onSuccess: () => {
+      onAplicado();
+      toast.success("Copy aplicado a la plataforma.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const piezas: PiezaGenerada[] = generacion?.resultado?.piezas ?? [];
+  const errorGen = generacion?.estado === "error";
+
+  const cerrar = () => {
+    limpiar();
+    onCerrar();
+  };
+
+  return (
+    <Dialog open={abierto} onOpenChange={(o) => !o && cerrar()}>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Asistente IA · {contenido.titulo}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {MODOS_ASISTENTE.map((m) => (
+              <button
+                key={m.modo}
+                type="button"
+                onClick={() => setModo(m.modo)}
+                disabled={ejecutando || lanzar.isPending}
+                className={cn(
+                  "rounded-md border p-2 text-left text-xs transition",
+                  modo === m.modo ? "border-primary bg-primary/5" : "border-border hover:bg-muted/50",
+                )}
+              >
+                <span className="block font-medium">{m.etiqueta}</span>
+                <span className="text-muted-foreground">{m.ayuda}</span>
+              </button>
+            ))}
+          </div>
+
+          <Button
+            onClick={() => lanzar.mutate()}
+            disabled={ejecutando || lanzar.isPending}
+            className="w-full"
+          >
+            {ejecutando || lanzar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {ejecutando ? "Generando…" : "Generar con IA"}
+          </Button>
+
+          {errorGen && (
+            <p className="text-sm text-red-600 dark:text-red-400">
+              {generacion?.error || "No se pudo generar. Inténtalo de nuevo."}
+            </p>
+          )}
+
+          {ejecutando && generacion?.salida && (
+            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/50 p-2 text-xs">
+              {generacion.salida}
+            </pre>
+          )}
+
+          {generacion?.resultado?.verdicto && (
+            <p className="text-xs text-muted-foreground">
+              Auto-verificación: {generacion.resultado.verdicto}
+            </p>
+          )}
+
+          {piezas.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Copy generado por red</p>
+              {piezas.map((pieza) => {
+                const fila = filaPorRed.get(pieza.red);
+                const limite = limiteRed(pieza.red);
+                return (
+                  <div key={pieza.red} className="space-y-1.5 rounded-md border p-2">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="font-normal">
+                        {fila?.red_nombre ?? pieza.red}
+                      </Badge>
+                      <ContadorCaracteres caracteres={pieza.contenido.length} limite={limite} />
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm">{pieza.contenido}</p>
+                    {fila ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7"
+                        onClick={() =>
+                          aplicar.mutate({ plataformaId: fila.id, copy: pieza.contenido })
+                        }
+                        disabled={aplicar.isPending}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Aplicar a {fila.red_nombre}
+                      </Button>
+                    ) : (
+                      <p className="text-xs text-muted-foreground/70">
+                        Añade {pieza.red} al contenido para aplicar este copy.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={cerrar}>
+            Cerrar
           </Button>
         </DialogFooter>
       </DialogContent>

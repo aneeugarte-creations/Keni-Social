@@ -1093,6 +1093,18 @@ export interface CatalogosContenido {
   estados_contenido: string[];
   estados_plataforma: string[];
   eventos: { id: string; titulo: string; fecha: string; hora: string }[];
+  /** Variables `{...}` que el copy puede llevar y se autocompletan en la previa. */
+  variables: VariableCopy[];
+}
+
+/** Una variable de copy (`{marca}`, `{fecha}`, ...) para insertar y autocompletar. */
+export interface VariableCopy {
+  /** Nombre de la variable (sin llaves), p.ej. "marca". */
+  clave: string;
+  /** Sintaxis lista para insertar, p.ej. "{marca}". */
+  ejemplo: string;
+  /** Explicación humana de qué inserta. */
+  etiqueta: string;
 }
 
 export interface RespuestaContenido {
@@ -1157,6 +1169,21 @@ export interface RespuestaContenidoItem {
 
 export interface RespuestaPlataforma {
   plataforma: ContenidoPlataforma;
+}
+
+/** `POST /api/contenido/{id}/preview`: copy con sus variables `{...}` ya sustituidas. */
+export interface RespuestaPreviewContenido {
+  preview: string;
+}
+
+/** Modo del asistente IA del tablero. */
+export type ModoAsistenteContenido = "generar" | "variantes" | "resumir";
+
+/** `POST /api/contenido/{id}/asistente`: lanza el asistente IA sobre un contenido. */
+export interface CuerpoAsistenteContenido {
+  modo: ModoAsistenteContenido;
+  /** Redes a generar; por defecto, las redes sociales del propio contenido. */
+  redes?: string[];
 }
 
 export interface CuerpoDesdeRadar {

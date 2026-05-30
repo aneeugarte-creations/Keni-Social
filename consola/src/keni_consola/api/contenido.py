@@ -23,8 +23,9 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, marcas, redes, repos
+from .. import auth, marcas, redes, repos, skills_catalogo
 from .._http_json import leer_json
+from ..dominio import asistente, placeholders
 from ..estados import (
     CLASES_CONTENIDO,
     ESTADOS_CONTENIDO,
@@ -131,6 +132,8 @@ def _catalogos() -> dict:
         "estados_contenido": list(ESTADOS_CONTENIDO),
         "estados_plataforma": list(ESTADOS_CONTENIDO_PLATAFORMA),
         "eventos": _eventos_proximos(),
+        # Variables `{...}` que el copy puede llevar y se autocompletan (placeholders).
+        "variables": placeholders.catalogo(),
     }
 
 
@@ -406,10 +409,103 @@ async def desde_radar(request: Request) -> Response:
     return JSONResponse({"contenido": _contenido_a_dict(item, plataformas)})
 
 
+# --------------------------------------------------------------------------- #
+# Variables/placeholders en el copy ({marca}, {fecha}, {hashtags}, ...)         #
+# --------------------------------------------------------------------------- #
+
+
+async def previsualizar(request: Request) -> Response:
+    """POST /api/contenido/{id}/preview: expande las variables `{...}` de un texto.
+
+    Cuerpo JSON `{texto}`: devuelve `{preview}` con `{marca}`/`{fecha}`/`{hashtags}`/...
+    ya sustituidas usando el contexto del contenido (marca, titulo, programa). Es la
+    previsualizacion por plataforma del copy (no persiste nada). `{...}` desconocidas se
+    dejan literales. 404 si el contenido no existe.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    texto = datos.get("texto")
+    if not isinstance(texto, str):
+        texto = ""
+    preview = placeholders.expandir_para_contenido(texto[:_MAX_TEXTO], item)
+    return JSONResponse({"preview": preview})
+
+
+# --------------------------------------------------------------------------- #
+# Asistente IA del tablero (genera/resume/3 variantes reutilizando las skills)  #
+# --------------------------------------------------------------------------- #
+
+
+async def asistente_ia(request: Request) -> Response:
+    """POST /api/contenido/{id}/asistente: lanza el asistente IA sobre un contenido.
+
+    Cuerpo JSON `{modo, redes?}` (`modo` ∈ generar|variantes|resumir). Reutiliza la skill
+    de copy y la pipeline de generacion: arma el brief del contenido (titulo+descripcion+
+    notas), lanza un trabajo en segundo plano y responde `{generacion}` (estado
+    "ejecutando"). El frontend sondea `GET /api/generaciones/{id}` y, al completarse, lee
+    `resultado.piezas` para rellenar el `copy` de cada fila `contenido_plataforma`.
+
+    Requiere que el contenido tenga MARCA (la voz de marca es el insumo de la skill) y al
+    menos una red CANONICA en sus plataformas (el canal "web" no entra en las skills de
+    copy). Si faltan, responde 400 con un mensaje en espanol.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+
+    marca = item.get("marca", "") or ""
+    if not marca or not marcas.es_marca(marca):
+        return JSONResponse(
+            {"error": "Asigna una marca al contenido para usar el asistente."},
+            status_code=400,
+        )
+    if not skills_catalogo.existe(asistente.SKILL_COPY):
+        return JSONResponse(
+            {"error": "No está disponible la skill de copy para el asistente."},
+            status_code=400,
+        )
+
+    datos = await leer_json(request)
+    modo = datos.get("modo", "generar")
+    if modo not in asistente.MODOS:
+        return JSONResponse({"error": "Modo de asistente no válido."}, status_code=400)
+
+    # Redes del cuerpo (si llegan) o, por defecto, las redes CANONICAS del contenido. El
+    # canal "web" se descarta (las skills de copy trabajan sobre redes sociales).
+    crudas = datos.get("redes")
+    if isinstance(crudas, list):
+        pedidas = [r for r in crudas if isinstance(r, str) and redes.es_red(r)]
+    else:
+        pedidas = [p["red"] for p in repos.listar_contenido_plataforma(contenido_id) if redes.es_red(p["red"])]
+    redes_ids = [r for r in redes.ids() if r in set(pedidas)]
+    if not redes_ids:
+        return JSONResponse(
+            {"error": "Añade al menos una red social al contenido para generar copy."},
+            status_code=400,
+        )
+
+    gen = asistente.lanzar(
+        modo=modo,
+        marca=marca,
+        titulo=item.get("titulo", "") or "",
+        descripcion=item.get("descripcion", "") or "",
+        notas=item.get("notas", "") or "",
+        redes_ids=redes_ids,
+        autor=autor_de_peticion(request),
+    )
+    return JSONResponse({"generacion": gen})
+
+
 RUTAS = [
     Route("/api/contenido", listar, methods=["GET"]),
     Route("/api/contenido", crear, methods=["POST"]),
     Route("/api/contenido/desde-radar", desde_radar, methods=["POST"]),
+    Route("/api/contenido/{contenido_id}/preview", previsualizar, methods=["POST"]),
+    Route("/api/contenido/{contenido_id}/asistente", asistente_ia, methods=["POST"]),
     Route("/api/contenido/{contenido_id}", actualizar, methods=["PATCH"]),
     Route("/api/contenido/{contenido_id}", borrar, methods=["DELETE"]),
     Route("/api/contenido/{contenido_id}/plataformas", agregar_plataforma, methods=["POST"]),

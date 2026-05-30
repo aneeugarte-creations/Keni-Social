@@ -50,6 +50,7 @@ import type {
   CuerpoCrearSkill,
   CuerpoActualizarContenido,
   CuerpoActualizarPlataforma,
+  CuerpoAsistenteContenido,
   CuerpoCrearContenido,
   CuerpoCrearTarea,
   CuerpoDesdeRadar,
@@ -144,6 +145,7 @@ import type {
   RespuestaContenido,
   RespuestaContenidoItem,
   RespuestaPlataforma,
+  RespuestaPreviewContenido,
   RespuestaTareas,
   RespuestaEquipoRota,
   RespuestaEventosRota,
@@ -899,6 +901,18 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+  /** Previsualiza un copy con sus variables `{...}` ya sustituidas (no persiste). */
+  previewContenido: (contenidoId: string, texto: string, signal?: AbortSignal) =>
+    peticion<RespuestaPreviewContenido>(
+      `/contenido/${encodeURIComponent(contenidoId)}/preview`,
+      { metodo: "POST", json: { texto }, signal },
+    ),
+  /** Lanza el asistente IA sobre un contenido (genera/resume/3 variantes). */
+  asistenteContenido: (contenidoId: string, cuerpo: CuerpoAsistenteContenido) =>
+    peticion<RespuestaGeneracion>(
+      `/contenido/${encodeURIComponent(contenidoId)}/asistente`,
+      { metodo: "POST", json: cuerpo },
+    ),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>
