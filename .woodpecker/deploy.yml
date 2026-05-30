@@ -39,6 +39,13 @@ steps:
     commands:
       - apk add --no-cache docker-cli-compose rsync
       # Sincroniza el checkout al dir estable (preserva .env/.git/venv/node_modules).
-      - rsync -a --exclude .git --exclude 'deploy/.env' --exclude node_modules --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
+      # `--delete`: los ficheros BORRADOS en git deben desaparecer del dir estable; sin él se
+      # quedaban huérfanos y rompían el build (p.ej. un .tsx eliminado seguía ahí y `tsc -b` lo
+      # compilaba -> fallo del deploy) y se acumulaba cruft (bundles viejos en webapp/assets).
+      # Los excludes PROTEGEN del borrado el estado host-only: secretos (`deploy/.env*`,
+      # `deploy/woodpecker/.env`), repos/artefactos (.git, node_modules, .venv*, .ruff_cache,
+      # __pycache__) y un worktree de trabajo en el host (`.claude`). Validado con --dry-run:
+      # borra solo orphans/artefactos, ningún .env.
+      - rsync -a --delete --exclude .git --exclude 'deploy/.env*' --exclude 'deploy/woodpecker/.env' --exclude .claude --exclude .ruff_cache --exclude node_modules --exclude '.venv*' --exclude __pycache__ ./ /home/ubuntu/keni-social/
       # docker compose corre DESDE el dir estable -> bind mounts (garage.toml, traefik/dynamic) OK.
       - cd /home/ubuntu/keni-social && sh deploy/deploy.sh /home/ubuntu/keni-social/deploy/.env
