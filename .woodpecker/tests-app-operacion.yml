@@ -41,7 +41,7 @@ steps:
         consola/tests/test_api_publicaciones.py
         consola/tests/test_api_publicaciones_contenido.py
         consola/tests/test_api_aprobacion.py
-        consola/tests/test_aprobacion_dominio.py
+        consola/tests/test_colaboracion_dominio.py
         consola/tests/test_api_franjas.py
         consola/tests/test_api_rota.py
         consola/tests/test_api_rota_ampliada.py

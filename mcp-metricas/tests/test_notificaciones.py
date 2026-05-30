@@ -184,6 +184,9 @@ def test_enviar_con_url_y_flag_postea_payload(monkeypatch, capsys):
 def test_enviar_generico_postea_payload_rico(monkeypatch, capsys):
     monkeypatch.setenv("KENI_WEBHOOK_URL", WEBHOOK)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
+    # Fuente DETERMINISTA: tras "Metricool fuente única" el default es metricool (vacío sin
+    # credenciales); este test verifica el payload RICO (picos/alertas), que da la muestra.
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     ruta = respx.post(WEBHOOK).mock(return_value=httpx.Response(200, json={"ok": True}))
 
     code = main(["--enviar", "--formato", "generico"])
@@ -225,6 +228,10 @@ def test_rango_invalido_aborta_con_rc2_sin_red(monkeypatch, capsys):
     """
     monkeypatch.setenv("KENI_WEBHOOK_URL", WEBHOOK)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
+    # Fuente DETERMINISTA (la muestra siempre tiene datos): aisla la rama que probamos —el
+    # ValueError por rango invalido—. Con metricool sin credenciales la fuente sale vacia y el
+    # camino corto no valida el rango, enmascarando esta rama.
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     ruta = respx.post(WEBHOOK).mock(return_value=httpx.Response(200, text="ok"))
 
     code = main(["--enviar", "--rango", "trimestre"])

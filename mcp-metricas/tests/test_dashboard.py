@@ -261,8 +261,12 @@ def test_main_escribe_html_y_rc_cero(tmp_path):
     assert "http://" not in html and "https://" not in html
 
 
-def test_main_rango_invalido_rc_dos(tmp_path, capsys):
+def test_main_rango_invalido_rc_dos(tmp_path, capsys, monkeypatch):
     """--rango invalido -> rc=2 + mensaje en stderr (no escribe el archivo)."""
+    # Fuente DETERMINISTA: tras "Metricool fuente única" el default es metricool y, sin
+    # credenciales, la fuente sale vacia y NO valida el rango (rc 0). La muestra (con datos)
+    # ejercita la rama de validacion que probamos: rango invalido -> rc 2.
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     salida = tmp_path / "dash.html"
     rc = main(["--salida", str(salida), "--rango", "trimestre"])
     assert rc == 2
