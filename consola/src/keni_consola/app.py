@@ -267,6 +267,15 @@ def crear_app(
             auth.sembrar_equipo()
         except Exception:  # noqa: BLE001 -- idem: no impide el arranque
             _logger.warning("No se pudo sembrar el equipo AMX.", exc_info=True)
+        # Migración al tablero de contenido unificado: lleva tareas, piezas de la rota y
+        # publicaciones legadas al modelo `contenido` para que el tablero las muestre.
+        # Idempotente (marca el origen / preserva ids) y best-effort: no impide el arranque.
+        try:
+            from . import migrar_contenido
+
+            migrar_contenido.migrar()
+        except Exception:  # noqa: BLE001 -- el arranque no debe romper por la migración
+            _logger.warning("No se pudo migrar al tablero de contenido.", exc_info=True)
 
     rutas: list[Route] = list(api.descubrir(refresco=True))
 
