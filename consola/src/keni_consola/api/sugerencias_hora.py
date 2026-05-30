@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from keni_metricas import servicio
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -33,7 +34,6 @@ from .. import marcas, metricas_cache, redes, repos
 from .._http_json import leer_json
 from ..dominio import planificacion
 from . import franjas as api_franjas
-from . import metricas as api_metricas
 
 
 def _ocupados_programados() -> set[str]:
@@ -86,8 +86,8 @@ async def sugerir(request: Request) -> Response:
         return JSONResponse({"error": "Indica una red válida."}, status_code=400)
 
     rango_crudo = datos.get("rango", "mes")
-    rango = api_metricas.RANGOS_VALIDOS[0]
-    if isinstance(rango_crudo, str) and rango_crudo in api_metricas.RANGOS_VALIDOS:
+    rango = servicio.RANGOS_VALIDOS[0]
+    if isinstance(rango_crudo, str) and rango_crudo in servicio.RANGOS_VALIDOS:
         rango = rango_crudo
 
     franjas = repos.listar_franjas()

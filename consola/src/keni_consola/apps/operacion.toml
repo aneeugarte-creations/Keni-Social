@@ -18,6 +18,9 @@ modulos_backend = [
   "publicaciones",
   "aprobacion",
   "franjas",
+  # Auto-planificación (Fase 3): sugerir la mejor hora para publicar combinando las FRANJAS
+  # (operacional) con el histórico de engagement; SOLO lectura, lo consume el botón del tablero.
+  "sugerencias_hora",
   "rota",
   "tareas",
   "contenido",
