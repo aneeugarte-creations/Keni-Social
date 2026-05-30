@@ -23,7 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, marcas, metricas_pieza, redes, repos, skills_catalogo
+from .. import auth, auto_responsable, marcas, metricas_pieza, redes, repos, skills_catalogo
 from .._http_json import leer_json
 from ..dominio import asistente, eventos, placeholders
 from ..estados import (
@@ -263,6 +263,15 @@ async def crear(request: Request) -> Response:
     responsable, valido = _resolver_responsable(datos.get("responsable_id"))
     if not valido:
         return JSONResponse({"error": "El responsable no es un usuario válido."}, status_code=400)
+
+    # --- FASE 3 auto-operativa: auto-asignacion de responsable desde la rota -------------
+    # Si no se fijo responsable, lo deriva la rota del dia para que la pieza no quede
+    # huerfana (el equipo solo crea; el reparto es automatico). Override manual: si el
+    # cliente mando `responsable_id`, se respeta y NO se toca. Degrada a None sin romper.
+    # [MERGE] bloque propio y autocontenido; no toca la validacion de arriba.
+    if responsable is None and marca:
+        responsable = auto_responsable.responsable_automatico(marca)
+    # --- fin bloque auto-operativa -------------------------------------------------------
 
     redes_iniciales = datos.get("redes", [])
     if not isinstance(redes_iniciales, list):

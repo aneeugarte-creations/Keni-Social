@@ -33,7 +33,7 @@ segura entre hilos como el resto.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from keni_metricas import servicio
@@ -41,6 +41,11 @@ from keni_metricas import servicio
 from . import marcas, repos
 
 _log = logging.getLogger("keni_consola.metricas_pieza")
+
+# Ventana (dias) para considerar una pieza publicada "reciente" y refrescarla de forma
+# PROACTIVA (el daemon `metricas_piezas_refresco`). Pasada la ventana el rendimiento se
+# estabiliza y el lazy-fill con TTL basta; refrescarla activamente solo gasta cuota.
+VENTANA_REFRESCO_DIAS = 30
 
 # Tipo de entrada en `metricas_cache` para las piezas del tablero.
 TIPO_PIEZA = "pieza_contenido"
@@ -204,3 +209,92 @@ def listado_piezas_publicadas(
     # Encontradas primero, ordenadas por engagement desc; las "sin datos" al final.
     filas.sort(key=lambda f: (f["encontrado"], f["engagement_pct"]), reverse=True)
     return filas
+
+
+# --------------------------------------------------------------------------- #
+# Refresco PROACTIVO (daemon): mantiene caliente la cache por pieza             #
+# --------------------------------------------------------------------------- #
+#
+# `rendimiento` (arriba) es LAZY: recalcula al abrir el tablero si la cache esta vieja.
+# El daemon `metricas_piezas_refresco` usa lo de abajo para adelantarse: recalcula la
+# cache de las piezas publicadas RECIENTES (con `id_post_metricool`) en segundo plano,
+# para que el tablero y la heuristica de reciclaje vean datos FRESCOS sin pagar el
+# lazy-fill en la apertura. Es solo lectura; no muta el tablero.
+
+
+def _es_reciente(fecha_iso: str, ahora: datetime, ventana_dias: int) -> bool:
+    """True si `fecha_iso` (ISO) cae dentro de la ventana `[ahora - ventana, ahora]`.
+
+    Tolerante: fecha vacia/invalida -> True (no excluimos por no saber la fecha; mejor
+    refrescar de mas que dejar fuera una pieza viva por un dato ausente).
+    """
+    if not fecha_iso:
+        return True
+    try:
+        ts = datetime.fromisoformat(fecha_iso)
+    except ValueError:
+        return True
+    return ts >= ahora - timedelta(days=ventana_dias)
+
+
+def recalcular(marca: str, red: str, id_post: str) -> dict[str, Any]:
+    """Recalcula el rendimiento de UNA pieza SALTANDO el TTL y refresca la cache.
+
+    A diferencia de `rendimiento` (lazy: respeta el TTL), esta SIEMPRE va a la fuente.
+    La usa el daemon de refresco proactivo. Best-effort: degrada a `encontrado=False`
+    sin romper. Solo cachea lo encontrado (igual que `rendimiento`).
+    """
+    if not (marca and red and id_post):
+        return {**_calcular(marca, red, id_post), "generado_en": ""}
+    ahora = _ahora()
+    payload = _calcular(marca, red, id_post)
+    generado_en = ahora.isoformat(timespec="seconds")
+    if payload.get("encontrado"):
+        repos.guardar_metricas_cache(
+            _clave(marca, red, id_post),
+            TIPO_PIEZA,
+            "-",
+            marca,
+            payload,
+            payload.get("fuente") or "muestra",
+            generado_en,
+        )
+    return {**payload, "generado_en": generado_en if payload.get("encontrado") else ""}
+
+
+def refrescar_piezas_recientes(
+    *, ventana_dias: int = VENTANA_REFRESCO_DIAS, ahora: datetime | None = None
+) -> int:
+    """Recalcula la cache de las piezas publicadas RECIENTES con `id_post_metricool`.
+
+    Recorre el tablero, toma las filas por plataforma con `id_post_metricool` cuya
+    `fecha_actualizacion` cae dentro de `ventana_dias`, y fuerza un `recalcular` de cada
+    una. Devuelve cuantas piezas refresco. Best-effort por pieza (un fallo de una no
+    afecta a las demas). Lo invoca el daemon `metricas_piezas_refresco` cada N horas.
+    """
+    ahora = ahora or _ahora()
+    try:
+        items = repos.listar_contenido()
+        por_contenido: dict[str, list[dict[str, Any]]] = {}
+        for plat in repos.listar_contenido_plataforma():
+            por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+    except Exception:  # noqa: BLE001 -- un fallo de lectura no debe matar el barrido
+        _log.exception("metricas_pieza: fallo al leer el tablero para el refresco proactivo.")
+        return 0
+
+    refrescadas = 0
+    for it in items:
+        marca = it.get("marca") or ""
+        if not marca:
+            continue
+        for plat in por_contenido.get(it["id"], []):
+            id_post = plat.get("id_post_metricool") or ""
+            red = plat.get("red") or ""
+            if not id_post:
+                continue
+            if not _es_reciente(plat.get("fecha_actualizacion", "") or "", ahora, ventana_dias):
+                continue
+            datos = recalcular(marca, red, id_post)
+            if datos.get("encontrado"):
+                refrescadas += 1
+    return refrescadas

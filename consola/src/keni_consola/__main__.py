@@ -130,6 +130,25 @@ def main() -> int:
 
     iniciar_refresco_metricas()
 
+    # Refresco PROACTIVO de la cache POR PIEZA (Fase 3 auto-operativa): un hilo demonio que
+    # recalcula el rendimiento de las piezas publicadas recientes (con `id_post_metricool`)
+    # desde Metricool cada N horas (def 4h, KENI_METRICAS_PIEZAS_REFRESCO_HORAS), para que el
+    # tablero y el reciclaje vean datos frescos sin lazy-fill en la apertura. Vive aqui
+    # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
+    from .metricas_piezas_refresco import iniciar_refresco_piezas
+
+    iniciar_refresco_piezas()
+
+    # Alertas de rendimiento / reciclaje proactivo (Fase 3 auto-operativa): un hilo demonio
+    # que cada N horas (def 6h, KENI_ALERTAS_RENDIMIENTO_HORAS) emite eventos internos
+    # `pieza.reciclaje_sugerida` (candidatas del archivo) y `pieza.bajo_rendimiento` (piezas
+    # publicadas bajo el umbral de engagement), repartidos a los webhooks salientes si los
+    # hay. SAFE BY DEFAULT: sin webhooks no toca la red. KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
+    # Vive aqui (servidor real), NO en `crear_app`.
+    from .alertas_rendimiento import iniciar_alertas_rendimiento
+
+    iniciar_alertas_rendimiento()
+
     # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un WORKER
     # corre `claude -p`. En el perfil LOCAL / un solo proceso, el worker corre EN PROCESO
     # (hilo daemon) para que la UX de una sola maquina no cambie (no hace falta un servicio
