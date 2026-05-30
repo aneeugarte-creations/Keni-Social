@@ -48,4 +48,7 @@ steps:
       - for i in $(seq 1 30); do python -c "import os,psycopg; psycopg.connect(os.environ['KENI_TEST_DATABASE_URL']).close()" 2>/dev/null && break; echo "esperando postgres ($i)"; sleep 1; done
       - python -m pytest keni-shared/tests -q
       - python -m pytest mcp-metricas/tests -q
-      - python -m pytest consola/tests -q
+      # consola en PARALELO (pytest-xdist): cada worker usa su PROPIA BD Postgres (`keni_test_gwN`,
+      # ver tests/_postgres.py), asi el aislamiento por TRUNCATE no choca entre workers. Es el paso
+      # dominante del pipeline (la suite monohilo era ~5min en un agente de 12 nucleos).
+      - python -m pytest consola/tests -q -n auto

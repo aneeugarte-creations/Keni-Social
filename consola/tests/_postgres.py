@@ -72,19 +72,63 @@ def url_postgres_de_pruebas() -> str | None:
     return os.environ.get(ENV_TEST_DATABASE_URL) or None
 
 
+# Aislamiento por worker de xdist: los workers corren EN PARALELO, asi que NO pueden compartir
+# una misma BD (un TRUNCATE de uno borraria datos de otro). A cada worker le damos su PROPIA base
+# `<base>_<worker>` (creada on-demand). En serie (sin xdist) se usa la BD base tal cual. Ademas,
+# a la BD efectiva le ponemos `synchronous_commit=off` (commits sin esperar el flush del WAL;
+# seguro en una BD desechable de tests, gran recorte con miles de commits). Todo esto UNA vez por
+# proceso (memo): cada worker es un proceso aparte y entra aqui una sola vez.
+_url_efectiva_cache: str | None = None
+
+
+def _con_db(url: str, dbname: str) -> str:
+    """`url` con su nombre de base de datos reemplazado por `dbname`."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    p = urlsplit(url)
+    return urlunsplit((p.scheme, p.netloc, f"/{dbname}", p.query, p.fragment))
+
+
+def _nombre_db(url: str) -> str:
+    from urllib.parse import urlsplit
+
+    return urlsplit(url).path.lstrip("/") or "postgres"
+
+
+def _preparar_db_efectiva(base_url: str) -> str:
+    """Crea (si hay xdist) la BD por-worker, le fija synchronous_commit=off y devuelve su URL."""
+    import psycopg
+
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    destino = base_url if not worker else _con_db(base_url, f"{_nombre_db(base_url)}_{worker}")
+    db_destino = _nombre_db(destino)
+    # Conexion de mantenimiento a la BD `postgres` del MISMO server (CREATE DATABASE / ALTER no
+    # pueden correr contra la propia BD destino ni dentro de una transaccion -> autocommit).
+    with psycopg.connect(_con_db(base_url, "postgres"), autocommit=True) as con:
+        if worker:
+            existe = con.execute("SELECT 1 FROM pg_database WHERE datname = %s", (db_destino,)).fetchone()
+            if not existe:
+                con.execute(f'CREATE DATABASE "{db_destino}"')  # noqa: S608 -- nombre derivado del worker
+        con.execute(f'ALTER DATABASE "{db_destino}" SET synchronous_commit TO off')  # noqa: S608
+    return destino
+
+
 def requiere_postgres() -> str:
-    """Devuelve la URL de pruebas o hace `pytest.skip` con un mensaje claro si no hay.
+    """Devuelve la URL de pruebas (por-worker si hay xdist) o `pytest.skip` si no hay Postgres.
 
     Usar al inicio de cada test de Postgres (o via la fixture `pg`). El skip es el
     comportamiento esperado en CI sin Postgres.
     """
-    url = url_postgres_de_pruebas()
-    if not url:
+    global _url_efectiva_cache
+    base = url_postgres_de_pruebas()
+    if not base:
         pytest.skip(
             f"sin Postgres de pruebas: exporta {ENV_TEST_DATABASE_URL} para ejecutar los "
             "tests del backend Postgres (CI sin Postgres los salta)."
         )
-    return url
+    if _url_efectiva_cache is None:
+        _url_efectiva_cache = _preparar_db_efectiva(base)
+    return _url_efectiva_cache
 
 
 def limpiar_postgres(url: str) -> None:
@@ -101,6 +145,14 @@ def limpiar_postgres(url: str) -> None:
     # existe; el loop tolerante lo absorbe). Tras ese primer uso siempre va el camino rapido.
     lista = ", ".join(_TABLAS)
     with psycopg.connect(url, autocommit=True) as con:
+        # Mata conexiones rezagadas a ESTA BD antes de truncar: la app del test anterior puede
+        # dejar un hilo de fondo "idle in transaction" reteniendo locks. Bajo xdist (workers bajo
+        # presion de CPU) su cierre se solapa con este TRUNCATE -> deadlock. En una BD de test
+        # desechable y aislada por worker, terminar esas conexiones rezagadas es seguro.
+        con.execute(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+            "WHERE datname = current_database() AND pid <> pg_backend_pid()"
+        )
         try:
             con.execute(f"TRUNCATE TABLE {lista} CASCADE")  # noqa: S608 -- allowlist fija
         except psycopg.errors.UndefinedTable:

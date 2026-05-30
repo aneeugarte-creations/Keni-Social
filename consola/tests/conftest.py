@@ -35,11 +35,27 @@ import pytest
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
+from keni_consola import db as db_modulo
 
 # Plugin con la fixture/ayuda del backend POSTGRES (skip si no hay Postgres). Registrarlo
 # aqui hace que la fixture `pg` se AUTODESCUBRA por nombre en los tests (sin importarla, lo
 # que evita falsos F811 de "redefinicion"). Ver `_postgres.py`.
 pytest_plugins = ["tests._postgres"]
+
+
+@pytest.fixture(autouse=True)
+def _esquema_fresco_por_test():
+    """Limpia el memo de esquema de `db` al inicio de CADA test (#perf de la suite).
+
+    `db._conectar` asegura el esquema (CREATE/ALTER idempotentes) UNA vez por proceso y URL para
+    no pagar ~89 sentencias DDL en cada conexion (sin pool, eso domina la suite). Limpiar el memo
+    por test hace que la PRIMERA conexion de cada test re-asegure el esquema: cuesta 1 ejecucion
+    DDL por test (no por conexion) y preserva la auto-curacion que ejercitan los tests de "BD
+    vieja"/esquema on-demand (que recrean el esquema con conexion cruda y esperan que la primera
+    operacion `db.*` lo migre).
+    """
+    db_modulo._esquemas_asegurados.clear()
+    yield
 
 # --------------------------------------------------------------------------- #
 # Catalogo de skills FALSO, aislado en tmp (env KENI_SKILLS_DIR)              #

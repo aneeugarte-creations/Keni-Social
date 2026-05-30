@@ -61,7 +61,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
-from . import motor_db
+from . import config, motor_db
 from .estados import (
     CLASE_CONTENIDO,
     ESTADO_COMERCIAL_ACTIVA,
@@ -179,17 +179,32 @@ __all__ = [
 ]
 
 
+# URLs de BD cuyo esquema YA aseguramos en ESTE proceso. El DDL (idempotente, ~89 sentencias
+# `CREATE ... IF NOT EXISTS` + `ALTER ... ADD COLUMN IF NOT EXISTS`) NO necesita re-ejecutarse en
+# CADA conexion: como no hay pool y cada operacion abre su propia conexion, hacerlo en cada
+# `_conectar` significaba barrer el catalogo de Postgres en CADA request -> coste real en prod y,
+# x16k conexiones, el coste DOMINANTE de la suite (medido: con memo la suite cae ~3.5x). Se asegura
+# UNA vez por proceso y URL; tras un deploy el proceso reinicia -> el set se vacia -> se re-crea/migra.
+# En tests, un fixture autouse lo limpia por test, de modo que la PRIMERA conexion de cada test
+# re-asegura el esquema (preserva la auto-curacion que ejercitan los tests de "BD vieja"/on-demand).
+_esquemas_asegurados: set[str] = set()
+
+
 def _conectar() -> Any:
-    """Abre la conexion a Postgres y crea el esquema on-demand.
+    """Abre la conexion a Postgres y asegura el esquema UNA vez por proceso/URL.
 
     `motor_db.conectar_cruda()` abre Postgres con `DATABASE_URL` (obligatoria, ADR 0004) y
     devuelve una conexion que IMITA la API de `sqlite3.Connection` que usan los call sites
     (`execute(sql, params)` con `?`, filas por nombre, `rowcount`, commit/close).
 
-    El esquema se crea aqui (idempotente) para que exista por cualquier via de arranque.
+    El esquema (idempotente) se crea/migra la PRIMERA vez que este proceso ve una URL dada; las
+    siguientes conexiones a la misma BD se saltan el DDL (ver `_esquemas_asegurados`).
     """
     con = motor_db.conectar_cruda()
-    _crear_esquema(con)
+    url = config.database_url() or ""
+    if url not in _esquemas_asegurados:
+        _crear_esquema(con)
+        _esquemas_asegurados.add(url)
     return con
 
 
