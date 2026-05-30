@@ -12,7 +12,9 @@ from keni_metricas import servicio
 
 @pytest.fixture
 def muestra(monkeypatch, tmp_path):
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    # Fuente única por defecto = `metricool`; estos tests usan la demo offline, fijada
+    # explícita con KENI_METRICAS_FUENTE=muestra.
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     return tmp_path

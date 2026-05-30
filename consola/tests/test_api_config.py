@@ -116,9 +116,11 @@ def test_get_config_marcas_con_etiqueta_humana(cfg_metricas):
 
 
 def test_placeholder_no_cuenta_como_conectada(cfg_metricas):
+    # La presencia de credenciales se reporta igual sea cual sea la fuente; usamos
+    # `metricool` (fuente válida sin flag) para que `cargar_config` no rechace el TOML.
     _escribir(
         cfg_metricas,
-        'fuente = "real"\n\n[credenciales.meta]\naccess_token = "PENDIENTE_PON_TU_TOKEN_AQUI"\n',
+        'fuente = "metricool"\n\n[credenciales.meta]\naccess_token = "PENDIENTE_PON_TU_TOKEN_AQUI"\n',
     )
     datos = _cli().get("/api/config").json()
     assert datos["credenciales_presentes"]["meta"] is False
@@ -130,14 +132,25 @@ def test_placeholder_no_cuenta_como_conectada(cfg_metricas):
 
 
 def test_post_cambia_fuente_y_alcance(cfg_metricas):
+    # `metricool` es la fuente única de producción; se usa para probar el plumbing
+    # (fuente + alcance) en vez de `real`, que ahora se rechaza (ver test dedicado).
     _escribir(cfg_metricas, 'fuente = "muestra"\n')
     c = _cli()
-    r = c.post("/api/config", json={"fuente": "real", "marcas": ["unotv", "claro_sports"]})
+    r = c.post("/api/config", json={"fuente": "metricool", "marcas": ["unotv", "claro_sports"]})
     assert r.status_code == 200
     assert "guardada" in r.json()["mensaje"].lower()
     datos = tomllib.loads(cfg_metricas.read_text(encoding="utf-8"))
-    assert datos["fuente"] == "real"
+    assert datos["fuente"] == "metricool"
     assert datos["marcas"] == ["unotv", "claro_sports"]
+
+
+def test_post_fuente_real_rechazada_400(cfg_metricas):
+    # `real` (adaptadores por plataforma) es un fallback desactivado: dejaría el
+    # rendimiento por pieza sin datos. La Consola no lo ofrece; debe responder 400.
+    _escribir(cfg_metricas, 'fuente = "muestra"\n')
+    r = _cli().post("/api/config", json={"fuente": "real", "marcas": []})
+    assert r.status_code == 400
+    assert "metricool" in r.json()["error"].lower()
 
 
 def test_post_alcance_vacio_borra_marcas(cfg_metricas):
@@ -150,17 +163,17 @@ def test_post_alcance_vacio_borra_marcas(cfg_metricas):
 
 def test_post_preserva_credenciales_y_cuentas(cfg_metricas):
     _escribir(cfg_metricas, _CONFIG_CON_CREDENCIALES)
-    r = _cli().post("/api/config", json={"fuente": "real", "marcas": ["unotv"]})
+    r = _cli().post("/api/config", json={"fuente": "metricool", "marcas": ["unotv"]})
     assert r.status_code == 200
     datos = tomllib.loads(cfg_metricas.read_text(encoding="utf-8"))
     assert datos["credenciales"]["meta"]["access_token"] == _TOKEN_FALSO
     assert datos["cuenta"][0]["id"] == "unotv"
-    assert datos["fuente"] == "real"
+    assert datos["fuente"] == "metricool"
 
 
 def test_post_archivo_0600(cfg_metricas):
     _escribir(cfg_metricas, _CONFIG_CON_CREDENCIALES)
-    _cli().post("/api/config", json={"fuente": "real", "marcas": ["unotv"]})
+    _cli().post("/api/config", json={"fuente": "metricool", "marcas": ["unotv"]})
     assert (cfg_metricas.stat().st_mode & 0o777) == 0o600
 
 

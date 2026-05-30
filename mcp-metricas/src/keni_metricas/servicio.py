@@ -432,6 +432,14 @@ def guardar_fuente_y_alcance(fuente: str, marcas: list[str]) -> None:
     if fuente not in FUENTES_VALIDAS:
         validas = ", ".join(FUENTES_DISPONIBLES)
         raise ValueError(f"Fuente invalida {fuente!r}. Usa una de: {validas}.")
+    # `real` es un fallback histórico desactivado por defecto (ver config): no se
+    # persiste desde la fachada sin el flag opt-in, para no dejar el config apuntando a
+    # una fuente que rompería la lectura del tablero. La fuente única es `metricool`.
+    if fuente == "real" and not _config._real_permitida():
+        raise ValueError(
+            "La fuente 'real' está desactivada (dejaría el rendimiento por pieza sin "
+            f"datos). Usa 'metricool' o 'muestra', o exporta {_config.ENV_PERMITIR_REAL}=1."
+        )
     ruta = _config.ruta_config()
     existente = asistente.leer_config_existente(ruta)
     nuevo: dict = {"fuente": fuente}

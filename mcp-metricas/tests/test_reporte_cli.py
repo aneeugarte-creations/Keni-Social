@@ -26,9 +26,10 @@ MARCAS_MUESTRA = 7
 
 @pytest.fixture(autouse=True)
 def _entorno_offline(monkeypatch, tmp_path):
-    # fuente de muestra (config inexistente) e historico apagado => determinista, sin red
+    # fuente de muestra (config inexistente) e historico apagado => determinista, sin red.
+    # La fuente única por defecto es `metricool`; se fija `muestra` explícita para la demo.
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
 

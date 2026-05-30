@@ -17,6 +17,7 @@ import { Descargas } from "./metricas/Descargas";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { Kpis } from "./metricas/Kpis";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
+import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
 
@@ -157,6 +158,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
           <TablaCuentas cuentas={reporteQuery.data.cuentas} />
           <PiezasAnalitica opciones={opciones} rangoActual={rango} />
+          {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
+              (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
+          <PiezasRendimiento opciones={opciones} />
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>
       )}

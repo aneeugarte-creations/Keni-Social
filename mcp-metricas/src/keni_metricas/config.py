@@ -2,8 +2,9 @@
 
 El archivo vive en `~/.config/keni-metricas/config.toml` (o la ruta de
 `KENI_METRICAS_CONFIG`). Las credenciales NUNCA salen de la maquina.
-Por defecto la fuente es `muestra` (datos offline), asi que el MCP funciona
-sin configurar nada. Ver `credenciales.ejemplo.toml`.
+Por defecto la fuente es `metricool` (la FUENTE ÚNICA de pago); sin credenciales
+degrada con honestidad a estado vacío, nunca a datos inventados. Para demo offline
+sin red, declara `fuente = "muestra"`. Ver `credenciales.ejemplo.toml`.
 """
 
 from __future__ import annotations
@@ -18,13 +19,39 @@ from .fuentes.base import CuentaNoEncontrada, FuenteMetricas
 from .schema import Cuenta, Pieza, Plataforma, ResumenMetricas
 
 # Valores aceptados para `fuente`:
-#   - `muestra`  = datos offline (defecto), sin red.
-#   - `metricool`= consumidor de la API REST de Metricool (B es consumidor, no
-#                  motor de ingesta; ADR 0005 §B). Requiere API token (plan
-#                  Advanced). Sin credenciales, degrada con honestidad a `muestra`.
-#   - `real`     = adaptadores propios por plataforma (Meta/YouTube/X/TikTok). NO se
-#                  usa para B (queda como capacidad histórica; ver ADR 0005 §B).
+#   - `metricool`= FUENTE ÚNICA de métricas (B es consumidor, no motor de ingesta;
+#                  ADR 0005 §B). Consumidor de la API REST de Metricool (plan pagado).
+#                  Lee TODO desde Metricool —dashboard por marca/cuenta Y rendimiento
+#                  por pieza— por el MISMO camino, así no hay desfase entre fuentes.
+#                  Sin credenciales degrada con honestidad a estado vacío (no inventa).
+#   - `muestra`  = datos offline deterministas (demo / sin red). Implementa el mismo
+#                  contrato completo que Metricool (resumen + piezas + serie + por-post),
+#                  así que la Consola se ve igual en demo sin desfase.
+#   - `real`     = FALLBACK EXPLÍCITO y DESACTIVADO por defecto: adaptadores propios por
+#                  plataforma (Meta/YouTube/X/TikTok). Capacidad HISTÓRICA que NO se usa
+#                  para B (ADR 0005 §B). Solo cubre el dashboard agregado: NO expone
+#                  rendimiento por pieza (`metricas_de_post`) ni serie diaria, así que
+#                  conviviría con el tablero leyendo cero —el desfase que esta
+#                  consolidación elimina—. Por eso queda detrás de un flag opt-in
+#                  (`KENI_METRICAS_PERMITIR_REAL=1`); sin el flag, seleccionarla falla
+#                  con un mensaje que remite a `metricool`. Ver `agregador.py`.
 FUENTES_VALIDAS: frozenset[str] = frozenset({"muestra", "metricool", "real"})
+
+# Fuente por defecto cuando el config no declara `fuente`: Metricool (la fuente única
+# de pago). Antes era "muestra"; ahora la Consola arranca apuntando a la fuente real y
+# degrada con honestidad a estado vacío si faltan credenciales (no a datos de demo).
+FUENTE_DEFECTO: str = "metricool"
+
+# Env var que habilita la fuente `real` (adaptadores por plataforma) como fallback
+# explícito. Sin ella, `real` se rechaza (ver `_verificar_real_permitida`). Existe
+# para no perder la capacidad histórica de los adaptadores, pero evitando que vuelva
+# a ser un camino silencioso que devuelva números distintos a los del tablero.
+ENV_PERMITIR_REAL: str = "KENI_METRICAS_PERMITIR_REAL"
+
+
+def _real_permitida() -> bool:
+    """True si la fuente `real` (adaptadores) está habilitada por flag opt-in."""
+    return os.environ.get(ENV_PERMITIR_REAL, "").strip().lower() in {"1", "true", "yes", "si"}
 
 
 class ConfigInvalida(ValueError):
@@ -128,7 +155,7 @@ class MetricoolConfig:
 
 @dataclass
 class Config:
-    fuente: str = "muestra"  # "muestra" | "metricool" | "real"
+    fuente: str = FUENTE_DEFECTO  # "metricool" (única) | "muestra" (demo) | "real" (fallback)
     cuentas: list[CuentaConfig] = field(default_factory=list)
     credenciales: dict[str, dict] = field(default_factory=dict)  # plataforma -> {clave: valor}
     # marcas (ids) que gestiona esta persona. Vacio = todas (compatibilidad).
@@ -252,12 +279,23 @@ def cargar_config() -> Config:
                 f"No se pudo leer el config en {ruta}: {e}"
             ) from e
 
-    fuente = os.environ.get("KENI_METRICAS_FUENTE") or datos.get("fuente", "muestra")
+    fuente = os.environ.get("KENI_METRICAS_FUENTE") or datos.get("fuente", FUENTE_DEFECTO)
     # B5: una `fuente` desconocida hoy caia en silencio (ceros). La rechazamos.
     if fuente not in FUENTES_VALIDAS:
         validas = ", ".join(sorted(FUENTES_VALIDAS))
         raise ConfigInvalida(
             f"Fuente invalida {fuente!r}. Usa una de: {validas}."
+        )
+    # `real` (adaptadores por plataforma) es un fallback histórico DESACTIVADO por
+    # defecto: solo cubre el dashboard agregado y dejaría el rendimiento por pieza en
+    # cero (el desfase que la consolidación a Metricool elimina). Sin el flag opt-in,
+    # se rechaza con un mensaje que remite a la fuente única.
+    if fuente == "real" and not _real_permitida():
+        raise ConfigInvalida(
+            "La fuente 'real' (adaptadores por plataforma) está desactivada: solo cubre "
+            "el dashboard agregado y dejaría el rendimiento por pieza sin datos. Usa "
+            "'metricool' (fuente única de pago) o 'muestra' (demo). Si necesitas los "
+            f"adaptadores históricos, exporta {ENV_PERMITIR_REAL}=1 a propósito."
         )
 
     cuentas = [_parsear_cuenta(i, c) for i, c in enumerate(datos.get("cuenta", []))]
@@ -379,7 +417,12 @@ def construir_fuente(cfg: Config | None = None) -> FuenteMetricas:
         from .fuentes.muestra import FuenteMuestra
 
         fuente = FuenteMuestra()
-    else:
+    else:  # cfg.fuente == "real" — fallback histórico, solo con el flag opt-in.
+        if not _real_permitida():
+            raise ConfigInvalida(
+                "La fuente 'real' (adaptadores por plataforma) está desactivada. Usa "
+                f"'metricool' o 'muestra', o exporta {ENV_PERMITIR_REAL}=1 a propósito."
+            )
         from .agregador import FuenteCompuesta
 
         fuente = FuenteCompuesta.desde_config(cfg)

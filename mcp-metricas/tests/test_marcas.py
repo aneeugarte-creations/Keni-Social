@@ -16,8 +16,11 @@ from keni_metricas.fuentes.muestra import FuenteMuestra
 
 @pytest.fixture(autouse=True)
 def _entorno_limpio(monkeypatch, tmp_path):
-    # parte siempre de un entorno sin marcas ni config en disco
+    # parte siempre de un entorno sin marcas ni config en disco, fuente de muestra.
+    # La fuente única por defecto ahora es `metricool`; estos tests prueban el ACOTADO
+    # por marcas sobre la fuente de muestra (offline), así que la fijamos explícita.
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
 
 
@@ -98,6 +101,7 @@ def test_env_var_gana_sobre_config_toml(monkeypatch, tmp_path):
 
 def test_aplica_a_fuente_real(monkeypatch):
     monkeypatch.setenv("KENI_METRICAS_FUENTE", "real")
+    monkeypatch.setenv("KENI_METRICAS_PERMITIR_REAL", "1")  # fallback opt-in
     monkeypatch.setenv("KENI_METRICAS_MARCAS", "claro_sports")
     fuente = construir_fuente(cargar_config())
     assert isinstance(fuente, FuenteScoped)

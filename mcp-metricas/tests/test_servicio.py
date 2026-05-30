@@ -18,8 +18,13 @@ from keni_metricas.servicio import ConfigInvalida, CuentaNoEncontrada
 
 @pytest.fixture
 def muestra(monkeypatch, tmp_path):
-    """Fuente de muestra aislada (sin config en disco, sin env vars de fuente/marcas)."""
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    """Fuente de muestra aislada (sin config en disco, sin env vars de marcas).
+
+    La fuente única por defecto ahora es `metricool`; para probar la demo offline
+    fijamos `KENI_METRICAS_FUENTE=muestra` explícitamente (antes se confiaba en que el
+    default fuera `muestra`).
+    """
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     return tmp_path

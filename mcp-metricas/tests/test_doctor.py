@@ -105,10 +105,21 @@ def test_fuente_muestra_se_construye():
     assert r.extra["fuente"] == "muestra"
 
 
-def test_fuente_real_se_construye_sin_credenciales():
-    # FuenteCompuesta se construye aunque no haya adaptadores disponibles.
+def test_fuente_real_se_construye_sin_credenciales(monkeypatch):
+    # `real` es un fallback opt-in: con el flag, FuenteCompuesta se construye aunque no
+    # haya adaptadores disponibles. Sin el flag, ver test_fuente_real_sin_flag_es_error.
+    monkeypatch.setenv("KENI_METRICAS_PERMITIR_REAL", "1")
     r = comprobar_fuente(Config(fuente="real"))
     assert r.estado is Estado.OK
+    assert r.extra["fuente"] == "real"
+
+
+def test_fuente_real_sin_flag_es_error(monkeypatch):
+    # Sin el flag opt-in, la fuente `real` no se construye: el doctor lo reporta ❌
+    # (la fuente única es `metricool`).
+    monkeypatch.delenv("KENI_METRICAS_PERMITIR_REAL", raising=False)
+    r = comprobar_fuente(Config(fuente="real"))
+    assert r.estado is Estado.ERROR
     assert r.extra["fuente"] == "real"
 
 
@@ -483,7 +494,10 @@ def test_validar_offline_con_muestra_no_hace_red(monkeypatch, tmp_path):
     assert all(r.estado is Estado.AVISO for r in conectividad)
 
 
-def test_validar_con_credenciales_marca_adaptador_disponible():
+def test_validar_con_credenciales_marca_adaptador_disponible(monkeypatch):
+    # El doctor valida la conectividad de los adaptadores `real` cuando se elige a
+    # propósito (fallback opt-in): habilitamos el flag.
+    monkeypatch.setenv("KENI_METRICAS_PERMITIR_REAL", "1")
     cfg = Config(
         fuente="real",
         cuentas=[CuentaConfig(id="claro_sports", nombre="Claro Sports", plataformas={Plataforma.x: "123"})],

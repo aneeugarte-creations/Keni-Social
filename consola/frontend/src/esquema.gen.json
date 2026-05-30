@@ -991,6 +991,117 @@
         "generado_en"
       ]
     },
+    "PiezaRendimiento": {
+      "type": "object",
+      "title": "PiezaRendimiento",
+      "properties": {
+        "contenido_id": {
+          "type": "string"
+        },
+        "plataforma_id": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "marca_nombre": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "id_post_metricool": {
+          "type": "string"
+        },
+        "encontrado": {
+          "type": "boolean"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "publicado": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).\n\nA diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la\nlista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó\ndesde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza\na la pieza en el tablero (`/parrilla/pendientes`). `encontrado=False` => Metricool aún\nno tiene datos (recién publicada): la UI muestra \"sin datos todavía\", no ceros falsos.",
+      "required": [
+        "contenido_id",
+        "plataforma_id",
+        "titulo",
+        "marca",
+        "marca_nombre",
+        "red",
+        "id_post_metricool",
+        "encontrado",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct",
+        "url",
+        "publicado",
+        "fuente",
+        "generado_en"
+      ]
+    },
+    "PiezasRendimiento": {
+      "type": "object",
+      "title": "PiezasRendimiento",
+      "properties": {
+        "marca": {
+          "type": "string"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "piezas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PiezaRendimiento"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/piezas-rendimiento`: drill-down marca -> pieza.\n\nLista las piezas publicadas (con `id_post_metricool`) y su rendimiento REAL, leído de\nla MISMA fuente única (Metricool) que el dashboard y las tarjetas del tablero, sin\ndesfase. Ordenadas por engagement desc (las \"sin datos\" al final).",
+      "required": [
+        "marca",
+        "fuente",
+        "total",
+        "piezas"
+      ]
+    },
     "Paginacion": {
       "type": "object",
       "title": "Paginacion",
@@ -1931,6 +2042,12 @@
     },
     {
       "$ref": "#/$defs/TendenciaDiaria"
+    },
+    {
+      "$ref": "#/$defs/PiezaRendimiento"
+    },
+    {
+      "$ref": "#/$defs/PiezasRendimiento"
     },
     {
       "$ref": "#/$defs/Paginacion"

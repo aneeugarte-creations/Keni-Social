@@ -25,16 +25,46 @@ def _escribir_config(monkeypatch, tmp_path, contenido: str):
     return ruta
 
 
-def test_default_es_muestra(monkeypatch, tmp_path):
+def test_default_es_metricool(monkeypatch, tmp_path):
+    """La fuente única por defecto es `metricool` (antes era `muestra`).
+
+    Sin credenciales degrada a una `FuenteMetricol` VACÍA (estado honesto, sin
+    cuentas), nunca a la fuente de muestra: el producto no muestra datos de demo por
+    defecto.
+    """
+    from keni_metricas.fuentes.metricol import FuenteMetricol
+
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    monkeypatch.delenv("METRICOOL_USER_TOKEN", raising=False)
+    monkeypatch.delenv("METRICOOL_USER_ID", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
+    fuente = construir_fuente(cargar_config())
+    assert isinstance(fuente, FuenteMetricol)
+    assert fuente.nombre == "metricool"
+
+
+def test_fuente_muestra_explicita_por_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     fuente = construir_fuente(cargar_config())
     assert isinstance(fuente, FuenteMuestra)
     assert fuente.nombre == "muestra"
 
 
-def test_fuente_real_por_env(monkeypatch, tmp_path):
+def test_fuente_real_requiere_flag_opt_in(monkeypatch, tmp_path):
+    """`real` (fallback histórico) se rechaza sin el flag `KENI_METRICAS_PERMITIR_REAL`."""
     monkeypatch.setenv("KENI_METRICAS_FUENTE", "real")
+    monkeypatch.delenv("KENI_METRICAS_PERMITIR_REAL", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
+    with pytest.raises(ConfigInvalida) as exc:
+        cargar_config()
+    assert "metricool" in str(exc.value)
+
+
+def test_fuente_real_con_flag_construye_compuesta(monkeypatch, tmp_path):
+    """Con el flag opt-in, `real` vuelve a instanciar la FuenteCompuesta (adaptadores)."""
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "real")
+    monkeypatch.setenv("KENI_METRICAS_PERMITIR_REAL", "1")
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     fuente = construir_fuente(cargar_config())
     assert isinstance(fuente, FuenteCompuesta)
@@ -293,7 +323,7 @@ def test_oserror_de_lectura_se_envuelve(monkeypatch, tmp_path):
 # --- Scoping de marcas (KENI_METRICAS_MARCAS / campo `marcas`) ------------------
 def test_marcas_por_env_envuelve_en_fuente_scoped(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.setenv("KENI_METRICAS_MARCAS", "claro_sports, unotv")
     cfg = cargar_config()
     # La env var se parsea respetando orden y descartando vacios/duplicados.
@@ -324,7 +354,7 @@ def test_env_marcas_tiene_prioridad_sobre_campo_config(monkeypatch, tmp_path):
 
 def test_sin_marcas_no_envuelve(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     fuente = construir_fuente(cargar_config())
     assert isinstance(fuente, FuenteMuestra)
@@ -371,7 +401,7 @@ def test_fuente_scoped_propaga_nombre():
 def test_construir_fuente_carga_config_si_no_se_pasa(monkeypatch, tmp_path):
     # construir_fuente() sin cfg debe cargar la config del entorno.
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     fuente = construir_fuente()
     assert isinstance(fuente, FuenteMuestra)
