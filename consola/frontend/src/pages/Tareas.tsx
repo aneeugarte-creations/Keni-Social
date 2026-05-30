@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Loader2,
   ListTodo,
+  MessageSquare,
   Plus,
   Trash2,
 } from "lucide-react";
@@ -11,6 +12,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -270,6 +272,7 @@ function TarjetaContenido({
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
+  const [colaboracionAbierta, setColaboracionAbierta] = React.useState(false);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -348,6 +351,17 @@ function TarjetaContenido({
                 ))}
               </SelectContent>
             </Select>
+            <Tooltip label="Colaboración (comentarios, versiones, aprobación)">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Colaboración"
+                className="text-muted-foreground"
+                onClick={() => setColaboracionAbierta(true)}
+              >
+                <MessageSquare className="h-4 w-4" />
+              </Button>
+            </Tooltip>
             <Tooltip label="Borrar">
               <Button
                 variant="ghost"
@@ -429,6 +443,11 @@ function TarjetaContenido({
           </Select>
         </div>
       </CardContent>
+      <PanelColaboracion
+        contenido={contenido}
+        abierto={colaboracionAbierta}
+        onCerrar={() => setColaboracionAbierta(false)}
+      />
     </Card>
   );
 }

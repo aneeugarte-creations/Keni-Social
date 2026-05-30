@@ -250,3 +250,28 @@ CHECKLIST_CONTENIDO: tuple[str, ...] = (
     "falta_revision",
     "falta_publicar",
 )
+
+# --------------------------------------------------------------------------- #
+# Ola COLABORACION: comentarios internos + versiones de copy + aprobacion      #
+# multinivel sobre el tablero de contenido (inspirado en Planable).            #
+# --------------------------------------------------------------------------- #
+
+# Decision de UN nivel de la cadena de aprobacion multinivel de una pieza
+# (`contenido_aprobaciones.decision`). `pendiente` = aun sin decidir; `aprobado` /
+# `rechazado` = decision tomada (con decisor + sello de tiempo). Una pieza esta
+# TOTALMENTE aprobada cuando todos sus niveles estan en `aprobado`; un `rechazado`
+# en cualquier nivel para la cadena.
+DECISIONES_APROBACION: tuple[str, ...] = ("pendiente", "aprobado", "rechazado")
+DECISION_PENDIENTE = "pendiente"
+DECISION_APROBADO = "aprobado"
+DECISION_RECHAZADO = "rechazado"
+
+# Cadena de aprobacion POR DEFECTO al pedir revision de una pieza (orden = nivel
+# 1-based). Refleja el organigrama de redes de AMX: redaccion -> coordinacion ->
+# direccion. Es solo la plantilla inicial; quien pide la revision puede mandar su
+# propia lista de etiquetas (la cadena vive en datos, no en codigo).
+CADENA_APROBACION_DEFECTO: tuple[str, ...] = (
+    "Edición",
+    "Coordinación",
+    "Dirección",
+)

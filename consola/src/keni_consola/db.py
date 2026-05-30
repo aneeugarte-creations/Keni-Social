@@ -516,6 +516,73 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_contenido_plat_red ON contenido_plataforma (red)",
     "CREATE INDEX IF NOT EXISTS idx_contenido_plat_estado ON contenido_plataforma (estado)",
     "CREATE INDEX IF NOT EXISTS idx_contenido_plat_programada ON contenido_plataforma (fecha_programada)",
+    # OLA COLABORACION (inspirada en Planable: internal notes, version history, multi-level
+    # approval). Tres tablas APENDIDAS al modelo `contenido`/`contenido_plataforma`, sin
+    # tocar su esquema: hilo de comentarios por pieza, historial de versiones del copy y
+    # cadena de aprobacion multinivel con trazabilidad. Operacional; vive en Postgres.
+    #
+    # Comentarios internos: hilo de discusion de redaccion por item de `contenido` (el padre,
+    # asi cubre tanto contenido publicable como tarea libre). `plataforma_id` opcional ata el
+    # comentario a UNA red concreta (""=comentario del item entero). `resuelto` marca un hilo
+    # cerrado sin borrarlo (trazabilidad). Borrado real solo por el autor/admin (capa API).
+    """
+    CREATE TABLE IF NOT EXISTS contenido_comentarios (
+        id            TEXT PRIMARY KEY,
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        texto         TEXT NOT NULL DEFAULT '',
+        resuelto      INTEGER NOT NULL DEFAULT 0,
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_coment_contenido ON contenido_comentarios (contenido_id)",
+    "CREATE INDEX IF NOT EXISTS idx_coment_plataforma ON contenido_comentarios (plataforma_id)",
+    # Historial de versiones del COPY de una fila por plataforma. Cada vez que el copy de una
+    # `contenido_plataforma` cambia (via la API de versiones), se guarda un SNAPSHOT inmutable
+    # del texto ANTERIOR antes de pisarlo, con quien y cuando. `version` es un contador
+    # incremental por plataforma (1, 2, 3...). Revertir = aplicar el texto de una version vieja
+    # como copy actual (que a su vez genera otro snapshot del que se pisa: nunca se pierde nada).
+    """
+    CREATE TABLE IF NOT EXISTS contenido_copy_versiones (
+        id            TEXT PRIMARY KEY,
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        version       INTEGER NOT NULL DEFAULT 0,
+        copy          TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        nota          TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_copyver_plataforma ON contenido_copy_versiones (plataforma_id)",
+    # Aprobacion MULTINIVEL de una fila por plataforma. La aprobacion editorial deja de ser un
+    # unico "otro par de ojos" y pasa a una CADENA de niveles configurable (p. ej. edicion ->
+    # coordinacion -> direccion). Cada registro es la decision de UN nivel sobre la pieza:
+    # `nivel` (1-based, orden de la cadena), `etiqueta` legible, `decision`
+    # (pendiente/aprobado/rechazado), quien decidio y cuando, mas un `comentario` opcional.
+    # La pieza queda totalmente aprobada cuando TODOS sus niveles estan en `aprobado`; un
+    # `rechazado` en cualquier nivel para la cadena. Trazabilidad completa (quien, que, cuando).
+    """
+    CREATE TABLE IF NOT EXISTS contenido_aprobaciones (
+        id              TEXT PRIMARY KEY,
+        plataforma_id   TEXT NOT NULL DEFAULT '',
+        contenido_id    TEXT NOT NULL DEFAULT '',
+        nivel           INTEGER NOT NULL DEFAULT 1,
+        etiqueta        TEXT NOT NULL DEFAULT '',
+        decision        TEXT NOT NULL DEFAULT 'pendiente',
+        decisor_id      TEXT NOT NULL DEFAULT '',
+        decisor_nombre  TEXT NOT NULL DEFAULT '',
+        comentario      TEXT NOT NULL DEFAULT '',
+        creado          TEXT NOT NULL DEFAULT '',
+        decidido_en     TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON contenido_aprobaciones (plataforma_id)",
+    "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON contenido_aprobaciones (decision)",
     # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
@@ -3352,6 +3419,360 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Ola COLABORACION: comentarios internos por pieza                             #
+# --------------------------------------------------------------------------- #
+# Hilo de discusion de redaccion atado a un item de `contenido` (padre). Modelo
+# CRUD plano: crear, listar (por contenido, opcionalmente filtrando una plataforma),
+# marcar resuelto/reabrir, editar texto, borrar. Aditivo: NO toca `contenido`.
+
+_COLS_COMENTARIO = (
+    "id",
+    "contenido_id",
+    "plataforma_id",
+    "autor_id",
+    "autor_nombre",
+    "texto",
+    "resuelto",
+    "creado",
+    "actualizado",
+)
+_SELECT_COMENTARIO = f"SELECT {', '.join(_COLS_COMENTARIO)} FROM contenido_comentarios"
+
+
+def _fila_a_comentario(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `contenido_comentarios` en dict (`resuelto` como bool)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_COMENTARIO}
+    item["resuelto"] = bool(fila["resuelto"])
+    return item
+
+
+def crear_comentario(
+    *,
+    contenido_id: str,
+    plataforma_id: str = "",
+    texto: str,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Inserta un comentario en el hilo de un contenido y lo devuelve. NO valida."""
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "contenido_id": contenido_id,
+        "plataforma_id": plataforma_id or "",
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "texto": texto or "",
+        "resuelto": 0,
+        "creado": ahora,
+        "actualizado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_COMENTARIO)
+        con.execute(
+            f"INSERT INTO contenido_comentarios ({', '.join(_COLS_COMENTARIO)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_COMENTARIO),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_comentario(fila)
+
+
+def listar_comentarios(
+    contenido_id: str, plataforma_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Comentarios de un contenido, mas antiguos primero. `plataforma_id` filtra una red."""
+    sql = f"{_SELECT_COMENTARIO} WHERE contenido_id = ?"
+    params: list[Any] = [contenido_id]
+    if plataforma_id is not None:
+        sql += " AND plataforma_id = ?"
+        params.append(plataforma_id)
+    sql += " ORDER BY creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_comentario(f) for f in filas]
+
+
+def obtener_comentario(comentario_id: str) -> dict[str, Any] | None:
+    """Un comentario por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_COMENTARIO} WHERE id = ?", (comentario_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_comentario(fila) if fila is not None else None
+
+
+def actualizar_comentario(
+    comentario_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita `texto` y/o `resuelto` de un comentario; None si no existe."""
+    cambios = {k: v for k, v in campos.items() if k in ("texto", "resuelto")}
+    if not cambios:
+        return obtener_comentario(comentario_id)
+    if "resuelto" in cambios:
+        cambios["resuelto"] = 1 if cambios["resuelto"] else 0
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, comentario_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE contenido_comentarios SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_COMENTARIO} WHERE id = ?", (comentario_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_comentario(fila) if fila is not None else None
+
+
+def borrar_comentario(comentario_id: str) -> bool:
+    """Borra un comentario; True si existia."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM contenido_comentarios WHERE id = ?", (comentario_id,)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Ola COLABORACION: historial de versiones del copy                            #
+# --------------------------------------------------------------------------- #
+# Snapshots inmutables del copy de una fila por plataforma. Cada cambio del copy
+# guarda el texto ANTERIOR (con quien/cuando/nota); revertir aplica un texto viejo
+# como copy actual y vuelve a snapshotear lo que se pisa: nunca se pierde nada.
+
+_COLS_COPY_VERSION = (
+    "id",
+    "plataforma_id",
+    "contenido_id",
+    "version",
+    "copy",
+    "autor_id",
+    "autor_nombre",
+    "nota",
+    "creado",
+)
+_SELECT_COPY_VERSION = f"SELECT {', '.join(_COLS_COPY_VERSION)} FROM contenido_copy_versiones"
+
+
+def _fila_a_copy_version(fila: Any) -> dict[str, Any]:
+    return {col: fila[col] for col in _COLS_COPY_VERSION}
+
+
+def registrar_copy_version(
+    *,
+    plataforma_id: str,
+    contenido_id: str,
+    copy: str,
+    autor: dict[str, str] | None = None,
+    nota: str = "",
+) -> dict[str, Any]:
+    """Guarda un snapshot del copy de una plataforma con `version` autoincremental (1-based).
+
+    El numero de version se calcula como `MAX(version)+1` sobre esa plataforma (1 si es el
+    primero). NO valida: la API decide cuando snapshotear (antes de pisar el copy vivo).
+    """
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        fila_max = con.execute(
+            "SELECT MAX(version) AS m FROM contenido_copy_versiones WHERE plataforma_id = ?",
+            (plataforma_id,),
+        ).fetchone()
+        siguiente = (fila_max["m"] or 0) + 1 if fila_max is not None else 1
+        fila = {
+            "id": uuid.uuid4().hex[:12],
+            "plataforma_id": plataforma_id,
+            "contenido_id": contenido_id or "",
+            "version": siguiente,
+            "copy": copy or "",
+            "autor_id": autor.get("id", "") or "",
+            "autor_nombre": autor.get("usuario", "") or "",
+            "nota": nota or "",
+            "creado": ahora,
+        }
+        marcadores = ", ".join("?" for _ in _COLS_COPY_VERSION)
+        con.execute(
+            f"INSERT INTO contenido_copy_versiones ({', '.join(_COLS_COPY_VERSION)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_COPY_VERSION),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_copy_version(fila)
+
+
+def listar_copy_versiones(plataforma_id: str) -> list[dict[str, Any]]:
+    """Historial de versiones del copy de una plataforma, mas RECIENTE primero."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_COPY_VERSION} WHERE plataforma_id = ? ORDER BY version DESC, id DESC",
+            (plataforma_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_copy_version(f) for f in filas]
+
+
+def obtener_copy_version(version_id: str) -> dict[str, Any] | None:
+    """Una version del copy por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_COPY_VERSION} WHERE id = ?", (version_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_copy_version(fila) if fila is not None else None
+
+
+# --------------------------------------------------------------------------- #
+# Ola COLABORACION: aprobacion multinivel por pieza                            #
+# --------------------------------------------------------------------------- #
+# Cadena de niveles de aprobacion de una fila por plataforma. Cada fila es la
+# decision de UN nivel; la pieza esta aprobada cuando todos sus niveles lo estan.
+
+_COLS_APROBACION = (
+    "id",
+    "plataforma_id",
+    "contenido_id",
+    "nivel",
+    "etiqueta",
+    "decision",
+    "decisor_id",
+    "decisor_nombre",
+    "comentario",
+    "creado",
+    "decidido_en",
+)
+_SELECT_APROBACION = f"SELECT {', '.join(_COLS_APROBACION)} FROM contenido_aprobaciones"
+
+
+def _fila_a_aprobacion(fila: Any) -> dict[str, Any]:
+    return {col: fila[col] for col in _COLS_APROBACION}
+
+
+def crear_cadena_aprobacion(
+    *,
+    plataforma_id: str,
+    contenido_id: str,
+    etiquetas: list[str],
+) -> list[dict[str, Any]]:
+    """Crea (o RECREA) la cadena de aprobacion de una plataforma a partir de `etiquetas`.
+
+    Borra cualquier cadena previa de esa plataforma y crea un nivel `pendiente` por cada
+    etiqueta, en orden (nivel 1-based). Devuelve la cadena nueva. NO valida.
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        con.execute(
+            "DELETE FROM contenido_aprobaciones WHERE plataforma_id = ?", (plataforma_id,)
+        )
+        creados: list[dict[str, Any]] = []
+        for indice, etiqueta in enumerate(etiquetas, start=1):
+            fila = {
+                "id": uuid.uuid4().hex[:12],
+                "plataforma_id": plataforma_id,
+                "contenido_id": contenido_id or "",
+                "nivel": indice,
+                "etiqueta": etiqueta or f"Nivel {indice}",
+                "decision": "pendiente",
+                "decisor_id": "",
+                "decisor_nombre": "",
+                "comentario": "",
+                "creado": ahora,
+                "decidido_en": "",
+            }
+            marcadores = ", ".join("?" for _ in _COLS_APROBACION)
+            con.execute(
+                f"INSERT INTO contenido_aprobaciones ({', '.join(_COLS_APROBACION)}) "
+                f"VALUES ({marcadores})",
+                tuple(fila[col] for col in _COLS_APROBACION),
+            )
+            creados.append(_fila_a_aprobacion(fila))
+        con.commit()
+    finally:
+        con.close()
+    return creados
+
+
+def listar_aprobaciones(plataforma_id: str) -> list[dict[str, Any]]:
+    """Cadena de aprobacion de una plataforma, por nivel ascendente."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_APROBACION} WHERE plataforma_id = ? ORDER BY nivel ASC, id ASC",
+            (plataforma_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_aprobacion(f) for f in filas]
+
+
+def obtener_aprobacion(aprobacion_id: str) -> dict[str, Any] | None:
+    """Un nivel de la cadena por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_APROBACION} WHERE id = ?", (aprobacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_aprobacion(fila) if fila is not None else None
+
+
+def actualizar_aprobacion(
+    aprobacion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Aplica una decision a un nivel (`decision`/`decisor_*`/`comentario`/`decidido_en`)."""
+    permitidos = ("decision", "decisor_id", "decisor_nombre", "comentario", "decidido_en")
+    cambios = {k: v for k, v in campos.items() if k in permitidos}
+    if not cambios:
+        return obtener_aprobacion(aprobacion_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), aprobacion_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE contenido_aprobaciones SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_APROBACION} WHERE id = ?", (aprobacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_aprobacion(fila) if fila is not None else None
 
 
 # --------------------------------------------------------------------------- #

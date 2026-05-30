@@ -141,8 +141,14 @@ import type {
   RespuestaSubContextos,
   RespuestaSugerencia,
   RespuestaSugerencias,
+  CadenaAprobacion,
+  RespuestaComentario,
+  RespuestaComentarios,
   RespuestaContenido,
   RespuestaContenidoItem,
+  RespuestaCopyGuardado,
+  RespuestaCopyVersiones,
+  RespuestaDecisionAprobacion,
   RespuestaPlataforma,
   RespuestaTareas,
   RespuestaEquipoRota,
@@ -899,6 +905,62 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+
+  // --- Ola COLABORACIÓN: comentarios + versiones de copy + aprobación multinivel ---
+  comentarios: (contenidoId: string, plataformaId?: string, signal?: AbortSignal) => {
+    const qs = plataformaId !== undefined ? `?plataforma_id=${encodeURIComponent(plataformaId)}` : "";
+    return peticion<RespuestaComentarios>(
+      `/contenido/${encodeURIComponent(contenidoId)}/comentarios${qs}`,
+      { signal },
+    );
+  },
+  crearComentario: (contenidoId: string, texto: string, plataformaId?: string) =>
+    peticion<RespuestaComentario>(`/contenido/${encodeURIComponent(contenidoId)}/comentarios`, {
+      metodo: "POST",
+      json: { texto, plataforma_id: plataformaId ?? "" },
+    }),
+  actualizarComentario: (id: string, cuerpo: { texto?: string; resuelto?: boolean }) =>
+    peticion<RespuestaComentario>(`/comentarios/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarComentario: (id: string) =>
+    peticion<RespuestaMensaje>(`/comentarios/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  copyVersiones: (plataformaId: string, signal?: AbortSignal) =>
+    peticion<RespuestaCopyVersiones>(
+      `/plataformas/${encodeURIComponent(plataformaId)}/copy/versiones`,
+      { signal },
+    ),
+  guardarCopy: (plataformaId: string, copy: string, nota?: string) =>
+    peticion<RespuestaCopyGuardado>(`/plataformas/${encodeURIComponent(plataformaId)}/copy`, {
+      metodo: "POST",
+      json: { copy, nota: nota ?? "" },
+    }),
+  revertirCopy: (plataformaId: string, versionId: string) =>
+    peticion<RespuestaCopyGuardado>(
+      `/plataformas/${encodeURIComponent(plataformaId)}/copy/revertir`,
+      { metodo: "POST", json: { version_id: versionId } },
+    ),
+
+  cadenaAprobacion: (plataformaId: string, signal?: AbortSignal) =>
+    peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(plataformaId)}/aprobacion`, {
+      signal,
+    }),
+  crearCadenaAprobacion: (plataformaId: string, etiquetas?: string[]) =>
+    peticion<CadenaAprobacion>(`/plataformas/${encodeURIComponent(plataformaId)}/aprobacion`, {
+      metodo: "POST",
+      json: etiquetas !== undefined ? { etiquetas } : {},
+    }),
+  decidirNivelAprobacion: (
+    nivelId: string,
+    decision: "aprobado" | "rechazado",
+    comentario?: string,
+  ) =>
+    peticion<RespuestaDecisionAprobacion>(
+      `/aprobacion-nivel/${encodeURIComponent(nivelId)}/decidir`,
+      { metodo: "POST", json: { decision, comentario: comentario ?? "" } },
+    ),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>
