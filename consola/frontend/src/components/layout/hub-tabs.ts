@@ -3,7 +3,9 @@ import {
   BarChart3,
   Bot,
   CalendarClock,
+  FileText,
   Globe,
+  Images,
   ListOrdered,
   ListTodo,
   Megaphone,
@@ -59,6 +61,11 @@ export const TABS_AGENTES: ItemTabHub[] = [
   { ruta: "/agentes/actividad", etiqueta: "Actividad IA", icono: Activity },
 ];
 
+export const TABS_ACTIVOS: ItemTabHub[] = [
+  { ruta: "/activos/plantillas", etiqueta: "Plantillas", icono: FileText },
+  { ruta: "/activos/biblioteca", etiqueta: "Biblioteca", icono: Images },
+];
+
 /**
  * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del item de nav de la
  * app que abre el hub (la misma que entrega el catálogo). El sidebar lo usa para
@@ -70,6 +77,7 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/analiticas": TABS_ANALITICAS,
   "/parrilla": TABS_PARRILLA,
   "/agentes": TABS_AGENTES,
+  "/activos": TABS_ACTIVOS,
 };
 
 /**

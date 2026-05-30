@@ -114,6 +114,15 @@ import type {
   RespuestaMensaje,
   RespuestaPlantilla,
   RespuestaPlantillas,
+  CuerpoCrearPlantillaContenido,
+  CuerpoActualizarPlantillaContenido,
+  CuerpoAplicarPlantilla,
+  RespuestaPlantillasContenido,
+  RespuestaPlantillaContenido,
+  RespuestaAplicarPlantilla,
+  RespuestaMediosBiblioteca,
+  RespuestaMedioBiblioteca,
+  CuerpoActualizarMedioBiblioteca,
   RespuestaProyectos,
   RespuestaRadar,
   RespuestaParrilla,
@@ -788,6 +797,83 @@ export const api = {
     }),
   eliminarPlantilla: (id: string) =>
     peticion<RespuestaMensaje>(`/plantillas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+
+  // --- Plantillas de CONTENIDO por tipo de nota (activos reutilizables) ---
+  plantillasContenido: (
+    filtros?: { marca?: string; tipo?: string; soloActivas?: boolean },
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaPlantillasContenido>(
+      `/plantillas-contenido${query({
+        marca: filtros?.marca || undefined,
+        tipo: filtros?.tipo || undefined,
+        solo_activas: filtros?.soloActivas ? "1" : undefined,
+      })}`,
+      { signal },
+    ),
+  crearPlantillaContenido: (cuerpo: CuerpoCrearPlantillaContenido) =>
+    peticion<RespuestaPlantillaContenido>("/plantillas-contenido", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+  actualizarPlantillaContenido: (id: string, cuerpo: CuerpoActualizarPlantillaContenido) =>
+    peticion<RespuestaPlantillaContenido>(`/plantillas-contenido/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarPlantillaContenido: (id: string) =>
+    peticion<RespuestaMensaje>(`/plantillas-contenido/${encodeURIComponent(id)}`, {
+      metodo: "DELETE",
+    }),
+  aplicarPlantillaContenido: (id: string, cuerpo: CuerpoAplicarPlantilla) =>
+    peticion<RespuestaAplicarPlantilla>(
+      `/plantillas-contenido/${encodeURIComponent(id)}/aplicar`,
+      { metodo: "POST", json: cuerpo },
+    ),
+
+  // --- Biblioteca de medios interna (activos reutilizables; no publica a redes) ---
+  bibliotecaMedia: (
+    filtros?: { marca?: string; tipo?: string; soloAprobados?: boolean },
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaMediosBiblioteca>(
+      `/biblioteca-media${query({
+        marca: filtros?.marca || undefined,
+        tipo: filtros?.tipo || undefined,
+        solo_aprobados: filtros?.soloAprobados ? "1" : undefined,
+      })}`,
+      { signal },
+    ),
+  subirMedioBiblioteca: (
+    archivo: File,
+    meta: {
+      titulo?: string;
+      descripcion?: string;
+      marca?: string;
+      tipo?: string;
+      etiquetas?: string[];
+      credito?: string;
+    },
+  ) => {
+    const form = new FormData();
+    form.set("archivo", archivo);
+    if (meta.titulo) form.set("titulo", meta.titulo);
+    if (meta.descripcion) form.set("descripcion", meta.descripcion);
+    if (meta.marca) form.set("marca", meta.marca);
+    if (meta.tipo) form.set("tipo", meta.tipo);
+    if (meta.credito) form.set("credito", meta.credito);
+    if (meta.etiquetas) form.set("etiquetas", JSON.stringify(meta.etiquetas));
+    return peticion<RespuestaMedioBiblioteca>("/biblioteca-media", { metodo: "POST", form });
+  },
+  actualizarMedioBiblioteca: (id: string, cuerpo: CuerpoActualizarMedioBiblioteca) =>
+    peticion<RespuestaMedioBiblioteca>(`/biblioteca-media/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarMedioBiblioteca: (id: string) =>
+    peticion<RespuestaMensaje>(`/biblioteca-media/${encodeURIComponent(id)}`, {
+      metodo: "DELETE",
+    }),
 
   // --- RSS (fuentes + items) ---
   fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),

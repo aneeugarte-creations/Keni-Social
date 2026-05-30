@@ -959,6 +959,119 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
     return db.borrar_contenido_plataforma(plataforma_id)
 
 
+# --------------------------------------------------------------------------- #
+# Plantillas de CONTENIDO por tipo de nota (OPERACIONAL: Postgres via db.py)    #
+# --------------------------------------------------------------------------- #
+# Distintas de `plantillas` (copy plano en YAML): modelan un TIPO de nota recurrente con
+# ESTRUCTURA `{{variables}}` + lista declarada de variables. Activos reutilizables (no
+# editorial por marca en fichero): viven en Postgres. La fachada delega 1:1 en `db.py`.
+
+
+def crear_plantilla_contenido(
+    *,
+    nombre: str,
+    tipo_nota: str = "",
+    descripcion: str = "",
+    marca: str = "",
+    red: str = "",
+    estructura: str = "",
+    variables: str = "[]",
+    activo: bool = True,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    return db.crear_plantilla_contenido(
+        nombre=nombre,
+        tipo_nota=tipo_nota,
+        descripcion=descripcion,
+        marca=marca,
+        red=red,
+        estructura=estructura,
+        variables=variables,
+        activo=activo,
+        autor=autor,
+    )
+
+
+def listar_plantillas_contenido(
+    *, marca: str | None = None, tipo_nota: str | None = None, solo_activas: bool = False
+) -> list[dict[str, Any]]:
+    return db.listar_plantillas_contenido(
+        marca=marca, tipo_nota=tipo_nota, solo_activas=solo_activas
+    )
+
+
+def obtener_plantilla_contenido(plantilla_id: str) -> dict[str, Any] | None:
+    return db.obtener_plantilla_contenido(plantilla_id)
+
+
+def actualizar_plantilla_contenido(
+    plantilla_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_plantilla_contenido(plantilla_id, campos)
+
+
+def borrar_plantilla_contenido(plantilla_id: str) -> bool:
+    return db.borrar_plantilla_contenido(plantilla_id)
+
+
+# --------------------------------------------------------------------------- #
+# Biblioteca de MEDIOS interna (OPERACIONAL: Postgres via db.py)                #
+# --------------------------------------------------------------------------- #
+# Catalogo editorial de medios APROBADOS y etiquetables. El binario lo guarda/sirve
+# `media.py`; aqui solo el catalogo reutilizable. La fachada delega 1:1 en `db.py`.
+
+
+def crear_media_biblioteca(
+    *,
+    objeto: str,
+    tipo: str = "imagen",
+    titulo: str = "",
+    descripcion: str = "",
+    marca: str = "",
+    etiquetas: str = "[]",
+    credito: str = "",
+    aprobado: bool = True,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    return db.crear_media_biblioteca(
+        objeto=objeto,
+        tipo=tipo,
+        titulo=titulo,
+        descripcion=descripcion,
+        marca=marca,
+        etiquetas=etiquetas,
+        credito=credito,
+        aprobado=aprobado,
+        autor=autor,
+    )
+
+
+def listar_media_biblioteca(
+    *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
+) -> list[dict[str, Any]]:
+    return db.listar_media_biblioteca(
+        marca=marca, tipo=tipo, solo_aprobados=solo_aprobados
+    )
+
+
+def obtener_media_biblioteca(media_id: str) -> dict[str, Any] | None:
+    return db.obtener_media_biblioteca(media_id)
+
+
+def existe_media_objeto(objeto: str) -> bool:
+    return db.existe_media_objeto(objeto)
+
+
+def actualizar_media_biblioteca(
+    media_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_media_biblioteca(media_id, campos)
+
+
+def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
+    return db.borrar_media_biblioteca(media_id)
+
+
 def duplicar_evento_rota(
     evento_id: str,
     *,

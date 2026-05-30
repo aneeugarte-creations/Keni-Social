@@ -32,6 +32,10 @@ const Parrilla = lazy(() => import("@/pages/Parrilla"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
 
+const Activos = lazy(() => import("@/pages/Activos"));
+const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
+const BibliotecaMedia = lazy(() => import("@/pages/activos/BibliotecaMedia"));
+
 const AgentesHub = lazy(() => import("@/pages/AgentesHub"));
 const Agentes = lazy(() => import("@/pages/Agentes"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
@@ -122,6 +126,17 @@ export const router = createBrowserRouter([
         ],
       },
       { path: "agentes/:id", element: <DetalleAgente /> },
+
+      // Hub Activos (plantillas de contenido + biblioteca de medios reutilizables).
+      {
+        path: "activos",
+        element: <Activos />,
+        children: [
+          { index: true, element: <Navigate to="plantillas" replace /> },
+          { path: "plantillas", element: <PlantillasContenido /> },
+          { path: "biblioteca", element: <BibliotecaMedia /> },
+        ],
+      },
 
       // Ajustes (sin entrada en el sidebar; se llega desde el dropdown del avatar).
       { path: "mi-cuenta", element: <MiCuenta /> },

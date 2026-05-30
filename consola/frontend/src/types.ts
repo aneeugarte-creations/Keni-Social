@@ -2118,6 +2118,126 @@ export interface CuerpoActualizarPlantilla {
   contenido?: string;
 }
 
+// --- Plantillas de CONTENIDO por tipo de nota (activos reutilizables) ---
+
+/** Una variable declarada de una plantilla de contenido (marcador `{{clave}}`). */
+export interface VariablePlantilla {
+  /** Identificador que se sustituye en la estructura (`[a-zA-Z0-9_]`). */
+  clave: string;
+  /** Etiqueta legible para el formulario (opcional). */
+  etiqueta: string;
+  /** Ejemplo/placeholder orientativo (opcional). */
+  ejemplo: string;
+}
+
+/** Una plantilla de contenido por tipo de nota recurrente (estructura + variables). */
+export interface PlantillaContenido {
+  id: string;
+  nombre: string;
+  /** Tipo de nota recurrente (p. ej. "gol", "alineación", "efeméride"). */
+  tipo_nota: string;
+  descripcion: string;
+  /** Marca asociada (`""` si es general). */
+  marca: string;
+  marca_nombre: string;
+  /** Red asociada (`""` si aplica a cualquier red). */
+  red: string;
+  red_nombre: string;
+  /** Cuerpo con marcadores `{{variable}}`. */
+  estructura: string;
+  variables: VariablePlantilla[];
+  activo: boolean;
+  autor_nombre: string;
+  creado: string;
+  actualizado: string;
+}
+
+export interface RespuestaPlantillasContenido {
+  plantillas: PlantillaContenido[];
+}
+
+export interface RespuestaPlantillaContenido {
+  plantilla: PlantillaContenido;
+}
+
+/** Cuerpo para crear una plantilla de contenido. */
+export interface CuerpoCrearPlantillaContenido {
+  nombre: string;
+  estructura: string;
+  tipo_nota?: string;
+  descripcion?: string;
+  marca?: string;
+  red?: string;
+  variables?: VariablePlantilla[];
+}
+
+/** Cuerpo parcial para actualizar una plantilla de contenido. */
+export interface CuerpoActualizarPlantillaContenido {
+  nombre?: string;
+  tipo_nota?: string;
+  descripcion?: string;
+  marca?: string;
+  red?: string;
+  estructura?: string;
+  variables?: VariablePlantilla[];
+  activo?: boolean;
+}
+
+/** Cuerpo para aplicar (rellenar) una plantilla de contenido. */
+export interface CuerpoAplicarPlantilla {
+  valores: Record<string, string>;
+}
+
+/** Resultado de aplicar una plantilla: copy compuesto + variables sin valor. */
+export interface RespuestaAplicarPlantilla {
+  copy: string;
+  /** Claves de variables que quedaron sin valor (la UI las resalta). */
+  faltan: string[];
+}
+
+// --- Biblioteca de medios interna (activos reutilizables) ---
+
+/** Un medio catalogado en la biblioteca interna (imagen/clip aprobado y etiquetable). */
+export interface MedioBiblioteca {
+  id: string;
+  /** Nombre del objeto en el almacén de media (uuid+ext del servidor). */
+  objeto: string;
+  /** URL para servir/previsualizar el binario (`/api/media/{objeto}`). */
+  url: string;
+  /** Tipo de medio: `imagen` o `clip`. */
+  tipo: string;
+  titulo: string;
+  descripcion: string;
+  /** Marca asociada (`""` si es general). */
+  marca: string;
+  marca_nombre: string;
+  etiquetas: string[];
+  credito: string;
+  aprobado: boolean;
+  autor_nombre: string;
+  creado: string;
+  actualizado: string;
+}
+
+export interface RespuestaMediosBiblioteca {
+  medios: MedioBiblioteca[];
+}
+
+export interface RespuestaMedioBiblioteca {
+  medio: MedioBiblioteca;
+}
+
+/** Cuerpo parcial para actualizar los metadatos de un medio de la biblioteca. */
+export interface CuerpoActualizarMedioBiblioteca {
+  titulo?: string;
+  descripcion?: string;
+  marca?: string;
+  tipo?: string;
+  etiquetas?: string[];
+  credito?: string;
+  aprobado?: boolean;
+}
+
 // --- RSS (fuentes y elementos para Generar copy) ---
 
 /** Una fuente RSS dada de alta. */

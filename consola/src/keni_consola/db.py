@@ -642,6 +642,65 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_metricas_cache_combo "
     "ON metricas_cache (tipo, rango, marca)",
+    # ----------------------------------------------------------------------- #
+    # ACTIVOS REUTILIZABLES (ola "activos"): plantillas de contenido por tipo  #
+    # de nota recurrente + biblioteca de medios interna.                      #
+    # ----------------------------------------------------------------------- #
+    # PLANTILLAS DE CONTENIDO (ola "activos"): a diferencia de la plantilla de copy plana
+    # (`plantillas`, un texto suelto por marca/red en YAML), esta plantilla modela un TIPO
+    # de nota recurrente (p.ej. "gol", "alineacion", "efemeride deportiva"): una ESTRUCTURA
+    # de cuerpo con marcadores `{{variable}}` mas la lista DECLARADA de esas variables. Al
+    # armar una pieza, el equipo elige la plantilla, rellena las variables y obtiene el copy
+    # base ya tropicalizado por la estructura. `variables` es un JSON serializado (lista de
+    # `{clave, etiqueta, ejemplo}`); el render (sustitucion) lo hace la API, no la BD.
+    """
+    CREATE TABLE IF NOT EXISTS plantilla_contenido (
+        id           TEXT PRIMARY KEY,
+        nombre       TEXT NOT NULL,
+        tipo_nota    TEXT NOT NULL DEFAULT '',
+        descripcion  TEXT NOT NULL DEFAULT '',
+        marca        TEXT NOT NULL DEFAULT '',
+        red          TEXT NOT NULL DEFAULT '',
+        estructura   TEXT NOT NULL DEFAULT '',
+        variables    TEXT NOT NULL DEFAULT '[]',
+        activo       INTEGER NOT NULL DEFAULT 1,
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_plantilla_contenido_marca ON plantilla_contenido (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_plantilla_contenido_tipo ON plantilla_contenido (tipo_nota)",
+    "CREATE INDEX IF NOT EXISTS idx_plantilla_contenido_activo ON plantilla_contenido (activo)",
+    # BIBLIOTECA DE MEDIOS interna (ola "activos"): catalogo editorial de imagenes/clips
+    # APROBADOS y reutilizables al armar una pieza. NO publica a redes (eso es Metricool); es
+    # un repositorio interno. Cada fila CATALOGA un objeto del almacen de media (`media.py` /
+    # `almacen_media.py`) por su nombre (`objeto`, un uuid+ext que SIEMPRE genera el servidor)
+    # mas metadatos editoriales: titulo, tipo (`imagen`|`clip`), marca, etiquetas (JSON de
+    # strings para buscar/filtrar), credito/fuente y estado de aprobacion. `objeto` UNIQUE: un
+    # mismo binario se cataloga una sola vez. Borrar una entrada NO borra el binario por
+    # defecto (puede estar referenciado por una pieza ya armada); la API decide.
+    """
+    CREATE TABLE IF NOT EXISTS biblioteca_media (
+        id           TEXT PRIMARY KEY,
+        objeto       TEXT NOT NULL UNIQUE,
+        tipo         TEXT NOT NULL DEFAULT 'imagen',
+        titulo       TEXT NOT NULL DEFAULT '',
+        descripcion  TEXT NOT NULL DEFAULT '',
+        marca        TEXT NOT NULL DEFAULT '',
+        etiquetas    TEXT NOT NULL DEFAULT '[]',
+        credito      TEXT NOT NULL DEFAULT '',
+        aprobado     INTEGER NOT NULL DEFAULT 1,
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_marca ON biblioteca_media (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_tipo ON biblioteca_media (tipo)",
+    "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_aprobado ON biblioteca_media (aprobado)",
 )
 
 
@@ -3352,6 +3411,382 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Plantillas de CONTENIDO por tipo de nota (ola "activos")                       #
+# --------------------------------------------------------------------------- #
+# Tabla `plantilla_contenido`: estructura con `{{variables}}` + lista declarada de esas
+# variables (JSON en la columna `variables`). El render/sustitucion lo hace la API; aqui
+# solo persistimos. `variables` viaja como JSON serializado para no inventar una tabla hija.
+
+_COLS_PLANTILLA_CONTENIDO = (
+    "id",
+    "nombre",
+    "tipo_nota",
+    "descripcion",
+    "marca",
+    "red",
+    "estructura",
+    "variables",
+    "activo",
+    "autor_id",
+    "autor_nombre",
+    "creado",
+    "actualizado",
+)
+_SELECT_PLANTILLA_CONTENIDO = (
+    f"SELECT {', '.join(_COLS_PLANTILLA_CONTENIDO)} FROM plantilla_contenido"
+)
+
+# Campos editables via `actualizar_plantilla_contenido` (lista blanca). `id`, `autor_*`,
+# `creado` y `actualizado` no son editables (el ultimo lo gestiona el sistema).
+_CAMPOS_EDITABLES_PLANTILLA_CONTENIDO: tuple[str, ...] = (
+    "nombre",
+    "tipo_nota",
+    "descripcion",
+    "marca",
+    "red",
+    "estructura",
+    "variables",
+    "activo",
+)
+
+
+def _fila_a_plantilla_contenido(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `plantilla_contenido` en dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_PLANTILLA_CONTENIDO}
+    item["activo"] = bool(fila["activo"])
+    item["variables"] = fila["variables"] or "[]"
+    return item
+
+
+def crear_plantilla_contenido(
+    *,
+    nombre: str,
+    tipo_nota: str = "",
+    descripcion: str = "",
+    marca: str = "",
+    red: str = "",
+    estructura: str = "",
+    variables: str = "[]",
+    activo: bool = True,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    """Inserta una plantilla de contenido y la devuelve. NO valida (lo hace la API)."""
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "nombre": nombre or "",
+        "tipo_nota": tipo_nota or "",
+        "descripcion": descripcion or "",
+        "marca": marca or "",
+        "red": red or "",
+        "estructura": estructura or "",
+        "variables": variables or "[]",
+        "activo": 1 if activo else 0,
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_PLANTILLA_CONTENIDO)
+        con.execute(
+            f"INSERT INTO plantilla_contenido ({', '.join(_COLS_PLANTILLA_CONTENIDO)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_PLANTILLA_CONTENIDO),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_plantilla_contenido(fila)
+
+
+def listar_plantillas_contenido(
+    *,
+    marca: str | None = None,
+    tipo_nota: str | None = None,
+    solo_activas: bool = False,
+) -> list[dict[str, Any]]:
+    """Plantillas de contenido, filtros combinables (AND). Orden estable por nombre."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if tipo_nota:
+        clausulas.append("tipo_nota = ?")
+        params.append(tipo_nota)
+    if solo_activas:
+        clausulas.append("activo = 1")
+    sql = _SELECT_PLANTILLA_CONTENIDO
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY nombre ASC, creado ASC, id ASC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_plantilla_contenido(f) for f in filas]
+
+
+def obtener_plantilla_contenido(plantilla_id: str) -> dict[str, Any] | None:
+    """Una plantilla de contenido por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_PLANTILLA_CONTENIDO} WHERE id = ?", (plantilla_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_plantilla_contenido(fila) if fila is not None else None
+
+
+def actualizar_plantilla_contenido(
+    plantilla_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
+    cambios = {
+        k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PLANTILLA_CONTENIDO
+    }
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    if not cambios:
+        return obtener_plantilla_contenido(plantilla_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, plantilla_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE plantilla_contenido SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_PLANTILLA_CONTENIDO} WHERE id = ?", (plantilla_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_plantilla_contenido(fila) if fila is not None else None
+
+
+def borrar_plantilla_contenido(plantilla_id: str) -> bool:
+    """Borra una plantilla de contenido; True si existia."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM plantilla_contenido WHERE id = ?", (plantilla_id,)
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Biblioteca de MEDIOS interna (ola "activos")                                  #
+# --------------------------------------------------------------------------- #
+# Tabla `biblioteca_media`: cataloga objetos del almacen de media (`media.py`) por su
+# nombre (`objeto`, uuid+ext del servidor) con metadatos editoriales y etiquetas (JSON de
+# strings). El binario lo guarda/sirve `media.py`; aqui solo el catalogo reutilizable.
+
+_COLS_BIBLIOTECA_MEDIA = (
+    "id",
+    "objeto",
+    "tipo",
+    "titulo",
+    "descripcion",
+    "marca",
+    "etiquetas",
+    "credito",
+    "aprobado",
+    "autor_id",
+    "autor_nombre",
+    "creado",
+    "actualizado",
+)
+_SELECT_BIBLIOTECA_MEDIA = (
+    f"SELECT {', '.join(_COLS_BIBLIOTECA_MEDIA)} FROM biblioteca_media"
+)
+
+# Campos editables via `actualizar_media_biblioteca` (lista blanca). `id`, `objeto`,
+# `autor_*`, `creado` y `actualizado` no son editables (el objeto NO se reasigna; se
+# cataloga uno nuevo si cambia el binario).
+_CAMPOS_EDITABLES_BIBLIOTECA_MEDIA: tuple[str, ...] = (
+    "tipo",
+    "titulo",
+    "descripcion",
+    "marca",
+    "etiquetas",
+    "credito",
+    "aprobado",
+)
+
+
+def _fila_a_media_biblioteca(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `biblioteca_media` en dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_BIBLIOTECA_MEDIA}
+    item["aprobado"] = bool(fila["aprobado"])
+    item["etiquetas"] = fila["etiquetas"] or "[]"
+    item["tipo"] = fila["tipo"] or "imagen"
+    return item
+
+
+def crear_media_biblioteca(
+    *,
+    objeto: str,
+    tipo: str = "imagen",
+    titulo: str = "",
+    descripcion: str = "",
+    marca: str = "",
+    etiquetas: str = "[]",
+    credito: str = "",
+    aprobado: bool = True,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    """Cataloga un objeto de media en la biblioteca y lo devuelve. NO valida (lo hace la API)."""
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "objeto": objeto or "",
+        "tipo": tipo or "imagen",
+        "titulo": titulo or "",
+        "descripcion": descripcion or "",
+        "marca": marca or "",
+        "etiquetas": etiquetas or "[]",
+        "credito": credito or "",
+        "aprobado": 1 if aprobado else 0,
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_BIBLIOTECA_MEDIA)
+        con.execute(
+            f"INSERT INTO biblioteca_media ({', '.join(_COLS_BIBLIOTECA_MEDIA)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_BIBLIOTECA_MEDIA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_media_biblioteca(fila)
+
+
+def listar_media_biblioteca(
+    *,
+    marca: str | None = None,
+    tipo: str | None = None,
+    solo_aprobados: bool = False,
+) -> list[dict[str, Any]]:
+    """Items de la biblioteca de medios, filtros combinables (AND). Mas recientes primero."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if tipo:
+        clausulas.append("tipo = ?")
+        params.append(tipo)
+    if solo_aprobados:
+        clausulas.append("aprobado = 1")
+    sql = _SELECT_BIBLIOTECA_MEDIA
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY creado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_media_biblioteca(f) for f in filas]
+
+
+def obtener_media_biblioteca(media_id: str) -> dict[str, Any] | None:
+    """Un item de la biblioteca por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_BIBLIOTECA_MEDIA} WHERE id = ?", (media_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_media_biblioteca(fila) if fila is not None else None
+
+
+def existe_media_objeto(objeto: str) -> bool:
+    """True si ya hay un item de biblioteca catalogando ese `objeto` (UNIQUE)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            "SELECT 1 FROM biblioteca_media WHERE objeto = ?", (objeto,)
+        ).fetchone()
+    finally:
+        con.close()
+    return fila is not None
+
+
+def actualizar_media_biblioteca(
+    media_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
+    cambios = {
+        k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_BIBLIOTECA_MEDIA
+    }
+    if "aprobado" in cambios:
+        cambios["aprobado"] = 1 if cambios["aprobado"] else 0
+    if not cambios:
+        return obtener_media_biblioteca(media_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, media_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE biblioteca_media SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_BIBLIOTECA_MEDIA} WHERE id = ?", (media_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_media_biblioteca(fila) if fila is not None else None
+
+
+def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
+    """Borra un item de la biblioteca; devuelve el item borrado (para limpiar el binario) o None."""
+    item = obtener_media_biblioteca(media_id)
+    if item is None:
+        return None
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM biblioteca_media WHERE id = ?", (media_id,))
+        con.commit()
+    finally:
+        con.close()
+    return item
 
 
 # --------------------------------------------------------------------------- #

@@ -40,6 +40,8 @@ modulos_backend = [
   "termometro",
   "radar",
   "parrilla",
+  "plantillas_contenido",
+  "biblioteca_media",
 ]
 
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
@@ -58,6 +60,9 @@ rutas_frontend = [
   "/agentes",
   "/agentes/actividad",
   "/agentes/:id",
+  "/activos",
+  "/activos/plantillas",
+  "/activos/biblioteca",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -113,3 +118,12 @@ descripcion = "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones. Pestañas 
 grupo = "operacion"
 grupo_orden = 30
 orden = 40
+
+[[nav]]
+ruta = "/activos"
+etiqueta = "Activos"
+icono = "Library"
+descripcion = "Plantillas de contenido por tipo de nota y biblioteca de medios aprobados, reutilizables al armar piezas. Pestañas Plantillas / Biblioteca."
+grupo = "operacion"
+grupo_orden = 30
+orden = 50
