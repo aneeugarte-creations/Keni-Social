@@ -51,6 +51,7 @@ import type {
   CuerpoActualizarContenido,
   CuerpoActualizarEtiqueta,
   CuerpoActualizarPlataforma,
+  CuerpoAsistenteContenido,
   CuerpoCrearContenido,
   CuerpoCrearEtiqueta,
   CuerpoCrearTarea,
@@ -164,6 +165,7 @@ import type {
   RespuestaEtiquetas,
   RespuestaEtiqueta,
   RespuestaEtiquetasContenido,
+  RespuestaPreviewContenido,
   RespuestaTareas,
   RespuestaEquipoRota,
   RespuestaEventosRota,
@@ -1049,6 +1051,18 @@ export const api = {
   /** Rendimiento real (Metricool) por pieza publicada del tablero. Mapa por `contenido_plataforma.id`. */
   metricasContenido: (signal?: AbortSignal) =>
     peticion<RespuestaMetricasContenido>("/contenido/metricas", { signal }),
+  /** Previsualiza un copy con sus variables `{...}` ya sustituidas (no persiste). */
+  previewContenido: (contenidoId: string, texto: string, signal?: AbortSignal) =>
+    peticion<RespuestaPreviewContenido>(
+      `/contenido/${encodeURIComponent(contenidoId)}/preview`,
+      { metodo: "POST", json: { texto }, signal },
+    ),
+  /** Lanza el asistente IA sobre un contenido (genera/resume/3 variantes). */
+  asistenteContenido: (contenidoId: string, cuerpo: CuerpoAsistenteContenido) =>
+    peticion<RespuestaGeneracion>(
+      `/contenido/${encodeURIComponent(contenidoId)}/asistente`,
+      { metodo: "POST", json: cuerpo },
+    ),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>
