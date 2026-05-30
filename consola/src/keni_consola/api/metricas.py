@@ -19,7 +19,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, metricas_cache
+from .. import marcas, metricas_cache, metricas_pieza, repos
 
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
@@ -361,6 +361,69 @@ async def tendencia(request: Request) -> Response:
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
+def _marca_consola_de_metricas(id_metricas: str | None) -> str | None:
+    """Traduce un id de marca de la frontera de métricas (guion_bajo) al id de la Consola.
+
+    Los selectores de Analíticas envían `?marca=` en forma `id_metricas` (igual que el
+    resto de endpoints de métricas). El tablero (`listar_contenido`) filtra por el id de
+    marca de la Consola, así que cruzamos la frontera con el catálogo único. Si no
+    resuelve (marca desconocida), devolvemos el valor tal cual: `listar_contenido`
+    simplemente no encontrará piezas (lista vacía, sin romper).
+    """
+    if not id_metricas:
+        return None
+    marca = marcas.marca_por_id_metricas(id_metricas)
+    return marca.id if marca is not None else id_metricas
+
+
+async def piezas_rendimiento(request: Request) -> Response:
+    """GET /api/metricas/piezas-rendimiento: drill-down marca -> pieza con rendimiento REAL.
+
+    Lista las piezas YA PUBLICADAS (las que tienen `id_post_metricool`) con su
+    rendimiento leído de Metricool —la MISMA fuente única que alimenta el dashboard y las
+    tarjetas del tablero, sin desfase— para la sección "Piezas" de Analíticas. Cada fila
+    enlaza a la pieza en el tablero (`contenido_id` -> `/parrilla/pendientes`).
+
+    `?marca=` (en forma `id_metricas`, como el resto de Analíticas) acota a una marca;
+    sin marca, agrega todas. Degradación honesta: las piezas que Metricool aún no tiene
+    salen con `encontrado=False` (la UI muestra "sin datos todavía", nunca ceros falsos).
+    """
+    marca_metricas = request.query_params.get("marca") or None
+    marca_consola = _marca_consola_de_metricas(marca_metricas)
+    try:
+        items = repos.listar_contenido(marca=marca_consola)
+        por_contenido: dict[str, list[dict]] = {}
+        for plat in repos.listar_contenido_plataforma():
+            por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+        contenidos = [
+            {
+                "id": it["id"],
+                "titulo": it.get("titulo", ""),
+                "marca": it.get("marca", ""),
+                "marca_nombre": marcas.etiqueta_de(it["marca"]) if it.get("marca") else "",
+                "plataformas": por_contenido.get(it["id"], []),
+            }
+            for it in items
+        ]
+        piezas = metricas_pieza.listado_piezas_publicadas(contenidos)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse(
+            {"error": "No se pudo generar el listado de piezas."}, status_code=500
+        )
+    # Fuente del listado: si cualquier pieza viene de muestra, lo marcamos como muestra
+    # (mismo criterio honesto que /reporte). Sin piezas encontradas, "desconocida".
+    fuentes = {p["fuente"] for p in piezas if p.get("encontrado")}
+    fuente = "muestra" if "muestra" in fuentes else (next(iter(fuentes), "") or "desconocida")
+    return JSONResponse(
+        {
+            "marca": marca_metricas or "",
+            "fuente": fuente,
+            "total": len(piezas),
+            "piezas": piezas,
+        }
+    )
+
+
 def _rango_opcional(raw: str | None) -> str | None:
     """Rango para /estado y /refrescar: preset o token válido, si no None (sin combo)."""
     if not raw:
@@ -447,6 +510,7 @@ RUTAS = [
     Route("/api/metricas/comparar", comparar, methods=["GET"]),
     Route("/api/metricas/analisis", analisis, methods=["GET"]),
     Route("/api/metricas/piezas", piezas, methods=["GET"]),
+    Route("/api/metricas/piezas-rendimiento", piezas_rendimiento, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),
     Route("/api/metricas/refrescar", refrescar, methods=["POST"]),

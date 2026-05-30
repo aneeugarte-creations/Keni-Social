@@ -48,6 +48,8 @@ export type {
   AnaliticaPiezas,
   PuntoSerie,
   TendenciaDiaria,
+  PiezaRendimiento,
+  PiezasRendimiento,
   Paginacion,
   MetricasRun,
   Publicacion,

@@ -10,7 +10,7 @@ ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_PREFERENCIAS`-> preferencias (esfuerzo de generacion) aisladas en tmp
   - `KENI_CONSOLA_SUGERENCIAS`-> buzon de sugerencias (JSON local) aislado en tmp
   - `KENI_CONSOLA_TERMOMETRO`-> config del Termometro mundial (JSON local) aislada en tmp
-  - `KENI_METRICAS_CONFIG` -> apunta a un archivo inexistente => fuente de muestra
+  - `KENI_METRICAS_CONFIG` -> archivo inexistente + `KENI_METRICAS_FUENTE=muestra` => fuente de muestra
   - `KENI_SKILLS_CWD`      -> cwd valido para skills (no toca el repo real)
   - `KENI_SKILLS_DIR`      -> catalogo de skills FALSO en tmp (sembrado; no toca skills-copy/)
 
@@ -232,7 +232,10 @@ def entorno(monkeypatch, tmp_path):
     # le pasamos (TOKEN_PRUEBA) y no uno del shell del usuario. Determinismo en tests.
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
-    monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
+    # La fuente única por defecto es ahora `metricool` (sin credenciales = estado vacío,
+    # no demo). Los tests del backend usan la fuente de MUESTRA determinista, así que la
+    # fijamos explícita (antes se confiaba en que el default fuera `muestra`).
+    monkeypatch.setenv("KENI_METRICAS_FUENTE", "muestra")
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     # Claves/proveedor de imagen por entorno: fuera, para que "sin clave" y el proveedor

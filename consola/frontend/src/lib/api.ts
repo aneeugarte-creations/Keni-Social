@@ -17,6 +17,7 @@ import type {
   CuerpoCrearAgente,
   EstadoMetricas,
   TendenciaDiaria,
+  PiezasRendimiento,
   CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
@@ -1404,6 +1405,10 @@ export const api = {
   // Serie diaria del periodo (visualizaciones + interacciones) para la tendencia.
   metricasTendencia: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<TendenciaDiaria>(`/metricas/tendencia${query(params)}`, { signal }),
+  // Drill-down marca -> pieza: piezas publicadas con su rendimiento REAL (Metricool),
+  // enlazables al tablero. Sin rango (es por pieza publicada, no por periodo).
+  metricasPiezasRendimiento: (params: { marca?: string }, signal?: AbortSignal) =>
+    peticion<PiezasRendimiento>(`/metricas/piezas-rendimiento${query(params)}`, { signal }),
   // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
   metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),

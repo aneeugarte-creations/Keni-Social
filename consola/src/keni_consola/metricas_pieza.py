@@ -152,3 +152,55 @@ def rendimiento_de_tablero(
                 continue
             salida[plat["id"]] = rendimiento(marca, red, id_post)
     return salida
+
+
+def listado_piezas_publicadas(
+    contenidos: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Lista de piezas publicadas (con `id_post_metricool`) y su rendimiento, para el drill-down.
+
+    Es la vista "marca -> pieza" de Analíticas: aplana las filas por plataforma con
+    `id_post_metricool` a una lista de piezas enlazables al tablero, cada una con su
+    rendimiento REAL leído de Metricool (la MISMA fuente que el dashboard y que las
+    tarjetas del tablero; sin desfase) vía `rendimiento` (cacheado, degradación honesta).
+
+    Recibe los items del tablero ya enriquecidos con `id`/`titulo`/`marca`/`marca_nombre`
+    y sus `plataformas`. Cada elemento de la salida lleva la metadata para enlazar a la
+    pieza en `/parrilla/pendientes` (`contenido_id`) y su rendimiento aplanado. Ordena de
+    mayor a menor engagement (las encontradas primero; las "sin datos" al final).
+    Best-effort por pieza: un fallo de una no afecta a las demás.
+    """
+    filas: list[dict[str, Any]] = []
+    for contenido in contenidos:
+        marca = contenido.get("marca") or ""
+        contenido_id = contenido.get("id") or ""
+        titulo = contenido.get("titulo") or ""
+        marca_nombre = contenido.get("marca_nombre") or marca
+        for plat in contenido.get("plataformas", []):
+            id_post = plat.get("id_post_metricool") or ""
+            red = plat.get("red") or ""
+            if not id_post or not marca:
+                continue
+            rend = rendimiento(marca, red, id_post)
+            filas.append(
+                {
+                    "contenido_id": contenido_id,
+                    "plataforma_id": plat.get("id", ""),
+                    "titulo": titulo,
+                    "marca": marca,
+                    "marca_nombre": marca_nombre,
+                    "red": red,
+                    "id_post_metricool": id_post,
+                    "encontrado": bool(rend.get("encontrado")),
+                    "visualizaciones": rend.get("visualizaciones", 0),
+                    "interacciones": rend.get("interacciones", 0),
+                    "engagement_pct": rend.get("engagement_pct", 0.0),
+                    "url": rend.get("url"),
+                    "publicado": rend.get("publicado"),
+                    "fuente": rend.get("fuente") or "desconocida",
+                    "generado_en": rend.get("generado_en", ""),
+                }
+            )
+    # Encontradas primero, ordenadas por engagement desc; las "sin datos" al final.
+    filas.sort(key=lambda f: (f["encontrado"], f["engagement_pct"]), reverse=True)
+    return filas

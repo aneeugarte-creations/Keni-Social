@@ -350,6 +350,52 @@ class TendenciaDiaria(TypedDict):
     generado_en: str
 
 
+class PiezaRendimiento(TypedDict):
+    """Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).
+
+    A diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la
+    lista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó
+    desde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza
+    a la pieza en el tablero (`/parrilla/pendientes`). `encontrado=False` => Metricool aún
+    no tiene datos (recién publicada): la UI muestra "sin datos todavía", no ceros falsos.
+    """
+
+    # contenido_id: id del item del tablero, para enlazar a la pieza en /parrilla/pendientes.
+    contenido_id: str
+    plataforma_id: str
+    titulo: str
+    # marca: id de marca de la Consola; marca_nombre: etiqueta legible.
+    marca: str
+    marca_nombre: str
+    red: str
+    id_post_metricool: str
+    encontrado: bool
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+    url: str | None
+    # publicado: fecha ISO (AAAA-MM-DD) o null si la fuente no la conoce todavía.
+    publicado: str | None
+    fuente: str
+    generado_en: str
+
+
+class PiezasRendimiento(TypedDict):
+    """Respuesta de `GET /api/metricas/piezas-rendimiento`: drill-down marca -> pieza.
+
+    Lista las piezas publicadas (con `id_post_metricool`) y su rendimiento REAL, leído de
+    la MISMA fuente única (Metricool) que el dashboard y las tarjetas del tablero, sin
+    desfase. Ordenadas por engagement desc (las "sin datos" al final).
+    """
+
+    # marca: id_metricas con el que se acotó (igual que el resto de Analíticas), o "".
+    marca: str
+    # fuente: "muestra" si alguna pieza viene de muestra; si no, la fuente real o "desconocida".
+    fuente: str
+    total: int
+    piezas: list[PiezaRendimiento]
+
+
 # --------------------------------------------------------------------------- #
 # Paginacion — envelope aditivo comun a los listados pesados (#121)            #
 # --------------------------------------------------------------------------- #
@@ -784,6 +830,9 @@ MODELOS = [
     AnaliticaPiezas,
     PuntoSerie,
     TendenciaDiaria,
+    # Drill-down marca -> pieza (rendimiento por pieza publicada).
+    PiezaRendimiento,
+    PiezasRendimiento,
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,

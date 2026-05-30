@@ -127,6 +127,9 @@ def test_compatible_con_cargar_config(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(ruta))
     monkeypatch.delenv("KENI_METRICAS_FUENTE", raising=False)
     monkeypatch.delenv("KENI_METRICAS_MARCAS", raising=False)
+    # El plan de ejemplo elige `real` (adaptadores), un fallback opt-in: habilitamos el
+    # flag para que `cargar_config` acepte ese TOML generado (la fuente única es metricool).
+    monkeypatch.setenv("KENI_METRICAS_PERMITIR_REAL", "1")
     cfg = cargar_config()
     assert cfg.fuente == "real"
     assert cfg.marcas == ["claro_sports"]

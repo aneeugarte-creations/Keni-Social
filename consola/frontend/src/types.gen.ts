@@ -271,6 +271,45 @@ export interface TendenciaDiaria {
   generado_en: string;
 }
 /**
+ * Una pieza YA PUBLICADA del tablero con su rendimiento REAL (drill-down marca->pieza).
+ *
+ * A diferencia de `PiezaMetrica` (mejores/peores del periodo descubiertas desde la
+ * lista de posts), esto es el rendimiento de una pieza CONCRETA que el equipo publicó
+ * desde la Consola, leído de Metricool por su `id_post_metricool`. `contenido_id` enlaza
+ * a la pieza en el tablero (`/parrilla/pendientes`). `encontrado=False` => Metricool aún
+ * no tiene datos (recién publicada): la UI muestra "sin datos todavía", no ceros falsos.
+ */
+export interface PiezaRendimiento {
+  contenido_id: string;
+  plataforma_id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  red: string;
+  id_post_metricool: string;
+  encontrado: boolean;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  url: string | null;
+  publicado: string | null;
+  fuente: string;
+  generado_en: string;
+}
+/**
+ * Respuesta de `GET /api/metricas/piezas-rendimiento`: drill-down marca -> pieza.
+ *
+ * Lista las piezas publicadas (con `id_post_metricool`) y su rendimiento REAL, leído de
+ * la MISMA fuente única (Metricool) que el dashboard y las tarjetas del tablero, sin
+ * desfase. Ordenadas por engagement desc (las "sin datos" al final).
+ */
+export interface PiezasRendimiento {
+  marca: string;
+  fuente: string;
+  total: number;
+  piezas: PiezaRendimiento[];
+}
+/**
  * Envelope ADITIVO de paginacion (offset-based, #121).
  *
  * Lo añaden los listados pesados (publicaciones/runs/generaciones) junto a su

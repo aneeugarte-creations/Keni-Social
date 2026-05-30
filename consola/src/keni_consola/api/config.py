@@ -70,6 +70,18 @@ async def guardar_config(request: Request) -> Response:
         return JSONResponse(
             {"error": f"Fuente inválida. Usa una de: {validas}."}, status_code=400
         )
+    # `real` (adaptadores por plataforma) es un fallback histórico desactivado: dejaría
+    # el rendimiento por pieza sin datos (desfase con el tablero). No se ofrece desde la
+    # Consola; quien lo necesite lo activa a propósito en el config + flag. La fuente
+    # única de producción es `metricool` (con `muestra` para demo).
+    if fuente == "real":
+        return JSONResponse(
+            {
+                "error": "La fuente 'real' está desactivada (dejaría el rendimiento por "
+                "pieza sin datos). Usa 'metricool' (fuente única) o 'muestra' (demo)."
+            },
+            status_code=400,
+        )
 
     marcas_crudas = datos.get("marcas", [])
     if not isinstance(marcas_crudas, list) or not all(isinstance(m, str) for m in marcas_crudas):
@@ -105,7 +117,7 @@ async def guardar_config(request: Request) -> Response:
         if alcance_ids
         else "todas las marcas"
     )
-    legible = {"muestra": "Muestra", "real": "Real"}.get(fuente, fuente)
+    legible = {"metricool": "Metricool", "muestra": "Muestra", "real": "Real"}.get(fuente, fuente)
     return JSONResponse(
         {"mensaje": f"Configuración guardada. Fuente: {legible}. Alcance: {alcance}."}
     )
