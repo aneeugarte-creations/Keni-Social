@@ -1,5 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Eye, FileText, Link2, Loader2, Pencil, Sprout } from "lucide-react";
+import {
+  Check,
+  Eye,
+  FileText,
+  Link2,
+  Loader2,
+  Pencil,
+  Send,
+  ShieldCheck,
+  Sprout,
+  XCircle,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -45,6 +56,113 @@ function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
+
+/**
+ * Estados que el equipo elige A MANO en el desplegable de edición. La APROBACIÓN
+ * (`en_revision` → `aprobado`) NO se elige aquí: se decide por la CADENA de aprobación
+ * (botones Enviar a revisión / Aprobar / Rechazar), única vía de aprobación. Así nadie
+ * salta la revisión poniendo el estado a mano. `programado`/`publicado` siguen disponibles.
+ */
+const ESTADOS_DECISION_CADENA = new Set(["en_revision", "aprobado"]);
+
+/**
+ * Panel de APROBACIÓN de una publicación: la cadena multinivel expresada para una pieza
+ * suelta (cadena simple). Mantiene la aprobación ACCESIBLE desde la UI de Publicaciones:
+ *  - `borrador`     → botón "Enviar a revisión" (crea la cadena y deja la pieza en revisión).
+ *  - `en_revision`  → botones "Aprobar" / "Rechazar" (deciden el nivel actual; revisor != autor).
+ *  - `aprobado`     → aviso de que ya está aprobada (lista para programar con su fecha).
+ * Reusa los endpoints `/api/aprobacion/*`, que forwardean a la cadena.
+ */
+function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
+  const queryClient = useQueryClient();
+
+  const tras = (mensaje: string) => () => {
+    void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+    toast.success(mensaje);
+  };
+  const onError = (e: unknown) => toast.error(mensajeError(e));
+
+  const enviar = useMutation({
+    mutationFn: () => api.enviarARevision(publicacion.id),
+    onSuccess: tras("Enviada a revisión."),
+    onError,
+  });
+  const aprobar = useMutation({
+    mutationFn: () => api.aprobarPublicacion(publicacion.id),
+    onSuccess: tras("Publicación aprobada."),
+    onError,
+  });
+  const rechazar = useMutation({
+    mutationFn: () => api.rechazarPublicacion(publicacion.id),
+    onSuccess: tras("Devuelta a borrador."),
+    onError,
+  });
+  const ocupado = enviar.isPending || aprobar.isPending || rechazar.isPending;
+
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        Aprobación
+      </div>
+      {publicacion.estado === "borrador" && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            Envíala a revisión para que otra persona la apruebe antes de programarla.
+          </p>
+          <Button size="sm" onClick={() => enviar.mutate()} disabled={ocupado}>
+            {enviar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            Enviar a revisión
+          </Button>
+        </>
+      )}
+      {publicacion.estado === "en_revision" && (
+        <>
+          <p className="text-xs text-muted-foreground">
+            En revisión. Quien aprueba no puede ser el autor (salvo admin).
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
+              {aprobar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Check className="h-4 w-4" />
+              )}
+              Aprobar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => rechazar.mutate()}
+              disabled={ocupado}
+            >
+              {rechazar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+              Rechazar
+            </Button>
+          </div>
+        </>
+      )}
+      {(publicacion.estado === "aprobado" ||
+        publicacion.estado === "programado" ||
+        publicacion.estado === "publicado") && (
+        <p className="text-xs text-muted-foreground">
+          {publicacion.revisor_nombre
+            ? `Aprobada por ${publicacion.revisor_nombre}.`
+            : "Aprobada."}{" "}
+          Ya puedes programarla eligiendo el estado “Programado” y su fecha.
+        </p>
+      )}
+    </div>
+  );
 }
 
 /** Diálogo de edición de una publicación: título, contenido, estado y fecha. */
@@ -94,6 +212,15 @@ export function DialogoEditar({
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
   const programado = estado === "programado";
+
+  // El desplegable de estado NO ofrece los estados de la cadena de aprobación
+  // (`en_revision`/`aprobado`): esos se alcanzan SOLO por los botones del panel de
+  // aprobación. Si la pieza YA está en uno de ellos, lo dejamos visible (deshabilitado de
+  // hecho por no estar en la lista de cambios) para no romper el Select controlado.
+  const estadosElegibles = React.useMemo(
+    () => estados.filter((e) => !ESTADOS_DECISION_CADENA.has(e.id) || e.id === estado),
+    [estados, estado],
+  );
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -226,7 +353,7 @@ export function DialogoEditar({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {estados.map((e) => (
+                    {estadosElegibles.map((e) => (
                       <SelectItem key={e.id} value={e.id}>
                         {e.nombre}
                       </SelectItem>
@@ -252,6 +379,8 @@ export function DialogoEditar({
                 </div>
               )}
             </div>
+
+            {publicacion && <PanelAprobacion publicacion={publicacion} />}
 
             <div className="flex items-start gap-2 rounded-md border border-border bg-muted/20 p-3">
               <Checkbox

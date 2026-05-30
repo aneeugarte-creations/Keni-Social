@@ -281,3 +281,9 @@ CADENA_APROBACION_DEFECTO: tuple[str, ...] = (
     "Coordinación",
     "Dirección",
 )
+
+# Cadena de aprobacion SIMPLE (longitud 1): el defecto razonable para una PUBLICACION
+# suelta. Un unico nivel "Revisión" = "otro par de ojos" (revisor != autor, salvo admin),
+# que reemplaza al viejo flujo lineal borrador→en_revision→aprobado por una cadena de un
+# solo nivel sobre el mismo modelo multinivel. Cadena vacia = sin aprobacion.
+CADENA_APROBACION_SIMPLE: tuple[str, ...] = ("Revisión",)
