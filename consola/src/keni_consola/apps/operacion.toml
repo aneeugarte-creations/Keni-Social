@@ -21,6 +21,11 @@ modulos_backend = [
   "rota",
   "tareas",
   "contenido",
+  # Sub-features del tablero de contenido (sin nav propia; cuelgan de la tarjeta):
+  "etiquetas",
+  "colaboracion",
+  # Automatización operacional: webhooks salientes + eventos internos del tablero.
+  "webhooks",
 ]
 
 rutas_frontend = [
@@ -28,6 +33,8 @@ rutas_frontend = [
   "/parrilla",
   "/parrilla/pendientes",
   "/parrilla/calendario",
+  # Webhooks salientes (admin; sin nav, se entra por URL directa). Ver router.tsx.
+  "/webhooks",
 ]
 
 [[nav]]

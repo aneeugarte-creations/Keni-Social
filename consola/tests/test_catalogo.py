@@ -20,7 +20,7 @@ from keni_consola.apps import registro
 _SIDEBAR_HOY = [
     ["Panel"],
     ["Generación", "Investigación", "Revisión", "Analíticas"],
-    ["Publicaciones", "Parrilla", "Skills", "Agentes"],
+    ["Publicaciones", "Parrilla", "Skills", "Agentes", "Activos"],
 ]
 
 

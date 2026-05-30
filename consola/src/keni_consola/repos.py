@@ -978,6 +978,9 @@ def crear_plantilla_contenido(
     variables: str = "[]",
     activo: bool = True,
     autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
 ) -> dict[str, Any]:
     return db.crear_plantilla_contenido(
         nombre=nombre,
@@ -989,6 +992,9 @@ def crear_plantilla_contenido(
         variables=variables,
         activo=activo,
         autor=autor,
+        id=id,
+        creado=creado,
+        actualizado=actualizado,
     )
 
 
@@ -1032,6 +1038,9 @@ def crear_media_biblioteca(
     credito: str = "",
     aprobado: bool = True,
     autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
 ) -> dict[str, Any]:
     return db.crear_media_biblioteca(
         objeto=objeto,
@@ -1043,6 +1052,9 @@ def crear_media_biblioteca(
         credito=credito,
         aprobado=aprobado,
         autor=autor,
+        id=id,
+        creado=creado,
+        actualizado=actualizado,
     )
 
 
@@ -1164,11 +1176,20 @@ def crear_etiqueta(
     marca: str = "",
     color: str = "",
     activo: bool = True,
+    creado: str = "",
+    actualizado: str = "",
     id: str = "",
 ) -> dict[str, Any]:
     """Crea una etiqueta editorial. Delegado en `db.py`."""
     return db.crear_etiqueta(
-        nombre=nombre, clase=clase, marca=marca, color=color, activo=activo, id=id
+        nombre=nombre,
+        clase=clase,
+        marca=marca,
+        color=color,
+        activo=activo,
+        creado=creado,
+        actualizado=actualizado,
+        id=id,
     )
 
 

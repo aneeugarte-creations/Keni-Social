@@ -46,8 +46,22 @@ _TABLAS = (
     "rota_eventos",
     "rota_swaps_turno",
     "rota_coordinacion",
+    "rota_config_franjas",
+    # Sub-tablas del tablero de contenido (olas organizacion/colaboracion): se truncan
+    # ANTES que sus padres `contenido`/`contenido_plataforma` (CASCADE igual las cubre,
+    # pero a la cabeza evita sorpresas de orden).
+    "contenido_etiquetas",
+    "contenido_comentarios",
+    "contenido_copy_versiones",
+    "contenido_aprobaciones",
     "contenido_plataforma",
     "contenido",
+    # Catálogos/activos operacionales independientes (olas organizacion/activos/automatizacion).
+    "etiquetas",
+    "plantilla_contenido",
+    "biblioteca_media",
+    "webhooks",
+    "eventos_internos",
     "jobs",
     "metricas_cache",
 )
