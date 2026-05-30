@@ -71,7 +71,7 @@ def test_migracion_es_idempotente(entorno):
     db.crear_tarea("", "Una tarea")
     db.crear_pieza_rota(programa="P", red_social="IG")
     primera = migrar_contenido.migrar()
-    assert primera == {"tareas": 1, "piezas": 1}
+    assert primera == {"tareas": 1, "piezas": 1, "publicaciones": 0}
     segunda = migrar_contenido.migrar()
-    assert segunda == {"tareas": 0, "piezas": 0}
+    assert segunda == {"tareas": 0, "piezas": 0, "publicaciones": 0}
     assert len(db.listar_contenido()) == 2

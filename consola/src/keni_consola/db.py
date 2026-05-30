@@ -506,6 +506,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         id_post_metricool     TEXT NOT NULL DEFAULT '',
         enlace                TEXT NOT NULL DEFAULT '',
         evergreen             INTEGER NOT NULL DEFAULT 0,
+        es_publicacion        INTEGER NOT NULL DEFAULT 0,
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
         actualizado           TEXT NOT NULL DEFAULT ''
@@ -1230,7 +1231,9 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
 # hooks existen por coherencia con `_migrar_columnas_*` para futuras ampliaciones sin
 # reescribir el esquema en bases hosted. Idempotentes; vacios no hacen nada.
 _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = ()
-_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+_COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
+)
 
 
 def _migrar_columnas_contenido(con: Any) -> None:
@@ -3164,6 +3167,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "id_post_metricool",
     "enlace",
     "evergreen",
+    "es_publicacion",
     "hora_post",
     "creado",
     "actualizado",
@@ -3177,13 +3181,15 @@ _BOOLS_CONTENIDO_PLATAFORMA = (
     "falta_revision",
     "falta_publicar",
     "evergreen",
+    "es_publicacion",
 )
 # Campos editables de una fila por plataforma (lista blanca). `id`, `contenido_id`,
-# `red`, `creado` y `actualizado` no se editan (el ultimo lo gestiona el sistema).
+# `red`, `es_publicacion`, `creado` y `actualizado` no se editan (los dos ultimos los
+# gestiona el sistema; `es_publicacion` se fija al crear).
 _CAMPOS_EDITABLES_CONTENIDO_PLATAFORMA: tuple[str, ...] = tuple(
     c
     for c in _COLS_CONTENIDO_PLATAFORMA
-    if c not in ("id", "contenido_id", "red", "creado", "actualizado")
+    if c not in ("id", "contenido_id", "red", "es_publicacion", "creado", "actualizado")
 )
 
 
@@ -3217,6 +3223,7 @@ def crear_contenido_plataforma(
     id_post_metricool: str = "",
     enlace: str = "",
     evergreen: bool = False,
+    es_publicacion: bool = False,
     hora_post: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -3252,6 +3259,7 @@ def crear_contenido_plataforma(
         "id_post_metricool": id_post_metricool or "",
         "enlace": enlace or "",
         "evergreen": 1 if evergreen else 0,
+        "es_publicacion": 1 if es_publicacion else 0,
         "hora_post": hora_post or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
@@ -3344,6 +3352,300 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# Publicaciones sobre el modelo unificado (FUSIÓN, paso 3)                       #
+# --------------------------------------------------------------------------- #
+# Una PUBLICACION = una fila `contenido_plataforma` con `es_publicacion=1` unida a su
+# `contenido` padre (1:1). Estas funciones conservan EXACTAMENTE la firma y la forma del
+# dict que antes producía `ficheros.py` (YAML), de modo que `api/publicaciones`,
+# `api/aprobacion`, `programador` (Metricool), `dominio/publicaciones` y el frontend de
+# Publicaciones siguen funcionando sin cambios (van por la fachada `repos`). El ciclo
+# editorial (borrador→en_revision→aprobado→programado→publicado) se traduce al ciclo
+# unificado de plataforma: `borrador` ⇆ `pendiente`/`en_curso`.
+
+# pub -> plataforma: el `borrador` editorial es el `pendiente` del tablero; el resto 1:1.
+_ESTADO_PUB_A_PLAT: dict[str, str] = {
+    "borrador": "pendiente",
+    "en_revision": "en_revision",
+    "aprobado": "aprobado",
+    "programado": "programado",
+    "publicado": "publicado",
+}
+# plataforma -> pub: el vocabulario editorial solo conoce `borrador` para "en progreso".
+_ESTADO_PLAT_A_PUB: dict[str, str] = {
+    "pendiente": "borrador",
+    "en_curso": "borrador",
+    "en_revision": "en_revision",
+    "aprobado": "aprobado",
+    "programado": "programado",
+    "publicado": "publicado",
+}
+
+# Columnas de la fila por plataforma que mapean campos editables de una publicacion.
+# (El `contenido` de la publicacion es el `copy` de la plataforma; ver `_campos_pub_a_plat`.)
+_SELECT_PUBLICACION = (
+    "SELECT cp.id AS pid, cp.red AS red, cp.estado AS pestado, cp.copy AS copy, "
+    "cp.imagen AS imagen, cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
+    "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
+    "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
+    "cp.preparado_en AS preparado_en, cp.id_post_metricool AS id_post_metricool, "
+    "cp.evergreen AS evergreen, cp.actualizado AS pactualizado, "
+    "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
+    "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado "
+    "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
+    "WHERE cp.es_publicacion = 1"
+)
+
+
+def _fila_a_publicacion(f: Any) -> dict[str, Any]:
+    """Reconstruye el dict público de una publicacion desde la fila unida (plat + padre)."""
+    return {
+        "id": f["pid"],
+        "titulo": f["titulo"] or "",
+        "marca": f["marca"] or "",
+        "red": f["red"] or "",
+        "contenido": f["copy"] or "",
+        "estado": _ESTADO_PLAT_A_PUB.get(f["pestado"] or "pendiente", "borrador"),
+        "veredicto": f["veredicto"] or "",
+        "autor_id": f["autor_id"] or "",
+        "autor_nombre": f["autor_nombre"] or "",
+        "enviado_a_revision_en": f["enviado_a_revision_en"] or "",
+        "revisor_id": f["revisor_id"] or "",
+        "revisor_nombre": f["revisor_nombre"] or "",
+        "revisado_en": f["revisado_en"] or "",
+        "preparado_en": f["preparado_en"] or "",
+        "id_post_metricool": f["id_post_metricool"] or "",
+        "fecha_creacion": f["ccreado"] or "",
+        "fecha_actualizacion": f["pactualizado"] or "",
+        "fecha_programada": f["fecha_programada"] or "",
+        "origen": f["origen"] or "",
+        "imagen": f["imagen"] or "",
+        "evergreen": bool(f["evergreen"]),
+    }
+
+
+def crear_publicacion(
+    marca: str,
+    red: str,
+    *,
+    titulo: str = "",
+    contenido: str = "",
+    estado: str = "borrador",
+    veredicto: str = "",
+    fecha_programada: str = "",
+    origen: str = "",
+    imagen: str = "",
+    evergreen: bool = False,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    fecha_creacion: str = "",
+) -> dict[str, Any]:
+    """Crea una publicacion (padre `contenido` + fila `contenido_plataforma` es_publicacion=1).
+
+    Conserva la firma de `ficheros.crear_publicacion` (+ `id`/`fecha_creacion` opcionales
+    para PRESERVAR identidad al migrar desde YAML). El `estado` editorial se traduce al de
+    plataforma.
+    """
+    padre = crear_contenido(
+        clase="contenido",
+        flujo="evergreen" if evergreen else "",
+        titulo=titulo,
+        marca=marca,
+        autor=autor,
+        origen=origen,
+        creado=fecha_creacion,
+        actualizado=fecha_creacion,
+    )
+    plat = crear_contenido_plataforma(
+        id=id,
+        contenido_id=padre["id"],
+        red=red,
+        estado=_ESTADO_PUB_A_PLAT.get(estado, "pendiente"),
+        copy=contenido,
+        imagen=imagen,
+        veredicto=veredicto,
+        fecha_programada=fecha_programada,
+        evergreen=evergreen,
+        es_publicacion=True,
+        creado=fecha_creacion,
+        actualizado=fecha_creacion,
+    )
+    return obtener_publicacion(plat["id"]) or _fila_a_publicacion(
+        {
+            "pid": plat["id"], "red": red, "pestado": plat["estado"], "copy": contenido,
+            "imagen": imagen, "veredicto": veredicto, "revisor_id": "", "revisor_nombre": "",
+            "revisado_en": "", "enviado_a_revision_en": "", "fecha_programada": fecha_programada,
+            "preparado_en": "", "id_post_metricool": "", "evergreen": plat["evergreen"],
+            "pactualizado": plat["actualizado"], "cid": padre["id"], "titulo": titulo,
+            "marca": marca, "autor_id": padre["autor_id"], "autor_nombre": padre["autor_nombre"],
+            "origen": origen, "ccreado": padre["creado"],
+        }
+    )
+
+
+def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Crea varias publicaciones (una por dict de entrada) y las devuelve."""
+    creadas: list[dict[str, Any]] = []
+    for d in lista:
+        creadas.append(
+            crear_publicacion(
+                d.get("marca", "") or "",
+                d.get("red", "") or "",
+                titulo=d.get("titulo", "") or "",
+                contenido=d.get("contenido", "") or "",
+                estado=d.get("estado", "borrador") or "borrador",
+                veredicto=d.get("veredicto", "") or "",
+                fecha_programada=d.get("fecha_programada", "") or "",
+                origen=d.get("origen", "") or "",
+                imagen=d.get("imagen", "") or "",
+                evergreen=bool(d.get("evergreen")),
+                autor=(
+                    {"id": d.get("autor_id", ""), "usuario": d.get("autor_nombre", "")}
+                    if d.get("autor_id")
+                    else None
+                ),
+            )
+        )
+    return creadas
+
+
+def _filtros_publicacion(
+    marca: str | None, red: str | None, estado: str | None, evergreen: bool | None
+) -> tuple[str, list[Any]]:
+    """Construye la cláusula WHERE adicional (tras `es_publicacion=1`) y sus parámetros."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("c.marca = ?")
+        params.append(marca)
+    if red:
+        clausulas.append("cp.red = ?")
+        params.append(red)
+    if estado:
+        # `borrador` casa los estados "en progreso" del tablero (pendiente/en_curso).
+        if estado == "borrador":
+            clausulas.append("cp.estado IN ('pendiente', 'en_curso')")
+        else:
+            clausulas.append("cp.estado = ?")
+            params.append(_ESTADO_PUB_A_PLAT.get(estado, estado))
+    if evergreen is not None:
+        clausulas.append("cp.evergreen = ?")
+        params.append(1 if evergreen else 0)
+    return (" AND " + " AND ".join(clausulas) if clausulas else ""), params
+
+
+def listar_publicaciones(
+    marca: str | None = None,
+    red: str | None = None,
+    estado: str | None = None,
+    evergreen: bool | None = None,
+    *,
+    limite: int | None = None,
+    desplazamiento: int | None = None,
+) -> list[dict[str, Any]]:
+    """Publicaciones (más recientes primero) con filtros y paginación opcionales."""
+    extra, params = _filtros_publicacion(marca, red, estado, evergreen)
+    sql = f"{_SELECT_PUBLICACION}{extra} ORDER BY c.creado DESC, cp.id DESC"
+    if limite is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params = [*params, limite, desplazamiento or 0]
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_publicacion(f) for f in filas]
+
+
+def contar_publicaciones(
+    marca: str | None = None,
+    red: str | None = None,
+    estado: str | None = None,
+    evergreen: bool | None = None,
+) -> int:
+    """Total de publicaciones que casan los filtros (para el `total` de paginación)."""
+    extra, params = _filtros_publicacion(marca, red, estado, evergreen)
+    sql = (
+        "SELECT COUNT(*) AS n FROM contenido_plataforma cp "
+        "JOIN contenido c ON cp.contenido_id = c.id WHERE cp.es_publicacion = 1" + extra
+    )
+    con = _conectar()
+    try:
+        fila = con.execute(sql, tuple(params)).fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
+    """Una publicacion por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_PUBLICACION} AND cp.id = ?", (publicacion_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_publicacion(fila) if fila is not None else None
+
+
+# Campo de publicacion -> columna de la fila por plataforma (edición parcial).
+_CAMPOS_PUB_A_PLAT: dict[str, str] = {
+    "contenido": "copy",
+    "fecha_programada": "fecha_programada",
+    "imagen": "imagen",
+    "evergreen": "evergreen",
+    "enviado_a_revision_en": "enviado_a_revision_en",
+    "revisor_id": "revisor_id",
+    "revisor_nombre": "revisor_nombre",
+    "revisado_en": "revisado_en",
+    "preparado_en": "preparado_en",
+    "id_post_metricool": "id_post_metricool",
+}
+
+
+def actualizar_publicacion(
+    publicacion_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una publicacion; None si no existe. Mapea a padre/plataforma."""
+    actual = obtener_publicacion(publicacion_id)
+    if actual is None:
+        return None
+    plat = obtener_contenido_plataforma(publicacion_id)
+    if plat is None:
+        return None
+
+    cambios_plat: dict[str, Any] = {}
+    for clave, columna in _CAMPOS_PUB_A_PLAT.items():
+        if clave in campos:
+            cambios_plat[columna] = (
+                bool(campos[clave]) if clave == "evergreen" else campos[clave]
+            )
+    if "estado" in campos:
+        cambios_plat["estado"] = _ESTADO_PUB_A_PLAT.get(campos["estado"], "pendiente")
+    if cambios_plat:
+        actualizar_contenido_plataforma(publicacion_id, cambios_plat)
+
+    cambios_padre: dict[str, Any] = {}
+    if "titulo" in campos:
+        cambios_padre["titulo"] = campos["titulo"]
+    if "evergreen" in campos:
+        cambios_padre["flujo"] = "evergreen" if campos["evergreen"] else ""
+    if cambios_padre:
+        actualizar_contenido(plat["contenido_id"], cambios_padre)
+
+    return obtener_publicacion(publicacion_id)
+
+
+def borrar_publicacion(publicacion_id: str) -> bool:
+    """Borra una publicacion (su fila por plataforma y el padre 1:1). True si existía."""
+    plat = obtener_contenido_plataforma(publicacion_id)
+    if plat is None or not plat.get("es_publicacion"):
+        return False
+    # El padre es 1:1 con la publicacion: borrarlo arrastra la fila por plataforma.
+    return borrar_contenido(plat["contenido_id"])
 
 
 def duplicar_evento_rota(

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pytest
 
-from keni_consola import agentes, ficheros, indice, repos
+from keni_consola import agentes, ficheros, indice
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def base(monkeypatch, tmp_path):
 
 def test_indice_paginacion_respeta_orden_y_pagina(base):
     # 5 publicaciones; el orden del indice es fecha_creacion DESC, fecha DESC, id DESC.
-    creadas = [repos.crear_publicacion("unotv", "x", titulo=f"P{i}") for i in range(5)]
+    creadas = [ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}") for i in range(5)]
     todas = indice.listar("publicacion")
     assert len(todas) == 5
 
@@ -52,9 +52,9 @@ def test_indice_paginacion_respeta_orden_y_pagina(base):
 
 
 def test_indice_contar_aplica_filtros(base):
-    repos.crear_publicacion("unotv", "x")
-    repos.crear_publicacion("unotv", "instagram")
-    repos.crear_publicacion("claro-sports", "x")
+    ficheros.crear_publicacion("unotv", "x")
+    ficheros.crear_publicacion("unotv", "instagram")
+    ficheros.crear_publicacion("claro-sports", "x")
     assert indice.contar("publicacion") == 3
     assert indice.contar("publicacion", {"marca": "unotv"}) == 2
     assert indice.contar("publicacion", {"red": "x"}) == 2
@@ -67,7 +67,7 @@ def test_indice_contar_aplica_filtros(base):
 
 def test_listar_publicaciones_paginado_solo_lee_la_pagina(base, monkeypatch):
     for i in range(6):
-        repos.crear_publicacion("unotv", "x", titulo=f"P{i}")
+        ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")
 
     # Contamos cuantos cuerpos YAML se leen al pedir una pagina de 2.
     original = ficheros._leer_yaml
@@ -78,7 +78,7 @@ def test_listar_publicaciones_paginado_solo_lee_la_pagina(base, monkeypatch):
         return original(ruta, tipo=tipo)
 
     monkeypatch.setattr(ficheros, "_leer_yaml", _contado)
-    pagina = repos.listar_publicaciones(limite=2, desplazamiento=0)
+    pagina = ficheros.listar_publicaciones(limite=2, desplazamiento=0)
     assert len(pagina) == 2
     # Solo se leyeron los 2 cuerpos de la pagina, no los 6.
     assert llamadas["n"] == 2
@@ -86,16 +86,16 @@ def test_listar_publicaciones_paginado_solo_lee_la_pagina(base, monkeypatch):
 
 def test_listar_publicaciones_sin_params_devuelve_todo(base):
     for i in range(4):
-        repos.crear_publicacion("unotv", "x", titulo=f"P{i}")
-    assert len(repos.listar_publicaciones()) == 4
-    assert repos.contar_publicaciones() == 4
+        ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")
+    assert len(ficheros.listar_publicaciones()) == 4
+    assert ficheros.contar_publicaciones() == 4
 
 
 def test_listar_publicaciones_paginas_consecutivas_cubren_todo(base):
-    ids = {repos.crear_publicacion("unotv", "x", titulo=f"P{i}")["id"] for i in range(5)}
+    ids = {ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")["id"] for i in range(5)}
     vistos: list[str] = []
     for off in (0, 2, 4):
-        vistos += [p["id"] for p in repos.listar_publicaciones(limite=2, desplazamiento=off)]
+        vistos += [p["id"] for p in ficheros.listar_publicaciones(limite=2, desplazamiento=off)]
     assert set(vistos) == ids
     assert len(vistos) == 5  # sin duplicados
 

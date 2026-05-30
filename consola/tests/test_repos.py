@@ -78,16 +78,17 @@ def test_no_hay_conmutador():
     assert "KENI_CONSOLA_BACKEND" not in fuente
 
 
-def test_backend_ignora_la_env_de_contenido(entorno, monkeypatch):
-    # Aunque alguien fije el viejo KENI_CONSOLA_BACKEND=sqlite, el contenido SIGUE en
-    # ficheros (la env ya no se lee): se escribe el YAML en disco, no en consola.db.
+def test_publicaciones_persisten_en_postgres_no_en_yaml(entorno, monkeypatch):
+    # Tras la fusión (paso 3), las publicaciones viven en Postgres (modelo `contenido`),
+    # NO como YAML en disco. El viejo KENI_CONSOLA_BACKEND ya no influye.
     monkeypatch.setenv("KENI_CONSOLA_BACKEND", "sqlite")
     pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="C")
-    # Existe el .yaml en la raiz de datos (fuente de verdad).
+    # Ya NO se escribe ningún .yaml de la publicación en disco.
     yamls = list((entorno / "datos").rglob(f"{pub['id']}.yaml"))
-    assert yamls, "la publicacion deberia haberse escrito como YAML"
-    # Y se lee igual por repos.
+    assert not yamls, "la publicacion ya no debe escribirse como YAML"
+    # Se lee desde Postgres por repos y por db (misma fuente).
     assert repos.obtener_publicacion(pub["id"])["marca"] == "unotv"
+    assert db.obtener_publicacion(pub["id"])["titulo"] == "T"
 
 
 # --------------------------------------------------------------------------- #
@@ -112,15 +113,15 @@ def test_delega_en_db_comercial(entorno):
     assert db.ultimo_snapshot_comercial(pub["id"])["interacciones"] == 10
 
 
-def test_delega_en_ficheros_publicaciones(entorno):
-    # El contenido vive en YAML: escribir por repos -> leer por ficheros (mismo disco).
+def test_delega_en_db_publicaciones(entorno):
+    # Tras la fusión, las publicaciones viven en Postgres: escribir por repos -> leer por db.
     pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="C")
-    leida = ficheros.obtener_publicacion(pub["id"])
+    leida = db.obtener_publicacion(pub["id"])
     assert leida is not None
     assert leida["marca"] == "unotv"
-    # Editar por ficheros -> ver el cambio por repos.
-    ficheros.actualizar_publicacion(pub["id"], {"titulo": "Z"})
-    assert repos.obtener_publicacion(pub["id"])["titulo"] == "Z"
+    # Editar por repos -> ver el cambio por db (misma fuente).
+    repos.actualizar_publicacion(pub["id"], {"titulo": "Z"})
+    assert db.obtener_publicacion(pub["id"])["titulo"] == "Z"
 
 
 def test_delega_en_ficheros_contenido_reutilizable(entorno):

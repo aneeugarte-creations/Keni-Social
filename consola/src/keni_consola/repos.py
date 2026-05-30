@@ -156,8 +156,11 @@ def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
-# Publicaciones (CONTENIDO: ficheros YAML via ficheros.py)                     #
+# Publicaciones (OPERACIONAL: Postgres via db.py; fusión sobre `contenido`, paso 3)    #
 # --------------------------------------------------------------------------- #
+# Una publicacion = una fila `contenido_plataforma` (es_publicacion=1) + su padre. Misma
+# forma de dict que antes (YAML); el resto del sistema (API/aprobación/Metricool/skills)
+# no cambia. `id`/`fecha_creacion` permiten preservar identidad al migrar desde YAML.
 
 
 def crear_publicacion(
@@ -173,8 +176,10 @@ def crear_publicacion(
     imagen: str = "",
     evergreen: bool = False,
     autor: dict[str, str] | None = None,
+    id: str = "",
+    fecha_creacion: str = "",
 ) -> dict[str, Any]:
-    return ficheros.crear_publicacion(
+    return db.crear_publicacion(
         marca,
         red,
         titulo=titulo,
@@ -186,11 +191,13 @@ def crear_publicacion(
         imagen=imagen,
         evergreen=evergreen,
         autor=autor,
+        id=id,
+        fecha_creacion=fecha_creacion,
     )
 
 
 def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return ficheros.crear_publicaciones(lista)
+    return db.crear_publicaciones(lista)
 
 
 def listar_publicaciones(
@@ -202,7 +209,7 @@ def listar_publicaciones(
     limite: int | None = None,
     desplazamiento: int | None = None,
 ) -> list[dict[str, Any]]:
-    return ficheros.listar_publicaciones(
+    return db.listar_publicaciones(
         marca=marca,
         red=red,
         estado=estado,
@@ -218,21 +225,21 @@ def contar_publicaciones(
     estado: str | None = None,
     evergreen: bool | None = None,
 ) -> int:
-    return ficheros.contar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
+    return db.contar_publicaciones(marca=marca, red=red, estado=estado, evergreen=evergreen)
 
 
 def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
-    return ficheros.obtener_publicacion(publicacion_id)
+    return db.obtener_publicacion(publicacion_id)
 
 
 def actualizar_publicacion(
     publicacion_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return ficheros.actualizar_publicacion(publicacion_id, campos)
+    return db.actualizar_publicacion(publicacion_id, campos)
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:
-    return ficheros.borrar_publicacion(publicacion_id)
+    return db.borrar_publicacion(publicacion_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -897,6 +904,7 @@ def crear_contenido_plataforma(
     id_post_metricool: str = "",
     enlace: str = "",
     evergreen: bool = False,
+    es_publicacion: bool = False,
     hora_post: str = "",
     creado: str = "",
     actualizado: str = "",
@@ -923,6 +931,7 @@ def crear_contenido_plataforma(
         id_post_metricool=id_post_metricool,
         enlace=enlace,
         evergreen=evergreen,
+        es_publicacion=es_publicacion,
         hora_post=hora_post,
         creado=creado,
         actualizado=actualizado,

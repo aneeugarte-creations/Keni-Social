@@ -38,7 +38,7 @@ def _ruta_pub(base, marca, pub_id):
 
 
 def test_carpeta_marca_siembra_meta_y_claude(base):
-    pub = repos.crear_publicacion("unotv", "x", titulo="Hola")
+    pub = ficheros.crear_publicacion("unotv", "x", titulo="Hola")
     carpeta = base / "datos" / "unotv"
     assert carpeta.is_dir()
     assert (carpeta / "marca.yaml").is_file()
@@ -60,7 +60,7 @@ def test_carpeta_marca_siembra_meta_y_claude(base):
 
 
 def test_round_trip_publicacion(base):
-    pub = repos.crear_publicacion("unotv", "x", titulo="T", contenido="Cuerpo largo\nmultilinea")
+    pub = ficheros.crear_publicacion("unotv", "x", titulo="T", contenido="Cuerpo largo\nmultilinea")
     ruta = _ruta_pub(base, "unotv", pub["id"])
     assert ruta.is_file()
     # Editamos el YAML A MANO (como haria una persona en su editor).
@@ -68,18 +68,18 @@ def test_round_trip_publicacion(base):
     datos["titulo"] = "Editado a mano"
     ruta.write_text(yaml.safe_dump(datos, allow_unicode=True, sort_keys=False))
     # repos lo lee actualizado (re-indexa por mtime distinto).
-    leida = repos.obtener_publicacion(pub["id"])
+    leida = ficheros.obtener_publicacion(pub["id"])
     assert leida["titulo"] == "Editado a mano"
     assert leida["contenido"] == "Cuerpo largo\nmultilinea"
 
 
 def test_contenido_largo_en_bloque_literal(base):
     largo = "linea1\nlinea2\nlinea3 con texto\n"
-    pub = repos.crear_publicacion("unotv", "x", contenido=largo)
+    pub = ficheros.crear_publicacion("unotv", "x", contenido=largo)
     texto = _ruta_pub(base, "unotv", pub["id"]).read_text()
     # PyYAML usa bloque '|' para multilinea: el texto crudo aparece sin escapes \n.
     assert "linea1" in texto and "\\n" not in texto
-    assert repos.obtener_publicacion(pub["id"])["contenido"] == largo
+    assert ficheros.obtener_publicacion(pub["id"])["contenido"] == largo
 
 
 def test_round_trip_plantilla_y_hashtags_y_fuente(base):
@@ -127,10 +127,10 @@ def test_historial_guarda_y_devuelve_metricas(base):
 
 
 def test_orden_publicaciones_por_fecha_hora(base):
-    a = repos.crear_publicacion("unotv", "x", titulo="A")
+    a = ficheros.crear_publicacion("unotv", "x", titulo="A")
     time.sleep(1.05)  # fecha_creacion tiene resolucion de segundos
-    b = repos.crear_publicacion("unotv", "x", titulo="B")
-    ids = [p["id"] for p in repos.listar_publicaciones()]
+    b = ficheros.crear_publicacion("unotv", "x", titulo="B")
+    ids = [p["id"] for p in ficheros.listar_publicaciones()]
     # Mas reciente primero (B antes que A).
     assert ids.index(b["id"]) < ids.index(a["id"])
 
@@ -149,34 +149,34 @@ def test_orden_franjas_determinista(base):
 
 
 def test_yaml_corrupto_se_omite(base):
-    ok = repos.crear_publicacion("unotv", "x", titulo="Buena")
-    mala = repos.crear_publicacion("unotv", "x", titulo="Mala")
+    ok = ficheros.crear_publicacion("unotv", "x", titulo="Buena")
+    mala = ficheros.crear_publicacion("unotv", "x", titulo="Mala")
     # Corrompemos el YAML de 'mala' a mano.
     _ruta_pub(base, "unotv", mala["id"]).write_text(":\n  - [esto no es yaml valido")
-    pubs = repos.listar_publicaciones()
+    pubs = ficheros.listar_publicaciones()
     ids = {p["id"] for p in pubs}
     assert ok["id"] in ids
     assert mala["id"] not in ids  # omitida, no rompe el listado
-    assert repos.obtener_publicacion(mala["id"]) is None
+    assert ficheros.obtener_publicacion(mala["id"]) is None
 
 
 def test_estado_invalido_se_omite(base):
-    pub = repos.crear_publicacion("unotv", "x", titulo="X")
+    pub = ficheros.crear_publicacion("unotv", "x", titulo="X")
     ruta = _ruta_pub(base, "unotv", pub["id"])
     datos = yaml.safe_load(ruta.read_text())
     datos["estado"] = "estado-inventado"
     ruta.write_text(yaml.safe_dump(datos, allow_unicode=True))
-    assert all(p["id"] != pub["id"] for p in repos.listar_publicaciones())
-    assert repos.obtener_publicacion(pub["id"]) is None
+    assert all(p["id"] != pub["id"] for p in ficheros.listar_publicaciones())
+    assert ficheros.obtener_publicacion(pub["id"]) is None
 
 
 def test_red_invalida_se_omite(base):
-    pub = repos.crear_publicacion("unotv", "x", titulo="X")
+    pub = ficheros.crear_publicacion("unotv", "x", titulo="X")
     ruta = _ruta_pub(base, "unotv", pub["id"])
     datos = yaml.safe_load(ruta.read_text())
     datos["red"] = "myspace"
     ruta.write_text(yaml.safe_dump(datos, allow_unicode=True))
-    assert all(p["id"] != pub["id"] for p in repos.listar_publicaciones())
+    assert all(p["id"] != pub["id"] for p in ficheros.listar_publicaciones())
 
 
 # --------------------------------------------------------------------------- #
@@ -186,7 +186,7 @@ def test_red_invalida_se_omite(base):
 
 def test_escritura_no_deja_temporales(base):
     for i in range(5):
-        repos.crear_publicacion("unotv", "x", titulo=f"P{i}")
+        ficheros.crear_publicacion("unotv", "x", titulo=f"P{i}")
     tmp = list((base / "datos").rglob(".tmp-*"))
     assert tmp == []
     # Y los .yaml definitivos si estan.
@@ -200,24 +200,24 @@ def test_escritura_no_deja_temporales(base):
 
 
 def test_indice_se_regenera_si_se_borra(base):
-    a = repos.crear_publicacion("unotv", "x", titulo="A")
-    b = repos.crear_publicacion("claro-sports", "instagram", titulo="B")
+    a = ficheros.crear_publicacion("unotv", "x", titulo="A")
+    b = ficheros.crear_publicacion("claro-sports", "instagram", titulo="B")
     # Borra el indice (NO es la verdad): los YAML siguen en disco.
     indice.ruta_indice().unlink()
     # Listar lo reconstruye desde los ficheros.
-    ids = {p["id"] for p in repos.listar_publicaciones()}
+    ids = {p["id"] for p in ficheros.listar_publicaciones()}
     assert {a["id"], b["id"]} <= ids
     # Y obtener por id tambien funciona tras el borrado.
     indice.ruta_indice().unlink()
-    assert repos.obtener_publicacion(a["id"])["titulo"] == "A"
+    assert ficheros.obtener_publicacion(a["id"])["titulo"] == "A"
 
 
 def test_reconstruir_indice_completo(base):
-    repos.crear_publicacion("unotv", "x", titulo="A")
+    ficheros.crear_publicacion("unotv", "x", titulo="A")
     repos.crear_plantilla("P", marca="unotv")
     indice.ruta_indice().unlink()
     ficheros.reconstruir_indice()
-    assert len(repos.listar_publicaciones()) == 1
+    assert len(ficheros.listar_publicaciones()) == 1
     assert len(repos.listar_plantillas()) == 1
 
 
@@ -227,14 +227,14 @@ def test_reconstruir_indice_completo(base):
 
 
 def test_filtros_listar_publicaciones(base):
-    repos.crear_publicacion("unotv", "x", evergreen=True)
-    repos.crear_publicacion("unotv", "instagram", evergreen=False)
-    repos.crear_publicacion("claro-sports", "x", estado="aprobado")
-    assert len(repos.listar_publicaciones(marca="unotv")) == 2
-    assert len(repos.listar_publicaciones(red="x")) == 2
-    assert len(repos.listar_publicaciones(estado="aprobado")) == 1
-    assert len(repos.listar_publicaciones(evergreen=True)) == 1
-    assert len(repos.listar_publicaciones(evergreen=False)) == 2
+    ficheros.crear_publicacion("unotv", "x", evergreen=True)
+    ficheros.crear_publicacion("unotv", "instagram", evergreen=False)
+    ficheros.crear_publicacion("claro-sports", "x", estado="aprobado")
+    assert len(ficheros.listar_publicaciones(marca="unotv")) == 2
+    assert len(ficheros.listar_publicaciones(red="x")) == 2
+    assert len(ficheros.listar_publicaciones(estado="aprobado")) == 1
+    assert len(ficheros.listar_publicaciones(evergreen=True)) == 1
+    assert len(ficheros.listar_publicaciones(evergreen=False)) == 2
 
 
 # --------------------------------------------------------------------------- #
@@ -243,10 +243,10 @@ def test_filtros_listar_publicaciones(base):
 
 
 def test_borrar_publicacion(base):
-    pub = repos.crear_publicacion("unotv", "x")
-    assert repos.borrar_publicacion(pub["id"]) is True
-    assert repos.obtener_publicacion(pub["id"]) is None
-    assert repos.borrar_publicacion(pub["id"]) is False
+    pub = ficheros.crear_publicacion("unotv", "x")
+    assert ficheros.borrar_publicacion(pub["id"]) is True
+    assert ficheros.obtener_publicacion(pub["id"]) is None
+    assert ficheros.borrar_publicacion(pub["id"]) is False
 
 
 def test_editar_grupo_cambia_de_marca_mueve_fichero(base):
