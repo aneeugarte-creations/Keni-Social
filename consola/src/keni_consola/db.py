@@ -728,21 +728,26 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # ACTIVOS REUTILIZABLES (ola "activos"): plantillas de contenido por tipo  #
     # de nota recurrente + biblioteca de medios interna.                      #
     # ----------------------------------------------------------------------- #
-    # PLANTILLAS DE CONTENIDO (ola "activos"): a diferencia de la plantilla de copy plana
-    # (`plantillas`, un texto suelto por marca/red en YAML), esta plantilla modela un TIPO
-    # de nota recurrente (p.ej. "gol", "alineacion", "efemeride deportiva"): una ESTRUCTURA
-    # de cuerpo con marcadores `{{variable}}` mas la lista DECLARADA de esas variables. Al
-    # armar una pieza, el equipo elige la plantilla, rellena las variables y obtiene el copy
-    # base ya tropicalizado por la estructura. `variables` es un JSON serializado (lista de
-    # `{clave, etiqueta, ejemplo}`); el render (sustitucion) lo hace la API, no la BD.
+    # PLANTILLAS DE CONTENIDO (ola "activos"): CATALOGO UNIFICADO de plantillas reutilizables
+    # al armar una pieza. Una plantilla tiene un `modo`:
+    #   - 'plano':      `contenido` es el copy directo (texto suelto reutilizable por marca/red).
+    #                   `estructura`/`variables` no se usan. (Antes vivia en YAML como `plantillas`.)
+    #   - 'estructura': `estructura` es el cuerpo con marcadores `{{variable}}` + la lista DECLARADA
+    #                   de esas variables (`variables`). Modela un TIPO de nota recurrente (p.ej.
+    #                   "gol", "alineacion", "efemeride"); al aplicar, el equipo rellena las
+    #                   variables y la API compone el copy base.
+    # `variables` es un JSON serializado (lista de `{clave, etiqueta, ejemplo}`); el render
+    # (sustitucion) lo hace la API, no la BD.
     """
     CREATE TABLE IF NOT EXISTS plantilla_contenido (
         id           TEXT PRIMARY KEY,
         nombre       TEXT NOT NULL,
+        modo         TEXT NOT NULL DEFAULT 'estructura',
         tipo_nota    TEXT NOT NULL DEFAULT '',
         descripcion  TEXT NOT NULL DEFAULT '',
         marca        TEXT NOT NULL DEFAULT '',
         red          TEXT NOT NULL DEFAULT '',
+        contenido    TEXT NOT NULL DEFAULT '',
         estructura   TEXT NOT NULL DEFAULT '',
         variables    TEXT NOT NULL DEFAULT '[]',
         activo       INTEGER NOT NULL DEFAULT 1,
@@ -897,6 +902,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
+    _migrar_columnas_plantilla_contenido(con)
     con.commit()
 
 
@@ -3581,13 +3587,40 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
 # variables (JSON en la columna `variables`). El render/sustitucion lo hace la API; aqui
 # solo persistimos. `variables` viaja como JSON serializado para no inventar una tabla hija.
 
+# Columnas que la ola "catalogo unificado de plantillas" anadio sobre el DDL inicial de
+# `plantilla_contenido`. Una BD creada antes (solo modo estructura) no las tiene; el ALTER
+# es retrocompatible: las filas viejas quedan en `modo='estructura'` con `contenido=''`,
+# que es exactamente su semantica previa. Mismo patron idempotente que el resto de migraciones.
+_COLUMNAS_PLANTILLA_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("modo", "TEXT NOT NULL DEFAULT 'estructura'"),
+    ("contenido", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_plantilla_contenido(con: Any) -> None:
+    """Anade a `plantilla_contenido` las columnas del catalogo unificado (`modo`/`contenido`).
+
+    El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS; una base creada antes
+    (solo plantillas de estructura) no las tiene. Anade solo la que falte con su DEFAULT, de
+    modo que las plantillas existentes quedan como `modo='estructura'` (su semantica previa).
+    """
+    if not _tabla_existe(con, "plantilla_contenido"):
+        return
+    columnas = _columnas_existentes(con, "plantilla_contenido")
+    for columna, tipo in _COLUMNAS_PLANTILLA_CONTENIDO_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE plantilla_contenido ADD COLUMN {columna} {tipo}")
+
+
 _COLS_PLANTILLA_CONTENIDO = (
     "id",
     "nombre",
+    "modo",
     "tipo_nota",
     "descripcion",
     "marca",
     "red",
+    "contenido",
     "estructura",
     "variables",
     "activo",
@@ -3604,10 +3637,12 @@ _SELECT_PLANTILLA_CONTENIDO = (
 # `creado` y `actualizado` no son editables (el ultimo lo gestiona el sistema).
 _CAMPOS_EDITABLES_PLANTILLA_CONTENIDO: tuple[str, ...] = (
     "nombre",
+    "modo",
     "tipo_nota",
     "descripcion",
     "marca",
     "red",
+    "contenido",
     "estructura",
     "variables",
     "activo",
@@ -3619,16 +3654,19 @@ def _fila_a_plantilla_contenido(fila: Any) -> dict[str, Any]:
     item: dict[str, Any] = {col: fila[col] for col in _COLS_PLANTILLA_CONTENIDO}
     item["activo"] = bool(fila["activo"])
     item["variables"] = fila["variables"] or "[]"
+    item["modo"] = fila["modo"] or "estructura"
     return item
 
 
 def crear_plantilla_contenido(
     *,
     nombre: str,
+    modo: str = "estructura",
     tipo_nota: str = "",
     descripcion: str = "",
     marca: str = "",
     red: str = "",
+    contenido: str = "",
     estructura: str = "",
     variables: str = "[]",
     activo: bool = True,
@@ -3643,10 +3681,12 @@ def crear_plantilla_contenido(
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "nombre": nombre or "",
+        "modo": modo or "estructura",
         "tipo_nota": tipo_nota or "",
         "descripcion": descripcion or "",
         "marca": marca or "",
         "red": red or "",
+        "contenido": contenido or "",
         "estructura": estructura or "",
         "variables": variables or "[]",
         "activo": 1 if activo else 0,

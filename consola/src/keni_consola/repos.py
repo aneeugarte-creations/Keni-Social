@@ -297,38 +297,11 @@ def borrar_franja(franja_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Plantillas (CONTENIDO: ficheros YAML via ficheros.py)                        #
+# Plantillas de copy PLANO: el concepto se FUSIONÓ en el catálogo unificado          #
+# `plantilla_contenido` (modo 'plano'). Las funciones planas YAML (`ficheros.*`) ya     #
+# no tienen fachada aquí; solo las usa `migrar_contenido.migrar_plantillas_plano` para  #
+# la migración one-shot. Ver `crear_plantilla_contenido` (modo) más abajo.              #
 # --------------------------------------------------------------------------- #
-
-
-def listar_plantillas(
-    *, limite: int | None = None, desplazamiento: int | None = None
-) -> list[dict[str, Any]]:
-    return ficheros.listar_plantillas(limite=limite, desplazamiento=desplazamiento)
-
-
-def contar_plantillas() -> int:
-    return ficheros.contar_plantillas()
-
-
-def obtener_plantilla(plantilla_id: str) -> dict[str, Any] | None:
-    return ficheros.obtener_plantilla(plantilla_id)
-
-
-def crear_plantilla(
-    nombre: str, marca: str = "", red: str = "", contenido: str = ""
-) -> dict[str, Any]:
-    return ficheros.crear_plantilla(nombre, marca=marca, red=red, contenido=contenido)
-
-
-def actualizar_plantilla(
-    plantilla_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return ficheros.actualizar_plantilla(plantilla_id, campos)
-
-
-def borrar_plantilla(plantilla_id: str) -> bool:
-    return ficheros.borrar_plantilla(plantilla_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -970,10 +943,12 @@ def borrar_contenido_plataforma(plataforma_id: str) -> bool:
 def crear_plantilla_contenido(
     *,
     nombre: str,
+    modo: str = "estructura",
     tipo_nota: str = "",
     descripcion: str = "",
     marca: str = "",
     red: str = "",
+    contenido: str = "",
     estructura: str = "",
     variables: str = "[]",
     activo: bool = True,
@@ -984,10 +959,12 @@ def crear_plantilla_contenido(
 ) -> dict[str, Any]:
     return db.crear_plantilla_contenido(
         nombre=nombre,
+        modo=modo,
         tipo_nota=tipo_nota,
         descripcion=descripcion,
         marca=marca,
         red=red,
+        contenido=contenido,
         estructura=estructura,
         variables=variables,
         activo=activo,

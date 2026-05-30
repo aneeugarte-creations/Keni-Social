@@ -83,8 +83,10 @@ def test_contenido_largo_en_bloque_literal(base):
 
 
 def test_round_trip_plantilla_y_hashtags_y_fuente(base):
-    p = repos.crear_plantilla("Saludo", marca="unotv", red="x", contenido="Hola")
-    assert repos.obtener_plantilla(p["id"])["nombre"] == "Saludo"
+    # Plantillas de copy plano: el modelo OPERACIONAL vive en Postgres (catálogo unificado
+    # `plantilla_contenido`); en YAML solo queda el origen legado que lee la migración.
+    p = ficheros.crear_plantilla("Saludo", marca="unotv", red="x", contenido="Hola")
+    assert ficheros.obtener_plantilla(p["id"])["nombre"] == "Saludo"
     g = repos.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol", "#liga"])
     assert repos.obtener_grupo_hashtags(g["id"])["hashtags"] == ["#gol", "#liga"]
     # hashtags como lista YAML nativa (no JSON embebido).
@@ -214,11 +216,11 @@ def test_indice_se_regenera_si_se_borra(base):
 
 def test_reconstruir_indice_completo(base):
     ficheros.crear_publicacion("unotv", "x", titulo="A")
-    repos.crear_plantilla("P", marca="unotv")
+    ficheros.crear_plantilla("P", marca="unotv")
     indice.ruta_indice().unlink()
     ficheros.reconstruir_indice()
     assert len(ficheros.listar_publicaciones()) == 1
-    assert len(repos.listar_plantillas()) == 1
+    assert len(ficheros.listar_plantillas()) == 1
 
 
 # --------------------------------------------------------------------------- #

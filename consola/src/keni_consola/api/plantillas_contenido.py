@@ -1,17 +1,23 @@
-"""API Plantillas de CONTENIDO: plantillas reutilizables por TIPO de nota recurrente.
+"""API Plantillas de CONTENIDO: CATÁLOGO UNIFICADO de plantillas de copy reutilizables.
 
-A diferencia de `api/plantillas.py` (un texto de copy PLANO por marca/red), aqui una
-plantilla modela un TIPO de nota recurrente (p.ej. "gol", "alineacion", "efeméride"):
-una ESTRUCTURA de cuerpo con marcadores `{{variable}}` mas la lista DECLARADA de esas
-variables. Al armar una pieza, el equipo elige la plantilla, rellena las variables y el
-endpoint `aplicar` devuelve el copy base ya compuesto. Nada se publica aqui (eso es
-Metricool): es un ACTIVO reutilizable que acelera crear piezas.
+Una plantilla tiene un `modo`:
+  - 'plano':      `contenido` es el copy directo (texto suelto reutilizable por marca/red).
+                  Es la antigua "plantilla de post" (antes en `api/plantillas.py` + YAML).
+  - 'estructura': modela un TIPO de nota recurrente (p.ej. "gol", "alineacion", "efeméride"):
+                  una ESTRUCTURA de cuerpo con marcadores `{{variable}}` + la lista DECLARADA
+                  de esas variables. Al armar una pieza, el equipo elige la plantilla, rellena
+                  las variables y el endpoint `aplicar` devuelve el copy base ya compuesto.
+
+Nada se publica aqui (eso es Metricool): es un ACTIVO reutilizable que acelera crear piezas.
+`api/plantillas.py` es un ADAPTADOR legado de solo-modo-plano sobre estos mismos endpoints.
 
 Persistencia en Postgres (`repos` -> `db.py`). Las `variables` se guardan como JSON
 (lista de `{clave, etiqueta, ejemplo}`); la API serializa/valida, la BD solo almacena.
 
 SEGURIDAD / VALIDACION (reusa las fuentes de verdad):
-  - `nombre` y `estructura` obligatorios (no vacios).
+  - `nombre` obligatorio (no vacio).
+  - `modo` ∈ {plano, estructura}. En 'plano' `contenido` es obligatorio; en 'estructura'
+    lo es `estructura`.
   - `marca` (si viene) SOLO del catalogo unico (`consola.marcas`).
   - `red` (si viene) SOLO una red canonica (`consola.redes`).
   - `clave` de cada variable: identificador simple `[a-zA-Z0-9_]` (lo que se sustituye).
@@ -45,6 +51,9 @@ _RE_MARCADOR = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
 # Limites defensivos (mismo espiritu que el resto de la consola: textos acotados).
 _MAX_ESTRUCTURA = 8000
 _MAX_VARIABLES = 50
+
+# Modos validos del catalogo unificado (ver docstring del modulo).
+_MODOS = ("plano", "estructura")
 
 
 def _normalizar_variables(crudo: Any) -> tuple[list[dict[str, str]] | None, str | None]:
@@ -91,12 +100,14 @@ def _plantilla_a_dict(p: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": p["id"],
         "nombre": p["nombre"],
+        "modo": p.get("modo") or "estructura",
         "tipo_nota": p["tipo_nota"],
         "descripcion": p["descripcion"],
         "marca": p["marca"],
         "marca_nombre": marcas.etiqueta_de(p["marca"]) if p["marca"] else "",
         "red": p["red"],
         "red_nombre": redes.nombre_por_id(p["red"]) if p["red"] else "",
+        "contenido": p.get("contenido", "") or "",
         "estructura": p["estructura"],
         "variables": _cargar_variables(p["variables"]),
         "activo": bool(p["activo"]),
@@ -144,16 +155,36 @@ async def listar(request: Request) -> Response:
 
 
 async def crear(request: Request) -> Response:
-    """Crea una plantilla `{nombre, estructura, tipo_nota?, descripcion?, marca?, red?, variables?}`."""
+    """Crea una plantilla del catálogo unificado.
+
+    `{nombre, modo?, contenido?, estructura?, tipo_nota?, descripcion?, marca?, red?, variables?}`.
+    `modo` por defecto 'estructura' (compatibilidad). En 'plano' obliga `contenido`; en
+    'estructura' obliga `estructura`.
+    """
     datos = await leer_json(request)
     nombre = datos.get("nombre")
     if not isinstance(nombre, str) or not nombre.strip():
         return JSONResponse({"error": "El nombre de la plantilla es obligatorio."}, status_code=400)
-    estructura = datos.get("estructura")
-    if not isinstance(estructura, str) or not estructura.strip():
-        return JSONResponse({"error": "La estructura de la plantilla es obligatoria."}, status_code=400)
+    modo = datos.get("modo", "estructura")
+    if modo not in _MODOS:
+        return JSONResponse({"error": "El modo debe ser «plano» o «estructura»."}, status_code=400)
+
+    contenido = datos.get("contenido", "")
+    if not isinstance(contenido, str):
+        return JSONResponse({"error": "El contenido debe ser texto."}, status_code=400)
+    if len(contenido) > _MAX_ESTRUCTURA:
+        return JSONResponse({"error": "El contenido es demasiado largo."}, status_code=400)
+    estructura = datos.get("estructura", "")
+    if not isinstance(estructura, str):
+        return JSONResponse({"error": "La estructura debe ser texto."}, status_code=400)
     if len(estructura) > _MAX_ESTRUCTURA:
         return JSONResponse({"error": "La estructura es demasiado larga."}, status_code=400)
+
+    if modo == "plano" and not contenido.strip():
+        return JSONResponse({"error": "El contenido de la plantilla es obligatorio."}, status_code=400)
+    if modo == "estructura" and not estructura.strip():
+        return JSONResponse({"error": "La estructura de la plantilla es obligatoria."}, status_code=400)
+
     marca, error = _validar_marca(datos.get("marca", ""))
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
@@ -171,11 +202,13 @@ async def crear(request: Request) -> Response:
     autor = autor_de_peticion(request) or {}
     plantilla = repos.crear_plantilla_contenido(
         nombre=nombre.strip(),
+        modo=modo,
         tipo_nota=tipo_nota.strip(),
         descripcion=descripcion,
         marca=marca,
         red=red,
-        estructura=estructura,
+        contenido=contenido if modo == "plano" else "",
+        estructura=estructura if modo == "estructura" else "",
         variables=json.dumps(variables, ensure_ascii=False),
         autor=autor,
     )
@@ -192,10 +225,22 @@ async def actualizar(request: Request) -> Response:
         if not isinstance(nombre, str) or not nombre.strip():
             return JSONResponse({"error": "El nombre de la plantilla es obligatorio."}, status_code=400)
         campos["nombre"] = nombre.strip()
+    if "modo" in datos:
+        modo = datos.get("modo")
+        if modo not in _MODOS:
+            return JSONResponse({"error": "El modo debe ser «plano» o «estructura»."}, status_code=400)
+        campos["modo"] = modo
+    if "contenido" in datos:
+        contenido = datos.get("contenido")
+        if not isinstance(contenido, str):
+            return JSONResponse({"error": "El contenido debe ser texto."}, status_code=400)
+        if len(contenido) > _MAX_ESTRUCTURA:
+            return JSONResponse({"error": "El contenido es demasiado largo."}, status_code=400)
+        campos["contenido"] = contenido
     if "estructura" in datos:
         estructura = datos.get("estructura")
-        if not isinstance(estructura, str) or not estructura.strip():
-            return JSONResponse({"error": "La estructura de la plantilla es obligatoria."}, status_code=400)
+        if not isinstance(estructura, str):
+            return JSONResponse({"error": "La estructura debe ser texto."}, status_code=400)
         if len(estructura) > _MAX_ESTRUCTURA:
             return JSONResponse({"error": "La estructura es demasiado larga."}, status_code=400)
         campos["estructura"] = estructura
@@ -225,6 +270,26 @@ async def actualizar(request: Request) -> Response:
     if not campos:
         return JSONResponse({"error": "No hay nada que actualizar."}, status_code=400)
 
+    # Coherencia modo<->cuerpo: el cuerpo obligatorio del modo RESULTANTE no puede quedar
+    # vacío (mezclando lo que cambia ahora con lo ya guardado).
+    if "modo" in campos or "contenido" in campos or "estructura" in campos:
+        actual = repos.obtener_plantilla_contenido(plantilla_id)
+        if actual is None:
+            return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
+        modo_final = campos.get("modo", actual.get("modo") or "estructura")
+        if modo_final == "plano":
+            contenido_final = campos.get("contenido", actual.get("contenido", "") or "")
+            if not str(contenido_final).strip():
+                return JSONResponse(
+                    {"error": "El contenido de la plantilla es obligatorio."}, status_code=400
+                )
+        else:
+            estructura_final = campos.get("estructura", actual.get("estructura", "") or "")
+            if not str(estructura_final).strip():
+                return JSONResponse(
+                    {"error": "La estructura de la plantilla es obligatoria."}, status_code=400
+                )
+
     plantilla = repos.actualizar_plantilla_contenido(plantilla_id, campos)
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
@@ -249,6 +314,11 @@ async def aplicar(request: Request) -> Response:
     plantilla = repos.obtener_plantilla_contenido(plantilla_id)
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
+
+    # Modo plano: el copy ES el contenido tal cual; no hay variables que rellenar.
+    if (plantilla.get("modo") or "estructura") == "plano":
+        return JSONResponse({"copy": plantilla.get("contenido", "") or "", "faltan": []})
+
     datos = await leer_json(request)
     valores = datos.get("valores", {})
     if not isinstance(valores, dict):

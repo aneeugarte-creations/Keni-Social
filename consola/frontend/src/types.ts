@@ -2365,48 +2365,12 @@ export interface FiltrosReciclaje {
   [clave: string]: string | undefined;
 }
 
-// --- Plantillas de post (copy reutilizable) ---
-
-/** Una plantilla de copy guardada. */
-export interface Plantilla {
-  id: string;
-  nombre: string;
-  /** Marca asociada (`""` si es general). */
-  marca: string;
-  marca_nombre: string;
-  /** Red asociada (`""` si aplica a cualquier red). */
-  red: string;
-  red_nombre: string;
-  contenido: string;
-}
-
-export interface RespuestaPlantillas {
-  plantillas: Plantilla[];
-}
-
-export interface RespuestaPlantilla {
-  plantilla: Plantilla;
-}
-
-/** Cuerpo para crear una plantilla. */
-export interface CuerpoCrearPlantilla {
-  nombre: string;
-  /** Marca asociada (opcional). */
-  marca?: string;
-  /** Red asociada (opcional). */
-  red?: string;
-  contenido: string;
-}
-
-/** Cuerpo parcial para actualizar una plantilla. */
-export interface CuerpoActualizarPlantilla {
-  nombre?: string;
-  marca?: string;
-  red?: string;
-  contenido?: string;
-}
-
-// --- Plantillas de CONTENIDO por tipo de nota (activos reutilizables) ---
+// --- Plantillas de CONTENIDO: catálogo unificado de plantillas reutilizables ---
+//
+// Una sola entidad con dos modos:
+//   - 'plano':      `contenido` es el copy directo (texto suelto por marca/red).
+//   - 'estructura': `estructura` con marcadores `{{variable}}` + `variables` declaradas.
+// El concepto legado de "plantilla de post" (un texto plano) se FUSIONÓ aquí.
 
 /** Una variable declarada de una plantilla de contenido (marcador `{{clave}}`). */
 export interface VariablePlantilla {
@@ -2418,10 +2382,15 @@ export interface VariablePlantilla {
   ejemplo: string;
 }
 
-/** Una plantilla de contenido por tipo de nota recurrente (estructura + variables). */
+/** Modo de una plantilla del catálogo unificado. */
+export type ModoPlantilla = "plano" | "estructura";
+
+/** Una plantilla del catálogo unificado (modo plano o estructura). */
 export interface PlantillaContenido {
   id: string;
   nombre: string;
+  /** 'plano' = `contenido` directo; 'estructura' = `estructura` + `variables`. */
+  modo: ModoPlantilla;
   /** Tipo de nota recurrente (p. ej. "gol", "alineación", "efeméride"). */
   tipo_nota: string;
   descripcion: string;
@@ -2431,7 +2400,9 @@ export interface PlantillaContenido {
   /** Red asociada (`""` si aplica a cualquier red). */
   red: string;
   red_nombre: string;
-  /** Cuerpo con marcadores `{{variable}}`. */
+  /** Copy directo (modo 'plano'). */
+  contenido: string;
+  /** Cuerpo con marcadores `{{variable}}` (modo 'estructura'). */
   estructura: string;
   variables: VariablePlantilla[];
   activo: boolean;
@@ -2451,7 +2422,12 @@ export interface RespuestaPlantillaContenido {
 /** Cuerpo para crear una plantilla de contenido. */
 export interface CuerpoCrearPlantillaContenido {
   nombre: string;
-  estructura: string;
+  /** Por defecto 'estructura' si se omite (compatibilidad). */
+  modo?: ModoPlantilla;
+  /** Obligatorio en modo 'plano'. */
+  contenido?: string;
+  /** Obligatorio en modo 'estructura'. */
+  estructura?: string;
   tipo_nota?: string;
   descripcion?: string;
   marca?: string;
@@ -2462,6 +2438,8 @@ export interface CuerpoCrearPlantillaContenido {
 /** Cuerpo parcial para actualizar una plantilla de contenido. */
 export interface CuerpoActualizarPlantillaContenido {
   nombre?: string;
+  modo?: ModoPlantilla;
+  contenido?: string;
   tipo_nota?: string;
   descripcion?: string;
   marca?: string;
