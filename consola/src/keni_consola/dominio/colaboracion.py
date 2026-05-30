@@ -28,15 +28,49 @@ from datetime import datetime
 from typing import Any
 
 from ..estados import (
+    CADENA_APROBACION_SIMPLE,
     DECISION_APROBADO,
     DECISION_PENDIENTE,
     DECISION_RECHAZADO,
+    ESTADO_APROBADO,
+    ESTADO_EN_REVISION,
     ROL_ADMIN,
 )
 
 
 def _ahora_iso() -> str:
     return datetime.now().isoformat(timespec="seconds")
+
+
+def cadena_simple() -> list[str]:
+    """Etiquetas de la cadena de aprobacion SIMPLE (longitud 1 = "otro par de ojos").
+
+    Defecto razonable para una PUBLICACION suelta: un unico nivel `pendiente` que un
+    revisor (distinto del autor, salvo admin) aprueba o rechaza. Equivale al viejo flujo
+    lineal borrador→en_revision→aprobado, pero expresado como una cadena de un solo nivel
+    sobre el mismo modelo multinivel (cadena vacia = sin aprobacion; cadena de N = N niveles).
+    """
+    return list(CADENA_APROBACION_SIMPLE)
+
+
+def estado_publicacion_para(estado_global: str) -> str | None:
+    """Traduce el estado GLOBAL de la cadena al `estado` editorial de la PUBLICACION.
+
+    Es el puente PURO entre el modelo de aprobacion (cadena multinivel) y los estados que
+    el programador entiende (`programador.py` lee `aprobado`/`programado`): cuando la cadena
+    queda totalmente `aprobado`, la pieza pasa a `aprobado`; mientras quedan niveles por
+    decidir, esta `en_revision`; un `rechazado` la devuelve a `borrador`. Una cadena vacia
+    ("sin_cadena") no toca el estado editorial: devuelve None (sin aprobacion configurada).
+
+    Devuelve el estado editorial a aplicar, o None si la cadena no debe alterarlo.
+    """
+    if estado_global == DECISION_APROBADO:
+        return ESTADO_APROBADO
+    if estado_global == DECISION_PENDIENTE:
+        return ESTADO_EN_REVISION
+    if estado_global == DECISION_RECHAZADO:
+        return "borrador"
+    return None  # "sin_cadena": ninguna aprobacion configurada, no se toca el estado.
 
 
 def estado_cadena(cadena: list[dict[str, Any]]) -> str:

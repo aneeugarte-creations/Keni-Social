@@ -736,20 +736,25 @@ export const api = {
       metodo: "POST",
     }),
 
-  // --- Aprobación de equipo (#9): cola de revisión + programación dry-run ---
-  // El flujo se monta sobre las publicaciones: borrador -> en_revisión -> aprobado
-  // -> programado. Quien aprueba no puede ser el autor (salvo admin). Programar NO
-  // publica de verdad: el posteo real está gated por #5/#8.
+  // --- Aprobación de PUBLICACIONES (#9): cola de revisión + decisión + programación ---
+  // CONSOLIDACIÓN: la aprobación es ahora la MISMA cadena multinivel del tablero (una
+  // publicación ES una fila `contenido_plataforma`). Estos endpoints se conservan y por
+  // dentro FORWARDEAN a la cadena: `enviarARevision` crea una cadena SIMPLE (1 nivel) y deja
+  // la pieza en revisión; `aprobar`/`rechazar` deciden el nivel actual de esa cadena.
+  // Programar NO es aprobación (es programación) y NO publica de verdad: gated por #5/#8.
   colaAprobacion: (signal?: AbortSignal) =>
     peticion<RespuestaColaAprobacion>("/aprobacion/cola", { signal }),
+  /** Envía una publicación a revisión: crea la cadena de aprobación simple (borrador → en revisión). */
   enviarARevision: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/enviar-a-revision`, {
       metodo: "POST",
     }),
+  /** Aprueba el nivel actual de la cadena de una publicación (revisor != autor, salvo admin). */
   aprobarPublicacion: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/aprobar`, {
       metodo: "POST",
     }),
+  /** Rechaza el nivel actual de la cadena de una publicación (vuelve a borrador). */
   rechazarPublicacion: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/rechazar`, {
       metodo: "POST",
