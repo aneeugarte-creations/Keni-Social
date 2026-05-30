@@ -1057,6 +1057,58 @@ export interface ContenidoPlataforma {
   evergreen: boolean;
 }
 
+/** Eje (clase) de una etiqueta editorial: campaña, vertical/sección, o tipo de formato. */
+export type ClaseEtiqueta = "campania" | "vertical" | "tipo";
+
+/** Una etiqueta editorial del catálogo (clasifica transversalmente las piezas del tablero).
+ *
+ * `marca = ""` = etiqueta GLOBAL (visible en todas las marcas/workspaces); cualquier otro
+ * valor la acota a esa marca. `color` es un token hex opcional para el chip ("" = sin color).
+ */
+export interface Etiqueta {
+  id: string;
+  nombre: string;
+  clase: ClaseEtiqueta;
+  marca: string;
+  marca_nombre: string;
+  color: string;
+  activo: boolean;
+}
+
+/** Forma reducida de una etiqueta en los catálogos del tablero (chips/selector). */
+export interface EtiquetaCatalogo {
+  id: string;
+  nombre: string;
+  clase: ClaseEtiqueta;
+  marca: string;
+  color: string;
+}
+
+export interface RespuestaEtiquetas {
+  etiquetas: Etiqueta[];
+  clases: ClaseEtiqueta[];
+  marcas: { id: string; nombre: string }[];
+}
+
+export interface CuerpoCrearEtiqueta {
+  nombre: string;
+  clase?: ClaseEtiqueta;
+  marca?: string;
+  color?: string;
+}
+
+export interface CuerpoActualizarEtiqueta {
+  nombre?: string;
+  clase?: ClaseEtiqueta;
+  marca?: string;
+  color?: string;
+  activo?: boolean;
+}
+
+export interface RespuestaEtiqueta {
+  etiqueta: Etiqueta;
+}
+
 /** Un item del tablero: contenido publicable (con plataformas) o tarea libre del equipo. */
 export interface Contenido {
   id: string;
@@ -1081,6 +1133,8 @@ export interface Contenido {
   /** Derivado: deadline pasado y aún sin cerrar. */
   vencido: boolean;
   plataformas: ContenidoPlataforma[];
+  /** Ids de las etiquetas asignadas (resolver contra `catalogos.etiquetas`). */
+  etiquetas: string[];
 }
 
 /** Catálogos para los selects del tablero. */
@@ -1093,6 +1147,7 @@ export interface CatalogosContenido {
   estados_contenido: string[];
   estados_plataforma: string[];
   eventos: { id: string; titulo: string; fecha: string; hora: string }[];
+  etiquetas: EtiquetaCatalogo[];
 }
 
 export interface RespuestaContenido {
@@ -1116,6 +1171,13 @@ export interface CuerpoCrearContenido {
   notas?: string;
   /** Redes para crear una fila por plataforma por cada una. */
   redes?: string[];
+  /** Ids de etiquetas a asignar al crear. */
+  etiquetas?: string[];
+}
+
+/** Respuesta de asignar/quitar una etiqueta a un contenido: el set actualizado de ids. */
+export interface RespuestaEtiquetasContenido {
+  etiquetas: string[];
 }
 
 /** Cambios parciales sobre el padre; cada campo es opcional. */

@@ -222,6 +222,12 @@ FLUJO_EVENTO = "evento"
 PRIORIDADES_CONTENIDO: tuple[str, ...] = PRIORIDADES_EVENTO
 PRIORIDAD_CONTENIDO_DEFECTO = PRIORIDAD_EVENTO_DEFECTO
 
+# Eje (clase) de una etiqueta editorial del tablero (ola "organizacion"). Una etiqueta
+# clasifica transversalmente una pieza: una CAMPAÑA ("Mundial 2026"), una VERTICAL/sección
+# editorial ("futbol", "espectaculos") o un TIPO de formato ("reel", "carrusel", "nota").
+CLASES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "tipo")
+CLASE_ETIQUETA_DEFECTO = "campania"
+
 # Estado de un contenido a nivel PADRE (resumen editable / estado directo de una tarea
 # libre). Cubre el ciclo de una tarea (pendiente/en_curso/hecha) y sirve de resumen.
 ESTADOS_CONTENIDO: tuple[str, ...] = ("pendiente", "en_curso", "hecha")

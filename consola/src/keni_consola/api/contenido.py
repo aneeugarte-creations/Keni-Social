@@ -90,8 +90,10 @@ def _plataforma_a_dict(plat: dict) -> dict:
     return {**plat, "red_nombre": _red_nombre(plat.get("red", ""))}
 
 
-def _contenido_a_dict(item: dict, plataformas: list[dict]) -> dict:
-    """Serializa un item del tablero con sus plataformas (ordenadas) y `vencido` derivado."""
+def _contenido_a_dict(
+    item: dict, plataformas: list[dict], etiquetas: list[str] | None = None
+) -> dict:
+    """Serializa un item del tablero con sus plataformas (ordenadas), etiquetas y `vencido`."""
     hoy = date.today().isoformat()
     entrega = item.get("fecha_entrega") or ""
     vencido = bool(
@@ -103,6 +105,7 @@ def _contenido_a_dict(item: dict, plataformas: list[dict]) -> dict:
         "marca_nombre": marcas.etiqueta_de(item["marca"]) if item.get("marca") else "",
         "vencido": vencido,
         "plataformas": [_plataforma_a_dict(p) for p in plats],
+        "etiquetas": list(etiquetas or []),
     }
 
 
@@ -120,6 +123,17 @@ def _eventos_proximos() -> list[dict]:
     ]
 
 
+def _etiqueta_catalogo(et: dict) -> dict:
+    """Forma reducida de una etiqueta para los catálogos/chips del tablero."""
+    return {
+        "id": et["id"],
+        "nombre": et["nombre"],
+        "clase": et["clase"],
+        "marca": et.get("marca", ""),
+        "color": et.get("color", ""),
+    }
+
+
 def _catalogos() -> dict:
     """Catalogos para los selects del tablero."""
     return {
@@ -131,6 +145,8 @@ def _catalogos() -> dict:
         "estados_contenido": list(ESTADOS_CONTENIDO),
         "estados_plataforma": list(ESTADOS_CONTENIDO_PLATAFORMA),
         "eventos": _eventos_proximos(),
+        # Solo etiquetas ACTIVAS para el selector; el catálogo completo vive en /api/etiquetas.
+        "etiquetas": [_etiqueta_catalogo(e) for e in repos.listar_etiquetas(solo_activas=True)],
     }
 
 
@@ -142,8 +158,8 @@ def _catalogos() -> dict:
 async def listar(request: Request) -> Response:
     """GET /api/contenido: tablero completo (items + plataformas) y catalogos.
 
-    Filtros opcionales por query: `clase`, `flujo`, `marca`, `responsable_id`, `estado`,
-    `desde`, `hasta` (por `fecha_objetivo`).
+    Filtros opcionales por query: `clase`, `flujo`, `marca` (workspace), `responsable_id`,
+    `estado`, `desde`, `hasta` (por `fecha_objetivo`), `etiqueta` (id de una etiqueta).
     """
     q = request.query_params
     items = repos.listar_contenido(
@@ -155,14 +171,23 @@ async def listar(request: Request) -> Response:
         desde=q.get("desde") or None,
         hasta=q.get("hasta") or None,
     )
-    # Una sola lectura de todas las plataformas, agrupadas por contenido (evita N consultas).
+    # Filtro por etiqueta: acota a los contenidos que la llevan (una sola lectura del N:M).
+    etiqueta_id = q.get("etiqueta") or None
+    if etiqueta_id:
+        con_etiqueta = repos.ids_contenido_con_etiqueta(etiqueta_id)
+        items = [it for it in items if it["id"] in con_etiqueta]
+    # Una sola lectura de todas las plataformas y etiquetas, agrupadas por contenido.
     por_contenido: dict[str, list[dict]] = {}
     for plat in repos.listar_contenido_plataforma():
         por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+    etiquetas_de = repos.etiquetas_por_contenido()
     return JSONResponse(
         {
             "contenidos": [
-                _contenido_a_dict(it, por_contenido.get(it["id"], [])) for it in items
+                _contenido_a_dict(
+                    it, por_contenido.get(it["id"], []), etiquetas_de.get(it["id"], [])
+                )
+                for it in items
             ],
             "catalogos": _catalogos(),
         }
@@ -175,6 +200,23 @@ def _validar_marca(marca: object) -> tuple[str | None, str | None]:
     if not isinstance(marca, str) or not marcas.es_marca(marca):
         return None, "Marca no permitida."
     return marca, None
+
+
+def _etiquetas_validas(valor: object) -> tuple[list[str], str | None]:
+    """Valida una lista de ids de etiqueta del cliente contra el catálogo existente.
+
+    Devuelve `(ids_existentes, error)`. Una etiqueta que ya no existe -> error 400 (el
+    cliente está desincronizado). Lista vacía/ausente es válida (sin etiquetas).
+    """
+    if valor in (None, ""):
+        return [], None
+    if not isinstance(valor, list):
+        return [], "Las etiquetas deben ser una lista."
+    ids = [e for e in valor if isinstance(e, str) and e]
+    for etiqueta_id in ids:
+        if repos.obtener_etiqueta(etiqueta_id) is None:
+            return [], "Alguna etiqueta ya no existe."
+    return ids, None
 
 
 async def crear(request: Request) -> Response:
@@ -226,6 +268,10 @@ async def crear(request: Request) -> Response:
     if any(not _red_valida(r) for r in redes_iniciales):
         return JSONResponse({"error": "Alguna red no es válida."}, status_code=400)
 
+    etiquetas_iniciales, err = _etiquetas_validas(datos.get("etiquetas"))
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+
     def _texto(clave: str) -> str:
         v = datos.get(clave, "")
         return v.strip()[:_MAX_TEXTO] if isinstance(v, str) else ""
@@ -249,8 +295,12 @@ async def crear(request: Request) -> Response:
     # Quita duplicados conservando el orden de llegada.
     for red in dict.fromkeys(redes_iniciales):
         repos.crear_contenido_plataforma(contenido_id=item["id"], red=red)
+    for etiqueta_id in dict.fromkeys(etiquetas_iniciales):
+        repos.asignar_etiqueta(item["id"], etiqueta_id)
     plataformas = repos.listar_contenido_plataforma(item["id"])
-    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas)})
+    return JSONResponse(
+        {"contenido": _contenido_a_dict(item, plataformas, list(dict.fromkeys(etiquetas_iniciales)))}
+    )
 
 
 async def actualizar(request: Request) -> Response:
@@ -303,7 +353,8 @@ async def actualizar(request: Request) -> Response:
     if item is None:
         return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
     plataformas = repos.listar_contenido_plataforma(contenido_id)
-    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas)})
+    etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas, etiquetas)})
 
 
 async def borrar(request: Request) -> Response:
@@ -358,6 +409,32 @@ async def borrar_plataforma(request: Request) -> Response:
     if not repos.borrar_contenido_plataforma(plataforma_id):
         return JSONResponse({"error": "Esa plataforma ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Plataforma borrada."})
+
+
+async def asignar_etiqueta(request: Request) -> Response:
+    """POST /api/contenido/{id}/etiquetas: asigna una etiqueta (`{"etiqueta_id": ...}`)."""
+    contenido_id = request.path_params["contenido_id"]
+    if repos.obtener_contenido(contenido_id) is None:
+        return JSONResponse({"error": "Ese contenido ya no existe."}, status_code=404)
+    datos = await leer_json(request)
+    etiqueta_id = datos.get("etiqueta_id")
+    if not isinstance(etiqueta_id, str) or not etiqueta_id:
+        return JSONResponse({"error": "Falta la etiqueta."}, status_code=400)
+    if repos.obtener_etiqueta(etiqueta_id) is None:
+        return JSONResponse({"error": "Esa etiqueta ya no existe."}, status_code=404)
+    repos.asignar_etiqueta(contenido_id, etiqueta_id)
+    etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"etiquetas": etiquetas})
+
+
+async def quitar_etiqueta(request: Request) -> Response:
+    """DELETE /api/contenido/{id}/etiquetas/{etiqueta_id}: quita una etiqueta del contenido."""
+    contenido_id = request.path_params["contenido_id"]
+    etiqueta_id = request.path_params["etiqueta_id"]
+    if not repos.quitar_etiqueta(contenido_id, etiqueta_id):
+        return JSONResponse({"error": "Esa etiqueta no estaba asignada."}, status_code=404)
+    etiquetas = repos.etiquetas_por_contenido().get(contenido_id, [])
+    return JSONResponse({"etiquetas": etiquetas})
 
 
 async def desde_radar(request: Request) -> Response:
@@ -421,6 +498,12 @@ RUTAS = [
     Route(
         "/api/contenido/{contenido_id}/plataformas/{plataforma_id}",
         borrar_plataforma,
+        methods=["DELETE"],
+    ),
+    Route("/api/contenido/{contenido_id}/etiquetas", asignar_etiqueta, methods=["POST"]),
+    Route(
+        "/api/contenido/{contenido_id}/etiquetas/{etiqueta_id}",
+        quitar_etiqueta,
         methods=["DELETE"],
     ),
 ]
