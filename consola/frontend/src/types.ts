@@ -1024,6 +1024,149 @@ export interface CuerpoActualizarTarea {
   enlace?: string;
 }
 
+// --- Tablero de CONTENIDO unificado (herramienta de community manager) ---
+
+/** Flujo editorial del tablero: lo importante del día, evergreen o cobertura de evento. */
+export type FlujoContenido = "importante" | "evergreen" | "evento" | "";
+/** Una fila por red lleva su propio estado en este ciclo unificado. */
+export type EstadoContenidoPlataforma =
+  | "pendiente"
+  | "en_curso"
+  | "en_revision"
+  | "aprobado"
+  | "programado"
+  | "publicado";
+
+/** Una fila por plataforma (red) de un contenido: estado propio + checklist "falta X". */
+export interface ContenidoPlataforma {
+  id: string;
+  contenido_id: string;
+  red: string;
+  red_nombre: string;
+  estado: EstadoContenidoPlataforma;
+  falta_copy: boolean;
+  falta_imagen: boolean;
+  falta_revision: boolean;
+  falta_publicar: boolean;
+  copy: string;
+  imagen: string;
+  veredicto: string;
+  fecha_programada: string;
+  hora_post: string;
+  enlace: string;
+  evergreen: boolean;
+}
+
+/** Un item del tablero: contenido publicable (con plataformas) o tarea libre del equipo. */
+export interface Contenido {
+  id: string;
+  clase: "contenido" | "tarea";
+  flujo: FlujoContenido;
+  titulo: string;
+  descripcion: string;
+  marca: string;
+  marca_nombre: string;
+  evento_id: string;
+  programa: string;
+  prioridad: PrioridadEvento;
+  estado: string;
+  fecha_objetivo: string;
+  hora_objetivo: string;
+  fecha_entrega: string;
+  responsable_id: string;
+  responsable_nombre: string;
+  autor_nombre: string;
+  origen: string;
+  notas: string;
+  /** Derivado: deadline pasado y aún sin cerrar. */
+  vencido: boolean;
+  plataformas: ContenidoPlataforma[];
+}
+
+/** Catálogos para los selects del tablero. */
+export interface CatalogosContenido {
+  usuarios: UsuarioTarea[];
+  marcas: { id: string; nombre: string }[];
+  redes: { id: string; nombre: string; limite: number | null }[];
+  flujos: string[];
+  prioridades: string[];
+  estados_contenido: string[];
+  estados_plataforma: string[];
+  eventos: { id: string; titulo: string; fecha: string; hora: string }[];
+}
+
+export interface RespuestaContenido {
+  contenidos: Contenido[];
+  catalogos: CatalogosContenido;
+}
+
+export interface CuerpoCrearContenido {
+  titulo: string;
+  clase?: "contenido" | "tarea";
+  flujo?: FlujoContenido;
+  marca?: string;
+  evento_id?: string;
+  programa?: string;
+  prioridad?: PrioridadEvento;
+  descripcion?: string;
+  fecha_objetivo?: string;
+  hora_objetivo?: string;
+  fecha_entrega?: string;
+  responsable_id?: string;
+  notas?: string;
+  /** Redes para crear una fila por plataforma por cada una. */
+  redes?: string[];
+}
+
+/** Cambios parciales sobre el padre; cada campo es opcional. */
+export interface CuerpoActualizarContenido {
+  titulo?: string;
+  flujo?: FlujoContenido;
+  marca?: string;
+  evento_id?: string;
+  programa?: string;
+  prioridad?: PrioridadEvento;
+  estado?: string;
+  descripcion?: string;
+  fecha_objetivo?: string;
+  hora_objetivo?: string;
+  fecha_entrega?: string;
+  responsable_id?: string;
+  notas?: string;
+}
+
+/** Cambios parciales sobre una fila por plataforma; cada campo es opcional. */
+export interface CuerpoActualizarPlataforma {
+  estado?: EstadoContenidoPlataforma;
+  falta_copy?: boolean;
+  falta_imagen?: boolean;
+  falta_revision?: boolean;
+  falta_publicar?: boolean;
+  copy?: string;
+  imagen?: string;
+  enlace?: string;
+  fecha_programada?: string;
+  hora_post?: string;
+  veredicto?: string;
+  evergreen?: boolean;
+}
+
+export interface RespuestaContenidoItem {
+  contenido: Contenido;
+}
+
+export interface RespuestaPlataforma {
+  plataforma: ContenidoPlataforma;
+}
+
+export interface CuerpoDesdeRadar {
+  titulo: string;
+  marca?: string;
+  redes?: string[];
+  prioridad?: PrioridadEvento;
+  descripcion?: string;
+}
+
 // --- Rota de horarios del equipo (F4 · #144) ---
 
 /** Un miembro del equipo (un usuario de la consola) disponible para la rota.

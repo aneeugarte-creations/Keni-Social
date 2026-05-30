@@ -48,7 +48,11 @@ import type {
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
   CuerpoCrearSkill,
+  CuerpoActualizarContenido,
+  CuerpoActualizarPlataforma,
+  CuerpoCrearContenido,
   CuerpoCrearTarea,
+  CuerpoDesdeRadar,
   CuerpoCrearEventoRota,
   CuerpoCrearPiezaRota,
   CuerpoDuplicarPublicacion,
@@ -137,6 +141,9 @@ import type {
   RespuestaSubContextos,
   RespuestaSugerencia,
   RespuestaSugerencias,
+  RespuestaContenido,
+  RespuestaContenidoItem,
+  RespuestaPlataforma,
   RespuestaTareas,
   RespuestaEquipoRota,
   RespuestaEventosRota,
@@ -831,6 +838,57 @@ export const api = {
     peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   abrirTarea: (id: string) =>
     peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}/abrir`, { metodo: "POST" }),
+
+  // --- Tablero de contenido unificado (herramienta de community manager) ---
+  contenido: (
+    params: {
+      flujo?: string;
+      marca?: string;
+      responsable_id?: string;
+      estado?: string;
+      clase?: string;
+      desde?: string;
+      hasta?: string;
+    } = {},
+    signal?: AbortSignal,
+  ) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== "") qs.set(k, String(v));
+    }
+    const cola = qs.toString();
+    return peticion<RespuestaContenido>(`/contenido${cola ? `?${cola}` : ""}`, { signal });
+  },
+  crearContenido: (cuerpo: CuerpoCrearContenido) =>
+    peticion<RespuestaContenidoItem>("/contenido", { metodo: "POST", json: cuerpo }),
+  actualizarContenido: (id: string, cuerpo: CuerpoActualizarContenido) =>
+    peticion<RespuestaContenidoItem>(`/contenido/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarContenido: (id: string) =>
+    peticion<RespuestaMensaje>(`/contenido/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  agregarPlataforma: (contenidoId: string, red: string) =>
+    peticion<RespuestaPlataforma>(
+      `/contenido/${encodeURIComponent(contenidoId)}/plataformas`,
+      { metodo: "POST", json: { red } },
+    ),
+  actualizarPlataforma: (
+    contenidoId: string,
+    plataformaId: string,
+    cuerpo: CuerpoActualizarPlataforma,
+  ) =>
+    peticion<RespuestaPlataforma>(
+      `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
+      { metodo: "PATCH", json: cuerpo },
+    ),
+  eliminarPlataforma: (contenidoId: string, plataformaId: string) =>
+    peticion<RespuestaMensaje>(
+      `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
+      { metodo: "DELETE" },
+    ),
+  contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
+    peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
 
   // --- Rota de horarios del equipo (F4 · #144) ---
   rotaEquipo: (signal?: AbortSignal) =>

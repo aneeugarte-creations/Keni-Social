@@ -4,72 +4,84 @@ import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import Tareas from "./Tareas";
+import Tablero from "./Tareas";
 
-const PROYECTOS = [
-  { id: "keni-social", nombre: "Keni Social", existe: true },
-  { id: "viejo", nombre: "Proyecto viejo", existe: false },
-];
+const CATALOGOS = {
+  usuarios: [
+    { id: "u1", usuario: "ana" },
+    { id: "u2", usuario: "luis" },
+  ],
+  marcas: [{ id: "unotv", nombre: "UnoTV" }],
+  redes: [
+    { id: "x", nombre: "X", limite: 280 },
+    { id: "instagram", nombre: "Instagram", limite: 2200 },
+    { id: "web", nombre: "Web", limite: null },
+  ],
+  flujos: ["importante", "evergreen", "evento"],
+  prioridades: ["alta", "media", "baja"],
+  estados_contenido: ["pendiente", "en_curso", "hecha"],
+  estados_plataforma: ["pendiente", "en_curso", "en_revision", "aprobado", "programado", "publicado"],
+  eventos: [],
+};
 
-const USUARIOS = [
-  { id: "u1", usuario: "ana" },
-  { id: "u2", usuario: "luis" },
-];
-
-const TAREAS = [
-  {
-    id: "t1",
-    proyecto: "keni-social",
-    proyecto_nombre: "Keni Social",
-    proyecto_existe: true,
-    titulo: "Revisar copy de las 8",
-    detalle: "Con la nota de portada.",
+function contenido(over: Record<string, unknown> = {}) {
+  return {
+    id: "c1",
+    clase: "contenido",
+    flujo: "importante",
+    titulo: "Sismo CDMX",
+    descripcion: "",
+    marca: "unotv",
+    marca_nombre: "UnoTV",
+    evento_id: "",
+    programa: "",
+    prioridad: "alta",
     estado: "pendiente",
-    fecha: "2026-05-25T08:00:00Z",
-    autor_id: "u1",
-    autor_nombre: "ana",
-    responsable_id: "u2",
-    responsable_nombre: "luis",
-    enlace: "/asistente?skill=copy",
-  },
-  {
-    id: "t2",
-    proyecto: "keni-social",
-    proyecto_nombre: "Keni Social",
-    proyecto_existe: true,
-    titulo: "Programar reel",
-    detalle: "",
-    estado: "hecha",
-    fecha: "2026-05-24T08:00:00Z",
-    autor_id: "u1",
-    autor_nombre: "ana",
+    fecha_objetivo: "",
+    hora_objetivo: "",
+    fecha_entrega: "",
     responsable_id: "",
     responsable_nombre: "",
-    enlace: "",
-  },
-];
+    autor_nombre: "ana",
+    origen: "manual",
+    notas: "",
+    vencido: false,
+    plataformas: [
+      {
+        id: "p1",
+        contenido_id: "c1",
+        red: "x",
+        red_nombre: "X",
+        estado: "pendiente",
+        falta_copy: true,
+        falta_imagen: true,
+        falta_revision: true,
+        falta_publicar: true,
+        copy: "",
+        imagen: "",
+        veredicto: "",
+        fecha_programada: "",
+        hora_post: "",
+        enlace: "",
+        evergreen: false,
+      },
+    ],
+    ...over,
+  };
+}
 
-/** Stub de fetch: GET /api/tareas devuelve el payload; el resto responde {}. */
-function stubFetch(
-  tareas = TAREAS,
-  proyectos = PROYECTOS,
-  usuarios = USUARIOS,
-  eventos_sin_cubrir: unknown[] = [],
-) {
+function stubFetch(contenidos = [contenido()]) {
   const fn = vi.fn(async (url: string | URL, init?: RequestInit) => {
     const ruta = String(url);
     const metodo = (init?.method ?? "GET").toUpperCase();
-    if (ruta.includes("/api/tareas") && metodo === "GET") {
-      return new Response(
-        JSON.stringify({ tareas, proyectos, usuarios, eventos_sin_cubrir }),
-        { status: 200 },
-      );
+    if (ruta.includes("/api/contenido") && metodo === "GET") {
+      return new Response(JSON.stringify({ contenidos, catalogos: CATALOGOS }), { status: 200 });
     }
-    if (ruta.includes("/api/tareas") && metodo === "POST") {
-      return new Response(JSON.stringify({ tarea: tareas[0] }), { status: 200 });
+    if (ruta.includes("/api/contenido") && metodo === "POST") {
+      return new Response(JSON.stringify({ contenido: contenido() }), { status: 200 });
     }
-    if (ruta.includes("/api/tareas") && metodo === "PATCH") {
-      return new Response(JSON.stringify({ tarea: tareas[0] }), { status: 200 });
+    if (ruta.includes("/api/contenido") && metodo === "PATCH") {
+      return new Response(JSON.stringify({ plataforma: contenido().plataformas[0] }), { status: 200 });
     }
     return new Response("{}", { status: 200 });
   });
@@ -86,126 +98,77 @@ function renderConProviders(ui: React.ReactElement) {
   );
 }
 
-describe("Tareas (vista de pendientes)", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+describe("Tablero de contenido", () => {
+  beforeEach(() => vi.restoreAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
 
-  it("lista las tareas y muestra la barra de estatus con el recuento por estado", async () => {
+  it("muestra las secciones por flujo y la tarjeta con su plataforma", async () => {
     stubFetch();
-    renderConProviders(<Tareas />);
+    renderConProviders(<Tablero />);
 
-    expect(await screen.findByRole("heading", { name: "Pendientes" })).toBeInTheDocument();
-    expect(await screen.findByText("Revisar copy de las 8")).toBeInTheDocument();
-    expect(screen.getByText("Programar reel")).toBeInTheDocument();
-
-    // Barra de estatus compartida: 2 pendientes, 1 pendiente, 0 en curso, 1 hecha.
-    const barra = screen.getByRole("status", { name: /resumen de tareas por estado/i });
-    expect(within(barra).getByText("2 pendientes")).toBeInTheDocument();
-    expect(within(barra).getByText("1 pendiente")).toBeInTheDocument();
-    expect(within(barra).getByText("0 en curso")).toBeInTheDocument();
-    expect(within(barra).getByText("1 hecha")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Tablero de contenido" })).toBeInTheDocument();
+    // Espera a que cargue el tablero (las secciones solo aparecen con datos).
+    expect(await screen.findByText("Sismo CDMX")).toBeInTheDocument();
+    expect(screen.getByText("Importante del día")).toBeInTheDocument();
+    expect(screen.getByText("Evergreen")).toBeInTheDocument();
+    expect(screen.getByText("Eventos previstos")).toBeInTheDocument();
+    // La fila por plataforma muestra la red y su checklist.
+    expect(screen.getByText("X")).toBeInTheDocument();
+    expect(screen.getByLabelText("Copy")).toBeInTheDocument();
   });
 
-  it("muestra el responsable y el enlace de acción (heredado) de un pendiente", async () => {
-    stubFetch();
-    renderConProviders(<Tareas />);
-
-    // La tarjeta de t1 lleva responsable "luis" (en su selector) y un enlace de acción
-    // heredado (los pendientes nuevos ya no capturan enlace, pero los antiguos lo muestran).
-    await screen.findByText("Revisar copy de las 8");
-    expect(screen.getByRole("link", { name: /abrir enlace de acción/i })).toHaveAttribute(
-      "href",
-      "/asistente?skill=copy",
-    );
-    // El selector de responsable de t1 muestra a luis (el asignado).
-    expect(screen.getAllByText("luis").length).toBeGreaterThan(0);
-  });
-
-  it("muestra estado vacío cuando no hay tareas", async () => {
+  it("muestra estado vacío cuando el tablero no tiene contenido", async () => {
     stubFetch([]);
-    renderConProviders(<Tareas />);
-
-    expect(await screen.findByText("Sin pendientes")).toBeInTheDocument();
+    renderConProviders(<Tablero />);
+    expect(await screen.findByText("Tablero vacío")).toBeInTheDocument();
   });
 
-  it("deshabilita 'Crear pendiente' sin título y lo habilita al escribirlo", async () => {
-    stubFetch();
-    renderConProviders(<Tareas />);
-
-    const boton = await screen.findByRole("button", { name: /crear pendiente/i });
-    expect(boton).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText("Título"), {
-      target: { value: "Nueva tarea de prueba" },
-    });
-    await waitFor(() => expect(boton).toBeEnabled());
-  });
-
-  it("crea un pendiente solo con título (sin proyecto, evento ni enlace)", async () => {
+  it("marca un check del checklist con un PATCH a la plataforma", async () => {
     const fn = stubFetch();
-    renderConProviders(<Tareas />);
+    renderConProviders(<Tablero />);
 
-    const titulo = await screen.findByLabelText("Título");
-    fireEvent.change(titulo, { target: { value: "Pendiente libre" } });
-    const boton = screen.getByRole("button", { name: /crear pendiente/i });
-    await waitFor(() => expect(boton).toBeEnabled());
-    fireEvent.click(boton);
-
-    await waitFor(() => {
-      const post = fn.mock.calls.find(
-        ([url, init]) =>
-          String(url).includes("/api/tareas") &&
-          (init?.method ?? "").toUpperCase() === "POST",
-      );
-      expect(post).toBeTruthy();
-      const cuerpo = JSON.parse(String((post![1] as RequestInit).body));
-      expect(cuerpo.titulo).toBe("Pendiente libre");
-      // El formulario simplificado ya no manda proyecto, evento ni enlace.
-      expect(cuerpo.proyecto).toBeUndefined();
-      expect(cuerpo.evento_id).toBeUndefined();
-      expect(cuerpo.enlace).toBeUndefined();
-    });
-  });
-
-  it("avanza el estado de un pendiente con un PATCH al backend (pendiente -> en curso)", async () => {
-    const fn = stubFetch();
-    renderConProviders(<Tareas />);
-
-    // El pendiente t1 (pendiente) avanza a "en curso" al pulsar su botón de ciclo.
-    const avanzar = await screen.findByRole("button", { name: /pasar a en curso/i });
-    fireEvent.click(avanzar);
+    const check = await screen.findByLabelText("Copy");
+    fireEvent.click(check);
 
     await waitFor(() => {
       const patch = fn.mock.calls.find(
         ([url, init]) =>
-          String(url).includes("/api/tareas/t1") &&
+          String(url).includes("/api/contenido/c1/plataformas/p1") &&
           (init?.method ?? "").toUpperCase() === "PATCH",
       );
       expect(patch).toBeTruthy();
-      expect(JSON.parse(String((patch![1] as RequestInit).body))).toEqual({ estado: "en_curso" });
+      // Marcar "Copy" como hecho => falta_copy false.
+      expect(JSON.parse(String((patch![1] as RequestInit).body))).toEqual({ falta_copy: false });
     });
   });
 
-  it("filtra los pendientes por responsable", async () => {
-    const tareas = [
-      { ...TAREAS[0], id: "ta", titulo: "De ana", responsable_id: "u1", responsable_nombre: "ana" },
-      { ...TAREAS[0], id: "tb", titulo: "De luis", responsable_id: "u2", responsable_nombre: "luis" },
-    ];
-    stubFetch(tareas);
-    renderConProviders(<Tareas />);
+  it("abre el diálogo de nuevo contenido y crea con POST", async () => {
+    const fn = stubFetch();
+    renderConProviders(<Tablero />);
 
-    // Sin filtro se ven ambas.
-    expect(await screen.findByText("De ana")).toBeInTheDocument();
-    expect(screen.getByText("De luis")).toBeInTheDocument();
+    // El botón se habilita al cargar el tablero (y el diálogo necesita catálogos).
+    await screen.findByText("Sismo CDMX");
+    fireEvent.click(screen.getByRole("button", { name: /nuevo contenido/i }));
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.change(within(dialogo).getByLabelText("Título"), {
+      target: { value: "Nueva nota" },
+    });
+    fireEvent.click(within(dialogo).getByRole("button", { name: /^crear$/i }));
 
-    // Filtrar a "ana" deja solo su pendiente.
-    fireEvent.click(screen.getByRole("combobox", { name: /filtrar por responsable/i }));
-    fireEvent.click(await screen.findByRole("option", { name: "ana" }));
-    await waitFor(() => expect(screen.queryByText("De luis")).not.toBeInTheDocument());
-    expect(screen.getByText("De ana")).toBeInTheDocument();
+    await waitFor(() => {
+      const post = fn.mock.calls.find(
+        ([url, init]) =>
+          String(url).includes("/api/contenido") &&
+          (init?.method ?? "").toUpperCase() === "POST",
+      );
+      expect(post).toBeTruthy();
+      expect(JSON.parse(String((post![1] as RequestInit).body)).titulo).toBe("Nueva nota");
+    });
+  });
+
+  it("vencido resalta el deadline", async () => {
+    stubFetch([contenido({ fecha_entrega: "2000-01-01", vencido: true })]);
+    renderConProviders(<Tablero />);
+    expect(await screen.findByText(/venció/i)).toBeInTheDocument();
   });
 });
