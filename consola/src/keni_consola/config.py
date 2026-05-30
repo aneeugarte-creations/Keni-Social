@@ -65,6 +65,10 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_COMERCIAL_INTERVALO_HORAS     intervalo captura (h)       def INTERVALO_HORAS_DEF
     - KENI_PROGRAMADOR_INTERVALO_SEGUNDOS  intervalo barrido (s)     def INTERVALO_SEGUNDOS_DEF
     - KENI_METRICAS_REFRESCO_HORAS       refresco cache metricas (h) def 4   (min 1)
+    - KENI_METRICAS_PIEZAS_REFRESCO_HORAS refresco cache POR PIEZA (h) def 4 (min 1)
+    - KENI_ALERTAS_RENDIMIENTO_HORAS     barrido alertas rendim. (h) def 6   (min 1)
+    - KENI_ALERTAS_RENDIMIENTO           apaga el barrido de alertas def ON
+    - KENI_ALERTAS_UMBRAL_ENGAGEMENT     umbral bajo rendim. (%)     def 1.0
 
   Imagen / secretos (`secretos`, `media`): la precedencia fichero>env vive en
   `secretos.py`; aqui se declaran solo los nombres (no hay accesor central porque el
@@ -150,6 +154,14 @@ ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
 ENV_COMERCIAL_INTERVALO_HORAS = "KENI_COMERCIAL_INTERVALO_HORAS"
 ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
 ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
+# Refresco PROACTIVO de la cache de metricas POR PIEZA (tablero) — Fase 3 auto-operativa.
+ENV_METRICAS_PIEZAS_REFRESCO_HORAS = "KENI_METRICAS_PIEZAS_REFRESCO_HORAS"
+# Barrido de ALERTAS de rendimiento / reciclaje proactivo (emite eventos internos).
+ENV_ALERTAS_INTERVALO_HORAS = "KENI_ALERTAS_RENDIMIENTO_HORAS"
+ENV_ALERTAS_ACTIVAS = "KENI_ALERTAS_RENDIMIENTO"
+# Umbral (% engagement) por debajo del cual una pieza publicada se considera "bajo
+# rendimiento" y dispara una alerta. Def 1.0 (muy por debajo del ~2-3% tipico del piloto).
+ENV_ALERTAS_UMBRAL_ENGAGEMENT = "KENI_ALERTAS_UMBRAL_ENGAGEMENT"
 
 # Publicacion real via Metricool (gate de seguridad; def OFF = dry-run).
 # `KENI_PUBLICAR_REAL=1` activa el posteo real al scheduler de Metricool en el
@@ -224,6 +236,13 @@ WORKER_SONDEO_SEGUNDOS_DEF = 0.5
 # Cadencia del barrido de refresco de la cache de metricas (horas). "1 vez al dia importa";
 # 4h da margen sin golpear las APIs externas en cada apertura.
 METRICAS_REFRESCO_HORAS_DEF = 4
+# Cadencia del refresco proactivo de la cache POR PIEZA (tablero). Casa con el TTL de
+# `metricas_pieza` (4h): un post no cambia minuto a minuto.
+METRICAS_PIEZAS_REFRESCO_HORAS_DEF = 4
+# Cadencia del barrido de alertas de rendimiento / reciclaje proactivo (horas).
+ALERTAS_INTERVALO_HORAS_DEF = 6
+# Umbral de engagement (%) por debajo del cual una pieza dispara alerta de bajo rendimiento.
+ALERTAS_UMBRAL_ENGAGEMENT_DEF = 1.0
 
 # Cadencia del barrido de eventos internos (vencimientos del tablero). 5 min basta: el
 # vencimiento es por DIA (`fecha_entrega`), no hace falta granularidad fina.
@@ -569,6 +588,54 @@ def programador_intervalo_segundos() -> float | None:
 def metricas_refresco_horas() -> int:
     """Cada cuantas horas refresca la cache de metricas el daemon (`KENI_METRICAS_REFRESCO_HORAS`, def 4, min 1)."""
     return _entero(ENV_METRICAS_REFRESCO_HORAS, METRICAS_REFRESCO_HORAS_DEF, minimo=1)
+
+
+def metricas_piezas_refresco_horas() -> int:
+    """Cada cuantas horas refresca el daemon la cache POR PIEZA del tablero.
+
+    `KENI_METRICAS_PIEZAS_REFRESCO_HORAS`, def 4, min 1. Fase 3 auto-operativa: refresca
+    proactivamente el rendimiento de las piezas publicadas recientes (con `id_post_metricool`)
+    para que el tablero y el reciclaje vean datos frescos sin lazy-fill en la apertura.
+    """
+    return _entero(
+        ENV_METRICAS_PIEZAS_REFRESCO_HORAS, METRICAS_PIEZAS_REFRESCO_HORAS_DEF, minimo=1
+    )
+
+
+def alertas_rendimiento_horas() -> int:
+    """Cada cuantas horas corre el barrido de alertas de rendimiento/reciclaje.
+
+    `KENI_ALERTAS_RENDIMIENTO_HORAS`, def 6, min 1.
+    """
+    return _entero(ENV_ALERTAS_INTERVALO_HORAS, ALERTAS_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def alertas_rendimiento_activas() -> bool:
+    """True (def) si el barrido de alertas debe arrancar. `KENI_ALERTAS_RENDIMIENTO=0` lo apaga.
+
+    Solo controla el HILO; la emision de eventos por transicion del tablero no depende de esto.
+    """
+    crudo = _crudo(ENV_ALERTAS_ACTIVAS)
+    if not crudo:
+        return True
+    return crudo.lower() in _VERDADEROS
+
+
+def alertas_umbral_engagement() -> float:
+    """Umbral de engagement (%) para la alerta de bajo rendimiento.
+
+    `KENI_ALERTAS_UMBRAL_ENGAGEMENT`, def 1.0. Una pieza publicada con engagement REAL
+    (Metricool) por debajo de este valor dispara `pieza.bajo_rendimiento`. Valor invalido
+    o <=0 -> def (no tiene sentido un umbral nulo).
+    """
+    crudo = _crudo(ENV_ALERTAS_UMBRAL_ENGAGEMENT)
+    if not crudo:
+        return ALERTAS_UMBRAL_ENGAGEMENT_DEF
+    try:
+        valor = float(crudo)
+    except ValueError:
+        return ALERTAS_UMBRAL_ENGAGEMENT_DEF
+    return valor if valor > 0 else ALERTAS_UMBRAL_ENGAGEMENT_DEF
 
 
 def eventos_intervalo_segundos() -> float:

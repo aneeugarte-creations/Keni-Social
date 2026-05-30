@@ -1288,7 +1288,13 @@ export interface CuerpoDesdeRadar {
 // --- Webhooks salientes + eventos internos del tablero ---
 
 /** Tipos de evento interno que un webhook puede escuchar (espejo de `dominio/eventos.TIPOS_EVENTO`). */
-export type TipoEventoInterno = "pieza.aprobada" | "pieza.publicada" | "contenido.vencido";
+export type TipoEventoInterno =
+  | "pieza.aprobada"
+  | "pieza.publicada"
+  | "contenido.vencido"
+  // Fase 3 auto-operativa: alertas proactivas del barrido `alertas_rendimiento`.
+  | "pieza.reciclaje_sugerida"
+  | "pieza.bajo_rendimiento";
 
 /** Forma del payload del POST saliente: `generico` (evento crudo) | `slack` (`{text}`). */
 export type FormatoWebhook = "generico" | "slack";

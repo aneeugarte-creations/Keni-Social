@@ -28,6 +28,9 @@ TIPOS DE EVENTO (estables; el frontend y los webhooks se suscriben por nombre):
   - `pieza.aprobada`    una fila por plataforma pasa a `aprobado`.
   - `pieza.publicada`   una fila por plataforma pasa a `publicado`.
   - `contenido.vencido` un contenido pasa su `fecha_entrega` sin estar cerrado.
+  - `pieza.reciclaje_sugerida`  el barrido `alertas_rendimiento` propone una pieza de
+                        archivo a reciclar (efemeride/perenne/recurrente/rindio bien).
+  - `pieza.bajo_rendimiento`    una pieza publicada cae por debajo del umbral de engagement.
 """
 
 from __future__ import annotations
@@ -49,6 +52,9 @@ TIPOS_EVENTO: tuple[str, ...] = (
     "pieza.aprobada",
     "pieza.publicada",
     "contenido.vencido",
+    # Fase 3 auto-operativa: alertas proactivas del barrido `alertas_rendimiento`.
+    "pieza.reciclaje_sugerida",
+    "pieza.bajo_rendimiento",
 )
 
 # Formatos de payload del POST saliente. `generico` = el evento crudo (`{tipo, datos, ...}`).
@@ -78,6 +84,16 @@ def _resumen_humano(tipo: str, datos: dict[str, Any]) -> str:
         fecha = datos.get("fecha_entrega") or ""
         venc = f" (entrega {fecha})" if fecha else ""
         return f"⏰ Contenido vencido: «{titulo}»{venc}{cola}"
+    if tipo == "pieza.reciclaje_sugerida":
+        motivo = datos.get("motivo_detalle") or datos.get("motivo") or ""
+        extra = f" — {motivo}" if motivo else ""
+        return f"♻️ Candidata a reciclaje: «{titulo}»{cola}{extra}"
+    if tipo == "pieza.bajo_rendimiento":
+        eng = datos.get("engagement_pct")
+        cifra = f" ({eng:.1f}% engagement)" if isinstance(eng, (int, float)) else ""
+        red = datos.get("red_nombre") or datos.get("red") or ""
+        en_red = f" en {red}" if red else ""
+        return f"📉 Bajo rendimiento{en_red}: «{titulo}»{cifra}{cola}"
     return f"{tipo}: «{titulo}»{cola}"
 
 

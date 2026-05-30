@@ -523,3 +523,52 @@ def resumen_carga(
         )
     resultado.sort(key=lambda c: (-c.eventos, c.nombre.lower()))
     return resultado
+
+
+# --------------------------------------------------------------------------- #
+# Auto-asignacion de responsable desde la rota (Fase 3 · auto-operativa)         #
+# --------------------------------------------------------------------------- #
+#
+# El producto quiere que el equipo SOLO cree piezas: la operativa es automatica. Una
+# pieza no debe quedar HUERFANA. Si quien la crea no fija responsable, lo deriva la rota:
+# de los miembros que entran a trabajar HOY (turno en una franja NO-descanso) y cubren la
+# MARCA de la pieza, se elige uno de forma DETERMINISTA. Esta funcion es PURA y testeable
+# (recibe los turnos, los miembros con sus marcas y el dia); la capa de API
+# (`api/contenido.py`) construye sus entradas desde `repos`/`auth` y aplica el resultado.
+
+
+def responsable_por_marca_hoy(
+    marca: str,
+    fecha_iso: str,
+    turnos: list[dict],
+    miembros_marcas: dict[str, list[str]],
+    franjas_descanso: set[str] | None = None,
+) -> str | None:
+    """`miembro_id` que cubre `marca` el dia `fecha_iso` segun la rota, o None.
+
+    PURA y DETERMINISTA. Un miembro "cubre la marca hoy" si:
+      - tiene un turno con `fecha == fecha_iso`,
+      - ese turno NO es de una franja de descanso (`franja_id` no en `franjas_descanso`),
+      - y la `marca` esta entre sus `miembros_marcas[miembro_id]`.
+
+    Si `marca` es vacia, no hay con que filtrar por vertical y se devuelve None (no se
+    inventa un responsable). Si varios miembros la cubren, se elige el de id menor
+    (orden estable) para que el resultado sea reproducible. None si nadie la cubre hoy.
+    """
+    if not marca or not fecha_iso:
+        return None
+    descanso = franjas_descanso or set()
+    candidatos: set[str] = set()
+    for t in turnos:
+        if (t.get("fecha", "") or "") != fecha_iso:
+            continue
+        if (t.get("franja_id", "") or "") in descanso:
+            continue
+        mid = t.get("miembro_id", "") or ""
+        if not mid:
+            continue
+        if marca in (miembros_marcas.get(mid) or []):
+            candidatos.add(mid)
+    if not candidatos:
+        return None
+    return sorted(candidatos)[0]
