@@ -1,9 +1,9 @@
 /**
- * Utilidades compartidas de plantillas de post (gestión + inserción al componer).
+ * Utilidad de composición de copy al editar/generar una publicación.
+ *
+ * (El catálogo de plantillas vive ahora unificado en `/activos/plantillas`; ver
+ * `components/plantillas/`.)
  */
-
-/** Clave de React Query para las plantillas de post. */
-export const CLAVE_PLANTILLAS = ["plantillas"] as const;
 
 /**
  * Añade un enlace al final de un contenido. Inserta un par de saltos de línea

@@ -6,7 +6,7 @@ Cubren el mapeo de tareas y piezas, el parseo del texto libre de redes, y la ide
 
 from __future__ import annotations
 
-from keni_consola import db, migrar_contenido
+from keni_consola import db, ficheros, migrar_contenido, repos
 
 
 def test_parsear_redes_mapea_y_separa_formatos():
@@ -67,11 +67,24 @@ def test_pieza_evergreen_es_flujo_evergreen(entorno):
     assert item["flujo"] == "evergreen"
 
 
+def test_migra_plantilla_plano_yaml_a_catalogo_unificado(entorno):
+    # Plantilla de copy plano legada en YAML -> catálogo unificado (modo 'plano'), preservando id.
+    p = ficheros.crear_plantilla("Saludo", marca="unotv", red="x", contenido="Hola equipo")
+    assert migrar_contenido.migrar_plantillas_plano() == 1
+    migrada = repos.obtener_plantilla_contenido(p["id"])
+    assert migrada is not None
+    assert migrada["modo"] == "plano"
+    assert migrada["contenido"] == "Hola equipo"
+    assert migrada["marca"] == "unotv"
+    # Idempotente: re-ejecutar no duplica.
+    assert migrar_contenido.migrar_plantillas_plano() == 0
+
+
 def test_migracion_es_idempotente(entorno):
     db.crear_tarea("", "Una tarea")
     db.crear_pieza_rota(programa="P", red_social="IG")
     primera = migrar_contenido.migrar()
-    assert primera == {"tareas": 1, "piezas": 1, "publicaciones": 0}
+    assert primera == {"tareas": 1, "piezas": 1, "publicaciones": 0, "plantillas_plano": 0}
     segunda = migrar_contenido.migrar()
-    assert segunda == {"tareas": 0, "piezas": 0, "publicaciones": 0}
+    assert segunda == {"tareas": 0, "piezas": 0, "publicaciones": 0, "plantillas_plano": 0}
     assert len(db.listar_contenido()) == 2

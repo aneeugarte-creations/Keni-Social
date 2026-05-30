@@ -42,7 +42,14 @@ def test_reexporta_funciones_de_contenido_de_ficheros():
     # utilidades de filesystem/indice que NO forman parte del contrato de la fachada.
     de_tareas = {"listar_tareas", "crear_tarea", "obtener_tarea", "actualizar_estado_tarea", "borrar_tarea"}
     utilidades = {"raiz_datos", "carpeta_marca", "reconstruir_indice"}
-    funcs_ficheros = _funciones_publicas(ficheros) - de_tareas - utilidades
+    # Plantillas de copy plano: el concepto se FUSIONÓ en el catálogo unificado
+    # `plantilla_contenido` (Postgres). Las funciones planas de YAML siguen en `ficheros`
+    # SOLO como origen legado de la migración one-shot; ya no tienen fachada en `repos`.
+    plano_legado = {
+        "listar_plantillas", "contar_plantillas", "obtener_plantilla",
+        "crear_plantilla", "actualizar_plantilla", "borrar_plantilla",
+    }
+    funcs_ficheros = _funciones_publicas(ficheros) - de_tareas - utilidades - plano_legado
     funcs_repos = _funciones_publicas(repos)
     faltan = funcs_ficheros - funcs_repos
     assert not faltan, f"repos no reexporta de ficheros: {sorted(faltan)}"
@@ -127,8 +134,6 @@ def test_delega_en_ficheros_contenido_reutilizable(entorno):
     assert any(x["id"] == f["id"] for x in ficheros.listar_franjas())
     g = repos.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol"])
     assert ficheros.obtener_grupo_hashtags(g["id"])["nombre"] == "Deportes"
-    p = repos.crear_plantilla("Saludo", marca="unotv", red="x", contenido="Hola")
-    assert ficheros.obtener_plantilla(p["id"])["nombre"] == "Saludo"
     fr = repos.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
     assert ficheros.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
 

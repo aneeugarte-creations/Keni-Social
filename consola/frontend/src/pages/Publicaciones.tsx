@@ -26,7 +26,6 @@ import { DialogoEditar } from "./publicaciones/DialogoEditar";
 import { FILTRO_TODOS, FiltrosPublicaciones } from "./publicaciones/Filtros";
 import { GestionFranjas } from "./publicaciones/GestionFranjas";
 import { GestionHashtags } from "./publicaciones/GestionHashtags";
-import { GestionPlantillas } from "./publicaciones/GestionPlantillas";
 import { PanelReciclaje } from "./publicaciones/PanelReciclaje";
 import { VistaCalendario } from "./publicaciones/VistaCalendario";
 import { VistaLista } from "./publicaciones/VistaLista";
@@ -123,7 +122,6 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
   const [duplicando, setDuplicando] = React.useState<Publicacion | null>(null);
   const [gestionFranjas, setGestionFranjas] = React.useState(false);
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
-  const [gestionPlantillas, setGestionPlantillas] = React.useState(false);
 
   // En vista lista paginamos; en calendario pedimos el conjunto completo.
   const paginar = vista === "lista";
@@ -167,11 +165,13 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
       <Button
         variant="outline"
         size="sm"
-        onClick={() => setGestionPlantillas(true)}
-        title="Gestionar plantillas de post"
+        asChild
+        title="Abrir el catálogo de plantillas (planas y de estructura)"
       >
-        <FileText className="h-4 w-4" />
-        Plantillas
+        <Link to="/activos/plantillas">
+          <FileText className="h-4 w-4" />
+          Plantillas
+        </Link>
       </Button>
       <Button
         variant="outline"
@@ -325,13 +325,6 @@ function Gestion({ opciones }: { opciones: OpcionesPublicaciones }) {
         abierto={gestionHashtags}
         onCerrar={() => setGestionHashtags(false)}
         marcas={opciones.marcas}
-      />
-
-      <GestionPlantillas
-        abierto={gestionPlantillas}
-        onCerrar={() => setGestionPlantillas(false)}
-        marcas={opciones.marcas}
-        redes={opciones.redes}
       />
     </>
   );

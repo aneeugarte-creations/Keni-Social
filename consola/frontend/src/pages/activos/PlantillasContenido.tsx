@@ -1,12 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ClipboardCheck,
-  Copy,
   FileText,
   Loader2,
   Pencil,
   Plus,
-  Sparkles,
   Trash2,
   Wand2,
   X,
@@ -23,6 +20,8 @@ import {
   desdeRed,
   ningunaParam,
 } from "@/components/comunes/selectores";
+import { DialogoAplicarPlantilla } from "@/components/plantillas/DialogoAplicarPlantilla";
+import { clavesEnEstructura } from "@/components/plantillas/util";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,9 +37,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import type {
+  ModoPlantilla,
   PlantillaContenido,
   RespuestaSkills,
   VariablePlantilla,
@@ -50,40 +51,34 @@ const CLAVE_PLANTILLAS_CONTENIDO = ["plantillas-contenido"] as const;
 const CLAVE_OPCIONES_SKILLS = ["skills"] as const;
 
 const CABECERA = {
-  titulo: "Plantillas de contenido",
+  titulo: "Plantillas",
   descripcion:
-    "Estructuras reutilizables por tipo de nota recurrente (gol, alineación, efeméride…). " +
-    "Rellena las variables y obtén el copy base. No publica nada: solo acelera armar piezas.",
+    "Catálogo unificado de plantillas de copy reutilizables: planas (texto fijo por marca/red) " +
+    "y de estructura por tipo de nota recurrente (gol, alineación, efeméride…) con variables " +
+    "{{...}}. No publica nada: solo acelera armar piezas.",
 };
 
-// Extrae los marcadores `{{clave}}` de una estructura (para avisar de variables sin declarar).
-const RE_MARCADOR = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
-
-function clavesEnEstructura(estructura: string): string[] {
-  const vistas: string[] = [];
-  for (const m of estructura.matchAll(RE_MARCADOR)) {
-    if (!vistas.includes(m[1])) vistas.push(m[1]);
-  }
-  return vistas;
-}
-
-/** Formulario controlado de crear/editar una plantilla de contenido. */
+/** Formulario controlado de crear/editar una plantilla del catálogo unificado. */
 interface FormPlantilla {
   nombre: string;
+  modo: ModoPlantilla;
   tipo_nota: string;
   descripcion: string;
   marca: string; // centinela MARCA_TODAS = sin marca
   red: string; // centinela RED_TODAS = sin red
-  estructura: string;
+  contenido: string; // modo 'plano'
+  estructura: string; // modo 'estructura'
   variables: VariablePlantilla[];
 }
 
 const FORM_VACIO: FormPlantilla = {
   nombre: "",
+  modo: "plano",
   tipo_nota: "",
   descripcion: "",
   marca: desdeMarca(""),
   red: desdeRed(""),
+  contenido: "",
   estructura: "",
   variables: [],
 };
@@ -119,10 +114,12 @@ export default function PlantillasContenido() {
     setEditId(p.id);
     setForm({
       nombre: p.nombre,
+      modo: p.modo,
       tipo_nota: p.tipo_nota,
       descripcion: p.descripcion,
       marca: desdeMarca(p.marca),
       red: desdeRed(p.red),
+      contenido: p.contenido,
       estructura: p.estructura,
       variables: p.variables,
     });
@@ -131,14 +128,18 @@ export default function PlantillasContenido() {
 
   const guardar = useMutation({
     mutationFn: async () => {
+      const esPlano = form.modo === "plano";
       const cuerpo = {
         nombre: form.nombre.trim(),
+        modo: form.modo,
         tipo_nota: form.tipo_nota.trim(),
         descripcion: form.descripcion,
         marca: ningunaParam(form.marca),
         red: ningunaParam(form.red),
-        estructura: form.estructura,
-        variables: form.variables,
+        // Solo enviamos el cuerpo del modo activo; el otro queda vacío en el servidor.
+        contenido: esPlano ? form.contenido : "",
+        estructura: esPlano ? "" : form.estructura,
+        variables: esPlano ? [] : form.variables,
       };
       if (editId) return api.actualizarPlantillaContenido(editId, cuerpo);
       return api.crearPlantillaContenido(cuerpo);
@@ -182,7 +183,9 @@ export default function PlantillasContenido() {
   const clavesDeclaradas = new Set(form.variables.map((v) => v.clave).filter(Boolean));
   const sinDeclarar = clavesEstructura.filter((c) => !clavesDeclaradas.has(c));
 
-  const puedeGuardar = form.nombre.trim() !== "" && form.estructura.trim() !== "";
+  const cuerpoLleno =
+    form.modo === "plano" ? form.contenido.trim() !== "" : form.estructura.trim() !== "";
+  const puedeGuardar = form.nombre.trim() !== "" && cuerpoLleno;
 
   return (
     <div>
@@ -239,12 +242,24 @@ export default function PlantillasContenido() {
           <DialogHeader>
             <DialogTitle>{editId ? "Editar plantilla" : "Nueva plantilla"}</DialogTitle>
             <DialogDescription>
-              Usa <code className="rounded bg-muted px-1">{"{{variable}}"}</code> en la
-              estructura; declara cada variable abajo para rellenarla al aplicar.
+              Elige el modo: <strong>plano</strong> (texto fijo reutilizable) o{" "}
+              <strong>estructura</strong> con marcadores{" "}
+              <code className="rounded bg-muted px-1">{"{{variable}}"}</code> que se rellenan al
+              aplicar.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
+            <Tabs
+              value={form.modo}
+              onValueChange={(v) => setForm((f) => ({ ...f, modo: v as ModoPlantilla }))}
+            >
+              <TabsList className="grid w-full grid-cols-2 sm:w-80">
+                <TabsTrigger value="plano">Texto plano</TabsTrigger>
+                <TabsTrigger value="estructura">Estructura</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="pc-nombre">Nombre</Label>
@@ -252,18 +267,20 @@ export default function PlantillasContenido() {
                   id="pc-nombre"
                   value={form.nombre}
                   onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-                  placeholder="Plantilla de gol"
+                  placeholder={form.modo === "plano" ? "Despedida de transmisión" : "Plantilla de gol"}
                 />
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pc-tipo">Tipo de nota</Label>
-                <Input
-                  id="pc-tipo"
-                  value={form.tipo_nota}
-                  onChange={(e) => setForm((f) => ({ ...f, tipo_nota: e.target.value }))}
-                  placeholder="gol, alineación, efeméride…"
-                />
-              </div>
+              {form.modo === "estructura" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="pc-tipo">Tipo de nota</Label>
+                  <Input
+                    id="pc-tipo"
+                    value={form.tipo_nota}
+                    onChange={(e) => setForm((f) => ({ ...f, tipo_nota: e.target.value }))}
+                    placeholder="gol, alineación, efeméride…"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -303,66 +320,81 @@ export default function PlantillasContenido() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="pc-estructura">Estructura</Label>
-              <Textarea
-                id="pc-estructura"
-                value={form.estructura}
-                onChange={(e) => setForm((f) => ({ ...f, estructura: e.target.value }))}
-                placeholder={"¡GOOOL de {{equipo}}! {{jugador}} marca el {{minuto}}'. {{marcador}} 🔥"}
-                className="min-h-[120px] font-mono text-sm"
-              />
-              {sinDeclarar.length > 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Variables usadas sin declarar: {sinDeclarar.join(", ")}.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Variables</Label>
-                <Button type="button" variant="outline" size="sm" onClick={anadirVariable}>
-                  <Plus className="mr-1 h-3.5 w-3.5" /> Añadir
-                </Button>
+            {form.modo === "plano" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="pc-contenido">Contenido</Label>
+                <Textarea
+                  id="pc-contenido"
+                  value={form.contenido}
+                  onChange={(e) => setForm((f) => ({ ...f, contenido: e.target.value }))}
+                  placeholder="Escribe aquí el copy reutilizable tal cual se usará…"
+                  className="min-h-[120px] font-mono text-sm"
+                />
               </div>
-              {form.variables.length === 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Declara las variables de la estructura para tener un formulario al aplicar.
-                </p>
-              )}
-              {form.variables.map((v, i) => (
-                <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
-                  <Input
-                    value={v.clave}
-                    onChange={(e) => setVariable(i, { clave: e.target.value })}
-                    placeholder="clave"
-                    aria-label={`Clave de la variable ${i + 1}`}
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="pc-estructura">Estructura</Label>
+                  <Textarea
+                    id="pc-estructura"
+                    value={form.estructura}
+                    onChange={(e) => setForm((f) => ({ ...f, estructura: e.target.value }))}
+                    placeholder={"¡GOOOL de {{equipo}}! {{jugador}} marca el {{minuto}}'. {{marcador}} 🔥"}
+                    className="min-h-[120px] font-mono text-sm"
                   />
-                  <Input
-                    value={v.etiqueta}
-                    onChange={(e) => setVariable(i, { etiqueta: e.target.value })}
-                    placeholder="Etiqueta"
-                    aria-label={`Etiqueta de la variable ${i + 1}`}
-                  />
-                  <Input
-                    value={v.ejemplo}
-                    onChange={(e) => setVariable(i, { ejemplo: e.target.value })}
-                    placeholder="Ejemplo"
-                    aria-label={`Ejemplo de la variable ${i + 1}`}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => quitarVariable(i)}
-                    aria-label={`Quitar variable ${i + 1}`}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  {sinDeclarar.length > 0 && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Variables usadas sin declarar: {sinDeclarar.join(", ")}.
+                    </p>
+                  )}
                 </div>
-              ))}
-            </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Variables</Label>
+                    <Button type="button" variant="outline" size="sm" onClick={anadirVariable}>
+                      <Plus className="mr-1 h-3.5 w-3.5" /> Añadir
+                    </Button>
+                  </div>
+                  {form.variables.length === 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Declara las variables de la estructura para tener un formulario al aplicar.
+                    </p>
+                  )}
+                  {form.variables.map((v, i) => (
+                    <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] items-center gap-2">
+                      <Input
+                        value={v.clave}
+                        onChange={(e) => setVariable(i, { clave: e.target.value })}
+                        placeholder="clave"
+                        aria-label={`Clave de la variable ${i + 1}`}
+                      />
+                      <Input
+                        value={v.etiqueta}
+                        onChange={(e) => setVariable(i, { etiqueta: e.target.value })}
+                        placeholder="Etiqueta"
+                        aria-label={`Etiqueta de la variable ${i + 1}`}
+                      />
+                      <Input
+                        value={v.ejemplo}
+                        onChange={(e) => setVariable(i, { ejemplo: e.target.value })}
+                        placeholder="Ejemplo"
+                        aria-label={`Ejemplo de la variable ${i + 1}`}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => quitarVariable(i)}
+                        aria-label={`Quitar variable ${i + 1}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           <DialogFooter>
@@ -418,6 +450,9 @@ function TarjetaPlantilla({
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
+          <Badge variant={plantilla.modo === "plano" ? "default" : "secondary"}>
+            {plantilla.modo === "plano" ? "Texto plano" : "Estructura"}
+          </Badge>
           {plantilla.tipo_nota && <Badge variant="secondary">{plantilla.tipo_nota}</Badge>}
           {plantilla.marca && <Badge variant="outline">{plantilla.marca_nombre || plantilla.marca}</Badge>}
           {plantilla.red && <Badge variant="outline">{plantilla.red_nombre || plantilla.red}</Badge>}
@@ -428,138 +463,18 @@ function TarjetaPlantilla({
           <p className="text-sm text-muted-foreground">{plantilla.descripcion}</p>
         )}
         <pre className="max-h-24 overflow-hidden whitespace-pre-wrap rounded bg-muted p-2 text-xs">
-          {plantilla.estructura}
+          {plantilla.modo === "plano" ? plantilla.contenido : plantilla.estructura}
         </pre>
         <Button variant="secondary" size="sm" className="w-full" onClick={() => setAplicando(true)}>
           <Wand2 className="mr-1.5 h-4 w-4" /> Aplicar
         </Button>
       </CardContent>
 
-      <DialogAplicar
+      <DialogoAplicarPlantilla
         plantilla={plantilla}
         abierto={aplicando}
         onCerrar={() => setAplicando(false)}
       />
     </Card>
-  );
-}
-
-/** Diálogo que rellena las variables y compone el copy en el servidor. */
-function DialogAplicar({
-  plantilla,
-  abierto,
-  onCerrar,
-}: {
-  plantilla: PlantillaContenido;
-  abierto: boolean;
-  onCerrar: () => void;
-}) {
-  const [valores, setValores] = React.useState<Record<string, string>>({});
-  const [copy, setCopy] = React.useState("");
-  const [faltan, setFaltan] = React.useState<string[]>([]);
-  const [copiado, setCopiado] = React.useState(false);
-
-  // Variables a rellenar: las declaradas o, si no hay, las detectadas en la estructura.
-  const claves =
-    plantilla.variables.length > 0
-      ? plantilla.variables
-      : clavesEnEstructura(plantilla.estructura).map((c) => ({ clave: c, etiqueta: "", ejemplo: "" }));
-
-  React.useEffect(() => {
-    if (abierto) {
-      setValores({});
-      setCopy("");
-      setFaltan([]);
-      setCopiado(false);
-    }
-  }, [abierto]);
-
-  const aplicar = useMutation({
-    mutationFn: () => api.aplicarPlantillaContenido(plantilla.id, { valores }),
-    onSuccess: (r) => {
-      setCopy(r.copy);
-      setFaltan(r.faltan);
-    },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "No se pudo aplicar."),
-  });
-
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(copy);
-      setCopiado(true);
-      toast.success("Copy copiado al portapapeles.");
-    } catch {
-      toast.error("No se pudo copiar al portapapeles.");
-    }
-  }
-
-  return (
-    <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Aplicar: {plantilla.nombre}</DialogTitle>
-          <DialogDescription>
-            Rellena las variables y genera el copy base. Las que dejes vacías quedarán como
-            marcador para completar a mano.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          {claves.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Esta plantilla no tiene variables; el copy es su estructura tal cual.
-            </p>
-          )}
-          {claves.map((v) => (
-            <div key={v.clave} className="space-y-1.5">
-              <Label htmlFor={`ap-${v.clave}`}>{v.etiqueta || v.clave}</Label>
-              <Input
-                id={`ap-${v.clave}`}
-                value={valores[v.clave] ?? ""}
-                onChange={(e) => setValores((prev) => ({ ...prev, [v.clave]: e.target.value }))}
-                placeholder={v.ejemplo || `{{${v.clave}}}`}
-              />
-            </div>
-          ))}
-
-          {copy && (
-            <div className="space-y-1.5">
-              <Label>Copy</Label>
-              <pre className="whitespace-pre-wrap rounded border bg-muted p-2 text-sm">{copy}</pre>
-              {faltan.length > 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Sin rellenar: {faltan.join(", ")}.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={onCerrar}>
-            Cerrar
-          </Button>
-          {copy ? (
-            <Button onClick={copiar}>
-              {copiado ? (
-                <ClipboardCheck className="mr-1.5 h-4 w-4" />
-              ) : (
-                <Copy className="mr-1.5 h-4 w-4" />
-              )}
-              Copiar copy
-            </Button>
-          ) : (
-            <Button onClick={() => aplicar.mutate()} disabled={aplicar.isPending}>
-              {aplicar.isPending ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="mr-1.5 h-4 w-4" />
-              )}
-              Generar copy
-            </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

@@ -19,7 +19,6 @@ import type {
   TendenciaDiaria,
   CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
-  CuerpoActualizarPlantilla,
   CuerpoActualizarPublicacion,
   CuerpoActualizarSkill,
   CuerpoActualizarTarea,
@@ -43,7 +42,6 @@ import type {
   CuerpoCrearFranja,
   CuerpoCrearRun,
   CuerpoCrearFuenteRss,
-  CuerpoCrearPlantilla,
   CuerpoCrearProyecto,
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
@@ -115,8 +113,6 @@ import type {
   RespuestaItemsRss,
   RespuestaMedia,
   RespuestaMensaje,
-  RespuestaPlantilla,
-  RespuestaPlantillas,
   CuerpoCrearPlantillaContenido,
   CuerpoActualizarPlantillaContenido,
   CuerpoAplicarPlantilla,
@@ -805,19 +801,7 @@ export const api = {
   sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
     peticion<RespuestaGeneracion>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
 
-  // --- Plantillas de post ---
-  plantillas: (signal?: AbortSignal) => peticion<RespuestaPlantillas>("/plantillas", { signal }),
-  crearPlantilla: (cuerpo: CuerpoCrearPlantilla) =>
-    peticion<RespuestaPlantilla>("/plantillas", { metodo: "POST", json: cuerpo }),
-  actualizarPlantilla: (id: string, cuerpo: CuerpoActualizarPlantilla) =>
-    peticion<RespuestaPlantilla>(`/plantillas/${encodeURIComponent(id)}`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  eliminarPlantilla: (id: string) =>
-    peticion<RespuestaMensaje>(`/plantillas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-
-  // --- Plantillas de CONTENIDO por tipo de nota (activos reutilizables) ---
+  // --- Plantillas: catálogo unificado (planas + de estructura) ---
   plantillasContenido: (
     filtros?: { marca?: string; tipo?: string; soloActivas?: boolean },
     signal?: AbortSignal,
