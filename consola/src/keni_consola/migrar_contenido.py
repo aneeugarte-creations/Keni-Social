@@ -15,11 +15,9 @@ Uso:  python -m keni_consola.migrar_contenido        (requiere DATABASE_URL, ADR
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime
 
-from . import db, ficheros, repos
+from . import ficheros, repos
 
 _logger = logging.getLogger(__name__)
 
@@ -238,122 +236,12 @@ def migrar_plantillas_plano() -> int:
     return creadas
 
 
-# --------------------------------------------------------------------------- #
-# CONTENIDO editorial reutilizable file -> Postgres (ADR 0006)                  #
-# --------------------------------------------------------------------------- #
-# Fuentes RSS, grupos de hashtags y franjas editoriales eran los ULTIMOS rezagados
-# file-backed. Estas migraciones leen el origen YAML legado via `ficheros` e insertan en
-# Postgres lo que FALTE, preservando el id (idempotentes: ON CONFLICT/chequeo por id, se
-# pueden re-correr sin duplicar). El origen YAML NO se destruye (queda de respaldo).
-# Insertamos por id directo (no via `db.crear_*`, que generaria un id nuevo) para preservar
-# identidad y poder saltar lo ya migrado.
-
-
-def migrar_fuentes_rss() -> int:
-    """Migra las fuentes RSS YAML legadas a `fuentes_rss` (Postgres). Idempotente por id."""
-    ahora = datetime.now().isoformat(timespec="seconds")
-    creadas = 0
-    con = db._conectar()  # noqa: SLF001 -- insert por id directo para preservar identidad
-    try:
-        for f in ficheros.listar_fuentes_rss():
-            cur = con.execute(
-                "INSERT INTO fuentes_rss (id, nombre, url, marca, fecha, activo, incluir, "
-                "excluir, redes_def, ultima_actualizacion, ultimo_error, ultimo_conteo, creado) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
-                (
-                    f["id"],
-                    f.get("nombre", "") or "",
-                    f.get("url", "") or "",
-                    f.get("marca", "") or "",
-                    f.get("fecha", "") or "",
-                    1 if f.get("activo", True) else 0,
-                    f.get("incluir", "") or "",
-                    f.get("excluir", "") or "",
-                    f.get("redes_def", "") or "",
-                    f.get("ultima_actualizacion", "") or "",
-                    f.get("ultimo_error", "") or "",
-                    int(f.get("ultimo_conteo", 0) or 0),
-                    f.get("fecha", "") or ahora,
-                ),
-            )
-            if cur.rowcount:
-                creadas += 1
-            # Items vistos de esa fuente (mapa file-backed -> filas).
-            for clave in ficheros.claves_vistas(f["id"]):
-                con.execute(
-                    "INSERT INTO rss_items_vistos (fuente_id, clave) VALUES (?, ?) "
-                    "ON CONFLICT DO NOTHING",
-                    (f["id"], clave),
-                )
-        con.commit()
-    finally:
-        con.close()
-    return creadas
-
-
-def migrar_grupos_hashtags() -> int:
-    """Migra los grupos de hashtags YAML legados a `grupos_hashtags`. Idempotente por id."""
-    ahora = datetime.now().isoformat(timespec="seconds")
-    creadas = 0
-    con = db._conectar()  # noqa: SLF001 -- insert por id directo para preservar identidad
-    try:
-        for g in ficheros.listar_grupos_hashtags():
-            cur = con.execute(
-                "INSERT INTO grupos_hashtags (id, nombre, marca, hashtags, creado) "
-                "VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
-                (
-                    g["id"],
-                    g.get("nombre", "") or "",
-                    g.get("marca", "") or "",
-                    json.dumps(
-                        [t for t in g.get("hashtags", []) if isinstance(t, str)],
-                        ensure_ascii=False,
-                    ),
-                    ahora,
-                ),
-            )
-            if cur.rowcount:
-                creadas += 1
-        con.commit()
-    finally:
-        con.close()
-    return creadas
-
-
-def migrar_franjas() -> int:
-    """Migra las franjas editoriales YAML legadas a `franjas_editoriales`. Idempotente por id."""
-    creadas = 0
-    con = db._conectar()  # noqa: SLF001 -- insert por id directo para preservar identidad
-    try:
-        for fr in ficheros.listar_franjas():
-            cur = con.execute(
-                "INSERT INTO franjas_editoriales (id, marca, red, dia_semana, hora) "
-                "VALUES (?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
-                (
-                    fr["id"],
-                    fr.get("marca", "") or "",
-                    fr.get("red", "") or "",
-                    int(fr.get("dia_semana", 0) or 0),
-                    fr.get("hora", "") or "",
-                ),
-            )
-            if cur.rowcount:
-                creadas += 1
-        con.commit()
-    finally:
-        con.close()
-    return creadas
-
-
 def migrar() -> dict[str, int]:
     """Ejecuta toda la migración (idempotente). Devuelve recuentos por origen."""
     resultado = {
         "piezas": migrar_piezas(),
         "publicaciones": migrar_publicaciones(),
         "plantillas_plano": migrar_plantillas_plano(),
-        "fuentes_rss": migrar_fuentes_rss(),
-        "grupos_hashtags": migrar_grupos_hashtags(),
-        "franjas": migrar_franjas(),
     }
     _logger.info("Migración a contenido: %s", resultado)
     return resultado
