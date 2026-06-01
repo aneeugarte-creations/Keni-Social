@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/layout-list-BocIAX8B.js
 import{a7 as t}from"./index-BCGR7Lso.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/layout-list-Dq8xjxc5.js
+import{a7 as t}from"./index-CGqIQvjw.js";/**
+========
+import{a7 as t}from"./index-BHahpPfI.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/layout-list-q5D2kviZ.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

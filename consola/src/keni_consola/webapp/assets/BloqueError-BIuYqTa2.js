@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/BloqueError-BIuYqTa2.js
 import{a7 as c,aj as e,a as i,b as l,B as o,z as x,a2 as d}from"./index-BCGR7Lso.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/BloqueError-Cofvi4Ha.js
+import{a7 as c,aj as e,a as i,b as l,B as o,z as x,a2 as d}from"./index-CGqIQvjw.js";/**
+========
+import{a7 as c,aj as e,a as i,b as l,B as o,z as x,a2 as d}from"./index-BHahpPfI.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/BloqueError-LK_k0M-u.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

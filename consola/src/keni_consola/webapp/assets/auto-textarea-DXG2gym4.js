@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/auto-textarea-DXG2gym4.js
 import{a7 as p,aj as i,W as b,B as f,ar as h,a2 as j}from"./index-BCGR7Lso.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/auto-textarea-CFnPehPO.js
+import{a7 as p,aj as i,W as b,B as f,ar as h,a2 as j}from"./index-CGqIQvjw.js";/**
+========
+import{a7 as p,aj as i,W as b,B as f,ar as h,a2 as j}from"./index-BHahpPfI.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/auto-textarea-CeoGo1-E.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

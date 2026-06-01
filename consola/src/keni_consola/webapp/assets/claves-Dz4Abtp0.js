@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/claves-Dz4Abtp0.js
 import{a7 as c}from"./index-BCGR7Lso.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/claves-DE31kAeH.js
+import{a7 as c}from"./index-CGqIQvjw.js";/**
+========
+import{a7 as c}from"./index-BHahpPfI.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/claves-Bc8OtL9U.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

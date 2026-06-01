@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/Verificacion-iwz-lGYg.js
 import{a7 as g,ar as h,aj as e,a as N,d as v,e as b,b as y,L as p,p as f,B as _,u as S,ay as j,a0 as w,S as P,C as z}from"./index-BCGR7Lso.js";import{u as L}from"./useMutation-Bre9tWyg.js";import{M as q}from"./MarcaIA-DL71iREK.js";import{P as V}from"./ProgresoGeneracion-C1WSgrvl.js";import{P as A}from"./PageHeader-DQvGL2Sj.js";import{B as d}from"./badge-hRooFvDP.js";import{u as B}from"./use-generacion-CvQXfel3.js";import{I}from"./info-DYAu8w0-.js";import{S as F}from"./shield-question-C3v-Nq_n.js";import{S as M}from"./shield-alert-BPdOQtml.js";import{E as C}from"./external-link-D9krM8VV.js";import"./formato-DyIEtOp7.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/Verificacion-CDM9lHd8.js
+import{a7 as g,ar as h,aj as e,a as N,d as v,e as b,b as y,L as p,p as f,B as _,u as w,S as C,ay as j,a0 as P,C as z}from"./index-CGqIQvjw.js";import{u as L}from"./useMutation-DdWgUZa7.js";import{P as q}from"./ProgresoGeneracion-CZ30ia_1.js";import{P as V}from"./PageHeader-Ba_0jBVs.js";import{B as d}from"./badge-Cc_gsIHZ.js";import{u as A}from"./use-generacion-MLbcqFZi.js";import{I as B}from"./info-Ba5eNfd3.js";import{S as F}from"./shield-question-C8mTQ_1D.js";import{S as I}from"./shield-alert-COp47WHc.js";import{E as k}from"./external-link-CDbfh2dy.js";import"./formato-DyIEtOp7.js";/**
+========
+import{a7 as g,ar as h,aj as e,a as N,d as v,e as b,b as y,L as p,p as f,B as _,u as w,S as C,ay as j,a0 as P,C as z}from"./index-BHahpPfI.js";import{u as L}from"./useMutation-D7kvBeQv.js";import{P as q}from"./ProgresoGeneracion-hLgo_463.js";import{P as V}from"./PageHeader-D_WJkG6O.js";import{B as d}from"./badge-DujRoajo.js";import{u as A}from"./use-generacion-B7pR7RCt.js";import{I as B}from"./info-CQBpCLOj.js";import{S as F}from"./shield-question-0DQuNlsN.js";import{S as I}from"./shield-alert-DjY0Fdxq.js";import{E as k}from"./external-link-i4zwiolg.js";import"./formato-DyIEtOp7.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/Verificacion-CKcAeixN.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/Actividad-BIsq6PU7.js
 import{a7 as X,ar as N,aI as D,aj as e,B as K,z as $,a2 as U,A as J,a as w,d as k,e as S,b as E,a0 as M}from"./index-BCGR7Lso.js";import{B as W}from"./BloqueError-BIuYqTa2.js";import{E as Y}from"./EstadoVacio-Db8d25hp.js";import{T as A}from"./TarjetaKpi-V2vlvOMh.js";import{P as Z}from"./PageHeader-DQvGL2Sj.js";import{B as v}from"./badge-hRooFvDP.js";import{S as B,d as z,e as H,b as V,c as f}from"./select-C9PCcC76.js";import{S as b}from"./skeleton-CsT633R0.js";import{T as F,d as _,e as o,c,a as q,b as t}from"./table-DHRKSGJp.js";import{a as h,c as y,n as I,d as ee}from"./formato-DyIEtOp7.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/Actividad-CyxKXWBu.js
+import{a7 as X,ar as N,aI as D,aj as e,B as K,z as $,a2 as U,A as J,a as w,d as k,e as S,b as E,a0 as M}from"./index-CGqIQvjw.js";import{B as W}from"./BloqueError-Cofvi4Ha.js";import{E as Y}from"./EstadoVacio-CRIW2-Lh.js";import{T as A}from"./TarjetaKpi-CXHrqxgI.js";import{P as Z}from"./PageHeader-Ba_0jBVs.js";import{B as v}from"./badge-Cc_gsIHZ.js";import{S as B,d as z,e as H,b as V,c as f}from"./select-MhnT7VYM.js";import{S as b}from"./skeleton-ow3FH61M.js";import{T as F,d as _,e as o,c,a as q,b as t}from"./table-BqFS-PTt.js";import{a as h,c as y,n as I,d as ee}from"./formato-DyIEtOp7.js";/**
+========
+import{a7 as X,ar as N,aI as D,aj as e,B as K,z as $,a2 as U,A as J,a as w,d as k,e as S,b as E,a0 as M}from"./index-BHahpPfI.js";import{B as W}from"./BloqueError-LK_k0M-u.js";import{E as Y}from"./EstadoVacio-C7Qpom2F.js";import{T as A}from"./TarjetaKpi-ZWnJi-Tr.js";import{P as Z}from"./PageHeader-D_WJkG6O.js";import{B as v}from"./badge-DujRoajo.js";import{S as B,d as z,e as H,b as V,c as f}from"./select-BdNV2fm5.js";import{S as b}from"./skeleton-Uw18qu2s.js";import{T as F,d as _,e as o,c,a as q,b as t}from"./table-CrnQlwWd.js";import{a as h,c as y,n as I,d as ee}from"./formato-DyIEtOp7.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/Actividad-DCkamSTq.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

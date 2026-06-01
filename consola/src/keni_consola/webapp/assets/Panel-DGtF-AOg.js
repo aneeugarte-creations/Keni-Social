@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/Panel-DGtF-AOg.js
 import{a7 as h,aI as g,aj as e,a as i,d as c,e as m,s as q,b as n,B as A,r as R,U as B,C as E,X as y,A as T,ab as F,ax as I,a0 as f}from"./index-BCGR7Lso.js";import{B as S}from"./BloqueError-BIuYqTa2.js";import{E as N}from"./EstadoVacio-Db8d25hp.js";import{T as u}from"./TarjetaKpi-V2vlvOMh.js";import{P as D}from"./PageHeader-DQvGL2Sj.js";import{B as x}from"./badge-hRooFvDP.js";import{S as b}from"./skeleton-CsT633R0.js";import{n as p,p as M}from"./formato-DyIEtOp7.js";import{C as H}from"./clipboard-check-giw7diR9.js";import{A as U}from"./arrow-right-DA_pL1II.js";/**
+|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/Panel-BM4fiIk3.js
+import{a7 as h,aI as g,aj as e,a as i,d as c,e as m,s as q,b as n,B as A,r as R,U as B,C as E,X as y,A as T,ab as F,ax as I,a0 as f}from"./index-CGqIQvjw.js";import{B as S}from"./BloqueError-Cofvi4Ha.js";import{E as N}from"./EstadoVacio-CRIW2-Lh.js";import{T as u}from"./TarjetaKpi-CXHrqxgI.js";import{P as D}from"./PageHeader-Ba_0jBVs.js";import{B as x}from"./badge-Cc_gsIHZ.js";import{S as b}from"./skeleton-ow3FH61M.js";import{n as p,p as M}from"./formato-DyIEtOp7.js";import{C as H}from"./clipboard-check-BoBhHidq.js";import{A as U}from"./arrow-right-BPVltdUC.js";/**
+========
+import{a7 as h,aI as g,aj as e,a as i,d as c,e as m,s as q,b as n,B as A,r as R,U as B,C as E,X as y,A as T,ab as F,ax as I,a0 as f}from"./index-BHahpPfI.js";import{B as S}from"./BloqueError-LK_k0M-u.js";import{E as N}from"./EstadoVacio-C7Qpom2F.js";import{T as u}from"./TarjetaKpi-ZWnJi-Tr.js";import{P as D}from"./PageHeader-D_WJkG6O.js";import{B as x}from"./badge-DujRoajo.js";import{S as b}from"./skeleton-Uw18qu2s.js";import{n as p,p as M}from"./formato-DyIEtOp7.js";import{C as H}from"./clipboard-check-Bnq72g1P.js";import{A as U}from"./arrow-right-Ce27e8ZE.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/Panel-AeyFKwOt.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.
