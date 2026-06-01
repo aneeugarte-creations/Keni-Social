@@ -229,6 +229,7 @@ import type {
 } from "@/types";
 
 import { type NombreContrato, validarContrato } from "./contrato";
+import type { PlantillaSpec } from "./specPlantilla";
 
 export const BASE_API = "/api";
 
@@ -800,6 +801,19 @@ export const api = {
       metodo: "PUT",
       json: datos,
     }),
+  // SPEC de capas del editor visual: leer / guardar / previsualizar (render real del servidor).
+  specPlantilla: (marca: string, signal?: AbortSignal) =>
+    peticion<{ spec: PlantillaSpec }>(`/plantillas-marca/${encodeURIComponent(marca)}/spec`, { signal }),
+  guardarSpecPlantilla: (marca: string, spec: PlantillaSpec) =>
+    peticion<{ spec: PlantillaSpec }>(`/plantillas-marca/${encodeURIComponent(marca)}/spec`, {
+      metodo: "PUT",
+      json: { spec },
+    }),
+  previewPlantilla: (marca: string, spec: PlantillaSpec, formato: string, titular?: string) =>
+    peticion<{ id: string; url: string }>(
+      `/plantillas-marca/${encodeURIComponent(marca)}/preview`,
+      { metodo: "POST", json: { spec, formato, titular: titular ?? "" } },
+    ),
 
   // --- Verificación de video (workflow propio, independiente de Generar copy) ---
   // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier

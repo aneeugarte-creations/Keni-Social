@@ -21,10 +21,14 @@ ENV PYTHONUNBUFFERED=1 \
     # El back NO ejecuta `claude -p`: solo ENCOLA. El servicio `worker` consume la cola.
     KENI_WORKER_EXTERNO=1
 
-# curl: solo para el healthcheck. git: lo usan algunas skills al renderizar. SIN Node ni
-# `claude` (el back ya no genera; eso lo hace la imagen del worker).
+# curl: healthcheck + script de nodesource. git: lo usan algunas skills al renderizar.
+# Node 20: el back compone la PLANTILLA de marca (logo+copy-in) con el renderer Node
+# (`motores/estudio_imagen/render_node`, @napi-rs/canvas prebuilt — sin Cairo) en
+# integrar-foto y en el Estudio. NO ejecuta `claude` (eso es del worker).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates git \
+ && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -42,6 +46,14 @@ COPY skills-copy/ ./skills-copy/
 # back las vars DATABASE_URL/S3_* estan cableadas y db.py/almacen_media.py las consumen.
 RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]" \
  && pip install "uvicorn[standard]>=0.31.1"
+
+# Renderer Node de la plantilla de marca: instala SOLO sus deps de runtime (@napi-rs/canvas
+# trae binarios prebuilt; no compila Cairo). `node_modules` no viaja en el contexto
+# (.dockerignore); se instala en la UBICACIÓN INSTALADA del paquete (site-packages), que es
+# donde el subproceso resuelve `componer.mjs` (keni_consola.__file__), desde el lock versionado.
+RUN RN="$(python -c 'import keni_consola, os; print(os.path.join(os.path.dirname(keni_consola.__file__), "motores", "estudio_imagen", "render_node"))')" \
+ && npm --prefix "$RN" ci --omit=dev \
+ && npm cache clean --force
 
 # HARDENING (#130): el proceso NO corre como root. Creamos un usuario sin privilegios y le
 # damos /app (codigo, solo lectura en runtime) y /data (estado: SQLite, secretos 0600, media).

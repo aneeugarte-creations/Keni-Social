@@ -28,6 +28,7 @@ from starlette.routing import Route
 
 from .. import plantillas_marca  # intra-app (shell store): permitido
 from .._http_json import leer_json
+from ..dominio import estudio_imagen
 
 
 def _con_logo_url(plantilla: dict[str, Any]) -> dict[str, Any]:
@@ -68,8 +69,55 @@ async def guardar(request: Request) -> Response:
     return JSONResponse({"plantilla": _con_logo_url(plantilla)})
 
 
+async def obtener_spec(request: Request) -> Response:
+    """SPEC de capas EFECTIVO de una marca (editor visual) -> `{spec:{...}}` (404 si no existe)."""
+    marca = request.path_params["marca"]
+    try:
+        spec = plantillas_marca.obtener_spec(marca)
+    except plantillas_marca.PlantillaMarcaError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    return JSONResponse({"spec": spec})
+
+
+async def guardar_spec(request: Request) -> Response:
+    """Guarda el SPEC de capas de una marca (validado en el store) -> `{spec:{...}}` | 400 | 404."""
+    marca = request.path_params["marca"]
+    datos = await leer_json(request)
+    spec = datos.get("spec") if isinstance(datos, dict) and "spec" in datos else datos
+    try:
+        guardado = plantillas_marca.guardar_spec(marca, spec)
+    except plantillas_marca.PlantillaMarcaError as e:
+        # Marca desconocida -> 404; spec inválido -> 400.
+        codigo = 404 if str(e).startswith("Marca desconocida") else 400
+        return JSONResponse({"error": str(e)}, status_code=codigo)
+    return JSONResponse({"spec": guardado})
+
+
+async def previsualizar(request: Request) -> Response:
+    """Renderiza el SPEC EN EDICIÓN (sin guardar) para la vista previa del editor.
+
+    `POST /api/plantillas-marca/{marca}/preview {spec, formato, titular?}` -> `{id, url}`.
+    Render determinista (placeholder) del spec recibido; 400 si el spec o el formato no valen.
+    """
+    datos = await leer_json(request)
+    spec = datos.get("spec") if isinstance(datos, dict) else None
+    formato = datos.get("formato") if isinstance(datos, dict) else None
+    if not isinstance(spec, dict) or not isinstance(formato, str):
+        return JSONResponse({"error": "Faltan 'spec' y 'formato'."}, status_code=400)
+    titular = datos.get("titular") if isinstance(datos.get("titular"), str) else ""
+    etiqueta = datos.get("etiqueta") if isinstance(datos.get("etiqueta"), str) else ""
+    try:
+        res = estudio_imagen.previsualizar_spec(spec, formato, titular=titular, etiqueta_default=etiqueta)
+    except estudio_imagen.EstudioError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse(res)
+
+
 RUTAS = [
     Route("/api/plantillas-marca", listar, methods=["GET"]),
     Route("/api/plantillas-marca/{marca}", obtener, methods=["GET"]),
     Route("/api/plantillas-marca/{marca}", guardar, methods=["PUT"]),
+    Route("/api/plantillas-marca/{marca}/spec", obtener_spec, methods=["GET"]),
+    Route("/api/plantillas-marca/{marca}/spec", guardar_spec, methods=["PUT"]),
+    Route("/api/plantillas-marca/{marca}/preview", previsualizar, methods=["POST"]),
 ]

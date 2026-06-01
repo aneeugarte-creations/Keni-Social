@@ -1,0 +1,11 @@
+{
+  "name": "keni-render-plantilla",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Renderizador determinista de la plantilla de marca (canvas-2D, mismo SPEC que el editor). Lo invoca el back/worker por subproceso desde Python.",
+  "main": "componer.mjs",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.100"
+  }
+}

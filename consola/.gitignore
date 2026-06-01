@@ -4,5 +4,9 @@ frontend/node_modules/
 frontend/dist/
 frontend/*.tsbuildinfo
 
+# Deps del renderer Node de la plantilla de marca: package.json + package-lock.json SÍ se
+# versionan; node_modules NO (Docker hace `npm ci` desde el lock, igual que el frontend).
+src/keni_consola/motores/estudio_imagen/render_node/node_modules/
+
 # OJO: NO ignorar src/keni_consola/webapp/ -- ese es el bundle COMPILADO que se
 # distribuye con el paquete Python (asi la consola corre sin Node instalado).

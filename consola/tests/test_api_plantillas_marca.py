@@ -76,3 +76,36 @@ def test_put_hex_invalido_400(cli):
 def test_put_logo_posicion_invalida_400(cli):
     r = cli.put("/api/plantillas-marca/unotv", json={"logo_posicion": "centro"})
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# SPEC de capas del editor visual                                             #
+# --------------------------------------------------------------------------- #
+
+
+def test_get_spec_devuelve_tres_formatos(cli):
+    r = cli.get("/api/plantillas-marca/unotv/spec")
+    assert r.status_code == 200
+    spec = r.json()["spec"]
+    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "vertical"]
+
+
+def test_put_spec_persiste(cli):
+    spec = cli.get("/api/plantillas-marca/unotv/spec").json()["spec"]
+    spec["formatos"]["feed"]["logo"]["x"] = 200
+    r = cli.put("/api/plantillas-marca/unotv/spec", json={"spec": spec})
+    assert r.status_code == 200
+    releido = cli.get("/api/plantillas-marca/unotv/spec").json()["spec"]
+    assert releido["formatos"]["feed"]["logo"]["x"] == 200
+
+
+def test_put_spec_invalido_400(cli):
+    spec = cli.get("/api/plantillas-marca/unotv/spec").json()["spec"]
+    spec["formatos"]["feed"]["fondo"] = {"tipo": "color", "color": "rojo"}
+    r = cli.put("/api/plantillas-marca/unotv/spec", json={"spec": spec})
+    assert r.status_code == 400
+
+
+def test_get_spec_marca_desconocida_404(cli):
+    r = cli.get("/api/plantillas-marca/inexistente/spec")
+    assert r.status_code == 404

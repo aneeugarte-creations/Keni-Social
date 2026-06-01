@@ -43,6 +43,14 @@ COPY skills-copy/ ./skills-copy/
 # [s3] (boto3) porque el post-procesado de imagen importa al media (bucket en hosted).
 RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]"
 
+# Renderer Node de la plantilla de marca (auto-genera la placa al crear copy en el worker).
+# @napi-rs/canvas trae binarios prebuilt (sin Cairo); node_modules no viaja (.dockerignore);
+# se instala en la UBICACIÓN INSTALADA del paquete (site-packages), donde el subproceso resuelve
+# `componer.mjs`, desde el lock versionado. Node 20 ya está presente.
+RUN RN="$(python -c 'import keni_consola, os; print(os.path.join(os.path.dirname(keni_consola.__file__), "motores", "estudio_imagen", "render_node"))')" \
+ && npm --prefix "$RN" ci --omit=dev \
+ && npm cache clean --force
+
 # HARDENING (#130): el worker NO corre como root. `claude` ya esta instalado globalmente
 # (RUN anterior, como root) y el usuario solo lo EJECUTA; ademas, fuera de root `claude` NO
 # exige el bypass `--dangerously-skip-permissions`+IS_SANDBOX (esa restriccion es solo para

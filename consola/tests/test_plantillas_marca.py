@@ -144,3 +144,46 @@ def test_logo_no_str_lanza(store):
 def test_hex_valido_acepta_mayusculas_y_minusculas(store):
     plantillas_marca.guardar("unotv", {"rojo": "#abcDEF"})
     assert plantillas_marca.obtener("unotv")["rojo"] == "#abcDEF"
+
+
+# --------------------------------------------------------------------------- #
+# SPEC de capas (editor visual)                                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_obtener_spec_deriva_de_planos_si_no_hay_guardado(store):
+    spec = plantillas_marca.obtener_spec("unotv")
+    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "vertical"]
+    assert spec["marca"] == "unotv"
+
+
+def test_guardar_spec_round_trip(store):
+    spec = plantillas_marca.obtener_spec("unotv")
+    # Modifica una coordenada del logo y persiste.
+    spec["formatos"]["feed"]["logo"]["x"] = 123
+    plantillas_marca.guardar_spec("unotv", spec)
+    releido = plantillas_marca.obtener_spec("unotv")
+    assert releido["formatos"]["feed"]["logo"]["x"] == 123
+
+
+def test_guardar_spec_conserva_campos_planos(store):
+    plantillas_marca.guardar("unotv", {"rojo": "#123456", "etiqueta_default": "AHORA"})
+    plantillas_marca.guardar_spec("unotv", plantillas_marca.obtener_spec("unotv"))
+    plana = plantillas_marca.obtener("unotv")
+    assert plana["rojo"] == "#123456" and plana["etiqueta_default"] == "AHORA"
+
+
+def test_guardar_plano_conserva_spec(store):
+    plantillas_marca.guardar_spec("unotv", plantillas_marca.obtener_spec("unotv"))
+    plantillas_marca.guardar("unotv", {"rojo": "#654321"})  # PUT plano no borra el spec
+    crudo = plantillas_marca._leer_override("unotv")
+    assert plantillas_marca.SPEC_KEY in crudo
+
+
+def test_guardar_spec_invalido_lanza(store):
+    from keni_consola.motores.estudio_imagen import spec_plantilla as sp
+    spec = plantillas_marca.obtener_spec("unotv")
+    spec["formatos"]["feed"]["fondo"] = {"tipo": "color", "color": "no-hex"}
+    with pytest.raises(plantillas_marca.PlantillaMarcaError):
+        plantillas_marca.guardar_spec("unotv", spec)
+    assert sp  # import usado

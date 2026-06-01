@@ -38,6 +38,11 @@ from typing import Any
 
 from . import marcas, rutas
 from .io_atomico import escribir_atomico
+from .motores.estudio_imagen import spec_plantilla
+
+# Clave (en el JSON por marca) del SPEC de capas del editor visual. Convive con los campos
+# planos (legacy/seed): el render usa el spec; los planos siembran el spec por defecto.
+SPEC_KEY = "spec"
 
 # Variable de entorno que sobreescribe la raiz del store (override de maxima prioridad; tests).
 ENV_PLANTILLAS_MARCA_DIR = "KENI_PLANTILLAS_MARCA_DIR"
@@ -250,14 +255,56 @@ def guardar(marca: str, datos: dict[str, Any]) -> dict[str, Any]:
     if not marcas.es_marca(marca):
         raise PlantillaMarcaError(f"Marca desconocida: {marca}.")
     limpio = _validar(datos)
+    previo = _leer_override(marca)
     # Fusiona con el override previo para que un PUT parcial no borre campos no enviados.
-    fusionado = {**_leer_override(marca), **limpio}
-    # Persiste SOLO los campos editables conocidos, en orden estable.
+    fusionado = {**previo, **limpio}
+    # Persiste los campos editables conocidos + conserva el SPEC si ya existía (no lo borra
+    # un guardado de campos planos).
     a_guardar = {c: fusionado[c] for c in CAMPOS if c in fusionado}
+    if SPEC_KEY in previo:
+        a_guardar[SPEC_KEY] = previo[SPEC_KEY]
+    _escribir_override(marca, a_guardar)
+    return obtener(marca)
+
+
+def _escribir_override(marca: str, datos: dict[str, Any]) -> None:
+    """Escritura atómica del JSON de override de una marca."""
     escribir_atomico(
         _ruta_marca(marca),
-        json.dumps(a_guardar, ensure_ascii=False, indent=2, sort_keys=False) + "\n",
+        json.dumps(datos, ensure_ascii=False, indent=2, sort_keys=False) + "\n",
         prefijo=".plantilla-",
         sufijo=".json.tmp",
     )
-    return obtener(marca)
+
+
+def obtener_spec(marca: str) -> dict[str, Any]:
+    """SPEC de capas EFECTIVO de una marca: el guardado (validado) o uno por defecto.
+
+    Si el override trae un `spec` válido, se valida+migra y se devuelve. Si no, se DERIVA desde
+    los campos planos efectivos (`obtener`) para que toda marca tenga spec sin migración previa.
+    """
+    if not marcas.es_marca(marca):
+        raise PlantillaMarcaError(f"Marca desconocida: {marca}.")
+    crudo = _leer_override(marca).get(SPEC_KEY)
+    if isinstance(crudo, dict) and crudo.get("formatos"):
+        try:
+            return spec_plantilla.migrar(spec_plantilla.validar(crudo))
+        except spec_plantilla.SpecError:
+            pass  # spec corrupto -> cae al derivado (nunca deja a la marca sin plantilla)
+    return spec_plantilla.spec_por_defecto(marca, obtener(marca))
+
+
+def guardar_spec(marca: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Persiste el SPEC de capas de una marca (validado), conservando los campos planos."""
+    if not marcas.es_marca(marca):
+        raise PlantillaMarcaError(f"Marca desconocida: {marca}.")
+    try:
+        limpio = spec_plantilla.validar(spec)
+    except spec_plantilla.SpecError as e:
+        raise PlantillaMarcaError(str(e)) from e
+    previo = _leer_override(marca)
+    previo[SPEC_KEY] = limpio
+    a_guardar = {c: previo[c] for c in CAMPOS if c in previo}
+    a_guardar[SPEC_KEY] = limpio
+    _escribir_override(marca, a_guardar)
+    return obtener_spec(marca)

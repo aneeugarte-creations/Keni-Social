@@ -21,6 +21,7 @@ temporal que se borra al terminar; los nombres en el almacen los genera el servi
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -28,6 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import biblioteca, generaciones, marcas, media, plantillas_marca
+from ..motores.estudio_imagen import spec_plantilla
 from . import generar, jobspec
 
 # Reglas de imagen (Biblioteca) que se adjuntan a la revision legal/editorial.
@@ -326,81 +328,174 @@ def _cfg_marca(marca: str, plantilla: dict[str, Any], ruta_logo: str) -> dict[st
     }
 
 
-def componer(
-    imagen: str,
-    *,
-    marca: str,
-    formato: str = "feed",
-    titular: str = "",
-    etiqueta: str | None = None,
-    autor: dict[str, str] | None = None,
-) -> dict[str, Any]:
-    """Estampa la PLANTILLA de marca (logo + pleca + titular) sobre una foto -> resultado uniforme.
+# Render de la plantilla: "node" (motor por defecto, lee el SPEC de capas) o "pillow" (motor
+# legado, layout fijo). `auto` (default) intenta Node y, si falla, cae a Pillow para que el
+# sistema vivo NUNCA se quede sin placa. `KENI_NODE_BIN` apunta al binario de node.
+_ENV_RENDER = "KENI_RENDER_PLANTILLA"
+_ENV_NODE_BIN = "KENI_NODE_BIN"
 
-    Determinista (Pillow, sin red): corre `motores/estudio_imagen/componer.py` por subproceso
-    con un `marcas.json` TEMPORAL construido desde la plantilla editable de la marca
-    (`plantillas_marca.obtener`). El `logo` referenciado (objeto de media) se materializa a un
-    PNG temporal; si no hay logo, el motor cae al wordmark de respaldo.
 
-    `imagen`: id de media de la foto; si es `""`, se compone una PLANTILLA con el HUECO DE LA
-    FOTO VACÍO (placeholder gris "Sube una foto") — pensada para auto-generarse al crear el copy
-    y recomponerse luego al subir la foto real.
+def _node_bin() -> str:
+    return (os.environ.get(_ENV_NODE_BIN) or "node").strip() or "node"
 
-    `etiqueta`: `None` => usa la `etiqueta_default` de la plantilla; `""` => omite la pleca;
-    un texto => esa pleca. `formato`: `vertical|feed|cuadrado`; `horizontal` se mapea a `feed`.
+
+def _render_modo() -> str:
+    modo = (os.environ.get(_ENV_RENDER) or "auto").strip().lower()
+    return modo if modo in ("auto", "node", "pillow") else "auto"
+
+
+def _ruta_render_node() -> Path:
+    return _ruta_motor("render_node") / "componer.mjs"
+
+
+def _materializar_logo(logo_id: str, carpeta: Path) -> str:
+    """Vuelca un objeto de media (logo/fondo) a un PNG temporal; '' si no hay o no existe."""
+    logo_id = (logo_id or "").strip()
+    if not logo_id:
+        return ""
+    datos = media.leer_media(logo_id)
+    if datos is None:
+        return ""
+    ruta = carpeta / f"asset-{logo_id}.png"
+    ruta.write_bytes(datos)
+    return str(ruta)
+
+
+def _correr_render_node(payload: dict[str, Any], out: Path) -> None:
+    """Corre el renderer Node con `payload` por stdin y `--salida out`. Lanza EstudioError si falla.
+
+    Módulo-nivel para que los tests lo monkeypatcheen sin ejecutar Node real.
     """
-    if not marcas.es_marca(marca):
-        raise EstudioError("Marca desconocida.")
+    cmd = [_node_bin(), str(_ruta_render_node()), "--salida", str(out)]
+    try:
+        proc = subprocess.run(  # noqa: S603 -- argv lista, sin shell; payload por stdin
+            cmd, input=json.dumps(payload), capture_output=True, text=True,
+            timeout=_TIMEOUT_COMPONER_S, check=False,
+        )
+    except FileNotFoundError as e:  # node no instalado
+        raise EstudioError("El renderer de plantilla (Node) no está disponible.") from e
+    except subprocess.TimeoutExpired as e:
+        raise EstudioError(
+            f"La composición tardó demasiado (más de {_TIMEOUT_COMPONER_S} s) y se canceló."
+        ) from e
+    if proc.returncode != 0 or not out.is_file():
+        detalle = (proc.stderr or "").strip()[-300:]
+        raise EstudioError("El renderer de plantilla no produjo un resultado. " + detalle)
+
+
+def _componer_node(
+    imagen: str, *, marca: str, fmt: str, titular: str, etiqueta: str | None,
+) -> dict[str, Any]:
+    """Render por SPEC con el motor Node (lo que se diseña en el editor = lo que sale)."""
+    plana = plantillas_marca.obtener(marca)
+    spec = plantillas_marca.obtener_spec(marca)
+    formato_spec = spec.get("formatos", {}).get(fmt)
+    if not formato_spec:
+        raise EstudioError(f"El spec de la marca no tiene el formato '{fmt}'.")
+    placeholder = not (imagen or "").strip()
+    # Pleca efectiva (contrato de `etiqueta`): None=default de marca; ""=omitir; texto=ese.
+    etiqueta_efectiva = plana.get("etiqueta_default", "") if etiqueta is None else etiqueta
+
+    with tempfile.TemporaryDirectory(prefix="keni-render-") as tmp:
+        carpeta = Path(tmp)
+        foto = None if placeholder else str(_materializar(imagen, carpeta))
+        logo_cfg = formato_spec.get("logo") or {}
+        ruta_logo = _materializar_logo(logo_cfg.get("media_id", ""), carpeta)
+        fondo_cfg = formato_spec.get("fondo") or {}
+        ruta_fondo = ""
+        if fondo_cfg.get("tipo") == "imagen":
+            ruta_fondo = _materializar_logo((fondo_cfg.get("imagen") or {}).get("media_id", ""), carpeta)
+
+        out = carpeta / "salida.png"
+        payload = {
+            "spec": spec,
+            "formato": fmt,
+            "placeholder": placeholder,
+            "foto": foto,
+            "assets": {"logo": ruta_logo or None, "fondo": ruta_fondo or None},
+            "bindings": {"copy_in": titular or "", "etiqueta_default": etiqueta_efectiva or ""},
+        }
+        _correr_render_node(payload, out)
+        try:
+            nombre = media.importar_imagen(str(out))
+        except media.MediaError as e:
+            raise EstudioError(str(e)) from e
+        return {
+            "id": nombre, "url": f"/api/media/{nombre}",
+            "imagenes": [{"id": nombre, "url": f"/api/media/{nombre}"}],
+            "info": {"op": "componer", "marca": marca, "formato": fmt,
+                     "placeholder": placeholder, "motor": "node"},
+        }
+
+
+def previsualizar_spec(
+    spec: dict[str, Any], formato: str, *, titular: str = "", etiqueta_default: str = "",
+) -> dict[str, Any]:
+    """Renderiza un SPEC en EDICIÓN (sin guardar) en modo placeholder -> `{id, url}`.
+
+    Lo usa el editor visual para mostrar "lo que sale" mientras se diseña. Valida el spec, lo
+    renderiza con el motor Node (placeholder, sin foto) usando un titular/pleca de muestra, e
+    importa el PNG a media. Fuerza Node (sin fallback Pillow: el editor previsualiza el spec real).
+    """
     fmt = "feed" if formato == "horizontal" else formato
     if fmt not in _FORMATOS_COMPONER:
-        raise EstudioError(
-            "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
-        )
-
+        raise EstudioError("Formato no soportado. Usa: " + ", ".join(_FORMATOS_COMPONER) + ".")
     try:
-        plantilla = plantillas_marca.obtener(marca)
-    except plantillas_marca.PlantillaMarcaError as e:
-        raise EstudioError(str(e)) from e
+        spec_ok = spec_plantilla.validar(spec)
+    except spec_plantilla.SpecError as exc:
+        raise EstudioError(str(exc)) from exc
+    if fmt not in spec_ok.get("formatos", {}):
+        raise EstudioError(f"El spec no tiene el formato '{fmt}'.")
 
+    with tempfile.TemporaryDirectory(prefix="keni-preview-") as tmp:
+        carpeta = Path(tmp)
+        logo_cfg = spec_ok["formatos"][fmt].get("logo") or {}
+        ruta_logo = _materializar_logo(logo_cfg.get("media_id", ""), carpeta)
+        fondo_cfg = spec_ok["formatos"][fmt].get("fondo") or {}
+        ruta_fondo = ""
+        if fondo_cfg.get("tipo") == "imagen":
+            ruta_fondo = _materializar_logo((fondo_cfg.get("imagen") or {}).get("media_id", ""), carpeta)
+        out = carpeta / "preview.png"
+        payload = {
+            "spec": spec_ok, "formato": fmt, "placeholder": True, "foto": None,
+            "assets": {"logo": ruta_logo or None, "fondo": ruta_fondo or None},
+            "bindings": {"copy_in": titular or "Titular de ejemplo",
+                         "etiqueta_default": etiqueta_default or ""},
+        }
+        _correr_render_node(payload, out)
+        try:
+            nombre = media.importar_imagen(str(out))
+        except media.MediaError as exc:
+            raise EstudioError(str(exc)) from exc
+        return {"id": nombre, "url": f"/api/media/{nombre}"}
+
+
+def _componer_pillow(
+    imagen: str, *, marca: str, fmt: str, titular: str, etiqueta: str | None,
+) -> dict[str, Any]:
+    """Render legado (Pillow, layout fijo). Fallback si el motor Node no está disponible."""
+    plantilla = plantillas_marca.obtener(marca)
     placeholder = not (imagen or "").strip()
-
     with tempfile.TemporaryDirectory(prefix="keni-componer-") as tmp:
         carpeta = Path(tmp)
         foto = None if placeholder else _materializar(imagen, carpeta)
-
-        # Materializa el logo (objeto de media) a un PNG temporal; "" si no hay o no existe.
-        ruta_logo = ""
-        logo_id = (plantilla.get("logo") or "").strip()
-        if logo_id:
-            datos_logo = media.leer_media(logo_id)
-            if datos_logo is not None:
-                logo_path = carpeta / "logo.png"
-                logo_path.write_bytes(datos_logo)
-                ruta_logo = str(logo_path)
-
-        # marcas.json TEMPORAL: solo esta marca + los formatos base copiados del catalogo.
+        ruta_logo = _materializar_logo(plantilla.get("logo", ""), carpeta)
         cfg = {"marcas": {marca: _cfg_marca(marca, plantilla, ruta_logo)}, "formatos": _formatos_base()}
         cfg_path = carpeta / "marcas.json"
         cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
-
         out = carpeta / "salida.png"
         motor = _ruta_motor("componer.py")
         cmd = [
-            sys.executable, str(motor),
-            "--marca", marca,
-            "--formato", fmt,
-            "--salida", str(out),
-            "--config", str(cfg_path),
+            sys.executable, str(motor), "--marca", marca, "--formato", fmt,
+            "--salida", str(out), "--config", str(cfg_path),
         ]
         cmd += ["--placeholder"] if placeholder else ["--foto", str(foto)]
         if titular:
             cmd += ["--titular", titular]
-        if etiqueta is not None:  # None = etiqueta_default; "" = sin pleca; texto = esa pleca
+        if etiqueta is not None:
             cmd += ["--etiqueta", etiqueta]
-
-        # TÚ pasas --salida: no hay que parsear "DATOS"; basta returncode 0 + archivo creado.
         try:
-            proc = subprocess.run(  # noqa: S603 -- argv lista, sin shell; rutas controladas por el server
+            proc = subprocess.run(  # noqa: S603 -- argv lista, sin shell
                 cmd, capture_output=True, text=True, timeout=_TIMEOUT_COMPONER_S, check=False,
             )
         except subprocess.TimeoutExpired as e:
@@ -412,15 +507,54 @@ def componer(
             raise EstudioError(
                 "El compositor de marca no produjo un resultado. " + (detalle or "Revisa la imagen de entrada.")
             )
-
         try:
             nombre = media.importar_imagen(str(out))
         except media.MediaError as e:
             raise EstudioError(str(e)) from e
+        return {
+            "id": nombre, "url": f"/api/media/{nombre}",
+            "imagenes": [{"id": nombre, "url": f"/api/media/{nombre}"}],
+            "info": {"op": "componer", "marca": marca, "formato": fmt,
+                     "placeholder": placeholder, "motor": "pillow"},
+        }
 
-        importada = {"id": nombre, "url": f"/api/media/{nombre}"}
-        info = {"op": "componer", "marca": marca, "formato": fmt, "placeholder": placeholder}
-        return {"id": nombre, "url": importada["url"], "imagenes": [importada], "info": info}
+
+def componer(
+    imagen: str,
+    *,
+    marca: str,
+    formato: str = "feed",
+    titular: str = "",
+    etiqueta: str | None = None,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Compone la PLANTILLA de marca y devuelve `{id,url,imagenes,info}` (firma estable).
+
+    Render por SPEC con el motor **Node** (lo diseñado en el editor = lo que sale); si Node no
+    está disponible o falla, cae al motor **Pillow** legado (layout fijo) salvo que se fuerce un
+    motor con `KENI_RENDER_PLANTILLA=node|pillow`.
+
+    `imagen`: id de media de la foto; `""` => PLANTILLA con el hueco de foto vacío (placeholder
+    "Sube una foto"). `etiqueta`: `None` => etiqueta_default de la marca; `""` => sin pleca;
+    texto => esa pleca. `formato`: `vertical|feed|cuadrado`; `horizontal` se mapea a `feed`.
+    """
+    if not marcas.es_marca(marca):
+        raise EstudioError("Marca desconocida.")
+    fmt = "feed" if formato == "horizontal" else formato
+    if fmt not in _FORMATOS_COMPONER:
+        raise EstudioError(
+            "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
+        )
+
+    modo = _render_modo()
+    if modo == "pillow":
+        return _componer_pillow(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
+    try:
+        return _componer_node(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
+    except EstudioError:
+        if modo == "node":  # forzado: no hay red de seguridad
+            raise
+        return _componer_pillow(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
 
 
 # --------------------------------------------------------------------------- #

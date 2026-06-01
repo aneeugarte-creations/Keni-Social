@@ -14,6 +14,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { EditorPlantillaSpec } from "@/components/editor/EditorPlantillaSpec";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -177,11 +178,12 @@ export function EditorPlantillaMarca({
 
   return (
     <Dialog open={abierto} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Editar plantilla de marca</DialogTitle>
           <DialogDescription>
-            Logo, colores, etiqueta/pleca y posición con los que se estampa la imagen.
+            Diseña la plantilla por formato (fondo, logo, textos, hueco de foto). Lo que diseñas es
+            lo que se genera. Abajo quedan los ajustes básicos rápidos.
           </DialogDescription>
         </DialogHeader>
 
@@ -203,6 +205,16 @@ export function EditorPlantillaMarca({
               className="w-full"
             />
           </div>
+
+          {/* Diseño de capas (control total): editor visual + vista real del servidor. */}
+          {marca && !cargando && (
+            <div className="rounded-md border border-border p-3">
+              <Label className="text-sm font-medium">Diseño de capas (control total)</Label>
+              <div className="mt-2">
+                <EditorPlantillaSpec marca={marca} />
+              </div>
+            </div>
+          )}
 
           {cargando ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

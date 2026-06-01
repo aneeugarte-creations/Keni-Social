@@ -126,42 +126,35 @@ def test_formato_por_red():
     assert e.formato_por_red("desconocida") == "feed"  # default
 
 
-def _fake_run_que_escribe_salida(monkeypatch):
-    """Mockea `subprocess.run` del dominio: escribe el `--salida` y devuelve rc 0. Captura cmd."""
-    from pathlib import Path
-    from types import SimpleNamespace
+def _fake_render_node(monkeypatch):
+    """Mockea `_correr_render_node`: escribe el PNG y captura el payload. No ejecuta Node."""
+    cap: dict[str, object] = {}
 
-    capturado: dict[str, list[str]] = {}
+    def _fake(payload, out):
+        cap["payload"] = payload
+        out.write_bytes(b"png")
 
-    def _fake(cmd, **kw):
-        capturado["cmd"] = cmd
-        salida = cmd[cmd.index("--salida") + 1]
-        Path(salida).write_bytes(b"png")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(e.subprocess, "run", _fake)
-    return capturado
+    monkeypatch.setattr(e, "_correr_render_node", _fake)
+    return cap
 
 
-def test_componer_placeholder_sin_foto(entorno, monkeypatch):
-    # imagen="" => modo placeholder: pasa --placeholder, NO --foto, y no materializa foto.
-    cap = _fake_run_que_escribe_salida(monkeypatch)
+def test_componer_placeholder_node(entorno, monkeypatch):
+    # imagen="" => placeholder; el motor por defecto (Node) recibe el spec y el copy_in.
+    cap = _fake_render_node(monkeypatch)
     monkeypatch.setattr(media, "importar_imagen", lambda ruta: "placa.png")
-    monkeypatch.setattr(
-        media, "leer_media", lambda nombre: (_ for _ in ()).throw(AssertionError("no debe leer foto"))
-    )
 
     res = e.componer("", marca="unotv", formato="feed", titular="DATO CLAVE")
 
     assert res["id"] == "placa.png"
-    assert res["info"]["placeholder"] is True
-    assert "--placeholder" in cap["cmd"]
-    assert "--foto" not in cap["cmd"]
-    assert "DATO CLAVE" in cap["cmd"]  # el copy_in viaja como --titular
+    assert res["info"]["motor"] == "node"
+    p = cap["payload"]
+    assert p["placeholder"] is True and p["foto"] is None
+    assert p["formato"] == "feed" and "formatos" in p["spec"]
+    assert p["bindings"]["copy_in"] == "DATO CLAVE"
 
 
-def test_componer_con_foto_materializa_y_no_placeholder(entorno, monkeypatch):
-    cap = _fake_run_que_escribe_salida(monkeypatch)
+def test_componer_con_foto_node(entorno, monkeypatch):
+    cap = _fake_render_node(monkeypatch)
     monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-foto")
     monkeypatch.setattr(media, "importar_imagen", lambda ruta: "final.png")
 
@@ -169,5 +162,47 @@ def test_componer_con_foto_materializa_y_no_placeholder(entorno, monkeypatch):
 
     assert res["id"] == "final.png"
     assert res["info"]["placeholder"] is False
-    assert "--foto" in cap["cmd"]
-    assert "--placeholder" not in cap["cmd"]
+    assert cap["payload"]["foto"] is not None  # foto materializada a ruta temporal
+
+
+def test_componer_etiqueta_resuelta_en_binding(entorno, monkeypatch):
+    # etiqueta="" => pleca omitida: el binding etiqueta_default viaja vacío.
+    cap = _fake_render_node(monkeypatch)
+    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "x.png")
+    e.componer("", marca="unotv", formato="feed", titular="T", etiqueta="")
+    assert cap["payload"]["bindings"]["etiqueta_default"] == ""
+
+
+def test_componer_fallback_a_pillow_si_node_falla(entorno, monkeypatch):
+    # Si Node falla y el modo es 'auto' (default), cae al motor Pillow (sistema vivo nunca se queda
+    # sin placa). Mockeamos Node para que lance y el motor Pillow (_correr_motor real no, subprocess).
+    def _node_boom(payload, out):
+        raise e.EstudioError("node no disponible")
+
+    monkeypatch.setattr(e, "_correr_render_node", _node_boom)
+
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    def _pillow_ok(cmd, **kw):
+        out = cmd[cmd.index("--salida") + 1]
+        Path(out).write_bytes(b"png")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(e.subprocess, "run", _pillow_ok)
+    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "fallback.png")
+
+    res = e.componer("", marca="unotv", formato="feed", titular="T")
+    assert res["id"] == "fallback.png"
+    assert res["info"]["motor"] == "pillow"
+
+
+def test_componer_forzar_node_no_cae_a_pillow(entorno, monkeypatch):
+    monkeypatch.setenv("KENI_RENDER_PLANTILLA", "node")
+
+    def _node_boom(payload, out):
+        raise e.EstudioError("node no disponible")
+
+    monkeypatch.setattr(e, "_correr_render_node", _node_boom)
+    with pytest.raises(e.EstudioError):
+        e.componer("", marca="unotv", formato="feed", titular="T")
