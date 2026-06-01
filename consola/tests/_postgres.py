@@ -68,6 +68,10 @@ _TABLAS = (
     "fuentes_rss",
     "grupos_hashtags",
     "franjas_editoriales",
+    # Inteligencia de plataforma (cambios de algoritmo + tendencias): noticias antes que
+    # fuentes (sin FK, pero a la cabeza evita sorpresas de orden).
+    "noticias_algoritmo",
+    "fuentes_algoritmo",
 )
 
 
