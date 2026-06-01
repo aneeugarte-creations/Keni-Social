@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   Eye,
-  FileText,
   Link2,
   Loader2,
   Pencil,
@@ -34,7 +33,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Markdown } from "@/components/ui/Markdown";
 import {
   Select,
   SelectContent,
@@ -186,7 +184,7 @@ export function DialogoEditar({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
-  const [vista, setVista] = React.useState<"editar" | "lectura" | "previa">("editar");
+  const [vista, setVista] = React.useState<"editar" | "previa">("previa");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -210,7 +208,7 @@ export function DialogoEditar({
     setFechaLocal(isoADatetimeLocal(publicacion.fecha_programada));
     setImagen(publicacion.imagen ?? "");
     setImagenUrl(publicacion.imagen_url ?? "");
-    setVista("editar");
+    setVista("previa");
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
@@ -267,19 +265,15 @@ export function DialogoEditar({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "lectura" | "previa")}>
+        <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "previa")}>
           <TabsList>
-            <TabsTrigger value="editar" className="gap-1.5">
-              <Pencil className="h-4 w-4" />
-              Editar
-            </TabsTrigger>
-            <TabsTrigger value="lectura" className="gap-1.5">
-              <FileText className="h-4 w-4" />
-              Vista
-            </TabsTrigger>
             <TabsTrigger value="previa" className="gap-1.5">
               <Eye className="h-4 w-4" />
               Previa
+            </TabsTrigger>
+            <TabsTrigger value="editar" className="gap-1.5">
+              <Pencil className="h-4 w-4" />
+              Editar
             </TabsTrigger>
           </TabsList>
 
@@ -434,15 +428,6 @@ export function DialogoEditar({
             </div>
           </TabsContent>
 
-          <TabsContent value="lectura">
-            <div className="rounded-md border border-border bg-muted/20 p-4">
-              {contenido.trim() ? (
-                <Markdown>{contenido}</Markdown>
-              ) : (
-                <p className="text-sm italic text-muted-foreground">Sin contenido todavía.</p>
-              )}
-            </div>
-          </TabsContent>
 
           <TabsContent value="previa">
             {publicacion && (
