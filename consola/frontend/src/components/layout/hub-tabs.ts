@@ -14,9 +14,22 @@ import {
   Rss,
   ScanSearch,
   ScanText,
+  type LucideIcon,
 } from "lucide-react";
 
-import type { ItemTabHub } from "./TabsHub";
+/** Una sub-pestaña de un hub (consumida por el sidebar con scope). */
+export interface ItemTabHub {
+  /** Ruta absoluta del tab (NavLink la consume tal cual). */
+  ruta: string;
+  etiqueta: string;
+  icono: LucideIcon;
+  /**
+   * Si es `true`, el tab solo se marca activo cuando la URL coincide
+   * exactamente; útil para el tab "raíz" de un hub que comparte prefijo con
+   * los demás (p.ej. `/agentes` vs `/agentes/actividad`).
+   */
+  end?: boolean;
+}
 
 /**
  * Registro COMPARTIDO de las sub-pestañas de cada hub de la consola.

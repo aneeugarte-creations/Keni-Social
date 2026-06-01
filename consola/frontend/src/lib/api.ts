@@ -22,7 +22,6 @@ import type {
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
   CuerpoActualizarSkill,
-  CuerpoActualizarTarea,
   CuerpoActualizarTurnoRota,
   CuerpoActualizarEventoRota,
   CuerpoActualizarPiezaRota,
@@ -39,11 +38,9 @@ import type {
   CuerpoDuplicarTurnoRota,
   CuerpoPerfilesMetricool,
   CuerpoGuardarMetricool,
-  CuerpoCrearCarpeta,
   CuerpoCrearFranja,
   CuerpoCrearRun,
   CuerpoCrearFuenteRss,
-  CuerpoCrearProyecto,
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
   CuerpoCrearSkill,
@@ -53,7 +50,6 @@ import type {
   CuerpoAsistenteContenido,
   CuerpoCrearContenido,
   CuerpoCrearEtiqueta,
-  CuerpoCrearTarea,
   CuerpoDesdeRadar,
   CuerpoSugerirHora,
   RespuestaSugerirHora,
@@ -94,7 +90,6 @@ import type {
   ReporteMetricas,
   RespuestaAgente,
   RespuestaAgentes,
-  RespuestaCarpetas,
   RespuestaCatalogo,
   RespuestaPerfilesMetricool,
   RespuestaMetricool,
@@ -102,8 +97,6 @@ import type {
   RespuestaProbarMetricool,
   RespuestaConexionImagen,
   RespuestaConfig,
-  RespuestaCrearCarpeta,
-  RespuestaCrearTarea,
   RespuestaEsfuerzo,
   RespuestaEstado,
   RespuestaFranja,
@@ -127,7 +120,6 @@ import type {
   RespuestaMediosBiblioteca,
   RespuestaMedioBiblioteca,
   CuerpoActualizarMedioBiblioteca,
-  RespuestaProyectos,
   RespuestaRadar,
   RespuestaParrilla,
   RespuestaProgramarMetricool,
@@ -173,7 +165,6 @@ import type {
   RespuestaEtiqueta,
   RespuestaEtiquetasContenido,
   RespuestaPreviewContenido,
-  RespuestaTareas,
   RespuestaEquipoRota,
   RespuestaEventosRota,
   RespuestaEventoRota,
@@ -523,23 +514,6 @@ export const api = {
   esfuerzo: (signal?: AbortSignal) => peticion<RespuestaEsfuerzo>("/config/esfuerzo", { signal }),
   guardarEsfuerzo: (cuerpo: CuerpoGuardarEsfuerzo) =>
     peticion<RespuestaMensaje>("/config/esfuerzo", { metodo: "POST", json: cuerpo }),
-
-  // --- Proyectos ---
-  proyectos: (signal?: AbortSignal) => peticion<RespuestaProyectos>("/proyectos", { signal }),
-  crearProyecto: (cuerpo: CuerpoCrearProyecto) =>
-    peticion<RespuestaMensaje>("/proyectos", { metodo: "POST", json: cuerpo }),
-  guardarClaudeMd: (id: string, cuerpo: CuerpoGuardarClaudeMd) =>
-    peticion<RespuestaMensaje>(`/proyectos/${encodeURIComponent(id)}/claude-md`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  abrirProyecto: (id: string) =>
-    peticion<RespuestaMensaje>(`/proyectos/${encodeURIComponent(id)}/abrir`, { metodo: "POST" }),
-
-  // --- Carpetas ---
-  carpetas: (signal?: AbortSignal) => peticion<RespuestaCarpetas>("/carpetas", { signal }),
-  crearCarpeta: (cuerpo: CuerpoCrearCarpeta) =>
-    peticion<RespuestaCrearCarpeta>("/carpetas", { metodo: "POST", json: cuerpo }),
 
   // --- Agentes (carpeta con CLAUDE.md, sub-contextos y runs) ---
   // Conjunto abierto: 5 marcas de serie (es_marca) + agentes genéricos
@@ -936,17 +910,6 @@ export const api = {
     peticion<RespuestaFranja>("/franjas", { metodo: "POST", json: cuerpo }),
   eliminarFranja: (id: string) =>
     peticion<RespuestaMensaje>(`/franjas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-
-  // --- Tareas ---
-  tareas: (signal?: AbortSignal) => peticion<RespuestaTareas>("/tareas", { signal }),
-  crearTarea: (cuerpo: CuerpoCrearTarea) =>
-    peticion<RespuestaCrearTarea>("/tareas", { metodo: "POST", json: cuerpo }),
-  actualizarTarea: (id: string, cuerpo: CuerpoActualizarTarea) =>
-    peticion<RespuestaCrearTarea>(`/tareas/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
-  eliminarTarea: (id: string) =>
-    peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  abrirTarea: (id: string) =>
-    peticion<RespuestaMensaje>(`/tareas/${encodeURIComponent(id)}/abrir`, { metodo: "POST" }),
 
   // --- Tablero de contenido unificado (herramienta de community manager) ---
   contenido: (

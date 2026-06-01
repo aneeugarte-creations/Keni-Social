@@ -115,26 +115,6 @@ export interface CuerpoGuardarEsfuerzo {
   esfuerzo: string;
 }
 
-// --- Proyectos ---
-
-export interface Proyecto {
-  id: string;
-  nombre: string;
-  ruta: string;
-  existe: boolean;
-  tiene_claude_md: boolean;
-  claude_md: string | null;
-}
-
-export interface RespuestaProyectos {
-  proyectos: Proyecto[];
-}
-
-export interface CuerpoCrearProyecto {
-  nombre: string;
-  ruta: string;
-}
-
 export interface CuerpoGuardarClaudeMd {
   contenido: string;
 }
@@ -238,28 +218,6 @@ export interface CuerpoCrearRun {
 // agregados de Monitor (`TotalRuns`/`AgregadoPorAgente`/`AgregadoPorDia`/
 // `RespuestaRunsAgregados`) se GENERAN desde el backend y se re-exportan arriba
 // (#101/#120). `RespuestaRun` lleva `mensaje?` (lanzamiento interactivo).
-
-// --- Carpetas ---
-
-export interface PlantillaCarpeta {
-  id: string;
-  nombre: string;
-}
-
-export interface RespuestaCarpetas {
-  raiz: string;
-  plantillas: PlantillaCarpeta[];
-}
-
-export interface CuerpoCrearCarpeta {
-  nombre: string;
-  plantilla: string;
-}
-
-export interface RespuestaCrearCarpeta {
-  mensaje: string;
-  ruta: string;
-}
 
 // --- Skills (Generar copy) ---
 
@@ -927,47 +885,7 @@ export interface CuerpoGuardarHistorial {
   red?: string;
 }
 
-// --- Tareas ---
-
-export type EstadoTarea = string;
-
-export interface Tarea {
-  id: string;
-  proyecto: string;
-  proyecto_nombre: string;
-  titulo: string;
-  detalle: string;
-  estado: EstadoTarea;
-  fecha: string;
-  /** Atribución por usuario (#130 Fase 1): id estable de quien creó. "" si legado/anónimo. */
-  autor_id: string;
-  /** Nombre de quien creó (para mostrar). "" si legado/anónimo. */
-  autor_nombre: string;
-  /** Tablero compartido (#145 F5): id del responsable asignado. "" si sin asignar. */
-  responsable_id: string;
-  /** Nombre del responsable (para mostrar). "" si sin asignar. */
-  responsable_nombre: string;
-  /** Enlace/ruta opcional para actuar sobre el pendiente (abrir asistente, generar copy…). "" si no hay. */
-  enlace: string;
-  /** Si la tarea está asociada a un evento de la rota: id del evento. "" / omitido si no. */
-  evento_id?: string;
-  /** Título del evento asociado (para mostrar). */
-  evento_titulo?: string;
-  /** Fecha del evento asociado (AAAA-MM-DD). */
-  evento_fecha?: string;
-  /** Hora del evento asociado. */
-  evento_hora?: string;
-  /** Tipo de cobertura del evento asociado. */
-  evento_tipo_cobertura?: TipoCoberturaEvento;
-  /** `true` si el proyecto referenciado existe en la allowlist. `false` si la tarea apunta a un proyecto borrado. */
-  proyecto_existe?: boolean;
-}
-
-export interface ProyectoTarea {
-  id: string;
-  nombre: string;
-  existe: boolean;
-}
+// --- Tablero de CONTENIDO unificado (herramienta de community manager) ---
 
 /** Usuario asignable como responsable (#145 F5): solo id + nombre. */
 export interface UsuarioTarea {
@@ -975,58 +893,6 @@ export interface UsuarioTarea {
   usuario: string;
 }
 
-export interface RespuestaTareas {
-  tareas: Tarea[];
-  proyectos: ProyectoTarea[];
-  /** Usuarios reales para el selector de responsable (#145 F5). */
-  usuarios: UsuarioTarea[];
-  /**
-   * Eventos próximos de la rota cuya cobertura aún no tiene un pendiente asociado.
-   * Aparecen como "pendientes implícitos" arriba del tablero (clic = crear tarea
-   * con `evento_id` prellenado). Vacío si no hay eventos sin cubrir o si el equipo
-   * no usa rota.
-   */
-  eventos_sin_cubrir: EventoSinCubrir[];
-}
-
-/** Evento de la rota que sigue sin cubrir (pendiente implícito). */
-export interface EventoSinCubrir {
-  id: string;
-  titulo: string;
-  /** AAAA-MM-DD. */
-  fecha: string;
-  hora: string;
-  contenido: string;
-  tipo_cobertura: TipoCoberturaEvento;
-  prioridad: PrioridadEvento;
-}
-
-export interface CuerpoCrearTarea {
-  /** OPCIONAL (#145 F5): "" o ausente crea un pendiente libre, sin proyecto. */
-  proyecto?: string;
-  titulo: string;
-  detalle?: string;
-  /** Responsable asignado al crear (#145 F5). "" / omitido = sin asignar. */
-  responsable_id?: string;
-  /** Enlace/ruta opcional para actuar sobre el pendiente (#145 F5). */
-  enlace?: string;
-  /** Si el pendiente cubre un evento de la rota: id del evento. */
-  evento_id?: string;
-}
-
-export interface RespuestaCrearTarea {
-  tarea: Tarea;
-}
-
-/** Cambios parciales sobre un pendiente (#145 F5): cada campo es opcional. */
-export interface CuerpoActualizarTarea {
-  estado?: EstadoTarea;
-  /** "" desasigna; un id real reasigna. */
-  responsable_id?: string;
-  enlace?: string;
-}
-
-// --- Tablero de CONTENIDO unificado (herramienta de community manager) ---
 
 /** Flujo editorial del tablero: lo importante del día, evergreen o cobertura de evento. */
 export type FlujoContenido = "importante" | "evergreen" | "evento" | "";
