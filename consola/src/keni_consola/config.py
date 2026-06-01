@@ -194,6 +194,15 @@ ENV_RADAR_AUTO_INTERVALO_HORAS = "KENI_RADAR_AUTO_INTERVALO_HORAS"
 ENV_RADAR_AUTO_MAX = "KENI_RADAR_AUTO_MAX"
 ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
 
+# Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
+# demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
+# radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
+# generacion de copy (mismo pipeline que el boton manual). El borrador resultante cae en la
+# cola de revision. CONSERVADOR por defecto (OFF): sin `KENI_AUTOGEN` el equipo genera a mano.
+ENV_AUTOGEN = "KENI_AUTOGEN"
+ENV_AUTOGEN_INTERVALO_HORAS = "KENI_AUTOGEN_INTERVALO_HORAS"
+ENV_AUTOGEN_MAX = "KENI_AUTOGEN_MAX"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -275,6 +284,12 @@ RADAR_AUTO_UMBRAL_DEF = 50_000
 RADAR_AUTO_GEO_DEF = "MX"
 RADAR_AUTO_INTERVALO_HORAS_DEF = 6
 RADAR_AUTO_MAX_DEF = 3
+
+# Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
+# porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
+# aplicando aguas abajo.
+AUTOGEN_INTERVALO_HORAS_DEF = 1
+AUTOGEN_MAX_DEF = 3
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -756,6 +771,29 @@ def radar_auto_marca() -> str:
     llamante la ignora (cae a sin marca): no se confia ciegamente del entorno.
     """
     return _crudo(ENV_RADAR_AUTO_MARCA)
+
+
+def autogen_activo() -> bool:
+    """True si el daemon de auto-generacion de copy debe arrancar (`KENI_AUTOGEN`).
+
+    Def OFF (conservador): los temas entran al tablero sin copy y el equipo lo genera a mano.
+    Con el flag, un hilo demonio encola copy para los temas alimentados por fuentes que aun
+    no lo tienen (revisable en la cola de revision). Nada se publica solo (sigue gated).
+    """
+    return _crudo(ENV_AUTOGEN).lower() in _VERDADEROS
+
+
+def autogen_intervalo_horas() -> int:
+    """Cada cuantas horas barre el daemon de auto-generacion (`KENI_AUTOGEN_INTERVALO_HORAS`, def 1, min 1)."""
+    return _entero(ENV_AUTOGEN_INTERVALO_HORAS, AUTOGEN_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def autogen_max() -> int:
+    """Maximo de temas a auto-generar por barrido (`KENI_AUTOGEN_MAX`, def 3, min 1).
+
+    Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
+    """
+    return _entero(ENV_AUTOGEN_MAX, AUTOGEN_MAX_DEF, minimo=1)
 
 
 def consola_url_publica() -> str | None:

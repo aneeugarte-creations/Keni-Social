@@ -169,6 +169,15 @@ def main() -> int:
 
     iniciar_radar_auto()
 
+    # Auto-generacion de COPY (fase3 auto-produccion, H2): un hilo demonio que, si
+    # `KENI_AUTOGEN` esta activo (def OFF), encola cada N horas copy para los temas que las
+    # fuentes (import/radar/rss) meten al tablero y aun no tienen borrador. El resultado cae
+    # en la cola de revision; NO publica solo (sigue gated). SAFE BY DEFAULT: sin el flag no
+    # arranca. Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
+    from .autogen_copy import iniciar_autogen
+
+    iniciar_autogen()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

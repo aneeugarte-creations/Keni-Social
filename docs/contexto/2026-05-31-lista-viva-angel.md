@@ -1,8 +1,9 @@
 # Lista viva de contenidos — petición de Angel (evaluación + diseño)
 
 > Fecha: 2026-05-31 · Origen: petición de Angel (equipo de redes AMX, piloto UnoTV / Claro Sports).
-> Estado: evaluación de viabilidad + diseño de los huecos. Primera pieza en construcción
-> (`feat/lista-viva-angel`): importador de calendario Excel/CSV.
+> Estado: evaluación de viabilidad + diseño de los huecos. En `feat/lista-viva-angel` ya
+> construidos H1 (importador de calendario Excel/CSV) y H2 (auto-generación de copy). H3
+> (score dinámico) y H5 (Panel 9am) + frontends quedan diseñados como siguiente paso.
 
 ## 1. Qué pidió Angel (textual, resumido)
 
@@ -72,13 +73,23 @@ parser puro (CSV + XLSX) → `repos.crear_contenido(...)` con `origen='import-ca
 `radar_auto.promover_temas`. PDF se difiere (los PDF de calendario rara vez son tabla fiable;
 el canon es Excel/CSV; PDF tabular = best-effort posterior).
 
-### H2 — Cableado auto copy (+ arte) al entrar un tema  ⭐ corazón del producto
-Cuando entra un tema al tablero (import, radar-auto, RSS elegido, o alta manual marcada
-"generar"), **encolar automáticamente** una generación de copy (worker existente) que deje un
-**borrador** colgado del contenido, listo para revisión. Fase 2: además encolar arte
-(`/api/media/generar`) con un prompt derivado del copy/tema. Gated y con cap de concurrencia
-(reutiliza `KENI_MAX_JOBS`) y un flag tipo `KENI_AUTOGEN=1` (conservador por defecto, como
-`radar_auto`). Esto convierte "lista de temas" en "lista de borradores listos para aprobar".
+### H2 — Cableado auto copy al entrar un tema  ⭐ corazón del producto  ✅ construido
+Daemon `autogen_copy.py` (espejo de `radar_auto`): barre el tablero y, para cada tema de una
+**fuente** (`import-calendario`/`radar-auto`/`radar`/`rss`) que aún no tiene copy y **sí tiene
+marca**, **encola** una generación de copy por el MISMO pipeline que el botón manual
+(`dominio.skills.lanzar_generacion_copy` → worker → cola de revisión). El borrador cae en
+`/revision/editorial`. Decisiones: bajo riesgo (no toca el contrato de borradores ni el
+jobspec); gated `KENI_AUTOGEN=1` (OFF por defecto); cap por barrido (`KENI_AUTOGEN_MAX`, def 3)
++ el cap del worker (`KENI_MAX_JOBS`) aguas abajo; dedup por etiqueta `autogen`; requiere marca
+(sin voz no se genera); el alta **manual** NO se auto-genera (el equipo decide). Convierte
+"lista de temas" en "lista de borradores listos para aprobar".
+
+**Siguientes pasos de H2 (no construidos aún):** (a) **auto arte** — encolar
+`/api/media/generar` con prompt derivado del tema; (b) **anidar el borrador bajo el tema** —
+hoy el borrador es contenido propio enlazado por flujo de generación; nido real bajo el
+`contenido` origen requiere pasar `contenido_id` por el jobspec + tocar `es_publicacion`
+(cambio del contrato, mayor riesgo); (c) incluir el alta manual ("lista verde") tras validar
+coste con el equipo.
 
 ### H3 — Score de prioridad dinámico (re-ordenar al entrar algo)
 Hoy el orden es prioridad fija + fecha. Diseñar un **score** puro y testeable que combine:
@@ -116,24 +127,25 @@ asistencia manual y conviene adaptarlos:
 
 Nada a **borrar** de raíz: todo es adaptable. (Pendiente de tu visto bueno para editar docs.)
 
-## 5. Lo que se construye en esta rama (primer incremento)
+## 5. Lo construido en esta rama (`feat/lista-viva-angel`)
 
-`feat/lista-viva-angel` — **H1: importador de calendario Excel/CSV** (backend + tests):
+**H1 — importador de calendario Excel/CSV** (backend + tests):
+- `importador_calendario.py`: parsing **puro y testeable** de `.csv`/`.xlsx` → filas
+  normalizadas (`titulo`, `fecha`, `marca`, `redes`, `prioridad`, `compromiso`, `notas`), con
+  mapeo flexible de columnas (sinónimos es/en, acentos) y errores honestos (filas inválidas se
+  reportan, no rompen). `importar_a_tablero` espeja `radar_auto`
+  (`crear_contenido(origen='import-calendario')` + etiqueta `compromiso`, dedup título+fecha).
+- `POST /api/contenido/importar` (multipart, con modo `previsualizar`).
+- `openpyxl` en `consola/pyproject.toml`. Tests: `test_importador_calendario.py` (14).
 
-- `consola/src/keni_consola/importador_calendario.py`: parsing **puro y testeable** de bytes
-  `.csv` y `.xlsx` → filas normalizadas (`titulo`, `fecha`, `marca`, `redes`, `prioridad`,
-  `compromiso`, `notas`), con mapeo flexible de columnas (sinónimos es/en) y validación honesta
-  (filas inválidas se reportan, no rompen). Sin I/O en la parte pura.
-- `importar_a_tablero(filas, ...)`: espeja `radar_auto.promover_temas` —
-  `repos.crear_contenido(origen='import-calendario', ...)` + etiqueta `compromiso` cuando aplica,
-  con dedup por (título normalizado + fecha).
-- `POST /api/contenido/importar` (multipart) en `api/contenido.py`, espejo de `desde_radar`.
-- Dependencia nueva: `openpyxl` en `consola/pyproject.toml`.
-- Tests: `consola/tests/test_importador_calendario.py`.
+**H2 — auto-generación de copy** (backend + tests):
+- `autogen_copy.py`: selección **pura** (`topics_pendientes`) + daemon (`iniciar_autogen`) que
+  reutiliza `dominio.skills.lanzar_generacion_copy`. Flags en `config.py` (`KENI_AUTOGEN*`),
+  cableado en `__main__.py`. Tests: `test_autogen_copy.py` (11).
 
-Diferido (siguientes incrementos, ya diseñados arriba): frontend del importador (subir archivo
-+ previsualizar + confirmar; requiere recompilar el bundle vendorizado), H2 (auto copy/arte),
-H3 (score), H5 (Panel-9am).
+**Diferido (diseñado arriba):** auto arte y nido bajo el tema (H2 siguientes pasos), H3 (score
+dinámico), H5 (Panel-9am) y los **frontends** (importador: subir/previsualizar/confirmar;
+requieren recompilar el bundle vendorizado con `npm run build`).
 
 ## 6. Restricciones y decisiones tomadas
 
