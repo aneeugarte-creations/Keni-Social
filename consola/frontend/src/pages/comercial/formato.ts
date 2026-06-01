@@ -59,5 +59,7 @@ export function presentacionEstado(estado: EstadoComercial): {
 
 /** Nombre legible de la métrica del objetivo. */
 export function etiquetaMetrica(metrica: MetricaComercial): string {
-  return metrica === "alcance" ? "Alcance" : "Interacciones";
+  if (metrica === "alcance") return "Alcance";
+  if (metrica === "visualizaciones") return "Visualizaciones";
+  return "Interacciones";
 }

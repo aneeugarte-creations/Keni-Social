@@ -327,8 +327,9 @@ def claves_vistas(fuente_id: str) -> set[str]:
 
 
 def crear_publicacion_comercial(
-    url: str,
+    url: str = "",
     *,
+    id_post_metricool: str = "",
     titulo: str = "",
     marca: str = "",
     cliente: str = "",
@@ -342,6 +343,7 @@ def crear_publicacion_comercial(
 ) -> dict[str, Any]:
     return db.crear_publicacion_comercial(
         url,
+        id_post_metricool=id_post_metricool,
         titulo=titulo,
         marca=marca,
         cliente=cliente,
@@ -382,9 +384,15 @@ def borrar_publicacion_comercial(publicacion_id: str) -> bool:
 
 
 def registrar_snapshot_comercial(
-    publicacion_id: str, ts: str, interacciones: int, alcance: int
+    publicacion_id: str,
+    ts: str,
+    interacciones: int,
+    alcance: int,
+    visualizaciones: int = 0,
 ) -> bool:
-    return db.registrar_snapshot_comercial(publicacion_id, ts, interacciones, alcance)
+    return db.registrar_snapshot_comercial(
+        publicacion_id, ts, interacciones, alcance, visualizaciones
+    )
 
 
 def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:

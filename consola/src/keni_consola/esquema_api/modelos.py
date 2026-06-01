@@ -621,7 +621,7 @@ class RespuestaPanel(TypedDict):
 # --------------------------------------------------------------------------- #
 
 EstadoComercial = Literal["activa", "pausada", "cerrada"]
-MetricaComercial = Literal["interacciones", "alcance"]
+MetricaComercial = Literal["interacciones", "visualizaciones", "alcance"]
 
 
 class ActualComercial(TypedDict):
@@ -629,6 +629,7 @@ class ActualComercial(TypedDict):
 
     ts: str
     interacciones: int
+    visualizaciones: int
     alcance: int
     engagement_pct: float
 
@@ -638,7 +639,29 @@ class SnapshotComercial(TypedDict):
 
     ts: str
     interacciones: int
+    visualizaciones: int
     alcance: int
+
+
+class PostSeleccionableComercial(TypedDict):
+    """Un post real de Metricool elegible para monitorizar (`GET /api/comercial/posts`)."""
+
+    id: str
+    red: str
+    titulo: str
+    publicado: str
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+    url: NotRequired[str | None]
+
+
+class RespuestaPostsComercial(TypedDict):
+    """Listado de posts seleccionables + procedencia (muestra vs real)."""
+
+    posts: list[PostSeleccionableComercial]
+    fuente: str
+    es_muestra: bool
 
 
 class PublicacionComercial(TypedDict):
@@ -650,6 +673,7 @@ class PublicacionComercial(TypedDict):
 
     id: str
     url: str
+    id_post_metricool: str
     titulo: str
     marca: str
     marca_nombre: str
@@ -769,6 +793,8 @@ MODELOS = [
     # Comercial (#124: fuente/es_muestra).
     ActualComercial,
     SnapshotComercial,
+    PostSeleccionableComercial,
+    RespuestaPostsComercial,
     PublicacionComercial,
     RespuestaPublicacionesComercial,
     RespuestaPublicacionComercial,

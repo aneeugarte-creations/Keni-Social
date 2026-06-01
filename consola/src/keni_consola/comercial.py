@@ -1,24 +1,30 @@
-"""Apartado COMERCIAL: seguimiento de UNA pieza por su link + captura + reporte.
+"""Apartado COMERCIAL: seguimiento de UN post real de Metricool + captura + reporte.
 
 Es un apartado SEPARADO del rendimiento diario (Metricas): una cosa es el pulso de
 las publicaciones del dia a dia y otra el reporte que se entrega de UNA pieza (o una
 serie de un cliente) cuando llega su KPI. Aqui se monitoriza una pieza ya publicada:
 
-  1. Se registra su link (con cliente/campania/objetivo).
-  2. Se le toman SNAPSHOTS periodicos de interacciones y alcance (serie temporal):
-     una captura programada en segundo plano (ver `iniciar_captura_programada`) los
-     llena aunque nadie este mirando, y al registrar se SIEMBRA el historico para
-     verla crecer desde el primer momento.
+  1. Se SELECCIONA de la lista de posts reales de Metricool (por su `id_post_metricool`,
+     marca y red); no se pegan enlaces a mano (ver `listar_posts_seleccionables`).
+  2. Se le toman SNAPSHOTS periodicos de interacciones y visualizaciones (serie
+     temporal): una captura programada en segundo plano (ver
+     `iniciar_captura_programada`) los llena aunque nadie este mirando.
   3. Si se fijo un objetivo/umbral, se marca el instante en que se alcanza (aviso).
   4. Al llegar el KPI se arma el REPORTE de la pieza o de la campania completa.
 
-DATOS DE MUESTRA: mientras no esten conectadas las APIs reales por plataforma, los
-valores salen de una curva sintetica DETERMINISTA por link (crece y se satura con el
-tiempo). Cuando llegue la fuente real, basta sustituir `metrica_en` por la lectura
-real de la pieza; el resto (persistencia, captura, aviso, reporte) no cambia.
+PROCEDENCIA DE LAS CIFRAS: en produccion, cada captura LEE EL DATO REAL del post desde
+la API de Metricool (reusando `metricas_pieza`, el mismo camino del tablero). Metricool
+NO guarda el historico por post (solo el valor actual): por eso la serie de Comercial
+ARRANCA VACIA y crece hacia delante con cada captura real — ese acumulado es justo el
+valor que Metricool no ofrece. En demo (sin Metricool configurado) las cifras salen de
+una curva sintetica DETERMINISTA (`metrica_en`) y se marcan como DATO DE MUESTRA.
+
+El alcance no viene por pieza en Metricool (solo agregado de plataforma); en modo real
+se monitorizan visualizaciones + interacciones (el alcance queda en 0). En muestra se
+conserva el alcance sintetico para no romper la demo.
 
 Solo LECTURA del mundo: nunca publica ni toca las redes; los snapshots se guardan en
-el SQLite local (via `db`), igual que el resto de la consola.
+Postgres (via `db`), igual que el resto de la consola.
 """
 
 from __future__ import annotations
@@ -31,28 +37,90 @@ import time
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from . import config, marcas, redes, repos
+from keni_metricas import servicio
+
+from . import config, marcas, metricas_pieza, redes, repos
 
 _log = logging.getLogger("keni_consola.comercial")
 
 # Cadencia por defecto de la captura programada (horas).
 INTERVALO_HORAS_DEF = 6.0
 # Tope de puntos al sembrar el historico de una pieza: una curva fluida y acotada sin
-# importar cuan antigua sea (para piezas viejas, los puntos se espacian mas).
+# importar cuan antigua sea (para piezas viejas, los puntos se espacian mas). Solo
+# aplica en modo MUESTRA (en real no hay historico por post que sembrar).
 MAX_PUNTOS_BACKFILL = 120
 
-# Procedencia de las cifras. Mientras las APIs reales por plataforma no esten
-# conectadas, todo sale del modelo sintetico de `metrica_en`: es DATO DE MUESTRA.
-# Mismo centinela ("muestra") que usa Metricas, asi el frontend reutiliza `BadgeFuente`.
-# Cuando se cablee la lectura real, `FUENTE_ACTUAL` pasara a la fuente real (p. ej.
-# "meta") y `es_muestra()` devolvera False sin tocar el resto del flujo.
+# Rango por defecto para listar los posts seleccionables de una marca (ventana amplia:
+# se eligen piezas ya publicadas, no necesariamente recientes).
+RANGO_LISTADO_DEF = "mes"
+
+# Centinela de procedencia "muestra" (cifras sinteticas). Mismo valor que usa Metricas,
+# asi el frontend reutiliza `BadgeFuente`. La fuente ACTUAL ya no es una constante: se
+# deriva de la fuente activa de metricas (Metricool real en prod; "muestra" en demo).
 FUENTE_MUESTRA = "muestra"
-FUENTE_ACTUAL = FUENTE_MUESTRA
+
+
+def fuente_actual() -> str:
+    """Nombre de la fuente activa de las cifras ("muestra" | "real"/"metricool").
+
+    Deriva de la configuracion de metricas (la misma fuente que alimenta el tablero):
+    si Metricool no esta configurado, es "muestra". Degrada a "muestra" si la fuente no
+    se puede resolver (config incompleto), para nunca presentar cifras como reales sin serlo.
+    """
+    try:
+        return servicio.nombre_fuente()
+    except Exception:  # noqa: BLE001 -- sin fuente valida tratamos las cifras como muestra
+        return FUENTE_MUESTRA
 
 
 def es_muestra() -> bool:
     """`True` mientras las cifras salgan del modelo sintetico (datos de muestra)."""
-    return FUENTE_ACTUAL == FUENTE_MUESTRA
+    return fuente_actual() == FUENTE_MUESTRA
+
+
+def _clave_muestra(pub: dict[str, Any]) -> str:
+    """Semilla estable de la curva sintetica de una pieza (id de post, link o id propio)."""
+    return pub.get("id_post_metricool") or pub.get("url") or pub.get("id") or ""
+
+
+def listar_posts_seleccionables(
+    marca: str = "", red: str = "", rango: str = RANGO_LISTADO_DEF
+) -> list[dict[str, Any]]:
+    """Posts reales ya publicados para ELEGIR cual monitorizar (sin pegar enlaces).
+
+    Trae el listado en vivo de la fuente activa (Metricool en prod; piezas sinteticas en
+    demo) via `servicio.construir_listado_piezas`, opcionalmente acotado a una `marca` y
+    filtrado a una `red`. `marca` es el id de la Consola (slug-guion); se traduce a su
+    `id_metricas` en la frontera. Degrada a `[]` si la fuente no puede listar (config
+    incompleto), para que el dialogo de alta no reviente.
+    """
+    id_metricas = marcas.id_metricas_de(marca) if marca else None
+    try:
+        piezas = servicio.construir_listado_piezas(rango, id_metricas)
+    except Exception:  # noqa: BLE001 -- sin fuente/cuenta valida: lista vacia, sin romper
+        _log.exception("comercial: no se pudo listar posts (marca=%s red=%s).", marca, red)
+        return []
+    if red:
+        piezas = [p for p in piezas if p.get("red") == red]
+    return piezas
+
+
+def _leer_real(pub: dict[str, Any]) -> tuple[int, int] | None:
+    """`(interacciones, visualizaciones)` REALES del post, o None si no hay dato todavia.
+
+    Reusa `metricas_pieza.recalcular` (mismo camino que el tablero: va a la fuente activa
+    y degrada honestamente). Devuelve None si falta la identidad del post o si Metricool
+    aun no tiene datos (post recien publicado): el llamante NO inserta un snapshot falso.
+    """
+    marca = pub.get("marca") or ""
+    red = pub.get("red") or ""
+    id_post = pub.get("id_post_metricool") or ""
+    if not (marca and red and id_post):
+        return None
+    rend = metricas_pieza.recalcular(marca, red, id_post)
+    if not rend.get("encontrado"):
+        return None
+    return int(rend.get("interacciones", 0)), int(rend.get("visualizaciones", 0))
 
 
 # --------------------------------------------------------------------------- #
@@ -111,20 +179,36 @@ def metrica_en(url: str, publicado: str, en: datetime) -> tuple[int, int]:
 
 
 def _capturar_en(pub: dict[str, Any], en: datetime) -> bool:
-    """Toma y guarda un snapshot de `pub` en el instante `en`. True si inserto."""
-    inter, alc = metrica_en(pub["url"], pub["publicado"], en)
-    return repos.registrar_snapshot_comercial(
-        pub["id"], en.isoformat(timespec="seconds"), inter, alc
-    )
+    """Toma y guarda un snapshot de `pub` en el instante `en`. True si inserto.
+
+    En modo REAL lee el valor actual del post en Metricool (el instante real es "ahora";
+    Metricool no da historico, asi que `en` solo fija el `ts` del punto) y guarda
+    interacciones + visualizaciones (alcance = 0, no disponible por pieza). Si Metricool
+    aun no tiene datos del post, NO inserta nada (sin ceros falsos). En modo MUESTRA usa
+    la curva sintetica (interacciones + alcance) como hasta ahora.
+    """
+    ts = en.isoformat(timespec="seconds")
+    if es_muestra():
+        inter, alc = metrica_en(_clave_muestra(pub), pub["publicado"], en)
+        return repos.registrar_snapshot_comercial(pub["id"], ts, inter, alc, visualizaciones=0)
+    real = _leer_real(pub)
+    if real is None:
+        return False
+    inter, vis = real
+    return repos.registrar_snapshot_comercial(pub["id"], ts, inter, alcance=0, visualizaciones=vis)
 
 
 def sembrar_historico(pub: dict[str, Any], *, hasta: datetime | None = None) -> int:
-    """Siembra snapshots desde `publicado` hasta ahora (curva inmediata y demoable).
+    """Deja la serie con su primer punto (en MUESTRA siembra la curva; en REAL un punto).
 
-    Genera hasta `MAX_PUNTOS_BACKFILL` puntos equiespaciados y garantiza un punto
-    exactamente "ahora" (el valor consultable). Devuelve cuantos snapshots inserto.
+    En modo REAL no se puede reconstruir el pasado (Metricool solo da el valor actual del
+    post): se captura UN punto "ahora" y la serie crece hacia delante. En modo MUESTRA se
+    siembran hasta `MAX_PUNTOS_BACKFILL` puntos equiespaciados desde `publicado` para una
+    curva inmediata y demoable. Devuelve cuantos snapshots inserto.
     """
     hasta = hasta or datetime.now()
+    if not es_muestra():
+        return int(_capturar_en(pub, hasta))
     inicio = _a_datetime(pub["publicado"])
     if hasta <= inicio:
         # Pieza recien publicada (o fecha futura): al menos el punto "ahora".
@@ -197,34 +281,48 @@ def evaluar_aviso(pub: dict[str, Any]) -> bool:
 # --------------------------------------------------------------------------- #
 
 
-def registrar(url: str, **campos: Any) -> dict[str, Any]:
-    """Da de alta una pieza a monitorear, siembra su historico y evalua el aviso.
+def registrar(url: str = "", *, id_post_metricool: str = "", **campos: Any) -> dict[str, Any]:
+    """Da de alta una pieza a monitorear, arranca su serie y evalua el aviso.
 
-    `campos` acepta: titulo, marca, cliente, campania, red, metrica_objetivo,
-    objetivo, estado, publicado, notas (la API ya valido allowlists). Devuelve la
-    pieza ya con `aviso_en` resuelto.
+    En produccion la pieza se identifica por `id_post_metricool` (+ marca + red en
+    `campos`) y la `url` es derivada/opcional. `campos` acepta: titulo, marca, cliente,
+    campania, red, metrica_objetivo, objetivo, estado, publicado, notas (la API ya valido
+    allowlists). Devuelve la pieza ya con `aviso_en` resuelto.
     """
-    pub = repos.crear_publicacion_comercial(url, **campos)
+    pub = repos.crear_publicacion_comercial(url, id_post_metricool=id_post_metricool, **campos)
     sembrar_historico(pub)
     evaluar_aviso(pub)
     return repos.obtener_publicacion_comercial(pub["id"]) or pub
 
 
 def resumen_actual(pub: dict[str, Any]) -> dict[str, Any]:
-    """Ultimo valor consultable de la pieza (del ultimo snapshot, o calculado ahora)."""
+    """Ultimo valor consultable de la pieza (del ultimo snapshot, o calculado ahora).
+
+    Sin snapshots aun: en MUESTRA calcula la curva sintetica "ahora"; en REAL devuelve
+    ceros (la serie aun no arranco / Metricool no tiene datos). El engagement se calcula
+    sobre visualizaciones (real) o, si no hay, sobre alcance (muestra).
+    """
     snap = repos.ultimo_snapshot_comercial(pub["id"])
     if snap is None:
-        inter, alc = metrica_en(pub["url"], pub["publicado"], datetime.now())
+        if es_muestra():
+            inter, alc = metrica_en(_clave_muestra(pub), pub["publicado"], datetime.now())
+        else:
+            inter, alc = 0, 0
         snap = {
             "ts": datetime.now().isoformat(timespec="seconds"),
             "interacciones": inter,
+            "visualizaciones": 0,
             "alcance": alc,
         }
-    eng = round(snap["interacciones"] / snap["alcance"] * 100, 2) if snap["alcance"] else 0.0
+    vis = snap.get("visualizaciones", 0)
+    alc = snap.get("alcance", 0)
+    base = vis or alc  # base del engagement: visualizaciones (real) o alcance (muestra)
+    eng = round(snap["interacciones"] / base * 100, 2) if base else 0.0
     return {
         "ts": snap["ts"],
         "interacciones": snap["interacciones"],
-        "alcance": snap["alcance"],
+        "visualizaciones": vis,
+        "alcance": alc,
         "engagement_pct": eng,
     }
 
@@ -253,7 +351,8 @@ def _pub_publica(pub: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": pub["id"],
         "titulo": pub.get("titulo") or "",
-        "url": pub["url"],
+        "url": pub.get("url") or "",
+        "id_post_metricool": pub.get("id_post_metricool") or "",
         "cliente": pub.get("cliente") or "",
         "campania": pub.get("campania") or "",
         "marca": pub.get("marca") or "",
@@ -284,7 +383,7 @@ def reporte_publicacion(pub: dict[str, Any]) -> dict[str, Any]:
     return {
         "tipo": "publicacion",
         "generado": datetime.now().isoformat(timespec="seconds"),
-        "fuente": FUENTE_ACTUAL,
+        "fuente": fuente_actual(),
         "es_muestra": es_muestra(),
         "publicacion": _pub_publica(pub),
         "periodo": {
@@ -302,10 +401,11 @@ def reporte_campania(
 ) -> dict[str, Any]:
     """Reporte de una SERIE de piezas (campania de un cliente): filas + totales."""
     filas: list[dict[str, Any]] = []
-    tot_inter = tot_alc = 0
+    tot_inter = tot_vis = tot_alc = 0
     for pub in pubs:
         actual = resumen_actual(pub)
         tot_inter += actual["interacciones"]
+        tot_vis += actual["visualizaciones"]
         tot_alc += actual["alcance"]
         filas.append(
             {
@@ -314,17 +414,19 @@ def reporte_campania(
                 "objetivo": _objetivo_publico(pub, actual),
             }
         )
-    eng = round(tot_inter / tot_alc * 100, 2) if tot_alc else 0.0
+    base = tot_vis or tot_alc  # engagement sobre visualizaciones (real) o alcance (muestra)
+    eng = round(tot_inter / base * 100, 2) if base else 0.0
     return {
         "tipo": "campania",
         "generado": datetime.now().isoformat(timespec="seconds"),
-        "fuente": FUENTE_ACTUAL,
+        "fuente": fuente_actual(),
         "es_muestra": es_muestra(),
         "campania": campania,
         "cliente": cliente,
         "piezas": filas,
         "total": {
             "interacciones": tot_inter,
+            "visualizaciones": tot_vis,
             "alcance": tot_alc,
             "engagement_pct": eng,
             "piezas": len(filas),
@@ -363,11 +465,20 @@ def render_markdown_reporte(rep: dict[str, Any]) -> str:
     return _render_publicacion_md(rep)
 
 
+def _volumen(actual: dict[str, Any]) -> tuple[str, int]:
+    """Etiqueta y valor de la metrica de volumen: visualizaciones (real) o alcance (muestra)."""
+    vis = actual.get("visualizaciones", 0)
+    if vis:
+        return "Visualizaciones", vis
+    return "Alcance", actual.get("alcance", 0)
+
+
 def _render_publicacion_md(rep: dict[str, Any]) -> str:
     p = rep["publicacion"]
     a = rep["actual"]
     o = rep["objetivo"]
-    titulo = p["titulo"] or p["url"]
+    titulo = p["titulo"] or p["url"] or p.get("id_post_metricool") or "pieza"
+    vol_etq, vol_val = _volumen(a)
     lineas = [
         f"# Reporte comercial — {titulo}",
         "",
@@ -379,11 +490,11 @@ def _render_publicacion_md(rep: dict[str, Any]) -> str:
         f"- Marca: {p['marca_nombre'] or '—'}",
         f"- Red: {p['red_nombre'] or '—'}",
         f"- Publicado: {p['publicado'] or '—'}",
-        f"- Enlace: {p['url']}",
+        f"- Enlace: {p['url'] or '—'}",
         "",
         f"## Resultados (al {rep['periodo']['hasta']})",
         "",
-        f"- Alcance: {_fmt(a['alcance'])}",
+        f"- {vol_etq}: {_fmt(vol_val)}",
         f"- Interacciones: {_fmt(a['interacciones'])}",
         f"- Engagement: {a['engagement_pct']} %",
         "",
@@ -412,27 +523,29 @@ def _render_campania_md(rep: dict[str, Any]) -> str:
         lineas.append(f"- Cliente: {rep['cliente']}")
     if rep["campania"]:
         lineas.append(f"- Campaña: {rep['campania']}")
+    vol_etq, vol_val = _volumen(t)
     lineas += [
         f"- Piezas: {t['piezas']}",
         "",
         "## Totales",
         "",
-        f"- Alcance: {_fmt(t['alcance'])}",
+        f"- {vol_etq}: {_fmt(vol_val)}",
         f"- Interacciones: {_fmt(t['interacciones'])}",
         f"- Engagement: {t['engagement_pct']} %",
         "",
         "## Detalle por pieza",
         "",
-        "| Pieza | Red | Alcance | Interacciones | Objetivo |",
+        f"| Pieza | Red | {vol_etq} | Interacciones | Objetivo |",
         "|---|---|--:|--:|---|",
     ]
     for fila in rep["piezas"]:
         p = fila["publicacion"]
         a = fila["actual"]
         o = fila["objetivo"]
-        titulo = (p["titulo"] or p["url"]).replace("|", "/")
+        titulo = (p["titulo"] or p["url"] or p.get("id_post_metricool") or "pieza").replace("|", "/")
+        _, fila_vol = _volumen(a)
         lineas.append(
-            f"| {titulo} | {p['red_nombre'] or '—'} | {_fmt(a['alcance'])} "
+            f"| {titulo} | {p['red_nombre'] or '—'} | {_fmt(fila_vol)} "
             f"| {_fmt(a['interacciones'])} | {_alcanzado_texto(o)} |"
         )
     return "\n".join(lineas) + "\n"

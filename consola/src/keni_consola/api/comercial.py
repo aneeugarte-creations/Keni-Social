@@ -34,6 +34,7 @@ _ESTADO_NOMBRE: dict[str, str] = {
 # Nombres legibles de la metrica del objetivo.
 _METRICA_NOMBRE: dict[str, str] = {
     "interacciones": "Interacciones",
+    "visualizaciones": "Visualizaciones",
     "alcance": "Alcance",
 }
 _MARCAS_IDS = {mid for mid, _ in marcas.opciones()}
@@ -55,7 +56,8 @@ def _a_dict(pub: dict[str, Any], *, con_serie: bool = False) -> dict[str, Any]:
     progreso = comercial.progreso_pct(pub, actual)
     d: dict[str, Any] = {
         "id": pub["id"],
-        "url": pub["url"],
+        "url": pub.get("url") or "",
+        "id_post_metricool": pub.get("id_post_metricool") or "",
         "titulo": pub.get("titulo") or "",
         "marca": pub.get("marca") or "",
         "marca_nombre": marcas.etiqueta_de(pub["marca"]) if pub.get("marca") else "",
@@ -76,7 +78,7 @@ def _a_dict(pub: dict[str, Any], *, con_serie: bool = False) -> dict[str, Any]:
         "alcanzado": bool(pub.get("aviso_en")) or (objetivo > 0 and progreso >= 100),
         # Procedencia de las cifras: de muestra (sinteticas) mientras no haya APIs
         # reales conectadas. Que el frontend nunca las confunda con datos reales.
-        "fuente": comercial.FUENTE_ACTUAL,
+        "fuente": comercial.fuente_actual(),
         "es_muestra": comercial.es_muestra(),
     }
     if con_serie:
@@ -215,23 +217,65 @@ async def listar(request: Request) -> Response:
         {
             "publicaciones": [_a_dict(p) for p in pubs],
             # Procedencia comun a todas: de muestra mientras no haya APIs reales.
-            "fuente": comercial.FUENTE_ACTUAL,
+            "fuente": comercial.fuente_actual(),
             "es_muestra": comercial.es_muestra(),
         }
     )
 
 
 async def crear(request: Request) -> Response:
-    """Da de alta una pieza por su link, siembra su historico y evalua el aviso."""
+    """Da de alta una pieza a monitorear, arranca su serie y evalua el aviso.
+
+    Forma preferida (sin enlaces a mano): se selecciona un post real de Metricool, asi
+    que llega `id_post_metricool` + `marca` + `red` (la `url` es derivada/opcional). Se
+    mantiene el alta por `url` (sin `id_post_metricool`) para la demo y la compatibilidad.
+    """
     datos = await leer_json(request)
-    url, error = _validar_url(datos.get("url"))
-    if error is not None:
-        return JSONResponse({"error": error}, status_code=400)
     cambios, error = _validar_campos(datos, claves=_CLAVES)
     if error is not None:
         return JSONResponse({"error": error}, status_code=400)
-    pub = comercial.registrar(url, **cambios)
+
+    id_post = datos.get("id_post_metricool")
+    if id_post:
+        if not isinstance(id_post, str) or not id_post.strip():
+            return JSONResponse({"error": "El id del post no es válido."}, status_code=400)
+        if not cambios.get("marca"):
+            return JSONResponse({"error": "Falta la marca del post."}, status_code=400)
+        if not cambios.get("red"):
+            return JSONResponse({"error": "Falta la red del post."}, status_code=400)
+        url = str(datos.get("url") or "").strip()  # derivada del post; no se exige
+        pub = comercial.registrar(url, id_post_metricool=id_post.strip(), **cambios)
+    else:
+        url, error = _validar_url(datos.get("url"))
+        if error is not None:
+            return JSONResponse({"error": error}, status_code=400)
+        pub = comercial.registrar(url, **cambios)
     return JSONResponse({"publicacion": _a_dict(pub, con_serie=True)}, status_code=201)
+
+
+async def posts(request: Request) -> Response:
+    """Posts reales seleccionables para monitorizar: `?marca=&red=&rango=`.
+
+    Lista en vivo de la fuente activa (Metricool en prod; piezas de muestra en demo) para
+    que el alta elija una pieza por su `id_post_metricool` sin pegar enlaces. `marca`/`red`
+    se validan contra sus allowlists (vacios = sin filtro); `rango` cae al valor por defecto.
+    """
+    qp = request.query_params
+    marca = qp.get("marca") or ""
+    if marca and marca not in _MARCAS_IDS:
+        return JSONResponse({"error": "Marca no permitida."}, status_code=400)
+    red = qp.get("red") or ""
+    if red and not redes.es_red(red):
+        return JSONResponse({"error": "Red no permitida."}, status_code=400)
+    rango = qp.get("rango") or comercial.RANGO_LISTADO_DEF
+    lista = comercial.listar_posts_seleccionables(marca, red, rango)
+    return JSONResponse(
+        {
+            "posts": lista,
+            "fuente": comercial.fuente_actual(),
+            "es_muestra": comercial.es_muestra(),
+        }
+    )
 
 
 async def detalle(request: Request) -> Response:
@@ -328,6 +372,7 @@ async def reporte(request: Request) -> Response:
 
 RUTAS = [
     Route("/api/comercial/opciones", opciones, methods=["GET"]),
+    Route("/api/comercial/posts", posts, methods=["GET"]),
     Route("/api/comercial/reporte", reporte, methods=["GET"]),
     Route("/api/comercial/refrescar", refrescar_todas, methods=["POST"]),
     Route("/api/comercial/publicaciones", listar, methods=["GET"]),

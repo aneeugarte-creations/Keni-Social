@@ -205,6 +205,7 @@ import type {
   UsuarioAdmin,
   FiltrosComercial,
   OpcionesComercial,
+  RespuestaPostsComercial,
   RespuestaPublicacionComercial,
   RespuestaPublicacionesComercial,
   RespuestaRefrescarComercial,
@@ -1385,6 +1386,10 @@ export const api = {
   // --- Comercial (seguimiento de publicaciones comerciales) ---
   comercialOpciones: (signal?: AbortSignal) =>
     peticion<OpcionesComercial>("/comercial/opciones", { signal }),
+  comercialPosts: (
+    params: { marca?: string; red?: string; rango?: string } = {},
+    signal?: AbortSignal,
+  ) => peticion<RespuestaPostsComercial>(`/comercial/posts${query(params)}`, { signal }),
   comerciales: (filtros: FiltrosComercial = {}, signal?: AbortSignal) =>
     peticion<RespuestaPublicacionesComercial>(`/comercial/publicaciones${query(filtros)}`, {
       signal,

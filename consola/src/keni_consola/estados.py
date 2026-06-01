@@ -48,8 +48,9 @@ ESTADOS_COMERCIAL: tuple[str, ...] = ("activa", "pausada", "cerrada")
 ESTADO_COMERCIAL_ACTIVA = "activa"
 
 # Metricas que un objetivo/umbral comercial puede seguir (misma forma que el resto
-# del producto).
-METRICAS_COMERCIAL: tuple[str, ...] = ("interacciones", "alcance")
+# del producto). `visualizaciones` e `interacciones` vienen del post real de Metricool;
+# `alcance` solo en modo muestra (Metricool no lo da por pieza).
+METRICAS_COMERCIAL: tuple[str, ...] = ("interacciones", "visualizaciones", "alcance")
 
 # Roles de usuario (auth multiusuario, #130). `admin` gestiona usuarios y todo lo
 # demas; `editor` usa la consola pero NO toca /api/usuarios.

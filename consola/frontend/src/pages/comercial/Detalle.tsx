@@ -171,6 +171,14 @@ function Contenido({
   const estadoBadge = presentacionEstado(pub.estado);
   const progreso = Math.min(pub.progreso_pct, 100);
   const titulo = pub.titulo || "Publicación comercial";
+  // Metrica de volumen: en datos reales (Metricool) se monitorizan visualizaciones; en
+  // modo muestra, el alcance sintetico (Metricool no da alcance por pieza).
+  const usaVisualizaciones = !pub.es_muestra;
+  const volMetrica: "visualizaciones" | "alcance" = usaVisualizaciones
+    ? "visualizaciones"
+    : "alcance";
+  const volEtiqueta = usaVisualizaciones ? "Visualizaciones" : "Alcance";
+  const volValor = usaVisualizaciones ? pub.actual.visualizaciones : pub.actual.alcance;
 
   return (
     <>
@@ -191,24 +199,26 @@ function Contenido({
           {pub.cliente && <span className="text-muted-foreground">· {pub.cliente}</span>}
           {pub.campania && <span className="text-muted-foreground">· {pub.campania}</span>}
         </DialogDescription>
-        <a
-          href={pub.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
-        >
-          <ExternalLink className="h-3.5 w-3.5" />
-          Ver publicación
-        </a>
+        {pub.url && (
+          <a
+            href={pub.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Ver publicación
+          </a>
+        )}
       </DialogHeader>
 
       <div className="space-y-5">
         {/* Valor actual */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <TarjetaKpi
-            etiqueta="Alcance"
-            valor={numeroCompacto(pub.actual.alcance)}
-            titulo={numeroCompleto(pub.actual.alcance)}
+            etiqueta={volEtiqueta}
+            valor={numeroCompacto(volValor)}
+            titulo={numeroCompleto(volValor)}
           />
           <TarjetaKpi
             etiqueta="Interacciones"
@@ -253,7 +263,12 @@ function Contenido({
 
         {/* Curvas */}
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <GraficaSerie serie={pub.serie ?? []} metrica="alcance" titulo="Alcance" color="blue" />
+          <GraficaSerie
+            serie={pub.serie ?? []}
+            metrica={volMetrica}
+            titulo={volEtiqueta}
+            color="blue"
+          />
           <GraficaSerie
             serie={pub.serie ?? []}
             metrica="interacciones"

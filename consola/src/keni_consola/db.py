@@ -29,11 +29,12 @@ Tablas:
     responsable_id, responsable_nombre, enlace)
     [tablero de pendientes compartido del equipo (#145): autor = quien la creo;
     responsable = a quien se le asigna; enlace = ruta/URL opcional para actuar]
-  - `comercial_publicaciones`(id, url, titulo, marca, cliente, campania, red,
-    metrica_objetivo, objetivo, estado, publicado, notas, aviso_en,
+  - `comercial_publicaciones`(id, url, id_post_metricool, titulo, marca, cliente,
+    campania, red, metrica_objetivo, objetivo, estado, publicado, notas, aviso_en,
     fecha_creacion, fecha_actualizacion)
-    [seguimiento de UNA publicacion comercial por su link; estado activa|pausada|cerrada]
-  - `comercial_snapshots`(id, publicacion_id, ts, interacciones, alcance)
+    [seguimiento de UNA publicacion comercial por su `id_post_metricool` (post real de
+    Metricool); estado activa|pausada|cerrada]
+  - `comercial_snapshots`(id, publicacion_id, ts, interacciones, visualizaciones, alcance)
     [serie temporal de cada publicacion; UNIQUE(publicacion_id, ts)]
   - `usuarios`(id, usuario UNICO, rol, salt, hash, debe_cambiar_password,
     intentos_fallidos, bloqueo_hasta, creado, ultimo_acceso)
@@ -259,7 +260,8 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS comercial_publicaciones (
         id                   TEXT PRIMARY KEY,
-        url                  TEXT NOT NULL,
+        url                  TEXT NOT NULL DEFAULT '',
+        id_post_metricool    TEXT NOT NULL DEFAULT '',
         titulo               TEXT NOT NULL DEFAULT '',
         marca                TEXT NOT NULL DEFAULT '',
         cliente              TEXT NOT NULL DEFAULT '',
@@ -281,6 +283,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         publicacion_id  TEXT NOT NULL,
         ts              TEXT NOT NULL,
         interacciones   INTEGER NOT NULL DEFAULT 0,
+        visualizaciones INTEGER NOT NULL DEFAULT 0,
         alcance         INTEGER NOT NULL DEFAULT 0
     )
     """,
@@ -963,6 +966,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_contenido(con)
+    _migrar_columnas_comercial(con)
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
@@ -1507,6 +1511,31 @@ def _migrar_columnas_contenido(con: Any) -> None:
                 con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
+# Columnas ampliadas del apartado comercial. Las bases creadas antes del paso a
+# "monitorizar el post real de Metricool" no tienen `id_post_metricool` (la pieza se
+# identificaba por `url`) ni `visualizaciones` en los snapshots (solo interacciones/
+# alcance, de la curva sintetica). El Postgres hosted persiste entre despliegues:
+# sin estos ALTER, una BD vieja reventaria al leer/escribir las columnas nuevas.
+_COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
+)
+_COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("visualizaciones", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_comercial(con: Any) -> None:
+    """Anade al apartado comercial las columnas que una BD vieja no tuviera (idempotente)."""
+    for tabla, ampliadas in (
+        ("comercial_publicaciones", _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS),
+        ("comercial_snapshots", _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS),
+    ):
+        columnas = _columnas_existentes(con, tabla)
+        for columna, tipo in ampliadas:
+            if columna not in columnas:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
 # tupla esta VACIA: la primera version del swap nace ya con todo el esquema declarado en
 # el `CREATE TABLE IF NOT EXISTS` (sin previas en produccion). Se conserva el hook por
@@ -1599,6 +1628,7 @@ def _migrar_columnas_usuarios(con: Any) -> None:
 _COLS_COMERCIAL = (
     "id",
     "url",
+    "id_post_metricool",
     "titulo",
     "marca",
     "cliente",
@@ -1638,8 +1668,9 @@ def _fila_a_comercial(fila: Any) -> dict[str, Any]:
 
 
 def crear_publicacion_comercial(
-    url: str,
+    url: str = "",
     *,
+    id_post_metricool: str = "",
     titulo: str = "",
     marca: str = "",
     cliente: str = "",
@@ -1653,13 +1684,16 @@ def crear_publicacion_comercial(
 ) -> dict[str, Any]:
     """Inserta una publicacion comercial a monitorear y la devuelve.
 
-    NO valida marca/red/estado/metrica (lo hace la API contra sus allowlists). `aviso_en`
-    nace vacio; se rellena la primera vez que el valor supera el objetivo.
+    La pieza se identifica por su `id_post_metricool` (el post real de Metricool); `url`
+    es derivada/opcional (la trae el propio post). NO valida marca/red/estado/metrica (lo
+    hace la API contra sus allowlists). `aviso_en` nace vacio; se rellena la primera vez
+    que el valor supera el objetivo.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
         "url": url,
+        "id_post_metricool": id_post_metricool,
         "titulo": titulo,
         "marca": marca,
         "cliente": cliente,
@@ -1801,7 +1835,11 @@ def borrar_publicacion_comercial(publicacion_id: str) -> bool:
 
 
 def registrar_snapshot_comercial(
-    publicacion_id: str, ts: str, interacciones: int, alcance: int
+    publicacion_id: str,
+    ts: str,
+    interacciones: int,
+    alcance: int,
+    visualizaciones: int = 0,
 ) -> bool:
     """Inserta un snapshot (idempotente por `(publicacion_id, ts)`).
 
@@ -1812,8 +1850,16 @@ def registrar_snapshot_comercial(
     try:
         cur = con.execute(
             "INSERT OR IGNORE INTO comercial_snapshots "
-            "(id, publicacion_id, ts, interacciones, alcance) VALUES (?, ?, ?, ?, ?)",
-            (uuid.uuid4().hex[:12], publicacion_id, ts, int(interacciones), int(alcance)),
+            "(id, publicacion_id, ts, interacciones, visualizaciones, alcance) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                uuid.uuid4().hex[:12],
+                publicacion_id,
+                ts,
+                int(interacciones),
+                int(visualizaciones),
+                int(alcance),
+            ),
         )
         con.commit()
         return cur.rowcount > 0
@@ -1826,14 +1872,19 @@ def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT ts, interacciones, alcance FROM comercial_snapshots "
+            "SELECT ts, interacciones, visualizaciones, alcance FROM comercial_snapshots "
             "WHERE publicacion_id = ? ORDER BY ts ASC",
             (publicacion_id,),
         ).fetchall()
     finally:
         con.close()
     return [
-        {"ts": f["ts"], "interacciones": int(f["interacciones"]), "alcance": int(f["alcance"])}
+        {
+            "ts": f["ts"],
+            "interacciones": int(f["interacciones"]),
+            "visualizaciones": int(f["visualizaciones"]),
+            "alcance": int(f["alcance"]),
+        }
         for f in filas
     ]
 
@@ -1843,7 +1894,7 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT ts, interacciones, alcance FROM comercial_snapshots "
+            "SELECT ts, interacciones, visualizaciones, alcance FROM comercial_snapshots "
             "WHERE publicacion_id = ? ORDER BY ts DESC LIMIT 1",
             (publicacion_id,),
         ).fetchone()
@@ -1854,6 +1905,7 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
     return {
         "ts": fila["ts"],
         "interacciones": int(fila["interacciones"]),
+        "visualizaciones": int(fila["visualizaciones"]),
         "alcance": int(fila["alcance"]),
     }
 

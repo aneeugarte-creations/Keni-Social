@@ -1,11 +1,11 @@
 /**
- * Diálogo para empezar a monitorear una publicación comercial por su enlace.
+ * Diálogo para empezar a monitorear una publicación comercial.
  *
- * Pega el link, opcionalmente cliente/campaña/marca/red y un objetivo; al guardar,
- * el backend siembra el histórico y arranca el seguimiento. Es el "pongo el link y
- * que la monitoree" del flujo comercial.
+ * En vez de pegar un enlace a mano, se ELIGE un post real ya publicado: marca → red →
+ * selector de posts (traídos en vivo de Metricool). Al guardar, el backend arranca el
+ * seguimiento del post por su `id_post_metricool` y la serie crece con cada captura real.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -33,17 +33,27 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
-import type { CuerpoCrearComercial, MetricaComercial, OpcionesComercial } from "@/types";
+import { numeroCompacto } from "@/lib/formato";
+import type {
+  CuerpoCrearComercial,
+  MetricaComercial,
+  OpcionesComercial,
+  PostSeleccionableComercial,
+} from "@/types";
 
 import { CLAVE_COMERCIAL } from "./claves";
+import { fechaCorta } from "./formato";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-function hoyIso(): string {
-  return new Date().toISOString().slice(0, 10);
+/** Resumen legible de un post en el selector: fecha + título + métricas. */
+function etiquetaPost(p: PostSeleccionableComercial): string {
+  const titulo = p.titulo?.trim() || "(sin texto)";
+  const corto = titulo.length > 70 ? `${titulo.slice(0, 70)}…` : titulo;
+  return `${fechaCorta(p.publicado)} · ${corto} · ${numeroCompacto(p.visualizaciones)} vis`;
 }
 
 export function DialogoNueva({
@@ -56,13 +66,12 @@ export function DialogoNueva({
   onCerrar: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [url, setUrl] = React.useState("");
+  const [marca, setMarca] = React.useState(NINGUNA);
+  const [red, setRed] = React.useState(NINGUNA);
+  const [idPost, setIdPost] = React.useState("");
   const [titulo, setTitulo] = React.useState("");
   const [cliente, setCliente] = React.useState("");
   const [campania, setCampania] = React.useState("");
-  const [marca, setMarca] = React.useState(NINGUNA);
-  const [red, setRed] = React.useState(NINGUNA);
-  const [publicado, setPublicado] = React.useState(hoyIso());
   const [metrica, setMetrica] = React.useState<MetricaComercial>("interacciones");
   const [objetivo, setObjetivo] = React.useState("");
   const [notas, setNotas] = React.useState("");
@@ -70,28 +79,53 @@ export function DialogoNueva({
   // Reseteamos el formulario cada vez que se abre.
   React.useEffect(() => {
     if (!abierto) return;
-    setUrl("");
+    setMarca(NINGUNA);
+    setRed(NINGUNA);
+    setIdPost("");
     setTitulo("");
     setCliente("");
     setCampania("");
-    setMarca(NINGUNA);
-    setRed(NINGUNA);
-    setPublicado(hoyIso());
     setMetrica("interacciones");
     setObjetivo("");
     setNotas("");
   }, [abierto]);
 
+  const marcaParam = ningunaParam(marca);
+  const redParam = ningunaParam(red);
+
+  // Cambiar de marca/red invalida el post elegido (ya no pertenece a la nueva lista).
+  React.useEffect(() => {
+    setIdPost("");
+  }, [marcaParam, redParam]);
+
+  // Posts seleccionables: en vivo de Metricool, solo cuando hay marca Y red.
+  const postsQuery = useQuery({
+    queryKey: [...CLAVE_COMERCIAL, "posts", marcaParam, redParam],
+    queryFn: ({ signal }) =>
+      api.comercialPosts({ marca: marcaParam, red: redParam }, signal),
+    enabled: abierto && Boolean(marcaParam && redParam),
+  });
+  const posts = postsQuery.data?.posts ?? [];
+  const postSeleccionado = posts.find((p) => p.id === idPost) ?? null;
+
+  // Al elegir un post, prerellenamos el título si el usuario no escribió uno propio.
+  function elegirPost(id: string) {
+    setIdPost(id);
+    const post = posts.find((p) => p.id === id);
+    if (post && !titulo.trim()) setTitulo(post.titulo?.trim() || "");
+  }
+
   const crear = useMutation({
     mutationFn: () => {
       const cuerpo: CuerpoCrearComercial = {
-        url: url.trim(),
+        id_post_metricool: idPost,
+        url: postSeleccionado?.url ?? "",
         titulo: titulo.trim(),
+        marca: marcaParam,
+        red: redParam,
         cliente: cliente.trim(),
         campania: campania.trim(),
-        marca: ningunaParam(marca),
-        red: ningunaParam(red),
-        publicado,
+        publicado: postSeleccionado?.publicado,
         metrica_objetivo: metrica,
         objetivo: objetivo ? Number(objetivo) : 0,
         notas: notas.trim(),
@@ -106,8 +140,17 @@ export function DialogoNueva({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  const urlValida = /^https?:\/\//i.test(url.trim());
-  const puedeGuardar = urlValida && !crear.isPending;
+  const puedeGuardar = Boolean(idPost) && !crear.isPending;
+
+  // Mensaje contextual bajo el selector de posts (carga / vacío / error / pista).
+  function ayudaPosts(): string | null {
+    if (!marcaParam || !redParam)
+      return "Elige una marca y una red para ver sus publicaciones.";
+    if (postsQuery.isPending) return "Cargando publicaciones…";
+    if (postsQuery.isError) return "No se pudieron cargar las publicaciones. Reintenta.";
+    if (posts.length === 0) return "No hay publicaciones para esa marca y red en el periodo.";
+    return null;
+  }
 
   return (
     <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
@@ -115,25 +158,59 @@ export function DialogoNueva({
         <DialogHeader>
           <DialogTitle>Monitorear publicación</DialogTitle>
           <DialogDescription>
-            Pega el enlace de la pieza. Le daremos seguimiento a interacciones y alcance, y
-            podrás pedir su reporte cuando llegue el KPI.
+            Elige una publicación ya hecha de tus redes (vía Metricool). Le daremos
+            seguimiento a interacciones y visualizaciones, y podrás pedir su reporte cuando
+            llegue el KPI.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="nueva-marca">Marca *</Label>
+              <SelectorMarca
+                id="nueva-marca"
+                className="w-full"
+                marcas={opciones.marcas}
+                valor={marca}
+                onCambio={setMarca}
+                incluirTodas={false}
+                incluirNinguna
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="nueva-red">Red *</Label>
+              <SelectorRed
+                id="nueva-red"
+                className="w-full"
+                redes={opciones.redes}
+                valor={red}
+                onCambio={setRed}
+                incluirTodas={false}
+                incluirNinguna
+              />
+            </div>
+          </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="nueva-url">Enlace *</Label>
-            <Input
-              id="nueva-url"
-              placeholder="https://www.instagram.com/p/…"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
-            {url && !urlValida && (
-              <p className="text-xs text-amber-600 dark:text-amber-400">
-                El enlace debe empezar por http:// o https://.
-              </p>
-            )}
+            <Label htmlFor="nueva-post">Publicación *</Label>
+            <Select
+              value={idPost}
+              onValueChange={elegirPost}
+              disabled={!marcaParam || !redParam || posts.length === 0}
+            >
+              <SelectTrigger id="nueva-post">
+                <SelectValue placeholder="Selecciona una publicación…" />
+              </SelectTrigger>
+              <SelectContent>
+                {posts.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {etiquetaPost(p)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {ayudaPosts() && <p className="text-xs text-muted-foreground">{ayudaPosts()}</p>}
           </div>
 
           <div className="space-y-1.5">
@@ -165,43 +242,6 @@ export function DialogoNueva({
                 onChange={(e) => setCampania(e.target.value)}
               />
             </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="nueva-marca">Marca</Label>
-              <SelectorMarca
-                id="nueva-marca"
-                className="w-full"
-                marcas={opciones.marcas}
-                valor={marca}
-                onCambio={setMarca}
-                incluirTodas={false}
-                incluirNinguna
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="nueva-red">Red</Label>
-              <SelectorRed
-                id="nueva-red"
-                className="w-full"
-                redes={opciones.redes}
-                valor={red}
-                onCambio={setRed}
-                incluirTodas={false}
-                incluirNinguna
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="nueva-publicado">Fecha de publicación</Label>
-            <Input
-              id="nueva-publicado"
-              type="date"
-              value={publicado}
-              onChange={(e) => setPublicado(e.target.value)}
-            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

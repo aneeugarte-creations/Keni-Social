@@ -28,7 +28,7 @@ def test_opciones(cliente):
     assert {"marcas", "redes", "estados", "metricas"} <= datos.keys()
     ids_estado = {e["id"] for e in datos["estados"]}
     assert {"activa", "pausada", "cerrada"} == ids_estado
-    assert {m["id"] for m in datos["metricas"]} == {"interacciones", "alcance"}
+    assert {m["id"] for m in datos["metricas"]} == {"interacciones", "visualizaciones", "alcance"}
 
 
 def test_crear_y_detalle(cliente):
@@ -61,6 +61,53 @@ def test_crear_url_invalida(cliente):
     r = cliente.post("/api/comercial/publicaciones", json={"url": "no-es-un-enlace"})
     assert r.status_code == 400
     assert "http" in r.json()["error"]
+
+
+def test_posts_seleccionables(cliente):
+    """El selector de posts responde con estructura y procedencia (muestra en test)."""
+    r = cliente.get("/api/comercial/posts?marca=unotv&red=instagram")
+    assert r.status_code == 200, r.text
+    datos = r.json()
+    assert isinstance(datos["posts"], list)
+    assert datos["es_muestra"] is True
+    assert datos["fuente"] == "muestra"
+
+
+def test_posts_marca_invalida(cliente):
+    r = cliente.get("/api/comercial/posts?marca=no-existe")
+    assert r.status_code == 400
+
+
+def test_crear_por_post_seleccionado(cliente):
+    """Alta por `id_post_metricool` + marca + red (sin pegar enlace)."""
+    r = cliente.post(
+        "/api/comercial/publicaciones",
+        json={
+            "id_post_metricool": "post-abc-123",
+            "marca": "unotv",
+            "red": "instagram",
+            "titulo": "Pieza seleccionada",
+            "publicado": _hace_dias(10),
+        },
+    )
+    assert r.status_code == 201, r.text
+    pub = r.json()["publicacion"]
+    assert pub["id_post_metricool"] == "post-abc-123"
+    assert pub["marca"] == "unotv"
+    assert pub["red"] == "instagram"
+
+
+def test_crear_por_id_post_exige_marca_y_red(cliente):
+    sin_marca = cliente.post(
+        "/api/comercial/publicaciones",
+        json={"id_post_metricool": "x", "red": "instagram"},
+    )
+    assert sin_marca.status_code == 400
+    sin_red = cliente.post(
+        "/api/comercial/publicaciones",
+        json={"id_post_metricool": "x", "marca": "unotv"},
+    )
+    assert sin_red.status_code == 400
 
 
 def test_crear_marca_invalida(cliente):

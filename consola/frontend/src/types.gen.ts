@@ -486,6 +486,7 @@ export interface RespuestaPanel {
 export interface ActualComercial {
   ts: string;
   interacciones: number;
+  visualizaciones: number;
   alcance: number;
   engagement_pct: number;
 }
@@ -495,7 +496,29 @@ export interface ActualComercial {
 export interface SnapshotComercial {
   ts: string;
   interacciones: number;
+  visualizaciones: number;
   alcance: number;
+}
+/**
+ * Un post real de Metricool elegible para monitorizar (`GET /api/comercial/posts`).
+ */
+export interface PostSeleccionableComercial {
+  id: string;
+  red: string;
+  titulo: string;
+  publicado: string;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  url?: string | null;
+}
+/**
+ * Listado de posts seleccionables + procedencia (muestra vs real).
+ */
+export interface RespuestaPostsComercial {
+  posts: PostSeleccionableComercial[];
+  fuente: string;
+  es_muestra: boolean;
 }
 /**
  * Una pieza comercial monitoreada (`api/comercial._a_dict`).
@@ -506,6 +529,7 @@ export interface SnapshotComercial {
 export interface PublicacionComercial {
   id: string;
   url: string;
+  id_post_metricool: string;
   titulo: string;
   marca: string;
   marca_nombre: string;
@@ -513,7 +537,7 @@ export interface PublicacionComercial {
   campania: string;
   red: string;
   red_nombre: string;
-  metrica_objetivo: "interacciones" | "alcance";
+  metrica_objetivo: "interacciones" | "visualizaciones" | "alcance";
   objetivo: number;
   estado: "activa" | "pausada" | "cerrada";
   publicado: string;

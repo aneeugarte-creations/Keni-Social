@@ -152,7 +152,7 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
         <EstadoVacio
           icono={Megaphone}
           titulo="Aún no monitoreas ninguna publicación"
-          texto="Pega el enlace de una pieza comercial y le daremos seguimiento a interacciones y alcance hasta que llegue su KPI."
+          texto="Elige una publicación ya hecha de tus redes y le daremos seguimiento a interacciones y visualizaciones hasta que llegue su KPI."
           accion={
             <Button onClick={() => setNuevaAbierta(true)}>
               <Plus className="h-4 w-4" />
@@ -163,7 +163,7 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
       ) : (
         <div className="space-y-6">
           {listaQuery.data?.es_muestra && <AvisoMuestra />}
-          <Kpis publicaciones={todas} />
+          <Kpis publicaciones={todas} esMuestra={Boolean(listaQuery.data?.es_muestra)} />
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative w-full sm:max-w-xs">
@@ -191,7 +191,11 @@ function Panel({ opciones }: { opciones: OpcionesComercial }) {
             </Select>
           </div>
 
-          <Tabla publicaciones={filtradas} onAbrir={setDetalleId} />
+          <Tabla
+            publicaciones={filtradas}
+            esMuestra={Boolean(listaQuery.data?.es_muestra)}
+            onAbrir={setDetalleId}
+          />
         </div>
       )}
 
@@ -238,19 +242,37 @@ function TarjetaKpi({ etiqueta, valor, titulo }: { etiqueta: string; valor: stri
   );
 }
 
-function Kpis({ publicaciones }: { publicaciones: PublicacionComercial[] }) {
+// Métrica de volumen mostrada en el listado: visualizaciones (datos reales de Metricool)
+// o alcance (modo muestra; Metricool no da alcance por pieza).
+function volumenLista(esMuestra: boolean): {
+  etiqueta: string;
+  valor: (p: PublicacionComercial) => number;
+} {
+  return esMuestra
+    ? { etiqueta: "Alcance", valor: (p) => p.actual.alcance }
+    : { etiqueta: "Visualizaciones", valor: (p) => p.actual.visualizaciones };
+}
+
+function Kpis({
+  publicaciones,
+  esMuestra,
+}: {
+  publicaciones: PublicacionComercial[];
+  esMuestra: boolean;
+}) {
   const activas = publicaciones.filter((p) => p.estado === "activa").length;
   const alcanzadas = publicaciones.filter((p) => p.alcanzado).length;
-  const alcanceTotal = publicaciones.reduce((s, p) => s + p.actual.alcance, 0);
+  const vol = volumenLista(esMuestra);
+  const volTotal = publicaciones.reduce((s, p) => s + vol.valor(p), 0);
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <TarjetaKpi etiqueta="En seguimiento" valor={numeroCompleto(publicaciones.length)} />
       <TarjetaKpi etiqueta="Activas" valor={numeroCompleto(activas)} />
       <TarjetaKpi etiqueta="Objetivo alcanzado" valor={numeroCompleto(alcanzadas)} />
       <TarjetaKpi
-        etiqueta="Alcance acumulado"
-        valor={numeroCompacto(alcanceTotal)}
-        titulo={numeroCompleto(alcanceTotal)}
+        etiqueta={`${vol.etiqueta} acumulado`}
+        valor={numeroCompacto(volTotal)}
+        titulo={numeroCompleto(volTotal)}
       />
     </div>
   );
@@ -258,11 +280,14 @@ function Kpis({ publicaciones }: { publicaciones: PublicacionComercial[] }) {
 
 function Tabla({
   publicaciones,
+  esMuestra,
   onAbrir,
 }: {
   publicaciones: PublicacionComercial[];
+  esMuestra: boolean;
   onAbrir: (id: string) => void;
 }) {
+  const vol = volumenLista(esMuestra);
   return (
     <Card>
       <CardContent className="p-0">
@@ -272,7 +297,7 @@ function Tabla({
               <TableHead className="pl-6">Publicación</TableHead>
               <TableHead>Red</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead className="text-right">Alcance</TableHead>
+              <TableHead className="text-right">{vol.etiqueta}</TableHead>
               <TableHead className="text-right">Interacciones</TableHead>
               <TableHead className="pr-6">Objetivo</TableHead>
             </TableRow>
@@ -295,8 +320,11 @@ function Tabla({
                     onClick={() => onAbrir(p.id)}
                   >
                     <TableCell className="pl-6">
-                      <span className="block max-w-[20rem] truncate font-medium" title={p.titulo || p.url}>
-                        {p.titulo || p.url}
+                      <span
+                        className="block max-w-[20rem] truncate font-medium"
+                        title={p.titulo || p.url || "Publicación"}
+                      >
+                        {p.titulo || p.url || "Publicación"}
                       </span>
                       {sub && <span className="block text-xs text-muted-foreground">{sub}</span>}
                     </TableCell>
@@ -310,8 +338,11 @@ function Tabla({
                     <TableCell>
                       <Badge variant={estado.variante}>{estado.texto}</Badge>
                     </TableCell>
-                    <TableCell className="text-right tabular-nums" title={numeroCompleto(p.actual.alcance)}>
-                      {numeroCompacto(p.actual.alcance)}
+                    <TableCell
+                      className="text-right tabular-nums"
+                      title={numeroCompleto(vol.valor(p))}
+                    >
+                      {numeroCompacto(vol.valor(p))}
                     </TableCell>
                     <TableCell
                       className="text-right tabular-nums"

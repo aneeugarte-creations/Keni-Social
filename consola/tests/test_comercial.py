@@ -115,6 +115,69 @@ def test_reporte_campania_agrega(entorno):
     assert "Datos de muestra" in md
 
 
+def test_post_real_arranca_serie_hacia_delante(entorno, monkeypatch):
+    """En modo real (Metricool) la captura lee el dato real y la serie NO se rellena hacia atrás."""
+    monkeypatch.setattr(comercial, "fuente_actual", lambda: "metricool")
+    lectura = {"interacciones": 1500, "visualizaciones": 42000, "encontrado": True}
+    monkeypatch.setattr(comercial.metricas_pieza, "recalcular", lambda m, r, i: lectura)
+
+    pub = comercial.registrar(
+        id_post_metricool="post-1",
+        marca="unotv",
+        red="instagram",
+        titulo="Real",
+        publicado=_hace_dias(30),
+        metrica_objetivo="interacciones",
+        objetivo=1000,
+    )
+    serie = comercial.serie(pub["id"])
+    assert len(serie) == 1  # solo el punto "ahora": Metricool no da histórico por pieza
+    assert serie[0]["visualizaciones"] == 42000
+    assert serie[0]["alcance"] == 0  # el alcance no viene por pieza en modo real
+
+    actual = comercial.resumen_actual(pub)
+    assert actual["visualizaciones"] == 42000
+    assert actual["interacciones"] == 1500
+    assert actual["engagement_pct"] == round(1500 / 42000 * 100, 2)
+    assert pub["aviso_en"]  # 1500 interacciones >= objetivo 1000
+
+
+def test_captura_real_sin_datos_no_inserta(entorno, monkeypatch):
+    """Si Metricool aún no tiene datos del post, NO se inserta un snapshot falso."""
+    monkeypatch.setattr(comercial, "fuente_actual", lambda: "metricool")
+    monkeypatch.setattr(
+        comercial.metricas_pieza,
+        "recalcular",
+        lambda m, r, i: {"encontrado": False, "interacciones": 0, "visualizaciones": 0},
+    )
+    pub = comercial.registrar(
+        id_post_metricool="post-x", marca="unotv", red="instagram", publicado=_hace_dias(1)
+    )
+    assert comercial.serie(pub["id"]) == []  # serie vacía, sin ceros falsos
+    actual = comercial.resumen_actual(pub)
+    assert actual["interacciones"] == 0
+    assert actual["visualizaciones"] == 0
+
+
+def test_reporte_real_no_marca_muestra(entorno, monkeypatch):
+    """Con fuente real, el reporte deja de marcarse como dato de muestra."""
+    monkeypatch.setattr(comercial, "fuente_actual", lambda: "metricool")
+    monkeypatch.setattr(
+        comercial.metricas_pieza,
+        "recalcular",
+        lambda m, r, i: {"interacciones": 200, "visualizaciones": 9000, "encontrado": True},
+    )
+    pub = comercial.registrar(
+        id_post_metricool="post-2", marca="unotv", red="instagram", titulo="Pieza"
+    )
+    rep = comercial.reporte_publicacion(pub)
+    assert rep["es_muestra"] is False
+    assert rep["fuente"] == "metricool"
+    md = comercial.render_markdown_reporte(rep)
+    assert "Datos de muestra" not in md
+    assert "Visualizaciones" in md
+
+
 def test_iniciar_captura_programada_arranca_hilo(entorno):
     """El scheduler arranca un hilo demonio y captura al menos una vez."""
     comercial.registrar(URL, estado="activa", publicado=_hace_dias(2))

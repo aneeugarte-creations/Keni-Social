@@ -66,6 +66,8 @@ export type {
   RespuestaPanel,
   ActualComercial,
   SnapshotComercial,
+  PostSeleccionableComercial,
+  RespuestaPostsComercial,
   PublicacionComercial,
   RespuestaPublicacionesComercial,
   RespuestaPublicacionComercial,
@@ -2569,7 +2571,7 @@ export interface CuerpoActualizarSugerencia {
 // --- Comercial (seguimiento de publicaciones comerciales) ---
 
 export type EstadoComercial = "activa" | "pausada" | "cerrada";
-export type MetricaComercial = "interacciones" | "alcance";
+export type MetricaComercial = "interacciones" | "visualizaciones" | "alcance";
 
 // `SnapshotComercial`, `ActualComercial`, `PublicacionComercial` (`api/comercial._a_dict`)
 // y las respuestas `RespuestaPublicacionesComercial`/`RespuestaPublicacionComercial`/
@@ -2597,7 +2599,10 @@ export interface OpcionesComercial {
 }
 
 export interface CuerpoCrearComercial {
-  url: string;
+  /** Identidad preferida: el post real de Metricool elegido en el selector. */
+  id_post_metricool?: string;
+  /** Derivada del post (opcional); legado para el alta por enlace en demo. */
+  url?: string;
   titulo?: string;
   marca?: string;
   cliente?: string;
@@ -2610,7 +2615,9 @@ export interface CuerpoCrearComercial {
   notas?: string;
 }
 
-export type CuerpoActualizarComercial = Partial<Omit<CuerpoCrearComercial, "url">>;
+export type CuerpoActualizarComercial = Partial<
+  Omit<CuerpoCrearComercial, "url" | "id_post_metricool">
+>;
 
 export interface FiltrosComercial {
   estado?: string;

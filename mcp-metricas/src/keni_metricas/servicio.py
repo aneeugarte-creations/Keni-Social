@@ -87,6 +87,7 @@ __all__ = [
     "construir_analisis_diario",
     "analisis_diario_markdown",
     "construir_analitica_piezas",
+    "construir_listado_piezas",
     "construir_tendencia_diaria",
     "construir_metricas_pieza",
     "etiqueta_rango",
@@ -225,6 +226,42 @@ def construir_analitica_piezas(rango: str = "mes", marca: str | None = None) -> 
         distribucion=_estadisticas.buckets_engagement(piezas),
     )
     return analitica.model_dump(mode="json")
+
+
+def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> list[dict]:
+    """Lista los posts YA PUBLICADOS del periodo, para SELECCIONARLOS (no para rankear).
+
+    A diferencia de `construir_analitica_piezas` (top/peores + distribucion), esto
+    devuelve el listado COMPLETO de piezas de la(s) cuenta(s) en alcance, ordenado por
+    fecha de publicacion descendente (lo mas reciente primero), pensado para un selector:
+    el apartado Comercial lo usa para elegir QUE pieza monitorizar por su `id` de
+    Metricool, sin que nadie pegue enlaces a mano.
+
+    Cada elemento trae lo necesario para identificar y previsualizar el post: `id`
+    (id de Metricool), `red`, `titulo`, `publicado` (ISO), `visualizaciones`,
+    `interacciones`, `engagement_pct` y `url`. Reusa `mejores_piezas` (coste de API ya
+    pagado por el dashboard). `marca=None` agrega todas las cuentas en alcance.
+    Propaga `ValueError` (rango invalido) y `CuentaNoEncontrada` (marca fuera de alcance).
+    """
+    fuente = _fuente(marca)
+    piezas = []
+    for c in fuente.cuentas():
+        piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
+    # Orden estable: mas recientes primero; a igualdad de fecha, mayor engagement antes.
+    piezas.sort(key=lambda p: (p.publicado.isoformat(), p.engagement_pct), reverse=True)
+    return [
+        {
+            "id": p.id,
+            "red": p.plataforma.value,
+            "titulo": p.titulo,
+            "publicado": p.publicado.isoformat(),
+            "visualizaciones": p.visualizaciones,
+            "interacciones": p.interacciones,
+            "engagement_pct": p.engagement_pct,
+            "url": p.url,
+        }
+        for p in piezas
+    ]
 
 
 def construir_tendencia_diaria(rango: str = "mes", marca: str | None = None) -> dict:

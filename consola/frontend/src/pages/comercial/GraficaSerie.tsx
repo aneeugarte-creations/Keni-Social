@@ -20,7 +20,7 @@ export function GraficaSerie({
   color,
 }: {
   serie: SnapshotComercial[];
-  metrica: "interacciones" | "alcance";
+  metrica: "interacciones" | "visualizaciones" | "alcance";
   titulo: string;
   color: string;
 }) {

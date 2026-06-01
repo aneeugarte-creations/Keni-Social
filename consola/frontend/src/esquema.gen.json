@@ -1543,6 +1543,9 @@
         "interacciones": {
           "type": "integer"
         },
+        "visualizaciones": {
+          "type": "integer"
+        },
         "alcance": {
           "type": "integer"
         },
@@ -1554,6 +1557,7 @@
       "required": [
         "ts",
         "interacciones",
+        "visualizaciones",
         "alcance",
         "engagement_pct"
       ]
@@ -1568,6 +1572,9 @@
         "interacciones": {
           "type": "integer"
         },
+        "visualizaciones": {
+          "type": "integer"
+        },
         "alcance": {
           "type": "integer"
         }
@@ -1576,7 +1583,79 @@
       "required": [
         "ts",
         "interacciones",
+        "visualizaciones",
         "alcance"
+      ]
+    },
+    "PostSeleccionableComercial": {
+      "type": "object",
+      "title": "PostSeleccionableComercial",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "publicado": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Un post real de Metricool elegible para monitorizar (`GET /api/comercial/posts`).",
+      "required": [
+        "id",
+        "red",
+        "titulo",
+        "publicado",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct"
+      ]
+    },
+    "RespuestaPostsComercial": {
+      "type": "object",
+      "title": "RespuestaPostsComercial",
+      "properties": {
+        "posts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PostSeleccionableComercial"
+          }
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "es_muestra": {
+          "type": "boolean"
+        }
+      },
+      "description": "Listado de posts seleccionables + procedencia (muestra vs real).",
+      "required": [
+        "posts",
+        "fuente",
+        "es_muestra"
       ]
     },
     "PublicacionComercial": {
@@ -1587,6 +1666,9 @@
           "type": "string"
         },
         "url": {
+          "type": "string"
+        },
+        "id_post_metricool": {
           "type": "string"
         },
         "titulo": {
@@ -1613,6 +1695,7 @@
         "metrica_objetivo": {
           "enum": [
             "interacciones",
+            "visualizaciones",
             "alcance"
           ]
         },
@@ -1667,6 +1750,7 @@
       "required": [
         "id",
         "url",
+        "id_post_metricool",
         "titulo",
         "marca",
         "marca_nombre",
@@ -1906,6 +1990,12 @@
     },
     {
       "$ref": "#/$defs/SnapshotComercial"
+    },
+    {
+      "$ref": "#/$defs/PostSeleccionableComercial"
+    },
+    {
+      "$ref": "#/$defs/RespuestaPostsComercial"
     },
     {
       "$ref": "#/$defs/PublicacionComercial"
