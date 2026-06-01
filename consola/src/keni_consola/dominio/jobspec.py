@@ -29,6 +29,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from . import copy as dom_copy
 from . import hashtags as dom_hashtags
 from . import qa_editorial as dom_qa
 from . import skills as dom_skills
@@ -206,14 +207,14 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return dom_qa.construir_procesar_qa(p["marca"], p.get("titulo", ""), autor=autor)
 
     if kind == PROC_DOCUMENTO:
-        return dom_skills.construir_procesar_documento(
+        return dom_copy.construir_procesar_documento(
             p["skill"], p["marca"], titulo_base=p.get("titulo_base", ""),
             titulo_dado=p.get("titulo_dado", ""), con_imagenes=bool(p.get("con_imagenes")),
             autor=autor,
         )
 
     if kind == PROC_COPY:
-        procesar_copy = dom_skills.construir_procesar_copy(
+        procesar_copy = dom_copy.construir_procesar_copy(
             p["skill"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
             titulo_dado=p.get("titulo_dado", ""), texto_base=p.get("texto_base", ""),
             con_imagenes=bool(p.get("con_imagenes")), autor=autor,
