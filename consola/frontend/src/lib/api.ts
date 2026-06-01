@@ -49,8 +49,6 @@ import type {
   CuerpoCrearFranja,
   CuerpoCrearRun,
   CuerpoCrearFuenteRss,
-  CuerpoCrearPublicacion,
-  CuerpoCrearPublicacionesLote,
   CuerpoActualizarContenido,
   CuerpoActualizarEtiqueta,
   CuerpoActualizarPlataforma,
@@ -134,7 +132,6 @@ import type {
   RespuestaGuardarModeloImagen,
   RespuestaPublicacion,
   RespuestaPublicaciones,
-  RespuestaColaAprobacion,
   RespuestaPanel,
   RespuestaListaDia,
   RespuestaImportPreview,
@@ -695,16 +692,6 @@ export const api = {
       signal,
       validador: "RespuestaPublicaciones",
     }),
-  publicacion: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, {
-      signal,
-      validador: "RespuestaPublicacion",
-      muestrear: false,
-    }),
-  crearPublicacion: (cuerpo: CuerpoCrearPublicacion) =>
-    peticion<RespuestaPublicacion>("/publicaciones", { metodo: "POST", json: cuerpo }),
-  crearPublicacionesLote: (cuerpo: CuerpoCrearPublicacionesLote) =>
-    peticion<RespuestaPublicaciones>("/publicaciones/lote", { metodo: "POST", json: cuerpo }),
   actualizarPublicacion: (id: string, cuerpo: CuerpoActualizarPublicacion) =>
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, {
       metodo: "PUT",
@@ -732,8 +719,6 @@ export const api = {
   // dentro FORWARDEAN a la cadena: `enviarARevision` crea una cadena SIMPLE (1 nivel) y deja
   // la pieza en revisión; `aprobar`/`rechazar` deciden el nivel actual de esa cadena.
   // Programar NO es aprobación (es programación) y NO publica de verdad: gated por #5/#8.
-  colaAprobacion: (signal?: AbortSignal) =>
-    peticion<RespuestaColaAprobacion>("/aprobacion/cola", { signal }),
   /** Envía una publicación a revisión: crea la cadena de aprobación simple (borrador → en revisión). */
   enviarARevision: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/enviar-a-revision`, {
@@ -748,11 +733,6 @@ export const api = {
   rechazarPublicacion: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/rechazar`, {
       metodo: "POST",
-    }),
-  programarPublicacion: (id: string, fecha: string) =>
-    peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/programar`, {
-      metodo: "POST",
-      json: { fecha },
     }),
 
   // --- Panel ligero (#9): dashboard de un vistazo (métricas + cola + próximas) ---
