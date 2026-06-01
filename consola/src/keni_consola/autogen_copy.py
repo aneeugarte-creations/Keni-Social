@@ -174,6 +174,9 @@ def lanzar_para_topic(item: dict[str, Any]) -> dict[str, Any] | None:
         titulo_dado=(item.get("titulo") or "").strip()[:300],
         texto_base=nota,
         autor=None,
+        # Lista viva: el borrador auto-generado cuelga del tema origen (su tarjeta lo
+        # muestra y sigue fluyendo por aprobacion/programador), no como contenido suelto.
+        contenido_id=item.get("id") or "",
     )
     # Dedup: marca el tema como ya encolado (solo si el encolado no lanzo). Best-effort.
     et_id = _id_etiqueta_autogen()

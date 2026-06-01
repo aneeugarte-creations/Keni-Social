@@ -161,3 +161,48 @@ def crear_borrador(
         autor=autor,
     )
     return publicacion_a_dict(pub)
+
+
+def crear_borrador_en(
+    contenido_id: str,
+    marca: str,
+    red: str,
+    *,
+    titulo: str = "",
+    contenido: str = "",
+    veredicto: str = "",
+    imagen: str = "",
+    evergreen: bool = False,
+) -> dict[str, Any] | None:
+    """Adjunta un BORRADOR a un `contenido` (tema) EXISTENTE y lo devuelve serializado.
+
+    Variante de `crear_borrador` que NIDA la pieza bajo un tema del tablero en vez de crear
+    su propio padre (peticion de Angel: el borrador auto-generado cuelga del tema origen).
+    Crea una fila `contenido_plataforma` con `es_publicacion=1`, estado `pendiente`
+    (== `borrador` editorial) y `falta_copy=False` (la pieza YA trae copy), de modo que:
+
+      - aparece en `/api/publicaciones` y en `cola_de_aprobacion` (ambos filtran
+        `es_publicacion=1`), igual que cualquier borrador, y
+      - se muestra en la tarjeta del tema (es una fila por plataforma de ESE `contenido`).
+
+    Sigue siendo el contrato de C: la pieza nace `borrador` (estado `pendiente` de
+    plataforma); el resto del flujo (revision/programacion/publicacion) es de C. Devuelve la
+    forma publica de la publicacion, o `None` si el tema no existe (no nidamos en el vacio:
+    el caller decide si cae al borrador suelto). NO se pasa `autor`: la atribucion del tema
+    es la del `contenido` padre (que ya existe); el copy no reescribe su autor.
+    """
+    if not contenido_id or repos.obtener_contenido(contenido_id) is None:
+        return None
+    plat = repos.crear_contenido_plataforma(
+        contenido_id=contenido_id,
+        red=red,
+        estado="pendiente",
+        falta_copy=False,
+        copy=contenido,
+        imagen=imagen,
+        veredicto=veredicto,
+        evergreen=evergreen,
+        es_publicacion=True,
+    )
+    pub = repos.obtener_publicacion(plat["id"])
+    return publicacion_a_dict(pub) if pub is not None else None
