@@ -4,7 +4,6 @@ import {
   CircleSlash,
   ExternalLink,
   Loader2,
-  Pencil,
   Plus,
   RefreshCw,
   Rss,
@@ -18,7 +17,9 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
@@ -224,83 +225,68 @@ function FilaFuente({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Acción primaria = editar el feed. Activar/desactivar y borrar van al menú
+  // contextual / kebab; el estado se comunica con la insignia "Inactivo" y la
+  // opacidad de la fila, así que el icono de toggle persistente sobra.
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: fuente.activo ? "Desactivar" : "Activar",
+      icono: fuente.activo ? CircleSlash : CheckCircle2,
+      onClick: () => alternarActivo.mutate(),
+      activo: fuente.activo,
+      deshabilitado: alternarActivo.isPending,
+    },
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => {
+        if (window.confirm(`¿Borrar el feed "${fuente.nombre}"?`)) borrar.mutate();
+      },
+      destructivo: true,
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
-    <div
+    <FilaConAcciones
+      como="div"
+      onPrimaria={onEditar}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de "${fuente.nombre}"`}
+      kebab="hover"
       className={cn(
-        "space-y-2 rounded-md border border-border p-3",
+        "space-y-2 rounded-md border border-border p-3 pr-10",
         !fuente.activo && "opacity-60",
       )}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium">{fuente.nombre}</span>
-            {fuente.marca && (
-              <Badge variant="outline" className="font-normal">
-                {fuente.marca_nombre || fuente.marca}
-              </Badge>
-            )}
-            {!fuente.activo && (
-              <Badge variant="secondary" className="font-normal">
-                Inactivo
-              </Badge>
-            )}
-          </div>
-          <a
-            href={fuente.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex max-w-full items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
-            title={fuente.url}
-          >
-            <span className="truncate">{fuente.url}</span>
-            <ExternalLink className="h-3 w-3 shrink-0" />
-          </a>
+      <div className="min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">{fuente.nombre}</span>
+          {fuente.marca && (
+            <Badge variant="outline" className="font-normal">
+              {fuente.marca_nombre || fuente.marca}
+            </Badge>
+          )}
+          {!fuente.activo && (
+            <Badge variant="secondary" className="font-normal">
+              Inactivo
+            </Badge>
+          )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Tooltip label={fuente.activo ? "Desactivar" : "Activar"}>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={fuente.activo ? "Desactivar feed" : "Activar feed"}
-              className="text-muted-foreground"
-              onClick={() => alternarActivo.mutate()}
-              disabled={alternarActivo.isPending}
-            >
-              {alternarActivo.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : fuente.activo ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                <CircleSlash className="h-4 w-4" />
-              )}
-            </Button>
-          </Tooltip>
-          <Tooltip label="Editar">
-            <Button variant="ghost" size="icon" aria-label="Editar feed" onClick={onEditar}>
-              <Pencil className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip label="Borrar">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Borrar feed"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => borrar.mutate()}
-              disabled={borrar.isPending}
-            >
-              {borrar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
-          </Tooltip>
-        </div>
+        <a
+          href={fuente.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex max-w-full items-center gap-1 text-xs text-muted-foreground hover:text-foreground hover:underline"
+          title={fuente.url}
+        >
+          <span className="truncate">{fuente.url}</span>
+          <ExternalLink className="h-3 w-3 shrink-0" />
+        </a>
       </div>
       <SaludFeed fuente={fuente} />
-    </div>
+    </FilaConAcciones>
   );
 }
 

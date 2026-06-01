@@ -11,6 +11,8 @@ import { CalendarClock, Clock, Loader2, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import { MARCA_TODAS, marcaParam, RED_TODAS, redParam } from "@/components/comunes/selectores";
@@ -143,7 +145,11 @@ function FormularioFranja({
   );
 }
 
-/** Una fila de franja con acción de borrado. */
+/**
+ * Una fila de franja. Las franjas no se editan (se recrean), así que la fila no
+ * tiene acción primaria: borrar vive en el menú contextual (click derecho) y en
+ * el kebab "⋮", con confirmación.
+ */
 function FilaFranja({ franja }: { franja: Franja }) {
   const queryClient = useQueryClient();
   const borrar = useMutation({
@@ -155,9 +161,29 @@ function FilaFranja({ franja }: { franja: Franja }) {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const etiquetaFranja = `${nombreDiaCorto(franja.dia_semana)} ${franja.hora}`;
+
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => {
+        if (window.confirm(`¿Borrar la franja "${etiquetaFranja}"?`)) borrar.mutate();
+      },
+      destructivo: true,
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+    <FilaConAcciones
+      como="div"
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de la franja "${etiquetaFranja}"`}
+      kebab="hover"
+      className="rounded-md border border-border"
+    >
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2 pr-10 text-sm">
         <span className="inline-flex items-center gap-1.5 font-medium">
           <Clock className="h-3.5 w-3.5 text-muted-foreground" />
           {nombreDiaCorto(franja.dia_semana)} {franja.hora}
@@ -177,22 +203,7 @@ function FilaFranja({ franja }: { franja: Franja }) {
           </>
         )}
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Borrar franja"
-        title="Borrar"
-        className="text-muted-foreground hover:text-destructive"
-        onClick={() => borrar.mutate()}
-        disabled={borrar.isPending}
-      >
-        {borrar.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Trash2 className="h-4 w-4" />
-        )}
-      </Button>
-    </div>
+    </FilaConAcciones>
   );
 }
 

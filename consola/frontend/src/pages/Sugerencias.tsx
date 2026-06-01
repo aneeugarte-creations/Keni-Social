@@ -5,6 +5,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,6 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip } from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Sugerencia } from "@/types";
@@ -300,9 +301,35 @@ function TarjetaSugerencia({
 
   const fecha = formatearFecha(sugerencia.creada);
 
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => {
+        if (
+          window.confirm(
+            `¿Borrar la sugerencia “${sugerencia.titulo}”? Esta acción no se puede deshacer.`,
+          )
+        )
+          borrar.mutate();
+      },
+      destructivo: true,
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
-    <Card className={cn(sugerencia.estado === "descartada" && "opacity-60")}>
-      <CardContent className="space-y-3 p-4">
+    <FilaConAcciones
+      como="div"
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de “${sugerencia.titulo}”`}
+      kebab="hover"
+      className={cn(
+        "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
+        sugerencia.estado === "descartada" && "opacity-60",
+      )}
+    >
+      <div className="space-y-3 p-4 pr-10">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
@@ -340,28 +367,12 @@ function TarjetaSugerencia({
                 ))}
               </SelectContent>
             </Select>
-            <Tooltip label="Borrar">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Borrar sugerencia"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => borrar.mutate()}
-                disabled={borrar.isPending}
-              >
-                {borrar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </Button>
-            </Tooltip>
           </div>
         </div>
         {sugerencia.detalle && (
           <Markdown className="text-muted-foreground">{sugerencia.detalle}</Markdown>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </FilaConAcciones>
   );
 }

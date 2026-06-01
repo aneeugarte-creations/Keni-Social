@@ -6,7 +6,6 @@ import {
   CalendarPlus,
   Copy,
   ImageIcon,
-  Loader2,
   Pencil,
   RefreshCw,
   Send,
@@ -14,15 +13,15 @@ import {
   Trash2,
 } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { marcaMetricasDesdeCanonica } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tooltip } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +31,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api, ApiError, urlMedia } from "@/lib/api";
-import { cn } from "@/lib/utils";
 import type { Publicacion } from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
@@ -45,7 +43,11 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-/** Una tarjeta de publicación con estado, fecha y acciones. */
+/**
+ * Una tarjeta de publicación. Click izquierdo sobre la tarjeta = editar (acción
+ * primaria); el resto de operaciones viven en el menú contextual (click derecho) y en
+ * el kebab "⋮", sin hilera de botones-icono.
+ */
 function TarjetaPublicacion({
   publicacion,
   onEditar,
@@ -58,6 +60,7 @@ function TarjetaPublicacion({
   onGestionarFranjas: () => void;
 }) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [confirmarBorrado, setConfirmarBorrado] = React.useState(false);
   const proximo = siguienteEstado(publicacion.estado);
   const imagen = urlMedia(publicacion.imagen_url || publicacion.imagen);
@@ -159,10 +162,86 @@ function TarjetaPublicacion({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Acción primaria = editar. Las demás operaciones, condicionadas por estado, en el menú.
+  const acciones: EntradaMenuContextual[] = [
+    { etiqueta: "Editar", icono: Pencil, onClick: () => onEditar(publicacion) },
+    ...(proximo
+      ? [
+          {
+            etiqueta: `Avanzar a "${metaEstado(proximo).nombre}"`,
+            icono: ArrowRight,
+            onClick: () => avanzar.mutate(),
+            deshabilitado: avanzar.isPending,
+          },
+        ]
+      : []),
+    { separador: true },
+    {
+      etiqueta: "Añadir a la cola",
+      icono: CalendarPlus,
+      onClick: () => encolar.mutate(),
+      deshabilitado: encolar.isPending,
+    },
+    ...(publicacion.estado === "aprobado" || publicacion.estado === "programado"
+      ? [
+          {
+            etiqueta: "Programar en Metricool",
+            icono: Send,
+            onClick: () => programarMetricool.mutate(),
+            deshabilitado: programarMetricool.isPending,
+          },
+        ]
+      : []),
+    ...(publicacion.estado === "publicado" || publicacion.evergreen
+      ? [
+          {
+            etiqueta: "Reciclar (volver a publicar)",
+            icono: RefreshCw,
+            onClick: () => reciclar.mutate(),
+            deshabilitado: reciclar.isPending,
+          },
+        ]
+      : []),
+    ...(publicacion.estado === "publicado"
+      ? [
+          {
+            etiqueta: "Ver métricas de la marca",
+            icono: BarChart3,
+            onClick: () =>
+              navigate("/analiticas/metricas", {
+                state: { marca: marcaMetricasDesdeCanonica(publicacion.marca) },
+              }),
+          },
+        ]
+      : []),
+    {
+      etiqueta: publicacion.evergreen ? "Quitar de perennes" : "Marcar como perenne",
+      icono: Sprout,
+      onClick: () => alternarEvergreen.mutate(),
+      activo: publicacion.evergreen,
+      deshabilitado: alternarEvergreen.isPending,
+    },
+    { etiqueta: "Duplicar", icono: Copy, onClick: () => onDuplicar(publicacion) },
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => setConfirmarBorrado(true),
+      destructivo: true,
+    },
+  ];
+
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex min-w-0 flex-1 gap-3">
+    <>
+      <FilaConAcciones
+        como="div"
+        onPrimaria={() => onEditar(publicacion)}
+        acciones={acciones}
+        etiquetaAcciones={`Acciones de "${publicacion.titulo}"`}
+        kebab="hover"
+        className="rounded-lg border border-border bg-card text-card-foreground shadow-sm transition-colors hover:border-foreground/20"
+      >
+        <div className="flex min-w-0 flex-1 gap-3 py-4 pl-4 pr-10">
           {imagen && (
             <img
               src={imagen}
@@ -218,138 +297,7 @@ function TarjetaPublicacion({
             )}
           </div>
         </div>
-
-        <div className="flex shrink-0 flex-wrap items-center gap-1">
-          {proximo && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => avanzar.mutate()}
-              disabled={avanzar.isPending}
-              title={`Avanzar a "${metaEstado(proximo).nombre}"`}
-            >
-              {avanzar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <ArrowRight className="h-4 w-4" />
-              )}
-              {metaEstado(proximo).nombre}
-            </Button>
-          )}
-          <Tooltip label="Añadir a la cola">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Añadir a la cola"
-              onClick={() => encolar.mutate()}
-              disabled={encolar.isPending}
-            >
-              {encolar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CalendarPlus className="h-4 w-4" />
-              )}
-            </Button>
-          </Tooltip>
-          {(publicacion.estado === "aprobado" || publicacion.estado === "programado") && (
-            <Tooltip label="Programar en Metricool (preview si el envío real está apagado)">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Programar en Metricool"
-                onClick={() => programarMetricool.mutate()}
-                disabled={programarMetricool.isPending}
-              >
-                {programarMetricool.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
-              </Button>
-            </Tooltip>
-          )}
-          {publicacion.estado === "publicado" && (
-            <Tooltip label="Ver métricas de esta marca">
-              <Button asChild variant="ghost" size="icon" aria-label="Ver métricas">
-                <Link
-                  to="/analiticas/metricas"
-                  state={{ marca: marcaMetricasDesdeCanonica(publicacion.marca) }}
-                >
-                  <BarChart3 className="h-4 w-4" />
-                </Link>
-              </Button>
-            </Tooltip>
-          )}
-          {(publicacion.estado === "publicado" || publicacion.evergreen) && (
-            <Tooltip label="Reciclar (volver a publicar)">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Reciclar publicación"
-                onClick={() => reciclar.mutate()}
-                disabled={reciclar.isPending}
-              >
-                {reciclar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-              </Button>
-            </Tooltip>
-          )}
-          <Tooltip label={publicacion.evergreen ? "Quitar de perennes" : "Marcar como perenne"}>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={publicacion.evergreen ? "Quitar perenne" : "Marcar perenne"}
-              className={cn(
-                publicacion.evergreen
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-muted-foreground",
-              )}
-              onClick={() => alternarEvergreen.mutate()}
-              disabled={alternarEvergreen.isPending}
-            >
-              {alternarEvergreen.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sprout className="h-4 w-4" />
-              )}
-            </Button>
-          </Tooltip>
-          <Tooltip label="Duplicar">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Duplicar publicación"
-              onClick={() => onDuplicar(publicacion)}
-            >
-              <Copy className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip label="Editar">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Editar publicación"
-              onClick={() => onEditar(publicacion)}
-            >
-              <Pencil className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip label="Borrar">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Borrar publicación"
-              className="text-muted-foreground hover:text-destructive"
-              onClick={() => setConfirmarBorrado(true)}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </Tooltip>
-        </div>
-      </CardContent>
+      </FilaConAcciones>
 
       <Dialog open={confirmarBorrado} onOpenChange={setConfirmarBorrado}>
         <DialogContent>
@@ -373,7 +321,7 @@ function TarjetaPublicacion({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </>
   );
 }
 

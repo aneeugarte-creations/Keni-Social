@@ -1,15 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Send, ShieldAlert, Trash2, Webhook as WebhookIcon } from "lucide-react";
+import {
+  Pause,
+  Play,
+  Plus,
+  Send,
+  ShieldAlert,
+  Trash2,
+  Webhook as WebhookIcon,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
   CardContent,
   CardDescription,
   CardHeader,
@@ -200,41 +209,55 @@ function TarjetaWebhook({ webhook }: { webhook: Webhook }) {
 
   const escuchaTodos = webhook.eventos.length === 0;
 
+  const acciones: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Probar",
+      icono: Send,
+      onClick: () => probar.mutate(),
+      deshabilitado: probar.isPending,
+    },
+    {
+      etiqueta: webhook.activo ? "Pausar" : "Activar",
+      icono: webhook.activo ? Pause : Play,
+      onClick: () => alternar.mutate(),
+      deshabilitado: alternar.isPending,
+    },
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => {
+        if (
+          window.confirm(
+            `¿Borrar el webhook “${webhook.nombre || webhook.url}”? Esta acción no se puede deshacer.`,
+          )
+        )
+          eliminar.mutate();
+      },
+      destructivo: true,
+      deshabilitado: eliminar.isPending,
+    },
+  ];
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <CardTitle className="flex items-center gap-2 text-base">
-              {webhook.nombre || "(sin nombre)"}
-              <Badge variant={webhook.activo ? "default" : "secondary"}>
-                {webhook.activo ? "Activo" : "Pausado"}
-              </Badge>
-              <Badge variant="outline">{ETIQUETA_FORMATO[webhook.formato]}</Badge>
-              {webhook.tiene_secreto && <Badge variant="outline">Firmado</Badge>}
-            </CardTitle>
-            <CardDescription className="mt-1 break-all">{webhook.url}</CardDescription>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => probar.mutate()}
-              disabled={probar.isPending}
-              title="Enviar un evento de prueba"
-            >
-              <Send className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => eliminar.mutate()}
-              disabled={eliminar.isPending}
-              title="Borrar webhook"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
+    <FilaConAcciones
+      como="div"
+      acciones={acciones}
+      etiquetaAcciones={`Acciones del webhook “${webhook.nombre || webhook.url}”`}
+      kebab="hover"
+      className="rounded-lg border border-border bg-card text-card-foreground shadow-sm"
+    >
+      <CardHeader className="pb-3 pr-10">
+        <div className="min-w-0">
+          <CardTitle className="flex items-center gap-2 text-base">
+            {webhook.nombre || "(sin nombre)"}
+            <Badge variant={webhook.activo ? "default" : "secondary"}>
+              {webhook.activo ? "Activo" : "Pausado"}
+            </Badge>
+            <Badge variant="outline">{ETIQUETA_FORMATO[webhook.formato]}</Badge>
+            {webhook.tiene_secreto && <Badge variant="outline">Firmado</Badge>}
+          </CardTitle>
+          <CardDescription className="mt-1 break-all">{webhook.url}</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2 text-sm">
@@ -247,23 +270,13 @@ function TarjetaWebhook({ webhook }: { webhook: Webhook }) {
             </Badge>
           ))
         )}
-        <span className="ml-auto flex items-center gap-2">
-          {webhook.ultimo_estado && (
-            <span className="text-xs text-muted-foreground">
-              Última entrega: {webhook.ultimo_estado}
-            </span>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => alternar.mutate()}
-            disabled={alternar.isPending}
-          >
-            {webhook.activo ? "Pausar" : "Activar"}
-          </Button>
-        </span>
+        {webhook.ultimo_estado && (
+          <span className="ml-auto text-xs text-muted-foreground">
+            Última entrega: {webhook.ultimo_estado}
+          </span>
+        )}
       </CardContent>
-    </Card>
+    </FilaConAcciones>
   );
 }
 

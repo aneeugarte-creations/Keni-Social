@@ -10,6 +10,8 @@ import { Hash, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
@@ -135,7 +137,10 @@ function FormularioGrupo({
   );
 }
 
-/** Una fila de grupo guardado con acciones de editar/borrar. */
+/**
+ * Una fila de grupo guardado. Click izquierdo sobre la fila = editar (acción
+ * primaria); borrar vive en el menú contextual (click derecho) y en el kebab "⋮".
+ */
 function FilaGrupo({
   grupo,
   onEditar,
@@ -153,9 +158,31 @@ function FilaGrupo({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Acción primaria = editar. Borrar, al menú (con confirmación).
+  const acciones: EntradaMenuContextual[] = [
+    { etiqueta: "Editar", icono: Pencil, onClick: () => onEditar(grupo) },
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => {
+        if (window.confirm(`¿Borrar el grupo "${grupo.nombre}"?`)) borrar.mutate();
+      },
+      destructivo: true,
+      deshabilitado: borrar.isPending,
+    },
+  ];
+
   return (
-    <div className="flex items-start justify-between gap-3 rounded-md border border-border p-3">
-      <div className="min-w-0 space-y-1.5">
+    <FilaConAcciones
+      como="div"
+      onPrimaria={() => onEditar(grupo)}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de "${grupo.nombre}"`}
+      kebab="hover"
+      className="rounded-md border border-border"
+    >
+      <div className="min-w-0 space-y-1.5 p-3 pr-10">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{grupo.nombre}</span>
           {grupo.marca && (
@@ -172,33 +199,7 @@ function FilaGrupo({
           ))}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Editar grupo"
-          title="Editar"
-          onClick={() => onEditar(grupo)}
-        >
-          <Pencil className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Borrar grupo"
-          title="Borrar"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={() => borrar.mutate()}
-          disabled={borrar.isPending}
-        >
-          {borrar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-        </Button>
-      </div>
-    </div>
+    </FilaConAcciones>
   );
 }
 

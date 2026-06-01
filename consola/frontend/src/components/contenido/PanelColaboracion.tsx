@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   History,
   MessageSquare,
+  MoreVertical,
   RotateCcw,
   ShieldCheck,
   Trash2,
@@ -28,6 +29,11 @@ import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import {
+  MenuContextual,
+  type EntradaMenuContextual,
+} from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,7 +51,6 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Tooltip } from "@/components/ui/tooltip";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
@@ -226,51 +231,57 @@ function Comentarios({ contenido }: { contenido: Contenido }) {
         <EstadoVacio titulo="Sin comentarios" texto="Arranca la conversación del equipo." />
       ) : (
         <ul className="space-y-2">
-          {comentarios.map((c) => (
-            <li
-              key={c.id}
-              className={cn(
-                "rounded-md border p-2 text-sm",
-                c.resuelto && "bg-muted/40 opacity-70",
-              )}
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <Autor nombre={c.autor_nombre} className="text-xs" />
-                <span className="flex items-center gap-2 text-xs text-muted-foreground">
-                  {fecha(c.creado)}
-                  {c.resuelto && (
-                    <Badge variant="ok" className="font-normal">
-                      Resuelto
-                    </Badge>
-                  )}
-                </span>
-              </div>
-              <p className="whitespace-pre-wrap break-words">{c.texto}</p>
-              <div className="mt-1.5 flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => resolver.mutate({ id: c.id, resuelto: !c.resuelto })}
-                  disabled={resolver.isPending}
-                >
-                  {c.resuelto ? "Reabrir" : "Marcar resuelto"}
-                </Button>
-                <Tooltip label="Borrar comentario">
+          {comentarios.map((c) => {
+            const acciones: EntradaMenuContextual[] = [
+              {
+                etiqueta: "Borrar comentario",
+                icono: Trash2,
+                onClick: () => {
+                  if (window.confirm("¿Borrar este comentario? No se puede deshacer."))
+                    borrar.mutate(c.id);
+                },
+                destructivo: true,
+                deshabilitado: borrar.isPending,
+              },
+            ];
+            return (
+              <FilaConAcciones
+                key={c.id}
+                como="li"
+                acciones={acciones}
+                etiquetaAcciones="Acciones del comentario"
+                kebab="hover"
+                className={cn(
+                  "rounded-md border p-2 pr-10 text-sm",
+                  c.resuelto && "bg-muted/40 opacity-70",
+                )}
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <Autor nombre={c.autor_nombre} className="text-xs" />
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {fecha(c.creado)}
+                    {c.resuelto && (
+                      <Badge variant="ok" className="font-normal">
+                        Resuelto
+                      </Badge>
+                    )}
+                  </span>
+                </div>
+                <p className="whitespace-pre-wrap break-words">{c.texto}</p>
+                <div className="mt-1.5 flex items-center gap-1">
                   <Button
                     variant="ghost"
-                    size="icon"
-                    aria-label="Borrar comentario"
-                    className="ml-auto h-6 w-6 text-muted-foreground hover:text-destructive"
-                    onClick={() => borrar.mutate(c.id)}
-                    disabled={borrar.isPending}
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => resolver.mutate({ id: c.id, resuelto: !c.resuelto })}
+                    disabled={resolver.isPending}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    {c.resuelto ? "Reabrir" : "Marcar resuelto"}
                   </Button>
-                </Tooltip>
-              </div>
-            </li>
-          ))}
+                </div>
+              </FilaConAcciones>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -341,34 +352,47 @@ function Versiones({ plataforma }: { plataforma: ContenidoPlataforma }) {
         <EstadoVacio titulo="Sin versiones previas" texto="Cada cambio de copy queda aquí." />
       ) : (
         <ul className="space-y-2">
-          {versiones.map((v) => (
-            <li key={v.id} className="rounded-md border p-2 text-sm">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="flex items-center gap-2">
-                  <Badge variant="secondary" className="font-normal">
-                    v{v.version}
-                  </Badge>
-                  <Autor nombre={v.autor_nombre} className="text-xs" />
-                </span>
-                <span className="text-xs text-muted-foreground">{fecha(v.creado)}</span>
-              </div>
-              {v.nota && <p className="mb-1 text-xs italic text-muted-foreground">{v.nota}</p>}
-              <p className="whitespace-pre-wrap break-words text-muted-foreground">
-                {v.copy || <span className="italic">(copy vacío)</span>}
-              </p>
-              <div className="mt-1.5 flex justify-end">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => revertir.mutate(v.id)}
-                  disabled={revertir.isPending}
-                >
-                  <RotateCcw className="mr-1 h-3 w-3" /> Revertir a esta
-                </Button>
-              </div>
-            </li>
-          ))}
+          {versiones.map((v) => {
+            const acciones: EntradaMenuContextual[] = [
+              {
+                etiqueta: "Revertir a esta",
+                icono: RotateCcw,
+                onClick: () => {
+                  if (
+                    window.confirm(
+                      `¿Revertir el copy a la versión v${v.version}? El copy actual se registrará como una versión nueva.`,
+                    )
+                  )
+                    revertir.mutate(v.id);
+                },
+                deshabilitado: revertir.isPending,
+              },
+            ];
+            return (
+              <FilaConAcciones
+                key={v.id}
+                como="li"
+                acciones={acciones}
+                etiquetaAcciones={`Acciones de la versión v${v.version}`}
+                kebab="hover"
+                className="rounded-md border p-2 pr-10 text-sm"
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <Badge variant="secondary" className="font-normal">
+                      v{v.version}
+                    </Badge>
+                    <Autor nombre={v.autor_nombre} className="text-xs" />
+                  </span>
+                  <span className="text-xs text-muted-foreground">{fecha(v.creado)}</span>
+                </div>
+                {v.nota && <p className="mb-1 text-xs italic text-muted-foreground">{v.nota}</p>}
+                <p className="whitespace-pre-wrap break-words text-muted-foreground">
+                  {v.copy || <span className="italic">(copy vacío)</span>}
+                </p>
+              </FilaConAcciones>
+            );
+          })}
         </ul>
       )}
     </div>
@@ -410,6 +434,23 @@ function Aprobacion({ plataforma }: { plataforma: ContenidoPlataforma }) {
   const cadena = query.data;
   const niveles = cadena?.niveles ?? [];
 
+  const accionesCadena: EntradaMenuContextual[] = [
+    {
+      etiqueta: "Reiniciar cadena",
+      icono: RotateCcw,
+      onClick: () => {
+        if (
+          window.confirm(
+            "¿Reiniciar la cadena de aprobación? Se perderán las decisiones registradas.",
+          )
+        )
+          crear.mutate();
+      },
+      destructivo: true,
+      deshabilitado: crear.isPending,
+    },
+  ];
+
   if (query.isLoading) {
     return <p className="text-sm text-muted-foreground">Cargando…</p>;
   }
@@ -439,15 +480,21 @@ function Aprobacion({ plataforma }: { plataforma: ContenidoPlataforma }) {
         >
           {ESTADO_CADENA_LABEL[cadena!.estado]}
         </Badge>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-2 text-xs"
-          onClick={() => crear.mutate()}
-          disabled={crear.isPending}
+        <MenuContextual
+          items={accionesCadena}
+          disparador="click"
+          etiqueta="Acciones de la cadena"
         >
-          <RotateCcw className="mr-1 h-3 w-3" /> Reiniciar cadena
-        </Button>
+          <button
+            type="button"
+            aria-label="Más acciones"
+            aria-haspopup="menu"
+            title="Más acciones"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <MoreVertical className="h-4 w-4" />
+          </button>
+        </MenuContextual>
       </div>
       <ol className="space-y-2">
         {niveles.map((n) => {

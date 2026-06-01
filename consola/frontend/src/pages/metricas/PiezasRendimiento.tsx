@@ -14,8 +14,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, LayoutList } from "lucide-react";
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -109,6 +111,9 @@ function ContenidoRendimiento({ marca }: { marca?: string }) {
             <TableHead className="text-right">Vistas</TableHead>
             <TableHead className="text-right">Interac.</TableHead>
             <TableHead className="text-right">Eng.</TableHead>
+            <TableHead className="w-10">
+              <span className="sr-only">Acciones</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -122,29 +127,33 @@ function ContenidoRendimiento({ marca }: { marca?: string }) {
 }
 
 function FilaPieza({ pieza }: { pieza: PiezaRendimiento }) {
+  const navigate = useNavigate();
+  const titulo = pieza.titulo || "(sin título)";
+
+  // Acción primaria = abrir la pieza en el tablero (resaltada por su contenido_id).
+  // "Abrir en la red" (si hay url) queda como acción secundaria en el menú.
+  const acciones: EntradaMenuContextual[] = pieza.url
+    ? [
+        {
+          etiqueta: "Abrir en la red",
+          icono: ExternalLink,
+          onClick: () => window.open(pieza.url!, "_blank", "noopener,noreferrer"),
+        },
+      ]
+    : [];
+
   return (
-    <TableRow>
+    <FilaConAcciones
+      como="tr"
+      onPrimaria={() => navigate(enlaceTablero(pieza.contenido_id))}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de "${titulo}"`}
+      kebab="hover"
+    >
       <TableCell className="max-w-[20rem]">
-        <div className="flex items-center gap-1.5">
-          <Link
-            to={enlaceTablero(pieza.contenido_id)}
-            className="truncate font-medium hover:underline"
-            title={pieza.titulo || "(sin título)"}
-          >
-            {pieza.titulo || "(sin título)"}
-          </Link>
-          {pieza.url && (
-            <a
-              href={pieza.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-              aria-label="Abrir pieza en la red"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </a>
-          )}
-        </div>
+        <span className="block truncate font-medium" title={titulo}>
+          {titulo}
+        </span>
         <span className="text-xs text-muted-foreground">
           {pieza.marca_nombre} · {pieza.red}
         </span>
@@ -169,6 +178,6 @@ function FilaPieza({ pieza }: { pieza: PiezaRendimiento }) {
           </Badge>
         </TableCell>
       )}
-    </TableRow>
+    </FilaConAcciones>
   );
 }

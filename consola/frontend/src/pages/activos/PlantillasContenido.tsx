@@ -13,6 +13,8 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRed } from "@/components/comunes/SelectorRed";
 import {
@@ -25,7 +27,7 @@ import { clavesEnEstructura } from "@/components/plantillas/util";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -413,7 +415,12 @@ export default function PlantillasContenido() {
   );
 }
 
-/** Tarjeta de una plantilla con su acción de "Aplicar" (rellenar variables). */
+/**
+ * Tarjeta de una plantilla. Click izquierdo sobre la tarjeta = editar (acción
+ * primaria); editar y borrar viven también en el menú contextual (click derecho)
+ * y en el kebab "⋮". El CTA "Aplicar" (rellenar variables) se mantiene como botón
+ * dominante full-width abajo.
+ */
 function TarjetaPlantilla({
   plantilla,
   onEditar,
@@ -426,30 +433,33 @@ function TarjetaPlantilla({
   borrando: boolean;
 }) {
   const [aplicando, setAplicando] = React.useState(false);
+
+  // Acción primaria = editar. Editar (explícito) + borrar (con confirmación), al menú.
+  const acciones: EntradaMenuContextual[] = [
+    { etiqueta: "Editar", icono: Pencil, onClick: onEditar },
+    { separador: true },
+    {
+      etiqueta: "Borrar",
+      icono: Trash2,
+      onClick: () => {
+        if (window.confirm(`¿Borrar la plantilla "${plantilla.nombre}"?`)) onBorrar();
+      },
+      destructivo: true,
+      deshabilitado: borrando,
+    },
+  ];
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base">{plantilla.nombre}</CardTitle>
-          <div className="flex shrink-0 gap-0.5">
-            <Button variant="ghost" size="icon" onClick={onEditar} aria-label="Editar plantilla">
-              <Pencil className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onBorrar}
-              disabled={borrando}
-              aria-label="Borrar plantilla"
-            >
-              {borrando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </div>
+    <FilaConAcciones
+      como="div"
+      onPrimaria={onEditar}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de "${plantilla.nombre}"`}
+      kebab="hover"
+      className="rounded-xl border border-border bg-card text-card-foreground"
+    >
+      <CardHeader className="pb-2 pr-10">
+        <CardTitle className="text-base">{plantilla.nombre}</CardTitle>
         <div className="flex flex-wrap gap-1.5">
           <Badge variant={plantilla.modo === "plano" ? "default" : "secondary"}>
             {plantilla.modo === "plano" ? "Texto plano" : "Estructura"}
@@ -476,6 +486,6 @@ function TarjetaPlantilla({
         abierto={aplicando}
         onCerrar={() => setAplicando(false)}
       />
-    </Card>
+    </FilaConAcciones>
   );
 }

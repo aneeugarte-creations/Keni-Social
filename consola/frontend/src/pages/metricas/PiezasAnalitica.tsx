@@ -15,6 +15,8 @@ import { BarChart } from "@tremor/react";
 import { BarChart3, ExternalLink } from "lucide-react";
 import * as React from "react";
 
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -169,40 +171,53 @@ function TablaPiezas({ titulo, piezas }: { titulo: string; piezas: PiezaMetrica[
               <TableHead>Pieza</TableHead>
               <TableHead className="text-right">Vistas</TableHead>
               <TableHead className="text-right">Eng.</TableHead>
+              <TableHead className="w-10">
+                <span className="sr-only">Acciones</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {piezas.map((p) => (
-              <TableRow key={`${p.plataforma}-${p.id}`}>
-                <TableCell className="max-w-[16rem]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate" title={p.titulo}>
-                      {p.titulo}
-                    </span>
-                    {p.url && (
-                      <a
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 text-muted-foreground hover:text-foreground"
-                        aria-label="Abrir pieza"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    )}
-                  </div>
-                  <span className="text-xs text-muted-foreground">{p.plataforma}</span>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">
-                  {numeroCompacto(p.visualizaciones)}
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{porcentaje(p.engagement_pct)}</TableCell>
-              </TableRow>
+              <FilaAnalitica key={`${p.plataforma}-${p.id}`} pieza={p} />
             ))}
           </TableBody>
         </Table>
       )}
     </div>
+  );
+}
+
+function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
+  // Acción primaria = abrir la pieza en la red (cuando hay url). "Abrir en la red"
+  // queda también como acción secundaria en el menú (click derecho / kebab).
+  const abrir = pieza.url
+    ? () => window.open(pieza.url!, "_blank", "noopener,noreferrer")
+    : undefined;
+  const acciones: EntradaMenuContextual[] = pieza.url
+    ? [{ etiqueta: "Abrir en la red", icono: ExternalLink, onClick: abrir! }]
+    : [];
+
+  return (
+    <FilaConAcciones
+      como="tr"
+      onPrimaria={abrir}
+      acciones={acciones}
+      etiquetaAcciones={`Acciones de "${pieza.titulo}"`}
+      kebab="hover"
+    >
+      <TableCell className="max-w-[16rem]">
+        <span className="block truncate" title={pieza.titulo}>
+          {pieza.titulo}
+        </span>
+        <span className="text-xs text-muted-foreground">{pieza.plataforma}</span>
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {numeroCompacto(pieza.visualizaciones)}
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {porcentaje(pieza.engagement_pct)}
+      </TableCell>
+    </FilaConAcciones>
   );
 }
 

@@ -287,7 +287,11 @@ describe("Tablero de contenido", () => {
     expect(screen.getByRole("button", { name: /mejorar copy con IA/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Detalle de la pieza/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Prioridad")).toBeInTheDocument();
-    expect(screen.getByLabelText("Borrar contenido")).toBeInTheDocument();
+    // "Borrar contenido" ya no es un icono suelto: vive en el menú de acciones (kebab).
+    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
+    expect(
+      await screen.findByRole("menuitem", { name: /Borrar contenido/i }),
+    ).toBeInTheDocument();
   });
 
   it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {

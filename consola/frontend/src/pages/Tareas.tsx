@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   ListTodo,
   MessageSquare,
+  MoreVertical,
   Pencil,
   Plus,
   Rows3,
@@ -32,6 +33,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -1044,10 +1047,16 @@ function ChipEtiqueta({
 function BarraAccionesPieza({
   contenido,
   abrirDetalle = false,
+  abrirDetalleRef,
 }: {
   contenido: Contenido;
   /** Deep-link `?abrir=`: si es esta pieza, abre su panel de detalle al montar. */
   abrirDetalle?: boolean;
+  /**
+   * Si se pasa, expone al padre la acción "abrir detalle" para que el cuerpo de la
+   * tarjeta sea clicable (acción primaria) sin duplicar el estado del panel aquí.
+   */
+  abrirDetalleRef?: React.MutableRefObject<(() => void) | null>;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
@@ -1059,6 +1068,11 @@ function BarraAccionesPieza({
   React.useEffect(() => {
     if (abrirDetalle && esContenido) setColaboracionAbierta(true);
   }, [abrirDetalle, esContenido]);
+
+  // Expone "abrir detalle" al padre (TarjetaContenido) para su cuerpo clicable.
+  if (abrirDetalleRef) {
+    abrirDetalleRef.current = esContenido ? () => setColaboracionAbierta(true) : null;
+  }
 
   const cambiarPrioridad = useMutation({
     mutationFn: (prioridad: Contenido["prioridad"]) =>
@@ -1121,22 +1135,42 @@ function BarraAccionesPieza({
           </Button>
         </Tooltip>
       )}
-      <Tooltip label="Borrar">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Borrar contenido"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={() => borrar.mutate()}
+      <MenuContextual
+        disparador="click"
+        etiqueta={`Acciones de "${contenido.titulo}"`}
+        items={[
+          {
+            etiqueta: "Borrar contenido",
+            icono: Trash2,
+            destructivo: true,
+            deshabilitado: borrar.isPending,
+            onClick: () => {
+              if (
+                window.confirm(
+                  `¿Borrar "${contenido.titulo}"? Esta acción no se puede deshacer.`,
+                )
+              ) {
+                borrar.mutate();
+              }
+            },
+          },
+        ]}
+      >
+        <button
+          type="button"
+          aria-label="Más acciones"
+          aria-haspopup="menu"
+          title="Más acciones"
           disabled={borrar.isPending}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {borrar.isPending ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Trash2 className="h-4 w-4" />
+            <MoreVertical className="h-4 w-4" />
           )}
-        </Button>
-      </Tooltip>
+        </button>
+      </MenuContextual>
       {esContenido && (
         <DialogoAsistente
           abierto={asistenteAbierto}
@@ -1174,6 +1208,9 @@ function TarjetaContenido({
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
+  // Acción primaria del cuerpo de la tarjeta: abrir el detalle. La capacidad la expone
+  // `BarraAccionesPieza` (dueña del estado del panel) a través de esta ref.
+  const abrirDetalleRef = React.useRef<(() => void) | null>(null);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -1205,6 +1242,7 @@ function TarjetaContenido({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const esContenido = contenido.clase === "contenido";
   const redesUsadas = new Set(contenido.plataformas.map((p) => p.red));
   const redesDisponibles = catalogos.redes.filter((r) => !redesUsadas.has(r.id));
   const asignadas = contenido.etiquetas ?? [];
@@ -1214,7 +1252,26 @@ function TarjetaContenido({
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1.5">
+          <div
+            className={cn(
+              "min-w-0 space-y-1.5",
+              esContenido && "-m-1 cursor-pointer rounded-md p-1 hover:bg-accent/40",
+            )}
+            role={esContenido ? "button" : undefined}
+            tabIndex={esContenido ? 0 : undefined}
+            onClick={esContenido ? () => abrirDetalleRef.current?.() : undefined}
+            onKeyDown={
+              esContenido
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      abrirDetalleRef.current?.();
+                    }
+                  }
+                : undefined
+            }
+            title={esContenido ? "Ver detalle: comentarios, versiones de copy y aprobación" : undefined}
+          >
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium leading-snug">{contenido.titulo}</span>
               {contenido.plataformas.some((p) => p.es_publicacion) && (
@@ -1249,7 +1306,11 @@ function TarjetaContenido({
               )}
             </div>
           </div>
-          <BarraAccionesPieza contenido={contenido} abrirDetalle={abrirDetalle} />
+          <BarraAccionesPieza
+            contenido={contenido}
+            abrirDetalle={abrirDetalle}
+            abrirDetalleRef={abrirDetalleRef}
+          />
         </div>
 
         {contenido.descripcion && (
@@ -1564,18 +1625,38 @@ function FilaPlataforma({
           </Badge>
         ) : null}
       </Button>
-      <Tooltip label="Quitar plataforma">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label={`Quitar ${plataforma.red_nombre}`}
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={() => borrar.mutate()}
+      <MenuContextual
+        disparador="click"
+        etiqueta={`Acciones de ${plataforma.red_nombre}`}
+        items={[
+          {
+            etiqueta: "Quitar plataforma",
+            icono: Trash2,
+            destructivo: true,
+            deshabilitado: borrar.isPending,
+            onClick: () => {
+              if (
+                window.confirm(
+                  `¿Quitar la plataforma ${plataforma.red_nombre} de esta pieza? Esta acción no se puede deshacer.`,
+                )
+              ) {
+                borrar.mutate();
+              }
+            },
+          },
+        ]}
+      >
+        <button
+          type="button"
+          aria-label={`Más acciones de ${plataforma.red_nombre}`}
+          aria-haspopup="menu"
+          title="Más acciones"
           disabled={borrar.isPending}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </Tooltip>
+          <MoreVertical className="h-3.5 w-3.5" />
+        </button>
+      </MenuContextual>
       </div>
       {editorAbierto && (
         <EditorCopy
@@ -2431,9 +2512,37 @@ function DialogoEtiquetas({
                     </Button>
                   </div>
                 ) : (
-                  <div
+                  <FilaConAcciones
                     key={e.id}
-                    className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-sm"
+                    como="div"
+                    onPrimaria={() => empezarEdicion(e)}
+                    etiquetaAcciones={`Acciones de la etiqueta ${e.nombre}`}
+                    kebab="hover"
+                    claseKebab="top-1.5"
+                    acciones={[
+                      {
+                        etiqueta: "Editar",
+                        icono: Pencil,
+                        onClick: () => empezarEdicion(e),
+                      },
+                      { separador: true },
+                      {
+                        etiqueta: "Borrar etiqueta",
+                        icono: Trash2,
+                        destructivo: true,
+                        deshabilitado: borrar.isPending,
+                        onClick: () => {
+                          if (
+                            window.confirm(
+                              `¿Borrar la etiqueta "${e.nombre}"? Esta acción no se puede deshacer.`,
+                            )
+                          ) {
+                            borrar.mutate(e.id);
+                          }
+                        },
+                      },
+                    ]}
+                    className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 pr-10 text-sm transition-colors hover:border-foreground/20"
                   >
                     <Tag className="h-3.5 w-3.5 text-muted-foreground" />
                     <span className="font-medium">{e.nombre}</span>
@@ -2443,27 +2552,7 @@ function DialogoEtiquetas({
                     <Badge variant="outline" className="font-normal">
                       {e.marca_nombre || "Global"}
                     </Badge>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Editar etiqueta ${e.nombre}`}
-                      className="ml-auto h-7 w-7 text-muted-foreground hover:text-foreground"
-                      onClick={() => empezarEdicion(e)}
-                      disabled={borrar.isPending}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Borrar etiqueta ${e.nombre}`}
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => borrar.mutate(e.id)}
-                      disabled={borrar.isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                  </FilaConAcciones>
                 ),
               )}
             </div>
