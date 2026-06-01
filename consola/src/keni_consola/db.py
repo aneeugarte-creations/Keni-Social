@@ -104,6 +104,8 @@ __all__ = [
     "TIPOS_COBERTURA",
     "TIPOS_AUSENCIA",
     "actualizar_franja_semana",
+    "actualizar_fuente_rss",
+    "actualizar_grupo_hashtags",
     "actualizar_evento_rota",
     "actualizar_pieza_rota",
     "actualizar_programa_rota",
@@ -115,7 +117,10 @@ __all__ = [
     "arrancar_persistencia",
     "borrar_ausencia_rota",
     "borrar_evento_rota",
+    "borrar_franja",
     "borrar_franja_semana",
+    "borrar_fuente_rss",
+    "borrar_grupo_hashtags",
     "borrar_pieza_rota",
     "borrar_piezas_rota_lote",
     "borrar_programa_rota",
@@ -125,12 +130,18 @@ __all__ = [
     "borrar_turnos_rota_lote",
     "borrar_turnos_semana_rota",
     "cancelar_job",
+    "claves_vistas",
     "conectar",
+    "contar_fuentes_rss",
+    "contar_grupos_hashtags",
     "contar_piezas_por_programa",
     "copiar_turnos_rota",
     "crear_ausencia_rota",
     "crear_evento_rota",
+    "crear_franja",
     "crear_franja_semana",
+    "crear_fuente_rss",
+    "crear_grupo_hashtags",
     "crear_pieza_rota",
     "crear_programa_rota",
     "crear_publicacion_comercial",
@@ -146,7 +157,10 @@ __all__ = [
     "job_cancelado",
     "listar_ausencias_rota",
     "listar_eventos_rota",
+    "listar_franjas",
     "listar_franjas_semana",
+    "listar_fuentes_rss",
+    "listar_grupos_hashtags",
     "listar_piezas_rota",
     "listar_programas_rota",
     "listar_publicaciones_comerciales",
@@ -154,15 +168,19 @@ __all__ = [
     "listar_swaps_turno",
     "listar_turnos_rota",
     "marcar_aviso_comercial",
+    "marcar_item",
     "obtener_ausencia_rota",
     "obtener_evento_rota",
     "obtener_franja_semana",
+    "obtener_fuente_rss",
+    "obtener_grupo_hashtags",
     "obtener_pieza_rota",
     "obtener_programa_rota",
     "obtener_publicacion_comercial",
     "obtener_swap_turno",
     "obtener_turno_rota",
     "reclamar_job",
+    "registrar_salud_fuente_rss",
     "registrar_snapshot_comercial",
     "sembrar_franjas_por_defecto",
     "terminar_job",
@@ -844,6 +862,73 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_contenido_etiquetas_etiqueta "
     "ON contenido_etiquetas (etiqueta_id)",
+    # CONTENIDO editorial reutilizable que ERA file-backed (YAML + indice SQLite de rutas
+    # absolutas) y cerro su rezago a Postgres (ADR 0006). Antes vivian en `ficheros.py` con un
+    # `indice.sqlite` de rutas ABSOLUTAS que, al recrear contenedores, quedaba apuntando a
+    # rutas viejas -> la pagina de Fuentes RSS aparecia VACIA. En Postgres no hay indice de
+    # rutas que se desincronice. Mismo dialecto portable que el resto del esquema.
+    #
+    # Fuentes RSS: una fuente de noticias por marca, con filtros (incluir/excluir CSV),
+    # redes por defecto (`redes_def` CSV) y telemetria de salud del ultimo refresco
+    # (`ultima_actualizacion`/`ultimo_error`/`ultimo_conteo`). `activo` 0/1. `creado` preserva
+    # el orden "recientes primero" (paridad con el indice file-backed). `fecha` = dia de alta.
+    """
+    CREATE TABLE IF NOT EXISTS fuentes_rss (
+        id                    TEXT PRIMARY KEY,
+        nombre                TEXT NOT NULL DEFAULT '',
+        url                   TEXT NOT NULL DEFAULT '',
+        marca                 TEXT NOT NULL DEFAULT '',
+        fecha                 TEXT NOT NULL DEFAULT '',
+        activo                INTEGER NOT NULL DEFAULT 1,
+        incluir               TEXT NOT NULL DEFAULT '',
+        excluir               TEXT NOT NULL DEFAULT '',
+        redes_def             TEXT NOT NULL DEFAULT '',
+        ultima_actualizacion  TEXT NOT NULL DEFAULT '',
+        ultimo_error          TEXT NOT NULL DEFAULT '',
+        ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
+        creado                TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_marca ON fuentes_rss (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_rss_creado ON fuentes_rss (creado)",
+    # Items RSS ya VISTOS/usados por fuente. Antes un mapa `{fuente_id: [clave]}` en
+    # `.keni/rss-vistos.yaml` por marca; aqui una fila por (fuente_id, clave). PK compuesta
+    # evita duplicados y hace `marcar_item(usado=True)` idempotente. SIN FK (igual que el
+    # resto del esquema): `marcar_item` NO exige que la fuente exista (paridad con el file-backed).
+    """
+    CREATE TABLE IF NOT EXISTS rss_items_vistos (
+        fuente_id  TEXT NOT NULL,
+        clave      TEXT NOT NULL,
+        PRIMARY KEY (fuente_id, clave)
+    )
+    """,
+    # Grupos de hashtags reutilizables (nombre + lista de tags JSON) por marca. `hashtags`
+    # es un JSON serializado de strings (igual patron que `biblioteca_media.etiquetas`).
+    # `creado` preserva el orden "recientes primero".
+    """
+    CREATE TABLE IF NOT EXISTS grupos_hashtags (
+        id        TEXT PRIMARY KEY,
+        nombre    TEXT NOT NULL DEFAULT '',
+        marca     TEXT NOT NULL DEFAULT '',
+        hashtags  TEXT NOT NULL DEFAULT '[]',
+        creado    TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_grupos_hashtags_marca ON grupos_hashtags (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_grupos_hashtags_creado ON grupos_hashtags (creado)",
+    # Franjas EDITORIALES (dia_semana 0-6 + hora) por marca/red: huecos recurrentes de la
+    # parrilla editorial. DISTINTAS de `rota_franjas`/`rota_config_franjas` (franjas horarias
+    # del equipo). Tabla nueva `franjas_editoriales` para no colisionar con `rota_franjas`.
+    """
+    CREATE TABLE IF NOT EXISTS franjas_editoriales (
+        id          TEXT PRIMARY KEY,
+        marca       TEXT NOT NULL DEFAULT '',
+        red         TEXT NOT NULL DEFAULT '',
+        dia_semana  INTEGER NOT NULL DEFAULT 0,
+        hora        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_franjas_editoriales_marca ON franjas_editoriales (marca)",
 )
 
 
@@ -882,6 +967,8 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_programas(con)
     _migrar_columnas_usuarios(con)
     _migrar_columnas_plantilla_contenido(con)
+    _migrar_columnas_fuentes_rss(con)
+    _migrar_columnas_grupos_hashtags(con)
     con.commit()
 
 
@@ -4004,6 +4091,451 @@ def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
             }
         )
     return salida
+
+
+# --------------------------------------------------------------------------- #
+# CONTENIDO editorial reutilizable migrado de FICHEROS a Postgres (ADR 0006)    #
+# --------------------------------------------------------------------------- #
+# Fuentes RSS (+ items vistos + salud), grupos de hashtags y franjas editoriales eran los
+# ULTIMOS rezagados file-backed (YAML + indice SQLite de rutas absolutas). Su indice de
+# rutas se desincronizaba al recrear contenedores (Fuentes RSS aparecia vacia). Aqui viven
+# en Postgres (ADR 0004/0006). Los dicts devueltos CONSERVAN las mismas claves que la capa
+# de ficheros para no romper `api/rss.py`/`hashtags.py`/`franjas.py` ni el frontend. db.py
+# NO valida (lo hace la API); `?` lo traduce `motor_db` a `%s`.
+
+# Columnas ampliables (mismo patron idempotente que `_migrar_columnas_*`): hoy ambas tablas
+# nacen enteras en el DDL declarativo; estos hooks existen por coherencia para futuras
+# ampliaciones sin reescribir el esquema en bases hosted. Vacios no hacen nada.
+_COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+_COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+
+
+def _migrar_columnas_fuentes_rss(con: Any) -> None:
+    """Anade a `fuentes_rss` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _COLUMNAS_FUENTES_RSS_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "fuentes_rss")
+    for columna, tipo in _COLUMNAS_FUENTES_RSS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE fuentes_rss ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+def _migrar_columnas_grupos_hashtags(con: Any) -> None:
+    """Anade a `grupos_hashtags` columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "grupos_hashtags")
+    for columna, tipo in _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE grupos_hashtags ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# --- Fuentes RSS ----------------------------------------------------------- #
+# El dict publico (paridad con `ficheros._parsear_fuente`) NO incluye `creado` (orden
+# interno): solo `id, nombre, url, marca, fecha, activo(bool), incluir, excluir, redes_def,
+# ultima_actualizacion, ultimo_error, ultimo_conteo(int)`.
+_COLS_FUENTE_RSS = (
+    "id",
+    "nombre",
+    "url",
+    "marca",
+    "fecha",
+    "activo",
+    "incluir",
+    "excluir",
+    "redes_def",
+    "ultima_actualizacion",
+    "ultimo_error",
+    "ultimo_conteo",
+    "creado",
+)
+_SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
+_CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
+    "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def",
+)
+
+
+def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
+    """Fila de `fuentes_rss` -> dict publico (sin `creado`; `activo` bool, `ultimo_conteo` int)."""
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"] or "",
+        "url": fila["url"] or "",
+        "marca": fila["marca"] or "",
+        "fecha": fila["fecha"] or "",
+        "activo": bool(fila["activo"]),
+        "incluir": fila["incluir"] or "",
+        "excluir": fila["excluir"] or "",
+        "redes_def": fila["redes_def"] or "",
+        "ultima_actualizacion": fila["ultima_actualizacion"] or "",
+        "ultimo_error": fila["ultimo_error"] or "",
+        "ultimo_conteo": int(fila["ultimo_conteo"] or 0),
+    }
+
+
+def listar_fuentes_rss(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    """Fuentes RSS (mas recientes primero), con paginacion opcional."""
+    sql = _SELECT_FUENTE_RSS + " ORDER BY creado DESC, fecha DESC, id DESC"
+    params: list[Any] = []
+    if limite is not None:
+        sql += " LIMIT ?"
+        params.append(int(limite))
+    if desplazamiento:
+        sql += " OFFSET ?"
+        params.append(int(desplazamiento))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_fuente_rss(f) for f in filas]
+
+
+def contar_fuentes_rss() -> int:
+    """Total de fuentes RSS (para el `total` de paginacion)."""
+    con = _conectar()
+    try:
+        fila = con.execute("SELECT COUNT(*) AS n FROM fuentes_rss").fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
+    """Una fuente RSS por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_FUENTE_RSS} WHERE id = ?", (fuente_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_fuente_rss(fila) if fila is not None else None
+
+
+def crear_fuente_rss(
+    nombre: str,
+    url: str,
+    marca: str = "",
+    *,
+    incluir: str = "",
+    excluir: str = "",
+    redes_def: str = "",
+) -> dict[str, Any]:
+    """Crea una fuente RSS (activa, salud vacia) y la devuelve."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "nombre": nombre or "",
+        "url": url or "",
+        "marca": marca or "",
+        "fecha": date.today().isoformat(),
+        "activo": 1,
+        "incluir": incluir or "",
+        "excluir": excluir or "",
+        "redes_def": redes_def or "",
+        "ultima_actualizacion": "",
+        "ultimo_error": "",
+        "ultimo_conteo": 0,
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_FUENTE_RSS)
+        con.execute(
+            f"INSERT INTO fuentes_rss ({', '.join(_COLS_FUENTE_RSS)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_FUENTE_RSS),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_fuente_rss(fila["id"]) or _fila_a_fuente_rss(fila)
+
+
+def actualizar_fuente_rss(
+    fuente_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una fuente (nombre/url/marca/activo/incluir/excluir/redes_def)."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_FUENTE_RSS}
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    if not cambios:
+        return obtener_fuente_rss(fuente_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), fuente_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE fuentes_rss SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_fuente_rss(fuente_id)
+
+
+def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
+    """Anota la salud de una fuente (fecha de hoy + conteo + error). Best-effort."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE fuentes_rss SET ultima_actualizacion = ?, ultimo_conteo = ?, "
+            "ultimo_error = ? WHERE id = ?",
+            (date.today().isoformat(), int(conteo), error or "", fuente_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def borrar_fuente_rss(fuente_id: str) -> bool:
+    """Borra una fuente RSS y sus items vistos; True si existia, False si no."""
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM rss_items_vistos WHERE fuente_id = ?", (fuente_id,))
+        cur = con.execute("DELETE FROM fuentes_rss WHERE id = ?", (fuente_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
+    """Marca/desmarca un item de una fuente como usado (idempotente).
+
+    NO exige que la fuente exista (paridad con el file-backed): es una tabla de claves
+    vistas sin FK. `usado=True` inserta (ON CONFLICT DO NOTHING); `usado=False` borra.
+    """
+    con = _conectar()
+    try:
+        if usado:
+            con.execute(
+                "INSERT INTO rss_items_vistos (fuente_id, clave) VALUES (?, ?) "
+                "ON CONFLICT DO NOTHING",
+                (fuente_id, clave),
+            )
+        else:
+            con.execute(
+                "DELETE FROM rss_items_vistos WHERE fuente_id = ? AND clave = ?",
+                (fuente_id, clave),
+            )
+        con.commit()
+    finally:
+        con.close()
+
+
+def claves_vistas(fuente_id: str) -> set[str]:
+    """Conjunto de claves ya marcadas como usadas para una fuente (vacio si ninguna)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT clave FROM rss_items_vistos WHERE fuente_id = ?", (fuente_id,)
+        ).fetchall()
+    finally:
+        con.close()
+    return {f["clave"] for f in filas}
+
+
+# --- Grupos de hashtags ---------------------------------------------------- #
+# `hashtags` se almacena como JSON serializado; el dict publico lo devuelve como lista de
+# strings (paridad con `ficheros._parsear_grupo`, que NO incluye `creado`/`fecha_creacion`).
+_COLS_GRUPO_HASHTAGS = ("id", "nombre", "marca", "hashtags", "creado")
+_SELECT_GRUPO_HASHTAGS = f"SELECT {', '.join(_COLS_GRUPO_HASHTAGS)} FROM grupos_hashtags"
+
+
+def _normalizar_hashtags(valor: Any) -> list[str]:
+    """Lista de strings desde una lista o un JSON serializado (degrada a [])."""
+    if isinstance(valor, str):
+        try:
+            valor = json.loads(valor) if valor.strip() else []
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(valor, list):
+        return []
+    return [t for t in valor if isinstance(t, str)]
+
+
+def _fila_a_grupo_hashtags(fila: Any) -> dict[str, Any]:
+    """Fila de `grupos_hashtags` -> dict publico (`hashtags` lista; sin `creado`)."""
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"] or "",
+        "marca": fila["marca"] or "",
+        "hashtags": _normalizar_hashtags(fila["hashtags"]),
+    }
+
+
+def listar_grupos_hashtags(
+    *, limite: int | None = None, desplazamiento: int | None = None
+) -> list[dict[str, Any]]:
+    """Grupos de hashtags (mas recientes primero), con paginacion opcional."""
+    sql = _SELECT_GRUPO_HASHTAGS + " ORDER BY creado DESC, id DESC"
+    params: list[Any] = []
+    if limite is not None:
+        sql += " LIMIT ?"
+        params.append(int(limite))
+    if desplazamiento:
+        sql += " OFFSET ?"
+        params.append(int(desplazamiento))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_grupo_hashtags(f) for f in filas]
+
+
+def contar_grupos_hashtags() -> int:
+    """Total de grupos de hashtags (para el `total` de paginacion)."""
+    con = _conectar()
+    try:
+        fila = con.execute("SELECT COUNT(*) AS n FROM grupos_hashtags").fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
+    """Un grupo de hashtags por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_GRUPO_HASHTAGS} WHERE id = ?", (grupo_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_grupo_hashtags(fila) if fila is not None else None
+
+
+def crear_grupo_hashtags(
+    nombre: str, marca: str = "", hashtags: list[str] | None = None
+) -> dict[str, Any]:
+    """Crea un grupo de hashtags y lo devuelve."""
+    tags = _normalizar_hashtags(hashtags or [])
+    grupo_id = uuid.uuid4().hex[:12]
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO grupos_hashtags (id, nombre, marca, hashtags, creado) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (
+                grupo_id,
+                nombre or "",
+                marca or "",
+                json.dumps(tags, ensure_ascii=False),
+                datetime.now().isoformat(timespec="seconds"),
+            ),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return {"id": grupo_id, "nombre": nombre or "", "marca": marca or "", "hashtags": tags}
+
+
+def actualizar_grupo_hashtags(
+    grupo_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente un grupo (nombre/marca/hashtags); None si no existe."""
+    editables = ("nombre", "marca", "hashtags")
+    cambios = {k: v for k, v in campos.items() if k in editables}
+    if "hashtags" in cambios:
+        cambios["hashtags"] = json.dumps(
+            _normalizar_hashtags(cambios["hashtags"]), ensure_ascii=False
+        )
+    if not cambios:
+        return obtener_grupo_hashtags(grupo_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), grupo_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE grupos_hashtags SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_grupo_hashtags(grupo_id)
+
+
+def borrar_grupo_hashtags(grupo_id: str) -> bool:
+    """Borra un grupo de hashtags; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM grupos_hashtags WHERE id = ?", (grupo_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --- Franjas editoriales --------------------------------------------------- #
+# Dict publico (paridad con `ficheros._leer_franjas_marca`): `id, marca, red, dia_semana, hora`.
+_COLS_FRANJA_EDIT = ("id", "marca", "red", "dia_semana", "hora")
+_SELECT_FRANJA_EDIT = f"SELECT {', '.join(_COLS_FRANJA_EDIT)} FROM franjas_editoriales"
+
+
+def _fila_a_franja(fila: Any) -> dict[str, Any]:
+    """Fila de `franjas_editoriales` -> dict publico."""
+    return {
+        "id": fila["id"],
+        "marca": fila["marca"] or "",
+        "red": fila["red"] or "",
+        "dia_semana": int(fila["dia_semana"] or 0),
+        "hora": fila["hora"] or "",
+    }
+
+
+def listar_franjas() -> list[dict[str, Any]]:
+    """Todas las franjas editoriales, ordenadas por dia/hora/id (determinista)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_FRANJA_EDIT} ORDER BY dia_semana ASC, hora ASC, id ASC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_franja(f) for f in filas]
+
+
+def crear_franja(
+    dia_semana: int, hora: str, marca: str = "", red: str = ""
+) -> dict[str, Any]:
+    """Crea una franja editorial y la devuelve."""
+    franja = {
+        "id": uuid.uuid4().hex[:12],
+        "marca": marca or "",
+        "red": red or "",
+        "dia_semana": int(dia_semana),
+        "hora": hora or "",
+    }
+    con = _conectar()
+    try:
+        con.execute(
+            "INSERT INTO franjas_editoriales (id, marca, red, dia_semana, hora) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (franja["id"], franja["marca"], franja["red"], franja["dia_semana"], franja["hora"]),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return franja
+
+
+def borrar_franja(franja_id: str) -> bool:
+    """Borra una franja editorial; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM franjas_editoriales WHERE id = ?", (franja_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 # --------------------------------------------------------------------------- #

@@ -37,7 +37,7 @@ $DC stop back || true
 echo "==> [3/5] chown del volumen de estado a uid no-root 10001 (back/worker corren no-root)"
 docker run --rm -v "$VOL":/d alpine chown -R 10001:10001 /d
 
-echo "==> [4/5] asegura esquema Postgres (idempotente; no-op tras ADR 0004, sin SQLite que migrar)"
+echo "==> [4/5] asegura esquema Postgres + copia editorial YAML->PG (idempotente; ADR 0004/0006)"
 $DC run --rm --no-deps -T back python -m keni_consola.migracion --solo-db
 
 echo "==> [5/5] up (recrea back no-root sobre Postgres + arranca el worker de generacion)"

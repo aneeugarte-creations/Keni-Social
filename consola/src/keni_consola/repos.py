@@ -6,11 +6,12 @@ enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
 
   - CONTENIDO editorial (editable a mano, fuente de verdad) -> ficheros YAML por
     marca (`ficheros.py`), con un indice SQLite regenerable (`indice.py`):
-    publicaciones, plantillas, fuentes RSS + items vistos + salud, grupos de
-    hashtags, franjas e historial de skills.
-  - OPERACIONAL (no editorial, no encaja en un fichero por entidad) -> Postgres
-    (`db.py`, via `motor_db`; ADR 0004): `comercial` (piezas + serie temporal
-    de snapshots), `rota`, `usuarios`/`sesiones` (via `auth/`) y la cola de `jobs`.
+    publicaciones, plantillas e historial de skills.
+  - OPERACIONAL + editorial reutilizable -> Postgres (`db.py`, via `motor_db`; ADR
+    0004/0006): `comercial` (piezas + serie temporal de snapshots), `rota`,
+    `usuarios`/`sesiones` (via `auth/`), la cola de `jobs`, y las 3 entidades editoriales
+    que cerraron su rezago file->pg (ADR 0006): `fuentes_rss` + items vistos + salud,
+    `grupos_hashtags` y `franjas` editoriales.
 
 Las firmas publicas son ESTABLES: ningun `api/*.py` cambia aunque cambie el almacen.
 
@@ -194,57 +195,60 @@ def borrar_publicacion(publicacion_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Grupos de hashtags (CONTENIDO: ficheros YAML via ficheros.py)                #
+# Grupos de hashtags (OPERACIONAL: Postgres via db.py; rezago cerrado, ADR 0006) #
 # --------------------------------------------------------------------------- #
+# CONTENIDO editorial reutilizable que vivia file-backed (YAML + indice SQLite de rutas
+# absolutas). El indice se desincronizaba al recrear contenedores; ahora vive en Postgres
+# (ADR 0006). El dict devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
 
 
 def listar_grupos_hashtags(
     *, limite: int | None = None, desplazamiento: int | None = None
 ) -> list[dict[str, Any]]:
-    return ficheros.listar_grupos_hashtags(limite=limite, desplazamiento=desplazamiento)
+    return db.listar_grupos_hashtags(limite=limite, desplazamiento=desplazamiento)
 
 
 def contar_grupos_hashtags() -> int:
-    return ficheros.contar_grupos_hashtags()
+    return db.contar_grupos_hashtags()
 
 
 def obtener_grupo_hashtags(grupo_id: str) -> dict[str, Any] | None:
-    return ficheros.obtener_grupo_hashtags(grupo_id)
+    return db.obtener_grupo_hashtags(grupo_id)
 
 
 def crear_grupo_hashtags(
     nombre: str, marca: str = "", hashtags: list[str] | None = None
 ) -> dict[str, Any]:
-    return ficheros.crear_grupo_hashtags(nombre, marca=marca, hashtags=hashtags)
+    return db.crear_grupo_hashtags(nombre, marca=marca, hashtags=hashtags)
 
 
 def actualizar_grupo_hashtags(
     grupo_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return ficheros.actualizar_grupo_hashtags(grupo_id, campos)
+    return db.actualizar_grupo_hashtags(grupo_id, campos)
 
 
 def borrar_grupo_hashtags(grupo_id: str) -> bool:
-    return ficheros.borrar_grupo_hashtags(grupo_id)
+    return db.borrar_grupo_hashtags(grupo_id)
 
 
 # --------------------------------------------------------------------------- #
-# Franjas (CONTENIDO: ficheros YAML via ficheros.py)                           #
+# Franjas editoriales (OPERACIONAL: Postgres via db.py; rezago cerrado, ADR 0006) #
 # --------------------------------------------------------------------------- #
 
 
 def listar_franjas() -> list[dict[str, Any]]:
-    return ficheros.listar_franjas()
+    return db.listar_franjas()
 
 
 def crear_franja(
     dia_semana: int, hora: str, marca: str = "", red: str = ""
 ) -> dict[str, Any]:
-    return ficheros.crear_franja(dia_semana, hora, marca=marca, red=red)
+    return db.crear_franja(dia_semana, hora, marca=marca, red=red)
 
 
 def borrar_franja(franja_id: str) -> bool:
-    return ficheros.borrar_franja(franja_id)
+    return db.borrar_franja(franja_id)
 
 
 # --------------------------------------------------------------------------- #
@@ -256,22 +260,25 @@ def borrar_franja(franja_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Fuentes RSS + items vistos + salud (CONTENIDO: ficheros YAML via ficheros.py) #
+# Fuentes RSS + items vistos + salud (OPERACIONAL: Postgres via db.py; ADR 0006) #
 # --------------------------------------------------------------------------- #
+# Ultimo rezago file-backed cerrado: el indice SQLite de rutas absolutas dejaba la pagina de
+# Fuentes RSS vacia tras recrear contenedores. Ahora vive en Postgres (ADR 0006). El dict
+# devuelto conserva las mismas claves; la fachada delega 1:1 en db.py.
 
 
 def listar_fuentes_rss(
     *, limite: int | None = None, desplazamiento: int | None = None
 ) -> list[dict[str, Any]]:
-    return ficheros.listar_fuentes_rss(limite=limite, desplazamiento=desplazamiento)
+    return db.listar_fuentes_rss(limite=limite, desplazamiento=desplazamiento)
 
 
 def contar_fuentes_rss() -> int:
-    return ficheros.contar_fuentes_rss()
+    return db.contar_fuentes_rss()
 
 
 def obtener_fuente_rss(fuente_id: str) -> dict[str, Any] | None:
-    return ficheros.obtener_fuente_rss(fuente_id)
+    return db.obtener_fuente_rss(fuente_id)
 
 
 def crear_fuente_rss(
@@ -283,7 +290,7 @@ def crear_fuente_rss(
     excluir: str = "",
     redes_def: str = "",
 ) -> dict[str, Any]:
-    return ficheros.crear_fuente_rss(
+    return db.crear_fuente_rss(
         nombre, url, marca=marca, incluir=incluir, excluir=excluir, redes_def=redes_def
     )
 
@@ -291,23 +298,23 @@ def crear_fuente_rss(
 def actualizar_fuente_rss(
     fuente_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
-    return ficheros.actualizar_fuente_rss(fuente_id, campos)
+    return db.actualizar_fuente_rss(fuente_id, campos)
 
 
 def registrar_salud_fuente_rss(fuente_id: str, *, conteo: int, error: str = "") -> None:
-    return ficheros.registrar_salud_fuente_rss(fuente_id, conteo=conteo, error=error)
+    return db.registrar_salud_fuente_rss(fuente_id, conteo=conteo, error=error)
 
 
 def borrar_fuente_rss(fuente_id: str) -> bool:
-    return ficheros.borrar_fuente_rss(fuente_id)
+    return db.borrar_fuente_rss(fuente_id)
 
 
 def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
-    return ficheros.marcar_item(fuente_id, clave, usado)
+    return db.marcar_item(fuente_id, clave, usado)
 
 
 def claves_vistas(fuente_id: str) -> set[str]:
-    return ficheros.claves_vistas(fuente_id)
+    return db.claves_vistas(fuente_id)
 
 
 # --------------------------------------------------------------------------- #

@@ -43,6 +43,9 @@ class ResumenMigracion:
     db_lista: bool = False
     objetos_media_copiados: int = 0
     objetos_media_saltados: int = 0
+    # CONTENIDO editorial reutilizable file -> Postgres (ADR 0006): copiado de los YAML
+    # legados a las tablas nuevas (fuentes RSS, grupos de hashtags, franjas). Idempotente.
+    editorial_migrado: dict[str, int] = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------------- #
@@ -70,6 +73,45 @@ def asegurar_esquema(*, dry_run: bool = False) -> bool:
         return True
     db.arrancar_persistencia()  # crea/migra el esquema; no orfana nada
     return True
+
+
+# --------------------------------------------------------------------------- #
+# CONTENIDO editorial reutilizable: ficheros YAML -> Postgres (ADR 0006)        #
+# --------------------------------------------------------------------------- #
+
+
+def migrar_editorial_file_a_pg(*, dry_run: bool = False) -> dict[str, int]:
+    """Copia las 3 entidades editoriales rezagadas de los YAML legados a Postgres. Idempotente.
+
+    Lee el origen file-backed (`ficheros`) y SOLO inserta lo que falte (por id), preservando
+    identidad. Re-ejecutar no duplica. El origen YAML NO se destruye (queda de respaldo). En
+    `dry_run` no escribe: cuenta lo que MIGRARIA (las filas aun no presentes en Postgres).
+
+    Va dentro del paso `--solo-db` del deploy (deploy.sh [4/5]) para que el cutover sea
+    DETERMINISTA (no solo via el hook best-effort del arranque del back).
+    """
+    from . import migrar_contenido
+
+    if dry_run:
+        # Cuenta lo que falta sin escribir (no abre transaccion de escritura).
+        from . import ficheros, repos
+
+        faltan_f = sum(
+            1 for f in ficheros.listar_fuentes_rss() if repos.obtener_fuente_rss(f["id"]) is None
+        )
+        faltan_g = sum(
+            1 for g in ficheros.listar_grupos_hashtags()
+            if repos.obtener_grupo_hashtags(g["id"]) is None
+        )
+        ids_pg = {fr["id"] for fr in repos.listar_franjas()}
+        faltan_fr = sum(1 for fr in ficheros.listar_franjas() if fr["id"] not in ids_pg)
+        return {"fuentes_rss": faltan_f, "grupos_hashtags": faltan_g, "franjas": faltan_fr}
+
+    return {
+        "fuentes_rss": migrar_contenido.migrar_fuentes_rss(),
+        "grupos_hashtags": migrar_contenido.migrar_grupos_hashtags(),
+        "franjas": migrar_contenido.migrar_franjas(),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -144,6 +186,9 @@ def migrar(*, solo_db: bool = False, solo_media: bool = False, dry_run: bool = F
     resumen = ResumenMigracion()
     if not solo_media:
         resumen.db_lista = asegurar_esquema(dry_run=dry_run)
+        # Tras asegurar el esquema, copia las 3 entidades editoriales rezagadas (ADR 0006).
+        # Va en el paso DB (corre con `--solo-db` del deploy). Idempotente.
+        resumen.editorial_migrado = migrar_editorial_file_a_pg(dry_run=dry_run)
     if not solo_db:
         copiados, saltados = migrar_media(dry_run=dry_run)
         resumen.objetos_media_copiados = copiados
@@ -155,6 +200,12 @@ def _imprimir_resumen(resumen: ResumenMigracion, *, dry_run: bool) -> None:
     prefijo = "[dry-run] " if dry_run else ""
     if resumen.db_lista:
         print(f"{prefijo}DB: esquema Postgres asegurado (idempotente; ADR 0004).")
+    if resumen.editorial_migrado:
+        total = sum(resumen.editorial_migrado.values())
+        print(
+            f"{prefijo}Editorial (YAML -> Postgres, ADR 0006): {total} filas nuevas "
+            f"{resumen.editorial_migrado}."
+        )
     if resumen.objetos_media_copiados or resumen.objetos_media_saltados:
         print(
             f"{prefijo}Media (disco -> S3): {resumen.objetos_media_copiados} copiados, "
