@@ -10,8 +10,10 @@ su almacen.
 BACKEND (#130 / ADR 0004): UNICO, Postgres. `motor_db.conectar_cruda()` abre Postgres con
 `DATABASE_URL` (OBLIGATORIA, local o hosted). Antes el backend se elegia segun esa var
 (sin URL -> SQLite local); la ADR 0004 retira ese SQLite operacional para eliminar el drift
-SQLite<->Postgres. La privacidad del perfil local se preserva con un Postgres LOCAL
-(`deploy/dev/docker-compose.yml`); se pierde el "cero-config/offline por defecto".
+SQLite<->Postgres. En desarrollo no se usa Postgres local: la ejecucion/validacion se hace
+en el server (CI Woodpecker / hosted); quien necesite correr en local provee su propio
+`DATABASE_URL`. La privacidad del perfil local se preserva si ese Postgres corre en la
+propia maquina; se pierde el "cero-config/offline por defecto".
 
 El esquema se crea ON-DEMAND en la primera conexion (idempotente). Las funciones publicas y
 la fachada `repos.py` son ESTABLES: ningun call site cambia (siguen usando `?`/`fila["col"]`,

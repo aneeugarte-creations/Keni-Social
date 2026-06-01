@@ -2,14 +2,13 @@
 
 El MCP corre en la máquina/entorno de cada persona. Aquí están las formas de instalarlo, pensadas para **máquinas corporativas bloqueadas** (sin permisos de admin). La alternativa —un MCP **alojado por Keni** por HTTP (System User tokens, OAuth centralizado)— está en `despliegue-hosted.md`; ambos modos conviven (arquitectura híbrida).
 
-> **Consola Keni en local:** la operacional de la consola (tareas, comercial, rota, usuarios, sesiones, cola de jobs) vive en **Postgres** (ADR 0004; ya no SQLite). Para arrancar `keni-consola` en la máquina hace falta un Postgres y `DATABASE_URL`. El monorepo trae un compose dev de un comando:
+> **Consola Keni en local:** la operacional de la consola (tareas, comercial, rota, usuarios, sesiones, cola de jobs) vive en **Postgres** (ADR 0004; ya no SQLite). En desarrollo no se usa Postgres local: la ejecución y validación se hacen en el server (CI Woodpecker / hosted `social.kenitech.io`). Si aun así necesitas arrancar `keni-consola` en tu máquina, provee tu propio Postgres y exporta su URL:
 >
 > ```bash
-> docker compose -f deploy/dev/docker-compose.yml up -d
-> export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/keni_social
+> export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/keni_social
 > ```
 >
-> El Postgres queda atado a `127.0.0.1` (no expuesto a la red); la privacidad del perfil local se preserva (ningún dato sale de la máquina). El MCP de métricas y su histórico SQLite local son otro almacén distinto y no se ven afectados.
+> Tú gestionas ese Postgres; el monorepo ya no trae un compose de conveniencia para dev. Si lo atas a `127.0.0.1` (no expuesto a la red), la privacidad del perfil local se preserva (ningún dato sale de la máquina). El MCP de métricas y su histórico SQLite local son otro almacén distinto y no se ven afectados.
 
 ## Opción 1 — `uv` (recomendada, sin admin)
 
