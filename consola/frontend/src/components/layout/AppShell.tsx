@@ -32,6 +32,7 @@ const ETIQUETAS_SHELL: Record<string, string> = {
   "/configuracion": "Configuración",
   "/mi-cuenta": "Mi cuenta",
   "/usuarios": "Usuarios",
+  "/sistema": "Sistema",
 };
 
 /**

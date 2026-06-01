@@ -39,6 +39,7 @@ const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
 const Webhooks = lazy(() => import("@/pages/Webhooks"));
 const MiCuenta = lazy(() => import("@/pages/MiCuenta"));
 const Usuarios = lazy(() => import("@/pages/Usuarios"));
+const Sistema = lazy(() => import("@/pages/Sistema"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
@@ -133,6 +134,10 @@ export const router = createBrowserRouter([
       // Gestion de usuarios: solo admin (el backend devuelve 403 si no, y la
       // propia pagina muestra el aviso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },
+      // Panel de sistema: solo admin (el backend devuelve 403 si no, y la propia
+      // página muestra el aviso al entrar por URL directa). Monitorización del
+      // servidor (CPU/RAM/disco) + estado del almacenamiento S3/Garage.
+      { path: "sistema", element: <Sistema /> },
 
       // ===== Redirecciones de rutas legacy =====
       // Fusiones de paginas individuales en hubs:

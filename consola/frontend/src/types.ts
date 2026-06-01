@@ -3276,3 +3276,53 @@ export interface RespuestaAjustes {
 export interface RespuestaAjusteGuardado {
   ajuste: AjusteAdmin;
 }
+
+// ── Sistema (panel de admin: CPU/RAM/disco + S3/Garage) ──────────────────────
+// `GET /api/sistema/recursos` y `GET /api/sistema/s3`. Solo admin (403 si no).
+// Bytes en crudo (el front formatea GB/%). Campos null = degradado (sonda no
+// disponible), nunca un error que tumbe la página.
+
+/** Uso de un volumen de disco. Bytes en crudo. */
+export interface DiscoSistema {
+  /** Etiqueta legible ("Estado", "Sistema"). */
+  etiqueta: string;
+  /** Ruta sondeada (p.ej. `/data` o `/`). */
+  ruta: string;
+  usado: number;
+  total: number;
+  /** Porcentaje de uso (0–100, 1 decimal). */
+  porcentaje: number;
+}
+
+/** Respuesta de `GET /api/sistema/recursos`. CPU/RAM null si psutil no está. */
+export interface RespuestaRecursos {
+  cpu: { porcentaje: number | null; cores: number | null };
+  ram: { usado: number | null; total: number | null; porcentaje: number | null };
+  discos: DiscoSistema[];
+  /** `true` si psutil estaba disponible para CPU/RAM. */
+  psutil: boolean;
+}
+
+/** Respuesta de `GET /api/sistema/s3`. `configurado:false` = media en disco local. */
+export interface RespuestaS3 {
+  configurado: boolean;
+  endpoint: string | null;
+  bucket: string | null;
+  region: string | null;
+  /** Salud del bucket (head_bucket): "ok" | "err" | null (sin configurar). */
+  salud: "ok" | "err" | null;
+  /** Nº de objetos del bucket (null si no se pudo medir). */
+  objetos: number | null;
+  /** Bytes totales del bucket (null si no se pudo medir). */
+  bytes: number | null;
+  /** `true` si el conteo se truncó por tope (es un mínimo). */
+  truncado: boolean;
+  /** Mensaje de error legible si la sonda falló; null si todo bien. */
+  error: string | null;
+}
+
+/** Respuesta de `POST /api/sistema/s3/probar` (test de conexión). */
+export interface RespuestaProbarS3 {
+  salud: "ok" | "err";
+  error: string | null;
+}

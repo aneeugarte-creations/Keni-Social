@@ -24,6 +24,7 @@ modulos_backend = [
   "ajustes",
   "config",
   "estado",
+  "sistema",
   "conexiones",
   "limites",
   "media",
@@ -43,6 +44,7 @@ rutas_frontend = [
   "/configuracion",
   "/sugerencias",
   "/usuarios",
+  "/sistema",
 ]
 
 # Panel es la única ruta del shell que SÍ vive en el sidebar (el "vistazo" inicial,

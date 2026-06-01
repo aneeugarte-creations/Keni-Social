@@ -25,6 +25,10 @@ dependencies = [
     # Lectura del calendario editorial en .xlsx (importador_calendario). CSV va en la stdlib;
     # openpyxl es la unica via para Excel sin LibreOffice. Solo lectura, sin estilos.
     "openpyxl>=3.1",
+    # Sondas de recursos del servidor (CPU/RAM) para el panel de Sistema (admin). El disco
+    # va por `shutil` (stdlib); psutil aporta CPU/RAM. La API degrada con elegancia si
+    # faltara, pero lo fijamos como dependencia para que el panel funcione en hosted.
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]

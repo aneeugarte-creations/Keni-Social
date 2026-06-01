@@ -204,6 +204,9 @@ import type {
   CuerpoLogin,
   RespuestaSesion,
   RespuestaUsuarios,
+  RespuestaRecursos,
+  RespuestaS3,
+  RespuestaProbarS3,
   UsuarioAdmin,
   FiltrosComercial,
   OpcionesComercial,
@@ -498,6 +501,12 @@ export const api = {
 
   // --- Estado ---
   estado: (signal?: AbortSignal) => peticion<RespuestaEstado>("/estado", { signal }),
+
+  // --- Sistema (panel de admin; 403 si no) ---
+  sistemaRecursos: (signal?: AbortSignal) =>
+    peticion<RespuestaRecursos>("/sistema/recursos", { signal }),
+  sistemaS3: (signal?: AbortSignal) => peticion<RespuestaS3>("/sistema/s3", { signal }),
+  probarS3: () => peticion<RespuestaProbarS3>("/sistema/s3/probar", { metodo: "POST" }),
 
   // --- Config ---
   config: (signal?: AbortSignal) => peticion<RespuestaConfig>("/config", { signal }),
