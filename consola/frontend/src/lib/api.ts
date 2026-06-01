@@ -132,6 +132,9 @@ import type {
   RespuestaPublicaciones,
   RespuestaColaAprobacion,
   RespuestaPanel,
+  RespuestaListaDia,
+  RespuestaImportPreview,
+  RespuestaImportCalendario,
   RespuestaAlertas,
   RespuestaReciclarPublicacion,
   RespuestaSugerenciasReciclaje,
@@ -744,6 +747,26 @@ export const api = {
   // --- Panel ligero (#9): dashboard de un vistazo (métricas + cola + próximas) ---
   panel: (params: { rango?: string; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<RespuestaPanel>(`/panel${query(params)}`, { signal }),
+
+  // --- Lista viva del día (H5): contenido del tablero ordenado por score dinámico ---
+  listaDia: (params: { marca?: string } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaListaDia>(`/panel/dia${query(params)}`, { signal }),
+
+  // --- Importar calendario (H1): sube un .xlsx/.csv al tablero (multipart). Con
+  // `previsualizar` parsea sin escribir; sin él, crea el contenido y devuelve el resumen. ---
+  importarCalendario: (
+    archivo: File,
+    opts: { marca?: string; previsualizar?: boolean } = {},
+  ) => {
+    const form = new FormData();
+    form.set("archivo", archivo);
+    if (opts.marca) form.set("marca", opts.marca);
+    if (opts.previsualizar) form.set("previsualizar", "1");
+    return peticion<RespuestaImportPreview | RespuestaImportCalendario>(
+      "/contenido/importar",
+      { metodo: "POST", form },
+    );
+  },
 
   // --- Alertas de rendimiento (bitácora editorial: reciclaje / bajo rendimiento) ---
   alertas: (params: { limite?: number } = {}, signal?: AbortSignal) =>

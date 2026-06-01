@@ -1,9 +1,10 @@
 # Lista viva de contenidos — petición de Angel (evaluación + diseño)
 
 > Fecha: 2026-05-31 · Origen: petición de Angel (equipo de redes AMX, piloto UnoTV / Claro Sports).
-> Estado: evaluación de viabilidad + diseño de los huecos. En `feat/lista-viva-angel` ya
-> construidos H1 (importador de calendario Excel/CSV) y H2 (auto-generación de copy). H3
-> (score dinámico) y H5 (Panel 9am) + frontends quedan diseñados como siguiente paso.
+> Estado: evaluación + diseño + construcción. En `feat/lista-viva-angel` ya construidos y
+> probados H1 (importador Excel/CSV + frontend), H2 (auto-generación de copy), H3 (score
+> dinámico) y H5 (Panel-9am + frontend). Quedan como follow-up documentado: auto-arte, anidar
+> el borrador bajo el tema (toca `es_publicacion`), y "green" como concepto de primera clase.
 
 ## 1. Qué pidió Angel (textual, resumido)
 
@@ -91,11 +92,13 @@ hoy el borrador es contenido propio enlazado por flujo de generación; nido real
 (cambio del contrato, mayor riesgo); (c) incluir el alta manual ("lista verde") tras validar
 coste con el equipo.
 
-### H3 — Score de prioridad dinámico (re-ordenar al entrar algo)
-Hoy el orden es prioridad fija + fecha. Diseñar un **score** puro y testeable que combine:
-señal de viralidad (Radar), compromiso (etiqueta + cercanía de `fecha_objetivo`), frescura, y
-flujo. Se aplica al listar (no requiere reescribir filas) y hace que la lista se "re-acomode"
-sola cuando entra algo nuevo. Empezar simple (función determinista) y afinar pesos con el equipo.
+### H3 — Score de prioridad dinámico  ✅ construido
+`priorizacion.py`: función PURA `score_contenido` (compromiso ≫ prioridad + cercanía de
+`fecha_objetivo` + flujo + frescura) y `ordenar_por_score` (estable). Decisión: se aplica en la
+**vista del día (Panel-9am)**, NO en el orden del kanban compartido (que el equipo ya conoce),
+así la lista se re-acomoda sola sin alterar la operativa del tablero. Pesos = defaults explícitos
+y afinables. Tests: `test_priorizacion.py` (10). (Nota: la `señal` de viralidad del Radar no
+vive en `contenido`; el score usa los campos que el tablero sí guarda.)
 
 ### H4 — Modelar "green" y "compromiso" como conceptos de primera clase
 - **Compromiso**: primer paso = etiqueta `compromiso` + `fecha_objetivo` (lo construye H1, sin
@@ -104,10 +107,11 @@ sola cuando entra algo nuevo. Empezar simple (función determinista) y afinar pe
 - **Green**: lista del equipo = contenido de alta manual; basta una etiqueta `green` o reusar
   `flujo='evergreen'`. Decisión menor; no bloquea.
 
-### H5 — Panel "9am" (lista curada del día)
-Vista del Panel que, al entrar a las 9, muestre **la lista viva ya ordenada por score**, con
-contadores por fuente y por estado, y CTA a revisión. Reutiliza `/panel` + lectura del tablero.
-**No** requiere email ni scheduler nuevo (decisión de producto: entrega = Panel).
+### H5 — Panel "9am" (lista curada del día)  ✅ construido
+Backend `GET /api/panel/dia` (`api/panel.py`): lee el tablero, ordena por score (H3) y devuelve
+la lista + contadores `por_fuente`/`por_estado`. Frontend: sección "Lista del día" en
+`Panel.tsx` (el centro del panel), con fuente, fecha, badge de compromiso, score y estado.
+Reutiliza `/panel` + tablero; **sin** email ni scheduler (entrega = Panel, decisión de producto).
 
 ## 4. Docs a adaptar / borrar (recomendación, no ejecutado aún)
 
@@ -138,14 +142,22 @@ Nada a **borrar** de raíz: todo es adaptable. (Pendiente de tu visto bueno para
 - `POST /api/contenido/importar` (multipart, con modo `previsualizar`).
 - `openpyxl` en `consola/pyproject.toml`. Tests: `test_importador_calendario.py` (14).
 
+- **Frontend**: diálogo "Importar calendario" en el tablero (`Tareas.tsx` + botón) con
+  previsualización; `DialogoImportarCalendario.tsx`, tipos en `types.ts`, `api.importarCalendario`.
+
 **H2 — auto-generación de copy** (backend + tests):
 - `autogen_copy.py`: selección **pura** (`topics_pendientes`) + daemon (`iniciar_autogen`) que
   reutiliza `dominio.skills.lanzar_generacion_copy`. Flags en `config.py` (`KENI_AUTOGEN*`),
   cableado en `__main__.py`. Tests: `test_autogen_copy.py` (11).
 
-**Diferido (diseñado arriba):** auto arte y nido bajo el tema (H2 siguientes pasos), H3 (score
-dinámico), H5 (Panel-9am) y los **frontends** (importador: subir/previsualizar/confirmar;
-requieren recompilar el bundle vendorizado con `npm run build`).
+**H3 — score dinámico** (backend + tests): `priorizacion.py` + `test_priorizacion.py` (10).
+
+**H5 — Panel-9am** (backend + frontend): `GET /api/panel/dia` + sección "Lista del día" en
+`Panel.tsx` (tipos `RespuestaListaDia`/`ItemListaDia`, `api.listaDia`). Bundle recompilado.
+
+**Diferido (follow-up):** auto-arte (encolar `/api/media/generar` por tema), anidar el borrador
+bajo el `contenido` origen (toca `es_publicacion`, mayor riesgo), "green" como flujo/etiqueta de
+primera clase, y auto-generar también el alta manual (tras validar coste con el equipo).
 
 ## 6. Restricciones y decisiones tomadas
 

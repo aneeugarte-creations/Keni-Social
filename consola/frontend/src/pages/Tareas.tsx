@@ -23,6 +23,7 @@ import {
   Sparkles,
   Tag,
   Trash2,
+  Upload,
   X,
 } from "lucide-react";
 import * as React from "react";
@@ -70,6 +71,7 @@ import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { VistaLista } from "@/pages/publicaciones/VistaLista";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
+import { DialogoImportarCalendario } from "@/pages/publicaciones/DialogoImportarCalendario";
 import { FILTRO_TODOS, FiltrosPublicaciones } from "@/pages/publicaciones/Filtros";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { cn } from "@/lib/utils";
@@ -211,6 +213,7 @@ export default function Tablero() {
     staleTime: 5 * 60 * 1000,
   });
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
+  const [importarAbierto, setImportarAbierto] = React.useState(false);
   const [gestionEtiquetas, setGestionEtiquetas] = React.useState(false);
   const [gestionFranjas, setGestionFranjas] = React.useState(false);
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
@@ -351,6 +354,15 @@ export default function Tablero() {
               <Tag className="h-4 w-4" />
               Etiquetas
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setImportarAbierto(true)}
+              title="Importar un calendario (.xlsx/.csv) al tablero"
+            >
+              <Upload className="h-4 w-4" />
+              Importar
+            </Button>
             <Button size="sm" onClick={() => setDialogoAbierto(true)} disabled={query.isPending}>
               <Plus className="h-4 w-4" />
               Nuevo contenido
@@ -422,6 +434,17 @@ export default function Tablero() {
           etiquetasWorkspace={etiquetasWorkspace}
         />
       )}
+      <DialogoImportarCalendario
+        abierto={importarAbierto}
+        onCerrar={() => setImportarAbierto(false)}
+        marcas={catalogos?.marcas ?? []}
+        onImportado={(creados) => {
+          toast.success(
+            creados === 1 ? "1 contenido importado al tablero." : `${creados} contenidos importados al tablero.`,
+          );
+          void query.refetch();
+        }}
+      />
       <DialogoEtiquetas
         abierto={gestionEtiquetas}
         onCerrar={() => setGestionEtiquetas(false)}

@@ -3221,3 +3221,57 @@ export interface AlertaRendimiento {
 export interface RespuestaAlertas {
   alertas: AlertaRendimiento[];
 }
+
+// ── Lista viva del dia (Panel-9am, H5) ──────────────────────────────────────
+// `GET /api/panel/dia` devuelve un dict ad-hoc (no un modelo de `esquema_api`),
+// asi que su tipo se mantiene a mano aqui (no en `types.gen.ts`).
+export interface ItemListaDia {
+  id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  estado: string;
+  prioridad: string;
+  flujo: string;
+  fecha_objetivo: string;
+  origen: string;
+  etiquetas: string[];
+  score: number;
+}
+
+export interface RespuestaListaDia {
+  items: ItemListaDia[];
+  total: number;
+  por_fuente: Record<string, number>;
+  por_estado: Record<string, number>;
+}
+
+// ── Importador de calendario Excel/CSV (H1) ─────────────────────────────────
+// `POST /api/contenido/importar` (multipart). Con `previsualizar=1` devuelve las
+// filas parseadas; sin él, importa y devuelve el resumen. Dicts ad-hoc (a mano).
+export interface FilaCalendarioImport {
+  titulo: string;
+  fecha: string;
+  marca: string;
+  redes: string[];
+  prioridad: string;
+  compromiso: boolean;
+  notas: string;
+}
+
+export interface ErrorImportCalendario {
+  fila?: number;
+  motivo: string;
+}
+
+export interface RespuestaImportPreview {
+  previsualizacion: true;
+  filas: FilaCalendarioImport[];
+  errores: ErrorImportCalendario[];
+}
+
+export interface RespuestaImportCalendario {
+  creados: number;
+  omitidos: { titulo: string; motivo: string }[];
+  errores: ErrorImportCalendario[];
+}
