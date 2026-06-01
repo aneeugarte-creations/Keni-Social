@@ -114,7 +114,6 @@ import type {
   CuerpoImagenesEditar,
   CuerpoImagenesExpandir,
   CuerpoImagenesRevisar,
-  CuerpoCatalogarMedio,
   RespuestaMensaje,
   CuerpoCrearPlantillaContenido,
   CuerpoActualizarPlantillaContenido,
@@ -122,9 +121,6 @@ import type {
   RespuestaPlantillasContenido,
   RespuestaPlantillaContenido,
   RespuestaAplicarPlantilla,
-  RespuestaMediosBiblioteca,
-  RespuestaMedioBiblioteca,
-  CuerpoActualizarMedioBiblioteca,
   RespuestaRadar,
   RespuestaParrilla,
   RespuestaProgramarMetricool,
@@ -796,13 +792,6 @@ export const api = {
   imagenesRevisar: (cuerpo: CuerpoImagenesRevisar) =>
     peticion<RespuestaGeneracion>("/imagenes/revisar", { metodo: "POST", json: cuerpo }),
 
-  // Cataloga un objeto de media YA subido/generado en la biblioteca de medios (sin re-subir).
-  catalogarMedio: (cuerpo: CuerpoCatalogarMedio) =>
-    peticion<RespuestaMedioBiblioteca>("/biblioteca-media/catalogar", {
-      metodo: "POST",
-      json: cuerpo,
-    }),
-
   // --- Verificación de video (workflow propio, independiente de Generar copy) ---
   // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier
   // generación (GET /api/generaciones/{id}) y completa con `resultado.verificacion`.
@@ -863,50 +852,6 @@ export const api = {
       `/plantillas-contenido/${encodeURIComponent(id)}/aplicar`,
       { metodo: "POST", json: cuerpo },
     ),
-
-  // --- Biblioteca de medios interna (activos reutilizables; no publica a redes) ---
-  bibliotecaMedia: (
-    filtros?: { marca?: string; tipo?: string; soloAprobados?: boolean },
-    signal?: AbortSignal,
-  ) =>
-    peticion<RespuestaMediosBiblioteca>(
-      `/biblioteca-media${query({
-        marca: filtros?.marca || undefined,
-        tipo: filtros?.tipo || undefined,
-        solo_aprobados: filtros?.soloAprobados ? "1" : undefined,
-      })}`,
-      { signal },
-    ),
-  subirMedioBiblioteca: (
-    archivo: File,
-    meta: {
-      titulo?: string;
-      descripcion?: string;
-      marca?: string;
-      tipo?: string;
-      etiquetas?: string[];
-      credito?: string;
-    },
-  ) => {
-    const form = new FormData();
-    form.set("archivo", archivo);
-    if (meta.titulo) form.set("titulo", meta.titulo);
-    if (meta.descripcion) form.set("descripcion", meta.descripcion);
-    if (meta.marca) form.set("marca", meta.marca);
-    if (meta.tipo) form.set("tipo", meta.tipo);
-    if (meta.credito) form.set("credito", meta.credito);
-    if (meta.etiquetas) form.set("etiquetas", JSON.stringify(meta.etiquetas));
-    return peticion<RespuestaMedioBiblioteca>("/biblioteca-media", { metodo: "POST", form });
-  },
-  actualizarMedioBiblioteca: (id: string, cuerpo: CuerpoActualizarMedioBiblioteca) =>
-    peticion<RespuestaMedioBiblioteca>(`/biblioteca-media/${encodeURIComponent(id)}`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  eliminarMedioBiblioteca: (id: string) =>
-    peticion<RespuestaMensaje>(`/biblioteca-media/${encodeURIComponent(id)}`, {
-      metodo: "DELETE",
-    }),
 
   // --- RSS (fuentes + items) ---
   fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),

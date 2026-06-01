@@ -2231,49 +2231,6 @@ export interface RespuestaAplicarPlantilla {
   faltan: string[];
 }
 
-// --- Biblioteca de medios interna (activos reutilizables) ---
-
-/** Un medio catalogado en la biblioteca interna (imagen/clip aprobado y etiquetable). */
-export interface MedioBiblioteca {
-  id: string;
-  /** Nombre del objeto en el almacén de media (uuid+ext del servidor). */
-  objeto: string;
-  /** URL para servir/previsualizar el binario (`/api/media/{objeto}`). */
-  url: string;
-  /** Tipo de medio: `imagen` o `clip`. */
-  tipo: string;
-  titulo: string;
-  descripcion: string;
-  /** Marca asociada (`""` si es general). */
-  marca: string;
-  marca_nombre: string;
-  etiquetas: string[];
-  credito: string;
-  aprobado: boolean;
-  autor_nombre: string;
-  creado: string;
-  actualizado: string;
-}
-
-export interface RespuestaMediosBiblioteca {
-  medios: MedioBiblioteca[];
-}
-
-export interface RespuestaMedioBiblioteca {
-  medio: MedioBiblioteca;
-}
-
-/** Cuerpo parcial para actualizar los metadatos de un medio de la biblioteca. */
-export interface CuerpoActualizarMedioBiblioteca {
-  titulo?: string;
-  descripcion?: string;
-  marca?: string;
-  tipo?: string;
-  etiquetas?: string[];
-  credito?: string;
-  aprobado?: boolean;
-}
-
 // --- RSS (fuentes y elementos para Generar copy) ---
 
 /** Una fuente RSS dada de alta. */
@@ -2476,18 +2433,6 @@ export interface CuerpoImagenesRevisar {
   /** Nombre del objeto de media a revisar. */
   imagen: string;
   marca?: string;
-}
-
-/** Cuerpo de `POST /api/biblioteca-media/catalogar`: cataloga un objeto ya subido/generado. */
-export interface CuerpoCatalogarMedio {
-  /** Nombre del objeto de media ya presente en el almacén. */
-  objeto: string;
-  titulo?: string;
-  descripcion?: string;
-  marca?: string;
-  tipo?: string;
-  etiquetas?: string[];
-  credito?: string;
 }
 
 // --- Hashtags ---
