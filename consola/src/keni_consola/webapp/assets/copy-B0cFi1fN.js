@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/copy-B0cFi1fN.js
 import{a7 as c}from"./index-yInRXLlf.js";/**
+|||||||| 8388aaad:consola/src/keni_consola/webapp/assets/copy-DLlrgcLG.js
+import{a7 as c}from"./index-BEqQjdpp.js";/**
+========
+import{a6 as c}from"./index-HM2pkZhN.js";/**
+>>>>>>>> feat/piezas-front:consola/src/keni_consola/webapp/assets/copy-BprHEQDf.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

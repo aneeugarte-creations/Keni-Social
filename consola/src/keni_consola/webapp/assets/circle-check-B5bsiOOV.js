@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/circle-check-B5bsiOOV.js
 import{a7 as c}from"./index-yInRXLlf.js";/**
+|||||||| 8388aaad:consola/src/keni_consola/webapp/assets/circle-check-Df4gTNf-.js
+import{a7 as c}from"./index-BEqQjdpp.js";/**
+========
+import{a6 as c}from"./index-HM2pkZhN.js";/**
+>>>>>>>> feat/piezas-front:consola/src/keni_consola/webapp/assets/circle-check-COblcJye.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

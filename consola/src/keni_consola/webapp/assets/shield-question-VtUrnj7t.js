@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/shield-question-VtUrnj7t.js
 import{a7 as e}from"./index-yInRXLlf.js";/**
+|||||||| 8388aaad:consola/src/keni_consola/webapp/assets/shield-question-CXyjPU4l.js
+import{a7 as e}from"./index-BEqQjdpp.js";/**
+========
+import{a6 as e}from"./index-HM2pkZhN.js";/**
+>>>>>>>> feat/piezas-front:consola/src/keni_consola/webapp/assets/shield-question-BRtcczxz.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

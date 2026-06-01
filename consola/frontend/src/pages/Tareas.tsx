@@ -27,7 +27,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
@@ -110,7 +110,13 @@ const CABECERA = {
 };
 
 const SIN_RESPONSABLE = "__sin_asignar__";
+const SIN_EVENTO = "__sin_evento__";
 const TODOS = "__todos__";
+
+/** Etiqueta legible de un evento del catálogo: "titulo · fecha". */
+function etiquetaEvento(e: { titulo: string; fecha: string }): string {
+  return [e.titulo, e.fecha].filter(Boolean).join(" · ") || "(evento)";
+}
 /** Workspace "todas las marcas" (sin aislar). */
 const WORKSPACE_TODAS = "__todas__";
 /** localStorage: workspace (marca) activo + vista del tablero, para que sobrevivan al refresco. */
@@ -223,6 +229,7 @@ export default function Tablero() {
   // Deep-link opcional: `?marca=` fija el workspace y `?modo=` el modo (lo usa, p.ej.,
   // la pestaña Contenido de un agente para abrir el tablero ya filtrado por esa marca).
   const location = useLocation();
+  const navigate = useNavigate();
   const [workspace, setWorkspace] = React.useState<string>(() => {
     const desdeUrl = new URLSearchParams(location.search).get("marca");
     return desdeUrl || leerLS(CLAVE_WORKSPACE, WORKSPACE_TODAS);
@@ -235,8 +242,18 @@ export default function Tablero() {
     if (desdeUrl === "publicaciones" || desdeUrl === "calendario" || desdeUrl === "tablero") {
       return desdeUrl;
     }
+    // Deep-link `?abrir=<id>` abre el detalle de un contenido: vive en el modo Tablero.
+    if (new URLSearchParams(location.search).get("abrir")) return "tablero";
     return leerLS(CLAVE_MODO, "tablero") as Modo;
   });
+  // Deep-link `?abrir=<contenido_id>` (p.ej. desde el Panel): abre el detalle de ESE
+  // contenido en el tablero. Lo pasamos a la tarjeta correspondiente, que se auto-abre.
+  // Se limpia de la URL al consumirlo (replace) para no re-abrir al navegar/refrescar.
+  // Capturado una sola vez al montar (no se vuelve a leer de la URL): el valor sobrevive a
+  // que limpiemos `?abrir` de la URL, dándole a la tarjeta tiempo de consumirlo.
+  const [abrirId] = React.useState<string | null>(
+    () => new URLSearchParams(location.search).get("abrir"),
+  );
 
   React.useEffect(() => {
     try {
@@ -262,6 +279,20 @@ export default function Tablero() {
 
   const contenidos = React.useMemo(() => query.data?.contenidos ?? [], [query.data]);
   const catalogos = query.data?.catalogos;
+
+  // Una vez resuelta la query con un `?abrir=` pendiente, limpiamos el parámetro de la URL
+  // (replace) para que el detalle no se re-abra al refrescar o navegar atrás. `abrirId`
+  // sobrevive en estado el tiempo justo para que la tarjeta lo consuma y se auto-abra; si
+  // el id no está en la lista cargada, simplemente no abre nada (no-op).
+  React.useEffect(() => {
+    if (!abrirId || !query.isSuccess) return;
+    const params = new URLSearchParams(location.search);
+    if (params.has("abrir")) {
+      params.delete("abrir");
+      const qs = params.toString();
+      navigate({ pathname: location.pathname, search: qs ? `?${qs}` : "" }, { replace: true });
+    }
+  }, [abrirId, query.isSuccess, location.pathname, location.search, navigate]);
   const metricas = metricasQuery.data?.metricas;
   const etiquetas = React.useMemo<EtiquetaCatalogo[]>(
     () => catalogos?.etiquetas ?? [],
@@ -308,6 +339,7 @@ export default function Tablero() {
         etiquetasWorkspace={etiquetasWorkspace}
         compacta={vista === "grid"}
         metricas={metricas}
+        abrirDetalle={c.id === abrirId}
       />
     );
 
@@ -967,6 +999,7 @@ function TarjetaContenido({
   etiquetasWorkspace,
   compacta = false,
   metricas,
+  abrirDetalle = false,
 }: {
   contenido: Contenido;
   catalogos: CatalogosContenido;
@@ -974,11 +1007,19 @@ function TarjetaContenido({
   etiquetasWorkspace: EtiquetaCatalogo[];
   compacta?: boolean;
   metricas?: Record<string, MetricaPieza>;
+  /** Deep-link `?abrir=`: si es esta pieza, abre su panel de detalle al montar. */
+  abrirDetalle?: boolean;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
   const [asistenteAbierto, setAsistenteAbierto] = React.useState(false);
   const [colaboracionAbierta, setColaboracionAbierta] = React.useState(false);
+
+  // Deep-link `?abrir=<id>` (desde el Panel): si esta tarjeta es la apuntada, abre su
+  // detalle. Solo aplica a `contenido` (las tareas no tienen panel de colaboración).
+  React.useEffect(() => {
+    if (abrirDetalle && contenido.clase === "contenido") setColaboracionAbierta(true);
+  }, [abrirDetalle, contenido.clase]);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -989,6 +1030,12 @@ function TarjetaContenido({
   const cambiarPrioridad = useMutation({
     mutationFn: (prioridad: Contenido["prioridad"]) =>
       api.actualizarContenido(contenido.id, { prioridad }),
+    onSuccess: invalidar,
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const cambiarEvento = useMutation({
+    mutationFn: (evento_id: string) =>
+      api.actualizarContenido(contenido.id, { evento_id }),
     onSuccess: invalidar,
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -1233,6 +1280,36 @@ function TarjetaContenido({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Evento (cobertura): atar/desatar la pieza a un evento del catálogo. Visible en el
+            flujo de eventos, o si la pieza ya trae un evento (para poder cambiarlo/quitarlo). */}
+        {contenido.clase === "contenido" &&
+          (contenido.flujo === "evento" || contenido.evento_id) && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Evento</span>
+              <Select
+                value={contenido.evento_id || SIN_EVENTO}
+                onValueChange={(v) => cambiarEvento.mutate(v === SIN_EVENTO ? "" : v)}
+                disabled={cambiarEvento.isPending}
+              >
+                <SelectTrigger aria-label="Evento del contenido" className="h-7 w-48 text-xs">
+                  <SelectValue placeholder="(ninguno)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_EVENTO}>(ninguno)</SelectItem>
+                  {catalogos.eventos.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {etiquetaEvento(e)}
+                    </SelectItem>
+                  ))}
+                  {contenido.evento_id &&
+                    !catalogos.eventos.some((e) => e.id === contenido.evento_id) && (
+                      <SelectItem value={contenido.evento_id}>(evento)</SelectItem>
+                    )}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
       </CardContent>
       {contenido.clase === "contenido" && (
         <DialogoAsistente
@@ -1648,6 +1725,7 @@ function DialogoNuevo({
   const [flujo, setFlujo] = React.useState<Contenido["flujo"]>("importante");
   // Por defecto el workspace activo (si hay uno fijado), para que la pieza nazca en él.
   const [marca, setMarca] = React.useState(workspace === WORKSPACE_TODAS ? "" : workspace);
+  const [evento, setEvento] = React.useState(SIN_EVENTO);
   const [prioridad, setPrioridad] = React.useState<Contenido["prioridad"]>("media");
   const [fechaEntrega, setFechaEntrega] = React.useState("");
   const [responsable, setResponsable] = React.useState(SIN_RESPONSABLE);
@@ -1665,6 +1743,7 @@ function DialogoNuevo({
     setClase("contenido");
     setFlujo("importante");
     setMarca(workspace === WORKSPACE_TODAS ? "" : workspace);
+    setEvento(SIN_EVENTO);
     setPrioridad("media");
     setFechaEntrega("");
     setResponsable(SIN_RESPONSABLE);
@@ -1693,6 +1772,8 @@ function DialogoNuevo({
         cuerpo.marca = marca;
         cuerpo.redes = redes;
         cuerpo.etiquetas = etiquetas;
+        // Solo tiene sentido atar a un evento en el flujo de cobertura de eventos.
+        if (flujo === "evento") cuerpo.evento_id = evento === SIN_EVENTO ? "" : evento;
       }
       return api.crearContenido(cuerpo);
     },
@@ -1802,6 +1883,29 @@ function DialogoNuevo({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          )}
+
+          {/* Evento: solo en el flujo de cobertura de eventos. Ata la pieza a un evento
+              del catálogo (`catalogos.eventos`); opcional ("(ninguno)"). */}
+          {clase === "contenido" && flujo === "evento" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="nc-evento">
+                Evento <span className="font-normal text-muted-foreground">(opcional)</span>
+              </Label>
+              <Select value={evento} onValueChange={setEvento}>
+                <SelectTrigger id="nc-evento" aria-label="Evento">
+                  <SelectValue placeholder="(ninguno)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={SIN_EVENTO}>(ninguno)</SelectItem>
+                  {catalogos.eventos.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {etiquetaEvento(e)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/select-D3zPWoTE.js
 import{a7 as ct,ar as f,aj as y,a5 as Dt,a6 as lt,as as ge,aB as Y,aq as at,x as z,aF as J,aA as Lt,aC as yt,aE as ft,a4 as F,P as Kn,ag as Yn,aD as Xn,y as qn,o as Gn,n as Zn,a2 as fe}from"./index-yInRXLlf.js";/**
+|||||||| 8388aaad:consola/src/keni_consola/webapp/assets/select-DaQrHksb.js
+import{a7 as ct,ar as f,aj as y,a5 as Dt,a6 as lt,as as ge,aB as Y,aq as at,x as z,aF as J,aA as Lt,aC as yt,aE as ft,a4 as F,P as Kn,ag as Yn,aD as Xn,y as qn,o as Gn,n as Zn,a2 as fe}from"./index-BEqQjdpp.js";/**
+========
+import{a6 as ct,aq as f,ai as y,a4 as Dt,a5 as lt,ar as ge,aA as Y,ap as at,w as z,aE as J,az as Lt,aB as yt,aD as ft,a3 as F,P as Kn,af as Yn,aC as Xn,x as qn,o as Gn,n as Zn,a1 as fe}from"./index-HM2pkZhN.js";/**
+>>>>>>>> feat/piezas-front:consola/src/keni_consola/webapp/assets/select-ymZm04VE.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

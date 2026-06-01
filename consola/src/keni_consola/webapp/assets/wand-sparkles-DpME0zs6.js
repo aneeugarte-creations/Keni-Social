@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/wand-sparkles-DpME0zs6.js
 import{a7 as a}from"./index-yInRXLlf.js";/**
+|||||||| 8388aaad:consola/src/keni_consola/webapp/assets/wand-sparkles-Br_tzhiF.js
+import{a7 as a}from"./index-BEqQjdpp.js";/**
+========
+import{a6 as a}from"./index-HM2pkZhN.js";/**
+>>>>>>>> feat/piezas-front:consola/src/keni_consola/webapp/assets/wand-sparkles-CtJM6k5z.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

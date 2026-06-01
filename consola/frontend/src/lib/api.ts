@@ -28,7 +28,6 @@ import type {
   CuerpoActualizarPublicacion,
   CuerpoActualizarTurnoRota,
   CuerpoActualizarEventoRota,
-  CuerpoActualizarPiezaRota,
   CuerpoActualizarProgramaRota,
   CuerpoAprobarRota,
   CuerpoBorrarLoteIds,
@@ -38,7 +37,6 @@ import type {
   CuerpoCrearTurnoRota,
   CuerpoCrearTurnosLote,
   CuerpoDuplicarEventoRota,
-  CuerpoDuplicarPiezaRota,
   CuerpoDuplicarTurnoRota,
   CuerpoPerfilesMetricool,
   CuerpoGuardarMetricool,
@@ -56,7 +54,6 @@ import type {
   RespuestaBandejaRadarAuto,
   RespuestaEjecutarRadarAuto,
   CuerpoCrearEventoRota,
-  CuerpoCrearPiezaRota,
   CuerpoDuplicarPublicacion,
   CuerpoGenerarDesdeItem,
   CuerpoGenerarMedia,
@@ -174,10 +171,7 @@ import type {
   CuerpoActualizarAusenciaRota,
   RespuestaAusenciasRota,
   RespuestaAusenciaRota,
-  FiltrosPiezasRota,
   RespuestaBorrarLote,
-  RespuestaPiezaRota,
-  RespuestaPiezasRota,
   RespuestaProgramaRota,
   RespuestaProgramasRota,
   RespuestaConfigFranjas,
@@ -1162,48 +1156,6 @@ export const api = {
     }),
   eliminarAusenciaRota: (id: string) =>
     peticion<RespuestaMensaje>(`/rota/ausencias/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-
-  // --- Piezas de la parrilla (#150 PARRILLA 2026.xlsx) ---
-  // Una pieza = un POST individual. Puede ir atada a un evento (`evento_id`) o ser
-  // suelta (campaña evergreen). Filtros combinables: `evento_id=""` lista las sueltas.
-  listarPiezasRota: (filtros: FiltrosPiezasRota = {}, signal?: AbortSignal) => {
-    // Pasamos evento_id="" tal cual (para listar piezas sueltas) sin que `query`
-    // lo descarte: `query` omite "" y undefined, así que añadimos el parametro a mano.
-    const otros: Record<string, string | undefined> = {
-      desde: filtros.desde,
-      hasta: filtros.hasta,
-      red: filtros.red,
-      tipo: filtros.tipo,
-      estado: filtros.estado,
-      responsable_id: filtros.responsable_id,
-      programa: filtros.programa,
-    };
-    let qs = query(otros);
-    if (filtros.evento_id !== undefined) {
-      const sep = qs ? "&" : "?";
-      qs = `${qs}${sep}evento_id=${encodeURIComponent(filtros.evento_id)}`;
-    }
-    return peticion<RespuestaPiezasRota>(`/rota/piezas${qs}`, { signal });
-  },
-  crearPiezaRota: (cuerpo: CuerpoCrearPiezaRota) =>
-    peticion<RespuestaPiezaRota>("/rota/piezas", { metodo: "POST", json: cuerpo }),
-  actualizarPiezaRota: (id: string, cuerpo: CuerpoActualizarPiezaRota) =>
-    peticion<RespuestaPiezaRota>(`/rota/piezas/${encodeURIComponent(id)}`, {
-      metodo: "PATCH",
-      json: cuerpo,
-    }),
-  eliminarPiezaRota: (id: string) =>
-    peticion<RespuestaMensaje>(`/rota/piezas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  duplicarPiezaRota: (id: string, cuerpo: CuerpoDuplicarPiezaRota = {}) =>
-    peticion<RespuestaPiezaRota>(`/rota/piezas/${encodeURIComponent(id)}/duplicar`, {
-      metodo: "POST",
-      json: cuerpo,
-    }),
-  borrarPiezasLote: (cuerpo: CuerpoBorrarLoteIds) =>
-    peticion<RespuestaBorrarLote>("/rota/piezas/lote/borrar", {
-      metodo: "POST",
-      json: cuerpo,
-    }),
 
   // --- Catálogo de programas (#150 PARRILLA 2026.xlsx) ---
   // Las piezas referencian programas por NOMBRE; renombrar hace cascada
