@@ -1650,38 +1650,24 @@ function FilaPlataforma({
           className={cn("h-3.5 w-3.5 transition-transform", imagenAbierta && "rotate-180")}
         />
       </Button>
-      <MenuContextual
-        disparador="click"
-        etiqueta={`Acciones de ${plataforma.red_nombre}`}
-        items={[
-          {
-            etiqueta: "Quitar plataforma",
-            icono: Trash2,
-            destructivo: true,
-            deshabilitado: borrar.isPending,
-            onClick: () => {
-              if (
-                window.confirm(
-                  `¿Quitar la plataforma ${plataforma.red_nombre} de esta pieza? Esta acción no se puede deshacer.`,
-                )
-              ) {
-                borrar.mutate();
-              }
-            },
-          },
-        ]}
+      <button
+        type="button"
+        aria-label={`Quitar la plataforma ${plataforma.red_nombre}`}
+        title="Quitar plataforma"
+        disabled={borrar.isPending}
+        onClick={() => {
+          if (
+            window.confirm(
+              `¿Quitar la plataforma ${plataforma.red_nombre} de esta pieza? Esta acción no se puede deshacer.`,
+            )
+          ) {
+            borrar.mutate();
+          }
+        }}
+        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
       >
-        <button
-          type="button"
-          aria-label={`Más acciones de ${plataforma.red_nombre}`}
-          aria-haspopup="menu"
-          title="Más acciones"
-          disabled={borrar.isPending}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <MoreVertical className="h-3.5 w-3.5" />
-        </button>
-      </MenuContextual>
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
       </div>
       {editorAbierto && (
         <EditorCopy

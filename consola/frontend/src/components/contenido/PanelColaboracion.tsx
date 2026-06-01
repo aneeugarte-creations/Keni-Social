@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   History,
   MessageSquare,
-  MoreVertical,
   RotateCcw,
   ShieldCheck,
   Trash2,
@@ -30,10 +29,7 @@ import { toast } from "sonner";
 import { Autor } from "@/components/comunes/Autor";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import {
-  MenuContextual,
-  type EntradaMenuContextual,
-} from "@/components/comunes/MenuContextual";
+import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -434,23 +430,6 @@ function Aprobacion({ plataforma }: { plataforma: ContenidoPlataforma }) {
   const cadena = query.data;
   const niveles = cadena?.niveles ?? [];
 
-  const accionesCadena: EntradaMenuContextual[] = [
-    {
-      etiqueta: "Reiniciar cadena",
-      icono: RotateCcw,
-      onClick: () => {
-        if (
-          window.confirm(
-            "¿Reiniciar la cadena de aprobación? Se perderán las decisiones registradas.",
-          )
-        )
-          crear.mutate();
-      },
-      destructivo: true,
-      deshabilitado: crear.isPending,
-    },
-  ];
-
   if (query.isLoading) {
     return <p className="text-sm text-muted-foreground">Cargando…</p>;
   }
@@ -480,21 +459,23 @@ function Aprobacion({ plataforma }: { plataforma: ContenidoPlataforma }) {
         >
           {ESTADO_CADENA_LABEL[cadena!.estado]}
         </Badge>
-        <MenuContextual
-          items={accionesCadena}
-          disparador="click"
-          etiqueta="Acciones de la cadena"
+        <button
+          type="button"
+          aria-label="Reiniciar la cadena de aprobación"
+          title="Reiniciar cadena"
+          disabled={crear.isPending}
+          onClick={() => {
+            if (
+              window.confirm(
+                "¿Reiniciar la cadena de aprobación? Se perderán las decisiones registradas.",
+              )
+            )
+              crear.mutate();
+          }}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
         >
-          <button
-            type="button"
-            aria-label="Más acciones"
-            aria-haspopup="menu"
-            title="Más acciones"
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-        </MenuContextual>
+          <RotateCcw className="h-4 w-4" />
+        </button>
       </div>
       <ol className="space-y-2">
         {niveles.map((n) => {

@@ -7,6 +7,7 @@ import { useMenuContextual } from "@/hooks/useMenuContextual";
 import {
   MenuFlotante,
   type EntradaMenuContextual,
+  type ItemMenuContextual,
 } from "@/components/comunes/MenuContextual";
 
 type ComoFila = "tr" | "div" | "li";
@@ -66,6 +67,14 @@ export function FilaConAcciones({
   const tieneAcciones = acciones.length > 0;
   const esClicable = typeof onPrimaria === "function";
 
+  // Si solo hay UNA acción, mostrarla como botón-icono directo en vez de un kebab que
+  // abre un menú de un solo item (sobreingeniería). El menú solo aparece con 2+ acciones.
+  const itemsReales = acciones.filter(
+    (a): a is ItemMenuContextual => !("separador" in a),
+  );
+  const accionUnica = itemsReales.length === 1 ? itemsReales[0] : null;
+  const hayMenu = tieneAcciones && !accionUnica;
+
   function alClick(e: React.MouseEvent) {
     if (!esClicable) return;
     // Ignora clicks originados en controles internos (incluido el kebab) o marcados.
@@ -84,8 +93,8 @@ export function FilaConAcciones({
         return;
       }
     }
-    // Shift+F10 o tecla Menú abren las acciones secundarias.
-    if (tieneAcciones && ((e.shiftKey && e.key === "F10") || e.key === "ContextMenu")) {
+    // Shift+F10 o tecla Menú abren las acciones secundarias (solo si hay menú).
+    if (hayMenu && ((e.shiftKey && e.key === "F10") || e.key === "ContextMenu")) {
       menu.abrirEn(e, e.currentTarget as HTMLElement);
     }
   }
@@ -97,14 +106,48 @@ export function FilaConAcciones({
       className,
     ),
     onClick: esClicable ? alClick : undefined,
-    onContextMenu: tieneAcciones ? (e: React.MouseEvent) => menu.abrirEn(e) : undefined,
-    onKeyDown: esClicable || tieneAcciones ? alTeclear : undefined,
+    // El click derecho abre el menú solo cuando hay 2+ acciones; con una sola, el
+    // botón-icono directo ya la ofrece.
+    onContextMenu: hayMenu ? (e: React.MouseEvent) => menu.abrirEn(e) : undefined,
+    onKeyDown: esClicable || hayMenu ? alTeclear : undefined,
     tabIndex: esClicable ? 0 : undefined,
     role: esClicable ? "button" : undefined,
   };
 
-  const botonKebab =
-    tieneAcciones && kebab !== "nunca" ? (
+  const claseControl = cn(
+    "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground",
+    "transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    kebab === "hover" &&
+      "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100",
+  );
+
+  let botonKebab: React.ReactNode = null;
+  if (accionUnica && kebab !== "nunca") {
+    const Icono = accionUnica.icono ?? MoreVertical;
+    botonKebab = (
+      <button
+        ref={kebabRef}
+        type="button"
+        aria-label={accionUnica.etiqueta}
+        title={accionUnica.etiqueta}
+        disabled={accionUnica.deshabilitado}
+        onClick={(e) => {
+          e.stopPropagation();
+          accionUnica.onClick();
+        }}
+        className={cn(
+          claseControl,
+          "disabled:cursor-not-allowed disabled:opacity-50",
+          accionUnica.destructivo
+            ? "hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10"
+            : "hover:bg-accent hover:text-foreground focus-visible:bg-accent",
+        )}
+      >
+        <Icono className="h-4 w-4" />
+      </button>
+    );
+  } else if (hayMenu && kebab !== "nunca") {
+    botonKebab = (
       <button
         ref={kebabRef}
         type="button"
@@ -115,17 +158,12 @@ export function FilaConAcciones({
           e.stopPropagation();
           menu.abrirEn(e, kebabRef.current);
         }}
-        className={cn(
-          "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground",
-          "transition-colors hover:bg-accent hover:text-foreground focus-visible:bg-accent",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          kebab === "hover" &&
-            "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-within:opacity-100",
-        )}
+        className={cn(claseControl, "hover:bg-accent hover:text-foreground focus-visible:bg-accent")}
       >
         <MoreVertical className="h-4 w-4" />
       </button>
-    ) : null;
+    );
+  }
 
   const portal = menu.pos
     ? createPortal(
