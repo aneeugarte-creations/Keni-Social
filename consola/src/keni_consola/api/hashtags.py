@@ -20,12 +20,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, redes, repos
+from .. import marcas, redes, repos
 from .._http_json import leer_json
+from ..dominio import generar as gen_dom
 from ..dominio import hashtags as dom_hashtags
 from ..dominio import jobspec
 from ..seguridad import autor_de_peticion
-from . import skills
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
 # que publicaciones.
@@ -172,45 +172,21 @@ async def sugerir(request: Request) -> Response:
 
     prompt = construir_prompt_sugerencia(texto.strip(), marca, red)
 
-    def procesar(salida: str, _metricas: object) -> dict[str, object]:
-        return {"hashtags": parsear_hashtags(salida)}
-
     # Atribucion por usuario (#130 Fase 1): la generacion la dispara el usuario actual.
-    autor = autor_de_peticion(request) or {}
-    gen = generaciones.crear(
-        {
-            "tipo": "hashtags",
-            "marca": marca,
-            "etiqueta": f"Hashtags · {marcas.etiqueta_de(marca)}",
-            "autor_id": autor.get("id", ""),
-            "autor_nombre": autor.get("usuario", ""),
-        }
+    # ENCOLA via el lanzador NEUTRO (cwd sin skills); el worker reconstruye el parseo de
+    # hashtags desde el `spec` (`jobspec.construir_hashtags`).
+    autor = autor_de_peticion(request)
+    procesar_spec = jobspec.construir_hashtags()
+    gen = gen_dom.lanzar(
+        tipo="hashtags",
+        titulo="Hashtags",
+        marca=marca,
+        prompt=prompt,
+        procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+        procesar_spec=procesar_spec,
+        autor=autor,
     )
-    # ENCOLA y devuelve de inmediato (#130 Fase 2): el worker reconstruye el parseo de
-    # hashtags desde el `spec` y corre `claude -p` (con #137). `procesar` solo lo usa un
-    # lanzador inyectado (tests). El cwd lo resuelve el worker (jobspec.cwd, via env vars).
-    spec = jobspec.construir(prompt=prompt, procesar=jobspec.construir_hashtags())
-    try:
-        generaciones.encolar_job_claude(
-            gen["id"], prompt=prompt, cwd=skills._cwd_skills(), procesar=procesar, spec=spec
-        )
-    except generaciones.ColaLlenaError:
-        # Cola al tope (#137): marcamos el registro y RE-LANZAMOS para que el manejador
-        # central responda 429 (backpressure) en vez de un error generico.
-        generaciones.actualizar(
-            gen["id"],
-            {"estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
-             "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
-             "fecha_fin": generaciones.ahora_iso()},
-        )
-        raise
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos error en el registro
-        generaciones.actualizar(
-            gen["id"],
-            {"estado": generaciones.ESTADO_ERROR, "error": "No se pudieron sugerir hashtags.",
-             "fecha_fin": generaciones.ahora_iso()},
-        )
-    return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
+    return JSONResponse({"generacion": gen})
 
 
 RUTAS = [
