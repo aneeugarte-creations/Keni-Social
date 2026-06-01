@@ -31,6 +31,7 @@ modulos_backend = [
   "biblioteca",
   "generaciones",
   "hashtags",
+  "historial",
   "plantillas",
   "skills_catalogo_api",
   "skills_generacion_api",

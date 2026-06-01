@@ -62,6 +62,11 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # así que el lint no lo dispara): dejan el seam VISIBLE. (ADR 0005 §Seams #1.)
         ("skills", "publicaciones"),
         ("skills_generacion_api", "publicaciones"),
+        # `api/historial.py` (A, NEUTRO) hereda ese mismo seam: "guardar como publicación"
+        # deposita borradores por el contrato `dominio.publicaciones.crear_borrador` (vía
+        # `dominio.copy.crear_publicaciones_desde_piezas` o directo). Es el handoff A→C de
+        # siempre, ahora desde el módulo de historial (al retirar el sistema de skills).
+        ("historial", "publicaciones"),
         # Seam #3 (`panel` shell lee la cola de aprobación de C): tras T1.2, el panel
         # lee C SOLO por las funciones-CONTRATO de solo lectura que C expone
         # (`dominio.publicaciones.cola_de_aprobacion` / `proximas_programadas`), no por

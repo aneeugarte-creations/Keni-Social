@@ -659,7 +659,6 @@ RUTAS = [
     Route("/api/skills/ejecutar", ejecutar, methods=["POST"]),
     Route("/api/skills/ejecutar-archivo", ejecutar_archivo, methods=["POST"]),
     Route("/api/skills/ejecutar-url", ejecutar_url, methods=["POST"]),
-    Route("/api/skills/historial", historial, methods=["GET"]),
-    Route("/api/skills/historial/{historial_id}/guardar", historial_guardar, methods=["POST"]),
-    Route("/api/skills/historial/{historial_id}", historial_detalle, methods=["GET"]),
+    # El historial (listado/detalle/guardar) se MOVIO a `api/historial.py` (modulo NEUTRO):
+    # lo consumen todas las generaciones, no solo skills. Aqui ya no se registran sus rutas.
 ]
