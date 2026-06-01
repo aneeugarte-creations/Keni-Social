@@ -72,8 +72,27 @@ function FilaSugerencia({
 }) {
   const meta = META_MOTIVO[sugerencia.motivo];
   const Icono = meta?.icono ?? Sparkles;
+  // Fila clicable entera = reciclar (la única acción primaria de la fila). La guarda evita
+  // que un click sobre el propio botón "Reciclar" la dispare dos veces.
+  function alClick(e: React.MouseEvent) {
+    if (reciclando) return;
+    const t = e.target as HTMLElement;
+    if (
+      t.closest(
+        "button, a, input, select, textarea, label, [role='button'], [role='menuitem'], [data-no-primaria]",
+      )
+    )
+      return;
+    onReciclar(sugerencia.id);
+  }
   return (
-    <div className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/60 p-3 sm:flex-row sm:items-start sm:justify-between">
+    <div
+      onClick={alClick}
+      className={cn(
+        "flex flex-col gap-2 rounded-lg border border-border/60 bg-background/60 p-3 transition-colors hover:bg-accent/40 sm:flex-row sm:items-start sm:justify-between",
+        reciclando ? "cursor-default" : "cursor-pointer",
+      )}
+    >
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate font-medium">{sugerencia.titulo || "(sin título)"}</span>

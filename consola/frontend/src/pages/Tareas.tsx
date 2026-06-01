@@ -1462,15 +1462,51 @@ function TarjetaFeed({ contenido }: { contenido: Contenido }) {
   const plats = contenido.plataformas;
   const marca = contenido.marca_nombre || "";
   const esContenido = contenido.clase === "contenido";
+  const abrirDetalleRef = React.useRef<(() => void) | null>(null);
+
+  // Click en cualquier parte de la tarjeta abre el detalle (salvo controles internos).
+  function alClickCard(e: React.MouseEvent) {
+    if (!esContenido) return;
+    const objetivo = e.target as HTMLElement;
+    if (
+      objetivo.closest(
+        "button, a, input, select, textarea, label, [role='button'], [role='menuitem'], [data-no-primaria]",
+      )
+    )
+      return;
+    abrirDetalleRef.current?.();
+  }
 
   return (
-    <section className="space-y-3 rounded-lg border border-border/60 p-3">
+    <section
+      className={cn(
+        "space-y-3 rounded-lg border border-border/60 p-3",
+        esContenido &&
+          "cursor-pointer transition-colors hover:border-foreground/25 hover:bg-accent/20",
+      )}
+      onClick={esContenido ? alClickCard : undefined}
+    >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
+        <div
+          className="min-w-0"
+          role={esContenido ? "button" : undefined}
+          tabIndex={esContenido ? 0 : undefined}
+          onKeyDown={
+            esContenido
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    abrirDetalleRef.current?.();
+                  }
+                }
+              : undefined
+          }
+          title={esContenido ? "Ver detalle: comentarios, versiones de copy y aprobación" : undefined}
+        >
           <p className="truncate font-medium leading-snug">{contenido.titulo}</p>
           <p className="truncate text-xs text-muted-foreground">{marca || "Sin marca"}</p>
         </div>
-        <BarraAccionesPieza contenido={contenido} />
+        <BarraAccionesPieza contenido={contenido} abrirDetalleRef={abrirDetalleRef} />
       </div>
 
       {!esContenido ? (
