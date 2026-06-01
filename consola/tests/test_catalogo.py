@@ -26,7 +26,7 @@ _SIDEBAR_HOY = [
     # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
     # tablero (Parrilla) es la superficie única de contenido. La pestaña "Skills
     # (catálogo)" se retiró con el sistema de skills (la edición vive en la Biblioteca).
-    ["Parrilla", "Agentes", "Activos"],
+    ["Parrilla", "Actividad IA", "Activos"],
 ]
 
 
@@ -86,7 +86,7 @@ def test_iconos_de_nav_son_strings_lucide():
     assert iconos["/revision"] == "ShieldCheck"
     assert iconos["/analiticas"] == "BarChart3"
     assert iconos["/parrilla"] == "CalendarClock"
-    assert iconos["/agentes"] == "Bot"
+    assert iconos["/actividad"] == "Activity"
 
 
 def test_desactivar_flag_oculta_la_app_del_catalogo():

@@ -19,13 +19,8 @@ frontend lo tipa rico); por eso no aparece aquí.
 
 from __future__ import annotations
 
-from keni_consola import agentes
-from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
 from keni_consola.esquema_api import esquema_json
 
-from .conftest import _cliente
-
-_MARCA = "unotv"
 _DEFS = esquema_json()["$defs"]
 
 
@@ -88,80 +83,6 @@ def test_publicacion_fecha_programada_y_origen_son_cadena(cliente):
     assert pub["origen"] == ""
     assert isinstance(pub["fecha_programada"], str)
     assert isinstance(pub["origen"], str)
-
-
-# --------------------------------------------------------------------------- #
-# Runs (canónico, listado por agente, listado global, agregados)              #
-# --------------------------------------------------------------------------- #
-
-
-_METRICAS_DEMO = skills.MetricasRun(
-    tokens_in=130, tokens_out=50, num_turns=3, total_cost_usd=0.0123,
-    duration_ms=4200, session_id="sess-abc-123", modelo="claude-opus-4-7",
-)
-
-
-def _lanzador_con_metricas(texto: str, metricas: skills.MetricasRun):
-    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
-        agentes.actualizar_run(
-            marca_id, run_id,
-            {"estado": "completado", "salida": texto,
-             "metricas": skills.metricas_a_dict(metricas), "fecha_fin": agentes.ahora_iso()},
-        )
-
-    return lanzar
-
-
-def test_run_canonico_conforma(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("salida", _METRICAS_DEMO))
-    run = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]
-    # El run completo trae salida/fecha_fin (NotRequired pero presentes).
-    _conforma(run, "Run")
-    assert {"salida", "fecha_fin"} <= set(run)
-    detalle = c.get(f"/api/agentes/{_MARCA}/runs/{run['id']}").json()["run"]
-    _conforma(detalle, "Run")
-    _conforma(detalle["metricas"], "MetricasRun")
-
-
-def test_run_interactivo_envelope_lleva_mensaje(entorno):
-    c = _cliente()  # abrir mock devuelve "ok-mock"
-    resp = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p", "modo": "interactivo"}).json()
-    _conforma(resp, "RespuestaRun")
-    assert "mensaje" in resp  # solo el lanzamiento interactivo lo añade
-    _conforma(resp["run"], "Run")
-
-
-def test_respuesta_runs_por_agente_conforma(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
-    c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"})
-    resp = c.get(f"/api/agentes/{_MARCA}/runs").json()
-    _conforma(resp, "RespuestaRuns")  # sin paginacion (NotRequired)
-    for run in resp["runs"]:
-        _conforma(run, "Run")
-
-
-def test_respuesta_runs_global_conforma(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
-    c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"})
-    resp = c.get("/api/runs").json()
-    _conforma(resp, "RespuestaRuns")
-    _conforma(resp["paginacion"], "Paginacion")
-    for run in resp["runs"]:
-        _conforma(run, "Run")
-        # El listado global denormaliza agente/agente_nombre y omite salida/fecha_fin.
-        assert {"agente", "agente_nombre"} <= set(run)
-
-
-def test_respuesta_runs_agregados_conforma(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
-    c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"})
-    resp = c.get("/api/runs/agregados").json()
-    _conforma(resp, "RespuestaRunsAgregados")
-    _conforma(resp["total"], "TotalRuns")
-    for fila in resp["por_agente"]:
-        _conforma(fila, "AgregadoPorAgente")
-    for fila in resp["por_dia"]:
-        _conforma(fila, "AgregadoPorDia")
 
 
 # --------------------------------------------------------------------------- #
