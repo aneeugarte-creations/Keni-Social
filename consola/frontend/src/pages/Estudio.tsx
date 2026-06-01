@@ -94,24 +94,63 @@ function resultadoImagen(g: Generacion | null): ImagenActiva | null {
 }
 
 /**
+ * Persistencia de la SESIÓN del Estudio en `sessionStorage` (sobrevive a cambiar de
+ * página y volver dentro de la misma pestaña). Las imágenes son objetos durables del
+ * almacén; lo que se perdía era la VISTA (candidatas, activa, variantes en vuelo). Los
+ * trabajos de IA siguen corriendo en el servidor: al volver, reanudamos su sondeo
+ * (las generaciones `op`/`revisión` por su `persistKey`; las variantes re-sondean por id).
+ * La clave incluye el id de la pieza para no mezclar sesiones de piezas distintas.
+ */
+interface SesionEstudio {
+  candidatas: ImagenActiva[];
+  activaId: string | null;
+  variantesGen: Generacion[];
+  prompt: string;
+  marca: string;
+  formato: FormatoImagen;
+  variantes: number;
+}
+
+function claveSesion(pubId?: string): string {
+  return "keni:estudio:" + (pubId || "libre");
+}
+
+function cargarSesion(clave: string): Partial<SesionEstudio> {
+  try {
+    const crudo = sessionStorage.getItem(clave);
+    return crudo ? (JSON.parse(crudo) as Partial<SesionEstudio>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function guardarSesion(clave: string, s: SesionEstudio): void {
+  try {
+    sessionStorage.setItem(clave, JSON.stringify(s));
+  } catch {
+    // Sin persistencia si el almacenamiento falla (modo privado, cuota llena…). No es fatal.
+  }
+}
+
+/**
  * Sondea UNA generación de variante y reporta su estado al padre. Es un componente
  * (y no un bucle de hooks) porque `useGeneracion` debe llamarse una vez por generación.
  */
 function Variante({
   generacion,
-  activa,
-  onCompletada,
-  onClick,
+  onResuelta,
+  onFallida,
 }: {
   generacion: Generacion;
-  activa: boolean;
-  onCompletada: (img: ImagenActiva) => void;
-  onClick: (img: ImagenActiva) => void;
+  onResuelta: (id: string, img: ImagenActiva) => void;
+  onFallida: (id: string) => void;
 }) {
-  const { generacion: g, ejecutando, iniciar } = useGeneracion();
+  // Sin persistKey propio: la lista `variantesGen` se persiste a nivel de sesión y al
+  // remontar este componente re-sondea por id (la generación sigue viva en el servidor).
+  const { generacion: g, iniciar } = useGeneracion();
   const iniciadoRef = React.useRef(false);
 
-  // Arranca el seguimiento una sola vez con la generación recibida del POST.
+  // Arranca (o REANUDA) el seguimiento una sola vez con la generación recibida.
   React.useEffect(() => {
     if (iniciadoRef.current) return;
     iniciadoRef.current = true;
@@ -119,18 +158,24 @@ function Variante({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const img = resultadoImagen(g ?? generacion);
+  const actual = g ?? generacion;
+  const img = resultadoImagen(actual);
+
+  // Al RESOLVERSE (imagen lista) o FALLAR, lo reportamos UNA vez: el padre la saca de
+  // `variantesGen` y la mueve a `candidatas` (evita el duplicado y deja solo spinners aquí).
   const reportadoRef = React.useRef(false);
   React.useEffect(() => {
-    if (img && !reportadoRef.current) {
+    if (reportadoRef.current) return;
+    if (img) {
       reportadoRef.current = true;
-      onCompletada(img);
+      onResuelta(generacion.id, img);
+    } else if (actual.estado === "error") {
+      reportadoRef.current = true;
+      onFallida(generacion.id);
     }
-  }, [img, onCompletada]);
+  }, [img, actual.estado, generacion.id, onResuelta, onFallida]);
 
-  const estado = (g ?? generacion).estado;
-
-  if (estado === "error") {
+  if (actual.estado === "error") {
     return (
       <div className="flex aspect-square items-center justify-center rounded-md border border-dashed border-border bg-muted/20 p-2 text-center text-xs text-muted-foreground">
         No se pudo generar esta variante.
@@ -138,29 +183,10 @@ function Variante({
     );
   }
 
-  if (!img || ejecutando) {
-    return (
-      <div className="flex aspect-square items-center justify-center rounded-md border border-dashed border-border bg-muted/20">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
-    <button
-      type="button"
-      onClick={() => onClick(img)}
-      className={`overflow-hidden rounded-md border-2 transition ${
-        activa ? "border-primary ring-2 ring-primary/30" : "border-border hover:border-primary/50"
-      }`}
-      title="Usar esta candidata"
-    >
-      <img
-        src={urlMedia(img.url)}
-        alt="Candidata generada"
-        className="aspect-square w-full object-cover"
-      />
-    </button>
+    <div className="flex aspect-square items-center justify-center rounded-md border border-dashed border-border bg-muted/20">
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    </div>
   );
 }
 
@@ -169,6 +195,11 @@ export default function Estudio() {
   const navigate = useNavigate();
   const ctx = (location.state ?? {}) as ContextoPieza;
 
+  // Sesión persistida (por pieza): se rehidrata en el primer render con inicializadores
+  // perezosos para no parpadear ni pisar lo guardado con valores vacíos.
+  const sesionKey = claveSesion(ctx.publicacionId);
+  const sesion0 = React.useMemo(() => cargarSesion(sesionKey), [sesionKey]);
+
   // Catálogo de marcas (para los selectores).
   const opcionesQuery = useQuery({
     queryKey: ["publicaciones", "opciones"],
@@ -176,18 +207,27 @@ export default function Estudio() {
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
 
-  // --- Estado de configuración (preconfigurado desde el contexto de la pieza) ---
-  const [prompt, setPrompt] = React.useState("");
-  const [marca, setMarca] = React.useState(ctx.marca ?? "");
-  const [formato, setFormato] = React.useState<FormatoImagen>(formatoPorRed(ctx.red));
-  const [variantes, setVariantes] = React.useState(2);
+  // --- Estado de configuración (sesión > contexto de la pieza > por defecto) ---
+  const [prompt, setPrompt] = React.useState(() => sesion0.prompt ?? "");
+  const [marca, setMarca] = React.useState(() => sesion0.marca ?? ctx.marca ?? "");
+  const [formato, setFormato] = React.useState<FormatoImagen>(
+    () => sesion0.formato ?? formatoPorRed(ctx.red),
+  );
+  const [variantes, setVariantes] = React.useState(() => sesion0.variantes ?? 2);
   const [aviso, setAviso] = React.useState("");
 
   // --- Lienzo: candidatas (de generar/subir/editar) y la imagen ACTIVA ---
-  const [candidatas, setCandidatas] = React.useState<ImagenActiva[]>([]);
-  const [activa, setActiva] = React.useState<ImagenActiva | null>(null);
-  // Generaciones de variantes en curso (una `<Variante>` por cada una).
-  const [variantesGen, setVariantesGen] = React.useState<Generacion[]>([]);
+  const [candidatas, setCandidatas] = React.useState<ImagenActiva[]>(
+    () => sesion0.candidatas ?? [],
+  );
+  const [activa, setActiva] = React.useState<ImagenActiva | null>(() =>
+    sesion0.activaId ? (sesion0.candidatas ?? []).find((c) => c.id === sesion0.activaId) ?? null : null,
+  );
+  // Generaciones de variantes EN VUELO (una `<Variante>` por cada una; al resolverse se
+  // mueven a `candidatas`). Persistidas para reanudar el sondeo al volver a la página.
+  const [variantesGen, setVariantesGen] = React.useState<Generacion[]>(
+    () => sesion0.variantesGen ?? [],
+  );
 
   // Si el contexto trae una imagen ya adjunta a la pieza, arranca con ella activa.
   React.useEffect(() => {
@@ -203,6 +243,31 @@ export default function Estudio() {
     setCandidatas((c) => (c.some((x) => x.id === img.id) ? c : [...c, img]));
     if (hacerActiva) setActiva(img);
   }
+
+  // Persistir la sesión cuando cambie: al volver a la página se recupera la vista (las
+  // imágenes son objetos durables; los trabajos en vuelo se reanudan por su id/persistKey).
+  React.useEffect(() => {
+    guardarSesion(sesionKey, {
+      candidatas,
+      activaId: activa?.id ?? null,
+      variantesGen,
+      prompt,
+      marca,
+      formato,
+      variantes,
+    });
+  }, [sesionKey, candidatas, activa, variantesGen, prompt, marca, formato, variantes]);
+
+  // Una variante se RESOLVIÓ: sácala de las que están en vuelo y añádela como candidata
+  // (sin activarla). Una que FALLÓ: sácala y avisa. Así el grid no duplica tiles.
+  const resolverVariante = React.useCallback((id: string, img: ImagenActiva) => {
+    setVariantesGen((prev) => prev.filter((g) => g.id !== id));
+    setCandidatas((c) => (c.some((x) => x.id === img.id) ? c : [...c, img]));
+  }, []);
+  const fallarVariante = React.useCallback((id: string) => {
+    setVariantesGen((prev) => prev.filter((g) => g.id !== id));
+    toast.error("No se pudo generar una variante.");
+  }, []);
 
   // --- Subir una foto de origen ---
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -248,7 +313,8 @@ export default function Estudio() {
 
   // --- Operación sobre la imagen activa (editar determinista / expandir generativo) ---
   // Un único `useGeneracion` dedicado: cada acción lanza una generación y la sondea.
-  const op = useGeneracion();
+  // Con `persistKey` reanuda el sondeo si cambias de página mientras corre.
+  const op = useGeneracion(sesionKey + ":op");
   const opTerminalRef = React.useRef<string | null>(null);
   const [opAviso, setOpAviso] = React.useState("");
   const [opEtiqueta, setOpEtiqueta] = React.useState("");
@@ -305,7 +371,7 @@ export default function Estudio() {
   // --- Revisión legal/editorial (gate humano, no bloquea publicar) ---
   // Job "qa-editorial" que VE la imagen activa y devuelve un checklist ✅/⚠️/❌ en `salida`
   // (texto en vivo). Hook dedicado y región propia para no chocar con editar/expandir.
-  const revision = useGeneracion();
+  const revision = useGeneracion(sesionKey + ":rev");
   const lanzarRevisar = useMutation({
     mutationFn: (cuerpo: Parameters<typeof api.imagenesRevisar>[0]) => api.imagenesRevisar(cuerpo),
     onSuccess: (data) => revision.iniciar(data.generacion),
@@ -319,6 +385,21 @@ export default function Estudio() {
   });
   const revisando = revision.ejecutando || lanzarRevisar.isPending;
   const textoRevision = revision.generacion?.salida ?? "";
+
+  // Empezar de cero: limpia la sesión persistida y deja de seguir los trabajos (no toca el
+  // servidor; las imágenes ya generadas siguen en el almacén). Útil al cambiar de pieza.
+  function limpiarSesion() {
+    setCandidatas([]);
+    setActiva(null);
+    setVariantesGen([]);
+    op.limpiar();
+    revision.limpiar();
+    try {
+      sessionStorage.removeItem(sesionKey);
+    } catch {
+      // Sin almacenamiento: no hay nada que limpiar.
+    }
+  }
 
   function editar(etiqueta: string, cuerpo: Omit<Parameters<typeof api.imagenesEditar>[0], "imagen">) {
     if (!activa) return;
@@ -400,15 +481,26 @@ export default function Estudio() {
           {/* Candidatas */}
           {(candidatas.length > 0 || variantesGen.length > 0) && (
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Candidatas</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-medium">Candidatas</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  onClick={limpiarSesion}
+                  title="Vaciar el lienzo y empezar de cero (no borra imágenes del almacén)"
+                >
+                  Empezar de cero
+                </Button>
+              </div>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {variantesGen.map((g) => (
                   <Variante
                     key={g.id}
                     generacion={g}
-                    activa={false}
-                    onCompletada={(img) => añadirCandidata(img, false)}
-                    onClick={setActiva}
+                    onResuelta={resolverVariante}
+                    onFallida={fallarVariante}
                   />
                 ))}
                 {candidatas.map((img) => (
