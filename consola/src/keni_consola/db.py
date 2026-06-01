@@ -5128,12 +5128,26 @@ def actualizar_publicacion(
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:
-    """Borra una publicacion (su fila por plataforma y el padre 1:1). True si existía."""
+    """Borra una publicacion. True si existía.
+
+    Dos casos (modelo consolidado: publicacion = fila `contenido_plataforma` con
+    `es_publicacion=1` colgada de un `contenido`):
+      - Publicacion SUELTA (su padre 1:1 solo contiene esta fila): se borra el padre, que
+        arrastra la fila (no deja un `contenido` huerfano y vacio). Es el caso de la
+        generacion manual de copy de siempre.
+      - Borrador ANIDADO bajo un tema (el padre tiene MAS filas por plataforma, p.ej. un tema
+        importado/Radar con su copy auto-generado): se borra SOLO esta fila, conservando el
+        tema y sus demas piezas. Evita que borrar un borrador se lleve el tema entero (#nido).
+    """
     plat = obtener_contenido_plataforma(publicacion_id)
     if plat is None or not plat.get("es_publicacion"):
         return False
-    # El padre es 1:1 con la publicacion: borrarlo arrastra la fila por plataforma.
-    return borrar_contenido(plat["contenido_id"])
+    hermanas = listar_contenido_plataforma(plat["contenido_id"])
+    if len(hermanas) <= 1:
+        # Padre 1:1 con la publicacion: borrarlo arrastra la fila por plataforma.
+        return borrar_contenido(plat["contenido_id"])
+    # Anidada bajo un tema con mas piezas: borrar SOLO esta fila, conservar el tema.
+    return borrar_contenido_plataforma(publicacion_id)
 
 
 def duplicar_evento_rota(
