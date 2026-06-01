@@ -8,9 +8,35 @@
 
 export type FormatoId = "vertical" | "feed" | "cuadrado";
 export type Ajuste = "cover" | "contain";
-export type Alineacion = "izquierda" | "centro" | "derecha";
-export type FamiliaLogica = "sans" | "condensada";
+export type Alineacion = "izquierda" | "centro" | "derecha" | "justificado";
+/** La familia es un nombre del catálogo embebido (o las lógicas antiguas "sans"/"condensada"). */
+export type FamiliaLogica = string;
 export type BindingTexto = "copy_in" | "etiqueta_default" | null;
+
+/** Catálogo de tipografías embebidas (SIL OFL). Debe coincidir con `render_node/fuentes.mjs`. */
+export const CATALOGO_FUENTES = [
+  "Barlow",
+  "Barlow Condensed",
+  "Anton",
+  "Oswald",
+  "Montserrat",
+  "Archivo Black",
+  "Lora",
+] as const;
+
+/** Normaliza la familia de un spec antiguo ("sans"/"condensada") al nombre real del catálogo. */
+export function familiaCatalogo(familia: string): string {
+  if (familia === "sans") return "Barlow";
+  if (familia === "condensada") return "Barlow Condensed";
+  return familia;
+}
+
+export const ALINEACIONES: { id: Alineacion; etiqueta: string }[] = [
+  { id: "izquierda", etiqueta: "Izquierda" },
+  { id: "centro", etiqueta: "Centrado" },
+  { id: "derecha", etiqueta: "Derecha" },
+  { id: "justificado", etiqueta: "Justificado" },
+];
 
 export const FORMATOS: { id: FormatoId; etiqueta: string; w: number; h: number }[] = [
   { id: "vertical", etiqueta: "9:16 (Reel/TikTok)", w: 1080, h: 1920 },

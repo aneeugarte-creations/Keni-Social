@@ -2435,6 +2435,12 @@ export interface ImagenActiva {
   id: string;
   /** URL para servir la imagen (`/api/media/...` o nombre que `urlMedia` resuelve). */
   url: string;
+  /**
+   * Foto BASE de la que se compuso esta imagen al "Aplicar marca". Permite REAPLICAR la
+   * plantilla siempre desde la foto original (no apila ni duplica el logo) y "quitar marca"
+   * volviendo a la base. Indefinido en fotos crudas (subidas/generadas) y ediciones.
+   */
+  origen?: string;
 }
 
 /** Formatos de red soportados por el Estudio (vertical 9:16, feed 4:5, cuadrado 1:1, horizontal 16:9). */

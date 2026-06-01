@@ -35,10 +35,14 @@ FORMATOS: dict[str, dict[str, int]] = {
 }
 
 # Familias lógicas de fuente -> el renderer y el editor las resuelven a su archivo embebido.
+# Familias lógicas antiguas (compat) + catálogo de fuentes embebidas reales (las que ofrece el
+# editor). `familia` de una capa puede ser una lógica o un nombre del catálogo; el renderer las
+# resuelve (fuentes.mjs::familiaReal). Validación tolerante: cualquier str no vacío vale.
 FAMILIAS = ("sans", "condensada")
+CATALOGO_FUENTES = ("Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora")
 
 _AJUSTES = ("cover", "contain")
-_ALINEACIONES = ("izquierda", "centro", "derecha")
+_ALINEACIONES = ("izquierda", "centro", "derecha", "justificado")
 _TIPOS_FONDO = ("color", "degradado", "imagen")
 _TIPOS_LOGO = ("imagen", "wordmark")
 _BINDINGS = ("copy_in", "etiqueta_default", None)
@@ -138,7 +142,7 @@ def _validar_logo(lg: Any) -> dict[str, Any]:
             "texto": str(wm.get("texto", "")),
             "color": wm["color"] if _es_hex(wm.get("color")) else "#FFFFFF",
             "fondo": wm["fondo"] if _es_hex(wm.get("fondo")) else "#E30613",
-            "familia": wm.get("familia") if wm.get("familia") in FAMILIAS else "sans",
+            "familia": wm["familia"] if isinstance(wm.get("familia"), str) and wm.get("familia") else "sans",
             "peso": int(wm.get("peso", 700)),
         },
         **caja,
@@ -171,13 +175,13 @@ def _validar_texto(t: Any) -> dict[str, Any]:
         }
     aj = t.get("auto_ajuste") or {}
     _exige(_es_hex(t.get("color")), "El color del texto debe ser hex #RRGGBB.")
-    _exige(t.get("familia") in FAMILIAS, "La familia del texto debe ser sans o condensada.")
+    familia = t["familia"] if isinstance(t.get("familia"), str) and t.get("familia") else "sans"
     return {
         "id": tid,
         "binding": t.get("binding"),
         "texto": str(t.get("texto", "")),
         "x": caja["x"], "y": caja["y"], "w": caja["w"],
-        "familia": t["familia"],
+        "familia": familia,
         "tamano": int(t.get("tamano", 64)),
         "peso": int(t.get("peso", 700)),
         "color": t["color"],

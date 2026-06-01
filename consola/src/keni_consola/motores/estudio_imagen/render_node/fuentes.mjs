@@ -1,8 +1,10 @@
-// Registro de fuentes embebidas (paridad servidor↔editor) y resolución familia/peso → CSS.
+// Registro del CATÁLOGO de fuentes embebidas (SIL OFL, en `../fuentes/`) y resolución de la
+// familia de una capa a un nombre real registrado en Skia.
 //
-// El SPEC usa familias LÓGICAS ("sans" / "condensada"); aquí se resuelven a las familias
-// reales embebidas (Barlow / Barlow Condensed, SIL OFL, en `../fuentes/`). El servidor las
-// registra en Skia con GlobalFonts; el editor las declara con @font-face (mismos archivos).
+// El editor elige la familia por NOMBRE real (p. ej. "Anton", "Barlow Condensed"); el servidor
+// registra esas familias y las usa directamente. Compatibilidad: las familias lógicas antiguas
+// "sans"/"condensada" se mapean a Barlow / Barlow Condensed. Solo el SERVIDOR necesita los
+// archivos (la vista previa del editor también la renderiza el servidor).
 
 import { GlobalFonts } from "@napi-rs/canvas";
 import { fileURLToPath } from "node:url";
@@ -11,7 +13,8 @@ import { dirname, join } from "node:path";
 const _aqui = dirname(fileURLToPath(import.meta.url));
 const DIR_FUENTES = join(_aqui, "..", "fuentes");
 
-// Familia real -> archivos por peso. Skia elige el archivo por peso al pedir `<peso>px ...`.
+// Familia real -> archivo(s). Las variables (Oswald/Montserrat/Lora) se registran una vez; Skia
+// elige el peso por el eje variable al pedir `<peso>px`. Barlow trae estáticas por peso.
 const ARCHIVOS = [
   ["Barlow", "Barlow-Regular.ttf"],
   ["Barlow", "Barlow-SemiBold.ttf"],
@@ -19,7 +22,15 @@ const ARCHIVOS = [
   ["Barlow Condensed", "BarlowCondensed-SemiBold.ttf"],
   ["Barlow Condensed", "BarlowCondensed-Bold.ttf"],
   ["Barlow Condensed", "BarlowCondensed-ExtraBold.ttf"],
+  ["Anton", "Anton-Regular.ttf"],
+  ["Archivo Black", "ArchivoBlack-Regular.ttf"],
+  ["Oswald", "Oswald-Variable.ttf"],
+  ["Montserrat", "Montserrat-Variable.ttf"],
+  ["Lora", "Lora-Variable.ttf"],
 ];
+
+// Catálogo de familias ofrecidas (el editor mantiene su propia copia para el selector).
+export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora"];
 
 let _registradas = false;
 
@@ -31,14 +42,17 @@ export function registrarFuentes() {
   _registradas = true;
 }
 
-// Mapa logical -> familia real, con fallback razonable.
-export function familiaReal(fuentes, logica) {
+// Resuelve la familia de una capa a un nombre real registrado.
+//   - "sans"        -> spec.fuentes.sans (o Barlow)        [compat con specs antiguos]
+//   - "condensada"  -> spec.fuentes.condensada (o Barlow Condensed)
+//   - cualquier otro -> ese mismo nombre (familia del catálogo)
+export function familiaReal(fuentes, familia) {
   const f = fuentes || {};
-  if (logica === "condensada") return f.condensada || "Barlow Condensed";
-  return f.sans || "Barlow";
+  if (familia === "sans") return f.sans || "Barlow";
+  if (familia === "condensada") return f.condensada || "Barlow Condensed";
+  return familia || "Barlow";
 }
 
-// Construye la cadena CSS de fuente para ctx.font.
-export function fuenteCss(fuentes, logica, peso, tam) {
-  return `${peso || 700} ${Math.round(tam)}px "${familiaReal(fuentes, logica)}"`;
+export function fuenteCss(fuentes, familia, peso, tam) {
+  return `${peso || 700} ${Math.round(tam)}px "${familiaReal(fuentes, familia)}"`;
 }

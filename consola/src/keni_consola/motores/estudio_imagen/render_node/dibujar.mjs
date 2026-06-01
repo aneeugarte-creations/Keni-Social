@@ -151,14 +151,43 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
 
   const offsetY = t.chip ? (t.chip.pad_y ?? 14) : 0;
   let y = t.y + offsetY;
-  for (const ln of lineas) {
-    if (t.sombra) {
-      ctx.fillStyle = t.sombra.color || "#000000";
-      ctx.fillText(ln, tx + (t.sombra.dx ?? 2), y + (t.sombra.dy ?? 2));
+  const justif = t.alineacion === "justificado";
+  for (let i = 0; i < lineas.length; i++) {
+    const ln = lineas[i];
+    const ultima = i === lineas.length - 1;
+    if (justif && !ultima) {
+      dibujarLineaJustificada(ctx, ln, t.x, y, t.w, t.color, t.sombra);
+    } else {
+      if (t.sombra) {
+        ctx.fillStyle = t.sombra.color || "#000000";
+        ctx.fillText(ln, (justif ? t.x : tx) + (t.sombra.dx ?? 2), y + (t.sombra.dy ?? 2));
+      }
+      ctx.fillStyle = t.color;
+      ctx.fillText(ln, justif ? t.x : tx, y);
     }
-    ctx.fillStyle = t.color;
-    ctx.fillText(ln, tx, y);
     y += altoLinea;
+  }
+}
+
+// Dibuja una línea con las palabras repartidas para llenar `ancho` (justificado). Una palabra
+// suelta cae a la izquierda. textAlign se fuerza a "left" (posicionamos cada palabra a mano).
+function dibujarLineaJustificada(ctx, linea, x, y, ancho, color, sombra) {
+  const palabras = linea.split(/\s+/).filter(Boolean);
+  ctx.textAlign = "left";
+  if (palabras.length <= 1) {
+    if (sombra) { ctx.fillStyle = sombra.color || "#000000"; ctx.fillText(linea, x + (sombra.dx ?? 2), y + (sombra.dy ?? 2)); }
+    ctx.fillStyle = color;
+    ctx.fillText(linea, x, y);
+    return;
+  }
+  const anchoPalabras = palabras.reduce((s, p) => s + ctx.measureText(p).width, 0);
+  const hueco = (ancho - anchoPalabras) / (palabras.length - 1);
+  let cx = x;
+  for (const p of palabras) {
+    if (sombra) { ctx.fillStyle = sombra.color || "#000000"; ctx.fillText(p, cx + (sombra.dx ?? 2), y + (sombra.dy ?? 2)); }
+    ctx.fillStyle = color;
+    ctx.fillText(p, cx, y);
+    cx += ctx.measureText(p).width + hueco;
   }
 }
 

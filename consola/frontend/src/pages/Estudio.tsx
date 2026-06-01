@@ -29,6 +29,7 @@ import {
   Settings2,
   ShieldCheck,
   Stamp,
+  Trash2,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -241,6 +242,17 @@ export default function Estudio() {
     if (hacerActiva) setActiva(img);
   }
 
+  // Menú contextual de una candidata (clic derecho) para borrar iteraciones del lienzo.
+  const [menuCand, setMenuCand] = React.useState<{ id: string; x: number; y: number } | null>(null);
+  function borrarCandidata(id: string) {
+    setCandidatas((c) => {
+      const resto = c.filter((x) => x.id !== id);
+      setActiva((a) => (a?.id === id ? (resto[resto.length - 1] ?? null) : a));
+      return resto;
+    });
+    setMenuCand(null);
+  }
+
   // Persistir la sesión cuando cambie: al volver a la página se recupera la vista (las
   // imágenes son objetos durables; los trabajos en vuelo se reanudan por su id/persistKey).
   React.useEffect(() => {
@@ -315,6 +327,9 @@ export default function Estudio() {
   const opTerminalRef = React.useRef<string | null>(null);
   const [opAviso, setOpAviso] = React.useState("");
   const [opEtiqueta, setOpEtiqueta] = React.useState("");
+  // Foto BASE de la composición de marca en vuelo (para etiquetar el resultado y reemplazar
+  // una composición previa de la MISMA base, sin apilar/duplicar el logo).
+  const baseComposicionRef = React.useRef<string | null>(null);
 
   React.useEffect(() => {
     const g = op.generacion;
@@ -323,7 +338,16 @@ export default function Estudio() {
       opTerminalRef.current = g.id;
       const img = resultadoImagen(g);
       if (img) {
-        añadirCandidata(img);
+        if (opEtiqueta === "Marca" && baseComposicionRef.current) {
+          // Aplicar marca: la imagen lleva la base como `origen`; sustituye cualquier
+          // composición ANTERIOR de esa misma base (idempotente: o está aplicada o no).
+          const base = baseComposicionRef.current;
+          const conOrigen = { ...img, origen: base };
+          setCandidatas((c) => [...c.filter((x) => x.origen !== base), conOrigen]);
+          setActiva(conOrigen);
+        } else {
+          añadirCandidata(img);
+        }
         toast.success(`${opEtiqueta || "Operación"} aplicada`);
       }
     } else if (g.estado === "error") {
@@ -537,12 +561,16 @@ export default function Estudio() {
                     key={img.id}
                     type="button"
                     onClick={() => setActiva(img)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      setMenuCand({ id: img.id, x: e.clientX, y: e.clientY });
+                    }}
                     className={`overflow-hidden rounded-md border-2 transition ${
                       activa?.id === img.id
                         ? "border-primary ring-2 ring-primary/30"
                         : "border-border hover:border-primary/50"
                     }`}
-                    title="Usar esta imagen"
+                    title="Clic: usar · clic derecho: borrar"
                   >
                     <img
                       src={urlMedia(img.url)}
@@ -555,6 +583,25 @@ export default function Estudio() {
             </div>
           )}
         </div>
+
+        {/* Menú contextual de candidata (borrar iteración del lienzo) */}
+        {menuCand && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setMenuCand(null)} onContextMenu={(e) => { e.preventDefault(); setMenuCand(null); }} />
+            <div
+              className="fixed z-50 min-w-36 overflow-hidden rounded-md border border-border bg-popover py-1 text-sm shadow-md"
+              style={{ left: menuCand.x, top: menuCand.y }}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-destructive hover:bg-muted"
+                onClick={() => borrarCandidata(menuCand.id)}
+              >
+                <Trash2 className="h-4 w-4" /> Borrar del lienzo
+              </button>
+            </div>
+          </>
+        )}
 
         {/* Columna derecha: acciones por pestañas */}
         <div className="space-y-3">
@@ -947,29 +994,50 @@ export default function Estudio() {
                     Vacío = usa la etiqueta de la plantilla.
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={opEjecutando || !marcaPlantilla}
-                  onClick={() => {
-                    if (!activa || !marcaPlantilla) return;
-                    lanzarComponer.mutate({
-                      imagen: activa.id,
-                      marca: marcaPlantilla,
-                      formato,
-                      titular: titularPlantilla.trim() || undefined,
-                      etiqueta: etiquetaPlantilla.trim() || undefined,
-                    });
-                  }}
-                >
-                  {opEjecutando ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Stamp className="mr-1 h-4 w-4" />
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={opEjecutando || !marcaPlantilla}
+                    onClick={() => {
+                      if (!activa || !marcaPlantilla) return;
+                      // SIEMPRE desde la foto base (no desde una ya marcada): idempotente, no
+                      // apila ni duplica el logo. Cambiar parámetros recompone desde la base.
+                      const base = activa.origen ?? activa.id;
+                      baseComposicionRef.current = base;
+                      setOpEtiqueta("Marca");
+                      lanzarComponer.mutate({
+                        imagen: base,
+                        marca: marcaPlantilla,
+                        formato,
+                        titular: titularPlantilla.trim() || undefined,
+                        etiqueta: etiquetaPlantilla.trim() || undefined,
+                      });
+                    }}
+                  >
+                    {opEjecutando ? (
+                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Stamp className="mr-1 h-4 w-4" />
+                    )}
+                    {activa?.origen ? "Reaplicar marca" : "Aplicar marca"}
+                  </Button>
+                  {activa?.origen && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={opEjecutando}
+                      onClick={() => {
+                        const raw = candidatas.find((c) => c.id === activa.origen);
+                        if (raw) setActiva(raw);
+                      }}
+                    >
+                      Quitar marca
+                    </Button>
                   )}
-                  Aplicar marca
-                </Button>
+                </div>
               </div>
             )}
           </section>

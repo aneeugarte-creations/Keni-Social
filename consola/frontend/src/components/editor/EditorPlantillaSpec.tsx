@@ -27,8 +27,11 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LienzoEditable } from "@/components/editor/LienzoEditable";
 import { api, ApiError, urlMedia } from "@/lib/api";
 import {
+  ALINEACIONES,
+  CATALOGO_FUENTES,
   centrar,
   type CapaTexto,
+  familiaCatalogo,
   type FormatoId,
   FORMATOS,
   idsTextoDisponibles,
@@ -397,19 +400,20 @@ export function EditorPlantillaSpec({ marca }: { marca: string }) {
                   <Color label="Color" value={textoSel.color} onChange={(v) => mutarTextoClave(seleccion, (t) => { t.color = v; })} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Select value={textoSel.familia} onValueChange={(v) => mutarTextoClave(seleccion, (t) => { t.familia = v as "sans" | "condensada"; })}>
-                    <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                  <Select value={familiaCatalogo(textoSel.familia)} onValueChange={(v) => mutarTextoClave(seleccion, (t) => { t.familia = v; })}>
+                    <SelectTrigger className="h-8 w-40"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sans">Sans</SelectItem>
-                      <SelectItem value="condensada">Condensada</SelectItem>
+                      {CATALOGO_FUENTES.map((f) => (
+                        <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Select value={textoSel.alineacion} onValueChange={(v) => mutarTextoClave(seleccion, (t) => { t.alineacion = v as CapaTexto["alineacion"]; })}>
                     <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="izquierda">Izquierda</SelectItem>
-                      <SelectItem value="centro">Centro</SelectItem>
-                      <SelectItem value="derecha">Derecha</SelectItem>
+                      {ALINEACIONES.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.etiqueta}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <label className="flex items-center gap-1.5 text-xs">
