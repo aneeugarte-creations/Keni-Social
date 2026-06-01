@@ -28,10 +28,9 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from datetime import date
 
-from . import config, marcas, metricas_pieza, redes, repos
+from . import config, daemon_util, marcas, metricas_pieza, redes, repos
 from .dominio import eventos, reciclaje
 
 _log = logging.getLogger("keni_consola.alertas_rendimiento")
@@ -139,36 +138,39 @@ def emitir_alertas(hoy: date | None = None) -> tuple[int, int]:
 
 def iniciar_alertas_rendimiento(
     intervalo_segundos: float | None = None,
-) -> threading.Thread | None:
-    """Arranca un hilo demonio que emite las alertas de rendimiento/reciclaje en bucle.
+) -> threading.Thread:
+    """Arranca un hilo demonio que emite las alertas de rendimiento/reciclaje (GATEADO EN VIVO).
 
-    None si el barrido esta apagado (`KENI_ALERTAS_RENDIMIENTO=0`). Pensado para el
-    servidor real (`__main__`), NO para `crear_app`. El hilo es daemon: muere al cerrar el
-    proceso. Un fallo de un barrido se loguea y NO mata el hilo (el siguiente reintenta).
+    El hilo arranca SIEMPRE y comprueba `KENI_ALERTAS_RENDIMIENTO` en cada ciclo: apagar/
+    encender en runtime aplica sin reiniciar (apagar en <= ~1 min; encender tras estar
+    apagado dispara un barrido de inmediato). Pensado para el servidor real (`__main__`), NO
+    para `crear_app`. El hilo es daemon: muere al cerrar el proceso. Un fallo de un barrido se
+    loguea y NO mata el hilo (el siguiente reintenta).
     """
-    if not config.alertas_rendimiento_activas():
-        _log.info("Barrido de alertas de rendimiento desactivado (KENI_ALERTAS_RENDIMIENTO=0).")
-        return None
     intervalo = (
         intervalo_segundos
         if intervalo_segundos is not None
         else config.alertas_rendimiento_horas() * 3600.0
     )
 
+    def barrido() -> None:
+        recic, bajo = emitir_alertas()
+        if recic or bajo:
+            _log.info(
+                "Alertas: %d candidata(s) de reciclaje, %d pieza(s) de bajo rendimiento.",
+                recic, bajo,
+            )
+
     def bucle() -> None:
-        while True:
-            try:
-                recic, bajo = emitir_alertas()
-                if recic or bajo:
-                    _log.info(
-                        "Alertas: %d candidata(s) de reciclaje, %d pieza(s) de bajo rendimiento.",
-                        recic, bajo,
-                    )
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
-                _log.exception("Fallo en el barrido de alertas de rendimiento.")
-            time.sleep(intervalo)
+        daemon_util.bucle_gateado(
+            activo_fn=config.alertas_rendimiento_activas,
+            intervalo_seg_fn=lambda: intervalo,
+            sweep_fn=barrido,
+            log=_log,
+        )
 
     hilo = threading.Thread(target=bucle, name="alertas-rendimiento-daemon", daemon=True)
     hilo.start()
-    _log.info("Barrido de alertas de rendimiento activo cada %.0f h.", intervalo / 3600.0)
+    estado = "activo" if config.alertas_rendimiento_activas() else "en espera (KENI_ALERTAS_RENDIMIENTO=0)"
+    _log.info("Barrido de alertas de rendimiento %s, cada %.0f h.", estado, intervalo / 3600.0)
     return hilo

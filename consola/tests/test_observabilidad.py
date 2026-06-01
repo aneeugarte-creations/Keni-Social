@@ -15,10 +15,7 @@ para poder leer la respuesta 500 (en vez de re-lanzar la excepcion).
 
 from __future__ import annotations
 
-import importlib
 import logging
-import sys
-from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient
@@ -45,45 +42,31 @@ def _cli_obs(**kwargs) -> TestClient:
 
 
 @pytest.fixture
-def modulo_api_que_lanza():
-    """Suelta un modulo api/ temporal con un endpoint que LANZA (y lo limpia).
+def modulo_api_que_lanza(monkeypatch):
+    """Inyecta EN MEMORIA dos rutas extra (una que LANZA, una OK) en el descubrimiento de
+    rutas, SIN escribir ningun fichero en el paquete `api/`. Devuelve sus paths.
 
-    El nombre del modulo y sus rutas son UNICOS por worker de xdist: la suite corre con
-    `-n auto` y todos los workers comparten el dir `api/` del paquete. Con un nombre fijo
-    (`zzlanza.py`), el teardown de un worker borraba el modulo que otro acababa de escribir
-    -> ese otro recibia 404 en vez de 500 (flake intermitente en CI). Por eso el fichero y
-    las rutas se sufijan con `PYTEST_XDIST_WORKER` y el fixture YIELDEA las rutas para que
-    los tests no las hardcodeen.
+    Antes el fixture soltaba un `api/zzlanza_<worker>.py` real y reescaneaba con
+    `api.descubrir(refresco=True)`. Pero el dir del paquete `api/` es COMPARTIDO entre los
+    workers de xdist: el `descubrir` de OTRO worker veia ese fichero y, segun el momento, o
+    intentaba importar un `zzlanza_<worker>` que su dueno ya habia borrado
+    (ModuleNotFoundError), o lo borraba a media corrida (404 en vez de 500). Inyectar las
+    rutas EN MEMORIA (monkeypatch de `api.descubrir`, que es lo que llama `crear_app`)
+    elimina la carrera de raiz: no hay fichero compartido que otro worker pueda ver.
     """
-    import os
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
 
-    dir_api = Path(api.__file__).parent
-    sufijo = os.environ.get("PYTEST_XDIST_WORKER", "principal")
-    nombre = f"zzlanza_{sufijo}"
-    modulo = dir_api / f"{nombre}.py"
-    ruta_lanza = f"/api/{nombre}"
-    ruta_ok = f"/api/{nombre}_ok"
-    modulo.write_text(
-        "from starlette.responses import JSONResponse\n"
-        "from starlette.routing import Route\n"
-        "\n"
-        "async def _ep(request):\n"
-        "    raise RuntimeError('detalle interno secreto que NO debe filtrarse')\n"
-        "\n"
-        "async def _ok(request):\n"
-        "    return JSONResponse({'ok': True})\n"
-        "\n"
-        f"RUTAS = [Route('{ruta_lanza}', _ep), Route('{ruta_ok}', _ok)]\n",
-        encoding="utf-8",
-    )
-    importlib.invalidate_caches()
-    api.descubrir(refresco=True)
-    try:
-        yield {"lanza": ruta_lanza, "ok": ruta_ok}
-    finally:
-        modulo.unlink(missing_ok=True)
-        sys.modules.pop(f"keni_consola.api.{nombre}", None)
-        api.descubrir(refresco=True)
+    async def _ep(request):  # noqa: ANN001
+        raise RuntimeError("detalle interno secreto que NO debe filtrarse")
+
+    async def _ok(request):  # noqa: ANN001
+        return JSONResponse({"ok": True})
+
+    extra = [Route("/api/zzlanza", _ep), Route("/api/zzok", _ok)]
+    base = list(api.descubrir())
+    monkeypatch.setattr(api, "descubrir", lambda refresco=False: list(base) + extra)
+    yield {"lanza": "/api/zzlanza", "ok": "/api/zzok"}
 
 
 # --------------------------------------------------------------------------- #
@@ -184,32 +167,22 @@ def test_middleware_loguea_una_linea_por_peticion(cliente, caplog):
     assert f"[{rid}]" in linea
 
 
-def test_request_id_en_estado_de_la_peticion(entorno, modulo_api_que_lanza):
+def test_request_id_en_estado_de_la_peticion(entorno, monkeypatch):
     """El middleware deja el id en `request.state.request_id` (lo leen los handlers)."""
-    import importlib
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
 
-    # Endpoint que DEVUELVE el request_id que ve en request.state (prueba la disponibilidad).
-    dir_api = Path(api.__file__).parent
-    modulo = dir_api / "zzrid.py"
-    modulo.write_text(
-        "from starlette.responses import JSONResponse\n"
-        "from starlette.routing import Route\n"
-        "async def _ep(request):\n"
-        "    return JSONResponse({'visto': getattr(request.state, 'request_id', None)})\n"
-        "RUTAS = [Route('/api/zzrid', _ep)]\n",
-        encoding="utf-8",
-    )
-    importlib.invalidate_caches()
-    api.descubrir(refresco=True)
-    try:
-        cliente = _cli_obs()
-        r = cliente.get("/api/zzrid")
-        assert r.status_code == 200
-        assert r.json()["visto"] == r.headers.get("x-request-id")
-    finally:
-        modulo.unlink(missing_ok=True)
-        sys.modules.pop("keni_consola.api.zzrid", None)
-        api.descubrir(refresco=True)
+    # Endpoint EN MEMORIA que devuelve el request_id que ve en request.state (sin escribir
+    # ningun fichero en el paquete `api/`; ver `modulo_api_que_lanza` sobre la carrera xdist).
+    async def _ep(request):  # noqa: ANN001
+        return JSONResponse({"visto": getattr(request.state, "request_id", None)})
+
+    base = list(api.descubrir())
+    monkeypatch.setattr(api, "descubrir", lambda refresco=False: list(base) + [Route("/api/zzrid", _ep)])
+    cliente = _cli_obs()
+    r = cliente.get("/api/zzrid")
+    assert r.status_code == 200
+    assert r.json()["visto"] == r.headers.get("x-request-id")
 
 
 def test_request_id_entrante_se_reusa(cliente):

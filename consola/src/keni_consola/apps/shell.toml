@@ -21,6 +21,7 @@ permisos = ["editor", "admin"]
 modulos_backend = [
   "auth",
   "usuarios",
+  "ajustes",
   "config",
   "estado",
   "conexiones",

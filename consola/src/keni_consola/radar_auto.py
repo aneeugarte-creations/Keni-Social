@@ -34,10 +34,9 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from typing import Any
 
-from . import config, marcas, repos
+from . import config, daemon_util, marcas, repos
 
 _log = logging.getLogger("keni_consola.radar_auto")
 
@@ -217,31 +216,30 @@ def _intervalo_segundos() -> float:
     return config.radar_auto_intervalo_horas() * 3600.0
 
 
-def iniciar_radar_auto(intervalo_segundos: float | None = None) -> threading.Thread | None:
-    """Arranca el hilo demonio de auto-promocion del Radar, SI el flag esta activo.
+def iniciar_radar_auto(intervalo_segundos: float | None = None) -> threading.Thread:
+    """Arranca el hilo demonio de auto-promocion del Radar (GATEADO EN VIVO).
 
     Pensado para el servidor real (`__main__`), NO para `crear_app` (los tests no lo arrancan,
-    igual que el resto de daemons). Devuelve None (y no arranca nada) si `KENI_RADAR_AUTO` esta
-    OFF: CONSERVADOR por defecto. El hilo es daemon; un fallo de barrido se loguea y NO lo mata.
+    igual que el resto de daemons). El hilo arranca SIEMPRE y comprueba `KENI_RADAR_AUTO` en
+    cada ciclo: apagar/encender en runtime aplica sin reiniciar el proceso (apagar en
+    <= ~1 min; encender tras estar apagado dispara un barrido de inmediato). El hilo es
+    daemon; un fallo de barrido se loguea y NO lo mata.
     """
-    if not config.radar_auto_activo():
-        _log.info("Radar auto-promocion DESACTIVADO (KENI_RADAR_AUTO no esta activo).")
-        return None
-
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
     def bucle() -> None:
-        while True:
-            try:
-                ejecutar_barrido()
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
-                _log.exception("Fallo en el barrido de auto-promocion del Radar.")
-            time.sleep(intervalo)
+        daemon_util.bucle_gateado(
+            activo_fn=config.radar_auto_activo,
+            intervalo_seg_fn=lambda: intervalo,
+            sweep_fn=ejecutar_barrido,
+            log=_log,
+        )
 
     hilo = threading.Thread(target=bucle, name="radar-auto-daemon", daemon=True)
     hilo.start()
+    estado = "ACTIVO" if config.radar_auto_activo() else "EN ESPERA (KENI_RADAR_AUTO off)"
     _log.info(
-        "Radar auto-promocion ACTIVO cada %.0f h (umbral=%d, max/barrido=%d).",
-        intervalo / 3600.0, config.radar_auto_umbral(), config.radar_auto_max(),
+        "Radar auto-promocion %s, cada %.0f h (umbral=%d, max/barrido=%d).",
+        estado, intervalo / 3600.0, config.radar_auto_umbral(), config.radar_auto_max(),
     )
     return hilo

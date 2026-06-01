@@ -42,24 +42,6 @@ steps:
       - for i in $(seq 1 30); do python -c "import os,psycopg; psycopg.connect(os.environ['KENI_TEST_DATABASE_URL']).close()" 2>/dev/null && break; echo "esperando postgres ($i)"; sleep 1; done
       # keni-shared SIEMPRE (base común) + el contrato de fronteras + los tests de A.
       - python -m pytest keni-shared/tests -q
-      - python -m pytest consola/tests/test_fronteras.py consola/tests/test_catalogo.py -q
-      - >-
-        python -m pytest -q
-        consola/tests/test_api_agentes.py
-        consola/tests/test_api_agentes_abiertos.py
-        consola/tests/test_api_agentes_runner.py
-        consola/tests/test_generaciones.py
-        consola/tests/test_api_hashtags.py
-        consola/tests/test_skills_piezas.py
-        consola/tests/test_skills_url.py
-        consola/tests/test_skills_imagenes.py
-        consola/tests/test_skills_catalogo.py
-        consola/tests/test_api_qa_editorial.py
-        consola/tests/test_api_verificaciones.py
-        consola/tests/test_api_reciclaje.py
-        consola/tests/test_reciclaje_dominio.py
-        consola/tests/test_api_rss.py
-        consola/tests/test_api_termometro.py
-        consola/tests/test_api_radar.py
-        consola/tests/test_radar.py
-        consola/tests/test_metricas_runs.py
+      # Tests por MARCADOR (no por fichero): el marcado vive en conftest._APP_POR_STEM.
+      # `contrato` = fronteras + catalogo. Robusto a borrados/renombrados de tests.
+      - python -m pytest consola/tests -m "contrato or app_produccion" -q

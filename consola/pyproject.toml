@@ -64,6 +64,17 @@ packages = ["src/keni_consola"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+# Marcadores del TEST-SCOPING por app (los aplica conftest.pytest_collection_modifyitems
+# segun el fichero de cada test). Los pipelines `.woodpecker/tests-app-*` seleccionan por
+# marcador (`-m "contrato or app_X"`) en vez de enumerar ficheros, asi borrar/renombrar un
+# test ya no rompe el CI. Registrados aqui para que `--strict-markers` (si se activa) y los
+# avisos de pytest los reconozcan.
+markers = [
+    "contrato: contrato compartido (fronteras + catalogo); corre en todos los pipelines scoped",
+    "app_metricas: tests de la app Metricas (test-scoping del CI)",
+    "app_operacion: tests de la app Operacion (test-scoping del CI)",
+    "app_produccion: tests de la app Produccion (test-scoping del CI)",
+]
 
 [tool.ruff]
 line-length = 120

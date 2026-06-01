@@ -305,3 +305,72 @@ def _cliente(
 def cliente(entorno):
     """TestClient listo con el entorno aislado (mock de `abrir` inofensivo)."""
     return _cliente()
+
+
+# --------------------------------------------------------------------------- #
+# Marcado por app para el TEST-SCOPING del CI (pipelines `.woodpecker/tests-app-*`)
+# --------------------------------------------------------------------------- #
+#
+# Los pipelines scoped corren un SUBCONJUNTO por app SIN enumerar ficheros (antes
+# listaban rutas a mano en el .woodpecker y se rompian con un "file not found" en cuanto
+# se borraba o renombraba un test). Ahora cada test se asigna aqui a su app por el STEM
+# de su fichero, y el pipeline corre `pytest consola/tests -m "contrato or app_X"`.
+#
+# ROBUSTO: un test BORRADO simplemente no se recolecta (no rompe nada). Un test NUEVO de
+# una app: anade su stem abajo para que entre en el scope; si se olvida, NO rompe el CI y
+# de todas formas lo cubre la suite COMPLETA (`tests-python`, que corre el directorio
+# entero en push a `main` y en cambios de keni-shared/gateway). `contrato` = fronteras +
+# catalogo, el contrato compartido que TODOS los pipelines scoped ejecutan.
+_APP_POR_STEM: dict[str, str] = {
+    # Contrato compartido (corre en los tres pipelines scoped).
+    "test_fronteras": "contrato",
+    "test_catalogo": "contrato",
+    # App B · Metricas (api/metricas, comercial, reporte_deportes).
+    "test_api_metricas": "app_metricas",
+    "test_api_comercial": "app_metricas",
+    "test_comercial": "app_metricas",
+    "test_reporte_deportes": "app_metricas",
+    # App C · Operacion (publicaciones, aprobacion, franjas, rota...).
+    "test_api_publicaciones": "app_operacion",
+    "test_api_publicaciones_contenido": "app_operacion",
+    "test_api_aprobacion": "app_operacion",
+    "test_colaboracion_dominio": "app_operacion",
+    "test_api_franjas": "app_operacion",
+    "test_api_rota": "app_operacion",
+    "test_api_rota_ampliada": "app_operacion",
+    "test_api_rota_franjas": "app_operacion",
+    "test_api_rota_piezas": "app_operacion",
+    "test_api_rota_programas": "app_operacion",
+    "test_api_rota_swaps": "app_operacion",
+    "test_rota": "app_operacion",
+    "test_api_reciclar": "app_operacion",
+    "test_db_piezas": "app_operacion",
+    # App A · Produccion (agentes, generaciones, skills, rss, radar, termometro...).
+    "test_api_agentes": "app_produccion",
+    "test_api_agentes_abiertos": "app_produccion",
+    "test_api_agentes_runner": "app_produccion",
+    "test_generaciones": "app_produccion",
+    "test_api_hashtags": "app_produccion",
+    "test_api_qa_editorial": "app_produccion",
+    "test_api_verificaciones": "app_produccion",
+    "test_api_reciclaje": "app_produccion",
+    "test_reciclaje_dominio": "app_produccion",
+    "test_api_rss": "app_produccion",
+    "test_api_termometro": "app_produccion",
+    "test_api_radar": "app_produccion",
+    "test_radar": "app_produccion",
+    "test_metricas_runs": "app_produccion",
+}
+
+
+def pytest_collection_modifyitems(items):  # noqa: D401 -- hook de pytest
+    """Marca cada test con su app (`_APP_POR_STEM`) para el test-scoping del CI.
+
+    Permite a los pipelines scoped seleccionar por marcador (`-m app_X`) en vez de
+    enumerar ficheros. Tests sin entrada quedan sin marca de app (solo corren en la suite
+    completa). No falla nunca por un stem que ya no exista.
+    """
+    for item in items:
+        marca = _APP_POR_STEM.get(getattr(getattr(item, "path", None), "stem", ""))
+        if marca:
+            item.add_marker(getattr(pytest.mark, marca))

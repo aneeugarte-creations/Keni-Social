@@ -139,6 +139,8 @@ import type {
   RespuestaListaDia,
   RespuestaImportPreview,
   RespuestaImportCalendario,
+  RespuestaAjustes,
+  RespuestaAjusteGuardado,
   RespuestaAlertas,
   RespuestaReciclarPublicacion,
   RespuestaSugerenciasReciclaje,
@@ -518,6 +520,11 @@ export const api = {
   esfuerzo: (signal?: AbortSignal) => peticion<RespuestaEsfuerzo>("/config/esfuerzo", { signal }),
   guardarEsfuerzo: (cuerpo: CuerpoGuardarEsfuerzo) =>
     peticion<RespuestaMensaje>("/config/esfuerzo", { metodo: "POST", json: cuerpo }),
+
+  // --- Ajustes de funcionalidad (admin): toggles + tuning, aplican en caliente ---
+  ajustes: (signal?: AbortSignal) => peticion<RespuestaAjustes>("/ajustes", { signal }),
+  guardarAjuste: (cuerpo: { clave: string; valor?: boolean | number | string; reset?: boolean }) =>
+    peticion<RespuestaAjusteGuardado>("/ajustes", { metodo: "POST", json: cuerpo }),
 
   // --- Agentes (carpeta con CLAUDE.md, sub-contextos y runs) ---
   // Conjunto abierto: 5 marcas de serie (es_marca) + agentes genéricos
