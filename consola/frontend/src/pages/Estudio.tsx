@@ -26,7 +26,9 @@ import {
   ImagePlus,
   Loader2,
   Maximize2,
+  Settings2,
   ShieldCheck,
+  Stamp,
   Type,
   Upload,
   Wand2,
@@ -37,6 +39,7 @@ import { toast } from "sonner";
 
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { EditorPlantillaMarca } from "@/components/editor/EditorPlantillaMarca";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -366,7 +369,41 @@ export default function Estudio() {
     },
   });
 
-  const opEjecutando = op.ejecutando || lanzarEditar.isPending || lanzarExpandir.isPending;
+  // --- Aplicar marca (plantilla): estampa logo/pleca/titular sobre la activa ---
+  // Composición DETERMINISTA en el backend; el resultado entra como candidata vía el
+  // MISMO hook `op` (respeta la persistencia de sesión, igual que editar/expandir).
+  const [marcaPlantilla, setMarcaPlantilla] = React.useState(() => ctx.marca ?? "");
+  const [titularPlantilla, setTitularPlantilla] = React.useState("");
+  const [etiquetaPlantilla, setEtiquetaPlantilla] = React.useState("");
+  const [editorPlantillaAbierto, setEditorPlantillaAbierto] = React.useState(false);
+
+  // Si la marca de "Aplicar marca" aún no está fijada, sigue a la del bloque de generar.
+  React.useEffect(() => {
+    if (!marcaPlantilla && marca) setMarcaPlantilla(marca);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marca]);
+
+  const lanzarComponer = useMutation({
+    mutationFn: (cuerpo: Parameters<typeof api.imagenesComponer>[0]) => api.imagenesComponer(cuerpo),
+    onSuccess: (data) => {
+      setOpAviso("");
+      setOpEtiqueta("Marca");
+      op.iniciar(data.generacion);
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 400) {
+        setOpAviso(e.message);
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : "No se pudo aplicar la marca.");
+    },
+  });
+
+  const opEjecutando =
+    op.ejecutando ||
+    lanzarEditar.isPending ||
+    lanzarExpandir.isPending ||
+    lanzarComponer.isPending;
 
   // --- Revisión legal/editorial (gate humano, no bloquea publicar) ---
   // Job "qa-editorial" que VE la imagen activa y devuelve un checklist ✅/⚠️/❌ en `salida`
@@ -858,6 +895,99 @@ export default function Estudio() {
             )}
           </section>
 
+          {/* Aplicar marca (plantilla): estampa logo/pleca/titular sobre la activa */}
+          <section className="space-y-3 rounded-md border border-border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="flex items-center gap-1 text-sm font-medium">
+                <Stamp className="h-4 w-4" />
+                Aplicar marca (plantilla)
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => setEditorPlantillaAbierto(true)}
+              >
+                <Settings2 className="mr-1 h-3.5 w-3.5" />
+                Editar plantilla de marca
+              </Button>
+            </div>
+            {!activa ? (
+              <p className="text-xs text-muted-foreground">
+                Selecciona una candidata para estamparle la marca.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="estudio-marca-plantilla" className="text-xs">
+                    Marca
+                  </Label>
+                  <SelectorMarca
+                    id="estudio-marca-plantilla"
+                    marcas={marcas}
+                    valor={marcaPlantilla}
+                    onCambio={setMarcaPlantilla}
+                    incluirTodas={false}
+                    placeholder="Elige una marca"
+                    ariaLabel="Marca a aplicar"
+                    className="w-full"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="estudio-titular" className="text-xs">
+                    Titular (opcional)
+                  </Label>
+                  <Input
+                    id="estudio-titular"
+                    value={titularPlantilla}
+                    onChange={(e) => setTitularPlantilla(e.target.value)}
+                    placeholder="Texto del titular"
+                    disabled={opEjecutando}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="estudio-etiqueta" className="text-xs">
+                    Etiqueta/pleca (opcional)
+                  </Label>
+                  <Input
+                    id="estudio-etiqueta"
+                    value={etiquetaPlantilla}
+                    onChange={(e) => setEtiquetaPlantilla(e.target.value)}
+                    placeholder="p. ej. ÚLTIMA HORA"
+                    disabled={opEjecutando}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Vacío = usa la etiqueta de la plantilla.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={opEjecutando || !marcaPlantilla}
+                  onClick={() => {
+                    if (!activa || !marcaPlantilla) return;
+                    lanzarComponer.mutate({
+                      imagen: activa.id,
+                      marca: marcaPlantilla,
+                      formato,
+                      titular: titularPlantilla.trim() || undefined,
+                      etiqueta: etiquetaPlantilla.trim() || undefined,
+                    });
+                  }}
+                >
+                  {opEjecutando ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Stamp className="mr-1 h-4 w-4" />
+                  )}
+                  Aplicar marca
+                </Button>
+              </div>
+            )}
+          </section>
+
           {/* Revisión legal/editorial (gate humano; no bloquea publicar) */}
           <section className="space-y-2 rounded-md border border-border p-3">
             <Label className="flex items-center gap-1 text-sm font-medium">
@@ -935,6 +1065,13 @@ export default function Estudio() {
           </section>
         </div>
       </div>
+
+      <EditorPlantillaMarca
+        abierto={editorPlantillaAbierto}
+        onOpenChange={setEditorPlantillaAbierto}
+        marcas={marcas}
+        marcaInicial={marcaPlantilla || marca || ctx.marca}
+      />
     </>
   );
 }

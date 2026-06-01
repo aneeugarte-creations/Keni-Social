@@ -2388,6 +2388,59 @@ export interface CuerpoImagenesRevisar {
   marca?: string;
 }
 
+/** Posición del logo dentro del lienzo al estampar la plantilla de marca. */
+export type PosicionLogo =
+  | "superior-izquierda"
+  | "superior-derecha"
+  | "inferior-izquierda"
+  | "inferior-derecha";
+
+/**
+ * Plantilla de marca: la identidad visual con la que se "estampa" una imagen
+ * (logo/pleca/titular + colores). El logo es un objeto de media (`logo` = su id,
+ * `logo_url` la URL para servirlo); si no hay logo se usa el texto `wordmark`.
+ */
+export interface PlantillaMarca {
+  marca: string;
+  /** Colores de marca (hex, p. ej. `#E10600`). */
+  rojo: string;
+  tinta: string;
+  blanco: string;
+  /** Etiqueta/pleca por defecto (p. ej. "ÚLTIMA HORA"). */
+  etiqueta_default: string;
+  titular_mayusculas: boolean;
+  titular_condensada: boolean;
+  /** Id del objeto de media del logo (PNG con transparencia), o "" si no hay. */
+  logo: string;
+  /** URL para servir el logo (vacía si no hay logo). */
+  logo_url: string;
+  logo_posicion: PosicionLogo;
+  /** Texto de respaldo cuando no hay logo. */
+  wordmark: string;
+}
+
+/** Respuesta de `GET /api/plantillas-marca`: mapa de plantillas por marca. */
+export interface RespuestaPlantillasMarca {
+  plantillas: Record<string, PlantillaMarca>;
+}
+
+/** Respuesta de `GET`/`PUT /api/plantillas-marca/{marca}`. */
+export interface RespuestaPlantillaMarca {
+  plantilla: PlantillaMarca;
+}
+
+/** Cuerpo de `POST /api/imagenes/componer`: estampa la plantilla de marca sobre una imagen. */
+export interface CuerpoImagenesComponer {
+  /** Nombre del objeto de media sobre el que componer. */
+  imagen: string;
+  marca: string;
+  formato?: FormatoImagen;
+  /** Titular corto opcional. */
+  titular?: string;
+  /** Etiqueta/pleca opcional (vacía = usa la de la plantilla). */
+  etiqueta?: string;
+}
+
 // --- Hashtags ---
 
 /** Un grupo de hashtags guardado. */

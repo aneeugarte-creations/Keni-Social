@@ -105,6 +105,10 @@ import type {
   CuerpoImagenesEditar,
   CuerpoImagenesExpandir,
   CuerpoImagenesRevisar,
+  CuerpoImagenesComponer,
+  RespuestaPlantillasMarca,
+  RespuestaPlantillaMarca,
+  PlantillaMarca,
   RespuestaMensaje,
   CuerpoCrearPlantillaContenido,
   CuerpoActualizarPlantillaContenido,
@@ -722,6 +726,25 @@ export const api = {
   // en `generacion.salida`.
   imagenesRevisar: (cuerpo: CuerpoImagenesRevisar) =>
     peticion<RespuestaGeneracion>("/imagenes/revisar", { metodo: "POST", json: cuerpo }),
+  // Componer/estampar la plantilla de marca (logo/pleca/titular) sobre una imagen:
+  // composición DETERMINISTA en el backend. Responde con una generación de imagen que
+  // se SONDEA con `useGeneracion` y completa con `resultado` `{id, url}` (igual que editar).
+  imagenesComponer: (cuerpo: CuerpoImagenesComponer) =>
+    peticion<RespuestaGeneracion>("/imagenes/componer", { metodo: "POST", json: cuerpo }),
+
+  // --- Plantillas de marca (identidad visual con la que se estampa una imagen) ---
+  // Solo lectura del catálogo + edición de la plantilla de una marca (logo, colores,
+  // etiqueta/pleca, posición del logo, wordmark de respaldo). El logo se sube antes con
+  // `subirMedia` y aquí se guarda su id en `logo`.
+  plantillasMarca: (signal?: AbortSignal) =>
+    peticion<RespuestaPlantillasMarca>("/plantillas-marca", { signal }),
+  plantillaMarca: (marca: string, signal?: AbortSignal) =>
+    peticion<RespuestaPlantillaMarca>(`/plantillas-marca/${encodeURIComponent(marca)}`, { signal }),
+  guardarPlantillaMarca: (marca: string, datos: Partial<PlantillaMarca>) =>
+    peticion<RespuestaPlantillaMarca>(`/plantillas-marca/${encodeURIComponent(marca)}`, {
+      metodo: "PUT",
+      json: datos,
+    }),
 
   // --- Verificación de video (workflow propio, independiente de Generar copy) ---
   // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier
