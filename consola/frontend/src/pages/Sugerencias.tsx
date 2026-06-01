@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -305,11 +306,13 @@ function TarjetaSugerencia({
     {
       etiqueta: "Borrar",
       icono: Trash2,
-      onClick: () => {
+      onClick: async () => {
         if (
-          window.confirm(
-            `¿Borrar la sugerencia “${sugerencia.titulo}”? Esta acción no se puede deshacer.`,
-          )
+          await confirmar({
+            mensaje: `¿Borrar la sugerencia “${sugerencia.titulo}”? Esta acción no se puede deshacer.`,
+            destructivo: true,
+            textoConfirmar: "Borrar",
+          })
         )
           borrar.mutate();
       },

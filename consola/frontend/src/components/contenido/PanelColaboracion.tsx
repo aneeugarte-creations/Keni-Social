@@ -27,6 +27,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -232,8 +233,14 @@ function Comentarios({ contenido }: { contenido: Contenido }) {
               {
                 etiqueta: "Borrar comentario",
                 icono: Trash2,
-                onClick: () => {
-                  if (window.confirm("¿Borrar este comentario? No se puede deshacer."))
+                onClick: async () => {
+                  if (
+                    await confirmar({
+                      mensaje: "¿Borrar este comentario? No se puede deshacer.",
+                      destructivo: true,
+                      textoConfirmar: "Borrar",
+                    })
+                  )
                     borrar.mutate(c.id);
                 },
                 destructivo: true,
@@ -353,11 +360,13 @@ function Versiones({ plataforma }: { plataforma: ContenidoPlataforma }) {
               {
                 etiqueta: "Revertir a esta",
                 icono: RotateCcw,
-                onClick: () => {
+                onClick: async () => {
                   if (
-                    window.confirm(
-                      `¿Revertir el copy a la versión v${v.version}? El copy actual se registrará como una versión nueva.`,
-                    )
+                    await confirmar({
+                      mensaje: `¿Revertir el copy a la versión v${v.version}? El copy actual se registrará como una versión nueva.`,
+                      destructivo: true,
+                      textoConfirmar: "Revertir",
+                    })
                   )
                     revertir.mutate(v.id);
                 },
@@ -464,11 +473,13 @@ function Aprobacion({ plataforma }: { plataforma: ContenidoPlataforma }) {
           aria-label="Reiniciar la cadena de aprobación"
           title="Reiniciar cadena"
           disabled={crear.isPending}
-          onClick={() => {
+          onClick={async () => {
             if (
-              window.confirm(
-                "¿Reiniciar la cadena de aprobación? Se perderán las decisiones registradas.",
-              )
+              await confirmar({
+                mensaje: "¿Reiniciar la cadena de aprobación? Se perderán las decisiones registradas.",
+                destructivo: true,
+                textoConfirmar: "Reiniciar",
+              })
             )
               crear.mutate();
           }}

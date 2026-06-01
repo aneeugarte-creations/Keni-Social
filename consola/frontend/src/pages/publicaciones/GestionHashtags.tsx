@@ -10,6 +10,7 @@ import { Hash, Loader2, Pencil, Plus, Trash2, X } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
@@ -165,8 +166,9 @@ function FilaGrupo({
     {
       etiqueta: "Borrar",
       icono: Trash2,
-      onClick: () => {
-        if (window.confirm(`¿Borrar el grupo "${grupo.nombre}"?`)) borrar.mutate();
+      onClick: async () => {
+        if (await confirmar({ mensaje: `¿Borrar el grupo "${grupo.nombre}"?`, destructivo: true, textoConfirmar: "Borrar" }))
+          borrar.mutate();
       },
       destructivo: true,
       deshabilitado: borrar.isPending,

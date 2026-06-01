@@ -19,6 +19,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -520,12 +521,15 @@ function SeccionNavegadorS3() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // Confirmación destructiva (convención del repo: window.confirm).
-  function pedirBorrar(obj: ObjetoS3) {
+  // Confirmación destructiva con el diálogo propio de la app.
+  async function pedirBorrar(obj: ObjetoS3) {
     if (
-      window.confirm(
-        `¿Borrar "${obj.nombre}" del bucket? Esta acción no se puede deshacer.`,
-      )
+      await confirmar({
+        titulo: "Borrar objeto",
+        mensaje: `¿Borrar "${obj.nombre}" del bucket? Esta acción no se puede deshacer.`,
+        destructivo: true,
+        textoConfirmar: "Borrar",
+      })
     ) {
       borrar.mutate(obj);
     }

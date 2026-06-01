@@ -33,6 +33,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
+import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
@@ -1121,11 +1122,13 @@ function BarraAccionesPieza({
             icono: Trash2,
             destructivo: true,
             deshabilitado: borrar.isPending,
-            onClick: () => {
+            onClick: async () => {
               if (
-                window.confirm(
-                  `¿Borrar "${contenido.titulo}"? Esta acción no se puede deshacer.`,
-                )
+                await confirmar({
+                  mensaje: `¿Borrar "${contenido.titulo}"? Esta acción no se puede deshacer.`,
+                  destructivo: true,
+                  textoConfirmar: "Borrar",
+                })
               ) {
                 borrar.mutate();
               }
@@ -1641,11 +1644,13 @@ function FilaPlataforma({
         aria-label={`Quitar la plataforma ${plataforma.red_nombre}`}
         title="Quitar plataforma"
         disabled={borrar.isPending}
-        onClick={() => {
+        onClick={async () => {
           if (
-            window.confirm(
-              `¿Quitar la plataforma ${plataforma.red_nombre} de esta pieza? Esta acción no se puede deshacer.`,
-            )
+            await confirmar({
+              mensaje: `¿Quitar la plataforma ${plataforma.red_nombre} de esta pieza? Esta acción no se puede deshacer.`,
+              destructivo: true,
+              textoConfirmar: "Quitar",
+            })
           ) {
             borrar.mutate();
           }
@@ -2528,11 +2533,13 @@ function DialogoEtiquetas({
                         icono: Trash2,
                         destructivo: true,
                         deshabilitado: borrar.isPending,
-                        onClick: () => {
+                        onClick: async () => {
                           if (
-                            window.confirm(
-                              `¿Borrar la etiqueta "${e.nombre}"? Esta acción no se puede deshacer.`,
-                            )
+                            await confirmar({
+                              mensaje: `¿Borrar la etiqueta "${e.nombre}"? Esta acción no se puede deshacer.`,
+                              destructivo: true,
+                              textoConfirmar: "Borrar",
+                            })
                           ) {
                             borrar.mutate(e.id);
                           }

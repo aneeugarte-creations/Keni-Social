@@ -4,6 +4,7 @@ import ReactDOM from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
 
 import { PuertaSesion } from "@/components/auth/PuertaSesion";
+import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { Toaster } from "@/components/ui/sonner";
 import { SesionProvider } from "@/hooks/use-sesion";
@@ -40,6 +41,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           </SesionProvider>
         </FronteraError>
         <Toaster />
+        <ContenedorConfirmacion />
       </QueryClientProvider>
     </TemaProvider>
   </React.StrictMode>,

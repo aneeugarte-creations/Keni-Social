@@ -12,6 +12,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
@@ -441,8 +442,8 @@ function TarjetaPlantilla({
     {
       etiqueta: "Borrar",
       icono: Trash2,
-      onClick: () => {
-        if (window.confirm(`¿Borrar la plantilla "${plantilla.nombre}"?`)) onBorrar();
+      onClick: async () => {
+        if (await confirmar({ mensaje: `¿Borrar la plantilla "${plantilla.nombre}"?`, destructivo: true, textoConfirmar: "Borrar" })) onBorrar();
       },
       destructivo: true,
       deshabilitado: borrando,

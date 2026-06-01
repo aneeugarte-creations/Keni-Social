@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { confirmar } from "@/components/comunes/confirmar";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
@@ -538,8 +539,8 @@ export default function Biblioteca() {
                 aria-label="Eliminar documento"
                 title="Eliminar (mover a la papelera)"
                 className="text-muted-foreground hover:text-destructive"
-                onClick={() => {
-                  if (window.confirm("¿Mover este documento a la papelera?"))
+                onClick={async () => {
+                  if (await confirmar({ mensaje: "¿Mover este documento a la papelera?", destructivo: true, textoConfirmar: "Mover" }))
                     eliminarMut.mutate(borrador.id);
                 }}
               >

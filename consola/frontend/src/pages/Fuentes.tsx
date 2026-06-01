@@ -16,6 +16,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -240,8 +241,15 @@ function FilaFuente({
     {
       etiqueta: "Borrar",
       icono: Trash2,
-      onClick: () => {
-        if (window.confirm(`¿Borrar el feed "${fuente.nombre}"?`)) borrar.mutate();
+      onClick: async () => {
+        if (
+          await confirmar({
+            mensaje: `¿Borrar el feed "${fuente.nombre}"?`,
+            destructivo: true,
+            textoConfirmar: "Borrar",
+          })
+        )
+          borrar.mutate();
       },
       destructivo: true,
       deshabilitado: borrar.isPending,

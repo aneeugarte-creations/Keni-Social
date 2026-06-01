@@ -17,6 +17,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -360,8 +361,15 @@ function Contenido({
                 icono: Trash2,
                 destructivo: true,
                 deshabilitado: eliminar.isPending,
-                onClick: () => {
-                  if (window.confirm("¿Quitar esta publicación del seguimiento?")) eliminar.mutate();
+                onClick: async () => {
+                  if (
+                    await confirmar({
+                      mensaje: "¿Quitar esta publicación del seguimiento?",
+                      destructivo: true,
+                      textoConfirmar: "Quitar",
+                    })
+                  )
+                    eliminar.mutate();
                 },
               },
             ]}

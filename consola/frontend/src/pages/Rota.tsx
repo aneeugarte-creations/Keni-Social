@@ -40,6 +40,7 @@ import { toast } from "sonner";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { confirmar } from "@/components/comunes/confirmar";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import {
   MenuContextual,
@@ -1068,11 +1069,14 @@ function Calendario({
           {esAdmin && semana?.aprobada && (
             <Button
               variant="outline"
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  window.confirm(
-                    "La semana volverá a ser editable. ¿Despublicar los turnos?",
-                  )
+                  await confirmar({
+                    mensaje:
+                      "La semana volverá a ser editable. ¿Despublicar los turnos?",
+                    destructivo: true,
+                    textoConfirmar: "Despublicar",
+                  })
                 )
                   despublicar.mutate();
               }}
@@ -1933,8 +1937,14 @@ function DialogEditarEvento({
           <Button
             variant="outline"
             className="text-destructive hover:text-destructive"
-            onClick={() => {
-              if (window.confirm("¿Borrar este evento? Sus turnos también se perderán."))
+            onClick={async () => {
+              if (
+                await confirmar({
+                  mensaje: "¿Borrar este evento? Sus turnos también se perderán.",
+                  destructivo: true,
+                  textoConfirmar: "Borrar",
+                })
+              )
                 borrar.mutate();
             }}
             disabled={borrar.isPending}
@@ -2078,8 +2088,15 @@ function ChipTurnoCM({
       etiqueta: "Eliminar",
       icono: Trash2,
       destructivo: true,
-      onClick: () => {
-        if (window.confirm(`¿Eliminar el turno de ${turno.miembro_nombre}?`)) borrar.mutate();
+      onClick: async () => {
+        if (
+          await confirmar({
+            mensaje: `¿Eliminar el turno de ${turno.miembro_nombre}?`,
+            destructivo: true,
+            textoConfirmar: "Eliminar",
+          })
+        )
+          borrar.mutate();
       },
       deshabilitado: borrar.isPending,
     },
@@ -2099,10 +2116,17 @@ function ChipTurnoCM({
         <button
           type="button"
           aria-label={`Borrar turno de ${turno.miembro_nombre}`}
-          onClick={(e) => {
+          onClick={async (e) => {
             e.stopPropagation();
             if (borrar.isPending) return;
-            if (window.confirm(`¿Borrar el turno de ${turno.miembro_nombre}?`)) borrar.mutate();
+            if (
+              await confirmar({
+                mensaje: `¿Borrar el turno de ${turno.miembro_nombre}?`,
+                destructivo: true,
+                textoConfirmar: "Borrar",
+              })
+            )
+              borrar.mutate();
           }}
           disabled={borrar.isPending}
           className="ml-0.5 rounded text-muted-foreground hover:text-destructive disabled:opacity-50"
@@ -2633,13 +2657,15 @@ function FilaFranjaSemana({
       toast.success(`Franja borrada${sufijo}.`);
       onCambio();
     },
-    onError: (e) => {
+    onError: async (e) => {
       if (e instanceof ApiError && e.status === 409) {
         const asociados = (e.cuerpo?.turnos_asociados as number | undefined) ?? 0;
         if (
-          window.confirm(
-            `Tiene ${asociados} turnos asociados. ¿Borrar también esos turnos?`,
-          )
+          await confirmar({
+            mensaje: `Tiene ${asociados} turnos asociados. ¿Borrar también esos turnos?`,
+            destructivo: true,
+            textoConfirmar: "Borrar",
+          })
         ) {
           borrar.mutate(true);
         }
@@ -5050,8 +5076,14 @@ function FilaPrograma({
                 variant="ghost"
                 className="h-8 w-8 text-muted-foreground hover:text-destructive"
                 aria-label={`Borrar ${programa.nombre}`}
-                onClick={() => {
-                  if (window.confirm(`¿Borrar el programa «${programa.nombre}»?`))
+                onClick={async () => {
+                  if (
+                    await confirmar({
+                      mensaje: `¿Borrar el programa «${programa.nombre}»?`,
+                      destructivo: true,
+                      textoConfirmar: "Borrar",
+                    })
+                  )
                     borrar.mutate(false);
                 }}
                 disabled={borrar.isPending}

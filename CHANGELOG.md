@@ -7,6 +7,17 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Diálogo de confirmación propio (sin pop-ups del navegador)
+
+- La app deja de usar el `window.confirm` (y cualquier diálogo/alerta por defecto del
+  navegador): se introduce un **diálogo de confirmación propio** con el estilo de la app
+  (shadcn `Dialog`), con API imperativa `confirmar(...)` al estilo de `toast` y un contenedor
+  único montado junto al `<Toaster />`. Soporta título, mensaje, textos de botón y modo
+  **destructivo** (botón rojo); se cierra con Escape/clic fuera (= cancelar).
+- Se migran **todas** las confirmaciones de la app (~20 sitios en Rota, Tareas, Fuentes,
+  Webhooks, Sugerencias, Biblioteca, Sistema, comercial, plantillas, hashtags, franjas y el
+  panel de colaboración) de `window.confirm` a `confirmar(...)`.
+
 ### Explorador S3 (Sistema): borrar un objeto
 
 - El explorador del bucket en **avatar → Sistema** (solo admin) deja de ser estrictamente de
