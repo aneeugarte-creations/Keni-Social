@@ -10,7 +10,7 @@
  * = sin imagen) y lo incluye al guardar la publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { ImagePlus, Loader2, Upload, Wand2, X } from "lucide-react";
+import { AlertTriangle, ImagePlus, Loader2, Upload, Wand2, X } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -21,11 +21,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
+import { nombreRed, tamanoRed } from "@/pages/publicaciones/meta";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
   if (error instanceof Error) return error.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
+
+/** Convierte una relación tipo "16:9" o "1.91:1" en un número (ancho/alto). */
+function ratioDe(txt: string): number | null {
+  const [w, h] = txt.split(/[:/]/).map((n) => parseFloat(n));
+  return w && h ? w / h : null;
 }
 
 export interface EditorImagenProps {
@@ -68,6 +75,17 @@ export function EditorImagen({
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
 
   const src = urlMedia(imagenUrl || imagen);
+
+  // Aspect-ratio real de la imagen (medido al cargar) frente al recomendado de la red:
+  // avisa si se desvía del estándar (la red la recortaría).
+  const [ratioReal, setRatioReal] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    setRatioReal(null);
+  }, [src]);
+  const tamRed = red ? tamanoRed(red) : null;
+  const ratioRec = tamRed ? ratioDe(tamRed.ratio) : null;
+  const aspectoFueraDeEstandar =
+    ratioReal != null && ratioRec != null && Math.abs(ratioReal - ratioRec) / ratioRec > 0.1;
 
   const subir = useMutation({
     // Sube la foto y, si pertenece a una publicación, la INTEGRA en la plantilla de marca
@@ -176,24 +194,38 @@ export function EditorImagen({
       />
 
       {src ? (
-        <div className="relative inline-block">
-          <img
-            src={src}
-            alt="Imagen de la publicación"
-            className="max-h-56 w-auto rounded-md border border-border object-contain"
-          />
-          <Button
-            type="button"
-            variant="destructive"
-            size="icon"
-            className="absolute right-1.5 top-1.5 h-7 w-7"
-            onClick={quitar}
-            disabled={ocupado}
-            aria-label="Quitar imagen"
-            title="Quitar imagen"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+        <div className="space-y-2">
+          <div className="relative inline-block">
+            <img
+              src={src}
+              alt="Imagen de la publicación"
+              onLoad={(e) =>
+                setRatioReal(e.currentTarget.naturalWidth / e.currentTarget.naturalHeight)
+              }
+              className="max-h-56 w-auto rounded-md border border-border object-contain"
+            />
+            <Button
+              type="button"
+              variant="destructive"
+              size="icon"
+              className="absolute right-1.5 top-1.5 h-7 w-7"
+              onClick={quitar}
+              disabled={ocupado}
+              aria-label="Quitar imagen"
+              title="Quitar imagen"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          {aspectoFueraDeEstandar && tamRed && red && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                La relación de aspecto no es la {tamRed.ratio} estándar de {nombreRed(red)}: se
+                recortará. {publicacionId ? "Adáptala en el Estudio" : "Recórtala"} a {tamRed.px} px.
+              </span>
+            </p>
+          )}
         </div>
       ) : (
         <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
