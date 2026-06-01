@@ -121,6 +121,7 @@ import type {
   RespuestaGuardarModeloImagen,
   RespuestaPublicacion,
   RespuestaPublicaciones,
+  RespuestaColaAprobacion,
   RespuestaPanel,
   RespuestaListaDia,
   RespuestaAlgoritmos,
@@ -702,6 +703,9 @@ export const api = {
   // dentro FORWARDEAN a la cadena: `enviarARevision` crea una cadena SIMPLE (1 nivel) y deja
   // la pieza en revisión; `aprobar`/`rechazar` deciden el nivel actual de esa cadena.
   // Programar NO es aprobación (es programación) y NO publica de verdad: gated por #5/#8.
+  /** Cola de aprobación: publicaciones en revisión (FIFO). Lectura; cada item es una `Publicacion`. */
+  colaAprobacion: (signal?: AbortSignal) =>
+    peticion<RespuestaColaAprobacion>("/aprobacion/cola", { signal }),
   /** Envía una publicación a revisión: crea la cadena de aprobación simple (borrador → en revisión). */
   enviarARevision: (id: string) =>
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/enviar-a-revision`, {

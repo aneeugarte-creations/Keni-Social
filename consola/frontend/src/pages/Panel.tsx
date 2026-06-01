@@ -26,7 +26,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { numeroCompacto, porcentaje } from "@/lib/formato";
-import type { AlertaRendimiento, ItemListaDia, PicoPanel, ProximaPanel } from "@/types";
+import type {
+  AlertaRendimiento,
+  ItemListaDia,
+  PicoPanel,
+  ProximaPanel,
+  Publicacion,
+} from "@/types";
 
 import { formatearFechaHora, tiempoRelativo } from "./publicaciones/meta";
 
@@ -125,6 +131,32 @@ function FilaProxima({ pieza }: { pieza: ProximaPanel }) {
             <Badge variant="secondary">Programada</Badge>
           )}
         </div>
+      </Link>
+    </li>
+  );
+}
+
+/** Fila de una pieza en la cola de aprobación: al hacer click abre su revisión/aprobación
+ *  en el tablero (deep-link `?abrir=`). `pieza.id` es el `plataforma_id`; el tablero lo
+ *  resuelve a la tarjeta del tema padre. */
+function FilaCola({ pieza }: { pieza: Publicacion }) {
+  return (
+    <li className="border-b border-border/60 last:border-0">
+      <Link
+        to={enlaceAbrir(pieza.id, pieza.marca)}
+        className={`flex items-center justify-between gap-3 py-2 ${FILA_CLICABLE}`}
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{pieza.titulo || "(sin título)"}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {[pieza.marca_nombre, pieza.red_nombre].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        {pieza.enviado_a_revision_en && (
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {tiempoRelativo(pieza.enviado_a_revision_en)}
+          </span>
+        )}
       </Link>
     </li>
   );
@@ -247,6 +279,14 @@ export default function Panel() {
     queryKey: ["alertas"],
     queryFn: ({ signal }) => api.alertas({}, signal),
   });
+  // Cola de aprobación: las piezas que esperan revisión, para listarlas clicables (cada
+  // una abre su revisión/aprobación). Query independiente (no toca el contrato de
+  // /api/panel, que solo trae el conteo), igual que las alertas.
+  const cola = useQuery({
+    queryKey: ["panel", "cola-aprobacion"],
+    queryFn: ({ signal }) => api.colaAprobacion(signal),
+  });
+  const piezasEnRevision = cola.data?.cola ?? [];
   // Lista viva del día (H5): contenido del tablero ordenado por score dinámico. Query
   // independiente (no toca el contrato de /api/panel), igual que las alertas.
   const listaDia = useQuery({
@@ -456,13 +496,25 @@ export default function Panel() {
               </CardHeader>
               <CardContent>
                 {data.cola.total > 0 ? (
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-3xl font-semibold tabular-nums">
-                      {data.cola.total}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      {data.cola.total === 1 ? "pieza espera revisión" : "piezas esperan revisión"}
-                    </span>
+                  <div className="space-y-3">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-semibold tabular-nums">
+                        {data.cola.total}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        {data.cola.total === 1
+                          ? "pieza espera revisión"
+                          : "piezas esperan revisión"}
+                      </span>
+                    </div>
+                    {/* Cada pieza es clicable: abre su revisión/aprobación en el tablero. */}
+                    {piezasEnRevision.length > 0 && (
+                      <ul>
+                        {piezasEnRevision.map((pieza) => (
+                          <FilaCola key={pieza.id} pieza={pieza} />
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ) : (
                   <p className="py-4 text-sm text-muted-foreground">
@@ -559,13 +611,6 @@ export default function Panel() {
               )}
             </CardContent>
           </Card>
-
-          {/* Frontera del producto: el sistema NO publica solo (gated por #5/#8). */}
-          {!data.gating.publicacion_real_activa && (
-            <p className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-300">
-              {data.gating.nota}
-            </p>
-          )}
         </div>
       )}
     </div>

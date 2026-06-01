@@ -54,9 +54,38 @@ const PANEL = {
   },
 };
 
-function stubFetch(panel: unknown = PANEL) {
+// Cola de aprobación (`GET /api/aprobacion/cola`): query independiente del panel.
+const COLA = {
+  total: 2,
+  cola: [
+    {
+      id: "pub-1",
+      titulo: "Copy de la rueda de prensa",
+      marca: "unotv",
+      marca_nombre: "UnoTV",
+      red: "instagram",
+      red_nombre: "Instagram",
+      enviado_a_revision_en: "2026-05-31T09:00",
+    },
+    {
+      id: "pub-2",
+      titulo: "Resumen del partido",
+      marca: "claro-sports",
+      marca_nombre: "Claro Sports",
+      red: "x",
+      red_nombre: "X",
+      enviado_a_revision_en: "",
+    },
+  ],
+};
+
+function stubFetch(panel: unknown = PANEL, cola: unknown = COLA) {
   const fn = vi.fn(async (url: string | URL) => {
-    if (String(url).includes("/api/panel")) {
+    const u = String(url);
+    if (u.includes("/api/aprobacion/cola")) {
+      return new Response(JSON.stringify(cola), { status: 200 });
+    }
+    if (u.includes("/api/panel")) {
       return new Response(JSON.stringify(panel), { status: 200 });
     }
     return new Response("{}", { status: 200 });
@@ -96,6 +125,17 @@ describe("Panel (dashboard ligero)", () => {
     expect(screen.getByText(/piezas esperan revisión/i)).toBeInTheDocument();
   });
 
+  it("lista las piezas en revisión y cada una abre su revisión/aprobación", async () => {
+    stubFetch();
+    renderConProviders(<Panel />);
+    const fila = await screen.findByText("Copy de la rueda de prensa");
+    expect(screen.getByText("Resumen del partido")).toBeInTheDocument();
+    // La pieza es un enlace que abre el tablero apuntando a ESA pieza (deep-link `?abrir=`).
+    const enlace = fila.closest("a");
+    expect(enlace).not.toBeNull();
+    expect(enlace).toHaveAttribute("href", expect.stringContaining("abrir=pub-1"));
+  });
+
   it("lista las próximas programadas y marca la dry-run como lista", async () => {
     stubFetch();
     renderConProviders(<Panel />);
@@ -104,12 +144,6 @@ describe("Panel (dashboard ligero)", () => {
     // La pieza vencida (con preparado_en) se marca como lista en dry-run.
     expect(screen.getByText("Lista (dry-run)")).toBeInTheDocument();
     expect(screen.getByText("Programada")).toBeInTheDocument();
-  });
-
-  it("avisa que el sistema no publica solo (gated por #5/#8)", async () => {
-    stubFetch();
-    renderConProviders(<Panel />);
-    expect(await screen.findByText(/pendiente de #5\/#8/i)).toBeInTheDocument();
   });
 
   it("aguanta cuando las métricas no están disponibles", async () => {

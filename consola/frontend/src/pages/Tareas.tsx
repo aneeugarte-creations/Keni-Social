@@ -354,6 +354,13 @@ export default function Tablero() {
 
   const tareas = visibles.filter((c) => c.clase === "tarea");
 
+  // `?abrir=<id>` casa por el id del tema O por el de una de sus plataformas. Una pieza
+  // del Panel (cola de aprobación / próximas) ES una fila `contenido_plataforma`: su id es
+  // el `plataforma_id`, no el del tema. Resolviéndolo aquí, el deep-link abre la tarjeta
+  // del tema padre (su panel de revisión/aprobación) en vez de quedar en no-op.
+  const coincideAbrir = (c: Contenido) =>
+    abrirId != null && (c.id === abrirId || c.plataformas.some((p) => p.id === abrirId));
+
   const renderItem = (c: Contenido) => (
     <TarjetaContenido
       key={c.id}
@@ -362,7 +369,7 @@ export default function Tablero() {
       etiquetaPorId={etiquetaPorId}
       etiquetasWorkspace={etiquetasWorkspace}
       metricas={metricas}
-      abrirDetalle={c.id === abrirId}
+      abrirDetalle={coincideAbrir(c)}
     />
   );
 
