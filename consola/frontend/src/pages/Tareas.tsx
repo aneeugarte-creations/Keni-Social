@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Eye,
   FileText,
+  Flag,
   Hash,
   Heart,
   Image as ImageIcon,
@@ -1066,6 +1067,12 @@ function AccionesPieza({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
+  const cambiarPrioridad = useMutation({
+    mutationFn: (prioridad: Contenido["prioridad"]) =>
+      api.actualizarContenido(contenido.id, { prioridad }),
+    onSuccess: invalidar,
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   const items: EntradaMenuContextual[] = [
     ...(esContenido
@@ -1075,8 +1082,18 @@ function AccionesPieza({
             icono: Sparkles,
             onClick: () => setAsistenteAbierto(true),
           },
+          { separador: true } as const,
         ]
       : []),
+    // Prioridad: misma opción en lista y feed (en la lista hay además el selector en línea).
+    ...(["alta", "media", "baja"] as const).map((p) => ({
+      etiqueta: `Prioridad ${p}`,
+      icono: Flag,
+      activo: contenido.prioridad === p,
+      deshabilitado: cambiarPrioridad.isPending,
+      onClick: () => cambiarPrioridad.mutate(p),
+    })),
+    { separador: true },
     {
       etiqueta: "Borrar contenido",
       icono: Trash2,
@@ -1231,7 +1248,11 @@ function TarjetaContenido({
                   }
                 : undefined
             }
-            title={esContenido ? "Ver detalle: comentarios, versiones de copy y aprobación" : undefined}
+            title={
+              esContenido
+                ? "Ver detalle: comentarios, versiones de copy y aprobación · Clic derecho para más acciones"
+                : undefined
+            }
           >
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium leading-snug">{contenido.titulo}</span>
@@ -1517,7 +1538,7 @@ function TarjetaFeed({
       <button
         type="button"
         onClick={() => abrirDetalleRef.current?.()}
-        title={`Ver detalle: ${contenido.titulo}`}
+        title={`Ver detalle: ${contenido.titulo} · Clic derecho para más acciones`}
         className="block w-full rounded-lg text-left transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <VistaPreviaRed

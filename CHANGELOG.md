@@ -17,8 +17,12 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 - Se **quita "Detalle" del menú**: el click izquierdo en la tarjeta ya abre el detalle
   (comentarios, versiones, aprobación), así que tenerlo también en el menú era redundante.
 - Consolidado en un único componente `AccionesPieza` que envuelve la tarjeta de ambas vistas
-  (dueño del menú, los diálogos de IA/colaboración y el borrado); la prioridad sigue como
-  control en línea de la vista lista.
+  (dueño del menú, los diálogos de IA/colaboración y el borrado).
+- El menú contextual incluye ahora **cambiar la prioridad** (alta/media/baja, con la actual
+  marcada): así el **feed** también puede cambiarla, no solo la lista (que mantiene además su
+  selector en línea).
+- **Pista de descubribilidad**: el tooltip de la tarjeta (en ambas vistas) indica "Clic derecho
+  para más acciones", ya que el menú dejó de tener un botón visible.
 
 ### Diálogo de confirmación propio (sin pop-ups del navegador)
 
