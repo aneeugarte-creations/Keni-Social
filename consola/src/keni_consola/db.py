@@ -4223,7 +4223,9 @@ def crear_fuente_rss(
     redes_def: str = "",
 ) -> dict[str, Any]:
     """Crea una fuente RSS (activa, salud vacia) y la devuelve."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
+    # en el mismo segundo empataban, dejando el orden al `id` (uuid aleatorio) -> test flaky.
+    ahora = datetime.now().isoformat(timespec="microseconds")
     fila = {
         "id": uuid.uuid4().hex[:12],
         "nombre": nombre or "",
