@@ -187,3 +187,28 @@ def test_obtener_rechaza_ids_invalidos(malo):
 def test_carpeta_con_traversal_lanza():
     with pytest.raises(biblioteca.BibliotecaError):
         biblioteca.crear("X", tipo="prompt", carpeta="../fuera")
+
+
+# --------------------------------------------------------------------------- #
+# Siembra (importar_semilla)                                                    #
+# --------------------------------------------------------------------------- #
+
+
+def test_importar_semilla_puebla_y_es_idempotente():
+    # La semilla del paquete trae editorial (línea editorial) + prompts base.
+    n = biblioteca.importar_semilla()
+    assert n > 0
+    # Hay al menos un prompt y un editorial tras importar.
+    assert biblioteca.listar(tipo="prompt"), "la semilla debe traer prompts"
+    assert biblioteca.listar(tipo="editorial"), "la semilla debe traer editorial"
+    # Idempotente: una segunda importación no duplica (no pisa lo existente).
+    assert biblioteca.importar_semilla() == 0
+
+
+def test_importar_semilla_no_pisa_lo_editado():
+    docs = biblioteca.importar_semilla()
+    assert docs > 0
+    prompt = biblioteca.listar(tipo="prompt")[0]
+    biblioteca.guardar(prompt.id, cuerpo="EDITADO POR EL EQUIPO")
+    biblioteca.importar_semilla()  # no debe restaurar el original
+    assert biblioteca.obtener(prompt.id).cuerpo.strip() == "EDITADO POR EL EQUIPO"

@@ -252,6 +252,9 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.setenv("KENI_SKILLS_DIR", str(dir_skills))
     # Almacen de generaciones (trabajos de IA en background) aislado en tmp.
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
+    # Almacen de la Biblioteca (prompts + linea editorial) aislado en tmp: ningun test
+    # debe leer/escribir el store real (~/.config/keni-social/biblioteca).
+    monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
     try:
         yield tmp_path
     finally:

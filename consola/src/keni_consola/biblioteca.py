@@ -535,6 +535,51 @@ def _validar_clase(tipo: str, clase: str) -> str:
     return clase
 
 
+def dir_semilla() -> Path:
+    """Dir de la SEMILLA (documentos por defecto que se copian al store en el 1er arranque).
+
+    Vive DENTRO del paquete (`biblioteca_semilla/`) para viajar con el código (a diferencia
+    del store, que es estado de usuario). Override por `KENI_BIBLIOTECA_SEMILLA` (tests).
+    """
+    import os
+
+    env = os.environ.get("KENI_BIBLIOTECA_SEMILLA")
+    if env:
+        return Path(env).expanduser()
+    return Path(__file__).resolve().parent / "biblioteca_semilla"
+
+
+def importar_semilla(origen: Path | None = None) -> int:
+    """Copia los documentos de la semilla al store que AÚN NO existan. Idempotente.
+
+    Pensado para el PRIMER arranque (poblar la Biblioteca con la línea editorial y los
+    prompts base). No pisa nada: un documento ya presente en el store se respeta. Devuelve
+    cuántos documentos se importaron. Los ficheros de la semilla ya vienen en formato de
+    store (frontmatter + cuerpo, ruta `tipo/.../slug.md`).
+    """
+    base = origen or dir_semilla()
+    if not base.is_dir():
+        return 0
+    destino_raiz = raiz()
+    n = 0
+    for ruta in sorted(base.rglob("*.md")):
+        rel = ruta.relative_to(base)
+        partes = rel.with_suffix("").as_posix().split("/")
+        if partes[0] not in TIPOS or not _segmentos_validos(partes):
+            continue
+        destino = destino_raiz.joinpath(*rel.parts)
+        if destino.exists():
+            continue
+        try:
+            texto = ruta.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        escribir_atomico(destino, texto)
+        n += 1
+    return n
+
+
 def _validar_marcas(marcas: list[str] | None) -> list[str]:
     """Normaliza la lista de marcas (ids canonicos) de un documento editorial."""
     if not marcas:

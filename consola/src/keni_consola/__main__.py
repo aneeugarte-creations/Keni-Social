@@ -97,6 +97,18 @@ def main() -> int:
     # Pasamos el token ya resuelto a la app (asi no se vuelve a generar otro).
     app = crear_app(token=token)
 
+    # Siembra de la Biblioteca (best-effort): en el PRIMER arranque copia la linea editorial
+    # y los prompts base al store si aun no estan. Idempotente; no pisa lo que el equipo edite.
+    # Vive aqui (servidor real), NO en `crear_app`, para no tocar el estado real en los tests.
+    try:
+        from . import biblioteca
+
+        n = biblioteca.importar_semilla()
+        if n:
+            print(f"Biblioteca: {n} documento(s) base importados.")
+    except Exception:  # noqa: BLE001 -- la siembra nunca debe impedir el arranque
+        pass
+
     # Captura programada del apartado Comercial: un hilo demonio que va tomando
     # snapshots de las piezas activas (interacciones/alcance) aunque nadie mire.
     # Vive aqui (servidor real) y NO en `crear_app`, para no arrancarlo en los tests.
