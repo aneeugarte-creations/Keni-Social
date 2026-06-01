@@ -90,6 +90,9 @@ export default function Biblioteca() {
   const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
   // Frontmatter del cuerpo que ocultamos en el editor (se readjunta al guardar).
   const [frontmatterOculto, setFrontmatterOculto] = React.useState("");
+  // Arrastrar y soltar para mover documentos entre carpetas.
+  const [arrastrando, setArrastrando] = React.useState<string | null>(null);
+  const [destino, setDestino] = React.useState<string | null>(null);
 
   const docsQuery = useQuery({
     queryKey: ["biblioteca", filtro, q],
@@ -151,9 +154,18 @@ export default function Biblioteca() {
         <button
           onClick={() => setSeleccionId(d.id)}
           title={d.titulo}
+          draggable
+          onDragStart={(e) => {
+            setArrastrando(d.id);
+            e.dataTransfer.effectAllowed = "move";
+          }}
+          onDragEnd={() => {
+            setArrastrando(null);
+            setDestino(null);
+          }}
           className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted ${
             d.id === seleccionId ? "bg-muted font-medium" : ""
-          }`}
+          } ${arrastrando === d.id ? "opacity-50" : ""}`}
         >
           {d.tipo === "editorial" ? (
             <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -200,6 +212,38 @@ export default function Biblioteca() {
       qc.invalidateQueries({ queryKey: ["biblioteca"] });
     },
   });
+
+  // Mover un documento a otra carpeta (cambia su carpeta; el id cambia, lo resincronizamos).
+  const moverMut = useMutation({
+    mutationFn: ({ id, carpeta }: { id: string; carpeta: string }) =>
+      api.guardarDocumento(id, { carpeta }),
+    onSuccess: (r, vars) => {
+      if (vars.id === seleccionId) setSeleccionId(r.documento.id);
+      qc.invalidateQueries({ queryKey: ["biblioteca"] });
+    },
+  });
+  function moverDoc(id: string, carpeta: string) {
+    const d = documentos.find((x) => x.id === id);
+    if (!d || (d.carpeta || "") === carpeta) return;
+    moverMut.mutate({ id, carpeta });
+  }
+
+  // Renombrar una carpeta = re-filar todos sus documentos (y los anidados) a la nueva ruta.
+  const renombrarCarpetaMut = useMutation({
+    mutationFn: async ({ de, a }: { de: string; a: string }) => {
+      const afectados = documentos.filter((d) => d.carpeta === de || d.carpeta.startsWith(de + "/"));
+      for (const d of afectados) {
+        await api.guardarDocumento(d.id, { carpeta: a + d.carpeta.slice(de.length) });
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["biblioteca"] }),
+  });
+  function renombrarCarpeta(carpeta: string) {
+    const a = window.prompt("Nuevo nombre de la carpeta", carpeta)?.trim();
+    if (!a || a === carpeta) return;
+    setSeleccionId(null); // los ids cambian; evita una selección colgada
+    renombrarCarpetaMut.mutate({ de: carpeta, a });
+  }
 
   function editar(parcial: Partial<DocumentoBiblioteca>) {
     if (!borrador) return;
@@ -281,7 +325,26 @@ export default function Biblioteca() {
             <ul className="divide-y divide-border">{documentos.map((d) => filaDoc(d, true))}</ul>
           ) : (
             // Navegación por carpetas: raíz suelta arriba, luego cada carpeta plegable.
+            // Arrastra un documento sobre una carpeta para moverlo; el lápiz la renombra.
             <div className="divide-y divide-border">
+              {arrastrando ? (
+                <div
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    setDestino("");
+                  }}
+                  onDragLeave={() => setDestino((d) => (d === "" ? null : d))}
+                  onDrop={() => {
+                    moverDoc(arrastrando, "");
+                    setDestino(null);
+                  }}
+                  className={`border-b border-dashed border-border px-3 py-1.5 text-center text-xs text-muted-foreground ${
+                    destino === "" ? "ring-2 ring-inset ring-primary" : ""
+                  }`}
+                >
+                  Soltar aquí para quitar de la carpeta
+                </div>
+              ) : null}
               {grupos.map(([carpeta, docs]) =>
                 carpeta === "" ? (
                   <ul key="__raiz__" className="divide-y divide-border">
@@ -289,19 +352,44 @@ export default function Biblioteca() {
                   </ul>
                 ) : (
                   <div key={carpeta}>
-                    <button
-                      onClick={() => alternarCarpeta(carpeta)}
-                      className="flex w-full items-center gap-1.5 bg-muted/40 px-2 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted"
+                    <div
+                      onDragOver={(e) => {
+                        if (arrastrando) {
+                          e.preventDefault();
+                          setDestino(carpeta);
+                        }
+                      }}
+                      onDragLeave={() => setDestino((d) => (d === carpeta ? null : d))}
+                      onDrop={() => {
+                        if (arrastrando) moverDoc(arrastrando, carpeta);
+                        setDestino(null);
+                      }}
+                      className={`flex items-center gap-1.5 bg-muted/40 px-2 py-1.5 text-xs font-medium text-muted-foreground ${
+                        destino === carpeta ? "ring-2 ring-inset ring-primary" : ""
+                      }`}
                     >
-                      {carpetasCerradas.has(carpeta) ? (
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                      ) : (
-                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                      <Folder className="h-3.5 w-3.5 shrink-0" />
-                      <span className="truncate">{carpeta}</span>
-                      <span className="ml-auto tabular-nums">{docs.length}</span>
-                    </button>
+                      <button
+                        onClick={() => alternarCarpeta(carpeta)}
+                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
+                      >
+                        {carpetasCerradas.has(carpeta) ? (
+                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        <Folder className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{carpeta}</span>
+                      </button>
+                      <button
+                        onClick={() => renombrarCarpeta(carpeta)}
+                        title="Renombrar carpeta"
+                        aria-label="Renombrar carpeta"
+                        className="shrink-0 opacity-50 hover:opacity-100"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <span className="shrink-0 tabular-nums">{docs.length}</span>
+                    </div>
                     {!carpetasCerradas.has(carpeta) ? (
                       <ul className="divide-y divide-border">
                         {docs.map((d) => filaDoc(d, false))}
