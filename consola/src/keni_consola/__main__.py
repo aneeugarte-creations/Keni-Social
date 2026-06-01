@@ -209,6 +209,15 @@ def main() -> int:
 
     iniciar_media_gc()
 
+    # Reaper de GENERACIONES zombi: un hilo demonio (SIEMPRE activo) que cierra como `error`
+    # las generaciones colgadas en `ejecutando` cuyo proceso murio (reinicio/OOM/cuelgue), para
+    # que el Monitor de Actividad no las muestre "Ejecutando…" indefinidamente. Barre al
+    # arrancar (limpia los huerfanos del crash anterior) y cada N min. Vive aqui (servidor
+    # real), NO en `crear_app`, para no arrancarlo en los tests.
+    from .reaper_generaciones import iniciar_reaper
+
+    iniciar_reaper()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

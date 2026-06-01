@@ -206,6 +206,12 @@ ENV_AUTOGEN_ARTE = "KENI_AUTOGEN_ARTE"
 ENV_AUTOGEN_ARTE_INTERVALO_HORAS = "KENI_AUTOGEN_ARTE_INTERVALO_HORAS"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
+# Reaper de generaciones zombi: una generacion `ejecutando` cuyo proceso murio (reinicio/
+# OOM/cuelgue) queda colgada para siempre. El reaper la cierra como `error` pasada una
+# antigüedad MUY superior al wall-timeout (asi nunca mata una viva). Siempre activo.
+ENV_GENERACIONES_TTL_HORAS = "KENI_GENERACIONES_TTL_HORAS"
+ENV_REAPER_INTERVALO_MIN = "KENI_REAPER_INTERVALO_MIN"
+
 # Recoleccion de basura (GC) de MEDIA HUERFANA (Estudio de imagen, diseno §5). El Estudio
 # genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
 # nadie borra. Un hilo demonio barre periodicamente el almacen y borra SOLO los objetos
@@ -312,6 +318,12 @@ AUTOGEN_MAX_DEF = 3
 # seguido, cap bajo por barrido), porque cada item llama al proveedor de imagen (coste).
 AUTOGEN_ARTE_INTERVALO_HORAS_DEF = 1
 AUTOGEN_ARTE_MAX_DEF = 3
+
+# Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
+# barrido cada 10 min. El barrido tambien corre al arrancar (limpia los huerfanos del crash
+# anterior de inmediato).
+GENERACIONES_TTL_HORAS_DEF = 1
+REAPER_INTERVALO_MIN_DEF = 10
 
 # Recoleccion de basura de media huerfana (Estudio §5). Barre 1 vez al dia (no urge: el
 # almacen crece lento) y solo borra objetos mas viejos que ANTIGUEDAD (def 24h), para NO
@@ -876,6 +888,20 @@ def autogen_arte_max() -> int:
     Cada item llama al proveedor de imagen (coste): el cap evita avalanchas por barrido.
     """
     return _entero(ENV_AUTOGEN_ARTE_MAX, AUTOGEN_ARTE_MAX_DEF, minimo=1)
+
+
+def generaciones_ttl_seg() -> int:
+    """Antigüedad (s) tras la cual una generacion `ejecutando` se considera zombi.
+
+    `KENI_GENERACIONES_TTL_HORAS` (def 1 h, min 1). MUY por encima del wall-timeout (~10 min):
+    asi el reaper nunca cierra una generacion que de verdad sigue viva.
+    """
+    return _entero(ENV_GENERACIONES_TTL_HORAS, GENERACIONES_TTL_HORAS_DEF, minimo=1) * 3600
+
+
+def reaper_intervalo_seg() -> int:
+    """Cada cuanto barre el reaper de generaciones (`KENI_REAPER_INTERVALO_MIN`, def 10, min 1)."""
+    return _entero(ENV_REAPER_INTERVALO_MIN, REAPER_INTERVALO_MIN_DEF, minimo=1) * 60
 
 
 def consola_url_publica() -> str | None:

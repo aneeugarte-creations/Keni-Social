@@ -91,6 +91,9 @@ ESTADO_ERROR = "error"
 MOTIVO_TIMEOUT = "timeout"
 MOTIVO_COLA_LLENA = "cola_llena"
 MOTIVO_CANCELADO = "cancelado"
+# Una generacion quedo `ejecutando` pero su proceso murio (reinicio/deploy, OOM, worker
+# matado, o `generar()` colgado): el finalizador nunca corrio. El reaper la marca asi.
+MOTIVO_INTERRUMPIDO = "interrumpido"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
 TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt")
@@ -326,6 +329,47 @@ def listar(
 def contar() -> int:
     """Total de generaciones almacenadas (para el `total` del envelope de paginacion)."""
     return len(_todas_ordenadas())
+
+
+def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> int:
+    """Marca como `error` (interrumpida) las generaciones colgadas en `ejecutando`.
+
+    Una generacion nace `ejecutando` y solo pasa a terminal cuando corre su finalizador. Si
+    el proceso que la ejecuta MUERE (reinicio/deploy, OOM, worker matado, `generar()` de
+    imagen colgado), el finalizador nunca corre y el registro queda ZOMBI en `ejecutando`
+    para siempre (el wall-timeout solo protege si el proceso sigue vivo). Este reaper barre
+    las `ejecutando` cuyo `fecha_inicio` es mas viejo que `max_edad_seg` y las cierra como
+    `error`/`interrumpido`. SEGURO: `max_edad_seg` debe ser MUY superior a cualquier job real
+    (que termina en <= wall-timeout), asi nunca mata uno vivo. Devuelve cuantas reclamo.
+
+    `ahora` se inyecta en tests; por defecto es la hora actual. Best-effort por item: un
+    fallo al parsear/actualizar uno NO aborta el barrido.
+    """
+    referencia = ahora if ahora is not None else datetime.now()
+    reclamadas = 0
+    for gen in _todas_ordenadas():
+        if gen.get("estado") != ESTADO_EJECUTANDO:
+            continue
+        try:
+            inicio = datetime.fromisoformat(gen.get("fecha_inicio", ""))
+        except ValueError:
+            continue  # sin fecha parseable: no podemos juzgar su edad, lo dejamos
+        if (referencia - inicio).total_seconds() < max_edad_seg:
+            continue  # aun dentro de ventana: podria estar viva de verdad
+        try:
+            actualizar(
+                gen["id"],
+                {
+                    "estado": ESTADO_ERROR,
+                    "motivo": MOTIVO_INTERRUMPIDO,
+                    "error": "La generación se interrumpió (el proceso se reinició o se colgó).",
+                    "fecha_fin": ahora_iso(),
+                },
+            )
+            reclamadas += 1
+        except Exception:  # noqa: BLE001 -- un fallo al reclamar uno no debe abortar el barrido
+            continue
+    return reclamadas
 
 
 # --------------------------------------------------------------------------- #
