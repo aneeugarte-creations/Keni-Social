@@ -22,6 +22,12 @@ Endpoints (bajo `/api/sistema`, CONTRATO con el frontend):
       y objetos del nivel actual ({key, nombre, tamano, modificado}). Tope anti-escaneo de
       1000 objetos por pagina, maximo _MAX_PAGINAS_NAV paginas. Sin S3: degradado, no 500.
       SOLO lectura: NADA destructivo.
+  - GET /api/sistema/s3/objeto?key=<k>[&descargar=1] -> STREAMING de los bytes del objeto.
+      El endpoint S3 de Garage es INTERNO (`http://files:3900`): el navegador no lo alcanza,
+      asi que NO se usan URLs prefirmadas; se proxean los bytes por el back con el Content-Type
+      real del objeto. Por defecto `inline` (previsualizacion: sirve para `<img src=...>` con la
+      cookie de sesion); `?descargar=1` fuerza `attachment`. Valida la key (sin `..`). Cap de
+      tamano (_MAX_BYTES_OBJETO). 404 si no existe, 409 si S3 no configurado. SOLO lectura.
 
 Implementacion DEFENSIVA: cualquier fallo de psutil/boto3/red se captura y se degrada a un
 campo de error legible; la pagina nunca se cae por una sonda.
@@ -34,10 +40,10 @@ import os
 import shutil
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from .. import config, permisos, rutas
+from .. import config, media, permisos, rutas
 from ..observabilidad import NOMBRE_LOGGER
 
 _logger = logging.getLogger(NOMBRE_LOGGER)
@@ -53,6 +59,14 @@ _MAX_OBJETOS = 100_000
 # Tope de paginas al navegar un prefijo (explorador de carpetas): 5 paginas = 5000 objetos
 # por nivel. Mas que suficiente para la media de la consola; evita escaneos infinitos.
 _MAX_PAGINAS_NAV = 5
+
+# Tope de tamano al servir/descargar un objeto por el back (proxy de bytes): 100 MiB. La
+# media de la consola son imagenes/clips ligeros; mas que de sobra. Protege la RAM del back
+# de descargar un objeto gigante de golpe. Si se supera, 413 (objeto demasiado grande).
+_MAX_BYTES_OBJETO = 100 * 1024 * 1024
+
+# Tamano de chunk al streamear los bytes del objeto al cliente (256 KiB).
+_CHUNK_STREAM = 256 * 1024
 
 
 def _es_admin(request: Request) -> bool:
@@ -406,11 +420,116 @@ async def s3_objetos(request: Request) -> Response:
     )
 
 
+def _key_valida(key: str) -> bool:
+    """True si `key` es una key de objeto SEGURA para servir (anti-traversal).
+
+    Rechaza keys vacias, absolutas (empiezan por "/") o con un segmento "..": aunque S3 no
+    es un FS, blindamos contra cualquier intento de escapar del bucket o de jugar con rutas.
+    """
+    if not key or key.startswith("/"):
+        return False
+    return ".." not in key.split("/")
+
+
+def _es_objeto_inexistente(e: Exception) -> bool:
+    """True si la excepcion de boto3 indica que el objeto NO existe (404 / NoSuchKey).
+
+    boto3 levanta `ClientError` con `e.response = {"Error": {"Code": ...}, "ResponseMetadata":
+    {"HTTPStatusCode": ...}}`. Miramos ambos por robustez (Garage y AWS pueden diferir en el
+    Code). Si no hay `response`, es un fallo de red/credencial -> NO es un 404.
+    """
+    resp = getattr(e, "response", None)
+    if not isinstance(resp, dict):
+        return False
+    codigo = str(resp.get("Error", {}).get("Code", "")).lower()
+    estado = resp.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    return codigo in ("nosuchkey", "404", "notfound") or estado == 404
+
+
+async def s3_objeto(request: Request) -> Response:
+    """GET /api/sistema/s3/objeto?key=<k>[&descargar=1]: streamea un objeto del bucket. Admin.
+
+    El endpoint de Garage es INTERNO: el navegador no lo alcanza, asi que NO firmamos URLs;
+    proxeamos los bytes por el back. `get_object` da el cuerpo (stream) y el `ContentType`
+    real, que reflejamos al cliente. `inline` por defecto (sirve para `<img src=...>` con la
+    cookie de sesion); `?descargar=1` -> `attachment`. SOLO lectura: nada destructivo.
+
+    Codigos: 400 key invalida, 409 S3 no configurado, 404 objeto inexistente, 413 demasiado
+    grande, 502 fallo de almacenamiento. Anti-traversal en la key (sin `..`).
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+
+    if not config.s3_configurado():
+        return JSONResponse(
+            {"error": "El almacenamiento S3 no está configurado en este servidor."},
+            status_code=409,
+        )
+
+    key = request.query_params.get("key", "")
+    if not _key_valida(key):
+        return JSONResponse({"error": "Clave de objeto no válida."}, status_code=400)
+
+    descargar = request.query_params.get("descargar") in ("1", "true", "si", "sí")
+
+    try:
+        cliente = _cliente_s3()
+        obj = cliente.get_object(Bucket=config.s3_bucket(), Key=key)
+    except Exception as e:  # noqa: BLE001 -- boto3 lanza ClientError(NoSuchKey/404) o red
+        # Distinguimos "no existe" (404) del resto (problema de almacenamiento, 502). boto3
+        # cuelga el detalle en `e.response` (dict) cuando es un ClientError; si no, es red.
+        if _es_objeto_inexistente(e):
+            return JSONResponse({"error": "Ese objeto no existe."}, status_code=404)
+        _logger.warning("No se pudo leer el objeto S3 %r: %s", key, e)
+        return JSONResponse(
+            {"error": "No se pudo leer el objeto del almacenamiento."}, status_code=502
+        )
+
+    # Cap de tamano: protege la RAM del back. `ContentLength` viene en la respuesta de S3.
+    tamano = int(obj.get("ContentLength", 0) or 0)
+    if tamano > _MAX_BYTES_OBJETO:
+        return JSONResponse(
+            {"error": "El objeto es demasiado grande para previsualizarlo aquí."},
+            status_code=413,
+        )
+
+    # Content-Type real del objeto; si S3 no lo trae, lo inferimos de la extension de la key.
+    tipo = obj.get("ContentType") or media.mime_de(key)
+
+    nombre_archivo = os.path.basename(key.rstrip("/")) or "objeto"
+    disposicion = "attachment" if descargar else "inline"
+    headers = {
+        "Content-Disposition": f'{disposicion}; filename="{nombre_archivo}"',
+        # Cache breve en el navegador: thumbnails repetidos no re-piden al back cada scroll.
+        "Cache-Control": "private, max-age=300",
+    }
+    if tamano:
+        headers["Content-Length"] = str(tamano)
+
+    cuerpo = obj["Body"]  # StreamingBody de botocore (file-like, .read(n))
+
+    def _iter():
+        try:
+            while True:
+                trozo = cuerpo.read(_CHUNK_STREAM)
+                if not trozo:
+                    break
+                yield trozo
+        finally:
+            try:
+                cuerpo.close()
+            except Exception:  # noqa: BLE001 -- cierre best-effort
+                pass
+
+    return StreamingResponse(_iter(), media_type=tipo, headers=headers)
+
+
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),
-    # IMPORTANTE: la ruta mas especifica (/s3/objetos) va ANTES que /s3/probar y /s3
-    # para que Starlette la case correctamente.
+    # IMPORTANTE: las rutas mas especificas (/s3/objetos, /s3/objeto) van ANTES que /s3/probar
+    # y /s3 para que Starlette las case correctamente.
     Route("/api/sistema/s3/objetos", s3_objetos, methods=["GET"]),
+    Route("/api/sistema/s3/objeto", s3_objeto, methods=["GET"]),
     Route("/api/sistema/s3/probar", probar_s3, methods=["POST"]),
 ]

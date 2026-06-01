@@ -10,6 +10,8 @@ Reusa la fixture `cliente` (token de mantenimiento) y el aislamiento de `entorno
 
 from __future__ import annotations
 
+from keni_consola import repos
+
 
 def _crear_programa(cli, **extra) -> dict:
     base = {"nombre": "MUNDIAL", "color": "#FF3300", "descripcion": "Mundial 2026"}
@@ -115,20 +117,12 @@ def test_actualizar_programa_color_y_descripcion(cliente):
 def test_renombrar_programa_hace_cascada_en_piezas(cliente):
     """Cuando renombro el programa, las piezas que lo referencian se actualizan."""
     p = _crear_programa(cliente, nombre="OLD NAME")
-    # Crea piezas con el nombre antiguo.
-    cliente.post(
-        "/api/rota/piezas",
-        json={"programa": "OLD NAME", "contenido_sugerido": "post 1"},
-    )
-    cliente.post(
-        "/api/rota/piezas",
-        json={"programa": "OLD NAME", "contenido_sugerido": "post 2"},
-    )
+    # Siembra piezas (legacy `rota_piezas`) por el dominio: la API HTTP de piezas se retiró,
+    # pero la cascada de programa->piezas sigue viva mientras exista la tabla y la migración.
+    repos.crear_pieza_rota(programa="OLD NAME", contenido_sugerido="post 1")
+    repos.crear_pieza_rota(programa="OLD NAME", contenido_sugerido="post 2")
     # Una pieza con OTRO nombre no debe cambiar.
-    cliente.post(
-        "/api/rota/piezas",
-        json={"programa": "Real Oviedo", "contenido_sugerido": "post 3"},
-    )
+    repos.crear_pieza_rota(programa="Real Oviedo", contenido_sugerido="post 3")
 
     # Renombrar el programa.
     r = cliente.patch(f"/api/rota/programas/{p['id']}", json={"nombre": "NEW NAME"})
@@ -136,7 +130,7 @@ def test_renombrar_programa_hace_cascada_en_piezas(cliente):
     assert r.json()["programa"]["nombre"] == "NEW NAME"
 
     # Las piezas con el nombre antiguo cambiaron; las del otro programa no.
-    todas = cliente.get("/api/rota/piezas").json()["piezas"]
+    todas = repos.listar_piezas_rota()
     nombres = [p["programa"] for p in todas]
     assert nombres.count("NEW NAME") == 2
     assert "OLD NAME" not in nombres
@@ -194,10 +188,7 @@ def test_borrar_programa_sin_piezas(cliente):
 
 def test_borrar_programa_en_uso_409(cliente):
     p = _crear_programa(cliente, nombre="MUNDIAL")
-    cliente.post(
-        "/api/rota/piezas",
-        json={"programa": "MUNDIAL", "contenido_sugerido": "post 1"},
-    )
+    repos.crear_pieza_rota(programa="MUNDIAL", contenido_sugerido="post 1")
     r = cliente.delete(f"/api/rota/programas/{p['id']}")
     assert r.status_code == 409
     cuerpo = r.json()
@@ -208,15 +199,12 @@ def test_borrar_programa_en_uso_409(cliente):
 def test_borrar_programa_forzar_true(cliente):
     """Con ?forzar=true se borra aunque haya piezas; estas siguen mostrando el nombre."""
     p = _crear_programa(cliente, nombre="MUNDIAL")
-    pieza_r = cliente.post(
-        "/api/rota/piezas",
-        json={"programa": "MUNDIAL", "contenido_sugerido": "post 1"},
-    )
-    pieza_id = pieza_r.json()["pieza"]["id"]
+    pieza = repos.crear_pieza_rota(programa="MUNDIAL", contenido_sugerido="post 1")
+    pieza_id = pieza["id"]
     r = cliente.delete(f"/api/rota/programas/{p['id']}?forzar=true")
     assert r.status_code == 200
     assert r.json()["piezas_afectadas"] == 1
     # La pieza huerfana sigue accesible y conserva el texto del programa.
-    piezas = cliente.get("/api/rota/piezas").json()["piezas"]
+    piezas = repos.listar_piezas_rota()
     huerfana = next(p for p in piezas if p["id"] == pieza_id)
     assert huerfana["programa"] == "MUNDIAL"

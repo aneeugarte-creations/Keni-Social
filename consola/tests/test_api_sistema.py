@@ -319,3 +319,178 @@ def test_objetos_fallo_red_degrada(entorno, monkeypatch):
     assert datos["error"]
     assert datos["carpetas"] == []
     assert datos["objetos"] == []
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/sistema/s3/objeto: streaming de un objeto (preview/descarga)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_objeto_editor_403(entorno):
+    """Un editor (no admin) recibe 403 al pedir un objeto."""
+    c = _cli_como("editor")
+    assert c.get("/api/sistema/s3/objeto?key=a.png").status_code == 403
+
+
+def test_objeto_token_403(entorno):
+    """El token de mantenimiento (no sesion admin) recibe 403."""
+    c = _cli_token()
+    assert c.get("/api/sistema/s3/objeto?key=a.png").status_code == 403
+
+
+def test_objeto_sin_s3_409(entorno):
+    """Sin S3 cableado: 409 (no hay nada que servir), NUNCA 500."""
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objeto?key=a.png")
+    assert r.status_code == 409
+    assert "configurado" in r.json()["error"].lower()
+
+
+def test_objeto_key_traversal_rechazada(entorno, monkeypatch):
+    """Una key con `..` se rechaza con 400 (anti-traversal), sin tocar S3."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    from keni_consola.api import sistema as api_sistema
+
+    # Si llegara a pedir el cliente seria un fallo: la validacion va antes.
+    def boom():
+        raise AssertionError("no debe construirse el cliente para una key invalida")
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    c = _cli_como("admin")
+    for key in ("../secret", "a/../../b", "/etc/passwd", ""):
+        r = c.get(f"/api/sistema/s3/objeto?key={key}")
+        assert r.status_code == 400, key
+
+
+def test_objeto_inexistente_404(entorno, monkeypatch):
+    """get_object que lanza NoSuchKey -> 404 (no 500)."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    class _ClienteFake:
+        def get_object(self, **k):
+            err = RuntimeError("not found")
+            # Imita el `e.response` de un ClientError de botocore.
+            err.response = {  # type: ignore[attr-defined]
+                "Error": {"Code": "NoSuchKey"},
+                "ResponseMetadata": {"HTTPStatusCode": 404},
+            }
+            raise err
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objeto?key=no-existe.png")
+    assert r.status_code == 404
+    assert "no existe" in r.json()["error"].lower()
+
+
+def test_objeto_streaming_ok(entorno, monkeypatch):
+    """get_object OK: streamea los bytes con el Content-Type real + inline por defecto."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    contenido = b"\x89PNG\r\n\x1a\n" + b"datos-de-imagen" * 10
+
+    class _Body:
+        def __init__(self, data: bytes):
+            self._buf = data
+            self._pos = 0
+
+        def read(self, n: int = -1) -> bytes:
+            if n is None or n < 0:
+                trozo = self._buf[self._pos :]
+                self._pos = len(self._buf)
+                return trozo
+            trozo = self._buf[self._pos : self._pos + n]
+            self._pos += len(trozo)
+            return trozo
+
+        def close(self):
+            pass
+
+    class _ClienteFake:
+        def get_object(self, **k):
+            assert k["Bucket"] == "keni-media"
+            assert k["Key"] == "logo.png"
+            return {
+                "Body": _Body(contenido),
+                "ContentType": "image/png",
+                "ContentLength": len(contenido),
+            }
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objeto?key=logo.png")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert "inline" in r.headers["content-disposition"]
+    assert "logo.png" in r.headers["content-disposition"]
+    assert r.content == contenido
+
+
+def test_objeto_descarga_attachment(entorno, monkeypatch):
+    """`?descargar=1` fuerza Content-Disposition: attachment."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    class _Body:
+        def __init__(self):
+            self._dado = False
+
+        def read(self, n: int = -1) -> bytes:
+            if self._dado:
+                return b""
+            self._dado = True
+            return b"contenido"
+
+        def close(self):
+            pass
+
+    class _ClienteFake:
+        def get_object(self, **k):
+            return {"Body": _Body(), "ContentType": "text/plain", "ContentLength": 9}
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objeto?key=nota.txt&descargar=1")
+    assert r.status_code == 200
+    assert "attachment" in r.headers["content-disposition"]
+
+
+def test_objeto_demasiado_grande_413(entorno, monkeypatch):
+    """Un objeto que supera el cap de tamano -> 413 (no se streamea)."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    from keni_consola.api import sistema as api_sistema
+
+    class _ClienteFake:
+        def get_object(self, **k):
+            return {
+                "Body": object(),  # no se debe leer: el cap corta antes
+                "ContentType": "application/octet-stream",
+                "ContentLength": api_sistema._MAX_BYTES_OBJETO + 1,
+            }
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objeto?key=enorme.bin")
+    assert r.status_code == 413

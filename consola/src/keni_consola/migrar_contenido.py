@@ -100,9 +100,26 @@ def _origenes_existentes(prefijo: str) -> set[str]:
     }
 
 
+def _id_etiqueta(nombre: str) -> str:
+    """Id de la etiqueta `nombre` (la crea si no existe). Best-effort idempotente.
+
+    Mismo patrón que `importador_calendario._id_etiqueta`: normaliza a minúsculas y reutiliza
+    la etiqueta existente con ese nombre antes de crear una nueva. Devuelve "" si no se pudo.
+    """
+    norm = nombre.strip().lower()
+    if not norm:
+        return ""
+    for et in repos.listar_etiquetas():
+        if (et.get("nombre", "") or "").strip().lower() == norm:
+            return et.get("id", "")
+    return repos.crear_etiqueta(nombre=norm).get("id", "")
+
+
 def migrar_piezas() -> int:
     """Migra `rota_piezas` -> `contenido` (clase='contenido') + filas por plataforma."""
     ya = _origenes_existentes("pieza")
+    # Cache nombre_normalizado -> etiqueta_id para no releer/crear la misma etiqueta por fila.
+    etiquetas_cache: dict[str, str] = {}
     creadas = 0
     for p in repos.listar_piezas_rota():
         if p["id"] in ya:
@@ -132,6 +149,17 @@ def migrar_piezas() -> int:
             notas=notas,
             origen=f"pieza:{p['id']}",
         )
+        # `tipo_pieza` (texto libre: HISTORIA / REEL / IMAGEN...) se preserva como ETIQUETA
+        # del tablero (no como flujo): se asegura/reutiliza la etiqueta con ese nombre
+        # normalizado y se asigna. Idempotente: `asignar_etiqueta` ignora duplicados.
+        tipo = (p.get("tipo_pieza", "") or "").strip().lower()
+        if tipo:
+            etiqueta_id = etiquetas_cache.get(tipo)
+            if etiqueta_id is None:
+                etiqueta_id = _id_etiqueta(tipo)
+                etiquetas_cache[tipo] = etiqueta_id
+            if etiqueta_id:
+                repos.asignar_etiqueta(item["id"], etiqueta_id)
         estado_plat = _ESTADO_PIEZA_A_PLATAFORMA.get(p.get("estado", ""), "pendiente")
         for red in redes:
             repos.crear_contenido_plataforma(

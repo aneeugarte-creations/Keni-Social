@@ -39,6 +39,17 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
+/** Enlace al tablero (Pendientes) abriendo el detalle de un contenido por su id.
+ *  Opcionalmente fija el workspace (`marca`) para que la pieza no quede filtrada fuera. */
+function enlaceAbrir(contenidoId: string, marca?: string): string {
+  const params = new URLSearchParams({ abrir: contenidoId });
+  if (marca) params.set("marca", marca);
+  return `/parrilla/pendientes?${params.toString()}`;
+}
+
+/** Estilo compartido para hacer una fila del panel clicable (hover) sin romper el layout. */
+const FILA_CLICABLE = "-mx-2 rounded-md px-2 transition-colors hover:bg-muted/60";
+
 /** Esqueleto de carga del panel (KPIs + dos columnas). */
 function EsqueletoPanel() {
   return (
@@ -88,25 +99,30 @@ function FilaPico({ pico }: { pico: PicoPanel }) {
 /** Fila de una pieza programada próxima (con su marca dry-run si ya venció). */
 function FilaProxima({ pieza }: { pieza: ProximaPanel }) {
   return (
-    <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{pieza.titulo || "(sin título)"}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {[pieza.marca_nombre, pieza.red_nombre].filter(Boolean).join(" · ")}
-        </p>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <span className="text-xs tabular-nums text-muted-foreground">
-          {formatearFechaHora(pieza.fecha_programada)}
-        </span>
-        {pieza.preparado_en ? (
-          <Badge variant="ok" title="Preparada (dry-run): el posteo real está pendiente de #5/#8.">
-            Lista (dry-run)
-          </Badge>
-        ) : (
-          <Badge variant="secondary">Programada</Badge>
-        )}
-      </div>
+    <li className="border-b border-border/60 last:border-0">
+      <Link
+        to={enlaceAbrir(pieza.id, pieza.marca)}
+        className={`flex items-center justify-between gap-3 py-2 ${FILA_CLICABLE}`}
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{pieza.titulo || "(sin título)"}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {[pieza.marca_nombre, pieza.red_nombre].filter(Boolean).join(" · ")}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {formatearFechaHora(pieza.fecha_programada)}
+          </span>
+          {pieza.preparado_en ? (
+            <Badge variant="ok" title="Preparada (dry-run): el posteo real está pendiente de #5/#8.">
+              Lista (dry-run)
+            </Badge>
+          ) : (
+            <Badge variant="secondary">Programada</Badge>
+          )}
+        </div>
+      </Link>
     </li>
   );
 }
@@ -123,8 +139,8 @@ function FilaAlerta({ alerta }: { alerta: AlertaRendimiento }) {
   const Icono = meta.icono;
   // Referencia a la pieza: preferimos el resumen humano del payload; si no, el id.
   const referencia = alerta.payload?.resumen || alerta.contenido_id || "(pieza)";
-  return (
-    <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
+  const interior = (
+    <>
       <div className="flex min-w-0 items-start gap-2">
         <Icono className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <div className="min-w-0">
@@ -135,6 +151,24 @@ function FilaAlerta({ alerta }: { alerta: AlertaRendimiento }) {
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
         {tiempoRelativo(alerta.creado)}
       </span>
+    </>
+  );
+  // Sin contenido_id no hay pieza a la que ir: la dejamos como texto plano.
+  if (!alerta.contenido_id) {
+    return (
+      <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
+        {interior}
+      </li>
+    );
+  }
+  return (
+    <li className="border-b border-border/60 last:border-0">
+      <Link
+        to={enlaceAbrir(alerta.contenido_id)}
+        className={`flex items-center justify-between gap-3 py-2 ${FILA_CLICABLE}`}
+      >
+        {interior}
+      </Link>
     </li>
   );
 }
@@ -154,42 +188,47 @@ function FilaListaDia({ item }: { item: ItemListaDia }) {
   const esGreen = item.etiquetas.some((e) => e.toLowerCase() === "green");
   const fuente = ORIGEN_ETIQUETA[item.origen] ?? item.origen;
   return (
-    <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">{item.titulo || "(sin título)"}</p>
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          <span className="text-xs text-muted-foreground">
-            {[item.marca_nombre, fuente].filter(Boolean).join(" · ")}
-          </span>
-          {esCompromiso && (
-            <Badge
-              variant="outline"
-              className="border-amber-500/40 text-amber-700 dark:text-amber-300"
-            >
-              Compromiso
-            </Badge>
-          )}
-          {esGreen && (
-            <Badge
-              variant="outline"
-              className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
-            >
-              Green
-            </Badge>
-          )}
-          {item.fecha_objetivo && (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {item.fecha_objetivo}
+    <li className="border-b border-border/60 last:border-0">
+      <Link
+        to={enlaceAbrir(item.id, item.marca)}
+        className={`flex items-center justify-between gap-3 py-2 ${FILA_CLICABLE}`}
+      >
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{item.titulo || "(sin título)"}</p>
+          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+            <span className="text-xs text-muted-foreground">
+              {[item.marca_nombre, fuente].filter(Boolean).join(" · ")}
             </span>
-          )}
+            {esCompromiso && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+              >
+                Compromiso
+              </Badge>
+            )}
+            {esGreen && (
+              <Badge
+                variant="outline"
+                className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+              >
+                Green
+              </Badge>
+            )}
+            {item.fecha_objetivo && (
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {item.fecha_objetivo}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <Badge variant="secondary" title="Prioridad calculada (score dinámico)">
-          {item.score}
-        </Badge>
-        <span className="text-xs text-muted-foreground">{item.estado}</span>
-      </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge variant="secondary" title="Prioridad calculada (score dinámico)">
+            {item.score}
+          </Badge>
+          <span className="text-xs text-muted-foreground">{item.estado}</span>
+        </div>
+      </Link>
     </li>
   );
 }

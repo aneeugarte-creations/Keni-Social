@@ -27,7 +27,6 @@ const ReporteDeportes = lazy(() => import("@/pages/ReporteDeportes"));
 
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
-const PiezasRota = lazy(() => import("@/pages/parrilla/PiezasRota"));
 
 const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
 
@@ -107,7 +106,8 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="pendientes" replace /> },
           { path: "pendientes", element: <Tareas /> },
           { path: "calendario", element: <Rota /> },
-          { path: "piezas", element: <PiezasRota /> },
+          // La hoja "Piezas" se retiró: las piezas se gestionan en el tablero (Pendientes).
+          { path: "piezas", element: <Navigate to="/parrilla/pendientes" replace /> },
         ],
       },
 
