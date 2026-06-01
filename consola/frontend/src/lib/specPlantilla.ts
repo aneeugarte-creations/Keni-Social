@@ -115,3 +115,54 @@ export interface PlantillaSpec {
   fuentes: { sans: string; condensada: string };
   formatos: Record<FormatoId, FormatoSpec>;
 }
+
+// --- Helpers de UI (los ids del spec NO cambian; solo su rótulo visible) --------------------
+
+export type IdTexto = CapaTexto["id"];
+
+/** Rótulo legible de un bloque de texto (titular→Título, pleca→Etiqueta, kicker→Antetítulo). */
+export function rotuloTexto(id: IdTexto): string {
+  return id === "titular" ? "Título" : id === "pleca" ? "Etiqueta" : "Antetítulo";
+}
+
+/** Ids de texto que AÚN no están en un formato (para el botón "+ Texto"). */
+export function idsTextoDisponibles(fmt: FormatoSpec): IdTexto[] {
+  const usados = new Set(fmt.textos.map((t) => t.id));
+  return (["titular", "pleca", "kicker"] as IdTexto[]).filter((i) => !usados.has(i));
+}
+
+/** Capa de texto nueva con valores razonables (centrada en horizontal, dentro del lienzo). */
+export function nuevaCapaTexto(id: IdTexto, lienzo: Lienzo): CapaTexto {
+  const margen = 56;
+  const esTitulo = id === "titular";
+  return {
+    id,
+    binding: id === "titular" ? "copy_in" : id === "pleca" ? "etiqueta_default" : null,
+    texto: id === "kicker" ? "Antetítulo" : "",
+    x: margen,
+    y: Math.round(lienzo.h * (esTitulo ? 0.6 : 0.5)),
+    w: lienzo.w - margen * 2,
+    familia: esTitulo ? "condensada" : "sans",
+    tamano: esTitulo ? 80 : id === "pleca" ? 36 : 40,
+    peso: esTitulo ? 800 : 700,
+    color: "#FFFFFF",
+    alineacion: "izquierda",
+    mayusculas: id === "pleca",
+    interlineado: 1.14,
+    auto_ajuste: { max_lineas: esTitulo ? 4 : 1, tam_min: esTitulo ? 40 : 28 },
+    sombra: esTitulo ? { dx: 2, dy: 2, color: "#000000" } : null,
+    chip: id === "pleca" ? { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } : null,
+    z: esTitulo ? 20 : id === "pleca" ? 21 : 22,
+  };
+}
+
+/** Centra una caja en el lienzo (horizontal y/o vertical). Devuelve {x,y} nuevos. */
+export function centrar(
+  caja: { x: number; y: number; w: number; h: number },
+  lienzo: Lienzo,
+  eje: "h" | "v" | "ambos",
+): { x: number; y: number } {
+  const x = eje === "v" ? caja.x : Math.round((lienzo.w - caja.w) / 2);
+  const y = eje === "h" ? caja.y : Math.round((lienzo.h - caja.h) / 2);
+  return { x, y };
+}

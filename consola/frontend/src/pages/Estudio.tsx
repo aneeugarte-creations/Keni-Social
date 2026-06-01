@@ -29,7 +29,6 @@ import {
   Settings2,
   ShieldCheck,
   Stamp,
-  Type,
   Upload,
   Wand2,
 } from "lucide-react";
@@ -51,6 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
@@ -62,12 +62,6 @@ const FORMATOS: { id: FormatoImagen; etiqueta: string }[] = [
   { id: "feed", etiqueta: "Feed (4:5)" },
   { id: "cuadrado", etiqueta: "Cuadrado (1:1)" },
   { id: "horizontal", etiqueta: "Horizontal (16:9)" },
-];
-
-/** Marcas con placa visual disponible (las únicas que el backend acepta en `op: placa`). */
-const MARCAS_PLACA = [
-  { id: "unotv", nombre: "UnoTV" },
-  { id: "claro-sports", nombre: "Claro Sports" },
 ];
 
 /** Formato sugerido por red (heurística sencilla; el usuario lo puede cambiar). */
@@ -447,8 +441,6 @@ export default function Estudio() {
   // --- Parámetros de las operaciones (controles inline) ---
   const [maxPx, setMaxPx] = React.useState("1080");
   const [pesoMb, setPesoMb] = React.useState("2");
-  const [placaTexto, setPlacaTexto] = React.useState("");
-  const [placaMarca, setPlacaMarca] = React.useState("unotv");
   const [expStrength, setExpStrength] = React.useState("0.6");
   const [expLado, setExpLado] = React.useState<
     "auto" | "arriba" | "abajo" | "izquierda" | "derecha"
@@ -470,7 +462,7 @@ export default function Estudio() {
     <>
       <PageHeader
         titulo="Estudio de imagen"
-        descripcion="Genera variantes, edita (recorte, peso, placa) y expande una imagen. Luego úsala en la pieza o descárgala."
+        descripcion="Origen, ajustes, marca y revisión de una imagen, por pestañas. Luego úsala en la pieza o descárgala."
       />
 
       {ctx.publicacionId && (
@@ -495,10 +487,10 @@ export default function Estudio() {
               <img
                 src={srcActiva}
                 alt="Imagen activa"
-                className="max-h-[26rem] w-auto rounded-md border border-border object-contain"
+                className="mx-auto max-h-[72vh] w-auto rounded-md border border-border object-contain"
               />
             ) : (
-              <div className="flex h-48 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
+              <div className="flex h-72 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
                 Sube una foto o genera variantes para empezar.
               </div>
             )}
@@ -564,8 +556,39 @@ export default function Estudio() {
           )}
         </div>
 
-        {/* Columna derecha: acciones */}
-        <div className="space-y-6">
+        {/* Columna derecha: acciones por pestañas */}
+        <div className="space-y-3">
+          {/* Acciones finales (siempre visibles cuando hay imagen activa) */}
+          {activa && (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2">
+              {ctx.publicacionId && (
+                <Button type="button" size="sm" onClick={() => usarEnPieza.mutate()} disabled={usarEnPieza.isPending}>
+                  {usarEnPieza.isPending ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ImagePlus className="mr-1 h-4 w-4" />
+                  )}
+                  Usar en la pieza
+                </Button>
+              )}
+              <Button asChild variant="outline" size="sm">
+                <a href={srcActiva} download>
+                  <Download className="mr-1 h-4 w-4" />
+                  Descargar
+                </a>
+              </Button>
+            </div>
+          )}
+
+          <Tabs defaultValue="origen">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="origen">Origen</TabsTrigger>
+              <TabsTrigger value="ajustar">Ajustar</TabsTrigger>
+              <TabsTrigger value="marca">Marca</TabsTrigger>
+              <TabsTrigger value="revisar">Revisar</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="origen" className="space-y-4">
           {/* Origen */}
           <section className="space-y-2">
             <Label className="text-sm font-medium">Origen</Label>
@@ -685,6 +708,9 @@ export default function Estudio() {
             )}
           </section>
 
+            </TabsContent>
+
+            <TabsContent value="ajustar" className="space-y-4">
           {/* Editar (determinista) + Expandir (generativo) sobre la activa */}
           <section className="space-y-3 rounded-md border border-border p-3">
             <Label className="text-sm font-medium">Editar la imagen activa</Label>
@@ -780,49 +806,6 @@ export default function Estudio() {
                   Extender a {formato}
                 </Button>
 
-                {/* Placa (solo unotv / claro-sports) */}
-                <div className="space-y-1.5 rounded-md border border-border p-2">
-                  <Label htmlFor="estudio-placa" className="flex items-center gap-1 text-xs">
-                    <Type className="h-3.5 w-3.5" />
-                    Placa con texto
-                  </Label>
-                  <Input
-                    id="estudio-placa"
-                    value={placaTexto}
-                    onChange={(e) => setPlacaTexto(e.target.value)}
-                    placeholder="Texto de la placa"
-                    disabled={opEjecutando}
-                  />
-                  <Select value={placaMarca} onValueChange={setPlacaMarca}>
-                    <SelectTrigger aria-label="Marca de la placa">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MARCAS_PLACA.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.nombre}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={opEjecutando || placaTexto.trim().length === 0}
-                    onClick={() =>
-                      editar("Placa", {
-                        op: "placa",
-                        texto: placaTexto.trim(),
-                        marca: placaMarca,
-                        formato,
-                      })
-                    }
-                  >
-                    Añadir placa
-                  </Button>
-                </div>
-
                 {/* Expandir (generativo, con coste) */}
                 <div className="space-y-1.5 rounded-md border border-border p-2">
                   <Label className="flex items-center gap-1 text-xs">
@@ -895,12 +878,15 @@ export default function Estudio() {
             )}
           </section>
 
-          {/* Aplicar marca (plantilla): estampa logo/pleca/titular sobre la activa */}
+            </TabsContent>
+
+            <TabsContent value="marca" className="space-y-4">
+          {/* Aplicar marca (plantilla): estampa la plantilla diseñada sobre la activa */}
           <section className="space-y-3 rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-2">
               <Label className="flex items-center gap-1 text-sm font-medium">
                 <Stamp className="h-4 w-4" />
-                Aplicar marca (plantilla)
+                Aplicar marca
               </Label>
               <Button
                 type="button"
@@ -988,6 +974,9 @@ export default function Estudio() {
             )}
           </section>
 
+            </TabsContent>
+
+            <TabsContent value="revisar" className="space-y-4">
           {/* Revisión legal/editorial (gate humano; no bloquea publicar) */}
           <section className="space-y-2 rounded-md border border-border p-3">
             <Label className="flex items-center gap-1 text-sm font-medium">
@@ -1030,39 +1019,8 @@ export default function Estudio() {
             )}
           </section>
 
-          {/* Elegir final */}
-          <section className="space-y-2 rounded-md border border-border p-3">
-            <Label className="text-sm font-medium">Elegir final</Label>
-            {!activa ? (
-              <p className="text-xs text-muted-foreground">
-                Selecciona una imagen para finalizar.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {ctx.publicacionId && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => usarEnPieza.mutate()}
-                    disabled={usarEnPieza.isPending}
-                  >
-                    {usarEnPieza.isPending ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : (
-                      <ImagePlus className="mr-1 h-4 w-4" />
-                    )}
-                    Usar en la pieza
-                  </Button>
-                )}
-                <Button asChild variant="outline" size="sm">
-                  <a href={srcActiva} download>
-                    <Download className="mr-1 h-4 w-4" />
-                    Descargar
-                  </a>
-                </Button>
-              </div>
-            )}
-          </section>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
