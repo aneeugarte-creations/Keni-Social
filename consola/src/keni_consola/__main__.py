@@ -178,6 +178,16 @@ def main() -> int:
 
     iniciar_autogen()
 
+    # Auto-generacion de ARTE (fase3 auto-produccion, H2-b): un hilo demonio que, si
+    # `KENI_AUTOGEN_ARTE` esta activo (def OFF), genera cada N horas un arte por IA para los
+    # temas con copy pero sin imagen y lo adjunta a la pieza. Reutiliza el proveedor de imagen
+    # de `/api/media/generar`; sin proveedor configurado no hace nada. El resultado sigue su
+    # revision/aprobacion humana; NO publica solo. SAFE BY DEFAULT: sin el flag no arranca.
+    # Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
+    from .autogen_arte import iniciar_autogen_arte
+
+    iniciar_autogen_arte()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 
