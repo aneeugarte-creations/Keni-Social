@@ -5,7 +5,8 @@ PROBLEMA QUE RESUELVE
 El tablero kanban ordena por prioridad fija (alta/media/baja) + fecha. La "lista viva" que pide
 Angel debe RE-ORDENARSE sola cada vez que entra algo: un tema obligatorio con fecha encima debe
 subir; uno evergreen sin fecha, bajar. Aqui un SCORE determinista combina las senales que el
-contenido YA tiene (compromiso, prioridad, cercania de la fecha objetivo, flujo, frescura).
+contenido YA tiene (compromiso, green list, prioridad, cercania de la fecha objetivo, flujo,
+frescura).
 
 DECISION (documentada): el score se aplica en la VISTA DEL DIA (Panel-9am), NO cambia el orden
 del tablero kanban compartido (que el equipo ya conoce). Asi la "lista del dia" se reordena
@@ -24,10 +25,15 @@ from typing import Any
 # Etiqueta que marca un contenido "obligatorio por compromiso" (la pone el importador / a mano).
 ETIQUETA_COMPROMISO = "compromiso"
 
+# Etiqueta de la "green list" del equipo (lo que el equipo quiere postear). La pone el importador.
+ETIQUETA_GREEN = "green"
+
 # Pesos por defecto (explicitos y afinables). El compromiso DOMINA: un must-do siempre arriba.
 PESO_PRIORIDAD: dict[str, int] = {"alta": 100, "media": 50, "baja": 10}
 PESO_FLUJO: dict[str, int] = {"importante": 60, "evento": 40, "evergreen": 5}
 BONUS_COMPROMISO = 200
+# Bonus moderado para la green list: por DEBAJO del compromiso, por encima de lo normal.
+BONUS_GREEN = 80
 
 
 def _norm(texto: object) -> str:
@@ -93,6 +99,8 @@ def score_contenido(
     score += peso_frescura(item.get("creado") or "", hoy)
     if any(_norm(e) == ETIQUETA_COMPROMISO for e in etiquetas):
         score += BONUS_COMPROMISO
+    if any(_norm(e) == ETIQUETA_GREEN for e in etiquetas):
+        score += BONUS_GREEN
     return score
 
 

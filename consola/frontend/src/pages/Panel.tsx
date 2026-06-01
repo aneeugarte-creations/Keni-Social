@@ -151,6 +151,7 @@ const ORIGEN_ETIQUETA: Record<string, string> = {
 /** Fila de la "lista viva" del día: tema con su score, fuente, fecha y estado. */
 function FilaListaDia({ item }: { item: ItemListaDia }) {
   const esCompromiso = item.etiquetas.some((e) => e.toLowerCase() === "compromiso");
+  const esGreen = item.etiquetas.some((e) => e.toLowerCase() === "green");
   const fuente = ORIGEN_ETIQUETA[item.origen] ?? item.origen;
   return (
     <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
@@ -166,6 +167,14 @@ function FilaListaDia({ item }: { item: ItemListaDia }) {
               className="border-amber-500/40 text-amber-700 dark:text-amber-300"
             >
               Compromiso
+            </Badge>
+          )}
+          {esGreen && (
+            <Badge
+              variant="outline"
+              className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+            >
+              Green
             </Badge>
           )}
           {item.fecha_objetivo && (

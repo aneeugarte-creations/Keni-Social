@@ -33,7 +33,22 @@ def test_csv_basico_mapea_columnas_y_normaliza():
     assert f.redes == ["instagram", "x"]
     assert f.prioridad == "alta"
     assert f.compromiso is True
+    assert f.green is False
     assert f.notas == "Cobertura en vivo"
+
+
+def test_green_se_detecta_por_sinonimos_es_en():
+    for cabecera in ("Green", "Verde", "Green List", "Lista verde"):
+        data = _csv(f"Tema,{cabecera}\nTema del equipo,si\n")
+        filas, errores = ic.parsear(data, nombre="x.csv")
+        assert errores == []
+        assert filas[0].green is True, cabecera
+
+
+def test_green_falso_por_defecto_y_con_valor_negativo():
+    data = _csv("Tema,Green\nUno,\nDos,no\n")
+    filas, _ = ic.parsear(data, nombre="x.csv")
+    assert [f.green for f in filas] == [False, False]
 
 
 def test_cabeceras_en_ingles_y_con_acentos():
