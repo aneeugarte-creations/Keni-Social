@@ -1,6 +1,6 @@
 # Consola Keni (interfaz)
 
-La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y te da una **interfaz** para las tareas del día a día, sin teclear comandos. Es una **capa de gestión**: por debajo, el motor que hace el trabajo de verdad sigue siendo **Claude Code** (las skills de copy y el servidor de métricas). La consola solo te lo pone fácil de lanzar y de ver.
+La **Consola Keni** es una aplicación web que corre **en tu propia máquina** y te da una **interfaz** para las tareas del día a día, sin teclear comandos. Es una **capa de gestión**: por debajo, el motor que hace el trabajo de verdad sigue siendo **Claude Code** (los prompts de la Biblioteca lanzados con `claude -p` y el servidor de métricas). La consola solo te lo pone fácil de lanzar y de ver.
 
 > **No reemplaza a Claude Code, lo envuelve.** Si prefieres escribirle a Claude directamente, puedes seguir haciéndolo; la consola es la opción para quien quiere botones en vez de comandos.
 
@@ -33,8 +33,9 @@ La consola intenta abrir el navegador sola; si no lo hace, copia esa dirección.
 ## Qué es (idea de diseño)
 
 La consola es una **capa de gestión** sobre Claude Code: no hace el trabajo, lo
-**lanza y lo muestra**. El motor sigue siendo Claude Code (las skills de copy) y el
-servidor de métricas; la consola solo da botones a quien no quiere teclear comandos.
+**lanza y lo muestra**. El motor sigue siendo Claude Code (los prompts de la
+Biblioteca, lanzados con `claude -p`) y el servidor de métricas; la consola solo da
+botones a quien no quiere teclear comandos.
 Dos ideas de diseño la rigen:
 
 - **El YAML por marca es la fuente de verdad.** Lo que ves y editas en la consola
@@ -52,7 +53,7 @@ código, `consola/frontend/src/components/layout/navegacion.ts`.
 
 ## Qué hay por debajo (arquitectura)
 
-- La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), las skills de copy (vía `claude -p`) y el lanzador de Claude Code.
+- La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), la **Biblioteca de Prompts** (`biblioteca.py`) y el **lanzador neutro** (`dominio/generar.py`, que arranca `claude -p`).
 - El **contenido editorial** (publicaciones, plantillas, fuentes RSS, hashtags, franjas y el historial de copy) vive en **ficheros YAML por marca** (`~/keni-proyectos/<marca>/…`): es la **fuente de verdad**, editable a mano. Una pequeña base **SQLite** (`~/.config/keni-social/consola.db`) guarda solo lo **operacional** (tus tareas y el seguimiento Comercial con su serie temporal); un **índice SQLite regenerable** acelera las búsquedas sobre los YAML (se puede borrar y se reconstruye). La configuración de marcas/fuente sigue en los `.toml` de siempre.
 - El frontend viaja **ya compilado** dentro del paquete, así que para **usar** la consola **no hace falta Node** ni instalar nada de JavaScript.
 

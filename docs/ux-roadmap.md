@@ -16,10 +16,10 @@ Nación Gamer, Piso 15, Fundación) + su jefe Bernardo.
 Las recomendaciones de mayor impacto/menor esfuerzo de la primera evaluación **ya están en el
 código** (verificado leyéndolo):
 
-- **Semáforo de veredicto + leyenda al INICIO de cada skill de copy.** `copy-desde-nota`,
-  `clip-a-copy`, etc. abren con un bloque "veredicto + leyenda, antes del copy" (`🟢/🟡/🔴` con
-  su explicación); el checklist detallado se mantiene al final. (Ver `*/SKILL.md`, sección "Cómo
-  ABRE tu salida".)
+- **Semáforo de veredicto + leyenda al INICIO de cada prompt de copy.** Copy desde nota,
+  Clip a copy, etc. abren con un bloque "veredicto + leyenda, antes del copy" (`🟢/🟡/🔴` con
+  su explicación); el checklist detallado se mantiene al final. (Ver los prompts de la Biblioteca,
+  `consola/src/keni_consola/biblioteca_semilla/prompt/`, sección "Cómo ABRE tu salida".)
 - **Picos resumidos en CLI/notificaciones:** `picos.render_markdown` encabeza con el top-N y
   colapsa el resto en una línea (ya no es un muro de 24–29 alertas planas).
 - **Doctor accionable:** agrupa las credenciales en una sola línea
@@ -46,7 +46,7 @@ Impacto: en el usuario no técnico (CM) y en Bernardo. (La Ola 1 ya se envió �
 | 13 | Guía de credenciales menos técnica: "no lo tengo → vacío y pídeselo a tu admin" por bloque | `asistente.py` | Medio | S | 2 |
 | 14 | Conteo de caracteres con indicador visual estandarizado (cabe/no cabe) garantizado por producto | `plataformas.md`, `contar.py` | Bajo | M | 3 |
 | 15 | Estados vacíos del dashboard (marca sin datos / cobertura 0) diseñados explícitamente | `dashboard.py` | Bajo | M | 3 |
-| 16 | Selección de marca asistida (lista en vez de id memorizado) para invocar skills | comandos `/`, skills | Alto | L | 3 |
+| 16 | Selección de marca asistida (lista en vez de id memorizado) para lanzar prompts | comandos `/`, Biblioteca de prompts | Alto | L | 3 |
 | 17 | Reconciliar marcas declaradas en el asistente con la fuente activa (avisar si `muestra`) | `asistente.py`, `doctor.py` | Medio | M | 3 |
 
 (Se conservan los números originales para no perder la traza; las filas 1–7 eran la Ola 1, ya
@@ -68,8 +68,8 @@ Estos principios deben guiar cualquier decisión de rediseño. Derivan de la fil
    en un doc. El producto enseña al CM a ser el aprobador, no a delegar a ciegas.
 
 3. **Una sola voz, una sola ortografía.** Una marca se escribe igual en todas las superficies.
-   El mismo concepto (engagement, alcance, "lo que rompió") se nombra y formatea igual en skill,
-   CLI, dashboard y guía. La consistencia es lo que hace que un no técnico confíe en el sistema.
+   El mismo concepto (engagement, alcance, "lo que rompió") se nombra y formatea igual en la
+   Consola, la CLI, el dashboard y la guía. La consistencia es lo que hace que un no técnico confíe en el sistema.
 
 4. **Español de México, siempre.** Fechas (24 may 2026), separadores de miles, tono. Cero ISO
    crudo, cero jerga de prensa española, cero inglés técnico filtrándose a la cara del usuario.

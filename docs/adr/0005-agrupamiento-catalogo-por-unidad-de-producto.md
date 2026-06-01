@@ -10,6 +10,13 @@
   Contexto estratégico en `07-innovacion/separacion-productos.md`. Plan de ejecución en
   [`docs/plan-separacion-apps.md`](../plan-separacion-apps.md).
 
+> **[Nota de estado]** La **decisión de fronteras A/B/C + shell sigue vigente**. El inventario de
+> módulos de abajo refleja el estado del 2026-05-29: el **sistema de skills** (`skills`,
+> `skills_catalogo_api`, `skills_generacion_api`, ruta `/skills`) de la app **A · Producción** se
+> **retiró** después y se reemplazó por la **Biblioteca de prompts** (`biblioteca.py`, `/biblioteca`) +
+> lanzador neutro (`dominio/generar.py`) y el **Estudio** de imagen (`/estudio`). El agrupamiento por
+> unidad de producto no cambia.
+
 ---
 
 ## Contexto

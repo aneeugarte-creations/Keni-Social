@@ -1,7 +1,9 @@
 # Estudio de imagen — keni-social
 ### Arquitectura y decisión · Keni AI
 
-- **Fecha:** 2026-05-25 · **Estado:** en uso (beta) dentro del piloto AMX.
+> **[SUPERSEDED — histórico]** Este documento describe la arquitectura original "enrutador + 2 motores + revisor" implementada **vía el sistema de skills** (`skills-copy/.claude/skills/estudio-imagen`), que ya **se retiró**. El diseño vigente está en [`diseno-estudio-imagen.md`](diseno-estudio-imagen.md): el motor determinista/generativo se **relocalizó** a `consola/src/keni_consola/motores/estudio_imagen/` y la superficie de usuario es el **Estudio** (`/estudio`, `api/imagenes.py`, `dominio/estudio_imagen.py`). Se conserva como registro de las decisiones originales; las referencias a skills y a `skills-copy/` de abajo son históricas.
+
+- **Fecha:** 2026-05-25 · **Estado:** ~~en uso (beta)~~ histórico (superseded por `diseno-estudio-imagen.md`).
 - **Origen:** sugerencia de Tescu (community Claro Sports) en el piloto: *"que yo le suba la foto, que ya tenga precargado meterle nuestro logo + el archivo de breaking, y que nos genere el copy."*
 - **Para:** decidir cómo keni-social gestiona tareas de imagen como una herramienta **independiente de Generar copy**, y cómo conviven lo determinista (herramientas) y lo generativo (IA).
 - **Doc canónico de imagen.** Esta es la arquitectura de imagen de keni-social (enrutador + 2 motores + revisor, motor por API). La sub-decisión de **dirección de arte por marca** (un Skill por marca que dirige un prompt y verifica) vive en [`diseno-redes.md`](diseno-redes.md) y encaja aquí como la vía "director de arte / sin key".

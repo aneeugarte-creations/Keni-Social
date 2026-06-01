@@ -15,6 +15,12 @@
 
 ## 0. Mapeo de referencia (router → unidad)
 
+> **[Nota histórica]** Este mapeo refleja el estado del repo el 2026-05-29. El **sistema de skills**
+> (`skills`, `skills_catalogo_api`, `skills_generacion_api`, ruta `/skills`) se **retiró** después y se
+> reemplazó por la **Biblioteca de prompts** (`biblioteca.py`, `/biblioteca`) + lanzador neutro
+> (`dominio/generar.py`) y el **Estudio** de imagen (`/estudio`, `api/imagenes.py`). Las menciones a
+> skills de abajo son del momento de ejecución de este runbook.
+
 | Unidad | Módulos backend (`consola/src/keni_consola/api/`) | Rutas frontend |
 |---|---|---|
 | **A · Producción** | `agentes`, `generaciones`, `hashtags`, `plantillas`, `skills`, `skills_catalogo_api`, `skills_generacion_api`, `qa_editorial`, `verificaciones`, `reciclaje`, `rss`, `termometro`, `radar` | `/generacion`, `/investigacion/*`, `/revision/*`, `/skills`, `/agentes`, `/agentes/actividad`, `/agentes/:id` |

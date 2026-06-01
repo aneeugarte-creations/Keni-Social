@@ -64,9 +64,9 @@ publicaría, sin publicar).
   y **es** la capacitación: no se vende una suscripción opaca, se deja capacidad instalada. Es la
   encarnación del "lo que vendemos lo aplicamos primero" de Keni.
 - **Construido y verificado de verdad.** El sistema corre con una amplia batería de pruebas
-  automatizadas (más chequeos estáticos de las skills) y un **CI en GitHub Actions** que en cada
-  cambio (push y pull request) corre esas pruebas, los evals estáticos de las skills y la
-  construcción del bundle del frontend. No es una maqueta: lo que está listo, está probado.
+  automatizadas y un **CI self-hosted en Woodpecker** que en cada cambio (push y pull request) corre
+  los tests de los tres paquetes Python y la construcción del bundle del frontend. No es una
+  maqueta: lo que está listo, está probado.
 
 ## Valor para AMX y para Keni
 

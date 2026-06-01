@@ -6,9 +6,9 @@ mantiene para el equipo de AMX (Bernardo, Mariana). No es un manual de uso diari
 arquitectura (eso es [`arquitectura.md`](arquitectura.md)): es el **índice y la secuencia**
 que enlaza el resto de la documentación, en orden, sin repetirla.
 
-Dos piezas a operar: las **skills de copy** (funcionan solas, sin credenciales) y el
-**MCP de métricas** (`keni-metricas`, opcional, necesita `uv` y, para datos reales,
-credenciales). Todo se distribuye como **plugin de Claude Code**.
+Dos piezas a operar: la **Consola** con su **Biblioteca de prompts** (generación de copy;
+funciona sin credenciales) y el **MCP de métricas** (`keni-metricas`, opcional, necesita `uv`
+y, para datos reales, credenciales).
 
 Principio del producto: **la IA produce, el humano aprueba.** Nada se publica solo.
 
@@ -27,9 +27,10 @@ Por cada persona del equipo, en este orden:
    /plugin install keni-social@keni
    ```
 
-   Tras instalar, recarga (`/reload-plugins` o reiniciar). Quedan disponibles las skills
-   `/keni-social:copy-desde-nota`, `clip-a-copy`, `resumen-tendencia`, `nota-a-formato`
-   y `publica-meta`. **Con esto el copy ya funciona** — no hace falta nada más.
+   El plugin declara el **MCP de métricas** (`keni-metricas`) y comandos `/` de apoyo. La
+   **generación de copy** ya **no** son skills instalables: vive en la **Consola** (paso 3),
+   en su **Biblioteca de prompts** (Copy desde nota, Clip a copy, Termómetro mundial…),
+   lanzados con `claude -p`. **El copy se trabaja desde la Consola.**
 
 2. **Conectar las métricas (opcional).** El servidor `keni-metricas` viene declarado en el
    plugin pero necesita `uv`/`uvx` para arrancar. Regístralo y compruébalo:
@@ -91,9 +92,9 @@ Solo necesarias para **datos reales** de métricas (con `fuente = muestra` no ha
 
 ---
 
-## 3. Caja de transcripción (clip-a-copy)
+## 3. Caja de transcripción (Clip a copy)
 
-La skill `clip-a-copy` (video/audio → copy) transcribe **100% en local** con `whisper.cpp`:
+El flujo **Clip a copy** (video/audio → copy) transcribe **100% en local** con `whisper.cpp`:
 el audio **no sale de la máquina**. Eso es por diseño, por privacidad (ver
 [`flujo-de-datos-privacidad.md`](flujo-de-datos-privacidad.md)).
 
@@ -115,7 +116,7 @@ El equipo no necesita este manual para el día a día: necesita la
 exactamente qué escribirle a Claude para sacar copy de una nota, de un video, consultar métricas
 y entender la **auto-verificación** (✅ / ⚠️ / ❌). Como operador, conviene que conozcas:
 
-- **Skills de copy:** `copy-desde-nota`, `clip-a-copy`, `resumen-tendencia`, `nota-a-formato`.
+- **Prompts de copy (Biblioteca):** Copy desde nota, Clip a copy, Termómetro mundial, QA editorial.
   La separación **marca** (línea editorial estable) vs **voz** (toque personal) está en
   [`arquitectura.md`](arquitectura.md).
 - **Métricas / dashboard.** Por conversación con las tools del MCP (`listar_cuentas`,

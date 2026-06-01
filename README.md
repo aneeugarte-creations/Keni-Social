@@ -1,19 +1,19 @@
 # keni-social
 
-**Suite de producción de contenido para equipos de redes sociales**, instalable como **plugin de Claude Code**. Convierte una nota, varios cables o un video en copy publicable —en **español de México**, con **auto-verificación** que dice cuándo creerle— y lee las **métricas de tus marcas conversando**, sin abrir cinco pestañas. El audio se transcribe **en tu máquina** y las métricas se leen con **credenciales locales**: privacidad por diseño.
+**Suite de producción de contenido para equipos de redes sociales.** Convierte una nota, varios cables o un video en copy publicable —en **español de México**, con **auto-verificación** que dice cuándo creerle— y lee las **métricas de tus marcas conversando**, sin abrir cinco pestañas. La **generación de copy y de imagen** se trabaja desde la **Consola** (Biblioteca de prompts + Estudio de imagen); el **plugin de Claude Code** aporta los **MCP** (métricas y tablero) y comandos `/` de apoyo. El audio se transcribe **en tu máquina** y las métricas se leen con **credenciales locales**: privacidad por diseño.
 
 **Para quién:** community managers y su responsable. Diseñado primero para el equipo de **AMX Contenido** (UnoTV / Claro Sports / Nación Gamer / Piso 15 / Fundación) y reutilizable para otros clientes de Keni.
 
 **El diferenciador:** copy tropicalizado es-MX + auto-verificación honesta + transcripción 100% local + métricas conversacionales, todo dentro de Claude Code y con la llave de cada red viviendo en tu máquina, no en la IA.
 
-> **Empieza aquí:** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 minutos para quien acaba de instalar el plugin.
+> **Empieza aquí:** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 minutos.
 
-Dos componentes independientes pero complementarios:
+Componentes principales:
 
-| Carpeta | Qué es | Estado |
+| Pieza | Qué es | Estado |
 |---|---|---|
+| [`consola/`](consola/) | La **Consola Keni** (app web local/alojada): **Biblioteca de prompts + línea editorial** (documentos markdown editables) para convertir una nota, varios cables o un clip en copy publicable (voz de marca + tropicalización mexicana + formato por plataforma + auto-verificación), y el **Estudio de imagen**. La generación se lanza con `claude -p`. | En uso (beta). |
 | [`mcp-metricas/`](mcp-metricas/) | Servidor **MCP** que lee métricas de redes (Meta FB/IG, YouTube, X, TikTok), multi-marca, y las expone a Claude. Corre **local por persona** con sus propias credenciales. | Núcleo + fuente `muestra` listos; adaptadores reales escalonados por App Review/auditoría. |
-| [`skills-copy/`](skills-copy/) | **Agent Skills** de Claude Code + contexto editorial versionado, que convierten una nota, varios cables o un clip en copy publicable (voz de marca + tropicalización mexicana + formato por plataforma + auto-verificación) y ayudan a responder comentarios en voz de marca. | Listo para usar. |
 
 ## Consola (interfaz)
 
@@ -31,18 +31,18 @@ keni-consola
 
 - **Primeros pasos (recomendado):** [`docs/primeros-pasos.md`](docs/primeros-pasos.md) — quickstart de ~5 min, sin tecnicismos.
 - **Día a día del community manager:** [`docs/guia-community-manager.md`](docs/guia-community-manager.md) — qué le escribes a Claude para cada tarea.
-- **Generar copy:** ver [`skills-copy/README.md`](skills-copy/README.md).
+- **Generar copy:** desde la Consola (Biblioteca de prompts). Ver [`docs/consola.md`](docs/consola.md) y [`consola/README.md`](consola/README.md).
 - **Conectar métricas a Claude:** ver [`mcp-metricas/README.md`](mcp-metricas/README.md).
 - **Credenciales y despliegue local:** ver [`docs/`](docs/).
 
 ### Documentación clave
 
-- [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan el sistema de copy y el MCP de métricas.
+- [`docs/arquitectura.md`](docs/arquitectura.md) — cómo encajan la Biblioteca de prompts, el MCP de métricas y la Consola.
 - [`docs/estado-producto.md`](docs/estado-producto.md) — panorama honesto: qué está listo, qué está pausado por gating externo.
 
 ## Instalación como plugin
 
-La forma más sencilla de tener todo (las skills de copy + las métricas) es instalar `keni-social` como **plugin de Claude Code** desde el marketplace privado de Keni. Son **dos comandos**, dentro de Claude Code, sin permisos de administrador.
+El plugin `keni-social` aporta a Claude Code los **servidores MCP** (métricas y tablero) y unos **comandos `/`** de apoyo. **La generación de copy y de imagen NO va en el plugin: vive en la Consola** (Biblioteca de prompts + Estudio de imagen). Se instala desde el marketplace privado de Keni en **dos comandos**, sin permisos de administrador.
 
 1. Añade el marketplace de Keni (solo la primera vez):
 
@@ -56,23 +56,16 @@ La forma más sencilla de tener todo (las skills de copy + las métricas) es ins
    /plugin install keni-social@keni
    ```
 
-Listo. Cierra y vuelve a abrir Claude Code (o ejecuta `/reload-plugins`). Después de instalarlo tendrás disponibles las skills, con el nombre del plugin por delante:
+Listo. Cierra y vuelve a abrir Claude Code (o ejecuta `/reload-plugins`). El plugin declara dos servidores MCP:
 
-- `/keni-social:copy-desde-nota` — de una o varias notas/cables (o una transcripción) a copy publicable por plataforma.
-- `/keni-social:clip-a-copy` — de un video/audio a copy (transcribe en local) con las mejores citas y su marca de tiempo.
-- `/keni-social:nota-a-formato` — normaliza una nota cruda al estilo editorial de la casa (paso previo opcional).
-- `/keni-social:resumen-tendencia` — brief corto de un tema: qué pasa, ángulo por marca y riesgos legales.
-- `/keni-social:publica-meta` — pre-vuelo en dry-run: prepara y previsualiza la publicación en cada red (copy final, conteos, hashtags, media), sin publicar.
-- `/keni-social:revisa-imagen` — repaso legal y editorial de un arte propuesto (bandera/escudo, menores, datos personales, marcas) antes de publicar.
-- `/keni-social:verifica-video` — pega el enlace de un video viral y dice si parece **nuevo o ya circulaba desde antes** (reciclado), antes de decidir si retomarlo. Análisis local y gratis (fecha de subida, fechas en pantalla por OCR, enlaces de búsqueda inversa para un clic). Requiere `yt-dlp`, `ffmpeg` y `tesseract`. *Experimental.*
-- `/keni-social:responde-comentarios` — clasifica un comentario y redacta la respuesta en voz de marca tropicalizada, con auto-verificación. **Nunca publica:** tú apruebas y respondes. Para el día a día, ver [`docs/guia-community-manager.md`](docs/guia-community-manager.md).
-- `/keni-social:brief-matutino` — el brief de la mañana para la mesa editorial: reúne noticias y tendencias del día (Google News + Google Trends, en vivo) más lo que viste a mano en redes, las jerarquiza por frescura/relevancia/agenda y sugiere un formato por pieza. Es un brief para **decidir qué cubrir**, no copy final. *Experimental.*
+- **`keni-metricas`** — lee las métricas multi-marca y las expone a Claude (Meta FB/IG, YouTube, X, TikTok).
+- **`keni-tablero`** — crea/mueve/lista contenido del tablero de la Consola desde Claude Code (necesita `KENI_CONSOLA_URL`/`KENI_CONSOLA_TOKEN`).
 
-> Las skills de copy funcionan solas. El servidor de **métricas** (`keni-metricas`) viene declarado en el plugin pero necesita `uv`/`uvx` en la máquina para arrancar y, para datos reales, credenciales locales. Para configurarlo sin tocar archivos a mano hay un **asistente guiado** (`python -m keni_metricas.asistente`): te lleva **paso a paso** (te indica en qué `paso X/N` vas) y cierra con un **recap** de lo que dejó configurado y el próximo paso (`verifica con doctor`). Ver [`mcp-metricas/README.md`](mcp-metricas/README.md) y [`docs/credenciales.md`](docs/credenciales.md). El cableado de ejemplo del servidor está en [`.mcp.json`](.mcp.json).
+> El servidor de **métricas** (`keni-metricas`) necesita `uv`/`uvx` en la máquina para arrancar y, para datos reales, credenciales locales. Para configurarlo sin tocar archivos a mano hay un **asistente guiado** (`python -m keni_metricas.asistente`): te lleva **paso a paso** (te indica en qué `paso X/N` vas) y cierra con un **recap** de lo que dejó configurado y el próximo paso (`verifica con doctor`). Ver [`mcp-metricas/README.md`](mcp-metricas/README.md) y [`docs/credenciales.md`](docs/credenciales.md). El cableado de ejemplo del servidor está en [`.mcp.json`](.mcp.json).
 
 ### Comandos disponibles
 
-Además de las skills, el plugin trae **comandos `/`** que envuelven los flujos más comunes para que sean fáciles de descubrir y lanzar (escríbelos con `/` dentro de Claude Code). Son **seguros**: solo lectura o dry-run, nunca publican ni borran nada.
+El plugin trae **comandos `/`** que envuelven los flujos de métricas más comunes para que sean fáciles de descubrir y lanzar (escríbelos con `/` dentro de Claude Code). Son **seguros**: solo lectura o dry-run, nunca publican ni borran nada.
 
 - `/keni-social:keni-reporte` — genera y **explica en claro** el reporte consolidado multi-marca con picos/anomalías (acepta rango, p. ej. `mes` o `semana`).
 - `/keni-social:keni-dashboard` — genera el **dashboard HTML** autocontenido (reporte + picos) y te dice dónde quedó y qué contiene.

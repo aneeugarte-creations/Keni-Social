@@ -98,7 +98,7 @@ keni-social **no entra a pelear la analítica ni la publicación de primera** �
 community manager:
 
 1. **Copy + tropicalización es-MX.** El material llega con giros de España; hoy el CM lo rehace a
-   mano. La skill lo entrega en la voz de la marca, listo para revisar, no para reescribir. Esto
+   mano. El sistema lo entrega en la voz de la marca, listo para revisar, no para reescribir. Esto
    ataca de frente el problema documentado del "español global" de los LLMs, que ninguna herramienta
    de la tabla resuelve con criterio editorial.
 2. **Video/audio → copy, en local.** De una entrevista: copy por plataforma **más las mejores citas
