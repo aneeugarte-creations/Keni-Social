@@ -1227,18 +1227,34 @@ function TarjetaContenido({
   const asignadas = contenido.etiquetas ?? [];
   const etiquetasDisponibles = etiquetasWorkspace.filter((e) => !asignadas.includes(e.id));
 
+  // Click izquierdo en cualquier parte de la card abre el detalle, salvo si el click
+  // viene de un control interno (selects, checkboxes, kebab, editores, chips…).
+  function alClickCard(e: React.MouseEvent) {
+    if (!esContenido) return;
+    const objetivo = e.target as HTMLElement;
+    if (
+      objetivo.closest(
+        "button, a, input, select, textarea, label, [role='button'], [role='menuitem'], [data-no-primaria]",
+      )
+    )
+      return;
+    abrirDetalleRef.current?.();
+  }
+
   return (
-    <Card>
+    <Card
+      className={cn(
+        esContenido &&
+          "cursor-pointer transition-colors hover:border-foreground/25 hover:bg-accent/20",
+      )}
+      onClick={esContenido ? alClickCard : undefined}
+    >
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div
-            className={cn(
-              "min-w-0 space-y-1.5",
-              esContenido && "-m-1 cursor-pointer rounded-md p-1 hover:bg-accent/40",
-            )}
+            className="min-w-0 space-y-1.5"
             role={esContenido ? "button" : undefined}
             tabIndex={esContenido ? 0 : undefined}
-            onClick={esContenido ? () => abrirDetalleRef.current?.() : undefined}
             onKeyDown={
               esContenido
                 ? (e) => {
@@ -1297,10 +1313,7 @@ function TarjetaContenido({
             className={cn(
               "whitespace-pre-wrap text-sm text-muted-foreground",
               compacta && "line-clamp-2",
-              esContenido && "cursor-pointer",
             )}
-            onClick={esContenido ? () => abrirDetalleRef.current?.() : undefined}
-            title={esContenido ? "Ver detalle: comentarios, versiones de copy y aprobación" : undefined}
           >
             {contenido.descripcion}
           </p>
@@ -1572,34 +1585,34 @@ function FilaPlataforma({
       <Button
         variant="ghost"
         size="sm"
-        className="ml-auto h-7 gap-1 px-2 text-xs text-muted-foreground"
+        className="ml-auto h-7 gap-1.5 px-2 text-xs text-muted-foreground"
         onClick={() => setEditorAbierto((v) => !v)}
         aria-expanded={editorAbierto}
       >
+        <FileText className="h-3.5 w-3.5" />
+        Copy
+        {plataforma.copy ? (
+          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+        ) : null}
         <ChevronDown
           className={cn("h-3.5 w-3.5 transition-transform", editorAbierto && "rotate-180")}
         />
-        Copy
-        {plataforma.copy ? (
-          <Badge variant="ok" className="h-4 px-1 font-normal">
-            <Check className="h-3 w-3" />
-          </Badge>
-        ) : null}
       </Button>
       <Button
         variant="ghost"
         size="sm"
-        className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+        className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
         onClick={() => setImagenAbierta((v) => !v)}
         aria-expanded={imagenAbierta}
       >
         <ImageIcon className="h-3.5 w-3.5" />
         Imagen
         {tieneImagen ? (
-          <Badge variant="ok" className="h-4 px-1 font-normal">
-            <Check className="h-3 w-3" />
-          </Badge>
+          <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
         ) : null}
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 transition-transform", imagenAbierta && "rotate-180")}
+        />
       </Button>
       <MenuContextual
         disparador="click"
