@@ -143,6 +143,49 @@ services:
       - traefik.http.routers.back.tls.certresolver=le
       - traefik.http.services.back.loadbalancer.server.port=8765
 
+  daemons:
+    # Proceso SOLO-daemons (Fase 3): el `back` corre uvicorn (que a proposito NO arranca
+    # daemons, para no levantarlos en los tests) y el `worker` solo procesa la cola de jobs;
+    # sin este servicio los hilos demonio de fondo NO correrian en prod. Corre
+    # `python -m keni_consola.daemons`: refresco de metricas (cuenta + por pieza), alertas de
+    # rendimiento/reciclaje, scanner de vencimientos, captura comercial, programador (DRY-RUN
+    # salvo KENI_PUBLICAR_REAL) y auto-promocion del Radar (solo con KENI_RADAR_AUTO). NO
+    # publica ni crea contenido por su cuenta; NO publica puertos ni va por Traefik. Misma
+    # imagen que el `back`; comparte Postgres + /data (donde viven las credenciales Metricool).
+    build:
+      context: ..
+      dockerfile: deploy/back/Dockerfile
+    image: keni-social/back:${KENI_VERSION:-latest}
+    restart: unless-stopped
+    command: ["python", "-m", "keni_consola.daemons"]
+    environment:
+      XDG_CONFIG_HOME: /data
+      KENI_SKILLS_CWD: /app
+      IS_SANDBOX: "1"
+      # No arranca worker in-proceso (lo hace el servicio `worker`); inocuo aqui igualmente.
+      KENI_WORKER_EXTERNO: "1"
+      # Persistencia compartida con el back: Postgres + S3/Garage. Las credenciales de
+      # Metricool por marca viven en la persistencia (/data + DB), no en estas env.
+      DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_REGION: ${S3_REGION}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # GATES DE SEGURIDAD: ausentes por defecto. Sin estos, el sistema NO publica ni crea
+      # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md):
+      #   KENI_PUBLICAR_REAL: "1"   # publica de verdad a Metricool (def: dry-run, no postea)
+      #   KENI_RADAR_AUTO: "1"      # auto-promueve temas del Radar (def: solo bandeja revisable)
+    volumes:
+      - keni-data:/data
+    networks:
+      - internal
+    depends_on:
+      - db
+
   worker:
     # Worker de generacion (#130 Fase 2 / ADR 0002 Fase B): consume la cola (tabla `jobs`
     # del Postgres compartido) y corre `claude -p`. SI lleva Node + `claude` (la del back

@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/trending-up-6lJunrjT.js
 import{ac as n}from"./index-CpNIC7EJ.js";/**
+|||||||| 2c89df7:consola/src/keni_consola/webapp/assets/trending-up-CZLhGtTh.js
+import{ac as n}from"./index-DzRHalxv.js";/**
+========
+import{ab as n}from"./index-BlrVx4iq.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/trending-up-DG9ZJe1O.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

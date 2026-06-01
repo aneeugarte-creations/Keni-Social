@@ -32,7 +32,7 @@ interface OpcionMenu {
 const OPCIONES: OpcionMenu[] = [
   { ruta: "/mi-cuenta", etiqueta: "Mi cuenta", icono: UserCog },
   { ruta: "/configuracion", etiqueta: "Configuración", icono: Settings2 },
-  { ruta: "/sugerencias", etiqueta: "Sugerencias", icono: Lightbulb },
+  { ruta: "/sugerencias", etiqueta: "Feedback", icono: Lightbulb },
   { ruta: "/webhooks", etiqueta: "Webhooks", icono: Webhook, soloAdmin: true },
   { ruta: "/usuarios", etiqueta: "Usuarios", icono: Users, soloAdmin: true },
 ];

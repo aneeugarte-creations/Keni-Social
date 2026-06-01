@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/shield-alert-sFxBJEvJ.js
 import{ac as e}from"./index-CpNIC7EJ.js";/**
+|||||||| 2c89df7:consola/src/keni_consola/webapp/assets/shield-alert-Cq-Tva-7.js
+import{ac as e}from"./index-DzRHalxv.js";/**
+========
+import{ab as e}from"./index-BlrVx4iq.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/shield-alert-C4IPQBai.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

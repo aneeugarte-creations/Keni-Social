@@ -55,7 +55,6 @@ rutas_frontend = [
   "/investigacion/fuentes",
   "/investigacion/termometro",
   "/investigacion/radar",
-  "/investigacion/parrilla-dia",
   "/revision",
   "/revision/editorial",
   "/revision/verificacion",
@@ -115,7 +114,7 @@ orden = 30
 
 [[nav]]
 ruta = "/skills"
-etiqueta = "Skills"
+etiqueta = "Skills (catálogo)"
 icono = "Wand2"
 descripcion = "Catálogo de skills editoriales: campos, plantilla y SKILL.md."
 grupo = "operacion"

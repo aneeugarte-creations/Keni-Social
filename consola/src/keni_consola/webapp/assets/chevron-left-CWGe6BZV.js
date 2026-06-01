@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/chevron-left-CWGe6BZV.js
 import{ac as a}from"./index-CpNIC7EJ.js";/**
+|||||||| 2c89df7:consola/src/keni_consola/webapp/assets/chevron-left-3DZkos_7.js
+import{ac as a}from"./index-DzRHalxv.js";/**
+========
+import{ab as a}from"./index-BlrVx4iq.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/chevron-left-BfmVK4fK.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

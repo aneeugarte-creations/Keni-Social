@@ -17,7 +17,6 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,11 +31,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import type { ItemParrilla, RespuestaParrilla, SubtipoParrilla } from "@/types";
 
-const CABECERA = {
-  titulo: "Parrilla del día",
-  descripcion:
-    "A partir del Radar, propone la parrilla editorial del día: 13 posteos (clip, galería, infografía o normal) y 6 video-editoriales, jerarquizados por importancia para México. SOLO propone el orden; qué y cuándo publicar lo decides tú. No inventa nada: deriva de las fuentes reales del Radar.",
-};
+/** Texto introductorio del panel "Plan del día" (antes la descripción de la página). */
+const INTRO =
+  "A partir del Radar, propone la parrilla editorial del día: 13 posteos (clip, galería, infografía o normal) y 6 video-editoriales, jerarquizados por importancia para México. SOLO propone el orden; qué y cuándo publicar lo decides tú. No inventa nada: deriva de las fuentes reales del Radar.";
 
 /** Etiqueta + icono por subtipo de posteo (vacío => posteo normal). */
 const SUBTIPO: Record<SubtipoParrilla, { etiqueta: string; Icono: typeof Film }> = {
@@ -58,42 +55,50 @@ function etiquetaRed(red: string): string {
   return red;
 }
 
-export default function ParrillaDia() {
+/**
+ * Panel "Plan del día": pestaña de Investigación (dentro de Radar). Antes era la
+ * página `/investigacion/parrilla-dia`; conserva su fetch y lógica intactos. No
+ * pinta PageHeader (lo hace el contenedor Radar); muestra su propia barra de
+ * acciones (país + actualizar) y una intro corta.
+ */
+export function PanelPlanDelDia() {
   const [geo, setGeo] = React.useState("MX");
   const query = useQuery({
     queryKey: ["parrilla-dia", geo],
     queryFn: ({ signal }) => api.parrillaDia(geo, signal),
   });
 
-  const acciones = query.isSuccess ? (
-    <div className="flex items-center gap-2">
-      <Select value={geo} onValueChange={setGeo}>
-        <SelectTrigger className="w-44" aria-label="País del contexto">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {query.data.geos_disponibles.map((g) => (
-            <SelectItem key={g.id} value={g.id}>
-              {g.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void query.refetch()}
-        disabled={query.isFetching}
-      >
-        <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-        Actualizar
-      </Button>
-    </div>
-  ) : undefined;
-
   return (
-    <>
-      <PageHeader {...CABECERA} acciones={acciones} />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-3xl text-sm text-muted-foreground">{INTRO}</p>
+        {query.isSuccess && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Select value={geo} onValueChange={setGeo}>
+              <SelectTrigger className="w-44" aria-label="País del contexto">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {query.data.geos_disponibles.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+            >
+              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              Actualizar
+            </Button>
+          </div>
+        )}
+      </div>
+
       {query.isPending ? (
         <div className="grid gap-6 lg:grid-cols-2">
           <Skeleton className="h-96 w-full rounded-md" />
@@ -109,7 +114,7 @@ export default function ParrillaDia() {
       ) : (
         <Contenido datos={query.data} />
       )}
-    </>
+    </div>
   );
 }
 

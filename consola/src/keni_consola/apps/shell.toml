@@ -27,6 +27,7 @@ modulos_backend = [
   "limites",
   "media",
   "panel",
+  "alertas",
   "sugerencias",
   "carpetas",
   "proyectos",

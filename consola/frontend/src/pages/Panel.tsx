@@ -5,7 +5,10 @@ import {
   ArrowUpRight,
   CalendarClock,
   ClipboardCheck,
+  Recycle,
   Sparkles,
+  TrendingDown,
+  TriangleAlert,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -19,9 +22,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { numeroCompacto, porcentaje } from "@/lib/formato";
-import type { PicoPanel, ProximaPanel } from "@/types";
+import type { AlertaRendimiento, PicoPanel, ProximaPanel } from "@/types";
 
-import { formatearFechaHora } from "./publicaciones/meta";
+import { formatearFechaHora, tiempoRelativo } from "./publicaciones/meta";
 
 const CABECERA = {
   titulo: "Panel",
@@ -107,11 +110,44 @@ function FilaProxima({ pieza }: { pieza: ProximaPanel }) {
   );
 }
 
+/** Etiqueta legible + icono para cada tipo de alerta de rendimiento. */
+const META_ALERTA: Record<string, { etiqueta: string; icono: typeof TrendingDown }> = {
+  "pieza.bajo_rendimiento": { etiqueta: "Bajo rendimiento", icono: TrendingDown },
+  "pieza.reciclaje_sugerida": { etiqueta: "Reciclaje sugerido", icono: Recycle },
+};
+
+/** Fila de una alerta de rendimiento (tipo legible + referencia a la pieza + fecha relativa). */
+function FilaAlerta({ alerta }: { alerta: AlertaRendimiento }) {
+  const meta = META_ALERTA[alerta.tipo] ?? { etiqueta: alerta.tipo, icono: TriangleAlert };
+  const Icono = meta.icono;
+  // Referencia a la pieza: preferimos el resumen humano del payload; si no, el id.
+  const referencia = alerta.payload?.resumen || alerta.contenido_id || "(pieza)";
+  return (
+    <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
+      <div className="flex min-w-0 items-start gap-2">
+        <Icono className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{meta.etiqueta}</p>
+          <p className="truncate text-xs text-muted-foreground">{referencia}</p>
+        </div>
+      </div>
+      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+        {tiempoRelativo(alerta.creado)}
+      </span>
+    </li>
+  );
+}
+
 export default function Panel() {
   // El panel es de lectura; se refresca al volver a la pestaña como el resto.
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["panel", "semana"],
     queryFn: ({ signal }) => api.panel({ rango: "semana" }, signal),
+  });
+  // Alertas de rendimiento: query independiente (no toca el contrato de /api/panel).
+  const alertas = useQuery({
+    queryKey: ["alertas"],
+    queryFn: ({ signal }) => api.alertas({}, signal),
   });
 
   return (
@@ -251,6 +287,35 @@ export default function Panel() {
                       <Link to="/parrilla/pendientes">Ir al tablero</Link>
                     </Button>
                   }
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Alertas de rendimiento (bitácora editorial: reciclaje / bajo rendimiento). */}
+          <Card>
+            <CardHeader className="space-y-0">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <TriangleAlert className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                Alertas de rendimiento
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {alertas.isError ? (
+                <p className="py-4 text-sm text-muted-foreground">
+                  No se pudieron cargar las alertas ahora mismo.
+                </p>
+              ) : (alertas.data?.alertas?.length ?? 0) > 0 ? (
+                <ul>
+                  {alertas.data!.alertas.map((alerta) => (
+                    <FilaAlerta key={alerta.id} alerta={alerta} />
+                  ))}
+                </ul>
+              ) : (
+                <EstadoVacio
+                  icono={TriangleAlert}
+                  titulo="Sin alertas"
+                  texto="No hay piezas con bajo rendimiento ni sugerencias de reciclaje por ahora."
                 />
               )}
             </CardContent>

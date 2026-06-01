@@ -10,9 +10,9 @@ expone y termina TLS (entonces pon `KENI_CONSOLA_HTTPS=1` para cookies `Secure`)
 Imprime la URL y, best-effort, la abre en el navegador.
 
 NOTA: el contenido editorial vive en ficheros YAML por marca (`ficheros.py`) y el
-dato operacional (tareas + comercial) en SQLite (`db.py`). La vieja migracion
-one-shot SQLite->YAML se ARCHIVO en `consola/scripts/migrar_a_ficheros.py` (ya no es
-un subcomando: el backend de contenido es YAML fijo).
+dato operacional (contenido + comercial + rota + usuarios) en Postgres (`db.py`,
+ADR 0004). `DATABASE_URL` es obligatoria; sin ella el arranque falla con un mensaje
+accionable.
 """
 
 from __future__ import annotations

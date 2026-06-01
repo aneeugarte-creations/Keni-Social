@@ -6,7 +6,7 @@ import {
   FileText,
   Globe,
   Images,
-  ListOrdered,
+  ListChecks,
   ListTodo,
   Megaphone,
   Presentation,
@@ -14,9 +14,22 @@ import {
   Rss,
   ScanSearch,
   ScanText,
+  type LucideIcon,
 } from "lucide-react";
 
-import type { ItemTabHub } from "./TabsHub";
+/** Una sub-pestaña de un hub (consumida por el sidebar con scope). */
+export interface ItemTabHub {
+  /** Ruta absoluta del tab (NavLink la consume tal cual). */
+  ruta: string;
+  etiqueta: string;
+  icono: LucideIcon;
+  /**
+   * Si es `true`, el tab solo se marca activo cuando la URL coincide
+   * exactamente; útil para el tab "raíz" de un hub que comparte prefijo con
+   * los demás (p.ej. `/agentes` vs `/agentes/actividad`).
+   */
+  end?: boolean;
+}
 
 /**
  * Registro COMPARTIDO de las sub-pestañas de cada hub de la consola.
@@ -36,7 +49,6 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   { ruta: "/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
   { ruta: "/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
   { ruta: "/investigacion/radar", etiqueta: "Radar", icono: Radar },
-  { ruta: "/investigacion/parrilla-dia", etiqueta: "Parrilla del día", icono: ListOrdered },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [
@@ -51,8 +63,9 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
 ];
 
 export const TABS_PARRILLA: ItemTabHub[] = [
-  { ruta: "/parrilla/calendario", etiqueta: "Calendario", icono: CalendarClock },
   { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
+  { ruta: "/parrilla/calendario", etiqueta: "Turnos", icono: CalendarClock },
+  { ruta: "/parrilla/piezas", etiqueta: "Piezas", icono: ListChecks },
 ];
 
 export const TABS_AGENTES: ItemTabHub[] = [

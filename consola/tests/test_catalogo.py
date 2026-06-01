@@ -23,7 +23,7 @@ _SIDEBAR_HOY = [
     ["Generación", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
     # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
     # tablero (Parrilla) es la superficie única de contenido.
-    ["Parrilla", "Skills", "Agentes", "Activos"],
+    ["Parrilla", "Skills (catálogo)", "Agentes", "Activos"],
 ]
 
 

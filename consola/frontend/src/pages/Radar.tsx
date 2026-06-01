@@ -1,15 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CircleCheck,
   CircleX,
   ExternalLink,
   Flame,
+  Play,
   Radar as RadarIcon,
   RefreshCw,
   Star,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import * as React from "react";
+import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -24,14 +27,54 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { FuenteRadar, RespuestaRadar, TemaRadar } from "@/types";
 
+import { PanelPlanDelDia } from "./ParrillaDia";
+
 const CABECERA = {
-  titulo: "Radar de tendencias",
+  titulo: "Radar",
   descripcion:
-    "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone: marca lo relevante; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.",
+    "Tendencias virales y el plan editorial del día, a partir de las mismas fuentes reales. El radar SOLO propone: marca lo relevante; publicar lo decides tú.",
 };
+
+/** Texto introductorio del panel "Tendencias" (antes la descripción de la página Radar). */
+const INTRO_TENDENCIAS =
+  "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone: marca lo relevante; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.";
+
+/**
+ * Página Radar: fusiona tres vistas que derivan de las mismas fuentes en pestañas
+ * internas — "Tendencias" (lo viral del momento), "Plan del día" (la antigua
+ * página /investigacion/parrilla-dia) y "Auto" (la bandeja de auto-promoción del
+ * Radar). Cada panel monta su propio fetch y lógica; la pestaña vive en el estado
+ * local (no en la URL: la ruta sigue siendo /radar).
+ */
+export default function Radar() {
+  return (
+    <>
+      <PageHeader {...CABECERA} />
+      <Tabs defaultValue="tendencias" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
+          <TabsTrigger value="plan-dia">Plan del día</TabsTrigger>
+          <TabsTrigger value="auto">Auto</TabsTrigger>
+        </TabsList>
+        <TabsContent value="tendencias">
+          <PanelTendencias />
+        </TabsContent>
+        <TabsContent value="plan-dia">
+          <PanelPlanDelDia />
+        </TabsContent>
+        <TabsContent value="auto">
+          <PanelRadarAuto />
+        </TabsContent>
+      </Tabs>
+    </>
+  );
+}
 
 /** Clave de localStorage para recordar qué temas marcó el equipo como relevantes. */
 const CLAVE_RELEVANTES = "keni:radar-relevantes";
@@ -48,7 +91,12 @@ function etiquetaRed(red: string): string {
   return red;
 }
 
-export default function Radar() {
+/**
+ * Panel "Tendencias": el contenido original de la página Radar (lo viral del
+ * momento). Sin PageHeader (lo pinta el contenedor); muestra su propia barra de
+ * acciones (país + actualizar) e intro.
+ */
+function PanelTendencias() {
   const [geo, setGeo] = React.useState("MX");
   const query = useQuery({
     queryKey: ["radar", geo],
@@ -79,30 +127,37 @@ export default function Radar() {
     });
   }
 
-  const acciones = query.isSuccess ? (
-    <div className="flex items-center gap-2">
-      <Select value={geo} onValueChange={setGeo}>
-        <SelectTrigger className="w-44" aria-label="País del radar">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {query.data.geos_disponibles.map((g) => (
-            <SelectItem key={g.id} value={g.id}>
-              {g.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button variant="outline" size="sm" onClick={() => void query.refetch()} disabled={query.isFetching}>
-        <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-        Actualizar
-      </Button>
-    </div>
-  ) : undefined;
-
   return (
-    <>
-      <PageHeader {...CABECERA} acciones={acciones} />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-3xl text-sm text-muted-foreground">{INTRO_TENDENCIAS}</p>
+        {query.isSuccess && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Select value={geo} onValueChange={setGeo}>
+              <SelectTrigger className="w-44" aria-label="País del radar">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {query.data.geos_disponibles.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+            >
+              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              Actualizar
+            </Button>
+          </div>
+        )}
+      </div>
+
       {query.isPending ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <Skeleton className="h-96 w-full rounded-md" />
@@ -125,7 +180,7 @@ export default function Radar() {
           <PanelFuentes datos={query.data} />
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -336,5 +391,153 @@ function PanelFuentes({ datos }: { datos: RespuestaRadar }) {
         </Card>
       )}
     </div>
+  );
+}
+
+// --- Panel Auto (bandeja de auto-promoción del Radar) ---------------------
+
+/**
+ * Panel "Auto": muestra la bandeja de la auto-promoción del Radar (los temas que
+ * ENTRARÍAN ahora a "importante del día", sin escribir nada) más su config viva
+ * (umbral, geo, daemon activo). El botón "Ejecutar ahora" promueve el batch
+ * (POST /radar/auto/ejecutar, SOLO ADMIN) y refresca la bandeja. Lectura segura:
+ * la bandeja se calcula aunque el daemon esté apagado.
+ */
+function PanelRadarAuto() {
+  const queryClient = useQueryClient();
+  const { usuario } = useSesion();
+  const esAdmin = usuario?.rol === "admin";
+
+  const bandejaQuery = useQuery({
+    queryKey: ["radar", "auto", "bandeja"],
+    queryFn: ({ signal }) => api.bandejaRadarAuto(signal),
+  });
+
+  const ejecutar = useMutation({
+    mutationFn: () => api.ejecutarRadarAuto(),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: ["radar", "auto"] });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      toast.success(
+        res.total === 0
+          ? "No había temas por encima del umbral; no se promovió nada."
+          : `${res.total} ${res.total === 1 ? "tema promovido" : "temas promovidos"} a “importante del día”.`,
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  if (bandejaQuery.isPending) {
+    return <Skeleton className="h-72 w-full rounded-md" />;
+  }
+  if (bandejaQuery.isError) {
+    return (
+      <BloqueError
+        titulo="No se pudo cargar la bandeja"
+        mensaje={mensajeError(bandejaQuery.error)}
+        onReintentar={() => void bandejaQuery.refetch()}
+        cargando={bandejaQuery.isFetching}
+      />
+    );
+  }
+
+  const { config, temas, total } = bandejaQuery.data;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="max-w-3xl space-y-2">
+          <p className="text-sm text-muted-foreground">
+            Auto-promoción del Radar: estos temas superarían el umbral de señal y entrarían a
+            “importante del día”. Es revisable y no escribe nada hasta que se ejecuta.
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Badge variant={config.activo ? "ok" : "secondary"} className="gap-1">
+              <Zap className="h-3 w-3" />
+              {config.activo ? "Daemon activo" : "Daemon apagado"}
+            </Badge>
+            <Badge variant="outline">Umbral {config.umbral}</Badge>
+            <Badge variant="outline">Geo {config.geo}</Badge>
+            <Badge variant="outline">Máx {config.max_por_barrido}/barrido</Badge>
+            {config.marca && <Badge variant="outline">Marca {config.marca}</Badge>}
+          </div>
+        </div>
+        {esAdmin && (
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() => ejecutar.mutate()}
+            disabled={ejecutar.isPending}
+            title="Promueve ahora los temas de la bandeja a “importante del día”"
+          >
+            {ejecutar.isPending ? (
+              <Loader2Spin />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            Ejecutar ahora
+          </Button>
+        )}
+      </div>
+
+      {!esAdmin && (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          Solo un administrador puede ejecutar la auto-promoción. Aquí puedes revisar qué entraría.
+        </p>
+      )}
+
+      {total === 0 ? (
+        <EstadoVacio
+          icono={Zap}
+          titulo="Nada por encima del umbral"
+          texto="Ahora mismo ningún tema del Radar supera el umbral de auto-promoción. Cuando lo haga, aparecerá aquí."
+        />
+      ) : (
+        <>
+          <p className="text-xs text-muted-foreground">
+            {total} {total === 1 ? "tema entraría" : "temas entrarían"} (ordenados por señal).
+          </p>
+          <ul className="space-y-3">
+            {temas.map((tema) => (
+              <li key={tema.titulo}>
+                <TarjetaTemaAuto tema={tema} />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Spinner reutilizado (evita importar el icono dos veces con otro nombre). */
+function Loader2Spin() {
+  return <RefreshCw className="h-4 w-4 animate-spin" />;
+}
+
+/** Tarjeta de un tema de la bandeja auto (solo lectura; sin acciones por tema). */
+function TarjetaTemaAuto({ tema }: { tema: TemaRadar }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <div className="flex items-start justify-between gap-3">
+          <CardTitle className="min-w-0 text-base leading-snug">{tema.titulo}</CardTitle>
+          {tema.senal_texto && (
+            <Badge variant="aviso" className="shrink-0 gap-1">
+              <TrendingUp className="h-3 w-3" />
+              {tema.senal_texto}
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      {tema.por_que && (
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Por qué sube: </span>
+            {tema.por_que}
+          </p>
+        </CardContent>
+      )}
+    </Card>
   );
 }

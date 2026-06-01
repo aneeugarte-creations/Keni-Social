@@ -165,7 +165,7 @@ export default function Skills() {
   return (
     <>
       <PageHeader
-        titulo="Skills"
+        titulo="Skills (catálogo)"
         descripcion="Gestiona las skills editoriales que alimentan Generar copy: sus campos, su plantilla de invocación y su SKILL.md."
         acciones={acciones}
       />
