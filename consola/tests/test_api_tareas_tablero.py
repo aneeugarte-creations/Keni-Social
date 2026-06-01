@@ -12,6 +12,7 @@ Todo OFFLINE; reusa el aislamiento de `entorno` y los fakes de `conftest`.
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 
 from starlette.testclient import TestClient
@@ -331,10 +332,13 @@ def test_crear_pendiente_con_evento_inexistente_400(entorno):
 def test_listado_devuelve_eventos_sin_cubrir(entorno):
     """GET /api/tareas devuelve `eventos_sin_cubrir` con los eventos de la rota sin asignar."""
     c = _cli_con_usuario("ana")
-    # Evento de esta semana, sin turno todavia -> debe aparecer como sin cubrir.
+    # Evento dentro de la ventana "esta semana + la siguiente" RELATIVO a hoy (no una
+    # fecha fija que caduca: `_eventos_sin_cubrir` acota a [lunes-de-esta-semana,
+    # domingo-de-la-siguiente] desde `date.today()`). Hoy siempre cae en ese rango.
+    fecha_evento = date.today().isoformat()
     r_a = c.post(
         "/api/rota/eventos",
-        json={"titulo": "Sin cubrir aun", "fecha": "2026-05-30", "hora": "16:00"},
+        json={"titulo": "Sin cubrir aun", "fecha": fecha_evento, "hora": "16:00"},
         headers=_ORIGIN,
     )
     assert r_a.status_code == 201, r_a.text
@@ -348,7 +352,7 @@ def test_listado_devuelve_eventos_sin_cubrir(entorno):
     # Forma del item: id/titulo/fecha/hora/contenido/tipo_cobertura/prioridad.
     sin_cubrir = next(e for e in cuerpo["eventos_sin_cubrir"] if e["id"] == ev_a["id"])
     assert sin_cubrir["titulo"] == "Sin cubrir aun"
-    assert sin_cubrir["fecha"] == "2026-05-30"
+    assert sin_cubrir["fecha"] == fecha_evento
     assert sin_cubrir["hora"] == "16:00"
     assert sin_cubrir["tipo_cobertura"] == "transmision"
     assert sin_cubrir["prioridad"] == "media"
