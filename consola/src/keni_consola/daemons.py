@@ -43,6 +43,7 @@ def main() -> int:
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
+    from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
     from .metricas_refresco import iniciar_refresco_metricas
     from .programador import iniciar_programador
@@ -55,6 +56,7 @@ def main() -> int:
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
+    iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
 
     # Los daemons son hilos; mantenemos vivo el proceso principal indefinidamente.
     threading.Event().wait()

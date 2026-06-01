@@ -125,6 +125,15 @@ def _construir_catalogo() -> list[Ajuste]:
             grupo="automatizacion",
             defecto=False,
         ),
+        Ajuste(
+            clave=config.ENV_MEDIA_GC,
+            tipo="bool",
+            etiqueta="Limpieza de media huérfana",
+            ayuda="Borra periódicamente los objetos de imagen del Estudio que ninguna "
+            "publicación usa y son más viejos que el umbral de antigüedad.",
+            grupo="automatizacion",
+            defecto=False,
+        ),
         # --- Publicacion (peligroso) ----------------------------------------------- #
         Ajuste(
             clave=config.ENV_PUBLICAR_REAL,
@@ -244,6 +253,25 @@ def _construir_catalogo() -> list[Ajuste]:
             ayuda="Máximo de generaciones `claude` ejecutándose a la vez.",
             grupo="tuning",
             defecto=config.MAX_JOBS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_MEDIA_GC_INTERVALO_HORAS,
+            tipo="int",
+            etiqueta="Limpieza media: intervalo (horas)",
+            ayuda="Cada cuántas horas barre el daemon de limpieza de media huérfana.",
+            grupo="tuning",
+            defecto=config.MEDIA_GC_INTERVALO_HORAS_DEF,
+            minimo=1,
+        ),
+        Ajuste(
+            clave=config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
+            tipo="int",
+            etiqueta="Limpieza media: antigüedad mínima (horas)",
+            ayuda="Un objeto de media más nuevo que esto nunca se borra, aunque parezca "
+            "huérfano (protege las variantes del Estudio que aún se revisan).",
+            grupo="tuning",
+            defecto=config.MEDIA_GC_ANTIGUEDAD_HORAS_DEF,
             minimo=1,
         ),
     ]

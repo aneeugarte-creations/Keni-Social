@@ -206,6 +206,16 @@ ENV_AUTOGEN_ARTE = "KENI_AUTOGEN_ARTE"
 ENV_AUTOGEN_ARTE_INTERVALO_HORAS = "KENI_AUTOGEN_ARTE_INTERVALO_HORAS"
 ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
 
+# Recoleccion de basura (GC) de MEDIA HUERFANA (Estudio de imagen, diseno §5). El Estudio
+# genera N variantes; las NO elegidas quedan como objetos sueltos en el almacen de media que
+# nadie borra. Un hilo demonio barre periodicamente el almacen y borra SOLO los objetos
+# HUERFANOS: ni referenciados por una publicacion (`imagen`) ni catalogados en biblioteca-media
+# y mas VIEJOS que un umbral (def 24h, para no tocar variantes recien generadas que el usuario
+# aun revisa). CONSERVADOR por defecto (OFF): sin `KENI_MEDIA_GC` no se borra nada.
+ENV_MEDIA_GC = "KENI_MEDIA_GC"
+ENV_MEDIA_GC_INTERVALO_HORAS = "KENI_MEDIA_GC_INTERVALO_HORAS"
+ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -302,6 +312,12 @@ AUTOGEN_MAX_DEF = 3
 # seguido, cap bajo por barrido), porque cada item llama al proveedor de imagen (coste).
 AUTOGEN_ARTE_INTERVALO_HORAS_DEF = 1
 AUTOGEN_ARTE_MAX_DEF = 3
+
+# Recoleccion de basura de media huerfana (Estudio §5). Barre 1 vez al dia (no urge: el
+# almacen crece lento) y solo borra objetos mas viejos que ANTIGUEDAD (def 24h), para NO
+# tocar las variantes recien generadas que el usuario aun esta revisando en el Estudio.
+MEDIA_GC_INTERVALO_HORAS_DEF = 24
+MEDIA_GC_ANTIGUEDAD_HORAS_DEF = 24
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -822,6 +838,35 @@ def autogen_arte_intervalo_horas() -> int:
     """Cada cuantas horas barre el daemon de auto-arte (`KENI_AUTOGEN_ARTE_INTERVALO_HORAS`, def 1, min 1)."""
     return _entero(
         ENV_AUTOGEN_ARTE_INTERVALO_HORAS, AUTOGEN_ARTE_INTERVALO_HORAS_DEF, minimo=1
+    )
+
+
+def media_gc_activo() -> bool:
+    """True si el daemon de GC de media huerfana debe BARRER (`KENI_MEDIA_GC`).
+
+    Def OFF (conservador): sin el flag NO se borra ningun objeto del almacen. Con el flag,
+    un hilo demonio barre cada N horas y borra los objetos HUERFANOS (no referenciados por
+    ninguna publicacion ni catalogados en biblioteca-media) y mas viejos que el umbral. El
+    hilo arranca SIEMPRE pero, gateado, solo actua cuando el flag esta activo.
+    """
+    return _crudo(ENV_MEDIA_GC).lower() in _VERDADEROS
+
+
+def media_gc_intervalo_horas() -> int:
+    """Cada cuantas horas barre el daemon de GC de media (`KENI_MEDIA_GC_INTERVALO_HORAS`, def 24, min 1)."""
+    return _entero(
+        ENV_MEDIA_GC_INTERVALO_HORAS, MEDIA_GC_INTERVALO_HORAS_DEF, minimo=1
+    )
+
+
+def media_gc_antiguedad_horas() -> int:
+    """Antiguedad MINIMA (horas) de un objeto para considerarlo borrable (`KENI_MEDIA_GC_ANTIGUEDAD_HORAS`).
+
+    Def 24h, min 1: un objeto mas NUEVO que esto NUNCA se borra, aunque parezca huerfano,
+    para no eliminar las variantes recien generadas por el Estudio que el usuario aun revisa.
+    """
+    return _entero(
+        ENV_MEDIA_GC_ANTIGUEDAD_HORAS, MEDIA_GC_ANTIGUEDAD_HORAS_DEF, minimo=1
     )
 
 

@@ -46,6 +46,8 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_RADAR_AUTO_MAX, config.ENV_RADAR_AUTO_GEO, config.ENV_RADAR_AUTO_MARCA,
         config.ENV_ALERTAS_INTERVALO_HORAS, config.ENV_ALERTAS_UMBRAL_ENGAGEMENT,
         config.ENV_MAX_JOBS,
+        config.ENV_MEDIA_GC, config.ENV_MEDIA_GC_INTERVALO_HORAS,
+        config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
     }
     assert claves == esperadas
 
