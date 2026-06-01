@@ -156,12 +156,6 @@ const SECCIONES: { flujo: Contenido["flujo"]; titulo: string }[] = [
   { flujo: "evento", titulo: "Eventos previstos" },
 ];
 
-const PRIORIDAD_VARIANTE: Record<string, "error" | "aviso" | "secondary"> = {
-  alta: "error",
-  media: "aviso",
-  baja: "secondary",
-};
-
 const ESTADO_PLAT_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
   en_curso: "En curso",
@@ -169,15 +163,6 @@ const ESTADO_PLAT_LABEL: Record<string, string> = {
   aprobado: "Aprobado",
   programado: "Programado",
   publicado: "Publicado",
-};
-
-const ESTADO_PLAT_VARIANTE: Record<string, "secondary" | "aviso" | "ok"> = {
-  pendiente: "aviso",
-  en_curso: "aviso",
-  en_revision: "secondary",
-  aprobado: "secondary",
-  programado: "secondary",
-  publicado: "ok",
 };
 
 /** Etiqueta humana del eje de una etiqueta editorial (para agrupar el catálogo). */
@@ -1100,9 +1085,16 @@ function BarraAccionesPieza({
         <SelectContent>
           {(["alta", "media", "baja"] as const).map((p) => (
             <SelectItem key={p} value={p}>
-              <Badge variant={PRIORIDAD_VARIANTE[p]} className="font-normal">
+              <span
+                className={cn(
+                  "font-medium capitalize",
+                  p === "alta" && "text-red-600 dark:text-red-400",
+                  p === "media" && "text-amber-600 dark:text-amber-400",
+                  p === "baja" && "text-muted-foreground",
+                )}
+              >
                 {p}
-              </Badge>
+              </span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -1305,7 +1297,10 @@ function TarjetaContenido({
             className={cn(
               "whitespace-pre-wrap text-sm text-muted-foreground",
               compacta && "line-clamp-2",
+              esContenido && "cursor-pointer",
             )}
+            onClick={esContenido ? () => abrirDetalleRef.current?.() : undefined}
+            title={esContenido ? "Ver detalle: comentarios, versiones de copy y aprobación" : undefined}
           >
             {contenido.descripcion}
           </p>
@@ -1550,9 +1545,7 @@ function FilaPlataforma({
         <SelectContent>
           {Object.keys(ESTADO_PLAT_LABEL).map((e) => (
             <SelectItem key={e} value={e}>
-              <Badge variant={ESTADO_PLAT_VARIANTE[e] ?? "secondary"} className="font-normal">
-                {ESTADO_PLAT_LABEL[e]}
-              </Badge>
+              {ESTADO_PLAT_LABEL[e]}
             </SelectItem>
           ))}
         </SelectContent>

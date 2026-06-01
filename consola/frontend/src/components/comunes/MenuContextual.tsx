@@ -1,12 +1,10 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
+import { origenBajoDisparador, type PosicionMenu } from "./menuPos";
 
-/** Posición (px) donde abrir el menú. */
-export interface PosicionMenu {
-  x: number;
-  y: number;
-}
+export type { PosicionMenu } from "./menuPos";
 
 /** Item del menú contextual. Click izquierdo dispara `onClick`. */
 export interface ItemMenuContextual {
@@ -205,6 +203,15 @@ export function MenuContextual({
 
   function alAbrir(e: React.MouseEvent) {
     e.preventDefault();
+    // Click-izquierdo (botón desplegable): ancla el menú bajo el disparador y alinea su
+    // borde para que no se salga de pantalla. Click-derecho: abre en el cursor.
+    if (e.type === "click") {
+      const disparadorEl =
+        ((e.target as HTMLElement).closest("button, [role='button']") as HTMLElement | null) ??
+        (e.currentTarget as HTMLElement);
+      setPos(origenBajoDisparador(disparadorEl.getBoundingClientRect()));
+      return;
+    }
     setPos({ x: e.clientX, y: e.clientY });
   }
 
@@ -219,14 +226,16 @@ export function MenuContextual({
       >
         {children}
       </div>
-      {pos && (
-        <MenuFlotante
-          pos={pos}
-          items={items}
-          etiqueta={etiqueta}
-          onClose={() => setPos(null)}
-        />
-      )}
+      {pos &&
+        createPortal(
+          <MenuFlotante
+            pos={pos}
+            items={items}
+            etiqueta={etiqueta}
+            onClose={() => setPos(null)}
+          />,
+          document.body,
+        )}
     </>
   );
 }
