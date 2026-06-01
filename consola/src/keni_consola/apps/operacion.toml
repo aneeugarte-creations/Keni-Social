@@ -40,7 +40,6 @@ rutas_frontend = [
   "/parrilla",
   "/parrilla/pendientes",
   "/parrilla/calendario",
-  "/parrilla/piezas",
   # Webhooks salientes (admin; sin nav, se entra por URL directa). Ver router.tsx.
   "/webhooks",
 ]
