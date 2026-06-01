@@ -569,10 +569,13 @@ def obtener_semilla(doc_id: str) -> Documento | None:
         return None
     base = dir_semilla()
     ruta = base.joinpath(*partes).with_suffix(".md")
+    # Anti-traversal robusto: el destino DEBE caer estrictamente dentro de la semilla
+    # (resolver + relative_to lanza si se escapa) y ser un fichero.
     try:
-        if base.resolve() not in ruta.resolve().parents or not ruta.is_file():
-            return None
-    except OSError:
+        ruta.resolve().relative_to(base.resolve())
+    except (ValueError, OSError):
+        return None
+    if not ruta.is_file():
         return None
     meta, cuerpo = _parsear(ruta.read_text(encoding="utf-8"))
     tipo = partes[0]

@@ -6,13 +6,14 @@ reto del desacoplo es que el POST-PROCESADO de una generacion (`procesar`) era u
 de Python que el back construia (parsear piezas, registrar historial, crear borradores,
 marcar un item de RSS, parsear hashtags). Un worker en OTRO proceso no puede recibir un
 closure; SI puede recibir sus PARAMETROS y reconstruirlo, porque toda esa logica es codigo
-de DOMINIO PURO (`dominio.skills`, `dominio.hashtags`, `repos`) que el worker comparte.
+de DOMINIO PURO (`dominio.copy`, `dominio.qa_editorial`, `dominio.hashtags`, `repos`) que el
+worker comparte.
 
 Por eso un job se serializa como:
   - `prompt` (str): el prompt de `claude -p` YA renderizado por el back.
-  - `cwd_kind` ("ejecucion_skills" | "skills"): COMO resolver el cwd en el worker (las
-    rutas absolutas pueden diferir entre back y worker; el worker resuelve via
-    `dominio.skills`, que lee las MISMAS env vars `KENI_SKILLS_*`).
+  - `cwd_kind` ("generacion"): COMO resolver el cwd en el worker. Tras retirar el sistema de
+    skills hay UN solo cwd: el dir NEUTRO y writable `cwd_generacion` (los prompts son
+    autocontenidos; el corpus editorial viaja DENTRO del prompt, no se descubre por cwd).
   - `dir_temporal` (str | None): dir de la subida (foto/clip); el worker lo borra al final
     y lo pasa como `--add-dir` (igual que antes). En hosted los temporales de subida no se
     comparten entre back y worker: ver la nota de `media`/`clip` en el README de deploy.
@@ -32,21 +33,16 @@ from typing import Any
 from . import copy as dom_copy
 from . import hashtags as dom_hashtags
 from . import qa_editorial as dom_qa
-from . import skills as dom_skills
 
 # Versiona el spec por si su forma cambia (un worker viejo no debe malinterpretar uno nuevo).
 VERSION = 1
 
-# Como resolver el cwd de `claude` en el worker (las rutas absolutas no viajan; el worker
-# las resuelve via `dominio.skills`, que lee KENI_SKILLS_*). "ejecucion_skills" es el dir
-# que contiene `.claude/skills` (skills de copy/RSS/hashtags); "skills" es la raiz.
-CWD_EJECUCION = "ejecucion_skills"
-CWD_SKILLS = "skills"
-# cwd NEUTRO para prompts AUTOCONTENIDOS (Biblioteca y features migradas): un dir writable
-# sin skills (el corpus editorial va dentro del prompt, no se descubre por cwd).
+# cwd NEUTRO para prompts AUTOCONTENIDOS (Biblioteca y TODAS las generaciones de texto): un
+# dir writable sin skills (el corpus editorial va DENTRO del prompt, no se descubre por cwd).
+# Tras retirar el sistema de skills es el ÚNICO cwd de `claude`; ya no hay cwd "de skills".
 CWD_GENERACION = "generacion"
 
-# Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.skills`/`qa`.
+# Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`qa`/`hashtags`.
 PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
@@ -136,7 +132,7 @@ def construir(
     *,
     prompt: str,
     procesar: dict[str, Any],
-    cwd_kind: str = CWD_EJECUCION,
+    cwd_kind: str = CWD_GENERACION,
     dir_temporal: str | None = None,
 ) -> dict[str, Any]:
     """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal)."""
@@ -168,16 +164,14 @@ def deserializar(texto: str) -> dict[str, Any]:
 
 
 def cwd(spec: dict[str, Any]) -> Path:
-    """Resuelve el cwd de `claude` en el worker segun `cwd_kind` (via `dominio.skills`).
+    """Resuelve el cwd de `claude` en el worker. Siempre el dir NEUTRO de generacion.
 
-    Las rutas absolutas no viajan en el spec: el worker las resuelve aqui, leyendo las
-    MISMAS env vars `KENI_SKILLS_*` que el back. Por defecto el dir de ejecucion de skills.
+    Tras retirar el sistema de skills, todas las generaciones de texto son prompts
+    AUTOCONTENIDOS y corren desde un cwd writable sin skills (`cwd_generacion`). Las rutas
+    absolutas no viajan en el spec: el worker las resuelve aqui. Cualquier `cwd_kind` legado
+    en un spec viejo de la cola degrada a este mismo dir (ya no existe cwd "de skills").
     """
-    if spec.get("cwd_kind") == CWD_GENERACION:
-        return cwd_generacion()
-    if spec.get("cwd_kind") == CWD_SKILLS:
-        return dom_skills.cwd_skills()
-    return dom_skills.cwd_ejecucion_skills()
+    return cwd_generacion()
 
 
 def cwd_generacion() -> Path:

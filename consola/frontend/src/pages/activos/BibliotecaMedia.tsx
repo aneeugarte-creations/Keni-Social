@@ -39,10 +39,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
-import type { MedioBiblioteca, RespuestaSkills } from "@/types";
+import type { MedioBiblioteca, OpcionesPublicaciones } from "@/types";
 
 const CLAVE_BIBLIOTECA = ["biblioteca-media"] as const;
-const CLAVE_OPCIONES_SKILLS = ["skills"] as const;
+const CLAVE_OPCIONES_PUBLICACIONES = ["publicaciones", "opciones"] as const;
 
 const CABECERA = {
   titulo: "Biblioteca de medios",
@@ -67,9 +67,10 @@ export default function BibliotecaMedia() {
   const [soloAprobados, setSoloAprobados] = React.useState(false);
   const [filtroTexto, setFiltroTexto] = React.useState("");
 
-  const opciones = useQuery<RespuestaSkills>({
-    queryKey: CLAVE_OPCIONES_SKILLS,
-    queryFn: ({ signal }) => api.skills(signal),
+  // Marcas desde el catálogo NEUTRO de publicaciones (antes /api/skills, retirado).
+  const opciones = useQuery<OpcionesPublicaciones>({
+    queryKey: CLAVE_OPCIONES_PUBLICACIONES,
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opciones.data?.marcas ?? [];
 

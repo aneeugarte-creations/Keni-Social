@@ -19,7 +19,7 @@ import json
 import pytest
 
 from keni_consola import agentes
-from keni_consola.api import skills
+from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
 
 from .conftest import _cliente, lanzador_generacion_completa
 
@@ -164,16 +164,16 @@ def test_parsear_vacio_devuelve_texto_vacio_sin_metricas():
 
 def test_arg_presupuesto_valido(monkeypatch):
     monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "0.50")
-    assert skills._arg_presupuesto() == ["--max-budget-usd", "0.5"]
+    assert skills.arg_presupuesto() == ["--max-budget-usd", "0.5"]
 
 
 def test_arg_presupuesto_invalido_o_ausente_se_ignora(monkeypatch):
     monkeypatch.delenv("KENI_CLAUDE_MAX_USD", raising=False)
-    assert skills._arg_presupuesto() == []
+    assert skills.arg_presupuesto() == []
     monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "no-numero")
-    assert skills._arg_presupuesto() == []
+    assert skills.arg_presupuesto() == []
     monkeypatch.setenv("KENI_CLAUDE_MAX_USD", "0")
-    assert skills._arg_presupuesto() == []
+    assert skills.arg_presupuesto() == []
 
 
 # --------------------------------------------------------------------------- #
@@ -295,11 +295,28 @@ _SALIDA_SKILL = """✅ Copy listo.
 
 
 def test_historial_skill_guarda_y_expone_metricas(entorno):
+    """Una generacion de COPY (Biblioteca, prompt salida=piezas) registra historial+metricas.
+
+    Tras retirar el motor de skills, el copy se lanza desde la Biblioteca: un prompt con
+    `salida: piezas` lanzado con redes usa el post-procesado de COPY (mismo `procesar` que la
+    skill antigua: parsea piezas, registra historial con sus metricas, crea borradores). El
+    historial sigue vivo en `/api/skills/historial` (modulo NEUTRO).
+    """
+    from keni_consola import biblioteca
+
+    # Prompt de copy (salida=piezas) en el store.
+    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota en copy.")
+    ruta = biblioteca._ruta_de_id(prompt.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+
     c = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL, _METRICAS_DEMO))
     gen = c.post(
-        "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": _MARCA, "valores": {"fuente": "una nota"},
-              "redes": ["x"]},
+        "/api/biblioteca/lanzar",
+        json={"prompt_id": prompt.id, "marca": _MARCA, "redes": ["x"],
+              "target": {"tipo": "contenido", "valor": "una nota"}},
     ).json()
     hid = gen["generacion"]["resultado"]["historial_id"]
 

@@ -2,13 +2,13 @@ import {
   BarChart3,
   Bot,
   CalendarClock,
+  ImagePlus,
   LayoutDashboard,
   Library,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
-  Wand2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,13 +43,13 @@ export const ICONOS: Record<string, LucideIcon> = {
   BarChart3,
   Bot,
   CalendarClock,
+  ImagePlus,
   LayoutDashboard,
   Library,
   Search,
   Send,
   ShieldCheck,
   Sparkles,
-  Wand2,
 };
 
 /** Resuelve un nombre de icono del catálogo a su componente (fallback Sparkles). */

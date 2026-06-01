@@ -177,14 +177,32 @@ _SALIDA_COPY = """✅ Copy listo.
 """
 
 
+def _crear_prompt_piezas() -> str:
+    """Crea en el store un prompt de copy con `salida=piezas` y devuelve su id.
+
+    El copy ya no se lanza por el motor de skills (retirado): se lanza desde la Biblioteca
+    con un prompt `salida=piezas` + redes. Devuelve el id para `POST /api/biblioteca/lanzar`.
+    """
+    from keni_consola import biblioteca
+
+    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
+    ruta = biblioteca._ruta_de_id(prompt.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+    return prompt.id
+
+
 def test_generacion_atribuye_registro_historial_y_publicaciones(entorno):
     """Generar copy como `ana` atribuye a `ana`: el registro de generacion, el historial
     y las publicaciones auto-creadas en el post-procesado (background)."""
     c = _cli_con_usuario("ana", lanzar_generacion=lanzador_generacion_completa(_SALIDA_COPY))
+    prompt_id = _crear_prompt_piezas()
     gen = c.post(
-        "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": _MARCA, "valores": {"fuente": "una nota"},
-              "redes": ["x"]},
+        "/api/biblioteca/lanzar",
+        json={"prompt_id": prompt_id, "marca": _MARCA, "redes": ["x"],
+              "target": {"tipo": "contenido", "valor": "una nota"}},
         headers=_ORIGIN,
     ).json()["generacion"]
 
@@ -213,10 +231,11 @@ def test_generacion_atribuye_registro_historial_y_publicaciones(entorno):
 def test_generacion_por_token_sin_autor(entorno):
     """Una generacion lanzada por el TOKEN (mantenimiento) no atribuye autor (anonima)."""
     c = _cli_por_token(lanzar_generacion=lanzador_generacion_completa(_SALIDA_COPY))
+    prompt_id = _crear_prompt_piezas()
     gen = c.post(
-        "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": _MARCA, "valores": {"fuente": "una nota"},
-              "redes": ["x"]},
+        "/api/biblioteca/lanzar",
+        json={"prompt_id": prompt_id, "marca": _MARCA, "redes": ["x"],
+              "target": {"tipo": "contenido", "valor": "una nota"}},
         headers=_ORIGIN,
     ).json()["generacion"]
     assert gen["autor_id"] == ""

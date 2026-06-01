@@ -20,7 +20,7 @@ frontend lo tipa rico); por eso no aparece aquí.
 from __future__ import annotations
 
 from keni_consola import agentes
-from keni_consola.api import skills
+from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
 from keni_consola.esquema_api import esquema_json
 
 from .conftest import _cliente

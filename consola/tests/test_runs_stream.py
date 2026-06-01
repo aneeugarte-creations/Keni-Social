@@ -20,7 +20,7 @@ import pytest
 
 from keni_consola import agentes
 from keni_consola.api import agentes as api_agentes
-from keni_consola.api import skills
+from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
 
 _MARCA = "unotv"
 

@@ -100,6 +100,7 @@ def lanzar(
         contexto=texto_base,
         redes_ids=redes_ids,
         titulo=titulo,
+        titulo_dado=titulo,  # el asistente fija el título de la fila como título del historial
         texto_base=texto_base,
         origen_historial=SKILL_COPY,
         autor=autor,

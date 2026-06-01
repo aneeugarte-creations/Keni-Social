@@ -703,7 +703,8 @@ async def generar(request: Request) -> Response:
     clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
     gen = gen_dom.lanzar_copy(
         tipo="rss", prompt_id=prompt_id, origen_historial=skill.strip(), marca=marca,
-        contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), texto_base=nota, autor=autor,
+        contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), titulo_dado=titulo.strip(),
+        texto_base=nota, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
     )
     return JSONResponse({"generacion": gen})

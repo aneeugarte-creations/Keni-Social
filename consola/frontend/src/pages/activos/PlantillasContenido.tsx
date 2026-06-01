@@ -42,13 +42,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
 import type {
   ModoPlantilla,
+  OpcionesPublicaciones,
   PlantillaContenido,
-  RespuestaSkills,
   VariablePlantilla,
 } from "@/types";
 
 const CLAVE_PLANTILLAS_CONTENIDO = ["plantillas-contenido"] as const;
-const CLAVE_OPCIONES_SKILLS = ["skills"] as const;
+const CLAVE_OPCIONES_PUBLICACIONES = ["publicaciones", "opciones"] as const;
 
 const CABECERA = {
   titulo: "Plantillas",
@@ -90,9 +90,10 @@ export default function PlantillasContenido() {
     queryKey: CLAVE_PLANTILLAS_CONTENIDO,
     queryFn: ({ signal }) => api.plantillasContenido(undefined, signal),
   });
-  const opciones = useQuery<RespuestaSkills>({
-    queryKey: CLAVE_OPCIONES_SKILLS,
-    queryFn: ({ signal }) => api.skills(signal),
+  // Marcas/redes desde el catálogo NEUTRO de publicaciones (antes /api/skills, retirado).
+  const opciones = useQuery<OpcionesPublicaciones>({
+    queryKey: CLAVE_OPCIONES_PUBLICACIONES,
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
 
   const plantillas = query.data?.plantillas ?? [];

@@ -300,12 +300,11 @@ def lanzador_generacion_completa(salida: str, metricas=None):  # noqa: ANN001
     import shutil as _sh
 
     from keni_consola import generaciones
-    from keni_consola.api import skills
+    from keni_consola.dominio import stream
 
     def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
-        # Igual que el lanzador real: el temporal se borra DESPUES de `procesar`, porque
-        # el post-procesado de las skills de imagen importa al media los .png que la skill
-        # dejo en ese dir. Borrarlo antes los perderia (ver generaciones._finalizar).
+        # Igual que el lanzador real: el temporal se borra DESPUES de `procesar` (el
+        # post-procesado puede leer archivos del dir temporal antes de limpiarlo).
         try:
             resultado = procesar(salida, metricas)
         finally:
@@ -316,7 +315,7 @@ def lanzador_generacion_completa(salida: str, metricas=None):  # noqa: ANN001
             {
                 "estado": generaciones.ESTADO_COMPLETADO,
                 "salida": salida,
-                "metricas": skills.metricas_a_dict(metricas),
+                "metricas": stream.metricas_a_dict(metricas),
                 "resultado": resultado,
                 "fecha_fin": generaciones.ahora_iso(),
             },

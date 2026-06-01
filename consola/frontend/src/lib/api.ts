@@ -30,7 +30,6 @@ import type {
   CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
-  CuerpoActualizarSkill,
   CuerpoActualizarTurnoRota,
   CuerpoActualizarEventoRota,
   CuerpoActualizarPiezaRota,
@@ -52,7 +51,6 @@ import type {
   CuerpoCrearFuenteRss,
   CuerpoCrearPublicacion,
   CuerpoCrearPublicacionesLote,
-  CuerpoCrearSkill,
   CuerpoActualizarContenido,
   CuerpoActualizarEtiqueta,
   CuerpoActualizarPlataforma,
@@ -67,16 +65,14 @@ import type {
   CuerpoCrearEventoRota,
   CuerpoCrearPiezaRota,
   CuerpoDuplicarPublicacion,
-  CuerpoEjecutarSkill,
-  CuerpoEjecutarSkillUrl,
   CuerpoGenerarDesdeItem,
   CuerpoGenerarMedia,
   CuerpoGenerarTermometro,
+  CuerpoGuardarHistorial,
   CuerpoGuardarTermometro,
   CuerpoGrupoHashtags,
   CuerpoGuardarClaudeMd,
   CuerpoGuardarContexto,
-  CuerpoGuardarHistorial,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarModeloImagen,
   CuerpoGuardarConfig,
@@ -86,8 +82,6 @@ import type {
   CuerpoRevisarQaEditorial,
   CuerpoSugerirHashtags,
   CuerpoVerificar,
-  CuerpoVistaPromptSkill,
-  DetalleHistorial,
   ErrorApi,
   FiltrosPublicaciones,
   OpcionesMetricas,
@@ -116,7 +110,6 @@ import type {
   RespuestaGeneraciones,
   RespuestaGrupoHashtags,
   RespuestaHashtags,
-  RespuestaHistorial,
   RespuestaItemsRss,
   RespuestaMedia,
   RespuestaMensaje,
@@ -135,8 +128,6 @@ import type {
   RespuestaProbarConexionImagen,
   RespuestaGuardarConexionImagen,
   RespuestaGuardarModeloImagen,
-  RespuestaCatalogoSkills,
-  RespuestaDetalleSkillDef,
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaColaAprobacion,
@@ -148,9 +139,6 @@ import type {
   RespuestaRun,
   RespuestaRuns,
   RespuestaRunsAgregados,
-  RespuestaSkillDef,
-  RespuestaSkillMd,
-  RespuestaSkills,
   RespuestaConfigTermometro,
   RespuestaTermometro,
   RespuestaSubContextos,
@@ -212,7 +200,6 @@ import type {
   FiltrosSwaps,
   RespuestaSwap,
   RespuestaSwaps,
-  RespuestaVistaPromptSkill,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
   CuerpoActualizarComercial,
@@ -622,57 +609,9 @@ export const api = {
   generarTermometro: (cuerpo: CuerpoGenerarTermometro) =>
     peticion<RespuestaGeneracion>("/termometro/generar", { metodo: "POST", json: cuerpo }),
 
-  // --- Skills (Generar copy) ---
-  skills: (signal?: AbortSignal) => peticion<RespuestaSkills>("/skills", { signal }),
-  ejecutarSkill: (cuerpo: CuerpoEjecutarSkill) =>
-    peticion<RespuestaGeneracion>("/skills/ejecutar", { metodo: "POST", json: cuerpo }),
-  ejecutarSkillUrl: (cuerpo: CuerpoEjecutarSkillUrl) =>
-    peticion<RespuestaGeneracion>("/skills/ejecutar-url", { metodo: "POST", json: cuerpo }),
-  ejecutarSkillArchivo: (
-    skill: string,
-    marca: string,
-    archivo: File,
-    valores: Record<string, string>,
-    redes?: string[],
-  ) => {
-    const form = new FormData();
-    form.set("skill", skill);
-    form.set("marca", marca);
-    form.set("archivo", archivo);
-    // El resto de campos de texto van como campos de formulario con su id.
-    for (const [id, valor] of Object.entries(valores)) form.set(id, valor);
-    // Cada red va como un campo `redes` repetido (multivalor).
-    for (const red of redes ?? []) form.append("redes", red);
-    return peticion<RespuestaGeneracion>("/skills/ejecutar-archivo", { metodo: "POST", form });
-  },
-
-  // --- Skills (catálogo editable: CRUD + vista previa del prompt) ---
-  catalogoSkills: (signal?: AbortSignal) =>
-    peticion<RespuestaCatalogoSkills>("/skills/catalogo", { signal }),
-  crearSkill: (cuerpo: CuerpoCrearSkill) =>
-    peticion<RespuestaSkillDef>("/skills/catalogo", { metodo: "POST", json: cuerpo }),
-  skillCatalogo: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaDetalleSkillDef>(`/skills/catalogo/${encodeURIComponent(id)}`, { signal }),
-  actualizarSkill: (id: string, cuerpo: CuerpoActualizarSkill) =>
-    peticion<RespuestaSkillDef>(`/skills/catalogo/${encodeURIComponent(id)}`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  guardarSkillMd: (id: string, contenido: string) =>
-    peticion<RespuestaSkillMd>(`/skills/catalogo/${encodeURIComponent(id)}/skill-md`, {
-      metodo: "PUT",
-      json: { contenido },
-    }),
-  eliminarSkill: (id: string) =>
-    peticion<RespuestaMensaje>(`/skills/catalogo/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  vistaPromptSkill: (id: string, cuerpo: CuerpoVistaPromptSkill, signal?: AbortSignal) =>
-    peticion<RespuestaVistaPromptSkill>(
-      `/skills/catalogo/${encodeURIComponent(id)}/vista-prompt`,
-      { metodo: "POST", json: cuerpo, signal },
-    ),
-  historial: (signal?: AbortSignal) => peticion<RespuestaHistorial>("/skills/historial", { signal }),
-  detalleHistorial: (id: string, signal?: AbortSignal) =>
-    peticion<DetalleHistorial>(`/skills/historial/${encodeURIComponent(id)}`, { signal }),
+  // --- Historial de generaciones (NEUTRO; común a copy/documento) ---
+  // Guardar una entrada del historial como publicaciones (borradores). El listado/detalle
+  // del historial ya no tiene página propia; este "guardar" lo usa ResultadoDocumento.
   guardarHistorial: (id: string, cuerpo: CuerpoGuardarHistorial = {}) =>
     peticion<RespuestaPublicaciones>(`/skills/historial/${encodeURIComponent(id)}/guardar`, {
       metodo: "POST",

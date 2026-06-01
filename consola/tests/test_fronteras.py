@@ -52,16 +52,12 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # fachada de jobs del gateway. (ADR 0005 §Seams #4.)
         ("media", "generaciones"),
         # Seam #1 (A→C handoff de borrador): una generación de copy deposita un
-        # *borrador* en `publicaciones` (C). Tras T1.3, el handoff pasa SIEMPRE por la
-        # función-CONTRATO `dominio.publicaciones.crear_borrador` (C garantiza el estado
-        # inicial `borrador`), no por `repos.crear_publicacion` ni por tablas internas
-        # de C. `api/skills.py` (FACHADA de A, sin RUTAS) reexpone ese contrato y la rama
-        # legada de `api/skills_generacion_api.py` lo consume; el grueso del handoff
-        # corre por `dominio.skills.crear_publicaciones_desde_piezas`, que llama al mismo
-        # contrato. Entradas DOCUMENTALES (el cruce vive en el dominio, no en el router,
-        # así que el lint no lo dispara): dejan el seam VISIBLE. (ADR 0005 §Seams #1.)
-        ("skills", "publicaciones"),
-        ("skills_generacion_api", "publicaciones"),
+        # *borrador* en `publicaciones` (C) por la función-CONTRATO
+        # `dominio.publicaciones.crear_borrador` (C garantiza el estado inicial `borrador`),
+        # no por `repos.crear_publicacion` ni por tablas internas de C. Tras retirar el
+        # sistema de skills, el handoff lo realizan `dominio.copy` (post-procesado de copy) e
+        # `api/historial.py` (guardar como publicación). El cruce vive en el dominio, no en
+        # los routers, así que el lint no lo dispara; el seam de `historial` SÍ se ve abajo.
         # `api/historial.py` (A, NEUTRO) hereda ese mismo seam: "guardar como publicación"
         # deposita borradores por el contrato `dominio.publicaciones.crear_borrador` (vía
         # `dominio.copy.crear_publicaciones_desde_piezas` o directo). Es el handoff A→C de

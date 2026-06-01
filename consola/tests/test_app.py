@@ -30,7 +30,7 @@ def test_auto_descubrimiento_monta_todas_las_areas():
         "/api/config",
         "/api/proyectos",
         "/api/carpetas",
-        "/api/skills",
+        "/api/biblioteca",
         "/api/contenido",
         "/api/metricas/reporte",
     ):

@@ -152,8 +152,10 @@ def lanzar(
             cuerpo_prompt, adjuntos, bloque_contexto,
             sin_emojis=True, redes_ids=redes_ids,
         )
+        # `titulo` es el nombre del PROMPT ("Copy desde nota"), no el título del historial:
+        # pasamos `titulo_dado=""` para que se DERIVE de la nota (texto_base/contexto).
         procesar_spec = jobspec.construir_copy(
-            skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo,
+            skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado="",
             texto_base=bloque_contexto, autor=autor,
         )
         return generar.lanzar(

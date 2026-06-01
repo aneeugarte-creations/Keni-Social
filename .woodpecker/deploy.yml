@@ -26,7 +26,6 @@ when:
 depends_on:
   - frontend-build
   - tests-python
-  - skills-copy-estatico
 
 steps:
   - name: build-and-deploy

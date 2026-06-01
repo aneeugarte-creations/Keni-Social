@@ -160,6 +160,7 @@ def lanzar_copy(
     contexto: str,
     redes_ids: list[str],
     titulo: str,
+    titulo_dado: str = "",
     texto_base: str = "",
     prompt_id: str = PROMPT_COPY,
     origen_historial: str = "copy-desde-nota",
@@ -176,6 +177,11 @@ def lanzar_copy(
     y lanza con el post-procesado de PIEZAS (parsea piezas/veredicto, registra historial,
     AUTO-CREA borradores). `fuente_id`/`clave` (RSS): además marca el item del feed como usado
     al completar. El `procesar` se reconstruye del MISMO `spec` que usa el worker (sin duplicar).
+
+    `titulo` es la ETIQUETA del lanzamiento (lista de actividad); `titulo_dado` es el título
+    fijo del HISTORIAL/borradores. Son distintos: para la Biblioteca `titulo` es el nombre del
+    prompt ("Copy desde nota"), que NO debe ser el título del historial; pasa `titulo_dado=""`
+    para que se derive de la nota. RSS/asistente pasan el título del ítem como `titulo_dado`.
     """
     cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
     if cuerpo is None:
@@ -184,10 +190,14 @@ def lanzar_copy(
         cuerpo, biblioteca.editoriales_de_marca(marca), contexto,
         sin_emojis=True, redes_ids=redes_ids,
     )
+    # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe
+    # marcar el item del feed). Saneamos y enviamos ambos o ninguno.
+    fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
+    clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
     procesar_spec = jobspec.construir_copy(
-        skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo,
+        skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
-        fuente_id=fuente_id, clave=clave,
+        fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,

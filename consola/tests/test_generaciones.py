@@ -7,8 +7,8 @@ Cubre:
     token (`text_delta`), turnos por `message_start`, `thinking` ignorado.
   - Store de generaciones (crear/obtener/actualizar/listar) aislado en tmp.
   - Endpoints `GET /api/generaciones` y `GET /api/generaciones/{id}`.
-  - El POST a `/api/skills/ejecutar` con el lanzador por defecto (noop) deja la
-    generacion en `ejecutando` (no bloquea, sin resultado todavia) y es sondeable.
+  - El POST a `/api/biblioteca/lanzar` (prompt salida=piezas) con el lanzador por defecto
+    (noop) deja la generacion en `ejecutando` (no bloquea, sin resultado todavia) y sondeable.
   - El lanzador de imagen completa la generacion con su `resultado`.
 """
 
@@ -24,9 +24,8 @@ from pathlib import Path
 import pytest
 
 from keni_consola import generaciones, preferencias
-from keni_consola.api import skills
 from keni_consola.dominio import runner
-from keni_consola.dominio import skills as dom_skills
+from keni_consola.dominio import stream as skills  # stream reúne lo que era la fachada api.skills
 
 from .conftest import _cliente
 
@@ -64,8 +63,6 @@ def test_argv_con_esfuerzo_pasa_effort(entorno):
 
 
 def test_argv_add_dir_para_dirs_permitidos(entorno):
-    from pathlib import Path
-
     argv = generaciones._argv_claude("hola", [Path("/tmp/x")])
     # `--add-dir` y la ruta deben ir CONSECUTIVOS (par flag+valor).
     i = argv.index("--add-dir")
@@ -175,232 +172,6 @@ def test_entorno_skill_sin_clave_no_anade_nada(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
-# cwd de EJECUCION de skills: el dir que CONTIENE .claude/skills              #
-# --------------------------------------------------------------------------- #
-
-
-def test_cwd_ejecucion_skills_apunta_a_skills_copy(monkeypatch, tmp_path):
-    # Estructura tipica del repo: las skills viven en `skills-copy/.claude/skills`.
-    # El cwd vive en el dominio (`dominio.skills`); `api.skills` solo lo reexporta.
-    (tmp_path / "skills-copy" / ".claude" / "skills").mkdir(parents=True)
-    monkeypatch.setattr(dom_skills, "cwd_skills", lambda: tmp_path)
-    assert dom_skills.cwd_ejecucion_skills() == tmp_path / "skills-copy"
-    # La fachada reexpone el mismo resultado.
-    assert skills._cwd_ejecucion_skills() == tmp_path / "skills-copy"
-
-
-# --------------------------------------------------------------------------- #
-# cwd_skills: fallback de descubrimiento de skills (#133)                      #
-# --------------------------------------------------------------------------- #
-#
-# `cwd_skills()` debe resolver una RAIZ que contenga `.claude/skills` (directa o via
-# `skills-copy/`). Preferencia: env KENI_SKILLS_CWD -> repo de dev -> cache del plugin
-# (CLAUDE_PLUGIN_ROOT, luego ~/.claude/plugins/**/keni-social) -> cwd actual.
-
-
-def _aislar_cwd_skills(monkeypatch, home: Path):
-    """Aisla cwd_skills del entorno real: HOME -> tmp y limpia los envs implicados."""
-    monkeypatch.setattr(dom_skills.Path, "home", classmethod(lambda cls: home))
-    monkeypatch.delenv("KENI_SKILLS_CWD", raising=False)
-    monkeypatch.delenv("KENI_SKILLS_EJECUCION_CWD", raising=False)
-    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
-
-
-def _crear_skills(raiz: Path) -> Path:
-    """Crea la estructura de skills del plugin/repo (`skills-copy/.claude/skills`) bajo `raiz`."""
-    (raiz / "skills-copy" / ".claude" / "skills").mkdir(parents=True)
-    return raiz
-
-
-def test_cwd_skills_repo_de_dev_presente(monkeypatch, tmp_path):
-    # Con el repo de dev en disco (`~/projects/keni-social` con skills) se usa ese, intacto.
-    home = tmp_path / "home"
-    repo = _crear_skills(home / "projects" / "keni-social")
-    _aislar_cwd_skills(monkeypatch, home)
-    assert dom_skills.cwd_skills() == repo
-
-
-def test_cwd_skills_fallback_a_claude_plugin_root(monkeypatch, tmp_path):
-    # Sin repo de dev, pero con CLAUDE_PLUGIN_ROOT apuntando a un plugin con skills:
-    # se usa la raiz del plugin (el caso del community manager que solo instalo el plugin).
-    home = tmp_path / "home"
-    (home / "projects").mkdir(parents=True)  # existe ~/projects pero SIN keni-social
-    plugin = _crear_skills(tmp_path / "plugin_root")
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(plugin))
-    assert dom_skills.cwd_skills() == plugin
-
-
-def test_cwd_skills_fallback_a_cache_de_plugins(monkeypatch, tmp_path):
-    # Sin repo de dev y sin CLAUDE_PLUGIN_ROOT: se descubre NUESTRO plugin en la cache
-    # `~/.claude/plugins/**/keni-social` (clon de marketplace).
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    plugin = _crear_skills(
-        home / ".claude" / "plugins" / "marketplaces" / "kenitech" / "plugins" / "keni-social"
-    )
-    _aislar_cwd_skills(monkeypatch, home)
-    assert dom_skills.cwd_skills() == plugin
-
-
-def test_cwd_skills_prioriza_plugin_root_sobre_cache(monkeypatch, tmp_path):
-    # CLAUDE_PLUGIN_ROOT manda sobre el barrido de la cache: es la senal directa.
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    _crear_skills(home / ".claude" / "plugins" / "keni-social")  # tambien en cache
-    plugin_env = _crear_skills(tmp_path / "plugin_env")
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(plugin_env))
-    assert dom_skills.cwd_skills() == plugin_env
-
-
-def test_cwd_skills_repo_de_dev_gana_al_plugin(monkeypatch, tmp_path):
-    # El flujo de dev no se rompe: con repo Y plugin presentes, gana el repo de dev.
-    home = tmp_path / "home"
-    repo = _crear_skills(home / "projects" / "keni-social")
-    _crear_skills(home / ".claude" / "plugins" / "keni-social")
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(_crear_skills(tmp_path / "otro")))
-    assert dom_skills.cwd_skills() == repo
-
-
-def test_cwd_skills_sin_skills_cae_al_cwd_actual(monkeypatch, tmp_path):
-    # Ni repo ni plugin con skills: ultimo recurso = cwd actual (compat con el viejo flujo).
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    cwd = tmp_path / "cwd_actual"
-    cwd.mkdir()
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setattr(dom_skills.Path, "cwd", classmethod(lambda cls: cwd))
-    assert dom_skills.cwd_skills() == cwd
-
-
-def test_cwd_skills_env_explicito_se_respeta_aunque_sin_skills(monkeypatch, tmp_path):
-    # KENI_SKILLS_CWD es override explicito: se respeta si es un dir existente, contenga
-    # o no skills (lo usan operadores/tests). No debe caer al fallback del plugin.
-    home = tmp_path / "home"
-    _crear_skills(home / "projects" / "keni-social")  # habria repo, pero el env manda
-    override = tmp_path / "override"
-    override.mkdir()
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(override))
-    assert dom_skills.cwd_skills() == override
-
-
-# --------------------------------------------------------------------------- #
-# CONTENEDOR (#130): descubrir y ejecutar desde un arbol BUNDLEADO, sin repo   #
-# de dev ni cache del plugin de Claude Code.                                   #
-# --------------------------------------------------------------------------- #
-#
-# En la imagen solo existe el arbol bundleado (KENI_SKILLS_CWD -> `<raiz>` con
-# `skills-copy/.claude/skills` + `skills-copy/contexto-editorial/`). NO hay
-# `~/projects/keni-social` ni `~/.claude/plugins`. Debe: (a) DESCUBRIR las skills,
-# (b) que el cwd de EJECUCION sea el `skills-copy/` correcto (donde resuelve el corpus
-# editorial relativo) y sea ESCRIBIBLE.
-
-
-def _crear_bundle_contenedor(raiz: Path) -> Path:
-    """Crea el arbol bundleado de la imagen: skills + contexto-editorial bajo `skills-copy/`."""
-    base = _crear_skills(raiz)  # `<raiz>/skills-copy/.claude/skills`
-    (base / "skills-copy" / "contexto-editorial" / "marcas").mkdir(parents=True)
-    (base / "skills-copy" / "contexto-editorial" / "tropicalizacion.md").write_text(
-        "tropicalizacion MX", encoding="utf-8"
-    )
-    return base
-
-
-def test_contenedor_solo_skills_cwd_descubre_y_ejecuta(monkeypatch, tmp_path):
-    # SOLO KENI_SKILLS_CWD definido (sin repo de dev ni cache del plugin):
-    #   - cwd_skills() resuelve la raiz bundleada,
-    #   - el cwd de EJECUCION es `skills-copy/` (donde resuelve `contexto-editorial/`),
-    #   - ese cwd es ESCRIBIBLE.
-    home = tmp_path / "home"
-    home.mkdir(parents=True)  # NO hay ~/projects/keni-social ni ~/.claude/plugins
-    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
-
-    assert dom_skills.cwd_skills() == bundle
-    ejecucion = dom_skills.cwd_ejecucion_skills()
-    assert ejecucion == bundle / "skills-copy"
-    # El corpus editorial se resuelve RELATIVO al cwd de ejecucion.
-    assert (ejecucion / "contexto-editorial" / "tropicalizacion.md").is_file()
-    # El cwd de ejecucion es ESCRIBIBLE (claude escribe en su cwd).
-    assert os.access(ejecucion, os.W_OK)
-    (ejecucion / ".keni_escritura_ok").write_text("ok", encoding="utf-8")
-
-
-def test_contenedor_catalogo_descubre_skills_via_skills_cwd(monkeypatch, tmp_path):
-    # El CATALOGO descubre las skills end-to-end desde KENI_SKILLS_CWD (sin KENI_SKILLS_DIR,
-    # sin repo de dev ni cache): `dir_skills()` resuelve `<raiz>/skills-copy/.claude/skills`
-    # y `listar()` ve la skill bundleada.
-    from keni_consola import skills_catalogo
-
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")
-    base_skills = bundle / "skills-copy" / ".claude" / "skills"
-    (base_skills / "copy-demo").mkdir(parents=True)
-    (base_skills / "copy-demo" / "keni.yaml").write_text("nombre: Copy Demo\n", encoding="utf-8")
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.delenv("KENI_SKILLS_DIR", raising=False)  # forzar la cadena via cwd_skills
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
-
-    assert skills_catalogo.dir_skills() == base_skills
-    assert "copy-demo" in {s.id for s in skills_catalogo.listar()}
-
-
-def test_contenedor_skills_cwd_apunta_directo_a_skills_copy(monkeypatch, tmp_path):
-    # La imagen tambien puede bundlear apuntando KENI_SKILLS_CWD directo a `skills-copy/`
-    # (raiz que contiene `.claude/skills` sin el nivel intermedio). El cwd de ejecucion es
-    # esa misma raiz y el corpus editorial sigue resolviendo.
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    skills_copy = tmp_path / "app" / "skills-copy"
-    (skills_copy / ".claude" / "skills").mkdir(parents=True)
-    (skills_copy / "contexto-editorial").mkdir(parents=True)
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(skills_copy))
-
-    assert dom_skills.cwd_skills() == skills_copy
-    assert dom_skills.cwd_ejecucion_skills() == skills_copy
-    assert (dom_skills.cwd_ejecucion_skills() / "contexto-editorial").is_dir()
-
-
-def test_ejecucion_cwd_override_escribible(monkeypatch, tmp_path):
-    # KENI_SKILLS_EJECUCION_CWD separa "donde corre claude" (copia ESCRIBIBLE) de la raiz
-    # de descubrimiento (KENI_SKILLS_CWD), para el caso de bundle de SOLO LECTURA.
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")  # descubrimiento
-    escribible = _crear_bundle_contenedor(tmp_path / "rw" / "ejecucion")  # copia rw
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
-    monkeypatch.setenv("KENI_SKILLS_EJECUCION_CWD", str(escribible))
-
-    # El descubrimiento sigue saliendo de KENI_SKILLS_CWD.
-    assert dom_skills.cwd_skills() == bundle
-    # El cwd de ejecucion sale del override y se normaliza a su `skills-copy/`.
-    ejecucion = dom_skills.cwd_ejecucion_skills()
-    assert ejecucion == escribible / "skills-copy"
-    assert (ejecucion / "contexto-editorial" / "tropicalizacion.md").is_file()
-    assert os.access(ejecucion, os.W_OK)
-
-
-def test_ejecucion_cwd_override_inexistente_cae_a_skills_cwd(monkeypatch, tmp_path):
-    # Si KENI_SKILLS_EJECUCION_CWD no existe, se ignora y el cwd de ejecucion se DERIVA de
-    # cwd_skills() (no se rompe ni se devuelve una ruta inexistente).
-    home = tmp_path / "home"
-    home.mkdir(parents=True)
-    bundle = _crear_bundle_contenedor(tmp_path / "app" / "keni-social")
-    _aislar_cwd_skills(monkeypatch, home)
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(bundle))
-    monkeypatch.setenv("KENI_SKILLS_EJECUCION_CWD", str(tmp_path / "no_existe"))
-
-    assert dom_skills.cwd_ejecucion_skills() == bundle / "skills-copy"
-
-
-# --------------------------------------------------------------------------- #
 # AcumuladorStream: streaming token a token (eventos `stream_event`)          #
 # --------------------------------------------------------------------------- #
 
@@ -497,11 +268,25 @@ def test_get_y_listar_generaciones(entorno):
 
 
 def test_ejecutar_lanza_en_background_y_queda_ejecutando(entorno):
-    """Con el lanzador por defecto (noop) la generacion queda `ejecutando`, sondeable."""
+    """Con el lanzador por defecto (noop) la generacion queda `ejecutando`, sondeable.
+
+    El copy ya no se lanza por el motor de skills (retirado), sino desde la Biblioteca: un
+    prompt `salida=piezas` lanzado con redes encola un trabajo de COPY en background.
+    """
+    from keni_consola import biblioteca
+
+    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="Convierte la nota.")
+    ruta = biblioteca._ruta_de_id(prompt.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+
     cli = _cliente()  # lanzador de generacion por defecto = noop (no claude)
     r = cli.post(
-        "/api/skills/ejecutar",
-        json={"skill": "copy-desde-nota", "marca": _MARCA, "valores": {"fuente": "una nota"}},
+        "/api/biblioteca/lanzar",
+        json={"prompt_id": prompt.id, "marca": _MARCA, "redes": ["x"],
+              "target": {"tipo": "contenido", "valor": "una nota"}},
     )
     assert r.status_code == 200
     gen = r.json()["generacion"]

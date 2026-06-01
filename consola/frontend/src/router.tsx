@@ -8,8 +8,7 @@ import { AppShell } from "@/components/layout/AppShell";
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
-const Generacion = lazy(() => import("@/pages/Generacion"));
-const Skills = lazy(() => import("@/pages/Skills"));
+const Imagenes = lazy(() => import("@/pages/Imagenes"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 
 // Sub-paginas de cada hub. Los hubs ya no tienen componente wrapper propio:
@@ -63,8 +62,7 @@ export const router = createBrowserRouter([
 
       // Diario
       { path: "panel", element: <Panel /> },
-      { path: "generacion", element: <Generacion /> },
-      { path: "skills", element: <Skills /> },
+      { path: "imagenes", element: <Imagenes /> },
       { path: "biblioteca", element: <Biblioteca /> },
 
       // Hub Investigación (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
@@ -165,8 +163,11 @@ export const router = createBrowserRouter([
       { path: "publicaciones", element: <Navigate to="/parrilla/pendientes" replace /> },
       { path: "monitor", element: <Navigate to="/agentes/actividad" replace /> },
       // Fusiones anteriores (mantener compatibilidad):
-      { path: "generar-copy", element: <Navigate to="/generacion" replace /> },
-      { path: "imagenes", element: <Navigate to="/generacion" replace /> },
+      // El copy se generaba en /generacion (motor de skills, retirado): ahora vive en la
+      // Biblioteca de prompts. El catálogo de skills (/skills) también pasa a la Biblioteca.
+      { path: "generar-copy", element: <Navigate to="/biblioteca" replace /> },
+      { path: "generacion", element: <Navigate to="/biblioteca" replace /> },
+      { path: "skills", element: <Navigate to="/biblioteca" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
       { path: "proyectos", element: <Navigate to="/agentes" replace /> },

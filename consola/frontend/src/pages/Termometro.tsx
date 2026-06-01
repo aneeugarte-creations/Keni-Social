@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
+import { ResultadoDocumento } from "@/components/generaciones/ResultadoDocumento";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { desdeNinguna, ningunaParam } from "@/components/comunes/selectores";
@@ -24,8 +25,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import type { ItemRss, RespuestaTermometro } from "@/types";
-
-import { ResultadoDocumento } from "./copy/ResultadoDocumento";
 
 /** Clave de sessionStorage para reanudar la generación en curso al volver a la página. */
 const CLAVE_GEN_TERMOMETRO = "keni:generacion-termometro";
