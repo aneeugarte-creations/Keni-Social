@@ -169,6 +169,36 @@ async def expandir(request: Request) -> Response:
     return JSONResponse({"generacion": _lanzar(request, f"Expandir · {formato}", _hacer)})
 
 
+async def componer(request: Request) -> Response:
+    """Estampa la PLANTILLA de marca (logo + pleca + titular) sobre una foto -> `{generacion}`.
+
+    Determinista (Pillow), patron de `editar`/`expandir`: responde con un registro de
+    generacion y el frontend sondea `GET /api/generaciones/{id}`. La plantilla por marca la
+    edita el equipo en `/api/plantillas-marca` (incluido el logo subido por `/api/media`).
+    """
+    datos = await leer_json(request)
+    imagen = datos.get("imagen") if isinstance(datos.get("imagen"), str) else ""
+    if not imagen.strip():
+        return JSONResponse({"error": "Falta la imagen sobre la que estampar la plantilla."}, status_code=400)
+    marca = datos.get("marca")
+    if not isinstance(marca, str) or not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    formato = datos.get("formato")
+    # `horizontal` se mapea a `feed` en el dominio; el resto debe ser un formato de componer.
+    formato = formato if formato in estudio_imagen.FORMATOS else "feed"
+    titular = datos.get("titular") if isinstance(datos.get("titular"), str) else ""
+    # `etiqueta`: None => etiqueta_default de la plantilla; "" => sin pleca; texto => esa pleca.
+    etiqueta = datos.get("etiqueta") if isinstance(datos.get("etiqueta"), str) else None
+    autor = _autor(request)
+
+    def _hacer() -> dict[str, Any]:
+        return estudio_imagen.componer(
+            imagen.strip(), marca=marca, formato=formato, titular=titular, etiqueta=etiqueta, autor=autor
+        )
+
+    return JSONResponse({"generacion": _lanzar(request, f"Componer · {marca}", _hacer)})
+
+
 async def revisar(request: Request) -> Response:
     """Revision legal/editorial de una imagen (gate humano, `claude` la VE) -> `{generacion}`.
 
@@ -196,5 +226,6 @@ RUTAS = [
     Route("/api/imagenes/generar", generar, methods=["POST"]),
     Route("/api/imagenes/editar", editar, methods=["POST"]),
     Route("/api/imagenes/expandir", expandir, methods=["POST"]),
+    Route("/api/imagenes/componer", componer, methods=["POST"]),
     Route("/api/imagenes/revisar", revisar, methods=["POST"]),
 ]

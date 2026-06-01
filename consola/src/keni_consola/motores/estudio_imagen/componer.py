@@ -174,15 +174,48 @@ def dibujar_chip_etiqueta(draw, x, y_bottom, texto, fuente, rojo, blanco):
     return chip_h
 
 
-def dibujar_logo(img, draw, cfg_marca, x, y, blanco, rojo):
-    """Pega el logo real si existe; si no, dibuja un wordmark de respaldo. Devuelve usado_real."""
+# Esquinas validas para colocar el logo (espejo de `plantillas_marca.POSICIONES`).
+POSICIONES_LOGO = (
+    "superior-izquierda",
+    "superior-derecha",
+    "inferior-izquierda",
+    "inferior-derecha",
+)
+
+
+def _esquina_logo(posicion: str, ancho: int, alto: int, w: int, h: int,
+                  margin: int, safe_top: int, safe_bottom: int) -> tuple[int, int]:
+    """Coordenada (x, y) de la esquina superior-izquierda del logo segun `posicion`.
+
+    Respeta el margen lateral y las zonas seguras (`safe_top`/`safe_bottom`). Default
+    (`superior-izquierda`) reproduce el comportamiento previo (x=margin, y=safe_top+24).
+    """
+    pos = posicion if posicion in POSICIONES_LOGO else POSICIONES_LOGO[0]
+    izquierda = "izquierda" in pos
+    superior = "superior" in pos
+    x = margin if izquierda else (w - margin - ancho)
+    y = (safe_top + 24) if superior else (h - safe_bottom - margin - alto)
+    return x, y
+
+
+def dibujar_logo(img, draw, cfg_marca, x, y, blanco, rojo, *, posicion=None,
+                 w=None, h=None, margin=56, safe_top=60, safe_bottom=96):
+    """Pega el logo real si existe; si no, dibuja un wordmark de respaldo. Devuelve usado_real.
+
+    Si se pasan `posicion` + dimensiones del lienzo (`w`/`h`), coloca el logo/wordmark en la
+    esquina indicada (4 esquinas, respetando margenes y zonas seguras). Sin `posicion` (o sin
+    `w`/`h`), usa la coordenada (`x`, `y`) que reciba: retrocompat = superior-izquierda.
+    """
     ruta_logo = (cfg_marca.get("logo") or "").strip()
     if ruta_logo and Path(ruta_logo).is_file():
         try:
             logo = Image.open(ruta_logo).convert("RGBA")
             destino_h = 96
             ratio = destino_h / logo.height
-            logo = logo.resize((max(1, int(logo.width * ratio)), destino_h), Image.LANCZOS)
+            ancho = max(1, int(logo.width * ratio))
+            logo = logo.resize((ancho, destino_h), Image.LANCZOS)
+            if posicion is not None and w is not None and h is not None:
+                x, y = _esquina_logo(posicion, ancho, destino_h, w, h, margin, safe_top, safe_bottom)
             img.alpha_composite(logo, (x, y))
             return True
         except OSError:
@@ -193,9 +226,11 @@ def dibujar_logo(img, draw, cfg_marca, x, y, blanco, rojo):
     izq, sup, der, inf = draw.textbbox((0, 0), texto, font=fuente)
     tw, th = der - izq, inf - sup
     pad_x, pad_y = 20, 12
-    draw.rounded_rectangle(
-        [x, y, x + tw + pad_x * 2, y + th + pad_y * 2], radius=10, fill=blanco
-    )
+    chip_w = tw + pad_x * 2
+    chip_h = th + pad_y * 2
+    if posicion is not None and w is not None and h is not None:
+        x, y = _esquina_logo(posicion, chip_w, chip_h, w, h, margin, safe_top, safe_bottom)
+    draw.rounded_rectangle([x, y, x + chip_w, y + chip_h], radius=10, fill=blanco)
     draw.text((x + pad_x - izq, y + pad_y - sup), texto, font=fuente, fill=rojo)
     return False
 
@@ -312,7 +347,11 @@ def componer(args) -> dict:
     # 4) Logo sintético solo si NO hay overlays (el overlay de la casa ya trae el logo).
     logo_real = False
     if not tiene_overlays:
-        logo_real = dibujar_logo(img, draw, m, margin, safe_top + 24, blanco, rojo)
+        logo_real = dibujar_logo(
+            img, draw, m, margin, safe_top + 24, blanco, rojo,
+            posicion=m.get("logo_posicion"), w=w, h=h,
+            margin=margin, safe_top=safe_top, safe_bottom=safe_bottom,
+        )
 
     # 5) Overlays a TAMAÑO COMPLETO, encima de todo (marca de agua + archivo de breaking).
     overlays_aplicados, overlays_faltantes = aplicar_overlays(img, overlays)

@@ -34,6 +34,7 @@ modulos_backend = [
   "historial",
   "imagenes",
   "plantillas",
+  "plantillas_marca",
   "qa_editorial",
   "verificaciones",
   "reciclaje",
