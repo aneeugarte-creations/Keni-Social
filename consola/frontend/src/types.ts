@@ -3480,3 +3480,11 @@ export interface RespuestaS3Objetos {
   /** Error legible si la sonda falló; null si todo bien. */
   error: string | null;
 }
+
+/** Respuesta de `POST /api/sistema/s3/borrar`. */
+export interface RespuestaBorrarS3 {
+  /** `true` si el objeto se borró. */
+  borrado: boolean;
+  /** Key del objeto borrado. */
+  key: string;
+}

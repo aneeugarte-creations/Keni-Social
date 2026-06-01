@@ -214,6 +214,7 @@ import type {
   RespuestaS3,
   RespuestaProbarS3,
   RespuestaS3Objetos,
+  RespuestaBorrarS3,
   UsuarioAdmin,
   FiltrosComercial,
   OpcionesComercial,
@@ -532,6 +533,11 @@ export const api = {
       `/sistema/s3/objetos${query({ prefijo: prefijo || "" })}`,
       { signal },
     ),
+  borrarObjetoS3: (key: string) =>
+    peticion<RespuestaBorrarS3>("/sistema/s3/borrar", {
+      metodo: "POST",
+      json: { key },
+    }),
 
   // --- Config ---
   config: (signal?: AbortSignal) => peticion<RespuestaConfig>("/config", { signal }),

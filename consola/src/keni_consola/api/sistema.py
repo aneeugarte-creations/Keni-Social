@@ -28,6 +28,12 @@ Endpoints (bajo `/api/sistema`, CONTRATO con el frontend):
       real del objeto. Por defecto `inline` (previsualizacion: sirve para `<img src=...>` con la
       cookie de sesion); `?descargar=1` fuerza `attachment`. Valida la key (sin `..`). Cap de
       tamano (_MAX_BYTES_OBJETO). 404 si no existe, 409 si S3 no configurado. SOLO lectura.
+  - POST /api/sistema/s3/borrar {key} -> {borrado, key}. UNICA operacion DESTRUCTIVA del
+      panel: borra UN objeto por su key exacta (la que lista el explorador). Valida la key
+      (anti-traversal, sin `..`) y rechaza keys de "carpeta" (terminadas en "/"). Confirma
+      existencia con head_object para dar un 404 honesto antes de borrar (delete_object de S3
+      es idempotente y no distingue). 400 key invalida, 404 inexistente, 409 sin configurar,
+      502 fallo de almacenamiento. El RESTO del panel sigue siendo solo lectura.
 
 Implementacion DEFENSIVA: cualquier fallo de psutil/boto3/red se captura y se degrada a un
 campo de error legible; la pagina nunca se cae por una sonda.
@@ -524,12 +530,63 @@ async def s3_objeto(request: Request) -> Response:
     return StreamingResponse(_iter(), media_type=tipo, headers=headers)
 
 
+async def s3_borrar(request: Request) -> Response:
+    """POST /api/sistema/s3/borrar {key}: borra UN objeto del bucket. Admin.
+
+    Unica operacion DESTRUCTIVA del panel (el resto es solo lectura). Borra por key EXACTA
+    el objeto que lista el explorador. Valida la key (anti-traversal, sin `..`) y rechaza
+    keys de "carpeta" (terminadas en "/"): aqui solo se borran objetos, no prefijos. Confirma
+    existencia con head_object para dar un 404 honesto (delete_object de S3 es idempotente y
+    no distingue si existia). Codigos: 400 key invalida, 404 inexistente, 409 S3 no
+    configurado, 502 fallo de almacenamiento.
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+
+    if not config.s3_configurado():
+        return JSONResponse(
+            {"error": "El almacenamiento S3 no está configurado en este servidor."},
+            status_code=409,
+        )
+
+    try:
+        cuerpo = await request.json()
+    except Exception:  # noqa: BLE001 -- cuerpo ausente o no-JSON: key vacia -> 400
+        cuerpo = {}
+    key = str(cuerpo.get("key", "")).strip() if isinstance(cuerpo, dict) else ""
+
+    if not _key_valida(key) or key.endswith("/"):
+        return JSONResponse({"error": "Clave de objeto no válida."}, status_code=400)
+
+    bucket = config.s3_bucket()
+    try:
+        cliente = _cliente_s3()
+        # Confirmar que existe ANTES de borrar: delete_object es idempotente (no falla si la
+        # key no estaba), pero queremos un 404 honesto y no decir "borrado" de algo ausente.
+        try:
+            cliente.head_object(Bucket=bucket, Key=key)
+        except Exception as e:  # noqa: BLE001 -- 404 -> inexistente; otro -> error real (raise)
+            if _es_objeto_inexistente(e):
+                return JSONResponse({"error": "Ese objeto no existe."}, status_code=404)
+            raise
+        cliente.delete_object(Bucket=bucket, Key=key)
+    except Exception as e:  # noqa: BLE001 -- boto3/red: 502, sin tumbar la pagina
+        _logger.warning("No se pudo borrar el objeto S3 %r: %s", key, e)
+        return JSONResponse(
+            {"error": "No se pudo borrar el objeto del almacenamiento."}, status_code=502
+        )
+
+    _logger.info("Objeto S3 borrado por un administrador: %r", key)
+    return JSONResponse({"borrado": True, "key": key})
+
+
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),
-    # IMPORTANTE: las rutas mas especificas (/s3/objetos, /s3/objeto) van ANTES que /s3/probar
-    # y /s3 para que Starlette las case correctamente.
+    # IMPORTANTE: las rutas mas especificas (/s3/objetos, /s3/objeto, /s3/borrar) van ANTES
+    # que /s3/probar y /s3 para que Starlette las case correctamente.
     Route("/api/sistema/s3/objetos", s3_objetos, methods=["GET"]),
     Route("/api/sistema/s3/objeto", s3_objeto, methods=["GET"]),
+    Route("/api/sistema/s3/borrar", s3_borrar, methods=["POST"]),
     Route("/api/sistema/s3/probar", probar_s3, methods=["POST"]),
 ]

@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
   Copy,
@@ -13,6 +13,7 @@ import {
   MemoryStick,
   RefreshCw,
   ShieldAlert,
+  Trash2,
 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
@@ -404,9 +405,13 @@ function ThumbnailObjeto({ objeto }: { objeto: ObjetoS3 }) {
 function PreviewObjeto({
   objeto,
   onClose,
+  onBorrar,
+  borrando,
 }: {
   objeto: ObjetoS3 | null;
   onClose: () => void;
+  onBorrar: (objeto: ObjetoS3) => void;
+  borrando: boolean;
 }) {
   const abierto = objeto != null;
   return (
@@ -454,16 +459,32 @@ function PreviewObjeto({
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {formatoBytes(objeto.tamano)}
                 </span>
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() =>
-                    window.open(urlS3Objeto(objeto.key, true), "_blank", "noopener,noreferrer")
-                  }
-                >
-                  <Download className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Descargar
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={borrando}
+                    onClick={() => onBorrar(objeto)}
+                  >
+                    {borrando ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                    )}
+                    Borrar
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() =>
+                      window.open(urlS3Objeto(objeto.key, true), "_blank", "noopener,noreferrer")
+                    }
+                  >
+                    <Download className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Descargar
+                  </Button>
+                </div>
               </div>
             </div>
           </>
@@ -484,6 +505,31 @@ function SeccionNavegadorS3() {
     // Sin auto-refresco: el explorador se refresca manualmente o al navegar.
     staleTime: 30_000,
   });
+
+  const queryClient = useQueryClient();
+  const borrar = useMutation({
+    mutationFn: (obj: ObjetoS3) => api.borrarObjetoS3(obj.key),
+    onSuccess: (_data, obj) => {
+      toast.success(`Objeto "${obj.nombre}" borrado.`);
+      // Si el objeto borrado estaba en preview, cierra el lightbox.
+      setPreview((p) => (p?.key === obj.key ? null : p));
+      // Refresca el listado del nivel y el conteo/uso del bucket.
+      void queryClient.invalidateQueries({ queryKey: ["sistema", "s3-objetos"] });
+      void queryClient.invalidateQueries({ queryKey: ["sistema", "s3"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Confirmación destructiva (convención del repo: window.confirm).
+  function pedirBorrar(obj: ObjetoS3) {
+    if (
+      window.confirm(
+        `¿Borrar "${obj.nombre}" del bucket? Esta acción no se puede deshacer.`,
+      )
+    ) {
+      borrar.mutate(obj);
+    }
+  }
 
   // Si S3 no está configurado, no mostramos esta sección en absoluto:
   // SeccionS3 ya lo avisa. Esperamos a tener datos para decidir.
@@ -579,7 +625,7 @@ function SeccionNavegadorS3() {
                 <TableHead>Nombre</TableHead>
                 <TableHead className="text-right">Tamaño</TableHead>
                 <TableHead className="hidden text-right sm:table-cell">Modificado</TableHead>
-                <TableHead className="w-10" />
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -657,22 +703,44 @@ function SeccionNavegadorS3() {
                       {fechaCorta}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-label={`Descargar ${obj.nombre}`}
-                        onClick={(e) => {
-                          // No abrir el preview al pulsar descargar.
-                          e.stopPropagation();
-                          window.open(
-                            urlS3Objeto(obj.key, true),
-                            "_blank",
-                            "noopener,noreferrer",
-                          );
-                        }}
-                      >
-                        <Download className="h-4 w-4" aria-hidden="true" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Descargar ${obj.nombre}`}
+                          onClick={(e) => {
+                            // No abrir el preview al pulsar descargar.
+                            e.stopPropagation();
+                            window.open(
+                              urlS3Objeto(obj.key, true),
+                              "_blank",
+                              "noopener,noreferrer",
+                            );
+                          }}
+                        >
+                          <Download className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Borrar ${obj.nombre}`}
+                          disabled={borrar.isPending}
+                          onClick={(e) => {
+                            // No abrir el preview al pulsar borrar.
+                            e.stopPropagation();
+                            pedirBorrar(obj);
+                          }}
+                        >
+                          {borrar.isPending && borrar.variables?.key === obj.key ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Trash2
+                              className="h-4 w-4 text-destructive"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -682,7 +750,12 @@ function SeccionNavegadorS3() {
         )}
       </CardContent>
 
-      <PreviewObjeto objeto={preview} onClose={() => setPreview(null)} />
+      <PreviewObjeto
+        objeto={preview}
+        onClose={() => setPreview(null)}
+        onBorrar={pedirBorrar}
+        borrando={borrar.isPending}
+      />
     </Card>
   );
 }

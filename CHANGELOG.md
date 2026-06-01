@@ -7,6 +7,16 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Explorador S3 (Sistema): borrar un objeto
+
+- El explorador del bucket en **avatar → Sistema** (solo admin) deja de ser estrictamente de
+  lectura: ahora cada objeto tiene un **botón de borrar** (en la fila y en la previsualización),
+  con **confirmación** antes de eliminar. Nuevo endpoint `POST /api/sistema/s3/borrar {key}`
+  (admin) que valida la key (anti-traversal, rechaza prefijos terminados en `/`), confirma
+  existencia con `head_object` para dar un **404 honesto** y borra con `delete_object`; 400 key
+  inválida, 409 sin S3 configurado, 502 fallo de almacenamiento. Tras borrar se refresca el
+  listado y el conteo/uso del bucket. El resto del panel sigue siendo solo lectura.
+
 ### Termómetro con descubrimiento en vivo + nuevo Brief de tendencias (MX/Internacional)
 
 - **`termometro-mundial`** integra **descubrimiento con WebSearch/WebFetch** cuando el bloque

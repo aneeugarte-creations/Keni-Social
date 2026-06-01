@@ -494,3 +494,124 @@ def test_objeto_demasiado_grande_413(entorno, monkeypatch):
     c = _cli_como("admin")
     r = c.get("/api/sistema/s3/objeto?key=enorme.bin")
     assert r.status_code == 413
+
+
+# --------------------------------------------------------------------------- #
+# Borrado de un objeto (POST /api/sistema/s3/borrar) — UNICA op destructiva    #
+# --------------------------------------------------------------------------- #
+
+
+def _s3_env(monkeypatch):
+    """Cablea las S3_* para los tests de borrado (sin tocar red real)."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+
+def test_borrar_editor_403(entorno):
+    """Un editor (no admin) recibe 403 al intentar borrar."""
+    c = _cli_como("editor")
+    r = c.post("/api/sistema/s3/borrar", json={"key": "a.png"}, headers=_ORIGIN)
+    assert r.status_code == 403
+
+
+def test_borrar_token_403(entorno):
+    """El token de mantenimiento (no sesion admin) recibe 403."""
+    c = _cli_token()
+    r = c.post("/api/sistema/s3/borrar", json={"key": "a.png"}, headers=_ORIGIN)
+    assert r.status_code == 403
+
+
+def test_borrar_sin_s3_409(entorno):
+    """Sin S3 cableado: 409 (no hay nada que borrar), NUNCA 500."""
+    c = _cli_como("admin")
+    r = c.post("/api/sistema/s3/borrar", json={"key": "a.png"}, headers=_ORIGIN)
+    assert r.status_code == 409
+    assert "configurado" in r.json()["error"].lower()
+
+
+def test_borrar_key_invalida_400(entorno, monkeypatch):
+    """Keys con `..`, absolutas, vacias o de 'carpeta' (terminadas en /) -> 400 sin tocar S3."""
+    _s3_env(monkeypatch)
+    from keni_consola.api import sistema as api_sistema
+
+    def boom():
+        raise AssertionError("no debe construirse el cliente para una key invalida")
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    c = _cli_como("admin")
+    for key in ("../secret", "a/../../b", "/etc/passwd", "", "carpeta/"):
+        r = c.post("/api/sistema/s3/borrar", json={"key": key}, headers=_ORIGIN)
+        assert r.status_code == 400, key
+
+
+def test_borrar_inexistente_404(entorno, monkeypatch):
+    """head_object que lanza NoSuchKey -> 404 y NO se llama a delete_object."""
+    _s3_env(monkeypatch)
+
+    class _ClienteFake:
+        def head_object(self, **k):
+            err = RuntimeError("not found")
+            err.response = {  # type: ignore[attr-defined]
+                "Error": {"Code": "NoSuchKey"},
+                "ResponseMetadata": {"HTTPStatusCode": 404},
+            }
+            raise err
+
+        def delete_object(self, **k):
+            raise AssertionError("no debe borrar un objeto inexistente")
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.post("/api/sistema/s3/borrar", json={"key": "no-existe.png"}, headers=_ORIGIN)
+    assert r.status_code == 404
+    assert "no existe" in r.json()["error"].lower()
+
+
+def test_borrar_ok(entorno, monkeypatch):
+    """head_object OK + delete_object con la key exacta -> 200 {borrado, key}."""
+    _s3_env(monkeypatch)
+    llamadas: dict = {}
+
+    class _ClienteFake:
+        def head_object(self, **k):
+            return {"ContentLength": 10}
+
+        def delete_object(self, **k):
+            llamadas["bucket"] = k["Bucket"]
+            llamadas["key"] = k["Key"]
+            return {}
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.post(
+        "/api/sistema/s3/borrar", json={"key": "videos/clip.mp4"}, headers=_ORIGIN
+    )
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo == {"borrado": True, "key": "videos/clip.mp4"}
+    assert llamadas == {"bucket": "keni-media", "key": "videos/clip.mp4"}
+
+
+def test_borrar_fallo_red_502(entorno, monkeypatch):
+    """Un fallo de almacenamiento al borrar (no 404) -> 502, sin tumbar la pagina."""
+    _s3_env(monkeypatch)
+
+    class _ClienteFake:
+        def head_object(self, **k):
+            return {"ContentLength": 10}
+
+        def delete_object(self, **k):
+            raise RuntimeError("garage caido")
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.post("/api/sistema/s3/borrar", json={"key": "a.png"}, headers=_ORIGIN)
+    assert r.status_code == 502
