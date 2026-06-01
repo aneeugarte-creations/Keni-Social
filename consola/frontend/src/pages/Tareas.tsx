@@ -382,7 +382,9 @@ export default function Tablero() {
   const contenedorClase =
     vista === "lista"
       ? "space-y-3"
-      : "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
+      : vista === "feed"
+        ? "space-y-4"
+        : "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
 
   return (
     <>
@@ -1028,6 +1030,127 @@ function ChipEtiqueta({
   );
 }
 
+/**
+ * Barra de ACCIONES de una pieza, COMPARTIDA por todas las vistas del tablero
+ * (lista/cuadrícula/feed) para que ninguna vista pierda funcionalidad: prioridad,
+ * asistente IA (generar/mejorar copy), Detalle (comentarios + versiones de copy +
+ * cadena de aprobación) y borrar. Autocontenida: trae sus mutaciones, su invalidación
+ * y sus diálogos (`DialogoAsistente`/`PanelColaboracion`). Las acciones de IA/Detalle
+ * solo aplican a `contenido` (las tareas del equipo no tienen copy ni aprobación).
+ */
+function BarraAccionesPieza({
+  contenido,
+  abrirDetalle = false,
+}: {
+  contenido: Contenido;
+  /** Deep-link `?abrir=`: si es esta pieza, abre su panel de detalle al montar. */
+  abrirDetalle?: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
+  const [asistenteAbierto, setAsistenteAbierto] = React.useState(false);
+  const [colaboracionAbierta, setColaboracionAbierta] = React.useState(false);
+  const esContenido = contenido.clase === "contenido";
+
+  // Deep-link `?abrir=<id>` (desde el Panel): abre el detalle de la pieza apuntada.
+  React.useEffect(() => {
+    if (abrirDetalle && esContenido) setColaboracionAbierta(true);
+  }, [abrirDetalle, esContenido]);
+
+  const cambiarPrioridad = useMutation({
+    mutationFn: (prioridad: Contenido["prioridad"]) =>
+      api.actualizarContenido(contenido.id, { prioridad }),
+    onSuccess: invalidar,
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const borrar = useMutation({
+    mutationFn: () => api.eliminarContenido(contenido.id),
+    onSuccess: () => {
+      invalidar();
+      toast.success("Contenido borrado.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <Select
+        value={contenido.prioridad}
+        onValueChange={(v) => cambiarPrioridad.mutate(v as Contenido["prioridad"])}
+        disabled={cambiarPrioridad.isPending}
+      >
+        <SelectTrigger aria-label="Prioridad" className="h-7 w-24 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(["alta", "media", "baja"] as const).map((p) => (
+            <SelectItem key={p} value={p}>
+              <Badge variant={PRIORIDAD_VARIANTE[p]} className="font-normal">
+                {p}
+              </Badge>
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {esContenido && (
+        <Tooltip label="Generar / mejorar copy con IA (voz de marca + verificación)">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-primary"
+            onClick={() => setAsistenteAbierto(true)}
+          >
+            <MarcaIA />
+            IA
+          </Button>
+        </Tooltip>
+      )}
+      {esContenido && (
+        <Tooltip label="Detalle de la pieza: comentarios, versiones de copy y cadena de aprobación">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+            onClick={() => setColaboracionAbierta(true)}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Detalle
+          </Button>
+        </Tooltip>
+      )}
+      <Tooltip label="Borrar">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Borrar contenido"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => borrar.mutate()}
+          disabled={borrar.isPending}
+        >
+          {borrar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
+      </Tooltip>
+      {esContenido && (
+        <DialogoAsistente
+          abierto={asistenteAbierto}
+          onCerrar={() => setAsistenteAbierto(false)}
+          contenido={contenido}
+          onAplicado={invalidar}
+        />
+      )}
+      <PanelColaboracion
+        contenido={contenido}
+        abierto={colaboracionAbierta}
+        onCerrar={() => setColaboracionAbierta(false)}
+      />
+    </div>
+  );
+}
+
 function TarjetaContenido({
   contenido,
   catalogos,
@@ -1048,14 +1171,6 @@ function TarjetaContenido({
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
-  const [asistenteAbierto, setAsistenteAbierto] = React.useState(false);
-  const [colaboracionAbierta, setColaboracionAbierta] = React.useState(false);
-
-  // Deep-link `?abrir=<id>` (desde el Panel): si esta tarjeta es la apuntada, abre su
-  // detalle. Solo aplica a `contenido` (las tareas no tienen panel de colaboración).
-  React.useEffect(() => {
-    if (abrirDetalle && contenido.clase === "contenido") setColaboracionAbierta(true);
-  }, [abrirDetalle, contenido.clase]);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -1063,24 +1178,10 @@ function TarjetaContenido({
     onSuccess: invalidar,
     onError: (e) => toast.error(mensajeError(e)),
   });
-  const cambiarPrioridad = useMutation({
-    mutationFn: (prioridad: Contenido["prioridad"]) =>
-      api.actualizarContenido(contenido.id, { prioridad }),
-    onSuccess: invalidar,
-    onError: (e) => toast.error(mensajeError(e)),
-  });
   const cambiarEvento = useMutation({
     mutationFn: (evento_id: string) =>
       api.actualizarContenido(contenido.id, { evento_id }),
     onSuccess: invalidar,
-    onError: (e) => toast.error(mensajeError(e)),
-  });
-  const borrar = useMutation({
-    mutationFn: () => api.eliminarContenido(contenido.id),
-    onSuccess: () => {
-      invalidar();
-      toast.success("Contenido borrado.");
-    },
     onError: (e) => toast.error(mensajeError(e)),
   });
   const agregarRed = useMutation({
@@ -1145,68 +1246,7 @@ function TarjetaContenido({
               )}
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Select
-              value={contenido.prioridad}
-              onValueChange={(v) => cambiarPrioridad.mutate(v as Contenido["prioridad"])}
-              disabled={cambiarPrioridad.isPending}
-            >
-              <SelectTrigger aria-label="Prioridad" className="h-7 w-24 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(["alta", "media", "baja"] as const).map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <Badge variant={PRIORIDAD_VARIANTE[p]} className="font-normal">
-                      {p}
-                    </Badge>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {contenido.clase === "contenido" && (
-              <Tooltip label="Generar / mejorar copy con IA (voz de marca + verificación)">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-primary"
-                  onClick={() => setAsistenteAbierto(true)}
-                >
-                  <MarcaIA />
-                  IA
-                </Button>
-              </Tooltip>
-            )}
-            {contenido.clase === "contenido" && (
-              <Tooltip label="Detalle de la pieza: comentarios, versiones de copy y cadena de aprobación">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-                  onClick={() => setColaboracionAbierta(true)}
-                >
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  Detalle
-                </Button>
-              </Tooltip>
-            )}
-            <Tooltip label="Borrar">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Borrar contenido"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => borrar.mutate()}
-                disabled={borrar.isPending}
-              >
-                {borrar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
-                )}
-              </Button>
-            </Tooltip>
-          </div>
+          <BarraAccionesPieza contenido={contenido} abrirDetalle={abrirDetalle} />
         </div>
 
         {contenido.descripcion && (
@@ -1347,56 +1387,60 @@ function TarjetaContenido({
             </div>
           )}
       </CardContent>
-      {contenido.clase === "contenido" && (
-        <DialogoAsistente
-          abierto={asistenteAbierto}
-          onCerrar={() => setAsistenteAbierto(false)}
-          contenido={contenido}
-          onAplicado={invalidar}
-        />
-      )}
-      <PanelColaboracion
-        contenido={contenido}
-        abierto={colaboracionAbierta}
-        onCerrar={() => setColaboracionAbierta(false)}
-      />
     </Card>
   );
 }
 
 /**
- * Modo "Feed": una vista previa POR RED de la pieza (no una por pieza). Devuelve un
- * fragmento con una `PreviewRed` por cada plataforma (cada una es una celda del grid
- * del feed), de modo que se ve cómo queda el post en Instagram, en X, etc. — con la
- * relación de aspecto y el tope de caracteres de cada red. Si la pieza aún no tiene
- * plataformas, muestra una preview neutra para que no desaparezca del feed.
+ * Modo "Feed": un BLOQUE por pieza con (a) su barra de acciones COMPARTIDA (la misma
+ * que lista/cuadrícula: prioridad, IA, Detalle, borrar — sin perder funcionalidad al
+ * cambiar de vista) y (b) una vista previa POR RED, una `PreviewRed` por plataforma con
+ * la relación de aspecto y el tope de caracteres de cada red. Las tareas del equipo
+ * (sin copy ni redes) muestran solo su barra de acciones, sin previa social.
  */
 function TarjetaFeed({ contenido }: { contenido: Contenido }) {
   const plats = contenido.plataformas;
   const marca = contenido.marca_nombre || "";
-  if (plats.length === 0) {
-    return (
-      <PreviewRed
-        red=""
-        marcaNombre={marca}
-        copy={contenido.descripcion || contenido.titulo}
-        titulo={contenido.titulo}
-      />
-    );
-  }
+  const esContenido = contenido.clase === "contenido";
+
   return (
-    <>
-      {plats.map((p) => (
-        <PreviewRed
-          key={p.id}
-          red={p.red}
-          marcaNombre={marca}
-          copy={p.copy || contenido.descripcion || contenido.titulo}
-          imagenUrl={p.imagen_url || undefined}
-          titulo={contenido.titulo}
-        />
-      ))}
-    </>
+    <section className="space-y-3 rounded-lg border border-border/60 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium leading-snug">{contenido.titulo}</p>
+          <p className="truncate text-xs text-muted-foreground">{marca || "Sin marca"}</p>
+        </div>
+        <BarraAccionesPieza contenido={contenido} />
+      </div>
+
+      {!esContenido ? (
+        <p className="text-xs italic text-muted-foreground/70">
+          Tarea del equipo (sin vista previa de red).
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {plats.length === 0 ? (
+            <PreviewRed
+              red=""
+              marcaNombre={marca}
+              copy={contenido.descripcion || contenido.titulo}
+              titulo={contenido.titulo}
+            />
+          ) : (
+            plats.map((p) => (
+              <PreviewRed
+                key={p.id}
+                red={p.red}
+                marcaNombre={marca}
+                copy={p.copy || contenido.descripcion || contenido.titulo}
+                imagenUrl={p.imagen_url || undefined}
+                titulo={contenido.titulo}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 

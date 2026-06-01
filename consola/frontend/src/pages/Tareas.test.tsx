@@ -256,6 +256,13 @@ describe("Tablero de contenido", () => {
     // Y el copy de cada red.
     expect(screen.getByText(/Hola X/)).toBeInTheDocument();
     expect(screen.getByText(/Hola IG/)).toBeInTheDocument();
+    // PARIDAD: el feed NO pierde funcionalidad: las acciones de pieza (IA, Detalle,
+    // prioridad, borrar) siguen disponibles igual que en lista/cuadrícula. El Tooltip
+    // pone su etiqueta como aria-label del botón.
+    expect(screen.getByRole("button", { name: /mejorar copy con IA/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Detalle de la pieza/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Prioridad")).toBeInTheDocument();
+    expect(screen.getByLabelText("Borrar contenido")).toBeInTheDocument();
   });
 
   it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {
