@@ -69,6 +69,7 @@ import { limiteRed } from "@/pages/publicaciones/meta";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
 import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
+import { PreviewRed } from "@/pages/publicaciones/PreviewRed";
 import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { VistaLista } from "@/pages/publicaciones/VistaLista";
@@ -364,7 +365,7 @@ export default function Tablero() {
 
   const renderItem = (c: Contenido) =>
     vista === "feed" ? (
-      <TarjetaFeed key={c.id} contenido={c} etiquetaPorId={etiquetaPorId} />
+      <TarjetaFeed key={c.id} contenido={c} />
     ) : (
       <TarjetaContenido
         key={c.id}
@@ -1363,64 +1364,39 @@ function TarjetaContenido({
   );
 }
 
-/** Vista "feed-preview": cómo se verá la pieza en el perfil (mockup tipo tarjeta de red). */
-function TarjetaFeed({
-  contenido,
-  etiquetaPorId,
-}: {
-  contenido: Contenido;
-  etiquetaPorId: Map<string, EtiquetaCatalogo>;
-}) {
-  // El copy del feed: el de la primera plataforma con texto, si no la descripción/título.
-  const copyPlat = contenido.plataformas.find((p) => p.copy)?.copy;
-  const copy = copyPlat || contenido.descripcion || contenido.titulo;
-  const asignadas = contenido.etiquetas ?? [];
-
+/**
+ * Modo "Feed": una vista previa POR RED de la pieza (no una por pieza). Devuelve un
+ * fragmento con una `PreviewRed` por cada plataforma (cada una es una celda del grid
+ * del feed), de modo que se ve cómo queda el post en Instagram, en X, etc. — con la
+ * relación de aspecto y el tope de caracteres de cada red. Si la pieza aún no tiene
+ * plataformas, muestra una preview neutra para que no desaparezca del feed.
+ */
+function TarjetaFeed({ contenido }: { contenido: Contenido }) {
+  const plats = contenido.plataformas;
+  const marca = contenido.marca_nombre || "";
+  if (plats.length === 0) {
+    return (
+      <PreviewRed
+        red=""
+        marcaNombre={marca}
+        copy={contenido.descripcion || contenido.titulo}
+        titulo={contenido.titulo}
+      />
+    );
+  }
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="space-y-3 p-0">
-        {/* Cabecera del "perfil" (marca + redes). */}
-        <div className="flex items-center gap-2 px-4 pt-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
-            {(contenido.marca_nombre || "?").slice(0, 2).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium leading-tight">
-              {contenido.marca_nombre || "Sin marca"}
-            </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {contenido.plataformas.map((p) => p.red_nombre).join(" · ") || "Sin plataformas"}
-            </p>
-          </div>
-        </div>
-
-        {/* Lienzo de la imagen (placeholder si no hay). */}
-        <div className="aspect-square w-full bg-muted/50">
-          {contenido.plataformas.find((p) => p.imagen_url)?.imagen_url ? (
-            <img
-              src={contenido.plataformas.find((p) => p.imagen_url)!.imagen_url}
-              alt={contenido.titulo}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-muted-foreground/50">
-              <ClipboardList className="h-10 w-10" />
-            </div>
-          )}
-        </div>
-
-        {/* Copy + metadatos. */}
-        <div className="space-y-2 px-4 pb-4">
-          <p className="line-clamp-4 whitespace-pre-wrap text-sm">{copy}</p>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {asignadas.map((id) => {
-              const et = etiquetaPorId.get(id);
-              return et ? <ChipEtiqueta key={id} etiqueta={et} /> : null;
-            })}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <>
+      {plats.map((p) => (
+        <PreviewRed
+          key={p.id}
+          red={p.red}
+          marcaNombre={marca}
+          copy={p.copy || contenido.descripcion || contenido.titulo}
+          imagenUrl={p.imagen_url || undefined}
+          titulo={contenido.titulo}
+        />
+      ))}
+    </>
   );
 }
 

@@ -83,6 +83,29 @@ export function limiteRed(id: string): number | null {
 export const ORDEN_REDES = ["x", "instagram", "facebook", "tiktok", "youtube"] as const;
 
 /**
+ * Relación de aspecto del LIENZO de imagen de cada red, como clase Tailwind, para que
+ * la vista previa del feed se parezca a cómo se ve el post en esa plataforma:
+ *   - Instagram: 1:1 (feed clásico cuadrado).
+ *   - Facebook:  1.91:1 (enlace/imagen horizontal).
+ *   - X:         16:9.
+ *   - TikTok:    9:16 (vertical).
+ *   - YouTube:   16:9 (miniatura).
+ * Fallback 1:1 para redes desconocidas.
+ */
+const _ASPECTO_REDES: Record<string, string> = {
+  instagram: "aspect-square",
+  facebook: "aspect-[1.91/1]",
+  x: "aspect-[16/9]",
+  tiktok: "aspect-[9/16]",
+  youtube: "aspect-video",
+};
+
+/** Clase Tailwind de relación de aspecto del lienzo de imagen de una red. */
+export function aspectoRed(id: string): string {
+  return _ASPECTO_REDES[id] ?? "aspect-square";
+}
+
+/**
  * Devuelve los metadatos de una red (visual + límite vigente), con un fallback
  * razonable. El `limite` proviene de la caché hidratada desde el backend (fuente
  * única, #112), no de un valor hardcodeado en este archivo.

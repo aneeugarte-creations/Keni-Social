@@ -229,6 +229,35 @@ describe("Tablero de contenido", () => {
     expect(screen.queryByText("Final Champions")).not.toBeInTheDocument();
   });
 
+  it("modo Feed: una vista previa POR RED (no una por pieza)", async () => {
+    stubFetch([
+      contenido({
+        plataformas: [
+          { ...contenido().plataformas[0], id: "p1", red: "x", red_nombre: "X", copy: "Hola X" },
+          {
+            ...contenido().plataformas[0],
+            id: "p2",
+            red: "instagram",
+            red_nombre: "Instagram",
+            copy: "Hola IG",
+          },
+        ],
+      }),
+    ]);
+    renderConProviders(<Tablero />);
+    await screen.findByText("Sismo CDMX");
+
+    // Cambia a la vista Feed.
+    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
+
+    // Una preview por red: aparecen los iconos de X e Instagram (etiqueta accesible).
+    expect(await screen.findByLabelText("Instagram")).toBeInTheDocument();
+    expect(screen.getByLabelText("X")).toBeInTheDocument();
+    // Y el copy de cada red.
+    expect(screen.getByText(/Hola X/)).toBeInTheDocument();
+    expect(screen.getByText(/Hola IG/)).toBeInTheDocument();
+  });
+
   it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {
     stubFetch([
       contenido(),
