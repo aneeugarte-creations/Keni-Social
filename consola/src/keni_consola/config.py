@@ -203,6 +203,15 @@ ENV_AUTOGEN = "KENI_AUTOGEN"
 ENV_AUTOGEN_INTERVALO_HORAS = "KENI_AUTOGEN_INTERVALO_HORAS"
 ENV_AUTOGEN_MAX = "KENI_AUTOGEN_MAX"
 
+# Auto-generacion de ARTE (imagen) para temas con copy pero sin imagen (fase3 auto-produccion,
+# H2-b). Un hilo demonio barre el tablero y, para los temas con borrador/copy en alguna
+# plataforma a la que le FALTA imagen, genera UN arte por IA (mismo proveedor que
+# `/api/media/generar`) y lo adjunta. CONSERVADOR por defecto (OFF): sin `KENI_AUTOGEN_ARTE`
+# el equipo hace el arte a mano. Sin proveedor de imagen configurado, no hace nada.
+ENV_AUTOGEN_ARTE = "KENI_AUTOGEN_ARTE"
+ENV_AUTOGEN_ARTE_INTERVALO_HORAS = "KENI_AUTOGEN_ARTE_INTERVALO_HORAS"
+ENV_AUTOGEN_ARTE_MAX = "KENI_AUTOGEN_ARTE_MAX"
+
 # Imagen / secretos (precedencia con el fichero vive en `secretos.py`).
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
@@ -290,6 +299,11 @@ RADAR_AUTO_MAX_DEF = 3
 # aplicando aguas abajo.
 AUTOGEN_INTERVALO_HORAS_DEF = 1
 AUTOGEN_MAX_DEF = 3
+
+# Auto-generacion de ARTE (H2-b): mismos defaults conservadores que el auto-copy (barre
+# seguido, cap bajo por barrido), porque cada item llama al proveedor de imagen (coste).
+AUTOGEN_ARTE_INTERVALO_HORAS_DEF = 1
+AUTOGEN_ARTE_MAX_DEF = 3
 
 # Defaults de object storage (coinciden con `deploy/.env.example`). El endpoint y las
 # credenciales NO tienen default: su PRESENCIA es lo que decide usar S3 (vs disco).
@@ -794,6 +808,31 @@ def autogen_max() -> int:
     Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
     """
     return _entero(ENV_AUTOGEN_MAX, AUTOGEN_MAX_DEF, minimo=1)
+
+
+def autogen_arte_activo() -> bool:
+    """True si el daemon de auto-generacion de arte debe arrancar (`KENI_AUTOGEN_ARTE`).
+
+    Def OFF (conservador): el equipo hace el arte a mano. Con el flag, un hilo demonio
+    genera imagen por IA para los temas con copy pero sin imagen y la adjunta. Sin
+    proveedor de imagen configurado, el daemon arranca pero no hace nada (degrada).
+    """
+    return _crudo(ENV_AUTOGEN_ARTE).lower() in _VERDADEROS
+
+
+def autogen_arte_intervalo_horas() -> int:
+    """Cada cuantas horas barre el daemon de auto-arte (`KENI_AUTOGEN_ARTE_INTERVALO_HORAS`, def 1, min 1)."""
+    return _entero(
+        ENV_AUTOGEN_ARTE_INTERVALO_HORAS, AUTOGEN_ARTE_INTERVALO_HORAS_DEF, minimo=1
+    )
+
+
+def autogen_arte_max() -> int:
+    """Maximo de temas a auto-ilustrar por barrido (`KENI_AUTOGEN_ARTE_MAX`, def 3, min 1).
+
+    Cada item llama al proveedor de imagen (coste): el cap evita avalanchas por barrido.
+    """
+    return _entero(ENV_AUTOGEN_ARTE_MAX, AUTOGEN_ARTE_MAX_DEF, minimo=1)
 
 
 def consola_url_publica() -> str | None:
