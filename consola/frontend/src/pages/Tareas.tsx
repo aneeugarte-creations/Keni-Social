@@ -1694,6 +1694,7 @@ function FilaPlataforma({
       )}
       {imagenAbierta && (
         <EditorImagenPlataforma
+          contenidoId={contenidoId}
           plataforma={plataforma}
           tipoContenido={tipoContenido}
           guardando={actualizar.isPending}
@@ -1909,23 +1910,37 @@ function EditorCopy({
  * en su defecto, la URL de la fuente).
  */
 function EditorImagenPlataforma({
+  contenidoId,
   plataforma,
   tipoContenido,
   guardando,
   onGuardarImagen,
   onGuardarFuente,
 }: {
+  contenidoId: string;
   plataforma: ContenidoPlataforma;
   tipoContenido: TipoContenido;
   guardando: boolean;
   onGuardarImagen: (imagen: string) => void;
   onGuardarFuente: (imagenFuente: string) => void;
 }) {
+  const queryClient = useQueryClient();
   const [urlFuente, setUrlFuente] = React.useState(plataforma.imagen_fuente);
   React.useEffect(() => {
     setUrlFuente(plataforma.imagen_fuente);
   }, [plataforma.imagen_fuente]);
   const sucioFuente = urlFuente.trim() !== plataforma.imagen_fuente;
+
+  // Adapta ESTA imagen a todas las redes de la pieza (recorte por formato + plantilla) y la
+  // asigna a cada plataforma.
+  const adaptarRedes = useMutation({
+    mutationFn: () => api.adaptarImagenContenido(contenidoId, plataforma.imagen),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE });
+      toast.success(`Imagen adaptada a ${res.adaptadas} red${res.adaptadas === 1 ? "" : "es"}`);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   if (tipoContenido === "fuente") {
     return (
@@ -1976,6 +1991,24 @@ function EditorImagenPlataforma({
         copy={plataforma.copy}
         disabled={guardando}
       />
+      {plataforma.imagen && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs"
+          onClick={() => adaptarRedes.mutate()}
+          disabled={guardando || adaptarRedes.isPending}
+          title="Recorta esta imagen al formato de cada red y la asigna a todas las plataformas de la pieza"
+        >
+          {adaptarRedes.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <ImageIcon className="h-3.5 w-3.5" />
+          )}
+          Adaptar a todas las redes
+        </Button>
+      )}
       <p className="text-xs text-muted-foreground">
         {tipoContenido === "galeria"
           ? "Sube una imagen o adjúntala desde tu equipo."

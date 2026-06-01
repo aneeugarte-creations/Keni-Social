@@ -187,3 +187,47 @@ def test_borrar_contenido(entorno):
     cont = c.post("/api/contenido", json={"titulo": "C"}, headers=_ORIGIN).json()["contenido"]
     assert c.request("DELETE", f"/api/contenido/{cont['id']}").status_code == 200
     assert c.get("/api/contenido").json()["contenidos"] == []
+
+
+def test_adaptar_imagen_por_red_asigna_a_cada_plataforma(entorno, monkeypatch):
+    from keni_consola.dominio import estudio_imagen
+
+    c = _cli()
+    cont = c.post(
+        "/api/contenido",
+        json={"titulo": "Sismo", "redes": ["x", "instagram"]},
+        headers=_ORIGIN,
+    ).json()["contenido"]
+
+    # Marca sin plantilla -> recorte DETERMINISTA por formato (mock de `editar`, sin red ni IA).
+    monkeypatch.setattr(estudio_imagen, "marca_tiene_plantilla", lambda _m: False)
+    monkeypatch.setattr(
+        estudio_imagen,
+        "editar",
+        lambda imagen, op, params: {"id": f"adapt-{params['formato']}.png", "url": "/x"},
+    )
+
+    r = c.post(
+        f"/api/contenido/{cont['id']}/adaptar-imagen",
+        json={"imagen": "origen.png"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo["adaptadas"] == 2
+    # Cada plataforma recibió una imagen adaptada al formato de su red.
+    imgs = {p["red"]: p["imagen"] for p in cuerpo["plataformas"]}
+    assert imgs["x"].startswith("adapt-")
+    assert imgs["instagram"].startswith("adapt-")
+    # Persistido: el tablero refleja las imágenes asignadas por plataforma.
+    tablero = c.get("/api/contenido").json()["contenidos"][0]
+    assert all(p["imagen"].startswith("adapt-") for p in tablero["plataformas"])
+
+
+def test_adaptar_imagen_sin_imagen_400(entorno):
+    c = _cli()
+    cont = c.post(
+        "/api/contenido", json={"titulo": "X", "redes": ["x"]}, headers=_ORIGIN
+    ).json()["contenido"]
+    r = c.post(f"/api/contenido/{cont['id']}/adaptar-imagen", json={}, headers=_ORIGIN)
+    assert r.status_code == 400

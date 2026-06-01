@@ -34,7 +34,7 @@ from .. import (
     repos,
 )
 from .._http_json import leer_json
-from ..dominio import asistente, eventos, placeholders
+from ..dominio import asistente, estudio_imagen, eventos, placeholders
 from ..estados import (
     CLASES_CONTENIDO,
     ESTADOS_CONTENIDO,
@@ -474,6 +474,57 @@ async def actualizar_plataforma(request: Request) -> Response:
     return JSONResponse({"plataforma": _plataforma_a_dict(plat)})
 
 
+async def adaptar_imagen(request: Request) -> Response:
+    """POST /api/contenido/{contenido_id}/adaptar-imagen {imagen}.
+
+    Genera una imagen ADAPTADA POR RED de forma DETERMINISTA y la asigna a cada plataforma de
+    la pieza: para cada red recorta la `imagen` de origen al formato de esa red (16:9, 1:1,
+    9:16...) y, si la marca tiene plantilla visual, la compone tras el marco de marca. Las
+    plataformas cuya composición falle se omiten (no abortan el resto).
+    -> `{plataformas, adaptadas}` | 400 | 404.
+    """
+    contenido_id = request.path_params["contenido_id"]
+    item = repos.obtener_contenido(contenido_id)
+    if item is None:
+        return JSONResponse({"error": "Esa pieza ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    imagen = datos.get("imagen")
+    if not isinstance(imagen, str) or not imagen.strip():
+        return JSONResponse({"error": "Falta la imagen a adaptar."}, status_code=400)
+    imagen = imagen.strip()
+
+    plataformas = repos.listar_contenido_plataforma(contenido_id)
+    if not plataformas:
+        return JSONResponse(
+            {"error": "La pieza no tiene plataformas a las que adaptar."}, status_code=400
+        )
+
+    marca = item.get("marca") or ""
+    con_plantilla = estudio_imagen.marca_tiene_plantilla(marca)
+
+    actualizadas: list[dict] = []
+    for plat in plataformas:
+        formato = estudio_imagen.formato_por_red(plat.get("red", ""))
+        try:
+            if con_plantilla:
+                res = estudio_imagen.componer(imagen, marca=marca, formato=formato)
+            else:
+                res = estudio_imagen.editar(imagen, "recortar", {"formato": formato})
+        except estudio_imagen.EstudioError:
+            continue
+        plat2 = repos.actualizar_contenido_plataforma(plat["id"], {"imagen": res["id"]})
+        if plat2 is not None:
+            actualizadas.append(_plataforma_a_dict(plat2))
+
+    if not actualizadas:
+        return JSONResponse(
+            {"error": "No se pudo adaptar la imagen a ninguna red."}, status_code=400
+        )
+
+    return JSONResponse({"plataformas": actualizadas, "adaptadas": len(actualizadas)})
+
+
 async def borrar_plataforma(request: Request) -> Response:
     plataforma_id = request.path_params["plataforma_id"]
     if not repos.borrar_contenido_plataforma(plataforma_id):
@@ -748,6 +799,7 @@ RUTAS = [
     Route("/api/contenido/importar", importar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/preview", previsualizar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/asistente", asistente_ia, methods=["POST"]),
+    Route("/api/contenido/{contenido_id}/adaptar-imagen", adaptar_imagen, methods=["POST"]),
     Route("/api/contenido/{contenido_id}", actualizar, methods=["PATCH"]),
     Route("/api/contenido/{contenido_id}", borrar, methods=["DELETE"]),
     Route("/api/contenido/{contenido_id}/plataformas", agregar_plataforma, methods=["POST"]),

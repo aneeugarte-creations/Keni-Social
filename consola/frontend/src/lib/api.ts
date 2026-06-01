@@ -1030,6 +1030,13 @@ export const api = {
       `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
       { metodo: "PATCH", json: cuerpo },
     ),
+  // Genera una imagen adaptada por red (recorte al formato + plantilla de marca) a partir de
+  // `imagen` y la asigna a CADA plataforma de la pieza, de forma determinista.
+  adaptarImagenContenido: (contenidoId: string, imagen: string) =>
+    peticion<{ adaptadas: number }>(
+      `/contenido/${encodeURIComponent(contenidoId)}/adaptar-imagen`,
+      { metodo: "POST", json: { imagen } },
+    ),
   eliminarPlataforma: (contenidoId: string, plataformaId: string) =>
     peticion<RespuestaMensaje>(
       `/contenido/${encodeURIComponent(contenidoId)}/plataformas/${encodeURIComponent(plataformaId)}`,
