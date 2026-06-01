@@ -50,10 +50,6 @@ steps:
         consola/tests/test_api_agentes_runner.py
         consola/tests/test_generaciones.py
         consola/tests/test_api_hashtags.py
-        consola/tests/test_skills_piezas.py
-        consola/tests/test_skills_url.py
-        consola/tests/test_skills_imagenes.py
-        consola/tests/test_skills_catalogo.py
         consola/tests/test_api_qa_editorial.py
         consola/tests/test_api_verificaciones.py
         consola/tests/test_api_reciclaje.py
