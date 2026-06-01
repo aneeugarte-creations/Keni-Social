@@ -18,6 +18,11 @@
  */
 
 // Re-export de los tipos generados desde el backend (NO editar `types.gen.ts`).
+// Nota: los tipos de runs/agentes (`Run`/`RespuestaRun(s)`/`TotalRuns`/`AgregadoPor*`/
+// `RespuestaRunsAgregados`) ya NO se consumen en el front (el hub Agentes se retiró y
+// Actividad IA lo sustituye), pero el backend de esta rama aún los emite en `types.gen.ts`
+// y el guard `types.gen.test.ts` exige re-exportar TODA interface generada; se conservan
+// como re-export puro hasta que el backend los retire del esquema.
 export type {
   ResultadoEstado,
   RespuestaEstado,
@@ -91,7 +96,6 @@ import type {
   Publicacion,
   RangoMetrica,
   ResultadoEstado,
-  Run,
 } from "./types.gen";
 
 // --- Estado (autodiagnostico del sistema) ---
@@ -115,109 +119,70 @@ export interface CuerpoGuardarEsfuerzo {
   esfuerzo: string;
 }
 
-export interface CuerpoGuardarClaudeMd {
-  contenido: string;
+// --- Actividad IA unificada (#actividad) ---
+//
+// Sección AD-HOC (a mano): la página /actividad consume el contrato unificado que
+// expone el backend, que fusiona en un solo feed las generaciones de IA en segundo
+// plano (`fuente: "generacion"`) y los runs de agentes (`fuente: "run"`). NO se genera
+// desde `types.gen.ts`; el backend de esta rama lo construye como dict ad-hoc.
+
+/** Origen de un ítem de actividad: una generación en segundo plano o un run de agente. */
+export type FuenteActividad = "generacion" | "run";
+
+/** Métricas (token/coste/duración/turnos) de un ítem de actividad; cualquiera puede faltar. */
+export interface MetricasActividad {
+  tokens: number | null;
+  coste_usd: number | null;
+  duration_ms: number | null;
+  num_turns: number | null;
 }
 
-// --- Agentes (marca = carpeta con CLAUDE.md, sub-contextos y runs) ---
-
-/** Resumen de un agente (carpeta con CLAUDE.md, sub-contextos y runs) en el listado. */
-export interface AgenteResumen {
+/** Un ítem del feed unificado de Actividad IA. */
+export interface ActividadItem {
   id: string;
-  nombre: string;
-  ruta: string;
-  /**
-   * `true` para las 5 marcas de serie (no se pueden renombrar ni borrar);
-   * `false` para los agentes genéricos (creados/conectados, gestionables).
-   */
-  es_marca: boolean;
-  tiene_claude_md: boolean;
-  n_publicaciones: number;
-  n_runs: number;
+  fuente: FuenteActividad;
+  tipo: string;
+  etiqueta: string;
+  marca: string;
+  estado: string;
+  fecha: string;
+  metricas: MetricasActividad;
 }
 
-export interface RespuestaAgentes {
-  agentes: AgenteResumen[];
+/** Respuesta paginada del feed de Actividad IA (`GET /api/actividad`). */
+export interface RespuestaActividad {
+  items: ActividadItem[];
+  total: number;
 }
 
-/** Una plantilla de CLAUDE.md disponible al crear un agente genérico. */
-export interface PlantillaAgente {
-  id: string;
-  nombre: string;
+/** Totales globales del periodo disponible. */
+export interface ActividadTotal {
+  items: number;
+  coste_usd: number;
+  tokens: number;
 }
 
-/** Cuerpo para crear un agente genérico. */
-export interface CuerpoCrearAgente {
-  nombre: string;
-  /** Plantilla de CLAUDE.md (p. ej. general/noticias/deportes/podcast/social). */
-  tipo?: string;
+/** Desglose de actividad por tipo de trabajo. */
+export interface ActividadPorTipo {
+  tipo: string;
+  items: number;
+  coste_usd: number;
+  tokens: number;
 }
 
-/** Cuerpo para registrar (conectar) una subcarpeta existente de la raíz. */
-export interface CuerpoConectarAgente {
-  carpeta: string;
+/** Desglose de actividad por día (`YYYY-MM-DD`). */
+export interface ActividadPorDia {
+  dia: string;
+  items: number;
+  coste_usd: number;
 }
 
-/** Cuerpo para renombrar el nombre visible de un agente genérico. */
-export interface CuerpoRenombrarAgente {
-  nombre: string;
+/** Agregados de Actividad IA (`GET /api/actividad/agregados`): totales + desgloses. */
+export interface ActividadAgregados {
+  total: ActividadTotal;
+  por_tipo: ActividadPorTipo[];
+  por_dia: ActividadPorDia[];
 }
-
-/** Respuesta al crear o conectar un agente. */
-export interface RespuestaAgente {
-  agente: AgenteResumen;
-}
-
-/** Un sub-contexto del agente: un archivo `contexto/*.md`. */
-export interface SubContexto {
-  nombre: string;
-  contenido: string;
-}
-
-/** Modo de ejecución de un run del agente. */
-export type ModoRun = "headless" | "interactivo";
-
-/**
- * Estado del ciclo de vida de un run. `ejecutando` = corriendo en segundo plano
- * (se sondea hasta `completado`/`error`); `lanzado` = run interactivo abierto.
- */
-export type EstadoRun = "completado" | "error" | "ejecutando" | "lanzado" | string;
-
-// `MetricasRun` y `Run` (`agentes._parsear_run` + listado global `/api/runs`) se
-// GENERAN desde el backend y se re-exportan arriba (#101/#120). El `Run` canónico
-// trae `salida`/`fecha_fin` (run completo) y, en el listado global, `agente`/
-// `agente_nombre`; el `mensaje` de lanzamiento interactivo viaja en el envelope
-// `RespuestaRun`, no en el run.
-
-/** Detalle completo de un agente. */
-export interface AgenteDetalle {
-  id: string;
-  nombre: string;
-  ruta: string;
-  claude_md: string;
-  sub_contextos: SubContexto[];
-  runs: Run[];
-}
-
-export interface RespuestaSubContextos {
-  sub_contextos: SubContexto[];
-}
-
-/** Cuerpo para guardar el contenido de un sub-contexto. */
-export interface CuerpoGuardarContexto {
-  contenido: string;
-}
-
-/** Cuerpo para lanzar un run del agente. */
-export interface CuerpoCrearRun {
-  prompt: string;
-  modo: ModoRun;
-}
-
-// `RespuestaRun`/`RespuestaRuns` (con `paginacion`), `Paginacion` (#121) y los
-// agregados de Monitor (`TotalRuns`/`AgregadoPorAgente`/`AgregadoPorDia`/
-// `RespuestaRunsAgregados`) se GENERAN desde el backend y se re-exportan arriba
-// (#101/#120). `RespuestaRun` lleva `mensaje?` (lanzamiento interactivo).
 
 // --- Generación de copy (resultado compartido) ---
 

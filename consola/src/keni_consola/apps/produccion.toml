@@ -27,7 +27,7 @@ permisos = ["editor", "admin"]
 # Módulos backend (`api/<modulo>.py`) que POSEE esta app. Lo usa el lint de fronteras
 # para mapear cada router a su app.
 modulos_backend = [
-  "agentes",
+  "actividad",
   "biblioteca",
   "generaciones",
   "hashtags",
@@ -57,9 +57,7 @@ rutas_frontend = [
   "/revision",
   "/revision/editorial",
   "/revision/verificacion",
-  "/agentes",
-  "/agentes/actividad",
-  "/agentes/:id",
+  "/actividad",
   "/activos",
   "/activos/plantillas",
 ]
@@ -110,10 +108,10 @@ grupo_orden = 20
 orden = 30
 
 [[nav]]
-ruta = "/agentes"
-etiqueta = "Agentes"
-icono = "Bot"
-descripcion = "Cada marca: su contexto (CLAUDE.md) y sus ejecuciones. Pestañas Agentes / Actividad IA."
+ruta = "/actividad"
+etiqueta = "Actividad IA"
+icono = "Activity"
+descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) y runs de agente, con su coste y consumo."
 grupo = "operacion"
 grupo_orden = 30
 orden = 40

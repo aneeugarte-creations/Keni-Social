@@ -31,9 +31,7 @@ const PiezasRota = lazy(() => import("@/pages/parrilla/PiezasRota"));
 
 const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
 
-const Agentes = lazy(() => import("@/pages/Agentes"));
-const Monitor = lazy(() => import("@/pages/Monitor"));
-const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
+const Actividad = lazy(() => import("@/pages/Actividad"));
 
 // Ajustes (ahora solo accesibles via dropdown del avatar).
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
@@ -45,7 +43,7 @@ const Usuarios = lazy(() => import("@/pages/Usuarios"));
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
  * cuelgan de el. Cada "hub" (Investigación, Revisión, Analíticas, Parrilla,
- * Agentes) es una ruta-layout SIN componente propio: react-router renderiza
+ * Activos) es una ruta-layout SIN componente propio: react-router renderiza
  * `<Outlet/>` por defecto, y la subnav entre sub-rutas vive en el sidebar
  * (acordeón, via HUB_TABS en components/layout/hub-tabs.ts).
  *
@@ -112,18 +110,8 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Hub Agentes (catalogo + Actividad IA como pestañas). Ruta-layout sin wrapper:
-      // <Outlet/> por defecto, asi que el `index` sigue renderizando el catalogo de
-      // Agentes y `actividad` el Monitor. El detalle queda fuera del hub para ocupar
-      // toda la pantalla sin la subnav.
-      {
-        path: "agentes",
-        children: [
-          { index: true, element: <Agentes /> },
-          { path: "actividad", element: <Monitor /> },
-        ],
-      },
-      { path: "agentes/:id", element: <DetalleAgente /> },
+      // Actividad IA: feed unificado de generaciones + runs de agentes con métricas.
+      { path: "actividad", element: <Actividad /> },
 
       // Hub Activos (plantillas de contenido reutilizables al armar piezas).
       // Ruta-layout sin wrapper: renderiza <Outlet/> por defecto.
@@ -161,7 +149,10 @@ export const router = createBrowserRouter([
       // Publicaciones se FUSIONÓ en el tablero (#fase2): el tablero es la superficie
       // única de contenido (modos Tablero/Publicaciones/Calendario).
       { path: "publicaciones", element: <Navigate to="/parrilla/pendientes" replace /> },
-      { path: "monitor", element: <Navigate to="/agentes/actividad" replace /> },
+      // El hub Agentes se retiró: su Actividad IA vive ahora en /actividad (feed unificado).
+      { path: "monitor", element: <Navigate to="/actividad" replace /> },
+      { path: "agentes", element: <Navigate to="/actividad" replace /> },
+      { path: "agentes/actividad", element: <Navigate to="/actividad" replace /> },
       // Fusiones anteriores (mantener compatibilidad):
       // El copy se generaba en /generacion (motor de skills, retirado): ahora vive en la
       // Biblioteca de prompts. El catálogo de skills (/skills) también pasa a la Biblioteca.
@@ -170,8 +161,8 @@ export const router = createBrowserRouter([
       { path: "skills", element: <Navigate to="/biblioteca" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
-      { path: "proyectos", element: <Navigate to="/agentes" replace /> },
-      { path: "carpetas", element: <Navigate to="/agentes" replace /> },
+      { path: "proyectos", element: <Navigate to="/actividad" replace /> },
+      { path: "carpetas", element: <Navigate to="/actividad" replace /> },
 
       // Cualquier otra ruta: de vuelta al Panel (ya no hay launcher).
       { path: "*", element: <Navigate to="/panel" replace /> },

@@ -197,27 +197,17 @@ def crear_app(
     usuarios (#130, idempotente). Los tests lo desactivan por defecto (la mayoria usan
     el token y no quieren pagar el coste del hash); los de auth lo activan o crean el
     usuario a mano. `abrir`: funcion opcional `(Path) -> str` para lanzar Claude Code (interactivo);
-    por defecto la real. `lanzar_run`: funcion opcional
-    `(marca_id, run_id, prompt, *, cwd) -> None` para lanzar runs headless en background.
+    por defecto la real. `lanzar_run` se ACEPTA por retrocompatibilidad con los tests
+    (el hub Agentes se retiró del backend; ya no lanza runs), pero se IGNORA.
     `lanzar_generacion`: funcion opcional `(gen_id, *, prompt, cwd, procesar, dir_temporal)`
     para lanzar trabajos de IA (copy/RSS/hashtags) en background. `lanzar_imagen`: funcion
     opcional `(gen_id, *, generar)` para trabajos de imagen. Por defecto todas son las
     reales (Popen/hilo/stream-json); los tests pasan mocks que NO tocan `claude` ni la red.
     """
-    if abrir is not None or lanzar_run is not None:
-        from .api import agentes as api_agentes
-
     if abrir is not None:
         from .api import proyectos as api_proyectos
 
         api_proyectos.abrir_en_claude_code = abrir
-        # Agentes (runs interactivos) abre con `prompt=`; lo envolvemos para que use el
-        # `abrir` inyectado ignorando el prompt (el mock simple solo recibe la ruta).
-        api_agentes.abrir_en_claude_code = lambda ruta, prompt=None: abrir(ruta)
-
-    if lanzar_run is not None:
-        # Runs headless en background: inyectamos una fake que NO usa Popen ni red.
-        api_agentes.lanzar_run_background = lanzar_run
 
     if lanzar_generacion is not None or lanzar_imagen is not None:
         from . import generaciones as gen_modulo
