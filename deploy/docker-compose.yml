@@ -85,6 +85,10 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_SKILLS_CWD: /app
+      # Store EDITABLE de ajustes (flags + tuning) cambiados desde la UI por el admin. En el
+      # volumen COMPARTIDO (back, daemons, worker) para que un cambio en caliente lo vean
+      # todos los procesos (precedencia store > env > defecto en config._crudo).
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
       # El back YA corre como usuario no-root (deploy/back/Dockerfile). El back no ejecuta
       # `claude` (solo encola), pero dejamos IS_SANDBOX=1 inocuo por si algun camino lo
       # consultara; el bypass de root de `claude` ya no aplica al ser no-root. Ver README.
@@ -162,6 +166,9 @@ services:
       XDG_CONFIG_HOME: /data
       KENI_SKILLS_CWD: /app
       IS_SANDBOX: "1"
+      # Store EDITABLE de ajustes compartido con back/worker (mismo volumen keni-data): los
+      # daemons leen aqui los flags/tuning cambiados en caliente (store > env > defecto).
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
       # No arranca worker in-proceso (lo hace el servicio `worker`); inocuo aqui igualmente.
       KENI_WORKER_EXTERNO: "1"
       # Persistencia compartida con el back: Postgres + S3/Garage. Las credenciales de
@@ -200,6 +207,9 @@ services:
     environment:
       XDG_CONFIG_HOME: /data
       KENI_SKILLS_CWD: /app
+      # Store EDITABLE de ajustes compartido con back/daemons (mismo volumen keni-data): el
+      # worker ve los flags/tuning cambiados en caliente (store > env > defecto).
+      KENI_CONSOLA_AJUSTES: /data/ajustes.toml
       # El worker YA corre como usuario no-root (deploy/worker/Dockerfile). Fuera de root,
       # `claude` NO restringe --dangerously-skip-permissions (esa guarda es solo para uid 0),
       # asi que IS_SANDBOX deja de ser necesario; lo dejamos en "1" (inocuo) por compatibilidad.
