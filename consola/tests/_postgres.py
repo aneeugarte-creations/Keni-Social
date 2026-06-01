@@ -63,6 +63,11 @@ _TABLAS = (
     "eventos_internos",
     "jobs",
     "metricas_cache",
+    # CONTENIDO editorial reutilizable migrado de ficheros a Postgres (ADR 0006).
+    "rss_items_vistos",
+    "fuentes_rss",
+    "grupos_hashtags",
+    "franjas_editoriales",
 )
 
 

@@ -3223,3 +3223,41 @@ export interface RespuestaProbarS3 {
   salud: "ok" | "err";
   error: string | null;
 }
+
+// ── S3 Navegador de objetos (GET /api/sistema/s3/objetos) ────────────────────
+
+/** Una miga del breadcrumb del explorador S3 ({nombre, prefijo}). */
+export interface MigaS3 {
+  /** Nombre legible del nivel ("Raiz", "videos", "2024"…). */
+  nombre: string;
+  /** Prefijo acumulado hasta este nivel (p.ej. "videos/2024/"). Vacío = raíz. */
+  prefijo: string;
+}
+
+/** Un objeto (archivo) del bucket S3. */
+export interface ObjetoS3 {
+  /** Clave completa del objeto en el bucket. */
+  key: string;
+  /** Nombre legible (basename). */
+  nombre: string;
+  /** Tamaño en bytes. */
+  tamano: number;
+  /** Fecha de última modificación (ISO) o null. */
+  modificado: string | null;
+}
+
+/** Respuesta de `GET /api/sistema/s3/objetos?prefijo=<p>`. */
+export interface RespuestaS3Objetos {
+  /** `false` si S3 no está configurado en este servidor. */
+  configurado: boolean;
+  /** Prefijos de subcarpetas bajo el prefijo actual. */
+  carpetas: string[];
+  /** Objetos del nivel actual. */
+  objetos: ObjetoS3[];
+  /** Prefijo activo (normalizado, termina en "/" o vacío para raíz). */
+  prefijo: string;
+  /** Breadcrumb desde la raíz hasta el nivel actual. */
+  migas: MigaS3[];
+  /** Error legible si la sonda falló; null si todo bien. */
+  error: string | null;
+}

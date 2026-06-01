@@ -85,16 +85,19 @@ def test_contenido_largo_en_bloque_literal(base):
 def test_round_trip_plantilla_y_hashtags_y_fuente(base):
     # Plantillas de copy plano: el modelo OPERACIONAL vive en Postgres (catálogo unificado
     # `plantilla_contenido`); en YAML solo queda el origen legado que lee la migración.
+    # Grupos de hashtags y fuentes RSS migraron a Postgres (ADR 0006): por eso aqui se prueba
+    # el ORIGEN legado YAML directamente con `ficheros.*` (sigue existiendo de respaldo / como
+    # fuente de la migración). El enrutado por `repos` se prueba en test_repos/test_db_editorial.
     p = ficheros.crear_plantilla("Saludo", marca="unotv", red="x", contenido="Hola")
     assert ficheros.obtener_plantilla(p["id"])["nombre"] == "Saludo"
-    g = repos.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol", "#liga"])
-    assert repos.obtener_grupo_hashtags(g["id"])["hashtags"] == ["#gol", "#liga"]
+    g = ficheros.crear_grupo_hashtags("Deportes", marca="unotv", hashtags=["#gol", "#liga"])
+    assert ficheros.obtener_grupo_hashtags(g["id"])["hashtags"] == ["#gol", "#liga"]
     # hashtags como lista YAML nativa (no JSON embebido).
     ruta_g = base / "datos" / "unotv" / "hashtags" / f"{g['id']}.yaml"
     cuerpo = yaml.safe_load(ruta_g.read_text())
     assert cuerpo["hashtags"] == ["#gol", "#liga"]
-    fr = repos.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
-    assert repos.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
+    fr = ficheros.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
+    assert ficheros.obtener_fuente_rss(fr["id"])["nombre"] == "Diario"
 
 
 def test_historial_round_trip_y_layout_por_fecha(base):
@@ -138,10 +141,12 @@ def test_orden_publicaciones_por_fecha_hora(base):
 
 
 def test_orden_franjas_determinista(base):
-    repos.crear_franja(4, "08:00", marca="unotv")
-    repos.crear_franja(1, "12:00", marca="unotv")
-    repos.crear_franja(1, "09:00", marca="claro-sports")
-    orden = [(f["dia_semana"], f["hora"]) for f in repos.listar_franjas()]
+    # Franjas editoriales migraron a Postgres (ADR 0006); el origen YAML legado se prueba
+    # aqui con `ficheros.*` directo. El enrutado por `repos` -> Postgres vive en test_db_editorial.
+    ficheros.crear_franja(4, "08:00", marca="unotv")
+    ficheros.crear_franja(1, "12:00", marca="unotv")
+    ficheros.crear_franja(1, "09:00", marca="claro-sports")
+    orden = [(f["dia_semana"], f["hora"]) for f in ficheros.listar_franjas()]
     assert orden == [(1, "09:00"), (1, "12:00"), (4, "08:00")]
 
 
@@ -252,13 +257,15 @@ def test_borrar_publicacion(base):
 
 
 def test_editar_grupo_cambia_de_marca_mueve_fichero(base):
-    g = repos.crear_grupo_hashtags("G", marca="unotv", hashtags=["#a"])
-    act = repos.actualizar_grupo_hashtags(g["id"], {"marca": "claro-sports"})
+    # Comportamiento del ORIGEN legado YAML (mover de carpeta al cambiar marca): se prueba con
+    # `ficheros.*` directo. La capa viva (repos) ya escribe en Postgres (ADR 0006).
+    g = ficheros.crear_grupo_hashtags("G", marca="unotv", hashtags=["#a"])
+    act = ficheros.actualizar_grupo_hashtags(g["id"], {"marca": "claro-sports"})
     assert act["marca"] == "claro-sports"
     # El fichero ya no esta en unotv y si en claro-sports.
     assert not (base / "datos" / "unotv" / "hashtags" / f"{g['id']}.yaml").exists()
     assert (base / "datos" / "claro-sports" / "hashtags" / f"{g['id']}.yaml").exists()
-    assert repos.obtener_grupo_hashtags(g["id"])["marca"] == "claro-sports"
+    assert ficheros.obtener_grupo_hashtags(g["id"])["marca"] == "claro-sports"
 
 
 # --------------------------------------------------------------------------- #
@@ -267,15 +274,17 @@ def test_editar_grupo_cambia_de_marca_mueve_fichero(base):
 
 
 def test_items_vistos_por_marca(base):
-    fr = repos.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
-    repos.marcar_item(fr["id"], "guid-1", True)
-    repos.marcar_item(fr["id"], "guid-2", True)
-    assert repos.claves_vistas(fr["id"]) == {"guid-1", "guid-2"}
+    # Items vistos del ORIGEN legado YAML (`.keni/rss-vistos.yaml` por marca): se prueba con
+    # `ficheros.*` directo. La capa viva (repos) ya escribe en Postgres (ADR 0006).
+    fr = ficheros.crear_fuente_rss("Diario", "https://example.com/feed.xml", marca="unotv")
+    ficheros.marcar_item(fr["id"], "guid-1", True)
+    ficheros.marcar_item(fr["id"], "guid-2", True)
+    assert ficheros.claves_vistas(fr["id"]) == {"guid-1", "guid-2"}
     # Vive en el .keni de la marca de la fuente.
     ruta = base / "datos" / "unotv" / ".keni" / "rss-vistos.yaml"
     assert ruta.is_file()
-    repos.marcar_item(fr["id"], "guid-1", False)
-    assert repos.claves_vistas(fr["id"]) == {"guid-2"}
+    ficheros.marcar_item(fr["id"], "guid-1", False)
+    assert ficheros.claves_vistas(fr["id"]) == {"guid-2"}
     # Borrar la fuente limpia sus items vistos.
-    repos.borrar_fuente_rss(fr["id"])
-    assert repos.claves_vistas(fr["id"]) == set()
+    ficheros.borrar_fuente_rss(fr["id"])
+    assert ficheros.claves_vistas(fr["id"]) == set()

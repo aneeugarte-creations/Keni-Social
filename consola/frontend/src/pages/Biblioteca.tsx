@@ -93,6 +93,12 @@ export default function Biblioteca() {
   // Arrastrar y soltar para mover documentos entre carpetas.
   const [arrastrando, setArrastrando] = React.useState<string | null>(null);
   const [destino, setDestino] = React.useState<string | null>(null);
+  // Renombrar en sitio (doble clic sobre el nombre, como en un explorador de archivos).
+  const [renombrando, setRenombrando] = React.useState<{ tipo: "doc" | "carpeta"; clave: string } | null>(
+    null,
+  );
+  const [valorRen, setValorRen] = React.useState("");
+  const enRenRef = React.useRef(false);
 
   const docsQuery = useQuery({
     queryKey: ["biblioteca", filtro, q],
@@ -149,36 +155,47 @@ export default function Biblioteca() {
   }
 
   function filaDoc(d: DocumentoBiblioteca, mostrarCarpeta: boolean) {
+    const icono =
+      d.tipo === "editorial" ? (
+        <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      ) : (
+        <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      );
+    const renom = renombrando?.tipo === "doc" && renombrando.clave === d.id;
     return (
       <li key={d.id}>
-        <button
-          onClick={() => setSeleccionId(d.id)}
-          title={d.titulo}
-          draggable
-          onDragStart={(e) => {
-            setArrastrando(d.id);
-            e.dataTransfer.effectAllowed = "move";
-          }}
-          onDragEnd={() => {
-            setArrastrando(null);
-            setDestino(null);
-          }}
-          className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted ${
-            d.id === seleccionId ? "bg-muted font-medium" : ""
-          } ${arrastrando === d.id ? "opacity-50" : ""}`}
-        >
-          {d.tipo === "editorial" ? (
-            <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          ) : (
-            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          )}
-          <span className="min-w-0 flex-1">
-            <span className="line-clamp-2 block break-words leading-snug">{d.titulo}</span>
-            {mostrarCarpeta && d.carpeta ? (
-              <span className="mt-0.5 block truncate text-xs text-muted-foreground">{d.carpeta}</span>
-            ) : null}
-          </span>
-        </button>
+        {renom ? (
+          <div className="flex w-full items-center gap-2 px-3 py-2">
+            {icono}
+            {inputRenombre(() => confirmarRenDoc(d.id))}
+          </div>
+        ) : (
+          <button
+            onClick={() => setSeleccionId(d.id)}
+            onDoubleClick={() => iniciarRen("doc", d.id, d.titulo)}
+            title={`${d.titulo} — doble clic para renombrar`}
+            draggable
+            onDragStart={(e) => {
+              setArrastrando(d.id);
+              e.dataTransfer.effectAllowed = "move";
+            }}
+            onDragEnd={() => {
+              setArrastrando(null);
+              setDestino(null);
+            }}
+            className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted ${
+              d.id === seleccionId ? "bg-muted font-medium" : ""
+            } ${arrastrando === d.id ? "opacity-50" : ""}`}
+          >
+            {icono}
+            <span className="min-w-0 flex-1">
+              <span className="line-clamp-2 block break-words leading-snug">{d.titulo}</span>
+              {mostrarCarpeta && d.carpeta ? (
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">{d.carpeta}</span>
+              ) : null}
+            </span>
+          </button>
+        )}
       </li>
     );
   }
@@ -238,11 +255,52 @@ export default function Biblioteca() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["biblioteca"] }),
   });
-  function renombrarCarpeta(carpeta: string) {
-    const a = window.prompt("Nuevo nombre de la carpeta", carpeta)?.trim();
-    if (!a || a === carpeta) return;
-    setSeleccionId(null); // los ids cambian; evita una selección colgada
-    renombrarCarpetaMut.mutate({ de: carpeta, a });
+  // --- Renombrar en sitio (doble clic) ---
+  function iniciarRen(tipo: "doc" | "carpeta", clave: string, valor: string) {
+    enRenRef.current = true;
+    setRenombrando({ tipo, clave });
+    setValorRen(valor);
+  }
+  // Cierra el modo renombrar UNA sola vez (Enter/blur confirman; Escape cancela). El ref
+  // evita el doble disparo (Enter dispara mutate y el blur subsiguiente lo repetiría).
+  function terminarRen(commit: boolean, onConfirmar: () => void) {
+    if (!enRenRef.current) return;
+    enRenRef.current = false;
+    setRenombrando(null);
+    if (commit) onConfirmar();
+  }
+  function confirmarRenDoc(id: string) {
+    const t = valorRen.trim();
+    if (t) guardarMut.mutate({ id, cuerpo: { titulo: t } });
+  }
+  function confirmarRenCarpeta(de: string) {
+    const a = valorRen.trim();
+    if (a && a !== de) {
+      setSeleccionId(null); // los ids cambian; evita una selección colgada
+      renombrarCarpetaMut.mutate({ de, a });
+    }
+  }
+  function inputRenombre(onConfirmar: () => void) {
+    return (
+      <input
+        autoFocus
+        value={valorRen}
+        onChange={(e) => setValorRen(e.target.value)}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            terminarRen(true, onConfirmar);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            terminarRen(false, onConfirmar);
+          }
+        }}
+        onBlur={() => terminarRen(true, onConfirmar)}
+        className="w-full rounded border border-input bg-background px-1 py-0.5 text-sm"
+      />
+    );
   }
 
   function editar(parcial: Partial<DocumentoBiblioteca>) {
@@ -368,26 +426,27 @@ export default function Biblioteca() {
                         destino === carpeta ? "ring-2 ring-inset ring-primary" : ""
                       }`}
                     >
-                      <button
-                        onClick={() => alternarCarpeta(carpeta)}
-                        className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
-                      >
-                        {carpetasCerradas.has(carpeta) ? (
-                          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-                        ) : (
-                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                        )}
-                        <Folder className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{carpeta}</span>
-                      </button>
-                      <button
-                        onClick={() => renombrarCarpeta(carpeta)}
-                        title="Renombrar carpeta"
-                        aria-label="Renombrar carpeta"
-                        className="shrink-0 opacity-50 hover:opacity-100"
-                      >
-                        <Pencil className="h-3 w-3" />
-                      </button>
+                      {renombrando?.tipo === "carpeta" && renombrando.clave === carpeta ? (
+                        <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                          <Folder className="h-3.5 w-3.5 shrink-0" />
+                          {inputRenombre(() => confirmarRenCarpeta(carpeta))}
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => alternarCarpeta(carpeta)}
+                          onDoubleClick={() => iniciarRen("carpeta", carpeta, carpeta)}
+                          title="Doble clic para renombrar la carpeta"
+                          className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-foreground"
+                        >
+                          {carpetasCerradas.has(carpeta) ? (
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                          )}
+                          <Folder className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{carpeta}</span>
+                        </button>
+                      )}
                       <span className="shrink-0 tabular-nums">{docs.length}</span>
                     </div>
                     {!carpetasCerradas.has(carpeta) ? (

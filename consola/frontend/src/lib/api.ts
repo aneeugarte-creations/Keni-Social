@@ -201,6 +201,7 @@ import type {
   RespuestaRecursos,
   RespuestaS3,
   RespuestaProbarS3,
+  RespuestaS3Objetos,
   UsuarioAdmin,
   FiltrosComercial,
   OpcionesComercial,
@@ -501,6 +502,11 @@ export const api = {
     peticion<RespuestaRecursos>("/sistema/recursos", { signal }),
   sistemaS3: (signal?: AbortSignal) => peticion<RespuestaS3>("/sistema/s3", { signal }),
   probarS3: () => peticion<RespuestaProbarS3>("/sistema/s3/probar", { metodo: "POST" }),
+  s3Objetos: (prefijo?: string, signal?: AbortSignal) =>
+    peticion<RespuestaS3Objetos>(
+      `/sistema/s3/objetos${query({ prefijo: prefijo || "" })}`,
+      { signal },
+    ),
 
   // --- Config ---
   config: (signal?: AbortSignal) => peticion<RespuestaConfig>("/config", { signal }),
