@@ -47,6 +47,9 @@ PROC_COPY = "copy"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
 PROC_QA = "qa"
+# Biblioteca de prompts: post-procesado IDENTIDAD. Un prompt de la biblioteca devuelve el
+# texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
+PROC_PROMPT = "prompt"
 
 
 def _autor_spec(autor: dict[str, str] | None) -> dict[str, str] | None:
@@ -120,6 +123,11 @@ def construir_qa(
     return {"kind": PROC_QA, "marca": marca, "titulo": titulo, "autor": _autor_spec(autor)}
 
 
+def construir_prompt_lib() -> dict[str, Any]:
+    """Spec del post-procesado de un PROMPT de la biblioteca (identidad: solo el texto)."""
+    return {"kind": PROC_PROMPT}
+
+
 def construir(
     *,
     prompt: str,
@@ -182,6 +190,12 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
     p = spec.get("procesar") or {}
     kind = p.get("kind")
     autor = p.get("autor")
+
+    if kind == PROC_PROMPT:
+        # Identidad: el texto markdown ya queda en `salida` del registro; no hay artefactos.
+        def procesar(_salida: str, _metricas: object) -> dict[str, object]:
+            return {}
+        return procesar
 
     if kind == PROC_HASHTAGS:
         def procesar(salida: str, _metricas: object) -> dict[str, object]:

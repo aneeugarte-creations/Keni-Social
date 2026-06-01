@@ -1,0 +1,112 @@
+"""Tests de la primitiva de lanzamiento de prompts de la biblioteca (dominio puro).
+
+Aisla `KENI_BIBLIOTECA_DIR` y `KENI_CONSOLA_GENERACIONES` en tmp e INTERCEPTA
+`generaciones.encolar_job_claude` (no toca la cola ni `claude`). Verifica la composicion
+del prompt (prompt + linea editorial + contexto), el registro de generacion (tipo "prompt")
+y la validacion de marca.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from keni_consola import biblioteca, generaciones, marcas
+from keni_consola.dominio import biblioteca_lanzar, jobspec
+
+_MARCA = marcas.opciones()[0][0]
+
+
+@pytest.fixture(autouse=True)
+def _entorno_tmp(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
+    monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
+    monkeypatch.setenv("KENI_SKILLS_CWD", str(tmp_path))  # cwd de ejecucion determinista
+    return tmp_path
+
+
+@pytest.fixture
+def encolado(monkeypatch):
+    """Intercepta `encolar_job_claude` y captura los kwargs (prompt, spec, ...)."""
+    capturado: dict = {}
+
+    def fake(gen_id, *, prompt, cwd, procesar, dir_temporal=None, spec=None):  # noqa: ANN001
+        capturado.update(gen_id=gen_id, prompt=prompt, cwd=cwd, procesar=procesar, spec=spec)
+
+    monkeypatch.setattr(generaciones, "encolar_job_claude", fake)
+    return capturado
+
+
+# --------------------------------------------------------------------------- #
+# Composicion                                                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_componer_incluye_solo_secciones_presentes():
+    solo = biblioteca_lanzar.componer("Haz X", [], "")
+    assert solo == "Haz X"
+
+    ed = biblioteca.crear("Voz", tipo="editorial", clase="voz", marcas=[_MARCA], cuerpo="tono cercano")
+    con_todo = biblioteca_lanzar.componer("Haz X", [ed], "una nota")
+    assert "Haz X" in con_todo
+    assert "LÍNEA EDITORIAL" in con_todo and "tono cercano" in con_todo
+    assert "CONTEXTO" in con_todo and "una nota" in con_todo
+
+
+# --------------------------------------------------------------------------- #
+# Lanzar                                                                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_lanzar_prompt_de_biblioteca_compone_y_encola(encolado):
+    prompt = biblioteca.crear("Genera copy", tipo="prompt", cuerpo="Convierte la nota en copy.")
+    ed = biblioteca.crear("Plataformas", tipo="editorial", clase="plataforma", cuerpo="máx 280 caracteres")
+
+    reg = biblioteca_lanzar.lanzar(
+        prompt_id=prompt.id, marca=_MARCA, adjuntos_ids=[ed.id], bloque_contexto="Nota: gol en el 90'",
+    )
+
+    assert reg["tipo"] == "prompt"
+    assert reg["marca"] == _MARCA
+    # El prompt final compuesto llego al encolado.
+    final = encolado["prompt"]
+    assert "Convierte la nota en copy." in final
+    assert "máx 280 caracteres" in final
+    assert "gol en el 90'" in final
+    # El spec usa el post-procesado IDENTIDAD de la biblioteca.
+    assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
+    # Y ese procesar no crea artefactos.
+    assert encolado["procesar"]("salida cualquiera", None) == {}
+    # El registro quedo persistido y recuperable.
+    assert generaciones.obtener(reg["id"]) is not None
+
+
+def test_lanzar_texto_ad_hoc(encolado):
+    reg = biblioteca_lanzar.lanzar(texto="Resume esto en 3 puntos", marca=_MARCA)
+    assert reg["tipo"] == "prompt"
+    assert "Resume esto en 3 puntos" in encolado["prompt"]
+
+
+def test_lanzar_marca_invalida_lanza(encolado):
+    p = biblioteca.crear("P", tipo="prompt", cuerpo="x")
+    with pytest.raises(biblioteca.BibliotecaError):
+        biblioteca_lanzar.lanzar(prompt_id=p.id, marca="marca-inexistente")
+    assert encolado == {}  # no se encolo nada
+
+
+def test_lanzar_sin_prompt_ni_texto_lanza():
+    with pytest.raises(biblioteca.BibliotecaError):
+        biblioteca_lanzar.lanzar(marca=_MARCA)
+
+
+def test_lanzar_prompt_inexistente_lanza():
+    with pytest.raises(biblioteca.BibliotecaError):
+        biblioteca_lanzar.lanzar(prompt_id="prompt/no-existe", marca=_MARCA)
+
+
+def test_spec_prompt_round_trip_reconstruye_identidad():
+    """El spec PROC_PROMPT sobrevive serializar/deserializar (compat worker)."""
+    spec = jobspec.construir(prompt="hola", procesar=jobspec.construir_prompt_lib())
+    revivido = jobspec.deserializar(jobspec.serializar(spec))
+    assert revivido["procesar"]["kind"] == jobspec.PROC_PROMPT
+    procesar = jobspec.reconstruir_procesar(revivido)
+    assert procesar("cualquier salida", None) == {}

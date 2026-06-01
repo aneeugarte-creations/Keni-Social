@@ -60,6 +60,9 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_SKILLS_DIR             carpeta directa del catalogo       def <cwd>/skills-copy/...
     - KENI_SKILLS_MAX_SUBIDA_MB   limite de subida por skill (MB)    def por tipo
 
+  Biblioteca de prompts + linea editorial (`biblioteca`, `dominio.biblioteca_lanzar`):
+    - KENI_BIBLIOTECA_DIR         almacen de documentos markdown     def <dir_config>/biblioteca
+
   Programadores en segundo plano (`comercial`, `programador`):
     - KENI_COMERCIAL_INTERVALO_SEGUNDOS  intervalo captura (s)       prioridad sobre horas
     - KENI_COMERCIAL_INTERVALO_HORAS     intervalo captura (h)       def INTERVALO_HORAS_DEF
@@ -148,6 +151,9 @@ ENV_SKILLS_CWD = "KENI_SKILLS_CWD"
 ENV_SKILLS_EJECUCION_CWD = "KENI_SKILLS_EJECUCION_CWD"
 ENV_SKILLS_DIR = "KENI_SKILLS_DIR"
 ENV_SKILLS_MAX_SUBIDA_MB = "KENI_SKILLS_MAX_SUBIDA_MB"
+
+# Biblioteca de prompts + linea editorial (almacen unico de documentos markdown).
+ENV_BIBLIOTECA_DIR = "KENI_BIBLIOTECA_DIR"
 
 # Programadores en segundo plano.
 ENV_COMERCIAL_INTERVALO_SEGUNDOS = "KENI_COMERCIAL_INTERVALO_SEGUNDOS"
@@ -563,6 +569,22 @@ def skills_max_subida_mb() -> int | None:
     except ValueError:
         return None
     return mb if mb > 0 else None
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: biblioteca de prompts + linea editorial                           #
+# --------------------------------------------------------------------------- #
+
+
+def biblioteca_dir() -> Path | None:
+    """Override del dir del almacen de la Biblioteca (`KENI_BIBLIOTECA_DIR`); None si no esta.
+
+    Sin override, `biblioteca.raiz()` cae a `rutas.dir_config()/biblioteca` (bajo el volumen
+    `KENI_DATA_DIR` en contenedor; `~/.config/keni-social/biblioteca` en local). Los tests lo
+    apuntan a un `tmp_path` para no tocar el estado real.
+    """
+    crudo = os.environ.get(ENV_BIBLIOTECA_DIR)
+    return Path(crudo).expanduser() if crudo else None
 
 
 # --------------------------------------------------------------------------- #
