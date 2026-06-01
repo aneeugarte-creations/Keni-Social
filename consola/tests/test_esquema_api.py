@@ -79,7 +79,6 @@ def test_churn_modelos_presentes():
     esperados = {
         "Paginacion", "MetricasRun",
         "Publicacion", "RespuestaPublicaciones", "RespuestaPublicacion",
-        "Run", "RespuestaRun", "RespuestaRuns", "RespuestaRunsAgregados",
         "PublicacionComercial", "RespuestaPublicacionesComercial",
         "RespuestaPublicacionComercial", "RespuestaRefrescarComercial",
     }
@@ -98,22 +97,6 @@ def test_paginacion_envelope_requerido_en_listados():
     defs = esquema_json()["$defs"]
     assert "paginacion" in defs["RespuestaPublicaciones"]["required"]
     assert set(defs["Paginacion"]["required"]) == {"total", "limite", "desplazamiento"}
-
-
-def test_run_campos_opcionales_por_endpoint():
-    """`Run`: requeridos comunes a todos los endpoints; los especificos son opcionales.
-
-    `salida`/`fecha_fin` solo van en el run completo; `agente`/`agente_nombre` solo en
-    el listado global. El `mensaje` (interactivo) va en el ENVELOPE, no en el run.
-    """
-    defs = esquema_json()["$defs"]
-    requeridos = set(defs["Run"]["required"])
-    assert requeridos == {"id", "prompt", "modo", "estado", "motivo", "fecha_inicio", "metricas"}
-    opcionales = set(defs["Run"]["properties"]) - requeridos
-    assert {"salida", "fecha_fin", "agente", "agente_nombre"} == opcionales
-    assert "mensaje" not in defs["Run"]["properties"]
-    assert "mensaje" in defs["RespuestaRun"]["properties"]
-    assert "mensaje" not in defs["RespuestaRun"].get("required", [])
 
 
 def test_comercial_fuente_y_es_muestra_requeridos():

@@ -14,20 +14,8 @@ import { ContratoDriftError, existeContrato, validarContrato } from "./contrato"
 vi.mock("./drift", () => ({ avisarDriftContrato: vi.fn() }));
 import { avisarDriftContrato } from "./drift";
 
-const RUNS_OK = {
-  runs: [
-    {
-      id: "r1",
-      prompt: "hola",
-      modo: "headless",
-      estado: "completado",
-      motivo: "",
-      fecha_inicio: "2026-05-26T10:00:00",
-      metricas: null,
-    },
-  ],
-  paginacion: { total: 1, limite: 1, desplazamiento: 0 },
-};
+// Modelo simple y estable del esquema para ejercitar la validación de contrato.
+const PAGINACION_OK = { total: 1, limite: 10, desplazamiento: 0 };
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -36,12 +24,12 @@ afterEach(() => {
 
 describe("validarContrato (#120)", () => {
   it("acepta una respuesta válida y la devuelve tal cual", () => {
-    expect(validarContrato("RespuestaRuns", RUNS_OK)).toBe(RUNS_OK);
+    expect(validarContrato("Paginacion", PAGINACION_OK)).toBe(PAGINACION_OK);
   });
 
   it("PERMITE propiedades extra (cambio aditivo del backend, no falso positivo)", () => {
-    const conExtra = { ...RUNS_OK, campo_nuevo_del_backend: 123 };
-    expect(validarContrato("RespuestaRuns", conExtra)).toBe(conExtra);
+    const conExtra = { ...PAGINACION_OK, campo_nuevo_del_backend: 123 };
+    expect(validarContrato("Paginacion", conExtra)).toBe(conExtra);
   });
 
   it("no valida si el modelo no existe en el esquema (no-op)", () => {
@@ -52,8 +40,8 @@ describe("validarContrato (#120)", () => {
 
   it("detecta una respuesta malformada: en DEV lanza ContratoDriftError", () => {
     // Vitest corre en modo test => import.meta.env.DEV es true.
-    const mala = { runs: [{ id: "r1" }] }; // faltan prompt/modo/estado/... y paginacion
-    expect(() => validarContrato("RespuestaRuns", mala)).toThrow(ContratoDriftError);
+    const mala = { total: 1 }; // faltan limite/desplazamiento (requeridos en Paginacion)
+    expect(() => validarContrato("Paginacion", mala)).toThrow(ContratoDriftError);
   });
 
   it("en PROD NO es fatal: avisa de drift y devuelve los datos", () => {

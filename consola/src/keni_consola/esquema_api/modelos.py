@@ -602,91 +602,6 @@ class RespuestaPanel(TypedDict):
 
 
 # --------------------------------------------------------------------------- #
-# Runs — agentes._parsear_run + api/agentes.py (listado global y por agente)   #
-# --------------------------------------------------------------------------- #
-
-# Estado del ciclo de vida de un run. La forma publica conserva el valor crudo
-# del YAML, asi que se modela abierto (str) en vez de un Literal cerrado.
-EstadoRun = str
-
-
-class Run(TypedDict):
-    """Un run (ejecucion) de un agente, en su forma publica.
-
-    Forma CANONICA: la de `agentes._parsear_run` (`GET .../runs/{id}` y el listado
-    `GET .../runs`): `id/prompt/modo/estado/motivo/fecha_inicio/metricas` + la
-    `salida` y `fecha_fin` del run completo. El LISTADO GLOBAL (`GET /api/runs`) y
-    el detalle del agente omiten `salida`/`fecha_fin` y, el global, AÑADE
-    `agente`/`agente_nombre`: por eso esos cuatro van como `NotRequired`. `metricas`
-    es `null` si el run no produjo metricas.
-    """
-
-    id: str
-    prompt: str
-    modo: str
-    estado: EstadoRun
-    motivo: str
-    fecha_inicio: str
-    metricas: MetricasRun | None
-    salida: NotRequired[str]
-    fecha_fin: NotRequired[str]
-    # Solo en el listado global `GET /api/runs` (denormalizados).
-    agente: NotRequired[str]
-    agente_nombre: NotRequired[str]
-
-
-class RespuestaRun(TypedDict):
-    """Respuesta de los endpoints que devuelven UN run (`{run}`).
-
-    `mensaje` solo lo añade el lanzamiento INTERACTIVO (`POST .../runs` con modo
-    `interactivo`): el texto legible del lanzamiento; ausente en el resto.
-    """
-
-    run: Run
-    mensaje: NotRequired[str]
-
-
-class RespuestaRuns(TypedDict):
-    """Listado de runs. El global (`GET /api/runs`) trae `paginacion`; el del agente
-    (`GET /api/agentes/{id}/runs`) no, por eso es `NotRequired`."""
-
-    runs: list[Run]
-    paginacion: NotRequired[Paginacion]
-
-
-# --- Agregados de runs: `GET /api/runs/agregados` -------------------------- #
-
-
-class TotalRuns(TypedDict):
-    coste_usd: float
-    tokens: int
-    runs: int
-
-
-class AgregadoPorAgente(TypedDict):
-    agente: str
-    agente_nombre: str
-    coste_usd: float
-    tokens: int
-    runs: int
-
-
-class AgregadoPorDia(TypedDict):
-    dia: str
-    coste_usd: float
-    tokens: int
-    runs: int
-
-
-class RespuestaRunsAgregados(TypedDict):
-    """Respuesta de `GET /api/runs/agregados`: totales de coste/tokens/runs."""
-
-    total: TotalRuns
-    por_agente: list[AgregadoPorAgente]
-    por_dia: list[AgregadoPorDia]
-
-
-# --------------------------------------------------------------------------- #
 # Generaciones — DEFERIDO del subconjunto generado (#120).                     #
 #                                                                              #
 # `Generacion` y sus envelopes NO se modelan aqui a proposito: su campo        #
@@ -850,14 +765,6 @@ MODELOS = [
     ProximasPanel,
     GatingPanel,
     RespuestaPanel,
-    # Runs (canonico + listado global + agregados).
-    Run,
-    RespuestaRun,
-    RespuestaRuns,
-    TotalRuns,
-    AgregadoPorAgente,
-    AgregadoPorDia,
-    RespuestaRunsAgregados,
     # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
     # Comercial (#124: fuente/es_muestra).
     ActualComercial,

@@ -18,11 +18,6 @@
  */
 
 // Re-export de los tipos generados desde el backend (NO editar `types.gen.ts`).
-// Nota: los tipos de runs/agentes (`Run`/`RespuestaRun(s)`/`TotalRuns`/`AgregadoPor*`/
-// `RespuestaRunsAgregados`) ya NO se consumen en el front (el hub Agentes se retiró y
-// Actividad IA lo sustituye), pero el backend de esta rama aún los emite en `types.gen.ts`
-// y el guard `types.gen.test.ts` exige re-exportar TODA interface generada; se conservan
-// como re-export puro hasta que el backend los retire del esquema.
 export type {
   ResultadoEstado,
   RespuestaEstado,
@@ -69,13 +64,6 @@ export type {
   ProximasPanel,
   GatingPanel,
   RespuestaPanel,
-  Run,
-  RespuestaRun,
-  RespuestaRuns,
-  TotalRuns,
-  AgregadoPorAgente,
-  AgregadoPorDia,
-  RespuestaRunsAgregados,
   ActualComercial,
   SnapshotComercial,
   PublicacionComercial,
