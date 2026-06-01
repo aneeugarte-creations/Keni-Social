@@ -85,8 +85,10 @@ from .estados import (
     PRIORIDAD_EVENTO_DEFECTO,
     PRIORIDADES_EVENTO,
     TIPO_COBERTURA_TRANSMISION,
+    TIPO_CONTENIDO_DEFECTO,
     TIPOS_AUSENCIA,
     TIPOS_COBERTURA,
+    TIPOS_CONTENIDO,
 )
 from .motor_db import IntegrityError
 
@@ -492,6 +494,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         autor_nombre        TEXT NOT NULL DEFAULT '',
         origen              TEXT NOT NULL DEFAULT '',
         notas               TEXT NOT NULL DEFAULT '',
+        tipo_contenido      TEXT NOT NULL DEFAULT 'ia',
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -512,6 +515,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         falta_publicar        INTEGER NOT NULL DEFAULT 1,
         copy                  TEXT NOT NULL DEFAULT '',
         imagen                TEXT NOT NULL DEFAULT '',
+        imagen_fuente         TEXT NOT NULL DEFAULT '',
         veredicto             TEXT NOT NULL DEFAULT '',
         revisor_id            TEXT NOT NULL DEFAULT '',
         revisor_nombre        TEXT NOT NULL DEFAULT '',
@@ -1491,9 +1495,15 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
 # ambas tablas nacen enteras en el DDL declarativo (sin previas en produccion); estos
 # hooks existen por coherencia con `_migrar_columnas_*` para futuras ampliaciones sin
 # reescribir el esquema en bases hosted. Idempotentes; vacios no hacen nada.
-_COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+_COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen de la pieza.
+    ("tipo_contenido", "TEXT NOT NULL DEFAULT 'ia'"),
+)
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
+    # URL de la imagen de la FUENTE original (cuando tipo_contenido='fuente'): se
+    # previsualiza tal cual sin tener que descargarla a la biblioteca de media.
+    ("imagen_fuente", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
@@ -3034,6 +3044,7 @@ _COLS_CONTENIDO = (
     "autor_nombre",
     "origen",
     "notas",
+    "tipo_contenido",
     "creado",
     "actualizado",
 )
@@ -3057,6 +3068,7 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     "responsable_nombre",
     "origen",
     "notas",
+    "tipo_contenido",
 )
 
 
@@ -3087,6 +3099,7 @@ def crear_contenido(
     responsable: dict[str, str] | None = None,
     origen: str = "",
     notas: str = "",
+    tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -3120,6 +3133,7 @@ def crear_contenido(
         "autor_nombre": autor.get("usuario", "") or "",
         "origen": origen or "",
         "notas": notas or "",
+        "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -3259,6 +3273,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "falta_publicar",
     "copy",
     "imagen",
+    "imagen_fuente",
     "veredicto",
     "revisor_id",
     "revisor_nombre",
@@ -3302,11 +3317,14 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
         plat[col] = bool(fila[col])
     plat["estado"] = fila["estado"] or "pendiente"
     # `imagen` es el NOMBRE de archivo en el dir de media; `imagen_url` es su ruta
-    # servible (`/api/media/{imagen}`), igual que en `publicacion_a_dict`. La UI debe
-    # usar SIEMPRE `imagen_url` en un <img>; `imagen` a secas no es navegable.
+    # servible. La UI debe usar SIEMPRE `imagen_url` en un <img>; `imagen` a secas no es
+    # navegable. Si no hay media adjunta pero la pieza es de tipo "fuente" (trae la URL de
+    # la imagen original en `imagen_fuente`), se sirve ESA tal cual (es ya navegable).
     imagen = plat.get("imagen") or ""
+    fuente = plat.get("imagen_fuente") or ""
     plat["imagen"] = imagen
-    plat["imagen_url"] = f"/api/media/{imagen}" if imagen else ""
+    plat["imagen_fuente"] = fuente
+    plat["imagen_url"] = f"/api/media/{imagen}" if imagen else fuente
     return plat
 
 
@@ -3321,6 +3339,7 @@ def crear_contenido_plataforma(
     falta_publicar: bool = True,
     copy: str = "",
     imagen: str = "",
+    imagen_fuente: str = "",
     veredicto: str = "",
     revisor_id: str = "",
     revisor_nombre: str = "",
@@ -3357,6 +3376,7 @@ def crear_contenido_plataforma(
         "falta_publicar": 1 if falta_publicar else 0,
         "copy": copy or "",
         "imagen": imagen or "",
+        "imagen_fuente": imagen_fuente or "",
         "veredicto": veredicto or "",
         "revisor_id": revisor_id or "",
         "revisor_nombre": revisor_nombre or "",

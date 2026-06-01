@@ -11,6 +11,7 @@ import {
   FileText,
   Hash,
   Heart,
+  Image as ImageIcon,
   Loader2,
   LayoutGrid,
   ListTodo,
@@ -32,6 +33,7 @@ import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
 import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
+import { EditorImagen } from "@/components/media/EditorImagen";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
@@ -92,6 +94,7 @@ import type {
   PiezaGenerada,
   Publicacion,
   RespuestaContenido,
+  TipoContenido,
   VariableCopy,
 } from "@/types";
 
@@ -1310,6 +1313,7 @@ function TarjetaContenido({
                   plataforma={p}
                   variables={catalogos.variables}
                   metrica={metricas?.[p.id]}
+                  tipoContenido={contenido.tipo_contenido}
                 />
               ))
             )}
@@ -1449,15 +1453,20 @@ function FilaPlataforma({
   plataforma,
   variables,
   metrica,
+  tipoContenido,
 }: {
   contenidoId: string;
   plataforma: ContenidoPlataforma;
   variables: VariableCopy[];
   metrica?: MetricaPieza;
+  /** De dónde sale la imagen de la pieza (IA / galería / fuente original). */
+  tipoContenido: TipoContenido;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
   const [editorAbierto, setEditorAbierto] = React.useState(false);
+  const [imagenAbierta, setImagenAbierta] = React.useState(false);
+  const tieneImagen = !!(plataforma.imagen || plataforma.imagen_fuente);
 
   const actualizar = useMutation({
     mutationFn: (cuerpo: Parameters<typeof api.actualizarPlataforma>[2]) =>
@@ -1540,6 +1549,21 @@ function FilaPlataforma({
           </Badge>
         ) : null}
       </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 gap-1 px-2 text-xs text-muted-foreground"
+        onClick={() => setImagenAbierta((v) => !v)}
+        aria-expanded={imagenAbierta}
+      >
+        <ImageIcon className="h-3.5 w-3.5" />
+        Imagen
+        {tieneImagen ? (
+          <Badge variant="ok" className="h-4 px-1 font-normal">
+            <Check className="h-3 w-3" />
+          </Badge>
+        ) : null}
+      </Button>
       <Tooltip label="Quitar plataforma">
         <Button
           variant="ghost"
@@ -1560,6 +1584,15 @@ function FilaPlataforma({
           variables={variables}
           guardando={actualizar.isPending}
           onGuardar={(copy) => actualizar.mutate({ copy })}
+        />
+      )}
+      {imagenAbierta && (
+        <EditorImagenPlataforma
+          plataforma={plataforma}
+          tipoContenido={tipoContenido}
+          guardando={actualizar.isPending}
+          onGuardarImagen={(imagen) => actualizar.mutate({ imagen })}
+          onGuardarFuente={(imagen_fuente) => actualizar.mutate({ imagen_fuente })}
         />
       )}
       <RendimientoPieza plataforma={plataforma} metrica={metrica} />
@@ -1761,6 +1794,91 @@ function EditorCopy({
   );
 }
 
+/**
+ * Editor de la IMAGEN de una fila por plataforma, con la afordancia según el TIPO de
+ * contenido de la pieza:
+ *   - `fuente`: pega la URL de la imagen del artículo/clip original (`imagen_fuente`).
+ *   - `ia` / `galeria`: genera con IA o sube/adjunta (reutiliza `EditorImagen`).
+ * En todos los casos la imagen mostrada en el feed sale de `imagen_url` (media adjunta o,
+ * en su defecto, la URL de la fuente).
+ */
+function EditorImagenPlataforma({
+  plataforma,
+  tipoContenido,
+  guardando,
+  onGuardarImagen,
+  onGuardarFuente,
+}: {
+  plataforma: ContenidoPlataforma;
+  tipoContenido: TipoContenido;
+  guardando: boolean;
+  onGuardarImagen: (imagen: string) => void;
+  onGuardarFuente: (imagenFuente: string) => void;
+}) {
+  const [urlFuente, setUrlFuente] = React.useState(plataforma.imagen_fuente);
+  React.useEffect(() => {
+    setUrlFuente(plataforma.imagen_fuente);
+  }, [plataforma.imagen_fuente]);
+  const sucioFuente = urlFuente.trim() !== plataforma.imagen_fuente;
+
+  if (tipoContenido === "fuente") {
+    return (
+      <div className="space-y-2 rounded-md border border-border/60 bg-background/60 p-2">
+        <Label htmlFor={`fuente-${plataforma.id}`} className="text-xs text-muted-foreground">
+          Imagen de la fuente original (URL) para {plataforma.red_nombre}
+        </Label>
+        {plataforma.imagen_url && (
+          <img
+            src={plataforma.imagen_url}
+            alt="Imagen de la fuente"
+            className="max-h-40 w-auto rounded-md border border-border object-contain"
+          />
+        )}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            id={`fuente-${plataforma.id}`}
+            value={urlFuente}
+            onChange={(e) => setUrlFuente(e.target.value)}
+            placeholder="https://…/imagen-del-articulo.jpg"
+            disabled={guardando}
+          />
+          <Button
+            size="sm"
+            className="h-9 shrink-0"
+            onClick={() => onGuardarFuente(urlFuente.trim())}
+            disabled={!sucioFuente || guardando}
+          >
+            {guardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+            Guardar
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Pega la URL de la imagen del artículo o clip de origen.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-1.5 rounded-md border border-border/60 bg-background/60 p-2">
+      <EditorImagen
+        imagen={plataforma.imagen}
+        imagenUrl={plataforma.imagen_url}
+        onCambio={(nombre) => onGuardarImagen(nombre)}
+        idPrefijo={`img-${plataforma.id}`}
+        red={plataforma.red}
+        copy={plataforma.copy}
+        disabled={guardando}
+      />
+      <p className="text-xs text-muted-foreground">
+        {tipoContenido === "galeria"
+          ? "Sube una imagen o adjúntala desde tu equipo."
+          : "Genera la imagen con IA (o súbela si ya la tienes)."}
+      </p>
+    </div>
+  );
+}
+
 function DialogoNuevo({
   abierto,
   onCerrar,
@@ -1785,6 +1903,7 @@ function DialogoNuevo({
   const [fechaEntrega, setFechaEntrega] = React.useState("");
   const [responsable, setResponsable] = React.useState(SIN_RESPONSABLE);
   const [descripcion, setDescripcion] = React.useState("");
+  const [tipoContenido, setTipoContenido] = React.useState<TipoContenido>("ia");
   const [redes, setRedes] = React.useState<string[]>([]);
   const [etiquetas, setEtiquetas] = React.useState<string[]>([]);
 
@@ -1803,6 +1922,7 @@ function DialogoNuevo({
     setFechaEntrega("");
     setResponsable(SIN_RESPONSABLE);
     setDescripcion("");
+    setTipoContenido("ia");
     setRedes([]);
     setEtiquetas([]);
   };
@@ -1825,6 +1945,7 @@ function DialogoNuevo({
       if (clase === "contenido") {
         cuerpo.flujo = flujo;
         cuerpo.marca = marca;
+        cuerpo.tipo_contenido = tipoContenido;
         cuerpo.redes = redes;
         cuerpo.etiquetas = etiquetas;
         // Solo tiene sentido atar a un evento en el flujo de cobertura de eventos.
@@ -1938,6 +2059,27 @@ function DialogoNuevo({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          )}
+
+          {/* Tipo de contenido: de dónde sale la IMAGEN de la pieza. Determina la
+              afordancia de imagen en el editor por plataforma (IA / galería / fuente). */}
+          {clase === "contenido" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="nc-tipo">Imagen</Label>
+              <Select
+                value={tipoContenido}
+                onValueChange={(v) => setTipoContenido(v as TipoContenido)}
+              >
+                <SelectTrigger id="nc-tipo" aria-label="Tipo de imagen">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ia">Generada por IA</SelectItem>
+                  <SelectItem value="galeria">De galería (subir)</SelectItem>
+                  <SelectItem value="fuente">De la fuente original</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           )}
 

@@ -51,6 +51,7 @@ function contenido(over: Record<string, unknown> = {}) {
     autor_nombre: "ana",
     origen: "manual",
     notas: "",
+    tipo_contenido: "ia",
     vencido: false,
     plataformas: [
       {
@@ -65,6 +66,7 @@ function contenido(over: Record<string, unknown> = {}) {
         falta_publicar: true,
         copy: "",
         imagen: "",
+        imagen_fuente: "",
         imagen_url: "",
         veredicto: "",
         fecha_programada: "",
@@ -227,6 +229,29 @@ describe("Tablero de contenido", () => {
     // Su marca (unotv) se ve; la otra marca queda fuera del workspace por defecto.
     expect(await screen.findByText("Sismo CDMX")).toBeInTheDocument();
     expect(screen.queryByText("Final Champions")).not.toBeInTheDocument();
+  });
+
+  it("permite editar la IMAGEN por plataforma (generar IA / adjuntar)", async () => {
+    stubFetch();
+    renderConProviders(<Tablero />);
+    await screen.findByText("Sismo CDMX");
+
+    // Despliega el editor de imagen de la fila por plataforma.
+    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
+    // Tipo 'ia' (por defecto): se puede generar con IA o adjuntar.
+    expect(await screen.findByRole("button", { name: /Generar con IA/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Adjuntar imagen")).toBeInTheDocument();
+  });
+
+  it("tipo 'fuente': el editor de imagen pide la URL de la fuente original", async () => {
+    stubFetch([contenido({ tipo_contenido: "fuente" })]);
+    renderConProviders(<Tablero />);
+    await screen.findByText("Sismo CDMX");
+
+    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
+    expect(
+      await screen.findByPlaceholderText(/imagen-del-articulo/i),
+    ).toBeInTheDocument();
   });
 
   it("modo Feed: una vista previa POR RED (no una por pieza)", async () => {

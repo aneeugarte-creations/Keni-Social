@@ -170,3 +170,25 @@ def test_fila_a_contenido_plataforma_deriva_imagen_url():
     sin = db._fila_a_contenido_plataforma(fila)
     assert sin["imagen"] == ""
     assert sin["imagen_url"] == ""
+
+
+def test_fila_a_contenido_plataforma_imagen_fuente_fallback():
+    """Sin media adjunta pero con `imagen_fuente` (tipo 'fuente'), `imagen_url` la sirve.
+
+    La imagen de la FUENTE original ya es navegable (URL externa): se expone tal cual en
+    `imagen_url`. Si además hay media adjunta, la media manda sobre la fuente.
+    """
+    fila = {c: "" for c in db._COLS_CONTENIDO_PLATAFORMA}
+    for b in db._BOOLS_CONTENIDO_PLATAFORMA:
+        fila[b] = 0
+    fila["estado"] = "pendiente"
+    fila["imagen_fuente"] = "https://cdn.example/orig.jpg"
+
+    plat = db._fila_a_contenido_plataforma(fila)
+    assert plat["imagen_fuente"] == "https://cdn.example/orig.jpg"
+    assert plat["imagen_url"] == "https://cdn.example/orig.jpg"
+
+    # La media adjunta gana a la fuente.
+    fila["imagen"] = "m.png"
+    con_media = db._fila_a_contenido_plataforma(fila)
+    assert con_media["imagen_url"] == "/api/media/m.png"

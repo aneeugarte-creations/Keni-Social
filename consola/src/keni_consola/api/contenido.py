@@ -41,6 +41,7 @@ from ..estados import (
     ESTADOS_CONTENIDO_PLATAFORMA,
     FLUJOS_CONTENIDO,
     PRIORIDADES_CONTENIDO,
+    TIPOS_CONTENIDO,
 )
 from ..seguridad import autor_de_peticion
 
@@ -314,6 +315,9 @@ async def crear(request: Request) -> Response:
         autor=autor_de_peticion(request),
         responsable=responsable,
         notas=_texto("notas"),
+        # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen. `db` coacciona
+        # un valor desconocido o vacío al defecto ('ia').
+        tipo_contenido=_texto("tipo_contenido"),
     )
     # Quita duplicados conservando el orden de llegada.
     for red in dict.fromkeys(redes_iniciales):
@@ -345,6 +349,10 @@ async def actualizar(request: Request) -> Response:
         if datos["prioridad"] not in PRIORIDADES_CONTENIDO:
             return JSONResponse({"error": "Prioridad inválida."}, status_code=400)
         campos["prioridad"] = datos["prioridad"]
+    if "tipo_contenido" in datos:
+        if datos["tipo_contenido"] not in TIPOS_CONTENIDO:
+            return JSONResponse({"error": "Tipo de contenido inválido."}, status_code=400)
+        campos["tipo_contenido"] = datos["tipo_contenido"]
     if "marca" in datos:
         marca, err = _validar_marca(datos.get("marca"))
         if err:
@@ -420,7 +428,15 @@ async def actualizar_plataforma(request: Request) -> Response:
     for flag in ("falta_copy", "falta_imagen", "falta_revision", "falta_publicar", "evergreen"):
         if flag in datos:
             campos[flag] = bool(datos[flag])
-    for clave in ("copy", "imagen", "enlace", "fecha_programada", "hora_post", "veredicto"):
+    for clave in (
+        "copy",
+        "imagen",
+        "imagen_fuente",
+        "enlace",
+        "fecha_programada",
+        "hora_post",
+        "veredicto",
+    ):
         if clave in datos:
             v = datos.get(clave)
             campos[clave] = v.strip()[:_MAX_TEXTO] if isinstance(v, str) else ""

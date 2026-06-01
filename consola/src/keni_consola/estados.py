@@ -223,6 +223,14 @@ FLUJO_EVENTO = "evento"
 PRIORIDADES_CONTENIDO: tuple[str, ...] = PRIORIDADES_EVENTO
 PRIORIDAD_CONTENIDO_DEFECTO = PRIORIDAD_EVENTO_DEFECTO
 
+# Tipo de contenido: de DÓNDE sale la imagen de la pieza.
+#   - `ia`:      se genera con IA (texto -> imagen).
+#   - `galeria`: se sube/elige de la biblioteca de medios.
+#   - `fuente`:  se usa la imagen de la FUENTE original (nota/clip), vía su URL.
+# Es una pista para la UI (qué afordancia de imagen resaltar), no una restricción dura.
+TIPOS_CONTENIDO: tuple[str, ...] = ("ia", "galeria", "fuente")
+TIPO_CONTENIDO_DEFECTO = "ia"
+
 # Eje (clase) de una etiqueta editorial del tablero (ola "organizacion"). Una etiqueta
 # clasifica transversalmente una pieza: una CAMPAÑA ("Mundial 2026"), una VERTICAL/sección
 # editorial ("futbol", "espectaculos") o un TIPO de formato ("reel", "carrusel", "nota").

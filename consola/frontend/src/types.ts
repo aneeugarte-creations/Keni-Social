@@ -706,7 +706,12 @@ export interface ContenidoPlataforma {
   copy: string;
   /** Nombre de archivo de la imagen en el dir de media ("" si no hay). NO es navegable. */
   imagen: string;
-  /** Ruta servible de la imagen (`/api/media/{imagen}`, "" si no hay). Úsala en un <img>. */
+  /** URL de la imagen de la FUENTE original (cuando tipo_contenido='fuente'). "" si no. */
+  imagen_fuente: string;
+  /**
+   * Ruta servible de la imagen, lista para un <img>. Es `/api/media/{imagen}` si hay media
+   * adjunta; si no, cae a `imagen_fuente` (URL externa ya navegable). "" si no hay ninguna.
+   */
   imagen_url: string;
   veredicto: string;
   fecha_programada: string;
@@ -795,6 +800,14 @@ export interface RespuestaEtiqueta {
 }
 
 /** Un item del tablero: contenido publicable (con plataformas) o tarea libre del equipo. */
+/**
+ * Tipo de contenido: de DÓNDE sale la imagen de la pieza.
+ *   - `ia`:      se genera con IA (texto → imagen).
+ *   - `galeria`: se sube/elige de la biblioteca de medios.
+ *   - `fuente`:  se usa la imagen de la FUENTE original (nota/clip), vía su URL.
+ */
+export type TipoContenido = "ia" | "galeria" | "fuente";
+
 export interface Contenido {
   id: string;
   clase: "contenido" | "tarea";
@@ -815,6 +828,8 @@ export interface Contenido {
   autor_nombre: string;
   origen: string;
   notas: string;
+  /** De dónde sale la imagen (IA / galería / fuente original). */
+  tipo_contenido: TipoContenido;
   /** Derivado: deadline pasado y aún sin cerrar. */
   vencido: boolean;
   plataformas: ContenidoPlataforma[];
@@ -866,6 +881,8 @@ export interface CuerpoCrearContenido {
   fecha_entrega?: string;
   responsable_id?: string;
   notas?: string;
+  /** De dónde sale la imagen (IA / galería / fuente original). Def 'ia'. */
+  tipo_contenido?: TipoContenido;
   /** Redes para crear una fila por plataforma por cada una. */
   redes?: string[];
   /** Ids de etiquetas a asignar al crear. */
