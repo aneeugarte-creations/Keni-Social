@@ -13,10 +13,10 @@ auto-verificacion) para producir el copy por red. Tres modos:
   - `resumir`    : condensa la nota/brief en un copy breve y directo por red.
 
 NO es un transporte: arma el "texto base" (brief) y la instruccion ADITIVA por modo, y
-delega el lanzamiento en `dominio.skills.lanzar_generacion_copy` (misma pipeline que copy/
-RSS: encola un `claude -p`, post-procesa a `{resultado, piezas, verdicto, publicaciones}`,
-seguible token a token via `GET /api/generaciones/{id}`). El handler HTTP (`api/contenido`)
-solo valida y llama aqui.
+delega el lanzamiento en `dominio.generar.lanzar_copy` (misma pipeline que copy/RSS: encola
+un `claude -p` con el prompt de copy autocontenido + editorial, post-procesa a `{resultado,
+piezas, verdicto, publicaciones}`, seguible token a token via `GET /api/generaciones/{id}`).
+El handler HTTP (`api/contenido`) solo valida y llama aqui.
 """
 
 from __future__ import annotations
@@ -87,10 +87,10 @@ def lanzar(
 ) -> dict[str, object]:
     """Lanza (ENCOLA) la generacion del asistente para un item del tablero.
 
-    Reutiliza la skill de copy (`SKILL_COPY`) y la pipeline de `lanzar_generacion_copy`:
-    construye el prompt con `dom_skills.construir_prompt` (voz de marca + redes pedidas) y
-    lo encola. Devuelve el registro de `generacion` (estado "ejecutando"); el frontend lo
-    sondea y, al completarse, lee `resultado.piezas` para rellenar el `copy` de cada fila.
+    Reutiliza el prompt de copy (`SKILL_COPY`) y la pipeline de `generar.lanzar_copy`:
+    compone el prompt autocontenido (copy + editorial + brief) y lo encola. Devuelve el
+    registro de `generacion` (estado "ejecutando"); el frontend lo sondea y, al completarse,
+    lee `resultado.piezas` para rellenar el `copy` de cada fila.
     """
     texto_base = construir_texto_base(
         modo=modo, titulo=titulo, descripcion=descripcion, notas=notas
