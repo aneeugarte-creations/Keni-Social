@@ -11,31 +11,26 @@ const Panel = lazy(() => import("@/pages/Panel"));
 const Generacion = lazy(() => import("@/pages/Generacion"));
 const Skills = lazy(() => import("@/pages/Skills"));
 
-// Hubs (layouts con tabs internos) y sus subpaginas.
-const Investigacion = lazy(() => import("@/pages/Investigacion"));
+// Sub-paginas de cada hub. Los hubs ya no tienen componente wrapper propio:
+// eran solo `<Outlet/>` (la subnav vive en el sidebar via HUB_TABS), asi que la
+// ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto.
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
 const Radar = lazy(() => import("@/pages/Radar"));
-const ParrillaDia = lazy(() => import("@/pages/ParrillaDia"));
 
-const Revision = lazy(() => import("@/pages/Revision"));
 const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
 const Verificacion = lazy(() => import("@/pages/Verificacion"));
 
-const Analiticas = lazy(() => import("@/pages/Analiticas"));
 const Metricas = lazy(() => import("@/pages/Metricas"));
 const Comercial = lazy(() => import("@/pages/Comercial"));
 const ReporteDeportes = lazy(() => import("@/pages/ReporteDeportes"));
 
-const Parrilla = lazy(() => import("@/pages/Parrilla"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
 
-const Activos = lazy(() => import("@/pages/Activos"));
 const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
 const BibliotecaMedia = lazy(() => import("@/pages/activos/BibliotecaMedia"));
 
-const AgentesHub = lazy(() => import("@/pages/AgentesHub"));
 const Agentes = lazy(() => import("@/pages/Agentes"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
 const DetalleAgente = lazy(() => import("@/pages/agentes/Detalle"));
@@ -50,7 +45,9 @@ const Usuarios = lazy(() => import("@/pages/Usuarios"));
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
  * cuelgan de el. Cada "hub" (Investigación, Revisión, Analíticas, Parrilla,
- * Agentes) es a su vez un layout con tabs internos que renderiza sub-rutas.
+ * Agentes) es una ruta-layout SIN componente propio: react-router renderiza
+ * `<Outlet/>` por defecto, y la subnav entre sub-rutas vive en el sidebar
+ * (acordeón, via HUB_TABS en components/layout/hub-tabs.ts).
  *
  * La landing `/` ya NO es un launcher: redirige a `/panel`. Las apps viven en el
  * sidebar como grupos de acordeón (ver Sidebar).
@@ -67,23 +64,23 @@ export const router = createBrowserRouter([
       { path: "generacion", element: <Generacion /> },
       { path: "skills", element: <Skills /> },
 
-      // Hub Investigación
+      // Hub Investigación (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
+      // Radar fusiona Tendencias + Plan del día (antes /parrilla-dia) en pestañas internas.
       {
         path: "investigacion",
-        element: <Investigacion />,
         children: [
           { index: true, element: <Navigate to="fuentes" replace /> },
           { path: "fuentes", element: <Fuentes /> },
           { path: "termometro", element: <Termometro /> },
           { path: "radar", element: <Radar /> },
-          { path: "parrilla-dia", element: <ParrillaDia /> },
+          // Legacy: la antigua hoja "Parrilla del día" ahora es una pestaña dentro de Radar.
+          { path: "parrilla-dia", element: <Navigate to="/investigacion/radar" replace /> },
         ],
       },
 
-      // Hub Revisión
+      // Hub Revisión (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
       {
         path: "revision",
-        element: <Revision />,
         children: [
           { index: true, element: <Navigate to="editorial" replace /> },
           { path: "editorial", element: <RevisionEditorial /> },
@@ -91,10 +88,9 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Hub Analíticas
+      // Hub Analíticas (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
       {
         path: "analiticas",
-        element: <Analiticas />,
         children: [
           { index: true, element: <Navigate to="metricas" replace /> },
           { path: "metricas", element: <Metricas /> },
@@ -103,10 +99,9 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Hub Parrilla (antes /tareas + /rota)
+      // Hub Parrilla (antes /tareas + /rota; ruta-layout sin wrapper: <Outlet/> por defecto).
       {
         path: "parrilla",
-        element: <Parrilla />,
         children: [
           { index: true, element: <Navigate to="pendientes" replace /> },
           { path: "pendientes", element: <Tareas /> },
@@ -114,11 +109,12 @@ export const router = createBrowserRouter([
         ],
       },
 
-      // Hub Agentes (catalogo + Actividad IA como pestañas). El detalle queda
-      // fuera del hub para ocupar toda la pantalla sin la subnav.
+      // Hub Agentes (catalogo + Actividad IA como pestañas). Ruta-layout sin wrapper:
+      // <Outlet/> por defecto, asi que el `index` sigue renderizando el catalogo de
+      // Agentes y `actividad` el Monitor. El detalle queda fuera del hub para ocupar
+      // toda la pantalla sin la subnav.
       {
         path: "agentes",
-        element: <AgentesHub />,
         children: [
           { index: true, element: <Agentes /> },
           { path: "actividad", element: <Monitor /> },
@@ -127,9 +123,9 @@ export const router = createBrowserRouter([
       { path: "agentes/:id", element: <DetalleAgente /> },
 
       // Hub Activos (plantillas de contenido + biblioteca de medios reutilizables).
+      // Ruta-layout sin wrapper: renderiza <Outlet/> por defecto.
       {
         path: "activos",
-        element: <Activos />,
         children: [
           { index: true, element: <Navigate to="plantillas" replace /> },
           { path: "plantillas", element: <PlantillasContenido /> },

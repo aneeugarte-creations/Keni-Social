@@ -29,7 +29,7 @@ import type { Sugerencia } from "@/types";
 const CLAVE_SUGERENCIAS = ["sugerencias"] as const;
 
 const CABECERA = {
-  titulo: "Buzón de sugerencias",
+  titulo: "Feedback",
   descripcion:
     "Deja ideas y mejoras del producto. Se guardan en tu máquina; nada sale a la red.",
 };

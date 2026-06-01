@@ -24,14 +24,47 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
 import type { FuenteRadar, RespuestaRadar, TemaRadar } from "@/types";
 
+import { PanelPlanDelDia } from "./ParrillaDia";
+
 const CABECERA = {
-  titulo: "Radar de tendencias",
+  titulo: "Radar",
   descripcion:
-    "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone: marca lo relevante; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.",
+    "Tendencias virales y el plan editorial del día, a partir de las mismas fuentes reales. El radar SOLO propone: marca lo relevante; publicar lo decides tú.",
 };
+
+/** Texto introductorio del panel "Tendencias" (antes la descripción de la página Radar). */
+const INTRO_TENDENCIAS =
+  "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone: marca lo relevante; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.";
+
+/**
+ * Página Radar: fusiona dos vistas que derivan de las mismas fuentes en pestañas
+ * internas — "Tendencias" (lo viral del momento) y "Plan del día" (la antigua
+ * página /investigacion/parrilla-dia). Cada panel monta su propio fetch y lógica;
+ * la pestaña vive en el estado local (no en la URL: la ruta sigue siendo /radar).
+ */
+export default function Radar() {
+  return (
+    <>
+      <PageHeader {...CABECERA} />
+      <Tabs defaultValue="tendencias" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
+          <TabsTrigger value="plan-dia">Plan del día</TabsTrigger>
+        </TabsList>
+        <TabsContent value="tendencias">
+          <PanelTendencias />
+        </TabsContent>
+        <TabsContent value="plan-dia">
+          <PanelPlanDelDia />
+        </TabsContent>
+      </Tabs>
+    </>
+  );
+}
 
 /** Clave de localStorage para recordar qué temas marcó el equipo como relevantes. */
 const CLAVE_RELEVANTES = "keni:radar-relevantes";
@@ -48,7 +81,12 @@ function etiquetaRed(red: string): string {
   return red;
 }
 
-export default function Radar() {
+/**
+ * Panel "Tendencias": el contenido original de la página Radar (lo viral del
+ * momento). Sin PageHeader (lo pinta el contenedor); muestra su propia barra de
+ * acciones (país + actualizar) e intro.
+ */
+function PanelTendencias() {
   const [geo, setGeo] = React.useState("MX");
   const query = useQuery({
     queryKey: ["radar", geo],
@@ -79,30 +117,37 @@ export default function Radar() {
     });
   }
 
-  const acciones = query.isSuccess ? (
-    <div className="flex items-center gap-2">
-      <Select value={geo} onValueChange={setGeo}>
-        <SelectTrigger className="w-44" aria-label="País del radar">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {query.data.geos_disponibles.map((g) => (
-            <SelectItem key={g.id} value={g.id}>
-              {g.nombre}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button variant="outline" size="sm" onClick={() => void query.refetch()} disabled={query.isFetching}>
-        <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-        Actualizar
-      </Button>
-    </div>
-  ) : undefined;
-
   return (
-    <>
-      <PageHeader {...CABECERA} acciones={acciones} />
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="max-w-3xl text-sm text-muted-foreground">{INTRO_TENDENCIAS}</p>
+        {query.isSuccess && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Select value={geo} onValueChange={setGeo}>
+              <SelectTrigger className="w-44" aria-label="País del radar">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {query.data.geos_disponibles.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void query.refetch()}
+              disabled={query.isFetching}
+            >
+              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              Actualizar
+            </Button>
+          </div>
+        )}
+      </div>
+
       {query.isPending ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <Skeleton className="h-96 w-full rounded-md" />
@@ -125,7 +170,7 @@ export default function Radar() {
           <PanelFuentes datos={query.data} />
         </div>
       )}
-    </>
+    </div>
   );
 }
 

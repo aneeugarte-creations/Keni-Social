@@ -6,7 +6,6 @@ import {
   FileText,
   Globe,
   Images,
-  ListOrdered,
   ListTodo,
   Megaphone,
   Presentation,
@@ -49,7 +48,6 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   { ruta: "/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
   { ruta: "/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
   { ruta: "/investigacion/radar", etiqueta: "Radar", icono: Radar },
-  { ruta: "/investigacion/parrilla-dia", etiqueta: "Parrilla del día", icono: ListOrdered },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [
@@ -64,7 +62,7 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
 ];
 
 export const TABS_PARRILLA: ItemTabHub[] = [
-  { ruta: "/parrilla/calendario", etiqueta: "Calendario", icono: CalendarClock },
+  { ruta: "/parrilla/calendario", etiqueta: "Turnos", icono: CalendarClock },
   { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
 ];
 

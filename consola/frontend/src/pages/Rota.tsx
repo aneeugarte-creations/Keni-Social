@@ -104,7 +104,7 @@ import type {
 } from "@/types";
 
 const CABECERA = {
-  titulo: "Parrilla y rota",
+  titulo: "Turnos",
   // Descripcion corta. La explicacion larga vivia aqui antes y comia mucho espacio
   // visual; ahora se ofrece bajo demanda con el icono "?" del calendario.
   descripcion: "Eventos + turnos + cobertura, semana a semana.",

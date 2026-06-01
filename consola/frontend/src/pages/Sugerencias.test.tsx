@@ -67,7 +67,7 @@ describe("Sugerencias · buzón", () => {
     renderConProviders(<Sugerencias />);
 
     expect(await screen.findByText("Exportar métricas a Slack")).toBeInTheDocument();
-    expect(screen.getByText("Buzón de sugerencias")).toBeInTheDocument();
+    expect(screen.getByText("Feedback")).toBeInTheDocument();
   });
 
   it("no muestra ningún panel ni botón de auto-desarrollo", async () => {
