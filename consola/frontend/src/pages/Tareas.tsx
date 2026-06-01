@@ -14,8 +14,6 @@ import {
   Image as ImageIcon,
   Loader2,
   ListTodo,
-  MessageSquare,
-  MoreVertical,
   Pencil,
   Plus,
   Rows3,
@@ -35,7 +33,10 @@ import { toast } from "sonner";
 import { Autor } from "@/components/comunes/Autor";
 import { confirmar } from "@/components/comunes/confirmar";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
-import { MenuContextual } from "@/components/comunes/MenuContextual";
+import {
+  type EntradaMenuContextual,
+  MenuContextual,
+} from "@/components/comunes/MenuContextual";
 import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -1019,26 +1020,29 @@ function ChipEtiqueta({
 }
 
 /**
- * Barra de ACCIONES de una pieza, COMPARTIDA por todas las vistas del tablero
- * (lista/cuadrícula/feed) para que ninguna vista pierda funcionalidad: prioridad,
- * asistente IA (generar/mejorar copy), Detalle (comentarios + versiones de copy +
- * cadena de aprobación) y borrar. Autocontenida: trae sus mutaciones, su invalidación
- * y sus diálogos (`DialogoAsistente`/`PanelColaboracion`). Las acciones de IA/Detalle
- * solo aplican a `contenido` (las tareas del equipo no tienen copy ni aprobación).
+ * Acciones de una pieza, COMPARTIDAS por todas las vistas del tablero (lista y feed):
+ * un MENÚ CONTEXTUAL (click DERECHO sobre la tarjeta) con "Generar/mejorar copy con IA"
+ * y "Borrar", más sus diálogos (`DialogoAsistente`/`PanelColaboracion`). Envuelve a la
+ * tarjeta (`children`) para que ambas vistas tengan EXACTAMENTE las mismas opciones.
+ *
+ * NO ofrece "abrir detalle" como opción de menú: el click IZQUIERDO en la tarjeta ya abre
+ * el detalle (se expone vía `abrirDetalleRef`), así que ponerlo en el menú sería redundante.
+ * Autocontenida: trae su mutación de borrado, su invalidación y sus diálogos. La acción de
+ * IA solo aplica a `contenido` (las tareas del equipo no tienen copy ni aprobación).
  */
-function BarraAccionesPieza({
+function AccionesPieza({
   contenido,
   abrirDetalle = false,
   abrirDetalleRef,
+  children,
 }: {
   contenido: Contenido;
   /** Deep-link `?abrir=`: si es esta pieza, abre su panel de detalle al montar. */
   abrirDetalle?: boolean;
-  /**
-   * Si se pasa, expone al padre la acción "abrir detalle" para que el cuerpo de la
-   * tarjeta sea clicable (acción primaria) sin duplicar el estado del panel aquí.
-   */
-  abrirDetalleRef?: React.MutableRefObject<(() => void) | null>;
+  /** Expone al cuerpo clicable de cada vista la acción "abrir detalle" (acción primaria). */
+  abrirDetalleRef: React.MutableRefObject<(() => void) | null>;
+  /** La tarjeta sobre la que se monta el menú contextual (right-click). */
+  children: React.ReactNode;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
@@ -1051,17 +1055,9 @@ function BarraAccionesPieza({
     if (abrirDetalle && esContenido) setColaboracionAbierta(true);
   }, [abrirDetalle, esContenido]);
 
-  // Expone "abrir detalle" al padre (TarjetaContenido) para su cuerpo clicable.
-  if (abrirDetalleRef) {
-    abrirDetalleRef.current = esContenido ? () => setColaboracionAbierta(true) : null;
-  }
+  // Expone "abrir detalle" al cuerpo clicable de la tarjeta (lo engancha cada vista).
+  abrirDetalleRef.current = esContenido ? () => setColaboracionAbierta(true) : null;
 
-  const cambiarPrioridad = useMutation({
-    mutationFn: (prioridad: Contenido["prioridad"]) =>
-      api.actualizarContenido(contenido.id, { prioridad }),
-    onSuccess: invalidar,
-    onError: (e) => toast.error(mensajeError(e)),
-  });
   const borrar = useMutation({
     mutationFn: () => api.eliminarContenido(contenido.id),
     onSuccess: () => {
@@ -1071,85 +1067,43 @@ function BarraAccionesPieza({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      <Select
-        value={contenido.prioridad}
-        onValueChange={(v) => cambiarPrioridad.mutate(v as Contenido["prioridad"])}
-        disabled={cambiarPrioridad.isPending}
-      >
-        <SelectTrigger aria-label="Prioridad" className="h-7 w-24 text-xs">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(["alta", "media", "baja"] as const).map((p) => (
-            <SelectItem key={p} value={p}>
-              <span
-                className={cn(
-                  "font-medium capitalize",
-                  p === "alta" && "text-red-600 dark:text-red-400",
-                  p === "media" && "text-amber-600 dark:text-amber-400",
-                  p === "baja" && "text-muted-foreground",
-                )}
-              >
-                {p}
-              </span>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <MenuContextual
-        disparador="click"
-        etiqueta={`Acciones de "${contenido.titulo}"`}
-        items={[
-          ...(esContenido
-            ? ([
-                {
-                  etiqueta: "Generar / mejorar copy con IA",
-                  icono: Sparkles,
-                  onClick: () => setAsistenteAbierto(true),
-                },
-                {
-                  etiqueta: "Detalle (comentarios, versiones, aprobación)",
-                  icono: MessageSquare,
-                  onClick: () => setColaboracionAbierta(true),
-                },
-                { separador: true },
-              ] as const)
-            : []),
+  const items: EntradaMenuContextual[] = [
+    ...(esContenido
+      ? [
           {
-            etiqueta: "Borrar contenido",
-            icono: Trash2,
-            destructivo: true,
-            deshabilitado: borrar.isPending,
-            onClick: async () => {
-              if (
-                await confirmar({
-                  mensaje: `¿Borrar "${contenido.titulo}"? Esta acción no se puede deshacer.`,
-                  destructivo: true,
-                  textoConfirmar: "Borrar",
-                })
-              ) {
-                borrar.mutate();
-              }
-            },
+            etiqueta: "Generar / mejorar copy con IA",
+            icono: Sparkles,
+            onClick: () => setAsistenteAbierto(true),
           },
-        ]}
+        ]
+      : []),
+    {
+      etiqueta: "Borrar contenido",
+      icono: Trash2,
+      destructivo: true,
+      deshabilitado: borrar.isPending,
+      onClick: async () => {
+        if (
+          await confirmar({
+            mensaje: `¿Borrar "${contenido.titulo}"? Esta acción no se puede deshacer.`,
+            destructivo: true,
+            textoConfirmar: "Borrar",
+          })
+        ) {
+          borrar.mutate();
+        }
+      },
+    },
+  ];
+
+  return (
+    <>
+      <MenuContextual
+        disparador="contextmenu"
+        etiqueta={`Acciones de "${contenido.titulo}"`}
+        items={items}
       >
-        <button
-          type="button"
-          aria-label="Más acciones"
-          aria-haspopup="menu"
-          title="Más acciones"
-          disabled={borrar.isPending}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {borrar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <MoreVertical className="h-4 w-4" />
-          )}
-        </button>
+        {children}
       </MenuContextual>
       {esContenido && (
         <DialogoAsistente
@@ -1164,7 +1118,7 @@ function BarraAccionesPieza({
         abierto={colaboracionAbierta}
         onCerrar={() => setColaboracionAbierta(false)}
       />
-    </div>
+    </>
   );
 }
 
@@ -1189,9 +1143,15 @@ function TarjetaContenido({
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
   // Acción primaria del cuerpo de la tarjeta: abrir el detalle. La capacidad la expone
-  // `BarraAccionesPieza` (dueña del estado del panel) a través de esta ref.
+  // `AccionesPieza` (dueña del estado del panel) a través de esta ref.
   const abrirDetalleRef = React.useRef<(() => void) | null>(null);
 
+  const cambiarPrioridad = useMutation({
+    mutationFn: (prioridad: Contenido["prioridad"]) =>
+      api.actualizarContenido(contenido.id, { prioridad }),
+    onSuccess: invalidar,
+    onError: (e) => toast.error(mensajeError(e)),
+  });
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
       api.actualizarContenido(contenido.id, { responsable_id }),
@@ -1243,13 +1203,18 @@ function TarjetaContenido({
   }
 
   return (
-    <Card
-      className={cn(
-        esContenido &&
-          "cursor-pointer transition-colors hover:border-foreground/25 hover:bg-accent/20",
-      )}
-      onClick={esContenido ? alClickCard : undefined}
+    <AccionesPieza
+      contenido={contenido}
+      abrirDetalle={abrirDetalle}
+      abrirDetalleRef={abrirDetalleRef}
     >
+      <Card
+        className={cn(
+          esContenido &&
+            "cursor-pointer transition-colors hover:border-foreground/25 hover:bg-accent/20",
+        )}
+        onClick={esContenido ? alClickCard : undefined}
+      >
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div
@@ -1302,11 +1267,31 @@ function TarjetaContenido({
               )}
             </div>
           </div>
-          <BarraAccionesPieza
-            contenido={contenido}
-            abrirDetalle={abrirDetalle}
-            abrirDetalleRef={abrirDetalleRef}
-          />
+          <Select
+            value={contenido.prioridad}
+            onValueChange={(v) => cambiarPrioridad.mutate(v as Contenido["prioridad"])}
+            disabled={cambiarPrioridad.isPending}
+          >
+            <SelectTrigger aria-label="Prioridad" className="h-7 w-24 shrink-0 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(["alta", "media", "baja"] as const).map((p) => (
+                <SelectItem key={p} value={p}>
+                  <span
+                    className={cn(
+                      "font-medium capitalize",
+                      p === "alta" && "text-red-600 dark:text-red-400",
+                      p === "media" && "text-amber-600 dark:text-amber-400",
+                      p === "baja" && "text-muted-foreground",
+                    )}
+                  >
+                    {p}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {contenido.descripcion && (
@@ -1448,7 +1433,8 @@ function TarjetaContenido({
             </div>
           )}
       </CardContent>
-    </Card>
+      </Card>
+    </AccionesPieza>
   );
 }
 
@@ -1465,7 +1451,6 @@ function VistaFeedPorRed({
   contenidos: Contenido[];
   catalogos: CatalogosContenido;
 }) {
-  const [detalle, setDetalle] = React.useState<Contenido | null>(null);
   const piezas = contenidos.filter((c) => c.clase === "contenido");
 
   // Una columna por red presente, en el orden canónico del catálogo.
@@ -1504,28 +1489,45 @@ function VistaFeedPorRed({
               </span>
             </header>
             {items.map(({ c, p }) => (
-              <button
-                key={`${c.id}-${p.id}`}
-                type="button"
-                onClick={() => setDetalle(c)}
-                title={`Ver detalle: ${c.titulo}`}
-                className="block w-full rounded-lg text-left transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <VistaPreviaRed
-                  red={p.red}
-                  marca={c.marca_nombre || ""}
-                  contenido={p.copy || c.descripcion || c.titulo}
-                  imagen_url={p.imagen_url || undefined}
-                />
-              </button>
+              <TarjetaFeed key={`${c.id}-${p.id}`} contenido={c} plataforma={p} />
             ))}
           </section>
         );
       })}
-      {detalle && (
-        <PanelColaboracion contenido={detalle} abierto onCerrar={() => setDetalle(null)} />
-      )}
     </div>
+  );
+}
+
+/**
+ * Una previa del feed (mockup fiel de la red) envuelta en `AccionesPieza`: click
+ * IZQUIERDO abre el detalle de la pieza; click DERECHO abre el mismo menú contextual que
+ * en la vista lista (Generar/mejorar copy con IA · Borrar). Así lista y feed comparten
+ * exactamente las mismas opciones.
+ */
+function TarjetaFeed({
+  contenido,
+  plataforma,
+}: {
+  contenido: Contenido;
+  plataforma: ContenidoPlataforma;
+}) {
+  const abrirDetalleRef = React.useRef<(() => void) | null>(null);
+  return (
+    <AccionesPieza contenido={contenido} abrirDetalleRef={abrirDetalleRef}>
+      <button
+        type="button"
+        onClick={() => abrirDetalleRef.current?.()}
+        title={`Ver detalle: ${contenido.titulo}`}
+        className="block w-full rounded-lg text-left transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <VistaPreviaRed
+          red={plataforma.red}
+          marca={contenido.marca_nombre || ""}
+          contenido={plataforma.copy || contenido.descripcion || contenido.titulo}
+          imagen_url={plataforma.imagen_url || undefined}
+        />
+      </button>
+    </AccionesPieza>
   );
 }
 

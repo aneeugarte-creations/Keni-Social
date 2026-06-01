@@ -7,6 +7,19 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Tablero: menú contextual unificado en lista y feed
+
+- Las vistas **lista** y **feed** del tablero ahora comparten **exactamente las mismas
+  opciones** por pieza. Antes la lista tenía un menú de 3 puntos (kebab) y el feed no tenía
+  ninguno.
+- El menú pasa de **kebab (3 puntos)** a **menú contextual de click derecho** sobre la propia
+  tarjeta, con "Generar / mejorar copy con IA" y "Borrar".
+- Se **quita "Detalle" del menú**: el click izquierdo en la tarjeta ya abre el detalle
+  (comentarios, versiones, aprobación), así que tenerlo también en el menú era redundante.
+- Consolidado en un único componente `AccionesPieza` que envuelve la tarjeta de ambas vistas
+  (dueño del menú, los diálogos de IA/colaboración y el borrado); la prioridad sigue como
+  control en línea de la vista lista.
+
 ### Diálogo de confirmación propio (sin pop-ups del navegador)
 
 - La app deja de usar el `window.confirm` (y cualquier diálogo/alerta por defecto del
