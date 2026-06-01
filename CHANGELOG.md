@@ -18,11 +18,20 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
   (comentarios, versiones, aprobación), así que tenerlo también en el menú era redundante.
 - Consolidado en un único componente `AccionesPieza` que envuelve la tarjeta de ambas vistas
   (dueño del menú, los diálogos de IA/colaboración y el borrado).
-- El menú contextual incluye ahora **cambiar la prioridad** (alta/media/baja, con la actual
-  marcada): así el **feed** también puede cambiarla, no solo la lista (que mantiene además su
-  selector en línea).
+- La **prioridad** se cambia desde el **menú contextual** (alta/media/baja, con la actual
+  marcada), igual en lista y feed — una única forma de editarla. En la lista, el selector en
+  línea se sustituye por un **indicador de color de solo lectura** (clic derecho para cambiarla).
 - **Pista de descubribilidad**: el tooltip de la tarjeta (en ambas vistas) indica "Clic derecho
   para más acciones", ya que el menú dejó de tener un botón visible.
+- Los diálogos de cada pieza (asistente IA / colaboración) se **montan solo al abrirse** (antes
+  colgaban cerrados del árbol por cada tarjeta; se nota en el feed, con muchas tarjetas).
+
+### Infra: el CI del frontend corre lint + tests
+
+- El job `frontend-build` de Woodpecker ahora corre **`eslint` y `vitest`** además del build
+  (`tsc -b && vite build`). Antes solo compilaba; lint y tests dependían de que cada autor los
+  corriera en local. Nuevo script `scripts/promover-main.sh` para promover una rama a `main` de
+  forma segura (fetch → rebase → push, sin borrar nada antes de confirmar el push).
 
 ### Diálogo de confirmación propio (sin pop-ups del navegador)
 

@@ -1122,19 +1122,23 @@ function AccionesPieza({
       >
         {children}
       </MenuContextual>
-      {esContenido && (
+      {/* Diálogos montados SOLO cuando se abren: el feed tiene muchas tarjetas y no
+          queremos N paneles/asistentes cerrados colgando del árbol por cada una. */}
+      {esContenido && asistenteAbierto && (
         <DialogoAsistente
-          abierto={asistenteAbierto}
+          abierto
           onCerrar={() => setAsistenteAbierto(false)}
           contenido={contenido}
           onAplicado={invalidar}
         />
       )}
-      <PanelColaboracion
-        contenido={contenido}
-        abierto={colaboracionAbierta}
-        onCerrar={() => setColaboracionAbierta(false)}
-      />
+      {colaboracionAbierta && (
+        <PanelColaboracion
+          contenido={contenido}
+          abierto
+          onCerrar={() => setColaboracionAbierta(false)}
+        />
+      )}
     </>
   );
 }
@@ -1163,12 +1167,6 @@ function TarjetaContenido({
   // `AccionesPieza` (dueña del estado del panel) a través de esta ref.
   const abrirDetalleRef = React.useRef<(() => void) | null>(null);
 
-  const cambiarPrioridad = useMutation({
-    mutationFn: (prioridad: Contenido["prioridad"]) =>
-      api.actualizarContenido(contenido.id, { prioridad }),
-    onSuccess: invalidar,
-    onError: (e) => toast.error(mensajeError(e)),
-  });
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
       api.actualizarContenido(contenido.id, { responsable_id }),
@@ -1232,228 +1230,219 @@ function TarjetaContenido({
         )}
         onClick={esContenido ? alClickCard : undefined}
       >
-      <CardContent className="space-y-3 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div
-            className="min-w-0 space-y-1.5"
-            role={esContenido ? "button" : undefined}
-            tabIndex={esContenido ? 0 : undefined}
-            onKeyDown={
-              esContenido
-                ? (e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      abrirDetalleRef.current?.();
+        <CardContent className="space-y-3 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div
+              className="min-w-0 space-y-1.5"
+              role={esContenido ? "button" : undefined}
+              tabIndex={esContenido ? 0 : undefined}
+              onKeyDown={
+                esContenido
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        abrirDetalleRef.current?.();
+                      }
                     }
-                  }
-                : undefined
-            }
-            title={
-              esContenido
-                ? "Ver detalle: comentarios, versiones de copy y aprobación · Clic derecho para más acciones"
-                : undefined
-            }
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium leading-snug">{contenido.titulo}</span>
-              {contenido.plataformas.some((p) => p.es_publicacion) && (
-                <Badge
-                  variant="outline"
-                  className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
-                  title="Esta pieza es una publicación (gestionable también en el modo Publicaciones/Calendario)"
-                >
-                  <Send className="h-3 w-3" />
-                  Publicación
-                </Badge>
-              )}
-              {contenido.marca_nombre && (
-                <Badge variant="outline" className="font-normal">
-                  {contenido.marca_nombre}
-                </Badge>
-              )}
-              {contenido.fecha_entrega && (
-                <Badge
-                  variant={contenido.vencido ? "error" : "outline"}
-                  className="gap-1 font-normal"
-                >
-                  <CalendarClock className="h-3 w-3" />
-                  {contenido.vencido ? "Venció " : "Entrega "}
-                  {formatearFecha(contenido.fecha_entrega)}
-                </Badge>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              {contenido.autor_nombre && (
-                <Autor nombre={contenido.autor_nombre} className="text-xs" />
-              )}
-            </div>
-          </div>
-          <Select
-            value={contenido.prioridad}
-            onValueChange={(v) => cambiarPrioridad.mutate(v as Contenido["prioridad"])}
-            disabled={cambiarPrioridad.isPending}
-          >
-            <SelectTrigger aria-label="Prioridad" className="h-7 w-24 shrink-0 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(["alta", "media", "baja"] as const).map((p) => (
-                <SelectItem key={p} value={p}>
-                  <span
-                    className={cn(
-                      "font-medium capitalize",
-                      p === "alta" && "text-red-600 dark:text-red-400",
-                      p === "media" && "text-amber-600 dark:text-amber-400",
-                      p === "baja" && "text-muted-foreground",
-                    )}
+                  : undefined
+              }
+              title={
+                esContenido
+                  ? "Ver detalle: comentarios, versiones de copy y aprobación · Clic derecho para más acciones"
+                  : undefined
+              }
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium leading-snug">{contenido.titulo}</span>
+                {contenido.plataformas.some((p) => p.es_publicacion) && (
+                  <Badge
+                    variant="outline"
+                    className="gap-1 border-sky-500/40 font-normal text-sky-700 dark:text-sky-300"
+                    title="Esta pieza es una publicación (gestionable también en el modo Publicaciones/Calendario)"
                   >
-                    {p}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+                    <Send className="h-3 w-3" />
+                    Publicación
+                  </Badge>
+                )}
+                {contenido.marca_nombre && (
+                  <Badge variant="outline" className="font-normal">
+                    {contenido.marca_nombre}
+                  </Badge>
+                )}
+                {contenido.fecha_entrega && (
+                  <Badge
+                    variant={contenido.vencido ? "error" : "outline"}
+                    className="gap-1 font-normal"
+                  >
+                    <CalendarClock className="h-3 w-3" />
+                    {contenido.vencido ? "Venció " : "Entrega "}
+                    {formatearFecha(contenido.fecha_entrega)}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {contenido.autor_nombre && (
+                  <Autor nombre={contenido.autor_nombre} className="text-xs" />
+                )}
+              </div>
+            </div>
+            {/* Indicador de prioridad (solo lectura). Se cambia desde el menú contextual
+                (clic derecho), igual en lista y feed — una única forma de editarla. */}
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium capitalize",
+                contenido.prioridad === "alta" &&
+                  "bg-red-500/10 text-red-600 dark:text-red-400",
+                contenido.prioridad === "media" &&
+                  "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+                contenido.prioridad === "baja" && "bg-muted text-muted-foreground",
+              )}
+              title={`Prioridad ${contenido.prioridad} · cámbiala con clic derecho`}
+            >
+              <Flag className="h-3 w-3" aria-hidden="true" />
+              {contenido.prioridad}
+            </span>
+          </div>
 
-        {contenido.descripcion && (
-          <p
-            className={cn(
-              "whitespace-pre-wrap text-sm text-muted-foreground",
-              compacta && "line-clamp-2",
+          {contenido.descripcion && (
+            <p
+              className={cn(
+                "whitespace-pre-wrap text-sm text-muted-foreground",
+                compacta && "line-clamp-2",
+              )}
+            >
+              {contenido.descripcion}
+            </p>
+          )}
+
+          {/* Etiquetas editoriales (chips removibles + selector para añadir). */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {asignadas.map((id) => {
+              const et = etiquetaPorId.get(id);
+              if (!et) return null;
+              return (
+                <ChipEtiqueta
+                  key={id}
+                  etiqueta={et}
+                  onQuitar={
+                    quitarEtiqueta.isPending ? undefined : () => quitarEtiqueta.mutate(id)
+                  }
+                />
+              );
+            })}
+            {etiquetasDisponibles.length > 0 && (
+              <Select value="" onValueChange={(id) => asignarEtiqueta.mutate(id)}>
+                <SelectTrigger
+                  aria-label="Añadir etiqueta"
+                  className="h-6 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground"
+                >
+                  <Tag className="h-3 w-3" />
+                  <SelectValue placeholder="Etiqueta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {etiquetasDisponibles.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
-          >
-            {contenido.descripcion}
-          </p>
-        )}
+          </div>
 
-        {/* Etiquetas editoriales (chips removibles + selector para añadir). */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          {asignadas.map((id) => {
-            const et = etiquetaPorId.get(id);
-            if (!et) return null;
-            return (
-              <ChipEtiqueta
-                key={id}
-                etiqueta={et}
-                onQuitar={
-                  quitarEtiqueta.isPending ? undefined : () => quitarEtiqueta.mutate(id)
-                }
-              />
-            );
-          })}
-          {etiquetasDisponibles.length > 0 && (
-            <Select value="" onValueChange={(id) => asignarEtiqueta.mutate(id)}>
-              <SelectTrigger
-                aria-label="Añadir etiqueta"
-                className="h-6 w-auto gap-1 border-dashed px-2 text-xs text-muted-foreground"
-              >
-                <Tag className="h-3 w-3" />
-                <SelectValue placeholder="Etiqueta" />
+          {/* Filas por plataforma (clase=contenido). */}
+          {contenido.clase === "contenido" && (
+            <div className="space-y-2 rounded-md border border-border/60 p-2">
+              {contenido.plataformas.length === 0 ? (
+                <p className="px-1 text-xs text-muted-foreground/70">
+                  Sin plataformas. Añade una red abajo.
+                </p>
+              ) : (
+                contenido.plataformas.map((p) => (
+                  <FilaPlataforma
+                    key={p.id}
+                    contenidoId={contenido.id}
+                    plataforma={p}
+                    variables={catalogos.variables}
+                    metrica={metricas?.[p.id]}
+                    tipoContenido={contenido.tipo_contenido}
+                  />
+                ))
+              )}
+              {redesDisponibles.length > 0 && (
+                <Select value="" onValueChange={(red) => agregarRed.mutate(red)}>
+                  <SelectTrigger aria-label="Añadir plataforma" className="h-7 w-44 text-xs">
+                    <SelectValue placeholder="+ Añadir plataforma" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {redesDisponibles.map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Responsable</span>
+            <Select
+              value={contenido.responsable_id || SIN_RESPONSABLE}
+              onValueChange={(v) => reasignar.mutate(v === SIN_RESPONSABLE ? "" : v)}
+              disabled={reasignar.isPending}
+            >
+              <SelectTrigger aria-label="Responsable del contenido" className="h-7 w-48 text-xs">
+                <SelectValue placeholder="Sin asignar" />
               </SelectTrigger>
               <SelectContent>
-                {etiquetasDisponibles.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nombre}
+                <SelectItem value={SIN_RESPONSABLE}>Sin asignar</SelectItem>
+                {catalogos.usuarios.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>
+                    {u.usuario}
                   </SelectItem>
                 ))}
+                {contenido.responsable_id &&
+                  !catalogos.usuarios.some((u) => u.id === contenido.responsable_id) && (
+                    <SelectItem value={contenido.responsable_id}>
+                      {contenido.responsable_nombre || "desconocido"}
+                    </SelectItem>
+                  )}
               </SelectContent>
             </Select>
-          )}
-        </div>
-
-        {/* Filas por plataforma (clase=contenido). */}
-        {contenido.clase === "contenido" && (
-          <div className="space-y-2 rounded-md border border-border/60 p-2">
-            {contenido.plataformas.length === 0 ? (
-              <p className="px-1 text-xs text-muted-foreground/70">
-                Sin plataformas. Añade una red abajo.
-              </p>
-            ) : (
-              contenido.plataformas.map((p) => (
-                <FilaPlataforma
-                  key={p.id}
-                  contenidoId={contenido.id}
-                  plataforma={p}
-                  variables={catalogos.variables}
-                  metrica={metricas?.[p.id]}
-                  tipoContenido={contenido.tipo_contenido}
-                />
-              ))
-            )}
-            {redesDisponibles.length > 0 && (
-              <Select value="" onValueChange={(red) => agregarRed.mutate(red)}>
-                <SelectTrigger aria-label="Añadir plataforma" className="h-7 w-44 text-xs">
-                  <SelectValue placeholder="+ Añadir plataforma" />
-                </SelectTrigger>
-                <SelectContent>
-                  {redesDisponibles.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.nombre}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
           </div>
-        )}
 
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Responsable</span>
-          <Select
-            value={contenido.responsable_id || SIN_RESPONSABLE}
-            onValueChange={(v) => reasignar.mutate(v === SIN_RESPONSABLE ? "" : v)}
-            disabled={reasignar.isPending}
-          >
-            <SelectTrigger aria-label="Responsable del contenido" className="h-7 w-48 text-xs">
-              <SelectValue placeholder="Sin asignar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={SIN_RESPONSABLE}>Sin asignar</SelectItem>
-              {catalogos.usuarios.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  {u.usuario}
-                </SelectItem>
-              ))}
-              {contenido.responsable_id &&
-                !catalogos.usuarios.some((u) => u.id === contenido.responsable_id) && (
-                  <SelectItem value={contenido.responsable_id}>
-                    {contenido.responsable_nombre || "desconocido"}
-                  </SelectItem>
-                )}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {/* Evento (cobertura): atar/desatar la pieza a un evento del catálogo. Visible en el
-            flujo de eventos, o si la pieza ya trae un evento (para poder cambiarlo/quitarlo). */}
-        {contenido.clase === "contenido" &&
-          (contenido.flujo === "evento" || contenido.evento_id) && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Evento</span>
-              <Select
-                value={contenido.evento_id || SIN_EVENTO}
-                onValueChange={(v) => cambiarEvento.mutate(v === SIN_EVENTO ? "" : v)}
-                disabled={cambiarEvento.isPending}
-              >
-                <SelectTrigger aria-label="Evento del contenido" className="h-7 w-48 text-xs">
-                  <SelectValue placeholder="(ninguno)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SIN_EVENTO}>(ninguno)</SelectItem>
-                  {catalogos.eventos.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {etiquetaEvento(e)}
-                    </SelectItem>
-                  ))}
-                  {contenido.evento_id &&
-                    !catalogos.eventos.some((e) => e.id === contenido.evento_id) && (
-                      <SelectItem value={contenido.evento_id}>(evento)</SelectItem>
-                    )}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-      </CardContent>
+          {/* Evento (cobertura): atar/desatar la pieza a un evento del catálogo. Visible en el
+              flujo de eventos, o si la pieza ya trae un evento (para poder cambiarlo/quitarlo). */}
+          {contenido.clase === "contenido" &&
+            (contenido.flujo === "evento" || contenido.evento_id) && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Evento</span>
+                <Select
+                  value={contenido.evento_id || SIN_EVENTO}
+                  onValueChange={(v) => cambiarEvento.mutate(v === SIN_EVENTO ? "" : v)}
+                  disabled={cambiarEvento.isPending}
+                >
+                  <SelectTrigger aria-label="Evento del contenido" className="h-7 w-48 text-xs">
+                    <SelectValue placeholder="(ninguno)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SIN_EVENTO}>(ninguno)</SelectItem>
+                    {catalogos.eventos.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {etiquetaEvento(e)}
+                      </SelectItem>
+                    ))}
+                    {contenido.evento_id &&
+                      !catalogos.eventos.some((e) => e.id === contenido.evento_id) && (
+                        <SelectItem value={contenido.evento_id}>(evento)</SelectItem>
+                      )}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+        </CardContent>
       </Card>
     </AccionesPieza>
   );
