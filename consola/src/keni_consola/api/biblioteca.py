@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas
+from .. import biblioteca, marcas, redes
 from .._http_json import leer_json
 from ..dominio import biblioteca_lanzar, extraccion_url
 from ..seguridad import autor_de_peticion
@@ -173,6 +173,21 @@ def _adjuntos_lista(crudo: object) -> list[str]:
     return [a for a in crudo if isinstance(a, str)] if isinstance(crudo, list) else []
 
 
+def _redes_lista(crudo: object) -> list[str]:
+    """Filtra ids de red contra las canonicas (orden de llegada, sin duplicar).
+
+    Solo importa en el MODO PIEZAS (prompt `salida=piezas`); para prompts normales el
+    dominio ignora las redes. Devuelve [] si no llega una lista o no hay ids validos.
+    """
+    if not isinstance(crudo, list):
+        return []
+    vistas: list[str] = []
+    for r in crudo:
+        if isinstance(r, str) and redes.es_red(r) and r not in vistas:
+            vistas.append(r)
+    return vistas
+
+
 def _bloque_de_target(target: dict, marca: str) -> tuple[str, Response | None]:
     """Resuelve el target a un BLOQUE DE CONTEXTO de texto. Devuelve (bloque, respuesta_error)."""
     tipo = target.get("tipo") if isinstance(target, dict) else None
@@ -223,6 +238,7 @@ async def lanzar(request: Request) -> Response:
             marca=marca,
             adjuntos_ids=_adjuntos_lista(datos.get("adjuntos")),
             bloque_contexto=bloque,
+            redes_ids=_redes_lista(datos.get("redes")),
             autor=autor_de_peticion(request),
         )
     except biblioteca.BibliotecaError as e:
@@ -289,6 +305,13 @@ async def lanzar_archivo(request: Request) -> Response:
         if isinstance(valor, str):
             adjuntos.extend(p.strip() for p in valor.split(",") if p.strip())
 
+    # Redes (modo PIEZAS): campo repetido o CSV. Se filtran contra las canonicas.
+    redes_crudas: list[str] = []
+    for valor in form.getlist("redes"):
+        if isinstance(valor, str):
+            redes_crudas.extend(p.strip() for p in valor.split(",") if p.strip())
+    redes_ids = _redes_lista(redes_crudas)
+
     try:
         ruta, dir_temporal, ext = await _guardar_subida(archivo)
     except biblioteca.BibliotecaError as e:
@@ -320,6 +343,7 @@ async def lanzar_archivo(request: Request) -> Response:
             marca=marca,
             adjuntos_ids=adjuntos,
             bloque_contexto=bloque,
+            redes_ids=redes_ids,
             dir_temporal=dir_para_lanzar,
             autor=autor_de_peticion(request),
         )

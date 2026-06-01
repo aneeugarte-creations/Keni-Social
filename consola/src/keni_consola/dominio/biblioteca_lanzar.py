@@ -104,6 +104,7 @@ def lanzar(
     marca: str,
     adjuntos_ids: list[str] | None = None,
     bloque_contexto: str = "",
+    redes_ids: list[str] | None = None,
     dir_temporal: Path | None = None,
     autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -113,19 +114,29 @@ def lanzar(
     debe ser una marca del catalogo. `adjuntos_ids` son documentos editoriales a adjuntar
     (ya resueltos en la UI a partir de `biblioteca.editoriales_de_marca`, ajustables).
     `bloque_contexto` es el texto del target ya resuelto por el llamante.
+
+    MODO PIEZAS (copy): si el prompt resuelto tiene `salida == "piezas"` y llegan `redes_ids`,
+    se compone con la instruccion de redes (sin emojis) y se lanza con el post-procesado de
+    COPY (parsea piezas por red + AUTO-CREA borradores en la Parrilla), igual que la antigua
+    generacion de copy. En cualquier otro caso se usa el camino IDENTIDAD (`PROC_PROMPT`): el
+    resultado es el texto markdown y no se crean artefactos.
     """
     if not generar.marca_valida(marca):
         raise biblioteca.BibliotecaError("Marca no válida.")
 
+    salida = ""
     if prompt_id:
         doc = biblioteca.obtener(prompt_id)
         if doc is None or doc.tipo != "prompt":
             raise biblioteca.BibliotecaError("Ese prompt no existe.")
         cuerpo_prompt = doc.cuerpo
         titulo = titulo.strip() or doc.titulo
+        salida = doc.salida
+        origen_historial = prompt_id.rsplit("/", 1)[-1] or "prompt"
     elif isinstance(texto, str) and texto.strip():
         cuerpo_prompt = texto
         titulo = titulo.strip() or "Prompt"
+        origen_historial = "prompt"
     else:
         raise biblioteca.BibliotecaError("Hace falta un prompt (de la biblioteca o pegado).")
 
@@ -134,6 +145,23 @@ def lanzar(
         d = biblioteca.obtener(aid)
         if d is not None and d.tipo == "editorial":
             adjuntos.append(d)
+
+    # MODO PIEZAS: el prompt declara salida=piezas y el lanzamiento trae redes -> copy.
+    if salida == "piezas" and redes_ids:
+        prompt_final = generar.componer(
+            cuerpo_prompt, adjuntos, bloque_contexto,
+            sin_emojis=True, redes_ids=redes_ids,
+        )
+        procesar_spec = jobspec.construir_copy(
+            skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo,
+            texto_base=bloque_contexto, autor=autor,
+        )
+        return generar.lanzar(
+            tipo="copy", titulo=titulo, marca=marca, prompt=prompt_final,
+            procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+            procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
+        )
+
     prompt_final = generar.componer(cuerpo_prompt, adjuntos, bloque_contexto)
 
     # Post-procesado IDENTIDAD: el prompt devuelve el texto markdown; no crea artefactos.

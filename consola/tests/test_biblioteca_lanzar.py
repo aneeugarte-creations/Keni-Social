@@ -103,6 +103,49 @@ def test_lanzar_prompt_inexistente_lanza():
         biblioteca_lanzar.lanzar(prompt_id="prompt/no-existe", marca=_MARCA)
 
 
+def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
+    """Un prompt salida=piezas + redes lanza con el post-procesado de COPY (no identidad)."""
+    prompt = biblioteca.crear(
+        "Copy desde nota", tipo="prompt", cuerpo="Convierte la nota en copy por red."
+    )
+    # `crear` no fija `salida`; lo escribimos como lo haria el editor de la Biblioteca.
+    biblioteca.guardar(prompt.id, cuerpo=prompt.cuerpo)
+    doc = biblioteca.obtener(prompt.id)
+    # Forzamos salida=piezas via el almacen (el frontmatter lo soporta).
+    ruta = biblioteca._ruta_de_id(prompt.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+    assert biblioteca.obtener(prompt.id).salida == "piezas"
+
+    redes_ids = ["instagram", "x"]
+    reg = biblioteca_lanzar.lanzar(
+        prompt_id=prompt.id, marca=_MARCA, redes_ids=redes_ids,
+        bloque_contexto="Nota: gol en el 90'",
+    )
+    assert reg["tipo"] == "copy"
+    spec = encolado["spec"]["procesar"]
+    assert spec["kind"] == jobspec.PROC_COPY
+    assert spec["redes_ids"] == redes_ids
+    assert spec["skill"] == doc.id.rsplit("/", 1)[-1]
+    # El prompt compuesto pide el bloque json de piezas por red.
+    assert "piezas" in encolado["prompt"]
+
+
+def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
+    """Sin redes, un prompt salida=piezas usa el camino IDENTIDAD (no crea borradores)."""
+    prompt = biblioteca.crear("Copy", tipo="prompt", cuerpo="haz copy")
+    ruta = biblioteca._ruta_de_id(prompt.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+    reg = biblioteca_lanzar.lanzar(prompt_id=prompt.id, marca=_MARCA)
+    assert reg["tipo"] == "prompt"
+    assert encolado["spec"]["procesar"]["kind"] == jobspec.PROC_PROMPT
+
+
 def test_spec_prompt_round_trip_reconstruye_identidad():
     """El spec PROC_PROMPT sobrevive serializar/deserializar (compat worker)."""
     spec = jobspec.construir(prompt="hola", procesar=jobspec.construir_prompt_lib())

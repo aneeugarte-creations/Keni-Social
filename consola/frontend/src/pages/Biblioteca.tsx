@@ -24,6 +24,7 @@ import {
 import * as React from "react";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
+import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { BarraFormato } from "@/components/editor/BarraFormato";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Badge } from "@/components/ui/badge";
@@ -321,6 +322,7 @@ export default function Biblioteca() {
       {borrador?.tipo === "prompt" ? (
         <PanelLanzar
           promptId={borrador.id}
+          salida={borrador.salida ?? ""}
           marcas={marcasQuery.data?.marcas ?? []}
           areas={areasQuery.data?.areas ?? []}
         />
@@ -335,10 +337,12 @@ export default function Biblioteca() {
 
 function PanelLanzar({
   promptId,
+  salida,
   marcas,
   areas,
 }: {
   promptId: string;
+  salida: string;
   marcas: { id: string; nombre: string }[];
   areas: { id: string; nombre: string }[];
 }) {
@@ -347,6 +351,11 @@ function PanelLanzar({
   const [tipoTarget, setTipoTarget] = React.useState<TipoTarget>("contenido");
   const [valorTarget, setValorTarget] = React.useState("");
   const [archivo, setArchivo] = React.useState<File | null>(null);
+
+  // Modo PIEZAS: si el prompt declara salida=piezas, ofrecemos el selector de redes y
+  // el lanzamiento crea borradores por red (copy) en vez de un documento markdown.
+  const esPiezas = salida === "piezas";
+  const [redes, setRedes] = React.useState<Set<string>>(new Set());
 
   const { generacion, ejecutando, cancelando, iniciar, cancelar } = useGeneracion("keni:biblioteca-lanzar");
 
@@ -361,12 +370,34 @@ function PanelLanzar({
     setAdjuntos(new Set(ids));
   }, [editorialesQuery.data]);
 
+  // Redes disponibles (catálogo de publicaciones); preselección = todas, solo en piezas.
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    enabled: esPiezas,
+  });
+  const opcionesRedes = React.useMemo(
+    () => (opcionesQuery.data?.redes ?? []).map((r) => ({ id: r.id, nombre: r.nombre })),
+    [opcionesQuery.data],
+  );
+  React.useEffect(() => {
+    if (esPiezas) setRedes(new Set(opcionesRedes.map((r) => r.id)));
+  }, [esPiezas, opcionesRedes]);
+
   const lanzarMut = useMutation({
     mutationFn: () => {
       const adj = [...adjuntos];
+      const redesArr = esPiezas ? [...redes] : undefined;
+      if (esPiezas && redesArr && redesArr.length === 0) {
+        throw new Error("Elige al menos una red para generar las piezas.");
+      }
       if (tipoTarget === "archivo") {
         if (!archivo) throw new Error("Adjunta un archivo o cambia de target.");
-        return api.lanzarBibliotecaArchivo(archivo, marca, { prompt_id: promptId, adjuntos: adj });
+        return api.lanzarBibliotecaArchivo(archivo, marca, {
+          prompt_id: promptId,
+          adjuntos: adj,
+          redes: redesArr,
+        });
       }
       const target: TargetLanzamiento =
         tipoTarget === "contenido"
@@ -376,7 +407,13 @@ function PanelLanzar({
             : tipoTarget === "area"
               ? { tipo: "area", valor: valorTarget }
               : { tipo: "ninguno" };
-      return api.lanzarBiblioteca({ prompt_id: promptId, marca, adjuntos: adj, target });
+      return api.lanzarBiblioteca({
+        prompt_id: promptId,
+        marca,
+        adjuntos: adj,
+        target,
+        redes: redesArr,
+      });
     },
     onSuccess: (r) => iniciar(r.generacion),
   });
@@ -425,6 +462,22 @@ function PanelLanzar({
             )}
           </div>
         </div>
+      ) : null}
+
+      {esPiezas ? (
+        <SelectorRedMultiple
+          opciones={opcionesRedes}
+          seleccionadas={redes}
+          onCambio={(red, marcada) =>
+            setRedes((prev) => {
+              const s = new Set(prev);
+              if (marcada) s.add(red);
+              else s.delete(red);
+              return s;
+            })
+          }
+          disabled={ejecutando || lanzarMut.isPending}
+        />
       ) : null}
 
       <div className="space-y-1">

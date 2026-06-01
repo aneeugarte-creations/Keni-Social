@@ -3214,6 +3214,8 @@ export interface DocumentoBiblioteca {
   clase: string;
   /** Solo editorial: marcas a las que aplica (para el auto-adjunto). */
   marcas: string[];
+  /** Solo prompt: "" | "documento" (texto) | "piezas" (copy por red -> borradores). */
+  salida?: string;
 }
 
 /** `GET /api/biblioteca`: documentos filtrados + carpetas existentes. */
@@ -3286,6 +3288,8 @@ export interface CuerpoLanzarBiblioteca {
   /** Ids de documentos editoriales a adjuntar. */
   adjuntos?: string[];
   target?: TargetLanzamiento;
+  /** Solo prompts salida=piezas: redes objetivo del copy (ids de red). */
+  redes?: string[];
 }
 
 /** Tipo de alerta de rendimiento (subconjunto de eventos internos de la bitácora). */

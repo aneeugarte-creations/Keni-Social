@@ -12,7 +12,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from keni_consola import generaciones, marcas
+from keni_consola import biblioteca, generaciones, marcas
 from keni_consola.api import biblioteca as api_bib
 
 _MARCA = marcas.opciones()[0][0]
@@ -129,3 +129,35 @@ def test_lanzar_area_invalida_400(cliente):
         "texto": "x", "marca": _MARCA, "target": {"tipo": "area", "valor": "inexistente"},
     })
     assert r.status_code == 400
+
+
+def test_lanzar_prompt_piezas_con_redes(monkeypatch, tmp_path):
+    """Un prompt salida=piezas + `redes` en el body crea el spec de COPY (borradores)."""
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
+    monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
+    capturado: dict = {}
+    monkeypatch.setattr(
+        generaciones, "encolar_job_claude",
+        lambda *a, **k: capturado.update(k),
+    )
+    cli = TestClient(Starlette(routes=list(api_bib.RUTAS)))
+    creado = cli.post("/api/biblioteca", json={
+        "titulo": "Copy por red", "tipo": "prompt", "cuerpo": "haz copy por red",
+    })
+    doc_id = creado.json()["documento"]["id"]
+    # Marca el prompt como salida=piezas (como haria el editor de la Biblioteca).
+    ruta = biblioteca._ruta_de_id(doc_id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+
+    r = cli.post("/api/biblioteca/lanzar", json={
+        "prompt_id": doc_id, "marca": _MARCA, "redes": ["instagram", "x"],
+        "target": {"tipo": "contenido", "valor": "una nota"},
+    })
+    assert r.status_code == 200
+    assert r.json()["generacion"]["tipo"] == "copy"
+    assert capturado["spec"]["procesar"]["kind"] == "copy"
+    assert capturado["spec"]["procesar"]["redes_ids"] == ["instagram", "x"]

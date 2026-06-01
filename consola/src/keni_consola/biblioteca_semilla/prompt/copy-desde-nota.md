@@ -2,6 +2,7 @@
 titulo: "Copy desde nota"
 tipo: prompt
 carpeta: ""
+salida: piezas
 creado: 2026-05-31T00:00:00+00:00
 actualizado: 2026-05-31T00:00:00+00:00
 ---
