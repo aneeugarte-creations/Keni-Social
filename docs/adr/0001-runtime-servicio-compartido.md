@@ -136,8 +136,10 @@ usuario.
 - **#134 (auth/CSRF):** se absorbe — el servicio multiusuario la necesita de todas formas.
 - **#9 (Fase 3: scheduling + cola de aprobación + dashboard):** **habilitada** — requiere el estado
   compartido y multiusuario que provee este runtime; #9 es su consumidor.
-- **#5 (Meta App Review + cuentas reales):** en paralelo (gating externo); ni se desbloquea ni se
-  bloquea aquí. El servicio alojado encaja con los System User tokens de Meta.
+- **#5 (publicación/métricas reales + cuentas reales):** en paralelo; ni se desbloquea ni se
+  bloquea aquí. La publicación y las métricas reales llegan **vía Metricool** (una integración para
+  FB/IG/X/TikTok/YouTube), así que la última milla es trabajo de código interno, no un trámite
+  externo. El servicio alojado encaja igualmente con esa ruta.
 
 ---
 
@@ -188,7 +190,7 @@ La generación **sigue** por `claude -p` por debajo (aún en local, no en sandbo
 - #134 — Consola sin auth ni CSRF (se absorbe)
 - #133 — Distribución rota (resuelta por el servicio + sandbox)
 - #9 — Fase 3: scheduling + cola de aprobación + dashboard (habilitada)
-- #5 — Meta App Review + cuentas reales (paralelo; gating externo)
+- #5 — publicación/métricas reales + cuentas reales (paralelo; vía Metricool, trabajo interno)
 - [ADR 0002](0002-descomposicion-monolito-modular-catalogo-apps.md) — Descomposición (complementa esta decisión)
 - Épica #140 — Auditoría de arquitectura
 - [`../flujo-de-datos-privacidad.md`](../flujo-de-datos-privacidad.md) — modos local vs alojado

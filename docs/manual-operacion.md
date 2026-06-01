@@ -76,9 +76,9 @@ Por cada persona del equipo, en este orden:
 
 Solo necesarias para **datos reales** de métricas (con `fuente = muestra` no hace falta nada).
 
-- **Qué token por plataforma** y qué bloqueo externo tiene cada uno (Meta App Review, tier de
-  pago de X, auditoría de TikTok, cuota de YouTube): tabla en
-  [`credenciales.md`](credenciales.md).
+- **Métricas reales = vía Metricool.** El camino recomendado de dato real es la API de
+  Metricool (AMX en plan Advanced): un token por marca, sin submission externa. Tabla de
+  tokens y configuración en [`credenciales.md`](credenciales.md).
 - **Dónde viven:** en `~/.config/keni-metricas/config.toml` de cada persona (está en
   `.gitignore`, no se versiona). Se copia de `mcp-metricas/credenciales.ejemplo.toml`. Si falta
   un bloque, esa plataforma se omite con aviso (degradación elegante).
@@ -145,15 +145,17 @@ y entender la **auto-verificación** (✅ / ⚠️ / ❌). Como operador, convie
 
 Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba).
 
-- **Hoy: preview en dry-run.** La skill `publica-meta` es el pre-vuelo final: muestra
+- **Por defecto: preview en dry-run.** La skill `publica-meta` es el pre-vuelo final: muestra
   exactamente qué se publicaría en cada red (texto, conteo de caracteres, hashtags, carrusel/hilo,
   qué media acompaña) y cierra con una checklist. **No toca la red, no sube media.** También hay
-  una CLI dry-run del payload de Meta: `python -m keni_metricas.publicacion ...` (solo imprime la
+  una CLI dry-run del payload: `python -m keni_metricas.publicacion ...` (solo imprime la
   petición exacta; no publica).
-- **Publicación real: pendiente.** El andamiaje de publicación a Meta existe
-  (`publicar(..., dry_run=False)`) pero queda gateado por aprobaciones de plataforma. En beta
-  no se usa todavía; el trabajo externo está **pausado** y se sigue en los issues de GitHub
-  (#5 Meta App Review, #6 auditoría TikTok, #7 cuota YouTube / coste X).
+- **Publicación real: vía Metricool.** La publicación de verdad sale por el **scheduler de
+  Metricool** (una sola integración cubre Facebook, Instagram, X, TikTok y YouTube; AMX ya
+  tiene plan Advanced), sin submission externa por plataforma. Se enciende con el flag
+  `KENI_PUBLICAR_REAL`; lo que queda es trabajo de código interno para cablear el camino real
+  en el programador de la Consola (ver
+  [`plataformas/publicacion-metricool.md`](plataformas/publicacion-metricool.md)).
 
 ---
 
@@ -189,8 +191,8 @@ Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba)
   personales las mantiene cada quien en su carpeta de config.
 - **Qué vigilar.**
   - **Caducidad de tokens** de usuario (la causa #1 de "se desconectó"): migrar a System User.
-  - **Bloqueos externos** que habilitarían datos reales (Meta App Review, auditoría de TikTok,
-    coste de X, cuota de YouTube): **pausados en beta**; se siguen en los issues #5/#6/#7.
+  - **Token de Metricool** (métricas y publicación reales): si falta o caduca, las métricas
+    degradan a `muestra` y la publicación real no sale; renovarlo en el `config.toml`.
   - **`cron.log`** del reporte programado (en `KENI_REPORTE_DIR`): revisar `FALLO` (no reintenta
     solo). El reporte es solo lectura: un fallo nunca rompe nada, solo no entrega ese informe.
   - **Auto-verificación:** recordar al equipo que ⚠️ significa "revísalo tú" (típico en nombres y

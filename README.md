@@ -13,7 +13,7 @@ Componentes principales:
 | Pieza | Qué es | Estado |
 |---|---|---|
 | [`consola/`](consola/) | La **Consola Keni** (app web local/alojada): **Biblioteca de prompts + línea editorial** (documentos markdown editables) para convertir una nota, varios cables o un clip en copy publicable (voz de marca + tropicalización mexicana + formato por plataforma + auto-verificación), y el **Estudio de imagen**. La generación se lanza con `claude -p`. | En uso (beta). |
-| [`mcp-metricas/`](mcp-metricas/) | Servidor **MCP** que lee métricas de redes (Meta FB/IG, YouTube, X, TikTok), multi-marca, y las expone a Claude. Corre **local por persona** con sus propias credenciales. | Núcleo + fuente `muestra` listos; adaptadores reales escalonados por App Review/auditoría. |
+| [`mcp-metricas/`](mcp-metricas/) | Servidor **MCP** que lee métricas de redes (Meta FB/IG, YouTube, X, TikTok), multi-marca, y las expone a Claude. Corre **local por persona** con sus propias credenciales. | Núcleo + fuente `muestra` listos; adaptadores reales vía Metricool (lectura y publicación). |
 
 ## Consola (interfaz)
 

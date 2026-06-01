@@ -1,16 +1,21 @@
-# TikTok: auditoría del Content Posting API — checklist + UX a construir
+# TikTok: Content Posting API directo — ruta opcional (no necesaria con Metricool)
 
-Paquete **listo para ejecutar** para pasar la **auditoría del Content Posting API de TikTok** y
-poder **publicar en público** desde `keni-social` (issue #6). Sin esta auditoría, **todo lo que
-publique la app queda en `SELF_ONLY`** (solo lo ve el propio creador) y el cliente API solo permite
-**hasta 5 usuarios** publicando en una ventana de 24 h: inservible para una redacción.
+> **La publicación a TikTok ya está cubierta por Metricool** (ver
+> [`publicacion-metricool.md`](publicacion-metricool.md)): no hace falta esta auditoría para publicar
+> desde `keni-social`. Este doc describe la **ruta directa** por el **Content Posting API de TikTok**
+> como **alternativa opcional**, por si alguna vez se quisiera integrar TikTok sin pasar por
+> Metricool. **No es un bloqueante** de publicación.
 
-> **Por qué importa.** Cuello de botella externo análogo al App Review de Meta
-> ([`meta-app-review.md`](meta-app-review.md)): la auditoría tarda **2–4 semanas** con **varias
-> rondas de feedback**, y **cada revisión que enviemos reinicia el reloj**. Casi todos los rechazos
-> son por **incumplimiento de UX** (pantallas de consentimiento, divulgación de la cuenta del
-> creador, nivel de privacidad), **no** por el código de subida. Por eso lo que más controla el
-> resultado es dejar la **UI de publicación 100% conforme a la primera**.
+Si se eligiera la ruta directa, habría que pasar la **auditoría del Content Posting API de TikTok**
+para **publicar en público**. Sin esa auditoría, **todo lo que publique la app por esa vía queda en
+`SELF_ONLY`** (solo lo ve el propio creador) y el cliente API solo permite **hasta 5 usuarios**
+publicando en una ventana de 24 h: inservible para una redacción.
+
+> **Coste de la ruta directa.** La auditoría tarda **2–4 semanas** con **varias rondas de feedback**,
+> y **cada revisión que enviemos reinicia el reloj**. Casi todos los rechazos son por **incumplimiento
+> de UX** (pantallas de consentimiento, divulgación de la cuenta del creador, nivel de privacidad),
+> **no** por el código de subida. Por eso lo que más controla el resultado es dejar la **UI de
+> publicación 100% conforme a la primera**. Este coste es exactamente lo que Metricool evita.
 
 **Separación de responsabilidades:**
 
@@ -183,8 +188,10 @@ Mientras la app **no esté auditada**:
   a cuentas del propio equipo / usuarios de prueba de la app.
 - `PUBLIC_TO_EVERYONE` y `MUTUAL_FOLLOW_FRIENDS` **no** están disponibles hasta aprobar la auditoría.
 
-**Implicación:** la publicación a TikTok puede integrarse y demostrarse en modo privado **desde ya**
-(encaja con "el humano aprueba todo"); la **difusión pública real está gateada por la auditoría**.
+**Implicación:** por la ruta directa, la publicación a TikTok puede integrarse y demostrarse en modo
+privado **desde ya** (encaja con "el humano aprueba todo"); la **difusión pública real estaría gateada
+por la auditoría**. Por eso el camino vigente es **Metricool**, que publica en público sin esa
+auditoría.
 
 ---
 

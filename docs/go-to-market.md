@@ -25,8 +25,8 @@ lo que Metricool no puede hacer —copy es-MX confiable a partir del propio vide
 verificación honesta, procesado en local— y, en métricas, nos **apoyamos** en Metricool: leemos
 sus datos vía su API (plan Advanced) y añadimos encima la capa de insight, narrativa y reporte
 es-MX. Metricool sigue siendo el tablero de métricas mientras nosotros demostramos valor. La
-publicación llega después, por fases, cuando ya tenemos confianza ganada y los permisos externos
-resueltos.
+publicación llega después, por fases, cuando ya tenemos confianza ganada; se habilita vía
+Metricool (trabajo de código interno), sin esperar a aprobaciones externas.
 
 Qué decimos y qué no:
 
@@ -202,20 +202,22 @@ Listo y sin dependencias externas:
 
 Esta fase ya justifica la **opción de entrada** y la **suite sin publicación**.
 
-### Fase 1 — Datos reales de métricas (semanas)
+### Fase 1 — Datos reales de métricas (hoy)
 
-- Adaptadores reales por plataforma (Meta FB/IG, YouTube, X, TikTok) — el código ya está; se
-  habilita por red conforme caen los bloqueos: **Meta App Review (3–6 semanas realistas)**,
-  auditoría de TikTok, decisión de coste de X.
-- Modo **alojado por Keni** con **tokens System User de Meta (no caducan)** → propiedad del camino
-  de publicación hosted (ver Fase 2): la conexión que publica no requiere reautenticación periódica.
+- Métricas reales por marca **vía Metricool** (`FuenteMetricol`, API REST; AMX en plan Advanced),
+  que cubre Facebook, Instagram, X, TikTok y YouTube sin submission externa. El código ya está;
+  basta configurar el token.
+- Modo **alojado por Keni** con **tokens System User de Meta (no caducan)** → conexión estable para
+  el modo hosted: no requiere reautenticación periódica.
 
-### Fase 2 — Publicación (tras App Review aprobada)
+### Fase 2 — Publicación real vía Metricool
 
-- **Publicación real** a Meta (FB/IG) desde el preview, con gate humano. Es el siguiente paso
-  natural del dry-run que ya existe. **Dependencia dura: App Review + Advanced Access de Meta**
-  (3–6 semanas, y cada rechazo reinicia el ciclo). Aquí es donde empezamos a **entrar en el terreno
-  de Metricool**, ya con confianza ganada.
+- **Publicación real** desde el preview, con gate humano. Es el siguiente paso natural del dry-run
+  que ya existe. Sale por el **scheduler de Metricool** (una integración cubre FB/IG, X, TikTok y
+  YouTube; AMX ya en plan Advanced), así que **no depende de aprobaciones externas**: lo que queda
+  es trabajo de código interno para cablear el camino real en el programador de la Consola (ver
+  [`plataformas/publicacion-metricool.md`](plataformas/publicacion-metricool.md)). Aquí es donde
+  empezamos a **entrar en el terreno de Metricool**, ya con confianza ganada.
 
 ### Fase 3 — Scheduling y dashboard
 
@@ -224,11 +226,10 @@ Esta fase ya justifica la **opción de entrada** y la **suite sin publicación**
   **Panel-9am** (lista curada del día) están construidos y probados (ver
   [`estado-producto.md`](estado-producto.md) §1 y
   [`contexto/2026-05-31-lista-viva-angel.md`](contexto/2026-05-31-lista-viva-angel.md)). El
-  programador de publicaciones también existe en código; lo que sigue gated no es la
-  **programación** sino el **disparo de la publicación real** a cada red (App Review de Meta,
-  Fase 2). Comercialmente: ya no se vende "scheduling" como promesa futura, sino la **lista viva
-  lista para aprobar y programar**; el upsell es activar la publicación real cuando caigan los
-  permisos.
+  programador de publicaciones también existe en código; lo que queda no es la **programación**
+  sino cablear el **disparo de la publicación real** vía Metricool (Fase 2, código interno).
+  Comercialmente: ya no se vende "scheduling" como promesa futura, sino la **lista viva
+  lista para aprobar y programar**; el upsell es activar la publicación real vía Metricool.
 - **Dashboard** con pantalla visual: hoy todo es conversacional. Un tablero para Mariana/Bernardo
   cierra la sustitución del tablero de Metricool.
 

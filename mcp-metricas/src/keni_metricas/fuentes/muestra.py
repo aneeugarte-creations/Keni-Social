@@ -1,9 +1,9 @@
 """Fuente offline `muestra`: datos representativos, creibles y deterministas.
 
 No es codigo de usar-y-tirar: es el adaptador de prueba del sistema (lo usan los
-tests) y la fuente con la que el MCP funciona desde el dia 1, mientras los
-adaptadores reales pasan App Review (Meta), auditoria (TikTok) o se decide el
-coste (X).
+tests) y la fuente con la que el MCP funciona desde el dia 1, como respaldo
+offline cuando no hay credenciales reales configuradas (las metricas reales
+llegan via Metricool, `fuentes.metricol`).
 
 Cifras ancladas a la realidad del cliente (entrevista a Mariana de Leon,
 estrategia digital de AMX, 2026-05-18; ordenes de magnitud de followers

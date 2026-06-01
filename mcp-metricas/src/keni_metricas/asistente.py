@@ -59,14 +59,15 @@ GUIA_CREDENCIALES: dict[str, dict[str, str]] = {
     "meta": {
         "titulo": "Meta (Facebook + Instagram)",
         "que": (
-            "Un access_token de la Graph API con permisos pages_read_engagement, "
-            "read_insights e instagram_manage_insights (requiere App Review de Meta). "
-            "Recomendado: token de System User de Business Manager (no caduca); en ese "
-            'caso se marca con tipo_token = "system_user".'
+            "Ruta directa opcional: lo habitual es leer y publicar via Metricool "
+            "(un token por marca). Para la via directa, un access_token de la Graph "
+            "API con permisos pages_read_engagement, read_insights e "
+            "instagram_manage_insights. Recomendado: token de System User de Business "
+            'Manager (no caduca); en ese caso se marca con tipo_token = "system_user".'
         ),
         "docs": (
             'docs/credenciales.md (seccion "Meta: token de System User"), '
-            "docs/meta-app-review.md, docs/despliegue-hosted.md"
+            "docs/plataformas/publicacion-metricool.md, docs/despliegue-hosted.md"
         ),
     },
     "youtube": {

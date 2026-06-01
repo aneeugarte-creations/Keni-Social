@@ -46,7 +46,7 @@ hoy están sueltas.
 | Copy auto-generado al entrar un tema | 🟡 Parcial | La generación existe (worker + `claude -p` + 20 skills: nota→copy, url→copy, clip→copy, breaking, hilos, tropicalización MX, voz de marca, auto-verificación). **Pero NO se dispara sola** cuando entra un tema al tablero. |
 | Arte auto-generado | 🟡 Parcial | Generación de imagen por IA real existe (`/api/media/generar`, OpenRouter → GPT-image/Gemini). **No está cableada** a la creación del borrador. |
 | Revisión / aprobación humana | ✅ Existe | Flujo completo borrador→en_revisión→aprobado→programado→publicado + cola de revisión (`api/aprobacion.py`, `/revision/editorial`). "Otro par de ojos" (revisor ≠ autor). |
-| Programado y publicado automáticamente | ✅ Existe (gated) | `programador.py` (barrido 60s) → publicación real a **Metricool** (`KENI_PUBLICAR_REAL`, hoy OFF por defecto; pendiente del App Review de Meta para algunas redes). |
+| Programado y publicado automáticamente | ✅ Existe (gated) | `programador.py` (barrido 60s) → publicación real vía **Metricool** (`KENI_PUBLICAR_REAL`, hoy OFF por defecto; pendiente solo de cablear/encender el camino Metricool real, ver `docs/plataformas/publicacion-metricool.md`). |
 | Re-priorización dinámica al entrar algo | 🟡 Parcial | Hoy ordena por prioridad fija (alta/media/baja) + fecha. No hay un **score** que mezcle señales (viralidad, compromiso, frescura) y re-ordene. |
 | Entrega a las 9am | 🔴 No existe (decidido: Panel) | No hay email/digest/daemon de entrega. **Decisión:** la entrega es el **Panel listo** al entrar (reutiliza `/panel` + daemons). Sin email/SMTP. |
 | Ingesta de PDF/Excel | 🔴 No existe | No hay importador del calendario/temas. **Es el primer hueco que se construye.** |
@@ -165,6 +165,8 @@ primera clase, y auto-generar también el alta manual (tras validar coste con el
 - **Obligatorios = ambos**: del Excel/CSV **y** a mano; se modelan como etiqueta `compromiso`
   + `fecha_objetivo` (sin tocar enums en el primer incremento).
 - **Publicación automática** = vía Metricool (`programador.py`), gated por `KENI_PUBLICAR_REAL`;
-  algunas redes dependen del **App Review de Meta** (gating externo, ver `docs/plataformas/`).
+  Metricool cubre FB/IG/X/TikTok/YouTube con una sola integración (AMX ya tiene plan Advanced),
+  así que no hay bloqueo externo: lo que queda es cablear el camino Metricool real
+  (ver `docs/plataformas/publicacion-metricool.md`).
 - **Conservador por defecto**: toda automatización nueva (auto-gen, etc.) detrás de un flag OFF
   por defecto, igual que `radar_auto`. El humano sigue aprobando antes de publicar.

@@ -1,8 +1,8 @@
 """Fuente `metricool`: consume la **API REST de Metricool** como una `FuenteMetricas` más.
 
 B (app Métricas) es **consumidor** de Metricool, no motor de ingesta propia
-(ADR 0005 §B). En vez de construir un adaptador por plataforma (Meta/TikTok/X/
-YouTube) y pasar App Review, leemos lo que Metricool YA consolidó vía su API REST
+(ADR 0005 §B). En vez de construir un adaptador contra cada API oficial (Meta/
+TikTok/X/YouTube), leemos lo que Metricool YA consolidó vía su API REST
 (AMX está en plan **Advanced**, que habilita el API token). Esta clase implementa
 el MISMO contrato `FuenteMetricas` que `FuenteMuestra` y `FuenteCompuesta`, de
 modo que el dashboard, el MCP y los reportes funcionan igual con cualquiera.

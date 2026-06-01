@@ -115,15 +115,21 @@ Esto define el techo del **sistema centralizado** (§5), no el dolor diario. El 
 
 | Plataforma | Publicar por API | Límite duro | Notas |
 |---|---|---|---|
-| **FB / Instagram** (Meta Graph) | Sí: imágenes, carruseles, Reels (≤90s), Stories | **~25 posts/24h por cuenta IG**; cuenta Business obligatoria | **App Review (días-semanas)**. Música nativa no automatizable |
-| **X / Twitter** | Sí | Tiers de pago | ⚠️ **El coste es el problema** (abajo) |
-| **YouTube** (Data API v3) | Sí | **~6 vídeos/día** con cuota por defecto | Ampliación solicitable |
-| **TikTok** (Content Posting) | Sí, **solo tras auditoría de TikTok** | ~15/día por creador | La auditoría es un trámite real |
-| **Threads** | Sí | App Review 2-4 sem/permiso | ⚠️ El equipo no mencionó usar Threads |
+| **FB / Instagram** (Meta Graph) | Sí: imágenes, carruseles, Reels (≤90s), Stories | **~25 posts/24h por cuenta IG**; cuenta Business obligatoria | Vía Metricool (no requiere App Review). Música nativa no automatizable |
+| **X / Twitter** | Sí | Tiers de pago | Vía Metricool (no requiere tier de pago propio de X) |
+| **YouTube** (Data API v3) | Sí | **~6 vídeos/día** con cuota por defecto | Vía Metricool (no requiere cuota propia) |
+| **TikTok** (Content Posting) | Sí | ~15/día por creador | Vía Metricool (no requiere auditoría propia de TikTok) |
+| **Threads** | Sí | — | ⚠️ El equipo no mencionó usar Threads |
+
+> **Desenlace (posterior a este doc).** La publicación se resolvió **vía el scheduler de Metricool**
+> (una sola integración cubre FB/IG/X/TikTok/YouTube; AMX ya tiene plan Advanced). Por eso el **App
+> Review de Meta, la auditoría de TikTok y el tier de pago de X dejaron de ser relevantes** para
+> publicar por API directa: ya no se publica por API propia red a red, sino por Metricool. La tabla
+> de arriba documenta el panorama de **API directa** que se exploró en su día.
 
 **⚠️ El coste de X (decisión, no detalle):** en pago por uso, **un post con URL ≈ $0,20** — letal para un medio que enlaza notas todo el día. Tiers fijos: Basic $200/mes, Pro $5.000/mes, Enterprise ~$42.000/mes. Hay que cotizar el volumen real antes de comprometer arquitectura.
 
-**Corrección de encuadre para la S4:** en S3 se dijo que publicar por API es "imposible salvo Metricool". Es impreciso — hay **API oficial con límites y App Review**, o herramienta que la envuelve. Y lo robusto (y lo que el propio equipo concluyó en el caso "muerte del Papa", donde la IA paró sola a pedir aprobación) es: **automatizar la producción, dejar el disparo con humano en el lazo**, sobre todo en breaking news y directo.
+**Corrección de encuadre para la S4:** en S3 se dijo que publicar por API es "imposible salvo Metricool". Es impreciso — hay **API oficial con límites** (red a red), o herramienta que la envuelve. El desenlace fue precisamente la herramienta que envuelve: la publicación se canaliza por **Metricool** (una integración para FB/IG/X/TikTok/YouTube), de modo que el trabajo de la última milla pasó a ser **interno** (cablear el camino Metricool real en el programador) en vez de trámites externos por red. Y lo robusto (y lo que el propio equipo concluyó en el caso "muerte del Papa", donde la IA paró sola a pedir aprobación) es: **automatizar la producción, dejar el disparo con humano en el lazo**, sobre todo en breaking news y directo.
 
 ---
 
@@ -186,7 +192,7 @@ Conecta con dos cosas ya instaladas: la **postura de privacidad de Keni** ("proh
 2. **¿Quién hospeda la Capa 2?** Si Keni (recomendado, evita el bloqueo de IT/máquinas de AMX), confirmarlo.
 3. **Identificar "CCB"** (fuente de datos que Mariana cruza con Meta) — para automatizar su reporte sin la inconsistencia actual.
 4. **Confirmar plataformas reales por marca** (¿Threads? ¿TikTok en todas?) y **nº de posts/día** por red — define topes de API y coste.
-5. **Cuentas Business en Meta + estado de App Review** — sin Business no hay publicación por API; el App Review tarda, conviene iniciarlo pronto si se va a Capa 2.
+5. **Cuentas Business en Meta** — IG debe ser cuenta Business. (La publicación se resolvió vía Metricool, así que no hay trámite de App Review que iniciar para la Capa 2.)
 6. **Mapear a Roger** (Claro Sports, no entrevistado) — previsiblemente misma Skill de copy que Tescu/Luis.
 
 ---

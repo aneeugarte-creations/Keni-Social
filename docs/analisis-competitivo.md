@@ -69,7 +69,7 @@ Leyenda: ✅ sí / fuerte · ⚠️ parcial o con limitaciones · ❌ no / ausen
 | **Métricas multi-marca / multi-plataforma** | ✅ | ✅ | ⚠️ básico | ✅ | ⚠️ | ✅ | ✅ | ❌ | ✅ real vía Metricool (Advanced) + capa de insight es-MX |
 | **MCP conversacional (agente lee tus datos)** | ✅ (hosted, OAuth) | ⚠️ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ⚠️ agentes | ✅ (núcleo del producto) |
 | **Programación / scheduling** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ (no existe aún) |
-| **Publicación directa a redes** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ dry-run hoy; real tras App Review |
+| **Publicación directa a redes** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ dry-run por defecto; real vía Metricool |
 | **Llaves locales / sin entregar credenciales a un SaaS** | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ BYOK tokens IA | ❌ | ❌ | ✅ tokens en config local |
 | **Publicación hosted con tokens Meta System User (no caducan)** | n/a | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | n/a | ✅ modo alojado (Fase 2) |
 | **El humano siempre aprueba (no publica solo)** | config | config | config | config | config | config | config | n/a | ✅ por diseño |
@@ -166,14 +166,12 @@ diferenciador de negocio es doble:
    **pipeline completo**: local + citas con marca de tiempo + mismo contexto editorial + verificación
    de ASR. Hay que vender el pipeline, no la transcripción suelta.
 
-4. **Dependencia de aprobaciones externas para publicar.** La **publicación directa** depende de
-   **Meta App Review / Advanced Access** (2–6 semanas, rechazos comunes, cada rechazo reinicia),
-   **auditoría de TikTok** (2–6 semanas, contenido en privado hasta aprobar, máx. 5 usuarios sin
-   auditar), **coste de X** (sin tier nuevo de Basic/Pro; pago por uso, posts con URL ~$0.20,
-   Enterprise desde $50k/mes) y los límites de YouTube/Meta. Mientras tanto, el incumbente ya publica.
-   (Las **métricas reales no dependen de esto**: se leen de Metricool vía su API, plan Advanced.)
-   *Mitigación:* la oferta de Fase 0 **no depende** de ninguna aprobación; el piloto genera valor sin
-   esperar a Meta. No prometer fechas de publicación que no controlamos.
+4. **La publicación llega vía Metricool, no por integración directa.** La **publicación directa**
+   sale por el **scheduler de Metricool** (una integración cubre FB/IG, X, TikTok y YouTube; AMX en
+   plan Advanced), así que **no depende de App Review ni auditorías de plataforma**: lo que queda es
+   trabajo de código interno. (Las **métricas reales** llegan por el mismo camino: Metricool vía su
+   API.) *Mitigación:* la oferta de Fase 0 **no depende** de publicar; el piloto genera valor desde
+   ya. La contrapartida —depender de Metricool como vía— se cubre en el riesgo #5.
 
 5. **Dependencia de Metricool como fuente de métricas.** En métricas, keni-social **lee de Metricool
    vía su API** (plan Advanced); si el cliente deja Metricool o cambia de plan, esa fuente se corta.
@@ -203,7 +201,7 @@ diferenciador de negocio es doble:
 
 2. **Liderar con los cuatro ✅ que nadie más tiene** (es-MX con criterio, auto-verificación honesta,
    video→copy, transcripción local) y **no** competir en scheduling/publicación de primera, que es el
-   terreno fuerte del incumbente y depende de aprobaciones externas.
+   terreno fuerte del incumbente; la publicación propia llega vía Metricool, por fases.
 
 3. **Vender el moat editorial, no la tecnología.** En cada conversación, anclar el valor en el corpus
    es-MX, la disciplina de verificación y la privacidad verificable. La frase "MCP + Whisper + Claude"
@@ -250,8 +248,5 @@ diferenciador de negocio es doble:
 - Copy IA genérico vs voz de marca: <https://www.optimizely.com/insights/blog/using-ai-for-brand-voice/> · <https://www.typeface.ai/blog/ai-powered-content-localization-to-scale-content-marketing>
 - Transcripción local vs nube (privacidad): <https://openwhispr.com/blog/local-vs-cloud-transcription> · <https://www.pingmebud.com/blog/local-ai-vs-cloud-transcription> · <https://basilai.app/articles/2026-02-26-otter-ai-privacy-policy-analysis-what-happens-to-your-recordings.html>
 - Meta — System User (tokens que no caducan): <https://developers.facebook.com/docs/facebook-login/guides/access-tokens/> · <https://www.adamigo.ai/blog/meta-api-key-expiration-policies-explained>
-- Meta — App Review / Advanced Access (timeline y rechazos): <https://developers.facebook.com/docs/instagram-platform/app-review/> · <https://zernio.com/blog/instagram-graph-api> · <https://www.getphyllo.com/post/instagram-api-integration-101-for-developers-of-the-creator-economy>
-- TikTok — Content Posting API (auditoría y restricciones): <https://developers.tiktok.com/doc/content-posting-api-get-started> · <https://docs.mixpost.app/services/social/tik-tok/direct-post-audit/> · <https://zernio.com/blog/tiktok-posting-api>
-- X (Twitter) — pricing de API 2026: <https://www.xpoz.ai/blog/guides/understanding-twitter-api-pricing-tiers-and-alternatives/> · <https://postproxy.dev/blog/x-api-pricing-2026/>
 </content>
 </invoke>

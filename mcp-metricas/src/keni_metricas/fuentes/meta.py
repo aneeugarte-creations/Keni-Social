@@ -1,7 +1,8 @@
 """Adaptador Meta Graph API: Facebook Pages + Instagram (insights).
 
-Requiere App Review de Meta (`pages_read_engagement`, `read_insights`,
-`instagram_manage_insights`). Hasta entonces, `disponible()` es False salvo que
+Ruta directa opcional: la lectura habitual de metricas va via Metricool
+(`fuentes.metricol`). Para la via directa usa `pages_read_engagement`,
+`read_insights` e `instagram_manage_insights`; `disponible()` es False salvo que
 se configure un access token. Ver docs/credenciales.md.
 
 - piezas: pagina siguiendo `paging.next` (con tope MAX_PAGINAS).

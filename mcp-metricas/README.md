@@ -20,8 +20,8 @@ Cada lectura de `metricas_resumen` se guarda en un SQLite local (`~/.local/share
 
 ## Fuentes de datos
 
-- **`muestra`** (por defecto): datos representativos y deterministas. El MCP funciona sin configurar nada — sirve para tests y para usar mientras llegan los permisos reales de cada plataforma.
-- **`real`**: combina los adaptadores por plataforma con tus credenciales. Cada plataforma se activa cuando hay credenciales y permisos (Meta App Review, auditoría de TikTok, tier de pago de X). Ver [`../docs/credenciales.md`](../docs/credenciales.md).
+- **`muestra`** (por defecto): datos representativos y deterministas. El MCP funciona sin configurar nada — sirve para tests y como respaldo cuando no hay credenciales reales configuradas.
+- **`real`**: las métricas reales llegan vía **Metricool** (un token por marca, plan Advanced), que ya consolida Facebook, Instagram, X, TikTok y YouTube. Ver [`../docs/credenciales.md`](../docs/credenciales.md).
 
 ## Instalación y uso (local por persona)
 

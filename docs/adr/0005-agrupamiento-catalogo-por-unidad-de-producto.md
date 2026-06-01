@@ -51,8 +51,9 @@ diario). Usuario: Mariana, Elías, Bernardo→Joe.
 **Sin gating: B es CONSUMIDOR de Metricool, no motor de ingesta.** Lee dato real vía la **API REST
 de Metricool** (AMX está en plan **Advanced** → API token disponible) como **un adapter más detrás
 del contrato `FuenteMetricas`** (`FuenteMetricol`). **No** construimos adaptadores propios por
-plataforma (Meta/TikTok/X/YouTube): eso duplicaría lo que Metricool ya consolidó y arrastraría App
-Review sin aportar moat (la ingesta es "plomería replicable"). El valor de B es la capa de
+plataforma (Meta/TikTok/X/YouTube): eso duplicaría lo que Metricool ya consolidó y arrastraría los
+trámites por red (permisos, auditorías, tiers) sin aportar moat (la ingesta es "plomería
+replicable"). El valor de B es la capa de
 **insight/narrativa/reporte** encima (deck del lunes F1, "por qué" diario F6, consultas
 conversacionales), no la ingesta. La fuente `muestra` queda como fallback/demo. Encaja con la
 estrategia ya escrita de **complementar, no reemplazar Metricool**.
@@ -67,11 +68,12 @@ Rutas frontend: `/analiticas/{metricas,comercial,reporte-deportes}`.
 
 Coordinación del trabajo del equipo: rota, pendientes compartidos, parrilla, programación y
 aprobación. Usuario: Elías/Diana + el equipo. Gating: multiusuario (#130); la publicación real
-depende de App Review.
+se habilita vía Metricool (flag `KENI_PUBLICAR_REAL`).
 
 **Decisión (D-publicación):** rota / pendientes / parrilla / programación entran **ya** (con
-multiusuario #130). La **publicación real** a redes es una **sub-capacidad** de C que **enciende con
-App Review**, sin bloquear el resto de la app (hoy queda en dry-run).
+multiusuario #130). La **publicación real** a redes es una **sub-capacidad** de C que **se habilita
+vía Metricool** (flag `KENI_PUBLICAR_REAL`; una integración cubre FB/IG/X/TikTok/YouTube, sin App
+Review), sin bloquear el resto de la app (hoy queda en dry-run por defecto).
 
 Módulos backend: `publicaciones`, `aprobacion`, `franjas`, `rota`, `tareas`.
 Rutas frontend: `/publicaciones`, `/parrilla/{pendientes,calendario}`.
@@ -107,7 +109,7 @@ fronteras los codifica como allowlist explícita:
   (ADR 0002 Fase A). Añadir/activar una app no exige editar la navegación.
 - Cada app gana un **flag de activación**: Producción y **Métricas** on (Métricas con **dato real
   vía Metricool desde ya**, sin gating); **Operación** enciende con multiusuario (#130) y la
-  publicación real con App Review.
+  publicación real vía Metricool (flag `KENI_PUBLICAR_REAL`).
 - Los seams pasan de imports implícitos a **contratos explícitos** verificados en CI.
 - La costura de extracción de ADR 0002 sigue válida: si Métricas se vende standalone, su frontera
   de app es la línea de separación a deployable, sin reescritura.

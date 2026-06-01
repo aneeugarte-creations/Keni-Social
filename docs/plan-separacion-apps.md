@@ -134,7 +134,7 @@ Fase 0 (FUNDACIÓN, 1 agente, GATING)  ──►  Fase 1 (SEAMS, 3 agentes ∥)
 
 **T2.C — App Operación · rama `sep/app-operacion`.**
 - `apps/operacion.toml` (5 módulos) + flag (multiusuario #130). **Publicación real** queda como
-  sub-capacidad que enciende con App Review; rota/pendientes activas antes.
+  sub-capacidad que enciende vía Metricool (código interno, sin App Review); rota/pendientes activas antes.
 - **Aceptación:** [ ] C por flag; [ ] no importa internals de A/B (cola la lee panel vía fachada).
 
 **T2.S — Shell · rama `sep/shell`.**
@@ -202,7 +202,8 @@ Ya no quedan decisiones abiertas para arrancar; quedaban estas y se cierran así
   propia por plataforma. (Descartada la variante "apuntar Claude al MCP de Metricool directamente":
   perdería la normalización por marca y el dashboard.)
 - **D-Publicación (C):** rota / pendientes / parrilla / programación entran ya con multiusuario
-  (#130); la **publicación real** es sub-capacidad que enciende con App Review, sin bloquear C.
+  (#130); la **publicación real** es sub-capacidad que enciende vía Metricool (código interno, sin
+  App Review), sin bloquear C.
 - **D-Manifest:** formato **TOML por app** (`apps/<app>.toml`) + cargador `apps/registro.py`;
   catálogo y navegación data-driven desde ahí.
 - **D-Test scoping:** jobs de CI por app/paquete con filtro de rutas (artefacto 5 / T0). Cierra la

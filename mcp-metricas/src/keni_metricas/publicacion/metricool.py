@@ -17,9 +17,9 @@
 Por que Metricool y no Graph API directo
 =========================================
 AMX ya esta en plan **Advanced** de Metricool (que habilita el API token). En vez
-de pasar el App Review de Meta + auditoria de TikTok + tier de pago de X para
-PUBLICAR directo en cada red (todo gated externamente), entregamos el post al
-**scheduler de Metricool** con su fecha de publicacion y Metricool lo dispara. Asi:
+de integrar cada API oficial (Graph API de Meta, API de TikTok, API de X) para
+PUBLICAR directo en cada red, entregamos el post al **scheduler de Metricool** con
+su fecha de publicacion y Metricool lo dispara. Asi:
 
 - una sola integracion cubre Facebook, Instagram, X (twitter), TikTok y YouTube;
 - la PROGRAMACION es nativa de Metricool (`publicationDate` + `autoPublish`), no

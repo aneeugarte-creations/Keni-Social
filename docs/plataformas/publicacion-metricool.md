@@ -1,9 +1,10 @@
 # Publicación / programación vía Metricool
 
-Camino de publicación **recomendado**: en vez de pegarle directo a Graph API de Meta
-(gated por App Review), a TikTok (gated por auditoría) y a X (tier de pago), entregamos
-el post al **scheduler de Metricool**, que AMX ya tiene en plan **Advanced**. Una sola
-integración cubre Facebook, Instagram, X, TikTok y YouTube, con **programación nativa**.
+Camino de publicación **recomendado y vigente**: en vez de pegarle directo a cada API
+oficial (Graph API de Meta, Content Posting API de TikTok, X API), entregamos el post al
+**scheduler de Metricool**, que AMX ya tiene en plan **Advanced**. **Una sola integración
+(Metricool) cubre Facebook, Instagram, X, TikTok y YouTube**, con **programación nativa**,
+y evita el coste/cumplimiento de integrar y mantener cada API oficial por separado.
 
 Reutiliza **el mismo token por marca** que la lectura de métricas
 (`fuentes.metricol.FuenteMetricol`): cabecera `X-Mc-Auth` + query `userId`/`blogId`.

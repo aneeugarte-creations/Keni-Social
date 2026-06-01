@@ -109,7 +109,7 @@ sobre el mecanismo de [ADR 0002](adr/0002-descomposicion-monolito-modular-catalo
 - **B · Métricas**: lectura/insight/reporte. **Consumidora de Metricool** (`FuenteMetricol`),
   no ingesta propia por red; read-through con caché e histórico.
 - **C · Operación**: rota, pendientes, parrilla, aprobación. CRUD transaccional multiusuario
-  sobre Postgres; la **publicación real** enciende con App Review.
+  sobre Postgres; la **publicación real** enciende vía Metricool (flag `KENI_PUBLICAR_REAL`).
 - **Shell** (no es app): auth, config, secretos, media, catálogo, panel. Base transversal.
 
 Cómo se sostiene en el código:

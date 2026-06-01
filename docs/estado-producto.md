@@ -6,7 +6,7 @@ qué está pausado por causas externas, y qué falta para tener un producto vend
 
 > **Marco de honestidad.** keni-social está en **beta**: producto real en uso con AMX Contenido
 > (UnoTV, Claro Sports, Nación Gamer, Piso 15, Fundación). Lo que sigue distingue con cuidado lo
-> construido y verificado de lo que aún no (bloqueado por aprobaciones externas de plataforma).
+> construido y verificado de lo que aún queda por cablear (la publicación real vía Metricool).
 
 ---
 
@@ -66,26 +66,25 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
 
 Arquitectura y hitos al detalle en [`arquitectura.md`](arquitectura.md).
 
-## 2. Qué está PAUSADO (por gating externo)
+## 2. Qué falta para publicar de verdad (código interno)
 
-**Leer métricas reales ya NO está bloqueado:** B lee dato real **vía Metricool** (AMX en plan
-**Advanced** → API token), como un adapter detrás de `FuenteMetricas`; no construimos ingesta
-propia por plataforma (ver [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md)
-§B). Lo único que sigue dependiendo de aprobaciones externas es la **publicación real** a cada red.
-El código de degradación ya existe; lo gated es el permiso de *publicar*, no de *leer*. La tabla de
-abajo aplica, por tanto, a la **publicación directa** (las lecturas por plataforma ya no son
-nuestro camino: las cubre Metricool).
+**Ni las métricas ni la publicación reales dependen ya de aprobaciones externas.** Ambas llegan
+**vía Metricool** (AMX en plan **Advanced**): una sola integración cubre Facebook, Instagram, X,
+TikTok y YouTube, así que **Meta App Review, la verificación de negocio, la auditoría de TikTok y
+el tier de pago de X dejan de ser bloqueantes**. Las métricas reales se leen con `FuenteMetricol`
+(adapter detrás de `FuenteMetricas`; no construimos ingesta propia por plataforma, ver
+[ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md) §B). La publicación real sale
+por el **scheduler de Metricool**.
 
-| Capacidad | Bloqueo externo | Estado |
+| Capacidad | Camino | Estado |
 |---|---|---|
-| Métricas y publicación reales de **Meta** (FB/IG) | App Review / Advanced Access de Meta | En espera de aprobación |
-| Métricas reales de **TikTok** | Auditoría de TikTok | En espera de aprobación |
-| Métricas reales de **X** | Tier de pago de la API | Decisión de coste pendiente |
-| Métricas reales de **YouTube** | Cuota diaria de la API (gestionable) | Ampliable cuando haga falta |
+| Métricas reales (todas las redes) | Metricool API (plan Advanced) | Disponible vía Metricool (configurar token) |
+| Publicación real (todas las redes) | Scheduler de Metricool, flag `KENI_PUBLICAR_REAL` | Pendiente: cablear el camino real en el programador de la Consola (código interno) |
 
-Detalle operativo en [`credenciales.md`](credenciales.md); timelines y riesgos asociados en
-[`analisis-competitivo.md`](analisis-competitivo.md) §4. **Importante: la oferta de lo listo
-(§1) no depende de ninguno de estos permisos**, así que el piloto genera valor sin esperar a Meta.
+Detalle del camino de publicación en
+[`plataformas/publicacion-metricool.md`](plataformas/publicacion-metricool.md); configuración de
+tokens en [`credenciales.md`](credenciales.md). **La oferta de lo listo (§1) no depende de nada de
+esto**: el piloto genera valor desde ya.
 
 ## 3. El camino a PRODUCTO vendible a AMX
 
@@ -96,14 +95,15 @@ alineadas al estado real (detalle en [`analisis-competitivo.md`](analisis-compet
 1. **Fase 0 — vender lo listo (hoy).** Copy desde texto, clip→copy local, **métricas-insight con
    dato real vía Metricool (Advanced)**, preview dry-run y la **lista viva multi-fuente**
    (tablero priorizado + importador de calendario H1 + auto-generación de copy H2 gated OFF +
-   score dinámico H3 + Panel-9am H5; ver §1). No depende de App Review: es lo que se demuestra y
-   se cobra. Lo único que sigue gated es la **publicación real** (Fase 1/2), no la lista ni la
-   generación del borrador.
+   score dinámico H3 + Panel-9am H5; ver §1). No depende de aprobaciones externas: es lo que se
+   demuestra y se cobra. Lo único que sigue pendiente es cablear la **publicación real** vía
+   Metricool (Fase 1/2, código interno), no la lista ni la generación del borrador.
 2. **Fase 1 — publicación real y modo alojado.** Las métricas reales por marca ya llegan vía
-   Metricool (§1). Lo que entra aquí, conforme caen los permisos (§2), es la **publicación real** a
-   cada red y el modo alojado por Keni con **System User de Meta (tokens que no caducan)**. Cada
-   hito que cae es un upsell natural, no una promesa que devalúe la venta inicial.
-3. **Fase 2 — publicación y siguientes mejoras de UX.** Publicación real tras App Review y las
+   Metricool (§1). Lo que entra aquí es la **publicación real** vía Metricool (trabajo de código
+   interno en el programador, sin espera externa) y el modo alojado por Keni con **System User de
+   Meta (tokens que no caducan)**. Cada hito que cae es un upsell natural, no una promesa que
+   devalúe la venta inicial.
+3. **Fase 2 — publicación y siguientes mejoras de UX.** Publicación real vía Metricool y las
    mejoras priorizadas en [`ux-roadmap.md`](ux-roadmap.md) (olas 2 y 3): quick-start "empieza aquí
    en 10 min", dashboard exportable a PDF, loop de vuelta a la acción (el dashboard sugiere "pide
    copy para lo que rinde"), selección de marca asistida y estados vacíos. La ola 1 del roadmap
@@ -119,8 +119,10 @@ privacidad verificable**. Eso crece con cada cliente y es propio e intransferibl
 - **Comoditización del MCP y del copy IA.** El mercado ya tiene MCP servers (incluido el de
   Metricool) y asistentes de copy en cada herramienta. *Mitigación:* vender el moat editorial, no
   la plomería.
-- **Dependencia de aprobaciones externas** (§2) para datos y publicación reales. *Mitigación:* la
-  oferta de Fase 0 no depende de ellas; no prometer fechas de publicación que no controlamos.
+- **Dependencia de Metricool** para datos y publicación reales (§2): si el cliente deja Metricool o
+  cambia de plan, esa vía se corta. *Mitigación:* la oferta de Fase 0 no depende de ella; es una
+  dependencia asumida, alineada con "complementar, no reemplazar", y el MCP construye histórico
+  propio en SQLite local.
 - **Dependencia del incumbente en el histórico.** Mientras Metricool tenga el histórico, el
   cliente no migra del todo. *Mitigación:* posicionarse como complemento aditivo y construir
   histórico propio (el MCP ya lo guarda en SQLite local).
@@ -141,5 +143,5 @@ el flujo en su día a día y el método queda documentado para replicarlo con el
 
 ---
 
-*Documento de estado. Honesto sobre lo que está construido y verificado frente a lo que aún está
-bloqueado por gating externo. Se actualiza conforme caen los hitos de la §2.*
+*Documento de estado. Honesto sobre lo que está construido y verificado frente a lo que aún queda
+por cablear (publicación real vía Metricool, §2). Se actualiza conforme caen los hitos.*

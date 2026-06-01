@@ -1,9 +1,14 @@
-# YouTube (cuota + borrador de solicitud) · X (decisión de coste) — issue #7
+# YouTube (cuota + borrador de solicitud) · X (decisión de coste) — ruta directa opcional
 
-Los dos cuellos de botella externos que faltan tras Meta ([`meta-app-review.md`](meta-app-review.md))
-y TikTok ([`tiktok-audit.md`](tiktok-audit.md)): **(A)** la **cuota** de la YouTube Data API y un
-**borrador de solicitud de ampliación listo para enviar**; **(B)** la **decisión de coste de la X
-API 2026** (pay-per-use), con recomendación operativa.
+> **No son cuellos de botella de publicación.** La publicación a YouTube y a X va por el **scheduler
+> de Metricool** (ver [`publicacion-metricool.md`](publicacion-metricool.md)), que cubre ambas en una
+> sola integración. Este doc describe la **ruta directa por API oficial** como **alternativa
+> opcional** (por si alguna vez se integrara una plataforma sin Metricool); lo de abajo **no** bloquea
+> ni publicar ni leer métricas.
+
+Si se evaluara la ruta directa: **(A)** la **cuota** de la YouTube Data API y un **borrador de
+solicitud de ampliación listo para enviar**; **(B)** la **decisión de coste de la X API 2026**
+(pay-per-use), con recomendación operativa.
 
 **Separación de responsabilidades:**
 
@@ -59,8 +64,8 @@ Con `videos.insert ≈ 100`, para el volumen de una redacción (decenas de víde
 defecto de 10 000 u/día probablemente alcanza** sin ampliación. La lectura de títulos
 (`videos.list` = 1 u) es despreciable. **La ampliación deja de ser el bloqueo crítico** que era con
 el coste antiguo. Solo hace falta solicitarla si: alto volumen sostenido, varios canales, o si
-Google revierte el coste. Por eso el borrador de §A.5 queda **listo pero no urgente** (a diferencia
-de Meta, que sí es el gating principal).
+Google revierte el coste. Por eso el borrador de §A.5 queda **listo pero no urgente** (y solo
+relevante si se eligiera la ruta directa por API; con Metricool ni siquiera hace falta).
 
 ### A.4 La auditoría de cumplimiento (si se pide ampliar)
 La ampliación **no es automática**: requiere pasar la **auditoría de cumplimiento de YouTube API

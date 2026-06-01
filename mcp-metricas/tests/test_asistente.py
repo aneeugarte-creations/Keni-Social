@@ -252,7 +252,7 @@ def test_guia_plataforma_menciona_docs_y_system_user():
     g_meta = a.texto_guia_plataforma("facebook")
     assert "System User" in g_meta
     assert "docs/credenciales.md" in g_meta
-    assert "docs/meta-app-review.md" in g_meta
+    assert "docs/plataformas/publicacion-metricool.md" in g_meta
     # facebook e instagram comparten el bloque meta
     assert a.guia_plataforma("instagram") is a.guia_plataforma("facebook")
     assert "docs/" in a.texto_guia_plataforma("youtube")

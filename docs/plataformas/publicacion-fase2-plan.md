@@ -1,15 +1,23 @@
-# Fase 2 — Publicación: dry-run → publicar real (Meta) → TikTok (issue #8)
+# Fase 2 — Publicación: dry-run → publicar real vía Metricool (issue #8)
 
 Plan de implementación para cerrar el hueco vs Metricool: pasar del **preview en dry-run** (un
-humano aprueba, nada se publica) a **publicación real**, primero en **Meta** (tras #5) y luego en
-**TikTok** (tras #6). Reutiliza la **cola de aprobación + scheduler ya construidos en #9**; lo nuevo
-es el **puente a la red real** detrás de un gate explícito.
+humano aprueba, nada se publica) a **publicación real**, entregando el post al **scheduler de
+Metricool** (una sola integración cubre Facebook, Instagram, X, TikTok y YouTube; AMX ya tiene plan
+**Advanced**). Reutiliza la **cola de aprobación + scheduler ya construidos en #9**; lo nuevo es
+**cablear el adaptador Metricool en el programador** detrás de un flag explícito. Detalle del
+adaptador y del contrato de la API en [`publicacion-metricool.md`](publicacion-metricool.md).
+
+> **Sin prerequisito externo.** La publicación real ya **no** está gated por App Review de Meta, ni
+> por la auditoría de TikTok, ni por el tier de pago de X: Metricool cubre todas esas plataformas con
+> una sola integración. El trabajo restante es **código interno** (cablear Metricool real en el
+> programador de la Consola).
 
 > Este es un **plan**, no código. Referencia las tareas de código emparejadas; **no se implementa
 > nada en esta tarea de docs**.
 
 **Frontera del producto (invariante):** *el humano aprueba; el sistema no publica solo.* Todo lo de
-abajo conserva esa postura: el dry-run es el defecto, y el salto a real es un gate consciente.
+abajo conserva esa postura: el dry-run es el defecto, y el salto a real es un gate consciente
+(`KENI_PUBLICAR_REAL`).
 
 ---
 
@@ -21,53 +29,51 @@ abajo conserva esa postura: el dry-run es el defecto, y el salto a real es un ga
 |---|---|---|
 | **Cola de aprobación de equipo** | `consola/.../api/aprobacion.py` + `dominio/aprobacion.py` | Estados `borrador → en_revision → aprobado → programado → publicado` (`estados.py`). Regla **"otro par de ojos"**: quien aprueba/rechaza ≠ autor (salvo admin). |
 | **Scheduler propio (24-7)** | `consola/.../programador.py` | Hilo demonio en el servidor compartido (ADR 0001): cuando una pieza `programado` **vence** (`fecha_programada <= ahora`), la **PREPARA en dry-run** y estampa `preparado_en`. **No publica en ninguna plataforma.** Cálculo de vencidos es función pura testeable (`piezas_vencidas`). |
-| **Adaptador de publicación Meta (dry-run)** | `mcp-metricas/.../publicacion/meta.py` | `AdaptadorPublicacionMeta.publicar(borrador, dry_run=True)` arma las peticiones **exactas** de Graph API (FB `feed`/`photos`/`videos`; IG `media` → `media_publish`) **sin tocar la red**. POST real **solo** con `dry_run=False` y token real; si falta token, error **antes** de la red. |
-| **Modelo de borrador** | `mcp-metricas/.../publicacion/modelos.py` | `Borrador` (plataforma FB/IG, cuenta, texto, media por **URL** —no binario—, hashtags) = el contrato "copy aprobado → petición a Meta". |
-| **Cola/agendador mínimo de borradores** | `mcp-metricas/.../publicacion/cola.py` | `ColaPublicacion` en memoria: encola borradores aprobados con hora opcional; `publicar_pendientes(ahora, dry_run=True)` dispara los vencidos. Hereda el dry-run. En dry-run un item **no** se marca publicado (un ensayo no consume la cola). |
-| **Skill demo de preview** | skill `publica-meta` | Previsualiza una publicación para Meta en **dry-run** (no publica de verdad). |
+| **Adaptador de publicación Metricool (dry-run)** | `mcp-metricas/.../publicacion/metricool.py` | `AdaptadorPublicacionMetricool.programar(borrador, dry_run=True)` arma el `ScheduledPost` **exacto** del scheduler de Metricool (`POST /v2/scheduler/posts`) **sin tocar la red**. POST real **solo** con `dry_run=False` y credenciales completas; si faltan, `ProgramacionNoConfigurada` **antes** de la red. |
+| **Modelo de borrador Metricool** | `mcp-metricas/.../publicacion/metricool.py` | `BorradorMetricool` (redes, texto, media por **URL**, hashtags, `publicar_en`, `timezone`, `auto_publish`, `borrador`) = el contrato "copy aprobado → post programado en Metricool". |
+| **Flujo de borradores Metricool** | `mcp-metricas/.../publicacion/flujo_metricool.py` | Carga borradores de `.json`/`.toml`, reporta el dry-run y, con `--publicar-real --si-publicar` + credenciales en el entorno, programa de verdad. Espeja la seguridad de `flujo.py`. |
+| **Skill demo de preview** | skill `publica-meta` | Previsualiza una publicación en **dry-run** (no publica de verdad). |
 
 ### Falta construir (Fase 2)
 
-1. **Puente a la red real (Meta)** detrás del gate dry-run→real: cablear el System User token
-   (`tipo_token = "system_user"`) y permitir `dry_run=False` **solo** cuando #5 esté aprobado y un
-   flag/permiso explícito lo habilite. Enganchar el posteo real en `programador.py::_preparar` (el
-   propio módulo señala ese punto: *"cuando #5/#8 aterricen, el posteo real se engancha aquí"*).
-2. **Respetar el límite de 100 posts/24h de Meta** en el scheduler (§3).
+1. **Cablear Metricool real en el programador** detrás del gate dry-run→real: enganchar
+   `AdaptadorPublicacionMetricool.programar(dry_run=not publicar_real)` en
+   `programador.py::_preparar` (el propio módulo señala ese punto). Pasos en
+   [`publicacion-metricool.md`](publicacion-metricool.md) §"Enganche en la Consola": resolver `creds`
+   de la marca (`marcas_configuradas()`), mapear la fila de `publicaciones` a `BorradorMetricool`,
+   programar, y guardar `id_post`/`estados` + mover la pieza a `publicado`.
+2. **Respetar los límites de rate de Metricool** en el scheduler (no martillar la API; diferir y
+   reintentar si responde rate-limit).
 3. **Audit-log de publicación** (§4): hoy solo hay observabilidad por petición (`observabilidad.py`),
-   **no** un registro de dominio de qué se publicó, quién aprobó y qué respondió la API.
-4. **Persistencia de la cola de borradores Meta**: `ColaPublicacion` es **en memoria** (andamiaje);
-   en producción el estado de publicación ya vive en las publicaciones (estado `programado` +
-   `fecha_programada` + `preparado_en`). Decidir si la cola en memoria se retira a favor del estado
-   persistido de las publicaciones (recomendado) o se persiste.
-5. **TikTok** (tras #6): adaptador de publicación + la **UI de UX-compliance** (consent, creator-info)
-   — ver `tiktok-audit.md`. No empieza la publicación pública hasta pasar la auditoría.
+   **no** un registro de dominio de qué se publicó, quién aprobó y qué respondió Metricool.
+4. **Persistencia del estado de publicación**: el estado ya vive en las publicaciones (estado
+   `programado` + `fecha_programada` + `preparado_en`); decidir cómo persistir el `id_post` que
+   devuelve Metricool y su `status` por red.
 
 ---
 
-## 2. Flujo del System User token (Meta)
+## 2. Credenciales de Metricool (por marca)
 
-Detalle completo en [`meta-app-review.md §6`](meta-app-review.md). Resumen para el plan:
+Detalle en [`publicacion-metricool.md`](publicacion-metricool.md) §"Credenciales por marca".
+Resumen para el plan:
 
-- Token de **System User** de Business Manager → **no caduca** → sin renovación manual cada ~60 días.
-- El **mismo token** lee y publica (la publicación reutiliza el cliente HTTP de lectura,
-  `publicacion/meta.py` importa `_http.post_json` y la constante `BASE`/`TIPO_SYSTEM_USER` de
-  `fuentes/meta.py`).
-- Se configura en `config.toml` con `tipo_token = "system_user"`; el adaptador **no intenta
-  renovarlo** (refresh = no-op).
+- El adaptador reutiliza **el mismo token por marca** que la lectura de métricas
+  (`fuentes.metricol.FuenteMetricol`): cabecera `X-Mc-Auth` + query `userId`/`blogId`.
+- La Consola resuelve `creds` con `config.MetricoolConfig(...).marcas_configuradas()[marca_id]` —
+  exactamente la forma que espera `AdaptadorPublicacionMetricool(creds=...)`, así que el cableado es
+  directo.
 - En el **hosted** (ADR 0001) el token vive en el sandbox/MCP de Keni, fuera de git, nunca enviado a
   la IA ni al cliente. La generación de copy sigue por `claude -p` (suscripción global), **separada**
   del token de publicación.
 
 ---
 
-## 3. Scheduler propio (Meta publica al instante, sin scheduling nativo)
+## 3. Scheduler: Metricool agenda nativamente
 
-**Hecho de la plataforma:** la Graph API de Meta **publica al instante**; **no agenda** IG (ni Page)
-nativamente. El agendado tiene que ser **nuestro** — y ya lo es (`programador.py` + `cola.py`).
-
-**Límite a respetar:** **100 posts publicados por API en una ventana móvil de 24 h por cuenta de
-Instagram** (carruseles = 1 post). Meta recomienda que la app **lo haga cumplir**, sobre todo si
-permite programar a futuro. Se puede consultar el uso con `GET /{ig-user-id}/content_publishing_limit`.
+**Hecho de la plataforma:** Metricool **agenda nativamente** con `publicationDate` + `autoPublish`,
+así que **no** hace falta cola/agendador propio para el camino real (a diferencia del camino
+Meta-directo, donde IG no agenda por API). El programador 24-7 de #9 sigue siendo el disparador
+interno que decide **cuándo** entregar la pieza a Metricool.
 
 **Diseño del scheduler para Fase 2 (sobre lo ya construido):**
 
@@ -75,12 +81,12 @@ permite programar a futuro. Se puede consultar el uso con `GET /{ig-user-id}/con
    `fecha_programada`.
 2. El **programador** (hilo 24-7) detecta las vencidas (`piezas_vencidas`, pura) y, **hoy**, las
    prepara en dry-run estampando `preparado_en`. **Fase 2:** en `_preparar`, si el gate real está
-   activo, en vez de solo preparar, **publica** (`AdaptadorPublicacionMeta.publicar(dry_run=False)`).
-3. **Cumplir el límite 100/24h:** antes de publicar, comprobar el contador por cuenta (consultar
-   `content_publishing_limit` o llevar un contador local de las últimas 24 h en el audit-log). Si se
-   alcanzó, **diferir** la pieza (no marcarla publicada, reintentar en la siguiente pasada) y
-   registrar el motivo. **Nunca** forzar por encima del límite.
-4. **Orden estable** (ya en `cola.py`): primero sin hora, luego por hora ascendente.
+   activo, en vez de solo preparar, **programa en Metricool**
+   (`AdaptadorPublicacionMetricool.programar(dry_run=False)`).
+3. **Respetar los límites de rate de Metricool:** si la API responde rate-limit, **diferir** la pieza
+   (no marcarla publicada, reintentar en la siguiente pasada) y registrar el motivo. **Nunca**
+   martillar la API.
+4. **Orden estable** (ya en el andamiaje): primero sin hora, luego por hora ascendente.
 
 ---
 
@@ -88,26 +94,25 @@ permite programar a futuro. Se puede consultar el uso con `GET /{ig-user-id}/con
 
 Hoy `observabilidad.py` registra **una línea por petición HTTP** (método + ruta + estado + duración,
 **sin** body ni tokens). Eso **no** es un registro de dominio de publicación. Fase 2 añade un
-**audit-log de publicación** (tabla operacional en SQLite, junto al resto del estado operacional):
+**audit-log de publicación** (tabla operacional en Postgres, junto al resto del estado operacional):
 
-**Qué registra cada intento de publicación (un evento por pieza/plataforma):**
+**Qué registra cada intento de publicación (un evento por pieza/red):**
 
 | Campo | Descripción |
 |---|---|
 | `pieza_id` | La publicación de origen. |
-| `plataforma` / `cuenta` | FB/IG/TikTok + Page ID / IG User ID. |
+| `red` / `marca` | Red(es) de destino (FB/IG/X/TikTok/YouTube) + marca/`blogId`. |
 | `autor` / `aprobado_por` | Quién la creó y quién la aprobó (de la cola #9; refuerza "otro par de ojos"). |
-| `accion` | `dry_run` \| `publicado` \| `diferido_por_limite` \| `error`. |
-| `peticiones` | Las `PeticionPublicacion` que se armaron (método + url + paso; **sin el token**). |
-| `respuesta_api` | El `id_publicacion` / id de media devuelto (real); o el error. |
+| `accion` | `dry_run` \| `programado` \| `diferido_por_rate` \| `error`. |
+| `peticion` | El `ScheduledPost` que se armó (**sin el token**). |
+| `respuesta_api` | El `id` de post de Metricool y el `status` por red (`PUBLISHED`/`PENDING`/…); o el error. |
 | `cuando` | Timestamp. |
 
 **Privacidad (regla heredada de `observabilidad.py`):** **nunca** registrar el token ni credenciales.
-El `PeticionPublicacion.data` que se muestra en dry-run **ya omite el token** por diseño (ver
-`publicacion/meta.py`). El audit-log mantiene esa garantía.
+El audit-log mantiene esa garantía.
 
-**Para qué sirve:** trazabilidad ("¿quién publicó qué y cuándo, y quién lo aprobó?"), contador para
-el límite 100/24h, y base de un panel ligero de actividad de publicación.
+**Para qué sirve:** trazabilidad ("¿quién publicó qué y cuándo, y quién lo aprobó?") y base de un
+panel ligero de actividad de publicación.
 
 ---
 
@@ -115,25 +120,28 @@ el límite 100/24h, y base de un panel ligero de actividad de publicación.
 
 El salto a real es un **gate consciente**, no un flag suelto:
 
-1. **Pre-requisito externo:** #5 (Meta App Review) aprobado y System User token configurado. Sin
-   token real, el adaptador **falla antes de tocar la red** (ya implementado).
-2. **Flag/permiso explícito de servidor:** una config (p. ej. `KENI_PUBLICACION_REAL=meta`) y/o un
-   permiso de usuario que habilite `dry_run=False`. Por defecto **todo es dry-run**.
+1. **Sin prerequisito externo:** no hay App Review, auditoría ni tier de pago que esperar — Metricool
+   cubre las cinco redes. El único requisito técnico son las **credenciales de Metricool** de la
+   marca; sin ellas, el adaptador **falla antes de tocar la red** (`ProgramacionNoConfigurada`, ya
+   implementado).
+2. **Flag explícito de servidor:** `KENI_PUBLICAR_REAL` habilita `dry_run=False`. Por defecto **todo
+   es dry-run**.
 3. **Doble revisión ya activa** (#9): solo piezas `aprobado` (por alguien ≠ autor) pueden
    programarse y, por tanto, publicarse.
-4. **Validación previa con cuenta de prueba:** antes de apuntar a las cuentas reales de AMX, publicar
-   contra una Página/IG de **prueba** con `dry_run=False` (también necesario para el screencast de
-   #5, ver `meta-app-review.md §4`).
-5. **Reversibilidad:** quitar el flag o el token vuelve todo a dry-run sin cambios de código.
+4. **Validación previa con `draft=true`:** antes de programar de verdad contra las cuentas reales de
+   AMX, POSTear un `draft=true` (no publica) para confirmar la forma de la respuesta de Metricool
+   (ver `publicacion-metricool.md` §"Supuestos sin confirmar").
+5. **Reversibilidad:** apagar el flag o quitar las credenciales vuelve todo a dry-run sin cambios de
+   código.
 
 ```
 borrador --(autor)--> en_revision --(revisor≠autor)--> aprobado --(programar)--> programado
                                                                                      |
                                             programador (24-7) detecta vencida -------+
                                                                                      |
-                          gate OFF (defecto): PREPARA en dry-run, estampa preparado_en
-                          gate ON  (#5 ok + flag + token): PUBLICA real, respeta 100/24h,
-                                                            escribe audit-log, -> publicado
+              flag OFF (defecto): PREPARA en dry-run, estampa preparado_en
+              flag ON  (KENI_PUBLICAR_REAL + creds Metricool): PROGRAMA en Metricool,
+                                                respeta rate-limits, escribe audit-log, -> publicado
 ```
 
 ---
@@ -142,26 +150,60 @@ borrador --(autor)--> en_revision --(revisor≠autor)--> aprobado --(programar)-
 
 | Orden | Hito | Depende de |
 |---|---|---|
-| 1 | **Meta real** — cablear System User token + gate dry-run→real + límite 100/24h + audit-log | **#5** aprobado (App Review + BV) |
-| 2 | Validar `seguidores_netos`/`variacion_vs_anterior` en el camino real contra cuentas de AMX | Tarea de código de #5 (ver `meta-app-review.md §7`) |
-| 3 | **TikTok real** — adaptador de publicación + **UI de UX-compliance** (consent, creator-info) | **#6** auditoría aprobada (ver `tiktok-audit.md`) |
-| 4 | (Diferido / decisión de coste) X publicación; YouTube subida | #7 (decisión de coste X · cuota YouTube ya suele alcanzar) |
+| 1 | **Publicación real vía Metricool** — cablear el adaptador en `programador.py::_preparar` + gate dry-run→real + límites de rate + audit-log | Código interno (sin prerequisito externo) |
+| 2 | Validar `seguidores_netos`/`variacion_vs_anterior` en el camino real contra cuentas reales de AMX (vía Metricool) | Tarea de código (§7) |
+| 3 | Datos por red obligatorios de Metricool (`youtubeData`/`tiktokData`: título, privacidad…) cuando se validen contra la API real | Token real de Metricool para validar |
 
-> **Gating principal = #5.** Meta es la primera y mayor puerta; TikTok va detrás de su propia
-> auditoría (#6); X/YouTube quedan tras la decisión de coste/cuota de #7. Nada publica de forma real
-> hasta que su puerta externa esté abierta **y** el gate interno se active conscientemente.
+> **Sin puerta externa.** Nada bloquea la publicación real salvo el trabajo de código y el gate
+> interno consciente (`KENI_PUBLICAR_REAL`). El cableado se hará cuando el merge en curso de la
+> Consola en `main` asiente (ver `publicacion-metricool.md` §"Enganche en la Consola").
+
+---
+
+## 7. Tarea de código emparejada — `seguidores_netos` / `variacion_vs_anterior`
+
+En el **camino real** hay que rellenar dos campos que hoy salen vacíos, para validarlos contra las
+cuentas reales de AMX (vía Metricool). **Esto es código, NO se toca en esta tarea de docs.**
+
+**Estado actual (verificado en el repo):**
+
+- `agregador.py` (el camino **real**, sobre `FuenteMetricas`) **hardcodea**:
+  ```python
+  seguidores_netos=0,        # requiere historico; no se calcula en v1   (agregador.py:155)
+  variacion_vs_anterior={},  # idem                                       (agregador.py:156)
+  ```
+- En cambio el camino **muestra** (`fuentes/muestra.py:376-380`) **sí** rellena ambos (con valores
+  deterministas de demo), y `historico.py` **ya tiene la maquinaria** para la variación real:
+  `aplicar_variacion(resumen)` busca el `periodo_anterior` guardado y sustituye
+  `variacion_vs_anterior` por la variación real de `visualizaciones`/`engagement_pct`
+  (`historico.py:130-135`). La tabla `lecturas` ya guarda `seguidores_netos`
+  (`historico.py:33,84,96`).
+
+**Trabajo emparejado (resumen, no se implementa aquí):**
+
+1. **`variacion_vs_anterior` (real):** dejar de hardcodear `{}` en `agregador.py:156` y enganchar
+   `historico.aplicar_variacion(...)` en el camino real (igual que para la muestra/CLI).
+2. **`seguidores_netos` (real):** leer el conteo de seguidores por red desde `FuenteMetricol`,
+   propagarlo a `MetricaPlataforma`, y calcular `seguidores_netos` como **delta** contra el conteo
+   del periodo anterior (la tabla `lecturas` ya lo persiste). Sin histórico previo, el neto es `0`.
+3. **Validación (humano):** con las cuentas reales de AMX, comprobar que ambos campos cuadran con lo
+   que muestran las analíticas nativas / Metricool.
 
 ---
 
 ## Referencias
 
-- [`meta-app-review.md`](meta-app-review.md) — App Review, System User token, tarea de código de #5.
-- [`tiktok-audit.md`](tiktok-audit.md) — auditoría + UI de UX-compliance de TikTok.
-- [`youtube-x.md`](youtube-x.md) — cuota YouTube + decisión de coste X.
+- [`publicacion-metricool.md`](publicacion-metricool.md) — adaptador Metricool, contrato de la API,
+  credenciales por marca, enganche en la Consola.
+- [`tiktok-audit.md`](tiktok-audit.md) — ruta directa opcional por el Content Posting API de TikTok
+  (no necesaria con Metricool).
+- [`youtube-x.md`](youtube-x.md) — rutas directas opcionales por API oficial de YouTube y X (no
+  necesarias con Metricool).
 - [ADR 0001](../adr/0001-runtime-servicio-compartido.md) — servidor compartido 24-7 que aloja el
   scheduler; generación por `claude -p` (no API de Claude), separada del token de publicación.
 - [`../flujo-de-datos-privacidad.md`](../flujo-de-datos-privacidad.md) — el audit-log hereda la regla
   de no registrar tokens/credenciales.
-- Código existente: `mcp-metricas/.../publicacion/` (adaptador dry-run + cola + modelos),
+- Código existente: `mcp-metricas/.../publicacion/metricool.py` (adaptador dry-run + modelo),
+  `mcp-metricas/.../publicacion/flujo_metricool.py` (flujo CLI),
   `consola/.../programador.py` (scheduler 24-7), `consola/.../api/aprobacion.py` (cola de aprobación
   #9), `consola/.../estados.py` (estados del flujo editorial).

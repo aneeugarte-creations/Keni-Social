@@ -4,12 +4,12 @@
    entrega el post al scheduler de Metricool con su fecha de publicacion, usando el
    MISMO token por marca que la lectura de metricas (`fuentes.metricol`). Cubre
    Facebook, Instagram, X (twitter), TikTok y YouTube por un solo endpoint, con
-   PROGRAMACION nativa (`publicationDate` + `autoPublish`) — sin pasar App Review de
-   Meta ni auditoria de TikTok, y sin cola propia.
+   PROGRAMACION nativa (`publicationDate` + `autoPublish`) — sin integrar cada API
+   oficial, y sin cola propia.
 
-2. **Meta directo (gated).** `meta.AdaptadorPublicacionMeta` traduce un `Borrador` a
-   peticiones de Graph API (FB feed/photo/video; IG container -> publish). Depende de
-   App Review de Meta; `cola.ColaPublicacion` agenda IG porque Graph API no lo hace.
+2. **Meta directo (opcional).** `meta.AdaptadorPublicacionMeta` traduce un `Borrador` a
+   peticiones de Graph API (FB feed/photo/video; IG container -> publish). Ruta directa
+   alternativa; `cola.ColaPublicacion` agenda IG porque Graph API no lo hace.
 
 La postura del producto es **humano aprueba, nada se publica solo**: ambos adaptadores
 corren en **dry-run por defecto** y NO tocan la red salvo que se pida `dry_run=False`
