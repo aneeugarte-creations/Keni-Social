@@ -16,8 +16,6 @@ Todo OFFLINE; reusa el aislamiento de `entorno` y los fakes de `conftest`.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
@@ -128,48 +126,6 @@ def test_duplicar_atribuye_al_usuario_que_duplica(entorno):
 # --------------------------------------------------------------------------- #
 # Tareas / pendientes                                                         #
 # --------------------------------------------------------------------------- #
-
-
-def _config_con_proyecto(tmp_path: Path) -> str:
-    """Registra un proyecto permitido y devuelve su id (para crear tareas)."""
-    from keni_consola import proyectos
-
-    carpeta = tmp_path / "proyecto-a"
-    carpeta.mkdir(parents=True, exist_ok=True)
-    (carpeta / "CLAUDE.md").write_text("# Proyecto A\n", encoding="utf-8")
-    (tmp_path / "consola.toml").write_text(
-        f'[[proyecto]]\nnombre = "Proyecto A"\nruta = "{carpeta}"\n', encoding="utf-8"
-    )
-    return proyectos.cargar_proyectos()[0].id
-
-
-def test_tarea_creada_por_usuario_queda_atribuida(entorno):
-    proyecto_id = _config_con_proyecto(entorno)
-    c = _cli_con_usuario("ana")
-    r = c.post(
-        "/api/tareas",
-        json={"proyecto": proyecto_id, "titulo": "Revisar copy", "detalle": ""},
-        headers=_ORIGIN,
-    )
-    assert r.status_code == 200
-    tarea = r.json()["tarea"]
-    assert tarea["autor_nombre"] == "ana"
-    assert tarea["autor_id"]
-    # Persiste y se relee en el listado compartido.
-    listado = c.get("/api/tareas").json()["tareas"]
-    assert listado[0]["autor_nombre"] == "ana"
-
-
-def test_tarea_por_token_sin_autor(entorno):
-    proyecto_id = _config_con_proyecto(entorno)
-    c = _cli_por_token()
-    tarea = c.post(
-        "/api/tareas",
-        json={"proyecto": proyecto_id, "titulo": "T", "detalle": ""},
-        headers=_ORIGIN,
-    ).json()["tarea"]
-    assert tarea["autor_id"] == ""
-    assert tarea["autor_nombre"] == ""
 
 
 def test_tarea_legada_sin_columnas_de_autor_se_migra_y_lee(entorno):

@@ -46,9 +46,23 @@ def _cli_obs(**kwargs) -> TestClient:
 
 @pytest.fixture
 def modulo_api_que_lanza():
-    """Suelta un modulo api/ temporal con un endpoint que LANZA (y lo limpia)."""
+    """Suelta un modulo api/ temporal con un endpoint que LANZA (y lo limpia).
+
+    El nombre del modulo y sus rutas son UNICOS por worker de xdist: la suite corre con
+    `-n auto` y todos los workers comparten el dir `api/` del paquete. Con un nombre fijo
+    (`zzlanza.py`), el teardown de un worker borraba el modulo que otro acababa de escribir
+    -> ese otro recibia 404 en vez de 500 (flake intermitente en CI). Por eso el fichero y
+    las rutas se sufijan con `PYTEST_XDIST_WORKER` y el fixture YIELDEA las rutas para que
+    los tests no las hardcodeen.
+    """
+    import os
+
     dir_api = Path(api.__file__).parent
-    modulo = dir_api / "zzlanza.py"
+    sufijo = os.environ.get("PYTEST_XDIST_WORKER", "principal")
+    nombre = f"zzlanza_{sufijo}"
+    modulo = dir_api / f"{nombre}.py"
+    ruta_lanza = f"/api/{nombre}"
+    ruta_ok = f"/api/{nombre}_ok"
     modulo.write_text(
         "from starlette.responses import JSONResponse\n"
         "from starlette.routing import Route\n"
@@ -59,16 +73,16 @@ def modulo_api_que_lanza():
         "async def _ok(request):\n"
         "    return JSONResponse({'ok': True})\n"
         "\n"
-        "RUTAS = [Route('/api/zzlanza', _ep), Route('/api/zzok', _ok)]\n",
+        f"RUTAS = [Route('{ruta_lanza}', _ep), Route('{ruta_ok}', _ok)]\n",
         encoding="utf-8",
     )
     importlib.invalidate_caches()
     api.descubrir(refresco=True)
     try:
-        yield
+        yield {"lanza": ruta_lanza, "ok": ruta_ok}
     finally:
         modulo.unlink(missing_ok=True)
-        sys.modules.pop("keni_consola.api.zzlanza", None)
+        sys.modules.pop(f"keni_consola.api.{nombre}", None)
         api.descubrir(refresco=True)
 
 
@@ -85,7 +99,7 @@ def test_excepcion_no_controlada_da_500_json_estandar(entorno, modulo_api_que_la
     `tipo` el nombre de la clase; NUNCA el detalle interno ni el stack.
     """
     cliente = _cli_obs(raise_server_exceptions=False)
-    r = cliente.get("/api/zzlanza")
+    r = cliente.get(modulo_api_que_lanza["lanza"])
     assert r.status_code == 500
     cuerpo = r.json()
     assert set(cuerpo) == {"error", "tipo", "request_id"}
@@ -104,7 +118,7 @@ def test_excepcion_no_controlada_loguea_traceback_en_servidor(
     """El servidor SI registra el error con traceback (auditable en beta)."""
     cliente = _cli_obs(raise_server_exceptions=False)
     with caplog.at_level(logging.ERROR, logger=NOMBRE_LOGGER):
-        cliente.get("/api/zzlanza")
+        cliente.get(modulo_api_que_lanza["lanza"])
     registros = [r for r in caplog.records if r.name == NOMBRE_LOGGER]
     assert registros, "se esperaba al menos un log de error del paquete"
     # El traceback (con el detalle real) vive SOLO en el log del servidor.
@@ -125,7 +139,7 @@ def test_excepcion_loguea_y_responde_el_mismo_request_id(
     logger_pet = f"{NOMBRE_LOGGER}.peticiones"
     cliente = _cli_obs(raise_server_exceptions=False)
     with caplog.at_level(logging.INFO):
-        r = cliente.get("/api/zzlanza")
+        r = cliente.get(modulo_api_que_lanza["lanza"])
     rid = r.json()["request_id"]
     assert rid and r.headers.get("x-request-id") == rid
     # El log de ERROR del manejador central incluye ese mismo id entre corchetes.
@@ -141,7 +155,7 @@ def test_excepcion_loguea_y_responde_el_mismo_request_id(
 def test_endpoint_que_no_lanza_no_se_ve_afectado(entorno, modulo_api_que_lanza):
     """El manejador es aditivo: un endpoint normal responde como siempre."""
     cliente = _cli_obs()
-    r = cliente.get("/api/zzok")
+    r = cliente.get(modulo_api_que_lanza["ok"])
     assert r.status_code == 200
     assert r.json() == {"ok": True}
 
