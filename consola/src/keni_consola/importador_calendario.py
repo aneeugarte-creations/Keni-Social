@@ -13,7 +13,8 @@ DOS CAPAS (como `radar_auto`):
     normalizadas + lista de errores honesta (una fila mala se reporta, NO rompe la importacion).
   - ESCRITURA (`importar_a_tablero`) reutiliza el MISMO camino que `desde_radar` /
     `radar_auto.promover_temas`: `repos.crear_contenido(origen='import-calendario', ...)`. Los
-    contenidos marcados "obligatorio" se etiquetan `compromiso` (sin tocar el enum de `flujo`).
+    contenidos marcados "obligatorio" se etiquetan `compromiso` y los de la "green list" del
+    equipo se etiquetan `green` (sin tocar el enum de `flujo`).
 
 CONSERVADOR:
   - Mapeo de cabeceras flexible (sinonimos es/en) y tolerante a acentos/espacios.
@@ -44,6 +45,9 @@ ORIGEN = "import-calendario"
 # Etiqueta con la que se marca un contenido "obligatorio por compromiso".
 ETIQUETA_COMPROMISO = "compromiso"
 
+# Etiqueta con la que se marca un contenido de la "green list" (lista del equipo).
+ETIQUETA_GREEN = "green"
+
 # Limites defensivos (un calendario real no tiene millones de filas).
 _MAX_FILAS = 5000
 _MAX_TITULO = 300
@@ -66,6 +70,9 @@ _SINONIMOS: dict[str, set[str]] = {
     "compromiso": {
         "compromiso", "obligatorio", "obligatoria", "mandatory", "commitment", "fijo",
     },
+    "green": {
+        "green", "verde", "green list", "lista green", "lista verde", "greenlist",
+    },
     "notas": {"notas", "nota", "detalle", "descripcion", "comentarios", "notes", "comment"},
 }
 
@@ -87,6 +94,7 @@ class FilaCalendario:
     redes: list[str] = field(default_factory=list)  # ids canonicos de red
     prioridad: str = "media"
     compromiso: bool = False
+    green: bool = False
     notas: str = ""
 
 
@@ -294,6 +302,7 @@ def _filas_desde_tabla(
             errores.append({"fila": desplazamiento, "motivo": "Fila sin título; se omitió."})
             continue
         compromiso = _es_verdadero(celda(fila, "compromiso"))
+        green = _es_verdadero(celda(fila, "green"))
         marca_norm = _normaliza(celda(fila, "marca"))
         notas = ("" if celda(fila, "notas") is None else str(celda(fila, "notas"))).strip()
         filas.append(
@@ -304,6 +313,7 @@ def _filas_desde_tabla(
                 redes=_parse_redes(celda(fila, "redes"), idx_redes),
                 prioridad=_parse_prioridad(celda(fila, "prioridad"), compromiso=compromiso),
                 compromiso=compromiso,
+                green=green,
                 notas=notas[:_MAX_TEXTO],
             )
         )
@@ -338,12 +348,22 @@ def claves_ya_importadas() -> set[str]:
     }
 
 
+def _id_etiqueta(nombre: str) -> str:
+    """Id de la etiqueta `nombre` (la crea si no existe). Best-effort idempotente."""
+    for et in repos.listar_etiquetas():
+        if _normaliza(et.get("nombre", "")) == nombre:
+            return et.get("id", "")
+    return repos.crear_etiqueta(nombre=nombre).get("id", "")
+
+
 def _id_etiqueta_compromiso() -> str:
     """Id de la etiqueta 'compromiso' (la crea si no existe). Best-effort idempotente."""
-    for et in repos.listar_etiquetas():
-        if _normaliza(et.get("nombre", "")) == ETIQUETA_COMPROMISO:
-            return et.get("id", "")
-    return repos.crear_etiqueta(nombre=ETIQUETA_COMPROMISO).get("id", "")
+    return _id_etiqueta(ETIQUETA_COMPROMISO)
+
+
+def _id_etiqueta_green() -> str:
+    """Id de la etiqueta 'green' (la crea si no existe). Best-effort idempotente."""
+    return _id_etiqueta(ETIQUETA_GREEN)
 
 
 def importar_a_tablero(
@@ -361,6 +381,7 @@ def importar_a_tablero(
     ya = claves_ya_importadas()
     defecto = marca_defecto if marcas.es_marca(marca_defecto) else ""
     etiqueta_compromiso_id = ""
+    etiqueta_green_id = ""
     creados: list[dict[str, Any]] = []
     omitidos: list[dict[str, Any]] = []
 
@@ -388,6 +409,11 @@ def importar_a_tablero(
                 etiqueta_compromiso_id = _id_etiqueta_compromiso()
             if etiqueta_compromiso_id:
                 repos.asignar_etiqueta(item["id"], etiqueta_compromiso_id)
+        if fila.green:
+            if not etiqueta_green_id:
+                etiqueta_green_id = _id_etiqueta_green()
+            if etiqueta_green_id:
+                repos.asignar_etiqueta(item["id"], etiqueta_green_id)
         creados.append(item)
 
     if creados:
