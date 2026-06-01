@@ -7,6 +7,27 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Termómetro con descubrimiento en vivo + nuevo Brief de tendencias (MX/Internacional)
+
+- **`termometro-mundial`** integra **descubrimiento con WebSearch/WebFetch** cuando el bloque
+  `CONTEXTO` viene escaso o vacío (antes solo trabajaba con notas inyectadas), conservando el
+  guardarraíl anti-invención: ahora la regla de oro exige que **todo dato trace a una fuente real
+  con su URL**. Añade **ancla de fecha** (`date`) antes de buscar, **mezcla de registros**
+  serio/viral con etiqueta por slide, **cruce de ≥2 fuentes** para frescura y una sección
+  **"Fuentes:"** con enlaces markdown.
+- **Nuevo prompt `brief-tendencias`**: brief matutino de **descubrimiento** (10 temas, 5 México +
+  5 internacional, mezcla serio/viral) que se entrega en el chat. Es la versión endurecida del
+  flujo de búsqueda en vivo: añade nuestra disciplina anti-invención, **tropicalización MX** de
+  los títulos y **marcas de riesgo legal** (⚠️ menores, "presunto", datos personales) antes de
+  convertir una tendencia en posteo. Cubre el **pulso nacional**, que el Termómetro (mesa
+  internacional, una por región) no daba.
+- **Política de emojis coherente**: se retira el «sin emojis» absoluto de `copy-desde-nota` y
+  `termometro-mundial`; ahora **manda la plataforma y la marca** (`plataformas.md`): cero en
+  UnoTV/Fundación, 0–2 en Instagram/Facebook, naturales en TikTok para las marcas que los
+  admitan. El texto-en-imagen (`copy_in`) sigue **siempre sin emojis**.
+- **`tropicalizacion.md`**: «Registro por marca» completa las 5 marcas (faltaban **Fundación** y
+  **Piso 15**).
+
 ### Biblioteca de Prompts en lugar del «sistema de skills»
 
 - El antiguo **sistema de skills** (carpetas `SKILL.md` + `keni.yaml` con formularios, y la

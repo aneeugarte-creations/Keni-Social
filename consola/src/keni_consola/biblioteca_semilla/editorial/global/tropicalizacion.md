@@ -4,7 +4,7 @@ tipo: editorial
 clase: tropicalizacion
 marcas: []
 creado: 2026-05-31T00:00:00+00:00
-actualizado: 2026-05-31T00:00:00+00:00
+actualizado: 2026-06-01T00:00:00+00:00
 ---
 
 # Tropicalización (español de México)
@@ -51,6 +51,8 @@ El léxico cambia según la marca. Misma noticia, distinto registro:
 - **UnoTV (noticias)** → es-MX **neutro profesional**. Evita jerga ("wey", "no manches", "chido"). Claro, directo, verificado. Mexicano sin coloquialismos: "celular", "computadora", "manejar", "boleto" sí; "morro", "varo", "chambear" no.
 - **Claro Sports (deportes)** → **coloquial pero correcto**. Energía de afición: "golazo", "se armó", "la rompió", "de no creer", "agárrate". Modismos sí, groserías no.
 - **Nación Gamer (gaming)** → **juvenil sin pasarse**. Códigos de comunidad (hype, drop, meta, loot) + mexicanismos ligeros. No fuerces la jerga de nicho ni el "wey" en cada frase.
+- **Fundación (impacto social)** → **sobrio y empático**. La marca más sobria: nada de jerga, humor ni coloquialismos; mexicano natural pero serio, cuidando la dignidad de las personas.
+- **Piso 15 (podcasts)** → **conversacional y humano**. Cercano y cálido, como una charla; mexicano natural, pero no desenfadado ni de relleno juvenil.
 
 ## Trampas comunes (errores que delatan que no es es-MX)
 - **Pretérito vs. perfecto:** en MX se prefiere el **pretérito simple** ("hoy **ganó**", "ya **llegó**"). El perfecto español ("hoy **ha ganado**", "ya **ha llegado**") suena peninsular. Reescribe.
