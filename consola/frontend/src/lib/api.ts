@@ -265,6 +265,18 @@ export function urlMedia(nombreOUrl: string | null | undefined): string {
   return `${BASE_API}/media/${encodeURIComponent(nombreOUrl)}`;
 }
 
+/**
+ * URL para servir un objeto del bucket S3 a través del back (admin). El endpoint S3 de
+ * Garage es interno; los bytes se proxean por el back. `descargar` fuerza `attachment`
+ * (descarga) en vez de `inline` (previsualización). La cookie de sesión viaja sola en
+ * peticiones same-origin (`<img src>` / `window.open`), así que basta con la URL.
+ */
+export function urlS3Objeto(key: string, descargar = false): string {
+  const params = new URLSearchParams({ key });
+  if (descargar) params.set("descargar", "1");
+  return `${BASE_API}/sistema/s3/objeto?${params.toString()}`;
+}
+
 /** Error de la API con el mensaje legible (en espanol) ya extraido. */
 export class ApiError extends Error {
   readonly status: number;
