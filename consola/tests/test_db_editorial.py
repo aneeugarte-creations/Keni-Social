@@ -3,14 +3,13 @@
 Fuentes RSS (+ items vistos + salud), grupos de hashtags y franjas editoriales eran los
 ULTIMOS rezagados file-backed (YAML + indice SQLite de rutas absolutas, que se
 desincronizaba al recrear contenedores -> Fuentes RSS aparecia vacia). Aqui se cubre que el
-CRUD vive en Postgres (`keni_consola.db`), conserva el contrato de los dicts (mismas claves
-que la capa de ficheros) y que la migracion one-shot (file -> pg) es idempotente y
-preserva ids.
+CRUD vive en Postgres (`keni_consola.db`) y conserva el contrato de los dicts (mismas
+claves que tenia la capa de ficheros, hoy retirada para estas 3 entidades).
 """
 
 from __future__ import annotations
 
-from keni_consola import db, ficheros, migrar_contenido
+from keni_consola import db
 
 
 # --------------------------------------------------------------------------- #
@@ -45,7 +44,7 @@ def test_crear_listar_obtener_fuente_rss(entorno):
         "Diario", "https://example.com/feed.xml", marca="unotv",
         incluir="gol", excluir="rumor", redes_def="x,facebook",
     )
-    # Contrato del dict (mismas claves que ficheros._parsear_fuente; SIN `creado`).
+    # Contrato del dict (mismas claves que daba la capa de ficheros; SIN `creado`).
     assert set(f) == {
         "id", "nombre", "url", "marca", "fecha", "activo", "incluir", "excluir",
         "redes_def", "ultima_actualizacion", "ultimo_error", "ultimo_conteo",
@@ -147,43 +146,3 @@ def test_crud_franjas_editoriales(entorno):
     assert dias == sorted(dias)
     assert db.borrar_franja(f["id"]) is True
     assert db.borrar_franja(f["id"]) is False
-
-
-# --------------------------------------------------------------------------- #
-# Migracion one-shot file -> Postgres (idempotente, preserva id)               #
-# --------------------------------------------------------------------------- #
-
-
-def test_migracion_editorial_file_a_pg_preserva_id_e_idempotente(entorno):
-    # Siembra el ORIGEN file-backed (YAML por marca) directamente con `ficheros`.
-    f_y = ficheros.crear_fuente_rss("Legada", "https://leg.example.com/f.xml", marca="unotv")
-    ficheros.marcar_item(f_y["id"], "viejo-item", True)
-    g_y = ficheros.crear_grupo_hashtags("Tags legados", marca="unotv", hashtags=["#x"])
-    fr_y = ficheros.crear_franja(3, "10:00", marca="unotv")
-
-    # Antes de migrar, Postgres esta vacio.
-    assert db.obtener_fuente_rss(f_y["id"]) is None
-
-    n1 = {
-        "fuentes_rss": migrar_contenido.migrar_fuentes_rss(),
-        "grupos_hashtags": migrar_contenido.migrar_grupos_hashtags(),
-        "franjas": migrar_contenido.migrar_franjas(),
-    }
-    assert n1 == {"fuentes_rss": 1, "grupos_hashtags": 1, "franjas": 1}
-
-    # El id se PRESERVA y el dato vive ya en Postgres (leido por db).
-    assert db.obtener_fuente_rss(f_y["id"])["nombre"] == "Legada"
-    assert db.claves_vistas(f_y["id"]) == {"viejo-item"}
-    assert db.obtener_grupo_hashtags(g_y["id"])["hashtags"] == ["#x"]
-    assert any(x["id"] == fr_y["id"] for x in db.listar_franjas())
-
-    # Re-correr NO duplica (idempotente).
-    n2 = {
-        "fuentes_rss": migrar_contenido.migrar_fuentes_rss(),
-        "grupos_hashtags": migrar_contenido.migrar_grupos_hashtags(),
-        "franjas": migrar_contenido.migrar_franjas(),
-    }
-    assert n2 == {"fuentes_rss": 0, "grupos_hashtags": 0, "franjas": 0}
-    assert db.contar_fuentes_rss() == 1
-    assert db.contar_grupos_hashtags() == 1
-    assert len(db.listar_franjas()) == 1
