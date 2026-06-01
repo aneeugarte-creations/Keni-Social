@@ -12,7 +12,8 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
   - alertas de rendimiento / reciclaje (solo leen + emiten eventos internos),
-  - auto-promocion del Radar (solo arranca con `KENI_RADAR_AUTO=1`).
+  - auto-promocion del Radar (solo arranca con `KENI_RADAR_AUTO=1`),
+  - reaper de generaciones zombi (cierra como `error` las `ejecutando` huerfanas).
 
 SAFE BY DEFAULT: este proceso NO publica nada ni crea/aprueba contenido por su
 cuenta. Los unicos caminos que lo harian estan gated por env y vienen AUSENTES por
@@ -48,6 +49,7 @@ def main() -> int:
     from .metricas_refresco import iniciar_refresco_metricas
     from .programador import iniciar_programador
     from .radar_auto import iniciar_radar_auto
+    from .reaper_generaciones import iniciar_reaper
 
     iniciar_captura_programada()
     iniciar_programador()  # DRY-RUN salvo KENI_PUBLICAR_REAL=1: nunca publica solo.
@@ -57,6 +59,13 @@ def main() -> int:
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
+    # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
+    # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las
+    # muestre "Generando..." indefinidamente. Barre al arrancar (limpia los huerfanos del
+    # deploy anterior) y cada N min. Antes solo se cableaba en `__main__` (servidor monolitico);
+    # con el split de servicios (Fase 3) NINGUN proceso hosted corre `__main__`, asi que sin
+    # esto el reaper no corria en produccion y los huerfanos quedaban "ejecutando" para siempre.
+    iniciar_reaper()
 
     # Los daemons son hilos; mantenemos vivo el proceso principal indefinidamente.
     threading.Event().wait()
