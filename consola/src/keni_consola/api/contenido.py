@@ -19,11 +19,21 @@ from __future__ import annotations
 
 from datetime import date
 
+from starlette.datastructures import UploadFile
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, auto_responsable, marcas, metricas_pieza, redes, repos, skills_catalogo
+from .. import (
+    auth,
+    auto_responsable,
+    importador_calendario,
+    marcas,
+    metricas_pieza,
+    redes,
+    repos,
+    skills_catalogo,
+)
 from .._http_json import leer_json
 from ..dominio import asistente, eventos, placeholders
 from ..estados import (
@@ -648,11 +658,78 @@ async def asistente_ia(request: Request) -> Response:
     return JSONResponse({"generacion": gen})
 
 
+# Tope defensivo del archivo de calendario (un calendario real pesa KB, no MB).
+_LIMITE_IMPORT = 5 * 1024 * 1024
+
+
+def _fila_a_dict(fila: importador_calendario.FilaCalendario) -> dict:
+    """Serializa una fila parseada para la previsualizacion del cliente."""
+    return {
+        "titulo": fila.titulo,
+        "fecha": fila.fecha,
+        "marca": fila.marca_id,
+        "redes": fila.redes,
+        "prioridad": fila.prioridad,
+        "compromiso": fila.compromiso,
+        "notas": fila.notas,
+    }
+
+
+async def importar(request: Request) -> Response:
+    """POST /api/contenido/importar: sube un calendario (.xlsx/.csv) al tablero (multipart).
+
+    Campos: `archivo` (obligatorio), `marca` (id canonico opcional, para filas sin marca),
+    `previsualizar` ('1' => parsea y devuelve lo que entraria SIN escribir). Crea contenido
+    `origen='import-calendario'`; las filas obligatorias se etiquetan `compromiso`.
+    """
+    try:
+        form = await request.form()
+    except Exception:  # noqa: BLE001 -- multipart malformado => mensaje claro, sin traza
+        return JSONResponse({"error": "Formulario inválido."}, status_code=400)
+
+    archivo = form.get("archivo")
+    if not isinstance(archivo, UploadFile):
+        return JSONResponse({"error": "Falta el archivo del calendario."}, status_code=400)
+    data = await archivo.read()
+    if not data:
+        return JSONResponse({"error": "El archivo está vacío."}, status_code=400)
+    if len(data) > _LIMITE_IMPORT:
+        return JSONResponse({"error": "El archivo es demasiado grande."}, status_code=413)
+
+    marca_defecto, err = _validar_marca(form.get("marca"))
+    if err:
+        return JSONResponse({"error": err}, status_code=400)
+
+    try:
+        filas, errores = importador_calendario.parsear(data, nombre=archivo.filename or "")
+    except ImportError:
+        return JSONResponse({"error": "El servidor no puede leer .xlsx (falta openpyxl); usa CSV."}, status_code=503)
+    except Exception:  # noqa: BLE001 -- archivo corrupto/no soportado => 400, sin traza
+        return JSONResponse({"error": "No se pudo leer el archivo (¿formato no soportado?)."}, status_code=400)
+
+    if str(form.get("previsualizar") or "") in ("1", "true", "si", "sí"):
+        return JSONResponse({
+            "previsualizacion": True,
+            "filas": [_fila_a_dict(f) for f in filas],
+            "errores": errores,
+        })
+
+    resumen = importador_calendario.importar_a_tablero(
+        filas, autor=autor_de_peticion(request), marca_defecto=marca_defecto or ""
+    )
+    return JSONResponse({
+        "creados": len(resumen["creados"]),
+        "omitidos": resumen["omitidos"],
+        "errores": errores,
+    })
+
+
 RUTAS = [
     Route("/api/contenido", listar, methods=["GET"]),
     Route("/api/contenido", crear, methods=["POST"]),
     Route("/api/contenido/metricas", metricas, methods=["GET"]),
     Route("/api/contenido/desde-radar", desde_radar, methods=["POST"]),
+    Route("/api/contenido/importar", importar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/preview", previsualizar, methods=["POST"]),
     Route("/api/contenido/{contenido_id}/asistente", asistente_ia, methods=["POST"]),
     Route("/api/contenido/{contenido_id}", actualizar, methods=["PATCH"]),
