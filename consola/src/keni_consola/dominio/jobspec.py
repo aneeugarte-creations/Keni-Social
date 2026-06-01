@@ -42,6 +42,9 @@ VERSION = 1
 # que contiene `.claude/skills` (skills de copy/RSS/hashtags); "skills" es la raiz.
 CWD_EJECUCION = "ejecucion_skills"
 CWD_SKILLS = "skills"
+# cwd NEUTRO para prompts AUTOCONTENIDOS (Biblioteca y features migradas): un dir writable
+# sin skills (el corpus editorial va dentro del prompt, no se descubre por cwd).
+CWD_GENERACION = "generacion"
 
 # Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.skills`/`qa`.
 PROC_COPY = "copy"
@@ -170,9 +173,24 @@ def cwd(spec: dict[str, Any]) -> Path:
     Las rutas absolutas no viajan en el spec: el worker las resuelve aqui, leyendo las
     MISMAS env vars `KENI_SKILLS_*` que el back. Por defecto el dir de ejecucion de skills.
     """
+    if spec.get("cwd_kind") == CWD_GENERACION:
+        return cwd_generacion()
     if spec.get("cwd_kind") == CWD_SKILLS:
         return dom_skills.cwd_skills()
     return dom_skills.cwd_ejecucion_skills()
+
+
+def cwd_generacion() -> Path:
+    """Dir writable desde el que corre `claude` para prompts AUTOCONTENIDOS (sin skills).
+
+    No depende de `skills-copy/`: el corpus editorial viaja DENTRO del prompt. Es un dir
+    estable y escribible bajo la config (se crea si falta).
+    """
+    from .. import rutas
+
+    d = rutas.dir_config() / "generacion-cwd"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def dir_temporal(spec: dict[str, Any]) -> Path | None:

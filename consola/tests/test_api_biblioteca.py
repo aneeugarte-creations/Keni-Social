@@ -20,9 +20,9 @@ _MARCA = marcas.opciones()[0][0]
 
 @pytest.fixture
 def cliente(monkeypatch, tmp_path):
+    monkeypatch.setenv("KENI_DATA_DIR", str(tmp_path))  # aisla dir_config() (cwd_generacion)
     monkeypatch.setenv("KENI_BIBLIOTECA_DIR", str(tmp_path / "biblioteca"))
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(tmp_path))
     monkeypatch.setattr(generaciones, "encolar_job_claude", lambda *a, **k: None)
     return TestClient(Starlette(routes=list(api_bib.RUTAS)))
 

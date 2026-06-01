@@ -549,6 +549,47 @@ def dir_semilla() -> Path:
     return Path(__file__).resolve().parent / "biblioteca_semilla"
 
 
+def obtener_semilla(doc_id: str) -> Documento | None:
+    """Lee un documento de la SEMILLA del paquete (no del store). None si no existe."""
+    if not isinstance(doc_id, str) or not doc_id.strip():
+        return None
+    partes = doc_id.strip().strip("/").split("/")
+    if len(partes) < 2 or partes[0] not in TIPOS or not _segmentos_validos(partes):
+        return None
+    base = dir_semilla()
+    ruta = base.joinpath(*partes).with_suffix(".md")
+    try:
+        if base.resolve() not in ruta.resolve().parents or not ruta.is_file():
+            return None
+    except OSError:
+        return None
+    meta, cuerpo = _parsear(ruta.read_text(encoding="utf-8"))
+    tipo = partes[0]
+    titulo = meta.get("titulo")
+    titulo = titulo.strip() if isinstance(titulo, str) and titulo.strip() else partes[-1].replace("-", " ")
+    clase = meta.get("clase") if isinstance(meta.get("clase"), str) and meta.get("clase") in CLASES else ""
+    marcas_crudas = meta.get("marcas")
+    marcas = [m for m in marcas_crudas if isinstance(m, str)] if isinstance(marcas_crudas, list) else []
+    return Documento(
+        id=doc_id, titulo=titulo, tipo=tipo, carpeta="/".join(partes[1:-1]), cuerpo=cuerpo,
+        creado="", actualizado="", clase=clase, marcas=marcas,
+    )
+
+
+def cuerpo_efectivo(prompt_id: str) -> str | None:
+    """Cuerpo de un prompt: la versión del STORE si el equipo la editó, si no la SEMILLA.
+
+    Es la fuente de verdad para las features que se apoyan en un prompt base: el equipo
+    puede editarlo en la Biblioteca (gana el store) y, si no, se usa el que viaja en el
+    paquete (semilla). None si no existe ni en uno ni en otro.
+    """
+    doc = obtener(prompt_id)
+    if doc is not None:
+        return doc.cuerpo
+    semilla = obtener_semilla(prompt_id)
+    return semilla.cuerpo if semilla is not None else None
+
+
 def importar_semilla(origen: Path | None = None) -> int:
     """Copia los documentos de la semilla al store que AÚN NO existan. Idempotente.
 

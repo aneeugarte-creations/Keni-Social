@@ -19,12 +19,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .. import biblioteca, generaciones, marcas
-from . import jobspec
-
-# Mapa id->nombre de marca (catalogo unico). Para etiquetar la generacion y validar la marca.
-_MARCA_NOMBRE: dict[str, str] = dict(marcas.opciones())
-
+from .. import biblioteca
+from . import generar, jobspec
 
 # --------------------------------------------------------------------------- #
 # Proveedores de CONTEXTO de AREA (secciones de la Consola; SOLO LECTURA)      #
@@ -95,26 +91,9 @@ def area_contexto(area: str, marca: str) -> str:
         return "(No se pudo leer el contexto de esta área.)"
 
 
-def _cwd_ejecucion() -> Path:
-    """cwd desde el que corre `claude` (import perezoso: evita acoplar el arranque a skills)."""
-    from . import skills as dom_skills
-
-    return dom_skills.cwd_ejecucion_skills()
-
-
 def componer(cuerpo_prompt: str, adjuntos: list[biblioteca.Documento], bloque_contexto: str) -> str:
-    """Arma el prompt final: cuerpo del prompt + linea editorial adjunta + contexto del target.
-
-    Solo incluye las secciones presentes. Las secciones van separadas por reglas `---` para
-    que el modelo distinga la instruccion (prompt) del material de apoyo (editorial/contexto).
-    """
-    partes: list[str] = [cuerpo_prompt.strip()]
-    if adjuntos:
-        bloques = [f"## {d.titulo}\n\n{d.cuerpo.strip()}" for d in adjuntos]
-        partes.append("---\nLÍNEA EDITORIAL (material de referencia, no lo copies literal):\n\n" + "\n\n".join(bloques))
-    if bloque_contexto and bloque_contexto.strip():
-        partes.append("---\nCONTEXTO:\n\n" + bloque_contexto.strip())
-    return "\n\n".join(partes)
+    """Arma el prompt final autocontenido (delega en el lanzador neutro `generar`)."""
+    return generar.componer(cuerpo_prompt, adjuntos, bloque_contexto)
 
 
 def lanzar(
@@ -135,9 +114,7 @@ def lanzar(
     (ya resueltos en la UI a partir de `biblioteca.editoriales_de_marca`, ajustables).
     `bloque_contexto` es el texto del target ya resuelto por el llamante.
     """
-    import shutil
-
-    if marca not in _MARCA_NOMBRE:
+    if not generar.marca_valida(marca):
         raise biblioteca.BibliotecaError("Marca no válida.")
 
     if prompt_id:
@@ -157,39 +134,12 @@ def lanzar(
         d = biblioteca.obtener(aid)
         if d is not None and d.tipo == "editorial":
             adjuntos.append(d)
-    prompt_final = componer(cuerpo_prompt, adjuntos, bloque_contexto)
+    prompt_final = generar.componer(cuerpo_prompt, adjuntos, bloque_contexto)
 
-    gen = generaciones.crear({
-        "tipo": "prompt",
-        "marca": marca,
-        "etiqueta": f"{titulo} · {_MARCA_NOMBRE.get(marca, marca)}",
-        "autor_id": (autor or {}).get("id", "") or "",
-        "autor_nombre": (autor or {}).get("usuario", "") or "",
-    })
-    spec = jobspec.construir(
-        prompt=prompt_final,
-        procesar=jobspec.construir_prompt_lib(),
-        dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
+    # Post-procesado IDENTIDAD: el prompt devuelve el texto markdown; no crea artefactos.
+    procesar_spec = jobspec.construir_prompt_lib()
+    return generar.lanzar(
+        tipo="prompt", titulo=titulo, marca=marca, prompt=prompt_final,
+        procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+        procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
     )
-    try:
-        generaciones.encolar_job_claude(
-            gen["id"], prompt=prompt_final, cwd=_cwd_ejecucion(),
-            procesar=jobspec.reconstruir_procesar(spec), dir_temporal=dir_temporal, spec=spec,
-        )
-    except generaciones.ColaLlenaError:
-        if dir_temporal is not None:
-            shutil.rmtree(dir_temporal, ignore_errors=True)
-        generaciones.actualizar(gen["id"], {
-            "estado": generaciones.ESTADO_ERROR, "motivo": generaciones.MOTIVO_COLA_LLENA,
-            "error": "Hay demasiadas generaciones en curso; inténtalo en unos segundos.",
-            "fecha_fin": generaciones.ahora_iso(),
-        })
-        raise
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo; reflejamos el error en el registro
-        if dir_temporal is not None:
-            shutil.rmtree(dir_temporal, ignore_errors=True)
-        generaciones.actualizar(gen["id"], {
-            "estado": generaciones.ESTADO_ERROR, "error": "No se pudo iniciar la generación.",
-            "fecha_fin": generaciones.ahora_iso(),
-        })
-    return generaciones.obtener(gen["id"]) or gen
