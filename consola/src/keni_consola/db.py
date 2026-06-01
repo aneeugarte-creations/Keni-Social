@@ -3301,6 +3301,12 @@ def _fila_a_contenido_plataforma(fila: Any) -> dict[str, Any]:
     for col in _BOOLS_CONTENIDO_PLATAFORMA:
         plat[col] = bool(fila[col])
     plat["estado"] = fila["estado"] or "pendiente"
+    # `imagen` es el NOMBRE de archivo en el dir de media; `imagen_url` es su ruta
+    # servible (`/api/media/{imagen}`), igual que en `publicacion_a_dict`. La UI debe
+    # usar SIEMPRE `imagen_url` en un <img>; `imagen` a secas no es navegable.
+    imagen = plat.get("imagen") or ""
+    plat["imagen"] = imagen
+    plat["imagen_url"] = f"/api/media/{imagen}" if imagen else ""
     return plat
 
 

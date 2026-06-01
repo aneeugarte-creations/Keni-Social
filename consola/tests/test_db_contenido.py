@@ -148,3 +148,25 @@ def test_borrar_publicacion_anidada_conserva_el_tema(entorno):
     assert db.obtener_contenido_plataforma(borrador["id"]) is None
     restantes = db.listar_contenido_plataforma(tema["id"])
     assert [p["red"] for p in restantes] == ["x"]
+
+
+def test_fila_a_contenido_plataforma_deriva_imagen_url():
+    """`imagen` es el NOMBRE de archivo; el serializador añade `imagen_url` servible.
+
+    Pura (sin DB): la UI (feed/preview) debe usar `imagen_url` en un <img>; `imagen`
+    a secas no es navegable. Antes de esto el feed pintaba `src={imagen}` y salía rota.
+    """
+    fila = {c: "" for c in db._COLS_CONTENIDO_PLATAFORMA}
+    for b in db._BOOLS_CONTENIDO_PLATAFORMA:
+        fila[b] = 0
+    fila["estado"] = "pendiente"
+    fila["imagen"] = "abc123.png"
+
+    plat = db._fila_a_contenido_plataforma(fila)
+    assert plat["imagen"] == "abc123.png"
+    assert plat["imagen_url"] == "/api/media/abc123.png"
+
+    fila["imagen"] = ""
+    sin = db._fila_a_contenido_plataforma(fila)
+    assert sin["imagen"] == ""
+    assert sin["imagen_url"] == ""

@@ -4,6 +4,9 @@ import * as React from "react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import type { UsuarioSesion } from "@/types";
+
 import Tablero from "./Tareas";
 
 const CATALOGOS = {
@@ -11,7 +14,10 @@ const CATALOGOS = {
     { id: "u1", usuario: "ana" },
     { id: "u2", usuario: "luis" },
   ],
-  marcas: [{ id: "unotv", nombre: "UnoTV" }],
+  marcas: [
+    { id: "unotv", nombre: "UnoTV" },
+    { id: "claro-sports", nombre: "Claro Sports" },
+  ],
   redes: [
     { id: "x", nombre: "X", limite: 280 },
     { id: "instagram", nombre: "Instagram", limite: 2200 },
@@ -59,6 +65,7 @@ function contenido(over: Record<string, unknown> = {}) {
         falta_publicar: true,
         copy: "",
         imagen: "",
+        imagen_url: "",
         veredicto: "",
         fecha_programada: "",
         hora_post: "",
@@ -89,17 +96,55 @@ function stubFetch(contenidos = [contenido()]) {
   return fn;
 }
 
-function renderConProviders(ui: React.ReactElement) {
+function usuarioConMarcas(marcas: string[]): UsuarioSesion {
+  return {
+    id: "u1",
+    usuario: "ana",
+    rol: "editor",
+    debe_cambiar_password: false,
+    marcas,
+  };
+}
+
+function sesionValor(usuario: UsuarioSesion | null): ValorSesion {
+  return {
+    usuario,
+    cargando: false,
+    iniciarSesion: vi.fn(),
+    cerrarSesion: vi.fn(),
+    refrescar: vi.fn(),
+  };
+}
+
+// Por defecto, usuario MULTIMARCA => el workspace arranca en "Todas" (comportamiento
+// histórico de estos tests). Los casos de marca por defecto pasan un usuario monomarca.
+function renderConProviders(
+  ui: React.ReactElement,
+  { usuario = usuarioConMarcas(["unotv", "claro-sports"]) }: { usuario?: UsuarioSesion | null } = {},
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter>{ui}</MemoryRouter>
+      <SesionContexto.Provider value={sesionValor(usuario)}>
+        <MemoryRouter>{ui}</MemoryRouter>
+      </SesionContexto.Provider>
     </QueryClientProvider>,
   );
 }
 
 describe("Tablero de contenido", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    // El workspace se persiste en localStorage; un stub en memoria por test lo aísla
+    // (jsdom no expone un localStorage completo aquí).
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+    });
+  });
   afterEach(() => vi.unstubAllGlobals());
 
   it("muestra las secciones por flujo y la tarjeta con su plataforma", async () => {
@@ -170,5 +215,28 @@ describe("Tablero de contenido", () => {
     stubFetch([contenido({ fecha_entrega: "2000-01-01", vencido: true })]);
     renderConProviders(<Tablero />);
     expect(await screen.findByText(/venció/i)).toBeInTheDocument();
+  });
+
+  it("usuario MONOMARCA: el workspace arranca aislado en su marca y filtra el resto", async () => {
+    stubFetch([
+      contenido(),
+      contenido({ id: "c2", titulo: "Final Champions", marca: "claro-sports", marca_nombre: "Claro Sports" }),
+    ]);
+    renderConProviders(<Tablero />, { usuario: usuarioConMarcas(["unotv"]) });
+
+    // Su marca (unotv) se ve; la otra marca queda fuera del workspace por defecto.
+    expect(await screen.findByText("Sismo CDMX")).toBeInTheDocument();
+    expect(screen.queryByText("Final Champions")).not.toBeInTheDocument();
+  });
+
+  it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {
+    stubFetch([
+      contenido(),
+      contenido({ id: "c2", titulo: "Final Champions", marca: "claro-sports", marca_nombre: "Claro Sports" }),
+    ]);
+    renderConProviders(<Tablero />, { usuario: usuarioConMarcas(["unotv", "claro-sports"]) });
+
+    expect(await screen.findByText("Sismo CDMX")).toBeInTheDocument();
+    expect(screen.getByText("Final Champions")).toBeInTheDocument();
   });
 });

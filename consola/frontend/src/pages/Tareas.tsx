@@ -63,6 +63,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useGeneracion } from "@/hooks/use-generacion";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import { limiteRed } from "@/pages/publicaciones/meta";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
@@ -206,6 +207,15 @@ function leerLS(clave: string, defecto: string): string {
   }
 }
 
+/** Lee una clave de localStorage devolviendo `null` si NO existe (sin valor por defecto). */
+function leerLSOpcional(clave: string): string | null {
+  try {
+    return localStorage.getItem(clave);
+  } catch {
+    return null;
+  }
+}
+
 export default function Tablero() {
   const query = useQuery({
     queryKey: CLAVE,
@@ -230,10 +240,35 @@ export default function Tablero() {
   // la pestaña Contenido de un agente para abrir el tablero ya filtrado por esa marca).
   const location = useLocation();
   const navigate = useNavigate();
+  const { usuario } = useSesion();
+  // Workspace por defecto = la MARCA del usuario. Si la persona pertenece a una sola
+  // marca, el tablero nace aislado en ella (y el contenido nuevo también); si pertenece
+  // a varias (p. ej. Yustine) o a ninguna, arranca en "Todas". El `?marca=` y la última
+  // elección guardada mandan sobre ese defecto. `sinPreferenciaInicial` recuerda si al
+  // montar NO había ni `?marca=` ni elección previa, para poder adoptar la marca del
+  // usuario cuando la sesión resuelve DESPUÉS del primer render (el `me` es asíncrono).
+  const sinPreferenciaInicial = React.useRef(
+    leerLSOpcional(CLAVE_WORKSPACE) === null &&
+      !new URLSearchParams(location.search).get("marca"),
+  );
   const [workspace, setWorkspace] = React.useState<string>(() => {
     const desdeUrl = new URLSearchParams(location.search).get("marca");
-    return desdeUrl || leerLS(CLAVE_WORKSPACE, WORKSPACE_TODAS);
+    if (desdeUrl) return desdeUrl;
+    const guardado = leerLSOpcional(CLAVE_WORKSPACE);
+    if (guardado) return guardado;
+    const marcas = usuario?.marcas ?? [];
+    return marcas.length === 1 ? marcas[0] : WORKSPACE_TODAS;
   });
+  // La sesión puede resolver tras el montaje: si no había preferencia previa y el usuario
+  // es monomarca, adopta su marca una sola vez (sin pisar una elección deliberada).
+  React.useEffect(() => {
+    if (!sinPreferenciaInicial.current) return;
+    const marcas = usuario?.marcas ?? [];
+    if (marcas.length === 1 && workspace === WORKSPACE_TODAS) {
+      setWorkspace(marcas[0]);
+    }
+    if (usuario) sinPreferenciaInicial.current = false;
+  }, [usuario, workspace]);
   const [vista, setVista] = React.useState<Vista>(
     () => leerLS(CLAVE_VISTA, "lista") as Vista,
   );
@@ -1361,9 +1396,9 @@ function TarjetaFeed({
 
         {/* Lienzo de la imagen (placeholder si no hay). */}
         <div className="aspect-square w-full bg-muted/50">
-          {contenido.plataformas.find((p) => p.imagen)?.imagen ? (
+          {contenido.plataformas.find((p) => p.imagen_url)?.imagen_url ? (
             <img
-              src={contenido.plataformas.find((p) => p.imagen)!.imagen}
+              src={contenido.plataformas.find((p) => p.imagen_url)!.imagen_url}
               alt={contenido.titulo}
               className="h-full w-full object-cover"
             />

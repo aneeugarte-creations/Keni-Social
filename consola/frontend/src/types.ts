@@ -704,7 +704,10 @@ export interface ContenidoPlataforma {
   falta_revision: boolean;
   falta_publicar: boolean;
   copy: string;
+  /** Nombre de archivo de la imagen en el dir de media ("" si no hay). NO es navegable. */
   imagen: string;
+  /** Ruta servible de la imagen (`/api/media/{imagen}`, "" si no hay). Úsala en un <img>. */
+  imagen_url: string;
   veredicto: string;
   fecha_programada: string;
   hora_post: string;
