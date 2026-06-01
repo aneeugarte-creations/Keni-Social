@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Download, Eye, Loader2, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Download, Eye, Loader2, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -173,26 +174,24 @@ export default function ReporteDeportes() {
             {preview.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
             Previsualizar
           </Button>
-          <Button onClick={() => descargar("pptx")} disabled={descargando !== null}>
-            {descargando === "pptx" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Descargar .pptx
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => descargar("pdf")}
-            disabled={descargando !== null}
+          <MenuContextual
+            disparador="click"
+            etiqueta="Descargar reporte"
+            items={[
+              { etiqueta: "Descargar .pptx", icono: Download, onClick: () => void descargar("pptx") },
+              { etiqueta: "Descargar .pdf", icono: Download, onClick: () => void descargar("pdf") },
+            ]}
           >
-            {descargando === "pdf" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Descargar .pdf
-          </Button>
+            <Button disabled={descargando !== null}>
+              {descargando !== null ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Descargar
+              <ChevronDown className="h-4 w-4 opacity-60" />
+            </Button>
+          </MenuContextual>
         </div>
 
         {preview.data && <Previsualizacion rep={preview.data} />}

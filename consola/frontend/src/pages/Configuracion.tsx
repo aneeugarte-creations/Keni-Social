@@ -12,9 +12,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
   Info,
   Loader2,
   Moon,
+  MoreHorizontal,
   Plug,
   RefreshCw,
   Save,
@@ -27,6 +29,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -545,31 +548,34 @@ function TarjetaMetricool({ marca }: { marca: MarcaMetricool }) {
           )}
           {guardar.isPending ? "Guardando…" : marca.conectado ? "Reemplazar" : "Guardar"}
         </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => probar.mutate()}
-          disabled={ocupado || !marca.conectado}
-          title={!marca.conectado ? "Guarda la credencial antes de probar." : undefined}
-        >
-          {probar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <ShieldCheck className="h-4 w-4" />
-          )}
-          {probar.isPending ? "Probando…" : "Probar"}
-        </Button>
+        {/* Acciones secundarias (Probar / Quitar) agrupadas en un desplegable.
+            Solo aplican con la credencial ya guardada, así que el menú se muestra
+            cuando la marca está conectada. */}
         {marca.conectado && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground hover:text-destructive"
-            onClick={() => setConfirmarQuitar(true)}
-            disabled={ocupado}
+          <MenuContextual
+            disparador="click"
+            etiqueta="Más opciones"
+            items={[
+              {
+                etiqueta: probar.isPending ? "Probando…" : "Probar conexión",
+                icono: ShieldCheck,
+                onClick: () => probar.mutate(),
+                deshabilitado: ocupado,
+              },
+              {
+                etiqueta: "Quitar",
+                icono: Trash2,
+                destructivo: true,
+                onClick: () => setConfirmarQuitar(true),
+                deshabilitado: ocupado,
+              },
+            ]}
           >
-            <Trash2 className="h-4 w-4" />
-            Quitar
-          </Button>
+            <Button size="sm" variant="outline" disabled={ocupado}>
+              <MoreHorizontal className="h-4 w-4" /> Más{" "}
+              <ChevronDown className="h-4 w-4 opacity-60" />
+            </Button>
+          </MenuContextual>
         )}
       </div>
 
@@ -861,28 +867,35 @@ function SeccionImagen() {
                 <Save className={cn("h-4 w-4", guardar.isPending && "animate-pulse")} />
                 {guardar.isPending ? "Guardando…" : "Guardar"}
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => probar.mutate()}
-                disabled={ocupado || !data.configurado}
-                title={!data.configurado ? "Guarda una clave antes de probar." : undefined}
-              >
-                {probar.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ShieldCheck className="h-4 w-4" />
-                )}
-                {probar.isPending ? "Probando…" : "Probar"}
-              </Button>
-              <Button
-                variant="ghost"
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => setConfirmarQuitar(true)}
-                disabled={ocupado || !data.configurado}
-              >
-                <Trash2 className="h-4 w-4" />
-                Quitar
-              </Button>
+              {/* Acciones secundarias (Probar / Quitar) agrupadas en un desplegable.
+                  Ambas requieren una clave ya guardada, así que el menú aparece solo
+                  cuando hay configuración. */}
+              {data.configurado && (
+                <MenuContextual
+                  disparador="click"
+                  etiqueta="Más opciones"
+                  items={[
+                    {
+                      etiqueta: probar.isPending ? "Probando…" : "Probar conexión",
+                      icono: ShieldCheck,
+                      onClick: () => probar.mutate(),
+                      deshabilitado: ocupado,
+                    },
+                    {
+                      etiqueta: "Quitar",
+                      icono: Trash2,
+                      destructivo: true,
+                      onClick: () => setConfirmarQuitar(true),
+                      deshabilitado: ocupado,
+                    },
+                  ]}
+                >
+                  <Button variant="outline" disabled={ocupado}>
+                    <MoreHorizontal className="h-4 w-4" /> Más{" "}
+                    <ChevronDown className="h-4 w-4 opacity-60" />
+                  </Button>
+                </MenuContextual>
+              )}
             </div>
           </>
         )}

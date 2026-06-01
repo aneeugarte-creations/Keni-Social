@@ -21,6 +21,7 @@ import {
   Plus,
   Rows3,
   Send,
+  Settings2,
   Smartphone,
   Sparkles,
   Tag,
@@ -29,7 +30,7 @@ import {
   X,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Autor } from "@/components/comunes/Autor";
@@ -398,48 +399,45 @@ export default function Tablero() {
         {...CABECERA}
         acciones={
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" asChild title="Catálogo de plantillas de contenido">
-              <Link to="/activos/plantillas">
-                <FileText className="h-4 w-4" />
-                Plantillas
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setGestionHashtags(true)}
-              title="Gestionar grupos de hashtags"
+            <MenuContextual
+              disparador="click"
+              etiqueta="Gestionar el tablero"
+              items={[
+                {
+                  etiqueta: "Plantillas",
+                  icono: FileText,
+                  onClick: () => navigate("/activos/plantillas"),
+                },
+                {
+                  etiqueta: "Hashtags",
+                  icono: Hash,
+                  onClick: () => setGestionHashtags(true),
+                },
+                {
+                  etiqueta: "Franjas",
+                  icono: CalendarClock,
+                  onClick: () => setGestionFranjas(true),
+                },
+                {
+                  etiqueta: "Etiquetas",
+                  icono: Tag,
+                  deshabilitado: query.isPending,
+                  onClick: () => setGestionEtiquetas(true),
+                },
+                { separador: true },
+                {
+                  etiqueta: "Importar calendario…",
+                  icono: Upload,
+                  onClick: () => setImportarAbierto(true),
+                },
+              ]}
             >
-              <Hash className="h-4 w-4" />
-              Hashtags
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setGestionFranjas(true)}
-              title="Gestionar franjas de la cola de publicación"
-            >
-              <CalendarClock className="h-4 w-4" />
-              Franjas
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setGestionEtiquetas(true)}
-              disabled={query.isPending}
-            >
-              <Tag className="h-4 w-4" />
-              Etiquetas
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setImportarAbierto(true)}
-              title="Importar un calendario (.xlsx/.csv) al tablero"
-            >
-              <Upload className="h-4 w-4" />
-              Importar
-            </Button>
+              <Button variant="outline" size="sm" title="Gestionar plantillas, hashtags, franjas, etiquetas e importación">
+                <Settings2 className="h-4 w-4" />
+                Gestionar
+                <ChevronDown className="h-4 w-4 opacity-60" />
+              </Button>
+            </MenuContextual>
             <Button size="sm" onClick={() => setDialogoAbierto(true)} disabled={query.isPending}>
               <Plus className="h-4 w-4" />
               Nuevo contenido
@@ -1109,36 +1107,25 @@ function BarraAccionesPieza({
           ))}
         </SelectContent>
       </Select>
-      {esContenido && (
-        <Tooltip label="Generar / mejorar copy con IA (voz de marca + verificación)">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-primary"
-            onClick={() => setAsistenteAbierto(true)}
-          >
-            <MarcaIA />
-            IA
-          </Button>
-        </Tooltip>
-      )}
-      {esContenido && (
-        <Tooltip label="Detalle de la pieza: comentarios, versiones de copy y cadena de aprobación">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1 px-2 text-xs text-muted-foreground"
-            onClick={() => setColaboracionAbierta(true)}
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Detalle
-          </Button>
-        </Tooltip>
-      )}
       <MenuContextual
         disparador="click"
         etiqueta={`Acciones de "${contenido.titulo}"`}
         items={[
+          ...(esContenido
+            ? ([
+                {
+                  etiqueta: "Generar / mejorar copy con IA",
+                  icono: Sparkles,
+                  onClick: () => setAsistenteAbierto(true),
+                },
+                {
+                  etiqueta: "Detalle (comentarios, versiones, aprobación)",
+                  icono: MessageSquare,
+                  onClick: () => setColaboracionAbierta(true),
+                },
+                { separador: true },
+              ] as const)
+            : []),
           {
             etiqueta: "Borrar contenido",
             icono: Trash2,
@@ -1563,17 +1550,13 @@ function FilaPlataforma({
         <SelectContent>
           {Object.keys(ESTADO_PLAT_LABEL).map((e) => (
             <SelectItem key={e} value={e}>
-              {ESTADO_PLAT_LABEL[e]}
+              <Badge variant={ESTADO_PLAT_VARIANTE[e] ?? "secondary"} className="font-normal">
+                {ESTADO_PLAT_LABEL[e]}
+              </Badge>
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
-      <Badge
-        variant={ESTADO_PLAT_VARIANTE[plataforma.estado] ?? "secondary"}
-        className="font-normal"
-      >
-        {ESTADO_PLAT_LABEL[plataforma.estado] ?? plataforma.estado}
-      </Badge>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {CHECKS.map(({ campo, etiqueta }) => {
           const hecho = !plataforma[campo];

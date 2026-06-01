@@ -17,6 +17,7 @@ import {
   FileText,
   Folder,
   Loader2,
+  MoreHorizontal,
   Pencil,
   Plus,
   RotateCcw,
@@ -27,6 +28,7 @@ import {
 import * as React from "react";
 
 import { MarcaIA } from "@/components/comunes/MarcaIA";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { BarraFormato } from "@/components/editor/BarraFormato";
@@ -532,14 +534,25 @@ export default function Biblioteca() {
                 {preview ? <Pencil className="mr-1 h-3.5 w-3.5" /> : <Eye className="mr-1 h-3.5 w-3.5" />}
                 {preview ? "Editar" : "Vista"}
               </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                onClick={() => eliminarMut.mutate(borrador.id)}
-                aria-label="Eliminar"
+              <MenuContextual
+                disparador="click"
+                etiqueta="Más acciones del documento"
+                items={[
+                  {
+                    etiqueta: "Eliminar",
+                    icono: Trash2,
+                    destructivo: true,
+                    onClick: () => {
+                      if (window.confirm("¿Mover este documento a la papelera?"))
+                        eliminarMut.mutate(borrador.id);
+                    },
+                  },
+                ]}
               >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Button size="icon" variant="ghost" aria-label="Más acciones">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </MenuContextual>
             </div>
 
             {borrador.tipo === "editorial" ? (

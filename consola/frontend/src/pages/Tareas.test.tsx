@@ -281,17 +281,15 @@ describe("Tablero de contenido", () => {
     // Y el copy de cada red.
     expect(screen.getByText(/Hola X/)).toBeInTheDocument();
     expect(screen.getByText(/Hola IG/)).toBeInTheDocument();
-    // PARIDAD: el feed NO pierde funcionalidad: las acciones de pieza (IA, Detalle,
-    // prioridad, borrar) siguen disponibles igual que en lista/cuadrícula. El Tooltip
-    // pone su etiqueta como aria-label del botón.
-    expect(screen.getByRole("button", { name: /mejorar copy con IA/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Detalle de la pieza/i })).toBeInTheDocument();
+    // PARIDAD: el feed NO pierde funcionalidad. La prioridad sigue visible; IA, Detalle y
+    // Borrar se consolidan en el menú de acciones (kebab) para reducir botones en pantalla.
     expect(screen.getByLabelText("Prioridad")).toBeInTheDocument();
-    // "Borrar contenido" ya no es un icono suelto: vive en el menú de acciones (kebab).
     fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
     expect(
-      await screen.findByRole("menuitem", { name: /Borrar contenido/i }),
+      await screen.findByRole("menuitem", { name: /mejorar copy con IA/i }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Detalle/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Borrar contenido/i })).toBeInTheDocument();
   });
 
   it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {

@@ -1,11 +1,12 @@
 /**
- * Botones de descarga del reporte actual en CSV / Markdown / JSON.
+ * Descarga del reporte actual en CSV / Markdown / JSON.
  *
  * Reutilizan el rango y la marca activos del reporte y delegan en
  * `api.exportarMetricas`, que abre la URL de descarga del backend.
  */
-import { Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 
@@ -24,17 +25,21 @@ const FORMATOS: Array<{ formato: "csv" | "md" | "json"; etiqueta: string }> = [
 export function Descargas({ rango, marca }: DescargasProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {FORMATOS.map(({ formato, etiqueta }) => (
-        <Button
-          key={formato}
-          variant="outline"
-          size="sm"
-          onClick={() => api.exportarMetricas(formato, { rango, marca })}
-        >
+      <MenuContextual
+        disparador="click"
+        etiqueta="Descargar reporte"
+        items={FORMATOS.map(({ formato, etiqueta }) => ({
+          etiqueta,
+          icono: Download,
+          onClick: () => api.exportarMetricas(formato, { rango, marca }),
+        }))}
+      >
+        <Button variant="outline" size="sm">
           <Download className="h-4 w-4" />
-          {etiqueta}
+          Descargar
+          <ChevronDown className="h-4 w-4 opacity-60" />
         </Button>
-      ))}
+      </MenuContextual>
     </div>
   );
 }

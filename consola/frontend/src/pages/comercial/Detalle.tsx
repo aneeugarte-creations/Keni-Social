@@ -3,11 +3,21 @@
  * edición rápida (estado/objetivo) y acciones (refrescar, reporte, eliminar).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bell, Download, ExternalLink, Loader2, RefreshCw, Trash2 } from "lucide-react";
+import {
+  Bell,
+  ChevronDown,
+  Download,
+  ExternalLink,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -328,40 +338,40 @@ function Contenido({
         </div>
 
         {/* Acciones */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => refrescar.mutate()}
-              disabled={refrescar.isPending}
-            >
-              <RefreshCw className={refrescar.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              Refrescar ahora
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => api.descargarReporteComercial({ publicacion: pub.id })}
-            >
-              <Download className="h-4 w-4" />
-              Descargar reporte
-            </Button>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="text-red-600 hover:text-red-700 dark:text-red-400"
-            onClick={() => eliminar.mutate()}
-            disabled={eliminar.isPending}
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+          <MenuContextual
+            disparador="click"
+            etiqueta="Más acciones"
+            items={[
+              {
+                etiqueta: "Refrescar ahora",
+                icono: RefreshCw,
+                deshabilitado: refrescar.isPending,
+                onClick: () => refrescar.mutate(),
+              },
+              {
+                etiqueta: "Descargar reporte",
+                icono: Download,
+                onClick: () => api.descargarReporteComercial({ publicacion: pub.id }),
+              },
+              { separador: true },
+              {
+                etiqueta: "Quitar del seguimiento",
+                icono: Trash2,
+                destructivo: true,
+                deshabilitado: eliminar.isPending,
+                onClick: () => {
+                  if (window.confirm("¿Quitar esta publicación del seguimiento?")) eliminar.mutate();
+                },
+              },
+            ]}
           >
-            {eliminar.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            Quitar del seguimiento
-          </Button>
+            <Button variant="outline" size="sm">
+              <MoreHorizontal className="h-4 w-4" />
+              Más
+              <ChevronDown className="h-4 w-4 opacity-60" />
+            </Button>
+          </MenuContextual>
         </div>
       </div>
     </>
