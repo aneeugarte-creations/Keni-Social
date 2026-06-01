@@ -62,7 +62,8 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "revisor_nombre": pub.get("revisor_nombre") or "",
         "revisado_en": pub.get("revisado_en") or "",
         # Marca dry-run del programador (#9): instante en que quedo "lista para publicar"
-        # (preparada, NO publicada de verdad: el posteo real esta GATED por #5/#8). ""
+        # (preparada, NO publicada de verdad: el posteo real vía Metricool esta GATED por
+        # `KENI_PUBLICAR_REAL`). ""
         # hasta que el programador la prepara al vencer su `fecha_programada`.
         "preparado_en": pub.get("preparado_en") or "",
         # Id del post en Metricool cuando KENI_PUBLICAR_REAL esta activo y la pieza

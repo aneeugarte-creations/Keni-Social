@@ -4,7 +4,8 @@ Cubre las dos mitades del scheduling:
   1) La API `POST /api/aprobacion/{id}/programar`: solo una pieza APROBADA, fecha futura.
   2) El programador del servidor (`programador.preparar_vencidas`): al vencer la fecha,
      la pieza se PREPARA en dry-run (estampa `preparado_en`) y NO se publica (sigue en
-     `programado`, nunca pasa a `publicado`). El posteo real esta GATED por #5/#8.
+     `programado`, nunca pasa a `publicado`). El posteo real (vía Metricool) esta GATED
+     por `KENI_PUBLICAR_REAL`.
 
 El barrido es una funcion PURA con `ahora` inyectado: se testea sin hilo ni reloj real.
 """
@@ -123,7 +124,7 @@ def test_preparar_vencidas_marca_dry_run_sin_publicar(entorno):
     assert preparadas == 1
 
     actualizada = repos.obtener_publicacion(pub["id"])
-    assert actualizada["estado"] == "programado"  # NO publicado (gating #5/#8)
+    assert actualizada["estado"] == "programado"  # NO publicado (gating KENI_PUBLICAR_REAL)
     assert actualizada["preparado_en"]  # marca dry-run puesta
 
 

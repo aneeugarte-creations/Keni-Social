@@ -24,7 +24,7 @@ SEGURO POR DISENO (CONSERVADOR)
   - DEDUP: tras encolar, el tema se ETIQUETA `autogen` para no re-generarlo barrido tras
     barrido. La seleccion lee esa etiqueta para saltarse lo ya hecho.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revision/aprobacion humana;
-    la publicacion real sigue gated por `KENI_PUBLICAR_REAL` (#5/#8).
+    la publicacion real (vía Metricool) sigue gated por `KENI_PUBLICAR_REAL`.
 
 La SELECCION (`topics_pendientes`) es PURA y testeable. El LANZAMIENTO reutiliza el pipeline
 existente sin tocar el contrato de borradores ni el jobspec: por eso es de bajo riesgo.

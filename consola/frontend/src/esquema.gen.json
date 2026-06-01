@@ -1242,7 +1242,7 @@
           "type": "boolean"
         }
       },
-      "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca\nDRY-RUN del programador (instante en que quedo \"lista para publicar\"; el posteo real\nesta gated por #5/#8); \"\" hasta que vence su `fecha_programada`.",
+      "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca\nDRY-RUN del programador (instante en que quedo \"lista para publicar\"; el posteo real\nvia Metricool esta gated por `KENI_PUBLICAR_REAL`); \"\" hasta que vence su `fecha_programada`.",
       "required": [
         "id",
         "titulo",
@@ -1458,7 +1458,7 @@
           "type": "string"
         }
       },
-      "description": "Una pieza programada próxima (vista mínima del panel, nombres resueltos).\n\n`preparado_en` viene con el instante DRY-RUN si el programador ya la preparó (venció);\n\"\" si aún no vence. El posteo real está gated por #5/#8.",
+      "description": "Una pieza programada próxima (vista mínima del panel, nombres resueltos).\n\n`preparado_en` viene con el instante DRY-RUN si el programador ya la preparó (venció);\n\"\" si aún no vence. El posteo real vía Metricool está gated por `KENI_PUBLICAR_REAL`.",
       "required": [
         "id",
         "titulo",
@@ -1501,7 +1501,7 @@
           "type": "string"
         }
       },
-      "description": "Aviso de frontera del producto: el sistema NO publica solo (gated por #5/#8).",
+      "description": "Aviso de frontera del producto: el sistema NO publica solo (gated por `KENI_PUBLICAR_REAL`).",
       "required": [
         "publicacion_real_activa",
         "nota"
@@ -1524,7 +1524,7 @@
           "$ref": "#/$defs/GatingPanel"
         }
       },
-      "description": "Respuesta de `GET /api/panel`: dashboard ligero de un vistazo (#9, Fase 3).\n\nAgrega métricas/picos (reusa los caminos de lectura de Metricas, sin tocar su\npágina), el contador de la cola de aprobación y las próximas piezas programadas.\n`gating` recuerda que el posteo real está pendiente de #5/#8.",
+      "description": "Respuesta de `GET /api/panel`: dashboard ligero de un vistazo (#9, Fase 3).\n\nAgrega métricas/picos (reusa los caminos de lectura de Metricas, sin tocar su\npágina), el contador de la cola de aprobación y las próximas piezas programadas.\n`gating` recuerda que el posteo real (vía Metricool) está gated por `KENI_PUBLICAR_REAL`.",
       "required": [
         "metricas",
         "cola",

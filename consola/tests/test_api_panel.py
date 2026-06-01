@@ -44,7 +44,7 @@ def test_panel_forma_basica(entorno):
     assert datos["metricas"]["disponible"] is True
     assert datos["metricas"]["fuente"] == "muestra"
     assert "visualizaciones" in datos["metricas"]["total"]
-    # Gating: el sistema NO publica solo (frontera del producto, #5/#8).
+    # Gating: el sistema NO publica solo (frontera del producto, gated por KENI_PUBLICAR_REAL).
     assert datos["gating"]["publicacion_real_activa"] is False
     assert datos["gating"]["nota"]
 

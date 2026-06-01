@@ -215,8 +215,8 @@ async def programar(request: Request) -> Response:
     NO es aprobacion: es programacion, y se conserva intacta. Solo se puede programar una
     pieza APROBADA (el humano ya la aprobó vía la cadena). NO publica: deja la pieza en
     `programado` con su `fecha_programada`; el programador del servidor la PREPARA (dry-run)
-    al vencer. Posteo real GATED por #5/#8. 404 si no existe; 409 si no está aprobada; 400 si
-    la fecha no es válida/futura.
+    al vencer. Posteo real (vía Metricool) GATED por `KENI_PUBLICAR_REAL`. 404 si no existe;
+    409 si no está aprobada; 400 si la fecha no es válida/futura.
     """
     publicacion_id = request.path_params["publicacion_id"]
     pub = repos.obtener_publicacion(publicacion_id)

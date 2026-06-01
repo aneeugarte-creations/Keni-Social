@@ -1,4 +1,4 @@
-# Fase 2 — Publicación: dry-run → publicar real vía Metricool (issue #8)
+# Fase 2 — Publicación: dry-run → publicar real vía Metricool
 
 Plan de implementación para cerrar el hueco vs Metricool: pasar del **preview en dry-run** (un
 humano aprueba, nada se publica) a **publicación real**, entregando el post al **scheduler de

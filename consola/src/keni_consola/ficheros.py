@@ -405,7 +405,7 @@ def _publicacion_yaml(pub: dict[str, Any]) -> dict[str, Any]:
         "revisor_nombre": pub.get("revisor_nombre", "") or "",
         "revisado_en": pub.get("revisado_en", "") or "",
         # Marca dry-run del programador (#9): instante en que se preparo "lista para
-        # publicar" (NO publica de verdad; gating en #5/#8). "" hasta que vence.
+        # publicar" (NO publica de verdad; gating en `KENI_PUBLICAR_REAL`). "" hasta que vence.
         "preparado_en": pub.get("preparado_en", "") or "",
         # Id del post en Metricool una vez programado de verdad (KENI_PUBLICAR_REAL).
         # "" en dry-run y en piezas legadas; nunca rompe el round-trip.

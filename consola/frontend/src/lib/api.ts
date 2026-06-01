@@ -703,7 +703,8 @@ export const api = {
   // publicación ES una fila `contenido_plataforma`). Estos endpoints se conservan y por
   // dentro FORWARDEAN a la cadena: `enviarARevision` crea una cadena SIMPLE (1 nivel) y deja
   // la pieza en revisión; `aprobar`/`rechazar` deciden el nivel actual de esa cadena.
-  // Programar NO es aprobación (es programación) y NO publica de verdad: gated por #5/#8.
+  // Programar NO es aprobación (es programación) y NO publica de verdad: el posteo real
+  // vía Metricool está gated por `KENI_PUBLICAR_REAL`.
   /** Cola de aprobación: publicaciones en revisión (FIFO). Lectura; cada item es una `Publicacion`. */
   colaAprobacion: (signal?: AbortSignal) =>
     peticion<RespuestaColaAprobacion>("/aprobacion/cola", { signal }),

@@ -50,7 +50,7 @@ const PANEL = {
   },
   gating: {
     publicacion_real_activa: false,
-    nota: "El posteo real a las plataformas está pendiente de #5/#8.",
+    nota: "El posteo real se hace vía Metricool y está gated por `KENI_PUBLICAR_REAL`.",
   },
 };
 

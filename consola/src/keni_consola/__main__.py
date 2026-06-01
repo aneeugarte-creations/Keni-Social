@@ -118,9 +118,9 @@ def main() -> int:
 
     # Programador de publicaciones (#9, Fase 3): un hilo demonio que, al vencer la
     # `fecha_programada` de una pieza `programado`, la PREPARA en dry-run (estampa
-    # `preparado_en`). NO publica en ninguna plataforma: el posteo real esta gated por
-    # #5/#8 ("el humano aprueba; el sistema no publica solo"). Vive aqui (servidor real),
-    # NO en `crear_app`, para no arrancarlo en los tests.
+    # `preparado_en`). Por defecto NO publica: el posteo real (vía Metricool) esta gated por
+    # `KENI_PUBLICAR_REAL` ("el humano aprueba; el sistema no publica solo"). Vive aqui
+    # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
     from .programador import iniciar_programador
 
     iniciar_programador()

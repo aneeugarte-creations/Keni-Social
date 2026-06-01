@@ -124,7 +124,10 @@ function FilaProxima({ pieza }: { pieza: ProximaPanel }) {
             {formatearFechaHora(pieza.fecha_programada)}
           </span>
           {pieza.preparado_en ? (
-            <Badge variant="ok" title="Preparada (dry-run): el posteo real está pendiente de #5/#8.">
+            <Badge
+              variant="ok"
+              title="Preparada (dry-run): el posteo real vía Metricool aún no está activo (KENI_PUBLICAR_REAL)."
+            >
               Lista (dry-run)
             </Badge>
           ) : (

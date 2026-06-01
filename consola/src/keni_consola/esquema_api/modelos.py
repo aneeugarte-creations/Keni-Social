@@ -462,7 +462,7 @@ class Publicacion(TypedDict):
     `revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; "" mientras
     no haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca
     DRY-RUN del programador (instante en que quedo "lista para publicar"; el posteo real
-    esta gated por #5/#8); "" hasta que vence su `fecha_programada`.
+    via Metricool esta gated por `KENI_PUBLICAR_REAL`); "" hasta que vence su `fecha_programada`.
     """
 
     id: str
@@ -568,7 +568,7 @@ class ProximaPanel(TypedDict):
     """Una pieza programada próxima (vista mínima del panel, nombres resueltos).
 
     `preparado_en` viene con el instante DRY-RUN si el programador ya la preparó (venció);
-    "" si aún no vence. El posteo real está gated por #5/#8.
+    "" si aún no vence. El posteo real vía Metricool está gated por `KENI_PUBLICAR_REAL`.
     """
 
     id: str
@@ -589,7 +589,7 @@ class ProximasPanel(TypedDict):
 
 
 class GatingPanel(TypedDict):
-    """Aviso de frontera del producto: el sistema NO publica solo (gated por #5/#8)."""
+    """Aviso de frontera del producto: el sistema NO publica solo (gated por `KENI_PUBLICAR_REAL`)."""
 
     publicacion_real_activa: bool
     nota: str
@@ -600,7 +600,7 @@ class RespuestaPanel(TypedDict):
 
     Agrega métricas/picos (reusa los caminos de lectura de Metricas, sin tocar su
     página), el contador de la cola de aprobación y las próximas piezas programadas.
-    `gating` recuerda que el posteo real está pendiente de #5/#8.
+    `gating` recuerda que el posteo real (vía Metricool) está gated por `KENI_PUBLICAR_REAL`.
     """
 
     metricas: MetricasPanel

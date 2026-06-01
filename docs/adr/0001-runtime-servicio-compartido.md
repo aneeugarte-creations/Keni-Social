@@ -3,7 +3,7 @@
 - **Estado:** Aceptado
 - **Fecha:** 2026-05-27
 - **Decisores:** equipo keni-social (auditoría de arquitectura, épica #140)
-- **Issues:** #130 (esta decisión) · #137 · #134 · #133 · #9 · #5
+- **Issues:** #130 (esta decisión) · #137 · #134 · #133 · #9
 - **Componente:** `consola/` (runtime, generación y modelo de despliegue)
 
 > **Sobre los ADR en este repo.** Numeración incremental de cuatro dígitos (`0001-…`, `0002-…`). Un
@@ -190,7 +190,7 @@ La generación **sigue** por `claude -p` por debajo (aún en local, no en sandbo
 - #134 — Consola sin auth ni CSRF (se absorbe)
 - #133 — Distribución rota (resuelta por el servicio + sandbox)
 - #9 — Fase 3: scheduling + cola de aprobación + dashboard (habilitada)
-- #5 — publicación/métricas reales + cuentas reales (paralelo; vía Metricool, trabajo interno)
+- Publicación/métricas reales + cuentas reales (paralelo; vía Metricool, trabajo interno)
 - [ADR 0002](0002-descomposicion-monolito-modular-catalogo-apps.md) — Descomposición (complementa esta decisión)
 - Épica #140 — Auditoría de arquitectura
 - [`../flujo-de-datos-privacidad.md`](../flujo-de-datos-privacidad.md) — modos local vs alojado

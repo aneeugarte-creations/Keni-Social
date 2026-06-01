@@ -14,7 +14,7 @@ caminos de lectura existentes (no duplica logica ni toca la pagina de Metricas):
 
 GATING (frontera del producto): el panel solo LEE. Las proximas programadas se preparan
 en dry-run (el sistema no publica solo); el campo `preparado_en` lo refleja. Posteo real
-GATED por #5/#8.
+via Metricool GATED por `KENI_PUBLICAR_REAL`.
 
 Solo lectura: ningun endpoint muta nada.
 """
@@ -119,13 +119,13 @@ async def resumen(request: Request) -> Response:
             "metricas": metricas,
             "cola": {"total": len(pendientes)},
             "proximas": {"items": proximas, "total": total_programadas},
-            # Aviso de frontera del producto: el panel NO publica; el posteo real esta
-            # gated por #5/#8. La UI lo muestra como nota junto a las proximas.
+            # Aviso de frontera del producto: el panel NO publica; el posteo real (vía
+            # Metricool) está gated por `KENI_PUBLICAR_REAL`. La UI lo expone como aviso.
             "gating": {
                 "publicacion_real_activa": False,
                 "nota": (
                     "Las piezas programadas se preparan en dry-run (lista para publicar); "
-                    "el posteo real a las plataformas está pendiente de #5/#8."
+                    "el posteo real se hace vía Metricool y está gated por `KENI_PUBLICAR_REAL`."
                 ),
             },
         }
