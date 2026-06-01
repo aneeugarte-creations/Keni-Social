@@ -17,6 +17,7 @@ const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
 const Radar = lazy(() => import("@/pages/Radar"));
+const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
 const RevisionEditorial = lazy(() => import("@/pages/RevisionEditorial"));
 const Verificacion = lazy(() => import("@/pages/Verificacion"));
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
           { path: "fuentes", element: <Fuentes /> },
           { path: "termometro", element: <Termometro /> },
           { path: "radar", element: <Radar /> },
+          { path: "algoritmos", element: <Algoritmos /> },
           // Legacy: la antigua hoja "Parrilla del día" ahora es una pestaña dentro de Radar.
           { path: "parrilla-dia", element: <Navigate to="/investigacion/radar" replace /> },
         ],

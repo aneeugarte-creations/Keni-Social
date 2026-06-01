@@ -5,6 +5,7 @@ import {
   Globe,
   ListTodo,
   Megaphone,
+  Newspaper,
   Presentation,
   Radar,
   Rss,
@@ -45,6 +46,7 @@ export const TABS_INVESTIGACION: ItemTabHub[] = [
   { ruta: "/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
   { ruta: "/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
   { ruta: "/investigacion/radar", etiqueta: "Radar", icono: Radar },
+  { ruta: "/investigacion/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [

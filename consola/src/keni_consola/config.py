@@ -188,6 +188,12 @@ ENV_RADAR_AUTO_INTERVALO_HORAS = "KENI_RADAR_AUTO_INTERVALO_HORAS"
 ENV_RADAR_AUTO_MAX = "KENI_RADAR_AUTO_MAX"
 ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
 
+# Auto-refresco de Algoritmos (inteligencia de plataforma): ingiere periodicamente los
+# feeds de blogs oficiales/agregadores. Gateado OFF por defecto (la pagina Algoritmos tiene
+# un boton "Refrescar" manual); con el flag ON, un daemon ingiere cada N horas.
+ENV_ALGORITMOS_AUTO = "KENI_ALGORITMOS_AUTO"
+ENV_ALGORITMOS_INTERVALO_HORAS = "KENI_ALGORITMOS_INTERVALO_HORAS"
+
 # Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
 # demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
 # radar-auto, radar, rss) que aun no tienen copy generado y SI tienen marca, ENCOLA una
@@ -307,6 +313,10 @@ RADAR_AUTO_UMBRAL_DEF = 50_000
 RADAR_AUTO_GEO_DEF = "MX"
 RADAR_AUTO_INTERVALO_HORAS_DEF = 6
 RADAR_AUTO_MAX_DEF = 3
+
+# Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
+# cambian a cada minuto y no conviene martillear los feeds.
+ALGORITMOS_INTERVALO_HORAS_DEF = 6
 
 # Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
 # porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
@@ -811,6 +821,21 @@ def radar_auto_marca() -> str:
     llamante la ignora (cae a sin marca): no se confia ciegamente del entorno.
     """
     return _crudo(ENV_RADAR_AUTO_MARCA)
+
+
+def algoritmos_auto_activo() -> bool:
+    """True si el daemon de auto-refresco de Algoritmos debe ingerir (`KENI_ALGORITMOS_AUTO`).
+
+    Def OFF (conservador): la pagina Algoritmos tiene un boton "Refrescar" manual. Con el flag
+    a un valor afirmativo, un hilo demonio ingiere los feeds cada N horas (solo LEE feeds RSS
+    publicos y persiste noticias clasificadas; no publica ni genera nada).
+    """
+    return _crudo(ENV_ALGORITMOS_AUTO).lower() in _VERDADEROS
+
+
+def algoritmos_intervalo_horas() -> int:
+    """Cada cuantas horas ingiere el daemon de Algoritmos (`KENI_ALGORITMOS_INTERVALO_HORAS`, def 6, min 1)."""
+    return _entero(ENV_ALGORITMOS_INTERVALO_HORAS, ALGORITMOS_INTERVALO_HORAS_DEF, minimo=1)
 
 
 def autogen_activo() -> bool:

@@ -42,6 +42,7 @@ def main() -> int:
     crear_app(bootstrap=False)
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
+    from .algoritmos_refresco import iniciar_refresco_algoritmos
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
     from .media_gc_daemon import iniciar_media_gc
@@ -58,6 +59,7 @@ def main() -> int:
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
+    iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
     # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las

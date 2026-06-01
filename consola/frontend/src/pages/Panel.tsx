@@ -5,7 +5,9 @@ import {
   ArrowUpRight,
   CalendarClock,
   ClipboardCheck,
+  ExternalLink,
   ListChecks,
+  Newspaper,
   Recycle,
   Sparkles,
   TrendingDown,
@@ -250,6 +252,12 @@ export default function Panel() {
     queryKey: ["panel", "lista-dia"],
     queryFn: ({ signal }) => api.listaDia({}, signal),
   });
+  // Noticias más importantes sobre algoritmos (inteligencia de plataforma): query
+  // independiente a /api/algoritmos (no toca el contrato de /api/panel), igual que las alertas.
+  const algoritmos = useQuery({
+    queryKey: ["panel", "algoritmos"],
+    queryFn: ({ signal }) => api.algoritmos({ limite: 5 }, signal),
+  });
 
   return (
     <div>
@@ -297,6 +305,77 @@ export default function Panel() {
                   icono={ListChecks}
                   titulo="Nada en la lista todavía"
                   texto="Importa un calendario o deja que las fuentes (Radar, RSS) alimenten el tablero."
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Cambios de algoritmo: las noticias más importantes sobre algoritmos (decisiones
+              de marca). Reusa el camino de lectura de Algoritmos; el detalle vive en su página. */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Newspaper className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                Cambios de algoritmo
+              </CardTitle>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/investigacion/algoritmos">Ver todo</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {algoritmos.isError ? (
+                <p className="py-4 text-sm text-muted-foreground">
+                  No se pudieron cargar las noticias de algoritmo ahora mismo.
+                </p>
+              ) : (algoritmos.data?.noticias?.length ?? 0) > 0 ? (
+                <ul>
+                  {algoritmos.data!.noticias.map((n) => (
+                    <li key={n.id} className="border-b border-border/60 last:border-0">
+                      <a
+                        href={n.enlace || undefined}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`flex items-center justify-between gap-3 py-2 ${FILA_CLICABLE} ${
+                          n.enlace ? "" : "pointer-events-none"
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">
+                            {n.titulo || "(sin título)"}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            <Badge variant="outline">{n.plataforma_nombre || n.plataforma}</Badge>
+                            {n.es_cambio && (
+                              <Badge
+                                variant="outline"
+                                className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+                              >
+                                Cambio
+                              </Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground">{n.fuente_nombre}</span>
+                          </div>
+                        </div>
+                        {n.enlace && (
+                          <ExternalLink
+                            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <EstadoVacio
+                  icono={Newspaper}
+                  titulo="Sin noticias de algoritmo todavía"
+                  texto="Configura las fuentes y refresca en Investigación › Algoritmos para ver lo último."
+                  accion={
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/investigacion/algoritmos">Ir a Algoritmos</Link>
+                    </Button>
+                  }
                 />
               )}
             </CardContent>

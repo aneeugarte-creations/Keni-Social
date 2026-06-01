@@ -135,6 +135,17 @@ __all__ = [
     "cancelar_job",
     "claves_vistas",
     "conectar",
+    "actualizar_fuente_algoritmo",
+    "borrar_fuente_algoritmo",
+    "contar_fuentes_algoritmo",
+    "crear_fuente_algoritmo",
+    "guardar_noticia_algoritmo",
+    "listar_fuentes_algoritmo",
+    "listar_noticias_algoritmo",
+    "marcar_noticia_algoritmo",
+    "obtener_fuente_algoritmo",
+    "obtener_noticia_algoritmo",
+    "registrar_salud_fuente_algoritmo",
     "contar_fuentes_rss",
     "contar_grupos_hashtags",
     "contar_piezas_por_programa",
@@ -937,6 +948,59 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_franjas_editoriales_marca ON franjas_editoriales (marca)",
+    # Fuentes de INTELIGENCIA DE PLATAFORMA (blogs oficiales + agregadores) que cubren
+    # cambios de algoritmo y tendencias por red. DISTINTAS de `fuentes_rss` (contenido de
+    # marca para generar copy): estas alimentan la pagina Algoritmos y el panel, y proponen
+    # actualizaciones a la ficha editorial de cada plataforma. `plataforma` ubica la fuente
+    # (meta/instagram/tiktok/youtube/x/linkedin/general); `tipo` distingue oficial vs
+    # agregador (la oficial pesa mas al priorizar). Salud igual que `fuentes_rss`.
+    """
+    CREATE TABLE IF NOT EXISTS fuentes_algoritmo (
+        id                    TEXT PRIMARY KEY,
+        nombre                TEXT NOT NULL DEFAULT '',
+        url                   TEXT NOT NULL DEFAULT '',
+        plataforma            TEXT NOT NULL DEFAULT 'general',
+        tipo                  TEXT NOT NULL DEFAULT 'agregador',
+        activo                INTEGER NOT NULL DEFAULT 1,
+        ultima_actualizacion  TEXT NOT NULL DEFAULT '',
+        ultimo_error          TEXT NOT NULL DEFAULT '',
+        ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
+        creado                TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_algoritmo_plataforma ON fuentes_algoritmo (plataforma)",
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_algoritmo_creado ON fuentes_algoritmo (creado)",
+    # Noticias de algoritmo ya INGERIDAS y CLASIFICADAS (a diferencia de los items RSS, que se
+    # leen en vivo y no se persisten): aqui SI se persisten para poder ordenarlas por
+    # importancia, mostrarlas en el panel y enlazarlas a la biblioteca. `importancia` es un
+    # score HEURISTICO (entero comparable) y `nivel` su tramo (alta/media/baja); `senales` son
+    # las palabras clave que dispararon el score (JSON, para el "por que" honesto, sin inventar).
+    # `es_cambio` marca lo que parece un cambio de algoritmo confirmado (candidato a la ficha).
+    # Dedup por (fuente_id, clave) — la misma identidad estable que usa el RSS.
+    """
+    CREATE TABLE IF NOT EXISTS noticias_algoritmo (
+        id             TEXT PRIMARY KEY,
+        fuente_id      TEXT NOT NULL DEFAULT '',
+        fuente_nombre  TEXT NOT NULL DEFAULT '',
+        plataforma     TEXT NOT NULL DEFAULT 'general',
+        tipo           TEXT NOT NULL DEFAULT 'agregador',
+        titulo         TEXT NOT NULL DEFAULT '',
+        resumen        TEXT NOT NULL DEFAULT '',
+        enlace         TEXT NOT NULL DEFAULT '',
+        fecha          TEXT NOT NULL DEFAULT '',
+        clave          TEXT NOT NULL DEFAULT '',
+        importancia    INTEGER NOT NULL DEFAULT 0,
+        nivel          TEXT NOT NULL DEFAULT 'baja',
+        senales        TEXT NOT NULL DEFAULT '[]',
+        es_cambio      INTEGER NOT NULL DEFAULT 0,
+        aplicada       INTEGER NOT NULL DEFAULT 0,
+        archivada      INTEGER NOT NULL DEFAULT 0,
+        creado         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_algoritmo_dedup ON noticias_algoritmo (fuente_id, clave)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_orden ON noticias_algoritmo (importancia DESC, fecha DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_plataforma ON noticias_algoritmo (plataforma)",
 )
 
 
@@ -4424,6 +4488,325 @@ def claves_vistas(fuente_id: str) -> set[str]:
     finally:
         con.close()
     return {f["clave"] for f in filas}
+
+
+# --- Fuentes de algoritmo (inteligencia de plataforma) --------------------- #
+# Mismo patron que `fuentes_rss` pero con `plataforma`/`tipo` en vez de marca/filtros: son
+# fuentes de INDUSTRIA (blogs oficiales + agregadores), no de contenido de marca.
+_COLS_FUENTE_ALGO = (
+    "id", "nombre", "url", "plataforma", "tipo", "activo",
+    "ultima_actualizacion", "ultimo_error", "ultimo_conteo", "creado",
+)
+_SELECT_FUENTE_ALGO = f"SELECT {', '.join(_COLS_FUENTE_ALGO)} FROM fuentes_algoritmo"
+_CAMPOS_EDITABLES_FUENTE_ALGO: tuple[str, ...] = ("nombre", "url", "plataforma", "tipo", "activo")
+
+
+def _fila_a_fuente_algo(fila: Any) -> dict[str, Any]:
+    """Fila de `fuentes_algoritmo` -> dict publico (sin `creado`; `activo` bool)."""
+    return {
+        "id": fila["id"],
+        "nombre": fila["nombre"] or "",
+        "url": fila["url"] or "",
+        "plataforma": fila["plataforma"] or "general",
+        "tipo": fila["tipo"] or "agregador",
+        "activo": bool(fila["activo"]),
+        "ultima_actualizacion": fila["ultima_actualizacion"] or "",
+        "ultimo_error": fila["ultimo_error"] or "",
+        "ultimo_conteo": int(fila["ultimo_conteo"] or 0),
+    }
+
+
+def listar_fuentes_algoritmo() -> list[dict[str, Any]]:
+    """Fuentes de algoritmo (mas recientes primero)."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            _SELECT_FUENTE_ALGO + " ORDER BY creado DESC, id DESC"
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_fuente_algo(f) for f in filas]
+
+
+def contar_fuentes_algoritmo() -> int:
+    """Total de fuentes de algoritmo (para decidir si sembrar las semilla)."""
+    con = _conectar()
+    try:
+        fila = con.execute("SELECT COUNT(*) AS n FROM fuentes_algoritmo").fetchone()
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def obtener_fuente_algoritmo(fuente_id: str) -> dict[str, Any] | None:
+    """Una fuente de algoritmo por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_FUENTE_ALGO} WHERE id = ?", (fuente_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_fuente_algo(fila) if fila is not None else None
+
+
+def crear_fuente_algoritmo(
+    nombre: str, url: str, *, plataforma: str = "general", tipo: str = "agregador"
+) -> dict[str, Any]:
+    """Crea una fuente de algoritmo (activa, salud vacia) y la devuelve."""
+    ahora = datetime.now().isoformat(timespec="microseconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "nombre": nombre or "",
+        "url": url or "",
+        "plataforma": plataforma or "general",
+        "tipo": tipo or "agregador",
+        "activo": 1,
+        "ultima_actualizacion": "",
+        "ultimo_error": "",
+        "ultimo_conteo": 0,
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_FUENTE_ALGO)
+        con.execute(
+            f"INSERT INTO fuentes_algoritmo ({', '.join(_COLS_FUENTE_ALGO)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_FUENTE_ALGO),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_fuente_algoritmo(fila["id"]) or _fila_a_fuente_algo(fila)
+
+
+def actualizar_fuente_algoritmo(
+    fuente_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita parcialmente una fuente (nombre/url/plataforma/tipo/activo)."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_FUENTE_ALGO}
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    if not cambios:
+        return obtener_fuente_algoritmo(fuente_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), fuente_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE fuentes_algoritmo SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_fuente_algoritmo(fuente_id)
+
+
+def registrar_salud_fuente_algoritmo(fuente_id: str, *, conteo: int, error: str = "") -> None:
+    """Anota la salud de una fuente de algoritmo (fecha de hoy + conteo + error)."""
+    con = _conectar()
+    try:
+        con.execute(
+            "UPDATE fuentes_algoritmo SET ultima_actualizacion = ?, ultimo_conteo = ?, "
+            "ultimo_error = ? WHERE id = ?",
+            (date.today().isoformat(), int(conteo), error or "", fuente_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def borrar_fuente_algoritmo(fuente_id: str) -> bool:
+    """Borra una fuente de algoritmo y sus noticias; True si existia."""
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM noticias_algoritmo WHERE fuente_id = ?", (fuente_id,))
+        cur = con.execute("DELETE FROM fuentes_algoritmo WHERE id = ?", (fuente_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+# --- Noticias de algoritmo (items ingeridos + clasificados) ---------------- #
+_COLS_NOTICIA_ALGO = (
+    "id", "fuente_id", "fuente_nombre", "plataforma", "tipo", "titulo", "resumen",
+    "enlace", "fecha", "clave", "importancia", "nivel", "senales", "es_cambio",
+    "aplicada", "archivada", "creado",
+)
+_SELECT_NOTICIA_ALGO = f"SELECT {', '.join(_COLS_NOTICIA_ALGO)} FROM noticias_algoritmo"
+
+
+def _fila_a_noticia_algo(fila: Any) -> dict[str, Any]:
+    """Fila de `noticias_algoritmo` -> dict publico (`senales` como lista; flags bool)."""
+    try:
+        senales = json.loads(fila["senales"] or "[]")
+    except (json.JSONDecodeError, ValueError, TypeError):
+        senales = []
+    return {
+        "id": fila["id"],
+        "fuente_id": fila["fuente_id"] or "",
+        "fuente_nombre": fila["fuente_nombre"] or "",
+        "plataforma": fila["plataforma"] or "general",
+        "tipo": fila["tipo"] or "agregador",
+        "titulo": fila["titulo"] or "",
+        "resumen": fila["resumen"] or "",
+        "enlace": fila["enlace"] or "",
+        "fecha": fila["fecha"] or "",
+        "clave": fila["clave"] or "",
+        "importancia": int(fila["importancia"] or 0),
+        "nivel": fila["nivel"] or "baja",
+        "senales": senales if isinstance(senales, list) else [],
+        "es_cambio": bool(fila["es_cambio"]),
+        "aplicada": bool(fila["aplicada"]),
+        "archivada": bool(fila["archivada"]),
+        "creado": fila["creado"] or "",
+    }
+
+
+def guardar_noticia_algoritmo(noticia: dict[str, Any]) -> str:
+    """Inserta o ACTUALIZA una noticia clasificada (dedup por fuente_id+clave).
+
+    Recibe una noticia YA clasificada (la clasificacion vive en `algoritmos.py`, no aqui).
+    Si ya existe (misma fuente+clave) refresca la clasificacion y los textos, pero PRESERVA
+    `id`/`creado` y las marcas humanas (`aplicada`/`archivada`). Devuelve "insertada" o
+    "actualizada". Exige `clave` no vacia (sin identidad estable no se puede deduplicar)."""
+    clave = (noticia.get("clave") or "").strip()
+    fuente_id = noticia.get("fuente_id") or ""
+    if not clave:
+        return "omitida"
+    senales = noticia.get("senales") or []
+    senales_json = json.dumps(senales) if isinstance(senales, list) else "[]"
+    con = _conectar()
+    try:
+        existente = con.execute(
+            "SELECT id FROM noticias_algoritmo WHERE fuente_id = ? AND clave = ?",
+            (fuente_id, clave),
+        ).fetchone()
+        if existente is not None:
+            con.execute(
+                "UPDATE noticias_algoritmo SET fuente_nombre = ?, plataforma = ?, tipo = ?, "
+                "titulo = ?, resumen = ?, enlace = ?, fecha = ?, importancia = ?, nivel = ?, "
+                "senales = ?, es_cambio = ? WHERE id = ?",
+                (
+                    noticia.get("fuente_nombre") or "",
+                    noticia.get("plataforma") or "general",
+                    noticia.get("tipo") or "agregador",
+                    noticia.get("titulo") or "",
+                    noticia.get("resumen") or "",
+                    noticia.get("enlace") or "",
+                    noticia.get("fecha") or "",
+                    int(noticia.get("importancia") or 0),
+                    noticia.get("nivel") or "baja",
+                    senales_json,
+                    1 if noticia.get("es_cambio") else 0,
+                    existente["id"],
+                ),
+            )
+            con.commit()
+            return "actualizada"
+        fila = {
+            "id": uuid.uuid4().hex[:12],
+            "fuente_id": fuente_id,
+            "fuente_nombre": noticia.get("fuente_nombre") or "",
+            "plataforma": noticia.get("plataforma") or "general",
+            "tipo": noticia.get("tipo") or "agregador",
+            "titulo": noticia.get("titulo") or "",
+            "resumen": noticia.get("resumen") or "",
+            "enlace": noticia.get("enlace") or "",
+            "fecha": noticia.get("fecha") or "",
+            "clave": clave,
+            "importancia": int(noticia.get("importancia") or 0),
+            "nivel": noticia.get("nivel") or "baja",
+            "senales": senales_json,
+            "es_cambio": 1 if noticia.get("es_cambio") else 0,
+            "aplicada": 0,
+            "archivada": 0,
+            "creado": datetime.now().isoformat(timespec="microseconds"),
+        }
+        marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ALGO)
+        con.execute(
+            f"INSERT INTO noticias_algoritmo ({', '.join(_COLS_NOTICIA_ALGO)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_NOTICIA_ALGO),
+        )
+        con.commit()
+        return "insertada"
+    finally:
+        con.close()
+
+
+def listar_noticias_algoritmo(
+    *,
+    plataforma: str | None = None,
+    nivel: str | None = None,
+    solo_cambios: bool = False,
+    incluir_archivadas: bool = False,
+    limite: int | None = None,
+) -> list[dict[str, Any]]:
+    """Noticias de algoritmo ordenadas por importancia (luego fecha, luego ingesta)."""
+    sql = _SELECT_NOTICIA_ALGO
+    condiciones: list[str] = []
+    params: list[Any] = []
+    if not incluir_archivadas:
+        condiciones.append("archivada = 0")
+    if plataforma:
+        condiciones.append("plataforma = ?")
+        params.append(plataforma)
+    if nivel:
+        condiciones.append("nivel = ?")
+        params.append(nivel)
+    if solo_cambios:
+        condiciones.append("es_cambio = 1")
+    if condiciones:
+        sql += " WHERE " + " AND ".join(condiciones)
+    sql += " ORDER BY importancia DESC, fecha DESC, creado DESC, id DESC"
+    if limite is not None:
+        sql += " LIMIT ?"
+        params.append(int(limite))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()  # noqa: S608 -- condiciones de allowlist
+    finally:
+        con.close()
+    return [_fila_a_noticia_algo(f) for f in filas]
+
+
+def obtener_noticia_algoritmo(noticia_id: str) -> dict[str, Any] | None:
+    """Una noticia de algoritmo por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_NOTICIA_ALGO} WHERE id = ?", (noticia_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_noticia_algo(fila) if fila is not None else None
+
+
+def marcar_noticia_algoritmo(
+    noticia_id: str, *, aplicada: bool | None = None, archivada: bool | None = None
+) -> dict[str, Any] | None:
+    """Marca una noticia como aplicada-a-biblioteca y/o archivada (None si no existe)."""
+    cambios: dict[str, Any] = {}
+    if aplicada is not None:
+        cambios["aplicada"] = 1 if aplicada else 0
+    if archivada is not None:
+        cambios["archivada"] = 1 if archivada else 0
+    if not cambios:
+        return obtener_noticia_algoritmo(noticia_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), noticia_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE noticias_algoritmo SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_noticia_algoritmo(noticia_id)
 
 
 # --- Grupos de hashtags ---------------------------------------------------- #

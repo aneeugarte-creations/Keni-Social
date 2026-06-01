@@ -42,6 +42,7 @@ modulos_backend = [
   "termometro",
   "radar",
   "radar_auto",
+  "algoritmos",
   "parrilla",
   "plantillas_contenido",
 ]
@@ -55,6 +56,7 @@ rutas_frontend = [
   "/investigacion/fuentes",
   "/investigacion/termometro",
   "/investigacion/radar",
+  "/investigacion/algoritmos",
   "/revision",
   "/revision/editorial",
   "/revision/verificacion",
@@ -94,7 +96,7 @@ orden = 15
 ruta = "/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
-descripcion = "Fuentes RSS, panorama mundial y tendencias virales. Pestañas Fuentes / Termómetro / Radar."
+descripcion = "Fuentes RSS, panorama mundial, tendencias virales y cambios de algoritmo. Pestañas Fuentes / Termómetro / Radar / Algoritmos."
 grupo = "dia"
 grupo_orden = 20
 orden = 20

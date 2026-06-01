@@ -181,6 +181,15 @@ def main() -> int:
 
     iniciar_radar_auto()
 
+    # Auto-refresco de ALGORITMOS (inteligencia de plataforma): un hilo demonio que, si
+    # `KENI_ALGORITMOS_AUTO` esta activo (def OFF), ingiere cada N horas los feeds de blogs
+    # oficiales/agregadores y mantiene al dia la pagina Algoritmos y el panel. SOLO LEE feeds
+    # RSS publicos; no publica ni genera. SAFE BY DEFAULT: sin el flag no ingiere. Vive aqui
+    # (servidor real), NO en `crear_app`, para no arrancarlo en los tests.
+    from .algoritmos_refresco import iniciar_refresco_algoritmos
+
+    iniciar_refresco_algoritmos()
+
     # Auto-generacion de COPY (fase3 auto-produccion, H2): un hilo demonio que, si
     # `KENI_AUTOGEN` esta activo (def OFF), encola cada N horas copy para los temas que las
     # fuentes (import/radar/rss) meten al tablero y aun no tienen borrador. El resultado cae

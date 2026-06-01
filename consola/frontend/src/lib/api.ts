@@ -123,6 +123,14 @@ import type {
   RespuestaPublicaciones,
   RespuestaPanel,
   RespuestaListaDia,
+  RespuestaAlgoritmos,
+  RespuestaRefrescarAlgoritmos,
+  RespuestaSembrarAlgoritmos,
+  RespuestaFuenteAlgoritmo,
+  RespuestaABibliotecaAlgoritmo,
+  RespuestaArchivarAlgoritmo,
+  FiltrosAlgoritmos,
+  CuerpoFuenteAlgoritmo,
   RespuestaImportPreview,
   RespuestaImportCalendario,
   RespuestaAjustes,
@@ -857,6 +865,48 @@ export const api = {
       `/radar${query({ geo, feeds: feeds === false ? "0" : undefined })}`,
       { signal },
     ),
+
+  // --- Algoritmos (inteligencia de plataforma: cambios de algoritmo + tendencias) ---
+  // Solo lectura + curación ligera. Las noticias ya vienen clasificadas/ordenadas por
+  // importancia; refrescar ingiere los feeds; las fuentes se gestionan como el RSS.
+  algoritmos: (filtros: FiltrosAlgoritmos = {}, signal?: AbortSignal) =>
+    peticion<RespuestaAlgoritmos>(
+      `/algoritmos${query({
+        plataforma: filtros.plataforma,
+        nivel: filtros.nivel,
+        solo_cambios: filtros.solo_cambios ? "1" : undefined,
+        incluir_archivadas: filtros.incluir_archivadas ? "1" : undefined,
+        limite: filtros.limite?.toString(),
+      })}`,
+      { signal },
+    ),
+  refrescarAlgoritmos: (fuente?: string) =>
+    peticion<RespuestaRefrescarAlgoritmos>("/algoritmos/refrescar", {
+      metodo: "POST",
+      json: fuente ? { fuente } : {},
+    }),
+  sembrarAlgoritmos: () =>
+    peticion<RespuestaSembrarAlgoritmos>("/algoritmos/sembrar", { metodo: "POST" }),
+  crearFuenteAlgoritmo: (cuerpo: CuerpoFuenteAlgoritmo) =>
+    peticion<RespuestaFuenteAlgoritmo>("/algoritmos/fuentes", { metodo: "POST", json: cuerpo }),
+  actualizarFuenteAlgoritmo: (id: string, cuerpo: CuerpoFuenteAlgoritmo) =>
+    peticion<RespuestaFuenteAlgoritmo>(`/algoritmos/fuentes/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  borrarFuenteAlgoritmo: (id: string) =>
+    peticion<RespuestaMensaje>(`/algoritmos/fuentes/${encodeURIComponent(id)}`, {
+      metodo: "DELETE",
+    }),
+  algoritmoABiblioteca: (id: string) =>
+    peticion<RespuestaABibliotecaAlgoritmo>(`/algoritmos/${encodeURIComponent(id)}/biblioteca`, {
+      metodo: "POST",
+    }),
+  archivarAlgoritmo: (id: string, archivada = true) =>
+    peticion<RespuestaArchivarAlgoritmo>(`/algoritmos/${encodeURIComponent(id)}/archivar`, {
+      metodo: "POST",
+      json: { archivada },
+    }),
 
   // --- Parrilla del día (clasifica 13 posteos + 6 editoriales y los jerarquiza) ---
   // Solo lectura: deriva del Radar. PROPONE el orden; publicar lo decide el humano.

@@ -343,10 +343,11 @@ describe("apps-scope · helpers", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
       "/generacion",
-      // /investigacion (hub) → sus 3 sub-pestañas
+      // /investigacion (hub) → sus 4 sub-pestañas
       "/investigacion/fuentes",
       "/investigacion/termometro",
       "/investigacion/radar",
+      "/investigacion/algoritmos",
       // /revision (hub) → sus 2 sub-pestañas
       "/revision/editorial",
       "/revision/verificacion",

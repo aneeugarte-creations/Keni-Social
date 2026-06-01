@@ -573,6 +573,137 @@ export interface RespuestaRadar {
   total: number;
 }
 
+// ── Algoritmos: inteligencia de plataforma (cambios de algoritmo + tendencias) ──
+// Tipos a mano (los handlers de `api/algoritmos.py` construyen dicts ad-hoc, no modelos),
+// igual que el Radar. Texto orientado al usuario llega ya en español desde el backend.
+
+/** Nivel de importancia heurístico de una noticia de algoritmo. */
+export type NivelAlgoritmo = "alta" | "media" | "baja";
+
+/** Una noticia de algoritmo ya ingerida y clasificada. */
+export interface NoticiaAlgoritmo {
+  id: string;
+  fuente_id: string;
+  fuente_nombre: string;
+  /** Plataforma (id, p. ej. "instagram"); `general` si es multiplataforma. */
+  plataforma: string;
+  /** Etiqueta humana de la plataforma (p. ej. "Instagram"). */
+  plataforma_nombre: string;
+  /** Origen de la fuente: "oficial" (la plataforma) o "agregador" (industria). */
+  tipo: string;
+  titulo: string;
+  resumen: string;
+  enlace: string;
+  /** Fecha tal cual la da el feed (puede venir vacía). */
+  fecha: string;
+  /** Score heurístico comparable (mayor = más importante). */
+  importancia: number;
+  nivel: NivelAlgoritmo;
+  /** Palabras clave que dispararon el score (el "por qué" honesto). */
+  senales: string[];
+  /** `true` si parece un cambio de algoritmo confirmado (candidato a la ficha). */
+  es_cambio: boolean;
+  /** `true` si ya se propuso a la biblioteca editorial. */
+  aplicada: boolean;
+  archivada: boolean;
+}
+
+/** Una fuente de inteligencia de plataforma (blog oficial o agregador). */
+export interface FuenteAlgoritmo {
+  id: string;
+  nombre: string;
+  url: string;
+  plataforma: string;
+  plataforma_nombre: string;
+  tipo: string;
+  tipo_nombre: string;
+  activo: boolean;
+  ultima_actualizacion: string;
+  ultimo_error: string;
+  ultimo_conteo: number;
+}
+
+/** Una plataforma SIN feed RSS oficial: el hueco se declara, no se inventa. */
+export interface PendienteAlgoritmo {
+  plataforma: string;
+  nombre: string;
+  motivo: string;
+}
+
+/** Un par {id, nombre} para los selectores de plataforma/tipo. */
+export interface OpcionAlgoritmo {
+  id: string;
+  nombre: string;
+}
+
+/** Respuesta de GET /api/algoritmos. */
+export interface RespuestaAlgoritmos {
+  noticias: NoticiaAlgoritmo[];
+  fuentes: FuenteAlgoritmo[];
+  pendientes: PendienteAlgoritmo[];
+  plataformas: OpcionAlgoritmo[];
+  tipos: OpcionAlgoritmo[];
+  niveles: NivelAlgoritmo[];
+}
+
+/** Error por fuente en una ingesta (degradación honesta). */
+export interface ErrorFuenteAlgoritmo {
+  fuente_id: string;
+  fuente_nombre: string;
+  error: string;
+}
+
+/** Resumen de una ingesta (POST /api/algoritmos/refrescar). */
+export interface ResumenRefrescoAlgoritmos {
+  fuentes: number;
+  insertadas: number;
+  actualizadas: number;
+  errores: ErrorFuenteAlgoritmo[];
+}
+
+export interface RespuestaRefrescarAlgoritmos {
+  resumen: ResumenRefrescoAlgoritmos;
+}
+
+export interface RespuestaSembrarAlgoritmos {
+  creadas: FuenteAlgoritmo[];
+  total: number;
+}
+
+export interface RespuestaFuenteAlgoritmo {
+  fuente: FuenteAlgoritmo;
+}
+
+/** Respuesta de POST /api/algoritmos/{id}/biblioteca: borrador para la ficha. */
+export interface RespuestaABibliotecaAlgoritmo {
+  noticia: NoticiaAlgoritmo;
+  /** Bloque markdown listo para pegar/confirmar en la Biblioteca. */
+  propuesta: string;
+  plataforma: string;
+}
+
+export interface RespuestaArchivarAlgoritmo {
+  noticia: NoticiaAlgoritmo | null;
+}
+
+/** Filtros del listado de noticias de algoritmo. */
+export interface FiltrosAlgoritmos {
+  plataforma?: string;
+  nivel?: NivelAlgoritmo;
+  solo_cambios?: boolean;
+  incluir_archivadas?: boolean;
+  limite?: number;
+}
+
+/** Cuerpo de alta/edición de una fuente de algoritmo. */
+export interface CuerpoFuenteAlgoritmo {
+  nombre?: string;
+  url?: string;
+  plataforma?: string;
+  tipo?: string;
+  activo?: boolean;
+}
+
 /** Subtipo de un posteo de la parrilla (vacío para los video-editoriales). */
 export type SubtipoParrilla = "clip" | "galeria" | "infografia" | "normal" | "";
 

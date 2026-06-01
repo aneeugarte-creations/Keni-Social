@@ -320,6 +320,78 @@ def claves_vistas(fuente_id: str) -> set[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Algoritmo: fuentes de industria + noticias clasificadas (OPERACIONAL: Postgres) #
+# --------------------------------------------------------------------------- #
+#
+# Inteligencia de plataforma (cambios de algoritmo + tendencias), distinta del RSS de
+# marca: alimenta la pagina Algoritmos y el panel. La clasificacion vive en `algoritmos.py`;
+# la fachada solo delega la persistencia 1:1 en db.py.
+
+
+def listar_fuentes_algoritmo() -> list[dict[str, Any]]:
+    return db.listar_fuentes_algoritmo()
+
+
+def contar_fuentes_algoritmo() -> int:
+    return db.contar_fuentes_algoritmo()
+
+
+def obtener_fuente_algoritmo(fuente_id: str) -> dict[str, Any] | None:
+    return db.obtener_fuente_algoritmo(fuente_id)
+
+
+def crear_fuente_algoritmo(
+    nombre: str, url: str, *, plataforma: str = "general", tipo: str = "agregador"
+) -> dict[str, Any]:
+    return db.crear_fuente_algoritmo(nombre, url, plataforma=plataforma, tipo=tipo)
+
+
+def actualizar_fuente_algoritmo(
+    fuente_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_fuente_algoritmo(fuente_id, campos)
+
+
+def registrar_salud_fuente_algoritmo(fuente_id: str, *, conteo: int, error: str = "") -> None:
+    return db.registrar_salud_fuente_algoritmo(fuente_id, conteo=conteo, error=error)
+
+
+def borrar_fuente_algoritmo(fuente_id: str) -> bool:
+    return db.borrar_fuente_algoritmo(fuente_id)
+
+
+def guardar_noticia_algoritmo(noticia: dict[str, Any]) -> str:
+    return db.guardar_noticia_algoritmo(noticia)
+
+
+def listar_noticias_algoritmo(
+    *,
+    plataforma: str | None = None,
+    nivel: str | None = None,
+    solo_cambios: bool = False,
+    incluir_archivadas: bool = False,
+    limite: int | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_noticias_algoritmo(
+        plataforma=plataforma,
+        nivel=nivel,
+        solo_cambios=solo_cambios,
+        incluir_archivadas=incluir_archivadas,
+        limite=limite,
+    )
+
+
+def obtener_noticia_algoritmo(noticia_id: str) -> dict[str, Any] | None:
+    return db.obtener_noticia_algoritmo(noticia_id)
+
+
+def marcar_noticia_algoritmo(
+    noticia_id: str, *, aplicada: bool | None = None, archivada: bool | None = None
+) -> dict[str, Any] | None:
+    return db.marcar_noticia_algoritmo(noticia_id, aplicada=aplicada, archivada=archivada)
+
+
+# --------------------------------------------------------------------------- #
 # Publicaciones comerciales (OPERACIONAL: Postgres via db.py; serie temporal)    #
 # --------------------------------------------------------------------------- #
 #
