@@ -84,6 +84,7 @@ services:
     restart: unless-stopped
     environment:
       XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
       KENI_SKILLS_CWD: /app
       # Store EDITABLE de ajustes (flags + tuning) cambiados desde la UI por el admin. En el
       # volumen COMPARTIDO (back, daemons, worker) para que un cambio en caliente lo vean
@@ -164,6 +165,7 @@ services:
     command: ["python", "-m", "keni_consola.daemons"]
     environment:
       XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
       KENI_SKILLS_CWD: /app
       IS_SANDBOX: "1"
       # Store EDITABLE de ajustes compartido con back/worker (mismo volumen keni-data): los
@@ -206,6 +208,7 @@ services:
     restart: unless-stopped
     environment:
       XDG_CONFIG_HOME: /data
+      KENI_DATA_DIR: /data
       KENI_SKILLS_CWD: /app
       # Store EDITABLE de ajustes compartido con back/daemons (mismo volumen keni-data): el
       # worker ve los flags/tuning cambiados en caliente (store > env > defecto).
