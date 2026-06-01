@@ -33,6 +33,12 @@ import { BarraFormato } from "@/components/editor/BarraFormato";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Markdown } from "@/components/ui/Markdown";
@@ -54,6 +60,23 @@ type TipoTarget = TargetLanzamiento["tipo"] | "archivo";
 
 const CLASES_EDITORIAL = ["marca", "voz", "plataforma", "tropicalizacion", "reglas"] as const;
 
+/**
+ * Separa un bloque de "frontmatter" al INICIO del cuerpo (un bloque `---\n…\n---`) del
+ * resto del texto. El store ya quita el frontmatter real; pero algunos documentos llevan
+ * ADEMÁS un bloque de metadatos al principio del cuerpo, que no aporta nada al editor.
+ * Lo separamos para EDITARLO oculto y readjuntarlo al guardar (no se pierde del fichero).
+ * Guarda: solo separa si el bloque PARECE metadatos (líneas `clave: valor` o comentarios `#`),
+ * para no tragarse un separador `---` legítimo de prosa.
+ */
+function separarFrontmatter(cuerpo: string): { oculto: string; visible: string } {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n[ \t\r\n]*/.exec(cuerpo);
+  if (!m || m.index !== 0) return { oculto: "", visible: cuerpo };
+  const lineas = m[1].split(/\r?\n/).filter((l) => l.trim());
+  const pareceMeta = lineas.length > 0 && lineas.every((l) => /^\s*(#|[\w.-]+\s*:)/.test(l));
+  if (!pareceMeta) return { oculto: "", visible: cuerpo };
+  return { oculto: m[0], visible: cuerpo.slice(m[0].length) };
+}
+
 export default function Biblioteca() {
   const qc = useQueryClient();
 
@@ -64,6 +87,9 @@ export default function Biblioteca() {
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState(false);
   const [carpetasCerradas, setCarpetasCerradas] = React.useState<Set<string>>(new Set());
+  const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
+  // Frontmatter del cuerpo que ocultamos en el editor (se readjunta al guardar).
+  const [frontmatterOculto, setFrontmatterOculto] = React.useState("");
 
   const docsQuery = useQuery({
     queryKey: ["biblioteca", filtro, q],
@@ -149,8 +175,17 @@ export default function Biblioteca() {
   // --- Borrador del editor (copia de trabajo, sincronizada al cambiar de documento) ---
   const [borrador, setBorrador] = React.useState<DocumentoBiblioteca | null>(null);
   React.useEffect(() => {
-    setBorrador(seleccion ? { ...seleccion } : null);
+    if (seleccion) {
+      // Oculta el bloque de frontmatter del cuerpo al editar; se readjunta al guardar.
+      const { oculto, visible } = separarFrontmatter(seleccion.cuerpo);
+      setBorrador({ ...seleccion, cuerpo: visible });
+      setFrontmatterOculto(oculto);
+    } else {
+      setBorrador(null);
+      setFrontmatterOculto("");
+    }
     setPreview(false);
+    setLanzarAbierto(false);
   }, [seleccionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -176,7 +211,8 @@ export default function Biblioteca() {
         id: borrador.id,
         cuerpo: {
           titulo: siguiente.titulo,
-          cuerpo: siguiente.cuerpo,
+          // Readjunta el frontmatter oculto para no perderlo del fichero.
+          cuerpo: frontmatterOculto + siguiente.cuerpo,
           carpeta: siguiente.carpeta,
           clase: siguiente.clase,
           marcas: siguiente.marcas,
@@ -336,6 +372,11 @@ export default function Biblioteca() {
                   <option key={c} value={c} />
                 ))}
               </datalist>
+              {borrador.tipo === "prompt" ? (
+                <Button size="sm" onClick={() => setLanzarAbierto(true)}>
+                  <Send className="mr-1 h-3.5 w-3.5" /> Lanzar
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"
@@ -401,13 +442,16 @@ export default function Biblioteca() {
         )}
       </main>
 
-      {/* ───────── Panel de lanzar (solo prompts) ───────── */}
+      {/* ───────── Lanzar (popup, solo prompts) ───────── */}
       {borrador?.tipo === "prompt" ? (
         <PanelLanzar
+          key={borrador.id}
           promptId={borrador.id}
           salida={borrador.salida ?? ""}
           marcas={marcasQuery.data?.marcas ?? []}
           areas={areasQuery.data?.areas ?? []}
+          open={lanzarAbierto}
+          onOpenChange={setLanzarAbierto}
         />
       ) : null}
     </div>
@@ -423,11 +467,15 @@ function PanelLanzar({
   salida,
   marcas,
   areas,
+  open,
+  onOpenChange,
 }: {
   promptId: string;
   salida: string;
   marcas: { id: string; nombre: string }[];
   areas: { id: string; nombre: string }[];
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
 }) {
   const [marca, setMarca] = React.useState("");
   const [adjuntos, setAdjuntos] = React.useState<Set<string>>(new Set());
@@ -504,10 +552,13 @@ function PanelLanzar({
   const editoriales = editorialesQuery.data?.editoriales ?? [];
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col gap-3 overflow-y-auto rounded-md border border-border p-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold">
-        <Send className="h-4 w-4" /> Lanzar prompt
-      </h2>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[88vh] max-w-2xl flex-col gap-3 overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Send className="h-4 w-4" /> Lanzar prompt
+          </DialogTitle>
+        </DialogHeader>
 
       <div className="space-y-1">
         <Label>Marca</Label>
@@ -581,9 +632,9 @@ function PanelLanzar({
         <AutoTextarea
           value={valorTarget}
           onChange={(e) => setValorTarget(e.target.value)}
-          maxHeight={220}
+          maxHeight={340}
           placeholder="Pega aquí la nota, transcripción o texto…"
-          className="w-full text-sm"
+          className="min-h-[160px] w-full text-sm"
         />
       ) : tipoTarget === "url" ? (
         <Input value={valorTarget} onChange={(e) => setValorTarget(e.target.value)} placeholder="https://…" />
@@ -632,6 +683,7 @@ function PanelLanzar({
           )}
         </div>
       ) : null}
-    </aside>
+      </DialogContent>
+    </Dialog>
   );
 }
