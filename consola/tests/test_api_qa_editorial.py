@@ -4,51 +4,20 @@ Ficha F3 (#143). NUEVO MODO: revisar el copy YA escrito por el community manager
 un INFORME (veredicto 🟢/🟡/🔴 + hallazgos clasificados con corrección sugerida). SEÑALA; no
 publica ni reescribe. Cubre:
 
-  - GET opciones: marcas + plataformas + si la skill esta instalada.
-  - POST revisar: con la skill sembrada y el lanzador mockeado, completa la generacion,
-    parsea el bloque ```json de hallazgos y registra el historial SIN auto-crear publicaciones;
-    valida marca, texto vacio y skill ausente; el prompt inyecta texto/plataforma/contexto.
+  - GET opciones: marcas + plataformas + disponibilidad del prompt (semilla).
+  - POST revisar: con el lanzador mockeado, completa la generacion, parsea el bloque
+    ```json de hallazgos y registra el historial SIN auto-crear publicaciones; valida
+    marca y texto vacio; el prompt inyecta texto/plataforma/contexto.
   - parsear_informe (unidad): JSON valido, degradacion sin JSON, semaforo, no_verificable.
 """
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 from keni_consola.api import qa_editorial
 
-from .conftest import _cliente, lanzador_generacion_completa, sembrar_skills
+from .conftest import _cliente, lanzador_generacion_completa
 
-# Skill de QA sembrada en el catalogo FALSO (salida documento, sin redes).
-_SKILL_QA = {
-    "qa-editorial": {
-        "md": "# qa-editorial\n\nRevisa el copy ajeno. Carga contexto-editorial/reglas-legales.md.\n",
-        "meta": {
-            "nombre": "QA editorial",
-            "explicacion": "Revisa el copy del community y señala typos/datos/legal/voz.",
-            "grupo": "validadas",
-            "aplica_redes": False,
-            "salida": "documento",
-            "media": False,
-            "orden": 35,
-            "campos": [
-                {"id": "texto", "etiqueta": "Copy a revisar", "tipo": "textarea", "requerido": True,
-                 "placeholder": "", "ayuda": "", "opciones": [], "media_tipos": ""},
-                {"id": "plataforma", "etiqueta": "Plataforma", "tipo": "select", "requerido": False,
-                 "placeholder": "", "ayuda": "", "opciones": ["X / Twitter", "Instagram"], "media_tipos": ""},
-                {"id": "contexto", "etiqueta": "Contexto", "tipo": "textarea", "requerido": False,
-                 "placeholder": "", "ayuda": "", "opciones": [], "media_tipos": ""},
-            ],
-            "plantilla_invocacion": (
-                "usa qa-editorial, marca {marca}.\nPlataforma: {plataforma}\n"
-                "Contexto:\n{contexto}\nCopy a revisar:\n{texto}\n"
-            ),
-        },
-    },
-}
-
-# Salida canned de la skill: informe con veredicto 🟡 + un bloque json de hallazgos.
+# Salida canned: informe con veredicto 🟡 + un bloque json de hallazgos.
 _SALIDA_INFORME = """🟡 REVISAR ANTES DE PUBLICAR
 🟢 LISTO PARA APROBAR · 🟡 REVISAR ANTES DE PUBLICAR · 🔴 NO PUBLICAR
 
@@ -73,11 +42,6 @@ Hallazgos:
 """
 
 
-def _sembrar_qa() -> None:
-    """Anade la skill qa-editorial al catalogo FALSO ya sembrado por `entorno`."""
-    sembrar_skills(Path(os.environ["KENI_SKILLS_DIR"]), _SKILL_QA)
-
-
 # --------------------------------------------------------------------------- #
 # GET /api/qa-editorial                                                        #
 # --------------------------------------------------------------------------- #
@@ -91,19 +55,12 @@ def test_opciones_por_defecto(cliente):
     assert datos["skill_disponible"] is True
 
 
-def test_opciones_skill_disponible_si_sembrada(entorno):
-    _sembrar_qa()
-    cli = _cliente()
-    assert cli.get("/api/qa-editorial").json()["skill_disponible"] is True
-
-
 # --------------------------------------------------------------------------- #
 # POST /api/qa-editorial/revisar                                               #
 # --------------------------------------------------------------------------- #
 
 
 def test_revisar_completa_y_parsea_informe(entorno):
-    _sembrar_qa()
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_INFORME))
     r = cli.post(
         "/api/qa-editorial/revisar",
@@ -130,7 +87,6 @@ def test_revisar_completa_y_parsea_informe(entorno):
 
 
 def test_revisar_inyecta_texto_plataforma_contexto_en_prompt(entorno):
-    _sembrar_qa()
     capturado = {}
     base = lanzador_generacion_completa(_SALIDA_INFORME)
 
@@ -154,21 +110,18 @@ def test_revisar_inyecta_texto_plataforma_contexto_en_prompt(entorno):
 
 
 def test_revisar_marca_invalida_400(entorno):
-    _sembrar_qa()
     cli = _cliente()
     r = cli.post("/api/qa-editorial/revisar", json={"marca": "marca_falsa", "texto": "algo"})
     assert r.status_code == 400
 
 
 def test_revisar_sin_texto_400(entorno):
-    _sembrar_qa()
     cli = _cliente()
     assert cli.post("/api/qa-editorial/revisar", json={"marca": "unotv"}).status_code == 400
     assert cli.post("/api/qa-editorial/revisar", json={"marca": "unotv", "texto": "  "}).status_code == 400
 
 
 def test_revisar_plataforma_desconocida_se_ignora(entorno):
-    _sembrar_qa()
     capturado = {}
     base = lanzador_generacion_completa(_SALIDA_INFORME)
 

@@ -34,10 +34,6 @@ _TODAS = (
     config.ENV_CLAUDE_MAX_USD,
     config.ENV_CLAUDE_MAX_TURNS,
     config.ENV_CLAUDE_SKIP_PERMISSIONS,
-    config.ENV_SKILLS_CWD,
-    config.ENV_SKILLS_EJECUCION_CWD,
-    config.ENV_SKILLS_DIR,
-    config.ENV_SKILLS_MAX_SUBIDA_MB,
     config.ENV_COMERCIAL_INTERVALO_SEGUNDOS,
     config.ENV_COMERCIAL_INTERVALO_HORAS,
     config.ENV_PROGRAMADOR_INTERVALO_SEGUNDOS,
@@ -83,7 +79,6 @@ def test_nombres_son_la_fuente_unica():
     assert config.ENV_CLAUDE_MAX_USD == "KENI_CLAUDE_MAX_USD"
     assert config.ENV_CLAUDE_MAX_TURNS == "KENI_CLAUDE_MAX_TURNS"
     assert config.ENV_CLAUDE_SKIP_PERMISSIONS == "KENI_CLAUDE_SKIP_PERMISSIONS"
-    assert config.ENV_SKILLS_CWD == "KENI_SKILLS_CWD"
     assert config.ENV_DATA_DIR == "KENI_DATA_DIR"
     assert config.ENV_GENERACIONES == "KENI_CONSOLA_GENERACIONES"
     # Persistencia hosted (#130): NOMBRES EXACTOS de deploy/.env.example (no se renombran).
@@ -221,9 +216,6 @@ def test_defaults_cuando_no_hay_env(limpio):
     assert config.claude_max_usd() is None
     assert config.claude_max_turns() is None
     assert config.claude_skip_permisos() is True
-    assert config.skills_cwd() is None
-    assert config.skills_dir() is None
-    assert config.skills_max_subida_mb() is None
     assert config.comercial_intervalo_segundos() is None
     assert config.comercial_intervalo_horas() is None
     assert config.programador_intervalo_segundos() is None
@@ -293,15 +285,6 @@ def test_claude_max_turns(limpio):
     assert config.claude_max_turns() is None
     limpio.setenv(config.ENV_CLAUDE_MAX_TURNS, "x")
     assert config.claude_max_turns() is None
-
-
-def test_skills_max_subida_mb(limpio):
-    limpio.setenv(config.ENV_SKILLS_MAX_SUBIDA_MB, "5")
-    assert config.skills_max_subida_mb() == 5
-    limpio.setenv(config.ENV_SKILLS_MAX_SUBIDA_MB, "0")
-    assert config.skills_max_subida_mb() is None
-    limpio.setenv(config.ENV_SKILLS_MAX_SUBIDA_MB, "x")
-    assert config.skills_max_subida_mb() is None
 
 
 # --------------------------------------------------------------------------- #

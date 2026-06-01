@@ -11,8 +11,7 @@ ningun test toque el disco real del usuario:
   - `KENI_CONSOLA_SUGERENCIAS`-> buzon de sugerencias (JSON local) aislado en tmp
   - `KENI_CONSOLA_TERMOMETRO`-> config del Termometro mundial (JSON local) aislada en tmp
   - `KENI_METRICAS_CONFIG` -> archivo inexistente + `KENI_METRICAS_FUENTE=muestra` => fuente de muestra
-  - `KENI_SKILLS_CWD`      -> cwd valido para skills (no toca el repo real)
-  - `KENI_SKILLS_DIR`      -> catalogo de skills FALSO en tmp (sembrado; no toca skills-copy/)
+  - `KENI_BIBLIOTECA_DIR`  -> almacen de la Biblioteca (prompts) FALSO en tmp (no toca el real)
 
 PERSISTENCIA OPERACIONAL (ADR 0004): la Consola persiste en Postgres. La fixture `entorno`
 fija `DATABASE_URL` apuntando al Postgres de pruebas (env `KENI_TEST_DATABASE_URL`) y
@@ -28,8 +27,6 @@ Nada de red, nada de tokens reales, nunca se llama a `claude` (el runner se mock
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient
@@ -56,116 +53,6 @@ def _esquema_fresco_por_test():
     """
     db_modulo._esquemas_asegurados.clear()
     yield
-
-# --------------------------------------------------------------------------- #
-# Catalogo de skills FALSO, aislado en tmp (env KENI_SKILLS_DIR)              #
-# --------------------------------------------------------------------------- #
-#
-# Los tests NO deben leer/escribir el `skills-copy/` real del repo. `entorno` apunta
-# `KENI_SKILLS_DIR` a un tmp y lo siembra con UNAS POCAS skills falsas que cubren las
-# tres formas: piezas+redes, documento y media (archivo). Conservamos los MISMOS ids
-# que ya usan los tests existentes (`copy-desde-nota`, `clip-a-copy`) para no reescribir
-# test_api_rss / test_metricas_runs, y anadimos un `resumen-tendencia` de salida documento.
-
-_SKILLS_SEMILLA: dict[str, dict] = {
-    # piezas + aplica_redes (como copy-desde-nota real)
-    "copy-desde-nota": {
-        "md": "# copy-desde-nota\n\nConvierte una nota en copy por red.\n",
-        "meta": {
-            "nombre": "Copy desde nota",
-            "explicacion": "Convierte una nota en copy listo para publicar por red.",
-            "grupo": "validadas",
-            "aplica_redes": True,
-            "salida": "piezas",
-            "media": False,
-            "orden": 10,
-            "campos": [
-                {
-                    "id": "fuente",
-                    "etiqueta": "Nota o transcripción",
-                    "tipo": "textarea",
-                    "requerido": True,
-                    "placeholder": "Pega aquí la nota…",
-                    "ayuda": "",
-                    "opciones": [],
-                    "media_tipos": "",
-                }
-            ],
-            "plantilla_invocacion": "usa copy-desde-nota con la siguiente nota, marca {marca}:\n\n{fuente}\n",
-        },
-    },
-    # documento (sin redes)
-    "resumen-tendencia": {
-        "md": "# resumen-tendencia\n\nResume un tema en un brief.\n",
-        "meta": {
-            "nombre": "Resumen de tendencia",
-            "explicacion": "Resume un tema en un brief corto.",
-            "grupo": "validadas",
-            "aplica_redes": False,
-            "salida": "documento",
-            "media": False,
-            "orden": 40,
-            "campos": [
-                {
-                    "id": "fuentes",
-                    "etiqueta": "Fuentes del tema",
-                    "tipo": "textarea",
-                    "requerido": True,
-                    "placeholder": "Pega aquí las fuentes…",
-                    "ayuda": "",
-                    "opciones": [],
-                    "media_tipos": "",
-                }
-            ],
-            "plantilla_invocacion": "usa resumen-tendencia con las siguientes fuentes, marca {marca}:\n\n{fuentes}\n",
-        },
-    },
-    # media (archivo) + piezas (como clip-a-copy real)
-    "clip-a-copy": {
-        "md": "# clip-a-copy\n\nDe un video/audio a copy por red.\n",
-        "meta": {
-            "nombre": "Clip a copy",
-            "explicacion": "De un video o audio saca copy por red.",
-            "grupo": "experimentales",
-            "aplica_redes": True,
-            "salida": "piezas",
-            "media": True,
-            "orden": 20,
-            "campos": [
-                {
-                    "id": "archivo",
-                    "etiqueta": "Video o audio",
-                    "tipo": "archivo",
-                    "requerido": True,
-                    "placeholder": "",
-                    "ayuda": "",
-                    "opciones": [],
-                    "media_tipos": "video/*,audio/*",
-                }
-            ],
-            "plantilla_invocacion": "usa clip-a-copy con el archivo en esta ruta, marca {marca}:\n\n{archivo}\n",
-        },
-    },
-}
-
-
-def sembrar_skills(dir_skills: Path, skills: dict[str, dict] | None = None) -> Path:
-    """Crea un catalogo de skills falso en `dir_skills` (una carpeta por skill).
-
-    `skills` mapea `id -> {"md": <SKILL.md>, "meta": <dict de keni.yaml>}`. Por defecto
-    siembra `_SKILLS_SEMILLA` (piezas+redes, documento, media). Devuelve `dir_skills`.
-    """
-    import yaml
-
-    skills = skills if skills is not None else _SKILLS_SEMILLA
-    for skill_id, contenido in skills.items():
-        carpeta = dir_skills / skill_id
-        carpeta.mkdir(parents=True, exist_ok=True)
-        (carpeta / "SKILL.md").write_text(contenido["md"], encoding="utf-8")
-        (carpeta / "keni.yaml").write_text(
-            yaml.safe_dump(contenido["meta"], allow_unicode=True, sort_keys=False), encoding="utf-8"
-        )
-    return dir_skills
 
 
 @pytest.fixture(autouse=True)
@@ -202,7 +89,7 @@ def _aislar_logging_keni():
 
 @pytest.fixture
 def entorno(monkeypatch, tmp_path):
-    """Config + DB aisladas; metricas offline; catalogo de skills falso en tmp.
+    """Config + DB aisladas; metricas offline; Biblioteca de prompts aislada en tmp.
 
     La operacional vive en Postgres (ADR 0004): fija `DATABASE_URL` al Postgres de pruebas
     (`KENI_TEST_DATABASE_URL`) y trunca las tablas operacionales antes/despues del test
@@ -245,11 +132,6 @@ def entorno(monkeypatch, tmp_path):
     monkeypatch.delenv("KENI_IMAGEN_PROVEEDOR", raising=False)
     monkeypatch.delenv("OPENROUTER_IMAGE_MODEL", raising=False)
     monkeypatch.setenv("KENI_METRICAS_HISTORICO", "0")
-    monkeypatch.setenv("KENI_SKILLS_CWD", str(tmp_path))
-    # Catalogo de skills aislado en tmp (NO toca el `skills-copy/` real) + sembrado.
-    dir_skills = tmp_path / "skills"
-    sembrar_skills(dir_skills)
-    monkeypatch.setenv("KENI_SKILLS_DIR", str(dir_skills))
     # Almacen de generaciones (trabajos de IA en background) aislado en tmp.
     monkeypatch.setenv("KENI_CONSOLA_GENERACIONES", str(tmp_path / "generaciones"))
     # Almacen de la Biblioteca (prompts + linea editorial) aislado en tmp: ningun test

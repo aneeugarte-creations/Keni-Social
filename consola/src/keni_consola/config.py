@@ -54,12 +54,6 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
     - KENI_CLAUDE_MAX_TURNS       tope de turnos (--max-turns)       def sin tope
     - KENI_CLAUDE_SKIP_PERMISSIONS  saltar permisos (--dangerously-skip-permissions)  def ON
 
-  Skills (`dominio.skills`, `skills_catalogo`, `api.skills_generacion_api`):
-    - KENI_SKILLS_CWD             raiz de DESCUBRIMIENTO de skills   def repo/plugin/cwd
-    - KENI_SKILLS_EJECUCION_CWD   cwd de EJECUCION de `claude`       def derivado de cwd_skills
-    - KENI_SKILLS_DIR             carpeta directa del catalogo       def <cwd>/skills-copy/...
-    - KENI_SKILLS_MAX_SUBIDA_MB   limite de subida por skill (MB)    def por tipo
-
   Biblioteca de prompts + linea editorial (`biblioteca`, `dominio.biblioteca_lanzar`):
     - KENI_BIBLIOTECA_DIR         almacen de documentos markdown     def <dir_config>/biblioteca
 
@@ -145,12 +139,6 @@ ENV_CLAUDE_TIMEOUT = "KENI_CLAUDE_TIMEOUT"
 ENV_CLAUDE_MAX_USD = "KENI_CLAUDE_MAX_USD"
 ENV_CLAUDE_MAX_TURNS = "KENI_CLAUDE_MAX_TURNS"
 ENV_CLAUDE_SKIP_PERMISSIONS = "KENI_CLAUDE_SKIP_PERMISSIONS"
-
-# Skills.
-ENV_SKILLS_CWD = "KENI_SKILLS_CWD"
-ENV_SKILLS_EJECUCION_CWD = "KENI_SKILLS_EJECUCION_CWD"
-ENV_SKILLS_DIR = "KENI_SKILLS_DIR"
-ENV_SKILLS_MAX_SUBIDA_MB = "KENI_SKILLS_MAX_SUBIDA_MB"
 
 # Biblioteca de prompts + linea editorial (almacen unico de documentos markdown).
 ENV_BIBLIOTECA_DIR = "KENI_BIBLIOTECA_DIR"
@@ -537,38 +525,6 @@ def claude_skip_permisos() -> bool:
     """¿Pasar `--dangerously-skip-permissions`? (def ON; `KENI_CLAUDE_SKIP_PERMISSIONS` falsy lo apaga)."""
     crudo = os.environ.get(ENV_CLAUDE_SKIP_PERMISSIONS, "1").strip().lower()
     return crudo not in _FALSOS
-
-
-# --------------------------------------------------------------------------- #
-# Accesores: skills                                                            #
-# --------------------------------------------------------------------------- #
-
-
-def skills_cwd() -> str | None:
-    """Override de la raiz de DESCUBRIMIENTO de skills (`KENI_SKILLS_CWD`); None si no esta."""
-    return os.environ.get(ENV_SKILLS_CWD) or None
-
-
-def skills_ejecucion_cwd() -> str | None:
-    """Override del cwd de EJECUCION de `claude` (`KENI_SKILLS_EJECUCION_CWD`); None si no esta."""
-    return os.environ.get(ENV_SKILLS_EJECUCION_CWD) or None
-
-
-def skills_dir() -> str | None:
-    """Override de la carpeta directa del catalogo de skills (`KENI_SKILLS_DIR`); None si no esta."""
-    return os.environ.get(ENV_SKILLS_DIR) or None
-
-
-def skills_max_subida_mb() -> int | None:
-    """Limite de subida por skill en MB (`KENI_SKILLS_MAX_SUBIDA_MB`); None si ausente/invalido/<=0."""
-    crudo = os.environ.get(ENV_SKILLS_MAX_SUBIDA_MB)
-    if not crudo:
-        return None
-    try:
-        mb = int(crudo)
-    except ValueError:
-        return None
-    return mb if mb > 0 else None
 
 
 # --------------------------------------------------------------------------- #

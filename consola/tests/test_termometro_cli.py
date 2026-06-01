@@ -2,23 +2,17 @@
 
 Cubre:
   - reunir_noticias_rss: formatea items de feeds activos (descargador mockeado).
-  - generar_termometro: corre la skill (runner mockeado), registra el historial.
+  - generar_termometro: arma el prompt desde la semilla del paquete (runner mockeado),
+    registra el historial.
   - main: dry-run imprime el prompt; con noticias-file genera y guarda; errores claros.
 """
 
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 
 from keni_consola import repos, termometro, termometro_cli
 from keni_consola.api import rss
-
-from .conftest import sembrar_skills
-
-# Reutilizamos la skill sembrada del test de la API.
-from .test_api_termometro import _SKILL_TERMOMETRO
 
 # IP publica literal (pasa el guard SSRF sin DNS), igual que en test_api_rss.
 _URL_OK = "https://93.184.216.34/feed.xml"
@@ -46,10 +40,6 @@ _STDOUT_CLAUDE = json.dumps(
     {"type": "result", "subtype": "success", "is_error": False, "result": _DOC,
      "num_turns": 1, "total_cost_usd": 0.02}
 )
-
-
-def _sembrar_termometro() -> None:
-    sembrar_skills(Path(os.environ["KENI_SKILLS_DIR"]), _SKILL_TERMOMETRO)
 
 
 def _claude_fake(salida: str):
@@ -90,7 +80,6 @@ def test_reunir_noticias_rss_sin_feeds_vacio(entorno):
 
 
 def test_generar_dry_run_no_llama_claude(entorno, monkeypatch):
-    _sembrar_termometro()
     # Si llamara a claude, esto reventaria el test.
     monkeypatch.setattr(termometro_cli, "_ejecutar_claude", _claude_fake("NO DEBERIA LLAMARSE"))
     res = termometro_cli.generar_termometro(
@@ -102,7 +91,6 @@ def test_generar_dry_run_no_llama_claude(entorno, monkeypatch):
 
 
 def test_generar_registra_historial(entorno, monkeypatch):
-    _sembrar_termometro()
     monkeypatch.setattr(termometro_cli, "_ejecutar_claude", _claude_fake(_STDOUT_CLAUDE))
     res = termometro_cli.generar_termometro(marca="unotv", noticias="Asia: algo.\nEuropa: otra.")
     assert "documento" in res
@@ -125,7 +113,6 @@ def test_generar_funciona_sin_catalogo_de_skills(entorno):
 
 
 def test_main_dry_run_imprime_prompt(entorno, monkeypatch, capsys, tmp_path):
-    _sembrar_termometro()
     noticias = tmp_path / "hoy.txt"
     noticias.write_text("China: algo grande.\nEEUU: otra cosa.", encoding="utf-8")
     rc = termometro_cli.main(["--marca", "unotv", "--noticias-file", str(noticias), "--dry-run"])
@@ -136,7 +123,6 @@ def test_main_dry_run_imprime_prompt(entorno, monkeypatch, capsys, tmp_path):
 
 
 def test_main_genera_desde_archivo(entorno, monkeypatch, capsys, tmp_path):
-    _sembrar_termometro()
     monkeypatch.setattr(termometro_cli, "_ejecutar_claude", _claude_fake(_STDOUT_CLAUDE))
     noticias = tmp_path / "hoy.txt"
     noticias.write_text("China: algo grande.", encoding="utf-8")
@@ -147,7 +133,6 @@ def test_main_genera_desde_archivo(entorno, monkeypatch, capsys, tmp_path):
 
 
 def test_main_sin_marca_error(entorno, capsys):
-    _sembrar_termometro()
     # Sin marca en config ni en flag -> error claro, rc=1.
     rc = termometro_cli.main(["--noticias-file", "/tmp/no-importa.txt"])
     assert rc == 1
@@ -155,7 +140,6 @@ def test_main_sin_marca_error(entorno, capsys):
 
 
 def test_main_usa_marca_de_la_config(entorno, monkeypatch, capsys, tmp_path):
-    _sembrar_termometro()
     termometro.guardar({"marca": "claro-sports"})
     monkeypatch.setattr(termometro_cli, "_ejecutar_claude", _claude_fake(_STDOUT_CLAUDE))
     noticias = tmp_path / "hoy.txt"
@@ -166,7 +150,6 @@ def test_main_usa_marca_de_la_config(entorno, monkeypatch, capsys, tmp_path):
 
 
 def test_main_sin_noticias_error(entorno, capsys):
-    _sembrar_termometro()
     # marca por flag, pero sin feeds RSS ni archivo -> sin noticias -> rc=1.
     rc = termometro_cli.main(["--marca", "unotv"])
     assert rc == 1

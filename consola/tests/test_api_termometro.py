@@ -1,51 +1,17 @@
 """Tests de la API del Termometro mundial (/api/termometro/*). OFFLINE: nunca se llama a claude.
 
 Cubre:
-  - GET config: defectos + si la skill esta instalada + marcas + regiones sugeridas.
+  - GET config: defectos + disponibilidad del prompt (semilla) + marcas + regiones sugeridas.
   - PUT config: guarda y valida (numero 5-8, hora HH:MM, marca del catalogo).
-  - POST generar: con la skill sembrada y el lanzador mockeado, completa la generacion
-    (salida documento: registra historial, sin auto-crear publicaciones); valida marca,
-    noticias y skill ausente.
+  - POST generar: con el lanzador mockeado, completa la generacion (salida documento:
+    registra historial, sin auto-crear publicaciones); valida marca y noticias.
 """
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
+from .conftest import _cliente, lanzador_generacion_completa
 
-from .conftest import _cliente, lanzador_generacion_completa, sembrar_skills
-
-# Skill del termometro sembrada en el catalogo FALSO (salida documento, sin redes).
-_SKILL_TERMOMETRO = {
-    "termometro-mundial": {
-        "md": "# termometro-mundial\n\nArma el termometro. Carga contexto-editorial/.\n",
-        "meta": {
-            "nombre": "Termómetro mundial",
-            "explicacion": "Galería diaria con las 5–8 internacionales más importantes.",
-            "grupo": "experimentales",
-            "aplica_redes": False,
-            "salida": "documento",
-            "media": False,
-            "orden": 46,
-            "campos": [
-                {"id": "noticias", "etiqueta": "Noticias", "tipo": "textarea", "requerido": True,
-                 "placeholder": "", "ayuda": "", "opciones": [], "media_tipos": ""},
-                {"id": "numero", "etiqueta": "Número", "tipo": "select", "requerido": False,
-                 "placeholder": "", "ayuda": "", "opciones": ["5", "6", "7", "8"], "media_tipos": ""},
-                {"id": "regiones", "etiqueta": "Regiones", "tipo": "texto", "requerido": False,
-                 "placeholder": "", "ayuda": "", "opciones": [], "media_tipos": ""},
-                {"id": "fecha", "etiqueta": "Fecha", "tipo": "fecha", "requerido": False,
-                 "placeholder": "", "ayuda": "", "opciones": [], "media_tipos": ""},
-            ],
-            "plantilla_invocacion": (
-                "usa termometro-mundial, marca {marca}.\nFecha: {fecha}\nNúmero: {numero}\n"
-                "Regiones: {regiones}\nNoticias:\n{noticias}\n"
-            ),
-        },
-    },
-}
-
-# Salida canned de la skill (documento con veredicto). Sin red, sin claude real.
+# Salida canned (documento con veredicto). Sin red, sin claude real.
 _SALIDA_DOC = """✅ Termómetro listo.
 
 PORTADA
@@ -54,11 +20,6 @@ Termómetro mundial · 2026-05-25
 SLIDES
 2/5. [Europa] Algo pasó en Europa.
 """
-
-
-def _sembrar_termometro() -> None:
-    """Anade la skill termometro-mundial al catalogo FALSO ya sembrado por `entorno`."""
-    sembrar_skills(Path(os.environ["KENI_SKILLS_DIR"]), _SKILL_TERMOMETRO)
 
 
 # --------------------------------------------------------------------------- #
@@ -73,12 +34,6 @@ def test_config_por_defecto(cliente):
     assert datos["skill_disponible"] is True
     assert {"id": "unotv", "nombre": "UnoTV"} in datos["marcas"]
     assert "Europa" in datos["regiones_sugeridas"]
-
-
-def test_skill_disponible_true_si_sembrada(entorno):
-    _sembrar_termometro()
-    cli = _cliente()
-    assert cli.get("/api/termometro").json()["skill_disponible"] is True
 
 
 # --------------------------------------------------------------------------- #
@@ -126,7 +81,6 @@ def test_guardar_config_marca_invalida_400(cliente):
 
 
 def test_generar_completa_y_registra_historial(entorno):
-    _sembrar_termometro()
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_DOC))
     r = cli.post(
         "/api/termometro/generar",
@@ -144,7 +98,6 @@ def test_generar_completa_y_registra_historial(entorno):
 
 
 def test_generar_inyecta_noticias_y_numero_en_el_prompt(entorno):
-    _sembrar_termometro()
     capturado = {}
     base = lanzador_generacion_completa(_SALIDA_DOC)
 
@@ -164,14 +117,12 @@ def test_generar_inyecta_noticias_y_numero_en_el_prompt(entorno):
 
 
 def test_generar_marca_invalida_400(entorno):
-    _sembrar_termometro()
     cli = _cliente()
     r = cli.post("/api/termometro/generar", json={"marca": "marca_falsa", "noticias": "algo"})
     assert r.status_code == 400
 
 
 def test_generar_sin_noticias_400(entorno):
-    _sembrar_termometro()
     cli = _cliente()
     assert cli.post("/api/termometro/generar", json={"marca": "unotv"}).status_code == 400
     assert cli.post("/api/termometro/generar", json={"marca": "unotv", "noticias": "  "}).status_code == 400
