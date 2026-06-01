@@ -226,6 +226,7 @@ def crear_publicaciones_desde_piezas(
     origen: str,
     redes_filtro: set[str] | None = None,
     autor: dict[str, str] | None = None,
+    contenido_id: str = "",
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -238,6 +239,13 @@ def crear_publicaciones_desde_piezas(
     BORRADOR en C por la funcion-contrato `dominio.publicaciones.crear_borrador` (no por
     `repos.crear_publicacion` ni decidiendo aqui el estado): C garantiza que nace
     `borrador` y devuelve la pieza ya en su forma publica.
+
+    NIDO BAJO EL TEMA (lista viva): si `contenido_id` apunta a un tema del tablero
+    existente, cada pieza se ADJUNTA a ESE `contenido` (via `crear_borrador_en`) en vez de
+    crear su propio padre, de modo que el borrador cuelga de la tarjeta del tema y sigue
+    fluyendo por aprobacion/programador. Sin `contenido_id` (default ""), o si el tema no
+    existe, el comportamiento es EXACTAMENTE el de hoy: borrador suelto con su propio padre
+    (back-compat total).
     """
     creadas: list[dict[str, object]] = []
     for pieza in piezas:
@@ -249,8 +257,20 @@ def crear_publicaciones_desde_piezas(
             continue
         if not isinstance(contenido, str):
             contenido = ""
-        creadas.append(
-            contrato_publicaciones.crear_borrador(
+        creada: dict[str, object] | None = None
+        if contenido_id:
+            # Nido bajo el tema: adjunta la pieza al `contenido` existente. `crear_borrador_en`
+            # devuelve None si el tema no existe (entonces caemos al borrador suelto).
+            creada = contrato_publicaciones.crear_borrador_en(
+                contenido_id,
+                marca,
+                red,
+                titulo=titulo,
+                contenido=contenido,
+                veredicto=verdicto,
+            )
+        if creada is None:
+            creada = contrato_publicaciones.crear_borrador(
                 marca,
                 red,
                 titulo=titulo,
@@ -259,7 +279,7 @@ def crear_publicaciones_desde_piezas(
                 origen=origen,
                 autor=autor,
             )
-        )
+        creadas.append(creada)
     return creadas
 
 
@@ -277,6 +297,7 @@ def construir_procesar_copy(
     texto_base: str,
     con_imagenes: bool = False,
     autor: dict[str, str] | None = None,
+    contenido_id: str = "",
 ) -> generaciones.Procesar:
     """Devuelve el callback de post-procesado de una generacion de copy/RSS.
 
@@ -288,6 +309,10 @@ def construir_procesar_copy(
     Si `con_imagenes` (skill de imagen), ademas importa las imagenes producidas al media
     y las anade como `imagenes` para previsualizarlas. `autor` (atribucion por usuario,
     #130 Fase 1) se propaga al historial y a cada publicacion creada en background.
+
+    `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador
+    se ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador
+    suelto como hoy (back-compat).
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -300,6 +325,7 @@ def construir_procesar_copy(
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=parsed["verdicto"], origen=historial_id, autor=autor,
+            contenido_id=contenido_id,
         )
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
@@ -590,23 +616,28 @@ def lanzar_generacion_copy(
     autor: dict[str, str] | None = None,
     fuente_id: str | None = None,
     clave: str | None = None,
+    contenido_id: str = "",
 ) -> dict[str, object]:
     """Lanza (ENCOLA) una generacion de PIEZAS (copy por red) en background. Usada por copy/RSS.
 
     `autor` (atribucion por usuario, #130 Fase 1) se propaga al registro, al historial y
     a las publicaciones que el post-procesado crea en background. `fuente_id`/`clave` (RSS):
     si vienen, ademas el post-procesado marca el item del feed como usado al completar con
-    exito (lo que antes envolvia `api/rss.generar`).
+    exito (lo que antes envolvia `api/rss.generar`). `contenido_id` (lista viva): si viene,
+    el borrador se NIDA bajo ese tema del tablero (cuelga de su tarjeta); viaja por el
+    jobspec para que el worker reconstruya el mismo post-procesado. Sin el, borrador suelto
+    como hoy (back-compat).
     """
     procesar = construir_procesar_copy(
         skill, marca, redes_ids=redes_ids, titulo_dado=titulo_dado, texto_base=texto_base,
-        autor=autor,
+        autor=autor, contenido_id=contenido_id,
     )
     if fuente_id and clave:
         procesar = _envolver_marcar_item(procesar, fuente_id, clave)
     procesar_spec = jobspec.construir_copy(
         skill=skill, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
         texto_base=texto_base, autor=autor, fuente_id=fuente_id, clave=clave,
+        contenido_id=contenido_id,
     )
     return _lanzar_con_procesar(
         tipo=tipo, skill=skill, marca=marca, prompt=prompt, procesar=procesar,

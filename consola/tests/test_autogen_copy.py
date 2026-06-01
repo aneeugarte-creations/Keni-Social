@@ -82,3 +82,26 @@ def test_nota_combina_titulo_y_descripcion():
 
 def test_nota_solo_titulo_si_no_hay_descripcion():
     assert ag._nota_de(_item(titulo="Solo título", descripcion="")) == "Solo título"
+
+
+def test_lanzar_para_topic_pasa_contenido_id_del_tema(monkeypatch):
+    """PURO (sin DB): el daemon pasa el `contenido_id` del tema para NIDAR el borrador.
+
+    Aisla `lanzar_para_topic` mockeando todo lo que toca DB/red/`claude`: solo verifica que
+    el `contenido_id` que viaja a `lanzar_generacion_copy` es el id del propio tema (lista
+    viva: el borrador cuelga del tema, no es contenido suelto).
+    """
+    capturado: dict = {}
+
+    def fake_lanzar(**kw):
+        capturado.update(kw)
+        return {"id": "gen-1"}
+
+    monkeypatch.setattr(ag.dom_skills, "lanzar_generacion_copy", fake_lanzar)
+    monkeypatch.setattr(ag.dom_skills, "construir_prompt", lambda *a, **k: "prompt")
+    monkeypatch.setattr(ag, "_redes_de", lambda item: ["x"])
+    monkeypatch.setattr(ag, "_id_etiqueta_autogen", lambda **k: "")  # sin etiqueta: best-effort
+
+    gen = ag.lanzar_para_topic(_item(id="tema-42"))
+    assert gen == {"id": "gen-1"}
+    assert capturado["contenido_id"] == "tema-42"
