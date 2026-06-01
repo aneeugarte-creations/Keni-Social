@@ -18,13 +18,13 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, skills y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/generacion", "/investigacion", "/revision", "/skills", "/agentes"],
+      rutas_frontend: ["/generacion", "/investigacion", "/revision", "/skills", "/actividad"],
       nav: [
         { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 10 },
         { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 20 },
         { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 30 },
         { ruta: "/skills", etiqueta: "Skills", icono: "Wand2", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 30 },
-        { ruta: "/agentes", etiqueta: "Agentes", icono: "Bot", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 40 },
+        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 40 },
       ],
     },
     {
@@ -179,8 +179,8 @@ describe("Sidebar · acordeón de apps", () => {
     // Las del hub Revisión también (Editorial, Verificación).
     expect(screen.getByRole("link", { name: /editorial/i })).toHaveAttribute("href", "/revision/editorial");
     expect(screen.getByRole("link", { name: /verificación/i })).toHaveAttribute("href", "/revision/verificacion");
-    // El hub Agentes aplana catálogo + Actividad IA.
-    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/agentes/actividad");
+    // Actividad IA es una hoja directa (ya no es un hub con sub-pestañas).
+    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/actividad");
     // Las OTRAS apps están cerradas: no se ven sus hojas.
     expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^métricas$/i })).not.toBeInTheDocument();
@@ -351,9 +351,8 @@ describe("apps-scope · helpers", () => {
       "/revision/editorial",
       "/revision/verificacion",
       "/skills",
-      // /agentes (hub) → catálogo + actividad
-      "/agentes",
-      "/agentes/actividad",
+      // /actividad NO es hub: queda como hoja directa.
+      "/actividad",
     ]);
   });
 
@@ -368,7 +367,7 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    expect(rutas).toEqual(["/generacion", "/investigacion", "/revision", "/skills", "/agentes"]);
+    expect(rutas).toEqual(["/generacion", "/investigacion", "/revision", "/skills", "/actividad"]);
   });
 });
 

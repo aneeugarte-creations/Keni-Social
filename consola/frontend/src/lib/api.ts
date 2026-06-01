@@ -18,16 +18,12 @@ import type {
   CuerpoCrearDocumento,
   CuerpoGuardarDocumento,
   CuerpoLanzarBiblioteca,
-  AgenteDetalle,
   AnalisisDiario,
   CompararMetricas,
   AnaliticaPiezas,
-  CuerpoConectarAgente,
-  CuerpoCrearAgente,
   EstadoMetricas,
   TendenciaDiaria,
   PiezasRendimiento,
-  CuerpoRenombrarAgente,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
   CuerpoActualizarTurnoRota,
@@ -47,7 +43,6 @@ import type {
   CuerpoPerfilesMetricool,
   CuerpoGuardarMetricool,
   CuerpoCrearFranja,
-  CuerpoCrearRun,
   CuerpoCrearFuenteRss,
   CuerpoActualizarContenido,
   CuerpoActualizarEtiqueta,
@@ -69,8 +64,6 @@ import type {
   CuerpoGuardarHistorial,
   CuerpoGuardarTermometro,
   CuerpoGrupoHashtags,
-  CuerpoGuardarClaudeMd,
-  CuerpoGuardarContexto,
   CuerpoGuardarConexionImagen,
   CuerpoGuardarModeloImagen,
   CuerpoGuardarConfig,
@@ -89,8 +82,6 @@ import type {
   RespuestaLimites,
   ReporteDeportes,
   ReporteMetricas,
-  RespuestaAgente,
-  RespuestaAgentes,
   RespuestaCatalogo,
   RespuestaPerfilesMetricool,
   RespuestaMetricool,
@@ -142,12 +133,8 @@ import type {
   RespuestaReciclarPublicacion,
   RespuestaSugerenciasReciclaje,
   FiltrosReciclaje,
-  RespuestaRun,
-  RespuestaRuns,
-  RespuestaRunsAgregados,
   RespuestaConfigTermometro,
   RespuestaTermometro,
-  RespuestaSubContextos,
   RespuestaSugerencia,
   RespuestaSugerencias,
   CadenaAprobacion,
@@ -223,7 +210,8 @@ import type {
   RespuestaPublicacionesComercial,
   RespuestaRefrescarComercial,
   RespuestaReporteComercial,
-  Run,
+  RespuestaActividad,
+  ActividadAgregados,
 } from "@/types";
 
 import { type NombreContrato, validarContrato } from "./contrato";
@@ -523,81 +511,24 @@ export const api = {
   guardarAjuste: (cuerpo: { clave: string; valor?: boolean | number | string; reset?: boolean }) =>
     peticion<RespuestaAjusteGuardado>("/ajustes", { metodo: "POST", json: cuerpo }),
 
-  // --- Agentes (carpeta con CLAUDE.md, sub-contextos y runs) ---
-  // Conjunto abierto: 5 marcas de serie (es_marca) + agentes genéricos
-  // (crear/conectar/renombrar/borrar).
-  agentes: (signal?: AbortSignal) => peticion<RespuestaAgentes>("/agentes", { signal }),
-  agente: (id: string, signal?: AbortSignal) =>
-    peticion<AgenteDetalle>(`/agentes/${encodeURIComponent(id)}`, { signal }),
-  crearAgente: (cuerpo: CuerpoCrearAgente) =>
-    peticion<RespuestaAgente>("/agentes", { metodo: "POST", json: cuerpo }),
-  conectarAgente: (cuerpo: CuerpoConectarAgente) =>
-    peticion<RespuestaAgente>("/agentes/conectar", { metodo: "POST", json: cuerpo }),
-  renombrarAgente: (id: string, cuerpo: CuerpoRenombrarAgente) =>
-    peticion<RespuestaAgente>(`/agentes/${encodeURIComponent(id)}`, {
-      metodo: "PATCH",
-      json: cuerpo,
-    }),
-  eliminarAgente: (id: string) =>
-    peticion<RespuestaMensaje>(`/agentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
-  guardarClaudeMdAgente: (id: string, cuerpo: CuerpoGuardarClaudeMd) =>
-    peticion<RespuestaMensaje>(`/agentes/${encodeURIComponent(id)}/claude-md`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  contextosAgente: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaSubContextos>(`/agentes/${encodeURIComponent(id)}/contextos`, { signal }),
-  guardarContextoAgente: (id: string, nombre: string, cuerpo: CuerpoGuardarContexto) =>
-    peticion<RespuestaMensaje>(
-      `/agentes/${encodeURIComponent(id)}/contextos/${encodeURIComponent(nombre)}`,
-      { metodo: "PUT", json: cuerpo },
-    ),
-  eliminarContextoAgente: (id: string, nombre: string) =>
-    peticion<RespuestaMensaje>(
-      `/agentes/${encodeURIComponent(id)}/contextos/${encodeURIComponent(nombre)}`,
-      { metodo: "DELETE" },
-    ),
-  crearRunAgente: (id: string, cuerpo: CuerpoCrearRun) =>
-    peticion<RespuestaRun>(`/agentes/${encodeURIComponent(id)}/runs`, {
-      metodo: "POST",
-      json: cuerpo,
-    }),
-  runsAgente: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaRuns>(`/agentes/${encodeURIComponent(id)}/runs`, {
-      signal,
-      validador: "RespuestaRuns",
-    }),
-  runAgente: (id: string, runId: string, signal?: AbortSignal): Promise<Run> =>
-    peticion<Run>(`/agentes/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}`, {
-      signal,
-      validador: "Run",
-    }),
-  // Cancela un run de agente en vuelo (#152): el backend mata el árbol del subproceso
-  // `claude` y devuelve el run en su estado terminal (error/motivo=cancelado). Idempotente;
-  // un run aún pendiente se cancela sin spawnear. Espeja `cancelarGeneracion` (#137).
-  cancelarRunAgente: (id: string, runId: string) =>
-    peticion<RespuestaRun>(
-      `/agentes/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/cancelar`,
-      { metodo: "POST" },
-    ),
-
-  // --- Monitor (actividad IA: runs de todos los agentes + agregados) ---
-  // `runs` admite paginacion offset-based (#121); sin params devuelve el conjunto
-  // completo (retrocompat) y el backend igual incluye `paginacion`.
-  runs: (params: { limite?: number; desplazamiento?: number } = {}, signal?: AbortSignal) =>
-    peticion<RespuestaRuns>(
-      `/runs${query({
+  // --- Actividad IA unificada (feed de generaciones + runs de agentes) ---
+  // Solo lectura: el backend fusiona ambas fuentes en un único feed con métricas
+  // (tokens/coste/duración) y expone sus agregados (totales + por tipo + por día).
+  actividad: (
+    params: { limite?: number; offset?: number; fuente?: string; tipo?: string } = {},
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaActividad>(
+      `/actividad${query({
         limite: params.limite != null ? String(params.limite) : undefined,
-        desplazamiento:
-          params.desplazamiento != null ? String(params.desplazamiento) : undefined,
+        offset: params.offset != null ? String(params.offset) : undefined,
+        fuente: params.fuente,
+        tipo: params.tipo,
       })}`,
-      { signal, validador: "RespuestaRuns" },
+      { signal },
     ),
-  runsAgregados: (signal?: AbortSignal) =>
-    peticion<RespuestaRunsAgregados>("/runs/agregados", {
-      signal,
-      validador: "RespuestaRunsAgregados",
-    }),
+  actividadAgregados: (signal?: AbortSignal) =>
+    peticion<ActividadAgregados>("/actividad/agregados", { signal }),
 
   // --- Generaciones (sondeo de trabajos de IA en segundo plano) ---
   // Toda generación (copy/RSS/hashtags/imagen) responde de inmediato con `{generacion}`

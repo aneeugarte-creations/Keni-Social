@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/tag-KDH4PsnF.js
 import{ab as a}from"./index-CMW2MeMF.js";/**
+|||||||| 2912805:consola/src/keni_consola/webapp/assets/tag-CRcPueQl.js
+import{ab as a}from"./index-Cx7_hiAH.js";/**
+========
+import{a9 as a}from"./index-ivjmc3Io.js";/**
+>>>>>>>> feat/actividad-front:consola/src/keni_consola/webapp/assets/tag-D8gIjlVE.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

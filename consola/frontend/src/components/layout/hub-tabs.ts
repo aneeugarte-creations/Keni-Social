@@ -1,7 +1,5 @@
 import {
-  Activity,
   BarChart3,
-  Bot,
   CalendarClock,
   FileText,
   Globe,
@@ -26,7 +24,7 @@ export interface ItemTabHub {
   /**
    * Si es `true`, el tab solo se marca activo cuando la URL coincide
    * exactamente; útil para el tab "raíz" de un hub que comparte prefijo con
-   * los demás (p.ej. `/agentes` vs `/agentes/actividad`).
+   * los demás (p.ej. `/activos` vs `/activos/plantillas`).
    */
   end?: boolean;
 }
@@ -34,7 +32,7 @@ export interface ItemTabHub {
 /**
  * Registro COMPARTIDO de las sub-pestañas de cada hub de la consola.
  *
- * Antes cada hub (Investigación, Revisión, Analíticas, Parrilla, Agentes)
+ * Antes cada hub (Investigación, Revisión, Analíticas, Parrilla, Activos)
  * declaraba sus `TABS` como `const` local. Ahora viven aquí, una sola vez, para
  * que las consuman TANTO la página del hub (que no cambia de comportamiento)
  * COMO el sidebar con scope (que las expande indentadas bajo la sección del
@@ -68,12 +66,6 @@ export const TABS_PARRILLA: ItemTabHub[] = [
   { ruta: "/parrilla/piezas", etiqueta: "Piezas", icono: ListChecks },
 ];
 
-export const TABS_AGENTES: ItemTabHub[] = [
-  // `end` para que el catálogo no quede activo cuando estás en /agentes/actividad.
-  { ruta: "/agentes", etiqueta: "Agentes", icono: Bot, end: true },
-  { ruta: "/agentes/actividad", etiqueta: "Actividad IA", icono: Activity },
-];
-
 export const TABS_ACTIVOS: ItemTabHub[] = [
   { ruta: "/activos/plantillas", etiqueta: "Plantillas", icono: FileText },
   { ruta: "/activos/biblioteca", etiqueta: "Biblioteca", icono: Images },
@@ -89,7 +81,6 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
   "/revision": TABS_REVISION,
   "/analiticas": TABS_ANALITICAS,
   "/parrilla": TABS_PARRILLA,
-  "/agentes": TABS_AGENTES,
   "/activos": TABS_ACTIVOS,
 };
 
