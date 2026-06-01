@@ -74,7 +74,7 @@ import { iconoRed, limiteRed, nombreRed } from "@/pages/publicaciones/meta";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
 import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
-import { PreviewRed } from "@/pages/publicaciones/PreviewRed";
+import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { VistaLista } from "@/pages/publicaciones/VistaLista";
@@ -1451,7 +1451,8 @@ function TarjetaContenido({
 
 /**
  * Modo "Feed": una COLUMNA por red social, cada una un feed real con la previsualización
- * (`PreviewRed`) de TODOS los contenidos que publican en esa red. Es el escaparate de
+ * (`VistaPreviaRed`, el mismo mockup fiel que la previa de cada pieza) de TODOS los
+ * contenidos que publican en esa red. Es el escaparate de
  * cómo quedará cada plataforma. Click en una previa abre el detalle de esa pieza.
  */
 function VistaFeedPorRed({
@@ -1507,12 +1508,11 @@ function VistaFeedPorRed({
                 title={`Ver detalle: ${c.titulo}`}
                 className="block w-full rounded-lg text-left transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <PreviewRed
+                <VistaPreviaRed
                   red={p.red}
-                  marcaNombre={c.marca_nombre || ""}
-                  copy={p.copy || c.descripcion || c.titulo}
-                  imagenUrl={p.imagen_url || undefined}
-                  titulo={c.titulo}
+                  marca={c.marca_nombre || ""}
+                  contenido={p.copy || c.descripcion || c.titulo}
+                  imagen_url={p.imagen_url || undefined}
                 />
               </button>
             ))}

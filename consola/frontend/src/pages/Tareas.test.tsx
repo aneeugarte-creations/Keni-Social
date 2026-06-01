@@ -275,11 +275,9 @@ describe("Tablero de contenido", () => {
     // Cambia a la vista Feed.
     fireEvent.click(screen.getByRole("button", { name: "Feed" }));
 
-    // Una preview por red: aparecen los iconos de X e Instagram (etiqueta accesible).
-    expect(await screen.findByLabelText("Instagram")).toBeInTheDocument();
-    expect(screen.getByLabelText("X")).toBeInTheDocument();
-    // Y el copy de cada red, recortado al estilo de esa plataforma.
-    expect(screen.getByText(/Hola X/)).toBeInTheDocument();
+    // Una columna por red (X e Instagram), cada una con el copy de esa red en su
+    // mockup fiel de plataforma.
+    expect(await screen.findByText(/Hola X/)).toBeInTheDocument();
     expect(screen.getByText(/Hola IG/)).toBeInTheDocument();
     // Cada preview es un botón clicable que abre el detalle de la pieza.
     expect(screen.getByText(/Hola X/).closest("button")).not.toBeNull();
