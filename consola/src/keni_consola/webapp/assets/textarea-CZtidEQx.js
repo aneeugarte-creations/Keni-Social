@@ -1,7 +1,0 @@
-<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/textarea-CZtidEQx.js
-import{ar as s,aj as o,a2 as t}from"./index-BCGR7Lso.js";const i=s.forwardRef(({className:e,...r},a)=>o.jsx("textarea",{className:t("flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",e),ref:a,...r}));i.displayName="Textarea";export{i as T};
-|||||||| 7e78b788:consola/src/keni_consola/webapp/assets/textarea-BORADh7E.js
-import{ar as s,aj as o,a2 as t}from"./index-CGqIQvjw.js";const i=s.forwardRef(({className:e,...r},a)=>o.jsx("textarea",{className:t("flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",e),ref:a,...r}));i.displayName="Textarea";export{i as T};
-========
-import{ar as s,aj as o,a2 as t}from"./index-BHahpPfI.js";const i=s.forwardRef(({className:e,...r},a)=>o.jsx("textarea",{className:t("flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",e),ref:a,...r}));i.displayName="Textarea";export{i as T};
->>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/textarea-Cm4Z7MWH.js
