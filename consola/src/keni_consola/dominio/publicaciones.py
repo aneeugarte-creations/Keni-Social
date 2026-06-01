@@ -40,6 +40,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     imagen = pub.get("imagen") or ""
     return {
         "id": pub["id"],
+        # Id del `contenido` padre: la UI lo usa para colgar los comentarios del item
+        # (que son del tema, no de la fila por red). "" en piezas legadas sin padre.
+        "contenido_id": pub.get("contenido_id") or "",
         "titulo": pub["titulo"],
         "marca": pub["marca"],
         "marca_nombre": marcas.etiqueta_de(pub["marca"]),

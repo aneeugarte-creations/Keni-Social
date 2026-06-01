@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   Eye,
+  History,
   Link2,
   Loader2,
+  MessageSquare,
   Pencil,
   Send,
   ShieldCheck,
@@ -13,6 +15,8 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { Comentarios } from "@/components/contenido/Comentarios";
+import { Versiones } from "@/components/contenido/Versiones";
 import { BarraFormato } from "@/components/editor/BarraFormato";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
@@ -77,6 +81,7 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
 
   const tras = (mensaje: string) => () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+    void queryClient.invalidateQueries({ queryKey: ["contenido"] });
     toast.success(mensaje);
   };
   const onError = (e: unknown) => toast.error(mensajeError(e));
@@ -163,6 +168,9 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
   );
 }
 
+/** Pestañas del editor: previsualización, edición, colaboración (comentarios) e historial. */
+type VistaEditor = "previa" | "editar" | "comentarios" | "versiones";
+
 /** Diálogo de edición de una publicación: título, contenido, estado y fecha. */
 export function DialogoEditar({
   publicacion,
@@ -184,7 +192,7 @@ export function DialogoEditar({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
-  const [vista, setVista] = React.useState<"editar" | "previa">("previa");
+  const [vista, setVista] = React.useState<VistaEditor>("previa");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -240,6 +248,9 @@ export function DialogoEditar({
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      // El tablero (feed/lista) lee `/api/contenido`: invalidamos su clave para que
+      // refleje el copy/estado/imagen recién guardados desde este editor unificado.
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
       toast.success("Publicación actualizada");
       onCerrar();
     },
@@ -265,7 +276,7 @@ export function DialogoEditar({
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs value={vista} onValueChange={(v) => setVista(v as "editar" | "previa")}>
+        <Tabs value={vista} onValueChange={(v) => setVista(v as VistaEditor)}>
           <TabsList>
             <TabsTrigger value="previa" className="gap-1.5">
               <Eye className="h-4 w-4" />
@@ -274,6 +285,18 @@ export function DialogoEditar({
             <TabsTrigger value="editar" className="gap-1.5">
               <Pencil className="h-4 w-4" />
               Editar
+            </TabsTrigger>
+            <TabsTrigger
+              value="comentarios"
+              className="gap-1.5"
+              disabled={!publicacion?.contenido_id}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Comentarios
+            </TabsTrigger>
+            <TabsTrigger value="versiones" className="gap-1.5" disabled={!publicacion}>
+              <History className="h-4 w-4" />
+              Versiones
             </TabsTrigger>
           </TabsList>
 
@@ -437,6 +460,20 @@ export function DialogoEditar({
                 contenido={contenido}
                 copy_in={copyIn}
                 imagen_url={imagenUrl || imagen}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="comentarios">
+            {publicacion?.contenido_id && <Comentarios contenidoId={publicacion.contenido_id} />}
+          </TabsContent>
+
+          <TabsContent value="versiones">
+            {publicacion && (
+              <Versiones
+                plataformaId={publicacion.id}
+                copyActual={publicacion.contenido}
+                redNombre={publicacion.red_nombre}
               />
             )}
           </TabsContent>

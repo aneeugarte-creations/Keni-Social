@@ -351,6 +351,7 @@ export interface MetricasRun {
  */
 export interface Publicacion {
   id: string;
+  contenido_id: string;
   titulo: string;
   marca: string;
   marca_nombre: string;

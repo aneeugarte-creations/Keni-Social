@@ -666,6 +666,10 @@ export const api = {
       signal,
       validador: "RespuestaPublicaciones",
     }),
+  /** Una publicación por id (= id de la fila `contenido_plataforma`). La usa el feed del
+   *  tablero para abrir el editor rico a partir de una tarjeta por red. */
+  publicacion: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, { signal }),
   actualizarPublicacion: (id: string, cuerpo: CuerpoActualizarPublicacion) =>
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}`, {
       metodo: "PUT",

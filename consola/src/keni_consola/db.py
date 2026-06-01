@@ -5804,7 +5804,10 @@ _SELECT_PUBLICACION = (
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado "
     "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
-    "WHERE cp.es_publicacion = 1"
+    # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una publicacion:
+    # el muro `es_publicacion` se retiro al fusionar Tablero y Publicaciones (#fusion). La
+    # columna persiste por compatibilidad pero ya no filtra; `clase` excluye las tareas.
+    "WHERE c.clase = 'contenido'"
 )
 
 
@@ -5812,6 +5815,7 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
     """Reconstruye el dict público de una publicacion desde la fila unida (plat + padre)."""
     return {
         "id": f["pid"],
+        "contenido_id": f["cid"] or "",
         "titulo": f["titulo"] or "",
         "marca": f["marca"] or "",
         "red": f["red"] or "",
@@ -5983,7 +5987,7 @@ def contar_publicaciones(
     extra, params = _filtros_publicacion(marca, red, estado, evergreen)
     sql = (
         "SELECT COUNT(*) AS n FROM contenido_plataforma cp "
-        "JOIN contenido c ON cp.contenido_id = c.id WHERE cp.es_publicacion = 1" + extra
+        "JOIN contenido c ON cp.contenido_id = c.id WHERE c.clase = 'contenido'" + extra
     )
     con = _conectar()
     try:
@@ -6067,7 +6071,7 @@ def borrar_publicacion(publicacion_id: str) -> bool:
         tema y sus demas piezas. Evita que borrar un borrador se lleve el tema entero (#nido).
     """
     plat = obtener_contenido_plataforma(publicacion_id)
-    if plat is None or not plat.get("es_publicacion"):
+    if plat is None:
         return False
     hermanas = listar_contenido_plataforma(plat["contenido_id"])
     if len(hermanas) <= 1:

@@ -466,6 +466,9 @@ class Publicacion(TypedDict):
     """
 
     id: str
+    # Id del `contenido` padre (tema). La UI lo usa para colgar los comentarios del item,
+    # que son del tema y no de la fila por red. "" en piezas legadas sin padre.
+    contenido_id: str
     titulo: str
     marca: str
     marca_nombre: str

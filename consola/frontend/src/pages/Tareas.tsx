@@ -38,7 +38,6 @@ import {
   type EntradaMenuContextual,
   MenuContextual,
 } from "@/components/comunes/MenuContextual";
-import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
@@ -1023,11 +1022,13 @@ function ChipEtiqueta({
 /**
  * Acciones de una pieza, COMPARTIDAS por todas las vistas del tablero (lista y feed):
  * un MENÚ CONTEXTUAL (click DERECHO sobre la tarjeta) con "Generar/mejorar copy con IA"
- * y "Borrar", más sus diálogos (`DialogoAsistente`/`PanelColaboracion`). Envuelve a la
+ * y "Borrar", más sus diálogos (`DialogoAsistente`/`DialogoEditar`). Envuelve a la
  * tarjeta (`children`) para que ambas vistas tengan EXACTAMENTE las mismas opciones.
  *
  * NO ofrece "abrir detalle" como opción de menú: el click IZQUIERDO en la tarjeta ya abre
- * el detalle (se expone vía `abrirDetalleRef`), así que ponerlo en el menú sería redundante.
+ * el editor rico unificado (`DialogoEditar`: previa/edición/comentarios/versiones/aprobación)
+ * de la pieza por red, expuesto vía `abrirDetalleRef(plataformaId?)`. En el feed se pasa la
+ * red concreta; en la lista (cuerpo de la tarjeta) se abre la primera plataforma.
  * Autocontenida: trae su mutación de borrado, su invalidación y sus diálogos. La acción de
  * IA solo aplica a `contenido` (las tareas del equipo no tienen copy ni aprobación).
  */
@@ -1041,23 +1042,46 @@ function AccionesPieza({
   /** Deep-link `?abrir=`: si es esta pieza, abre su panel de detalle al montar. */
   abrirDetalle?: boolean;
   /** Expone al cuerpo clicable de cada vista la acción "abrir detalle" (acción primaria). */
-  abrirDetalleRef: React.MutableRefObject<(() => void) | null>;
+  abrirDetalleRef: React.MutableRefObject<((plataformaId?: string) => void) | null>;
   /** La tarjeta sobre la que se monta el menú contextual (right-click). */
   children: React.ReactNode;
 }) {
   const queryClient = useQueryClient();
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
   const [asistenteAbierto, setAsistenteAbierto] = React.useState(false);
-  const [colaboracionAbierta, setColaboracionAbierta] = React.useState(false);
+  // Id de la fila por plataforma (= publicación) en edición; null = editor cerrado.
+  const [editandoId, setEditandoId] = React.useState<string | null>(null);
   const esContenido = contenido.clase === "contenido";
+
+  // Abre el editor rico (DialogoEditar) de una pieza por RED. Sin red explícita (deep-link
+  // o click en el cuerpo de una tarjeta de lista) abre la primera plataforma del contenido.
+  const abrirEditor = React.useCallback(
+    (plataformaId?: string) => {
+      const id = plataformaId ?? contenido.plataformas[0]?.id;
+      if (id) setEditandoId(id);
+    },
+    [contenido.plataformas],
+  );
 
   // Deep-link `?abrir=<id>` (desde el Panel): abre el detalle de la pieza apuntada.
   React.useEffect(() => {
-    if (abrirDetalle && esContenido) setColaboracionAbierta(true);
-  }, [abrirDetalle, esContenido]);
+    if (abrirDetalle && esContenido) abrirEditor();
+  }, [abrirDetalle, esContenido, abrirEditor]);
 
   // Expone "abrir detalle" al cuerpo clicable de la tarjeta (lo engancha cada vista).
-  abrirDetalleRef.current = esContenido ? () => setColaboracionAbierta(true) : null;
+  abrirDetalleRef.current = esContenido ? abrirEditor : null;
+
+  // Catálogo de estados + la publicación a editar: se cargan SOLO al abrir el editor.
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+    enabled: editandoId !== null,
+  });
+  const publicacionQuery = useQuery({
+    queryKey: ["publicacion", editandoId],
+    queryFn: ({ signal }) => api.publicacion(editandoId as string, signal),
+    enabled: editandoId !== null,
+  });
 
   const borrar = useMutation({
     mutationFn: () => api.eliminarContenido(contenido.id),
@@ -1132,11 +1156,11 @@ function AccionesPieza({
           onAplicado={invalidar}
         />
       )}
-      {colaboracionAbierta && (
-        <PanelColaboracion
-          contenido={contenido}
-          abierto
-          onCerrar={() => setColaboracionAbierta(false)}
+      {editandoId !== null && (
+        <DialogoEditar
+          publicacion={publicacionQuery.data?.publicacion ?? null}
+          estados={opcionesQuery.data?.estados ?? []}
+          onCerrar={() => setEditandoId(null)}
         />
       )}
     </>
@@ -1165,7 +1189,7 @@ function TarjetaContenido({
   const invalidar = () => void queryClient.invalidateQueries({ queryKey: CLAVE });
   // Acción primaria del cuerpo de la tarjeta: abrir el detalle. La capacidad la expone
   // `AccionesPieza` (dueña del estado del panel) a través de esta ref.
-  const abrirDetalleRef = React.useRef<(() => void) | null>(null);
+  const abrirDetalleRef = React.useRef<((plataformaId?: string) => void) | null>(null);
 
   const reasignar = useMutation({
     mutationFn: (responsable_id: string) =>
@@ -1521,13 +1545,13 @@ function TarjetaFeed({
   contenido: Contenido;
   plataforma: ContenidoPlataforma;
 }) {
-  const abrirDetalleRef = React.useRef<(() => void) | null>(null);
+  const abrirDetalleRef = React.useRef<((plataformaId?: string) => void) | null>(null);
   return (
     <AccionesPieza contenido={contenido} abrirDetalleRef={abrirDetalleRef}>
       <button
         type="button"
-        onClick={() => abrirDetalleRef.current?.()}
-        title={`Ver detalle: ${contenido.titulo} · Clic derecho para más acciones`}
+        onClick={() => abrirDetalleRef.current?.(plataforma.id)}
+        title={`Editar ${plataforma.red_nombre}: ${contenido.titulo} · Clic derecho para más acciones`}
         className="block w-full rounded-lg text-left transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <VistaPreviaRed
