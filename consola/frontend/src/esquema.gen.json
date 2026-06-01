@@ -1191,12 +1191,7 @@
           ]
         },
         "veredicto": {
-          "enum": [
-            "listo",
-            "revisar",
-            "no_publicar",
-            ""
-          ]
+          "type": "string"
         },
         "autor_id": {
           "type": "string"

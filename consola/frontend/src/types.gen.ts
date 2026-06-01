@@ -358,7 +358,7 @@ export interface Publicacion {
   red_nombre: string;
   contenido: string;
   estado: "borrador" | "en_revision" | "aprobado" | "programado" | "publicado";
-  veredicto: "listo" | "revisar" | "no_publicar" | "";
+  veredicto: string;
   autor_id: string;
   autor_nombre: string;
   enviado_a_revision_en: string;

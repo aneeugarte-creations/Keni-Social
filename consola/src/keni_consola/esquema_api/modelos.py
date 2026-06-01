@@ -441,8 +441,13 @@ class MetricasRun(TypedDict):
 # El flujo de aprobacion de equipo (#9, Fase 3) intercala `en_revision` entre el
 # borrador y el aprobado.
 EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado", "publicado"]
-# Veredicto editorial de una pieza. "" = sin veredicto.
-Veredicto = Literal["listo", "revisar", "no_publicar", ""]
+# Veredicto editorial de una pieza: TEXTO LIBRE. El auto-verificador (skills de copy)
+# escribe veredictos legibles y matizados ("ok — confirmar marcador con el equipo",
+# "marcar claramente como rumor", "pendiente resultado real del partido"), no un enum
+# cerrado. La UI deriva la insignia (Listo/Revisar/No publicar) de un prefijo normalizado
+# (`meta.metaVeredicto`). "" = sin veredicto. Era un `Literal` cerrado y eso rompía el
+# contrato `RespuestaPublicaciones` en cada pieza con veredicto real (drift del calendario).
+Veredicto = str
 
 
 class Publicacion(TypedDict):

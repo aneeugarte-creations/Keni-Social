@@ -171,9 +171,31 @@ export const META_VEREDICTOS: Record<Exclude<Veredicto, "">, MetaVeredicto> = {
   no_publicar: { nombre: "No publicar", variante: "error" },
 };
 
-export function metaVeredicto(veredicto: Veredicto): MetaVeredicto | null {
+/**
+ * Insignia de un veredicto editorial. El veredicto de una PUBLICACIÓN es TEXTO LIBRE
+ * (lo escribe el auto-verificador: "ok — confirmar marcador…", "marcar como rumor",
+ * "pendiente resultado real…"); el enum cerrado solo cubría tres valores. Derivamos la
+ * variante de un PREFIJO normalizado y conservamos el texto íntegro como `nombre`:
+ *   - "no publicar" / "no_publicar"        → error
+ *   - "marcar" / "revisar" / "pendiente"   → aviso
+ *   - "ok" / "listo"                        → ok
+ *   - resto (no vacío)                      → aviso (señala que hay que leerlo)
+ * Devuelve `null` solo si el veredicto está vacío.
+ */
+export function metaVeredicto(veredicto: string): MetaVeredicto | null {
   if (!veredicto) return null;
-  return META_VEREDICTOS[veredicto] ?? null;
+  const canon = META_VEREDICTOS[veredicto as Exclude<Veredicto, "">];
+  if (canon) return canon;
+  const t = veredicto
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  let variante: MetaVeredicto["variante"] = "aviso";
+  if (t.startsWith("no publicar") || t.startsWith("no_publicar")) variante = "error";
+  else if (t.startsWith("ok") || t.startsWith("listo")) variante = "ok";
+  // El nombre conserva el texto íntegro del veredicto (la UI lo recorta/tooltipea).
+  return { nombre: veredicto, variante };
 }
 
 /** Formatea una fecha ISO en es-MX (corto, con hora); tolera valores inválidos. */
