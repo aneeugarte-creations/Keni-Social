@@ -103,14 +103,12 @@ __all__ = [
     "PRIORIDADES_EVENTO",
     "TIPOS_COBERTURA",
     "TIPOS_AUSENCIA",
-    "actualizar_estado_tarea",
     "actualizar_franja_semana",
     "actualizar_evento_rota",
     "actualizar_pieza_rota",
     "actualizar_programa_rota",
     "actualizar_publicacion_comercial",
     "actualizar_ausencia_rota",
-    "actualizar_tarea",
     "actualizar_turno_rota",
     "actualizar_turnos_rota_lote",
     "aprobar_semana_rota",
@@ -123,7 +121,6 @@ __all__ = [
     "borrar_programa_rota",
     "borrar_publicacion_comercial",
     "borrar_swap_turno",
-    "borrar_tarea",
     "borrar_turno_rota",
     "borrar_turnos_rota_lote",
     "borrar_turnos_semana_rota",
@@ -138,7 +135,6 @@ __all__ = [
     "crear_programa_rota",
     "crear_publicacion_comercial",
     "crear_swap_turno",
-    "crear_tarea",
     "crear_turno_rota",
     "crear_turnos_rota_lote",
     "duplicar_evento_rota",
@@ -156,7 +152,6 @@ __all__ = [
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
     "listar_swaps_turno",
-    "listar_tareas",
     "listar_turnos_rota",
     "marcar_aviso_comercial",
     "obtener_ausencia_rota",
@@ -166,7 +161,6 @@ __all__ = [
     "obtener_programa_rota",
     "obtener_publicacion_comercial",
     "obtener_swap_turno",
-    "obtener_tarea",
     "obtener_turno_rota",
     "reclamar_job",
     "registrar_snapshot_comercial",
@@ -244,22 +238,6 @@ def arrancar_persistencia() -> None:
 # todos validos en Postgres 16. Los ids son TEXT generados por la app (uuid), no
 # autoincrementales: no hay `AUTOINCREMENT`/`SERIAL`.
 _DDL_ESQUEMA: tuple[str, ...] = (
-    """
-    CREATE TABLE IF NOT EXISTS tareas (
-        id                  TEXT PRIMARY KEY,
-        proyecto            TEXT NOT NULL,
-        titulo              TEXT NOT NULL,
-        detalle             TEXT NOT NULL DEFAULT '',
-        estado              TEXT NOT NULL DEFAULT 'pendiente',
-        fecha               TEXT NOT NULL DEFAULT '',
-        autor_id            TEXT NOT NULL DEFAULT '',
-        autor_nombre        TEXT NOT NULL DEFAULT '',
-        responsable_id      TEXT NOT NULL DEFAULT '',
-        responsable_nombre  TEXT NOT NULL DEFAULT '',
-        enlace              TEXT NOT NULL DEFAULT '',
-        evento_id           TEXT NOT NULL DEFAULT ''
-    )
-    """,
     """
     CREATE TABLE IF NOT EXISTS comercial_publicaciones (
         id                   TEXT PRIMARY KEY,
@@ -897,7 +875,6 @@ def _crear_esquema(con: Any) -> None:
     _migrar_modelo_franjas(con)
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
-    _migrar_columnas_tareas(con)
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_contenido(con)
@@ -1348,41 +1325,6 @@ def _migrar_modelo_franjas(con: Any) -> None:
     con.commit()
 
 
-# Columnas que se anadieron a `tareas` despues de su esquema original. Una BD creada
-# antes de cada ampliacion no las tiene; `ALTER TABLE ... ADD COLUMN DEFAULT ''` es
-# retrocompatible (las filas viejas quedan con el campo vacio, sin reescribir nada).
-#   - autor_id/autor_nombre: atribucion por usuario (#130 Fase 1).
-#   - responsable_id/responsable_nombre/enlace: tablero compartido del equipo (#145, F5).
-#   - evento_id: referencia opcional a un evento de la rota (pendientes unificados). Si
-#     la tarea cubre un evento de la rota lleva su id; si es una tarea libre, "".
-_COLUMNAS_TAREAS_AMPLIADAS: tuple[str, ...] = (
-    "autor_id",
-    "autor_nombre",
-    "responsable_id",
-    "responsable_nombre",
-    "enlace",
-    "evento_id",
-)
-
-
-def _migrar_columnas_tareas(con: Any) -> None:
-    """Anade a `tareas` las columnas ampliadas que una BD vieja no tuviera (idempotente).
-
-    El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
-    antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y las anade
-    con `ADD COLUMN IF NOT EXISTS ... DEFAULT ''`: las tareas existentes quedan con el campo
-    vacio (autor / responsable "desconocido", sin enlace) y no se pierde ni reescribe nada.
-
-    Usa `IF NOT EXISTS` (idempotencia a nivel de Postgres) en vez de un pre-check
-    `_columnas_existentes` + ALTER: ese par NO es atomico y, bajo carga (CI con xdist), una
-    lectura de catalogo desfasada hacia que se reintentara anadir una columna ya existente
-    -> `DuplicateColumn`. El Postgres hosted persiste entre despliegues, asi que tambien
-    puede ir atrasado (ver `_crear_esquema`).
-    """
-    for columna in _COLUMNAS_TAREAS_AMPLIADAS:
-        con.execute(f"ALTER TABLE tareas ADD COLUMN IF NOT EXISTS {columna} TEXT NOT NULL DEFAULT ''")
-
-
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
 # Una BD creada antes no las tiene; `ALTER TABLE ... ADD COLUMN ... DEFAULT ...` es
 # retrocompatible (las filas viejas quedan con el valor por defecto, sin reescribir nada):
@@ -1493,7 +1435,7 @@ def _migrar_columnas_swaps(con: Any) -> None:
     Hoy es no-op (tupla vacia): la tabla nace completa. Cuando se amplie, basta con
     declarar la columna en el `CREATE TABLE` (para bases NUEVAS) y anadir `(col, tipo)` a
     `_COLUMNAS_SWAP_AMPLIADAS` (para que las bases ANTIGUAS la reciban via ALTER). Mismo
-    patron que `_migrar_columnas_tareas` / `_migrar_columnas_eventos_rota`.
+    patron que `_migrar_columnas_eventos_rota`.
     """
     if not _COLUMNAS_SWAP_AMPLIADAS:
         return
@@ -1554,216 +1496,6 @@ def _migrar_columnas_usuarios(con: Any) -> None:
     for columna, tipo in _COLUMNAS_USUARIOS_AMPLIADAS:
         if columna not in columnas:
             con.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {columna} {tipo}")
-
-
-# --------------------------------------------------------------------------- #
-# Tareas                                                                       #
-# --------------------------------------------------------------------------- #
-
-
-# Columnas de `tareas` en el SELECT (atribucion por usuario #130; responsable/enlace #145;
-# evento_id = referencia opcional a un evento de la rota para pendientes unificados).
-_SELECT_TAREA = (
-    "SELECT id, proyecto, titulo, detalle, estado, fecha, autor_id, autor_nombre, "
-    "responsable_id, responsable_nombre, enlace, evento_id FROM tareas"
-)
-
-
-def _fila_a_tarea(fila: Any) -> dict[str, Any]:
-    """Convierte una fila de `tareas` en un dict simple.
-
-    `autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) y
-    `responsable_id`/`responsable_nombre`/`enlace` (tablero compartido, #145 F5) salen ""
-    en tareas legadas / anonimas / sin asignar; la UI las muestra como "desconocido" / "sin
-    asignar". `evento_id` sale "" en tareas libres (no atadas a un evento de la rota).
-    """
-    return {
-        "id": fila["id"],
-        "proyecto": fila["proyecto"],
-        "titulo": fila["titulo"],
-        "detalle": fila["detalle"],
-        "estado": fila["estado"],
-        "fecha": fila["fecha"],
-        "autor_id": fila["autor_id"] or "",
-        "autor_nombre": fila["autor_nombre"] or "",
-        "responsable_id": fila["responsable_id"] or "",
-        "responsable_nombre": fila["responsable_nombre"] or "",
-        "enlace": fila["enlace"] or "",
-        "evento_id": fila["evento_id"] or "",
-    }
-
-
-def listar_tareas(
-    proyecto_id: str | None = None,
-    evento_id: str | None = None,
-) -> list[dict[str, Any]]:
-    """Tareas del tablero compartido, mas recientes primero (por fecha y luego id).
-
-    Con `proyecto_id` filtra a un solo proyecto/marca (acotado por proyecto, #145 F5); con
-    `evento_id` filtra a las tareas atadas a un evento concreto de la rota (pendientes
-    unificados). Sin filtros, devuelve el tablero completo del equipo. Los dos filtros son
-    combinables (AND).
-    """
-    clausulas: list[str] = []
-    params: list[Any] = []
-    if proyecto_id:
-        clausulas.append("proyecto = ?")
-        params.append(proyecto_id)
-    if evento_id:
-        clausulas.append("evento_id = ?")
-        params.append(evento_id)
-    sql = _SELECT_TAREA
-    if clausulas:
-        sql += " WHERE " + " AND ".join(clausulas)
-    sql += " ORDER BY fecha DESC, id DESC"
-    con = _conectar()
-    try:
-        filas = con.execute(sql, tuple(params)).fetchall()
-    finally:
-        con.close()
-    return [_fila_a_tarea(f) for f in filas]
-
-
-def crear_tarea(
-    proyecto_id: str,
-    titulo: str,
-    detalle: str = "",
-    *,
-    autor: dict[str, str] | None = None,
-    responsable: dict[str, str] | None = None,
-    enlace: str = "",
-    evento_id: str = "",
-) -> dict[str, Any]:
-    """Inserta una tarea nueva y la devuelve. NO valida el proyecto (lo hace la API).
-
-    `autor` (atribucion por usuario, #130 Fase 1) es `{"id", "usuario"}` o `None`
-    (creacion anonima / por token de mantenimiento); se persiste vacio en ese caso.
-
-    `responsable` (tablero compartido, #145 F5) es `{"id", "usuario"}` o `None` (sin
-    asignar). `enlace` es una ruta/URL opcional para actuar sobre la tarea.
-
-    `evento_id` (pendientes unificados): id de un evento de la rota cuya cobertura
-    representa esta tarea, o "" si es una tarea libre. La API valida que el evento exista.
-    `proyecto_id` puede ser "" (pendiente sin proyecto: tarea libre que el equipo cubre).
-    """
-    autor = autor or {}
-    responsable = responsable or {}
-    tarea = {
-        "id": uuid.uuid4().hex[:12],
-        "proyecto": proyecto_id,
-        "titulo": titulo,
-        "detalle": detalle,
-        "estado": "pendiente",
-        "fecha": date.today().isoformat(),
-        "autor_id": autor.get("id", "") or "",
-        "autor_nombre": autor.get("usuario", "") or "",
-        "responsable_id": responsable.get("id", "") or "",
-        "responsable_nombre": responsable.get("usuario", "") or "",
-        "enlace": enlace or "",
-        "evento_id": evento_id or "",
-    }
-    con = _conectar()
-    try:
-        con.execute(
-            "INSERT INTO tareas (id, proyecto, titulo, detalle, estado, fecha, "
-            "autor_id, autor_nombre, responsable_id, responsable_nombre, enlace, evento_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                tarea["id"],
-                tarea["proyecto"],
-                tarea["titulo"],
-                tarea["detalle"],
-                tarea["estado"],
-                tarea["fecha"],
-                tarea["autor_id"],
-                tarea["autor_nombre"],
-                tarea["responsable_id"],
-                tarea["responsable_nombre"],
-                tarea["enlace"],
-                tarea["evento_id"],
-            ),
-        )
-        con.commit()
-    finally:
-        con.close()
-    return tarea
-
-
-def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
-    """Una tarea por id (None si no existe)."""
-    con = _conectar()
-    try:
-        fila = con.execute(
-            f"{_SELECT_TAREA} WHERE id = ?",
-            (tarea_id,),
-        ).fetchone()
-    finally:
-        con.close()
-    return _fila_a_tarea(fila) if fila is not None else None
-
-
-# Campos de `tareas` editables via `actualizar_tarea` (tablero compartido, #145 F5).
-# El `responsable` se actualiza como par id+nombre desde la API; aqui se mapean a sus dos
-# columnas. `evento_id` (pendientes unificados) tambien es editable: una tarea puede
-# atarse / desatarse a posteriori. La validacion (estado valido, responsable real, evento
-# existente) es de la capa API.
-_CAMPOS_EDITABLES_TAREA: tuple[str, ...] = (
-    "estado",
-    "responsable_id",
-    "responsable_nombre",
-    "enlace",
-    "evento_id",
-)
-
-
-def actualizar_tarea(tarea_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    """Actualiza campos de una tarea (estado/responsable/enlace) y la devuelve.
-
-    `campos` se filtra a `_CAMPOS_EDITABLES_TAREA` (defensa en profundidad: nunca se
-    escriben columnas arbitrarias). Devuelve la tarea actualizada, o None si no existe o no
-    hay nada que actualizar tras el filtro. La validacion de valores la hace la capa API.
-    """
-    editables = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_TAREA}
-    if not editables:
-        return obtener_tarea(tarea_id)
-    asignaciones = ", ".join(f"{col} = ?" for col in editables)
-    valores = [*editables.values(), tarea_id]
-    con = _conectar()
-    try:
-        cur = con.execute(
-            f"UPDATE tareas SET {asignaciones} WHERE id = ?",  # noqa: S608 -- columnas de allowlist
-            valores,
-        )
-        con.commit()
-        if cur.rowcount == 0:
-            return None
-        fila = con.execute(
-            f"{_SELECT_TAREA} WHERE id = ?",
-            (tarea_id,),
-        ).fetchone()
-    finally:
-        con.close()
-    return _fila_a_tarea(fila) if fila is not None else None
-
-
-def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None:
-    """Cambia el estado de una tarea; devuelve la tarea actualizada (None si no existe).
-
-    Atajo historico sobre `actualizar_tarea` (se conserva para no romper a quien solo cambia
-    el estado).
-    """
-    return actualizar_tarea(tarea_id, {"estado": estado})
-
-
-def borrar_tarea(tarea_id: str) -> bool:
-    """Borra una tarea; True si existia, False si no."""
-    con = _conectar()
-    try:
-        cur = con.execute("DELETE FROM tareas WHERE id = ?", (tarea_id,))
-        con.commit()
-        return cur.rowcount > 0
-    finally:
-        con.close()
 
 
 # --------------------------------------------------------------------------- #

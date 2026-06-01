@@ -21,39 +21,7 @@ from keni_consola import auth, db, motor_db
 
 def test_esquema_se_crea_on_demand(pg):
     # La primera operacion crea el esquema en Postgres y devuelve vacio.
-    assert db.listar_tareas() == []
-
-
-# --------------------------------------------------------------------------- #
-# Tareas: CRUD (paridad con test_db.py sobre Postgres)                        #
-# --------------------------------------------------------------------------- #
-
-
-def test_crear_listar_obtener_tarea(pg):
-    t = db.crear_tarea("proj1", "Una tarea", "detalle")
-    assert t["id"] and t["estado"] == "pendiente"
-    assert db.obtener_tarea(t["id"])["titulo"] == "Una tarea"
-    assert len(db.listar_tareas()) == 1
-    assert len(db.listar_tareas("proj1")) == 1
-    assert db.listar_tareas("otro") == []
-
-
-def test_actualizar_y_borrar_tarea(pg):
-    t = db.crear_tarea("p", "Cambia")
-    assert db.actualizar_estado_tarea(t["id"], "hecha")["estado"] == "hecha"
-    assert db.actualizar_tarea(
-        t["id"], {"responsable_id": "u1", "responsable_nombre": "ana", "enlace": "/x"}
-    )["responsable_nombre"] == "ana"
-    assert db.borrar_tarea(t["id"]) is True
-    assert db.borrar_tarea(t["id"]) is False
-    assert db.obtener_tarea(t["id"]) is None
-
-
-def test_sql_parametrizado_no_inyectable(pg):
-    malicioso = "'; DROP TABLE tareas; --"
-    t = db.crear_tarea("p", malicioso)
-    assert db.obtener_tarea(t["id"])["titulo"] == malicioso
-    assert len(db.listar_tareas()) == 1
+    assert db.listar_swaps_turno() == []
 
 
 # --------------------------------------------------------------------------- #
@@ -124,33 +92,6 @@ def test_rota_eventos_y_turnos(pg):
     # Borrado individual del turno.
     assert db.borrar_turno_rota(turno["id"]) is True
     assert db.listar_turnos_rota("2026-W09") == []
-
-
-def test_migracion_columnas_tareas_postgres_bd_vieja(pg):
-    """Un Postgres con `tareas` sin las columnas de atribucion/tablero (#130/#145) se
-    ALTERa idempotente al crear el esquema. Reproduce el escenario real del hosted: la
-    tabla PERSISTE entre despliegues; `CREATE TABLE IF NOT EXISTS` NO anade columnas.
-    """
-    con = motor_db.conectar_cruda()
-    con.execute("DROP TABLE IF EXISTS tareas")
-    con.execute(
-        "CREATE TABLE tareas (id TEXT PRIMARY KEY, proyecto TEXT NOT NULL, titulo TEXT NOT NULL, "
-        "detalle TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'pendiente', "
-        "fecha TEXT NOT NULL DEFAULT '')"
-    )
-    con.execute("INSERT INTO tareas (id, proyecto, titulo) VALUES ('vieja', 'p', 'Tarea vieja')")
-    con.commit()
-    con.close()
-
-    # La primera operacion via la capa de datos dispara la migracion idempotente.
-    t = db.obtener_tarea("vieja")
-    assert t is not None
-    assert t["autor_id"] == "" and t["autor_nombre"] == ""
-    assert t["responsable_id"] == "" and t["responsable_nombre"] == ""
-    assert t["enlace"] == ""
-    # Y las columnas quedan disponibles para nuevas filas con responsable y enlace.
-    nueva = db.crear_tarea("p", "Nueva", responsable={"id": "u1", "usuario": "ana"})
-    assert nueva["responsable_nombre"] == "ana"
 
 
 def test_migracion_columnas_eventos_rota_postgres_bd_vieja(pg):

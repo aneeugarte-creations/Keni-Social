@@ -38,9 +38,8 @@ def test_reexporta_todas_las_funciones_publicas_de_db():
 
 def test_reexporta_funciones_de_contenido_de_ficheros():
     # Las funciones de CONTENIDO (CRUD por entidad) de ficheros estan en la fachada.
-    # Se excluyen: las de tareas (ficheros delega en db; repos las toma de db) y las
-    # utilidades de filesystem/indice que NO forman parte del contrato de la fachada.
-    de_tareas = {"listar_tareas", "crear_tarea", "obtener_tarea", "actualizar_estado_tarea", "borrar_tarea"}
+    # Se excluyen las utilidades de filesystem/indice que NO forman parte del contrato
+    # de la fachada.
     utilidades = {"raiz_datos", "carpeta_marca", "reconstruir_indice"}
     # Plantillas de copy plano: el concepto se FUSIONÓ en el catálogo unificado
     # `plantilla_contenido` (Postgres). Las funciones planas de YAML siguen en `ficheros`
@@ -49,7 +48,7 @@ def test_reexporta_funciones_de_contenido_de_ficheros():
         "listar_plantillas", "contar_plantillas", "obtener_plantilla",
         "crear_plantilla", "actualizar_plantilla", "borrar_plantilla",
     }
-    funcs_ficheros = _funciones_publicas(ficheros) - de_tareas - utilidades - plano_legado
+    funcs_ficheros = _funciones_publicas(ficheros) - utilidades - plano_legado
     funcs_repos = _funciones_publicas(repos)
     faltan = funcs_ficheros - funcs_repos
     assert not faltan, f"repos no reexporta de ficheros: {sorted(faltan)}"
@@ -99,15 +98,6 @@ def test_publicaciones_persisten_en_postgres_no_en_yaml(entorno, monkeypatch):
 # --------------------------------------------------------------------------- #
 # Enrutado por efecto: contenido->ficheros, operacional->db                    #
 # --------------------------------------------------------------------------- #
-
-
-def test_delega_en_db_tareas(entorno):
-    # Las tareas viven en Postgres: escribir por repos -> leer por db (mismo Postgres).
-    tarea = repos.crear_tarea("proy", "Mi tarea", "detalle")
-    leida = db.obtener_tarea(tarea["id"])
-    assert leida is not None
-    assert leida["titulo"] == "Mi tarea"
-    assert any(t["id"] == tarea["id"] for t in repos.listar_tareas())
 
 
 def test_delega_en_db_comercial(entorno):

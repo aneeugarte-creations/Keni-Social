@@ -9,7 +9,7 @@ enruta cada entidad a su almacen de forma FIJA (no hay conmutador ni env var):
     publicaciones, plantillas, fuentes RSS + items vistos + salud, grupos de
     hashtags, franjas e historial de skills.
   - OPERACIONAL (no editorial, no encaja en un fichero por entidad) -> Postgres
-    (`db.py`, via `motor_db`; ADR 0004): `tareas`, `comercial` (piezas + serie temporal
+    (`db.py`, via `motor_db`; ADR 0004): `comercial` (piezas + serie temporal
     de snapshots), `rota`, `usuarios`/`sesiones` (via `auth/`) y la cola de `jobs`.
 
 Las firmas publicas son ESTABLES: ningun `api/*.py` cambia aunque cambie el almacen.
@@ -19,7 +19,7 @@ Uso en las features:
     from .. import repos
 
     repos.crear_publicacion(marca="unotv", red="x", titulo="Hola")  # -> YAML
-    repos.crear_tarea("proy", "Revisar copy")                       # -> Postgres
+    repos.crear_publicacion_comercial(url="https://…", titulo="Promo")  # -> Postgres
 """
 
 from __future__ import annotations
@@ -70,55 +70,6 @@ def arrancar_persistencia() -> None:
 def raiz_datos() -> Path:
     """Raiz de datos de ficheros (delega en `ficheros.raiz_datos`; CONTENIDO editorial vive ahi)."""
     return ficheros.raiz_datos()
-
-
-# --------------------------------------------------------------------------- #
-# Tareas (OPERACIONAL: Postgres via db.py)                                       #
-# --------------------------------------------------------------------------- #
-
-
-def listar_tareas(
-    proyecto_id: str | None = None,
-    evento_id: str | None = None,
-) -> list[dict[str, Any]]:
-    return db.listar_tareas(proyecto_id, evento_id)
-
-
-def crear_tarea(
-    proyecto_id: str,
-    titulo: str,
-    detalle: str = "",
-    *,
-    autor: dict[str, str] | None = None,
-    responsable: dict[str, str] | None = None,
-    enlace: str = "",
-    evento_id: str = "",
-) -> dict[str, Any]:
-    return db.crear_tarea(
-        proyecto_id,
-        titulo,
-        detalle,
-        autor=autor,
-        responsable=responsable,
-        enlace=enlace,
-        evento_id=evento_id,
-    )
-
-
-def obtener_tarea(tarea_id: str) -> dict[str, Any] | None:
-    return db.obtener_tarea(tarea_id)
-
-
-def actualizar_tarea(tarea_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
-    return db.actualizar_tarea(tarea_id, campos)
-
-
-def actualizar_estado_tarea(tarea_id: str, estado: str) -> dict[str, Any] | None:
-    return db.actualizar_estado_tarea(tarea_id, estado)
-
-
-def borrar_tarea(tarea_id: str) -> bool:
-    return db.borrar_tarea(tarea_id)
 
 
 # --------------------------------------------------------------------------- #

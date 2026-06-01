@@ -1,9 +1,9 @@
 """Migración de datos legados al tablero de CONTENIDO unificado.
 
-Lleva las TAREAS (`tareas`) y las PIEZAS de la rota (`rota_piezas`) al modelo nuevo
-`contenido` (+ `contenido_plataforma`), para que el tablero del community manager muestre
+Lleva las PIEZAS de la rota (`rota_piezas`) al modelo nuevo `contenido`
+(+ `contenido_plataforma`), para que el tablero del community manager muestre
 lo que el equipo ya tenía. NO destruye los orígenes (las tablas legadas quedan intactas);
-es IDEMPOTENTE: cada item migrado marca su `origen` (`tarea:<id>` / `pieza:<id>`) y un
+es IDEMPOTENTE: cada item migrado marca su `origen` (`pieza:<id>`) y un
 segundo paso no lo duplica.
 
 Las PUBLICACIONES (hoy en YAML) NO se migran aquí: se incorporan al fusionar su
@@ -96,36 +96,6 @@ def _origenes_existentes(prefijo: str) -> set[str]:
         for c in repos.listar_contenido()
         if c.get("origen", "").startswith(f"{prefijo}:")
     }
-
-
-def migrar_tareas() -> int:
-    """Migra `tareas` -> `contenido` (clase='tarea'). Devuelve cuántas creó."""
-    ya = _origenes_existentes("tarea")
-    creadas = 0
-    for t in repos.listar_tareas():
-        if t["id"] in ya:
-            continue
-        repos.crear_contenido(
-            clase="tarea",
-            titulo=t.get("titulo", ""),
-            descripcion=t.get("detalle", ""),
-            estado=t.get("estado", "pendiente"),
-            evento_id=t.get("evento_id", "") or "",
-            fecha_objetivo=t.get("fecha", "") or "",
-            responsable=(
-                {"id": t["responsable_id"], "usuario": t.get("responsable_nombre", "")}
-                if t.get("responsable_id")
-                else None
-            ),
-            autor=(
-                {"id": t["autor_id"], "usuario": t.get("autor_nombre", "")}
-                if t.get("autor_id")
-                else None
-            ),
-            origen=f"tarea:{t['id']}",
-        )
-        creadas += 1
-    return creadas
 
 
 def migrar_piezas() -> int:
@@ -241,7 +211,6 @@ def migrar_plantillas_plano() -> int:
 def migrar() -> dict[str, int]:
     """Ejecuta toda la migración (idempotente). Devuelve recuentos por origen."""
     resultado = {
-        "tareas": migrar_tareas(),
         "piezas": migrar_piezas(),
         "publicaciones": migrar_publicaciones(),
         "plantillas_plano": migrar_plantillas_plano(),

@@ -31,7 +31,7 @@ def test_asegurar_esquema_crea_y_es_idempotente(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", url)
     # Primera vez: crea el esquema.
     assert migracion.asegurar_esquema() is True
-    assert db.listar_tareas() == []
+    assert db.listar_swaps_turno() == []
     # Segunda vez: idempotente, no rompe (`CREATE TABLE IF NOT EXISTS` + ALTERs guardados).
     assert migracion.asegurar_esquema() is True
     limpiar_postgres(url)
@@ -127,7 +127,7 @@ def test_arrancar_persistencia_crea_esquema_y_es_idempotente(monkeypatch):
     db.arrancar_persistencia()
     db.arrancar_persistencia()  # idempotente: segundo arranque tampoco rompe
     # La aplicacion puede usar las tablas tras el arranque.
-    assert db.listar_tareas() == []
+    assert db.listar_swaps_turno() == []
     limpiar_postgres(url)
 
 

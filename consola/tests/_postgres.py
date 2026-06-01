@@ -35,7 +35,6 @@ _TABLAS = (
     "usuarios_marcas",
     "sesiones",
     "usuarios",
-    "tareas",
     "comercial_snapshots",
     "comercial_publicaciones",
     "rota_turnos",

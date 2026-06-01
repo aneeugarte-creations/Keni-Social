@@ -1,6 +1,6 @@
 """Tests de la migración de datos legados al tablero de contenido (`migrar_contenido`).
 
-Cubren el mapeo de tareas y piezas, el parseo del texto libre de redes, y la idempotencia
+Cubren el mapeo de piezas, el parseo del texto libre de redes, y la idempotencia
 (re-ejecutar no duplica). Reusa la fixture `entorno` (Postgres de pruebas o skip).
 """
 
@@ -13,18 +13,6 @@ def test_parsear_redes_mapea_y_separa_formatos():
     redes, sobrantes = migrar_contenido._parsear_redes("FB, IG, X (REEL)")
     assert redes == ["facebook", "instagram", "x"]
     assert "REEL" in sobrantes
-
-
-def test_migra_tarea_a_contenido_clase_tarea(entorno):
-    t = db.crear_tarea("", "Revisar relevo", "con detalle", responsable=None)
-    db.actualizar_estado_tarea(t["id"], "en_curso")
-    assert migrar_contenido.migrar_tareas() == 1
-    items = db.listar_contenido(clase="tarea")
-    assert len(items) == 1
-    assert items[0]["titulo"] == "Revisar relevo"
-    assert items[0]["descripcion"] == "con detalle"
-    assert items[0]["estado"] == "en_curso"
-    assert items[0]["origen"] == f"tarea:{t['id']}"
 
 
 def test_migra_pieza_con_redes_y_checklist(entorno):
@@ -81,10 +69,9 @@ def test_migra_plantilla_plano_yaml_a_catalogo_unificado(entorno):
 
 
 def test_migracion_es_idempotente(entorno):
-    db.crear_tarea("", "Una tarea")
     db.crear_pieza_rota(programa="P", red_social="IG")
     primera = migrar_contenido.migrar()
-    assert primera == {"tareas": 1, "piezas": 1, "publicaciones": 0, "plantillas_plano": 0}
+    assert primera == {"piezas": 1, "publicaciones": 0, "plantillas_plano": 0}
     segunda = migrar_contenido.migrar()
-    assert segunda == {"tareas": 0, "piezas": 0, "publicaciones": 0, "plantillas_plano": 0}
-    assert len(db.listar_contenido()) == 2
+    assert segunda == {"piezas": 0, "publicaciones": 0, "plantillas_plano": 0}
+    assert len(db.listar_contenido()) == 1

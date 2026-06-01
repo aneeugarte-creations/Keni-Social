@@ -19,7 +19,7 @@ from __future__ import annotations
 from starlette.testclient import TestClient
 
 from keni_consola import app as app_modulo
-from keni_consola import auth, db, repos
+from keni_consola import auth, repos
 
 from .conftest import TOKEN_PRUEBA, lanzador_generacion_completa
 
@@ -121,47 +121,6 @@ def test_duplicar_atribuye_al_usuario_que_duplica(entorno):
     copia = c.post(f"/api/publicaciones/{original['id']}/duplicar", json={}, headers=_ORIGIN)
     assert copia.status_code == 200
     assert copia.json()["publicacion"]["autor_nombre"] == "ana"
-
-
-# --------------------------------------------------------------------------- #
-# Tareas / pendientes                                                         #
-# --------------------------------------------------------------------------- #
-
-
-def test_tarea_legada_sin_columnas_de_autor_se_migra_y_lee(entorno):
-    """Una BD vieja sin columnas de autor se ALTERa (idempotente) y la tarea se lee vacia.
-
-    Recrea el escenario real (Postgres hosted PERSISTE entre despliegues): una fila de
-    `tareas` que existia ANTES de la atribucion no tiene `autor_id`/`autor_nombre`. Tras la
-    migracion on-demand, debe leerse con autor "" (desconocido) sin romper, y la columna
-    queda disponible para nuevas filas.
-    """
-    # 1) Tabla `tareas` con el esquema VIEJO (sin las columnas de atribucion) sobre Postgres.
-    from keni_consola import motor_db
-
-    con = motor_db.conectar_cruda()
-    con.execute("DROP TABLE IF EXISTS tareas")
-    con.execute(
-        "CREATE TABLE tareas (id TEXT PRIMARY KEY, proyecto TEXT NOT NULL, titulo TEXT NOT NULL, "
-        "detalle TEXT NOT NULL DEFAULT '', estado TEXT NOT NULL DEFAULT 'pendiente', "
-        "fecha TEXT NOT NULL DEFAULT '')"
-    )
-    con.execute(
-        "INSERT INTO tareas (id, proyecto, titulo) VALUES ('vieja', 'proy', 'Tarea vieja')"
-    )
-    con.commit()
-    con.close()
-
-    # 2) Cualquier operacion via la capa de datos dispara la migracion idempotente.
-    tarea = db.obtener_tarea("vieja")
-    assert tarea is not None
-    assert tarea["titulo"] == "Tarea vieja"
-    assert tarea["autor_id"] == ""
-    assert tarea["autor_nombre"] == ""
-    # 3) La columna existe ahora: una tarea nueva con autor persiste el autor.
-    nueva = db.crear_tarea("proy", "Nueva", autor={"id": "u1", "usuario": "ana"})
-    assert nueva["autor_nombre"] == "ana"
-    assert db.obtener_tarea(nueva["id"])["autor_nombre"] == "ana"
 
 
 # --------------------------------------------------------------------------- #
