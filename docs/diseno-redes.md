@@ -1,7 +1,9 @@
 # Diseño de redes — AMX Contenido (UnoTV / ClaroSports)
 ### Skills de dirección de arte por marca · Keni AI · keni-social
 
-- **Fecha:** 2026-05-24 · **Estado:** en uso (beta) dentro del piloto AMX.
+> **[SUPERSEDED — histórico]** Este documento describe la dirección de arte por marca implementada como **skills** (`diseno-unotv`, `diseno-clarosports`) dentro del sistema de skills, que ya **se retiró**. La superficie vigente de imagen es el **Estudio** ([`diseno-estudio-imagen.md`](diseno-estudio-imagen.md)): el estilo y las reglas por marca son editables por el equipo desde la Biblioteca (dirección de arte por marca) y el motor vive en `consola/src/keni_consola/motores/estudio_imagen/`. Se conserva como registro del razonamiento de diseño; las referencias a skills y a `skills-copy/` de abajo son históricas.
+
+- **Fecha:** 2026-05-24 · **Estado:** ~~en uso (beta)~~ histórico (superseded por el Estudio / `diseno-estudio-imagen.md`).
 - **Para:** que cualquiera del equipo (UnoTV o Claro Sports) convierta su material bruto en una pieza **lista y en marca** con la menor fricción posible.
 - **Alcance de este doc:** es la **sub-decisión de "dirección de arte por marca"** dentro de la arquitectura de imagen. La decisión de imagen completa (enrutador determinista vs. generativo, 2 motores + revisor, motor por API) vive en [`estudio-imagen.md`](estudio-imagen.md), que es el doc canónico de imagen. Aquí solo se cubre **cómo un Skill por marca dirige y verifica** una pieza visual.
 - **Hermano de:** el sistema de copy (`skills-copy/` + contexto editorial; doc-origen en `docs/origen-automatizacion-redes.md`). Mismo patrón: **un activo de contexto + un Skill que lo consume.** Allí el activo es el *contexto editorial*; aquí es el *sistema de diseño*.

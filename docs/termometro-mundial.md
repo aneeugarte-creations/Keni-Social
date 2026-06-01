@@ -9,26 +9,28 @@ entrega el **copy del posteo** ya tropicalizado a México, listo para revisar y 
 
 Tres piezas, una sola idea:
 
-1. **La skill** `termometro-mundial` — el cerebro: jerarquiza y arma la galería + copy.
+1. **El prompt** `termometro-mundial` (en la **Biblioteca**) — el cerebro: jerarquiza y arma la galería + copy.
 2. **La página de la Consola** — para armarlo a mano cuando quieras.
 3. **El cron `keni-termometro`** — para que a las 7:00 ya esté hecho, sin abrir nada.
 
-Como el resto de skills de copy, **el humano aprueba**: la salida es un borrador
+Como el resto de prompts de copy, **el humano aprueba**: la salida es un borrador
 verificado (abre con el veredicto ✅/⚠️/❌), nunca una publicación automática.
 
-## La skill `termometro-mundial`
+## El prompt `termometro-mundial`
 
-Vive en `skills-copy/.claude/skills/termometro-mundial/` (`SKILL.md` + `keni.yaml`).
+Es un documento de la **Biblioteca de Prompts** (`prompt/termometro-mundial`; semilla en
+`consola/src/keni_consola/biblioteca_semilla/prompt/termometro-mundial.md`), lanzado con el
+lanzador neutro (`claude -p`).
 Salida tipo **documento** (una galería + caption, no una variante por red). Entradas:
 
-- **Noticias del día** (`noticias`): la materia prima. La skill **no inventa nada** fuera
+- **Noticias del día** (`noticias`): la materia prima. El prompt **no inventa nada** fuera
   de aquí; solo jerarquiza y reparte lo que se le pasa.
 - **Número de slides** (`numero`): entre 5 y 8 (def. 8).
 - **Regiones** (`regiones`): CSV; vacío = reparto por defecto priorizando la diversidad.
 - **Fecha** (`fecha`): para la portada; vacío = hoy.
 
-Carga el contexto editorial (`reglas-legales`, `plataformas`, `tropicalizacion`, la ficha
-de marca) para angular el tono, tropicalizar y marcar riesgos por slide.
+Se le adjunta la **línea editorial** de la Biblioteca (reglas legales, plataformas,
+tropicalización, la ficha de marca) para angular el tono, tropicalizar y marcar riesgos por slide.
 
 ## En la Consola
 
@@ -43,10 +45,10 @@ de marca) para angular el tono, tropicalizar y marcar riesgos por slide.
 
 ### Endpoints
 
-- `GET  /api/termometro` — config guardada + si la skill está instalada + marcas + regiones.
+- `GET  /api/termometro` — config guardada + si el prompt base está disponible en la Biblioteca + marcas + regiones.
 - `PUT  /api/termometro/config` — guarda `{numero, regiones, hora, marca}`.
 - `POST /api/termometro/generar` — lanza la generación (`{marca, noticias, numero?, regiones?,
-  fecha?}`) reutilizando el motor de Skills; responde con `{generacion}` y se sondea en
+  fecha?}`) reutilizando el lanzador neutro (`dominio/generar`); responde con `{generacion}` y se sondea en
   `GET /api/generaciones/{id}`.
 
 ## Generación programada (cron 07:00)
@@ -56,7 +58,7 @@ hace lo mismo **sin servidor** y de forma síncrona, pensado para `cron`/`launch
 
 1. Lee la config guardada (marca, número, regiones) — la misma que la web.
 2. Reúne las noticias del día de los **feeds RSS activos** (el "rastreo") o de un archivo.
-3. Corre la skill y deja el resultado en el **historial** (Consola → Generar copy → Historial),
+3. Lanza el prompt y deja el resultado en el **historial** (Consola → Generar copy → Historial),
    donde el community lo encuentra al llegar. No publica nada: es un borrador.
 
 ```bash
@@ -124,6 +126,6 @@ noticias).
 ## Privacidad y criterio editorial
 
 - Todo es **local**: la config vive en tu máquina; la generación corre con tu Claude Code.
-- La skill **no inventa**: solo jerarquiza y reparte las notas que se le dan.
+- El prompt **no inventa**: solo jerarquiza y reparte las notas que se le dan.
 - La salida es un **borrador verificado** (veredicto + auto-verificación). El humano revisa
   y publica.

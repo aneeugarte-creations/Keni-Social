@@ -62,7 +62,7 @@ Entramos por el dolor que es **universal entre todos los CM** y que la herramien
 resuelve:
 
 1. **Copy + tropicalización es-MX.** El material llega con giros de España; hoy el CM lo rehace a
-   mano. La skill lo tropicaliza en la voz de la marca, listo para revisar, no para reescribir.
+   mano. El sistema lo tropicaliza en la voz de la marca, listo para revisar, no para reescribir.
 2. **Video/audio → copy.** De una entrevista o declaración: copy por plataforma **más las mejores
    citas con marca de tiempo** (punto de corte exacto para el clip). El audio se transcribe en
    local y nunca sale de la máquina. Esto elimina el "escúchate la hora de podcast a ver qué sirve".
@@ -102,14 +102,14 @@ diseño, que se acumulan con cada cliente y son propios e intransferibles.
 | Agencia (Hootsuite ~$99/asiento, Sprout $199–399, Vista Social hasta $304) | $100–300/mes | Donde vive el comprador serio. |
 | Enterprise / por asiento | $300–400+/asiento | Techo. |
 | Jasper (IA copy, sin fact-check) | $39–59/asiento | Competidor directo en copy IA, **sin** verificación ni es-MX. |
-| **Insumo: asiento Claude for Teams** | **≈ $30/asiento/mes** | Coste base que pasamos. El cliente lo necesita para correr las skills. |
+| **Insumo: asiento Claude for Teams** | **≈ $30/asiento/mes** | Coste base que pasamos. El cliente lo necesita para correr la generación de copy. |
 
 ### Estructura de coste (supuesto clave)
 
 `keni-social` corre **dentro de Claude Code** del cliente. Eso significa que el cliente necesita
 asientos de **Claude for Teams (≈ $30/asiento/mes)** como insumo. El cobro de Keni va **encima** de
-ese coste, como margen por el producto editorial (corpus es-MX + verificación + skills + soporte +
-el MCP).
+ese coste, como margen por el producto editorial (corpus es-MX + verificación + Biblioteca de
+prompts + soporte + el MCP).
 
 > **Supuesto a confirmar:** quién paga los asientos de Claude. Dos caminos:
 > (a) el cliente contrata Claude for Teams directo y Keni cobra solo su capa; o
@@ -121,7 +121,7 @@ el MCP).
 
 Dos componentes:
 
-- **Por puesto (CM):** cubre acceso a las skills de copy (texto + video→copy), tropicalización,
+- **Por puesto (CM):** cubre acceso a la generación de copy (texto + video→copy), tropicalización,
   voz personal, verificación y preview. Es el valor diario del operador.
 - **Add-on de equipo/marca:** cubre el MCP de métricas consolidado (reporte multi-marca, picos,
   cobertura) y, en su fase, el despliegue alojado. Es el valor para Mariana/Bernardo y escala con
@@ -133,8 +133,8 @@ Dos componentes:
 |---|---|---|---|
 | **Por puesto CM** | **$45/puesto/mes** | + ~$30 (Claude for Teams) | **≈ $75/puesto/mes** |
 
-- Incluye: las skills de copy (desde texto y desde video/audio), tropicalización es-MX, voz por
-  marca + voz personal, verificación, `clip-a-copy` (video→copy local), preview en dry-run.
+- Incluye: la generación de copy (desde texto y desde video/audio), tropicalización es-MX, voz por
+  marca + voz personal, verificación, Clip a copy (video→copy local), preview en dry-run.
 - No incluye: MCP de métricas alojado ni publicación (esta última no existe aún).
 - **Lectura de ancla:** la capa Keni ($45) se sitúa cerca de Jasper ($39–59) pero entregando lo que
   Jasper no tiene (es-MX real + fact-check + local). El total al cliente (~$75) queda **por debajo

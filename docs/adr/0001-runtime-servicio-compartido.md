@@ -15,6 +15,14 @@
 > El objetivo es que quien lea el ADR (persona o agente) no resucite preguntas ya resueltas. La traza
 > histórica fina vive en git, no en el cuerpo del ADR.
 
+> **[Nota de estado]** La **decisión de runtime sigue vigente** (servicio compartido multiusuario +
+> generación con `claude -p` en sandbox por usuario, no la API/SDK de Claude). Lo que cambió desde
+> entonces: el **sistema de skills** (`SKILL.md`, `dominio/skills.py`, resolución de skills) se
+> **retiró** y se reemplazó por la **Biblioteca de prompts** (`biblioteca.py`) + lanzador neutro
+> (`dominio/generar.py`) y el **Estudio** de imagen. Donde abajo se lea "plugin/skills" / "`SKILL.md`"
+> como mecanismo de generación, léase hoy "prompts autocontenidos de la Biblioteca, lanzados con
+> `claude -p`". El razonamiento del runtime no cambia.
+
 ---
 
 ## Contexto
