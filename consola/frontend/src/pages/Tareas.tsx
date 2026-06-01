@@ -13,7 +13,6 @@ import {
   Heart,
   Image as ImageIcon,
   Loader2,
-  LayoutGrid,
   ListTodo,
   MessageSquare,
   MoreVertical,
@@ -71,7 +70,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
-import { limiteRed } from "@/pages/publicaciones/meta";
+import { iconoRed, limiteRed, nombreRed } from "@/pages/publicaciones/meta";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
 import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
@@ -134,7 +133,7 @@ const CLAVE_VISTA = "keni.tablero.vista";
 const CLAVE_MODO = "keni.tablero.modo";
 
 /** Densidad de la sección del tablero: lista / cuadrícula / feed. */
-type Vista = "lista" | "grid" | "feed";
+type Vista = "lista" | "feed";
 
 /**
  * MODO del tablero (superficie única de contenido, #fase2):
@@ -262,8 +261,8 @@ export default function Tablero() {
     }
     if (usuario) sinPreferenciaInicial.current = false;
   }, [usuario, workspace]);
-  const [vista, setVista] = React.useState<Vista>(
-    () => leerLS(CLAVE_VISTA, "lista") as Vista,
+  const [vista, setVista] = React.useState<Vista>(() =>
+    leerLS(CLAVE_VISTA, "lista") === "feed" ? "feed" : "lista",
   );
   const [modo, setModo] = React.useState<Modo>(() => {
     const desdeUrl = new URLSearchParams(location.search).get("modo");
@@ -355,28 +354,19 @@ export default function Tablero() {
 
   const tareas = visibles.filter((c) => c.clase === "tarea");
 
-  const renderItem = (c: Contenido) =>
-    vista === "feed" ? (
-      <TarjetaFeed key={c.id} contenido={c} />
-    ) : (
-      <TarjetaContenido
-        key={c.id}
-        contenido={c}
-        catalogos={catalogos!}
-        etiquetaPorId={etiquetaPorId}
-        etiquetasWorkspace={etiquetasWorkspace}
-        compacta={vista === "grid"}
-        metricas={metricas}
-        abrirDetalle={c.id === abrirId}
-      />
-    );
+  const renderItem = (c: Contenido) => (
+    <TarjetaContenido
+      key={c.id}
+      contenido={c}
+      catalogos={catalogos!}
+      etiquetaPorId={etiquetaPorId}
+      etiquetasWorkspace={etiquetasWorkspace}
+      metricas={metricas}
+      abrirDetalle={c.id === abrirId}
+    />
+  );
 
-  const contenedorClase =
-    vista === "lista"
-      ? "space-y-3"
-      : vista === "feed"
-        ? "space-y-4"
-        : "grid gap-3 sm:grid-cols-2 xl:grid-cols-3";
+  const contenedorClase = "space-y-3";
 
   return (
     <>
@@ -603,6 +593,8 @@ function ModoTablero({
           titulo="Nada que mostrar"
           texto="Ningún contenido coincide con el workspace o los filtros activos."
         />
+      ) : vista === "feed" ? (
+        <VistaFeedPorRed contenidos={visibles} catalogos={catalogos!} />
       ) : (
         <div className="mt-4 space-y-8">
           {SECCIONES.map((s) => {
@@ -929,7 +921,7 @@ function BarraControles({
         </Select>
       </div>
 
-      {/* Vista del tablero: lista / grid / feed-preview. */}
+      {/* Vista del tablero: lista / feed por red. */}
       <div
         className="ml-auto inline-flex items-center rounded-lg bg-muted p-0.5"
         role="group"
@@ -938,7 +930,6 @@ function BarraControles({
         {(
           [
             { v: "lista", icono: Rows3, etiqueta: "Lista" },
-            { v: "grid", icono: LayoutGrid, etiqueta: "Cuadrícula" },
             { v: "feed", icono: Smartphone, etiqueta: "Feed" },
           ] as const
         ).map(({ v, icono: Icono, etiqueta }) => (
@@ -1452,91 +1443,79 @@ function TarjetaContenido({
 }
 
 /**
- * Modo "Feed": un BLOQUE por pieza con (a) su barra de acciones COMPARTIDA (la misma
- * que lista/cuadrícula: prioridad, IA, Detalle, borrar — sin perder funcionalidad al
- * cambiar de vista) y (b) una vista previa POR RED, una `PreviewRed` por plataforma con
- * la relación de aspecto y el tope de caracteres de cada red. Las tareas del equipo
- * (sin copy ni redes) muestran solo su barra de acciones, sin previa social.
+ * Modo "Feed": una COLUMNA por red social, cada una un feed real con la previsualización
+ * (`PreviewRed`) de TODOS los contenidos que publican en esa red. Es el escaparate de
+ * cómo quedará cada plataforma. Click en una previa abre el detalle de esa pieza.
  */
-function TarjetaFeed({ contenido }: { contenido: Contenido }) {
-  const plats = contenido.plataformas;
-  const marca = contenido.marca_nombre || "";
-  const esContenido = contenido.clase === "contenido";
-  const abrirDetalleRef = React.useRef<(() => void) | null>(null);
+function VistaFeedPorRed({
+  contenidos,
+  catalogos,
+}: {
+  contenidos: Contenido[];
+  catalogos: CatalogosContenido;
+}) {
+  const [detalle, setDetalle] = React.useState<Contenido | null>(null);
+  const piezas = contenidos.filter((c) => c.clase === "contenido");
 
-  // Click en cualquier parte de la tarjeta abre el detalle (salvo controles internos).
-  function alClickCard(e: React.MouseEvent) {
-    if (!esContenido) return;
-    const objetivo = e.target as HTMLElement;
-    if (
-      objetivo.closest(
-        "button, a, input, select, textarea, label, [role='button'], [role='menuitem'], [data-no-primaria]",
-      )
-    )
-      return;
-    abrirDetalleRef.current?.();
+  // Una columna por red presente, en el orden canónico del catálogo.
+  const columnas = catalogos.redes
+    .map((red) => ({
+      red,
+      items: piezas.flatMap((c) =>
+        c.plataformas.filter((p) => p.red === red.id).map((p) => ({ c, p })),
+      ),
+    }))
+    .filter((col) => col.items.length > 0);
+
+  if (columnas.length === 0) {
+    return (
+      <div className="mt-4">
+        <EstadoVacio
+          icono={Smartphone}
+          titulo="Sin previsualizaciones"
+          texto="Los contenidos visibles aún no tienen plataformas asignadas."
+        />
+      </div>
+    );
   }
 
   return (
-    <section
-      className={cn(
-        "space-y-3 rounded-lg border border-border/60 p-3",
-        esContenido &&
-          "cursor-pointer transition-colors hover:border-foreground/25 hover:bg-accent/20",
+    <div className="mt-4 flex gap-4 overflow-x-auto pb-4">
+      {columnas.map(({ red, items }) => {
+        const Icono = iconoRed(red.id);
+        return (
+          <section key={red.id} className="w-80 shrink-0 space-y-3">
+            <header className="sticky top-0 z-10 flex items-center gap-2 rounded-md border border-border bg-background/95 px-3 py-2 backdrop-blur">
+              <Icono className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{nombreRed(red.id)}</span>
+              <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                {items.length}
+              </span>
+            </header>
+            {items.map(({ c, p }) => (
+              <button
+                key={`${c.id}-${p.id}`}
+                type="button"
+                onClick={() => setDetalle(c)}
+                title={`Ver detalle: ${c.titulo}`}
+                className="block w-full rounded-lg text-left transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <PreviewRed
+                  red={p.red}
+                  marcaNombre={c.marca_nombre || ""}
+                  copy={p.copy || c.descripcion || c.titulo}
+                  imagenUrl={p.imagen_url || undefined}
+                  titulo={c.titulo}
+                />
+              </button>
+            ))}
+          </section>
+        );
+      })}
+      {detalle && (
+        <PanelColaboracion contenido={detalle} abierto onCerrar={() => setDetalle(null)} />
       )}
-      onClick={esContenido ? alClickCard : undefined}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div
-          className="min-w-0"
-          role={esContenido ? "button" : undefined}
-          tabIndex={esContenido ? 0 : undefined}
-          onKeyDown={
-            esContenido
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    abrirDetalleRef.current?.();
-                  }
-                }
-              : undefined
-          }
-          title={esContenido ? "Ver detalle: comentarios, versiones de copy y aprobación" : undefined}
-        >
-          <p className="truncate font-medium leading-snug">{contenido.titulo}</p>
-          <p className="truncate text-xs text-muted-foreground">{marca || "Sin marca"}</p>
-        </div>
-        <BarraAccionesPieza contenido={contenido} abrirDetalleRef={abrirDetalleRef} />
-      </div>
-
-      {!esContenido ? (
-        <p className="text-xs italic text-muted-foreground/70">
-          Tarea del equipo (sin vista previa de red).
-        </p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {plats.length === 0 ? (
-            <PreviewRed
-              red=""
-              marcaNombre={marca}
-              copy={contenido.descripcion || contenido.titulo}
-              titulo={contenido.titulo}
-            />
-          ) : (
-            plats.map((p) => (
-              <PreviewRed
-                key={p.id}
-                red={p.red}
-                marcaNombre={marca}
-                copy={p.copy || contenido.descripcion || contenido.titulo}
-                imagenUrl={p.imagen_url || undefined}
-                titulo={contenido.titulo}
-              />
-            ))
-          )}
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
 

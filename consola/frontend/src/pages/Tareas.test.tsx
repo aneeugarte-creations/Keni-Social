@@ -278,18 +278,11 @@ describe("Tablero de contenido", () => {
     // Una preview por red: aparecen los iconos de X e Instagram (etiqueta accesible).
     expect(await screen.findByLabelText("Instagram")).toBeInTheDocument();
     expect(screen.getByLabelText("X")).toBeInTheDocument();
-    // Y el copy de cada red.
+    // Y el copy de cada red, recortado al estilo de esa plataforma.
     expect(screen.getByText(/Hola X/)).toBeInTheDocument();
     expect(screen.getByText(/Hola IG/)).toBeInTheDocument();
-    // PARIDAD: el feed NO pierde funcionalidad. La prioridad sigue visible; IA, Detalle y
-    // Borrar se consolidan en el menú de acciones (kebab) para reducir botones en pantalla.
-    expect(screen.getByLabelText("Prioridad")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Más acciones" }));
-    expect(
-      await screen.findByRole("menuitem", { name: /mejorar copy con IA/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Detalle/i })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: /Borrar contenido/i })).toBeInTheDocument();
+    // Cada preview es un botón clicable que abre el detalle de la pieza.
+    expect(screen.getByText(/Hola X/).closest("button")).not.toBeNull();
   });
 
   it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {
