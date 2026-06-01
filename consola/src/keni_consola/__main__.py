@@ -200,6 +200,15 @@ def main() -> int:
 
     iniciar_autogen_arte()
 
+    # GC de MEDIA HUERFANA (Estudio §5): un hilo demonio que, si `KENI_MEDIA_GC` esta activo
+    # (def OFF), barre cada N horas el almacen de media y borra los objetos HUERFANOS (no
+    # referenciados por ninguna publicacion) y mas viejos que el umbral. SAFE BY DEFAULT: sin
+    # el flag no borra nada. Vive aqui (servidor real), NO en `crear_app`, para no arrancarlo
+    # en los tests.
+    from .media_gc_daemon import iniciar_media_gc
+
+    iniciar_media_gc()
+
     uvicorn.run(app, host=HOST, port=puerto, log_level="warning")
     return 0
 

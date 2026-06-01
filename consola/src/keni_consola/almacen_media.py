@@ -181,6 +181,58 @@ def leer_objeto(nombre: str) -> bytes | None:
         return None
 
 
+def listar_objetos() -> list[tuple[str, float]]:
+    """Lista los objetos del backend activo como `(nombre, mtime_epoch)` (neutral disco/S3).
+
+    `mtime_epoch` es la antiguedad del objeto en segundos epoch (UTC): en disco el mtime del
+    fichero; en S3/Garage el `LastModified` de la key. Lo usa el GC de huerfanos para borrar
+    SOLO los objetos viejos (no las variantes recien generadas que el usuario aun revisa).
+
+    - DISCO: recorre `dir_media()` y devuelve los FICHEROS (no subdirectorios) con su mtime.
+      Si el directorio no existe aun, devuelve lista vacia.
+    - S3/Garage: pagina `list_objects_v2` sobre el bucket y devuelve `Key` + `LastModified`
+      (convertido a epoch). El nombre es la key plana (asi la subimos: uuid+ext).
+
+    Best-effort por backend: un fallo de listado se propaga (lo gestiona el llamante), pero
+    nunca devuelve nombres parciales mezclados con errores silenciosos.
+    """
+    if s3_activo():
+        cliente = _s3()
+        bucket = config.s3_bucket()
+        objetos: list[tuple[str, float]] = []
+        token: str | None = None
+        while True:
+            kwargs: dict[str, object] = {"Bucket": bucket}
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = cliente.list_objects_v2(**kwargs)
+            for item in resp.get("Contents", []) or []:
+                clave = item.get("Key")
+                if not clave:
+                    continue
+                modificado = item.get("LastModified")
+                mtime = modificado.timestamp() if modificado is not None else 0.0
+                objetos.append((clave, mtime))
+            if not resp.get("IsTruncated"):
+                break
+            token = resp.get("NextContinuationToken")
+            if not token:
+                break
+        return objetos
+    base = dir_media()
+    if not base.is_dir():
+        return []
+    salida: list[tuple[str, float]] = []
+    for entrada in base.iterdir():
+        if not entrada.is_file():
+            continue
+        try:
+            salida.append((entrada.name, entrada.stat().st_mtime))
+        except OSError:
+            continue
+    return salida
+
+
 def borrar_objeto(nombre: str) -> None:
     """Borra el objeto `nombre` del backend activo (idempotente; usado al limpiar restos)."""
     if s3_activo():
