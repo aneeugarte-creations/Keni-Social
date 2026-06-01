@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { LienzoEditable } from "@/components/editor/LienzoEditable";
 import { api, ApiError, urlMedia } from "@/lib/api";
 import {
   type CapaTexto,
@@ -91,8 +92,10 @@ export function EditorPlantillaSpec({ marca }: { marca: string }) {
   const [spec, setSpec] = React.useState<PlantillaSpec | null>(null);
   const [formato, setFormato] = React.useState<FormatoId>("feed");
   const [previewUrl, setPreviewUrl] = React.useState("");
+  const [seleccion, setSeleccion] = React.useState("");
   const logoInputRef = React.useRef<HTMLInputElement>(null);
   const fondoInputRef = React.useRef<HTMLInputElement>(null);
+  const debounceRef = React.useRef<number | undefined>(undefined);
 
   const specQuery = useQuery({
     queryKey: ["plantilla-spec", marca],
@@ -114,11 +117,16 @@ export function EditorPlantillaSpec({ marca }: { marca: string }) {
     onSuccess: (d) => setPreviewUrl(urlMedia(d.url)),
     onError: (e) => toast.error(msg(e)),
   });
-  // Refresca la vista al cargar y al cambiar de formato.
+  // Refresca la "vista real" del servidor con DEBOUNCE: al cargar, al cambiar de formato y tras
+  // cada edición (mover/redimensionar capas o tocar propiedades). El render es barato y
+  // determinista; 600 ms evitan un render por cada píxel arrastrado.
   React.useEffect(() => {
-    if (spec) preview.mutate();
+    if (!spec) return;
+    window.clearTimeout(debounceRef.current);
+    debounceRef.current = window.setTimeout(() => preview.mutate(), 600);
+    return () => window.clearTimeout(debounceRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec !== null, formato]);
+  }, [spec, formato]);
 
   const guardar = useMutation({
     mutationFn: () => {
@@ -205,20 +213,23 @@ export function EditorPlantillaSpec({ marca }: { marca: string }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,260px)_1fr]">
-        {/* Vista real (servidor) */}
+        {/* Lienzo editable: arrastra/redimensiona las capas sobre la vista real del servidor. */}
         <div className="space-y-1.5">
-          <Label className="text-xs text-muted-foreground">Vista real (servidor)</Label>
-          <div className="overflow-hidden rounded-md border border-border bg-muted/30">
-            {previewUrl ? (
-              <img src={previewUrl} alt="Vista de la plantilla" className="w-full" />
-            ) : (
-              <div className="flex aspect-[4/5] items-center justify-center text-xs text-muted-foreground">
-                Pulsa «Vista real»
-              </div>
-            )}
-          </div>
+          <Label className="text-xs text-muted-foreground">
+            Lienzo {preview.isPending && <span className="text-sky-500">· actualizando…</span>}
+          </Label>
+          <LienzoEditable
+            fmt={fmt}
+            previewUrl={previewUrl}
+            seleccion={seleccion}
+            onSeleccion={setSeleccion}
+            onFoto={(x, y, w, h) => mutarFmt((f) => { f.foto_slot = { ...f.foto_slot, x, y, w, h }; })}
+            onLogo={(x, y, w, h) => mutarFmt((f) => { f.logo = { ...f.logo, x, y, w, h }; })}
+            onTexto={(i, x, y, w) => mutarTexto(i, (t) => { t.x = x; t.y = y; t.w = w; })}
+          />
           <p className="text-[11px] text-muted-foreground">
-            Render del servidor: idéntico a la placa final. La foto va vacía (placeholder).
+            Arrastra las cajas para mover; la esquina para redimensionar. El render es del
+            servidor (idéntico a la placa final); la foto va vacía (placeholder).
           </p>
         </div>
 
