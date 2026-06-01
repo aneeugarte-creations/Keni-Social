@@ -113,7 +113,7 @@ deja documentado el orden de construcción como rationale de diseño:
 
 - **Proveedor único: OpenRouter** (gateway compatible con OpenAI). Una sola clave y un solo endpoint (`/api/v1/chat/completions`) para CUALQUIER modelo de imagen/vídeo — se elige por id sin tocar código (Gemini Flash Image, Seedream, FLUX… y vídeo: Sora/Veo/Kling/Seedance). Así evitamos mantener varios SDKs/proveedores. `generar.py` (ilustración) y `expandir.py` (outpaint de fondo) van por aquí.
 - **Credenciales (estándar keni-social):** API key en **variable de entorno / gestor de credenciales**, **nunca** en el código ni en archivos versionados. Mismo principio que `mcp-metricas` (la llave vive en la máquina, no en la IA).
-- **Modo sin key (degradado):** si no hay key, el adaptador **no falla**: explica cómo configurarla y, como alternativa de cero coste, ofrece la vía **"director de arte"** (Claude da el prompt en marca y el usuario genera en su herramienta) — el patrón que ya existe en `skills-copy/.claude/skills/diseno-unotv` y `diseno-clarosports`.
+- **Modo sin key (degradado):** si no hay key, el adaptador **no falla**: explica cómo configurarla y, como alternativa de cero coste, ofrece la vía **"director de arte"** (Claude da el prompt en marca y el usuario genera en su herramienta) — usando el sistema de diseño por marca (tokens y guía de marca de UnoTV / Claro Sports).
 - **Coste:** la generación por API tiene **coste por imagen**; conviene reservarla a lo que de verdad la necesita (ilustraciones/fondos, outpaint de fondo no uniforme) y medir el volumen.
 
 ---

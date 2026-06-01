@@ -14,40 +14,20 @@ En los ejemplos de abajo la marca va escrita tal cual hay que teclearla (p. ej. 
 
 ## 1. Copy desde una nota (~1 min)
 
-Tienes una nota, un cable o un texto y quieres el copy para cada red.
+Tienes una nota, un cable o un texto y quieres el copy para cada red. El camino más directo es la **Consola** (`python -m keni_consola`, página **Generar copy**): eliges un **prompt** de la **Biblioteca**, la **marca** y pegas la nota.
 
-**Escríbele a Claude:**
-
-```
-usa copy-desde-nota con skills-copy/ejemplos/cable-1.md y skills-copy/ejemplos/cable-2.md, marca claro-sports
-```
-
-(Cambia los archivos por los tuyos y la `marca` por la que toque. Si tienes tu voz personal cargada, añade `voz tu-nombre`.)
+La Biblioteca es un almacén de **documentos markdown** editables: los **prompts** (lo que se lanza sobre tu contenido) y la **línea editorial** por marca (voz, plataformas, tropicalización, reglas legales), que se adjunta automáticamente al lanzar. Puedes ver y editar cualquiera desde la página **Biblioteca**.
 
 **Qué esperar:**
 - Arriba del todo, un **veredicto**: `✅ LISTO PARA APROBAR`, `⚠️ REVISAR ANTES DE PUBLICAR` o `❌ NO PUBLICAR`.
 - Una **versión por plataforma** (X, Instagram, Facebook, TikTok, YouTube), cada una con su conteo de caracteres y tropicalizada a México.
-- Al final, el **detalle de la auto-verificación** (fechas, nombres, cifras, reglas legales). Los dos cables de ejemplo se contradicen a propósito, así que verás un `⚠️`: el sistema **no inventa** la cifra, te dice que la confirmes.
+- El **detalle de la auto-verificación** (fechas, nombres, cifras, reglas legales). Si la nota tiene datos sin confirmar, verás un `⚠️`: el sistema **no inventa**, te dice que lo confirmes.
 
 ---
 
 ## 2. Copy desde un clip de video (~2 min)
 
-Partes de un video o audio y quieres el copy y la cita exacta para cortar el clip, sin escuchar todo. **El audio se transcribe dentro de tu máquina; no se sube a ningún lado.**
-
-Si no tienes un archivo a la mano, genera uno de prueba (una vez):
-
-```
-cd skills-copy/ejemplos && bash generar-clip-prueba.sh
-```
-
-Luego, en Claude Code:
-
-```
-usa clip-a-copy con /tmp/keni-clip/declaracion.m4a para claro-sports
-```
-
-(Sirven `.mp4`, `.mov`, `.m4a`, `.mp3`, `.wav`...)
+Partes de un video o audio y quieres el copy y la cita exacta para cortar el clip, sin escuchar todo. **El audio se transcribe dentro de tu máquina; no se sube a ningún lado.** En **Generar copy** elige un prompt que acepte archivo y sube el video o audio (sirven `.mp4`, `.mov`, `.m4a`, `.mp3`, `.wav`...).
 
 **Qué esperar:**
 - Verás correr la **transcripción local**.

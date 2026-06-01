@@ -1,31 +1,43 @@
 # Arquitectura
 
-Tres piezas independientes que se complementan: el **sistema de copy** (skills), el **MCP de
-métricas**, y la **Consola** (UI que orquesta ambos). Cada una funciona por su cuenta.
+Tres piezas independientes que se complementan: la **Biblioteca de Prompts** + lanzador neutro,
+el **MCP de métricas**, y la **Consola** (UI que orquesta ambos). Cada una funciona por su cuenta.
 
 Para el **estado** de cada pieza (qué está listo, qué está pausado por gating externo) la fuente
 única es [`estado-producto.md`](estado-producto.md); aquí se describe **cómo** encajan, no el
 estado.
 
-## 1. Sistema de copy (`skills-copy/`)
+## 1. Biblioteca de Prompts + lanzador neutro
 
-Agent Skills de Claude Code + contexto editorial versionado.
+Reemplaza al antiguo "sistema de skills" (carpetas `SKILL.md` + `keni.yaml` con formularios) por
+un **almacén único de documentos markdown** editables (`biblioteca.py`, files-as-truth bajo
+`KENI_BIBLIOTECA_DIR`) y un **lanzador NEUTRO** (`dominio/generar.py`) que es el único punto de
+arranque de `claude -p`.
+
+Cada documento es un `.md` con frontmatter YAML + cuerpo; conviven dos `tipo`:
+
+- **`prompt`**: la instrucción que se LANZA sobre contenido/áreas (el motor de generación).
+- **`editorial`**: la línea editorial (voz de marca, plataformas, tropicalización, reglas legales).
+  Se ADJUNTA a un prompt al lanzarlo (auto por marca + ajustable).
 
 ```
-fuente (nota escrita)            fuente (video | audio)
-   └─ copy-desde-nota                └─ clip-a-copy
-        │                                  ├─ transcribe en LOCAL (whisper.cpp; el audio no sale de la máquina)
-        │                                  ├─ saca citas con marca de tiempo (puntos de corte del clip)
-        │                                  └─ ↓ (mismo contexto editorial y verificación)
-        ├─ carga: reglas-legales → tropicalizacion → plataformas → marca → voz
-        ├─ produce: 1 variante por plataforma (con conteo de caracteres)
-        └─ auto-verifica: fechas, nombres, cifras, legal, "¿suena mexicano?", límites
-             └─ veredicto: LISTO PARA APROBAR / qué revisar
+documento prompt (Biblioteca)        fuente (nota | video | audio | url | área)
+   └─ lanzar (dominio/generar)            ├─ video/audio: transcribe en LOCAL (whisper.cpp; no sale de la máquina)
+        │                                 └─ ↓
+        ├─ compone: cuerpo del prompt + línea editorial adjunta (por marca) + contexto + redes
+        ├─ encola un job `claude -p` con cwd NEUTRO (prompt AUTOCONTENIDO; sin `skills-copy/`)
+        ├─ produce: 1 variante por plataforma (con conteo de caracteres) o un documento
+        └─ post-procesa: piezas/publicaciones/QA/hashtags, según el `procesar_spec` del job
+             └─ veredicto: LISTO PARA APROBAR / qué revisar; queda en el historial
 ```
 
-Separación clave: **marca** (línea editorial institucional, estable) vs **voz** (toque personal, lo rellena cada quien). La skill compone voz sobre marca sobre reglas globales.
+Separación clave: **marca** (línea editorial institucional, estable) vs **voz** (toque personal,
+lo rellena cada quien). El lanzador compone voz sobre marca sobre reglas globales DENTRO del
+prompt, que viaja autocontenido al subproceso.
 
-`clip-a-copy` añade el caso "mete el video y dame el copy": transcribe el material en local y trata el texto de ASR como **no verificado** (nombres, cifras y citas se marcan para confirmar contra el audio). Comparte el mismo contexto editorial y la misma auto-verificación que `copy-desde-nota`.
+El caso "mete el video y dame el copy" transcribe el material en local y trata el texto de ASR
+como **no verificado** (nombres, cifras y citas se marcan para confirmar contra el audio), con la
+misma auto-verificación que el copy desde nota.
 
 ## 2. MCP de métricas (`mcp-metricas/`)
 
@@ -54,27 +66,27 @@ Añadir una plataforma = un adaptador nuevo, sin tocar las tools. El esquema (`s
 - **Local por persona** — MCP por stdio, credenciales en la máquina de cada quien (ver `despliegue-local.md`, `credenciales.md`). Máxima privacidad.
 - **Alojado por Keni** — MCP por HTTP con **System User tokens de Meta** (no caducan: sin renovación manual cada ~60 días) y OAuth centralizado, para máquinas bloqueadas (ver `despliegue-hosted.md`). Solo expone números agregados.
 
-Distribución: todo el conjunto (skills + MCP) se instala y actualiza como **plugin de Claude Code** desde un marketplace privado (ver `README.md`). La voz personal de cada quien vive en `~/.config/keni-social/voces/` para sobrevivir a las actualizaciones.
+Distribución: el MCP se instala y actualiza como **plugin de Claude Code** desde un marketplace privado (ver `README.md`). La voz personal de cada quien vive en `~/.config/keni-social/voces/` para sobrevivir a las actualizaciones.
 
 ## 3. Consola (`consola/`)
 
 Capa de gestión opcional para máquinas no técnicas (community managers): una UI web local que
-**orquesta** las skills de copy/imagen y el MCP de métricas, sin reemplazarlos. Backend Starlette
+**orquesta** la generación de copy/imagen (Biblioteca + lanzador) y el MCP de métricas, sin
+reemplazarlos. Backend Starlette
 (Python) + frontend React/TS/Vite/shadcn (bundle vendorizado en
 `consola/src/keni_consola/webapp/`). La generación corre **en segundo plano con `claude -p`**
 (stream-json, token a token), con un semáforo de concurrencia (`KENI_MAX_JOBS`, def. 4).
 
 ```
 Consola (Starlette + React, local 127.0.0.1)
-   ├─ páginas de Trabajo: Generar copy · Imágenes · Reporte deportes · Termómetro mundial …
-   │    └─ lanzan las MISMAS skills (`claude -p`) que un usuario técnico invocaría a mano
+   ├─ páginas de Trabajo: Biblioteca · Generar copy · Imágenes · Reporte deportes · Termómetro mundial …
+   │    └─ lanzan `claude -p` con el MISMO prompt autocontenido que un usuario técnico invocaría a mano
    ├─ páginas de métricas: dashboard / reporte sobre el MCP `keni-metricas`
    └─ Ajustes: credenciales (`secretos.toml`, 0600), buzón de sugerencias
 ```
 
-Las skills son un plugin independiente y leen solo variables de entorno; la Consola **exporta** la
-clave del almacén único (`secretos.toml`) al subproceso al lanzar una skill. Detalle en
-[`consola.md`](consola.md).
+El lanzador lee solo variables de entorno; la Consola **exporta** la clave del almacén único
+(`secretos.toml`) al subproceso al lanzar una generación. Detalle en [`consola.md`](consola.md).
 
 **Persistencia operacional (ADR 0004): Postgres único.** Las tareas, el seguimiento comercial,
 la rota, los usuarios/sesiones y la cola de jobs viven en **Postgres** (`DATABASE_URL`
@@ -90,8 +102,8 @@ La Consola es un **catálogo de apps** (no un monolito enmarañado ni microservi
 **verificadas en CI**. Decisión en [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md)
 sobre el mecanismo de [ADR 0002](adr/0002-descomposicion-monolito-modular-catalogo-apps.md).
 
-- **A · Producción** (el moat): generación de copy/imagen, skills, investigación, revisión,
-  agentes. Asíncrona + worker (`claude -p`) + whisper local.
+- **A · Producción** (el moat): generación de copy/imagen, Biblioteca de Prompts, investigación,
+  revisión, agentes. Asíncrona + worker (`claude -p`) + whisper local.
 - **B · Métricas**: lectura/insight/reporte. **Consumidora de Metricool** (`FuenteMetricol`),
   no ingesta propia por red; read-through con caché e histórico.
 - **C · Operación**: rota, pendientes, parrilla, aprobación. CRUD transaccional multiusuario
@@ -130,7 +142,7 @@ de partida) que transforme de N a N+1; el salto 0→1 es identidad y no se regis
 
 ## Cómo encajan
 
-`copy-desde-nota` puede consultar `mejores_piezas` del MCP para ajustar el tono a lo que funcionó (paso opcional con degradación: si el MCP no está, se omite). Así el sistema que **produce** aprende del que **mide**, sin acoplarse: cada uno funciona solo. La Consola es la cara visible que reúne las tres piezas para quien no quiere usar Claude Code a pelo.
+Un prompt de copy puede consultar `mejores_piezas` del MCP para ajustar el tono a lo que funcionó (paso opcional con degradación: si el MCP no está, se omite). Así el sistema que **produce** aprende del que **mide**, sin acoplarse: cada uno funciona solo. La Consola es la cara visible que reúne las tres piezas para quien no quiere usar Claude Code a pelo.
 
 > **Estado y hitos:** la fuente única es [`estado-producto.md`](estado-producto.md) (qué está
 > listo, qué está pausado por gating externo de plataforma). Las cifras de la fuente `muestra`

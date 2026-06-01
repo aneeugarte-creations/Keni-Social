@@ -7,6 +7,23 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
 
 ## [No publicado]
 
+### Biblioteca de Prompts en lugar del «sistema de skills»
+
+- El antiguo **sistema de skills** (carpetas `SKILL.md` + `keni.yaml` con formularios, y la
+  carpeta `skills-copy/`) se retira y se reemplaza por una **Biblioteca de Prompts**: un
+  almacén único de **documentos markdown** editables (`biblioteca.py`, bajo `KENI_BIBLIOTECA_DIR`)
+  donde conviven dos `tipo` — `prompt` (lo que se lanza) y `editorial` (la línea editorial por
+  marca, que se adjunta al lanzar). El arranque de `claude -p` pasa por un **lanzador NEUTRO**
+  (`dominio/generar.py`): compone el prompt autocontenido (cuerpo + línea editorial + contexto
+  + redes) y encola el job con un cwd neutro, sin depender de `skills-copy/`.
+- **Imagen preservada**: las herramientas del Estudio de imagen (Pillow/outpaint/breaking) viven
+  ahora dentro del paquete (`keni_consola/motores/estudio_imagen/`); la generación cruda por API
+  (`media.py`) no se ve afectada.
+- **Limpieza de huérfanos** tras la migración: se retiran los accesores y vars `KENI_SKILLS_*`
+  de `config.py`, el sembrado de skills falso de los tests (`conftest`) y los tipos de skills
+  sin uso del frontend (`types.ts`). Se conservan los endpoints neutros `/api/skills/historial*`
+  (compat) y la derivación de `skill_disponible` desde la Biblioteca. Sin cambios de comportamiento.
+
 ### «Mi cuenta»: configuración de la propia cuenta + auth reorganizada (#130)
 
 - Nueva página **Mi cuenta** (en *Ajustes*, para cualquier rol, también desde el menú de
