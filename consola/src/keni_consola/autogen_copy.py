@@ -34,10 +34,9 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from typing import Any
 
-from . import config, generaciones, marcas, redes, repos
+from . import config, daemon_util, generaciones, marcas, redes, repos
 from .dominio import skills as dom_skills
 from .estados import CLASE_CONTENIDO
 
@@ -220,31 +219,30 @@ def _intervalo_segundos() -> float:
     return config.autogen_intervalo_horas() * 3600.0
 
 
-def iniciar_autogen(intervalo_segundos: float | None = None) -> threading.Thread | None:
-    """Arranca el hilo demonio de auto-generacion de copy, SI el flag esta activo.
+def iniciar_autogen(intervalo_segundos: float | None = None) -> threading.Thread:
+    """Arranca el hilo demonio de auto-generacion de copy (GATEADO EN VIVO).
 
     Pensado para el servidor real (`__main__`), NO para `crear_app` (los tests no lo arrancan,
-    igual que el resto de daemons). Devuelve None si `KENI_AUTOGEN` esta OFF (conservador). El
-    hilo es daemon; un fallo de barrido se loguea y NO lo mata.
+    igual que el resto de daemons). El hilo arranca SIEMPRE y comprueba `KENI_AUTOGEN` en cada
+    ciclo: apagar/encender en runtime aplica sin reiniciar (apagar en <= ~1 min; encender tras
+    estar apagado dispara un barrido de inmediato). El hilo es daemon; un fallo de barrido se
+    loguea y NO lo mata.
     """
-    if not config.autogen_activo():
-        _log.info("Auto-generacion de copy DESACTIVADA (KENI_AUTOGEN no esta activo).")
-        return None
-
     intervalo = intervalo_segundos if intervalo_segundos is not None else _intervalo_segundos()
 
     def bucle() -> None:
-        while True:
-            try:
-                ejecutar_barrido()
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
-                _log.exception("Fallo en el barrido de auto-generacion de copy.")
-            time.sleep(intervalo)
+        daemon_util.bucle_gateado(
+            activo_fn=config.autogen_activo,
+            intervalo_seg_fn=lambda: intervalo,
+            sweep_fn=ejecutar_barrido,
+            log=_log,
+        )
 
     hilo = threading.Thread(target=bucle, name="autogen-copy-daemon", daemon=True)
     hilo.start()
+    estado = "ACTIVA" if config.autogen_activo() else "EN ESPERA (KENI_AUTOGEN off)"
     _log.info(
-        "Auto-generacion de copy ACTIVA cada %.0f h (max/barrido=%d).",
-        intervalo / 3600.0, config.autogen_max(),
+        "Auto-generacion de copy %s, cada %.0f h (max/barrido=%d).",
+        estado, intervalo / 3600.0, config.autogen_max(),
     )
     return hilo

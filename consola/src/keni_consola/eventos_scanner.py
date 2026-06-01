@@ -18,10 +18,9 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 from datetime import date
 
-from . import config, marcas, repos
+from . import config, daemon_util, marcas, repos
 from .dominio import eventos
 
 _log = logging.getLogger("keni_consola.eventos_scanner")
@@ -85,33 +84,36 @@ def emitir_vencimientos(hoy: date | None = None) -> int:
 
 def iniciar_scanner_vencimientos(
     intervalo_segundos: float | None = None,
-) -> threading.Thread | None:
-    """Arranca un hilo demonio que emite los vencimientos del tablero en bucle.
+) -> threading.Thread:
+    """Arranca un hilo demonio que emite los vencimientos del tablero (GATEADO EN VIVO).
 
-    None si el barrido esta apagado (`KENI_EVENTOS_VENCIMIENTOS=0`). Pensado para el
-    servidor real (`__main__`), NO para `crear_app`. El hilo es daemon: muere al cerrar el
-    proceso. Un fallo de un barrido se loguea y NO mata el hilo (el siguiente reintenta).
+    El hilo arranca SIEMPRE y comprueba `KENI_EVENTOS_VENCIMIENTOS` en cada ciclo: apagar/
+    encender en runtime aplica sin reiniciar (apagar en <= ~1 min o el intervalo si es menor;
+    encender tras estar apagado dispara un barrido de inmediato). Pensado para el servidor
+    real (`__main__`), NO para `crear_app`. El hilo es daemon: muere al cerrar el proceso. Un
+    fallo de un barrido se loguea y NO mata el hilo (el siguiente reintenta).
     """
-    if not config.eventos_vencimientos_activos():
-        _log.info("Barrido de vencimientos desactivado (KENI_EVENTOS_VENCIMIENTOS=0).")
-        return None
     intervalo = (
         intervalo_segundos
         if intervalo_segundos is not None
         else config.eventos_intervalo_segundos()
     )
 
+    def barrido() -> None:
+        n = emitir_vencimientos()
+        if n:
+            _log.info("Vencimientos: %d contenido(s) notificado(s).", n)
+
     def bucle() -> None:
-        while True:
-            try:
-                n = emitir_vencimientos()
-                if n:
-                    _log.info("Vencimientos: %d contenido(s) notificado(s).", n)
-            except Exception:  # noqa: BLE001 -- un fallo de barrido no debe matar el hilo
-                _log.exception("Fallo en el barrido de vencimientos.")
-            time.sleep(intervalo)
+        daemon_util.bucle_gateado(
+            activo_fn=config.eventos_vencimientos_activos,
+            intervalo_seg_fn=lambda: intervalo,
+            sweep_fn=barrido,
+            log=_log,
+        )
 
     hilo = threading.Thread(target=bucle, name="eventos-vencimientos", daemon=True)
     hilo.start()
-    _log.info("Barrido de vencimientos del tablero activo cada %.0f s.", intervalo)
+    estado = "activo" if config.eventos_vencimientos_activos() else "en espera (KENI_EVENTOS_VENCIMIENTOS=0)"
+    _log.info("Barrido de vencimientos del tablero %s, cada %.0f s.", estado, intervalo)
     return hilo
