@@ -170,8 +170,32 @@ async def expandir(request: Request) -> Response:
     return JSONResponse({"generacion": _lanzar(request, f"Expandir · {formato}", _hacer)})
 
 
+async def revisar(request: Request) -> Response:
+    """Revision legal/editorial de una imagen (gate humano, `claude` la VE) -> `{generacion}`.
+
+    NO bloquea publicar: lanza un job `claude` que aplica las reglas de imagen de la Biblioteca
+    y devuelve un checklist ✅/⚠️/❌; el frontend SONDEA `GET /api/generaciones/{id}` y muestra
+    el texto en vivo (`salida`). El registro es de tipo "qa-editorial" (revision editorial).
+    """
+    datos = await leer_json(request)
+    imagen = datos.get("imagen") if isinstance(datos.get("imagen"), str) else ""
+    if not imagen.strip():
+        return JSONResponse({"error": "Falta la imagen que quieres revisar."}, status_code=400)
+    marca = datos.get("marca") if isinstance(datos.get("marca"), str) else ""
+    if marca and not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    try:
+        gen = estudio_imagen.revisar(
+            imagen.strip(), marca=marca, autor=autor_de_peticion(request)
+        )
+    except estudio_imagen.EstudioError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    return JSONResponse({"generacion": gen})
+
+
 RUTAS = [
     Route("/api/imagenes/generar", generar, methods=["POST"]),
     Route("/api/imagenes/editar", editar, methods=["POST"]),
     Route("/api/imagenes/expandir", expandir, methods=["POST"]),
+    Route("/api/imagenes/revisar", revisar, methods=["POST"]),
 ]

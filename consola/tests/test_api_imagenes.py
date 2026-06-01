@@ -7,9 +7,10 @@ pipeline endpoint -> registro de generacion -> resultado.
 
 from __future__ import annotations
 
+from keni_consola import media
 from keni_consola.dominio import estudio_imagen
 
-from .conftest import _cliente, lanzador_imagen_ejecuta
+from .conftest import _cliente, lanzador_generacion_completa, lanzador_imagen_ejecuta
 
 # --------------------------------------------------------------------------- #
 # POST /api/imagenes/generar                                                  #
@@ -128,3 +129,67 @@ def test_expandir_ok(entorno, monkeypatch):
     r = cli.post("/api/imagenes/expandir", json={"imagen": "src.png", "formato": "feed", "strength": 0.4})
     assert r.status_code == 200
     assert r.json()["generacion"]["resultado"]["id"] == "e.png"
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/imagenes/revisar (gate humano: job claude que VE la imagen)        #
+# --------------------------------------------------------------------------- #
+
+# Checklist canned que devolveria la revision legal/editorial.
+_SALIDA_REVISION = """Revisión de la imagen `imagen.png`:
+
+✅ Bandera de México: no aparece la bandera con escudo.
+⚠️ Menores: hay una persona que podría ser menor; confírmalo.
+❌ Marca de agua de terceros visible en la esquina inferior.
+
+La decisión de publicar es del humano.
+"""
+
+
+def test_revisar_sin_imagen_400(cliente):
+    assert cliente.post("/api/imagenes/revisar", json={}).status_code == 400
+    assert cliente.post("/api/imagenes/revisar", json={"imagen": "  "}).status_code == 400
+
+
+def test_revisar_marca_invalida_400(cliente):
+    r = cliente.post("/api/imagenes/revisar", json={"imagen": "x.png", "marca": "no-existe"})
+    assert r.status_code == 400
+
+
+def test_revisar_imagen_inexistente_400(entorno, monkeypatch):
+    # `media.leer_media` devuelve None -> el dominio lanza EstudioError -> 400 sin traceback.
+    monkeypatch.setattr(media, "leer_media", lambda _n: None)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_REVISION))
+    r = cli.post("/api/imagenes/revisar", json={"imagen": "fantasma.png"})
+    assert r.status_code == 400
+
+
+def test_revisar_ok_completa_con_checklist(entorno, monkeypatch):
+    monkeypatch.setattr(media, "leer_media", lambda _n: b"\x89PNG\r\n\x1a\n datos")
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_REVISION))
+    r = cli.post("/api/imagenes/revisar", json={"imagen": "src.png", "marca": "unotv"})
+    assert r.status_code == 200
+    gen = r.json()["generacion"]
+    assert gen["estado"] == "completado"
+    assert gen["tipo"] == "qa-editorial"
+    # El checklist viaja como texto en vivo en `salida` (lo que sondea el frontend).
+    assert "✅" in gen["salida"] and "❌" in gen["salida"]
+
+
+def test_revisar_inyecta_reglas_e_imagen_en_prompt(entorno, monkeypatch):
+    monkeypatch.setattr(media, "leer_media", lambda _n: b"\x89PNG bytes")
+    capturado = {}
+    base = lanzador_generacion_completa(_SALIDA_REVISION)
+
+    def lanzar(gen_id, *, prompt, cwd, procesar, dir_temporal=None):  # noqa: ANN001
+        capturado["prompt"] = prompt
+        capturado["dir_temporal"] = dir_temporal
+        base(gen_id, prompt=prompt, cwd=cwd, procesar=procesar, dir_temporal=dir_temporal)
+
+    cli = _cliente(lanzar_generacion=lanzar)
+    r = cli.post("/api/imagenes/revisar", json={"imagen": "src.png"})
+    assert r.status_code == 200
+    # El prompt referencia el archivo adjunto y pide el checklist; la imagen va por --add-dir.
+    assert "imagen.png" in capturado["prompt"]
+    assert "✅" in capturado["prompt"] and "❌" in capturado["prompt"]
+    assert capturado["dir_temporal"] is not None

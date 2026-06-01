@@ -113,6 +113,7 @@ import type {
   CuerpoImagenesGenerar,
   CuerpoImagenesEditar,
   CuerpoImagenesExpandir,
+  CuerpoImagenesRevisar,
   CuerpoCatalogarMedio,
   RespuestaMensaje,
   CuerpoCrearPlantillaContenido,
@@ -789,6 +790,11 @@ export const api = {
     peticion<RespuestaGeneracion>("/imagenes/editar", { metodo: "POST", json: cuerpo }),
   imagenesExpandir: (cuerpo: CuerpoImagenesExpandir) =>
     peticion<RespuestaGeneracion>("/imagenes/expandir", { metodo: "POST", json: cuerpo }),
+  // Revisión legal/editorial de una imagen (gate humano, no bloquea publicar): job
+  // "qa-editorial" que se SONDEA con `useGeneracion`; el checklist ✅/⚠️/❌ llega en vivo
+  // en `generacion.salida`.
+  imagenesRevisar: (cuerpo: CuerpoImagenesRevisar) =>
+    peticion<RespuestaGeneracion>("/imagenes/revisar", { metodo: "POST", json: cuerpo }),
 
   // Cataloga un objeto de media YA subido/generado en la biblioteca de medios (sin re-subir).
   catalogarMedio: (cuerpo: CuerpoCatalogarMedio) =>

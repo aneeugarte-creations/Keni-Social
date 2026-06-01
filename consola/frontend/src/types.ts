@@ -2471,6 +2471,13 @@ export interface CuerpoImagenesExpandir {
   lado?: "auto" | "arriba" | "abajo" | "izquierda" | "derecha";
 }
 
+/** Cuerpo de `POST /api/imagenes/revisar`: revisión legal/editorial (gate humano, no bloquea). */
+export interface CuerpoImagenesRevisar {
+  /** Nombre del objeto de media a revisar. */
+  imagen: string;
+  marca?: string;
+}
+
 /** Cuerpo de `POST /api/biblioteca-media/catalogar`: cataloga un objeto ya subido/generado. */
 export interface CuerpoCatalogarMedio {
   /** Nombre del objeto de media ya presente en el almacén. */

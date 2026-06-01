@@ -27,6 +27,7 @@ import {
   Loader2,
   Maximize2,
   Save,
+  ShieldCheck,
   Sparkles,
   Type,
   Upload,
@@ -301,6 +302,24 @@ export default function Estudio() {
   });
 
   const opEjecutando = op.ejecutando || lanzarEditar.isPending || lanzarExpandir.isPending;
+
+  // --- Revisión legal/editorial (gate humano, no bloquea publicar) ---
+  // Job "qa-editorial" que VE la imagen activa y devuelve un checklist ✅/⚠️/❌ en `salida`
+  // (texto en vivo). Hook dedicado y región propia para no chocar con editar/expandir.
+  const revision = useGeneracion();
+  const lanzarRevisar = useMutation({
+    mutationFn: (cuerpo: Parameters<typeof api.imagenesRevisar>[0]) => api.imagenesRevisar(cuerpo),
+    onSuccess: (data) => revision.iniciar(data.generacion),
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 400) {
+        toast.error(e.message);
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : "No se pudo revisar la imagen.");
+    },
+  });
+  const revisando = revision.ejecutando || lanzarRevisar.isPending;
+  const textoRevision = revision.generacion?.salida ?? "";
 
   function editar(etiqueta: string, cuerpo: Omit<Parameters<typeof api.imagenesEditar>[0], "imagen">) {
     if (!activa) return;
@@ -762,6 +781,48 @@ export default function Estudio() {
                   </Button>
                 </div>
               </div>
+            )}
+          </section>
+
+          {/* Revisión legal/editorial (gate humano; no bloquea publicar) */}
+          <section className="space-y-2 rounded-md border border-border p-3">
+            <Label className="flex items-center gap-1 text-sm font-medium">
+              <ShieldCheck className="h-4 w-4" />
+              Revisión (legal/editorial)
+            </Label>
+            {!activa ? (
+              <p className="text-xs text-muted-foreground">
+                Selecciona una imagen para revisarla.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Pasa la imagen activa por las reglas de imagen y obtén un checklist ✅/⚠️/❌.
+                  No bloquea publicar: la decisión final es tuya.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={revisando}
+                  onClick={() => {
+                    if (!activa) return;
+                    lanzarRevisar.mutate({ imagen: activa.id, marca: marca || undefined });
+                  }}
+                >
+                  {revisando ? (
+                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="mr-1 h-4 w-4" />
+                  )}
+                  {revisando ? "Revisando…" : "Revisar (legal/editorial)"}
+                </Button>
+                {textoRevision && (
+                  <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded-md bg-muted/30 px-3 py-2 text-xs text-foreground">
+                    {textoRevision}
+                  </pre>
+                )}
+              </>
             )}
           </section>
 
