@@ -8,8 +8,7 @@ un callable en un hilo) y el almacen de media. El dominio (`dominio.estudio_imag
 trabajo real y es mockeable: los tests nunca tocan la red ni Pillow.
 
 Asociar el arte a una pieza NO vive aqui: se hace con el seam existente
-`PATCH /api/publicaciones/{id}` (`{imagen}`); catalogar un activo reutilizable, con
-`POST /api/biblioteca-media/catalogar`. Subir/servir siguen en `/api/media`.
+`PUT /api/publicaciones/{id}` (`{imagen}`). Subir/servir siguen en `/api/media`.
 
 SEGURIDAD: entradas validadas (op, formato, marca, numeros) antes de tocar el motor; sin
 shell; errores en espanol sin tracebacks.

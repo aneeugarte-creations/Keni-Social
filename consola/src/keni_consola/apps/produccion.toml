@@ -43,13 +43,11 @@ modulos_backend = [
   "radar_auto",
   "parrilla",
   "plantillas_contenido",
-  "biblioteca_media",
 ]
 
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
 # test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
 rutas_frontend = [
-  "/imagenes",
   "/estudio",
   "/biblioteca",
   "/investigacion",
@@ -64,7 +62,6 @@ rutas_frontend = [
   "/agentes/:id",
   "/activos",
   "/activos/plantillas",
-  "/activos/biblioteca",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -77,19 +74,10 @@ rutas_frontend = [
 # que hoy. Bloques: vistazo(10) · dia(20) · operacion(30).
 
 [[nav]]
-ruta = "/imagenes"
-etiqueta = "Imágenes"
-icono = "ImagePlus"
-descripcion = "Genera imágenes con IA a partir de una descripción. Adjúntalas a una pieza desde el editor de cada publicación."
-grupo = "dia"
-grupo_orden = 20
-orden = 10
-
-[[nav]]
 ruta = "/estudio"
 etiqueta = "Estudio"
 icono = "Palette"
-descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o guárdala en la biblioteca."
+descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o descárgala."
 grupo = "dia"
 grupo_orden = 20
 orden = 12
@@ -134,7 +122,7 @@ orden = 40
 ruta = "/activos"
 etiqueta = "Activos"
 icono = "Library"
-descripcion = "Plantillas de contenido por tipo de nota y biblioteca de medios aprobados, reutilizables al armar piezas. Pestañas Plantillas / Biblioteca."
+descripcion = "Plantillas de contenido por tipo de nota, reutilizables al armar piezas."
 grupo = "operacion"
 grupo_orden = 30
 orden = 50

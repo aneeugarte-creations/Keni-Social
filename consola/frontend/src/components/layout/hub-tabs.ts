@@ -5,7 +5,6 @@ import {
   CalendarClock,
   FileText,
   Globe,
-  Images,
   ListChecks,
   ListTodo,
   Megaphone,
@@ -76,7 +75,6 @@ export const TABS_AGENTES: ItemTabHub[] = [
 
 export const TABS_ACTIVOS: ItemTabHub[] = [
   { ruta: "/activos/plantillas", etiqueta: "Plantillas", icono: FileText },
-  { ruta: "/activos/biblioteca", etiqueta: "Biblioteca", icono: Images },
 ];
 
 /**

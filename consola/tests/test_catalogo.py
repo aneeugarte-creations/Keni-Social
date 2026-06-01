@@ -19,10 +19,10 @@ from keni_consola.apps import registro
 # 3 bloques sin encabezado, en este orden y con estas etiquetas.
 _SIDEBAR_HOY = [
     ["Panel"],
-    # Biblioteca (prompts + línea editorial) encabeza el bloque "día"; el copy se genera
-    # ahí (sustituyó a "Generación"). "Imágenes" es la generación de imagen neutra y
-    # "Estudio" la superficie rica de diseño de imagen (variantes + editar + expandir).
-    ["Imágenes", "Estudio", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
+    # Biblioteca (prompts + línea editorial) es la única "Biblioteca" del producto; el
+    # copy se genera ahí (sustituyó a "Generación"). "Estudio" es la única superficie de
+    # imagen (variantes + editar + expandir); absorbió la antigua "Imágenes".
+    ["Estudio", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
     # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
     # tablero (Parrilla) es la superficie única de contenido. La pestaña "Skills
     # (catálogo)" se retiró con el sistema de skills (la edición vive en la Biblioteca).
@@ -64,7 +64,7 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
             assert {"ruta", "etiqueta", "icono", "descripcion"} <= set(item)
 
     # La ruta primaria (primer item) de cada app es la esperada.
-    assert porid["produccion"]["nav"][0]["ruta"] == "/imagenes"
+    assert porid["produccion"]["nav"][0]["ruta"] == "/estudio"
     assert porid["metricas"]["nav"][0]["ruta"] == "/analiticas"
     assert porid["operacion"]["nav"][0]["ruta"] == "/parrilla"
 
@@ -81,7 +81,7 @@ def test_iconos_de_nav_son_strings_lucide():
     cat = registro.catalogo(_entorno())
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
     assert iconos["/panel"] == "LayoutDashboard"
-    assert iconos["/imagenes"] == "ImagePlus"
+    assert iconos["/estudio"] == "Palette"
     assert iconos["/investigacion"] == "Search"
     assert iconos["/revision"] == "ShieldCheck"
     assert iconos["/analiticas"] == "BarChart3"
@@ -98,7 +98,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/analiticas" not in rutas
     # Las demás siguen.
-    assert "/imagenes" in rutas and "/parrilla" in rutas and "/panel" in rutas
+    assert "/estudio" in rutas and "/parrilla" in rutas and "/panel" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():

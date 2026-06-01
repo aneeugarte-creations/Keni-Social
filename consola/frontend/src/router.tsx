@@ -8,7 +8,6 @@ import { AppShell } from "@/components/layout/AppShell";
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
-const Imagenes = lazy(() => import("@/pages/Imagenes"));
 const Estudio = lazy(() => import("@/pages/Estudio"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 
@@ -31,7 +30,6 @@ const Rota = lazy(() => import("@/pages/Rota"));
 const PiezasRota = lazy(() => import("@/pages/parrilla/PiezasRota"));
 
 const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
-const BibliotecaMedia = lazy(() => import("@/pages/activos/BibliotecaMedia"));
 
 const Agentes = lazy(() => import("@/pages/Agentes"));
 const Monitor = lazy(() => import("@/pages/Monitor"));
@@ -63,7 +61,8 @@ export const router = createBrowserRouter([
 
       // Diario
       { path: "panel", element: <Panel /> },
-      { path: "imagenes", element: <Imagenes /> },
+      // "Imágenes" se fusionó en el Estudio (única superficie de generación de imagen).
+      { path: "imagenes", element: <Navigate to="/estudio" replace /> },
       { path: "estudio", element: <Estudio /> },
       { path: "biblioteca", element: <Biblioteca /> },
 
@@ -126,14 +125,13 @@ export const router = createBrowserRouter([
       },
       { path: "agentes/:id", element: <DetalleAgente /> },
 
-      // Hub Activos (plantillas de contenido + biblioteca de medios reutilizables).
+      // Hub Activos (plantillas de contenido reutilizables al armar piezas).
       // Ruta-layout sin wrapper: renderiza <Outlet/> por defecto.
       {
         path: "activos",
         children: [
           { index: true, element: <Navigate to="plantillas" replace /> },
           { path: "plantillas", element: <PlantillasContenido /> },
-          { path: "biblioteca", element: <BibliotecaMedia /> },
         ],
       },
 

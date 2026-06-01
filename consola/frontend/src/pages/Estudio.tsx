@@ -13,11 +13,11 @@
  *     Cada acción lanza UNA generación que se sondea con un `useGeneracion` dedicado y
  *     reemplaza la imagen activa por el resultado.
  *
- * Elegir final: "Usar en la pieza" (si se abrió desde una publicación, vía router state),
- * "Descargar" y "Guardar en biblioteca" (catalogar el objeto activo).
+ * Elegir final: "Usar en la pieza" (si se abrió desde una publicación, vía router state)
+ * y "Descargar".
  *
  * Errores 400 "no configurada" (generar/expandir sin proveedor de imagen): aviso ámbar
- * amable, nunca toast rojo (igual que `Imagenes.tsx`).
+ * amable, nunca toast rojo.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -26,7 +26,6 @@ import {
   ImagePlus,
   Loader2,
   Maximize2,
-  Save,
   ShieldCheck,
   Sparkles,
   Type,
@@ -347,31 +346,13 @@ export default function Estudio() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo aplicar a la pieza."),
   });
 
-  const guardarBiblioteca = useMutation({
-    mutationFn: () =>
-      api.catalogarMedio({
-        objeto: activa!.id,
-        marca: marca || undefined,
-        tipo: "imagen",
-      }),
-    onSuccess: () => toast.success("Guardada en la biblioteca de medios"),
-    onError: (e) => {
-      // 409 = ya catalogada: aviso amable, no error rojo.
-      if (e instanceof ApiError && e.status === 409) {
-        toast.info(e.message);
-        return;
-      }
-      toast.error(e instanceof Error ? e.message : "No se pudo guardar en la biblioteca.");
-    },
-  });
-
   const srcActiva = activa ? urlMedia(activa.url) : "";
 
   return (
     <>
       <PageHeader
         titulo="Estudio de imagen"
-        descripcion="Genera variantes, edita (recorte, peso, placa) y expande una imagen. Luego úsala en la pieza o guárdala en la biblioteca."
+        descripcion="Genera variantes, edita (recorte, peso, placa) y expande una imagen. Luego úsala en la pieza o descárgala."
       />
 
       {ctx.publicacionId && (
@@ -855,20 +836,6 @@ export default function Estudio() {
                     <Download className="mr-1 h-4 w-4" />
                     Descargar
                   </a>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => guardarBiblioteca.mutate()}
-                  disabled={guardarBiblioteca.isPending}
-                >
-                  {guardarBiblioteca.isPending ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="mr-1 h-4 w-4" />
-                  )}
-                  Guardar en biblioteca
                 </Button>
               </div>
             )}
