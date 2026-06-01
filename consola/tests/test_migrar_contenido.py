@@ -40,6 +40,33 @@ def test_migra_pieza_con_redes_y_checklist(entorno):
     assert all(x["falta_copy"] is True for x in plats)
 
 
+def test_migra_tipo_pieza_como_etiqueta(entorno):
+    """`tipo_pieza` (texto libre del Excel) se preserva como ETIQUETA del contenido."""
+    db.crear_pieza_rota(
+        programa="Mundial",
+        red_social="IG",
+        contenido_sugerido="Reel del gol",
+        tipo_pieza="REEL",
+    )
+    assert migrar_contenido.migrar_piezas() == 1
+    item = db.listar_contenido(clase="contenido")[0]
+    etiqueta_ids = repos.etiquetas_por_contenido().get(item["id"], [])
+    nombres = {
+        (repos.obtener_etiqueta(eid) or {}).get("nombre", "") for eid in etiqueta_ids
+    }
+    # Normalizada a minúsculas (mismo patrón que importador_calendario).
+    assert "reel" in nombres
+
+
+def test_migra_tipo_pieza_reutiliza_etiqueta_existente(entorno):
+    """Dos piezas con el mismo `tipo_pieza` comparten UNA sola etiqueta (no se duplica)."""
+    db.crear_pieza_rota(programa="A", red_social="IG", contenido_sugerido="x", tipo_pieza="HISTORIA")
+    db.crear_pieza_rota(programa="B", red_social="FB", contenido_sugerido="y", tipo_pieza="historia")
+    migrar_contenido.migrar_piezas()
+    historias = [e for e in repos.listar_etiquetas() if (e.get("nombre") or "").lower() == "historia"]
+    assert len(historias) == 1
+
+
 def test_pieza_con_evento_es_flujo_evento(entorno):
     ev = db.crear_evento_rota("Partido", fecha="2026-06-01", hora="20:00")
     db.crear_pieza_rota(evento_id=ev["id"], red_social="WEB", contenido_sugerido="Nota")

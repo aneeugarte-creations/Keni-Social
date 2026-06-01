@@ -170,14 +170,16 @@ def _catalogos() -> dict:
 async def listar(request: Request) -> Response:
     """GET /api/contenido: tablero completo (items + plataformas) y catalogos.
 
-    Filtros opcionales por query: `clase`, `flujo`, `marca` (workspace), `responsable_id`,
-    `estado`, `desde`, `hasta` (por `fecha_objetivo`), `etiqueta` (id de una etiqueta).
+    Filtros opcionales por query: `clase`, `flujo`, `marca` (workspace), `evento_id`
+    (cobertura de un evento de la rota), `responsable_id`, `estado`, `desde`, `hasta`
+    (por `fecha_objetivo`), `etiqueta` (id de una etiqueta).
     """
     q = request.query_params
     items = repos.listar_contenido(
         clase=q.get("clase") or None,
         flujo=q.get("flujo") or None,
         marca=q.get("marca") or None,
+        evento_id=q.get("evento_id") or None,
         responsable_id=q.get("responsable_id") if "responsable_id" in q else None,
         estado=q.get("estado") or None,
         desde=q.get("desde") or None,
