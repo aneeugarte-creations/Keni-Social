@@ -21,6 +21,7 @@ Solo lectura: ningun endpoint muta nada.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from keni_metricas import servicio
@@ -28,14 +29,19 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, metricas_cache
+from .. import marcas, metricas_cache, priorizacion, repos
 from ..dominio.publicaciones import cola_de_aprobacion, proximas_programadas
+from ..estados import CLASE_CONTENIDO
 
 # Cuantas piezas programadas mostrar como "proximas" (las mas inminentes). Mantiene el
 # panel ligero: un vistazo, no la agenda completa.
 _MAX_PROXIMAS = 8
 # Cuantos movimientos ("picos") destacar en el resumen.
 _MAX_PICOS = 5
+# Tope de items de la "lista del dia" (los demas cuentan en `total`, no se pintan todos).
+_MAX_LISTA_DIA = 100
+# Estados terminales del contenido padre: ya no son "del dia" (no hay nada que postear).
+_ESTADOS_CERRADOS = ("hecha",)
 
 
 def _resumen_metricas(rango: str, marca: str | None) -> dict[str, Any]:
@@ -126,6 +132,78 @@ async def resumen(request: Request) -> Response:
     )
 
 
+def _nombres_etiqueta() -> dict[str, str]:
+    """Mapa id de etiqueta -> nombre (para resolver las etiquetas de cada contenido)."""
+    return {e.get("id", ""): e.get("nombre", "") for e in repos.listar_etiquetas()}
+
+
+def _lista_dia(marca: str | None) -> dict[str, Any]:
+    """La "lista viva" del dia: contenido abierto del tablero ORDENADO por score (H3/H5).
+
+    Reusa `repos.listar_contenido` (mismo camino que el tablero) y `priorizacion` (score
+    determinista). NO cambia el orden del tablero kanban: solo ESTA vista se reordena sola.
+    Best-effort: si la lectura del tablero falla, devuelve una lista vacia (el resto del
+    panel sigue util). Incluye contadores por fuente (`origen`) y por estado.
+    """
+    try:
+        items = repos.listar_contenido(marca=marca)
+    except Exception:  # noqa: BLE001 -- el panel no debe caer por la lectura del tablero
+        return {"items": [], "total": 0, "por_fuente": {}, "por_estado": {}}
+
+    items = [
+        it
+        for it in items
+        if (it.get("clase") or CLASE_CONTENIDO) == CLASE_CONTENIDO
+        and (it.get("estado") or "") not in _ESTADOS_CERRADOS
+    ]
+    nombres_et = _nombres_etiqueta()
+    etiquetas_por_item = {
+        cid: [nombres_et.get(eid, "") for eid in eids]
+        for cid, eids in repos.etiquetas_por_contenido().items()
+    }
+    hoy = date.today()
+    ordenados = priorizacion.ordenar_por_score(
+        items, etiquetas_por_item=etiquetas_por_item, hoy=hoy
+    )
+    nombres_marca = dict(marcas.opciones())
+
+    por_fuente: dict[str, int] = {}
+    por_estado: dict[str, int] = {}
+    for it in ordenados:
+        por_fuente[it.get("origen") or "manual"] = por_fuente.get(it.get("origen") or "manual", 0) + 1
+        por_estado[it.get("estado") or "pendiente"] = por_estado.get(it.get("estado") or "pendiente", 0) + 1
+
+    salida: list[dict[str, Any]] = []
+    for it in ordenados[:_MAX_LISTA_DIA]:
+        cid = it.get("id", "")
+        marca_id = it.get("marca") or ""
+        salida.append(
+            {
+                "id": cid,
+                "titulo": it.get("titulo", ""),
+                "marca": marca_id,
+                "marca_nombre": nombres_marca.get(marca_id, marca_id),
+                "estado": it.get("estado") or "pendiente",
+                "prioridad": it.get("prioridad") or "media",
+                "flujo": it.get("flujo") or "",
+                "fecha_objetivo": it.get("fecha_objetivo") or "",
+                "origen": it.get("origen") or "manual",
+                "etiquetas": [e for e in etiquetas_por_item.get(cid, []) if e],
+                "score": priorizacion.score_contenido(
+                    it, etiquetas=etiquetas_por_item.get(cid, []), hoy=hoy
+                ),
+            }
+        )
+    return {"items": salida, "total": len(items), "por_fuente": por_fuente, "por_estado": por_estado}
+
+
+async def lista_dia(request: Request) -> Response:
+    """GET /api/panel/dia: la lista viva del dia (ordenada por score). `?marca=` opcional."""
+    marca = request.query_params.get("marca") or None
+    return JSONResponse(_lista_dia(marca))
+
+
 RUTAS = [
     Route("/api/panel", resumen, methods=["GET"]),
+    Route("/api/panel/dia", lista_dia, methods=["GET"]),
 ]

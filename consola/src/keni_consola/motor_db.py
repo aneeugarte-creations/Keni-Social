@@ -9,7 +9,9 @@ causaba bugs (p. ej. columnas que solo migraban en un backend). Ver `docs/adr/00
 
 La privacidad del perfil local se preserva apuntando `DATABASE_URL` a un Postgres LOCAL
 (ningun dato sale de la maquina). Lo que se pierde es el "cero-config / offline por
-defecto"; el dev arranca un Postgres con `deploy/dev/docker-compose.yml`.
+defecto". En desarrollo no se usa Postgres local: la ejecucion/validacion se hace en el
+server (CI Woodpecker / hosted); quien necesite correr en local provee su propio
+`DATABASE_URL` apuntando a un Postgres que el mismo gestione.
 
 POR QUE UN WRAPPER (y no SQLAlchemy): la capa de auth (`auth/usuarios.py`,
 `auth/sesiones.py`, `auth/bootstrap.py`) y `db.py` operan DIRECTAMENTE sobre la conexion
@@ -143,10 +145,10 @@ def _mensaje_sin_url() -> str:
     """Mensaje accionable cuando falta `DATABASE_URL` (Postgres es obligatorio, ADR 0004)."""
     return (
         "DATABASE_URL no esta fijada y es OBLIGATORIA: la Consola persiste en Postgres "
-        "(ya no hay backend SQLite, ver docs/adr/0004). Arranca un Postgres local y "
-        "exporta la URL antes de usar la Consola, p. ej.:\n\n"
-        "    docker compose -f deploy/dev/docker-compose.yml up -d\n"
-        "    export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/keni_social\n\n"
+        "(ya no hay backend SQLite, ver docs/adr/0004). En desarrollo no se usa Postgres "
+        "local: la ejecucion/validacion se hace en el server (CI Woodpecker / hosted). Si "
+        "necesitas correr en local, provee tu propio Postgres y exporta su URL, p. ej.:\n\n"
+        "    export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/keni_social\n\n"
         "(En hosted la fija deploy/docker-compose.yml.)"
     )
 

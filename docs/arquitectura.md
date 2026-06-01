@@ -90,7 +90,9 @@ El lanzador lee solo variables de entorno; la Consola **exporta** la clave del a
 
 **Persistencia operacional (ADR 0004): Postgres único.** Las tareas, el seguimiento comercial,
 la rota, los usuarios/sesiones y la cola de jobs viven en **Postgres** (`DATABASE_URL`
-obligatoria en local y hosted; `deploy/dev/docker-compose.yml` levanta un Postgres local).
+obligatoria en local y hosted; en desarrollo no se usa Postgres local —la ejecución y
+validación se hacen en el server/CI— y, si hace falta correr en local, cada quien provee
+su propio `DATABASE_URL`).
 El contenido editorial sigue en **YAML por marca** (`ficheros.py`) con su índice SQLite
 regenerable (`indice.py`). El histórico de métricas del MCP (SQLite local por persona) es
 otro almacén distinto y no se ve afectado.

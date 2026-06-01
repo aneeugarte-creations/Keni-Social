@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   CalendarClock,
   ClipboardCheck,
+  ListChecks,
   Recycle,
   Sparkles,
   TrendingDown,
@@ -22,7 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
 import { numeroCompacto, porcentaje } from "@/lib/formato";
-import type { AlertaRendimiento, PicoPanel, ProximaPanel } from "@/types";
+import type { AlertaRendimiento, ItemListaDia, PicoPanel, ProximaPanel } from "@/types";
 
 import { formatearFechaHora, tiempoRelativo } from "./publicaciones/meta";
 
@@ -138,6 +139,61 @@ function FilaAlerta({ alerta }: { alerta: AlertaRendimiento }) {
   );
 }
 
+/** Etiqueta humana de la fuente (`origen`) de un item de la lista del día. */
+const ORIGEN_ETIQUETA: Record<string, string> = {
+  "import-calendario": "Calendario",
+  "radar-auto": "Radar",
+  radar: "Radar",
+  rss: "RSS",
+  manual: "Manual",
+};
+
+/** Fila de la "lista viva" del día: tema con su score, fuente, fecha y estado. */
+function FilaListaDia({ item }: { item: ItemListaDia }) {
+  const esCompromiso = item.etiquetas.some((e) => e.toLowerCase() === "compromiso");
+  const esGreen = item.etiquetas.some((e) => e.toLowerCase() === "green");
+  const fuente = ORIGEN_ETIQUETA[item.origen] ?? item.origen;
+  return (
+    <li className="flex items-center justify-between gap-3 border-b border-border/60 py-2 last:border-0">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{item.titulo || "(sin título)"}</p>
+        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+          <span className="text-xs text-muted-foreground">
+            {[item.marca_nombre, fuente].filter(Boolean).join(" · ")}
+          </span>
+          {esCompromiso && (
+            <Badge
+              variant="outline"
+              className="border-amber-500/40 text-amber-700 dark:text-amber-300"
+            >
+              Compromiso
+            </Badge>
+          )}
+          {esGreen && (
+            <Badge
+              variant="outline"
+              className="border-emerald-500/40 text-emerald-700 dark:text-emerald-300"
+            >
+              Green
+            </Badge>
+          )}
+          {item.fecha_objetivo && (
+            <span className="text-xs tabular-nums text-muted-foreground">
+              {item.fecha_objetivo}
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <Badge variant="secondary" title="Prioridad calculada (score dinámico)">
+          {item.score}
+        </Badge>
+        <span className="text-xs text-muted-foreground">{item.estado}</span>
+      </div>
+    </li>
+  );
+}
+
 export default function Panel() {
   // El panel es de lectura; se refresca al volver a la pestaña como el resto.
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
@@ -148,6 +204,12 @@ export default function Panel() {
   const alertas = useQuery({
     queryKey: ["alertas"],
     queryFn: ({ signal }) => api.alertas({}, signal),
+  });
+  // Lista viva del día (H5): contenido del tablero ordenado por score dinámico. Query
+  // independiente (no toca el contrato de /api/panel), igual que las alertas.
+  const listaDia = useQuery({
+    queryKey: ["panel", "lista-dia"],
+    queryFn: ({ signal }) => api.listaDia({}, signal),
   });
 
   return (
@@ -166,6 +228,41 @@ export default function Panel() {
 
       {data && (
         <div className="space-y-6">
+          {/* Lista viva del día (H5): el centro del panel — lo que hay que postear hoy,
+              alimentado por todas las fuentes y ordenado por score dinámico. */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ListChecks className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                Lista del día
+              </CardTitle>
+              {(listaDia.data?.total ?? 0) > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {listaDia.data!.total} en cola
+                </span>
+              )}
+            </CardHeader>
+            <CardContent>
+              {listaDia.isError ? (
+                <p className="py-4 text-sm text-muted-foreground">
+                  No se pudo cargar la lista del día.
+                </p>
+              ) : (listaDia.data?.items?.length ?? 0) > 0 ? (
+                <ul>
+                  {listaDia.data!.items.map((item) => (
+                    <FilaListaDia key={item.id} item={item} />
+                  ))}
+                </ul>
+              ) : (
+                <EstadoVacio
+                  icono={ListChecks}
+                  titulo="Nada en la lista todavía"
+                  texto="Importa un calendario o deja que las fuentes (Radar, RSS) alimenten el tablero."
+                />
+              )}
+            </CardContent>
+          </Card>
+
           {/* Resumen de métricas (reusa el camino de lectura de Métricas). */}
           <section className="space-y-3">
             <h3 className="text-sm font-medium text-muted-foreground">

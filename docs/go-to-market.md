@@ -219,7 +219,16 @@ Esta fase ya justifica la **opción de entrada** y la **suite sin publicación**
 
 ### Fase 3 — Scheduling y dashboard
 
-- **Programación de publicaciones** (cola/calendario): hoy no existe.
+- **Cola/calendario y lista priorizada: ya existen** como producto. El **tablero vivo
+  multi-fuente** (importador de calendario, RSS, radar), el **score de prioridad dinámico** y el
+  **Panel-9am** (lista curada del día) están construidos y probados (ver
+  [`estado-producto.md`](estado-producto.md) §1 y
+  [`contexto/2026-05-31-lista-viva-angel.md`](contexto/2026-05-31-lista-viva-angel.md)). El
+  programador de publicaciones también existe en código; lo que sigue gated no es la
+  **programación** sino el **disparo de la publicación real** a cada red (App Review de Meta,
+  Fase 2). Comercialmente: ya no se vende "scheduling" como promesa futura, sino la **lista viva
+  lista para aprobar y programar**; el upsell es activar la publicación real cuando caigan los
+  permisos.
 - **Dashboard** con pantalla visual: hoy todo es conversacional. Un tablero para Mariana/Bernardo
   cierra la sustitución del tablero de Metricool.
 

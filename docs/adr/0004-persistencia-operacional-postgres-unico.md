@@ -7,6 +7,8 @@
 - **Componente:** persistencia operacional de `keni-consola` (`consola/src/keni_consola/db.py`, `motor_db.py`, `auth/`)
 - **Relación:** **supersede la parte de DUAL backend** (SQLite local / Postgres hosted) introducida por #130 y descrita en ADR 0002 § "Persistencia". Mantiene el resto de decisiones de 0001/0002 intactas.
 
+> Nota posterior: el compose de dev `deploy/dev/docker-compose.yml` (mencionado más abajo) se retiró; en desarrollo no se usa Postgres local —la ejecución/validación se hace en el server/CI— y quien necesite correr en local provee su propio `DATABASE_URL`.
+
 ---
 
 ## Contexto

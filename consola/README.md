@@ -31,24 +31,26 @@ uv tool install ./consola
 uvx --from ./consola keni-consola
 ```
 
-## Postgres local (obligatorio, ADR 0004)
+## Postgres (obligatorio, ADR 0004)
 
 La operacional (tareas, comercial, rota, usuarios, sesiones, cola de jobs) vive en
 **Postgres**: ya no hay backend SQLite. Antes de arrancar la consola necesitas un
-Postgres corriendo y `DATABASE_URL` apuntandole. El monorepo trae un compose listo:
+Postgres corriendo y `DATABASE_URL` apuntandole.
+
+En desarrollo NO se usa Postgres local: la ejecución y validación se hacen en el
+server (CI Woodpecker / hosted `social.kenitech.io`). Si aun así necesitas correr la
+consola en tu máquina, provee tu propio Postgres y exporta su URL, p. ej.:
 
 ```
-docker compose -f deploy/dev/docker-compose.yml up -d
-export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:55432/keni_social
+export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/keni_social
 ```
 
-El compose levanta un Postgres 16 atado a `127.0.0.1:55432` (no se publica fuera de
-loopback) con un volumen named `keni-pg-dev`. Para empezar de cero:
-`docker compose -f deploy/dev/docker-compose.yml down -v`.
+Tú gestionas ese Postgres (instalación, arranque, datos): el monorepo ya no trae un
+compose de conveniencia para dev.
 
-Si arrancas la consola SIN `DATABASE_URL`, el back falla con un mensaje claro que
-incluye este mismo comando. La privacidad del perfil local se preserva (el Postgres
-local no expone datos fuera de la maquina); lo que se pierde es el "cero-config".
+Si arrancas la consola SIN `DATABASE_URL`, el back falla con un mensaje claro. La
+privacidad del perfil local se preserva (un Postgres local no expone datos fuera de
+la maquina); lo que se pierde es el "cero-config".
 
 ## Arranque
 

@@ -170,6 +170,7 @@ def lanzar_copy(
     fuente_id: str | None = None,
     clave: str | None = None,
     tipo: str = "copy",
+    contenido_id: str = "",
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
@@ -182,6 +183,10 @@ def lanzar_copy(
     fijo del HISTORIAL/borradores. Son distintos: para la Biblioteca `titulo` es el nombre del
     prompt ("Copy desde nota"), que NO debe ser el título del historial; pasa `titulo_dado=""`
     para que se derive de la nota. RSS/asistente pasan el título del ítem como `titulo_dado`.
+
+    `contenido_id` (lista viva): si apunta a un tema del tablero, el borrador resultante se
+    NIDA bajo ese tema (cuelga de su tarjeta) en vez de nacer como contenido suelto. Lo usa
+    el auto-copy (`autogen_copy`); sin el (default ""), borrador suelto como hoy.
     """
     cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
     if cuerpo is None:
@@ -198,6 +203,7 @@ def lanzar_copy(
         skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo_dado,
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
+        contenido_id=contenido_id or "",
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,

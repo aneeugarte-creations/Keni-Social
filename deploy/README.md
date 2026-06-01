@@ -25,10 +25,12 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
 
 - **Postgres (`db`) y Garage (`files`) ya los CONSUME el back (#130).** Tras la **ADR 0004**
   Postgres es el **backend único** de la operacional (ya no hay SQLite):
-  - **`DATABASE_URL` es OBLIGATORIA** en local y en hosted (este stack la cablea; en local
-    el monorepo trae `deploy/dev/docker-compose.yml`). La DB operacional (tareas, comercial,
-    rota, usuarios/sesiones, cola de jobs) vive en **Postgres**. Sin `DATABASE_URL` el back
-    falla al arrancar con un mensaje accionable.
+  - **`DATABASE_URL` es OBLIGATORIA** en local y en hosted (este stack la cablea). En
+    desarrollo no se ofrece Postgres local: la ejecución/validación se hace en el server
+    (CI Woodpecker / hosted); si necesitas correr la app en local, provee tu propio
+    `DATABASE_URL` apuntando a un Postgres que tú gestiones. La DB operacional (tareas,
+    comercial, rota, usuarios/sesiones, cola de jobs) vive en **Postgres**. Sin
+    `DATABASE_URL` el back falla al arrancar con un mensaje accionable.
   - **Con `S3_*`** (endpoint + credenciales) → la media va al **bucket Garage/S3**. Sin S3
     → disco (`/data/keni-social/media`), como siempre.
   El antiguo cutover SQLite → Postgres ya es historia (ADR 0004); el comando

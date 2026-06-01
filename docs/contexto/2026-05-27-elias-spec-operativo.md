@@ -32,8 +32,18 @@ consolidar o distribuir, es nuestra.**
 
 ## 1. Mapa: necesidad de Elías → clase → estado
 
-Clase: **OP** = operativo (lo construimos) · **CR** = creativo (del equipo) · **MX** = mixto
+Clase: **OP** = operativo (lo construimos) · **OP-SV** = operativo **semiautomático con
+validación** (el sistema lo dispara y adelanta solo —p. ej. auto-popular la cola, auto-generar el
+borrador—, el humano valida el checkpoint) · **CR** = creativo (del equipo) · **MX** = mixto
 (construimos el andamiaje, el equipo decide). Estado: ✅ existe · 🟡 parcial · 🔴 nuevo.
+
+> **Nota — OP semiautomático (OP-SV).** Desde la *lista viva* (ver
+> [`2026-05-31-lista-viva-angel.md`](2026-05-31-lista-viva-angel.md)), parte de lo que aquí se
+> describía como "el humano lo dispara paso a paso" se mueve a OP-SV: el sistema **adelanta el
+> trabajo hasta el punto de validación** (auto-popula la cola desde las fuentes, auto-genera el
+> borrador) y el humano valida el checkpoint, no opera cada eslabón. La frontera de §0 no cambia
+> —el último clic sigue siendo humano—; lo que cambia es **cuánto adelanta la máquina** antes de
+> pedírselo.
 
 | # | Necesidad (bloque del transcript) | Clase | Estado | Dónde vive / feature |
 |---|---|---|---|---|
@@ -50,7 +60,7 @@ Clase: **OP** = operativo (lo construimos) · **CR** = creativo (del equipo) · 
 | 11 | Análisis mensual de Mariana, comparar mes vs. mes, coyuntura (B3) | OP | ✅ | `comparar_periodos` + `tendencia_historica` |
 | 12 | Comercial: reporte de impacto para vender + seguimiento de pautas (B3) | OP | ✅ | página Comercial |
 | 13 | App de equipo con **pendientes diarios** compartidos (B4) | OP | 🟡 | Pendientes (single-user hoy) → **F5** (dep. #130) |
-| 14 | **Rastreo: lo más viral del momento en todas las redes** (B4) | MX | 🟡 | Termómetro/`resumen-tendencia` no lo hacen → **F7** |
+| 14 | **Rastreo: lo más viral del momento en todas las redes** (B4) | MX / OP-SV | 🟡 | Termómetro/`resumen-tendencia` no lo hacen → **F7** (el radar surface; `radar-auto` **auto-popula la cola**, gated OFF) |
 | 15 | Creación de copies, incl. "meter un link y que lo genere" (B4) | OP | ✅/🟡 | Generar copy → **F9 (enhance: desde URL)** |
 | 16 | Creación de imágenes / "dame el layout" (B4) | MX | ✅ | Imágenes / `estudio-imagen` (equipo aprueba) |
 | 17 | Que el equipo vea con anticipación su horario de la próxima semana (B4) | OP | 🔴 | = **F4** (vista del equipo) |
@@ -180,9 +190,14 @@ aceptación verificables**. El "estado" indica si nace, se amplía o ya existe.
 - **Objetivo:** un radar que **trae y consolida** lo que está reventando ahora, multi-red, para que el
   equipo decida si entra.
 - **Keni hace:** recoge y agrupa lo más viral del momento por tema (de las fuentes/APIs disponibles),
-  con por qué está subiendo y enlaces; deduplica y prioriza por señal.
+  con por qué está subiendo y enlaces; deduplica y prioriza por señal. Además, el daemon
+  **`radar_auto`** (gated `KENI_RADAR_AUTO`, OFF por defecto) **auto-popula la cola**: promueve los
+  temas trending al tablero como contenido (`origen='radar-auto'`), de donde la auto-generación de
+  copy (H2 de la lista viva) puede dejar un borrador listo para revisar. Es **OP-SV**: el radar no
+  solo informa, adelanta el trabajo hasta el checkpoint de validación. Ver
+  [`2026-05-31-lista-viva-angel.md`](2026-05-31-lista-viva-angel.md).
 - **Queda en el equipo:** **seleccionar** qué es relevante para su público y publicarlo (frontera
-  editorial; nosotros surface, ellos eligen).
+  editorial; nosotros surface y proponemos, ellos eligen y aprueban).
 - **Dónde encaja / estado:** **🟡/🔴 nuevo**. No lo cubre Termómetro (noticias internacionales
   curadas) ni `resumen-tendencia` (resume **una** tendencia dada) ni Verificación (¿es nuevo el
   video?). Es una superficie de **descubrimiento** distinta.

@@ -84,12 +84,18 @@ def crear_publicaciones_desde_piezas(
     origen: str,
     redes_filtro: set[str] | None = None,
     autor: dict[str, str] | None = None,
+    contenido_id: str = "",
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
     HANDOFF A->C (ADR 0005 §Seams #1): cada pieza se deposita como BORRADOR por la
     funcion-contrato `dominio.publicaciones.crear_borrador` (nace `borrador`). Si
     `redes_filtro` no es None, solo se crean las piezas cuya red este en el filtro.
+
+    NIDO BAJO EL TEMA (lista viva): si `contenido_id` apunta a un tema del tablero existente,
+    cada pieza se ADJUNTA a ESE `contenido` (via `crear_borrador_en`) en vez de crear su
+    propio padre, de modo que el borrador cuelga de la tarjeta del tema. Sin `contenido_id`
+    (default ""), o si el tema no existe, es EXACTAMENTE el comportamiento de hoy.
     """
     creadas: list[dict[str, object]] = []
     for pieza in piezas:
@@ -101,12 +107,20 @@ def crear_publicaciones_desde_piezas(
             continue
         if not isinstance(contenido, str):
             contenido = ""
-        creadas.append(
-            contrato_publicaciones.crear_borrador(
+        creada: dict[str, object] | None = None
+        if contenido_id:
+            # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
+            # el tema no existe (entonces caemos al borrador suelto).
+            creada = contrato_publicaciones.crear_borrador_en(
+                contenido_id, marca, red, titulo=titulo, contenido=contenido,
+                veredicto=verdicto,
+            )
+        if creada is None:
+            creada = contrato_publicaciones.crear_borrador(
                 marca, red, titulo=titulo, contenido=contenido, veredicto=verdicto,
                 origen=origen, autor=autor,
             )
-        )
+        creadas.append(creada)
     return creadas
 
 
@@ -124,12 +138,16 @@ def construir_procesar_copy(
     texto_base: str,
     con_imagenes: bool = False,
     autor: dict[str, str] | None = None,
+    contenido_id: str = "",
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
     Parsea la salida en piezas/verdicto, registra el historial (con metricas), AUTO-GUARDA
     una publicacion (borrador) por pieza y devuelve `{resultado, historial_id, verdicto,
     piezas, publicaciones[, imagenes]}`. `skill` es solo la etiqueta de origen del historial.
+
+    `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
+    ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -142,6 +160,7 @@ def construir_procesar_copy(
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=parsed["verdicto"], origen=historial_id, autor=autor,
+            contenido_id=contenido_id,
         )
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
