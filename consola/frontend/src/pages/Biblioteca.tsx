@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { BarraFormato } from "@/components/editor/BarraFormato";
@@ -524,7 +525,7 @@ function PanelLanzar({
         {ejecutando || lanzarMut.isPending ? (
           <Loader2 className="mr-1 h-4 w-4 animate-spin" />
         ) : (
-          <Send className="mr-1 h-4 w-4" />
+          <MarcaIA className="mr-1" />
         )}
         Lanzar
       </Button>

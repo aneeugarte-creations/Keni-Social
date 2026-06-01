@@ -18,6 +18,7 @@ import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacioTexto } from "@/components/comunes/EstadoVacio";
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { desdeMarca, marcaParam } from "@/components/comunes/selectores";
@@ -779,7 +780,7 @@ function ItemNoticia({
       )}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <Button size="sm" onClick={() => setGenerarAbierto(true)}>
-          <Sparkles className="h-4 w-4" />
+          <MarcaIA />
           Generar copy
         </Button>
         <Button variant="outline" size="sm" onClick={usarEnGenerar}>
@@ -966,7 +967,7 @@ function DialogoGenerar({
               {generando ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="h-4 w-4" />
+                <MarcaIA />
               )}
               {generando ? "Generando…" : "Generar y guardar"}
             </Button>

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { ResultadoDocumento } from "@/components/generaciones/ResultadoDocumento";
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { desdeNinguna, ningunaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -312,7 +313,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
 
           <div className="flex items-center gap-3">
             <Button onClick={() => generar.mutate()} disabled={!puedeGenerar}>
-              {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+              {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
               {generando ? "Generando…" : "Generar termómetro"}
             </Button>
             {generando && (

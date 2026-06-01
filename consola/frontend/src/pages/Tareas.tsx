@@ -34,6 +34,7 @@ import { Autor } from "@/components/comunes/Autor";
 import { PanelColaboracion } from "@/components/contenido/PanelColaboracion";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -1088,7 +1089,7 @@ function TarjetaContenido({
                   className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-primary"
                   onClick={() => setAsistenteAbierto(true)}
                 >
-                  <Sparkles className="h-3.5 w-3.5" />
+                  <MarcaIA />
                   IA
                 </Button>
               </Tooltip>
@@ -2274,7 +2275,7 @@ function DialogoAsistente({
             {ejecutando || lanzar.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Sparkles className="h-4 w-4" />
+              <MarcaIA />
             )}
             {ejecutando ? "Generando…" : "Generar con IA"}
           </Button>

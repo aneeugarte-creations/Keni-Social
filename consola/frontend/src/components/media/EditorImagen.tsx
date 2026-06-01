@@ -10,11 +10,12 @@
  * = sin imagen) y lo incluye al guardar la publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { ImagePlus, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
+import { ImagePlus, Loader2, Upload, Wand2, X } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -229,7 +230,7 @@ export function EditorImagen({
               {generando ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="h-4 w-4" />
+                <MarcaIA costo />
               )}
               {generando ? "Generando…" : "Generar con IA"}
             </Button>

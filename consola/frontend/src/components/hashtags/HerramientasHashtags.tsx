@@ -10,10 +10,11 @@
  * claro/oscuro; texto es-MX.
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Hash, Loader2, Plus, Settings2, Sparkles } from "lucide-react";
+import { Hash, Loader2, Plus, Settings2 } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -170,7 +171,7 @@ export function HerramientasHashtags({
           {sugiriendo ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <Sparkles className="h-4 w-4" />
+            <MarcaIA />
           )}
           {sugiriendo ? "Sugiriendo…" : "Sugerir con IA"}
         </Button>

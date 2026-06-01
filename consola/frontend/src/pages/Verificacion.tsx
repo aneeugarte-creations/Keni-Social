@@ -13,6 +13,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -401,7 +402,7 @@ export default function Verificacion() {
               {ejecutando || mutacion.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
               ) : (
-                <ScanSearch className="h-4 w-4" aria-hidden />
+                <MarcaIA />
               )}
               Verificar
             </Button>

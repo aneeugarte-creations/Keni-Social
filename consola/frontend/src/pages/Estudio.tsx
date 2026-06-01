@@ -27,7 +27,6 @@ import {
   Loader2,
   Maximize2,
   ShieldCheck,
-  Sparkles,
   Type,
   Upload,
   Wand2,
@@ -36,6 +35,7 @@ import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -545,7 +545,7 @@ export default function Estudio() {
               {generandoVariantes ? (
                 <Loader2 className="mr-1 h-4 w-4 animate-spin" />
               ) : (
-                <Sparkles className="mr-1 h-4 w-4" />
+                <MarcaIA costo className="mr-1" />
               )}
               {generandoVariantes ? "Generando…" : "Generar variantes"}
             </Button>
@@ -758,6 +758,7 @@ export default function Estudio() {
                       });
                     }}
                   >
+                    <MarcaIA costo />
                     Expandir
                   </Button>
                 </div>
