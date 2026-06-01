@@ -1,7 +1,7 @@
 # Woodpecker: tests de la app C · OPERACIÓN (test scoping por ruta, plan §1.5).
 # Espejo del job `tests-app-operacion` de .github/workflows/ci.yml.
 #
-# Cambio en los módulos de C (api/publicaciones, aprobacion, franjas, rota, tareas)
+# Cambio en los módulos de C (api/publicaciones, aprobacion, franjas, rota)
 # -> SOLO los tests de C + contrato de fronteras + keni-shared. Cambio en keni-shared
 # -> suite completa (`tests-python`).
 when:
@@ -12,7 +12,6 @@ when:
         - "consola/src/keni_consola/api/aprobacion.py"
         - "consola/src/keni_consola/api/franjas.py"
         - "consola/src/keni_consola/api/rota.py"
-        - "consola/src/keni_consola/api/tareas.py"
         - "consola/src/keni_consola/rota.py"
         - "consola/src/keni_consola/dominio/{publicaciones,aprobacion}.py"
         - "consola/src/keni_consola/apps/operacion.toml"
@@ -50,6 +49,5 @@ steps:
         consola/tests/test_api_rota_programas.py
         consola/tests/test_api_rota_swaps.py
         consola/tests/test_rota.py
-        consola/tests/test_api_tareas_tablero.py
         consola/tests/test_api_reciclar.py
         consola/tests/test_db_piezas.py
