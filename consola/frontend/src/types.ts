@@ -936,6 +936,7 @@ export interface CuerpoActualizarPlataforma {
   falta_publicar?: boolean;
   copy?: string;
   imagen?: string;
+  imagen_fuente?: string;
   enlace?: string;
   fecha_programada?: string;
   hora_post?: string;
