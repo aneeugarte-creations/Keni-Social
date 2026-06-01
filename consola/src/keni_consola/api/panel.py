@@ -165,16 +165,31 @@ def _lista_dia(marca: str | None) -> dict[str, Any]:
     ordenados = priorizacion.ordenar_por_score(
         items, etiquetas_por_item=etiquetas_por_item, hoy=hoy
     )
+    # Una misma pieza puede existir como VARIOS temas con el mismo título: el handoff A→C
+    # crea un borrador —y por tanto un tema— por red. En la lista del día solo se muestra el
+    # título, así que esos temas se ven como el mismo contenido repetido N veces. Los
+    # colapsamos a uno por (marca, título): como `ordenados` viene de mayor a menor score,
+    # el PRIMERO de cada clave (el más prioritario) es el que se conserva. Las piezas SIN
+    # título no se agrupan (cada una es única por id) para no fundir contenidos distintos.
+    unicos: list[dict[str, Any]] = []
+    vistos: set[tuple[str, str]] = set()
+    for it in ordenados:
+        titulo = (it.get("titulo") or "").strip().lower()
+        clave = (it.get("marca") or "", titulo) if titulo else ("", it.get("id", ""))
+        if clave in vistos:
+            continue
+        vistos.add(clave)
+        unicos.append(it)
     nombres_marca = dict(marcas.opciones())
 
     por_fuente: dict[str, int] = {}
     por_estado: dict[str, int] = {}
-    for it in ordenados:
+    for it in unicos:
         por_fuente[it.get("origen") or "manual"] = por_fuente.get(it.get("origen") or "manual", 0) + 1
         por_estado[it.get("estado") or "pendiente"] = por_estado.get(it.get("estado") or "pendiente", 0) + 1
 
     salida: list[dict[str, Any]] = []
-    for it in ordenados[:_MAX_LISTA_DIA]:
+    for it in unicos[:_MAX_LISTA_DIA]:
         cid = it.get("id", "")
         marca_id = it.get("marca") or ""
         salida.append(
@@ -194,7 +209,7 @@ def _lista_dia(marca: str | None) -> dict[str, Any]:
                 ),
             }
         )
-    return {"items": salida, "total": len(items), "por_fuente": por_fuente, "por_estado": por_estado}
+    return {"items": salida, "total": len(unicos), "por_fuente": por_fuente, "por_estado": por_estado}
 
 
 async def lista_dia(request: Request) -> Response:

@@ -92,6 +92,22 @@ def test_panel_muestra_marca_dry_run_en_preparadas(entorno):
     assert item["preparado_en"]  # marca dry-run visible en el panel
 
 
+def test_panel_lista_del_dia_colapsa_una_pieza_por_red(entorno):
+    """Una pieza preparada para varias redes son varios temas con el MISMO título (el
+    handoff crea un borrador por red). La lista del día solo muestra el título, así que se
+    colapsan a UNO; otra pieza distinta NO se colapsa con ella."""
+    cli = _cli()
+    for red in ("x", "instagram", "facebook"):
+        _crear(cli, red=red, titulo="Misma nota")
+    _crear(cli, titulo="Otra nota")
+
+    lista = cli.get("/api/panel/dia").json()
+    titulos = [it["titulo"] for it in lista["items"]]
+    assert titulos.count("Misma nota") == 1
+    assert titulos.count("Otra nota") == 1
+    assert lista["total"] == 2
+
+
 def test_panel_rango_invalido_cae_a_semana(entorno):
     cli = _cli()
     datos = cli.get("/api/panel?rango=loquesea").json()
