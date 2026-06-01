@@ -704,6 +704,48 @@ export interface CuerpoFuenteAlgoritmo {
   activo?: boolean;
 }
 
+/** Estado de una sugerencia editorial. */
+export type EstadoSugerenciaEditorial = "nueva" | "aplicada" | "descartada";
+
+/** Una propuesta de cambio editorial/límite generada por el digest diario. */
+export interface SugerenciaEditorial {
+  id: string;
+  plataforma: string;
+  plataforma_nombre: string;
+  /** "editorial" (cambio a la ficha) o "limite" (cambio a los límites de caracteres). */
+  tipo: string;
+  titulo: string;
+  /** Markdown: qué cambiar y por qué, con referencia a las noticias. */
+  detalle: string;
+  /** Doc de biblioteca destino (p. ej. "editorial/plataformas/instagram"). */
+  ficha_id: string;
+  /** Ids de las noticias que motivaron la sugerencia. */
+  noticia_ids: string[];
+  estado: EstadoSugerenciaEditorial;
+  creado: string;
+}
+
+/** Respuesta de GET /api/algoritmos/sugerencias. */
+export interface RespuestaSugerenciasAlgoritmo {
+  sugerencias: SugerenciaEditorial[];
+  total: number;
+  /** Nº de sugerencias en estado "nueva" (para el aviso del panel). */
+  nuevas: number;
+}
+
+/** Respuesta de aplicar una sugerencia. */
+export interface RespuestaAplicarSugerencia {
+  sugerencia: SugerenciaEditorial;
+  /** Doc de biblioteca afectado (vacío para sugerencias de límite). */
+  ficha_id: string;
+  /** Nota (p. ej. para límites, que son cambio de código). */
+  nota: string;
+}
+
+export interface RespuestaDescartarSugerencia {
+  sugerencia: SugerenciaEditorial | null;
+}
+
 /** Subtipo de un posteo de la parrilla (vacío para los video-editoriales). */
 export type SubtipoParrilla = "clip" | "galeria" | "infografia" | "normal" | "";
 

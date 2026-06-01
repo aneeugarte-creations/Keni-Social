@@ -51,6 +51,7 @@ def main() -> int:
     from .programador import iniciar_programador
     from .radar_auto import iniciar_radar_auto
     from .reaper_generaciones import iniciar_reaper
+    from .sugerencias_algoritmo import iniciar_sugerencias_editoriales
 
     iniciar_captura_programada()
     iniciar_programador()  # DRY-RUN salvo KENI_PUBLICAR_REAL=1: nunca publica solo.
@@ -60,6 +61,7 @@ def main() -> int:
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
+    iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).
     # Reaper de generaciones zombi (SIEMPRE activo): cierra como `error`/`interrumpido` las
     # `ejecutando` cuyo proceso murio (reinicio/deploy/OOM/cuelgue), para que la UI no las

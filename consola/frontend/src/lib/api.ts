@@ -131,6 +131,10 @@ import type {
   RespuestaArchivarAlgoritmo,
   FiltrosAlgoritmos,
   CuerpoFuenteAlgoritmo,
+  RespuestaSugerenciasAlgoritmo,
+  RespuestaAplicarSugerencia,
+  RespuestaDescartarSugerencia,
+  EstadoSugerenciaEditorial,
   RespuestaImportPreview,
   RespuestaImportCalendario,
   RespuestaAjustes,
@@ -918,6 +922,25 @@ export const api = {
       metodo: "POST",
       json: { archivada },
     }),
+
+  // --- Sugerencias editoriales (digest diario: cambios a fichas/límites de plataforma) ---
+  sugerenciasAlgoritmo: (estado?: EstadoSugerenciaEditorial, signal?: AbortSignal) =>
+    peticion<RespuestaSugerenciasAlgoritmo>(
+      `/algoritmos/sugerencias${query({ estado })}`,
+      { signal },
+    ),
+  generarSugerenciasAlgoritmo: () =>
+    peticion<RespuestaMensaje>("/algoritmos/sugerencias/generar", { metodo: "POST" }),
+  aplicarSugerenciaAlgoritmo: (id: string) =>
+    peticion<RespuestaAplicarSugerencia>(
+      `/algoritmos/sugerencias/${encodeURIComponent(id)}/aplicar`,
+      { metodo: "POST" },
+    ),
+  descartarSugerenciaAlgoritmo: (id: string) =>
+    peticion<RespuestaDescartarSugerencia>(
+      `/algoritmos/sugerencias/${encodeURIComponent(id)}/descartar`,
+      { metodo: "POST" },
+    ),
 
   // --- Parrilla del día (clasifica 13 posteos + 6 editoriales y los jerarquiza) ---
   // Solo lectura: deriva del Radar. PROPONE el orden; publicar lo decide el humano.

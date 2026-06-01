@@ -6,6 +6,7 @@ import {
   CalendarClock,
   ClipboardCheck,
   ExternalLink,
+  Lightbulb,
   ListChecks,
   Newspaper,
   Recycle,
@@ -258,10 +259,33 @@ export default function Panel() {
     queryKey: ["panel", "algoritmos"],
     queryFn: ({ signal }) => api.algoritmos({ limite: 5 }, signal),
   });
+  // Sugerencias editoriales pendientes (digest diario): solo para el contador del aviso.
+  const sugerencias = useQuery({
+    queryKey: ["panel", "sugerencias-editoriales"],
+    queryFn: ({ signal }) => api.sugerenciasAlgoritmo("nueva", signal),
+  });
+  const nuevasSugerencias = sugerencias.data?.nuevas ?? 0;
 
   return (
     <div>
       <PageHeader titulo={CABECERA.titulo} descripcion={CABECERA.descripcion} />
+
+      {nuevasSugerencias > 0 && (
+        <Link
+          to="/investigacion/algoritmos"
+          className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
+        >
+          <Lightbulb className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>
+            <span className="font-medium">
+              {nuevasSugerencias} sugerencia{nuevasSugerencias === 1 ? "" : "s"} editorial
+              {nuevasSugerencias === 1 ? "" : "es"}
+            </span>{" "}
+            por revisar: cambios propuestos a las fichas de plataforma y límites.
+          </span>
+          <ArrowRight className="ml-auto h-4 w-4 shrink-0" aria-hidden="true" />
+        </Link>
+      )}
 
       {isLoading && <EsqueletoPanel />}
       {isError && (

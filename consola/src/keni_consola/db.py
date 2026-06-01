@@ -146,6 +146,11 @@ __all__ = [
     "obtener_fuente_algoritmo",
     "obtener_noticia_algoritmo",
     "registrar_salud_fuente_algoritmo",
+    "actualizar_estado_sugerencia_editorial",
+    "contar_sugerencias_editoriales",
+    "crear_sugerencia_editorial",
+    "listar_sugerencias_editoriales",
+    "obtener_sugerencia_editorial",
     "contar_fuentes_rss",
     "contar_grupos_hashtags",
     "contar_piezas_por_programa",
@@ -995,12 +1000,33 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         es_cambio      INTEGER NOT NULL DEFAULT 0,
         aplicada       INTEGER NOT NULL DEFAULT 0,
         archivada      INTEGER NOT NULL DEFAULT 0,
+        sugerida       INTEGER NOT NULL DEFAULT 0,
         creado         TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_noticias_algoritmo_dedup ON noticias_algoritmo (fuente_id, clave)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_orden ON noticias_algoritmo (importancia DESC, fecha DESC)",
     "CREATE INDEX IF NOT EXISTS idx_noticias_algoritmo_plataforma ON noticias_algoritmo (plataforma)",
+    # Sugerencias editoriales GENERADAS por el job diario a partir de las noticias importantes:
+    # propuestas de cambio a la ficha editorial de una plataforma (`tipo='editorial'`) o a sus
+    # limites (`tipo='limite'`). PROPUESTAS, no aplicadas: el equipo revisa y decide (estado
+    # nueva/aplicada/descartada). `noticia_ids` (JSON) son las noticias que la motivaron;
+    # `ficha_id` el doc de biblioteca destino (p. ej. `editorial/plataformas/instagram`).
+    """
+    CREATE TABLE IF NOT EXISTS sugerencias_editoriales (
+        id           TEXT PRIMARY KEY,
+        plataforma   TEXT NOT NULL DEFAULT 'general',
+        tipo         TEXT NOT NULL DEFAULT 'editorial',
+        titulo       TEXT NOT NULL DEFAULT '',
+        detalle      TEXT NOT NULL DEFAULT '',
+        ficha_id     TEXT NOT NULL DEFAULT '',
+        noticia_ids  TEXT NOT NULL DEFAULT '[]',
+        estado       TEXT NOT NULL DEFAULT 'nueva',
+        creado       TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_estado ON sugerencias_editoriales (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_creado ON sugerencias_editoriales (creado)",
 )
 
 
@@ -1042,7 +1068,23 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_plantilla_contenido(con)
     _migrar_columnas_fuentes_rss(con)
     _migrar_columnas_grupos_hashtags(con)
+    _migrar_columnas_noticias_algoritmo(con)
     con.commit()
+
+
+def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
+    """Anade `sugerida` a `noticias_algoritmo` si una BD ya creada no la tuviera (idempotente).
+
+    La tabla `noticias_algoritmo` se creo sin esta columna; el job de sugerencias editoriales
+    la usa para no re-procesar una noticia. `ADD COLUMN IF NOT EXISTS` es seguro y no-op si ya
+    esta. Solo aplica si la tabla existe (un primer arranque ya la crea con la columna).
+    """
+    if not _tabla_existe(con, "noticias_algoritmo"):
+        return
+    if "sugerida" not in _columnas_existentes(con, "noticias_algoritmo"):
+        con.execute(
+            "ALTER TABLE noticias_algoritmo ADD COLUMN IF NOT EXISTS sugerida INTEGER NOT NULL DEFAULT 0"
+        )
 
 
 def _columnas_existentes(con: Any, tabla: str) -> set[str]:
@@ -4633,7 +4675,7 @@ def borrar_fuente_algoritmo(fuente_id: str) -> bool:
 _COLS_NOTICIA_ALGO = (
     "id", "fuente_id", "fuente_nombre", "plataforma", "tipo", "titulo", "resumen",
     "enlace", "fecha", "clave", "importancia", "nivel", "senales", "es_cambio",
-    "aplicada", "archivada", "creado",
+    "aplicada", "archivada", "sugerida", "creado",
 )
 _SELECT_NOTICIA_ALGO = f"SELECT {', '.join(_COLS_NOTICIA_ALGO)} FROM noticias_algoritmo"
 
@@ -4661,6 +4703,7 @@ def _fila_a_noticia_algo(fila: Any) -> dict[str, Any]:
         "es_cambio": bool(fila["es_cambio"]),
         "aplicada": bool(fila["aplicada"]),
         "archivada": bool(fila["archivada"]),
+        "sugerida": bool(fila["sugerida"]),
         "creado": fila["creado"] or "",
     }
 
@@ -4723,6 +4766,7 @@ def guardar_noticia_algoritmo(noticia: dict[str, Any]) -> str:
             "es_cambio": 1 if noticia.get("es_cambio") else 0,
             "aplicada": 0,
             "archivada": 0,
+            "sugerida": 0,
             "creado": datetime.now().isoformat(timespec="microseconds"),
         }
         marcadores = ", ".join("?" for _ in _COLS_NOTICIA_ALGO)
@@ -4741,6 +4785,7 @@ def listar_noticias_algoritmo(
     plataforma: str | None = None,
     nivel: str | None = None,
     solo_cambios: bool = False,
+    solo_no_sugeridas: bool = False,
     incluir_archivadas: bool = False,
     limite: int | None = None,
 ) -> list[dict[str, Any]]:
@@ -4758,6 +4803,8 @@ def listar_noticias_algoritmo(
         params.append(nivel)
     if solo_cambios:
         condiciones.append("es_cambio = 1")
+    if solo_no_sugeridas:
+        condiciones.append("sugerida = 0")
     if condiciones:
         sql += " WHERE " + " AND ".join(condiciones)
     sql += " ORDER BY importancia DESC, fecha DESC, creado DESC, id DESC"
@@ -4783,14 +4830,20 @@ def obtener_noticia_algoritmo(noticia_id: str) -> dict[str, Any] | None:
 
 
 def marcar_noticia_algoritmo(
-    noticia_id: str, *, aplicada: bool | None = None, archivada: bool | None = None
+    noticia_id: str,
+    *,
+    aplicada: bool | None = None,
+    archivada: bool | None = None,
+    sugerida: bool | None = None,
 ) -> dict[str, Any] | None:
-    """Marca una noticia como aplicada-a-biblioteca y/o archivada (None si no existe)."""
+    """Marca una noticia como aplicada-a-biblioteca / archivada / ya-sugerida (None si no existe)."""
     cambios: dict[str, Any] = {}
     if aplicada is not None:
         cambios["aplicada"] = 1 if aplicada else 0
     if archivada is not None:
         cambios["archivada"] = 1 if archivada else 0
+    if sugerida is not None:
+        cambios["sugerida"] = 1 if sugerida else 0
     if not cambios:
         return obtener_noticia_algoritmo(noticia_id)
     asignaciones = [f"{k} = ?" for k in cambios]
@@ -4807,6 +4860,136 @@ def marcar_noticia_algoritmo(
     finally:
         con.close()
     return obtener_noticia_algoritmo(noticia_id)
+
+
+# --- Sugerencias editoriales (generadas por el job diario) ----------------- #
+_COLS_SUGERENCIA_EDITORIAL = (
+    "id", "plataforma", "tipo", "titulo", "detalle", "ficha_id", "noticia_ids", "estado", "creado",
+)
+_SELECT_SUGERENCIA_EDITORIAL = (
+    f"SELECT {', '.join(_COLS_SUGERENCIA_EDITORIAL)} FROM sugerencias_editoriales"
+)
+ESTADOS_SUGERENCIA_EDITORIAL = ("nueva", "aplicada", "descartada")
+
+
+def _fila_a_sugerencia_editorial(fila: Any) -> dict[str, Any]:
+    """Fila de `sugerencias_editoriales` -> dict publico (`noticia_ids` como lista)."""
+    try:
+        ids = json.loads(fila["noticia_ids"] or "[]")
+    except (json.JSONDecodeError, ValueError, TypeError):
+        ids = []
+    return {
+        "id": fila["id"],
+        "plataforma": fila["plataforma"] or "general",
+        "tipo": fila["tipo"] or "editorial",
+        "titulo": fila["titulo"] or "",
+        "detalle": fila["detalle"] or "",
+        "ficha_id": fila["ficha_id"] or "",
+        "noticia_ids": ids if isinstance(ids, list) else [],
+        "estado": fila["estado"] or "nueva",
+        "creado": fila["creado"] or "",
+    }
+
+
+def crear_sugerencia_editorial(
+    *,
+    plataforma: str,
+    tipo: str,
+    titulo: str,
+    detalle: str,
+    ficha_id: str = "",
+    noticia_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Crea una sugerencia editorial (estado 'nueva') y la devuelve."""
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "plataforma": plataforma or "general",
+        "tipo": tipo or "editorial",
+        "titulo": titulo or "",
+        "detalle": detalle or "",
+        "ficha_id": ficha_id or "",
+        "noticia_ids": json.dumps(noticia_ids or []),
+        "estado": "nueva",
+        "creado": datetime.now().isoformat(timespec="microseconds"),
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_SUGERENCIA_EDITORIAL)
+        con.execute(
+            f"INSERT INTO sugerencias_editoriales ({', '.join(_COLS_SUGERENCIA_EDITORIAL)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_SUGERENCIA_EDITORIAL),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_sugerencia_editorial(fila["id"]) or _fila_a_sugerencia_editorial(fila)
+
+
+def listar_sugerencias_editoriales(
+    *, estado: str | None = None, limite: int | None = None
+) -> list[dict[str, Any]]:
+    """Sugerencias editoriales (mas recientes primero), filtrables por estado."""
+    sql = _SELECT_SUGERENCIA_EDITORIAL
+    params: list[Any] = []
+    if estado:
+        sql += " WHERE estado = ?"
+        params.append(estado)
+    sql += " ORDER BY creado DESC, id DESC"
+    if limite is not None:
+        sql += " LIMIT ?"
+        params.append(int(limite))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()  # noqa: S608 -- estado de allowlist
+    finally:
+        con.close()
+    return [_fila_a_sugerencia_editorial(f) for f in filas]
+
+
+def contar_sugerencias_editoriales(*, estado: str | None = None) -> int:
+    """Total de sugerencias editoriales (para el contador del panel), filtrable por estado."""
+    sql = "SELECT COUNT(*) AS n FROM sugerencias_editoriales"
+    params: list[Any] = []
+    if estado:
+        sql += " WHERE estado = ?"
+        params.append(estado)
+    con = _conectar()
+    try:
+        fila = con.execute(sql, tuple(params)).fetchone()  # noqa: S608 -- estado de allowlist
+    finally:
+        con.close()
+    return int(fila["n"]) if fila is not None else 0
+
+
+def obtener_sugerencia_editorial(sugerencia_id: str) -> dict[str, Any] | None:
+    """Una sugerencia editorial por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_SUGERENCIA_EDITORIAL} WHERE id = ?", (sugerencia_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_sugerencia_editorial(fila) if fila is not None else None
+
+
+def actualizar_estado_sugerencia_editorial(
+    sugerencia_id: str, estado: str
+) -> dict[str, Any] | None:
+    """Cambia el estado de una sugerencia (nueva/aplicada/descartada). None si no existe."""
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE sugerencias_editoriales SET estado = ? WHERE id = ?",
+            (estado, sugerencia_id),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_sugerencia_editorial(sugerencia_id)
 
 
 # --- Grupos de hashtags ---------------------------------------------------- #

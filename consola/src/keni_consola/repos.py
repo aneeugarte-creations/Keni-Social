@@ -386,9 +386,54 @@ def obtener_noticia_algoritmo(noticia_id: str) -> dict[str, Any] | None:
 
 
 def marcar_noticia_algoritmo(
-    noticia_id: str, *, aplicada: bool | None = None, archivada: bool | None = None
+    noticia_id: str,
+    *,
+    aplicada: bool | None = None,
+    archivada: bool | None = None,
+    sugerida: bool | None = None,
 ) -> dict[str, Any] | None:
-    return db.marcar_noticia_algoritmo(noticia_id, aplicada=aplicada, archivada=archivada)
+    return db.marcar_noticia_algoritmo(
+        noticia_id, aplicada=aplicada, archivada=archivada, sugerida=sugerida
+    )
+
+
+# Estados validos de una sugerencia editorial (re-export para los `api/*.py`).
+ESTADOS_SUGERENCIA_EDITORIAL = db.ESTADOS_SUGERENCIA_EDITORIAL
+
+
+def crear_sugerencia_editorial(
+    *,
+    plataforma: str,
+    tipo: str,
+    titulo: str,
+    detalle: str,
+    ficha_id: str = "",
+    noticia_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    return db.crear_sugerencia_editorial(
+        plataforma=plataforma, tipo=tipo, titulo=titulo, detalle=detalle,
+        ficha_id=ficha_id, noticia_ids=noticia_ids,
+    )
+
+
+def listar_sugerencias_editoriales(
+    *, estado: str | None = None, limite: int | None = None
+) -> list[dict[str, Any]]:
+    return db.listar_sugerencias_editoriales(estado=estado, limite=limite)
+
+
+def contar_sugerencias_editoriales(*, estado: str | None = None) -> int:
+    return db.contar_sugerencias_editoriales(estado=estado)
+
+
+def obtener_sugerencia_editorial(sugerencia_id: str) -> dict[str, Any] | None:
+    return db.obtener_sugerencia_editorial(sugerencia_id)
+
+
+def actualizar_estado_sugerencia_editorial(
+    sugerencia_id: str, estado: str
+) -> dict[str, Any] | None:
+    return db.actualizar_estado_sugerencia_editorial(sugerencia_id, estado)
 
 
 # --------------------------------------------------------------------------- #

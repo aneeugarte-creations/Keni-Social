@@ -193,6 +193,11 @@ ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
 # un boton "Refrescar" manual); con el flag ON, un daemon ingiere cada N horas.
 ENV_ALGORITMOS_AUTO = "KENI_ALGORITMOS_AUTO"
 ENV_ALGORITMOS_INTERVALO_HORAS = "KENI_ALGORITMOS_INTERVALO_HORAS"
+# Digest DIARIO de sugerencias editoriales a partir de las noticias importantes (encola un
+# claude -p por plataforma afectada). Gateado OFF por defecto.
+ENV_SUGERENCIAS_EDITORIALES = "KENI_SUGERENCIAS_EDITORIALES"
+ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS = "KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS"
+ENV_SUGERENCIAS_EDITORIALES_MAX = "KENI_SUGERENCIAS_EDITORIALES_MAX"
 
 # Auto-generacion de COPY al entrar un tema al tablero (fase3 auto-produccion, H2). Un hilo
 # demonio barre el tablero y, para los temas alimentados por fuentes (import-calendario,
@@ -317,6 +322,11 @@ RADAR_AUTO_MAX_DEF = 3
 # Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
 # cambian a cada minuto y no conviene martillear los feeds.
 ALGORITMOS_INTERVALO_HORAS_DEF = 6
+
+# Digest de sugerencias editoriales: 1 vez al dia, pocas plataformas por barrido (cada una
+# cuesta un claude -p). Conservador a proposito.
+SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF = 24
+SUGERENCIAS_EDITORIALES_MAX_DEF = 3
 
 # Auto-generacion de copy (H2): barre seguido (def 1h) y con cap bajo por barrido (def 3),
 # porque cada item lanza un `claude -p` (coste). El cap del worker (`KENI_MAX_JOBS`) sigue
@@ -836,6 +846,33 @@ def algoritmos_auto_activo() -> bool:
 def algoritmos_intervalo_horas() -> int:
     """Cada cuantas horas ingiere el daemon de Algoritmos (`KENI_ALGORITMOS_INTERVALO_HORAS`, def 6, min 1)."""
     return _entero(ENV_ALGORITMOS_INTERVALO_HORAS, ALGORITMOS_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def sugerencias_editoriales_activo() -> bool:
+    """True si el digest diario de sugerencias editoriales debe correr (`KENI_SUGERENCIAS_EDITORIALES`).
+
+    Def OFF (conservador): cada barrido encola uno o varios `claude -p` (coste). Con el flag a
+    un valor afirmativo, un hilo demonio propone 1 vez/dia cambios a las fichas/limites a partir
+    de las noticias importantes. Las propuestas son REVISABLES; nunca se aplican solas.
+    """
+    return _crudo(ENV_SUGERENCIAS_EDITORIALES).lower() in _VERDADEROS
+
+
+def sugerencias_editoriales_intervalo_horas() -> int:
+    """Cada cuantas horas corre el digest (`KENI_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS`, def 24, min 1)."""
+    return _entero(
+        ENV_SUGERENCIAS_EDITORIALES_INTERVALO_HORAS,
+        SUGERENCIAS_EDITORIALES_INTERVALO_HORAS_DEF,
+        minimo=1,
+    )
+
+
+def sugerencias_editoriales_max() -> int:
+    """Maximo de plataformas a procesar por barrido (`KENI_SUGERENCIAS_EDITORIALES_MAX`, def 3, min 1).
+
+    Cada plataforma cuesta un `claude -p`: el tope acota el gasto por dia.
+    """
+    return _entero(ENV_SUGERENCIAS_EDITORIALES_MAX, SUGERENCIAS_EDITORIALES_MAX_DEF, minimo=1)
 
 
 def autogen_activo() -> bool:

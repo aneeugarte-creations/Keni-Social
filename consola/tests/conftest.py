@@ -360,6 +360,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_radar": "app_produccion",
     "test_api_algoritmos": "app_produccion",
     "test_algoritmos": "app_produccion",
+    "test_sugerencias_algoritmo": "app_produccion",
     "test_metricas_runs": "app_produccion",
     "test_plantillas_marca": "app_produccion",
     "test_api_plantillas_marca": "app_produccion",

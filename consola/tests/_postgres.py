@@ -72,6 +72,8 @@ _TABLAS = (
     # fuentes (sin FK, pero a la cabeza evita sorpresas de orden).
     "noticias_algoritmo",
     "fuentes_algoritmo",
+    # Sugerencias editoriales generadas por el job diario.
+    "sugerencias_editoriales",
 )
 
 

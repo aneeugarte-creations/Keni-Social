@@ -190,6 +190,15 @@ def main() -> int:
 
     iniciar_refresco_algoritmos()
 
+    # Digest DIARIO de sugerencias editoriales: un hilo demonio que, si
+    # `KENI_SUGERENCIAS_EDITORIALES` esta activo (def OFF), convierte 1 vez al dia las noticias
+    # de algoritmo importantes en PROPUESTAS de cambio a las fichas de plataforma y limites
+    # (encola un claude -p por plataforma; el worker lo ejecuta). Las propuestas son revisables;
+    # nunca se aplican solas. SAFE BY DEFAULT: sin el flag no encola nada.
+    from .sugerencias_algoritmo import iniciar_sugerencias_editoriales
+
+    iniciar_sugerencias_editoriales()
+
     # Auto-generacion de COPY (fase3 auto-produccion, H2): un hilo demonio que, si
     # `KENI_AUTOGEN` esta activo (def OFF), encola cada N horas copy para los temas que las
     # fuentes (import/radar/rss) meten al tablero y aun no tienen borrador. El resultado cae

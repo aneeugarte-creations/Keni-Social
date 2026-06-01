@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  Check,
   CircleCheck,
   CircleX,
   Clipboard,
   ExternalLink,
   Library,
+  Lightbulb,
   Newspaper,
   Plus,
   RefreshCw,
   Sparkles,
   Trash2,
+  Wand2,
+  X,
 } from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
@@ -49,6 +53,7 @@ import type {
   NivelAlgoritmo,
   NoticiaAlgoritmo,
   OpcionAlgoritmo,
+  SugerenciaEditorial,
 } from "@/types";
 
 const CABECERA = {
@@ -402,6 +407,72 @@ function DialogoPropuesta({
 // Página                                                                        //
 // --------------------------------------------------------------------------- //
 
+// --------------------------------------------------------------------------- //
+// Tarjeta de una sugerencia editorial (digest diario)                           //
+// --------------------------------------------------------------------------- //
+
+function TarjetaSugerencia({
+  sugerencia,
+  onAplicar,
+  onDescartar,
+  ocupada,
+}: {
+  sugerencia: SugerenciaEditorial;
+  onAplicar: (s: SugerenciaEditorial) => void;
+  onDescartar: (s: SugerenciaEditorial) => void;
+  ocupada: boolean;
+}) {
+  const esLimite = sugerencia.tipo === "limite";
+  return (
+    <li className="rounded-lg border border-border/60 p-3">
+      <div className="flex flex-wrap items-center gap-1.5 pb-1">
+        <Badge variant="outline">{sugerencia.plataforma_nombre || sugerencia.plataforma}</Badge>
+        <Badge
+          variant="outline"
+          className={
+            esLimite
+              ? "border-violet-500/40 text-violet-700 dark:text-violet-300"
+              : "border-sky-500/40 text-sky-700 dark:text-sky-300"
+          }
+        >
+          {esLimite ? "Límite" : "Ficha editorial"}
+        </Badge>
+      </div>
+      <p className="text-sm font-medium">{sugerencia.titulo}</p>
+      {sugerencia.detalle && (
+        <div className="pt-1">
+          <Markdown className="text-xs text-muted-foreground">{sugerencia.detalle}</Markdown>
+        </div>
+      )}
+      <div className="flex items-center justify-end gap-1 pt-2">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onAplicar(sugerencia)}
+          disabled={ocupada}
+          title={
+            esLimite
+              ? "Marcar como atendida (los límites se cambian en el código)"
+              : "Añadir esta propuesta a la ficha editorial de la plataforma"
+          }
+        >
+          <Check className="mr-1 h-3.5 w-3.5" aria-hidden="true" />
+          {esLimite ? "Atendida" : "Aplicar a la ficha"}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => onDescartar(sugerencia)}
+          disabled={ocupada}
+          title="Descartar"
+        >
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 export default function Algoritmos() {
   const queryClient = useQueryClient();
   const [plataforma, setPlataforma] = React.useState<string>(TODAS);
@@ -489,8 +560,42 @@ export default function Algoritmos() {
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  // Sugerencias editoriales (digest diario): query independiente de las noticias.
+  const sugerencias = useQuery({
+    queryKey: ["algoritmos", "sugerencias"],
+    queryFn: ({ signal }) => api.sugerenciasAlgoritmo("nueva", signal),
+  });
+  const invalidarSugerencias = () =>
+    queryClient.invalidateQueries({ queryKey: ["algoritmos", "sugerencias"] });
+
+  const generarSugerencias = useMutation({
+    mutationFn: () => api.generarSugerenciasAlgoritmo(),
+    onSuccess: (r) => toast.success(r.mensaje),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const aplicarSugerencia = useMutation({
+    mutationFn: (s: SugerenciaEditorial) => api.aplicarSugerenciaAlgoritmo(s.id),
+    onSuccess: (r) => {
+      toast.success(r.nota || "Aplicada a la ficha editorial.");
+      void invalidarSugerencias();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const descartarSugerencia = useMutation({
+    mutationFn: (s: SugerenciaEditorial) => api.descartarSugerenciaAlgoritmo(s.id),
+    onSuccess: () => {
+      toast.success("Sugerencia descartada.");
+      void invalidarSugerencias();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
   const fuentes = data?.fuentes ?? [];
   const fuenteOcupada = toggleFuente.isPending || borrarFuente.isPending;
+  const sugerenciaOcupada = aplicarSugerencia.isPending || descartarSugerencia.isPending;
+  const listaSugerencias = sugerencias.data?.sugerencias ?? [];
 
   return (
     <div>
@@ -498,18 +603,30 @@ export default function Algoritmos() {
         titulo={CABECERA.titulo}
         descripcion={CABECERA.descripcion}
         acciones={
-          <Button
-            onClick={() => refrescar.mutate()}
-            disabled={refrescar.isPending}
-            variant="outline"
-            size="sm"
-          >
-            <RefreshCw
-              className={`mr-1 h-4 w-4 ${refrescar.isPending ? "animate-spin" : ""}`}
-              aria-hidden="true"
-            />
-            Refrescar
-          </Button>
+          <>
+            <Button
+              onClick={() => generarSugerencias.mutate()}
+              disabled={generarSugerencias.isPending}
+              variant="outline"
+              size="sm"
+              title="Generar ahora las sugerencias editoriales a partir de las noticias importantes"
+            >
+              <Wand2 className="mr-1 h-4 w-4" aria-hidden="true" />
+              Generar sugerencias
+            </Button>
+            <Button
+              onClick={() => refrescar.mutate()}
+              disabled={refrescar.isPending}
+              variant="outline"
+              size="sm"
+            >
+              <RefreshCw
+                className={`mr-1 h-4 w-4 ${refrescar.isPending ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              Refrescar
+            </Button>
+          </>
         }
       />
 
@@ -533,6 +650,36 @@ export default function Algoritmos() {
         <div className="grid gap-4 lg:grid-cols-3">
           {/* Columna principal: noticias */}
           <div className="space-y-3 lg:col-span-2">
+            {/* Sugerencias editoriales (digest diario): solo se muestra si hay nuevas. */}
+            {listaSugerencias.length > 0 && (
+              <Card className="border-amber-500/30 bg-amber-500/[0.03]">
+                <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Lightbulb className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                    Sugerencias editoriales
+                    <Badge variant="secondary">{listaSugerencias.length}</Badge>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="pb-2 text-xs text-muted-foreground">
+                    Propuestas de cambio a la ficha de plataforma y a los límites, a partir de
+                    las noticias importantes. Revisa y aplica o descarta; nunca se aplican solas.
+                  </p>
+                  <ul className="space-y-2">
+                    {listaSugerencias.map((s) => (
+                      <TarjetaSugerencia
+                        key={s.id}
+                        sugerencia={s}
+                        onAplicar={(sug) => aplicarSugerencia.mutate(sug)}
+                        onDescartar={(sug) => descartarSugerencia.mutate(sug)}
+                        ocupada={sugerenciaOcupada}
+                      />
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Filtros */}
             <div className="flex flex-wrap items-center gap-2">
               <Select value={plataforma} onValueChange={setPlataforma}>
