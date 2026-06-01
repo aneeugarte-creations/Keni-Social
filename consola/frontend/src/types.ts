@@ -3328,3 +3328,96 @@ export interface RespuestaCatalogo {
   apps: AppCatalogo[];
   navegacion: GrupoNavCatalogo[];
 }
+
+// --------------------------------------------------------------------------- //
+// Biblioteca de documentos (prompts + línea editorial)                         //
+// --------------------------------------------------------------------------- //
+
+export type TipoDocumento = "prompt" | "editorial";
+
+/** Un documento de la biblioteca (prompt o pieza editorial). */
+export interface DocumentoBiblioteca {
+  id: string;
+  titulo: string;
+  tipo: TipoDocumento | string;
+  carpeta: string;
+  cuerpo: string;
+  creado: string;
+  actualizado: string;
+  /** Solo editorial: marca | voz | plataforma | tropicalizacion | reglas (o ""). */
+  clase: string;
+  /** Solo editorial: marcas a las que aplica (para el auto-adjunto). */
+  marcas: string[];
+}
+
+/** `GET /api/biblioteca`: documentos filtrados + carpetas existentes. */
+export interface RespuestaBiblioteca {
+  documentos: DocumentoBiblioteca[];
+  carpetas: string[];
+}
+
+export interface RespuestaDocumento {
+  documento: DocumentoBiblioteca;
+}
+
+export interface ItemPapelera {
+  id: string;
+  titulo: string;
+  tipo: string;
+  /** Id de origen al que se restauraría. */
+  origen: string;
+}
+
+export interface RespuestaPapelera {
+  papelera: ItemPapelera[];
+}
+
+export interface RespuestaEditoriales {
+  editoriales: DocumentoBiblioteca[];
+}
+
+export interface AreaBiblioteca {
+  id: string;
+  nombre: string;
+}
+
+export interface RespuestaAreas {
+  areas: AreaBiblioteca[];
+}
+
+export interface RespuestaMarcasBiblioteca {
+  marcas: MarcaDisponible[];
+}
+
+export interface CuerpoCrearDocumento {
+  titulo: string;
+  tipo?: TipoDocumento;
+  carpeta?: string;
+  cuerpo?: string;
+  clase?: string;
+  marcas?: string[];
+}
+
+export interface CuerpoGuardarDocumento {
+  titulo?: string;
+  cuerpo?: string;
+  carpeta?: string;
+  clase?: string;
+  marcas?: string[];
+}
+
+/** Target sobre el que se lanza un prompt. */
+export interface TargetLanzamiento {
+  tipo: "ninguno" | "contenido" | "url" | "area";
+  valor?: string;
+}
+
+export interface CuerpoLanzarBiblioteca {
+  prompt_id?: string;
+  texto?: string;
+  titulo?: string;
+  marca: string;
+  /** Ids de documentos editoriales a adjuntar. */
+  adjuntos?: string[];
+  target?: TargetLanzamiento;
+}

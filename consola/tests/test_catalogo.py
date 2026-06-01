@@ -19,7 +19,8 @@ from keni_consola.apps import registro
 # 3 bloques sin encabezado, en este orden y con estas etiquetas.
 _SIDEBAR_HOY = [
     ["Panel"],
-    ["Generación", "Investigación", "Revisión", "Analíticas"],
+    # Biblioteca (prompts + línea editorial) entra en el bloque "día" tras Generación.
+    ["Generación", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
     # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
     # tablero (Parrilla) es la superficie única de contenido.
     ["Parrilla", "Skills", "Agentes", "Activos"],

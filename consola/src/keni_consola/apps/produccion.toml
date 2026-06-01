@@ -28,6 +28,7 @@ permisos = ["editor", "admin"]
 # para mapear cada router a su app.
 modulos_backend = [
   "agentes",
+  "biblioteca",
   "generaciones",
   "hashtags",
   "plantillas",
@@ -49,6 +50,7 @@ modulos_backend = [
 # test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
 rutas_frontend = [
   "/generacion",
+  "/biblioteca",
   "/investigacion",
   "/investigacion/fuentes",
   "/investigacion/termometro",
@@ -83,6 +85,15 @@ descripcion = "Crea copy o imágenes con las skills editoriales. Pestañas Copy 
 grupo = "dia"
 grupo_orden = 20
 orden = 10
+
+[[nav]]
+ruta = "/biblioteca"
+etiqueta = "Biblioteca"
+icono = "Library"
+descripcion = "Prompts y línea editorial en un editor markdown a pantalla completa. Lanza un prompt sobre contenido o una sección."
+grupo = "dia"
+grupo_orden = 20
+orden = 15
 
 [[nav]]
 ruta = "/investigacion"

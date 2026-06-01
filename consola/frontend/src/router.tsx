@@ -10,6 +10,7 @@ import { AppShell } from "@/components/layout/AppShell";
 const Panel = lazy(() => import("@/pages/Panel"));
 const Generacion = lazy(() => import("@/pages/Generacion"));
 const Skills = lazy(() => import("@/pages/Skills"));
+const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 
 // Hubs (layouts con tabs internos) y sus subpaginas.
 const Investigacion = lazy(() => import("@/pages/Investigacion"));
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
       { path: "panel", element: <Panel /> },
       { path: "generacion", element: <Generacion /> },
       { path: "skills", element: <Skills /> },
+      { path: "biblioteca", element: <Biblioteca /> },
 
       // Hub Investigación
       {

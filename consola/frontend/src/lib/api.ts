@@ -9,6 +9,15 @@
  * - Soporta JSON, multipart (FormData) y descargas (abre la URL en el navegador).
  */
 import type {
+  RespuestaBiblioteca,
+  RespuestaDocumento,
+  RespuestaPapelera,
+  RespuestaEditoriales,
+  RespuestaAreas,
+  RespuestaMarcasBiblioteca,
+  CuerpoCrearDocumento,
+  CuerpoGuardarDocumento,
+  CuerpoLanzarBiblioteca,
   AgenteDetalle,
   AnalisisDiario,
   CompararMetricas,
@@ -694,6 +703,51 @@ export const api = {
       metodo: "POST",
       json: cuerpo,
     }),
+
+  // --- Biblioteca de documentos (prompts + línea editorial) ---
+  biblioteca: (filtros?: { tipo?: string; carpeta?: string; q?: string }, signal?: AbortSignal) =>
+    peticion<RespuestaBiblioteca>(
+      `/biblioteca${query({ tipo: filtros?.tipo, carpeta: filtros?.carpeta, q: filtros?.q })}`,
+      { signal },
+    ),
+  crearDocumento: (cuerpo: CuerpoCrearDocumento) =>
+    peticion<RespuestaDocumento>("/biblioteca", { metodo: "POST", json: cuerpo }),
+  // El id es una ruta con barras (p. ej. `prompt/x/y`); el backend lo casa con `{doc_id:path}`,
+  // así que NO se codifica (los segmentos son slugs seguros [a-z0-9-]).
+  documento: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaDocumento>(`/biblioteca/${id}`, { signal }),
+  guardarDocumento: (id: string, cuerpo: CuerpoGuardarDocumento) =>
+    peticion<RespuestaDocumento>(`/biblioteca/${id}`, { metodo: "PUT", json: cuerpo }),
+  eliminarDocumento: (id: string) =>
+    peticion<RespuestaMensaje>(`/biblioteca/${id}`, { metodo: "DELETE" }),
+  papeleraBiblioteca: (signal?: AbortSignal) =>
+    peticion<RespuestaPapelera>("/biblioteca/papelera", { signal }),
+  restaurarDocumento: (id: string) =>
+    peticion<RespuestaDocumento>(`/biblioteca/papelera/${encodeURIComponent(id)}/restaurar`, {
+      metodo: "POST",
+    }),
+  editorialesBiblioteca: (marca: string, signal?: AbortSignal) =>
+    peticion<RespuestaEditoriales>(`/biblioteca/editoriales${query({ marca })}`, { signal }),
+  areasBiblioteca: (signal?: AbortSignal) =>
+    peticion<RespuestaAreas>("/biblioteca/areas", { signal }),
+  marcasBiblioteca: (signal?: AbortSignal) =>
+    peticion<RespuestaMarcasBiblioteca>("/biblioteca/marcas", { signal }),
+  lanzarBiblioteca: (cuerpo: CuerpoLanzarBiblioteca) =>
+    peticion<RespuestaGeneracion>("/biblioteca/lanzar", { metodo: "POST", json: cuerpo }),
+  lanzarBibliotecaArchivo: (
+    archivo: File,
+    marca: string,
+    opts: { prompt_id?: string; texto?: string; titulo?: string; adjuntos?: string[] } = {},
+  ) => {
+    const form = new FormData();
+    form.set("archivo", archivo);
+    form.set("marca", marca);
+    if (opts.prompt_id) form.set("prompt_id", opts.prompt_id);
+    if (opts.texto) form.set("texto", opts.texto);
+    if (opts.titulo) form.set("titulo", opts.titulo);
+    for (const a of opts.adjuntos ?? []) form.append("adjuntos", a);
+    return peticion<RespuestaGeneracion>("/biblioteca/lanzar-archivo", { metodo: "POST", form });
+  },
 
   // --- Límites de caracteres por red (fuente única backend, #112) ---
   limites: (signal?: AbortSignal) => peticion<RespuestaLimites>("/limites", { signal }),

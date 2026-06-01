@@ -15,6 +15,7 @@ aqui, que es la frontera de "como se arma el prompt".
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,75 @@ from . import jobspec
 
 # Mapa id->nombre de marca (catalogo unico). Para etiquetar la generacion y validar la marca.
 _MARCA_NOMBRE: dict[str, str] = dict(marcas.opciones())
+
+
+# --------------------------------------------------------------------------- #
+# Proveedores de CONTEXTO de AREA (secciones de la Consola; SOLO LECTURA)      #
+# --------------------------------------------------------------------------- #
+#
+# Un prompt puede lanzarse "sobre un area" de la Consola: el proveedor lee datos que el
+# usuario YA ve (parrilla, pendientes) en modo SOLO LECTURA y los entrega como TEXTO plano
+# que se incrusta como bloque de contexto. Degradan con gracia: ante cualquier fallo (sin
+# datos / BD no disponible) devuelven una nota, nunca rompen el lanzamiento.
+
+# Cuantas filas como maximo lista un proveedor de area (no inundar el prompt).
+_MAX_FILAS_AREA = 20
+
+
+def _resumen_pieza(p: dict[str, Any]) -> str:
+    """Una linea legible de una publicacion (tolerante a la forma del dict)."""
+    red = p.get("red") or "?"
+    titulo = p.get("titulo") or (p.get("contenido") or "")[:80]
+    cuando = p.get("fecha_programada") or ""
+    cola = f" — {cuando}" if cuando else ""
+    return f"- [{red}] {titulo}{cola}".rstrip()
+
+
+def _area_parrilla(marca: str) -> str:
+    """Contexto de la PARRILLA: proximas publicaciones programadas (de la marca)."""
+    from . import publicaciones
+
+    items, total = publicaciones.proximas_programadas(_MAX_FILAS_AREA)
+    if marca:
+        items = [p for p in items if p.get("marca") == marca]
+    if not items:
+        return "No hay publicaciones programadas próximas para esta marca."
+    return f"Próximas publicaciones programadas (total {total}):\n" + "\n".join(_resumen_pieza(p) for p in items)
+
+
+def _area_pendientes(marca: str) -> str:
+    """Contexto de PENDIENTES: piezas en cola de aprobacion (de la marca)."""
+    from . import publicaciones
+
+    cola = publicaciones.cola_de_aprobacion()
+    if marca:
+        cola = [p for p in cola if p.get("marca") == marca]
+    if not cola:
+        return "No hay piezas pendientes de aprobación para esta marca."
+    return "Piezas pendientes de aprobación:\n" + "\n".join(_resumen_pieza(p) for p in cola[:_MAX_FILAS_AREA])
+
+
+# Registro de areas (extensible). id -> (etiqueta humana, proveedor(marca) -> texto).
+AREAS: dict[str, tuple[str, Callable[[str], str]]] = {
+    "parrilla": ("Parrilla (próximas programadas)", _area_parrilla),
+    "pendientes": ("Pendientes de aprobación", _area_pendientes),
+}
+
+
+def areas_disponibles() -> list[dict[str, str]]:
+    """Areas que un prompt puede usar como contexto (para el selector del SPA)."""
+    return [{"id": k, "nombre": etiqueta} for k, (etiqueta, _) in AREAS.items()]
+
+
+def area_contexto(area: str, marca: str) -> str:
+    """Texto de contexto de un area. Lanza `BibliotecaError` si el area no existe."""
+    entrada = AREAS.get(area)
+    if entrada is None:
+        raise biblioteca.BibliotecaError("Área no válida.")
+    try:
+        return entrada[1](marca)
+    except Exception:  # noqa: BLE001 -- degradacion honesta: el area no debe romper el lanzamiento
+        return "(No se pudo leer el contexto de esta área.)"
 
 
 def _cwd_ejecucion() -> Path:
