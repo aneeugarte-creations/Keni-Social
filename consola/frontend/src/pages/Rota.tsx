@@ -3049,6 +3049,8 @@ function TarjetaAusencia({
     onError: (e) => toast.error(mensajeError(e)),
   });
 
+  const [editando, setEditando] = React.useState(false);
+
   const etiquetaTipo =
     TIPOS_AUSENCIA.find((t) => t.valor === ausencia.tipo)?.etiqueta ?? ausencia.tipo;
 
@@ -3072,22 +3074,158 @@ function TarjetaAusencia({
             <div className="text-sm text-muted-foreground">{ausencia.motivo}</div>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Borrar ausencia"
-          className="text-muted-foreground hover:text-destructive"
-          onClick={() => borrar.mutate()}
-          disabled={borrar.isPending}
-        >
-          {borrar.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Trash2 className="h-4 w-4" />
-          )}
-        </Button>
+        <div className="flex shrink-0 items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Editar ausencia"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => setEditando(true)}
+            disabled={borrar.isPending}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Borrar ausencia"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => borrar.mutate()}
+            disabled={borrar.isPending}
+          >
+            {borrar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
       </CardContent>
+      <DialogoEditarAusencia
+        ausencia={ausencia}
+        abierto={editando}
+        onCerrar={() => setEditando(false)}
+        onGuardada={() => {
+          setEditando(false);
+          onCambio();
+        }}
+      />
     </Card>
+  );
+}
+
+/**
+ * Diálogo para EDITAR una ausencia existente (PATCH /api/rota/ausencias/{id}).
+ * Reutiliza los mismos campos que `NuevaAusencia` salvo la PERSONA: el backend
+ * (`CuerpoActualizarAusenciaRota`) solo permite cambiar tipo / fechas / motivo.
+ */
+function DialogoEditarAusencia({
+  ausencia,
+  abierto,
+  onCerrar,
+  onGuardada,
+}: {
+  ausencia: AusenciaRota;
+  abierto: boolean;
+  onCerrar: () => void;
+  onGuardada: () => void;
+}) {
+  const [tipo, setTipo] = React.useState<TipoAusencia>(ausencia.tipo);
+  const [desde, setDesde] = React.useState(ausencia.desde);
+  const [hasta, setHasta] = React.useState(ausencia.hasta);
+  const [motivo, setMotivo] = React.useState(ausencia.motivo);
+
+  // Al (re)abrir, repuebla los campos con los valores vigentes de la ausencia.
+  React.useEffect(() => {
+    if (abierto) {
+      setTipo(ausencia.tipo);
+      setDesde(ausencia.desde);
+      setHasta(ausencia.hasta);
+      setMotivo(ausencia.motivo);
+    }
+  }, [abierto, ausencia]);
+
+  const guardar = useMutation({
+    mutationFn: () =>
+      api.actualizarAusenciaRota(ausencia.id, { tipo, desde, hasta, motivo: motivo.trim() }),
+    onSuccess: () => {
+      toast.success("Ausencia actualizada.");
+      onGuardada();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const puedeGuardar = desde !== "" && hasta !== "" && !guardar.isPending;
+
+  return (
+    <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Editar ausencia</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Persona</Label>
+            <Input value={ausencia.miembro_nombre || "—"} disabled readOnly />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Tipo</Label>
+            <Select value={tipo} onValueChange={(v) => setTipo(v as TipoAusencia)}>
+              <SelectTrigger aria-label="Tipo de ausencia">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TIPOS_AUSENCIA.map((t) => (
+                  <SelectItem key={t.valor} value={t.valor}>
+                    {t.etiqueta}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="au-edit-desde">Desde</Label>
+              <Input
+                id="au-edit-desde"
+                type="date"
+                value={desde}
+                onChange={(e) => setDesde(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="au-edit-hasta">Hasta</Label>
+              <Input
+                id="au-edit-hasta"
+                type="date"
+                value={hasta}
+                onChange={(e) => setHasta(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="au-edit-motivo">
+              Motivo <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="au-edit-motivo"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              maxLength={200}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onCerrar}>
+            Cancelar
+          </Button>
+          <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+            {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            Guardar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

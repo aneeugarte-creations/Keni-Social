@@ -132,6 +132,7 @@ import type {
   RespuestaPublicaciones,
   RespuestaColaAprobacion,
   RespuestaPanel,
+  RespuestaAlertas,
   RespuestaReciclarPublicacion,
   RespuestaSugerenciasReciclaje,
   FiltrosReciclaje,
@@ -743,6 +744,13 @@ export const api = {
   // --- Panel ligero (#9): dashboard de un vistazo (métricas + cola + próximas) ---
   panel: (params: { rango?: string; marca?: string } = {}, signal?: AbortSignal) =>
     peticion<RespuestaPanel>(`/panel${query(params)}`, { signal }),
+
+  // --- Alertas de rendimiento (bitácora editorial: reciclaje / bajo rendimiento) ---
+  alertas: (params: { limite?: number } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaAlertas>(
+      `/alertas${query({ limite: params.limite?.toString() })}`,
+      { signal },
+    ),
 
   // --- Reciclaje proactivo (sugerencias de archivo a retomar, #110) ---
   sugerenciasReciclaje: (filtros: FiltrosReciclaje = {}, signal?: AbortSignal) =>

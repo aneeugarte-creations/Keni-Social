@@ -3194,3 +3194,30 @@ export interface RespuestaCatalogo {
   apps: AppCatalogo[];
   navegacion: GrupoNavCatalogo[];
 }
+
+/** Tipo de alerta de rendimiento (subconjunto de eventos internos de la bitácora). */
+export type TipoAlerta = "pieza.bajo_rendimiento" | "pieza.reciclaje_sugerida";
+
+/**
+ * Una alerta de rendimiento leída de la bitácora (`GET /api/alertas`): aviso proactivo
+ * que el daemon `alertas_rendimiento` emite sobre las piezas publicadas.
+ */
+export interface AlertaRendimiento {
+  id: string;
+  /** Uno de `TipoAlerta`; se deja `string` por tolerancia ante tipos nuevos del backend. */
+  tipo: string;
+  contenido_id: string;
+  plataforma_id: string;
+  /** Payload genérico del evento (`{evento, emitido_en, resumen, datos}`). */
+  payload: {
+    resumen?: string;
+    datos?: Record<string, unknown>;
+    [clave: string]: unknown;
+  };
+  creado: string;
+}
+
+/** Respuesta de `GET /api/alertas`. */
+export interface RespuestaAlertas {
+  alertas: AlertaRendimiento[];
+}

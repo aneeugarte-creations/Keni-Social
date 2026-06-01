@@ -15,6 +15,7 @@ import {
   LayoutGrid,
   ListTodo,
   MessageSquare,
+  Pencil,
   Plus,
   Rows3,
   Send,
@@ -78,6 +79,7 @@ import type {
   ContenidoPlataforma,
   CuerpoCrearContenido,
   EstadoContenidoPlataforma,
+  Etiqueta,
   EtiquetaCatalogo,
   MetricaPieza,
   ModoAsistenteContenido,
@@ -1903,11 +1905,25 @@ function DialogoEtiquetas({
   const [clase, setClase] = React.useState("campania");
   const [marca, setMarca] = React.useState("");
 
+  // Edición en línea de una etiqueta existente (renombrar / cambiar eje / marca).
+  const [editandoId, setEditandoId] = React.useState<string | null>(null);
+  const [editNombre, setEditNombre] = React.useState("");
+  const [editClase, setEditClase] = React.useState("campania");
+  const [editMarca, setEditMarca] = React.useState("");
+
   const invalidar = () => {
     void queryClient.invalidateQueries({ queryKey: ["etiquetas"] });
     // El catálogo de etiquetas del tablero viaja dentro de /api/contenido.
     void queryClient.invalidateQueries({ queryKey: CLAVE });
   };
+
+  const empezarEdicion = (e: Etiqueta) => {
+    setEditandoId(e.id);
+    setEditNombre(e.nombre);
+    setEditClase(e.clase);
+    setEditMarca(e.marca || "");
+  };
+  const cancelarEdicion = () => setEditandoId(null);
 
   const crear = useMutation({
     mutationFn: () =>
@@ -1916,6 +1932,20 @@ function DialogoEtiquetas({
       invalidar();
       setNombre("");
       toast.success("Etiqueta creada.");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const actualizar = useMutation({
+    mutationFn: (id: string) =>
+      api.actualizarEtiqueta(id, {
+        nombre: editNombre.trim(),
+        clase: editClase as never,
+        marca: editMarca,
+      }),
+    onSuccess: () => {
+      invalidar();
+      setEditandoId(null);
+      toast.success("Etiqueta actualizada.");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -2006,31 +2036,111 @@ function DialogoEtiquetas({
             </p>
           ) : (
             <div className="space-y-1.5">
-              {etiquetas.map((e) => (
-                <div
-                  key={e.id}
-                  className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-sm"
-                >
-                  <Tag className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-medium">{e.nombre}</span>
-                  <Badge variant="secondary" className="font-normal">
-                    {CLASE_ETIQUETA_LABEL[e.clase] ?? e.clase}
-                  </Badge>
-                  <Badge variant="outline" className="font-normal">
-                    {e.marca_nombre || "Global"}
-                  </Badge>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Borrar etiqueta ${e.nombre}`}
-                    className="ml-auto h-7 w-7 text-muted-foreground hover:text-destructive"
-                    onClick={() => borrar.mutate(e.id)}
-                    disabled={borrar.isPending}
+              {etiquetas.map((e) =>
+                editandoId === e.id ? (
+                  <div
+                    key={e.id}
+                    className="grid grid-cols-[1fr_auto_auto_auto_auto] items-end gap-2 rounded-md border border-border/60 px-2 py-1.5"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`et-edit-nombre-${e.id}`} className="sr-only">
+                        Nombre
+                      </Label>
+                      <Input
+                        id={`et-edit-nombre-${e.id}`}
+                        value={editNombre}
+                        onChange={(ev) => setEditNombre(ev.target.value)}
+                        maxLength={60}
+                      />
+                    </div>
+                    <Select value={editClase} onValueChange={setEditClase}>
+                      <SelectTrigger aria-label="Eje" className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CLASE_ETIQUETA_LABEL).map(([v, l]) => (
+                          <SelectItem key={v} value={v}>
+                            {l}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select
+                      value={editMarca || "__global__"}
+                      onValueChange={(v) => setEditMarca(v === "__global__" ? "" : v)}
+                    >
+                      <SelectTrigger aria-label="Marca" className="w-36">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__global__">Global</SelectItem>
+                        {marcas.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.nombre}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      size="icon"
+                      aria-label={`Guardar etiqueta ${e.nombre}`}
+                      className="h-9 w-9"
+                      onClick={() => actualizar.mutate(e.id)}
+                      disabled={editNombre.trim().length === 0 || actualizar.isPending}
+                    >
+                      {actualizar.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Cancelar edición"
+                      className="h-9 w-9"
+                      onClick={cancelarEdicion}
+                      disabled={actualizar.isPending}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div
+                    key={e.id}
+                    className="flex items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-sm"
+                  >
+                    <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="font-medium">{e.nombre}</span>
+                    <Badge variant="secondary" className="font-normal">
+                      {CLASE_ETIQUETA_LABEL[e.clase] ?? e.clase}
+                    </Badge>
+                    <Badge variant="outline" className="font-normal">
+                      {e.marca_nombre || "Global"}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Editar etiqueta ${e.nombre}`}
+                      className="ml-auto h-7 w-7 text-muted-foreground hover:text-foreground"
+                      onClick={() => empezarEdicion(e)}
+                      disabled={borrar.isPending}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Borrar etiqueta ${e.nombre}`}
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => borrar.mutate(e.id)}
+                      disabled={borrar.isPending}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ),
+              )}
             </div>
           )}
         </div>
