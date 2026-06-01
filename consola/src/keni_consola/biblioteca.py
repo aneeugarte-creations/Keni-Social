@@ -53,6 +53,10 @@ TIPOS = ("prompt", "editorial")
 # Clase de un documento EDITORIAL (organiza la linea editorial y gobierna el auto-adjunto).
 CLASES = ("marca", "voz", "plataforma", "tropicalizacion", "reglas")
 
+# Tipo de SALIDA de un PROMPT: "" / "documento" = texto markdown (no crea artefactos);
+# "piezas" = copy por red que se parsea y crea borradores en Parrilla (selector de redes).
+SALIDAS = ("", "documento", "piezas")
+
 # Clases editoriales GLOBALES: aplican a TODAS las marcas (no llevan `marcas` propias).
 _CLASES_GLOBALES = frozenset({"plataforma", "tropicalizacion", "reglas"})
 
@@ -85,6 +89,8 @@ class Documento:
     actualizado: str
     clase: str = ""  # solo editorial
     marcas: list[str] = field(default_factory=list)  # solo editorial (clase marca/voz)
+    # Solo prompt: "" | "documento" (texto) | "piezas" (copy por red -> borradores en Parrilla).
+    salida: str = ""
 
     def a_dict(self) -> dict[str, object]:
         return {
@@ -97,6 +103,7 @@ class Documento:
             "actualizado": self.actualizado,
             "clase": self.clase,
             "marcas": list(self.marcas),
+            "salida": self.salida,
         }
 
 
@@ -216,6 +223,8 @@ def _serializar(doc: Documento) -> str:
     if doc.tipo == "editorial":
         meta["clase"] = doc.clase
         meta["marcas"] = list(doc.marcas)
+    elif doc.tipo == "prompt" and doc.salida:
+        meta["salida"] = doc.salida
     cabecera = yaml.safe_dump(meta, default_flow_style=False, allow_unicode=True, sort_keys=False)
     return f"---\n{cabecera}---\n\n{doc.cuerpo.rstrip()}\n"
 
@@ -246,9 +255,11 @@ def _leer(ruta: Path) -> Documento | None:
     marcas = [m for m in marcas_crudas if isinstance(m, str)] if isinstance(marcas_crudas, list) else []
     creado = meta.get("creado") if isinstance(meta.get("creado"), str) else ""
     actualizado = meta.get("actualizado") if isinstance(meta.get("actualizado"), str) else creado
+    salida = meta.get("salida")
+    salida = salida if isinstance(salida, str) and salida in SALIDAS else ""
     return Documento(
         id=doc_id, titulo=titulo, tipo=tipo, carpeta=carpeta, cuerpo=cuerpo,
-        creado=creado, actualizado=actualizado, clase=clase, marcas=marcas,
+        creado=creado, actualizado=actualizado, clase=clase, marcas=marcas, salida=salida,
     )
 
 
