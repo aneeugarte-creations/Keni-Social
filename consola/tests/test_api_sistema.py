@@ -190,3 +190,132 @@ def test_s3_configurado_fallo_red_degrada(entorno, monkeypatch):
     assert datos["configurado"] is True
     assert datos["salud"] == "err"
     assert datos["error"]
+
+
+# --------------------------------------------------------------------------- #
+# GET /api/sistema/s3/objetos: navegador de carpetas/objetos                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_objetos_editor_403(entorno):
+    """Un editor (no admin) recibe 403 en el endpoint de objetos."""
+    c = _cli_como("editor")
+    assert c.get("/api/sistema/s3/objetos").status_code == 403
+
+
+def test_objetos_token_403(entorno):
+    """El token de mantenimiento (no sesion admin) recibe 403."""
+    c = _cli_token()
+    assert c.get("/api/sistema/s3/objetos").status_code == 403
+
+
+def test_objetos_sin_s3_configurado(entorno):
+    """Sin S3 cableado: degradado (configurado:false), NUNCA 500."""
+    assert not __import__("keni_consola.config", fromlist=["config"]).s3_configurado()
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objetos")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["configurado"] is False
+    assert datos["carpetas"] == []
+    assert datos["objetos"] == []
+    assert datos["error"]  # mensaje de "no configurado"
+
+
+def test_objetos_raiz(entorno, monkeypatch):
+    """Con S3 cableado: lista carpetas y objetos del nivel raiz (prefijo vacio)."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    class _ClienteFake:
+        def list_objects_v2(self, **k):
+            assert k.get("Delimiter") == "/"
+            assert k.get("Prefix") == ""
+            return {
+                "CommonPrefixes": [{"Prefix": "videos/"}, {"Prefix": "imagenes/"}],
+                "Contents": [{"Key": "logo.png", "Size": 512, "LastModified": None}],
+                "IsTruncated": False,
+            }
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objetos")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["configurado"] is True
+    assert datos["prefijo"] == ""
+    assert "videos/" in datos["carpetas"]
+    assert "imagenes/" in datos["carpetas"]
+    assert len(datos["objetos"]) == 1
+    assert datos["objetos"][0]["key"] == "logo.png"
+    assert datos["objetos"][0]["nombre"] == "logo.png"
+    assert datos["objetos"][0]["tamano"] == 512
+    # Migas: solo la raiz
+    assert datos["migas"] == [{"nombre": "Raiz", "prefijo": ""}]
+    assert datos["error"] is None
+
+
+def test_objetos_subprefijo(entorno, monkeypatch):
+    """Navegando a un subprefijo devuelve el prefijo normalizado y las migas correctas."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+    monkeypatch.setenv("S3_BUCKET", "keni-media")
+
+    from datetime import datetime, timezone
+
+    ts = datetime(2024, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    class _ClienteFake:
+        def list_objects_v2(self, **k):
+            assert k.get("Prefix") == "videos/"
+            return {
+                "CommonPrefixes": [{"Prefix": "videos/2024/"}],
+                "Contents": [{"Key": "videos/portada.jpg", "Size": 1024, "LastModified": ts}],
+                "IsTruncated": False,
+            }
+
+    from keni_consola.api import sistema as api_sistema
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", lambda: _ClienteFake())
+    c = _cli_como("admin")
+    # El prefijo se puede enviar con o sin barra final; el back lo normaliza.
+    r = c.get("/api/sistema/s3/objetos?prefijo=videos")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["prefijo"] == "videos/"
+    assert datos["carpetas"] == ["videos/2024/"]
+    assert len(datos["objetos"]) == 1
+    assert datos["objetos"][0]["nombre"] == "portada.jpg"
+    assert datos["objetos"][0]["tamano"] == 1024
+    assert datos["objetos"][0]["modificado"] == ts.isoformat()
+    # Migas: Raiz + videos
+    assert len(datos["migas"]) == 2
+    assert datos["migas"][0] == {"nombre": "Raiz", "prefijo": ""}
+    assert datos["migas"][1] == {"nombre": "videos", "prefijo": "videos/"}
+
+
+def test_objetos_fallo_red_degrada(entorno, monkeypatch):
+    """Un fallo de boto3/red en el explorador se reporta en error, NO 500."""
+    monkeypatch.setenv("S3_ENDPOINT", "http://garage:3900")
+    monkeypatch.setenv("S3_ACCESS_KEY", "ak")
+    monkeypatch.setenv("S3_SECRET_KEY", "sk")
+
+    from keni_consola.api import sistema as api_sistema
+
+    def boom():
+        raise RuntimeError("sin red")
+
+    monkeypatch.setattr(api_sistema, "_cliente_s3", boom)
+    c = _cli_como("admin")
+    r = c.get("/api/sistema/s3/objetos")
+    assert r.status_code == 200
+    datos = r.json()
+    assert datos["configurado"] is True
+    assert datos["error"]
+    assert datos["carpetas"] == []
+    assert datos["objetos"] == []

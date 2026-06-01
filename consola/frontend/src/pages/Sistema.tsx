@@ -1,7 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
+  ChevronRight,
   Cpu,
   Database,
+  File,
+  Folder,
   HardDrive,
   Loader2,
   MemoryStick,
@@ -18,9 +21,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { DiscoSistema, RespuestaProbarS3, RespuestaS3 } from "@/types";
+import type { DiscoSistema, MigaS3, RespuestaProbarS3, RespuestaS3 } from "@/types";
 
 const CABECERA = {
   titulo: "Sistema",
@@ -301,6 +312,216 @@ function SeccionS3() {
   );
 }
 
+// --------------------------------------------------------------------------- #
+// Navegador de carpetas/objetos del bucket S3                                  #
+// --------------------------------------------------------------------------- #
+
+/** Breadcrumb de navegación del explorador S3. */
+function BreadcrumbS3({
+  migas,
+  onNavegar,
+}: {
+  migas: MigaS3[];
+  onNavegar: (prefijo: string) => void;
+}) {
+  return (
+    <nav className="flex items-center gap-1 text-sm" aria-label="Navegación del bucket">
+      {migas.map((miga, idx) => {
+        const esUltima = idx === migas.length - 1;
+        return (
+          <React.Fragment key={miga.prefijo}>
+            {idx > 0 && (
+              <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+            )}
+            {esUltima ? (
+              <span className="font-medium text-foreground">{miga.nombre}</span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onNavegar(miga.prefijo)}
+                className="text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                {miga.nombre}
+              </button>
+            )}
+          </React.Fragment>
+        );
+      })}
+    </nav>
+  );
+}
+
+/** Explorador de carpetas y objetos de un bucket S3/Garage (solo lectura). */
+function SeccionNavegadorS3() {
+  const [prefijo, setPrefijo] = React.useState("");
+
+  const query = useQuery({
+    queryKey: ["sistema", "s3-objetos", prefijo],
+    queryFn: ({ signal }) => api.s3Objetos(prefijo, signal),
+    // Sin auto-refresco: el explorador se refresca manualmente o al navegar.
+    staleTime: 30_000,
+  });
+
+  // Si S3 no está configurado, no mostramos esta sección en absoluto:
+  // SeccionS3 ya lo avisa. Esperamos a tener datos para decidir.
+  if (query.isPending) {
+    return (
+      <Card>
+        <CardHeader className="p-4 pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Folder className="h-4 w-4" aria-hidden="true" />
+            Explorador del bucket
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 pt-0">
+          <Skeleton className="h-32 w-full rounded-lg" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (query.isError) {
+    const err = query.error;
+    // 403: sin permisos (ya gestionado por la guardia superior, pero por si acaso).
+    if (err instanceof ApiError && err.status === 403) return null;
+    return (
+      <BloqueError
+        titulo="No se pudo leer el bucket"
+        mensaje={mensajeError(err)}
+        onReintentar={() => void query.refetch()}
+        cargando={query.isFetching}
+      />
+    );
+  }
+
+  const datos = query.data;
+
+  // Sin S3 configurado: SeccionS3 ya lo avisa; omitimos el explorador.
+  if (!datos.configurado) return null;
+
+  const { carpetas, objetos, migas } = datos;
+  const hayContenido = carpetas.length > 0 || objetos.length > 0;
+
+  return (
+    <Card>
+      <CardHeader className="p-4 pb-2">
+        <CardTitle className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
+          <span className="flex items-center gap-2">
+            <Folder className="h-4 w-4" aria-hidden="true" />
+            Explorador del bucket
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+            aria-label="Refrescar"
+          >
+            {query.isFetching ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 p-4 pt-0">
+        {/* Breadcrumb */}
+        <BreadcrumbS3 migas={migas} onNavegar={setPrefijo} />
+
+        {/* Error de sonda (S3 configurado pero fallo de red) */}
+        {datos.error && (
+          <p className="text-sm text-amber-600 dark:text-amber-400">{datos.error}</p>
+        )}
+
+        {/* Tabla de carpetas y objetos */}
+        {!datos.error && !hayContenido ? (
+          <p className="text-sm text-muted-foreground">Esta carpeta está vacía.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-8" />
+                <TableHead>Nombre</TableHead>
+                <TableHead className="text-right">Tamaño</TableHead>
+                <TableHead className="hidden text-right sm:table-cell">Modificado</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Enlace ".." para subir un nivel */}
+              {prefijo && (
+                <TableRow
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => {
+                    // Sube al nivel anterior: quita el último segmento del prefijo.
+                    const partes = prefijo.replace(/\/$/, "").split("/");
+                    partes.pop();
+                    setPrefijo(partes.length > 0 ? `${partes.join("/")}/` : "");
+                  }}
+                >
+                  <TableCell>
+                    <Folder className="h-4 w-4 text-blue-500" aria-hidden="true" />
+                  </TableCell>
+                  <TableCell className="font-medium text-muted-foreground">..</TableCell>
+                  <TableCell />
+                  <TableCell className="hidden sm:table-cell" />
+                </TableRow>
+              )}
+
+              {/* Subcarpetas */}
+              {carpetas.map((carpeta) => {
+                // Nombre legible: el ultimo segmento del prefijo (sin barra final).
+                const nombre = carpeta.replace(/\/$/, "").split("/").pop() ?? carpeta;
+                return (
+                  <TableRow
+                    key={carpeta}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => setPrefijo(carpeta)}
+                  >
+                    <TableCell>
+                      <Folder className="h-4 w-4 text-blue-500" aria-hidden="true" />
+                    </TableCell>
+                    <TableCell className="font-medium">{nombre}/</TableCell>
+                    <TableCell className="text-right text-muted-foreground">—</TableCell>
+                    <TableCell className="hidden text-right text-muted-foreground sm:table-cell">
+                      —
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+
+              {/* Objetos del nivel actual */}
+              {objetos.map((obj) => {
+                const fechaCorta = obj.modificado
+                  ? new Date(obj.modificado).toLocaleDateString("es-MX", {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })
+                  : "—";
+                return (
+                  <TableRow key={obj.key}>
+                    <TableCell>
+                      <File className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                    </TableCell>
+                    <TableCell className="font-medium">{obj.nombre}</TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {formatoBytes(obj.tamano)}
+                    </TableCell>
+                    <TableCell className="hidden text-right text-muted-foreground sm:table-cell">
+                      {fechaCorta}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function Dato({ etiqueta, valor }: { etiqueta: string; valor: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3 border-b border-border/50 py-1 last:border-0">
@@ -318,9 +539,9 @@ function mensajeError(error: unknown): string {
 
 /**
  * Panel de SISTEMA (admin): monitorización del servidor (CPU/RAM/disco, auto-refresco)
- * y estado/gestión del almacenamiento S3/Garage (uso del bucket + probar conexión, solo
- * lectura). El backend devuelve 403 si quien entra no es admin; aquí lo avisamos al
- * llegar por URL directa (el nav ya oculta la página para no-admin).
+ * y estado/gestión del almacenamiento S3/Garage (uso del bucket + probar conexión + explorador
+ * de carpetas/objetos, solo lectura). El backend devuelve 403 si quien entra no es admin;
+ * aquí lo avisamos al llegar por URL directa (el nav ya oculta la página para no-admin).
  */
 export default function Sistema() {
   // Una sonda inicial para detectar el 403 y mostrar el aviso de permiso de forma unificada.
@@ -347,6 +568,7 @@ export default function Sistema() {
         <div className="space-y-6">
           <SeccionRecursos />
           <SeccionS3 />
+          <SeccionNavegadorS3 />
         </div>
       )}
     </>

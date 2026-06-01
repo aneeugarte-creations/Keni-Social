@@ -17,6 +17,11 @@ Endpoints (bajo `/api/sistema`, CONTRATO con el frontend):
       sin cablear devuelve `configurado:false` (degradado, NO 500). `salud` es "ok"/"err".
   - POST /api/sistema/s3/probar -> {salud, error?}. Test de conexion (head_bucket). SOLO
       lectura: NADA destructivo. 409 si S3 no esta configurado (no hay nada que probar).
+  - GET /api/sistema/s3/objetos?prefijo=<p> -> {carpetas, objetos, prefijo, migas}.
+      Navega el bucket por prefijo usando Delimiter="/": devuelve subcarpetas (CommonPrefixes)
+      y objetos del nivel actual ({key, nombre, tamano, modificado}). Tope anti-escaneo de
+      1000 objetos por pagina, maximo _MAX_PAGINAS_NAV paginas. Sin S3: degradado, no 500.
+      SOLO lectura: NADA destructivo.
 
 Implementacion DEFENSIVA: cualquier fallo de psutil/boto3/red se captura y se degrada a un
 campo de error legible; la pagina nunca se cae por una sonda.
@@ -25,6 +30,7 @@ campo de error legible; la pagina nunca se cae por una sonda.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 
 from starlette.requests import Request
@@ -43,6 +49,10 @@ _MSG_SOLO_ADMIN = "Solo un administrador puede ver el estado del sistema."
 # media de la consola sin convertir el panel en un escaneo eterno. Si se supera, marcamos
 # `truncado` para que el front avise de que el conteo es un minimo.
 _MAX_OBJETOS = 100_000
+
+# Tope de paginas al navegar un prefijo (explorador de carpetas): 5 paginas = 5000 objetos
+# por nivel. Mas que suficiente para la media de la consola; evita escaneos infinitos.
+_MAX_PAGINAS_NAV = 5
 
 
 def _es_admin(request: Request) -> bool:
@@ -271,8 +281,136 @@ async def probar_s3(request: Request) -> Response:
     return JSONResponse({"salud": "ok", "error": None})
 
 
+# --------------------------------------------------------------------------- #
+# S3 / Garage (navegador de carpetas/objetos)                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _migas(prefijo: str) -> list[dict]:
+    """Genera las migas de pan para el breadcrumb dado un prefijo como 'a/b/c/'.
+
+    Devuelve [{nombre, prefijo}] incluyendo la raiz (prefijo vacio). Cada elemento lleva
+    el prefijo acumulado hasta ese nivel para poder navegar directo a cualquier ancestro.
+    """
+    migas: list[dict] = [{"nombre": "Raiz", "prefijo": ""}]
+    if not prefijo:
+        return migas
+    # El prefijo termina en "/": dividimos y acumulamos.
+    partes = prefijo.rstrip("/").split("/")
+    acumulado = ""
+    for parte in partes:
+        acumulado = f"{acumulado}{parte}/"
+        migas.append({"nombre": parte, "prefijo": acumulado})
+    return migas
+
+
+async def s3_objetos(request: Request) -> Response:
+    """GET /api/sistema/s3/objetos?prefijo=<p>: navega el bucket por prefijo. Admin.
+
+    Usa `list_objects_v2` con `Delimiter="/"` para distinguir "carpetas" (CommonPrefixes)
+    de objetos del nivel actual. Devuelve:
+      - carpetas: lista de prefijos de subcarpetas bajo el prefijo actual.
+      - objetos:  lista {key, nombre (basename), tamano, modificado} del nivel.
+      - prefijo:  el prefijo activo (normalizado).
+      - migas:    breadcrumb [{nombre, prefijo}] desde la raiz hasta el nivel actual.
+
+    Tope anti-escaneo: _MAX_PAGINAS_NAV paginas (hasta 5000 objetos por nivel). Si S3 no
+    esta configurado devuelve payload degradado (no 500). SOLO lectura: nada destructivo.
+    """
+    if not _es_admin(request):
+        return _rechazo_no_admin()
+
+    if not config.s3_configurado():
+        return JSONResponse(
+            {
+                "configurado": False,
+                "carpetas": [],
+                "objetos": [],
+                "prefijo": "",
+                "migas": [{"nombre": "Raiz", "prefijo": ""}],
+                "error": "S3 no está configurado en este servidor.",
+            }
+        )
+
+    # Normalizar prefijo: sin barra al inicio, con barra al final (salvo raiz).
+    prefijo_raw = request.query_params.get("prefijo", "")
+    prefijo = prefijo_raw.lstrip("/")
+    if prefijo and not prefijo.endswith("/"):
+        prefijo = f"{prefijo}/"
+
+    bucket = config.s3_bucket()
+    carpetas: list[str] = []
+    objetos_lista: list[dict] = []
+    error: str | None = None
+
+    try:
+        cliente = _cliente_s3()
+        token: str | None = None
+        paginas = 0
+        while paginas < _MAX_PAGINAS_NAV:
+            paginas += 1
+            kwargs: dict = {
+                "Bucket": bucket,
+                "Delimiter": "/",
+                "Prefix": prefijo,
+            }
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = cliente.list_objects_v2(**kwargs)
+
+            # Subcarpetas (CommonPrefixes): S3 agrupa las keys con "/" como separador.
+            for cp in resp.get("CommonPrefixes", []) or []:
+                p = cp.get("Prefix", "")
+                if p:
+                    carpetas.append(p)
+
+            # Objetos del nivel actual (excluimos el "directorio virtual" propio).
+            for item in resp.get("Contents", []) or []:
+                key = item.get("Key", "")
+                if key == prefijo:
+                    # Es el "folder marker" (clave identica al prefijo): omitir.
+                    continue
+                nombre = os.path.basename(key.rstrip("/")) or key
+                tamano = int(item.get("Size", 0) or 0)
+                modificado_raw = item.get("LastModified")
+                modificado = (
+                    modificado_raw.isoformat() if modificado_raw is not None else None
+                )
+                objetos_lista.append(
+                    {
+                        "key": key,
+                        "nombre": nombre,
+                        "tamano": tamano,
+                        "modificado": modificado,
+                    }
+                )
+
+            if not resp.get("IsTruncated"):
+                break
+            token = resp.get("NextContinuationToken")
+            if not token:
+                break
+    except Exception as e:  # noqa: BLE001 -- boto3/red: degradar, no 500
+        _logger.warning("Error al navegar S3/Garage (prefijo=%r): %s", prefijo, e)
+        error = "No se pudo listar el almacenamiento. Revisa el endpoint y las credenciales."
+
+    return JSONResponse(
+        {
+            "configurado": True,
+            "carpetas": carpetas,
+            "objetos": objetos_lista,
+            "prefijo": prefijo,
+            "migas": _migas(prefijo),
+            "error": error,
+        }
+    )
+
+
 RUTAS = [
     Route("/api/sistema/recursos", recursos, methods=["GET"]),
     Route("/api/sistema/s3", s3, methods=["GET"]),
+    # IMPORTANTE: la ruta mas especifica (/s3/objetos) va ANTES que /s3/probar y /s3
+    # para que Starlette la case correctamente.
+    Route("/api/sistema/s3/objetos", s3_objetos, methods=["GET"]),
     Route("/api/sistema/s3/probar", probar_s3, methods=["POST"]),
 ]
