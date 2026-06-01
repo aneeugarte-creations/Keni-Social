@@ -1,8 +1,12 @@
-# Woodpecker: bundle del frontend (verifica que la SPA COMPILA).
-# Espejo del job `frontend-build` de .github/workflows/ci.yml.
-# `npm run build` corre `tsc -b && vite build`: falla si el typecheck o el build
-# de Vite se rompen. El bundle versionado en consola/src/keni_consola/webapp/ no
-# se recommitea aqui; solo se comprueba que sigue compilando.
+# Woodpecker: calidad del frontend (lint + tests + bundle).
+# `npm run lint`  -> eslint (estilo y errores de patrón).
+# `npm run test`  -> vitest (tests del frontend).
+# `npm run build` -> tsc -b && vite build (typecheck + build de la SPA).
+# Los tres corren tras un unico `npm ci`; falla a la primera. Antes solo se
+# comprobaba el build: lint y tests no se ejecutaban en CI y dependian de que
+# cada quien los corriera en local (red de seguridad floja con varios autores
+# empujando directo a `main`). El bundle versionado en consola/src/keni_consola/
+# webapp/ no se recommitea aqui; solo se comprueba que sigue compilando.
 # TEST SCOPING (plan §1.5): solo corre cuando cambia el frontend (o sus tipos
 # generados / el contrato), y SIEMPRE en push a `main` (el deploy `depends_on:
 # frontend-build` lo necesita) y a mano.
@@ -22,4 +26,6 @@ steps:
     commands:
       - cd consola/frontend
       - npm ci
+      - npm run lint
+      - npm run test
       - npm run build
