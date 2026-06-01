@@ -637,6 +637,18 @@ function PanelLanzar({
 
   const { generacion, ejecutando, cancelando, iniciar, cancelar } = useGeneracion("keni:biblioteca-lanzar");
 
+  // "Pensando…" con cronómetro: el modelo puede tardar ~1-2 min en RAZONAR antes de emitir
+  // el primer token (la fase de thinking NO se transmite a `salida`), así que mientras corre
+  // sin salida la UI parecía colgada. Contamos los segundos para señalar que sigue vivo.
+  const pensando = ejecutando && !generacion?.salida && !generacion?.error;
+  const [pensandoSeg, setPensandoSeg] = React.useState(0);
+  React.useEffect(() => {
+    if (!pensando) return;
+    setPensandoSeg(0);
+    const t = setInterval(() => setPensandoSeg((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [pensando]);
+
   // Línea editorial auto-resuelta por marca (selección inicial = todas).
   const editorialesQuery = useQuery({
     queryKey: ["biblioteca-editoriales", marca],
@@ -825,8 +837,22 @@ function PanelLanzar({
           </div>
           {generacion.error ? (
             <p className="text-sm text-destructive">{generacion.error}</p>
+          ) : pensando ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Pensando… {pensandoSeg}s</span>
+            </div>
           ) : (
-            <Markdown>{generacion.salida || (ejecutando ? "_Generando…_" : "")}</Markdown>
+            <>
+              <Markdown>{generacion.salida}</Markdown>
+              {/* MODO PIEZAS: el copy NO se queda aquí, se guarda como borradores por red en
+                  la Parrilla. Lo decimos al completar para que no se busque en este panel. */}
+              {esPiezas && !ejecutando && generacion.salida ? (
+                <p className="text-xs text-muted-foreground">
+                  El copy se guardó como borradores en la Parrilla (uno por red), listos para revisar.
+                </p>
+              ) : null}
+            </>
           )}
         </div>
       ) : null}

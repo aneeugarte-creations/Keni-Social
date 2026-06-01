@@ -20,10 +20,11 @@ import os
 import sys
 import threading
 import time
+from datetime import datetime, timedelta
 
 import pytest
 
-from keni_consola import cola, generaciones, repos, worker
+from keni_consola import cola, config, db, generaciones, repos, worker
 from keni_consola.dominio import jobspec
 
 _MARCA = "unotv"
@@ -71,6 +72,33 @@ def test_encolar_idempotente_por_gen_id(entorno):
     primero = cola.reclamar()
     assert primero is not None and primero["gen_id"] == gen["id"]
     assert cola.reclamar() is None  # no habia un segundo job
+
+
+def test_reclama_job_huerfano_de_worker_muerto(entorno):
+    """Un job `reclamado` cuyo worker murio (claimed_at viejo) lo RE-RECLAMA otro worker.
+
+    Antes quedaba `reclamado` para siempre y su registro `ejecutando` -> "Generando..." sin
+    fin. Un job recien reclamado (worker vivo) NO se re-reclama: solo al pasar el umbral.
+    """
+    gen = generaciones.crear({"tipo": "hashtags", "marca": _MARCA, "etiqueta": "X"})
+    cola.encolar(gen["id"], jobspec.construir(prompt="p", procesar=jobspec.construir_hashtags()))
+    primero = cola.reclamar("worker-muerto")
+    assert primero is not None
+    # Recien reclamado: un segundo worker NO lo roba (el primero podria seguir vivo).
+    assert cola.reclamar("worker-2") is None
+    # Envejecemos `claimed_at` mas alla del umbral de huerfano (wall-timeout + margen).
+    viejo = (
+        datetime.now()
+        - timedelta(seconds=config.claude_timeout() + db._RECLAIM_STALE_MARGEN_S + 60)
+    ).isoformat(timespec="seconds")
+    con = db._conectar()
+    try:
+        con.execute("UPDATE jobs SET claimed_at = ? WHERE id = ?", (viejo, primero["id"]))
+        con.commit()
+    finally:
+        con.close()
+    rereclamado = cola.reclamar("worker-2")
+    assert rereclamado is not None and rereclamado["id"] == primero["id"]
 
 
 def test_spec_corrupto_se_reclama_con_spec_none(entorno):

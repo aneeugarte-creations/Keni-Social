@@ -6528,6 +6528,14 @@ JOB_PENDIENTE = "pendiente"
 JOB_RECLAMADO = "reclamado"
 JOB_TERMINADO = "terminado"
 
+# Margen sobre el wall-timeout tras el cual un job `reclamado` se considera HUERFANO (su
+# worker murio a mitad: reinicio/deploy/OOM) y OTRO worker lo RE-RECLAMA para que el trabajo
+# complete solo, sin que el usuario relance. Debe SUPERAR el wall-timeout + el margen terminal
+# del worker (~60 s), asi un worker VIVO que aun esta cerrando su job nunca pierde la fila
+# (a esa edad la fila ya seria `terminado`, no `reclamado`). El reaper de generaciones (TTL
+# 1 h) sigue como red de ultimo recurso si el re-reclamo tampoco lo saca adelante.
+_RECLAIM_STALE_MARGEN_S = 300
+
 
 def encolar_job(gen_id: str, spec: str) -> str:
     """Encola un job de generacion para el `gen_id` dado con su `spec` (JSON). Devuelve el job id.
@@ -6552,19 +6560,30 @@ def encolar_job(gen_id: str, spec: str) -> str:
 
 
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:
-    """Clava UN job pendiente de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
+    """Clava UN job de forma CONCURRENTE-SEGURA y lo devuelve (None si no hay).
 
     `SELECT ... FOR UPDATE SKIP LOCKED LIMIT 1` dentro de la transaccion + UPDATE a
     `reclamado`: otro worker que corra a la vez SALTA esa fila (no la doble-ejecuta).
     Devuelve `{id, gen_id, spec}` del job clavado.
+
+    RE-RECLAMO DE HUERFANOS: ademas de los `pendiente`, clava los `reclamado` cuyo
+    `claimed_at` es mas viejo que `wall-timeout + _RECLAIM_STALE_MARGEN_S` — su worker murio
+    a mitad (reinicio/deploy/OOM) y nadie lo sacaria adelante (antes quedaba `reclamado` para
+    siempre y el registro `ejecutando` -> la UI mostraba "Generando..." sin fin). El umbral
+    supera el tiempo maximo que un worker VIVO retiene la fila, asi nunca se roba un job en
+    curso. El UPDATE re-sella `worker`/`claimed_at`, asi un segundo abandono se vuelve a cubrir.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
+    limite_huerfano = (
+        datetime.now() - timedelta(seconds=config.claude_timeout() + _RECLAIM_STALE_MARGEN_S)
+    ).isoformat(timespec="seconds")
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT id, gen_id, spec FROM jobs WHERE estado = ? "
+            "SELECT id, gen_id, spec FROM jobs "
+            "WHERE estado = ? OR (estado = ? AND claimed_at IS NOT NULL AND claimed_at < ?) "
             "ORDER BY creado ASC, id ASC LIMIT 1 FOR UPDATE SKIP LOCKED",
-            (JOB_PENDIENTE,),
+            (JOB_PENDIENTE, JOB_RECLAMADO, limite_huerfano),
         ).fetchone()
         if fila is None:
             con.commit()

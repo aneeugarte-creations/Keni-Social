@@ -104,6 +104,7 @@ def lanzar(
     marca: str,
     adjuntos_ids: list[str] | None = None,
     bloque_contexto: str = "",
+    titulo_contenido: str = "",
     redes_ids: list[str] | None = None,
     dir_temporal: Path | None = None,
     autor: dict[str, str] | None = None,
@@ -113,7 +114,10 @@ def lanzar(
     `prompt_id` (de la biblioteca) o `texto` (prompt ad-hoc pegado): uno de los dos. `marca`
     debe ser una marca del catalogo. `adjuntos_ids` son documentos editoriales a adjuntar
     (ya resueltos en la UI a partir de `biblioteca.editoriales_de_marca`, ajustables).
-    `bloque_contexto` es el texto del target ya resuelto por el llamante.
+    `bloque_contexto` es el texto del target ya resuelto por el llamante. `titulo_contenido`
+    es un título del CONTENIDO sugerido por el llamante (p. ej. el titular real de una URL):
+    en MODO PIEZAS titula los borradores, evitando que se derive de la 1ª línea del bloque
+    (que en una URL es el AVISO de extracción automática). Vacío => se deriva como antes.
 
     MODO PIEZAS (copy): si el prompt resuelto tiene `salida == "piezas"` y llegan `redes_ids`,
     se compone con la instruccion de redes (sin emojis) y se lanza con el post-procesado de
@@ -152,10 +156,12 @@ def lanzar(
             cuerpo_prompt, adjuntos, bloque_contexto,
             sin_emojis=True, redes_ids=redes_ids,
         )
-        # `titulo` es el nombre del PROMPT ("Copy desde nota"), no el título del historial:
-        # pasamos `titulo_dado=""` para que se DERIVE de la nota (texto_base/contexto).
+        # `titulo` es el nombre del PROMPT ("Copy desde nota"), no el título del historial.
+        # `titulo_dado` titula los borradores: si el llamante sugiere un título del contenido
+        # (titular de la URL) lo usamos; si no, "" para que se DERIVE de la nota (texto_base).
         procesar_spec = jobspec.construir_copy(
-            skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado="",
+            skill=origen_historial, marca=marca, redes_ids=redes_ids,
+            titulo_dado=titulo_contenido.strip(),
             texto_base=bloque_contexto, autor=autor,
         )
         return generar.lanzar(

@@ -133,6 +133,28 @@ def test_lanzar_prompt_piezas_con_redes_crea_spec_copy(encolado):
     assert "piezas" in encolado["prompt"]
 
 
+def test_lanzar_piezas_titulo_contenido_titula_los_borradores(encolado):
+    """`titulo_contenido` (titular real de la URL) va a `titulo_dado` del spec de copy.
+
+    Evita que el borrador se titule con la 1ª línea del bloque (en una URL, el AVISO de
+    extracción automática). Sin `titulo_contenido` el `titulo_dado` queda "" (se deriva).
+    """
+    prompt = biblioteca.crear("Copy desde nota", tipo="prompt", cuerpo="copy por red")
+    ruta = biblioteca._ruta_de_id(prompt.id)
+    ruta.write_text(
+        ruta.read_text(encoding="utf-8").replace("tipo: prompt", "tipo: prompt\nsalida: piezas"),
+        encoding="utf-8",
+    )
+    biblioteca_lanzar.lanzar(
+        prompt_id=prompt.id, marca=_MARCA, redes_ids=["x"],
+        bloque_contexto="AVISO: extraído automáticamente…\n\nCuerpo de la nota.",
+        titulo_contenido="  Ni volcán ni géiser: expertos de la UNAM  ",
+    )
+    spec = encolado["spec"]["procesar"]
+    assert spec["kind"] == jobspec.PROC_COPY
+    assert spec["titulo_dado"] == "Ni volcán ni géiser: expertos de la UNAM"
+
+
 def test_lanzar_prompt_piezas_sin_redes_cae_a_identidad(encolado):
     """Sin redes, un prompt salida=piezas usa el camino IDENTIDAD (no crea borradores)."""
     prompt = biblioteca.crear("Copy", tipo="prompt", cuerpo="haz copy")

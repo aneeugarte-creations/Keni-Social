@@ -188,31 +188,36 @@ def _redes_lista(crudo: object) -> list[str]:
     return vistas
 
 
-def _bloque_de_target(target: dict, marca: str) -> tuple[str, Response | None]:
-    """Resuelve el target a un BLOQUE DE CONTEXTO de texto. Devuelve (bloque, respuesta_error)."""
+def _bloque_de_target(target: dict, marca: str) -> tuple[str, str, Response | None]:
+    """Resuelve el target a un BLOQUE DE CONTEXTO. Devuelve (bloque, titulo_sugerido, error).
+
+    `titulo_sugerido` solo lo da la URL (el titular real de la página): sirve para que el
+    borrador NO se titule con la primera línea del bloque (que, en una URL, es el AVISO de
+    extracción automática). Para el resto de targets es "" (el título se deriva del contenido).
+    """
     tipo = target.get("tipo") if isinstance(target, dict) else None
     valor = target.get("valor") if isinstance(target, dict) else None
 
     if not tipo or tipo == "ninguno":
-        return "", None
+        return "", "", None
     if tipo == "contenido":
-        return (valor if isinstance(valor, str) else "")[:_MAX_TEXTO], None
+        return (valor if isinstance(valor, str) else "")[:_MAX_TEXTO], "", None
     if tipo == "area":
         try:
-            return biblioteca_lanzar.area_contexto(valor if isinstance(valor, str) else "", marca), None
+            return biblioteca_lanzar.area_contexto(valor if isinstance(valor, str) else "", marca), "", None
         except biblioteca.BibliotecaError as e:
-            return "", JSONResponse({"error": str(e)}, status_code=400)
+            return "", "", JSONResponse({"error": str(e)}, status_code=400)
     if tipo == "url":
         url_limpia, error = extraccion_url.validar_url(valor)
         if error is not None:
-            return "", JSONResponse({"error": error}, status_code=400)
+            return "", "", JSONResponse({"error": error}, status_code=400)
         try:
             titulo, cuerpo = extraccion_url.extraer_texto(url_limpia)
         except extraccion_url.ExtraccionError as e:
-            return "", JSONResponse({"error": str(e)}, status_code=502)
+            return "", "", JSONResponse({"error": str(e)}, status_code=502)
         nota = extraccion_url.componer_nota_no_verificada(url_limpia, titulo, cuerpo)
-        return nota[:_MAX_TEXTO], None
-    return "", JSONResponse({"error": "Tipo de target no válido."}, status_code=400)
+        return nota[:_MAX_TEXTO], titulo.strip(), None
+    return "", "", JSONResponse({"error": "Tipo de target no válido."}, status_code=400)
 
 
 async def lanzar(request: Request) -> Response:
@@ -226,7 +231,7 @@ async def lanzar(request: Request) -> Response:
     if not isinstance(marca, str) or not marca:
         return JSONResponse({"error": "Falta la marca."}, status_code=400)
 
-    bloque, error = _bloque_de_target(datos.get("target") or {}, marca)
+    bloque, titulo_contenido, error = _bloque_de_target(datos.get("target") or {}, marca)
     if error is not None:
         return error
 
@@ -238,6 +243,7 @@ async def lanzar(request: Request) -> Response:
             marca=marca,
             adjuntos_ids=_adjuntos_lista(datos.get("adjuntos")),
             bloque_contexto=bloque,
+            titulo_contenido=titulo_contenido,
             redes_ids=_redes_lista(datos.get("redes")),
             autor=autor_de_peticion(request),
         )
