@@ -81,9 +81,15 @@ Estos principios deben guiar cualquier decisión de rediseño. Derivan de la fil
    pequeña: son una promesa visible que reduce el miedo del CM a "romper algo". El humano siempre
    tiene el último clic.
 
-7. **Cada pantalla termina con el siguiente paso.** Diagnosticar sin decir qué hacer es dejar al
-   no técnico a medias. El doctor, el asistente y el dashboard cierran señalando la acción
-   siguiente, cerrando el loop hacia "produce → verifica → aprueba → publica → mide → vuelve a producir".
+7. **Cada pantalla termina con el siguiente paso, y el loop se cierra solo.** Diagnosticar sin
+   decir qué hacer es dejar al no técnico a medias. El doctor, el asistente y el dashboard cierran
+   señalando la acción siguiente, cerrando el loop hacia "produce → verifica → aprueba → publica →
+   mide → vuelve a producir". Y donde antes el humano lanzaba **cada** paso a mano, la **lista viva
+   multi-fuente** (calendario, RSS, radar) ahora **auto-genera** el borrador al entrar un tema y lo
+   deja en la cola de revisión; el humano valida **checkpoints** (aprobar el copy, autorizar la
+   publicación) en vez de operar cada eslabón. El principio se mantiene —el siguiente paso siempre
+   está a la vista—, pero el sistema adelanta el trabajo operativo hasta el punto de validación, y
+   la publicación queda **programada** tras la aprobación. (Ver nota al cierre.)
 
 8. **Onboarding por tareas, no por arquitectura.** El CM aprende "cómo saco copy de una nota",
    no "qué es un MCP". La `guia-community-manager.md` es el patrón: replicarlo en todo el
@@ -96,3 +102,11 @@ veredicto al inicio, nombres de marca legibles, resumen de picos, doctor y asist
 **ya se implementó** y por eso se resumió arriba en §0 en vez de mantener el detalle de
 implementación. El "norte" de experiencia (§3) es el rationale durable que debe guiar cualquier
 rediseño; las olas 2–3 (§2) recogen lo que sigue abierto por orden de impacto/esfuerzo.*
+
+> **Nota — cierre de loop hacia auto-generación (principio 7).** El paso de "asistente que el
+> humano dispara paso a paso" a "lista viva que adelanta el trabajo hasta el checkpoint" está
+> evaluado, diseñado y parcialmente construido (H1–H5) en
+> [`contexto/2026-05-31-lista-viva-angel.md`](contexto/2026-05-31-lista-viva-angel.md): importador
+> de calendario (H1), auto-generación de copy al entrar un tema (H2, gated OFF por defecto), score
+> de prioridad dinámico (H3) y Panel-9am como lista curada del día (H5). El humano sigue teniendo
+> el último clic; lo que cambia es que el sistema llega más lejos antes de pedírselo.
