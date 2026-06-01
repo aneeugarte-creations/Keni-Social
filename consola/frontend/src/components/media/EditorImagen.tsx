@@ -46,6 +46,8 @@ export interface EditorImagenProps {
   marca?: string;
   red?: string;
   copy?: string;
+  /** Texto que va DENTRO de la imagen (copy-in); titular al integrar la foto en la plantilla. */
+  copyIn?: string;
 }
 
 export function EditorImagen({
@@ -58,6 +60,7 @@ export function EditorImagen({
   marca,
   red,
   copy,
+  copyIn,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = React.useState("");
@@ -67,10 +70,18 @@ export function EditorImagen({
   const src = urlMedia(imagenUrl || imagen);
 
   const subir = useMutation({
-    mutationFn: (archivo: File) => api.subirMedia(archivo),
+    // Sube la foto y, si pertenece a una publicación, la INTEGRA en la plantilla de marca
+    // (logo + copy-in + pleca). Para marcas sin plantilla el backend devuelve la foto tal cual,
+    // así que el flujo es uniforme. Sin `publicacionId` (uso suelto), solo adjunta.
+    mutationFn: async (archivo: File) => {
+      const subida = await api.subirMedia(archivo);
+      if (!publicacionId) return { id: subida.id, url: subida.url };
+      const integrada = await api.integrarFotoPublicacion(publicacionId, subida.id, copyIn);
+      return { id: integrada.imagen, url: integrada.imagen_url };
+    },
     onSuccess: (data) => {
       onCambio(data.id, data.url);
-      toast.success("Imagen adjuntada");
+      toast.success(publicacionId ? "Foto integrada en la plantilla" : "Imagen adjuntada");
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
@@ -199,7 +210,7 @@ export function EditorImagen({
               ) : (
                 <Upload className="h-4 w-4" />
               )}
-              Adjuntar
+              {subir.isPending && publicacionId ? "Integrando…" : "Adjuntar"}
             </Button>
             <span className="text-xs text-muted-foreground">o genera una con IA:</span>
           </div>

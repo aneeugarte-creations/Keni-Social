@@ -105,3 +105,69 @@ def test_expandir_importa_salida(entorno, monkeypatch):
 def test_expandir_sin_imagen(entorno):
     with pytest.raises(e.EstudioError):
         e.expandir("", formato="feed")
+
+
+# --------------------------------------------------------------------------- #
+# componer (plantilla de marca: con foto y placeholder)                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_marca_tiene_plantilla():
+    assert e.marca_tiene_plantilla("unotv")
+    assert e.marca_tiene_plantilla("claro-sports")
+    assert not e.marca_tiene_plantilla("piso-15")
+    assert not e.marca_tiene_plantilla("desconocida")
+
+
+def test_formato_por_red():
+    assert e.formato_por_red("tiktok") == "vertical"
+    assert e.formato_por_red("instagram") == "cuadrado"
+    assert e.formato_por_red("facebook") == "feed"
+    assert e.formato_por_red("desconocida") == "feed"  # default
+
+
+def _fake_run_que_escribe_salida(monkeypatch):
+    """Mockea `subprocess.run` del dominio: escribe el `--salida` y devuelve rc 0. Captura cmd."""
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    capturado: dict[str, list[str]] = {}
+
+    def _fake(cmd, **kw):
+        capturado["cmd"] = cmd
+        salida = cmd[cmd.index("--salida") + 1]
+        Path(salida).write_bytes(b"png")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(e.subprocess, "run", _fake)
+    return capturado
+
+
+def test_componer_placeholder_sin_foto(entorno, monkeypatch):
+    # imagen="" => modo placeholder: pasa --placeholder, NO --foto, y no materializa foto.
+    cap = _fake_run_que_escribe_salida(monkeypatch)
+    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "placa.png")
+    monkeypatch.setattr(
+        media, "leer_media", lambda nombre: (_ for _ in ()).throw(AssertionError("no debe leer foto"))
+    )
+
+    res = e.componer("", marca="unotv", formato="feed", titular="DATO CLAVE")
+
+    assert res["id"] == "placa.png"
+    assert res["info"]["placeholder"] is True
+    assert "--placeholder" in cap["cmd"]
+    assert "--foto" not in cap["cmd"]
+    assert "DATO CLAVE" in cap["cmd"]  # el copy_in viaja como --titular
+
+
+def test_componer_con_foto_materializa_y_no_placeholder(entorno, monkeypatch):
+    cap = _fake_run_que_escribe_salida(monkeypatch)
+    monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes-de-foto")
+    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "final.png")
+
+    res = e.componer("foto.jpg", marca="unotv", formato="feed", titular="X")
+
+    assert res["id"] == "final.png"
+    assert res["info"]["placeholder"] is False
+    assert "--foto" in cap["cmd"]
+    assert "--placeholder" not in cap["cmd"]

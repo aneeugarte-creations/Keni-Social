@@ -365,7 +365,14 @@ export function VistaPreviaRed({ red, marca, contenido, copy_in, imagen_url }: V
           Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
         </span>
       </div>
-      <Mockup marca={nombreMarca} contenido={contenido} copyIn={copy_in} imagen={imagen} />
+      {/* El overlay de simulación del copy-in solo cuando NO hay imagen: si ya hay una placa
+          compuesta, el texto va horneado en la imagen y duplicarlo se vería doble. */}
+      <Mockup
+        marca={nombreMarca}
+        contenido={contenido}
+        copyIn={imagen ? "" : copy_in}
+        imagen={imagen}
+      />
       <p className="text-[11px] text-muted-foreground">
         Mockup aproximado. El render real puede variar según la red. Las redes no aplican formato
         Markdown.

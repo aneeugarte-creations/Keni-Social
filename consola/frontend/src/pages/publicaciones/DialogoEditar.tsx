@@ -351,6 +351,7 @@ export function DialogoEditar({
               marca={publicacion?.marca}
               red={publicacion?.red}
               copy={contenido}
+              copyIn={copyIn}
             />
 
             <div className="space-y-1.5">

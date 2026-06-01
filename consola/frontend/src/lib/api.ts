@@ -674,6 +674,17 @@ export const api = {
     peticion<RespuestaReciclarPublicacion>(`/publicaciones/${encodeURIComponent(id)}/reciclar`, {
       metodo: "POST",
     }),
+  /**
+   * Integra una FOTO subida dentro de la plantilla de marca de la publicación (logo + copy-in +
+   * pleca). Composición DETERMINISTA y SÍNCRONA en el backend (~<1s). Devuelve la imagen
+   * resultante `{imagen, imagen_url}` para fijarla y guardarla con el resto de la edición. Para
+   * marcas sin plantilla, devuelve la foto tal cual.
+   */
+  integrarFotoPublicacion: (id: string, imagen: string, copyIn?: string) =>
+    peticion<{ imagen: string; imagen_url: string }>(
+      `/publicaciones/${encodeURIComponent(id)}/integrar-foto`,
+      { metodo: "POST", json: copyIn === undefined ? { imagen } : { imagen, copy_in: copyIn } },
+    ),
 
   // --- Aprobación de PUBLICACIONES (#9): cola de revisión + decisión + programación ---
   // CONSOLIDACIÓN: la aprobación es ahora la MISMA cadena multinivel del tablero (una

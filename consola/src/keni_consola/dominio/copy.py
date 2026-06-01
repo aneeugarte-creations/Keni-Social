@@ -75,6 +75,31 @@ def cosechar_imagenes(salida: str) -> list[dict[str, str]]:
 # --------------------------------------------------------------------------- #
 
 
+def _componer_placa_placeholder(marca: str, red: str, copy_in: str) -> str:
+    """Compone la imagen-plantilla (logo + copy_in + pleca, hueco de foto vacío) y devuelve su id.
+
+    Solo para marcas con identidad visual (`unotv`/`claro-sports`); devuelve "" para el resto o
+    si la composición falla. TOLERANTE: cualquier error se traga (la previsualización de la placa
+    es un extra y NUNCA debe romper la creación del borrador). Determinista (Pillow, ~<1s).
+    """
+    from . import estudio_imagen
+
+    if not estudio_imagen.marca_tiene_plantilla(marca):
+        return ""
+    try:
+        resultado = estudio_imagen.componer(
+            "",  # sin foto: placeholder gris "Sube una foto"
+            marca=marca,
+            formato=estudio_imagen.formato_por_red(red),
+            titular=copy_in,
+            etiqueta=None,  # usa la etiqueta_default de la marca
+        )
+    except Exception:  # noqa: BLE001 -- la placa es un extra; nunca rompe la generación de copy
+        return ""
+    nombre = resultado.get("id")
+    return nombre if isinstance(nombre, str) else ""
+
+
 def crear_publicaciones_desde_piezas(
     piezas: list[dict[str, object]],
     *,
@@ -110,18 +135,21 @@ def crear_publicaciones_desde_piezas(
             contenido = ""
         if not isinstance(copy_in, str):
             copy_in = ""
+        # Auto-compone la imagen-plantilla de marca (logo + copy_in, hueco de foto vacío). "" si
+        # la marca no tiene plantilla o si falla: el borrador se crea igual, sin imagen.
+        imagen = _componer_placa_placeholder(marca, red, copy_in)
         creada: dict[str, object] | None = None
         if contenido_id:
             # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
             # el tema no existe (entonces caemos al borrador suelto).
             creada = contrato_publicaciones.crear_borrador_en(
                 contenido_id, marca, red, titulo=titulo, contenido=contenido,
-                copy_in=copy_in, veredicto=verdicto,
+                copy_in=copy_in, veredicto=verdicto, imagen=imagen,
             )
         if creada is None:
             creada = contrato_publicaciones.crear_borrador(
                 marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
-                veredicto=verdicto, origen=origen, autor=autor,
+                veredicto=verdicto, origen=origen, autor=autor, imagen=imagen,
             )
         creadas.append(creada)
     return creadas

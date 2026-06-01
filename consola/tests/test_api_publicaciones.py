@@ -201,6 +201,48 @@ def test_actualizar_copy_in_no_texto_400(cliente):
     assert r.status_code == 400
 
 
+def test_integrar_foto_marca_visual_recompone(cliente, monkeypatch):
+    # Marca con plantilla (unotv): integrar-foto recompone la foto en el marco con el copy_in
+    # como titular y devuelve la imagen compuesta (mockeamos el compositor, sin Pillow).
+    from keni_consola.dominio import estudio_imagen
+
+    llamadas = []
+
+    def _fake_componer(imagen, *, marca, formato, titular, etiqueta=None, autor=None):
+        llamadas.append({"imagen": imagen, "marca": marca, "titular": titular})
+        return {"id": "compuesta.png", "url": "/api/media/compuesta.png"}
+
+    monkeypatch.setattr(estudio_imagen, "componer", _fake_componer)
+
+    pid = _crear(cliente, marca="unotv").json()["publicacion"]["id"]
+    cliente.put(f"/api/publicaciones/{pid}", json={"copy_in": "DATO CLAVE"})
+    r = cliente.post(f"/api/publicaciones/{pid}/integrar-foto", json={"imagen": "foto-real.jpg"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["imagen"] == "compuesta.png"
+    assert body["imagen_url"] == "/api/media/compuesta.png"
+    assert llamadas == [{"imagen": "foto-real.jpg", "marca": "unotv", "titular": "DATO CLAVE"}]
+
+
+def test_integrar_foto_marca_sin_plantilla_devuelve_foto(cliente):
+    # Marca sin identidad visual (piso-15): no recompone; devuelve la foto tal cual.
+    pid = _crear(cliente, marca="piso-15").json()["publicacion"]["id"]
+    r = cliente.post(f"/api/publicaciones/{pid}/integrar-foto", json={"imagen": "foto-real.jpg"})
+    assert r.status_code == 200
+    assert r.json()["imagen"] == "foto-real.jpg"
+
+
+def test_integrar_foto_sin_imagen_400(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.post(f"/api/publicaciones/{pid}/integrar-foto", json={})
+    assert r.status_code == 400
+
+
+def test_integrar_foto_404(cliente):
+    r = cliente.post("/api/publicaciones/noexiste/integrar-foto", json={"imagen": "x.jpg"})
+    assert r.status_code == 404
+
+
 def test_actualizar_estado_invalido_400(cliente):
     pid = _crear(cliente).json()["publicacion"]["id"]
     r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "archivado"})

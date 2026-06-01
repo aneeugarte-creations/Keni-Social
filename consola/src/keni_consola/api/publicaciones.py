@@ -463,6 +463,52 @@ async def programar_metricool(request: Request) -> Response:
     )
 
 
+async def integrar_foto(request: Request) -> Response:
+    """Integra una FOTO subida dentro de la plantilla de marca de la publicación.
+
+    `POST /api/publicaciones/{id}/integrar-foto {imagen}` (imagen = id de media de la foto).
+    Para marcas con plantilla visual (`unotv`/`claro-sports`) RECOMPONE de forma determinista
+    (síncrona, ~<1s) la foto detrás del marco de marca usando el `copy_in` de la pieza como
+    titular; para las demás marcas devuelve la foto tal cual. NO persiste: devuelve la imagen
+    resultante para que el SPA la fije y la guarde con el resto de la edición.
+    -> `{imagen, imagen_url}` | 400 | 404.
+    """
+    from ..dominio import estudio_imagen
+
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    imagen = datos.get("imagen")
+    if not isinstance(imagen, str) or not imagen.strip():
+        return JSONResponse({"error": "Falta la foto a integrar."}, status_code=400)
+    imagen = imagen.strip()
+    # `copy_in` opcional: el SPA puede mandar el texto-en-imagen VIGENTE (aún sin guardar) para
+    # que la placa use ese titular; si no viene, se usa el `copy_in` persistido de la pieza.
+    copy_in = datos.get("copy_in")
+    titular = copy_in if isinstance(copy_in, str) else (pub.get("copy_in") or "")
+
+    marca = pub.get("marca") or ""
+    final = imagen
+    if estudio_imagen.marca_tiene_plantilla(marca):
+        try:
+            resultado = estudio_imagen.componer(
+                imagen,
+                marca=marca,
+                formato=estudio_imagen.formato_por_red(pub.get("red") or ""),
+                titular=titular,
+                etiqueta=None,
+                autor=autor_de_peticion(request),
+            )
+            final = resultado.get("id") or imagen
+        except estudio_imagen.EstudioError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+
+    return JSONResponse({"imagen": final, "imagen_url": f"/api/media/{final}"})
+
+
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
@@ -472,6 +518,7 @@ RUTAS = [
     Route("/api/publicaciones/{publicacion_id}/duplicar", duplicar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/reciclar", reciclar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),

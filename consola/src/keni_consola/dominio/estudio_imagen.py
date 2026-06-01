@@ -69,6 +69,32 @@ class EstudioError(RuntimeError):
     """Error de dominio del Estudio, con mensaje en espanol listo para la UI."""
 
 
+def marca_tiene_plantilla(marca: str) -> bool:
+    """True si la marca tiene identidad visual de placa (tokens en `marcas.json`).
+
+    Solo esas marcas pueden auto-componer la imagen-plantilla (logo + pleca + titular). Las
+    demas del catalogo no tienen tokens todavia, asi que se omiten (no se compone nada).
+    """
+    return marca in _MARCAS_VISUALES
+
+
+# Formato de placa por red. El compositor solo entiende vertical|feed|cuadrado; se elige el
+# encaje editorial mas cercano al aspecto de cada red (tiktok 9:16 -> vertical; ig 1:1 ->
+# cuadrado; el resto -> feed 4:5). Una red desconocida cae a `feed`.
+_FORMATO_POR_RED = {
+    "tiktok": "vertical",
+    "instagram": "cuadrado",
+    "facebook": "feed",
+    "x": "feed",
+    "youtube": "feed",
+}
+
+
+def formato_por_red(red: str) -> str:
+    """Formato de placa (`vertical|feed|cuadrado`) para una red; `feed` si no se conoce."""
+    return _FORMATO_POR_RED.get(red, "feed")
+
+
 # --------------------------------------------------------------------------- #
 # Composicion del prompt generativo                                            #
 # --------------------------------------------------------------------------- #
@@ -316,11 +342,13 @@ def componer(
     (`plantillas_marca.obtener`). El `logo` referenciado (objeto de media) se materializa a un
     PNG temporal; si no hay logo, el motor cae al wordmark de respaldo.
 
+    `imagen`: id de media de la foto; si es `""`, se compone una PLANTILLA con el HUECO DE LA
+    FOTO VACÍO (placeholder gris "Sube una foto") — pensada para auto-generarse al crear el copy
+    y recomponerse luego al subir la foto real.
+
     `etiqueta`: `None` => usa la `etiqueta_default` de la plantilla; `""` => omite la pleca;
     un texto => esa pleca. `formato`: `vertical|feed|cuadrado`; `horizontal` se mapea a `feed`.
     """
-    if not imagen:
-        raise EstudioError("Falta la imagen sobre la que estampar la plantilla.")
     if not marcas.es_marca(marca):
         raise EstudioError("Marca desconocida.")
     fmt = "feed" if formato == "horizontal" else formato
@@ -334,9 +362,11 @@ def componer(
     except plantillas_marca.PlantillaMarcaError as e:
         raise EstudioError(str(e)) from e
 
+    placeholder = not (imagen or "").strip()
+
     with tempfile.TemporaryDirectory(prefix="keni-componer-") as tmp:
         carpeta = Path(tmp)
-        foto = _materializar(imagen, carpeta)
+        foto = None if placeholder else _materializar(imagen, carpeta)
 
         # Materializa el logo (objeto de media) a un PNG temporal; "" si no hay o no existe.
         ruta_logo = ""
@@ -357,12 +387,12 @@ def componer(
         motor = _ruta_motor("componer.py")
         cmd = [
             sys.executable, str(motor),
-            "--foto", str(foto),
             "--marca", marca,
             "--formato", fmt,
             "--salida", str(out),
             "--config", str(cfg_path),
         ]
+        cmd += ["--placeholder"] if placeholder else ["--foto", str(foto)]
         if titular:
             cmd += ["--titular", titular]
         if etiqueta is not None:  # None = etiqueta_default; "" = sin pleca; texto = esa pleca
@@ -389,7 +419,7 @@ def componer(
             raise EstudioError(str(e)) from e
 
         importada = {"id": nombre, "url": f"/api/media/{nombre}"}
-        info = {"op": "componer", "marca": marca, "formato": fmt}
+        info = {"op": "componer", "marca": marca, "formato": fmt, "placeholder": placeholder}
         return {"id": nombre, "url": importada["url"], "imagenes": [importada], "info": info}
 
 

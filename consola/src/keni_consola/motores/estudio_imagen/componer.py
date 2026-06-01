@@ -145,6 +145,36 @@ def recorte_cubriente(img: Image.Image, w: int, h: int) -> Image.Image:
     return ImageOps.fit(img, (w, h), method=Image.LANCZOS, centering=(0.5, 0.45))
 
 
+def lienzo_placeholder(w: int, h: int, tinta) -> Image.Image:
+    """Lienzo w×h gris con un hint centrado 'Sube una foto' (hueco de la foto vacío).
+
+    Sustituye a la foto cuando aún no hay imagen: la plantilla (logo + pleca + titular) se
+    estampa igual encima, así se ve la marca con el copy y solo falta subir la foto. El gris
+    es neutro y suficientemente oscuro para que el texto blanco del titular siga legible.
+    """
+    gris = (63, 66, 70)  # gris medio-oscuro, neutro
+    img = Image.new("RGBA", (w, h), gris + (255,))
+    draw = ImageDraw.Draw(img)
+    cx, cy = w // 2, h // 2
+    # Recuadro punteado central como "marco de foto vacío".
+    lado = int(min(w, h) * 0.30)
+    x0, y0, x1, y1 = cx - lado, cy - lado, cx + lado, cy + lado
+    borde = (150, 154, 158)
+    paso = 28
+    for x in range(x0, x1, paso):  # bordes superior e inferior punteados
+        draw.line([(x, y0), (min(x + paso // 2, x1), y0)], fill=borde, width=4)
+        draw.line([(x, y1), (min(x + paso // 2, x1), y1)], fill=borde, width=4)
+    for y in range(y0, y1, paso):  # bordes izquierdo y derecho punteados
+        draw.line([(x0, y), (x0, min(y + paso // 2, y1))], fill=borde, width=4)
+        draw.line([(x1, y), (x1, min(y + paso // 2, y1))], fill=borde, width=4)
+    # Texto del hint, centrado.
+    fuente = cargar_fuente(max(28, int(min(w, h) * 0.05)))
+    hint = "Sube una foto"
+    tw = ancho_texto(draw, hint, fuente)
+    draw.text((cx - tw / 2, cy - lado - 64), hint, font=fuente, fill=borde)
+    return img
+
+
 def degradado_inferior(w: int, h: int, color_rgb, alto_frac: float = 0.58, alpha_max: int = 238) -> Image.Image:
     """Capa RGBA con degradado oscuro de abajo (opaco) hacia arriba (transparente)."""
     band = max(1, int(h * alto_frac))
@@ -297,13 +327,21 @@ def componer(args) -> dict:
     blanco = hex_a_rgb(m.get("blanco", "#FFFFFF"))
     margin = 56
 
-    foto_path = Path(args.foto)
-    if not foto_path.is_file():
-        raise SystemExit(f"ERROR: no existe la foto: {foto_path}")
-    base = Image.open(foto_path)
-    base = ImageOps.exif_transpose(base).convert("RGBA")
-    img = recorte_cubriente(base, w, h)
-    draw = ImageDraw.Draw(img)
+    # Lienzo base: la FOTO recortada al formato, o —si no hay foto— un PLACEHOLDER
+    # gris con un hint "Sube una foto". El placeholder deja la plantilla (logo + pleca +
+    # titular) lista y solo a falta de la foto; subirla después recompone con la foto real.
+    placeholder = bool(getattr(args, "placeholder", False)) or not (args.foto or "").strip()
+    if placeholder:
+        img = lienzo_placeholder(w, h, tinta)
+        draw = ImageDraw.Draw(img)
+    else:
+        foto_path = Path(args.foto)
+        if not foto_path.is_file():
+            raise SystemExit(f"ERROR: no existe la foto: {foto_path}")
+        base = Image.open(foto_path)
+        base = ImageOps.exif_transpose(base).convert("RGBA")
+        img = recorte_cubriente(base, w, h)
+        draw = ImageDraw.Draw(img)
 
     # 2) Titular (de abajo hacia arriba, por encima de la zona insegura inferior).
     #    El degradado de legibilidad solo se pone si hay titular sintético; con overlays
@@ -359,6 +397,8 @@ def componer(args) -> dict:
     # Guardar.
     if args.salida:
         salida = Path(args.salida)
+    elif placeholder:
+        salida = Path(f"plantilla-{clave}-{fclave}.png")
     else:
         salida = foto_path.with_name(f"{foto_path.stem}-breaking-{clave}-{fclave}.png")
     salida.parent.mkdir(parents=True, exist_ok=True)
@@ -370,6 +410,7 @@ def componer(args) -> dict:
         "marca_id": clave,
         "formato": fclave,
         "tamano": f"{w}x{h}",
+        "placeholder": placeholder,
         "etiqueta": etiqueta,
         "titular": titular,
         "logo_real": logo_real,
@@ -382,7 +423,11 @@ def componer(args) -> dict:
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Compositor determinista de piezas de breaking para AMX.")
-    p.add_argument("--foto", required=True, help="Ruta de la foto de la noticia.")
+    p.add_argument("--foto", default=None,
+                   help="Ruta de la foto. Si se omite (o con --placeholder), se compone una "
+                        "plantilla con el hueco de la foto vacío (placeholder 'Sube una foto').")
+    p.add_argument("--placeholder", action="store_true",
+                   help="Compone la plantilla SIN foto: fondo gris con hint 'Sube una foto'.")
     p.add_argument("--marca", required=True, help="unotv | claro-sports")
     p.add_argument("--titular", default="", help="Titular corto (el hecho) sobreimpreso.")
     p.add_argument("--formato", default="vertical", help="vertical | feed | cuadrado")

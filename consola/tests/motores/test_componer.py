@@ -97,6 +97,26 @@ def test_esquina_logo_distingue_las_cuatro():
     assert si == (margin, st + 24)  # retrocompat: superior-izquierda == comportamiento previo
 
 
+def test_componer_placeholder_sin_foto(tmp_path):
+    """Sin foto (placeholder): compone la plantilla del tamaño del formato y marca el flag."""
+    logo = _logo_png(tmp_path / "logo.png")
+    cfg = tmp_path / "marcas.json"
+    cfg.write_text(json.dumps(_cfg_con_logo(logo, "superior-izquierda")), encoding="utf-8")
+    salida = tmp_path / "placa.png"
+    args = SimpleNamespace(
+        foto=None, placeholder=True, marca="prueba", titular="Titular de prueba",
+        formato="feed", etiqueta="", logo=None, overlay=None, marca_agua=None,
+        salida=str(salida), config=str(cfg),
+    )
+
+    info = componer.componer(args)
+
+    assert info["placeholder"] is True
+    assert salida.is_file()
+    with Image.open(salida) as out:
+        assert out.size == (1080, 1350)
+
+
 def test_cli_componer_con_logo_posicion(tmp_path):
     foto = _guardar(Image.new("RGB", (1000, 1000), (10, 20, 30)), tmp_path / "foto.png")
     logo = _logo_png(tmp_path / "logo.png")

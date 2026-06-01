@@ -22,6 +22,11 @@ dependencies = [
     # python-pptx para el .pptx y reportlab para el PDF NATIVO (sin LibreOffice, #141).
     "python-pptx>=0.6.23",
     "reportlab>=4.0",
+    # Compositor determinista de imagen (Estudio + placa de marca: `motores/estudio_imagen`).
+    # Hoy entraria transitivo por python-pptx, pero lo fijamos EXPLICITO: la composicion de la
+    # plantilla de marca (logo + copy-in) corre en back y worker y no debe depender de un
+    # transitivo que pueda cambiar.
+    "pillow>=10",
     # Lectura del calendario editorial en .xlsx (importador_calendario). CSV va en la stdlib;
     # openpyxl es la unica via para Excel sin LibreOffice. Solo lectura, sin estilos.
     "openpyxl>=3.1",
