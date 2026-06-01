@@ -46,6 +46,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "red": pub["red"],
         "red_nombre": redes.nombre_por_id(pub["red"]),
         "contenido": pub["contenido"],
+        # Texto que va DENTRO de la imagen (copy-in), distinto del `contenido` que acompana
+        # a la publicacion. "" en piezas legadas o cuando la marca/red no lo genera.
+        "copy_in": pub.get("copy_in") or "",
         "estado": pub["estado"],
         "veredicto": pub["veredicto"],
         # Atribucion por usuario (#130 Fase 1): quien creo la pieza. "" en piezas
@@ -135,6 +138,7 @@ def crear_borrador(
     *,
     titulo: str = "",
     contenido: str = "",
+    copy_in: str = "",
     veredicto: str = "",
     origen: str = "",
     imagen: str = "",
@@ -153,6 +157,7 @@ def crear_borrador(
         red,
         titulo=titulo,
         contenido=contenido,
+        copy_in=copy_in,
         estado="borrador",
         veredicto=veredicto,
         origen=origen,
@@ -170,6 +175,7 @@ def crear_borrador_en(
     *,
     titulo: str = "",
     contenido: str = "",
+    copy_in: str = "",
     veredicto: str = "",
     imagen: str = "",
     evergreen: bool = False,
@@ -199,6 +205,7 @@ def crear_borrador_en(
         estado="pendiente",
         falta_copy=False,
         copy=contenido,
+        copy_in=copy_in,
         imagen=imagen,
         veredicto=veredicto,
         evergreen=evergreen,

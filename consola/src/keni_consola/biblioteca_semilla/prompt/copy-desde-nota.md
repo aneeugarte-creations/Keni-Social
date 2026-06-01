@@ -58,13 +58,26 @@ línea, en pocas palabras, qué hay que revisar si no está listo.
    y víctimas, datos personales); ¿suena mexicano y a la marca?; límites por plataforma.
    Cierra con el veredicto, que debe coincidir con el bloque de apertura.
 
+## Texto EN la imagen (copy-in)
+
+Las publicaciones con imagen llevan DOS textos distintos:
+
+- **`texto`**: el copy que ACOMPAÑA a la publicación (lo que ya redactas por plataforma).
+- **`copy_in`**: el texto que va DENTRO de la imagen (titular/claim sobre la placa). Es
+  corto y de impacto, jerarquiza el dato más fuerte, y **respeta la línea editorial de
+  texto-en-imagen de la marca adjunta** (longitud, mayúsculas, qué nunca poner). No repite
+  literal el `texto`. Si la pieza de esa red no lleva imagen, deja `copy_in` en `""`.
+
+El `copy_in` también sale **sin emojis** y respeta las mismas reglas legales que el copy.
+
 ## Bloque final para la Consola (OBLIGATORIO)
 
 Al FINAL de toda tu respuesta, añade un único bloque de código cercado ```json con esta
 forma exacta, una pieza por cada plataforma pedida:
 
 ```json
-{"piezas": [{"red": "<id>", "texto": "<copy de esa red>"}, ...]}
+{"piezas": [{"red": "<id>", "texto": "<copy de esa red>", "copy_in": "<texto en la imagen>"}, ...]}
 ```
 
-Usa como `<id>` únicamente: `x`, `instagram`, `facebook`, `tiktok`, `youtube`.
+Usa como `<id>` únicamente: `x`, `instagram`, `facebook`, `tiktok`, `youtube`. Incluye
+siempre `copy_in` en cada pieza (`""` si esa red no lleva imagen).

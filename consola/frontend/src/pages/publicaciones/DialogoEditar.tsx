@@ -178,6 +178,8 @@ export function DialogoEditar({
   const queryClient = useQueryClient();
   const [titulo, setTitulo] = React.useState("");
   const [contenido, setContenido] = React.useState("");
+  // Texto que va DENTRO de la imagen (copy-in), distinto del contenido que la acompaña.
+  const [copyIn, setCopyIn] = React.useState("");
   const [estado, setEstado] = React.useState<EstadoPublicacion>("borrador");
   const [evergreen, setEvergreen] = React.useState(false);
   const [fechaLocal, setFechaLocal] = React.useState("");
@@ -202,6 +204,7 @@ export function DialogoEditar({
     if (!publicacion) return;
     setTitulo(publicacion.titulo);
     setContenido(publicacion.contenido);
+    setCopyIn(publicacion.copy_in ?? "");
     setEstado(publicacion.estado);
     setEvergreen(publicacion.evergreen ?? false);
     setFechaLocal(isoADatetimeLocal(publicacion.fecha_programada));
@@ -228,6 +231,7 @@ export function DialogoEditar({
       const cuerpo: CuerpoActualizarPublicacion = {
         titulo: titulo.trim(),
         contenido,
+        copy_in: copyIn,
         estado,
         evergreen,
         // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
@@ -349,6 +353,25 @@ export function DialogoEditar({
               copy={contenido}
             />
 
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="editar-copy-in">Texto en imagen</Label>
+                <span className="text-xs text-muted-foreground">{copyIn.length} car.</span>
+              </div>
+              <AutoTextarea
+                id="editar-copy-in"
+                value={copyIn}
+                onChange={(e) => setCopyIn(e.target.value)}
+                maxHeight={200}
+                className="min-h-[4rem] font-mono text-sm"
+                placeholder="Titular o frase que va DENTRO de la imagen (placa)."
+              />
+              <p className="text-xs text-muted-foreground">
+                El texto sobre la imagen, distinto del contenido que la acompaña. Sigue las
+                reglas de texto-en-imagen de la marca.
+              </p>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="editar-estado">Estado</Label>
@@ -426,6 +449,7 @@ export function DialogoEditar({
                 red={publicacion.red}
                 marca={publicacion.marca_nombre}
                 contenido={contenido}
+                copy_in={copyIn}
                 imagen_url={imagenUrl || imagen}
               />
             )}

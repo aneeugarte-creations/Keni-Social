@@ -55,8 +55,11 @@ def instruccion_redes(redes_ids: list[str]) -> str:
         "Mantén tu formato y tu auto-verificación habituales. "
         "Además, al FINAL de toda tu respuesta, añade un único bloque de código "
         'cercado ```json con esta forma exacta: {"piezas": [{"red": "<id>", '
-        '"texto": "<copy de esa red>"}, ...]}, usando como <id> únicamente estos '
-        f"valores: {ids_json}. Incluye una pieza por cada red pedida."
+        '"texto": "<copy de esa red>", "copy_in": "<texto que va DENTRO de la imagen>"}, '
+        f"...]}}, usando como <id> únicamente estos valores: {ids_json}. Incluye una pieza "
+        "por cada red pedida. El `copy_in` es el texto que va SOBRE la imagen (titular/claim "
+        "corto), distinto del `texto` que la acompaña; respeta la línea editorial de "
+        'texto-en-imagen de la marca adjunta y deja "" si la pieza no lleva imagen.'
     )
 
 

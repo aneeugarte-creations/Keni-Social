@@ -552,18 +552,32 @@ def _repartir_por_encabezados(texto: str, redes_ids: list[str]) -> dict[str, str
     return {red: "\n".join(cuerpo).strip() for red, cuerpo in por_red.items()}
 
 
-def _piezas_desde_por_red(por_red: dict[str, str], redes_ids: list[str]) -> list[dict[str, object]]:
+def _piezas_desde_por_red(
+    por_red: dict[str, str],
+    redes_ids: list[str],
+    copy_in_por_red: dict[str, str] | None = None,
+) -> list[dict[str, object]]:
     """Construye las piezas en el ORDEN FIJO de las redes pedidas, sin emojis.
 
     Cada `contenido` se limpia con `quitar_emojis` y `caracteres = len(contenido)`
     YA limpio. Solo incluye redes presentes en `por_red`.
+
+    `copy_in_por_red` (opcional) aporta el TEXTO EN IMAGEN (copy-in) por red; se emite
+    tal cual (sin `quitar_emojis`: es texto de placa y puede querer simbolos), `""` si la
+    red no lo trae. `caracteres` sigue midiendo SOLO el `contenido`.
     """
+    copy_in_por_red = copy_in_por_red or {}
     piezas: list[dict[str, object]] = []
     for r in redes_ids:
         if r not in por_red:
             continue
         contenido = quitar_emojis(por_red[r])
-        piezas.append({"red": r, "contenido": contenido, "caracteres": len(contenido)})
+        piezas.append({
+            "red": r,
+            "contenido": contenido,
+            "caracteres": len(contenido),
+            "copy_in": copy_in_por_red.get(r, ""),
+        })
     return piezas
 
 
@@ -603,6 +617,9 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
             limpio = (salida[: ultima.start()] + salida[ultima.end():]).strip()
 
     por_red: dict[str, str] = {}
+    # Texto EN IMAGEN (copy-in) por red, en paralelo a `por_red`. Solo lo aporta la via JSON
+    # (cada pieza puede traer `copy_in`); el fallback por encabezados no lo conoce.
+    copy_in_por_red: dict[str, str] = {}
     permitidas = set(redes_ids)
     crudas = datos.get("piezas") if isinstance(datos, dict) else None
     if isinstance(crudas, list):
@@ -615,13 +632,17 @@ def parsear_salida(salida: str, redes_ids: list[str]) -> dict[str, object]:
                 continue  # ignora redes desconocidas o fuera de las pedidas
             if not isinstance(texto, str):
                 continue
-            por_red.setdefault(red, texto)  # primera gana ante duplicados
+            if red in por_red:
+                continue  # primera gana ante duplicados (contenido + copy_in juntos)
+            por_red[red] = texto
+            copy_in = cruda.get("copy_in")
+            copy_in_por_red[red] = copy_in if isinstance(copy_in, str) else ""
 
     # FALLBACK: sin piezas via JSON, intenta repartir por encabezados de plataforma.
     if not por_red:
         por_red = _repartir_por_encabezados(limpio, redes_ids)
 
-    piezas = _piezas_desde_por_red(por_red, redes_ids)
+    piezas = _piezas_desde_por_red(por_red, redes_ids, copy_in_por_red)
     return {"resultado": quitar_emojis(limpio), "piezas": piezas, "verdicto": verdicto}
 
 

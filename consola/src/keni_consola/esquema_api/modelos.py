@@ -472,6 +472,9 @@ class Publicacion(TypedDict):
     red: str
     red_nombre: str
     contenido: str
+    # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto del
+    # `contenido` que acompana a la publicacion. "" en piezas legadas o si no se genero.
+    copy_in: str
     estado: EstadoPublicacion
     veredicto: Veredicto
     autor_id: str

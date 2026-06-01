@@ -74,6 +74,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
 
     titulo = datos.get("titulo", "")
     contenido = datos.get("contenido", "")
+    copy_in = datos.get("copy_in", "")
     veredicto = datos.get("veredicto", "")
     fecha_programada = datos.get("fecha_programada", "")
     origen = datos.get("origen", "")
@@ -81,6 +82,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
     for valor, etiqueta in (
         (titulo, "El título"),
         (contenido, "El contenido"),
+        (copy_in, "El texto en imagen"),
         (veredicto, "El veredicto"),
         (fecha_programada, "La fecha programada"),
         (origen, "El origen"),
@@ -95,6 +97,7 @@ def _validar_nueva(datos: dict[str, Any]) -> tuple[dict[str, Any] | None, str | 
             "marca": marca,
             "red": red,
             "contenido": contenido,
+            "copy_in": copy_in,
             "estado": estado,
             "veredicto": veredicto,
             "fecha_programada": fecha_programada.strip(),
@@ -175,6 +178,7 @@ async def crear(request: Request) -> Response:
         entrada["red"],
         titulo=entrada["titulo"],
         contenido=entrada["contenido"],
+        copy_in=entrada["copy_in"],
         estado=entrada["estado"],
         veredicto=entrada["veredicto"],
         fecha_programada=entrada["fecha_programada"],
@@ -220,7 +224,7 @@ async def detalle(request: Request) -> Response:
 
 
 async def actualizar(request: Request) -> Response:
-    """Edicion PARCIAL: titulo/contenido/estado/fecha_programada (404 si no existe)."""
+    """Edicion PARCIAL: titulo/contenido/copy_in/estado/fecha_programada (404 si no existe)."""
     publicacion_id = request.path_params["publicacion_id"]
     datos = await leer_json(request)
 
@@ -235,6 +239,13 @@ async def actualizar(request: Request) -> Response:
         if not isinstance(contenido, str):
             return JSONResponse({"error": "El contenido debe ser texto."}, status_code=400)
         campos["contenido"] = contenido
+    if "copy_in" in datos:
+        copy_in = datos.get("copy_in")
+        if not isinstance(copy_in, str):
+            return JSONResponse(
+                {"error": "El texto en imagen debe ser texto."}, status_code=400
+            )
+        campos["copy_in"] = copy_in
     if "estado" in datos:
         estado = datos.get("estado")
         if not isinstance(estado, str) or estado not in repos.ESTADOS_PUBLICACION:
@@ -262,8 +273,8 @@ async def actualizar(request: Request) -> Response:
         return JSONResponse(
             {
                 "error": (
-                    "No hay nada que actualizar (título, contenido, estado, fecha, "
-                    "imagen o evergreen)."
+                    "No hay nada que actualizar (título, contenido, texto en imagen, "
+                    "estado, fecha, imagen o evergreen)."
                 )
             },
             status_code=400,
@@ -334,7 +345,7 @@ async def duplicar(request: Request) -> Response:
     """Duplica una publicacion como borrador, con overrides opcionales.
 
     `POST /api/publicaciones/{id}/duplicar` con JSON opcional `{red?, marca?, titulo?}`.
-    Copia contenido/imagen/veredicto/hashtags; estado=borrador, fecha_programada=''.
+    Copia contenido/copy_in/imagen/veredicto/hashtags; estado=borrador, fecha_programada=''.
     -> `{publicacion}` | 404.
     """
     publicacion_id = request.path_params["publicacion_id"]
@@ -367,6 +378,7 @@ async def duplicar(request: Request) -> Response:
         red,
         titulo=titulo,
         contenido=original["contenido"],
+        copy_in=original.get("copy_in", ""),
         estado="borrador",
         veredicto=original["veredicto"],
         fecha_programada="",
@@ -397,6 +409,7 @@ async def reciclar(request: Request) -> Response:
         original["red"],
         titulo=original["titulo"],
         contenido=original["contenido"],
+        copy_in=original.get("copy_in", ""),
         estado="borrador",
         veredicto=original["veredicto"],
         fecha_programada="",

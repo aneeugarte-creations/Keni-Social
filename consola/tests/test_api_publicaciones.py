@@ -181,6 +181,26 @@ def test_actualizar_parcial(cliente):
     assert pub["estado"] == "aprobado"
 
 
+def test_crear_y_editar_copy_in(cliente):
+    # El copy_in (texto EN imagen) se acepta al crear y se edita por PUT, independiente del
+    # contenido. Nace "" si no se manda.
+    pub = _crear(cliente).json()["publicacion"]
+    assert pub["copy_in"] == ""
+    r = cliente.put(
+        f"/api/publicaciones/{pub['id']}", json={"copy_in": "TITULAR EN LA IMAGEN"}
+    )
+    assert r.status_code == 200
+    editada = r.json()["publicacion"]
+    assert editada["copy_in"] == "TITULAR EN LA IMAGEN"
+    assert editada["contenido"] == "C"  # el contenido no se toca
+
+
+def test_actualizar_copy_in_no_texto_400(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"copy_in": 123})
+    assert r.status_code == 400
+
+
 def test_actualizar_estado_invalido_400(cliente):
     pid = _crear(cliente).json()["publicacion"]["id"]
     r = cliente.put(f"/api/publicaciones/{pid}", json={"estado": "archivado"})

@@ -1181,6 +1181,9 @@
         "contenido": {
           "type": "string"
         },
+        "copy_in": {
+          "type": "string"
+        },
         "estado": {
           "enum": [
             "borrador",
@@ -1248,6 +1251,7 @@
         "red",
         "red_nombre",
         "contenido",
+        "copy_in",
         "estado",
         "veredicto",
         "autor_id",

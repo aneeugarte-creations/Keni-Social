@@ -514,6 +514,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         falta_revision        INTEGER NOT NULL DEFAULT 1,
         falta_publicar        INTEGER NOT NULL DEFAULT 1,
         copy                  TEXT NOT NULL DEFAULT '',
+        copy_in               TEXT NOT NULL DEFAULT '',
         imagen                TEXT NOT NULL DEFAULT '',
         imagen_fuente         TEXT NOT NULL DEFAULT '',
         veredicto             TEXT NOT NULL DEFAULT '',
@@ -1504,6 +1505,9 @@ _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # URL de la imagen de la FUENTE original (cuando tipo_contenido='fuente'): se
     # previsualiza tal cual sin tener que descargarla a la biblioteca de media.
     ("imagen_fuente", "TEXT NOT NULL DEFAULT ''"),
+    # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto
+    # del `copy` que acompana a la publicacion. Se genera por marca con sus reglas/plantilla.
+    ("copy_in", "TEXT NOT NULL DEFAULT ''"),
 )
 
 
@@ -3272,6 +3276,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "falta_revision",
     "falta_publicar",
     "copy",
+    "copy_in",
     "imagen",
     "imagen_fuente",
     "veredicto",
@@ -3338,6 +3343,7 @@ def crear_contenido_plataforma(
     falta_revision: bool = True,
     falta_publicar: bool = True,
     copy: str = "",
+    copy_in: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
     veredicto: str = "",
@@ -3375,6 +3381,7 @@ def crear_contenido_plataforma(
         "falta_revision": 1 if falta_revision else 0,
         "falta_publicar": 1 if falta_publicar else 0,
         "copy": copy or "",
+        "copy_in": copy_in or "",
         "imagen": imagen or "",
         "imagen_fuente": imagen_fuente or "",
         "veredicto": veredicto or "",
@@ -5222,6 +5229,7 @@ _ESTADO_PLAT_A_PUB: dict[str, str] = {
 # (El `contenido` de la publicacion es el `copy` de la plataforma; ver `_campos_pub_a_plat`.)
 _SELECT_PUBLICACION = (
     "SELECT cp.id AS pid, cp.red AS red, cp.estado AS pestado, cp.copy AS copy, "
+    "cp.copy_in AS copy_in, "
     "cp.imagen AS imagen, cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
     "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
@@ -5242,6 +5250,7 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "marca": f["marca"] or "",
         "red": f["red"] or "",
         "contenido": f["copy"] or "",
+        "copy_in": f["copy_in"] or "",
         "estado": _ESTADO_PLAT_A_PUB.get(f["pestado"] or "pendiente", "borrador"),
         "veredicto": f["veredicto"] or "",
         "autor_id": f["autor_id"] or "",
@@ -5267,6 +5276,7 @@ def crear_publicacion(
     *,
     titulo: str = "",
     contenido: str = "",
+    copy_in: str = "",
     estado: str = "borrador",
     veredicto: str = "",
     fecha_programada: str = "",
@@ -5299,6 +5309,7 @@ def crear_publicacion(
         red=red,
         estado=_ESTADO_PUB_A_PLAT.get(estado, "pendiente"),
         copy=contenido,
+        copy_in=copy_in,
         imagen=imagen,
         veredicto=veredicto,
         fecha_programada=fecha_programada,
@@ -5310,6 +5321,7 @@ def crear_publicacion(
     return obtener_publicacion(plat["id"]) or _fila_a_publicacion(
         {
             "pid": plat["id"], "red": red, "pestado": plat["estado"], "copy": contenido,
+            "copy_in": copy_in,
             "imagen": imagen, "veredicto": veredicto, "revisor_id": "", "revisor_nombre": "",
             "revisado_en": "", "enviado_a_revision_en": "", "fecha_programada": fecha_programada,
             "preparado_en": "", "id_post_metricool": "", "evergreen": plat["evergreen"],
@@ -5330,6 +5342,7 @@ def crear_publicaciones(lista: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 d.get("red", "") or "",
                 titulo=d.get("titulo", "") or "",
                 contenido=d.get("contenido", "") or "",
+                copy_in=d.get("copy_in", "") or "",
                 estado=d.get("estado", "borrador") or "borrador",
                 veredicto=d.get("veredicto", "") or "",
                 fecha_programada=d.get("fecha_programada", "") or "",
@@ -5429,6 +5442,7 @@ def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
 # Campo de publicacion -> columna de la fila por plataforma (edición parcial).
 _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "contenido": "copy",
+    "copy_in": "copy_in",
     "fecha_programada": "fecha_programada",
     "imagen": "imagen",
     "evergreen": "evergreen",

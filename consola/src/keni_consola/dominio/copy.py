@@ -101,24 +101,27 @@ def crear_publicaciones_desde_piezas(
     for pieza in piezas:
         red = pieza.get("red")
         contenido = pieza.get("contenido")
+        copy_in = pieza.get("copy_in")
         if not isinstance(red, str) or not redes.es_red(red):
             continue
         if redes_filtro is not None and red not in redes_filtro:
             continue
         if not isinstance(contenido, str):
             contenido = ""
+        if not isinstance(copy_in, str):
+            copy_in = ""
         creada: dict[str, object] | None = None
         if contenido_id:
             # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
             # el tema no existe (entonces caemos al borrador suelto).
             creada = contrato_publicaciones.crear_borrador_en(
                 contenido_id, marca, red, titulo=titulo, contenido=contenido,
-                veredicto=verdicto,
+                copy_in=copy_in, veredicto=verdicto,
             )
         if creada is None:
             creada = contrato_publicaciones.crear_borrador(
-                marca, red, titulo=titulo, contenido=contenido, veredicto=verdicto,
-                origen=origen, autor=autor,
+                marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
+                veredicto=verdicto, origen=origen, autor=autor,
             )
         creadas.append(creada)
     return creadas

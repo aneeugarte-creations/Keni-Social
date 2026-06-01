@@ -1950,6 +1950,8 @@ export interface CuerpoCrearPublicacionesLote {
 export interface CuerpoActualizarPublicacion {
   titulo?: string;
   contenido?: string;
+  /** Texto que va DENTRO de la imagen (copy-in), distinto del contenido. */
+  copy_in?: string;
   estado?: EstadoPublicacion;
   fecha_programada?: string | null;
   /** Marca/desmarca la publicación como perenne. */

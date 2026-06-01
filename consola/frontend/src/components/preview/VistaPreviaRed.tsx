@@ -35,6 +35,8 @@ export interface VistaPreviaRedProps {
   red: string;
   marca: string;
   contenido: string;
+  /** Texto que va DENTRO de la imagen (copy-in); vacío = sin texto sobre la imagen. */
+  copy_in?: string;
   /** Nombre del archivo o URL de la imagen; vacío = sin imagen. */
   imagen_url?: string;
 }
@@ -120,11 +122,29 @@ function TextoRed({ contenido, className }: { contenido: string; className?: str
 interface MockupProps {
   marca: string;
   contenido: string;
+  copyIn?: string;
   imagen: string;
 }
 
+/**
+ * Capa con el TEXTO EN IMAGEN (copy-in) sobre el área de imagen. Es una simulación del
+ * texto sobre la placa (NO el estampado real, que es trabajo del compositor): se superpone
+ * centrado, en blanco con sombra, para previsualizar cómo conviviría con la imagen. Se
+ * inserta dentro de un contenedor `relative`. Vacío => no renderiza nada.
+ */
+function CapaCopyIn({ texto }: { texto?: string }) {
+  if (!texto?.trim()) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-3">
+      <p className="whitespace-pre-wrap break-words text-center text-base font-extrabold uppercase leading-tight text-white [text-shadow:_0_1px_6px_rgb(0_0_0_/_95%)]">
+        {texto}
+      </p>
+    </div>
+  );
+}
+
 /** Mockup de X (antes Twitter). */
-function PreviaX({ marca, contenido, imagen }: MockupProps) {
+function PreviaX({ marca, contenido, copyIn, imagen }: MockupProps) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 text-[15px]">
       <div className="flex gap-3">
@@ -138,12 +158,15 @@ function PreviaX({ marca, contenido, imagen }: MockupProps) {
             <MoreHorizontal className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
           </div>
           <TextoRed contenido={contenido} className="mt-0.5 leading-normal" />
-          {imagen && (
-            <img
-              src={imagen}
-              alt=""
-              className="mt-3 aspect-video w-full rounded-2xl border border-border object-cover"
-            />
+          {(imagen || copyIn?.trim()) && (
+            <div className="relative mt-3 aspect-video w-full overflow-hidden rounded-2xl border border-border">
+              {imagen ? (
+                <img src={imagen} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <PlaceholderImagen className="h-full w-full" />
+              )}
+              <CapaCopyIn texto={copyIn} />
+            </div>
           )}
           <div className="mt-3 flex max-w-md items-center justify-between text-muted-foreground">
             <span className="flex items-center gap-1.5 text-xs">
@@ -167,7 +190,7 @@ function PreviaX({ marca, contenido, imagen }: MockupProps) {
 }
 
 /** Mockup de Instagram (imagen cuadrada 1:1 + caption). */
-function PreviaInstagram({ marca, contenido, imagen }: MockupProps) {
+function PreviaInstagram({ marca, contenido, copyIn, imagen }: MockupProps) {
   return (
     <div className="mx-auto max-w-sm overflow-hidden rounded-xl border border-border bg-card text-sm">
       <div className="flex items-center gap-2.5 px-3 py-2.5">
@@ -178,11 +201,14 @@ function PreviaInstagram({ marca, contenido, imagen }: MockupProps) {
         <span className="text-[13px] font-semibold">{handleDe(marca).slice(1)}</span>
         <MoreHorizontal className="ml-auto h-4 w-4 text-muted-foreground" />
       </div>
-      {imagen ? (
-        <img src={imagen} alt="" className="aspect-square w-full object-cover" />
-      ) : (
-        <PlaceholderImagen className="aspect-square w-full" />
-      )}
+      <div className="relative aspect-square w-full overflow-hidden">
+        {imagen ? (
+          <img src={imagen} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <PlaceholderImagen className="h-full w-full" />
+        )}
+        <CapaCopyIn texto={copyIn} />
+      </div>
       <div className="space-y-2 px-3 py-2.5">
         <div className="flex items-center gap-4 text-foreground">
           <Heart className="h-6 w-6" />
@@ -201,7 +227,7 @@ function PreviaInstagram({ marca, contenido, imagen }: MockupProps) {
 }
 
 /** Mockup de Facebook. */
-function PreviaFacebook({ marca, contenido, imagen }: MockupProps) {
+function PreviaFacebook({ marca, contenido, copyIn, imagen }: MockupProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card text-[15px]">
       <div className="flex items-center gap-2.5 px-3 pt-3">
@@ -216,7 +242,10 @@ function PreviaFacebook({ marca, contenido, imagen }: MockupProps) {
         <TextoRed contenido={contenido} className="leading-normal" />
       </div>
       {imagen ? (
-        <img src={imagen} alt="" className="max-h-96 w-full object-cover" />
+        <div className="relative w-full overflow-hidden">
+          <img src={imagen} alt="" className="max-h-96 w-full object-cover" />
+          <CapaCopyIn texto={copyIn} />
+        </div>
       ) : null}
       <div className="mt-1 flex items-center justify-around border-t border-border py-1.5 text-muted-foreground">
         <span className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium">
@@ -234,7 +263,7 @@ function PreviaFacebook({ marca, contenido, imagen }: MockupProps) {
 }
 
 /** Mockup de TikTok (vertical 9:16 + caption sobreimpreso). */
-function PreviaTikTok({ marca, contenido, imagen }: MockupProps) {
+function PreviaTikTok({ marca, contenido, copyIn, imagen }: MockupProps) {
   return (
     <div className="mx-auto w-full max-w-[17rem]">
       <div className="relative aspect-[9/16] overflow-hidden rounded-2xl border border-border bg-black">
@@ -245,6 +274,7 @@ function PreviaTikTok({ marca, contenido, imagen }: MockupProps) {
             <Play className="h-12 w-12" />
           </div>
         )}
+        <CapaCopyIn texto={copyIn} />
         {/* Acciones laterales */}
         <div className="absolute bottom-20 right-2.5 flex flex-col items-center gap-4 text-white">
           <Avatar marca={marca} className="h-9 w-9 border-2 border-white text-[11px]" />
@@ -275,7 +305,7 @@ function PreviaTikTok({ marca, contenido, imagen }: MockupProps) {
 }
 
 /** Mockup de YouTube (thumbnail 16:9 + título 2 líneas + canal). */
-function PreviaYouTube({ marca, contenido, imagen }: MockupProps) {
+function PreviaYouTube({ marca, contenido, copyIn, imagen }: MockupProps) {
   // En YouTube el "contenido" hace de título: tomamos la primera línea.
   const titulo = contenido.trim().split("\n")[0] || "Título del video";
   return (
@@ -286,6 +316,7 @@ function PreviaYouTube({ marca, contenido, imagen }: MockupProps) {
         ) : (
           <PlaceholderImagen className="h-full w-full" />
         )}
+        <CapaCopyIn texto={copyIn} />
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="flex h-12 w-16 items-center justify-center rounded-xl bg-red-600 text-white shadow-lg">
             <Play className="h-6 w-6 fill-current" />
@@ -320,7 +351,7 @@ const PREVIAS: Record<string, React.ComponentType<MockupProps>> = {
  * Renderiza la vista previa del post en la red indicada. Para redes sin mockup
  * específico cae a un layout tipo tarjeta genérica (estilo Facebook).
  */
-export function VistaPreviaRed({ red, marca, contenido, imagen_url }: VistaPreviaRedProps) {
+export function VistaPreviaRed({ red, marca, contenido, copy_in, imagen_url }: VistaPreviaRedProps) {
   const imagen = urlMedia(imagen_url);
   const nombreMarca = marca.trim() || "Marca";
   const Mockup = PREVIAS[red] ?? PreviaFacebook;
@@ -334,7 +365,7 @@ export function VistaPreviaRed({ red, marca, contenido, imagen_url }: VistaPrevi
           Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
         </span>
       </div>
-      <Mockup marca={nombreMarca} contenido={contenido} imagen={imagen} />
+      <Mockup marca={nombreMarca} contenido={contenido} copyIn={copy_in} imagen={imagen} />
       <p className="text-[11px] text-muted-foreground">
         Mockup aproximado. El render real puede variar según la red. Las redes no aplican formato
         Markdown.

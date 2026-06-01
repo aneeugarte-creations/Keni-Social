@@ -178,6 +178,32 @@ def test_reconstruir_procesar_copy_crea_publicaciones(entorno):
     # El borrador quedo guardado de verdad.
     pubs = repos.listar_publicaciones(marca=_MARCA, red="x")
     assert any("Hola X" in (p.get("contenido") or "") for p in pubs)
+    # Sin `copy_in` en la pieza, la publicacion nace con copy_in == "" (no rompe).
+    assert resultado["publicaciones"][0]["copy_in"] == ""
+
+
+def test_reconstruir_procesar_copy_guarda_copy_in(entorno):
+    # El copy_in (texto EN imagen) viaja en la misma pieza que el copy y se persiste como
+    # campo propio de la publicacion (distinto del contenido), editable luego en C.
+    spec = jobspec.construir(
+        prompt="p",
+        procesar=jobspec.construir_copy(
+            skill="copy-desde-nota", marca=_MARCA, redes_ids=["x"], titulo_dado="Titulo",
+            texto_base="nota",
+        ),
+    )
+    procesar = jobspec.reconstruir_procesar(spec)
+    salida = (
+        'Texto del copy\n\n```json\n'
+        '{"piezas": [{"red": "x", "texto": "Hola X", "copy_in": "TITULAR EN LA IMAGEN"}]}\n```'
+    )
+    resultado = procesar(salida, None)
+    pub = resultado["publicaciones"][0]
+    assert pub["contenido"] == "Hola X"
+    assert pub["copy_in"] == "TITULAR EN LA IMAGEN"
+    # Persistido y editable: una relectura desde el repo lo conserva.
+    recargada = repos.obtener_publicacion(pub["id"])
+    assert recargada["copy_in"] == "TITULAR EN LA IMAGEN"
 
 
 def test_reconstruir_procesar_copy_nida_bajo_el_tema(entorno):
