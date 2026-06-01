@@ -369,6 +369,7 @@ def listar_noticias_algoritmo(
     plataforma: str | None = None,
     nivel: str | None = None,
     solo_cambios: bool = False,
+    solo_no_sugeridas: bool = False,
     incluir_archivadas: bool = False,
     limite: int | None = None,
 ) -> list[dict[str, Any]]:
@@ -376,6 +377,7 @@ def listar_noticias_algoritmo(
         plataforma=plataforma,
         nivel=nivel,
         solo_cambios=solo_cambios,
+        solo_no_sugeridas=solo_no_sugeridas,
         incluir_archivadas=incluir_archivadas,
         limite=limite,
     )
