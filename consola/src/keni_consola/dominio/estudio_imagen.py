@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .. import biblioteca, generaciones, media
+from .. import biblioteca, generaciones, marcas, media, plantillas_marca
 from . import generar, jobspec
 
 # Reglas de imagen (Biblioteca) que se adjuntan a la revision legal/editorial.
@@ -56,6 +56,13 @@ _ESTILO_MARCA = {
 # Wall-timeouts: editar es determinista (rapido); expandir llama al proveedor (lento).
 _TIMEOUT_EDITAR_S = 60
 _TIMEOUT_EXPANDIR_S = 240
+# Componer es determinista (Pillow), como editar: rapido, sin red.
+_TIMEOUT_COMPONER_S = 60
+
+# Formatos que ENTIENDE el compositor (`componer.py`): subconjunto de FORMATOS sin
+# `horizontal`. `horizontal` (16:9) NO es un formato de breaking del compositor, asi que
+# se MAPEA a `feed` (4:5): es el encaje editorial mas cercano para una pieza de feed/post.
+_FORMATOS_COMPONER = ("vertical", "feed", "cuadrado")
 
 
 class EstudioError(RuntimeError):
@@ -250,6 +257,140 @@ def expandir(
             cmd += ["--lado", lado]
         info = _correr_motor(cmd, timeout=_TIMEOUT_EXPANDIR_S, env=generaciones._entorno_skill())
         return _resultado(_importar_salidas(info), info)
+
+
+# --------------------------------------------------------------------------- #
+# Composicion de marca DETERMINISTA (plantilla: logo + pleca + titular)        #
+# --------------------------------------------------------------------------- #
+
+
+def _formatos_base() -> dict[str, Any]:
+    """Bloque `formatos` del catalogo estatico `motores/.../marcas.json` (w/h/zonas seguras)."""
+    ruta = _ruta_motor("marcas.json")
+    cfg = json.loads(ruta.read_text(encoding="utf-8"))
+    formatos = cfg.get("formatos")
+    if not isinstance(formatos, dict) or not formatos:
+        raise EstudioError("No se pudo leer la configuración de formatos del compositor.")
+    return formatos
+
+
+def _cfg_marca(marca: str, plantilla: dict[str, Any], ruta_logo: str) -> dict[str, Any]:
+    """Construye un cfg COMPLETO de marca (schema de marcas.json) desde la plantilla editable.
+
+    Fusiona los campos editables de la plantilla con los campos NO editables que el motor
+    espera (`nombre`, `id_metricas`, overlays vacios, `verificar`). `logo` se materializa a
+    una RUTA de disco (PNG temporal) si la plantilla referencia un objeto de media; si no,
+    queda "" para que el motor caiga al wordmark.
+    """
+    return {
+        "nombre": marcas.etiqueta_de(marca),
+        "id_metricas": marcas.id_metricas_de(marca),
+        "rojo": plantilla["rojo"],
+        "tinta": plantilla["tinta"],
+        "blanco": plantilla["blanco"],
+        "etiqueta_default": plantilla["etiqueta_default"],
+        "titular_mayusculas": bool(plantilla["titular_mayusculas"]),
+        "titular_condensada": bool(plantilla["titular_condensada"]),
+        "logo": ruta_logo,
+        "marca_agua": "",
+        "overlay_breaking": "",
+        "logo_posicion": plantilla["logo_posicion"],
+        "wordmark": plantilla["wordmark"],
+        "verificar": "",
+    }
+
+
+def componer(
+    imagen: str,
+    *,
+    marca: str,
+    formato: str = "feed",
+    titular: str = "",
+    etiqueta: str | None = None,
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Estampa la PLANTILLA de marca (logo + pleca + titular) sobre una foto -> resultado uniforme.
+
+    Determinista (Pillow, sin red): corre `motores/estudio_imagen/componer.py` por subproceso
+    con un `marcas.json` TEMPORAL construido desde la plantilla editable de la marca
+    (`plantillas_marca.obtener`). El `logo` referenciado (objeto de media) se materializa a un
+    PNG temporal; si no hay logo, el motor cae al wordmark de respaldo.
+
+    `etiqueta`: `None` => usa la `etiqueta_default` de la plantilla; `""` => omite la pleca;
+    un texto => esa pleca. `formato`: `vertical|feed|cuadrado`; `horizontal` se mapea a `feed`.
+    """
+    if not imagen:
+        raise EstudioError("Falta la imagen sobre la que estampar la plantilla.")
+    if not marcas.es_marca(marca):
+        raise EstudioError("Marca desconocida.")
+    fmt = "feed" if formato == "horizontal" else formato
+    if fmt not in _FORMATOS_COMPONER:
+        raise EstudioError(
+            "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
+        )
+
+    try:
+        plantilla = plantillas_marca.obtener(marca)
+    except plantillas_marca.PlantillaMarcaError as e:
+        raise EstudioError(str(e)) from e
+
+    with tempfile.TemporaryDirectory(prefix="keni-componer-") as tmp:
+        carpeta = Path(tmp)
+        foto = _materializar(imagen, carpeta)
+
+        # Materializa el logo (objeto de media) a un PNG temporal; "" si no hay o no existe.
+        ruta_logo = ""
+        logo_id = (plantilla.get("logo") or "").strip()
+        if logo_id:
+            datos_logo = media.leer_media(logo_id)
+            if datos_logo is not None:
+                logo_path = carpeta / "logo.png"
+                logo_path.write_bytes(datos_logo)
+                ruta_logo = str(logo_path)
+
+        # marcas.json TEMPORAL: solo esta marca + los formatos base copiados del catalogo.
+        cfg = {"marcas": {marca: _cfg_marca(marca, plantilla, ruta_logo)}, "formatos": _formatos_base()}
+        cfg_path = carpeta / "marcas.json"
+        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+
+        out = carpeta / "salida.png"
+        motor = _ruta_motor("componer.py")
+        cmd = [
+            sys.executable, str(motor),
+            "--foto", str(foto),
+            "--marca", marca,
+            "--formato", fmt,
+            "--salida", str(out),
+            "--config", str(cfg_path),
+        ]
+        if titular:
+            cmd += ["--titular", titular]
+        if etiqueta is not None:  # None = etiqueta_default; "" = sin pleca; texto = esa pleca
+            cmd += ["--etiqueta", etiqueta]
+
+        # TÚ pasas --salida: no hay que parsear "DATOS"; basta returncode 0 + archivo creado.
+        try:
+            proc = subprocess.run(  # noqa: S603 -- argv lista, sin shell; rutas controladas por el server
+                cmd, capture_output=True, text=True, timeout=_TIMEOUT_COMPONER_S, check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise EstudioError(
+                f"La composición tardó demasiado (más de {_TIMEOUT_COMPONER_S} s) y se canceló."
+            ) from e
+        if proc.returncode != 0 or not out.is_file():
+            detalle = (proc.stderr or "").strip()[-300:]
+            raise EstudioError(
+                "El compositor de marca no produjo un resultado. " + (detalle or "Revisa la imagen de entrada.")
+            )
+
+        try:
+            nombre = media.importar_imagen(str(out))
+        except media.MediaError as e:
+            raise EstudioError(str(e)) from e
+
+        importada = {"id": nombre, "url": f"/api/media/{nombre}"}
+        info = {"op": "componer", "marca": marca, "formato": fmt}
+        return {"id": nombre, "url": importada["url"], "imagenes": [importada], "info": info}
 
 
 # --------------------------------------------------------------------------- #

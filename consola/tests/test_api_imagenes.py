@@ -132,6 +132,59 @@ def test_expandir_ok(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# POST /api/imagenes/componer (estampar la plantilla de marca, determinista)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_componer_sin_imagen_400(cliente):
+    r = cliente.post("/api/imagenes/componer", json={"marca": "unotv"})
+    assert r.status_code == 400
+
+
+def test_componer_marca_invalida_400(cliente):
+    r = cliente.post("/api/imagenes/componer", json={"imagen": "x.png", "marca": "no-existe"})
+    assert r.status_code == 400
+
+
+def test_componer_ok(entorno, monkeypatch):
+    captado = {}
+
+    def _fake_componer(imagen, **kw):
+        captado.update(imagen=imagen, **kw)
+        return {"id": "c.png", "url": "/api/media/c.png", "imagenes": [{"id": "c.png", "url": "/api/media/c.png"}]}
+
+    monkeypatch.setattr(estudio_imagen, "componer", _fake_componer)
+    cli = _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
+    r = cli.post(
+        "/api/imagenes/componer",
+        json={"imagen": "src.png", "marca": "claro-sports", "formato": "vertical", "titular": "Gol"},
+    )
+    assert r.status_code == 200
+    gen = r.json()["generacion"]
+    assert gen["estado"] == "completado"
+    assert gen["resultado"]["id"] == "c.png"
+    assert captado["imagen"] == "src.png"
+    assert captado["marca"] == "claro-sports"
+    assert captado["formato"] == "vertical"
+    assert captado["titular"] == "Gol"
+    # etiqueta ausente => None (el dominio usa la etiqueta_default de la plantilla).
+    assert captado["etiqueta"] is None
+
+
+def test_componer_horizontal_se_pasa_tal_cual(entorno, monkeypatch):
+    """El endpoint deja pasar `horizontal`; el dominio lo mapea a `feed`."""
+    captado = {}
+    monkeypatch.setattr(
+        estudio_imagen, "componer",
+        lambda imagen, **kw: captado.update(**kw) or {"id": "c.png", "url": "/x", "imagenes": []},
+    )
+    cli = _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
+    r = cli.post("/api/imagenes/componer", json={"imagen": "s.png", "marca": "unotv", "formato": "horizontal"})
+    assert r.status_code == 200
+    assert captado["formato"] == "horizontal"
+
+
+# --------------------------------------------------------------------------- #
 # POST /api/imagenes/revisar (gate humano: job claude que VE la imagen)        #
 # --------------------------------------------------------------------------- #
 
