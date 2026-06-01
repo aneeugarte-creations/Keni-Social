@@ -20,8 +20,9 @@ from keni_consola.apps import registro
 _SIDEBAR_HOY = [
     ["Panel"],
     # Biblioteca (prompts + línea editorial) encabeza el bloque "día"; el copy se genera
-    # ahí (sustituyó a "Generación"). "Imágenes" es la generación de imagen neutra.
-    ["Imágenes", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
+    # ahí (sustituyó a "Generación"). "Imágenes" es la generación de imagen neutra y
+    # "Estudio" la superficie rica de diseño de imagen (variantes + editar + expandir).
+    ["Imágenes", "Estudio", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
     # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
     # tablero (Parrilla) es la superficie única de contenido. La pestaña "Skills
     # (catálogo)" se retiró con el sistema de skills (la edición vive en la Biblioteca).

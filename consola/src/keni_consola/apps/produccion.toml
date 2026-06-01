@@ -32,6 +32,7 @@ modulos_backend = [
   "generaciones",
   "hashtags",
   "historial",
+  "imagenes",
   "plantillas",
   "qa_editorial",
   "verificaciones",
