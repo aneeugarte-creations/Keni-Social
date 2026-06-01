@@ -252,6 +252,10 @@ ENV_INDICE = "KENI_CONSOLA_INDICE"
 ENV_MEDIA = "KENI_CONSOLA_MEDIA"
 ENV_SECRETOS = "KENI_CONSOLA_SECRETOS"
 ENV_PREFERENCIAS = "KENI_CONSOLA_PREFERENCIAS"
+# Store EDITABLE de ajustes de funcionalidad (flags + tuning) gestionado por la API admin
+# (`keni_consola.ajustes`). Su VALOR participa en la PRECEDENCIA de `_crudo` (store > env);
+# este nombre solo sobreescribe la RUTA del fichero (override de maxima prioridad).
+ENV_AJUSTES = "KENI_CONSOLA_AJUSTES"
 ENV_SUGERENCIAS = "KENI_CONSOLA_SUGERENCIAS"
 ENV_TERMOMETRO = "KENI_CONSOLA_TERMOMETRO"
 ENV_CONFIG = "KENI_CONSOLA_CONFIG"
@@ -321,7 +325,23 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 
 
 def _crudo(nombre: str) -> str:
-    """Valor crudo (str) de una env var, sin espacios; "" si no esta."""
+    """Valor crudo (str) de un ajuste, sin espacios; "" si no esta.
+
+    PRECEDENCIA (STORE > ENV > DEFECTO): primero el store EDITABLE de ajustes
+    (`keni_consola.ajustes`, gestionado por la API admin); si el store no tiene la clave,
+    cae a `os.environ`. Asi un flag/tuning cambiado desde la UI gana al entorno, y una clave
+    no editada (ausente del store) se comporta EXACTAMENTE como hoy (lee la env / cae al
+    defecto del accesor). Como todos los accesores (`_entero` y los de float, que tambien
+    leen `_crudo`) pasan por aqui, la precedencia aplica de forma uniforme.
+
+    El import de `ajustes` es PEREZOSO (dentro de la funcion) para evitar el ciclo de import
+    a nivel de modulo: `ajustes` usa `rutas`, y `rutas` importa `config`.
+    """
+    from . import ajustes  # perezoso: evita el ciclo config <- rutas <- ... y ajustes->rutas
+
+    desde_store = ajustes.obtener(nombre)
+    if desde_store is not None:
+        return desde_store.strip()
     return (os.environ.get(nombre) or "").strip()
 
 
