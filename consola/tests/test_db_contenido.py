@@ -120,3 +120,31 @@ def test_migracion_columnas_contenido_idempotente(entorno):
     db.listar_contenido()
     c = db.crear_contenido(titulo="X")
     assert c["id"]
+
+
+def test_borrar_publicacion_suelta_borra_el_padre(entorno):
+    """Una publicacion SUELTA (padre 1:1) se borra arrastrando su `contenido` padre."""
+    pub = db.crear_publicacion("unotv", "x", titulo="T", contenido="C")
+    padre_id = db.obtener_contenido_plataforma(pub["id"])["contenido_id"]
+
+    assert db.borrar_publicacion(pub["id"]) is True
+    # La fila y su padre 1:1 desaparecen (no queda un contenido huerfano y vacio).
+    assert db.obtener_publicacion(pub["id"]) is None
+    assert db.obtener_contenido(padre_id) is None
+
+
+def test_borrar_publicacion_anidada_conserva_el_tema(entorno):
+    """Un borrador ANIDADO bajo un tema con mas piezas: se borra SOLO su fila, no el tema."""
+    tema = db.crear_contenido(flujo="importante", titulo="Tema con copy")
+    # Pieza placeholder del tablero (no es publicacion) + borrador anidado (es_publicacion=1).
+    db.crear_contenido_plataforma(contenido_id=tema["id"], red="x")
+    borrador = db.crear_contenido_plataforma(
+        contenido_id=tema["id"], red="instagram", copy="Hola", es_publicacion=True
+    )
+
+    assert db.borrar_publicacion(borrador["id"]) is True
+    # El tema y su otra pieza SIGUEN; solo desaparece el borrador anidado.
+    assert db.obtener_contenido(tema["id"]) is not None
+    assert db.obtener_contenido_plataforma(borrador["id"]) is None
+    restantes = db.listar_contenido_plataforma(tema["id"])
+    assert [p["red"] for p in restantes] == ["x"]

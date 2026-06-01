@@ -1369,15 +1369,18 @@ def _migrar_columnas_tareas(con: Any) -> None:
     """Anade a `tareas` las columnas ampliadas que una BD vieja no tuviera (idempotente).
 
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
-    antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y anade solo
-    la que falte, con `DEFAULT ''`: las tareas existentes quedan con el campo vacio (autor /
-    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada. El Postgres
-    hosted persiste entre despliegues, asi que tambien puede ir atrasado (ver `_crear_esquema`).
+    antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y las anade
+    con `ADD COLUMN IF NOT EXISTS ... DEFAULT ''`: las tareas existentes quedan con el campo
+    vacio (autor / responsable "desconocido", sin enlace) y no se pierde ni reescribe nada.
+
+    Usa `IF NOT EXISTS` (idempotencia a nivel de Postgres) en vez de un pre-check
+    `_columnas_existentes` + ALTER: ese par NO es atomico y, bajo carga (CI con xdist), una
+    lectura de catalogo desfasada hacia que se reintentara anadir una columna ya existente
+    -> `DuplicateColumn`. El Postgres hosted persiste entre despliegues, asi que tambien
+    puede ir atrasado (ver `_crear_esquema`).
     """
-    columnas = _columnas_existentes(con, "tareas")
     for columna in _COLUMNAS_TAREAS_AMPLIADAS:
-        if columna not in columnas:
-            con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
+        con.execute(f"ALTER TABLE tareas ADD COLUMN IF NOT EXISTS {columna} TEXT NOT NULL DEFAULT ''")
 
 
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
@@ -1408,7 +1411,7 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_eventos")
     for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas de `rota_piezas` declaradas en el DDL inicial: cualquier columna que se
@@ -1448,7 +1451,7 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_piezas")
     for columna, tipo in _COLUMNAS_PIEZA_ROTA_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_piezas ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_piezas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas ampliadas de `contenido` / `contenido_plataforma` (tablero unificado). Hoy
@@ -1472,7 +1475,7 @@ def _migrar_columnas_contenido(con: Any) -> None:
         columnas = _columnas_existentes(con, tabla)
         for columna, tipo in ampliadas:
             if columna not in columnas:
-                con.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}")
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
@@ -1497,7 +1500,7 @@ def _migrar_columnas_swaps(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_swaps_turno")
     for columna, tipo in _COLUMNAS_SWAP_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas que se podrian anadir a `rota_programas`. Hoy esta tupla esta VACIA: la tabla
@@ -1517,7 +1520,7 @@ def _migrar_columnas_programas(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_programas")
     for columna, tipo in _COLUMNAS_PROGRAMA_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_programas ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_programas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas que se anadieron a `usuarios` despues del esquema original (cargo + cobertura
@@ -1550,7 +1553,7 @@ def _migrar_columnas_usuarios(con: Any) -> None:
     columnas = _columnas_existentes(con, "usuarios")
     for columna, tipo in _COLUMNAS_USUARIOS_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE usuarios ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -3611,7 +3614,7 @@ def _migrar_columnas_plantilla_contenido(con: Any) -> None:
     columnas = _columnas_existentes(con, "plantilla_contenido")
     for columna, tipo in _COLUMNAS_PLANTILLA_CONTENIDO_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE plantilla_contenido ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE plantilla_contenido ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 _COLS_PLANTILLA_CONTENIDO = (
@@ -5128,12 +5131,26 @@ def actualizar_publicacion(
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:
-    """Borra una publicacion (su fila por plataforma y el padre 1:1). True si existía."""
+    """Borra una publicacion. True si existía.
+
+    Dos casos (modelo consolidado: publicacion = fila `contenido_plataforma` con
+    `es_publicacion=1` colgada de un `contenido`):
+      - Publicacion SUELTA (su padre 1:1 solo contiene esta fila): se borra el padre, que
+        arrastra la fila (no deja un `contenido` huerfano y vacio). Es el caso de la
+        generacion manual de copy de siempre.
+      - Borrador ANIDADO bajo un tema (el padre tiene MAS filas por plataforma, p.ej. un tema
+        importado/Radar con su copy auto-generado): se borra SOLO esta fila, conservando el
+        tema y sus demas piezas. Evita que borrar un borrador se lleve el tema entero (#nido).
+    """
     plat = obtener_contenido_plataforma(publicacion_id)
     if plat is None or not plat.get("es_publicacion"):
         return False
-    # El padre es 1:1 con la publicacion: borrarlo arrastra la fila por plataforma.
-    return borrar_contenido(plat["contenido_id"])
+    hermanas = listar_contenido_plataforma(plat["contenido_id"])
+    if len(hermanas) <= 1:
+        # Padre 1:1 con la publicacion: borrarlo arrastra la fila por plataforma.
+        return borrar_contenido(plat["contenido_id"])
+    # Anidada bajo un tema con mas piezas: borrar SOLO esta fila, conservar el tema.
+    return borrar_contenido_plataforma(publicacion_id)
 
 
 def duplicar_evento_rota(
