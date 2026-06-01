@@ -71,7 +71,13 @@ def test_migra_plantilla_plano_yaml_a_catalogo_unificado(entorno):
 def test_migracion_es_idempotente(entorno):
     db.crear_pieza_rota(programa="P", red_social="IG")
     primera = migrar_contenido.migrar()
-    assert primera == {"piezas": 1, "publicaciones": 0, "plantillas_plano": 0}
+    assert primera == {
+        "piezas": 1, "publicaciones": 0, "plantillas_plano": 0,
+        "fuentes_rss": 0, "grupos_hashtags": 0, "franjas": 0,
+    }
     segunda = migrar_contenido.migrar()
-    assert segunda == {"piezas": 0, "publicaciones": 0, "plantillas_plano": 0}
+    assert segunda == {
+        "piezas": 0, "publicaciones": 0, "plantillas_plano": 0,
+        "fuentes_rss": 0, "grupos_hashtags": 0, "franjas": 0,
+    }
     assert len(db.listar_contenido()) == 1
