@@ -27,10 +27,13 @@ const ARCHIVOS = [
   ["Oswald", "Oswald-Variable.ttf"],
   ["Montserrat", "Montserrat-Variable.ttf"],
   ["Lora", "Lora-Variable.ttf"],
+  ["Exo 2", "Exo2-Variable.ttf"],
+  ["Lato", "Lato-Regular.ttf"],
+  ["Lato", "Lato-Bold.ttf"],
 ];
 
 // Catálogo de familias ofrecidas (el editor mantiene su propia copia para el selector).
-export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora"];
+export const CATALOGO = ["Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora", "Exo 2", "Lato"];
 
 let _registradas = false;
 

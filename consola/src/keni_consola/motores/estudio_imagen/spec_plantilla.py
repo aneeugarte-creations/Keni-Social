@@ -39,7 +39,10 @@ FORMATOS: dict[str, dict[str, int]] = {
 # editor). `familia` de una capa puede ser una lógica o un nombre del catálogo; el renderer las
 # resuelve (fuentes.mjs::familiaReal). Validación tolerante: cualquier str no vacío vale.
 FAMILIAS = ("sans", "condensada")
-CATALOGO_FUENTES = ("Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora")
+CATALOGO_FUENTES = (
+    "Barlow", "Barlow Condensed", "Anton", "Oswald", "Montserrat", "Archivo Black", "Lora",
+    "Exo 2", "Lato",
+)
 
 _AJUSTES = ("cover", "contain")
 _ALINEACIONES = ("izquierda", "centro", "derecha", "justificado")

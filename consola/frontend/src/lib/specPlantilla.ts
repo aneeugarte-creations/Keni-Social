@@ -22,6 +22,8 @@ export const CATALOGO_FUENTES = [
   "Montserrat",
   "Archivo Black",
   "Lora",
+  "Exo 2",
+  "Lato",
 ] as const;
 
 /** Normaliza la familia de un spec antiguo ("sans"/"condensada") al nombre real del catálogo. */
