@@ -3204,3 +3204,40 @@ export interface RespuestaImportCalendario {
   omitidos: { titulo: string; motivo: string }[];
   errores: ErrorImportCalendario[];
 }
+
+// ── Ajustes de funcionalidad (admin, toggles + tuning en caliente) ──────────
+// `GET/POST /api/ajustes`: store editable que `config` consulta (store > env >
+// defecto). Dicts ad-hoc (a mano, no `types.gen.ts`).
+export interface OpcionAjuste {
+  id: string;
+  etiqueta: string;
+}
+
+export interface AjusteAdmin {
+  clave: string;
+  tipo: "bool" | "int" | "float" | "select";
+  etiqueta: string;
+  ayuda: string;
+  grupo: string;
+  peligroso: boolean;
+  valor: boolean | number | string;
+  fuente: "store" | "env" | "defecto";
+  defecto: boolean | number | string;
+  opciones?: OpcionAjuste[];
+  min?: number;
+  max?: number;
+}
+
+export interface GrupoAjustes {
+  id: string;
+  titulo: string;
+  ajustes: AjusteAdmin[];
+}
+
+export interface RespuestaAjustes {
+  grupos: GrupoAjustes[];
+}
+
+export interface RespuestaAjusteGuardado {
+  ajuste: AjusteAdmin;
+}

@@ -49,16 +49,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { useTema } from "@/hooks/tema-contexto";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { MarcaMetricool, PerfilMetricool } from "@/types";
+import type { AjusteAdmin, MarcaMetricool, PerfilMetricool, RespuestaAjustes } from "@/types";
 
 const CLAVE_CONFIG = ["config"];
 const CLAVE_ESFUERZO = ["config", "esfuerzo"];
 const CLAVE_IMAGEN = ["conexiones", "imagen"];
 const CLAVE_METRICOOL = ["conexiones", "metricool"];
+const CLAVE_AJUSTES = ["ajustes"];
 
 /** Proveedores de imagen IA disponibles (gateway único OpenRouter). */
 const PROVEEDORES = [{ id: "openrouter", nombre: "OpenRouter (gateway de IA)" }];
@@ -972,6 +974,220 @@ function SeccionApariencia() {
  * Página de Ajustes: fuente de datos, alcance de marcas, métricas (Metricool) e
  * imagen IA. El botón "Actualizar" refresca las cachés de las queries.
  */
+/** Etiqueta corta del origen del valor actual de un ajuste. */
+function FuenteAjuste({ fuente }: { fuente: AjusteAdmin["fuente"] }) {
+  const texto = fuente === "store" ? "Guardado" : fuente === "env" ? "Entorno" : "Por defecto";
+  return (
+    <Badge variant="outline" className="text-[10px] font-normal text-muted-foreground">
+      {texto}
+    </Badge>
+  );
+}
+
+/** Una fila de ajuste: toggle (bool), número (int/float) o selector (select). */
+function FilaAjuste({
+  ajuste,
+  onGuardar,
+  guardando,
+}: {
+  ajuste: AjusteAdmin;
+  onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
+  guardando: boolean;
+}) {
+  const [confirmar, setConfirmar] = React.useState(false);
+  const [num, setNum] = React.useState(String(ajuste.valor));
+  React.useEffect(() => {
+    setNum(String(ajuste.valor));
+  }, [ajuste.valor]);
+
+  const cabecera = (
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium">{ajuste.etiqueta}</span>
+        {ajuste.peligroso && (
+          <Badge variant="destructive" className="text-[10px]">
+            Publica de verdad
+          </Badge>
+        )}
+        <FuenteAjuste fuente={ajuste.fuente} />
+      </div>
+      <p className="text-xs text-muted-foreground">{ajuste.ayuda}</p>
+    </div>
+  );
+
+  if (ajuste.tipo === "bool") {
+    const activo = Boolean(ajuste.valor);
+    const onToggle = (valor: boolean) => {
+      // Encender un flag PELIGROSO (publicación real) pide confirmación explícita.
+      if (valor && ajuste.peligroso) {
+        setConfirmar(true);
+        return;
+      }
+      onGuardar({ clave: ajuste.clave, valor });
+    };
+    return (
+      <div className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0">
+        {cabecera}
+        <Switch checked={activo} onCheckedChange={onToggle} disabled={guardando} aria-label={ajuste.etiqueta} />
+        <Dialog open={confirmar} onOpenChange={setConfirmar}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Activar publicación real</DialogTitle>
+              <DialogDescription>
+                «{ajuste.etiqueta}» hará que las piezas aprobadas y programadas se publiquen DE
+                VERDAD en las redes (vía Metricool). Asegúrate de que es lo que quieres.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmar(false)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  onGuardar({ clave: ajuste.clave, valor: true });
+                  setConfirmar(false);
+                }}
+              >
+                Sí, publicar de verdad
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  if (ajuste.tipo === "select") {
+    return (
+      <div className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0">
+        {cabecera}
+        <Select
+          value={String(ajuste.valor) || "_vacio"}
+          onValueChange={(valor) =>
+            onGuardar({ clave: ajuste.clave, valor: valor === "_vacio" ? "" : valor })
+          }
+          disabled={guardando}
+        >
+          <SelectTrigger className="w-[160px]" aria-label={ajuste.etiqueta}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(ajuste.opciones ?? []).map((o) => (
+              <SelectItem key={o.id || "_vacio"} value={o.id || "_vacio"}>
+                {o.etiqueta}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  }
+
+  // int / float: se guarda al salir del campo (blur) si cambió.
+  const guardarNumero = () => {
+    if (num !== String(ajuste.valor) && num.trim() !== "") {
+      onGuardar({ clave: ajuste.clave, valor: Number(num) });
+    }
+  };
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-border/50 py-3 last:border-0">
+      {cabecera}
+      <Input
+        type="number"
+        value={num}
+        min={ajuste.min}
+        max={ajuste.max}
+        step={ajuste.tipo === "float" ? "0.1" : "1"}
+        onChange={(e) => setNum(e.target.value)}
+        onBlur={guardarNumero}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        }}
+        disabled={guardando}
+        className="w-[120px] tabular-nums"
+        aria-label={ajuste.etiqueta}
+      />
+    </div>
+  );
+}
+
+/** Sección admin: toggles + ajustes finos de funcionalidad (aplican en caliente). */
+function SeccionFuncionalidad() {
+  const queryClient = useQueryClient();
+  const { data, isPending, isError, error, refetch, isFetching } = useQuery({
+    queryKey: CLAVE_AJUSTES,
+    queryFn: ({ signal }) => api.ajustes(signal),
+  });
+
+  const guardar = useMutation({
+    mutationFn: (cuerpo: { clave: string; valor?: boolean | number | string }) =>
+      api.guardarAjuste(cuerpo),
+    onSuccess: (res) => {
+      // Sustituye el ajuste en la caché (sin refetch completo) y confirma.
+      queryClient.setQueryData<RespuestaAjustes>(CLAVE_AJUSTES, (prev) =>
+        prev
+          ? {
+              grupos: prev.grupos.map((g) => ({
+                ...g,
+                ajustes: g.ajustes.map((a) => (a.clave === res.ajuste.clave ? res.ajuste : a)),
+              })),
+            }
+          : prev,
+      );
+      toast.success(`«${res.ajuste.etiqueta}» actualizado.`);
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Funcionalidad</CardTitle>
+        <CardDescription>
+          Activa o desactiva la automatización y ajusta sus parámetros. Los cambios aplican{" "}
+          <strong>en caliente</strong> (sin reiniciar; tardan hasta ~1 minuto). El humano sigue
+          aprobando antes de publicar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6 pt-0">
+        {isPending ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : isError ? (
+          <BloqueError
+            titulo="No se pudieron cargar los ajustes"
+            mensaje={mensajeError(error)}
+            onReintentar={() => void refetch()}
+            cargando={isFetching}
+          />
+        ) : (
+          data.grupos.map((grupo) => (
+            <div key={grupo.id} className="space-y-1">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {grupo.titulo}
+              </h4>
+              <div>
+                {grupo.ajustes.map((ajuste) => (
+                  <FilaAjuste
+                    key={ajuste.clave}
+                    ajuste={ajuste}
+                    onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+                    guardando={guardar.isPending}
+                  />
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Configuracion() {
   const queryClient = useQueryClient();
   const { usuario } = useSesion();
@@ -1018,6 +1234,8 @@ export default function Configuracion() {
         {/* Metricool e Imagen IA: solo admin (secretos globales, #153). */}
         {puedeVerConexiones && <SeccionMetricool />}
         {puedeVerConexiones && <SeccionImagen />}
+        {/* Funcionalidad (toggles + tuning): solo admin, igual que las conexiones. */}
+        {puedeVerConexiones && <SeccionFuncionalidad />}
         <SeccionApariencia />
       </div>
     </>
