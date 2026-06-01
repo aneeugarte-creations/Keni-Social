@@ -152,3 +152,76 @@ def test_xlsx_detectado_por_firma_pk_sin_extension():
     libro.save(buffer)
     filas, _ = ic.parsear(buffer.getvalue(), nombre="archivo_sin_ext")
     assert filas[0].titulo == "Sin extension"
+
+
+# --------------------------------------------------------------------------- #
+# Extracción AGNÓSTICA de formato con Claude (parseo PURO de su respuesta +    #
+# dispatch con ejecutor inyectado: no toca el binario `claude`).               #
+# --------------------------------------------------------------------------- #
+
+
+def test_parsear_respuesta_claude_objeto_filas():
+    """Un objeto {"filas":[...]} de Claude se normaliza con las mismas reglas que un Excel."""
+    texto = (
+        '{"filas": [{"titulo": "Final de la Liga MX", "fecha": "2026-06-01", '
+        '"marca": "Claro Sports", "redes": ["Instagram", "X"], "prioridad": "alta", '
+        '"compromiso": true, "green": false, "notas": "Cobertura en vivo"}]}'
+    )
+    filas, errores = ic.parsear_respuesta_claude(texto)
+    assert errores == []
+    assert len(filas) == 1
+    f = filas[0]
+    assert f.titulo == "Final de la Liga MX"
+    assert f.fecha == "2026-06-01"
+    assert f.marca_id == "claro-sports"
+    assert f.redes == ["instagram", "x"]
+    assert f.prioridad == "alta"
+    assert f.compromiso is True
+
+
+def test_parsear_respuesta_claude_tolera_fences_y_array_desnudo():
+    fenced = '```json\n[{"titulo": "Nota A"}, {"titulo": "Nota B"}]\n```'
+    filas, errores = ic.parsear_respuesta_claude(fenced)
+    assert [f.titulo for f in filas] == ["Nota A", "Nota B"]
+    assert errores == []
+
+
+def test_parsear_respuesta_claude_registro_sin_titulo_es_error_no_rompe():
+    texto = '{"filas": [{"titulo": "Ok"}, {"fecha": "2026-01-01"}]}'
+    filas, errores = ic.parsear_respuesta_claude(texto)
+    assert [f.titulo for f in filas] == ["Ok"]
+    assert len(errores) == 1
+
+
+def test_parsear_respuesta_claude_basura_devuelve_error_honesto():
+    filas, errores = ic.parsear_respuesta_claude("lo siento, no encontré un calendario")
+    assert filas == []
+    assert errores and "JSON" in errores[0]["motivo"]
+
+
+def test_extraer_con_claude_usa_ejecutor_inyectado():
+    """`extraer_con_claude` vuelca el archivo y normaliza lo que devuelva el ejecutor."""
+    visto = {}
+
+    def fake_ejecutor(prompt: str, carpeta: str) -> str:
+        visto["prompt"] = prompt
+        visto["carpeta"] = carpeta
+        return '{"filas": [{"titulo": "Desde un PDF", "redes": ["TikTok"]}]}'
+
+    filas, errores = ic.extraer_con_claude(
+        b"%PDF-1.7 binario...", nombre="plan.pdf", ejecutor=fake_ejecutor
+    )
+    assert errores == []
+    assert filas[0].titulo == "Desde un PDF"
+    assert filas[0].redes == ["tiktok"]
+    # El prompt apunta al archivo volcado en la carpeta temporal.
+    assert "plan.pdf" in visto["prompt"]
+
+
+def test_extraer_con_claude_ejecutor_que_falla_devuelve_error_legible():
+    def ejecutor_roto(prompt: str, carpeta: str) -> str:
+        raise RuntimeError("claude no disponible")
+
+    filas, errores = ic.extraer_con_claude(b"x", nombre="x.bin", ejecutor=ejecutor_roto)
+    assert filas == []
+    assert errores and "IA" in errores[0]["motivo"]

@@ -1,7 +1,9 @@
 /**
- * Diálogo "Importar calendario" (H1): sube un .xlsx/.csv y vuelca su contenido al
- * tablero. Previsualiza (parsea sin escribir) y luego confirma. Las filas marcadas
- * como obligatorias entran etiquetadas "compromiso" (lo hace el backend).
+ * Diálogo "Importar calendario": sube un archivo de CUALQUIER formato (Excel, CSV,
+ * PDF, Word, una imagen/captura…) y vuelca su contenido al tablero. El backend usa el
+ * parser tabular para .xlsx/.csv bien formados y, para todo lo demás, deja que Claude
+ * LEA el archivo y extraiga el calendario. Previsualiza (sin escribir) y luego confirma.
+ * Las filas marcadas como obligatorias entran etiquetadas "compromiso" (lo hace el back).
  */
 import { useMutation } from "@tanstack/react-query";
 import { Upload } from "lucide-react";
@@ -96,13 +98,15 @@ export function DialogoImportarCalendario({
         <DialogHeader>
           <DialogTitle>Importar calendario</DialogTitle>
           <DialogDescription>
-            Sube un .xlsx o .csv con columnas como título, fecha, marca, redes, prioridad y
+            Sube un archivo en cualquier formato (Excel, CSV, PDF, Word, una imagen o
+            captura…). La IA lo interpreta y extrae título, fecha, marca, redes, prioridad y
             compromiso. Las filas marcadas como obligatorias se etiquetan “compromiso”.
+            Previsualiza antes de volcar al tablero.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <Input type="file" accept=".xlsx,.xlsm,.csv" onChange={onArchivo} />
+          <Input type="file" onChange={onArchivo} aria-label="Archivo a importar" />
           <div>
             <p className="mb-1 text-xs text-muted-foreground">
               Marca por defecto (para las filas sin marca propia):

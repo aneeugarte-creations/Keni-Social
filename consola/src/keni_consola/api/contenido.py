@@ -711,12 +711,17 @@ async def importar(request: Request) -> Response:
     if err:
         return JSONResponse({"error": err}, status_code=400)
 
+    # Camino RÁPIDO y determinista: el parser tabular para .xlsx/.csv bien formados.
+    nombre = archivo.filename or ""
     try:
-        filas, errores = importador_calendario.parsear(data, nombre=archivo.filename or "")
-    except ImportError:
-        return JSONResponse({"error": "El servidor no puede leer .xlsx (falta openpyxl); usa CSV."}, status_code=503)
-    except Exception:  # noqa: BLE001 -- archivo corrupto/no soportado => 400, sin traza
-        return JSONResponse({"error": "No se pudo leer el archivo (¿formato no soportado?)."}, status_code=400)
+        filas, errores = importador_calendario.parsear(data, nombre=nombre)
+    except Exception:  # noqa: BLE001 -- formato no tabular/ilegible: lo intentará Claude abajo
+        filas, errores = [], []
+    # Si el parser rígido no sacó nada (PDF, imagen, captura, Word, Excel con otra
+    # estructura, cabeceras irreconocibles…), deja que Claude LEA el archivo y lo
+    # interprete, sea cual sea el formato. Es síncrono (el usuario espera la importación).
+    if not filas:
+        filas, errores = importador_calendario.extraer_con_claude(data, nombre=nombre)
 
     if str(form.get("previsualizar") or "") in ("1", "true", "si", "sí"):
         return JSONResponse({

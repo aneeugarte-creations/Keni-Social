@@ -27,9 +27,15 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Any
@@ -324,6 +330,190 @@ def parsear(data: bytes, *, nombre: str) -> tuple[list[FilaCalendario], list[dic
     """Bytes de un .xlsx/.csv -> (filas normalizadas, errores). No escribe nada."""
     tabla = _leer_tabla(data, nombre=nombre)
     return _filas_desde_tabla(tabla)
+
+
+# --------------------------------------------------------------------------- #
+# Extracción AGNÓSTICA de formato con Claude (cualquier archivo: PDF, imagen,  #
+# captura, Word, Excel raro, texto…). El parser rígido de arriba es el camino  #
+# RÁPIDO y determinista para .xlsx/.csv bien formados; cuando no saca filas    #
+# (formato no tabular o cabeceras irreconocibles), la API cae a esto: deja que #
+# Claude LEA el archivo y devuelva el mismo calendario en JSON. El normalizado #
+# posterior (marca→id, redes, fecha, prioridad) reusa los helpers PUROS de     #
+# arriba, así que un registro de Claude pasa por las MISMAS reglas que una     #
+# fila de Excel.                                                               #
+# --------------------------------------------------------------------------- #
+
+# Wall-timeout del subproceso `claude` (s). La importación es una acción que el
+# usuario inicia y espera; topamos para no colgar la petición indefinidamente.
+_CLAUDE_TIMEOUT_S = 180
+
+# Ejecutor de `claude` inyectable: (prompt, dir_permitido) -> texto final. El default es
+# el subproceso real; los tests inyectan uno falso para no depender del binario.
+Ejecutor = Callable[[str, str], str]
+
+
+def _filas_desde_registros(
+    registros: list[Any],
+) -> tuple[list[FilaCalendario], list[dict[str, Any]]]:
+    """Lista de dicts (de Claude) -> (filas válidas, errores). PURO.
+
+    Cada registro lleva las MISMAS claves que una columna del Excel
+    (titulo/fecha/marca/redes/prioridad/compromiso/green/notas) y pasa por los mismos
+    normalizadores. Un registro sin título se reporta como error, no rompe el resto.
+    """
+    errores: list[dict[str, Any]] = []
+    idx_marcas = _marcas_por_nombre()
+    idx_redes = _redes_por_nombre()
+    filas: list[FilaCalendario] = []
+    for i, reg in enumerate(registros, start=1):
+        if len(filas) >= _MAX_FILAS:
+            errores.append({"fila": i, "motivo": f"Se superó el máximo de {_MAX_FILAS} filas; el resto se omitió."})
+            break
+        if not isinstance(reg, dict):
+            errores.append({"fila": i, "motivo": "Registro no es un objeto; se omitió."})
+            continue
+        titulo = str(reg.get("titulo") or reg.get("tema") or "").strip()
+        if not titulo:
+            errores.append({"fila": i, "motivo": "Registro sin título; se omitió."})
+            continue
+        compromiso = _es_verdadero(reg.get("compromiso"))
+        green = _es_verdadero(reg.get("green"))
+        redes_val = reg.get("redes")
+        if isinstance(redes_val, list):
+            redes_val = ",".join(str(x) for x in redes_val)
+        notas = str(reg.get("notas") or "").strip()
+        filas.append(
+            FilaCalendario(
+                titulo=titulo[:_MAX_TITULO],
+                fecha=_parse_fecha(reg.get("fecha")),
+                marca_id=idx_marcas.get(_normaliza(reg.get("marca")), ""),
+                redes=_parse_redes(redes_val, idx_redes),
+                prioridad=_parse_prioridad(reg.get("prioridad"), compromiso=compromiso),
+                compromiso=compromiso,
+                green=green,
+                notas=notas[:_MAX_TEXTO],
+            )
+        )
+    return filas, errores
+
+
+def _extraer_json(texto: str) -> list[Any] | None:
+    """Saca la lista de filas del texto de Claude. Tolera ```json fences y `{"filas":[…]}`."""
+    if not texto or not texto.strip():
+        return None
+    s = texto.strip()
+    cerca = re.search(r"```(?:json)?\s*(.*?)```", s, re.DOTALL)
+    if cerca:
+        s = cerca.group(1).strip()
+    data: Any = None
+    try:
+        data = json.loads(s)
+    except (json.JSONDecodeError, ValueError):
+        inicio = next((i for i, c in enumerate(s) if c in "[{"), -1)
+        if inicio < 0:
+            return None
+        try:
+            data = json.loads(s[inicio:])
+        except (json.JSONDecodeError, ValueError):
+            return None
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict):
+        for clave in ("filas", "rows", "calendario", "items"):
+            if isinstance(data.get(clave), list):
+                return data[clave]
+    return None
+
+
+def parsear_respuesta_claude(texto: str) -> tuple[list[FilaCalendario], list[dict[str, Any]]]:
+    """Texto de salida de Claude -> (filas normalizadas, errores). PURO."""
+    registros = _extraer_json(texto)
+    if registros is None:
+        return [], [{"fila": 0, "motivo": "El asistente no devolvió un calendario en JSON legible."}]
+    return _filas_desde_registros(registros)
+
+
+def _prompt_extraccion(ruta: str) -> str:
+    """Prompt para que Claude LEA el archivo y devuelva el calendario en JSON."""
+    lista_marcas = ", ".join(etiqueta for _id, etiqueta in marcas.opciones()) or "(ninguna)"
+    lista_redes = ", ".join(redes.nombre_por_id(r) for r in redes.ids()) or "(ninguna)"
+    return (
+        "Eres un extractor de calendarios de contenido para redes sociales. Lee el archivo "
+        f"en la ruta {ruta} (puede ser Excel, CSV, PDF, Word, una imagen/captura o texto) y "
+        'devuelve EXCLUSIVAMENTE un objeto JSON con la forma {"filas": [ ... ]}, sin ningún '
+        "texto adicional ni explicación. Cada elemento de `filas` es un objeto con estas claves:\n"
+        '- "titulo": el tema o post (OBLIGATORIO).\n'
+        '- "fecha": fecha de publicación en ISO YYYY-MM-DD, o "" si no la hay.\n'
+        f'- "marca": una de estas marcas por su nombre exacto, o "": {lista_marcas}.\n'
+        f'- "redes": lista de redes (subconjunto de): {lista_redes}.\n'
+        '- "prioridad": "alta", "media" o "baja".\n'
+        '- "compromiso": true si la fila está marcada como obligatoria/comprometida.\n'
+        '- "green": true si está marcada como green/verde.\n'
+        '- "notas": cualquier detalle adicional, o "".\n'
+        "Si el archivo no contiene un calendario, devuelve {\"filas\": []}."
+    )
+
+
+def _ejecutar_claude_json(prompt: str, dir_permitido: str) -> str:
+    """Corre `claude -p <prompt> --output-format json --add-dir <dir>` y devuelve el texto final.
+
+    Síncrono y acotado por `_CLAUDE_TIMEOUT_S`. Hereda el entorno (incluido el
+    `CLAUDE_CODE_OAUTH_TOKEN` de la máquina). No tocar en tests: se inyecta un falso.
+    """
+    from .dominio import stream  # import perezoso: evita ciclo importador<->dominio
+
+    if shutil.which("claude") is None:
+        raise RuntimeError("El asistente (claude) no está disponible en el servidor.")
+    argv = [
+        "claude",
+        "-p",
+        prompt,
+        "--output-format",
+        "json",
+        "--add-dir",
+        dir_permitido,
+        *stream.arg_skip_permisos(),
+    ]
+    res = subprocess.run(  # noqa: S603 -- argv fijo, sin shell; prompt va como argumento
+        argv,
+        capture_output=True,
+        text=True,
+        timeout=_CLAUDE_TIMEOUT_S,
+        check=False,
+        env=dict(os.environ),
+    )
+    if res.returncode != 0:
+        raise RuntimeError((res.stderr or "claude terminó con error").strip()[:300])
+    try:
+        envelope = json.loads(res.stdout or "{}")
+    except (json.JSONDecodeError, ValueError):
+        return res.stdout or ""
+    if isinstance(envelope, dict):
+        return str(envelope.get("result") or "")
+    return res.stdout or ""
+
+
+def extraer_con_claude(
+    data: bytes, *, nombre: str, ejecutor: Ejecutor | None = None
+) -> tuple[list[FilaCalendario], list[dict[str, Any]]]:
+    """Bytes de CUALQUIER archivo -> (filas, errores) usando Claude. No escribe en el tablero.
+
+    Vuelca el archivo a un temporal, deja que Claude lo lea y normaliza su JSON con las
+    mismas reglas que el parser rígido. `ejecutor` es inyectable (tests).
+    """
+    correr = ejecutor or _ejecutar_claude_json
+    salida = ""
+    with tempfile.TemporaryDirectory(prefix="keni-import-") as carpeta:
+        nombre_seguro = os.path.basename(nombre or "") or "archivo"
+        ruta = os.path.join(carpeta, nombre_seguro)
+        with open(ruta, "wb") as fh:
+            fh.write(data)
+        try:
+            salida = correr(_prompt_extraccion(ruta), carpeta)
+        except Exception as e:  # noqa: BLE001 -- cualquier fallo del asistente => error legible
+            _log.warning("extraer_con_claude falló: %s", e)
+            return [], [{"fila": 0, "motivo": f"No se pudo interpretar el archivo con IA: {e}"}]
+    return parsear_respuesta_claude(salida)
 
 
 # --------------------------------------------------------------------------- #
