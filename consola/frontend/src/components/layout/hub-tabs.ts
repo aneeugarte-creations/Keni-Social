@@ -6,6 +6,7 @@ import {
   FileText,
   Globe,
   Images,
+  ListChecks,
   ListTodo,
   Megaphone,
   Presentation,
@@ -62,8 +63,9 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
 ];
 
 export const TABS_PARRILLA: ItemTabHub[] = [
-  { ruta: "/parrilla/calendario", etiqueta: "Turnos", icono: CalendarClock },
   { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
+  { ruta: "/parrilla/calendario", etiqueta: "Turnos", icono: CalendarClock },
+  { ruta: "/parrilla/piezas", etiqueta: "Piezas", icono: ListChecks },
 ];
 
 export const TABS_AGENTES: ItemTabHub[] = [
