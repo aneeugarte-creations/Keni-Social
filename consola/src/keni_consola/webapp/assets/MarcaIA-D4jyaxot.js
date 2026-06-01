@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/MarcaIA-D4jyaxot.js
 import{a6 as n,ai as a,T as i,a1 as r}from"./index-OwJAfMyz.js";/**
+|||||||| 23e1bc39:consola/src/keni_consola/webapp/assets/MarcaIA-ClsAsaBB.js
+import{a7 as n,aj as a,U as i,a2 as r}from"./index-Ba83vUQM.js";/**
+========
+import{a7 as n,aj as a,U as i,a2 as r}from"./index-Bg7npwqD.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/MarcaIA-fF6rDdKo.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.

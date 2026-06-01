@@ -1,4 +1,10 @@
+<<<<<<<< HEAD:consola/src/keni_consola/webapp/assets/clipboard-check-BGlkUTbT.js
 import{a6 as a}from"./index-OwJAfMyz.js";/**
+|||||||| 23e1bc39:consola/src/keni_consola/webapp/assets/clipboard-check-BU_V0CO3.js
+import{a7 as a}from"./index-Ba83vUQM.js";/**
+========
+import{a7 as a}from"./index-Bg7npwqD.js";/**
+>>>>>>>> origin/main:consola/src/keni_consola/webapp/assets/clipboard-check-DICRwUSs.js
  * @license lucide-react v0.475.0 - ISC
  *
  * This source code is licensed under the ISC license.
