@@ -14,6 +14,7 @@ const PAYLOAD_BASE = {
     { id: "claro-sports", nombre: "Claro Sports" },
   ],
   regiones_sugeridas: ["EEUU", "Europa", "Asia"],
+  ultimo: null,
 };
 
 function stubFetch(payload: object) {
@@ -66,6 +67,23 @@ describe("Termometro", () => {
     const noticias = screen.getByLabelText(/noticias internacionales del día/i);
     fireEvent.change(noticias, { target: { value: "China: algo grande.\nEuropa: otra cosa." } });
     expect(boton).toBeEnabled();
+  });
+
+  it("repinta el último termómetro guardado (resultado persistente)", async () => {
+    stubFetch({
+      ...PAYLOAD_BASE,
+      ultimo: {
+        historial_id: "h-123",
+        documento: "Galeria internacional del dia de ayer",
+        titulo: "Termómetro mundial · 2026-05-31",
+        fecha: "2026-05-31",
+        marca: "unotv",
+      },
+    });
+    renderConProviders(<Termometro />);
+
+    // El documento del último termómetro aparece sin haber generado nada en esta sesión.
+    expect(await screen.findByText(/galeria internacional del dia de ayer/i)).toBeInTheDocument();
   });
 
   it("avisa cuando la skill no está instalada", async () => {

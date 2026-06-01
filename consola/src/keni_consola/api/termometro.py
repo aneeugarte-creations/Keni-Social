@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas, termometro
+from .. import biblioteca, marcas, repos, termometro
 from .._http_json import leer_json
 from ..dominio import copy as dom_copy
 from ..dominio import generar as gen_dom
@@ -56,11 +56,34 @@ def _marcas_lista() -> list[dict[str, str]]:
     return [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()]
 
 
+def _ultimo_resultado() -> dict[str, str] | None:
+    """El último termómetro generado (fuente PERMANENTE del resultado de la página).
+
+    El resultado del termómetro NO se persiste en el cliente: el historial es su registro
+    duradero. Devuelve la entrada de historial más reciente con origen `termometro-mundial`
+    (documento + id, para repintar `ResultadoDocumento`), o `None` si aún no hay ninguna.
+    Un termómetro nuevo la reemplaza (queda como la más reciente); borrarla del historial la
+    elimina. El listado viene recientes-primero, así que basta el primer match.
+    """
+    for e in repos.listar_historial_skills():
+        if e.get("skill") == ORIGEN_HISTORIAL:
+            return {
+                "historial_id": e["id"],
+                "documento": e.get("resultado", "") or "",
+                "titulo": e.get("titulo", "") or "",
+                "fecha": e.get("fecha", "") or "",
+                "marca": e.get("marca", "") or "",
+            }
+    return None
+
+
 async def obtener_config(request: Request) -> Response:
-    """`GET /api/termometro` -> `{config, skill_disponible, marcas, regiones_sugeridas}`.
+    """`GET /api/termometro` -> `{config, skill_disponible, marcas, regiones_sugeridas, ultimo}`.
 
     `skill_disponible` se conserva por compat del frontend: el prompt base viaja en la
     semilla del paquete, así que siempre está disponible (salvo borrado manual del store).
+    `ultimo` es el último termómetro generado (o `null`): la página lo usa como resultado
+    PERSISTENTE entre navegaciones, sin depender del estado de cliente.
     """
     return JSONResponse(
         {
@@ -68,6 +91,7 @@ async def obtener_config(request: Request) -> Response:
             "skill_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
             "marcas": _marcas_lista(),
             "regiones_sugeridas": list(REGIONES_SUGERIDAS),
+            "ultimo": _ultimo_resultado(),
         }
     )
 

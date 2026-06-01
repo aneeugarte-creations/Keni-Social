@@ -197,6 +197,7 @@ function PanelConfig({ datos }: { datos: RespuestaTermometro }) {
 // --- Generación (panel derecho) -------------------------------------------
 
 function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
+  const queryClient = useQueryClient();
   const marcaInicial = datos.config.marca || datos.marcas[0]?.id || "";
   const [marca, setMarca] = React.useState(marcaInicial);
   const [numero, setNumero] = React.useState(String(datos.config.numero));
@@ -236,6 +237,13 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   const puedeGenerar = datos.skill_disponible && marca !== "" && noticias.trim().length > 0 && !generando;
   const resultado = generacion?.resultado;
   const completado = generacion?.estado === "completado" && resultado?.documento !== undefined;
+
+  // Al completarse una generación nueva, refrescamos el termómetro para que `datos.ultimo`
+  // (el resultado PERSISTENTE leído del historial) refleje ya esta galería: así al navegar
+  // fuera y volver se repinta sin depender del estado de cliente.
+  React.useEffect(() => {
+    if (completado) void queryClient.invalidateQueries({ queryKey: CLAVE_TERMOMETRO });
+  }, [completado, queryClient]);
 
   return (
     <div className="space-y-4">
@@ -330,14 +338,22 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
         <ProgresoGeneracion generacion={generacion} />
       )}
 
-      {/* Resultado: el documento de la galería, guardable como publicación. */}
-      {completado && resultado?.documento !== undefined && (
+      {/* Resultado de la galería, guardable como publicación. Prioriza el resultado en vivo
+          recién generado; si no lo hay, repinta el último termómetro del historial (`ultimo`):
+          fuente PERSISTENTE que sobrevive a navegaciones y recargas hasta que otro lo reemplace
+          o se borre del historial. */}
+      {completado && resultado?.documento !== undefined ? (
         <ResultadoDocumento
           documento={resultado.documento}
           historialId={resultado.historial_id ?? ""}
           imagenes={resultado.imagenes ?? []}
         />
-      )}
+      ) : datos.ultimo ? (
+        <ResultadoDocumento
+          documento={datos.ultimo.documento}
+          historialId={datos.ultimo.historial_id}
+        />
+      ) : null}
     </div>
   );
 }

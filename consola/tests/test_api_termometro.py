@@ -34,6 +34,8 @@ def test_config_por_defecto(cliente):
     assert datos["skill_disponible"] is True
     assert {"id": "unotv", "nombre": "UnoTV"} in datos["marcas"]
     assert "Europa" in datos["regiones_sugeridas"]
+    # Sin generaciones previas no hay resultado persistente.
+    assert datos["ultimo"] is None
 
 
 # --------------------------------------------------------------------------- #
@@ -95,6 +97,35 @@ def test_generar_completa_y_registra_historial(entorno):
     # Se registro en el historial (descubrible desde "Generar copy").
     historial = cli.get("/api/skills/historial").json()["historial"]
     assert any(h["skill"] == "termometro-mundial" for h in historial)
+
+
+def test_get_devuelve_ultimo_termometro_persistente(entorno):
+    # El resultado del termometro es PERSISTENTE: tras generar, GET /api/termometro lo
+    # devuelve en `ultimo` (la pagina lo repinta al navegar/recargar sin estado de cliente).
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_DOC))
+    cli.post(
+        "/api/termometro/generar",
+        json={"marca": "unotv", "noticias": "China: algo grande.", "numero": "5"},
+    )
+    ultimo = cli.get("/api/termometro").json()["ultimo"]
+    assert ultimo is not None
+    assert ultimo["historial_id"]
+    assert "Termómetro mundial" in ultimo["documento"]
+    assert ultimo["marca"] == "unotv"
+
+
+def test_ultimo_es_el_mas_reciente(entorno):
+    # Un termometro nuevo OBSOLETA al anterior: `ultimo` apunta siempre al ultimo generado.
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_DOC))
+    cli.post("/api/termometro/generar", json={"marca": "unotv", "noticias": "viejo", "numero": "5"})
+    primero = cli.get("/api/termometro").json()["ultimo"]["historial_id"]
+    cli.post(
+        "/api/termometro/generar",
+        json={"marca": "claro-sports", "noticias": "nuevo", "numero": "5"},
+    )
+    ultimo = cli.get("/api/termometro").json()["ultimo"]
+    assert ultimo["historial_id"] != primero
+    assert ultimo["marca"] == "claro-sports"
 
 
 def test_generar_inyecta_noticias_y_numero_en_el_prompt(entorno):

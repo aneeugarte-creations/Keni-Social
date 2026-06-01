@@ -466,6 +466,22 @@ export interface RespuestaTermometro {
   skill_disponible: boolean;
   marcas: MarcaDisponible[];
   regiones_sugeridas: string[];
+  /**
+   * Último termómetro generado (o `null`): el resultado PERSISTENTE de la página, leído del
+   * historial. Sobrevive a navegaciones y recargas; un termómetro nuevo lo reemplaza y
+   * borrarlo del historial lo elimina.
+   */
+  ultimo: UltimoTermometro | null;
+}
+
+/** Último termómetro generado, para repintar el resultado al entrar en la página. */
+export interface UltimoTermometro {
+  historial_id: string;
+  /** Documento Markdown completo de la galería. */
+  documento: string;
+  titulo: string;
+  fecha: string;
+  marca: string;
 }
 
 /** Cuerpo de PUT /api/termometro/config (parcial: solo las claves a cambiar). */
