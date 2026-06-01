@@ -28,13 +28,16 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import skills_catalogo, termometro
+from .. import biblioteca, marcas, termometro
 from .._http_json import leer_json
+from ..dominio import copy as dom_copy
+from ..dominio import generar as gen_dom
+from ..dominio import jobspec
 from ..seguridad import autor_de_peticion
-from . import skills
 
-# Id de la skill que arma el termometro (vive en skills-copy/.claude/skills/).
-SKILL_ID = "termometro-mundial"
+# Prompt base (Biblioteca) que arma el termometro + etiqueta de origen del historial.
+PROMPT_ID = "prompt/termometro-mundial"
+ORIGEN_HISTORIAL = "termometro-mundial"
 
 # Regiones sugeridas en la UI (el reparto por defecto de la skill si no se indican otras).
 REGIONES_SUGERIDAS: tuple[str, ...] = (
@@ -50,15 +53,19 @@ REGIONES_SUGERIDAS: tuple[str, ...] = (
 
 def _marcas_lista() -> list[dict[str, str]]:
     """Marcas para el selector del formulario (id + nombre humano)."""
-    return [{"id": mid, "nombre": nombre} for mid, nombre in skills.MARCAS]
+    return [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()]
 
 
 async def obtener_config(request: Request) -> Response:
-    """`GET /api/termometro` -> `{config, skill_disponible, marcas, regiones_sugeridas}`."""
+    """`GET /api/termometro` -> `{config, skill_disponible, marcas, regiones_sugeridas}`.
+
+    `skill_disponible` se conserva por compat del frontend: el prompt base viaja en la
+    semilla del paquete, así que siempre está disponible (salvo borrado manual del store).
+    """
     return JSONResponse(
         {
             "config": termometro.obtener(),
-            "skill_disponible": skills_catalogo.existe(SKILL_ID),
+            "skill_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
             "marcas": _marcas_lista(),
             "regiones_sugeridas": list(REGIONES_SUGERIDAS),
         }
@@ -104,7 +111,7 @@ async def generar(request: Request) -> Response:
         return JSONResponse({"error": "El cuerpo de la petición no es válido."}, status_code=400)
 
     marca = datos.get("marca")
-    if not isinstance(marca, str) or marca not in skills._MARCAS_IDS:
+    if not gen_dom.marca_valida(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
 
     valores = construir_valores(datos)
@@ -113,34 +120,48 @@ async def generar(request: Request) -> Response:
             {"error": "Pega las noticias internacionales del día para armar el termómetro."},
             status_code=400,
         )
-    if len(valores["noticias"]) > skills._MAX_TEXTO:
+    if len(valores["noticias"]) > gen_dom.MAX_TEXTO:
         return JSONResponse(
             {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."}, status_code=400
         )
 
-    skilldef = skills_catalogo.obtener(SKILL_ID)
-    if skilldef is None:
+    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
+    if cuerpo is None:
         return JSONResponse(
-            {
-                "error": (
-                    "La skill del termómetro no está instalada en este equipo. "
-                    "Actualiza el plugin de skills de Keni e inténtalo de nuevo."
-                )
-            },
+            {"error": "No está disponible el prompt del termómetro. Reinstala la Consola."},
             status_code=400,
         )
 
-    redes_ids = skills.normalizar_redes(None)
-    prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
-    gen = skills.lanzar_generacion_skill(
-        skilldef=skilldef,
+    titulo = titulo_termometro(valores["fecha"])
+    autor = autor_de_peticion(request)
+    procesar_spec = jobspec.construir_documento(
+        skill=ORIGEN_HISTORIAL, marca=marca, titulo_base=titulo, autor=autor
+    )
+    gen = gen_dom.lanzar(
+        tipo="copy",
+        titulo=titulo,
         marca=marca,
-        prompt=prompt,
-        redes_ids=redes_ids,
-        titulo_base=titulo_termometro(valores["fecha"]),
-        autor=autor_de_peticion(request),
+        prompt=gen_dom.componer(cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores)),
+        procesar=dom_copy.construir_procesar_documento(
+            ORIGEN_HISTORIAL, marca, titulo_base=titulo, autor=autor
+        ),
+        procesar_spec=procesar_spec,
+        autor=autor,
     )
     return JSONResponse({"generacion": gen})
+
+
+def _contexto(valores: dict[str, str]) -> str:
+    """Compone el bloque de contexto del termómetro (parámetros + noticias del día)."""
+    extras: list[str] = []
+    if valores["numero"]:
+        extras.append(f"Número de slides: {valores['numero']}")
+    if valores["regiones"]:
+        extras.append(f"Regiones a cubrir: {valores['regiones']}")
+    if valores["fecha"]:
+        extras.append(f"Fecha: {valores['fecha']}")
+    cabecera = ("\n".join(extras) + "\n\n") if extras else ""
+    return f"{cabecera}Noticias del día:\n\n{valores['noticias']}"
 
 
 RUTAS = [

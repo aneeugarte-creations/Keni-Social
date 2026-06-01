@@ -97,7 +97,7 @@ def test_generar_dry_run_no_llama_claude(entorno, monkeypatch):
         marca="unotv", noticias="Asia: algo.", numero="5", dry_run=True
     )
     assert res["dry_run"] is True
-    assert "termometro-mundial" in res["prompt"]
+    assert "Termómetro" in res["prompt"]
     assert "Asia: algo." in res["prompt"]
 
 
@@ -112,14 +112,11 @@ def test_generar_registra_historial(entorno, monkeypatch):
     assert any(e["skill"] == "termometro-mundial" for e in entradas)
 
 
-def test_generar_skill_no_instalada_lanza(entorno):
-    # entorno siembra el catalogo SIN el termometro.
-    try:
-        termometro_cli.generar_termometro(marca="unotv", noticias="algo")
-    except termometro_cli.TermometroCronError as e:
-        assert "skill" in str(e).lower()
-    else:
-        raise AssertionError("debía lanzar TermometroCronError")
+def test_generar_funciona_sin_catalogo_de_skills(entorno):
+    # El prompt del termometro viaja en la semilla del paquete: se arma sin catalogo de skills.
+    res = termometro_cli.generar_termometro(marca="unotv", noticias="algo", dry_run=True)
+    assert res["dry_run"] is True
+    assert "Termómetro" in res["prompt"]
 
 
 # --------------------------------------------------------------------------- #
@@ -134,7 +131,7 @@ def test_main_dry_run_imprime_prompt(entorno, monkeypatch, capsys, tmp_path):
     rc = termometro_cli.main(["--marca", "unotv", "--noticias-file", str(noticias), "--dry-run"])
     assert rc == 0
     salida = capsys.readouterr().out
-    assert "termometro-mundial" in salida
+    assert "Termómetro" in salida
     assert "China: algo grande." in salida
 
 

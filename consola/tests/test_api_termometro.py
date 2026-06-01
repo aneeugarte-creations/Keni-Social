@@ -69,8 +69,8 @@ def _sembrar_termometro() -> None:
 def test_config_por_defecto(cliente):
     datos = cliente.get("/api/termometro").json()
     assert datos["config"] == {"numero": 8, "regiones": "", "hora": "07:00", "marca": ""}
-    # En el catalogo sembrado por defecto NO esta el termometro.
-    assert datos["skill_disponible"] is False
+    # El prompt del termometro viaja en la semilla del paquete: siempre disponible.
+    assert datos["skill_disponible"] is True
     assert {"id": "unotv", "nombre": "UnoTV"} in datos["marcas"]
     assert "Europa" in datos["regiones_sugeridas"]
 
@@ -157,7 +157,8 @@ def test_generar_inyecta_noticias_y_numero_en_el_prompt(entorno):
         "/api/termometro/generar",
         json={"marca": "unotv", "noticias": "Japón: terremoto.", "numero": "6", "regiones": "Asia"},
     )
-    assert "termometro-mundial" in capturado["prompt"]
+    # El prompt autocontenido del termometro (semilla) + las noticias/parametros inyectados.
+    assert "Termómetro" in capturado["prompt"]
     assert "Japón: terremoto." in capturado["prompt"]
     assert "6" in capturado["prompt"] and "Asia" in capturado["prompt"]
 
@@ -176,8 +177,8 @@ def test_generar_sin_noticias_400(entorno):
     assert cli.post("/api/termometro/generar", json={"marca": "unotv", "noticias": "  "}).status_code == 400
 
 
-def test_generar_skill_no_instalada_400(cliente):
-    # Sin sembrar la skill: la generacion no puede armarse.
+def test_generar_funciona_sin_sembrar_skill(cliente):
+    # El prompt del termometro viaja en la semilla del paquete: la generacion se arma sin
+    # necesidad de un catalogo de skills (que ya no existe).
     r = cliente.post("/api/termometro/generar", json={"marca": "unotv", "noticias": "algo"})
-    assert r.status_code == 400
-    assert "skill" in r.json()["error"].lower()
+    assert r.status_code == 200

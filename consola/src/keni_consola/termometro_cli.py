@@ -32,10 +32,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from . import preferencias, redes, repos, skills_catalogo, termometro
+from . import biblioteca, preferencias, repos, termometro
 from .api import rss
-from .api.termometro import SKILL_ID, titulo_termometro
-from .dominio import skills as dom_skills
+from .api.termometro import ORIGEN_HISTORIAL, PROMPT_ID, _contexto, titulo_termometro
+from .dominio import copy as dom_copy
+from .dominio import generar as gen_dom
 from .dominio import stream
 
 # Wall-timeout (s) de la generacion programada. Mas holgado que la web porque corre sola.
@@ -151,18 +152,17 @@ def generar_termometro(
     parsea la salida y registra el historial (salida documento; sin auto-crear publicaciones).
     Lanza `TermometroCronError` si la skill no esta instalada o si la generacion falla.
     """
-    skilldef = skills_catalogo.obtener(SKILL_ID)
-    if skilldef is None:
+    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
+    if cuerpo is None:
         raise TermometroCronError(
-            "La skill del termómetro no está instalada. Actualiza el plugin de skills de Keni."
+            "No está disponible el prompt del termómetro. Reinstala la Consola."
         )
     valores = {"noticias": noticias, "numero": numero, "regiones": regiones, "fecha": fecha}
-    redes_ids = stream.normalizar_redes(None, canonicas=redes.ids())
-    prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
+    prompt = gen_dom.componer(cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores))
     if dry_run:
         return {"prompt": prompt, "dry_run": True}
 
-    stdout = _ejecutar_claude(prompt, cwd=dom_skills.cwd_ejecucion_skills(), timeout=timeout)
+    stdout = _ejecutar_claude(prompt, cwd=gen_dom.cwd_generacion(), timeout=timeout)
     try:
         texto, metricas = stream.parsear_resultado_json(stdout)
     except stream.SkillError as e:
@@ -170,8 +170,8 @@ def generar_termometro(
     if not texto.strip():
         raise TermometroCronError("El asistente terminó sin devolver un termómetro.")
 
-    procesar = dom_skills.construir_procesar_documento(
-        SKILL_ID, marca, titulo_base=titulo_termometro(fecha)
+    procesar = dom_copy.construir_procesar_documento(
+        ORIGEN_HISTORIAL, marca, titulo_base=titulo_termometro(fecha)
     )
     return procesar(texto, metricas)
 

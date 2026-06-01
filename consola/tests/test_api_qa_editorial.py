@@ -87,8 +87,8 @@ def test_opciones_por_defecto(cliente):
     datos = cliente.get("/api/qa-editorial").json()
     assert {"id": "unotv", "nombre": "UnoTV"} in datos["marcas"]
     assert "Instagram" in datos["plataformas"]
-    # En el catalogo sembrado por defecto NO esta qa-editorial.
-    assert datos["skill_disponible"] is False
+    # El prompt de QA viaja en la semilla del paquete: siempre disponible.
+    assert datos["skill_disponible"] is True
 
 
 def test_opciones_skill_disponible_si_sembrada(entorno):
@@ -186,11 +186,10 @@ def test_revisar_plataforma_desconocida_se_ignora(entorno):
     assert "MySpace" not in capturado["prompt"]
 
 
-def test_revisar_skill_no_instalada_400(cliente):
-    # Sin sembrar la skill: la revision no puede armarse.
+def test_revisar_funciona_sin_sembrar_skill(cliente):
+    # El prompt de QA viaja en la semilla del paquete: la revision se arma sin catalogo de skills.
     r = cliente.post("/api/qa-editorial/revisar", json={"marca": "unotv", "texto": "algo"})
-    assert r.status_code == 400
-    assert "skill" in r.json()["error"].lower()
+    assert r.status_code == 200
 
 
 # --------------------------------------------------------------------------- #

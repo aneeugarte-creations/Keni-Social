@@ -31,16 +31,16 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import skills_catalogo
+from .. import biblioteca, marcas
 from .._http_json import leer_json
+from ..dominio import generar as gen_dom
 from ..dominio import jobspec, stream
 from ..dominio import qa_editorial as dom_qa
-from ..dominio import skills as dom_skills
 from ..seguridad import autor_de_peticion
-from . import skills
 
-# Id de la skill que hace el QA (vive en skills-copy/.claude/skills/).
-SKILL_ID = dom_qa.SKILL_ID
+# Prompt base (Biblioteca) que hace el QA + etiqueta de origen del historial.
+PROMPT_ID = "prompt/qa-editorial"
+ORIGEN_HISTORIAL = dom_qa.SKILL_ID
 
 # Parseo del informe + post-procesado viven AHORA en `dominio.qa_editorial` (para que el
 # worker los reconstruya sin importar de `api/`, #130 Fase 2). Se reexportan aqui por compat
@@ -65,16 +65,20 @@ PLATAFORMAS: tuple[str, ...] = (
 
 def _marcas_lista() -> list[dict[str, str]]:
     """Marcas para el selector del formulario (id + nombre humano)."""
-    return [{"id": mid, "nombre": nombre} for mid, nombre in skills.MARCAS]
+    return [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()]
 
 
 async def opciones(request: Request) -> Response:
-    """`GET /api/qa-editorial` -> `{marcas, plataformas, skill_disponible}` (para el form)."""
+    """`GET /api/qa-editorial` -> `{marcas, plataformas, skill_disponible}` (para el form).
+
+    `skill_disponible` se conserva por compat del frontend: el prompt base viaja en la semilla
+    del paquete, así que siempre está disponible (salvo borrado manual del store).
+    """
     return JSONResponse(
         {
             "marcas": _marcas_lista(),
             "plataformas": list(PLATAFORMAS),
-            "skill_disponible": skills_catalogo.existe(SKILL_ID),
+            "skill_disponible": biblioteca.cuerpo_efectivo(PROMPT_ID) is not None,
         }
     )
 
@@ -92,7 +96,7 @@ async def revisar(request: Request) -> Response:
         return JSONResponse({"error": "El cuerpo de la petición no es válido."}, status_code=400)
 
     marca = datos.get("marca")
-    if not isinstance(marca, str) or marca not in skills._MARCAS_IDS:
+    if not gen_dom.marca_valida(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
 
     texto_crudo = datos.get("texto")
@@ -102,7 +106,7 @@ async def revisar(request: Request) -> Response:
             {"error": "Pega el copy que escribió el community manager para revisarlo."},
             status_code=400,
         )
-    if len(texto) > skills._MAX_TEXTO:
+    if len(texto) > gen_dom.MAX_TEXTO:
         return JSONResponse(
             {"error": "El texto es demasiado largo; acórtalo e inténtalo de nuevo."},
             status_code=400,
@@ -115,36 +119,40 @@ async def revisar(request: Request) -> Response:
     contexto_crudo = datos.get("contexto")
     contexto = contexto_crudo.strip() if isinstance(contexto_crudo, str) else ""
 
-    skilldef = skills_catalogo.obtener(SKILL_ID)
-    if skilldef is None:
+    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
+    if cuerpo is None:
         return JSONResponse(
-            {
-                "error": (
-                    "La skill de QA editorial no está instalada en este equipo. "
-                    "Actualiza el plugin de skills de Keni e inténtalo de nuevo."
-                )
-            },
+            {"error": "No está disponible el prompt de QA editorial. Reinstala la Consola."},
             status_code=400,
         )
 
-    valores = {"texto": texto, "plataforma": plataforma, "contexto": contexto}
-    redes_ids = skills.normalizar_redes(None)
-    prompt = skills_catalogo.render_invocacion(skilldef, marca, valores, redes_ids)
     titulo = stream.derivar_titulo(texto)
-
     # Atribucion por usuario (#130 Fase 1): el QA lo dispara el usuario de la peticion.
     # ENCOLA (#130 Fase 2); el worker reconstruye el parseo del informe desde el `spec`.
     autor = autor_de_peticion(request)
-    gen = dom_skills._lanzar_con_procesar(
+    gen = gen_dom.lanzar(
         tipo="qa-editorial",
-        skill=SKILL_ID,
+        titulo="QA editorial",
         marca=marca,
-        prompt=prompt,
+        prompt=gen_dom.componer(
+            cuerpo, biblioteca.editoriales_de_marca(marca), _contexto_qa(texto, plataforma, contexto)
+        ),
         procesar=_construir_procesar(marca, titulo, autor),
         procesar_spec=jobspec.construir_qa(marca=marca, titulo=titulo, autor=autor),
         autor=autor,
     )
     return JSONResponse({"generacion": gen})
+
+
+def _contexto_qa(texto: str, plataforma: str, contexto: str) -> str:
+    """Bloque de contexto del QA: plataforma + contexto + el copy a revisar."""
+    partes: list[str] = []
+    if plataforma:
+        partes.append(f"Plataforma de destino: {plataforma}")
+    if contexto:
+        partes.append(f"Contexto adicional: {contexto}")
+    partes.append("Copy a revisar:\n\n" + texto)
+    return "\n\n".join(partes)
 
 
 RUTAS = [
