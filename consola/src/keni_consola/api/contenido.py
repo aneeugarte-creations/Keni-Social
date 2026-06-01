@@ -23,7 +23,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import auth, auto_responsable, marcas, metricas_pieza, redes, repos, skills_catalogo
+from .. import auth, auto_responsable, biblioteca, marcas, metricas_pieza, redes, repos
 from .._http_json import leer_json
 from ..dominio import asistente, eventos, placeholders
 from ..estados import (
@@ -611,9 +611,9 @@ async def asistente_ia(request: Request) -> Response:
             {"error": "Asigna una marca al contenido para usar el asistente."},
             status_code=400,
         )
-    if not skills_catalogo.existe(asistente.SKILL_COPY):
+    if biblioteca.cuerpo_efectivo("prompt/" + asistente.SKILL_COPY) is None:
         return JSONResponse(
-            {"error": "No está disponible la skill de copy para el asistente."},
+            {"error": "No está disponible el prompt de copy para el asistente."},
             status_code=400,
         )
 

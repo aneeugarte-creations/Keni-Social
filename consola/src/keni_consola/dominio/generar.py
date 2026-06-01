@@ -148,3 +148,49 @@ def lanzar(
             "fecha_fin": generaciones.ahora_iso(),
         })
     return generaciones.obtener(gen["id"]) or gen
+
+
+# Prompt base por defecto para la generación de copy (piezas por red). Viaja en la semilla.
+PROMPT_COPY = "prompt/copy-desde-nota"
+
+
+def lanzar_copy(
+    *,
+    marca: str,
+    contexto: str,
+    redes_ids: list[str],
+    titulo: str,
+    texto_base: str = "",
+    prompt_id: str = PROMPT_COPY,
+    origen_historial: str = "copy-desde-nota",
+    con_imagenes: bool = False,
+    dir_temporal: Path | None = None,
+    autor: dict[str, str] | None = None,
+    fuente_id: str | None = None,
+    clave: str | None = None,
+    tipo: str = "copy",
+) -> dict[str, Any]:
+    """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
+
+    Compone el prompt autocontenido (copy-desde-nota semilla + editorial + contexto + redes)
+    y lanza con el post-procesado de PIEZAS (parsea piezas/veredicto, registra historial,
+    AUTO-CREA borradores). `fuente_id`/`clave` (RSS): además marca el item del feed como usado
+    al completar. El `procesar` se reconstruye del MISMO `spec` que usa el worker (sin duplicar).
+    """
+    cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
+    if cuerpo is None:
+        raise biblioteca.BibliotecaError("No está disponible el prompt de copy. Reinstala la Consola.")
+    prompt = componer(
+        cuerpo, biblioteca.editoriales_de_marca(marca), contexto,
+        sin_emojis=True, redes_ids=redes_ids,
+    )
+    procesar_spec = jobspec.construir_copy(
+        skill=origen_historial, marca=marca, redes_ids=redes_ids, titulo_dado=titulo,
+        texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
+        fuente_id=fuente_id, clave=clave,
+    )
+    return lanzar(
+        tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,
+        procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+        procesar_spec=procesar_spec, dir_temporal=dir_temporal, autor=autor,
+    )

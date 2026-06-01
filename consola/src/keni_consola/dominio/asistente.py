@@ -21,11 +21,11 @@ solo valida y llama aqui.
 
 from __future__ import annotations
 
-from . import skills as dom_skills
+from . import generar
 
-# Skill de copy que el asistente REUTILIZA para todos los modos: la pipeline de copy por
-# red (piezas + veredicto + voz de marca). El asistente solo cambia el TEXTO BASE (brief)
-# y una instruccion ADITIVA por modo; el resto es la generacion de copy de siempre.
+# Etiqueta de origen del historial: el asistente REUTILIZA la pipeline de copy por red
+# (piezas + veredicto + voz de marca). Solo cambia el TEXTO BASE (brief) y una instruccion
+# ADITIVA por modo; el resto es la generacion de copy de siempre.
 SKILL_COPY = "copy-desde-nota"
 
 # Modos soportados por el asistente (allowlist; cualquier otro => 400 en el handler).
@@ -95,14 +95,12 @@ def lanzar(
     texto_base = construir_texto_base(
         modo=modo, titulo=titulo, descripcion=descripcion, notas=notas
     )
-    prompt = dom_skills.construir_prompt(SKILL_COPY, marca, texto_base, redes_ids)
-    return dom_skills.lanzar_generacion_copy(
-        tipo="copy",
-        skill=SKILL_COPY,
+    return generar.lanzar_copy(
         marca=marca,
-        prompt=prompt,
+        contexto=texto_base,
         redes_ids=redes_ids,
-        titulo_dado=titulo,
+        titulo=titulo,
         texto_base=texto_base,
+        origen_historial=SKILL_COPY,
         autor=autor,
     )

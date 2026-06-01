@@ -48,10 +48,11 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import biblioteca, marcas, redes, repos
 from .._http_json import leer_json
+from ..dominio import generar as gen_dom
+from ..dominio import stream
 from ..seguridad import autor_de_peticion
-from . import skills
 
 # Marcas validas: TODAS las del catalogo unico (por su id canonico). Mismo criterio
 # que publicaciones.
@@ -675,35 +676,34 @@ async def generar(request: Request) -> Response:
     enlace = datos.get("enlace") if isinstance(datos.get("enlace"), str) else ""
 
     marca = datos.get("marca")
-    if not isinstance(marca, str) or marca not in skills._MARCAS_IDS:
+    if not gen_dom.marca_valida(marca):
         return JSONResponse({"error": "Marca no permitida."}, status_code=400)
 
     skill = datos.get("skill")
-    if skill is None or skill == "":
+    if not isinstance(skill, str) or not skill.strip():
         skill = _SKILL_DEFECTO
-    if not isinstance(skill, str) or skill not in skills._SKILLS_IDS:
+    # El "tipo de contenido" es ahora un PROMPT de la Biblioteca (store-or-semilla).
+    prompt_id = f"prompt/{skill.strip()}"
+    cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
+    if cuerpo is None:
         return JSONResponse({"error": "Tipo de contenido no permitido."}, status_code=400)
 
     crudas = datos.get("redes")
-    redes_ids = skills.normalizar_redes(crudas if isinstance(crudas, list) else None)
+    redes_ids = stream.normalizar_redes(crudas if isinstance(crudas, list) else None, canonicas=redes.ids())
     nota = _nota_desde_item(titulo, resumen, enlace)
     fuente_id = datos.get("fuente_id")
     clave = datos.get("clave")
 
     # Atribucion por usuario (#130 Fase 1): el item lo genera el usuario de la peticion.
-    # Se propaga al registro, al historial y a las publicaciones creadas en background.
+    # ENCOLA y devuelve de inmediato (#130 Fase 2); el worker corre `claude -p`. El post-
+    # procesado de copy (parsear + historial + N borradores) se reutiliza; `fuente_id`/`clave`
+    # marcan el item del feed como usado SOLO si completa con exito.
     autor = autor_de_peticion(request)
-
-    # El post-procesado de copy (parsear + historial + N publicaciones) se reutiliza tal
-    # cual; `fuente_id`/`clave` hacen que, ademas, se marque el item del feed como usado
-    # SOLO si completa con exito (lo hace el dominio, in-proceso o en el worker, igual).
-    # ENCOLA y devuelve de inmediato (#130 Fase 2); el worker corre `claude -p`.
-    prompt = skills.construir_prompt(skill, marca, nota, redes_ids)
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
     clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
-    gen = skills.lanzar_generacion_copy(
-        tipo="rss", skill=skill, marca=marca, prompt=prompt, redes_ids=redes_ids,
-        titulo_dado=titulo.strip(), texto_base=nota, autor=autor,
+    gen = gen_dom.lanzar_copy(
+        tipo="rss", prompt_id=prompt_id, origen_historial=skill.strip(), marca=marca,
+        contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), texto_base=nota, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
     )
     return JSONResponse({"generacion": gen})

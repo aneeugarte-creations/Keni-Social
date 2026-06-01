@@ -634,6 +634,6 @@ def test_generar_skill_por_defecto(entorno):
         "/api/rss/generar", json={"titulo": "T", "resumen": "R", "marca": "unotv", "redes": ["x"]}
     )
     assert r.status_code == 200
-    # skill por defecto: copy-desde-nota; la nota concatena titulo + resumen
-    assert "copy-desde-nota" in capturado["prompt"]
+    # skill por defecto: copy-desde-nota (prompt autocontenido) + la nota (titulo + resumen)
+    assert "redactor de redes" in capturado["prompt"]
     assert "T" in capturado["prompt"] and "R" in capturado["prompt"]
