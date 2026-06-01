@@ -221,7 +221,7 @@ def test_metricas_a_dict_omite_none_y_extras():
 
 
 # --------------------------------------------------------------------------- #
-# Runner de prueba (devuelve metricas reales)                                 #
+# Metricas de prueba (subconjunto persistido de un run/generacion)            #
 # --------------------------------------------------------------------------- #
 
 
@@ -229,56 +229,6 @@ _METRICAS_DEMO = skills.MetricasRun(
     tokens_in=130, tokens_out=50, num_turns=3, total_cost_usd=0.0123,
     duration_ms=4200, session_id="sess-abc-123", modelo="claude-opus-4-7",
 )
-
-
-def _lanzador_con_metricas(texto: str, metricas: skills.MetricasRun):
-    """Fake del lanzador background: completa el run con `texto` + metricas (sin Popen)."""
-
-    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
-        agentes.actualizar_run(
-            marca_id, run_id,
-            {
-                "estado": "completado",
-                "salida": texto,
-                "metricas": skills.metricas_a_dict(metricas),
-                "fecha_fin": agentes.ahora_iso(),
-            },
-        )
-
-    return lanzar
-
-
-# --------------------------------------------------------------------------- #
-# Persistencia: metricas en el run YAML del agente                            #
-# --------------------------------------------------------------------------- #
-
-
-def test_run_headless_guarda_metricas_en_yaml(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("salida con metricas", _METRICAS_DEMO))
-    run = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]
-    # El run devuelto trae las metricas (el lanzador fake ya completo el run).
-    assert run["estado"] == "completado"
-    assert run["metricas"]["tokens_in"] == 130
-    assert run["metricas"]["total_cost_usd"] == pytest.approx(0.0123)
-    assert run["metricas"]["modelo"] == "claude-opus-4-7"
-    # Persistido en el YAML del run.
-    detalle = c.get(f"/api/agentes/{_MARCA}/runs/{run['id']}").json()["run"]
-    assert detalle["metricas"]["num_turns"] == 3
-    assert detalle["metricas"]["duration_ms"] == 4200
-
-
-def test_run_headless_error_no_tiene_metricas(entorno):
-    def lanzar(marca_id, run_id, prompt, *, cwd):  # noqa: ANN001
-        agentes.actualizar_run(
-            marca_id, run_id,
-            {"estado": "error", "salida": "El asistente terminó con error: x",
-             "fecha_fin": agentes.ahora_iso()},
-        )
-
-    c = _cliente(lanzar_run=lanzar)
-    run = c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "p"}).json()["run"]
-    assert run["estado"] == "error"
-    assert run["metricas"] is None
 
 
 # --------------------------------------------------------------------------- #
@@ -336,63 +286,6 @@ def test_historial_skill_sin_metricas_devuelve_none(entorno):
     c = _cliente()
     detalle = c.get(f"/api/skills/historial/{hid}").json()
     assert detalle["metricas"] is None
-
-
-# --------------------------------------------------------------------------- #
-# GET /api/runs (global) + /api/runs/agregados                                #
-# --------------------------------------------------------------------------- #
-
-
-def test_runs_globales_agrega_de_varios_agentes(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
-    c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "uno"})
-    c.post("/api/agentes/claro-sports/runs", json={"prompt": "dos"})
-
-    datos = c.get("/api/runs").json()
-    runs = datos["runs"]
-    assert len(runs) == 2
-    agentes_vistos = {r["agente"] for r in runs}
-    assert agentes_vistos == {_MARCA, "claro-sports"}
-    primero = runs[0]
-    assert set(primero) == {
-        "id", "agente", "agente_nombre", "prompt", "modo", "estado", "motivo",
-        "fecha_inicio", "metricas",
-    }
-    assert primero["metricas"]["tokens_in"] == 130
-
-
-def test_runs_agregados_totales_por_agente_y_dia(entorno):
-    c = _cliente(lanzar_run=_lanzador_con_metricas("ok", _METRICAS_DEMO))
-    c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "uno"})
-    c.post(f"/api/agentes/{_MARCA}/runs", json={"prompt": "dos"})
-    c.post("/api/agentes/claro-sports/runs", json={"prompt": "tres"})
-
-    agg = c.get("/api/runs/agregados").json()
-    assert agg["total"]["runs"] == 3
-    # 3 runs * 0.0123
-    assert agg["total"]["coste_usd"] == pytest.approx(0.0369)
-    # 3 runs * (130+50) tokens
-    assert agg["total"]["tokens"] == 3 * 180
-
-    por_agente = {e["agente"]: e for e in agg["por_agente"]}
-    assert por_agente[_MARCA]["runs"] == 2
-    assert por_agente["claro-sports"]["runs"] == 1
-    # por_dia agrupa por fecha (un solo dia en el test).
-    assert sum(d["runs"] for d in agg["por_dia"]) == 3
-
-
-def test_runs_agregados_vacio_sin_runs(entorno):
-    agg = _cliente().get("/api/runs/agregados").json()
-    assert agg["total"] == {"coste_usd": 0, "tokens": 0, "runs": 0}
-    assert agg["por_agente"] == []
-    assert agg["por_dia"] == []
-
-
-def test_runs_globales_no_materializa_carpetas(entorno):
-    """Listar runs globales sin ningun run no debe crear carpetas de agente."""
-    _cliente().get("/api/runs")
-    raiz = entorno / "datos"
-    assert not raiz.exists() or not any(raiz.iterdir())
 
 
 # --------------------------------------------------------------------------- #

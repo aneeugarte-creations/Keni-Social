@@ -345,10 +345,8 @@ _APP_POR_STEM: dict[str, str] = {
     "test_rota": "app_operacion",
     "test_api_reciclar": "app_operacion",
     "test_db_piezas": "app_operacion",
-    # App A · Produccion (agentes, generaciones, skills, rss, radar, termometro...).
-    "test_api_agentes": "app_produccion",
-    "test_api_agentes_abiertos": "app_produccion",
-    "test_api_agentes_runner": "app_produccion",
+    # App A · Produccion (actividad, generaciones, skills, rss, radar, termometro...).
+    "test_actividad": "app_produccion",
     "test_generaciones": "app_produccion",
     "test_api_hashtags": "app_produccion",
     "test_api_qa_editorial": "app_produccion",
