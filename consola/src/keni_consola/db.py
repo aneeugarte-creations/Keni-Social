@@ -1411,7 +1411,7 @@ def _migrar_columnas_eventos_rota(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_eventos")
     for columna, tipo in _COLUMNAS_EVENTO_ROTA_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_eventos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas de `rota_piezas` declaradas en el DDL inicial: cualquier columna que se
@@ -1451,7 +1451,7 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_piezas")
     for columna, tipo in _COLUMNAS_PIEZA_ROTA_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_piezas ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_piezas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas ampliadas de `contenido` / `contenido_plataforma` (tablero unificado). Hoy
@@ -1475,7 +1475,7 @@ def _migrar_columnas_contenido(con: Any) -> None:
         columnas = _columnas_existentes(con, tabla)
         for columna, tipo in ampliadas:
             if columna not in columnas:
-                con.execute(f"ALTER TABLE {tabla} ADD COLUMN {columna} {tipo}")
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas que se podrian anadir a `rota_swaps_turno` en futuras ampliaciones. Hoy esta
@@ -1500,7 +1500,7 @@ def _migrar_columnas_swaps(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_swaps_turno")
     for columna, tipo in _COLUMNAS_SWAP_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_swaps_turno ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas que se podrian anadir a `rota_programas`. Hoy esta tupla esta VACIA: la tabla
@@ -1520,7 +1520,7 @@ def _migrar_columnas_programas(con: Any) -> None:
     columnas = _columnas_existentes(con, "rota_programas")
     for columna, tipo in _COLUMNAS_PROGRAMA_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE rota_programas ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE rota_programas ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # Columnas que se anadieron a `usuarios` despues del esquema original (cargo + cobertura
@@ -1553,7 +1553,7 @@ def _migrar_columnas_usuarios(con: Any) -> None:
     columnas = _columnas_existentes(con, "usuarios")
     for columna, tipo in _COLUMNAS_USUARIOS_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE usuarios ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 # --------------------------------------------------------------------------- #
@@ -3614,7 +3614,7 @@ def _migrar_columnas_plantilla_contenido(con: Any) -> None:
     columnas = _columnas_existentes(con, "plantilla_contenido")
     for columna, tipo in _COLUMNAS_PLANTILLA_CONTENIDO_AMPLIADAS:
         if columna not in columnas:
-            con.execute(f"ALTER TABLE plantilla_contenido ADD COLUMN {columna} {tipo}")
+            con.execute(f"ALTER TABLE plantilla_contenido ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 _COLS_PLANTILLA_CONTENIDO = (
