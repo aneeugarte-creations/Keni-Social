@@ -106,6 +106,24 @@ export function aspectoRed(id: string): string {
 }
 
 /**
+ * Tamaño de imagen recomendado por red (relación de aspecto + píxeles sugeridos), para
+ * guiar al usuario a adaptar la foto a cada plataforma. Cada red recorta a su propio
+ * formato, así que conviene subir una imagen ya pensada para ese tamaño.
+ */
+const _TAMANO_REDES: Record<string, { ratio: string; px: string }> = {
+  instagram: { ratio: "1:1", px: "1080×1080" },
+  facebook: { ratio: "1.91:1", px: "1200×630" },
+  x: { ratio: "16:9", px: "1600×900" },
+  tiktok: { ratio: "9:16", px: "1080×1920" },
+  youtube: { ratio: "16:9", px: "1280×720" },
+};
+
+/** Relación de aspecto y píxeles recomendados de la imagen de una red (o `null`). */
+export function tamanoRed(id: string): { ratio: string; px: string } | null {
+  return _TAMANO_REDES[id] ?? null;
+}
+
+/**
  * Devuelve los metadatos de una red (visual + límite vigente), con un fallback
  * razonable. El `limite` proviene de la caché hidratada desde el backend (fuente
  * única, #112), no de un valor hardcodeado en este archivo.

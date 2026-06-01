@@ -29,7 +29,7 @@ import * as React from "react";
 import { urlMedia } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
-import { iconoRed, nombreRed } from "../../pages/publicaciones/meta";
+import { iconoRed, nombreRed, tamanoRed } from "../../pages/publicaciones/meta";
 
 export interface VistaPreviaRedProps {
   red: string;
@@ -356,6 +356,7 @@ export function VistaPreviaRed({ red, marca, contenido, copy_in, imagen_url }: V
   const nombreMarca = marca.trim() || "Marca";
   const Mockup = PREVIAS[red] ?? PreviaFacebook;
   const Icono = iconoRed(red);
+  const tam = tamanoRed(red);
 
   return (
     <div className="space-y-3">
@@ -364,6 +365,14 @@ export function VistaPreviaRed({ red, marca, contenido, copy_in, imagen_url }: V
         <span>
           Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
         </span>
+        {tam && (
+          <span
+            className="ml-auto rounded-full border border-border px-2 py-0.5 tabular-nums"
+            title={`Imagen recomendada para ${nombreRed(red)}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
+          >
+            {tam.ratio} · {tam.px} px
+          </span>
+        )}
       </div>
       {/* El overlay de simulación del copy-in solo cuando NO hay imagen: si ya hay una placa
           compuesta, el texto va horneado en la imagen y duplicarlo se vería doble. */}
