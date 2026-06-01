@@ -343,6 +343,10 @@ export function DialogoEditar({
                 setImagenUrl(url);
               }}
               idPrefijo="editar"
+              publicacionId={publicacion?.id}
+              marca={publicacion?.marca}
+              red={publicacion?.red}
+              copy={contenido}
             />
 
             <div className="grid gap-4 sm:grid-cols-2">

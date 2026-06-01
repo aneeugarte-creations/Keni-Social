@@ -112,6 +112,10 @@ import type {
   RespuestaHashtags,
   RespuestaItemsRss,
   RespuestaMedia,
+  CuerpoImagenesGenerar,
+  CuerpoImagenesEditar,
+  CuerpoImagenesExpandir,
+  CuerpoCatalogarMedio,
   RespuestaMensaje,
   CuerpoCrearPlantillaContenido,
   CuerpoActualizarPlantillaContenido,
@@ -787,6 +791,24 @@ export const api = {
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
     peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
+
+  // --- Estudio de imagen (generar variantes · editar determinista · expandir generativo) ---
+  // Cada endpoint responde de inmediato con registro(s) de generación (tipo "imagen") que se
+  // SONDEAN con `useGeneracion` (GET /api/generaciones/{id}); al completar dan `resultado`
+  // con `{id, url}`. `imagenesGenerar` devuelve UNA generación por variante.
+  imagenesGenerar: (cuerpo: CuerpoImagenesGenerar) =>
+    peticion<RespuestaGeneraciones>("/imagenes/generar", { metodo: "POST", json: cuerpo }),
+  imagenesEditar: (cuerpo: CuerpoImagenesEditar) =>
+    peticion<RespuestaGeneracion>("/imagenes/editar", { metodo: "POST", json: cuerpo }),
+  imagenesExpandir: (cuerpo: CuerpoImagenesExpandir) =>
+    peticion<RespuestaGeneracion>("/imagenes/expandir", { metodo: "POST", json: cuerpo }),
+
+  // Cataloga un objeto de media YA subido/generado en la biblioteca de medios (sin re-subir).
+  catalogarMedio: (cuerpo: CuerpoCatalogarMedio) =>
+    peticion<RespuestaMedioBiblioteca>("/biblioteca-media/catalogar", {
+      metodo: "POST",
+      json: cuerpo,
+    }),
 
   // --- Verificación de video (workflow propio, independiente de Generar copy) ---
   // Lanza el análisis de procedencia en segundo plano; se sondea como cualquier

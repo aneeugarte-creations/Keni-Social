@@ -49,6 +49,7 @@ modulos_backend = [
 # test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
 rutas_frontend = [
   "/imagenes",
+  "/estudio",
   "/biblioteca",
   "/investigacion",
   "/investigacion/fuentes",
@@ -82,6 +83,15 @@ descripcion = "Genera imágenes con IA a partir de una descripción. Adjúntalas
 grupo = "dia"
 grupo_orden = 20
 orden = 10
+
+[[nav]]
+ruta = "/estudio"
+etiqueta = "Estudio"
+icono = "Palette"
+descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o guárdala en la biblioteca."
+grupo = "dia"
+grupo_orden = 20
+orden = 12
 
 [[nav]]
 ruta = "/biblioteca"

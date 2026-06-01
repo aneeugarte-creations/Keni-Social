@@ -9,6 +9,7 @@ import { AppShell } from "@/components/layout/AppShell";
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
 const Imagenes = lazy(() => import("@/pages/Imagenes"));
+const Estudio = lazy(() => import("@/pages/Estudio"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 
 // Sub-paginas de cada hub. Los hubs ya no tienen componente wrapper propio:
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
       // Diario
       { path: "panel", element: <Panel /> },
       { path: "imagenes", element: <Imagenes /> },
+      { path: "estudio", element: <Estudio /> },
       { path: "biblioteca", element: <Biblioteca /> },
 
       // Hub Investigación (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).

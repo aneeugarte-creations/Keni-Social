@@ -10,8 +10,9 @@
  * = sin imagen) y lo incluye al guardar la publicación.
  */
 import { useMutation } from "@tanstack/react-query";
-import { ImagePlus, Loader2, Sparkles, Upload, X } from "lucide-react";
+import { ImagePlus, Loader2, Sparkles, Upload, Wand2, X } from "lucide-react";
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,14 @@ export interface EditorImagenProps {
   /** Marca (para anteponer en el prompt de generación si se desea). */
   disabled?: boolean;
   idPrefijo?: string;
+  /**
+   * Contexto de la pieza, opcional: si se pasa, se muestra un enlace discreto
+   * "Abrir en Estudio" que lleva al Estudio de imagen preconfigurado (router state).
+   */
+  publicacionId?: string;
+  marca?: string;
+  red?: string;
+  copy?: string;
 }
 
 export function EditorImagen({
@@ -44,6 +53,10 @@ export function EditorImagen({
   onCambio,
   disabled,
   idPrefijo = "img",
+  publicacionId,
+  marca,
+  red,
+  copy,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = React.useState("");
@@ -116,10 +129,30 @@ export function EditorImagen({
 
   return (
     <div className="space-y-2.5">
-      <Label className="flex items-center gap-1.5">
-        <ImagePlus className="h-4 w-4 text-muted-foreground" />
-        Imagen <span className="font-normal text-muted-foreground">(opcional)</span>
-      </Label>
+      <div className="flex items-center justify-between gap-2">
+        <Label className="flex items-center gap-1.5">
+          <ImagePlus className="h-4 w-4 text-muted-foreground" />
+          Imagen <span className="font-normal text-muted-foreground">(opcional)</span>
+        </Label>
+        {publicacionId && (
+          <Button
+            asChild
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs text-muted-foreground"
+            disabled={!!disabled}
+          >
+            <Link
+              to="/estudio"
+              state={{ publicacionId, marca, red, copy, imagen: imagen || undefined }}
+            >
+              <Wand2 className="mr-1 h-3.5 w-3.5" />
+              Abrir en Estudio
+            </Link>
+          </Button>
+        )}
+      </div>
 
       <input
         ref={inputRef}
