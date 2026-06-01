@@ -11,8 +11,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
+  ChevronDown,
+  ChevronRight,
   Eye,
   FileText,
+  Folder,
   Loader2,
   Pencil,
   Plus,
@@ -60,6 +63,7 @@ export default function Biblioteca() {
   const [enPapelera, setEnPapelera] = React.useState(false);
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState(false);
+  const [carpetasCerradas, setCarpetasCerradas] = React.useState<Set<string>>(new Set());
 
   const docsQuery = useQuery({
     queryKey: ["biblioteca", filtro, q],
@@ -80,7 +84,66 @@ export default function Biblioteca() {
     queryFn: ({ signal }) => api.areasBiblioteca(signal),
   });
 
-  const documentos = docsQuery.data?.documentos ?? [];
+  const documentos = React.useMemo(() => docsQuery.data?.documentos ?? [], [docsQuery.data]);
+  const buscando = q.trim().length > 0;
+
+  // Agrupa por carpeta: la jerarquía ES la navegación. Raíz ("") primero, resto alfabético.
+  const grupos = React.useMemo(() => {
+    const m = new Map<string, DocumentoBiblioteca[]>();
+    for (const d of documentos) {
+      const k = d.carpeta || "";
+      const arr = m.get(k);
+      if (arr) arr.push(d);
+      else m.set(k, [d]);
+    }
+    return [...m.entries()].sort(([a], [b]) =>
+      a === "" ? -1 : b === "" ? 1 : a.localeCompare(b, "es"),
+    );
+  }, [documentos]);
+
+  // Carpetas existentes para el autocompletado del editor (mover un doc a una carpeta).
+  const carpetasExistentes = React.useMemo(
+    () =>
+      [...new Set(documentos.map((d) => d.carpeta).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b, "es"),
+      ),
+    [documentos],
+  );
+
+  function alternarCarpeta(c: string) {
+    setCarpetasCerradas((prev) => {
+      const s = new Set(prev);
+      if (s.has(c)) s.delete(c);
+      else s.add(c);
+      return s;
+    });
+  }
+
+  function filaDoc(d: DocumentoBiblioteca, mostrarCarpeta: boolean) {
+    return (
+      <li key={d.id}>
+        <button
+          onClick={() => setSeleccionId(d.id)}
+          title={d.titulo}
+          className={`flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted ${
+            d.id === seleccionId ? "bg-muted font-medium" : ""
+          }`}
+        >
+          {d.tipo === "editorial" ? (
+            <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          ) : (
+            <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          )}
+          <span className="min-w-0 flex-1">
+            <span className="line-clamp-2 block break-words leading-snug">{d.titulo}</span>
+            {mostrarCarpeta && d.carpeta ? (
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">{d.carpeta}</span>
+            ) : null}
+          </span>
+        </button>
+      </li>
+    );
+  }
   const seleccion = documentos.find((d) => d.id === seleccionId) ?? null;
 
   // --- Borrador del editor (copia de trabajo, sincronizada al cambiar de documento) ---
@@ -177,29 +240,41 @@ export default function Biblioteca() {
             </div>
           ) : documentos.length === 0 ? (
             <p className="p-3 text-sm text-muted-foreground">No hay documentos. Crea uno arriba.</p>
+          ) : buscando ? (
+            // Buscando: lista plana (resultados de todas las carpetas), con la carpeta como pista.
+            <ul className="divide-y divide-border">{documentos.map((d) => filaDoc(d, true))}</ul>
           ) : (
-            <ul className="divide-y divide-border">
-              {documentos.map((d) => (
-                <li key={d.id}>
-                  <button
-                    onClick={() => setSeleccionId(d.id)}
-                    className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted ${
-                      d.id === seleccionId ? "bg-muted font-medium" : ""
-                    }`}
-                  >
-                    {d.tipo === "editorial" ? (
-                      <BookOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    )}
-                    <span className="truncate">{d.titulo}</span>
-                    {d.carpeta ? (
-                      <span className="ml-auto truncate text-xs text-muted-foreground">{d.carpeta}</span>
+            // Navegación por carpetas: raíz suelta arriba, luego cada carpeta plegable.
+            <div className="divide-y divide-border">
+              {grupos.map(([carpeta, docs]) =>
+                carpeta === "" ? (
+                  <ul key="__raiz__" className="divide-y divide-border">
+                    {docs.map((d) => filaDoc(d, false))}
+                  </ul>
+                ) : (
+                  <div key={carpeta}>
+                    <button
+                      onClick={() => alternarCarpeta(carpeta)}
+                      className="flex w-full items-center gap-1.5 bg-muted/40 px-2 py-1.5 text-left text-xs font-medium text-muted-foreground hover:bg-muted"
+                    >
+                      {carpetasCerradas.has(carpeta) ? (
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                      <Folder className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{carpeta}</span>
+                      <span className="ml-auto tabular-nums">{docs.length}</span>
+                    </button>
+                    {!carpetasCerradas.has(carpeta) ? (
+                      <ul className="divide-y divide-border">
+                        {docs.map((d) => filaDoc(d, false))}
+                      </ul>
                     ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
+                  </div>
+                ),
+              )}
+            </div>
           )}
         </div>
 
@@ -253,7 +328,14 @@ export default function Biblioteca() {
                 onChange={(e) => editar({ carpeta: e.target.value })}
                 className="w-40"
                 placeholder="carpeta/…"
+                list="carpetas-biblioteca"
+                title="Carpeta (organiza el documento; usa una existente o crea una nueva)"
               />
+              <datalist id="carpetas-biblioteca">
+                {carpetasExistentes.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
               <Button
                 size="sm"
                 variant="outline"
