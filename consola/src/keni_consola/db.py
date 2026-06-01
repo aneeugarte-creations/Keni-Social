@@ -1369,15 +1369,18 @@ def _migrar_columnas_tareas(con: Any) -> None:
     """Anade a `tareas` las columnas ampliadas que una BD vieja no tuviera (idempotente).
 
     El `CREATE TABLE IF NOT EXISTS` ya las declara para bases NUEVAS, pero una base creada
-    antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y anade solo
-    la que falte, con `DEFAULT ''`: las tareas existentes quedan con el campo vacio (autor /
-    responsable "desconocido", sin enlace) y no se pierde ni reescribe nada. El Postgres
-    hosted persiste entre despliegues, asi que tambien puede ir atrasado (ver `_crear_esquema`).
+    antes de cada ampliacion no las tiene. Recorre `_COLUMNAS_TAREAS_AMPLIADAS` y las anade
+    con `ADD COLUMN IF NOT EXISTS ... DEFAULT ''`: las tareas existentes quedan con el campo
+    vacio (autor / responsable "desconocido", sin enlace) y no se pierde ni reescribe nada.
+
+    Usa `IF NOT EXISTS` (idempotencia a nivel de Postgres) en vez de un pre-check
+    `_columnas_existentes` + ALTER: ese par NO es atomico y, bajo carga (CI con xdist), una
+    lectura de catalogo desfasada hacia que se reintentara anadir una columna ya existente
+    -> `DuplicateColumn`. El Postgres hosted persiste entre despliegues, asi que tambien
+    puede ir atrasado (ver `_crear_esquema`).
     """
-    columnas = _columnas_existentes(con, "tareas")
     for columna in _COLUMNAS_TAREAS_AMPLIADAS:
-        if columna not in columnas:
-            con.execute(f"ALTER TABLE tareas ADD COLUMN {columna} TEXT NOT NULL DEFAULT ''")
+        con.execute(f"ALTER TABLE tareas ADD COLUMN IF NOT EXISTS {columna} TEXT NOT NULL DEFAULT ''")
 
 
 # Columnas que se anadieron a `rota_eventos` despues de su esquema original (ola B, #144).
