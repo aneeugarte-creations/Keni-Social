@@ -21,9 +21,13 @@ import pytest
 PIL = pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# El motor se relocalizo a `keni_consola/motores/estudio_imagen/` (fuera de skills-copy/).
+_MOTOR = (
+    Path(__file__).resolve().parents[2]
+    / "src" / "keni_consola" / "motores" / "estudio_imagen"
+)
+sys.path.insert(0, str(_MOTOR))
 import editar  # noqa: E402
-
 
 # --------------------------------------------------------------------------- #
 # Helpers de imagenes de prueba                                               #

@@ -20,7 +20,12 @@ import pytest
 pytest.importorskip("PIL")
 from PIL import Image  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# El motor se relocalizo a `keni_consola/motores/estudio_imagen/` (fuera de skills-copy/).
+_MOTOR = (
+    Path(__file__).resolve().parents[2]
+    / "src" / "keni_consola" / "motores" / "estudio_imagen"
+)
+sys.path.insert(0, str(_MOTOR))
 import expandir  # noqa: E402
 
 
@@ -121,7 +126,7 @@ def test_geometria_cuadrado_a_feed_anade_alto():
     geo = expandir.geometria(1000, 1000, 1080, 1350, "auto")
     assert geo["eje"] == "v"
     assert geo["fw"] == 1000 and geo["fh"] == 1250
-    assert {l for l, _ in geo["bandas"]} == {"arriba", "abajo"}
+    assert {lado for lado, _ in geo["bandas"]} == {"arriba", "abajo"}
 
 
 def test_geometria_lado_forzado_arriba():

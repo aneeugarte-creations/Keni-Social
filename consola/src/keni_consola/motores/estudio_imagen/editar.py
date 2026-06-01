@@ -195,12 +195,12 @@ def _resolver_clave_marca(marca: str) -> str:
 
 
 def cargar_marca(marca: str) -> dict:
-    """Lee tokens de la marca del marcas.json hermano del breaking; si no existe,
-    cae a los defaults internos. Resuelve la ruta con pathlib relativo al script
-    (../breaking-express/marcas.json) y NO duplica todo el JSON: solo toma los
-    tokens que la placa necesita."""
+    """Lee tokens de la marca del marcas.json hermano; si no existe, cae a los
+    defaults internos. Resuelve la ruta con pathlib relativo al script
+    (marcas.json en el mismo dir, relocalizado desde breaking-express) y NO
+    duplica todo el JSON: solo toma los tokens que la placa necesita."""
     clave = _resolver_clave_marca(marca)
-    cfg_path = Path(__file__).resolve().parent.parent / "breaking-express" / "marcas.json"
+    cfg_path = Path(__file__).resolve().parent / "marcas.json"
     m: dict | None = None
     if cfg_path.is_file():
         try:
