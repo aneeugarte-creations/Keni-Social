@@ -378,6 +378,39 @@ def marcar_item(fuente_id: str, clave: str, usado: bool) -> None:
     return db.marcar_item(fuente_id, clave, usado)
 
 
+# --- Hub generico de fuentes (item G): delega 1:1 en db.py ----------------- #
+
+
+def listar_fuentes(*, tipo: str | None = None) -> list[dict[str, Any]]:
+    return db.listar_fuentes(tipo=tipo)
+
+
+def obtener_fuente(fuente_id: str) -> dict[str, Any] | None:
+    return db.obtener_fuente(fuente_id)
+
+
+def crear_fuente(
+    *,
+    tipo: str,
+    nombre: str,
+    config: dict[str, Any] | None = None,
+    marca: str = "",
+    prioridad: int = 0,
+    etiquetas: list[str] | None = None,
+) -> dict[str, Any]:
+    return db.crear_fuente(
+        tipo=tipo, nombre=nombre, config=config, marca=marca, prioridad=prioridad, etiquetas=etiquetas
+    )
+
+
+def actualizar_fuente(fuente_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_fuente(fuente_id, campos)
+
+
+def borrar_fuente(fuente_id: str) -> bool:
+    return db.borrar_fuente(fuente_id)
+
+
 def claves_vistas(fuente_id: str) -> set[str]:
     return db.claves_vistas(fuente_id)
 

@@ -151,6 +151,11 @@ __all__ = [
     "crear_sugerencia_editorial",
     "listar_sugerencias_editoriales",
     "obtener_sugerencia_editorial",
+    "listar_fuentes",
+    "obtener_fuente",
+    "crear_fuente",
+    "actualizar_fuente",
+    "borrar_fuente",
     "contar_fuentes_rss",
     "contar_grupos_hashtags",
     "contar_piezas_por_programa",
@@ -1053,6 +1058,33 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_estado ON sugerencias_editoriales (estado)",
     "CREATE INDEX IF NOT EXISTS idx_sugerencias_editoriales_creado ON sugerencias_editoriales (creado)",
+    # HUB GENERICO de fuentes (item G): convierte "Fuentes" en el lugar donde se dan de alta
+    # TODAS las fuentes de insumo, no solo RSS. Cada fila es una fuente de un `tipo`
+    # (rss/api/galeria/idea/...) con su `config` (JSON especifico del tipo: url, credenciales
+    # gateadas por config.py, parametros), una `prioridad` entera (mayor pesa mas al priorizar)
+    # y `etiquetas` (JSON de strings, para agrupar/filtrar). `activo` 0/1; salud igual que
+    # `fuentes_rss` (ultima_actualizacion/ultimo_error/ultimo_conteo). NO sustituye a
+    # `fuentes_rss` (que sigue siendo la fuente de verdad del Radar v1): el hub es ADITIVO y se
+    # SIEMBRA desde `fuentes_rss` (ver `_sembrar_fuentes_hub_desde_rss`) sin romper el Radar.
+    """
+    CREATE TABLE IF NOT EXISTS fuentes (
+        id                    TEXT PRIMARY KEY,
+        tipo                  TEXT NOT NULL DEFAULT 'rss',
+        nombre                TEXT NOT NULL DEFAULT '',
+        config                TEXT NOT NULL DEFAULT '{}',
+        marca                 TEXT NOT NULL DEFAULT '',
+        prioridad             INTEGER NOT NULL DEFAULT 0,
+        etiquetas             TEXT NOT NULL DEFAULT '[]',
+        activo                INTEGER NOT NULL DEFAULT 1,
+        ultima_actualizacion  TEXT NOT NULL DEFAULT '',
+        ultimo_error          TEXT NOT NULL DEFAULT '',
+        ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
+        origen_rss_id         TEXT NOT NULL DEFAULT '',
+        creado                TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_tipo ON fuentes (tipo)",
+    "CREATE INDEX IF NOT EXISTS idx_fuentes_creado ON fuentes (creado)",
 )
 
 
@@ -1096,7 +1128,58 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_fuentes_rss(con)
     _migrar_columnas_grupos_hashtags(con)
     _migrar_columnas_noticias_algoritmo(con)
+    _sembrar_fuentes_hub_desde_rss(con)
     con.commit()
+
+
+def _sembrar_fuentes_hub_desde_rss(con: Any) -> None:
+    """Siembra el HUB generico `fuentes` (tipo 'rss') desde `fuentes_rss` (item G, idempotente).
+
+    Migracion ADITIVA: por cada fila de `fuentes_rss` que aun NO tenga su espejo en `fuentes`
+    (rastreada por `origen_rss_id`), crea una fila de `tipo='rss'` con la url/filtros/redes
+    serializados en `config`. NO toca `fuentes_rss` (sigue alimentando el Radar v1) ni borra
+    nada. Solo corre si AMBAS tablas existen. Re-ejecutarla no duplica: salta las ya espejadas.
+    """
+    if not (_tabla_existe(con, "fuentes") and _tabla_existe(con, "fuentes_rss")):
+        return
+    ya = {
+        fila["origen_rss_id"]
+        for fila in con.execute(
+            "SELECT origen_rss_id FROM fuentes WHERE tipo = 'rss' AND origen_rss_id <> ''"
+        ).fetchall()
+    }
+    filas = con.execute(
+        "SELECT id, nombre, url, marca, incluir, excluir, redes_def, activo, "
+        "ultima_actualizacion, ultimo_error, ultimo_conteo, creado FROM fuentes_rss"
+    ).fetchall()
+    for f in filas:
+        if f["id"] in ya:
+            continue
+        config = json.dumps(
+            {
+                "url": f["url"] or "",
+                "incluir": f["incluir"] or "",
+                "excluir": f["excluir"] or "",
+                "redes_def": f["redes_def"] or "",
+            }
+        )
+        con.execute(
+            "INSERT INTO fuentes (id, tipo, nombre, config, marca, prioridad, etiquetas, "
+            "activo, ultima_actualizacion, ultimo_error, ultimo_conteo, origen_rss_id, creado) "
+            "VALUES (?, 'rss', ?, ?, ?, 0, '[]', ?, ?, ?, ?, ?, ?)",
+            (
+                uuid.uuid4().hex[:12],
+                f["nombre"] or "",
+                config,
+                f["marca"] or "",
+                int(f["activo"] or 0),
+                f["ultima_actualizacion"] or "",
+                f["ultimo_error"] or "",
+                int(f["ultimo_conteo"] or 0),
+                f["id"],
+                f["creado"] or datetime.now().isoformat(timespec="microseconds"),
+            ),
+        )
 
 
 def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
@@ -4604,6 +4687,152 @@ def claves_vistas(fuente_id: str) -> set[str]:
     finally:
         con.close()
     return {f["clave"] for f in filas}
+
+
+# --- Hub GENERICO de fuentes (item G) -------------------------------------- #
+# Tabla `fuentes`: TODAS las fuentes de insumo por `tipo` (rss/api/galeria/idea/...), con
+# `config` JSON especifico del tipo, `prioridad` y `etiquetas`. ADITIVA: convive con
+# `fuentes_rss` (que sigue alimentando el Radar v1) y se siembra de ella sin romper nada.
+_TIPOS_FUENTE: tuple[str, ...] = ("rss", "api", "galeria", "idea", "interna")
+_COLS_FUENTE = (
+    "id", "tipo", "nombre", "config", "marca", "prioridad", "etiquetas", "activo",
+    "ultima_actualizacion", "ultimo_error", "ultimo_conteo", "origen_rss_id", "creado",
+)
+_SELECT_FUENTE = f"SELECT {', '.join(_COLS_FUENTE)} FROM fuentes"
+_CAMPOS_EDITABLES_FUENTE: tuple[str, ...] = (
+    "tipo", "nombre", "config", "marca", "prioridad", "etiquetas", "activo",
+)
+
+
+def _fila_a_fuente(fila: Any) -> dict[str, Any]:
+    """Fila de `fuentes` -> dict publico (config/etiquetas parseados de JSON; activo bool)."""
+    try:
+        config = json.loads(fila["config"]) if fila["config"] else {}
+    except (json.JSONDecodeError, ValueError):
+        config = {}
+    try:
+        etiquetas = json.loads(fila["etiquetas"]) if fila["etiquetas"] else []
+    except (json.JSONDecodeError, ValueError):
+        etiquetas = []
+    return {
+        "id": fila["id"],
+        "tipo": fila["tipo"] or "rss",
+        "nombre": fila["nombre"] or "",
+        "config": config if isinstance(config, dict) else {},
+        "marca": fila["marca"] or "",
+        "prioridad": int(fila["prioridad"] or 0),
+        "etiquetas": [e for e in etiquetas if isinstance(e, str)] if isinstance(etiquetas, list) else [],
+        "activo": bool(fila["activo"]),
+        "ultima_actualizacion": fila["ultima_actualizacion"] or "",
+        "ultimo_error": fila["ultimo_error"] or "",
+        "ultimo_conteo": int(fila["ultimo_conteo"] or 0),
+        "origen_rss_id": fila["origen_rss_id"] or "",
+    }
+
+
+def listar_fuentes(*, tipo: str | None = None) -> list[dict[str, Any]]:
+    """Fuentes del hub (mas recientes primero), opcionalmente filtradas por `tipo`."""
+    sql = _SELECT_FUENTE
+    params: list[Any] = []
+    if tipo:
+        sql += " WHERE tipo = ?"
+        params.append(tipo)
+    sql += " ORDER BY prioridad DESC, creado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_fuente(f) for f in filas]
+
+
+def obtener_fuente(fuente_id: str) -> dict[str, Any] | None:
+    """Una fuente del hub por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_FUENTE} WHERE id = ?", (fuente_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_fuente(fila) if fila is not None else None
+
+
+def crear_fuente(
+    *,
+    tipo: str,
+    nombre: str,
+    config: dict[str, Any] | None = None,
+    marca: str = "",
+    prioridad: int = 0,
+    etiquetas: list[str] | None = None,
+) -> dict[str, Any]:
+    """Crea una fuente generica (activa, salud vacia) y la devuelve."""
+    ahora = datetime.now().isoformat(timespec="microseconds")
+    fila = {
+        "id": uuid.uuid4().hex[:12],
+        "tipo": tipo or "rss",
+        "nombre": nombre or "",
+        "config": json.dumps(config or {}),
+        "marca": marca or "",
+        "prioridad": int(prioridad or 0),
+        "etiquetas": json.dumps(etiquetas or []),
+        "activo": 1,
+        "ultima_actualizacion": "",
+        "ultimo_error": "",
+        "ultimo_conteo": 0,
+        "origen_rss_id": "",
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_FUENTE)
+        con.execute(
+            f"INSERT INTO fuentes ({', '.join(_COLS_FUENTE)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_FUENTE),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return obtener_fuente(fila["id"]) or _fila_a_fuente(fila)
+
+
+def actualizar_fuente(fuente_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita parcialmente una fuente del hub (tipo/nombre/config/marca/prioridad/etiquetas/activo)."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_FUENTE}
+    if "activo" in cambios:
+        cambios["activo"] = 1 if cambios["activo"] else 0
+    if "prioridad" in cambios:
+        cambios["prioridad"] = int(cambios["prioridad"] or 0)
+    if "config" in cambios and isinstance(cambios["config"], dict):
+        cambios["config"] = json.dumps(cambios["config"])
+    if "etiquetas" in cambios and isinstance(cambios["etiquetas"], list):
+        cambios["etiquetas"] = json.dumps(cambios["etiquetas"])
+    if not cambios:
+        return obtener_fuente(fuente_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    params: list[Any] = [*cambios.values(), fuente_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE fuentes SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+    finally:
+        con.close()
+    return obtener_fuente(fuente_id)
+
+
+def borrar_fuente(fuente_id: str) -> bool:
+    """Borra una fuente del hub; True si existia, False si no."""
+    con = _conectar()
+    try:
+        cur = con.execute("DELETE FROM fuentes WHERE id = ?", (fuente_id,))
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 # --- Fuentes de algoritmo (inteligencia de plataforma) --------------------- #

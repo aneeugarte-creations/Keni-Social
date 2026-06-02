@@ -74,6 +74,8 @@ _TABLAS = (
     "fuentes_algoritmo",
     # Sugerencias editoriales generadas por el job diario.
     "sugerencias_editoriales",
+    # Hub generico de fuentes (item G): TODAS las fuentes de insumo por tipo.
+    "fuentes",
 )
 
 
