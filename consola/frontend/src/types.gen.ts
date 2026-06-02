@@ -508,6 +508,14 @@ export interface SnapshotComercial {
   interacciones: number;
   visualizaciones: number;
   alcance: number;
+  likes: number;
+  comentarios: number;
+  compartidos: number;
+  guardados: number;
+  video_views: number;
+  tiempo_medio_vis_s: number;
+  clics_enlace: number;
+  seguidores_netos_atribuidos: number;
 }
 /**
  * Un post real de Metricool elegible para monitorizar (`GET /api/comercial/posts`).
@@ -547,6 +555,7 @@ export interface PublicacionComercial {
   campania: string;
   red: string;
   red_nombre: string;
+  formato: string;
   metrica_objetivo: "interacciones" | "visualizaciones" | "alcance";
   objetivo: number;
   estado: "activa" | "pausada" | "cerrada";

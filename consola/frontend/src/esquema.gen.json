@@ -1619,6 +1619,30 @@
         },
         "alcance": {
           "type": "integer"
+        },
+        "likes": {
+          "type": "integer"
+        },
+        "comentarios": {
+          "type": "integer"
+        },
+        "compartidos": {
+          "type": "integer"
+        },
+        "guardados": {
+          "type": "integer"
+        },
+        "video_views": {
+          "type": "integer"
+        },
+        "tiempo_medio_vis_s": {
+          "type": "integer"
+        },
+        "clics_enlace": {
+          "type": "integer"
+        },
+        "seguidores_netos_atribuidos": {
+          "type": "integer"
         }
       },
       "description": "Un punto de la serie temporal de una pieza comercial (acumulado).",
@@ -1626,7 +1650,15 @@
         "ts",
         "interacciones",
         "visualizaciones",
-        "alcance"
+        "alcance",
+        "likes",
+        "comentarios",
+        "compartidos",
+        "guardados",
+        "video_views",
+        "tiempo_medio_vis_s",
+        "clics_enlace",
+        "seguidores_netos_atribuidos"
       ]
     },
     "PostSeleccionableComercial": {
@@ -1734,6 +1766,9 @@
         "red_nombre": {
           "type": "string"
         },
+        "formato": {
+          "type": "string"
+        },
         "metrica_objetivo": {
           "enum": [
             "interacciones",
@@ -1800,6 +1835,7 @@
         "campania",
         "red",
         "red_nombre",
+        "formato",
         "metrica_objetivo",
         "objetivo",
         "estado",

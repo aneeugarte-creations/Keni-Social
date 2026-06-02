@@ -674,12 +674,25 @@ class ActualComercial(TypedDict):
 
 
 class SnapshotComercial(TypedDict):
-    """Un punto de la serie temporal de una pieza comercial (acumulado)."""
+    """Un punto de la serie temporal de una pieza comercial (acumulado).
+
+    Ademas de las metricas "base" (interacciones/visualizaciones/alcance) lleva el
+    desglose GRANULAR por pieza; cada uno es 0 cuando la fuente no lo expone (no se
+    inventa), igual que `alcance` por pieza.
+    """
 
     ts: str
     interacciones: int
     visualizaciones: int
     alcance: int
+    likes: int
+    comentarios: int
+    compartidos: int
+    guardados: int
+    video_views: int
+    tiempo_medio_vis_s: int
+    clics_enlace: int
+    seguidores_netos_atribuidos: int
 
 
 class PostSeleccionableComercial(TypedDict):
@@ -720,6 +733,7 @@ class PublicacionComercial(TypedDict):
     campania: str
     red: str
     red_nombre: str
+    formato: str
     metrica_objetivo: MetricaComercial
     objetivo: int
     estado: EstadoComercial
