@@ -6131,11 +6131,15 @@ def registrar_veredicto_qa(
     return qid
 
 
-def ultimo_veredicto_qa(plataforma_id: str) -> dict[str, Any] | None:
+def ultimo_veredicto_qa(
+    plataforma_id: str, contenido_id: str = ""
+) -> dict[str, Any] | None:
     """Ultimo veredicto del QA editorial de una pieza por `creado` (None si no hay).
 
     Devuelve el dict crudo del registro (incluido `copy_hash` y `creado`) para que la capa
     `repos` decida si sigue siendo VALIDO (no invalidado por un cambio de copy posterior).
+    `contenido_id` se acepta por simetria de firma con `repos.ultimo_veredicto_qa`; el lookup
+    se hace por `plataforma_id` (clave 1:1 de la pieza), asi que aqui no se usa.
     """
     if not plataforma_id:
         return None
