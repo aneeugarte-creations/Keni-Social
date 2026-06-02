@@ -291,10 +291,53 @@ muestra la lista del día ordenada por score. La cola de aprobación está en `G
 
 ---
 
-## Exponer el MCP (opcional)
+## MCP operativo: operar la consola desde Claude Code (`/mcp`)
 
-El `mcp` es interno y **sin auth propia**. Para que clientes Claude del equipo lo
-usen por HTTP, añade a `mcp` un router Traefik con subdominio + middleware bearer:
+Hay **dos** MCP, no confundir:
+
+- **`mcp` (servicio, keni-metricas):** SOLO métricas, interno, sin auth propia. Es el de
+  la sección siguiente ("Exponer el MCP (opcional)"). No hace falta para lo de abajo.
+- **MCP OPERATIVO (`/mcp` del back):** lo que usa **este Claude Code** para *operar* la
+  consola —crear/gestionar/aprobar contenido y leer métricas— **sin conocer la API**. Vive
+  DENTRO del back (no es un servicio aparte): se sirve en `https://social.kenitech.io/mcp`
+  por el mismo Traefik (el router `back` ya enruta `/api` **y** `/mcp`). Implementación en
+  `consola/src/keni_consola/mcp_operativo.py`.
+
+**Encenderlo** (apagado por defecto): fija el bearer en `deploy/.env` y recrea el back.
+
+```bash
+# Secreto del endpoint (lo presenta el cliente Claude). Guárdalo: no se vuelve a mostrar.
+echo "KENI_MCP_BEARER=$(openssl rand -base64 24)" >> .env
+# Opcional: usuario al que se atribuyen las acciones (def: KENI_CONSOLA_ADMIN_USER, el dueño).
+# echo "KENI_MCP_USUARIO=duena@kenitech.io" >> .env
+docker compose up -d --force-recreate back
+# Humo: sin bearer -> 401; con bearer -> NO 401 (el MCP responde su handshake).
+curl -s -o /dev/null -w '%{http_code}\n' https://social.kenitech.io/mcp                          # 401
+curl -s -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $KENI_MCP_BEARER" \
+     -H 'Accept: application/json, text/event-stream' https://social.kenitech.io/mcp             # 405/406, no 401
+```
+
+> El usuario `KENI_MCP_USUARIO` debe existir y **no** tener `debe_cambiar_password`
+> pendiente (el dueño real ya lo cambió); si no, el MCP queda bloqueado igual que ese
+> usuario en la UI. Las acciones llegan **hasta aprobación**: no hay tool de publicar/
+> programar real (eso sigue gated por `KENI_PUBLICAR_REAL` y se opera desde la UI).
+
+**Conectar Claude Code** (en la máquina de cada persona):
+
+```bash
+claude mcp add --transport http keni-social https://social.kenitech.io/mcp \
+  --header "Authorization: Bearer <KENI_MCP_BEARER>"
+```
+
+Luego, en Claude Code, las tools aparecen como `keni_contexto`, `keni_crear_contenido`,
+`keni_cola_aprobacion`, `keni_aprobar`, `keni_panel`, `keni_metricas_reporte`, etc.
+
+---
+
+## Exponer el MCP de métricas (opcional)
+
+El `mcp` (keni-metricas) es interno y **sin auth propia**. Para que clientes Claude del
+equipo lo usen por HTTP, añade a `mcp` un router Traefik con subdominio + middleware bearer:
 
 ```yaml
 labels:

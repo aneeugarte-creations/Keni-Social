@@ -118,6 +118,10 @@ def entorno(monkeypatch, tmp_path):
     # Token de sesion (#134): lo borramos del entorno para que `crear_app` use el que
     # le pasamos (TOKEN_PRUEBA) y no uno del shell del usuario. Determinismo en tests.
     monkeypatch.delenv("KENI_CONSOLA_TOKEN", raising=False)
+    # MCP operativo APAGADO por defecto en los tests (determinismo): sin bearer, `crear_app`
+    # no monta `/mcp` ni añade su lifespan. Los tests del MCP lo activan a propósito.
+    monkeypatch.delenv("KENI_MCP_BEARER", raising=False)
+    monkeypatch.delenv("KENI_MCP_USUARIO", raising=False)
     monkeypatch.setenv("KENI_METRICAS_CONFIG", str(tmp_path / "noexiste.toml"))
     # La fuente única por defecto es ahora `metricool` (sin credenciales = estado vacío,
     # no demo). Los tests del backend usan la fuente de MUESTRA determinista, así que la
@@ -345,6 +349,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_rota": "app_operacion",
     "test_api_reciclar": "app_operacion",
     "test_db_piezas": "app_operacion",
+    "test_mcp_operativo": "app_operacion",
     # App A · Produccion (actividad, generaciones, skills, rss, radar, termometro...).
     "test_actividad": "app_produccion",
     "test_generaciones": "app_produccion",

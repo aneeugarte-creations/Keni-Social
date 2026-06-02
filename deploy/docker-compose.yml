@@ -111,6 +111,12 @@ services:
       KENI_CONSOLA_ADMIN_USER: ${KENI_CONSOLA_ADMIN_USER}
       KENI_CONSOLA_ADMIN_PASS: ${KENI_CONSOLA_ADMIN_PASS}
       KENI_CONSOLA_SESION_HORAS: ${KENI_CONSOLA_SESION_HORAS}
+      # MCP operativo (servidor MCP en `/mcp` del mismo back): bearer que exige el endpoint
+      # a los clientes (Claude Code) e identidad con la que opera la API por dentro. Si
+      # KENI_MCP_BEARER esta vacio, `/mcp` NO se monta (apagado por defecto). KENI_MCP_USUARIO
+      # es opcional: vacio => cae al admin/dueño (KENI_CONSOLA_ADMIN_USER). Ver deploy/README.
+      KENI_MCP_BEARER: ${KENI_MCP_BEARER:-}
+      KENI_MCP_USUARIO: ${KENI_MCP_USUARIO:-}
       KENI_MAX_JOBS: ${KENI_MAX_JOBS}
       # El back solo ENCOLA (#130 Fase 2): NO arranca su worker in-proceso (lo hace el
       # servicio `worker`). La credencial de Claude la lleva el worker, no el back.
@@ -146,8 +152,10 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=keni-social_edge
-      # Solo /api va al gateway. Prioridad ALTA para ganar al catch-all del front.
-      - traefik.http.routers.back.rule=Host(`${KENI_HOST}`) && PathPrefix(`/api`)
+      # /api y /mcp van al gateway. Prioridad ALTA para ganar al catch-all del front. El
+      # MCP operativo se sirve en /mcp del mismo back (sin imagen/servicio nuevos); su
+      # barrera es el bearer KENI_MCP_BEARER (no la auth del SPA). Ver mcp_operativo.py.
+      - traefik.http.routers.back.rule=Host(`${KENI_HOST}`) && (PathPrefix(`/api`) || PathPrefix(`/mcp`))
       - traefik.http.routers.back.priority=10
       - traefik.http.routers.back.entrypoints=websecure
       - traefik.http.routers.back.tls.certresolver=le

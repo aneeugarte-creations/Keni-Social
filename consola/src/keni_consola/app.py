@@ -30,9 +30,9 @@ from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
-from starlette.routing import Route
+from starlette.routing import Mount, Route
 
-from . import api, db, proyectos, seguridad
+from . import api, config, db, proyectos, seguridad
 from .dominio.runner import ColaLlenaError
 from .observabilidad import NOMBRE_LOGGER, RegistroPeticiones, manejar_excepcion
 
@@ -275,6 +275,20 @@ def crear_app(
     # caiga al index.html. 200 JSON barato, sin tocar la BD.
     rutas.append(Route("/healthz", _healthz))
 
+    # MCP operativo: si hay `KENI_MCP_BEARER` configurado, monta el servidor MCP en `/mcp`
+    # (transporte streamable-HTTP) para que un cliente MCP (Claude Code) opere la API sin
+    # conocerla. Se monta ANTES del catch-all del SPA para que /mcp no caiga al index. El
+    # endpoint exige el bearer (middleware abajo) y por dentro opera con sesion del dueño.
+    # APAGADO por defecto (sin bearer no se monta): el despliegue actual no cambia. Ver
+    # `mcp_operativo.py`.
+    bearer_mcp = config.mcp_bearer()
+    servidor_mcp = None
+    if bearer_mcp:
+        from . import mcp_operativo
+
+        servidor_mcp = mcp_operativo.crear_servidor(config.mcp_usuario())
+        rutas.append(Mount("/mcp", app=servidor_mcp.app_asgi()))
+
     # Estaticos del SPA y fallback. Van DESPUES de las rutas /api para no taparlas.
     rutas.append(Route("/assets/{ruta:path}", _servir_asset))
     rutas.append(Route("/", _servir_spa))
@@ -306,12 +320,23 @@ def crear_app(
     # Seguridad (#134): `SeguridadConsola` envuelve TODO (va el primero, mas externo)
     # para exigir el token en `/api` y verificar CSRF en mutaciones ANTES de tocar las
     # rutas. El SPA y los estaticos pasan sin token (hay que poder cargar la pagina).
+    middleware = [
+        Middleware(seguridad.SeguridadConsola, token=token),
+        Middleware(RegistroPeticiones),
+    ]
+    # Con el MCP montado: el guard del bearer va el MAS externo (rechaza /mcp no
+    # autorizado antes que nada) y el lifespan del padre arranca el session manager del
+    # MCP + abre el cliente in-proceso (Starlette no corre el lifespan de un sub-app
+    # montado, hay que engancharlo aqui). Ver `mcp_operativo.ServidorMcp.lifespan`.
+    lifespan = None
+    if servidor_mcp is not None:
+        middleware.insert(0, Middleware(mcp_operativo.GuardBearerMcp, bearer=bearer_mcp))
+        lifespan = servidor_mcp.lifespan
+
     app = Starlette(
         routes=rutas,
-        middleware=[
-            Middleware(seguridad.SeguridadConsola, token=token),
-            Middleware(RegistroPeticiones),
-        ],
+        middleware=middleware,
+        lifespan=lifespan,
         # ColaLlenaError ANTES que Exception: Starlette elige el handler por tipo mas
         # especifico, pero lo dejamos explicito (#137: cola al tope -> 429, no 500).
         exception_handlers={

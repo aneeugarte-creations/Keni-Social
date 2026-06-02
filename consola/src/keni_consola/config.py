@@ -123,6 +123,15 @@ ENV_SESION_HORAS = "KENI_CONSOLA_SESION_HORAS"
 ENV_ADMIN_USER = "KENI_CONSOLA_ADMIN_USER"
 ENV_ADMIN_PASS = "KENI_CONSOLA_ADMIN_PASS"
 
+# MCP operativo (servidor MCP montado en `/mcp`): bearer que exige el endpoint a los
+# clientes (este Claude Code) e identidad (usuario) con la que el MCP opera la API
+# interna. Si `KENI_MCP_BEARER` no esta, el endpoint `/mcp` NO se monta (apagado por
+# defecto: el despliegue actual no cambia hasta que el operador fije el bearer).
+ENV_MCP_BEARER = "KENI_MCP_BEARER"
+# Usuario al que se ATRIBUYEN las acciones del MCP (autor en el historial). Si no se
+# fija, cae al admin de bootstrap (`KENI_CONSOLA_ADMIN_USER`): el dueño de la consola.
+ENV_MCP_USUARIO = "KENI_MCP_USUARIO"
+
 # Observabilidad.
 ENV_LOG_LEVEL = "KENI_CONSOLA_LOG_LEVEL"
 
@@ -531,6 +540,26 @@ def cookie_secure() -> bool:
     if crudo:
         return crudo.lower() in _VERDADEROS
     return flag_https()
+
+
+def mcp_bearer() -> str | None:
+    """Bearer que protege el endpoint `/mcp` (`KENI_MCP_BEARER`; None si no esta).
+
+    None/vacio => el servidor MCP NO se monta (apagado por defecto). Cuando esta, el
+    middleware del MCP exige `Authorization: Bearer <este valor>` en cada peticion a
+    `/mcp` (comparacion en tiempo constante). Es la barrera del MCP frente al exterior;
+    por dentro el MCP opera la API con una sesion del usuario `mcp_usuario()`.
+    """
+    return _crudo(ENV_MCP_BEARER) or None
+
+
+def mcp_usuario() -> str | None:
+    """Usuario al que se atribuyen las acciones del MCP (`KENI_MCP_USUARIO`).
+
+    Si no se fija, cae al admin de bootstrap (`KENI_CONSOLA_ADMIN_USER`): el dueño. None
+    solo si tampoco hay admin configurado (el MCP resolvera entonces el primer admin).
+    """
+    return _crudo(ENV_MCP_USUARIO) or _crudo(ENV_ADMIN_USER) or None
 
 
 def sesion_horas() -> int:
