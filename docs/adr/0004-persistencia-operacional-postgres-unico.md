@@ -71,7 +71,7 @@ Lo que **NO cambia** y debe quedar claro:
 - El **almacén YAML del contenido editorial** (`ficheros.py`) y su **índice SQLite
   regenerable** (`indice.py`) tampoco: siguen siendo el backend único del contenido.
 - La privacidad del perfil local se preserva apuntando `DATABASE_URL` a un **Postgres
-  local** (`deploy/dev/docker-compose.yml`): ningún dato sale de la máquina. Lo que se pierde
+  local** que el propio dev gestiona: ningún dato sale de la máquina. Lo que se pierde
   es el "cero-config, offline por defecto" del primer arranque.
 
 ## Consecuencias
@@ -89,9 +89,9 @@ Lo que **NO cambia** y debe quedar claro:
 
 **Negativas / coste a asumir**
 
-- El desarrollo local exige un Postgres corriendo. Se añade `deploy/dev/docker-compose.yml`
-  con un Postgres de un comando, y el mensaje de error de `conectar_cruda` apunta a ese
-  comando. Coste: ~30 segundos la primera vez (`docker compose up -d`).
+- El desarrollo local exige un Postgres corriendo, gestionado por el propio dev (ver la nota
+  del inicio: el compose de dev se retiró), con `DATABASE_URL` apuntando a él; el mensaje de
+  error de `conectar_cruda` da un comando de ejemplo para levantarlo con Docker.
 - El "perfil offline puro" deja de existir como tal; sigue siendo posible (Postgres local =
   ningún dato sale), pero no es zero-config.
 - CI necesita un service `postgres` para correr los tests operacionales (ya lo tenía: ver

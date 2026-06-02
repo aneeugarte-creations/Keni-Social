@@ -1,5 +1,13 @@
 # Especificación operativa — convergencia del rol de Elías (Claro Sports / UnoTV)
 
+> **[SNAPSHOT 2026-05-27 — superado parcialmente]** Los estados de la tabla (✅/🟡/🔴) son del
+> 27-may. Parte de lo que aquí figura como 🟡/🔴 ya se construyó después: ver
+> [`2026-05-31-lista-viva-angel.md`](2026-05-31-lista-viva-angel.md) (lista viva, auto-generación,
+> score, Panel-9am) y [`2026-06-01-contratos-maquina-automatica.md`](2026-06-01-contratos-maquina-automatica.md)
+> (contratos de la máquina automática). Además, el **sistema de skills se retiró**: los prompts que
+> esta nota cita como skills (`brief-matutino`, `nota-a-formato`, `calendario-editorial`, etc.)
+> viven hoy como documentos de la **Biblioteca**, lanzados por el motor neutro `claude -p`.
+
 - **Fecha:** 2026-05-27 · **Estado:** borrador para revisar **con Elías** antes de abrir issues.
 - **Fuente:** `03-entrega/.../transcripciones/elias/elias-convergencia.txt` (consolidado de 4 audios:
   rutina semanal, flujos del equipo, diseño/video/comercial, y lo que le gustaría construir).

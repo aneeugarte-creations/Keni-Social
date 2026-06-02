@@ -48,7 +48,9 @@ docker compose logs -f woodpecker-server   # comprueba arranque + cert
 
 Entra en `https://ci-social.kenitech.io`, autoriza con GitHub y activa el repo
 `kenitech-io/keni-social` (Repositories -> Add). A partir de ahi cada push/PR
-dispara los 3 pipelines de `.woodpecker/`.
+dispara los pipelines de `.woodpecker/`: 7 de CI/tests (`tests-python`,
+`tests-shell`, `tests-app-metricas`, `tests-app-operacion`, `tests-app-produccion`,
+`frontend-build`, `fronteras`) y el de despliegue (`deploy`).
 
 ## Operacion
 
@@ -64,12 +66,12 @@ Secretos de pipeline (registry, tokens) se anaden en la UI de Woodpecker por rep
 
 ## Despliegue de la app (`.woodpecker/deploy.yml`)
 
-Ademas de los 3 pipelines de CI (tests), hay un pipeline de **despliegue**:
+Ademas de los 7 pipelines de CI (tests), hay un pipeline de **despliegue**:
 `.woodpecker/deploy.yml`. Como el agente corre en el **mismo host** que el stack y ya
 monta el `docker.sock`, el step construye las imagenes desde el checkout del pipeline
 (sin rsync) y recrea el stack via `deploy/deploy.sh`.
 
-- **Auto-deploy en push a `main`** (`when: event: push, branch: main`), DESPUES de los 3
+- **Auto-deploy en push a `main`** (`when: event: push, branch: main`), DESPUES de los
   pipelines de test (via `depends_on`); tambien disparable como *manual*. Un push con
   tests en rojo NO despliega; NO despliega en PRs ni otras ramas.
 - **Hace:** `docker compose build` -> `stop back` -> chown del volumen a uid 10001 (los

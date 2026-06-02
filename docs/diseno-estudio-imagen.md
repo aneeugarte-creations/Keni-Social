@@ -1,28 +1,65 @@
-# Diseño — Estudio de Diseño de Imagen (superficie de primera clase)
+# Estudio de Diseño de Imagen (superficie de primera clase)
 
-- **Fecha:** 2026-05-31 · **Estado:** IMPLEMENTADO (F1–F3; F4 ya N/A: la skill estaba borrada) · **Rama:** `feat/estudio-imagen`
-- **Estado de implementación (2026-05-31):** construido el Estudio como superficie propia: dominio `dominio/estudio_imagen.py` (componer prompt + correr los motores relocalizados por subproceso + importar salidas), API `api/imagenes.py` (`POST /api/imagenes/{generar,editar,expandir}`), página `frontend/src/pages/Estudio.tsx` (ruta `/estudio`, nav), enlace "Abrir en Estudio" desde `EditorImagen`, y semilla de Biblioteca (`prompt/imagen/ilustracion-fondo`, `editorial/reglas/imagen`). "Usar en la pieza" reutiliza el seam existente `PUT /api/publicaciones/{id}` (`imagen`); "Guardar en biblioteca" usa `/api/biblioteca-media/catalogar`. **Diferido:** `POST /api/imagenes/revisar` (revisión legal vía `claude -p`) — se difiere al QA editorial existente (opción §3.5.b); la revisión sigue siendo un gate humano antes de "Usar en la pieza".
-- **Para:** retirar `skills-copy/.claude/skills/estudio-imagen` (que se va a borrar con el resto del sistema de skills) y reemplazarlo por un **Estudio de Diseño de Imagen** propio: una superficie de primera clase para crear/editar el arte de cada pieza de la lista dinámica de contenidos.
-- **Reemplaza** (no borra) al documento histórico `docs/estudio-imagen.md`, que describe la arquitectura "enrutador + 2 motores + revisor" vía el motor de skills. Este documento la **relocaliza** fuera de `skills-copy/` siguiendo el patrón ya establecido por `verifica-video`.
-- **Precedente directo a copiar:** la migración de la skill `verifica-video` → `keni_consola/motores/verifica_video/` + `api/verificaciones.py`. Es el camino ya recorrido para "una skill se vuelve superficie propia con su motor relocalizado y su API de primera clase". Todo este diseño es ese patrón aplicado a imagen.
+- **Fecha origen:** 2026-05-31 · **Estado: EN PRODUCCIÓN.** El sistema de skills ya se retiró
+  (`skills-copy/` está vacío); el Estudio es la superficie de imagen vigente.
+- **Qué es:** el Estudio es una superficie propia de la Consola para crear/editar el arte de cada
+  pieza. Su motor vive en `consola/src/keni_consola/motores/estudio_imagen/`
+  (`editar.py`, `expandir.py`, `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`,
+  `marcas.json`), el dominio en `dominio/estudio_imagen.py` (compone prompt, corre los motores por
+  subproceso, importa salidas), la API en `api/imagenes.py`
+  (`POST /api/imagenes/{generar,editar,expandir,retocar,componer,set,revisar}` + `GET .../matriz`),
+  y la UI en `frontend/src/pages/Estudio.tsx` (ruta `/estudio`, nav), con enlace "Abrir en Estudio"
+  desde `EditorImagen`. "Usar en la pieza" reutiliza el seam `PUT /api/publicaciones/{id}` (`imagen`);
+  "Guardar en biblioteca" usa `/api/biblioteca-media/catalogar`. La revisión legal (`POST
+  /api/imagenes/revisar`, `claude -p`) está implementada como cierre opcional; la aprobación sigue
+  siendo un gate humano antes de "Usar en la pieza".
+- **Editor visual de plantillas por marca:** además del motor determinista/generativo, el Estudio
+  tiene un editor de plantillas de marca (`api/plantillas_marca.py` + `dominio/plantillas_marca.py`):
+  el equipo diseña y guarda un *spec* por marca (logo, pleca, titular, geometría por lienzo) que el
+  motor estampa con `render_node/` (renderizador Node). `componer`/`set`/`marca_tiene_plantilla`
+  (`dominio/estudio_imagen.py:88`) materializan ese spec sobre la foto.
+- **Reemplazó** al documento histórico `docs/estudio-imagen.md` (ya borrado), que describía la
+  arquitectura "enrutador + 2 motores + revisor" cuando vivía como skill. El motor se relocalizó
+  fuera de `skills-copy/` siguiendo el patrón de `verifica-video` (`keni_consola/motores/verifica_video/`
+  + `api/verificaciones.py`): "una skill se vuelve superficie propia con su motor relocalizado y su
+  API de primera clase".
 
 ---
 
 ## 0. TL;DR
 
-1. Hoy hay **DOS caminos de imagen distintos** que conviven: (a) un camino **directo HTTP** (`POST /api/media/generar` → `media.generar_imagen` → proveedor OpenRouter → `.png` → almacén media), que es lo que usa el `EditorImagen.tsx` de cada publicación; y (b) un camino **vía motor de skills** (`estudio-imagen` con `editar.py`/`expandir.py`/`generar.py`), que corre `claude -p` como subproceso y aporta el recorte/extensión/composición de marca deterministas + la revisión legal. El Estudio nuevo unifica ambos.
-2. La generación cruda por API ya vive **dentro del paquete** (`keni_consola/media.py`) y NO depende de `skills-copy/`. Lo único que vive en `skills-copy/` y hay que **relocalizar** son las herramientas deterministas de Pillow (`editar.py`, `expandir.py`) y el adaptador `generar.py` → a `keni_consola/motores/estudio_imagen/`.
-3. El **modelo de datos ya existe**: una publicación (`publicacion`) tiene un campo `imagen` (nombre de objeto en el almacén media) + `imagen_url`. El arte "pertenece a la pieza" por ese campo. El Estudio produce un objeto media y lo asocia a la pieza por ese mismo seam.
-4. La **Biblioteca** aporta: los **prompts de imagen** como documentos `tipo: prompt` y la **línea editorial / dirección de arte por marca** (lo que hoy son `diseno-unotv`/`diseno-clarosports`) como documentos `tipo: editorial, clase: marca/voz`. El Estudio los **adjunta** al componer el prompt, igual que `dominio/generar.py` hace con el copy.
-5. **Migración en 4 fases sin romper el piloto:** (F1) relocalizar herramientas a `motores/estudio_imagen/` + API `/api/imagenes/...`; (F2) UI de Estudio (lienzo + variantes + editar + elegir final); (F3) cablear con la Biblioteca (prompts + dirección de arte por marca); (F4) borrar `skills-copy/.claude/skills/estudio-imagen`. La generación cruda (`/api/media/generar`) sigue viva todo el tiempo.
+1. Conviven **dos caminos de imagen**, ambos dentro del paquete: (a) el camino **directo HTTP**
+   (`POST /api/media/generar` → `media.generar_imagen` → proveedor OpenRouter → `.png` → almacén media),
+   que usa el `EditorImagen.tsx` de cada publicación para el caso simple; y (b) el **Estudio**
+   (`/api/imagenes/*` + motor `motores/estudio_imagen/`), que aporta recorte/extensión/retoque/
+   composición de marca + variantes + revisión legal. El camino directo no se rompió: el Estudio es el
+   "modo avanzado" sobre las mismas piezas.
+2. La generación cruda por API vive en `keni_consola/media.py`; las herramientas del motor
+   (`editar.py`, `expandir.py`, `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`) viven
+   en `keni_consola/motores/estudio_imagen/`. Nada depende ya de `skills-copy/` (vacío).
+3. El **modelo de datos**: una publicación (`publicacion`) tiene un campo `imagen` (nombre de objeto en
+   el almacén media) + `imagen_url`. El arte "pertenece a la pieza" por ese campo. El Estudio produce un
+   objeto media y lo asocia a la pieza por ese mismo seam.
+4. La **Biblioteca** aporta: los **prompts de imagen** como documentos `tipo: prompt` y la **línea
+   editorial / dirección de arte por marca** como documentos `tipo: editorial, clase: marca/voz`. El
+   Estudio los **adjunta** al componer el prompt, igual que `dominio/generar.py` hace con el copy.
+5. **Dirección de arte por marca = dos vías:** el prompt generativo se angula con la dirección de arte
+   editable en la Biblioteca; y para la identidad exacta (logo + pleca + titular) hay un **editor visual
+   de plantillas por marca** cuyo *spec* estampa el renderizador `render_node/` de forma determinista
+   (`componer`/`set`/`marca_tiene_plantilla`).
 
 ---
 
-## 1. Cómo funciona HOY (pipeline real, con rutas y líneas)
+## 1. Cómo funciona (pipeline real, con rutas y líneas)
 
-Hay **dos pipelines** de imagen. Conviene tenerlos separados en la cabeza porque el Estudio nuevo los funde.
+> **Nota histórica:** §1.B describe el camino **vía motor de skills** tal como era cuando el Estudio
+> aún vivía como skill `estudio-imagen`. Ese motor se relocalizó a
+> `keni_consola/motores/estudio_imagen/` y hoy se invoca desde `api/imagenes.py` (no desde `claude -p`
+> para las operaciones deterministas). Se conserva la descripción porque las capacidades (recorte,
+> extensión, retoque, composición de marca, revisión) siguen siendo las mismas; solo cambió cómo se
+> invoca el motor. El camino directo de §1.A no cambió.
 
-### 1.A — Camino DIRECTO por API (el que usa la consola hoy para "generar/adjuntar imagen a una pieza")
+### 1.A — Camino DIRECTO por API (el que usa la consola para "generar/adjuntar imagen a una pieza")
 
 Es el camino vivo y el que NO depende de skills. Es síncrono en HTTP solo para crear el registro; la generación corre en background.
 
@@ -58,9 +95,9 @@ Puntos clave:
 - `lanzar_job_imagen` (`generaciones.py:692`) es un **runner genérico de un callable en un hilo** — NO es específico de imagen: ya lo reusa `api/verificaciones.py:118`. El Estudio lo reutiliza tal cual para cada operación que llame a un proveedor/herramienta.
 - La clave del proveedor es **una sola fuente de verdad**: `secretos.toml` (`0600`, gestionado por la UI) con fallback a entorno (`KENI_IMAGEN_API_KEY`/`OPENROUTER_API_KEY`/`OPENAI_API_KEY`); ver `secretos.py:162-201`. El modelo se elige de la lista curada `media.MODELOS_IMAGEN` (`media.py:85-105`).
 
-### 1.B — Camino vía MOTOR DE SKILLS (el `estudio-imagen` que se va a borrar)
+### 1.B — Capacidades del motor (origen: skill `estudio-imagen`, hoy relocalizado)
 
-Este es el que aporta lo que el camino directo NO hace: recortar a formato, comprimir a un peso, extender fondo, componer marca/breaking, outpainting fiel y la **revisión legal/editorial**. Corre como un trabajo de `claude -p`, no como una llamada HTTP directa.
+Estas son las capacidades que el camino directo NO da: recortar a formato, comprimir a un peso, extender fondo, componer marca/breaking, outpainting fiel, retoque por instrucción y la **revisión legal/editorial**. El diagrama de abajo refleja cómo corría como skill (`claude -p`); hoy las deterministas las invoca `api/imagenes.py` por subproceso del motor (ver §3.4).
 
 ```
 formulario de skill (imagen subida + petición + formato + peso + ajuste)
@@ -98,9 +135,9 @@ Puntos clave de 1.B que el Estudio debe **preservar** como capacidades:
 
 ---
 
-## 2. Qué reutilizar y qué relocalizar
+## 2. Qué se reutiliza y de dónde vino el motor
 
-### Se reutiliza TAL CUAL (no se toca, ya vive en el paquete)
+### Se reutiliza TAL CUAL (ya vive en el paquete)
 - `keni_consola/media.py` — generación cruda por API, validación, `guardar_bytes`, `importar_imagen`, `MODELOS_IMAGEN`, `_proveedor_openrouter` (mockeable). **Es el corazón generativo y se queda.**
 - `keni_consola/almacen_media.py` — almacén de objetos disco/S3, anti-traversal. **Sin cambios.**
 - `keni_consola/secretos.py` — clave/proveedor/modelo de imagen, `0600`. **Sin cambios.**
@@ -109,10 +146,10 @@ Puntos clave de 1.B que el Estudio debe **preservar** como capacidades:
 - `api/biblioteca_media.py` (`/api/biblioteca-media`) — cosecha/catálogo. **Se queda.**
 - `EditorImagen.tsx` — sigue funcionando contra `/api/media/generar`. El Estudio es un "modo avanzado"; el editor inline simple no desaparece.
 
-### Se RELOCALIZA fuera de `skills-copy/` (que se borra) → `keni_consola/motores/estudio_imagen/`
-Patrón idéntico a `motores/verifica_video/` (un `__init__.py` vacío + los scripts del motor, invocados por subproceso desde una API de primera clase).
+### Relocalizado fuera de `skills-copy/` → `keni_consola/motores/estudio_imagen/` (hecho)
+Patrón idéntico a `motores/verifica_video/` (un `__init__.py` vacío + los scripts del motor, invocados por subproceso desde una API de primera clase). La tabla documenta la **procedencia** de cada motor (el origen ya no existe; `skills-copy/` está vacío). El motor sumó además `retocar.py` (retoque generativo por instrucción), `spec_plantilla.py` y `render_node/` (composición de plantilla de marca), que no estaban en el origen.
 
-| Origen (se borra con la skill) | Destino | Naturaleza |
+| Origen (skill, ya borrada) | Destino | Naturaleza |
 |---|---|---|
 | `skills-copy/.claude/skills/estudio-imagen/editar.py` | `keni_consola/motores/estudio_imagen/editar.py` | Determinista (Pillow): recortar/redimensionar/comprimir/extender/placa |
 | `skills-copy/.claude/skills/estudio-imagen/expandir.py` | `keni_consola/motores/estudio_imagen/expandir.py` | Generativo (outpainting fiel vía OpenRouter) |
@@ -120,7 +157,7 @@ Patrón idéntico a `motores/verifica_video/` (un `__init__.py` vacío + los scr
 | `skills-copy/.claude/skills/estudio-imagen/test_editar.py`, `test_expandir.py` | `consola/tests/motores/test_editar.py`, `test_expandir.py` | Tests Pillow (proveedor IA mockeado) |
 | `skills-copy/.claude/skills/breaking-express/componer.py` (+ `marcas.json`, assets) | `keni_consola/motores/estudio_imagen/componer.py` (+ assets) | Determinista: logo + pleca + breaking |
 
-Nota sobre `generar.py` vs `media.py`: ambos llaman a OpenRouter `chat/completions` con `modalities:["image","text"]`. Al relocalizar, **`generar.py` deja de hacer su propia llamada HTTP**: la operación "generar ilustración" del Estudio debe pasar por `media.generar_imagen()` (fuente única de proveedor/clave/modelo/log/anti-SSRF). De `generar.py` solo se conserva `construir_prompt` (estilo por marca + aspecto por formato), y eso se mueve a la composición de prompt del Estudio (ver §3, donde la dirección de arte viene de la Biblioteca). Resultado: un solo punto que toca la red para generar (`media._PROVEEDOR`), mockeable en tests.
+Nota sobre `generar.py` vs `media.py`: ambos llaman a OpenRouter `chat/completions` con `modalities:["image","text"]`. La operación "generar variante" del Estudio pasa por `media.generar_imagen()` (vía `dominio/estudio_imagen.generar_variante`): fuente única de proveedor/clave/modelo/log/anti-SSRF, un solo punto de red mockeable en tests. La dirección de arte de marca se compone desde la Biblioteca (§3.2/§3.6). El script `generar.py` conserva su propia ruta HTTP (`generar_con_openrouter`) y su `ESTILO_MARCA`/`construir_prompt` como CLI de respaldo (modo sin-key → dirección de arte), pero el camino del Estudio no la usa para producir variantes.
 
 ### Se RECONCEPTUALIZA como documentos de la Biblioteca (no se relocaliza como código)
 - `diseno-unotv/guia-diseno.md`, `plantillas-prompt.md` → `editorial/marcas/unotv` (clase `marca`, `marcas:[unotv]`).
@@ -157,31 +194,36 @@ Una página `Estudio.tsx` (o un panel/drawer abrible desde una pieza), con tres 
   - **Generar variantes** (generativo): prompt de imagen + marca + formato → lanza N jobs `imagen`, muestra una rejilla de candidatas conforme completan (sondeo `useGeneracion`).
   - **Editar** una candidata (determinista, sin coste): recortar a formato / las 3 medidas / redimensionar / comprimir a peso / extender fondo uniforme / placa / breaking. Cada acción es un job que corre el motor `estudio_imagen` por subproceso y re-importa el .png.
   - **Expandir** (generativo, fiel): outpainting cuando el fondo no es uniforme; re-compone el sujeto intacto.
+  - **Retocar** (generativo, por instrucción): edita la imagen según una instrucción en lenguaje natural (`retocar.py`, image-to-image vía OpenRouter).
+  - **Componer plantilla de marca / set de formatos** (determinista): estampa la identidad de marca (logo + pleca + titular) según el *spec* de la marca (`componer`/`set`, renderizador `render_node/`).
   - **Revisar** (opcional, cierre): pasa la candidata por la revisión legal/editorial (ver §3.5).
 - **Elegir final:** botón "Usar en la pieza" → escribe `publicacion.imagen = <objeto>`; botón "Guardar en biblioteca" → `POST /api/biblioteca-media/catalogar`.
 
 Encaje con la lista dinámica: a las 9am el equipo recorre la lista; cada pieza con copy ya generado ofrece "Abrir en Estudio". El Estudio devuelve la pieza con su arte asociado, lista para revisar/aprobar/programar. El editor inline simple (`EditorImagen.tsx`) sigue para el caso trivial "adjunta o describe una imagen"; el Estudio es para el caso rico (variantes + edición + marca + revisión).
 
-### 3.4 API propuesta (`/api/imagenes/...`)
-Un módulo nuevo `api/imagenes.py` (auto-descubierto por `api/__init__.py`, solo hay que exportar `RUTAS`). TODO reusa `generaciones.lanzar_job_imagen` + el almacén media. Cada endpoint que "produce píxeles" responde de inmediato con un registro de generación y el front sondea `GET /api/generaciones/{id}`.
+### 3.4 API (`/api/imagenes/...`)
+El módulo `api/imagenes.py` (auto-descubierto por `api/__init__.py`, exporta `RUTAS`) reusa
+`generaciones.lanzar_job_imagen` + el almacén media. Cada endpoint que "produce píxeles" responde de
+inmediato con un registro de generación y el front sondea `GET /api/generaciones/{id}`.
 
 | Endpoint | Hace | Reutiliza |
 |---|---|---|
-| `POST /api/imagenes/generar` | genera N variantes desde prompt+marca+formato (compone prompt con la Biblioteca) | `media.generar_imagen`, `lanzar_job_imagen`, `biblioteca.cuerpo_efectivo` + `editoriales_de_marca` |
-| `POST /api/imagenes/editar` | operación determinista (recortar/redimensionar/comprimir/extender/placa/breaking) sobre un objeto media | motor `motores/estudio_imagen/editar.py` por subproceso (patrón `verificaciones.analizar`), `media.importar_imagen` |
+| `GET  /api/imagenes/matriz` | lista lienzos canónicos (aspecto/medida) + las plantillas de marca disponibles | `formatos_red`, `plantillas_marca` |
+| `POST /api/imagenes/generar` | genera N variantes desde prompt+marca+formato (compone prompt con `estudio_imagen.componer_prompt` + la Biblioteca) | `media.generar_imagen`, `lanzar_job_imagen`, `biblioteca.cuerpo_efectivo` + `editoriales_de_marca` |
+| `POST /api/imagenes/editar` | operación determinista (recortar/redimensionar/comprimir/extender/placa) sobre un objeto media | motor `motores/estudio_imagen/editar.py` por subproceso (patrón `verificaciones.analizar`), `media.importar_imagen` |
 | `POST /api/imagenes/expandir` | outpainting fiel a un formato | `motores/estudio_imagen/expandir.py`, `lanzar_job_imagen` |
-| `POST /api/imagenes/revisar` | revisión legal/editorial de un objeto media | `claude -p` (job claude) con `editorial/reglas/imagen` adjunta, o un job determinista que devuelve checklist |
-| `POST /api/imagenes/usar` | asocia un objeto media a una pieza (`publicacion.imagen`) | `repos`/`publicaciones` (handoff existente) |
+| `POST /api/imagenes/retocar` | retoque generativo por instrucción (image-to-image) | `motores/estudio_imagen/retocar.py` |
+| `POST /api/imagenes/componer` | estampa la plantilla de marca (logo + pleca + titular) sobre una foto | `spec_plantilla.py` + `render_node/`, `plantillas_marca` |
+| `POST /api/imagenes/set` | genera el set de formatos de una red estampando la identidad de marca | `estudio_imagen.generar_set_formatos`, `formatos_red` |
+| `POST /api/imagenes/revisar` | revisión legal/editorial de un objeto media (cierre opcional, gate humano) | `claude -p` con `editorial/reglas/imagen` adjunta |
 
-Subir/servir/cosechar siguen en `/api/media` y `/api/biblioteca-media` (sin duplicar). `/api/media/generar` se mantiene como alias del caso simple (1 variante) para no romper `EditorImagen.tsx`.
+"Usar en la pieza" no es endpoint propio: reutiliza `PUT /api/publicaciones/{id}` (`imagen`).
+Subir/servir/cosechar siguen en `/api/media` y `/api/biblioteca-media` (sin duplicar). `/api/media/generar` se mantiene como caso simple (1 variante) para no romper `EditorImagen.tsx`.
 
 Las operaciones deterministas (`editar`) NO necesitan `claude`: corren el motor con el python de la consola (`sys.executable motores/estudio_imagen/editar.py …`), exactamente como `api/verificaciones.py:_ruta_motor`/`analizar` corre `analiza-video.py`. La clave de imagen para `expandir`/`generar` se transporta al subproceso reutilizando el mapeo de `generaciones._entorno_skill` (proveedor → `OPENROUTER/OPENAI/GEMINI_API_KEY`).
 
 ### 3.5 Revisión legal/editorial
-Hoy la hace la skill (Claude *ve* el PNG y aplica `reglas-legales.md`). Tras borrar la skill hay dos opciones, ambas viables:
-- **(a) Job `claude` puntual:** `POST /api/imagenes/revisar` lanza un `claude -p` con la imagen vía `--add-dir` y la regla `editorial/reglas/imagen` adjunta en el prompt; devuelve el checklist ✅/⚠️/❌. Reutiliza `encolar_job_claude`/`_argv_claude` que ya saben pasar `--add-dir` de un temporal (`generaciones.py:341,613`).
-- **(b) Diferir** la revisión al QA editorial existente (`api/qa_editorial.py`, `dominio/qa_editorial.py`) extendido a imagen. Recomendado a medio plazo para no fragmentar la verificación.
-La revisión NO bloquea la generación: es el cierre antes de "Usar en la pieza" (gate humano), igual que hoy.
+Implementada como **job `claude` puntual**: `POST /api/imagenes/revisar` lanza un `claude -p` con la imagen vía `--add-dir` y la regla `editorial/reglas/imagen` adjunta en el prompt; devuelve el checklist ✅/⚠️/❌ (`dominio/estudio_imagen.revisar`, reutiliza `encolar_job_claude`/`_argv_claude`). La revisión NO bloquea la generación: es el cierre antes de "Usar en la pieza" (gate humano). Pendiente a medio plazo: unificarla con el QA editorial existente (`api/qa_editorial.py`) para no fragmentar la verificación.
 
 ### 3.6 Relación con la Biblioteca
 - **Prompts de imagen** = documentos `tipo: prompt` (p. ej. `prompt/imagen/ilustracion-fondo`). El Estudio los carga con `biblioteca.cuerpo_efectivo(id)` (mismo seam que `dominio/generar.py:180`).
@@ -191,59 +233,48 @@ La revisión NO bloquea la generación: es el cierre antes de "Usar en la pieza"
 
 ---
 
-## 4. Plan de migración por fases (sin romper el piloto)
+## 4. Estado de implementación (todo construido)
 
-Invariante: en TODO momento la generación de imagen funciona. El camino directo `POST /api/media/generar` + `EditorImagen.tsx` NO se toca hasta el final. Cada fase es desplegable por separado.
+La migración descrita por este documento ya se completó. Resumen del estado actual:
 
-### Fase 0 — Preparación (sin cambios de comportamiento)
-- Confirmar que `media.py` (proveedor) y `lanzar_job_imagen` cubren el camino directo (ya cubren). Asegurar que `Pillow`/`httpx` son dependencias del back (hoy Pillow solo lo necesitaba la skill; ver §5).
-- Crear `keni_consola/motores/estudio_imagen/__init__.py` (vacío), espejando `motores/verifica_video/`.
-
-### Fase 1 — Relocalizar el motor + API de primera clase (la skill sigue viva en paralelo)
-1. Copiar `editar.py`, `expandir.py`, `componer.py` (+ `marcas.json`/assets) a `motores/estudio_imagen/`. Ajustar rutas relativas internas (el `marcas.json` hermano del breaking) a la nueva ubicación. NO borrar aún el original.
-2. Mover los tests Pillow a `consola/tests/motores/` y hacerlos correr en el CI del back (instalar Pillow en el entorno de test).
-3. Crear `api/imagenes.py` con `POST /api/imagenes/editar` y `/expandir` que invocan el motor por subproceso (patrón `api/verificaciones.py`), reusan `lanzar_job_imagen` y re-importan con `media.importar_imagen`. Reusar `_entorno_skill` para la clave en `expandir`.
-4. `POST /api/imagenes/generar`: 1ª versión = wrapper de `media.generar_imagen` con N variantes (sin Biblioteca todavía; prompt crudo). Verificable contra el proveedor real o mockeado.
-- **Estado tras F1:** existe la API nueva; la skill `estudio-imagen` sigue funcionando por su camino. Nada roto.
-
-### Fase 2 — UI del Estudio (lienzo + variantes + editar + elegir final)
-1. `Estudio.tsx` (página o drawer) consumiendo `/api/imagenes/*`, con sondeo `useGeneracion`.
-2. Abrir el Estudio desde una pieza (Radar/RSS/Parrilla/Publicaciones) pasando `copy/marca/red/titulo` por router state.
-3. Botón "Usar en la pieza" (`POST /api/imagenes/usar` → `publicacion.imagen`) y "Guardar en biblioteca" (`/api/biblioteca-media/catalogar`).
-4. Mantener `EditorImagen.tsx` como editor inline simple; añadir un enlace "Abrir en Estudio".
-- **Estado tras F2:** el equipo ya hace todo el flujo rico desde la Consola sin la pestaña de skill.
-
-### Fase 3 — Cablear con la Biblioteca (prompts + dirección de arte por marca)
-1. Sembrar `prompt/imagen/<slug>`, `editorial/marcas/<marca>`, `editorial/reglas/imagen` en `biblioteca_semilla/` (portando el contenido de `guia-diseno.md`/`plantillas-prompt.md`/`reglas-legales.md`).
-2. `POST /api/imagenes/generar` compone el prompt con `biblioteca.cuerpo_efectivo` + `editoriales_de_marca` (sustituye `ESTILO_MARCA`).
-3. `POST /api/imagenes/revisar` adjunta `editorial/reglas/imagen` a un job `claude`.
-- **Estado tras F3:** estilo de marca y reglas son editables por el equipo; el Estudio es autónomo de `skills-copy/`.
-
-### Fase 4 — Borrar la skill
-1. Quitar `estudio-imagen` (y los `diseno-*`/`revisa-imagen` si ya no los usa nada) del catálogo de skills; quitar el filtro `esSkillDeImagen` y la pestaña "Imágenes" de `Generacion.tsx`.
-2. Borrar `skills-copy/.claude/skills/estudio-imagen/` (y `breaking-express/` si solo lo usaba el motor relocalizado).
-3. Limpiar `generaciones._entorno_skill` si ya no hay subprocesos `claude` de imagen (mantenerlo si la revisión usa `claude`).
-- **Precondición de F4:** F1-F3 desplegadas y el Estudio cubriendo todas las capacidades. La generación directa `/api/media/generar` sigue intacta.
+- **Motor relocalizado** a `keni_consola/motores/estudio_imagen/` (`editar.py`, `expandir.py`,
+  `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`, `marcas.json`), con tests Pillow en
+  el CI del back. El origen en `skills-copy/` ya no existe (el sistema de skills se retiró).
+- **API de primera clase** `api/imagenes.py` con `generar/editar/expandir/retocar/componer/set/revisar`
+  + `matriz` (ver §3.4).
+- **UI** `frontend/src/pages/Estudio.tsx` (ruta `/estudio`), abrible desde una pieza con
+  `copy/marca/red/titulo`; "Usar en la pieza" (`PUT /api/publicaciones/{id}`) y "Guardar en biblioteca"
+  (`/api/biblioteca-media/catalogar`). `EditorImagen.tsx` sigue como editor inline simple con enlace
+  "Abrir en Estudio".
+- **Biblioteca cableada:** el prompt generativo compone con `biblioteca.cuerpo_efectivo` +
+  `editoriales_de_marca` (sustituye el `ESTILO_MARCA` hard-coded); las reglas legales van como
+  `editorial/reglas/imagen` adjuntas a la revisión.
+- **Editor visual de plantillas por marca** (`api/plantillas_marca.py` + `dominio/plantillas_marca.py`):
+  el equipo diseña el *spec* de marca; `render_node/` lo estampa.
+- El camino directo `/api/media/generar` + `EditorImagen.tsx` sigue intacto.
 
 ---
 
 ## 5. Riesgos y dependencias
 
 - **Clave del proveedor (OpenRouter):** fuente única `secretos.toml` (`0600`) con fallback a entorno. Sin clave, lo generativo degrada a "dirección de arte" (prompt para herramienta externa) como hoy (`generar.py:salida_sin_key`). Riesgo: que el subproceso del motor no reciba la clave → mitigado reusando `_entorno_skill` (`generaciones.py:375`). NUNCA loguear la clave (ya respetado en `media.py`/`secretos.py`).
-- **Pillow en el back:** hoy Pillow lo cargaba el subproceso de la skill; el CI estático de skills no lo instalaba (ver `docs/estudio-imagen.md` §8). Al relocalizar `editar.py`/`expandir.py` al paquete, **Pillow pasa a ser dependencia del back** (o del worker que ejecuta los motores). Asegurar que el entorno de ejecución y de test lo tiene.
+- **Pillow en el back:** con el motor en el paquete, **Pillow es dependencia del back** (del worker que ejecuta los motores deterministas). Asegurar que el entorno de ejecución y de test lo tiene.
 - **ffmpeg / tesseract / yt-dlp:** NO los necesita imagen (son del motor de video `verifica_video`). Imagen solo necesita Pillow + httpx. No introducir esa dependencia aquí.
 - **Tamaño de media:** límite vigente 15 MB por imagen (`media.LIMITE_IMAGEN`). Generar N variantes multiplica el almacenamiento; sin recolección, el almacén crece. Mitigar: las variantes NO elegidas son objetos huérfanos — definir una política (TTL/limpieza de objetos no referenciados por ninguna pieza ni catalogados en biblioteca). Hoy `biblioteca_media.borrar` ya borra el binario al descatalogar; falta un GC de huérfanos del Estudio.
-- **Coste por imagen:** cada variante generativa cuesta. El determinista (recortar/comprimir/extender uniforme/placa) es gratis y debe ser el camino por defecto cuando aplica (regla de oro de `docs/estudio-imagen.md` §3). La UI debe empujar a lo determinista y limitar el nº de variantes generativas por defecto.
-- **S3/Garage:** en hosted la media va a bucket; el motor determinista escribe en un **temporal local** y `media.importar_imagen` lo sube al backend activo (igual que hoy importa los .png de la skill). Verificar que el subproceso del motor tiene acceso al temporal (patrón `--add-dir` / `tempfile.mkdtemp` de `verificaciones.analizar`).
-- **Outpainting fiel:** `expandir.py` re-compone el sujeto pixel a pixel; al relocalizar, conservar esa garantía (es la línea roja editorial: la IA no inventa sobre el sujeto de una foto real).
-- **Acoplamiento generar.py ↔ media.py:** al unificar la generación en `media.generar_imagen`, `expandir.py` (que SÍ manda la imagen de entrada con `image_config.strength`) puede necesitar un parámetro extra que `media._proveedor_openrouter` hoy no expone (solo manda texto). Riesgo: el outpainting necesita su propio camino de proveedor o ampliar `media.py` para aceptar imagen de entrada + strength. Decidir en F1: ampliar `media._proveedor_openrouter` para aceptar `imagen_base64`/`strength` opcionales (preferible, una sola puerta de red) vs. mantener `expandir.py` con su httpx propio (más simple pero duplica el punto de red).
+- **Coste por imagen:** cada variante generativa cuesta. El determinista (recortar/comprimir/extender uniforme/placa) es gratis y debe ser el camino por defecto cuando aplica. La UI debe empujar a lo determinista y limitar el nº de variantes generativas por defecto.
+- **S3/Garage:** en hosted la media va a bucket; el motor determinista escribe en un **temporal local** y `media.importar_imagen` lo sube al backend activo. Verificar que el subproceso del motor tiene acceso al temporal (patrón `--add-dir` / `tempfile.mkdtemp` de `verificaciones.analizar`).
+- **Outpainting fiel:** `expandir.py` re-compone el sujeto pixel a pixel — es la línea roja editorial: la IA no inventa sobre el sujeto de una foto real. Conservar esa garantía en cualquier cambio del motor.
 
 ---
 
-## 6. Archivos críticos para la implementación
+## 6. Archivos críticos (mapa del código)
 
-- `consola/src/keni_consola/api/verificaciones.py` — **plantilla exacta** de "skill relocalizada → motor en `motores/` + API de primera clase que corre el motor por subproceso y reusa `lanzar_job_imagen`". Copiar su forma para `api/imagenes.py`.
-- `consola/src/keni_consola/media.py` — corazón generativo (proveedor, `generar_imagen`, `guardar_bytes`, `importar_imagen`, `MODELOS_IMAGEN`); se reutiliza y posiblemente se amplía para outpainting.
+- `consola/src/keni_consola/api/imagenes.py` — la API del Estudio (endpoints de §3.4).
+- `consola/src/keni_consola/dominio/estudio_imagen.py` — compone el prompt, corre los motores por subproceso, importa salidas; `componer`/`set`/`marca_tiene_plantilla`/`revisar`.
+- `consola/src/keni_consola/motores/estudio_imagen/` — los motores: `editar.py`, `expandir.py`, `retocar.py`, `generar.py`, `spec_plantilla.py`, `render_node/`, `marcas.json`.
+- `consola/src/keni_consola/api/plantillas_marca.py` + `dominio/plantillas_marca.py` — editor visual de plantillas de marca (el *spec* que estampa `render_node/`).
+- `consola/src/keni_consola/api/verificaciones.py` — el patrón "motor en `motores/` + API que lo corre por subproceso y reusa `lanzar_job_imagen`" que sigue `api/imagenes.py`.
+- `consola/src/keni_consola/media.py` — corazón generativo (proveedor, `generar_imagen`, `guardar_bytes`, `importar_imagen`, `MODELOS_IMAGEN`).
 - `consola/src/keni_consola/generaciones.py` — `lanzar_job_imagen` (runner del Estudio) y `_entorno_skill`/`_argv_claude` (clave al subproceso, `--add-dir` para la revisión).
-- `consola/src/keni_consola/dominio/generar.py` — patrón de composición de prompt (`componer()` = prompt + editorial + contexto) a replicar para el prompt de imagen con la Biblioteca.
-- `skills-copy/.claude/skills/estudio-imagen/{editar,expandir,generar}.py` — los motores a relocalizar a `keni_consola/motores/estudio_imagen/`.
+- `consola/src/keni_consola/dominio/generar.py` — patrón de composición de prompt (`componer()` = prompt + editorial + contexto) que replica el prompt de imagen con la Biblioteca.
+- `consola/frontend/src/pages/Estudio.tsx` — la UI del Estudio (ruta `/estudio`).

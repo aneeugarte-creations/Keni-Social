@@ -38,10 +38,11 @@ Biblioteca, lanzados con `claude -p`) y el servidor de métricas; la consola sol
 botones a quien no quiere teclear comandos.
 Dos ideas de diseño la rigen:
 
-- **El YAML por marca es la fuente de verdad.** Lo que ves y editas en la consola
-  (publicaciones, plantillas, fuentes, contexto de cada marca) vive en ficheros YAML
-  por marca, editables a mano; la consola es una vista cómoda sobre ellos, no un
-  almacén paralelo.
+- **Un solo almacén operacional (Postgres).** Lo que ves y editas en la consola
+  (publicaciones, plantillas, fuentes RSS, hashtags, franjas, tareas, rota) vive en
+  **Postgres** (ADR 0004/0006), no en almacenes paralelos. La prosa editorial por marca
+  (el `CLAUDE.md` y las voces de cada marca) sigue como ficheros versionados editables a
+  mano; la consola es una vista cómoda sobre todo ello.
 - **Solo en tu máquina.** Escucha únicamente en `127.0.0.1`; nada se expone a la red.
 
 El sidebar agrupa las páginas en **Trabajo** (uso diario) y **Ajustes**
@@ -54,7 +55,7 @@ código, `consola/frontend/src/components/layout/navegacion.ts`.
 ## Qué hay por debajo (arquitectura)
 
 - La interfaz es una **aplicación React** (SPA) servida por un **servidor local** (Python/Starlette) que expone una **API JSON** (`/api/...`). La React habla con esa API; la API reutiliza el núcleo de siempre: el servidor de métricas (`keni-metricas`), la **Biblioteca de Prompts** (`biblioteca.py`) y el **lanzador neutro** (`dominio/generar.py`, que arranca `claude -p`).
-- El **contenido editorial** (publicaciones, plantillas, fuentes RSS, hashtags, franjas y el historial de copy) vive en **ficheros YAML por marca** (`~/keni-proyectos/<marca>/…`): es la **fuente de verdad**, editable a mano. Una pequeña base **SQLite** (`~/.config/keni-social/consola.db`) guarda solo lo **operacional** (tus tareas y el seguimiento Comercial con su serie temporal); un **índice SQLite regenerable** acelera las búsquedas sobre los YAML (se puede borrar y se reconstruye). La configuración de marcas/fuente sigue en los `.toml` de siempre.
+- El **contenido editorial estructurado** (publicaciones, plantillas, fuentes RSS, hashtags, franjas y el historial de copy) y lo **operacional** (tus tareas, el seguimiento Comercial con su serie temporal, la rota, usuarios/sesiones y la cola de jobs) viven en **Postgres** (`DATABASE_URL`, ADR 0004/0006): un único almacén operacional, sin índices ni SQLite paralelos que se desincronicen. Solo la **prosa editorial por marca** (`marca.yaml`, `CLAUDE.md`, voces) sigue como ficheros versionados editables a mano. La configuración de marcas/fuente sigue en los `.toml` de siempre.
 - El frontend viaja **ya compilado** dentro del paquete, así que para **usar** la consola **no hace falta Node** ni instalar nada de JavaScript.
 
 ---

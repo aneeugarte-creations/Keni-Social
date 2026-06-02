@@ -68,7 +68,7 @@ Leyenda: ✅ sí / fuerte · ⚠️ parcial o con limitaciones · ❌ no / ausen
 | **Citas con marca de tiempo (puntos de corte)** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **Métricas multi-marca / multi-plataforma** | ✅ | ✅ | ⚠️ básico | ✅ | ⚠️ | ✅ | ✅ | ❌ | ✅ real vía Metricool (Advanced) + capa de insight es-MX |
 | **MCP conversacional (agente lee tus datos)** | ✅ (hosted, OAuth) | ⚠️ | ❌ | ❌ | ❌ | ⚠️ | ❌ | ⚠️ agentes | ✅ (núcleo del producto) |
-| **Programación / scheduling** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ (no existe aún) |
+| **Programación / scheduling** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ existe internamente (`programador.py`); aún no publicación real |
 | **Publicación directa a redes** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ dry-run por defecto; real vía Metricool |
 | **Llaves locales / sin entregar credenciales a un SaaS** | ❌ | ❌ | ❌ | ❌ | ❌ | ⚠️ BYOK tokens IA | ❌ | ❌ | ✅ tokens en config local |
 | **Publicación hosted con tokens Meta System User (no caducan)** | n/a | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | ⚠️ | n/a | ✅ modo alojado (Fase 2) |

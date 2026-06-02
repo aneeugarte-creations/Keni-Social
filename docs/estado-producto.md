@@ -66,7 +66,7 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
 
 Arquitectura y hitos al detalle en [`arquitectura.md`](arquitectura.md).
 
-## 2. Qué falta para publicar de verdad (código interno)
+## 2. Publicación real: construida y gateada (falta validar en producción)
 
 **Ni las métricas ni la publicación reales dependen ya de aprobaciones externas.** Ambas llegan
 **vía Metricool** (AMX en plan **Advanced**): una sola integración cubre Facebook, Instagram, X,
@@ -74,12 +74,14 @@ TikTok y YouTube, así que **Meta App Review, la verificación de negocio, la au
 el tier de pago de X dejan de ser bloqueantes**. Las métricas reales se leen con `FuenteMetricol`
 (adapter detrás de `FuenteMetricas`; no construimos ingesta propia por plataforma, ver
 [ADR 0005](adr/0005-agrupamiento-catalogo-por-unidad-de-producto.md) §B). La publicación real sale
-por el **scheduler de Metricool**.
+por el **scheduler de Metricool**: el camino **ya está construido** en el programador de la Consola
+(`programador.py`) y **gateado por `KENI_PUBLICAR_REAL` (OFF por defecto)**. Lo que queda no es
+cablearlo, sino **validarlo en producción** con credenciales reales.
 
 | Capacidad | Camino | Estado |
 |---|---|---|
 | Métricas reales (todas las redes) | Metricool API (plan Advanced) | Disponible vía Metricool (configurar token) |
-| Publicación real (todas las redes) | Scheduler de Metricool, flag `KENI_PUBLICAR_REAL` | Pendiente: cablear el camino real en el programador de la Consola (código interno) |
+| Publicación real (todas las redes) | Scheduler de Metricool, flag `KENI_PUBLICAR_REAL` | Construida y gateada OFF (dry-run por defecto); pendiente de validar en producción |
 
 Detalle del camino de publicación en
 [`plataformas/publicacion-metricool.md`](plataformas/publicacion-metricool.md); configuración de
@@ -96,13 +98,14 @@ alineadas al estado real (detalle en [`analisis-competitivo.md`](analisis-compet
    dato real vía Metricool (Advanced)**, preview dry-run y la **lista viva multi-fuente**
    (tablero priorizado + importador de calendario H1 + auto-generación de copy H2 gated OFF +
    score dinámico H3 + Panel-9am H5; ver §1). No depende de aprobaciones externas: es lo que se
-   demuestra y se cobra. Lo único que sigue pendiente es cablear la **publicación real** vía
-   Metricool (Fase 1/2, código interno), no la lista ni la generación del borrador.
+   demuestra y se cobra. Lo único que sigue pendiente es **validar en producción** la
+   **publicación real** vía Metricool (ya construida y gateada OFF, Fase 1/2), no la lista ni la
+   generación del borrador.
 2. **Fase 1 — publicación real y modo alojado.** Las métricas reales por marca ya llegan vía
-   Metricool (§1). Lo que entra aquí es la **publicación real** vía Metricool (trabajo de código
-   interno en el programador, sin espera externa) y el modo alojado por Keni con **System User de
-   Meta (tokens que no caducan)**. Cada hito que cae es un upsell natural, no una promesa que
-   devalúe la venta inicial.
+   Metricool (§1). Lo que entra aquí es **encender y validar en producción** la **publicación real**
+   vía Metricool (ya construida y gateada OFF en el programador, sin espera externa) y el modo
+   alojado por Keni con **System User de Meta (tokens que no caducan)**. Cada hito que cae es un
+   upsell natural, no una promesa que devalúe la venta inicial.
 3. **Fase 2 — publicación y siguientes mejoras de UX.** Publicación real vía Metricool y las
    mejoras priorizadas en [`ux-roadmap.md`](ux-roadmap.md) (olas 2 y 3): quick-start "empieza aquí
    en 10 min", dashboard exportable a PDF, loop de vuelta a la acción (el dashboard sugiere "pide

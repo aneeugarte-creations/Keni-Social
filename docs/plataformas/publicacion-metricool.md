@@ -58,19 +58,21 @@ ad.programar(borrador, dry_run=False)  # programa en Metricool
 
 La CLI usa una sola identidad por entorno (`METRICOOL_USER_TOKEN/USER_ID/BLOG_ID`).
 
-## Enganche en la Consola (siguiente paso)
+## Enganche en la Consola (ya cableado, gate OFF por defecto)
 
-El programador 24-7 (`consola/.../programador.py`, `_preparar`) hoy solo estampa
-`preparado_en` en dry-run. Ahí es donde se engancha el posteo real:
+El programador 24-7 (`consola/.../programador.py`, `_preparar`) **ya entrega el post a
+Metricool**, gateado por `KENI_PUBLICAR_REAL` (defecto OFF). Cuando una pieza vence:
 
-1. resolver `creds` de la marca de la pieza (`marcas_configuradas()`),
-2. mapear la fila de `publicaciones` (texto, red(es), media del object-store) a
+1. resuelve `creds` de la marca de la pieza (`_creds_metricool` → `marcas_configuradas()`),
+2. mapea la fila de `publicaciones` (texto, red(es), media del object-store) a
    `BorradorMetricool`,
 3. `AdaptadorPublicacionMetricool(creds).programar(borrador, dry_run=not publicar_real)`,
-4. guardar `id_post`/`estados` y mover la pieza a `publicado`.
+4. guarda `id_post_metricool`/`estados` y mueve la pieza a `publicado`.
 
-Gateado por flag (defecto OFF). **No** se cableó en este cambio porque la Consola está a
-mitad de un merge en `main`; conviene hacerlo cuando ese merge asiente.
+Con el gate OFF (defecto) solo estampa `preparado_en` en dry-run; **nada va a Metricool**.
+Con `KENI_PUBLICAR_REAL` activo y credenciales de la marca, programa de verdad. La misma
+lógica está disponible por pieza vía `programar_pieza_metricool` (previsualizar con
+`dry_run` o enviar). Tests en `consola/tests/test_programador_metricool.py`.
 
 ## Supuestos sin confirmar (no hay token real para validar en vivo)
 

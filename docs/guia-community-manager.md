@@ -19,7 +19,7 @@ Cuando ya tienes la nota, el cable o un texto y quieres el copy para cada red.
 **Lo que escribes:**
 
 ```
-usa copy-desde-nota con ejemplos/clip-entrevista.md, marca claro-sports, voz tescu
+usa copy-desde-nota con notas/gol-de-mexico.md, marca claro-sports, voz tescu
 ```
 
 Cambia las tres cosas por las tuyas:
@@ -40,29 +40,22 @@ da para más, también puede armar un **carrusel** o un **hilo**.
 ## Tarea 2 — Sacar copy desde un video o un audio
 
 Cuando partes de una entrevista, una declaración o un fragmento de podcast y quieres el copy
-sin tener que escuchar todo el material.
+sin tener que escuchar todo el material. Esto va en **dos pasos**: primero se transcribe el
+audio **en tu máquina** (sin nube), y luego esa transcripción se usa como fuente del copy —el
+mismo prompt de la Tarea 1.
 
-**Lo que escribes:**
-
-```
-usa clip-a-copy con /ruta/al/video.mp4 para claro-sports
-```
-
-Cambia `/ruta/al/video.mp4` por la ruta de tu archivo (sirve `.mp4`, `.mov`, `.m4a`, `.mp3`,
-`.wav`...) y `claro-sports` por tu marca. Si quieres tu voz personal, añade `voz tu-nombre`.
-
-**Lo que recibes:**
-- el copy por plataforma, igual que en la Tarea 1, y
-- las **mejores citas con su marca de tiempo** (por ejemplo `[00:02:14–00:02:31]`), para que
-  el editor sepa exactamente qué fragmento cortar para el clip.
+**Lo que recibes** (una vez transcrito el material): el copy por plataforma, igual que en la
+Tarea 1, a partir del texto de la transcripción.
 
 El audio se transcribe **dentro de la máquina** (no se sube a ningún lado). Como la
 transcripción automática se equivoca con nombres propios y cifras, Claude los marca como
 "verificar contra el audio": no son verdad confirmada hasta que tú los chequeas.
 
-> ¿No tienes un video a la mano para probar? Pide un clip de ejemplo:
-> `cd ejemplos && bash generar-clip-prueba.sh`, y luego
-> `usa clip-a-copy con /tmp/keni-clip/declaracion.m4a para claro-sports`.
+> El paso de transcripción necesita **whisper** y, hoy, un **Mac** (ver
+> [`despliegue-local.md`](despliegue-local.md), sección "Transcripción local"). La forma más
+> cómoda de encadenar transcripción → copy es desde la **Consola** (flujo clip → copy de la
+> Biblioteca de prompts): subes el archivo y ella se encarga de los dos pasos. Ver la
+> [guía de la consola](consola.md).
 
 ---
 

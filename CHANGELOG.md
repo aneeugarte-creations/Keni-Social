@@ -128,6 +128,12 @@ y el proyecto sigue [Versionado Semántico](https://semver.org/lang/es/).
   (round-trip en catálogo y opciones), endpoint `POST /api/skills/ejecutar-url` y la skill
   `url-a-copy` como puerta de entrada en el catálogo. **Frontend**: el formulario dinámico
   rinde el campo de enlace y enruta las skills `ingesta === "url"` al nuevo endpoint.
+- **Nota (posterior, mismo `[No publicado]`)**: el mecanismo de skills aquí descrito
+  (`SkillDef`/`keni.yaml`, `POST /api/skills/ejecutar-url`, skill `url-a-copy`) fue
+  **reemplazado por la Biblioteca de Prompts** (ver entrada "Biblioteca de Prompts en lugar
+  del «sistema de skills»"). La extracción de URL en el servidor (`dominio.extraccion_url`)
+  se conserva; la entrada de copy desde URL vive ahora en la Biblioteca + lanzador neutro
+  (`dominio/generar.py`), no en el sistema de skills.
 
 ### Normalización de métricas: no sumar magnitudes incomparables (#138)
 

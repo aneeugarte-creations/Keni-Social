@@ -39,18 +39,17 @@ Impacto: en el usuario no técnico (CM) y en Bernardo. (La Ola 1 ya se envió �
 | # | Mejora | Superficie / archivo | Impacto | Esfuerzo | Ola |
 |---|---|---|---|---|---|
 | 8 | "Empieza aquí en 10 min": un único quick-start para el CM que enlaza doctor como paso 1 | `README.md`, `docs/` | Alto | M | 2 |
-| 9 | Dashboard: exportable a PDF/impresión (`@media print`) + documentar `--presentacion` | `dashboard.py`, guía | Medio | M | 2 |
-| 10 | Callout "lo que rompió": aclarar criterio (engagement %) o ponderar por volumen | `dashboard.py` | Medio | M | 2 |
 | 11 | Loop de vuelta a la acción: dashboard/reporte sugieren "pide copy para X que es lo que rinde" | `dashboard.py`, `reporte.py` | Medio | M | 2 |
 | 12 | Tarjeta de referencia ✅/⚠️/❌ + sección de métricas (dashboard/doctor) en la guía del CM | `docs/guia-community-manager.md` | Medio | S | 2 |
 | 13 | Guía de credenciales menos técnica: "no lo tengo → vacío y pídeselo a tu admin" por bloque | `asistente.py` | Medio | S | 2 |
 | 14 | Conteo de caracteres con indicador visual estandarizado (cabe/no cabe) garantizado por producto | `plataformas.md`, `contar.py` | Bajo | M | 3 |
-| 15 | Estados vacíos del dashboard (marca sin datos / cobertura 0) diseñados explícitamente | `dashboard.py` | Bajo | M | 3 |
 | 16 | Selección de marca asistida (lista en vez de id memorizado) para lanzar prompts | comandos `/`, Biblioteca de prompts | Alto | L | 3 |
-| 17 | Reconciliar marcas declaradas en el asistente con la fuente activa (avisar si `muestra`) | `asistente.py`, `doctor.py` | Medio | M | 3 |
 
-(Se conservan los números originales para no perder la traza; las filas 1–7 eran la Ola 1, ya
-enviada.)
+(Se conservan los números originales para no perder la traza; las filas 1–7 eran la Ola 1 ya
+enviada, y los ítems 9, 10, 15 y 17 también se implementaron después —dashboard exportable a
+PDF/impresión con `@media print` y `--presentacion`, callout con su criterio aclarado, estados
+vacíos del dashboard, y aviso de fuente `muestra` en el doctor—, por eso ya no figuran como
+abiertos.)
 
 ---
 

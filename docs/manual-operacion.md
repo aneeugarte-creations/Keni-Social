@@ -36,9 +36,11 @@ Por cada persona del equipo, en este orden:
    plugin pero necesita `uv`/`uvx` para arrancar. Regístralo y compruébalo:
 
    ```bash
-   claude mcp add keni-metricas -- uvx --from /ruta/a/keni-social/mcp-metricas keni-metricas
+   claude mcp add keni-metricas -- uvx --with /ruta/a/keni-social/keni-shared --from /ruta/a/keni-social/mcp-metricas keni-metricas
    claude mcp list          # debe aparecer keni-metricas
    ```
+
+   (El `--with .../keni-shared` es necesario: `keni-shared` es dependencia local del MCP y no está publicada en PyPI.)
 
    En una sesión de Claude: `usa listar_cuentas` y `usa metricas_resumen con cuenta claro-sports y rango semana`.
    Por defecto corre con datos de **muestra** (no necesita credenciales); para datos reales,
@@ -145,11 +147,11 @@ y entender la **auto-verificación** (✅ / ⚠️ / ❌). Como operador, convie
 
 Hoy el sistema **no publica solo** — y eso es a propósito (el humano aprueba).
 
-- **Por defecto: preview en dry-run.** La skill `publica-meta` es el pre-vuelo final: muestra
-  exactamente qué se publicaría en cada red (texto, conteo de caracteres, hashtags, carrusel/hilo,
-  qué media acompaña) y cierra con una checklist. **No toca la red, no sube media.** También hay
-  una CLI dry-run del payload: `python -m keni_metricas.publicacion ...` (solo imprime la
-  petición exacta; no publica).
+- **Por defecto: preview en dry-run.** El pre-vuelo final muestra exactamente qué se publicaría
+  en cada red (texto, conteo de caracteres, hashtags, carrusel/hilo, qué media acompaña) **sin
+  tocar la red ni subir media**. La CLI dry-run del payload es
+  `python -m keni_metricas.publicacion ...` (solo imprime la petición exacta; no publica). El
+  comando `/keni-social:keni-preview` del plugin envuelve este mismo pre-vuelo.
 - **Publicación real: vía Metricool.** La publicación de verdad sale por el **scheduler de
   Metricool** (una sola integración cubre Facebook, Instagram, X, TikTok y YouTube; AMX ya
   tiene plan Advanced), sin submission externa por plataforma. Se enciende con el flag

@@ -53,6 +53,11 @@ AMX.
 
 ## Mapeo a lo que ya existe en el repo
 
+> **Nota posterior:** la skill `estudio-imagen` se **relocalizó** al motor
+> `consola/src/keni_consola/motores/estudio_imagen/` (el sistema de skills se retiró); la superficie
+> de usuario hoy es la página **Estudio** (`frontend/src/pages/Estudio.tsx`), no la pestaña
+> "Imagenes". El mapeo de abajo es del 25-may.
+
 - **Recorte a 4:5** y resize: ya hechos, deterministas con Pillow, en la skill
   `estudio-imagen` (`editar.py`: `recortar`, `redimensionar`). Formatos: 9:16, 4:5, 1:1, 16:9.
 - **Integracion gen IA**: ya existe. Gemini (`gemini-2.5-flash-image`, "Nano Banana") en las

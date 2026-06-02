@@ -52,10 +52,12 @@ Tres cosas que ninguna herramienta del mercado ofrece junta (ver
 
 ## Qué NO hace (todavía)
 
-No publica solo, no programa publicaciones y no genera imágenes ni edita video. Produce y
-verifica el copy; **una persona del equipo revisa, aprueba y publica**. Es por diseño: el humano
-tiene siempre la última palabra. Hoy la publicación es **dry-run** (previsualiza qué se
-publicaría, sin publicar).
+No publica solo y no edita video. Produce y verifica el copy —y también genera imágenes (el
+**Estudio de imagen** de la Consola)—; programa publicaciones para una fecha, pero **una persona
+del equipo revisa, aprueba y autoriza** antes de que algo salga. Es por diseño: el humano tiene
+siempre la última palabra. Hoy la publicación es **dry-run por defecto** (previsualiza y prepara
+qué se publicaría, sin publicar); el envío real existe en el código, gateado y apagado, a la
+espera de validarse en producción.
 
 ## Cómo se entrega y se confía
 
@@ -81,7 +83,8 @@ publicaría, sin publicar).
 
 En **beta, en uso con AMX**: el producto es real y opera en el flujo del equipo. El copy desde
 texto y desde video ya funciona hoy, y las métricas leen datos reales desde Metricool (vía su API,
-plan Advanced). La publicación directa a cada red se va encendiendo conforme caen los permisos
-externos (revisiones de Meta, auditoría de TikTok, coste de X). El panorama completo —qué está
-listo, qué está pausado y el camino a producto vendible— está en
-[`estado-producto.md`](estado-producto.md).
+plan Advanced). La publicación real sale por el **scheduler de Metricool** (una sola integración
+cubre todas las redes, así que ya **no depende de aprobaciones externas** como App Review de Meta,
+auditoría de TikTok o el tier de X): el camino está construido y gateado (apagado por defecto), a
+la espera de validarse en producción. El panorama completo —qué está listo, qué está pausado y el
+camino a producto vendible— está en [`estado-producto.md`](estado-producto.md).

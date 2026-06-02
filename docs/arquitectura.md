@@ -93,9 +93,11 @@ la rota, los usuarios/sesiones y la cola de jobs viven en **Postgres** (`DATABAS
 obligatoria en local y hosted; en desarrollo no se usa Postgres local —la ejecución y
 validación se hacen en el server/CI— y, si hace falta correr en local, cada quien provee
 su propio `DATABASE_URL`).
-El contenido editorial sigue en **YAML por marca** (`ficheros.py`) con su índice SQLite
-regenerable (`indice.py`). El histórico de métricas del MCP (SQLite local por persona) es
-otro almacén distinto y no se ve afectado.
+El **contenido editorial estructurado** (publicaciones, fuentes RSS, grupos de hashtags,
+franjas) también vive en **Postgres** tras cerrar el rezago file→pg (ADR 0006). Solo la
+**prosa editorial por marca** (el `marca.yaml` y el `CLAUDE.md` de cada marca, las voces) sigue
+en ficheros versionados (`ficheros.py`). El histórico de métricas del MCP (SQLite local por
+persona) es otro almacén distinto y no se ve afectado.
 
 ### Catálogo de apps (A/B/C + shell)
 
@@ -125,11 +127,12 @@ Cómo se sostiene en el código:
 - **Test scoping** en CI: el aislamiento de apps permite correr **solo los tests de la app tocada**
   (+ contrato + `keni-shared`) por filtro de rutas; un cambio en `keni-shared` corre la suite completa.
 
-### Versionado de esquema de los YAML
+### Versionado de esquema de los YAML que quedan en fichero
 
-La Consola guarda su contenido como **ficheros YAML editables a mano** (fuente de verdad). Para que
-un cambio incompatible de forma no obligue a una migración heurística, cada fichero lleva una clave
-top-level `version: <int>`. El registro único vive en `keni_shared.esquema_yaml`:
+La prosa editorial por marca que sigue en **ficheros YAML editables a mano** (`marca.yaml` y demás;
+el contenido estructurado migró a Postgres, ver arriba) se versiona para que un cambio incompatible
+de forma no obligue a una migración heurística: cada fichero lleva una clave top-level
+`version: <int>`. El registro único vive en `keni_shared.esquema_yaml`:
 
 - `VERSIONES` (tipo → versión actual) y `MIGRACIONES` (tipo → lista de funciones `dict → dict`).
 - `sellar(tipo, datos)` estampa la versión actual antes de volcar; `migrar(tipo, datos)` la sube al

@@ -1,6 +1,6 @@
 # ADR 0002 — Descomposición: monolito modular + catálogo de apps, no microservicios
 
-- **Estado:** Propuesto (borrador para revisar)
+- **Estado:** Aceptado (Fases A y B implementadas)
 - **Fecha:** 2026-05-27
 - **Decisores:** equipo keni-social (auditoría de arquitectura, épica #140)
 - **Issues:** #140 (épica) · #130 (ADR 0001, runtime) · #137 · #9 · #135 · #133
