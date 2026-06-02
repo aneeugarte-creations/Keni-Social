@@ -27,7 +27,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import radar
+from .. import agencias, radar
 from . import rss
 
 
@@ -68,6 +68,41 @@ def _radar_trends(geo: str) -> tuple[list[radar.Tema], dict[str, Any]]:
         return [], estado
     estado["conteo"] = len(temas)
     return temas, estado
+
+
+def _radar_agencias() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
+    """Trae temas de las AGENCIAS (Reuters/AFP) GATEADAS por credencial. `(temas, estados)`.
+
+    Cada agencia sale con su estado HONESTO: si no hay credencial, `disponible=False` con el
+    motivo y NO aporta items (degradacion honesta, no se inventa nada). Con credencial,
+    descarga y normaliza a items (misma forma que el RSS del equipo) y los convierte a temas
+    via `radar.temas_de_feeds` (señal cualitativa, igual que un feed). Un fallo de descarga se
+    OMITE con su motivo sin romper los demas.
+    """
+    temas: list[radar.Tema] = []
+    estados: list[dict[str, Any]] = []
+    for agencia in ("reuters", "afp"):
+        estado = agencias.estado_fuente(agencia)
+        estado_salida: dict[str, Any] = {
+            "id": f"agencia-{agencia}",
+            "nombre": estado["nombre"],
+            "red": estado["red"],
+            "disponible": estado["disponible"],
+            "motivo": estado["motivo"],
+            "conteo": 0,
+        }
+        if estado["disponible"]:
+            try:
+                items = agencias.traer_items(agencia)
+                propios = radar.temas_de_feeds(items)
+                temas.extend(propios)
+                estado_salida["conteo"] = len(propios)
+            except rss.RSSError as e:
+                estado_salida.update(disponible=False, motivo=str(e))
+            except Exception:  # noqa: BLE001 -- nunca traceback crudo; se omite la agencia
+                estado_salida.update(disponible=False, motivo="No se pudo leer la agencia.")
+        estados.append(estado_salida)
+    return temas, estados
 
 
 def _radar_feeds() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
@@ -129,6 +164,11 @@ async def obtener(request: Request) -> Response:
         temas_feeds, estados_feeds = _radar_feeds()
         grupos.append(temas_feeds)
         fuentes.extend(estados_feeds)
+        # Agencias (Reuters/AFP, item F): gateadas por credencial. Sin credencial salen como
+        # fuente NO disponible con su motivo (no aportan items); con credencial, como un feed.
+        temas_agencias, estados_agencias = _radar_agencias()
+        grupos.append(temas_agencias)
+        fuentes.extend(estados_agencias)
 
     temas = radar.consolidar(*grupos)
     return JSONResponse(

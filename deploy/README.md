@@ -253,6 +253,37 @@ y mete `mcp` también en la red `edge`. TLS obligatorio (el bearer viaja en clar
 
 ---
 
+## Agencias de noticias: Reuters Connect / AFP (item F)
+
+Las agencias son **fuentes opcionales** del Radar/pestaña Fuentes que traen notas
+normalizadas (titulo/resumen/enlace/fecha/fuente) como un feed más. Están **gateadas por
+credencial**: sin clave, la fuente aparece como "pendiente / no configurada" y **NO rompe**
+nada (degradación honesta; el Radar y Fuentes lo dicen en claro, sin inventar contenido).
+
+Para activarlas, pon las credenciales en `.env` y `docker compose up -d`:
+
+```sh
+# Reuters Connect — una API key (Bearer):
+KENI_REUTERS_API_KEY=<tu-api-key>
+# opcional, para apuntar a un endpoint/versión concreto:
+# KENI_REUTERS_BASE_URL=https://api.reutersconnect.com
+
+# AFP — OAuth2 client_credentials (client_id + client_secret):
+KENI_AFP_CLIENT_ID=<tu-client-id>
+KENI_AFP_CLIENT_SECRET=<tu-client-secret>
+# KENI_AFP_BASE_URL=https://afp-apicore-prod.afp.com
+```
+
+Sin esas variables, la fuente queda "pendiente": no se descarga nada y el resto del pipeline
+(Google Trends + feeds RSS del equipo) sigue funcionando igual. El estado de cada agencia se
+ve en **Fuentes → Todas las fuentes → Agencias de noticias** y en el panel del **Radar**.
+
+> Nota: los normalizadores de respuesta (Reuters GraphQL / AFP REST) están implementados y
+> testeados; el cableado FINAL de autenticación/endpoint por agencia se completa cuando se
+> conecte una cuenta real (las URLs base son configurables por las `*_BASE_URL`).
+
+---
+
 ## Cómo encaja con los ADR
 
 - **ADR 0001 (runtime):** este compose ES el "servicio compartido multiusuario".

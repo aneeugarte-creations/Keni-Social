@@ -79,11 +79,17 @@ def test_radar_consolida_trends_y_feeds(cliente, monkeypatch):
     datos = cliente.get("/api/radar").json()  # feeds incluidos por defecto
     titulos = {t["titulo"] for t in datos["temas"]}
     assert {"junior h", "fichajes", "Nota del equipo"} <= titulos
-    # Dos clases de fuente: Trends + el feed del equipo, ambas disponibles.
+    # Clases de fuente: Trends + el feed del equipo (ambas disponibles) + las agencias
+    # (Reuters/AFP, gateadas: aparecen como NO disponibles sin credencial, sin romper nada).
     nombres = {f["nombre"] for f in datos["fuentes"]}
     assert "Diario" in nombres
     assert any(f["red"] == "busquedas-mx" for f in datos["fuentes"])
-    assert all(f["disponible"] for f in datos["fuentes"])
+    # Trends y el feed del equipo SI disponibles (las agencias no, por falta de credencial).
+    no_agencias = [f for f in datos["fuentes"] if f["red"] not in ("reuters", "afp")]
+    assert all(f["disponible"] for f in no_agencias)
+    # Las agencias salen en el listado, gateadas (sin credencial en el entorno de test).
+    agencias_red = {f["red"] for f in datos["fuentes"] if f["red"] in ("reuters", "afp")}
+    assert agencias_red == {"reuters", "afp"}
 
 
 def test_radar_trends_caido_degrada_honesto(cliente, monkeypatch):

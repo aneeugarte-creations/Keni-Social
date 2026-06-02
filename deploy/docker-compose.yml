@@ -130,6 +130,11 @@ services:
       S3_BUCKET: ${S3_BUCKET}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # Agencias de noticias (item F): fuentes OPCIONALES del Radar/Fuentes. Sin credencial
+      # quedan "pendientes" (no descargan, no rompen). Ver deploy/README.md.
+      KENI_REUTERS_API_KEY: ${KENI_REUTERS_API_KEY:-}
+      KENI_AFP_CLIENT_ID: ${KENI_AFP_CLIENT_ID:-}
+      KENI_AFP_CLIENT_SECRET: ${KENI_AFP_CLIENT_SECRET:-}
     volumes:
       # Estado de la app: consola.db (SQLite), secretos.toml (0600), media, tareas.
       - keni-data:/data
@@ -184,6 +189,11 @@ services:
       S3_BUCKET: ${S3_BUCKET}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
       S3_SECRET_KEY: ${S3_SECRET_KEY}
+      # Agencias de noticias (item F): tambien aqui, porque la auto-promocion del Radar
+      # (radar_auto) lee las mismas fuentes. Sin credencial: pendientes, no rompen.
+      KENI_REUTERS_API_KEY: ${KENI_REUTERS_API_KEY:-}
+      KENI_AFP_CLIENT_ID: ${KENI_AFP_CLIENT_ID:-}
+      KENI_AFP_CLIENT_SECRET: ${KENI_AFP_CLIENT_SECRET:-}
       # GATES DE SEGURIDAD: ausentes por defecto. Sin estos, el sistema NO publica ni crea
       # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md):
       #   KENI_PUBLICAR_REAL: "1"   # publica de verdad a Metricool (def: dry-run, no postea)

@@ -248,6 +248,19 @@ ENV_MEDIA_GC_ANTIGUEDAD_HORAS = "KENI_MEDIA_GC_ANTIGUEDAD_HORAS"
 ENV_IMAGEN_API_KEY = "KENI_IMAGEN_API_KEY"
 ENV_IMAGEN_PROVEEDOR = "KENI_IMAGEN_PROVEEDOR"
 
+# Agencias de noticias (item F): adaptadores de fuente que descargan y normalizan notas a la
+# MISMA forma que los items RSS ({titulo, resumen, enlace, fecha, fuente}). GATEADOS por
+# credencial: sin clave, la fuente aparece como "pendiente/no configurada" y NO rompe el
+# pipeline (degradacion honesta, igual criterio que las fuentes pendientes del Radar).
+#   - Reuters Connect: una API key (Bearer). `KENI_REUTERS_BASE_URL` permite apuntar a un
+#     endpoint/version concreto sin recompilar (def el publico de Reuters Connect).
+#   - AFP: OAuth2 client_credentials (client_id + client_secret). `KENI_AFP_BASE_URL` igual.
+ENV_REUTERS_API_KEY = "KENI_REUTERS_API_KEY"
+ENV_REUTERS_BASE_URL = "KENI_REUTERS_BASE_URL"
+ENV_AFP_CLIENT_ID = "KENI_AFP_CLIENT_ID"
+ENV_AFP_CLIENT_SECRET = "KENI_AFP_CLIENT_SECRET"
+ENV_AFP_BASE_URL = "KENI_AFP_BASE_URL"
+
 # Eventos internos del tablero (pieza aprobada / contenido vencido). El barrido que
 # detecta vencimientos y dispara los webhooks salientes corre como hilo demonio en el
 # servidor real (igual que el programador). El reparto a la red es OPT-IN: sin webhooks
@@ -1009,6 +1022,53 @@ def consola_url_publica() -> str | None:
     """
     crudo = _crudo(ENV_CONSOLA_URL_PUBLICA)
     return crudo.rstrip("/") if crudo else None
+
+
+# --------------------------------------------------------------------------- #
+# Accesores: agencias de noticias (item F) — gateadas por credencial            #
+# --------------------------------------------------------------------------- #
+
+
+# URLs por defecto de las agencias (override con su `*_BASE_URL`). Son los endpoints
+# documentados; se centralizan aqui para no esparcir literales por el adaptador.
+REUTERS_BASE_URL_DEF = "https://api.reutersconnect.com"
+AFP_BASE_URL_DEF = "https://afp-apicore-prod.afp.com"
+
+
+def reuters_api_key() -> str | None:
+    """API key de Reuters Connect (`KENI_REUTERS_API_KEY`); None si no esta (fuente apagada)."""
+    return _crudo(ENV_REUTERS_API_KEY) or None
+
+
+def reuters_base_url() -> str:
+    """URL base de Reuters Connect (`KENI_REUTERS_BASE_URL`, def el publico), sin barra final."""
+    return (_crudo(ENV_REUTERS_BASE_URL) or REUTERS_BASE_URL_DEF).rstrip("/")
+
+
+def reuters_configurado() -> bool:
+    """True si Reuters tiene credencial: la fuente puede descargar (si no, queda pendiente)."""
+    return bool(reuters_api_key())
+
+
+def afp_client_id() -> str | None:
+    """Client ID de AFP (`KENI_AFP_CLIENT_ID`); None si no esta."""
+    return _crudo(ENV_AFP_CLIENT_ID) or None
+
+
+def afp_client_secret() -> str | None:
+    """Client secret de AFP (`KENI_AFP_CLIENT_SECRET`); None si no esta. SIN strip (sensible)."""
+    valor = os.environ.get(ENV_AFP_CLIENT_SECRET)
+    return valor if valor else None
+
+
+def afp_base_url() -> str:
+    """URL base de AFP (`KENI_AFP_BASE_URL`, def el publico), sin barra final."""
+    return (_crudo(ENV_AFP_BASE_URL) or AFP_BASE_URL_DEF).rstrip("/")
+
+
+def afp_configurado() -> bool:
+    """True si AFP tiene AMBAS credenciales OAuth2 (si no, la fuente queda pendiente)."""
+    return bool(afp_client_id() and afp_client_secret())
 
 
 # --------------------------------------------------------------------------- #
