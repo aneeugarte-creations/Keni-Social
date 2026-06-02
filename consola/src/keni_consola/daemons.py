@@ -55,6 +55,7 @@ def main() -> int:
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
     from .metricas_refresco import iniciar_refresco_metricas
+    from .pipeline_contenido import iniciar_pipeline
     from .programador import iniciar_programador
     from .radar_auto import iniciar_radar_auto
     from .reaper_generaciones import iniciar_reaper
@@ -75,6 +76,10 @@ def main() -> int:
     # esto la auto-produccion NO correria en produccion aunque se encendieran los flags.
     iniciar_autogen()  # auto-copy; no barre salvo KENI_AUTOGEN=1 (def OFF).
     iniciar_autogen_arte()  # auto-arte; no barre salvo KENI_AUTOGEN_ARTE=1 (def OFF) ni sin proveedor de imagen.
+    # Pipeline de contenido CI→CD→QA por marca (ADITIVO, SAFE BY DEFAULT): ingiere RSS, genera
+    # copy+arte y valida, registrando cada etapa en "Actividad IA"; deja borradores en revision.
+    # No barre salvo KENI_PIPELINE=1 (def OFF); nunca publica.
+    iniciar_pipeline()
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).

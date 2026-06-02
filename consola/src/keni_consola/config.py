@@ -239,6 +239,16 @@ ENV_AUTOGEN = "KENI_AUTOGEN"
 ENV_AUTOGEN_INTERVALO_HORAS = "KENI_AUTOGEN_INTERVALO_HORAS"
 ENV_AUTOGEN_MAX = "KENI_AUTOGEN_MAX"
 
+# Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion, Flujo "tubería"). Un hilo
+# demonio que, cada N horas y por marca con feeds RSS activos, ingiere temas frescos (CI),
+# lanza la generacion de copy+arte de marca (CD, mismo camino que el boton manual) y valida
+# automaticamente los borradores recientes (QA), registrando CADA etapa en "Actividad IA" como
+# un pipeline de CI/CD. Deja BORRADORES en la cola de revision para la aprobacion humana; NUNCA
+# publica. CONSERVADOR por defecto (OFF): sin `KENI_PIPELINE` el comportamiento no cambia.
+ENV_PIPELINE = "KENI_PIPELINE"
+ENV_PIPELINE_INTERVALO_HORAS = "KENI_PIPELINE_INTERVALO_HORAS"
+ENV_PIPELINE_MAX = "KENI_PIPELINE_MAX"
+
 # Auto-generacion de ARTE (imagen) para temas con copy pero sin imagen (fase3 auto-produccion,
 # H2-b). Un hilo demonio barre el tablero y, para los temas con borrador/copy en alguna
 # plataforma a la que le FALTA imagen, genera UN arte por IA (mismo proveedor que
@@ -385,6 +395,12 @@ AUTOGEN_MAX_DEF = 3
 # seguido, cap bajo por barrido), porque cada item llama al proveedor de imagen (coste).
 AUTOGEN_ARTE_INTERVALO_HORAS_DEF = 1
 AUTOGEN_ARTE_MAX_DEF = 3
+
+# Pipeline de contenido CI→CD→QA: barrido HORARIO (def 1h) por marca y cap bajo por barrido
+# (def 3), porque cada item ingerido lanza un `claude -p` (coste). El cap del worker
+# (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
+PIPELINE_INTERVALO_HORAS_DEF = 1
+PIPELINE_MAX_DEF = 3
 
 # Reaper de generaciones: TTL 1h (>> wall-timeout de ~10 min, asi no toca jobs vivos) y
 # barrido cada 10 min. El barrido tambien corre al arrancar (limpia los huerfanos del crash
@@ -1034,6 +1050,30 @@ def autogen_max() -> int:
     Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
     """
     return _entero(ENV_AUTOGEN_MAX, AUTOGEN_MAX_DEF, minimo=1)
+
+
+def pipeline_activo() -> bool:
+    """True si el daemon del pipeline de contenido debe BARRER (`KENI_PIPELINE`).
+
+    Def OFF (conservador): sin el flag el comportamiento existente NO cambia (nada se ingiere/
+    genera por el pipeline). Con el flag a un valor afirmativo, un hilo demonio ejecuta cada N
+    horas el flujo CI→CD→QA por marca y deja borradores en la cola de revision. Nada se publica
+    solo (sigue gated). El hilo arranca SIEMPRE pero, gateado, solo actua con el flag activo.
+    """
+    return _crudo(ENV_PIPELINE).lower() in _VERDADEROS
+
+
+def pipeline_intervalo_horas() -> int:
+    """Cada cuantas horas barre el pipeline de contenido (`KENI_PIPELINE_INTERVALO_HORAS`, def 1, min 1)."""
+    return _entero(ENV_PIPELINE_INTERVALO_HORAS, PIPELINE_INTERVALO_HORAS_DEF, minimo=1)
+
+
+def pipeline_max() -> int:
+    """Maximo de temas a ingerir+generar por barrido y por marca (`KENI_PIPELINE_MAX`, def 3, min 1).
+
+    Cada item lanza un `claude -p`: el cap evita una avalancha de jobs por barrido.
+    """
+    return _entero(ENV_PIPELINE_MAX, PIPELINE_MAX_DEF, minimo=1)
 
 
 def autogen_arte_activo() -> bool:

@@ -218,6 +218,16 @@ def main() -> int:
 
     iniciar_autogen_arte()
 
+    # Pipeline de contenido CI→CD→QA por marca (fase3 auto-produccion, Flujo "tubería"): un
+    # hilo demonio que, si `KENI_PIPELINE` esta activo (def OFF), cada N horas ingiere los feeds
+    # RSS de cada marca (CI), lanza copy+arte de marca (CD) y valida los borradores recientes
+    # (QA), registrando cada etapa en "Actividad IA". Deja borradores en la cola de revision; NO
+    # publica solo. SAFE BY DEFAULT: sin el flag no barre. Vive aqui (servidor real), NO en
+    # `crear_app`, para no arrancarlo en los tests.
+    from .pipeline_contenido import iniciar_pipeline
+
+    iniciar_pipeline()
+
     # GC de MEDIA HUERFANA (Estudio §5): un hilo demonio que, si `KENI_MEDIA_GC` esta activo
     # (def OFF), barre cada N horas el almacen de media y borra los objetos HUERFANOS (no
     # referenciados por ninguna publicacion) y mas viejos que el umbral. SAFE BY DEFAULT: sin
