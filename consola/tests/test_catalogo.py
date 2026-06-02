@@ -67,8 +67,10 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
         for item in app["nav"]:
             assert {"ruta", "etiqueta", "icono", "descripcion"} <= set(item)
 
-    # La ruta primaria (primer item) de cada app es la esperada.
-    assert porid["produccion"]["nav"][0]["ruta"] == "/estudio"
+    # La ruta primaria (primer item) de cada app: `nav` viene ordenada por bloque de
+    # flujo (grupo_orden, orden), así que la 1ª es la entrada de Producción que cae más
+    # arriba en el sidebar — Revisión (bloque "hoy"), no Estudio (bloque "producir").
+    assert porid["produccion"]["nav"][0]["ruta"] == "/revision"
     assert porid["metricas"]["nav"][0]["ruta"] == "/analiticas"
     assert porid["operacion"]["nav"][0]["ruta"] == "/parrilla"
 
