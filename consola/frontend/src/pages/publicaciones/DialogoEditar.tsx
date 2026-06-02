@@ -148,6 +148,14 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
   const aprobados = cadena?.aprobados ?? 0;
   const faltanFirmas = minimo > 0 && aprobados < minimo;
 
+  // QA editorial como APROBADOR AUTOMATICO (item E): si el primer nivel es "QA Editorial" y lo
+  // decidió la máquina (decisor "auto"), reflejamos el veredicto automático. 🟡 (pendiente) deja
+  // el nivel abierto a un humano y no se sella decisor: se muestra como "requiere revisión".
+  const nivelQa = (cadena?.niveles ?? []).find(
+    (n) => n.etiqueta.trim().toLowerCase() === "qa editorial",
+  );
+  const qaAutoResuelto = nivelQa?.decisor_id === "auto" && nivelQa.decision !== "pendiente";
+
   const tras = (mensaje: string) => () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
@@ -179,6 +187,23 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
         <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
         Aprobación
       </div>
+      {nivelQa && (
+        <p
+          className={
+            qaAutoResuelto && nivelQa.decision === "rechazado"
+              ? "text-xs text-red-600 dark:text-red-400"
+              : qaAutoResuelto
+                ? "text-xs text-emerald-600 dark:text-emerald-400"
+                : "text-xs text-muted-foreground"
+          }
+        >
+          {qaAutoResuelto && nivelQa.decision === "aprobado"
+            ? "🟢 QA editorial: aprobado automáticamente. La decisión final es humana."
+            : qaAutoResuelto && nivelQa.decision === "rechazado"
+              ? "🔴 QA editorial: rechazado automáticamente. Corrige el copy y vuelve a revisar."
+              : "🟡 QA editorial: requiere revisión humana (sin veredicto automático que aplicar)."}
+        </p>
+      )}
       {publicacion.estado === "borrador" && (
         <>
           <p className="text-xs text-muted-foreground">

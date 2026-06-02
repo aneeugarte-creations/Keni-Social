@@ -417,6 +417,12 @@ export interface CuerpoRevisarQaEditorial {
   plataforma?: string;
   /** Fuente/nota contra la que comprobar datos. Vacío = datos no verificables. */
   contexto?: string;
+  /**
+   * Pieza concreta (`contenido_plataforma.id`) sobre la que se revisa el copy. Si se indica,
+   * el veredicto se ATA a la pieza y resuelve su nivel automático "QA Editorial" en la cadena
+   * de aprobación (aprobador automático). Vacío = revisión suelta, no atada a ninguna pieza.
+   */
+  plataforma_id?: string;
 }
 
 /**

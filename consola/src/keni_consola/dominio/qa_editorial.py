@@ -10,12 +10,25 @@ reescribe. Aqui solo vive el PARSEO de la salida de la skill en ese informe estr
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from . import stream
 
 # Id de la skill que hace el QA (vive en skills-copy/.claude/skills/).
 SKILL_ID = "qa-editorial"
+
+
+def hash_copy(texto: str) -> str:
+    """Hash estable del copy revisado (para invalidar el veredicto si el copy cambia; item D).
+
+    Normaliza espacios al borde antes de hashear (un cambio cosmetico de whitespace al final
+    no invalida el QA). PURA. `""` para texto vacio (sin copy que atar).
+    """
+    norm = (texto or "").strip()
+    if not norm:
+        return ""
+    return hashlib.sha256(norm.encode("utf-8")).hexdigest()
 
 # Valores permitidos del informe estructurado (defensa: ignoramos cualquier otro).
 _TIPOS = frozenset({"ortografia", "dato", "legal", "voz"})
@@ -130,13 +143,27 @@ def parsear_informe(salida: str) -> dict[str, object]:
     }
 
 
-def construir_procesar_qa(marca: str, titulo: str, autor: dict[str, str] | None = None):  # noqa: ANN201
+def construir_procesar_qa(  # noqa: ANN201
+    marca: str,
+    titulo: str,
+    autor: dict[str, str] | None = None,
+    *,
+    plataforma_id: str = "",
+    contenido_id: str = "",
+    copy_hash: str = "",
+):
     """Callback de post-procesado del QA: parsea el informe y registra el historial (sin piezas).
 
     NO auto-crea publicaciones (esto SEÑALA, no publica). Devuelve `{informe, verdicto,
     historial_id, piezas: [], publicaciones: []}` para el sondeo del frontend. `autor`
     (atribucion por usuario, #130 Fase 1) se propaga al historial. Lo usan tanto el lanzador
     in-proceso (tests) como el worker (reconstruido desde el spec).
+
+    APROBADOR AUTOMATICO (item A/D): si la revision se lanzo SOBRE una pieza concreta
+    (`plataforma_id`), ademas persiste el veredicto ATADO a la pieza (`repos.registrar_veredicto_qa`)
+    con el `copy_hash` del copy revisado, para que el nivel "QA Editorial" de la cadena se
+    resuelva luego con ese veredicto (y se invalide si el copy cambia). Sin `plataforma_id`
+    (revision suelta del copy pegado a mano) no se ata nada: solo informe + historial.
     """
     from .. import repos
 
@@ -146,6 +173,15 @@ def construir_procesar_qa(marca: str, titulo: str, autor: dict[str, str] | None 
             SKILL_ID, marca, informe["informe_texto"], piezas=[], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
+        if plataforma_id:
+            repos.registrar_veredicto_qa(
+                plataforma_id=plataforma_id,
+                contenido_id=contenido_id,
+                verdicto=str(informe.get("verdicto") or ""),
+                resumen=str(informe.get("resumen") or ""),
+                copy_hash=copy_hash,
+                historial_id=historial_id,
+            )
         return {
             "informe": informe,
             "verdicto": informe["verdicto"],

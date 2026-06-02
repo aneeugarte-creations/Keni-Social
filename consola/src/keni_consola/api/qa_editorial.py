@@ -31,7 +31,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas
+from .. import biblioteca, marcas, repos
 from .._http_json import leer_json
 from ..dominio import generar as gen_dom
 from ..dominio import jobspec, stream
@@ -119,6 +119,20 @@ async def revisar(request: Request) -> Response:
     contexto_crudo = datos.get("contexto")
     contexto = contexto_crudo.strip() if isinstance(contexto_crudo, str) else ""
 
+    # APROBADOR AUTOMATICO (item A): si la revision se lanza SOBRE una pieza concreta, atamos el
+    # veredicto a ella (plataforma_id/contenido_id) y guardamos el hash del copy revisado para
+    # invalidarlo si el copy cambia (item D). `plataforma_id` desconocido se ignora (sin atar).
+    plataforma_id_crudo = datos.get("plataforma_id")
+    plataforma_id = plataforma_id_crudo.strip() if isinstance(plataforma_id_crudo, str) else ""
+    contenido_id = ""
+    if plataforma_id:
+        pieza = repos.obtener_contenido_plataforma(plataforma_id)
+        if pieza is None:
+            plataforma_id = ""  # pieza inexistente: revision suelta, sin atar
+        else:
+            contenido_id = pieza.get("contenido_id", "") or ""
+    copy_hash = dom_qa.hash_copy(texto)
+
     cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
     if cuerpo is None:
         return JSONResponse(
@@ -137,8 +151,14 @@ async def revisar(request: Request) -> Response:
         prompt=gen_dom.componer(
             cuerpo, biblioteca.editoriales_de_marca(marca), _contexto_qa(texto, plataforma, contexto)
         ),
-        procesar=_construir_procesar(marca, titulo, autor),
-        procesar_spec=jobspec.construir_qa(marca=marca, titulo=titulo, autor=autor),
+        procesar=_construir_procesar(
+            marca, titulo, autor,
+            plataforma_id=plataforma_id, contenido_id=contenido_id, copy_hash=copy_hash,
+        ),
+        procesar_spec=jobspec.construir_qa(
+            marca=marca, titulo=titulo, autor=autor,
+            plataforma_id=plataforma_id, contenido_id=contenido_id, copy_hash=copy_hash,
+        ),
         autor=autor,
     )
     return JSONResponse({"generacion": gen})

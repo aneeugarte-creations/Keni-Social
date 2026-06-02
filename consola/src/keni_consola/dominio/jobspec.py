@@ -149,10 +149,28 @@ def construir_hashtags() -> dict[str, Any]:
 
 
 def construir_qa(
-    *, marca: str, titulo: str, autor: dict[str, str] | None = None
+    *,
+    marca: str,
+    titulo: str,
+    autor: dict[str, str] | None = None,
+    plataforma_id: str = "",
+    contenido_id: str = "",
+    copy_hash: str = "",
 ) -> dict[str, Any]:
-    """Spec del post-procesado de QA EDITORIAL (parsea el informe; no crea borradores)."""
-    return {"kind": PROC_QA, "marca": marca, "titulo": titulo, "autor": _autor_spec(autor)}
+    """Spec del post-procesado de QA EDITORIAL (parsea el informe; no crea borradores).
+
+    `plataforma_id`/`contenido_id`/`copy_hash` (item A): si la revision se lanzo SOBRE una pieza
+    concreta, viajan en el spec para que el WORKER persista el veredicto atado a ella.
+    """
+    return {
+        "kind": PROC_QA,
+        "marca": marca,
+        "titulo": titulo,
+        "autor": _autor_spec(autor),
+        "plataforma_id": plataforma_id or "",
+        "contenido_id": contenido_id or "",
+        "copy_hash": copy_hash or "",
+    }
 
 
 def construir_prompt_lib() -> dict[str, Any]:
@@ -248,7 +266,12 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         return procesar
 
     if kind == PROC_QA:
-        return dom_qa.construir_procesar_qa(p["marca"], p.get("titulo", ""), autor=autor)
+        return dom_qa.construir_procesar_qa(
+            p["marca"], p.get("titulo", ""), autor=autor,
+            plataforma_id=p.get("plataforma_id", "") or "",
+            contenido_id=p.get("contenido_id", "") or "",
+            copy_hash=p.get("copy_hash", "") or "",
+        )
 
     if kind == PROC_GALERIA:
         return dom_copy.construir_procesar_galeria(

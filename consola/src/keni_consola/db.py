@@ -624,6 +624,27 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON contenido_aprobaciones (plataforma_id)",
     "CREATE INDEX IF NOT EXISTS idx_aprob_decision ON contenido_aprobaciones (decision)",
+    # QA EDITORIAL como APROBADOR AUTOMATICO (item D): veredicto de la skill `qa-editorial`
+    # ATADO a una pieza (`contenido_plataforma`). Cada vez que se corre el QA sobre una pieza
+    # concreta se guarda aqui un registro inmutable con el `verdicto` (listo/revisar/no_publicar),
+    # un `resumen` legible y el `copy_hash` (hash del copy revisado en ese momento). El consumidor
+    # (`repos.ultimo_veredicto_qa`) lee el ULTIMO veredicto de la pieza para resolver el nivel
+    # automatico "QA Editorial" de la cadena de aprobacion; compara `copy_hash` con el copy actual
+    # para INVALIDAR el veredicto si el copy cambio despues del QA (entonces el nivel queda
+    # pendiente, lo decide un humano). Append-only: nunca se pisa, solo se inserta y se lee el ultimo.
+    """
+    CREATE TABLE IF NOT EXISTS contenido_qa_veredictos (
+        id            TEXT PRIMARY KEY,
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        verdicto      TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        copy_hash     TEXT NOT NULL DEFAULT '',
+        historial_id  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_qaver_plataforma ON contenido_qa_veredictos (plataforma_id)",
     # Programas/campanas evergreen (#150). En el Excel cada hoja evergreen ("Álvaro Fidalgo",
     # "Real Oviedo", "Anfitriones", "PATY CANTU", "MUNDIAL", "LA SELECCIÓN EN TUS MANOS",
     # "IDEAS SIN DERECHOS") es un PROGRAMA con sus propias piezas. Aqui catalogamos los
@@ -5820,6 +5841,87 @@ def actualizar_aprobacion(
     finally:
         con.close()
     return _fila_a_aprobacion(fila) if fila is not None else None
+
+
+# --------------------------------------------------------------------------- #
+# QA editorial atado a la pieza (aprobador automatico, item D)                  #
+# --------------------------------------------------------------------------- #
+_COLS_QA_VEREDICTO = (
+    "id",
+    "plataforma_id",
+    "contenido_id",
+    "verdicto",
+    "resumen",
+    "copy_hash",
+    "historial_id",
+    "creado",
+)
+_SELECT_QA_VEREDICTO = (
+    f"SELECT {', '.join(_COLS_QA_VEREDICTO)} FROM contenido_qa_veredictos"
+)
+
+
+def registrar_veredicto_qa(
+    *,
+    plataforma_id: str,
+    contenido_id: str,
+    verdicto: str,
+    resumen: str = "",
+    copy_hash: str = "",
+    historial_id: str = "",
+) -> str:
+    """Persiste un veredicto del QA editorial ATADO a una pieza y devuelve su id (item A/D).
+
+    Append-only: inserta un registro inmutable; el consumidor lee el ULTIMO por `creado`.
+    `copy_hash` es el hash del copy revisado en ese instante (para invalidar el veredicto si
+    el copy cambia despues). No valida el veredicto (lo normaliza la capa de dominio).
+    """
+    qid = uuid.uuid4().hex[:12]
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": qid,
+        "plataforma_id": plataforma_id or "",
+        "contenido_id": contenido_id or "",
+        "verdicto": verdicto or "",
+        "resumen": (resumen or "")[:1000],
+        "copy_hash": copy_hash or "",
+        "historial_id": historial_id or "",
+        "creado": ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_QA_VEREDICTO)
+        con.execute(
+            f"INSERT INTO contenido_qa_veredictos ({', '.join(_COLS_QA_VEREDICTO)}) "
+            f"VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_QA_VEREDICTO),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return qid
+
+
+def ultimo_veredicto_qa(plataforma_id: str) -> dict[str, Any] | None:
+    """Ultimo veredicto del QA editorial de una pieza por `creado` (None si no hay).
+
+    Devuelve el dict crudo del registro (incluido `copy_hash` y `creado`) para que la capa
+    `repos` decida si sigue siendo VALIDO (no invalidado por un cambio de copy posterior).
+    """
+    if not plataforma_id:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_QA_VEREDICTO} WHERE plataforma_id = ? "
+            "ORDER BY creado DESC, id DESC LIMIT 1",
+            (plataforma_id,),
+        ).fetchone()
+    finally:
+        con.close()
+    if fila is None:
+        return None
+    return {col: fila[col] for col in _COLS_QA_VEREDICTO}
 
 
 # --------------------------------------------------------------------------- #

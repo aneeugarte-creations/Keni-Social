@@ -107,21 +107,56 @@ def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
     return ficheros.obtener_historial_skill(historial_id)
 
 
-def ultimo_veredicto_qa(
-    plataforma_id: str, contenido_id: str
-) -> dict[str, Any] | None:
-    """Ultimo veredicto del QA editorial asociado a una pieza, o None si no hay (item D).
+def registrar_veredicto_qa(
+    *,
+    plataforma_id: str,
+    contenido_id: str,
+    verdicto: str,
+    resumen: str = "",
+    copy_hash: str = "",
+    historial_id: str = "",
+) -> str:
+    """Persiste un veredicto del QA editorial ATADO a una pieza (item A). Devuelve su id."""
+    return db.registrar_veredicto_qa(
+        plataforma_id=plataforma_id,
+        contenido_id=contenido_id,
+        verdicto=verdicto,
+        resumen=resumen,
+        copy_hash=copy_hash,
+        historial_id=historial_id,
+    )
 
-    DEFERIDO (hook): hoy el historial de QA (`registrar_historial_skill` con `piezas=[]`) NO
-    guarda el `plataforma_id`/`contenido_id` de la pieza revisada, asi que no hay forma fiable
-    de atar un job de QA a una pieza concreta. Esta funcion existe como punto de extension: el
-    consumidor (`api/colaboracion._aplicar_qa_automatico`) la llama y, mientras devuelva None,
-    el nivel automatico de QA queda `pendiente` (lo decide un humano) — comportamiento
-    CONSERVADOR y seguro. Para activarlo de verdad bastaria con persistir el veredicto + la
-    pieza al correr el QA (p. ej. una columna en `contenido_plataforma` o una tabla
-    `contenido_qa`) y devolver aqui `{"verdicto": "listo|revisar|no_publicar", "resumen": ...}`.
+
+def ultimo_veredicto_qa(
+    plataforma_id: str, contenido_id: str = ""
+) -> dict[str, Any] | None:
+    """Ultimo veredicto del QA editorial VIGENTE de una pieza, o None si no hay/expiro (item B/D).
+
+    Lee el ultimo veredicto persistido para `plataforma_id` (`db.ultimo_veredicto_qa`) y lo
+    INVALIDA si el copy de la pieza cambio despues del QA: compara el `copy_hash` del veredicto
+    con el hash del copy ACTUAL de la fila. Si no coinciden (el copy se reescribio tras la
+    revision), devuelve None -> el nivel automatico de QA queda `pendiente` (lo decide un humano),
+    que es el comportamiento CONSERVADOR y seguro. Si coinciden (o el veredicto no guardo hash,
+    p. ej. registros viejos), devuelve `{"verdicto", "resumen"}` para resolver el nivel.
     """
-    return None
+    if not plataforma_id:
+        return None
+    registro = db.ultimo_veredicto_qa(plataforma_id)
+    if not registro:
+        return None
+    copy_hash_qa = (registro.get("copy_hash") or "").strip()
+    if copy_hash_qa:
+        # Import local: `dominio.qa_editorial` importa `repos` (evita ciclo en carga).
+        from .dominio import qa_editorial as dom_qa
+
+        plat = db.obtener_contenido_plataforma(plataforma_id)
+        copy_actual = (plat or {}).get("copy", "") or ""
+        if dom_qa.hash_copy(copy_actual) != copy_hash_qa:
+            return None  # el copy cambio tras el QA: veredicto invalido, lo decide un humano.
+    return {
+        "verdicto": registro.get("verdicto", "") or "",
+        "resumen": registro.get("resumen", "") or "",
+    }
 
 
 # --------------------------------------------------------------------------- #
