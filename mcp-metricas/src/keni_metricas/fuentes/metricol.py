@@ -218,18 +218,18 @@ _GRANULAR_INTERACCION = ("likes", "comentarios", "compartidos", "guardados")
 
 
 def _interacciones_efectivas(inter: int, gran: dict) -> int:
-    """Interacciones del post: el agregado de Metricool, o la SUMA del desglose si el
-    agregado viene 0/ausente.
+    """Interacciones del post: el MÁXIMO entre el agregado de Metricool y la suma del
+    desglose por tipo (likes+comentarios+compartidos+guardados).
 
-    Metricool a veces devuelve `interactions`=0 en posts (sobre todo Facebook) aunque el
-    desglose por tipo (likes/comentarios/compartidos/guardados) SÍ venga poblado. Tomar 0
-    daría un engagement 0 falso; cuando el agregado es 0 pero hay desglose, se usa su suma
-    (degradación honesta: mejor el dato disponible que un 0 engañoso). Si el agregado ya
-    es > 0, se respeta tal cual.
+    El campo `interactions` agregado de Metricool no es fiable en muchos posts: a veces
+    viene 0 y a veces un número diminuto (p.ej. 12) cuando el desglose es enorme (likes en
+    decenas de miles, típico en TikTok/Facebook). Tomar ese agregado daría un engagement
+    falsamente bajo. El desglose tampoco es siempre completo (Metricool no separa todos los
+    tipos en toda red), así que el agregado puede legítimamente superarlo. `max(...)` toma
+    lo MEJOR de ambos: nunca por debajo del agregado ni del desglose conocido. Si no hay ni
+    agregado ni desglose, queda 0 (degradación honesta).
     """
-    if inter:
-        return inter
-    return sum(gran[k] for k in _GRANULAR_INTERACCION if gran.get(k) is not None)
+    return max(inter, sum(gran[k] for k in _GRANULAR_INTERACCION if gran.get(k) is not None))
 
 
 def _formato_opt(v) -> str | None:

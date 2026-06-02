@@ -289,6 +289,32 @@ def test_interacciones_se_derivan_del_desglose_si_el_agregado_es_cero():
 
 
 @respx.mock
+def test_interacciones_toma_el_maximo_si_el_agregado_es_diminuto():
+    """Agregado roto-bajo (interactions=12) pero desglose enorme (likes=23599, típico en
+    TikTok): se toma el MÁXIMO -> 23599, no el 12 que daría engagement falsamente nulo."""
+    posts = {
+        "data": [
+            {
+                "id": "tk1",
+                "publishedAt": "2026-05-20T12:00:00",
+                "views": 228984,
+                "interactions": 12,  # agregado roto-bajo...
+                "likes": 23599,  # ...pero el desglose es enorme
+                "mediaType": "video",
+            }
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        piezas = _fuente(cli).mejores_piezas("claro_sports", RANGO, 5)
+
+    assert piezas[0].interacciones == 23599  # max(12, 23599)
+    assert piezas[0].engagement_pct > 0
+
+
+@respx.mock
 def test_seguidores_netos_ultimo_menos_primero():
     """seguidores_netos = (último punto - primer punto) de la serie de followers."""
     def responder(request: httpx.Request) -> httpx.Response:

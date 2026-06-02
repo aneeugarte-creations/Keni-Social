@@ -27,12 +27,12 @@ def test_analitica_piezas_marca(muestra):
     assert a["total"] > 0
     assert len(a["top"]) == 5
     assert len(a["peores"]) == 5
-    # top/peores ESTRATIFICADOS por red (claro_sports tiene 5 redes con baselines
-    # dispares): no colapsan a una sola red, y traen el score normalizado por grupo.
-    redes_top = {p["plataforma"] for p in a["top"]}
-    redes_peor = {p["plataforma"] for p in a["peores"]}
-    assert len(redes_top) > 1
-    assert len(redes_peor) > 1
+    # top/peores ordenados por VISUALIZACIONES (alcance absoluto): top = las más vistas
+    # (desc), peores = las menos vistas; el badge `rendimiento_relativo` queda anotado.
+    vistas_top = [p["visualizaciones"] for p in a["top"]]
+    vistas_peor = [p["visualizaciones"] for p in a["peores"]]
+    assert vistas_top == sorted(vistas_top, reverse=True)
+    assert max(vistas_peor) <= min(vistas_top)  # los peores son menos vistos que el top
     assert all(p["rendimiento_relativo"] is not None for p in a["top"])
     # peores no solapan con top.
     ids_top = {p["id"] for p in a["top"]}
@@ -43,14 +43,13 @@ def test_analitica_piezas_marca(muestra):
     assert sum(b["n"] for b in a["distribucion"]) == a["total"]
 
 
-def test_analitica_piezas_global_no_colapsa_a_una_marca(muestra):
-    # marca=None agrega todas las marcas; top/peores deben representar VARIAS marcas
-    # y VARIAS redes (no monopolio de la marca/red de mayor volumen).
+def test_analitica_piezas_global_orden_por_vistas(muestra):
+    # marca=None agrega todas las marcas; top = las 5 más vistas globalmente (desc).
     a = servicio.construir_analitica_piezas("mes", None)
     assert len(a["top"]) == 5 and len(a["peores"]) == 5
-    assert len({p["cuenta"] for p in a["top"]}) > 1
-    assert len({p["cuenta"] for p in a["peores"]}) > 1
-    assert len({p["plataforma"] for p in a["top"]}) > 1
+    vistas_top = [p["visualizaciones"] for p in a["top"]]
+    assert vistas_top == sorted(vistas_top, reverse=True)
+    assert max(p["visualizaciones"] for p in a["peores"]) <= min(vistas_top)
 
 
 def test_analitica_piezas_global_agrega_todas(muestra):

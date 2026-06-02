@@ -115,124 +115,28 @@ def anotar_rendimiento_relativo(piezas: Sequence[Pieza]) -> list[Pieza]:
     return list(piezas)
 
 
-def _score(p: Pieza) -> float:
-    """Clave de ranking de top/peores: VISUALIZACIONES (alcance absoluto).
-
-    Por decisión de producto, Mejores/Peores se ordenan por alcance (vistas): el #1 es la
-    pieza MÁS vista y los peores las MENOS vistas. La estratificación marca×red (ver
-    `_seleccionar`) se mantiene para que el resultado REPRESENTE varias marcas y redes en
-    vez de colapsar a la de mayor volumen. El `rendimiento_relativo` se sigue anotando
-    como insignia secundaria (× mediana de su grupo), pero NO ordena.
-    """
-    return float(p.visualizaciones)
-
-
-# Una "rama" de la estratificación: una marca con sus redes, cada red ya ordenada
-# por mérito (lista de piezas mejor->peor o peor->mejor según el extremo buscado).
-_Rama = list[list[Pieza]]
-
-
-def _seleccionar(ramas: list[_Rama], n: int, *, mejor: bool) -> list[Pieza]:
-    """Estratifica por GRUPO (marca×red): round-robin entre todos los grupos.
-
-    `ramas` es una lista por marca; cada rama es una lista de redes (grupos marca×red) ya
-    ordenadas por mérito en la dirección pedida. Se APLANAN a la lista de grupos y se hace
-    round-robin: en cada ronda se toma el próximo candidato de cada grupo con pendientes,
-    ordenados por mérito (mayor para el top, menor para los peores). Así los primeros N
-    slots salen de N grupos DISTINTOS cuando hay >= N grupos: el top muestra la pieza más
-    representativa (la MÁS vista) de cada segmento marca×red, garantizando variedad de
-    marca Y de red en vez de colapsar a la de mayor volumen. Con un solo grupo degrada al
-    ranking directo (n mejores del grupo por mérito).
-    """
-    grupos = [red for rama in ramas for red in rama]  # cada grupo = (marca, red) ordenado
-    indices = [0] * len(grupos)
-    seleccion: list[Pieza] = []
-    while len(seleccion) < n:
-        # próximo candidato de cada grupo con pendientes, ordenado por mérito.
-        proximos = [
-            (_score(grupos[g][indices[g]]), g)
-            for g in range(len(grupos))
-            if indices[g] < len(grupos[g])
-        ]
-        if not proximos:
-            break  # todos los grupos agotados
-        proximos.sort(key=lambda t: t[0], reverse=mejor)
-        for _, g in proximos:
-            if len(seleccion) >= n:
-                break
-            seleccion.append(grupos[g][indices[g]])
-            indices[g] += 1
-    return seleccion
-
-
-def _construir_ramas(
-    piezas: Sequence[Pieza], *, mejor: bool, excluir: set[int] | None = None
-) -> list[_Rama]:
-    """Agrupa piezas en ramas marca→red, cada red ordenada por mérito (dirección `mejor`).
-
-    Orden estable de marcas (por id, None al final) y de redes (por valor) para una
-    salida determinista. `excluir` (ids de objeto) descarta piezas ya elegidas (para que
-    los peores no solapen con el top). Devuelve solo ramas/redes no vacías.
-    """
-    excluir = excluir or set()
-    por_marca: dict[str | None, dict[Plataforma, list[Pieza]]] = {}
-    for p in piezas:
-        if id(p) in excluir:
-            continue
-        por_marca.setdefault(p.cuenta, {}).setdefault(p.plataforma, []).append(p)
-
-    ramas: list[_Rama] = []
-    for marca in sorted(por_marca, key=lambda m: (m is None, m or "")):
-        redes = por_marca[marca]
-        rama = [
-            sorted(redes[plat], key=_score, reverse=mejor)
-            for plat in sorted(redes, key=lambda x: x.value)
-        ]
-        if rama:
-            ramas.append(rama)
-    return ramas
-
-
 def top_y_peores(piezas: Sequence[Pieza], n: int = 5) -> tuple[list[Pieza], list[Pieza]]:
-    """`(top, peores)` REPRESENTATIVOS por marca y red, score = rendimiento vs su grupo.
+    """`(top, peores)` ordenados por VISUALIZACIONES (alcance absoluto).
 
-    El problema que resuelve: ordenar por una métrica global SIN estratificar colapsa top
-    y peores a una sola red/marca (IG mueve cientos de miles de vistas; TikTok cientos).
-    Aquí el ranking es por VISUALIZACIONES (alcance absoluto; decisión de producto: el #1
-    es la pieza MÁS vista, los peores las MENOS vistas), pero la SELECCIÓN es estratificada
-    por marca×red para GARANTIZAR representación de varias marcas y redes (round-robin, ver
-    `_seleccionar`). El `rendimiento_relativo` (engagement ÷ mediana de su grupo) se anota
-    como insignia secundaria, no como criterio de orden.
+    Decisión de producto (validada con el usuario): Mejores = las `n` piezas MÁS vistas;
+    Peores = las `n` MENOS vistas (de las restantes, sin solapar con el top). Orden GLOBAL
+    por vistas, SIN estratificar: el #1 es simplemente la pieza con más alcance, igual que
+    ordenar la tabla por su columna "Vistas". (Una versión anterior estratificaba por
+    marca×red para forzar variedad, pero eso metía piezas diminutas en el Top solo por
+    "representar" una red de bajo volumen, lo que contradecía el orden por alcance.)
 
-    Estratificación (garantiza diversidad):
-      - Las piezas se agrupan por GRUPO (marca×red); cada grupo se ordena por mérito
-        (visualizaciones) en la dirección buscada.
-      - Selección round-robin entre GRUPOS: en cada ronda se toma el próximo candidato de
-        cada grupo con pendientes, ordenados por mérito (más vistas para el top, menos
-        para los peores). Los primeros N slots salen de N grupos DISTINTOS cuando hay
-        >= N grupos -> el top muestra la pieza MÁS vista de cada segmento marca×red, y
-        cubre varias marcas Y redes en vez de colapsar a la de mayor volumen.
-      - Para el TOP se toma el extremo ALTO de cada grupo; para los PEORES, el BAJO.
-        Los peores NO solapan con el top (se excluyen las piezas ya elegidas).
-      - El mérito se mantiene DENTRO de cada grupo (el primero de un grupo es realmente
-        el más/menos visto de ese grupo); la estratificación solo decide de qué grupo
-        sale cada slot.
+    `rendimiento_relativo` (engagement ÷ mediana de su grupo marca×red) se sigue anotando
+    como insignia secundaria para contextualizar cada pieza contra su red, pero NO ordena.
 
-    Caso degenerado (un solo grupo, p.ej. una marca con una red): degrada al ranking
-    directo: top = `n` más vistas, peores = `n` menos vistas de las restantes. Si hay
-    <= n piezas, peores es [] (todo cupo en el top).
+    Si hay <= n piezas, peores es [] (todas caben en el top).
     """
     if not piezas:
         return [], []
 
     anotar_rendimiento_relativo(piezas)
 
-    top = _seleccionar(_construir_ramas(piezas, mejor=True), n, mejor=True)
-
-    # los peores NO deben solapar con el top: se reconstruyen las ramas (peor->mejor)
-    # excluyendo las piezas ya elegidas en el top.
-    ids_top = {id(p) for p in top}
-    peores = _seleccionar(
-        _construir_ramas(piezas, mejor=False, excluir=ids_top), n, mejor=False
-    )
+    ordenadas = sorted(piezas, key=lambda p: p.visualizaciones, reverse=True)
+    top = ordenadas[:n]
+    # peores: las MENOS vistas de las que NO entraron en el top (sin solape).
+    peores = sorted(ordenadas[n:], key=lambda p: p.visualizaciones)[:n]
     return top, peores

@@ -119,70 +119,27 @@ def test_rendimiento_relativo_mediana_cero_cae_a_media():
     assert por_eng[0.0] == 0.0
 
 
-# --- Estratificación de top/peores (no colapsa a una red ni una marca) ------
+# --- Orden global de top/peores por vistas (mezcla de marcas y redes) --------
 
 
-def _muestra_baselines_dispares() -> list[Pieza]:
-    """Muestra con redes y marcas de baselines ESTRUCTURALMENTE distintos.
-
-    IG: vistas altas + engagement alto; TikTok: vistas bajas + engagement bajo;
-    FB/X/YT intermedios. Tres marcas. Rankear por CUALQUIER métrica global (vistas o
-    engagement) colapsaría top a IG y worst a TikTok; la estratificación no debe.
-    """
-    specs = {
-        Plataforma.instagram: (300_000, 5.0),
-        Plataforma.tiktok: (400, 1.2),
-        Plataforma.facebook: (50_000, 2.0),
-        Plataforma.x: (8_000, 0.8),
-        Plataforma.youtube: (20_000, 3.5),
-    }
-    piezas: list[Pieza] = []
-    for marca in ("claro_sports", "unotv", "nacion_gamer"):
-        for plat, (base_vis, base_eng) in specs.items():
-            for i in range(6):
-                # jitter determinista (sin random): factor 0.6..1.6 por índice.
-                f = 0.6 + 0.2 * i
-                piezas.append(
-                    _pieza(
-                        eng=round(base_eng * f, 2),
-                        vis=int(base_vis * f),
-                        i=i,
-                        plat=plat,
-                        cuenta=marca,
-                    )
-                )
-    return piezas
-
-
-def test_top_y_peores_no_colapsan_a_una_red_ni_una_marca():
-    piezas = _muestra_baselines_dispares()
-    top, peores = top_y_peores(piezas, n=5)
-
-    # top y worst representan VARIAS redes (no monopolio de IG ni de TikTok)...
-    assert len({p.plataforma for p in top}) > 1
-    assert len({p.plataforma for p in peores}) > 1
-    # ...y VARIAS marcas cuando se agregan todas.
-    assert len({p.cuenta for p in top}) > 1
-    assert len({p.cuenta for p in peores}) > 1
-    # no solapan
+def test_top_y_peores_orden_global_por_vistas():
+    # Mezcla de marcas y redes con vistas dispares: top = las MÁS vistas globalmente
+    # (desc), peores = las MENOS vistas; orden GLOBAL por alcance, sin estratificar.
+    datos = [
+        (900_000, Plataforma.instagram, "unotv"),
+        (500_000, Plataforma.tiktok, "nacion_gamer"),
+        (100_000, Plataforma.instagram, "claro_sports"),
+        (50_000, Plataforma.facebook, "unotv"),
+        (10_000, Plataforma.youtube, "claro_sports"),
+        (5_000, Plataforma.x, "unotv"),
+        (500, Plataforma.tiktok, "nacion_gamer"),
+        (20, Plataforma.youtube, "claro_sports"),
+    ]
+    piezas = [_pieza(eng=5.0, vis=v, plat=plat, cuenta=marca, i=i)
+              for i, (v, plat, marca) in enumerate(datos)]
+    top, peores = top_y_peores(piezas, n=3)
+    assert [p.visualizaciones for p in top] == [900_000, 500_000, 100_000]
+    assert [p.visualizaciones for p in peores] == [20, 500, 5_000]
     assert not ({p.id for p in top} & {p.id for p in peores})
-    # el score normalizado quedó anotado en las piezas seleccionadas.
+    # el badge rendimiento_relativo queda anotado (aunque no ordena).
     assert all(p.rendimiento_relativo is not None for p in top)
-
-
-def test_top_estratificado_cubre_cada_red_con_una_marca():
-    # Una sola marca, 5 redes, n=5 -> round-robin saca ~1 por red (cobertura total).
-    specs = {
-        Plataforma.instagram: 5.0,
-        Plataforma.tiktok: 1.2,
-        Plataforma.facebook: 2.0,
-        Plataforma.x: 0.8,
-        Plataforma.youtube: 3.5,
-    }
-    piezas: list[Pieza] = []
-    for plat, base in specs.items():
-        for i in range(4):
-            piezas.append(_pieza(eng=base * (0.7 + 0.2 * i), plat=plat, cuenta="m", i=i))
-    top, _ = top_y_peores(piezas, n=5)
-    # las 5 redes representadas en el top (no colapsa a IG por tener vistas/eng altos).
-    assert {p.plataforma for p in top} == set(specs)
