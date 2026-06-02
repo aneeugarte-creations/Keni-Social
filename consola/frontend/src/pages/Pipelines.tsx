@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { GitBranch, RefreshCw } from "lucide-react";
+import { ChevronRight, GitBranch, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -21,6 +21,7 @@ import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type {
   Pipeline,
+  PipelineActividad,
   PipelineEtapa,
   RespuestaPipelineDetalle,
   RespuestaPipelines,
@@ -36,6 +37,9 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
   fallo: { variant: "destructive", clase: "", texto: "Fallo" },
 };
 
+// Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
+const ETAPA_A_EVENTO: Record<string, string> = { ci: "CI", cd: "CD", qa: "QA" };
+
 function aspecto(estado: string) {
   return ASPECTO[estado] ?? ASPECTO.pendiente;
 }
@@ -46,6 +50,21 @@ function ChipEstado({ estado, className }: { estado: string; className?: string 
     <Badge variant={a.variant} className={cn("border", a.clase, className)}>
       {a.texto}
     </Badge>
+  );
+}
+
+function Punto({ estado }: { estado: string }) {
+  return (
+    <span
+      className={cn(
+        "h-2 w-2 shrink-0 rounded-full",
+        estado === "ok" && "bg-emerald-500",
+        estado === "en_curso" && "bg-sky-500 animate-pulse",
+        estado === "revisar" && "bg-amber-500",
+        estado === "pendiente" && "bg-muted-foreground/40",
+        estado === "fallo" && "bg-destructive",
+      )}
+    />
   );
 }
 
@@ -62,16 +81,7 @@ function TiraEtapas({ etapas }: { etapas: PipelineEtapa[] }) {
             )}
             title={e.detalle}
           >
-            <span
-              className={cn(
-                "h-2 w-2 rounded-full",
-                e.estado === "ok" && "bg-emerald-500",
-                e.estado === "en_curso" && "bg-sky-500 animate-pulse",
-                e.estado === "revisar" && "bg-amber-500",
-                e.estado === "pendiente" && "bg-muted-foreground/40",
-                e.estado === "fallo" && "bg-destructive",
-              )}
-            />
+            <Punto estado={e.estado} />
             <span className="font-medium">{e.nombre}</span>
           </div>
           {i < etapas.length - 1 && <span className="text-muted-foreground/40">→</span>}
@@ -95,11 +105,23 @@ function tiempoRelativo(iso: string): string {
   return `hace ${d} d`;
 }
 
+/** Tarjeta de una run: TODA la tarjeta es clicable (abre el detalle). */
 function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: (id: string) => void }) {
   return (
-    <Card className="transition-colors hover:bg-muted/40">
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 space-y-2">
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={() => onAbrir(run.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onAbrir(run.id);
+        }
+      }}
+      className="cursor-pointer transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <CardContent className="flex items-center gap-3 p-4">
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="shrink-0">{run.marca_nombre || run.marca}</Badge>
             <ChipEstado estado={run.estado_global} />
@@ -108,11 +130,111 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: (id: string) =
           <p className="truncate text-sm font-medium" title={run.titulo}>{run.titulo}</p>
           <TiraEtapas etapas={run.etapas} />
         </div>
-        <Button variant="ghost" size="sm" className="shrink-0" onClick={() => onAbrir(run.id)}>
-          Ver detalle
-        </Button>
+        <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
       </CardContent>
     </Card>
+  );
+}
+
+function EventosEtapa({ eventos }: { eventos: PipelineActividad[] }) {
+  if (eventos.length === 0) return null;
+  return (
+    <ul className="space-y-1">
+      {eventos.map((ev, i) => (
+        <li key={i} className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+          <span className="truncate" title={ev.etiqueta}>{ev.etiqueta}</span>
+          <span className="shrink-0">{tiempoRelativo(ev.fecha)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Contenido COMPLETO específico de cada etapa (lo que ocurrió de verdad). */
+function ContenidoEtapa({
+  clave,
+  run,
+}: {
+  clave: string;
+  run: Pipeline;
+}) {
+  if (clave === "ci") {
+    return (
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <p><span className="font-medium text-foreground">Tema:</span> {run.titulo}</p>
+        {run.origen && <p><span className="font-medium text-foreground">Origen:</span> {run.origen}</p>}
+        {run.descripcion && <p className="line-clamp-3">{run.descripcion}</p>}
+      </div>
+    );
+  }
+  if (clave === "cd") {
+    return (
+      <div className="space-y-3">
+        {run.piezas.map((p, i) => (
+          <div key={`${p.red}-${i}`} className="rounded-md border p-2">
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-xs font-semibold">{p.red_nombre}</span>
+              {p.copy_in && <Badge variant="outline" className="text-[10px]">placa: {p.copy_in}</Badge>}
+            </div>
+            {p.copy ? (
+              <p className="whitespace-pre-wrap text-xs text-foreground/90">{p.copy}</p>
+            ) : (
+              <p className="text-xs italic text-muted-foreground">Sin copy todavía.</p>
+            )}
+            {p.imagen_url && (
+              <img
+                src={p.imagen_url}
+                alt={`Placa ${p.red_nombre}`}
+                loading="lazy"
+                className="mt-2 h-24 w-24 rounded border object-cover"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (clave === "qa") {
+    return (
+      <div className="space-y-2">
+        {run.piezas.map((p, i) => (
+          <div key={`${p.red}-${i}`} className="rounded-md border p-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold">{p.red_nombre}</span>
+              {p.veredicto ? (
+                <ChipEstado estado={p.veredicto === "listo" ? "ok" : "revisar"} />
+              ) : (
+                <ChipEstado estado="pendiente" />
+              )}
+            </div>
+            {p.observaciones && p.observaciones.length > 0 ? (
+              <ul className="mt-1 list-disc pl-4 text-xs text-amber-600">
+                {p.observaciones.map((o, j) => <li key={j}>{o}</li>)}
+              </ul>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">Sin observaciones.</p>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }
+  // aprobacion
+  return (
+    <div className="space-y-2">
+      {run.piezas.map((p, i) => (
+        <div key={`${p.red}-${i}`} className="flex items-center justify-between gap-2 rounded-md border p-2 text-xs">
+          <span className="font-semibold">{p.red_nombre}</span>
+          <div className="flex flex-col items-end gap-0.5 text-muted-foreground">
+            <Badge variant="outline">{p.estado}</Badge>
+            {p.revisor_nombre && <span>Revisó: {p.revisor_nombre} · {tiempoRelativo(p.revisado_en || "")}</span>}
+            {!p.revisor_nombre && p.enviado_a_revision_en && (
+              <span>En revisión {tiempoRelativo(p.enviado_a_revision_en)}</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -124,9 +246,14 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
   });
   const datos = q.data as RespuestaPipelineDetalle | undefined;
   const run = datos?.pipeline;
+  const eventosDe = (clave: string): PipelineActividad[] => {
+    const cod = ETAPA_A_EVENTO[clave];
+    return cod && datos ? datos.actividad.filter((e) => e.etapa === cod) : [];
+  };
+
   return (
     <Dialog open={!!id} onOpenChange={(o) => { if (!o) onCerrar(); }}>
-      <DialogContent className="max-h-[85vh] w-full overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] w-full overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle className="pr-6 text-base">{run?.titulo ?? "Pipeline"}</DialogTitle>
           <DialogDescription>
@@ -136,8 +263,8 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
 
         {q.isPending ? (
           <div className="space-y-3 py-4">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
           </div>
         ) : q.isError || !run ? (
           <BloqueError
@@ -146,49 +273,22 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
             onReintentar={() => q.refetch()}
           />
         ) : (
-          <div className="space-y-5 py-4">
-            <section className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground">Etapas</h3>
-              {run.etapas.map((e) => (
-                <div key={e.clave} className="flex items-start justify-between gap-3 rounded-md border p-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{e.nombre}</p>
-                    <p className="text-xs text-muted-foreground">{e.detalle}</p>
-                  </div>
-                  <ChipEstado estado={e.estado} className="shrink-0" />
+          <ol className="space-y-4 py-4">
+            {run.etapas.map((e) => (
+              <li key={e.clave} className="relative space-y-2 border-l-2 pl-4">
+                <span className="absolute -left-[5px] top-1.5">
+                  <Punto estado={e.estado} />
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">{e.nombre}</h3>
+                  <ChipEstado estado={e.estado} />
                 </div>
-              ))}
-            </section>
-
-            {run.piezas.length > 0 && (
-              <section className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase text-muted-foreground">Piezas por red</h3>
-                {run.piezas.map((p, i) => (
-                  <div key={`${p.red}-${i}`} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                    <span className="font-medium">{p.red_nombre}</span>
-                    <div className="flex items-center gap-2">
-                      {p.veredicto && <ChipEstado estado={p.veredicto === "listo" ? "ok" : "revisar"} />}
-                      <Badge variant="outline">{p.estado}</Badge>
-                    </div>
-                  </div>
-                ))}
-              </section>
-            )}
-
-            <section className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase text-muted-foreground">Actividad</h3>
-              {datos && datos.actividad.length > 0 ? (
-                datos.actividad.map((ev, i) => (
-                  <div key={i} className="flex items-center justify-between gap-3 rounded-md border p-2 text-xs">
-                    <span className="truncate" title={ev.etiqueta}>{ev.etiqueta}</span>
-                    <span className="shrink-0 text-muted-foreground">{tiempoRelativo(ev.fecha)}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-muted-foreground">Sin eventos registrados todavía.</p>
-              )}
-            </section>
-          </div>
+                <p className="text-xs text-muted-foreground">{e.detalle}</p>
+                <EventosEtapa eventos={eventosDe(e.clave)} />
+                <ContenidoEtapa clave={e.clave} run={run} />
+              </li>
+            ))}
+          </ol>
         )}
       </DialogContent>
     </Dialog>
@@ -209,7 +309,7 @@ export default function Pipelines() {
     <div className="space-y-5">
       <PageHeader
         titulo="Pipelines"
-        descripcion="Cada pieza del pipeline de contenido, etapa a etapa (Ingesta → Copy → Validación → Aprobación), estilo CI/CD."
+        descripcion="Cada pieza del pipeline de contenido, etapa a etapa (Ingesta → Copy → Validación → Aprobación), estilo CI/CD. Haz clic en una tarjeta para ver el detalle de cada paso."
         acciones={
           <Button variant="outline" size="sm" onClick={() => q.refetch()} disabled={q.isFetching}>
             <RefreshCw className={cn("mr-2 h-4 w-4", q.isFetching && "animate-spin")} />

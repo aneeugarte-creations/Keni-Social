@@ -192,7 +192,9 @@ export interface PipelineEtapa {
   ts: string;
 }
 
-/** Una pieza por plataforma dentro de una run del pipeline. */
+/** Una pieza por plataforma dentro de una run del pipeline.
+ *  Los campos de detalle (copy, observaciones, traza de revisión) solo vienen del endpoint
+ *  de detalle (`/api/pipelines/{id}`); en la lista son `undefined`. */
 export interface PipelinePieza {
   red: string;
   red_nombre: string;
@@ -200,6 +202,14 @@ export interface PipelinePieza {
   veredicto: string;
   falta_copy: boolean;
   falta_imagen: boolean;
+  copy?: string;
+  copy_in?: string;
+  imagen_url?: string;
+  observaciones?: string[];
+  revisor_nombre?: string;
+  revisado_en?: string;
+  enviado_a_revision_en?: string;
+  creado?: string;
 }
 
 /** Una RUN del pipeline: el recorrido de una pieza por sus etapas. */
@@ -208,6 +218,8 @@ export interface Pipeline {
   titulo: string;
   marca: string;
   marca_nombre: string;
+  origen?: string;
+  descripcion?: string;
   creado: string;
   actualizado: string;
   estado_global: "ok" | "en_curso" | "pendiente" | "revisar" | "fallo";

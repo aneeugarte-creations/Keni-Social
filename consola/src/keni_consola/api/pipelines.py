@@ -22,7 +22,7 @@ from starlette.routing import Route
 
 from .. import generaciones, marcas, redes, repos
 from .._http_json import _entero_query
-from ..pipeline_contenido import ORIGEN_PIPELINE, TIPO_ACTIVIDAD
+from ..pipeline_contenido import ORIGEN_PIPELINE, TIPO_ACTIVIDAD, qa_lexico
 
 # Tope por defecto de runs por página (alineado con el resto de la consola).
 _LIMITE_DEF = 50
@@ -52,7 +52,7 @@ def _marca_nombre(marca: str) -> str:
 
 
 def _pieza_de(plat: dict) -> dict:
-    """Forma reducida de una fila por plataforma para la tira de piezas de la run."""
+    """Forma reducida de una fila por plataforma (lista + derivación de etapas)."""
     return {
         "red": plat.get("red", ""),
         "red_nombre": _red_nombre(plat.get("red", "")),
@@ -60,6 +60,30 @@ def _pieza_de(plat: dict) -> dict:
         "veredicto": plat.get("veredicto", "") or "",
         "falta_copy": bool(plat.get("falta_copy", True)),
         "falta_imagen": bool(plat.get("falta_imagen", True)),
+    }
+
+
+def _pieza_detalle(plat: dict) -> dict:
+    """Forma COMPLETA de una pieza para el detalle: lo que ocurrió de verdad en cada etapa.
+
+    Sobre la forma reducida añade el COPY generado (texto por red + copy-in), la imagen de
+    la placa, las OBSERVACIONES de la validación (recalculadas con la misma QA léxica, para
+    mostrar el "por qué" del veredicto) y la traza de revisión humana (revisor + fechas).
+    """
+    base = _pieza_de(plat)
+    copy = plat.get("copy", "") or ""
+    imagen = plat.get("imagen", "") or ""
+    qa = qa_lexico({"red": base["red"], "contenido": copy})
+    return {
+        **base,
+        "copy": copy,
+        "copy_in": plat.get("copy_in", "") or "",
+        "imagen_url": f"/api/media/{imagen}" if imagen else "",
+        "observaciones": qa["observaciones"],
+        "revisor_nombre": plat.get("revisor_nombre", "") or "",
+        "revisado_en": plat.get("revisado_en", "") or "",
+        "enviado_a_revision_en": plat.get("enviado_a_revision_en", "") or "",
+        "creado": plat.get("creado", "") or "",
     }
 
 
@@ -157,20 +181,29 @@ def _estado_global(etapas: list[dict]) -> str:
     return "ok"
 
 
-def _run_de(item: dict, piezas_plat: list[dict]) -> dict:
-    """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma."""
-    etapas = _etapas_de_run(item, [_pieza_de(p) for p in piezas_plat])
+def _run_de(item: dict, piezas_plat: list[dict], *, completo: bool = False) -> dict:
+    """Construye el objeto `run` de un contenido del pipeline y sus piezas por plataforma.
+
+    `completo`: en el DETALLE, las piezas llevan la forma COMPLETA (`_pieza_detalle`: copy,
+    placa, observaciones, traza de revisión) para mostrar todo lo ocurrido por etapa. En la
+    LISTA basta la reducida. Las ETAPAS se derivan SIEMPRE de la forma reducida (mismos campos).
+    """
+    base = [_pieza_de(p) for p in piezas_plat]
+    etapas = _etapas_de_run(item, base)
     marca = item.get("marca", "") or ""
+    # `origen` real de la pieza padre (la fuente RSS que la ingirió): contexto de la etapa CI.
     return {
         "id": item.get("id", ""),
         "titulo": item.get("titulo", "") or "",
         "marca": marca,
         "marca_nombre": _marca_nombre(marca),
+        "origen": item.get("origen", "") or "",
+        "descripcion": item.get("descripcion", "") or "",
         "creado": item.get("creado", "") or "",
         "actualizado": item.get("actualizado", "") or "",
         "estado_global": _estado_global(etapas),
         "etapas": etapas,
-        "piezas": [_pieza_de(p) for p in piezas_plat],
+        "piezas": [_pieza_detalle(p) for p in piezas_plat] if completo else base,
     }
 
 
@@ -245,7 +278,10 @@ async def detalle(request: Request) -> Response:
         return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
     piezas = repos.listar_contenido_plataforma(pipeline_id)
     return JSONResponse(
-        {"pipeline": _run_de(item, piezas), "actividad": _actividad_de(pipeline_id)}
+        {
+            "pipeline": _run_de(item, piezas, completo=True),
+            "actividad": _actividad_de(pipeline_id),
+        }
     )
 
 

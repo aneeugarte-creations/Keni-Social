@@ -107,6 +107,11 @@ def test_detalle_run(cliente):
     assert body["pipeline"]["id"] == tema["id"]
     assert [e["clave"] for e in body["pipeline"]["etapas"]] == ["ci", "cd", "qa", "aprobacion"]
     assert "actividad" in body
+    # El detalle trae las piezas COMPLETAS: el copy real + observaciones de la validación.
+    pieza = body["pipeline"]["piezas"][0]
+    assert pieza["copy"] == "Copy."
+    assert "observaciones" in pieza
+    assert "copy_in" in pieza and "imagen_url" in pieza
 
 
 def test_detalle_404(cliente):
