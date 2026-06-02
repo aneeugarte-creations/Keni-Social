@@ -40,6 +40,8 @@ const PUBLICACION = {
   revisado_en: "",
   preparado_en: "",
   id_post_metricool: "",
+  tipo_contenido: "",
+  imagen_fuente: "",
   falta_copy: false,
   falta_imagen: false,
   falta_revision: false,
