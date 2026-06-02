@@ -47,7 +47,8 @@ function claseRendimiento(v: number | null): string {
 }
 
 function textoRendimiento(v: number | null): string {
-  return v == null ? "—" : `${v.toLocaleString("es-MX", { maximumFractionDigits: 2 })}×`;
+  // 1 decimal, consistente con el badge de `rendimiento_relativo` en PiezasAnalitica.
+  return v == null ? "—" : `${v.toLocaleString("es-MX", { maximumFractionDigits: 1 })}×`;
 }
 
 export function Crosstab({
