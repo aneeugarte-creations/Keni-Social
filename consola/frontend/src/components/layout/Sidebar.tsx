@@ -79,7 +79,7 @@ function clasesPadre(activa: boolean) {
 /**
  * Clases de una HOJA (nivel 2, indentada bajo el padre-app). Minimalismo: las
  * hojas van en TEXTO (sin icono). El estado activo se marca con una barra/acento
- * a la izquierda (`border-l-2 border-foreground` + texto en `font-medium`), no
+ * a la izquierda (`border-l-2 border-keni` + texto en `font-medium`), no
  * con icono. Inactivas llevan un borde transparente para que no salte el layout.
  */
 function clasesHoja({ isActive }: { isActive: boolean }) {

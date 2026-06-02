@@ -226,9 +226,9 @@ describe("Sidebar · acordeón de apps", () => {
   it("las HOJAS van en TEXTO (sin icono) y la activa marca acento a la izquierda", async () => {
     renderSidebar("editor", "/generacion");
     const hoja = await screen.findByRole("link", { name: /generación/i });
-    // La hoja activa lleva la barra/acento a la izquierda (border-l-2 + border-foreground).
+    // La hoja activa lleva la barra/acento de marca a la izquierda (border-l-2 + border-keni).
     expect(hoja.className).toContain("border-l-2");
-    expect(hoja.className).toContain("border-foreground");
+    expect(hoja.className).toContain("border-keni");
     // Sin icono en la hoja: ningún <svg> dentro del enlace.
     expect(hoja.querySelector("svg")).toBeNull();
     // Una hoja inactiva tampoco lleva icono.
