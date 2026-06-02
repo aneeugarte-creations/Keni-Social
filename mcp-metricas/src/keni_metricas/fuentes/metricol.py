@@ -151,7 +151,11 @@ _ALIAS_LIKES = ("likes", "favorites", "reactions", "likeCount")
 _ALIAS_COMENTARIOS = ("comments", "replies", "commentsCount")
 _ALIAS_COMPARTIDOS = ("shares", "retweets", "reposts", "sharesCount")
 _ALIAS_GUARDADOS = ("saves", "saved", "bookmarks", "savedCount")
-_ALIAS_VIDEO_VIEWS = ("videoViews", "views", "plays", "videoViewCount", "reelPlays")
+# OJO: sin el alias genérico "views" a propósito. En posts de imagen/carrusel Metricool
+# usa "views"/"impressions" para las visualizaciones GENERALES; si lo tomáramos aquí,
+# `video_views` duplicaría `visualizaciones` en piezas que no son vídeo. Solo campos
+# específicos de vídeo -> None en imágenes (honesto), valor real en reels/vídeos.
+_ALIAS_VIDEO_VIEWS = ("videoViews", "plays", "videoViewCount", "reelPlays", "videoPlayCount")
 _ALIAS_TIEMPO_VIS = ("avgWatchTime", "averageWatchTime", "avgTimeWatched", "averageViewDuration")
 _ALIAS_CLICS = ("linkClicks", "clicks", "urlClicks", "websiteClicks", "linkClicksCount")
 _ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format")
@@ -165,6 +169,9 @@ _FORMATO_NORMAL: dict[str, str] = {
     "IMAGE": "foto",
     "PHOTO": "foto",
     "VIDEO": "video",
+    "IGTV": "video",
+    "SHORT": "video",
+    "SHORTS": "video",
     "REEL": "reel",
     "REELS": "reel",
     "CAROUSEL": "carrusel",
@@ -173,6 +180,7 @@ _FORMATO_NORMAL: dict[str, str] = {
     "LINK": "link",
     "TEXT": "texto",
     "STATUS": "texto",
+    "TWEET": "texto",
 }
 
 
@@ -209,15 +217,20 @@ def _a_int_opt(v) -> int | None:
 def _formato_opt(v) -> str | None:
     """Normaliza el formato crudo a un literal del contrato, o None si no viene.
 
-    'IMAGE'/'PHOTO'->'foto', 'VIDEO'->'video', 'REEL'/'REELS'->'reel',
-    'CAROUSEL'/'CAROUSEL_ALBUM'->'carrusel', 'LINK'->'link', 'TEXT'/'STATUS'->'texto'.
-    Si no se reconoce, devuelve el valor crudo en minúsculas (mejor algo que None
-    cuando sí vino un dato); None solo si el campo está ausente.
+    Metricool/redes usan vocabularios como 'feed_image', 'feed_carousel_album',
+    'feed_video', 'feed_reel', 'reel', 'video', 'photo'... Se quita el prefijo 'FEED_'
+    (Metricool antepone 'feed_' a los formatos de Instagram/Facebook) antes de mapear a
+    los buckets del contrato (foto/carrusel/video/reel/link/texto). Si no se reconoce,
+    devuelve el valor crudo en minúsculas (mejor algo que None cuando sí vino un dato);
+    None solo si el campo está ausente.
     """
     if v is None or v == "":
         return None
     crudo = str(v).strip()
-    return _FORMATO_NORMAL.get(crudo.upper(), crudo.lower() or None)
+    clave = crudo.upper()
+    if clave.startswith("FEED_"):
+        clave = clave[len("FEED_"):]
+    return _FORMATO_NORMAL.get(clave, crudo.lower() or None)
 
 
 def _fecha(v, defecto: date) -> date:

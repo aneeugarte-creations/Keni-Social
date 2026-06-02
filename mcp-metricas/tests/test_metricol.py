@@ -180,6 +180,44 @@ def test_mejores_piezas_mapea_posts():
 
 
 @respx.mock
+def test_formato_feed_prefix_y_video_views_sin_colision():
+    """Vocabulario REAL de Metricool: 'feed_carousel_album'/'feed_image' y que
+    `video_views` NO copie las visualizaciones generales en posts de imagen."""
+    posts = {
+        "data": [
+            {
+                "id": "carrusel",
+                "publishedAt": "2026-05-20T12:00:00",
+                "impressions": 968213,
+                "views": 968213,  # vistas GENERALES, no de vídeo
+                "interactions": 55737,
+                "mediaType": "feed_carousel_album",
+            },
+            {
+                "id": "imagen",
+                "publishedAt": "2026-05-21T12:00:00",
+                "impressions": 297119,
+                "views": 297119,
+                "interactions": 3688,
+                "mediaType": "feed_image",
+            },
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        piezas = _fuente(cli).mejores_piezas("claro_sports", RANGO, 5)
+
+    por_id = {p.id: p for p in piezas}
+    assert por_id["carrusel"].formato == "carrusel"  # prefijo feed_ resuelto
+    assert por_id["imagen"].formato == "foto"
+    # Sin alias "views" goloso: video_views None en imagen/carrusel (no copia impresiones).
+    assert por_id["carrusel"].video_views is None
+    assert por_id["imagen"].video_views is None
+
+
+@respx.mock
 def test_metricas_de_post_parsea_granulares():
     """metricas_de_post mapea los campos granulares del post al contrato."""
     posts = {
