@@ -77,15 +77,20 @@ class EstudioError(RuntimeError):
 
 
 def marca_tiene_plantilla(marca: str) -> bool:
-    """True si la marca puede auto-componer su PLANTILLA por SPEC (logo + pleca + titular).
+    """True si la marca tiene una PLANTILLA REALMENTE configurada (logo + pleca + titular).
 
-    Vale para CUALQUIER marca del catalogo: el spec de capas se DERIVA de los campos planos
-    efectivos (`plantillas_marca.spec_por_defecto`), que existen para toda marca (defaults
-    genericos cuando no hay tokens propios). Asi Fundacion y el resto componen como UnoTV /
-    Claro Sports, y el editor visual puede disenar y guardar el spec de cada una. Las marcas
-    con tokens precargados (`_MARCAS_VISUALES`) solo arrancan con colores/pleca afinados.
+    Cualquier marca del catalogo PUEDE tener plantilla (el editor visual diseña y guarda su
+    SPEC de capas), pero solo se auto-compone cuando hay un diseño concreto, no por el mero
+    hecho de existir en el catalogo. Dos casos cuentan como "configurada":
+      - tokens de diseño PRECARGADOS (`_MARCAS_VISUALES`: unotv / claro-sports), o
+      - un SPEC guardado en el editor visual (`plantillas_marca.tiene_spec_guardado`).
+    Una marca del catalogo SIN ninguno de los dos (p. ej. piso-15, o Fundacion hasta que se
+    le diseñe spec) NO compone: el integrar-foto devuelve la foto tal cual y la auto-gen omite
+    la placa. Asi evitamos componer una placa generica para toda marca por defecto.
     """
-    return marcas.es_marca(marca)
+    if marca in _MARCAS_VISUALES:
+        return True
+    return plantillas_marca.tiene_spec_guardado(marca)
 
 
 # Formato de placa por red. El compositor solo entiende vertical|feed|cuadrado; se elige el

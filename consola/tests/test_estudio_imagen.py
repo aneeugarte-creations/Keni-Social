@@ -143,14 +143,22 @@ def test_retocar_sin_instruccion(entorno):
 # --------------------------------------------------------------------------- #
 
 
-def test_marca_tiene_plantilla():
-    # Toda marca del catalogo puede componer su plantilla por SPEC (derivado de los campos
-    # planos): no solo las de tokens precargados, tambien Fundacion, Piso 15, etc.
+def test_marca_tiene_plantilla(entorno):
+    # Solo cuenta como "con plantilla" una marca REALMENTE configurada: las de tokens
+    # precargados (unotv / claro-sports) o una marca del catalogo a la que se le diseñó y
+    # guardó un SPEC en el editor visual. Una marca del catalogo sin diseño propio (piso-15,
+    # fundacion) NO compone por defecto.
+    from keni_consola import plantillas_marca
+
     assert e.marca_tiene_plantilla("unotv")
     assert e.marca_tiene_plantilla("claro-sports")
-    assert e.marca_tiene_plantilla("piso-15")
-    assert e.marca_tiene_plantilla("fundacion")
+    assert not e.marca_tiene_plantilla("piso-15")
+    assert not e.marca_tiene_plantilla("fundacion")
     assert not e.marca_tiene_plantilla("desconocida")
+
+    # Al guardar un SPEC para una marca del catalogo, pasa a tener plantilla configurada.
+    plantillas_marca.guardar_spec("fundacion", plantillas_marca.obtener_spec("fundacion"))
+    assert e.marca_tiene_plantilla("fundacion")
 
 
 def test_formato_por_red():

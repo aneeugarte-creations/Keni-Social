@@ -294,6 +294,19 @@ def obtener_spec(marca: str) -> dict[str, Any]:
     return spec_plantilla.spec_por_defecto(marca, obtener(marca))
 
 
+def tiene_spec_guardado(marca: str) -> bool:
+    """True si la marca tiene un SPEC de capas GUARDADO (diseñado en el editor visual).
+
+    Distingue una marca CON plantilla configurada (override con `spec` válido) de una marca
+    del catálogo SIN diseño propio (que solo tendría un spec DERIVADO de defaults genéricos).
+    No deriva nada: solo mira el override persistido. Marca desconocida -> False.
+    """
+    if not marcas.es_marca(marca):
+        return False
+    crudo = _leer_override(marca).get(SPEC_KEY)
+    return isinstance(crudo, dict) and bool(crudo.get("formatos"))
+
+
 def guardar_spec(marca: str, spec: dict[str, Any]) -> dict[str, Any]:
     """Persiste el SPEC de capas de una marca (validado), conservando los campos planos."""
     if not marcas.es_marca(marca):
