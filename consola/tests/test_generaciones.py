@@ -203,6 +203,28 @@ def test_acumulador_streaming_texto_token_a_token():
     assert parc is not None and parc.tokens_out == 5
 
 
+def test_acumulador_fase_avanza_razonando_generando_completado():
+    """La fase (en que ETAPA va) avanza con el stream: razonando → generando → completado.
+
+    - Antes de arrancar: "" (aun nada).
+    - Tras `message_start` y solo thinking: razonando (no hay texto VISIBLE todavia).
+    - Tras el primer `text_delta`: generando (escribiendo el copy).
+    - Tras el `result`: completado (terminal).
+    """
+    acc = skills.AcumuladorStream()
+    assert acc.fase() == ""  # aun no arranco
+    acc.procesar_linea(_se({"type": "message_start", "message": {}}))
+    acc.procesar_linea(_se({"type": "content_block_delta", "index": 0,
+                            "delta": {"type": "thinking_delta", "thinking": "pensando..."}}))
+    assert acc.fase() == skills.FASE_RAZONANDO  # thinking NO es texto visible
+    acc.procesar_linea(_se({"type": "content_block_delta", "index": 1,
+                            "delta": {"type": "text_delta", "text": "Hola"}}))
+    assert acc.fase() == skills.FASE_GENERANDO
+    acc.procesar_linea(json.dumps({"type": "result", "subtype": "success", "result": "Hola",
+                                   "usage": {"input_tokens": 1, "output_tokens": 1}}))
+    assert acc.fase() == skills.FASE_COMPLETADO
+
+
 def test_acumulador_parcial_no_recuenta_turnos_desde_assistant():
     """En modo parcial los turnos los cuenta `message_start`; un `assistant` posterior
     (que el CLI tambien emite) NO debe sumar otro turno."""
@@ -239,6 +261,21 @@ def test_store_crear_obtener_actualizar_listar(entorno):
 
     assert any(x["id"] == gid for x in generaciones.listar())
     assert generaciones.obtener("noexiste") is None
+
+
+def test_store_fase_se_persiste_y_legado_cae_a_vacio(entorno):
+    """`fase` se persiste y se expone; un registro legado (sin fase) la trae como "".
+
+    Migracion suave del esquema: anadir `fase` no rompe registros viejos (default "").
+    """
+    g = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "X"})
+    # Recien creado, sin avance todavia: la fase es "" (no se ha escrito ningun token).
+    assert g["fase"] == ""
+    generaciones.actualizar(g["id"], {"fase": generaciones.FASE_GENERANDO})
+    assert generaciones.obtener(g["id"])["fase"] == generaciones.FASE_GENERANDO
+    # Un registro legado (escrito sin `fase`) sigue funcionando: la fase cae a "".
+    g2 = generaciones.crear({"tipo": "copy", "marca": _MARCA, "etiqueta": "Legado"})
+    assert generaciones.obtener(g2["id"])["fase"] == ""
 
 
 def test_store_id_invalido_no_escapa(entorno):

@@ -42,6 +42,24 @@ function LineaMetricas({ metricas }: { metricas: MetricasRun | null }) {
 }
 
 /**
+ * Etiqueta humana de la ETAPA de progreso (en qué etapa va, no cuánto falta), según la
+ * `fase` que deriva el backend del stream. La fase "" (registros legados / antes de
+ * arrancar) cae a "Visualizando…", el comportamiento previo.
+ */
+function etiquetaFase(fase: string): string {
+  switch (fase) {
+    case "razonando":
+      return "Razonando…";
+    case "generando":
+      return "Escribiendo…";
+    case "completado":
+      return "Terminando…";
+    default:
+      return "Visualizando…";
+  }
+}
+
+/**
  * Consola de progreso EN VIVO de una generación de IA: el texto del asistente que
  * va llegando token a token (auto-scroll al final), con un cursor parpadeante
  * mientras corre. Si aún no hay texto, muestra "Pensando…".
@@ -110,7 +128,7 @@ export function ProgresoGeneracion({
           {ejecutando ? (
             <Badge variant="aviso" className="gap-1">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-              Visualizando…
+              {etiquetaFase(generacion.fase)}
             </Badge>
           ) : error ? (
             <Badge variant="error">Error</Badge>

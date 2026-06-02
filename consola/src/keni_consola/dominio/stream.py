@@ -254,6 +254,23 @@ def parsear_resultado_json(stdout: str) -> tuple[str, MetricasRun | None]:
     return texto, metricas
 
 
+# --------------------------------------------------------------------------- #
+# Fases de progreso de un run (en que ETAPA va, no cuanto falta)               #
+# --------------------------------------------------------------------------- #
+#
+# Una generacion atraviesa estas etapas, en orden y sin retroceso:
+#   - "razonando":  arranco, pero aun no llega texto VISIBLE del asistente (esta
+#                   pensando / usando herramientas / el thinking no cuenta como texto).
+#   - "generando":  ya llego el PRIMER token de texto visible (escribiendo el copy).
+#   - "completado": el run termino (llego el `result`), con o sin texto.
+# El acumulador deriva la fase del propio stream; se persiste en el registro y la UI la
+# pinta ("Razonando…" → "Escribiendo…" → "Terminando…"). Registros viejos sin fase la
+# tratan como "" (la UI cae a su comportamiento previo).
+FASE_RAZONANDO = "razonando"
+FASE_GENERANDO = "generando"
+FASE_COMPLETADO = "completado"
+
+
 @dataclass
 class AcumuladorStream:
     """Acumula el progreso de un run `--output-format stream-json --verbose`.
@@ -397,6 +414,27 @@ class AcumuladorStream:
             modelo=self.modelo,
             session_id=self.session_id,
         )
+
+    def fase(self) -> str:
+        """Etapa de PROGRESO del run (en que etapa va), derivada del propio stream.
+
+        - `FASE_COMPLETADO` en cuanto llega el `result` (terminal), con o sin texto.
+        - `FASE_GENERANDO` desde que llega el PRIMER token de texto VISIBLE del asistente
+          (el `thinking` NO cuenta: no acumula `texto`).
+        - `FASE_RAZONANDO` mientras el run arranco pero aun no escribe texto visible.
+        - `""` si aun no arranco (ni la usamos para nada todavia).
+
+        Es PURA y monotona en la practica: el stream solo avanza (arranque → texto →
+        result), nunca retrocede. La transicion razonando→generando la marca el primer
+        `text_delta` (que ya alimenta `self.texto`).
+        """
+        if self.terminado:
+            return FASE_COMPLETADO
+        if self.texto:
+            return FASE_GENERANDO
+        if self.iniciado:
+            return FASE_RAZONANDO
+        return ""
 
 
 # --------------------------------------------------------------------------- #

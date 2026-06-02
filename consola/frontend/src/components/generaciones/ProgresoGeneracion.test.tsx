@@ -17,6 +17,7 @@ function base(parcial: Partial<Generacion>): Generacion {
     marca: "unotv",
     etiqueta: "Copy desde nota · UnoTV",
     estado: "ejecutando",
+    fase: "",
     motivo: "",
     salida: "",
     error: "",
@@ -36,6 +37,22 @@ describe("ProgresoGeneracion", () => {
     expect(screen.getByText("Copy desde nota · UnoTV")).toBeInTheDocument();
     expect(screen.getByText("Visualizando…")).toBeInTheDocument();
     expect(screen.getByText(/Hola mundo en vivo/)).toBeInTheDocument();
+  });
+
+  it("pinta la etapa según la fase: Razonando… → Escribiendo… → Terminando…", () => {
+    const { rerender } = render(
+      <ProgresoGeneracion generacion={base({ fase: "razonando" })} />,
+    );
+    expect(screen.getByText("Razonando…")).toBeInTheDocument();
+    rerender(<ProgresoGeneracion generacion={base({ fase: "generando", salida: "Hola" })} />);
+    expect(screen.getByText("Escribiendo…")).toBeInTheDocument();
+    rerender(<ProgresoGeneracion generacion={base({ fase: "completado", salida: "Hola" })} />);
+    expect(screen.getByText("Terminando…")).toBeInTheDocument();
+  });
+
+  it("sin fase (registro legado) cae a 'Visualizando…'", () => {
+    render(<ProgresoGeneracion generacion={base({ fase: "", salida: "en curso" })} />);
+    expect(screen.getByText("Visualizando…")).toBeInTheDocument();
   });
 
   it("muestra 'Pensando…' cuando aún no hay texto", () => {

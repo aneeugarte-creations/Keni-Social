@@ -208,6 +208,14 @@ export type TipoGeneracion =
 export type EstadoGeneracion = "ejecutando" | "completado" | "error";
 
 /**
+ * Etapa de PROGRESO de una generación (en qué etapa va, no cuánto falta). La deriva el
+ * backend del propio stream: `razonando` (arrancó, aún sin texto visible) →
+ * `generando` (escribiendo el copy token a token) → `completado` (terminó). `""` en
+ * registros legados o antes de arrancar (la UI cae a su comportamiento previo).
+ */
+export type FaseGeneracion = "razonando" | "generando" | "completado" | "";
+
+/**
  * Resultado de una generación COMPLETADA. Los campos presentes dependen del
  * `tipo`: copy/rss traen `{resultado, historial_id, verdicto, piezas,
  * publicaciones}`; hashtags trae `{hashtags}`; imagen trae `{id, url}`.
@@ -424,6 +432,11 @@ export interface Generacion {
   /** Etiqueta legible (p. ej. "Copy desde nota · UnoTV"). */
   etiqueta: string;
   estado: EstadoGeneracion | string;
+  /**
+   * Etapa de PROGRESO mientras corre (en qué etapa va): "razonando" → "generando" →
+   * "completado". "" en registros legados o antes de arrancar.
+   */
+  fase: FaseGeneracion | string;
   /** Motivo terminal (p. ej. "timeout"); normalmente vacío. */
   motivo: string;
   /** Texto del asistente en vivo (vacío para imágenes; crece mientras corre). */

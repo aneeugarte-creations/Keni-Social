@@ -87,6 +87,13 @@ _log = logging.getLogger("keni_consola.generaciones")
 ESTADO_EJECUTANDO = "ejecutando"
 ESTADO_COMPLETADO = "completado"
 ESTADO_ERROR = "error"
+# Fases de PROGRESO (en que etapa va el run, no cuanto falta). Re-exportadas del dominio
+# (`stream`), unica fuente. La UI las pinta ("Razonando…" → "Escribiendo…" → "Terminando…").
+# Migracion suave: registros viejos sin `fase` la traen como "" (la UI cae al comportamiento
+# previo); por eso NO sube la version de esquema YAML (anadir un campo opcional vacio es compat).
+FASE_RAZONANDO = stream.FASE_RAZONANDO
+FASE_GENERANDO = stream.FASE_GENERANDO
+FASE_COMPLETADO = stream.FASE_COMPLETADO
 # Motivos terminales (campo `motivo`): para que el llamante/UI distingan el porque.
 MOTIVO_TIMEOUT = "timeout"
 MOTIVO_COLA_LLENA = "cola_llena"
@@ -222,6 +229,8 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         "marca": _str("marca"),
         "etiqueta": _str("etiqueta"),
         "estado": _str("estado"),
+        # Fase de PROGRESO (en que etapa va; ausente en registros legados => "").
+        "fase": _str("fase"),
         "motivo": _str("motivo"),
         "salida": _str("salida"),
         "error": _str("error"),
@@ -536,6 +545,8 @@ def lanzar_job_claude(
                 gen_id,
                 {
                     "estado": ESTADO_EJECUTANDO,
+                    # Etapa de progreso (en que etapa va): razonando → generando.
+                    "fase": acumulador.fase(),
                     "salida": acumulador.texto,
                     "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                 },
@@ -593,7 +604,8 @@ def lanzar_job_claude(
                     })
                     return
                 actualizar(gen_id, {
-                    "estado": ESTADO_COMPLETADO, "salida": acumulador.texto,
+                    "estado": ESTADO_COMPLETADO, "fase": FASE_COMPLETADO,
+                    "salida": acumulador.texto,
                     "metricas": stream.metricas_a_dict(acumulador.final),
                     "resultado": resultado, "fecha_fin": fecha_fin,
                 })
