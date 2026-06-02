@@ -6537,6 +6537,7 @@ def obtener_publicacion(publicacion_id: str) -> dict[str, Any] | None:
 _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "contenido": "copy",
     "copy_in": "copy_in",
+    "veredicto": "veredicto",
     "fecha_programada": "fecha_programada",
     "imagen": "imagen",
     "foto": "foto",
