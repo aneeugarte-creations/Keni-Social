@@ -29,7 +29,9 @@ def _tema_y_borrador(copy: str = "Copy de prueba para el QA.", marca: str = "uno
     pub = repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador", copy=copy,
     )
-    return pub
+    # Devuelve la PUBLICACIÓN (forma que recibe el QA en producción: `contenido`=copy, `marca`,
+    # `contenido_id`), no la fila cruda de plataforma (cuyo copy va bajo `copy` y sin marca).
+    return repos.obtener_publicacion(pub["id"])
 
 
 def test_asegurar_documento_qa_lo_crea_si_falta(entorno):
