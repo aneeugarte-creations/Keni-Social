@@ -227,6 +227,10 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         "id": gen_id,
         "tipo": _str("tipo"),
         "marca": _str("marca"),
+        # Contenido correlacionado (opcional): las generaciones-marcador del pipeline
+        # (`tipo='pipeline'`) lo sellan para que la vista Pipelines ate cada etapa a su run.
+        # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
+        "contenido_id": _str("contenido_id"),
         "etiqueta": _str("etiqueta"),
         "estado": _str("estado"),
         # Fase de PROGRESO (en que etapa va; ausente en registros legados => "").

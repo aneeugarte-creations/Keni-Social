@@ -30,8 +30,11 @@ _LIMITE_DEF = 50
 
 # Fuentes y tipos validos para filtrar (un filtro vacio no filtra por ese eje). El
 # `tipo` admite los tipos de generacion + "run" (los runs se exponen como tipo "run").
+# "pipeline" = las generaciones-marcador de las etapas del pipeline de contenido
+# (`pipeline_contenido.TIPO_ACTIVIDAD`): antes no era filtrable aquí (el usuario se quejó de
+# que quedaban enterradas). Añadirlo al set las hace seleccionables en el feed de Actividad IA.
 _FUENTES = frozenset({"generacion", "run"})
-_TIPOS = frozenset({*generaciones.TIPOS, "autogen", "run"})
+_TIPOS = frozenset({*generaciones.TIPOS, "autogen", "run", "pipeline"})
 
 
 def _filtro(valor: str | None, validos: frozenset[str]) -> str:

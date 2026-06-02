@@ -237,6 +237,8 @@ import type {
   RespuestaReporteComercial,
   RespuestaActividad,
   ActividadAgregados,
+  RespuestaPipelines,
+  RespuestaPipelineDetalle,
 } from "@/types";
 
 import { type NombreContrato, validarContrato } from "./contrato";
@@ -583,6 +585,18 @@ export const api = {
     ),
   actividadAgregados: (signal?: AbortSignal) =>
     peticion<ActividadAgregados>("/actividad/agregados", { signal }),
+
+  // --- Pipelines (vista CI/CD del pipeline de contenido) ---
+  pipelines: (params: { marca?: string; limite?: number } = {}, signal?: AbortSignal) =>
+    peticion<RespuestaPipelines>(
+      `/pipelines${query({
+        marca: params.marca,
+        limite: params.limite != null ? String(params.limite) : undefined,
+      })}`,
+      { signal },
+    ),
+  pipelineDetalle: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaPipelineDetalle>(`/pipelines/${encodeURIComponent(id)}`, { signal }),
 
   // --- Generaciones (sondeo de trabajos de IA en segundo plano) ---
   // Toda generación (copy/RSS/hashtags/imagen) responde de inmediato con `{generacion}`

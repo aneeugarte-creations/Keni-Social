@@ -155,19 +155,27 @@ _FETCH_OG_IMAGE = _fetch_og_image_real
 # --------------------------------------------------------------------------- #
 
 
-def registrar_etapa(etapa: str, marca: str, detalle: str) -> dict[str, Any] | None:
+def registrar_etapa(
+    etapa: str, marca: str, detalle: str, contenido_id: str = ""
+) -> dict[str, Any] | None:
     """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/QA). Best-effort.
 
     Crea una generación-marcador `completado` (sin `claude`): `tipo='pipeline'` y la etapa +
     detalle en la `etiqueta` ("CI · Ingesta...", etc.). La vista "Actividad IA" la muestra
     junto al resto de la actividad de IA. Un fallo al sellar NUNCA aborta el barrido (devuelve
     None y se loguea): la actividad es trazabilidad, no parte crítica del flujo.
+
+    `contenido_id` (opcional, def "") CORRELACIONA la etapa con la RUN (el `contenido` padre
+    del pipeline) para la vista Pipelines (`/api/pipelines/{id}`). CD/QA lo pasan (la etapa va
+    sobre un tema concreto); CI es brand-level y lo deja vacío. Es ADITIVO: vacío no engorda el
+    registro (lo filtra `generaciones._cuerpo`) y los registros previos lo traen como "".
     """
     etiqueta = f"{etapa} · {detalle}".strip()
     try:
         gen = generaciones.crear({
             "tipo": TIPO_ACTIVIDAD,
             "marca": marca or "",
+            "contenido_id": contenido_id or "",
             "etiqueta": etiqueta[:200],
             "estado": generaciones.ESTADO_COMPLETADO,
             "fecha_fin": generaciones.ahora_iso(),
@@ -419,7 +427,12 @@ def crear_contenido_de(trabajo: dict[str, Any], *, autor: dict[str, str] | None)
             repos.marcar_item(fuente["id"], clave, True)
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no debe romper el barrido
             _log.warning("pipeline: no se pudo marcar el item usado (%s)", clave, exc_info=True)
-    registrar_etapa(ETAPA_CD, marca, f"Generación de copy+arte de marca — '{titulo[:120]}'")
+    registrar_etapa(
+        ETAPA_CD,
+        marca,
+        f"Generación de copy+arte de marca — '{titulo[:120]}'",
+        contenido_id=tema_id,
+    )
     return gen
 
 
@@ -526,6 +539,7 @@ def validar_borrador(publicacion: dict[str, Any]) -> dict[str, Any] | None:
         ETAPA_QA,
         (publicacion.get("marca") or "") or "",
         f"Validación automática — '{titulo}': {detalle_ok}",
+        contenido_id=(publicacion.get("contenido_id") or ""),
     )
     return {"id": pid, "verdicto": verdicto, "observaciones": obs}
 

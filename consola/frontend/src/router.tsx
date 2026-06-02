@@ -37,6 +37,7 @@ const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
 
 const Actividad = lazy(() => import("@/pages/Actividad"));
+const Pipelines = lazy(() => import("@/pages/Pipelines"));
 
 // Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
 // columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
@@ -168,6 +169,8 @@ export const router = createBrowserRouter([
           },
           // Actividad IA: feed unificado de generaciones + runs de agentes con métricas.
           { path: "actividad", element: <Actividad /> },
+          // Pipelines: vista CI/CD del pipeline de contenido (etapas por pieza).
+          { path: "pipelines", element: <Pipelines /> },
         ],
       },
 

@@ -181,6 +181,57 @@ export interface ActividadAgregados {
   por_dia: ActividadPorDia[];
 }
 
+// --- Pipelines (vista estilo GitLab del pipeline de contenido CI/CD) ---
+
+/** Una etapa de una run del pipeline (CI/CD/QA/Aprobación). */
+export interface PipelineEtapa {
+  clave: string;
+  nombre: string;
+  estado: string;
+  detalle: string;
+  ts: string;
+}
+
+/** Una pieza por plataforma dentro de una run del pipeline. */
+export interface PipelinePieza {
+  red: string;
+  red_nombre: string;
+  estado: string;
+  veredicto: string;
+  falta_copy: boolean;
+  falta_imagen: boolean;
+}
+
+/** Una RUN del pipeline: el recorrido de una pieza por sus etapas. */
+export interface Pipeline {
+  id: string;
+  titulo: string;
+  marca: string;
+  marca_nombre: string;
+  creado: string;
+  actualizado: string;
+  estado_global: "ok" | "en_curso" | "pendiente" | "revisar" | "fallo";
+  etapas: PipelineEtapa[];
+  piezas: PipelinePieza[];
+}
+
+/** Un evento del log de actividad de una run (etapa registrada). */
+export interface PipelineActividad {
+  etapa: string;
+  etiqueta: string;
+  estado: string;
+  fecha: string;
+}
+
+export interface RespuestaPipelines {
+  pipelines: Pipeline[];
+}
+
+export interface RespuestaPipelineDetalle {
+  pipeline: Pipeline;
+  actividad: PipelineActividad[];
+}
+
 // --- Generación de copy (resultado compartido) ---
 
 /** Veredicto editorial de una pieza/generación. "" = sin veredicto. */

@@ -46,6 +46,7 @@ modulos_backend = [
   "algoritmos",
   "parrilla",
   "plantillas_contenido",
+  "pipelines",
 ]
 
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
@@ -65,6 +66,7 @@ rutas_frontend = [
   "/operacion/revision/editorial",
   "/operacion/revision/verificacion",
   "/datos/actividad",
+  "/datos/pipelines",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -121,6 +123,15 @@ descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS
 grupo = "datos"
 grupo_orden = 30
 orden = 30
+
+[[nav]]
+ruta = "/datos/pipelines"
+etiqueta = "Pipelines"
+icono = "GitBranch"
+descripcion = "Vista CI/CD del pipeline de contenido: cada pieza con sus etapas (Ingesta → Copy → Validación → Aprobación) y su actividad."
+grupo = "datos"
+grupo_orden = 30
+orden = 40
 
 # (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
 # de la Biblioteca y dejó de ser una entrada de nav.)
