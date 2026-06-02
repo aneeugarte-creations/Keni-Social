@@ -1458,6 +1458,10 @@ export const api = {
     peticion<EstadoMetricas>(`/metricas/refrescar${query(params)}`, { metodo: "POST" }),
   exportarMetricas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
     descargar(`/metricas/export.${formato}${query(params)}`),
+  // Descarga del Top 5 / Peores 5 de piezas del periodo (Item B): mismo dato que la
+  // analítica de piezas, serializado en csv|md|json. `fmt` viaja como query param.
+  exportarPiezas: (formato: "csv" | "md" | "json", params: { rango?: string; marca?: string }) =>
+    descargar(`/metricas/piezas-export${query({ fmt: formato, ...params })}`),
 
   // --- Reporte de deportes (deck semanal de Claro Sports) ---
   reporteDeportesOpciones: (signal?: AbortSignal) =>

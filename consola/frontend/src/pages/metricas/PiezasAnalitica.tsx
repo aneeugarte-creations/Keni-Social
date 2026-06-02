@@ -12,12 +12,14 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
-import { BarChart3, ExternalLink } from "lucide-react";
+import { BarChart3, ChevronDown, Download, ExternalLink } from "lucide-react";
 import * as React from "react";
 
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
+import { MenuContextual } from "@/components/comunes/MenuContextual";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -114,13 +116,46 @@ function ContenidoPiezas({ marca, rango }: { marca?: string; rango?: string }) {
         total={data.total}
       />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <TablaPiezas titulo="Top 5" piezas={data.top} />
-        <TablaPiezas titulo="Peores 5" piezas={data.peores} />
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h4 className="text-sm font-semibold">Mejores y peores piezas</h4>
+          <DescargarPiezas rango={rango} marca={marca} />
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <TablaPiezas titulo="Top 5" piezas={data.top} />
+          <TablaPiezas titulo="Peores 5" piezas={data.peores} />
+        </div>
       </div>
 
       <Distribucion buckets={data.distribucion} />
     </CardContent>
+  );
+}
+
+const FORMATOS_PIEZAS: Array<{ formato: "csv" | "md" | "json"; etiqueta: string }> = [
+  { formato: "csv", etiqueta: "CSV" },
+  { formato: "md", etiqueta: "Markdown" },
+  { formato: "json", etiqueta: "JSON" },
+];
+
+/** Descarga del Top 5 / Peores 5 del tab actual (csv|md|json), vía /piezas-export. */
+function DescargarPiezas({ rango, marca }: { rango?: string; marca?: string }) {
+  return (
+    <MenuContextual
+      disparador="click"
+      etiqueta="Descargar top y peores piezas"
+      items={FORMATOS_PIEZAS.map(({ formato, etiqueta }) => ({
+        etiqueta,
+        icono: Download,
+        onClick: () => api.exportarPiezas(formato, { rango, marca }),
+      }))}
+    >
+      <Button variant="outline" size="sm">
+        <Download className="h-4 w-4" />
+        Descargar
+        <ChevronDown className="h-4 w-4 opacity-60" />
+      </Button>
+    </MenuContextual>
   );
 }
 
