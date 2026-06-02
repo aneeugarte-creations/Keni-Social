@@ -361,6 +361,8 @@ def _pieza(
         interacciones=inter,
         engagement_pct=eng,
         url=_URL_BASE[plat].format(cuenta=cuenta_id, pid=pid),
+        # sella la marca para estratificar/normalizar top/peores por grupo marca×red.
+        cuenta=cuenta_id,
         **_granulares_muestra(cuenta_id, plat, f"{rango}:{idx}", vistas, inter),
     )
 

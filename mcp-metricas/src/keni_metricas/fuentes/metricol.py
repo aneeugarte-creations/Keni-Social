@@ -488,7 +488,7 @@ class FuenteMetricol:
         for post in datos.get("data") or []:
             if not isinstance(post, dict):
                 continue
-            pieza = self._pieza_desde_post(post, plat, hasta)
+            pieza = self._pieza_desde_post(post, plat, hasta, cuenta_id)
             if pieza is not None:
                 piezas.append(pieza)
         return piezas
@@ -512,8 +512,15 @@ class FuenteMetricol:
             "formato": _formato_opt(_primero(post, _ALIAS_FORMATO)),
         }
 
-    def _pieza_desde_post(self, post: dict, plat: Plataforma, defecto_fecha: date) -> Pieza | None:
-        """Mapea un post de Metricool a `Pieza` (parseo defensivo; ver SUPUESTOS)."""
+    def _pieza_desde_post(
+        self, post: dict, plat: Plataforma, defecto_fecha: date, cuenta_id: str | None = None
+    ) -> Pieza | None:
+        """Mapea un post de Metricool a `Pieza` (parseo defensivo; ver SUPUESTOS).
+
+        `cuenta_id` (id_metricas de la marca) se sella en la pieza para poder
+        ESTRATIFICAR top/peores por marca y normalizar el rendimiento por grupo
+        (ver `estadisticas.top_y_peores`).
+        """
         vis = _entero(_primero(post, _ALIAS_VIS, 0))
         if not vis:
             return None  # sin visualizaciones no es una "mejor pieza" útil
@@ -527,6 +534,7 @@ class FuenteMetricol:
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(post, _ALIAS_URL),
+            cuenta=cuenta_id,
             **self._granulares(post),
         )
 

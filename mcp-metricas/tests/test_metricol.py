@@ -177,6 +177,8 @@ def test_mejores_piezas_mapea_posts():
     assert p1.video_views == 4200
     assert p1.tiempo_medio_vis_s == 12
     assert p1.clics_enlace == 8
+    # cada pieza se sella con su marca (para estratificar top/peores por marca).
+    assert all(p.cuenta == "claro_sports" for p in piezas)
 
 
 @respx.mock

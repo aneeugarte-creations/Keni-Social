@@ -166,6 +166,19 @@ class Pieza(BaseModel):
     interacciones: int
     engagement_pct: float
     url: str | None = None
+    # cuenta/marca de la pieza (id_metricas, guion_bajo). OPCIONAL y retrocompatible:
+    # None cuando la fuente construye la pieza sin contexto de cuenta. Necesario para
+    # ESTRATIFICAR top/peores por marca (que no salga todo de una sola marca) y para
+    # calcular el rendimiento relativo contra el grupo (marca×red). Ver
+    # `estadisticas.top_y_peores` y `anotar_rendimiento_relativo`.
+    cuenta: str | None = None
+    # rendimiento RELATIVO de la pieza vs. la mediana de su grupo (marca×red, o red
+    # si no hay marca): ratio = engagement_pct / mediana_engagement_del_grupo. Permite
+    # comparar piezas de redes con baselines dispares de forma JUSTA ("rindió 3× la
+    # mediana de su red"). OPCIONAL: None si no se computó o la mediana del grupo es 0
+    # (sin baseline). Lo rellena `anotar_rendimiento_relativo`; default None preserva
+    # la retrocompatibilidad de la salida.
+    rendimiento_relativo: float | None = None
     # --- Métricas granulares por pieza (issue métricas granulares) -----------
     # OPCIONALES y con default None/0: degradación honesta. Si Metricool no trae
     # el campo a nivel post (la forma de `/v2/analytics/posts/{network}` NO está

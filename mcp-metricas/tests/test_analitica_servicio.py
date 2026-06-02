@@ -27,15 +27,30 @@ def test_analitica_piezas_marca(muestra):
     assert a["total"] > 0
     assert len(a["top"]) == 5
     assert len(a["peores"]) == 5
-    # top ordenado por VISUALIZACIONES desc; peores no solapan con top.
-    vistas = [p["visualizaciones"] for p in a["top"]]
-    assert vistas == sorted(vistas, reverse=True)
+    # top/peores ESTRATIFICADOS por red (claro_sports tiene 5 redes con baselines
+    # dispares): no colapsan a una sola red, y traen el score normalizado por grupo.
+    redes_top = {p["plataforma"] for p in a["top"]}
+    redes_peor = {p["plataforma"] for p in a["peores"]}
+    assert len(redes_top) > 1
+    assert len(redes_peor) > 1
+    assert all(p["rendimiento_relativo"] is not None for p in a["top"])
+    # peores no solapan con top.
     ids_top = {p["id"] for p in a["top"]}
     ids_peor = {p["id"] for p in a["peores"]}
     assert not (ids_top & ids_peor)
     # estadisticas presentes.
     assert a["engagement"]["media"] is not None
     assert sum(b["n"] for b in a["distribucion"]) == a["total"]
+
+
+def test_analitica_piezas_global_no_colapsa_a_una_marca(muestra):
+    # marca=None agrega todas las marcas; top/peores deben representar VARIAS marcas
+    # y VARIAS redes (no monopolio de la marca/red de mayor volumen).
+    a = servicio.construir_analitica_piezas("mes", None)
+    assert len(a["top"]) == 5 and len(a["peores"]) == 5
+    assert len({p["cuenta"] for p in a["top"]}) > 1
+    assert len({p["cuenta"] for p in a["peores"]}) > 1
+    assert len({p["plataforma"] for p in a["top"]}) > 1
 
 
 def test_analitica_piezas_global_agrega_todas(muestra):

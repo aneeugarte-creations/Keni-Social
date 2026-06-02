@@ -80,6 +80,8 @@ def test_mejores_piezas_ordenadas(fuente: FuenteMuestra):
     assert len(piezas) == 5
     eng = [p.engagement_pct for p in piezas]
     assert eng == sorted(eng, reverse=True)
+    # cada pieza se sella con su marca (para estratificar top/peores por marca).
+    assert all(p.cuenta == "claro_sports" for p in piezas)
 
 
 def test_cuenta_desconocida(fuente: FuenteMuestra):
