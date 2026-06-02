@@ -228,7 +228,7 @@ def construir_analitica_piezas(rango: str = "mes", marca: str | None = None) -> 
     for c in fuente.cuentas():
         piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
 
-    top, peores = _estadisticas.top_y_peores(piezas, n=5)
+    top, peores = _estadisticas.top_y_peores(piezas, n=10)
     analitica = AnaliticaPiezas(
         cuenta=marca,
         rango=rango,

@@ -134,8 +134,8 @@ function ContenidoPiezas({ marca, rango }: { marca?: string; rango?: string }) {
           <DescargarPiezas rango={rango} marca={marca} />
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <TablaPiezas titulo="Top 5" piezas={data.top} />
-          <TablaPiezas titulo="Peores 5" piezas={data.peores} />
+          <TablaPiezas titulo="Top 10" piezas={data.top} />
+          <TablaPiezas titulo="Peores 10" piezas={data.peores} />
         </div>
       </div>
 
