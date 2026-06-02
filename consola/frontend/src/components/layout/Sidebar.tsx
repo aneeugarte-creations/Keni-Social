@@ -51,17 +51,22 @@ function BuscadorSidebar() {
   );
 }
 
-/** Clases de un item del sidebar (estilo shadcn: activo resaltado con acento). */
+/**
+ * Clases de un item del sidebar (estilo shadcn: activo resaltado con acento). El activo
+ * lleva además un acento NARANJA Keni sutil: el icono se tiñe de marca, para dar color a la
+ * navegación sin romper el minimalismo (el `[&_svg]` afecta solo al icono lucide del item).
+ */
 function clasesItem({ isActive }: { isActive: boolean }) {
   return cn(
     "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
     isActive
-      ? "bg-accent font-medium text-foreground"
+      ? "bg-accent font-medium text-foreground [&_svg]:text-keni"
       : "font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
   );
 }
 
-/** Clases del item PADRE de una app (cabecera colapsable del acordeón). */
+/** Clases del item PADRE de una app (cabecera colapsable del acordeón). El icono de la app
+ * activa se tiñe de naranja Keni (acento de marca sutil, sin afectar el chevron de cierre). */
 function clasesPadre(activa: boolean) {
   return cn(
     "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
@@ -81,17 +86,18 @@ function clasesHoja({ isActive }: { isActive: boolean }) {
   return cn(
     "flex items-center rounded-r-md border-l-2 py-1.5 pl-7 pr-3 text-[13px] transition-colors",
     isActive
-      ? "border-foreground bg-accent/50 font-medium text-foreground"
+      ? "border-keni bg-accent/50 font-medium text-foreground"
       : "border-transparent font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
   );
 }
 
-/** Clases de un icono del rail (barra colapsada, solo iconos). */
+/** Clases de un icono del rail (barra colapsada, solo iconos). El activo se tiñe de naranja
+ * Keni sobre el fondo de acento (acento de marca sutil en la barra estrecha). */
 function clasesIconoRail(activa: boolean) {
   return cn(
     "flex h-10 w-10 items-center justify-center rounded-md transition-colors",
     activa
-      ? "bg-accent text-foreground"
+      ? "bg-accent text-keni"
       : "text-muted-foreground hover:bg-accent hover:text-foreground",
   );
 }
@@ -324,7 +330,10 @@ export function Sidebar({
                     }
                   }}
                 >
-                  <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <Icono
+                    className={cn("h-4 w-4 shrink-0", activa && "text-keni")}
+                    aria-hidden="true"
+                  />
                   <span className="flex-1 text-left">{app.etiqueta}</span>
                   <ChevronRight
                     className={cn(

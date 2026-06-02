@@ -12,6 +12,14 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/85",
+        // Naranja Keni: CTA de marca (Lanzar, Generar). Texto blanco fijo (el naranja es
+        // oscuro), válido en claro y oscuro. Foco con anillo de marca.
+        brand:
+          "bg-keni text-white hover:bg-keni-500 focus-visible:ring-keni dark:hover:bg-keni-300",
+        // Verde: acción afirmativa/confirmatoria (Aprobar, Guardar). Mismo criterio de
+        // contraste; sirve en ambos modos.
+        positive:
+          "bg-emerald-600 text-white hover:bg-emerald-600/90 focus-visible:ring-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500",
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
         outline:
           "border border-border bg-background hover:bg-accent hover:text-accent-foreground",

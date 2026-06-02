@@ -186,7 +186,7 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
             En revisión. Quien aprueba no puede ser el autor (salvo admin).
           </p>
           <div className="flex gap-2">
-            <Button size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
+            <Button variant="positive" size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
               {aprobar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -541,7 +541,7 @@ export function DialogoEditar({
           <Button variant="outline" onClick={onCerrar} disabled={guardar.isPending}>
             Cancelar
           </Button>
-          <Button onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
+          <Button variant="positive" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
             {guardar.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Guardar cambios
           </Button>
