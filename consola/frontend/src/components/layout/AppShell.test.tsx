@@ -25,7 +25,7 @@ const CATALOGO = {
   // apps activas, ya agrupada por el backend).
   navegacion: [
     {
-      etiqueta: "Hoy",
+      etiqueta: "Operación",
       items: [
         { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "" },
         { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "" },

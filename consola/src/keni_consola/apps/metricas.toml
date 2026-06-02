@@ -33,8 +33,8 @@ ruta = "/analiticas"
 etiqueta = "Analíticas"
 icono = "BarChart3"
 descripcion = "Rendimiento de las cuentas, seguimiento de comercial y deck deportivo. Pestañas Métricas / Comercial / Reporte deportes."
-# Bloque "senales": la medición cierra el loop (alimenta de vuelta qué producir); es
+# Bloque "datos": la medición cierra el loop (alimenta de vuelta qué producir); es
 # lectura, no un checkpoint de la operación diaria.
-grupo = "senales"
+grupo = "datos"
 grupo_orden = 30
 orden = 20

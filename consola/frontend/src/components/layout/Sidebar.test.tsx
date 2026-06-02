@@ -24,12 +24,12 @@ const CATALOGO = {
       permisos: ["editor", "admin"],
       rutas_frontend: ["/estudio", "/investigacion", "/revision", "/actividad"],
       nav: [
-        { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "", grupo: "producir", grupo_orden: 20, orden: 10 },
-        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "", grupo: "producir", grupo_orden: 20, orden: 20 },
-        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "senales", grupo_orden: 30, orden: 10 },
-        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "hoy", grupo_orden: 10, orden: 30 },
-        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "senales", grupo_orden: 30, orden: 30 },
-        { ruta: "/activos", etiqueta: "Activos", icono: "Library", descripcion: "", grupo: "producir", grupo_orden: 20, orden: 30 },
+        { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
+        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
+        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
+        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 30 },
+        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
+        { ruta: "/activos", etiqueta: "Activos", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 30 },
       ],
     },
     {
@@ -40,7 +40,7 @@ const CATALOGO = {
       permisos: ["editor", "admin"],
       rutas_frontend: ["/analiticas"],
       nav: [
-        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "senales", grupo_orden: 30, orden: 20 },
+        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 20 },
       ],
     },
     {
@@ -51,16 +51,16 @@ const CATALOGO = {
       permisos: ["editor", "admin"],
       rutas_frontend: ["/parrilla"],
       nav: [
-        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "hoy", grupo_orden: 10, orden: 20 },
+        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
       ],
     },
   ],
   // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
-  // Panel (shell) encabeza "Hoy"; los hubs van como UNA entrada (su sub-nav es
+  // Panel (shell) encabeza "Operación"; los hubs van como UNA entrada (su sub-nav es
   // in-page, no en el sidebar).
   navegacion: [
     {
-      etiqueta: "Hoy",
+      etiqueta: "Operación",
       items: [
         { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "El vistazo del día" },
         { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "Tablero del equipo" },
@@ -68,7 +68,7 @@ const CATALOGO = {
       ],
     },
     {
-      etiqueta: "Producir",
+      etiqueta: "Contenido",
       items: [
         { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "Lienzo de imagen" },
         { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "Prompts y editorial" },
@@ -76,7 +76,7 @@ const CATALOGO = {
       ],
     },
     {
-      etiqueta: "Entradas y señales",
+      etiqueta: "Datos",
       items: [
         { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Fuentes y radar" },
         { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
@@ -185,21 +185,21 @@ function renderAvatarMenu(rol: RolUsuario) {
 describe("Sidebar · bloques de flujo", () => {
   it("pinta los 3 bloques de flujo con su encabezado", async () => {
     renderSidebar("editor", "/panel");
-    expect(await screen.findByText("Hoy")).toBeInTheDocument();
-    expect(screen.getByText("Producir")).toBeInTheDocument();
-    expect(screen.getByText("Entradas y señales")).toBeInTheDocument();
+    expect(await screen.findByText("Operación")).toBeInTheDocument();
+    expect(screen.getByText("Contenido")).toBeInTheDocument();
+    expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
   it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {
     renderSidebar("editor", "/panel");
-    // Bloque "Hoy": Panel + tablero + revisión, los checkpoints diarios.
+    // Bloque "Operación": Panel + tablero + revisión, los checkpoints diarios.
     expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
     expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/parrilla");
     expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/revision");
-    // Bloque "Producir".
+    // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/estudio");
     expect(screen.getByRole("link", { name: /biblioteca/i })).toHaveAttribute("href", "/biblioteca");
-    // Bloque "Entradas y señales": los hubs son una entrada, no sus pestañas.
+    // Bloque "Datos": los hubs son una entrada, no sus pestañas.
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/investigacion");
     expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/actividad");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
@@ -250,7 +250,7 @@ describe("Sidebar · rail colapsable", () => {
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
     // En rail no se pintan los encabezados de bloque (solo iconos).
-    expect(screen.queryByText("Producir")).not.toBeInTheDocument();
+    expect(screen.queryByText("Contenido")).not.toBeInTheDocument();
   });
 
   it("el toggle (colapsar / expandir) invoca onToggleColapsar", async () => {

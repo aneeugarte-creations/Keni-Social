@@ -2,8 +2,8 @@
 
 Verifican el contrato de `apps/registro.py` (ADR 0005 / plan §1) SIN red ni BD:
   - las 3 apps de producto + el shell se cargan de sus manifests TOML,
-  - el catálogo agrupa la nav por MOMENTO DEL FLUJO (hoy / producir / señales), con
-    encabezado de bloque visible, en el orden y con las etiquetas esperadas,
+  - el catálogo agrupa la nav por MOMENTO DEL FLUJO (Operación / Contenido / Datos),
+    con encabezado de bloque visible, en el orden y con las etiquetas esperadas,
   - desactivar el flag de una app la OCULTA del catálogo sin romper nada,
   - el shell NO figura como app de catálogo (pero sí aporta su nav: Panel).
 
@@ -19,19 +19,19 @@ from keni_consola.apps import registro
 # Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
-    # "Hoy": los checkpoints que el equipo toca cada día — el vistazo (Panel), la columna
-    # vertebral (Parrilla/tablero) y la cola de aprobación (Revisión).
+    # "Operación": los checkpoints que el equipo toca cada día — el vistazo (Panel), la
+    # columna vertebral (Parrilla/tablero) y la cola de aprobación (Revisión).
     ["Panel", "Parrilla", "Revisión"],
-    # "Producir": herramientas para crear/editar a mano una pieza (consumidas por el
+    # "Contenido": herramientas para crear/editar a mano una pieza (consumidas por el
     # pipeline cuando es automático). Estudio (imagen), Biblioteca (prompts), Activos.
     ["Estudio", "Biblioteca", "Activos"],
-    # "Entradas y señales": lo que alimenta o refleja la automatización — Investigación
-    # (fuentes/radar), Analíticas (medición que cierra el loop), Actividad IA (qué hizo).
+    # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
+    # Analíticas (medición que cierra el loop), Actividad IA (qué hizo).
     ["Investigación", "Analíticas", "Actividad IA"],
 ]
 
 # Encabezados humanos de cada bloque, en el mismo orden.
-_ETIQUETAS_BLOQUES = ["Hoy", "Producir", "Entradas y señales"]
+_ETIQUETAS_BLOQUES = ["Operación", "Contenido", "Datos"]
 
 
 def _entorno(**flags: str) -> dict[str, str]:
@@ -69,7 +69,7 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
 
     # La ruta primaria (primer item) de cada app: `nav` viene ordenada por bloque de
     # flujo (grupo_orden, orden), así que la 1ª es la entrada de Producción que cae más
-    # arriba en el sidebar — Revisión (bloque "hoy"), no Estudio (bloque "producir").
+    # arriba en el sidebar — Revisión (bloque "operacion"), no Estudio (bloque "contenido").
     assert porid["produccion"]["nav"][0]["ruta"] == "/revision"
     assert porid["metricas"]["nav"][0]["ruta"] == "/analiticas"
     assert porid["operacion"]["nav"][0]["ruta"] == "/parrilla"

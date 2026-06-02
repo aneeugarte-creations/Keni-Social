@@ -73,15 +73,15 @@ rutas_frontend = [
 # bloque visible. Cada entrada declara a qué bloque pertenece (`grupo` + `grupo_orden`)
 # y su `orden` dentro del bloque. El bloque es VISUAL y se desacopla del dueño de la
 # app: Producción reparte sus entradas entre los tres bloques según cuánto las toca el
-# humano. Bloques: hoy(10) = checkpoints diarios · producir(20) = herramientas para
-# crear/editar a mano · senales(30) = entradas que alimentan o reflejan la automatización.
+# humano. Bloques: operacion(10) = checkpoints diarios · contenido(20) = herramientas
+# para crear/editar a mano · datos(30) = entradas que alimentan o reflejan la automatización.
 
 [[nav]]
 ruta = "/estudio"
 etiqueta = "Estudio"
 icono = "Palette"
 descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o descárgala."
-grupo = "producir"
+grupo = "contenido"
 grupo_orden = 20
 orden = 10
 
@@ -90,7 +90,7 @@ ruta = "/biblioteca"
 etiqueta = "Biblioteca"
 icono = "Library"
 descripcion = "Prompts y línea editorial en un editor markdown a pantalla completa. Lanza un prompt sobre contenido o una sección."
-grupo = "producir"
+grupo = "contenido"
 grupo_orden = 20
 orden = 20
 
@@ -99,7 +99,7 @@ ruta = "/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
 descripcion = "Fuentes RSS, panorama mundial, tendencias virales y cambios de algoritmo. Pestañas Fuentes / Termómetro / Radar / Algoritmos."
-grupo = "senales"
+grupo = "datos"
 grupo_orden = 30
 orden = 10
 
@@ -108,7 +108,7 @@ ruta = "/revision"
 etiqueta = "Revisión"
 icono = "ShieldCheck"
 descripcion = "QA editorial y verificación de imágenes/videos antes de publicar. Pestañas Editorial / Verificación."
-grupo = "hoy"
+grupo = "operacion"
 grupo_orden = 10
 orden = 30
 
@@ -117,7 +117,7 @@ ruta = "/actividad"
 etiqueta = "Actividad IA"
 icono = "Activity"
 descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) y runs de agente, con su coste y consumo."
-grupo = "senales"
+grupo = "datos"
 grupo_orden = 30
 orden = 30
 
@@ -126,6 +126,6 @@ ruta = "/activos"
 etiqueta = "Activos"
 icono = "Library"
 descripcion = "Plantillas de contenido por tipo de nota, reutilizables al armar piezas."
-grupo = "producir"
+grupo = "contenido"
 grupo_orden = 20
 orden = 30

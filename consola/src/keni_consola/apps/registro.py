@@ -35,15 +35,15 @@ _DIR_MANIFESTS = Path(__file__).parent
 _VALORES_OFF = frozenset({"0", "false", "no", "off"})
 
 # Etiqueta humana de cada bloque del sidebar (encabezado visible). El sidebar agrupa por
-# MOMENTO DEL FLUJO, no por dueño de app: `hoy` = checkpoints diarios (Panel, tablero,
-# revisión); `producir` = herramientas para crear/editar a mano (estudio, biblioteca,
-# plantillas); `senales` = entradas que alimentan o reflejan la automatización
+# MOMENTO DEL FLUJO, no por dueño de app: `operacion` = checkpoints diarios (Panel,
+# tablero, revisión); `contenido` = herramientas para crear/editar a mano (estudio,
+# biblioteca, plantillas); `datos` = entradas que alimentan o reflejan la automatización
 # (investigación, analíticas, actividad). Un `grupo` sin etiqueta aquí cae a "" (bloque
 # sin encabezado), así un manifest nuevo no rompe aunque estrene un bloque.
 ETIQUETAS_BLOQUE: dict[str, str] = {
-    "hoy": "Hoy",
-    "producir": "Producir",
-    "senales": "Entradas y señales",
+    "operacion": "Operación",
+    "contenido": "Contenido",
+    "datos": "Datos",
 }
 
 
