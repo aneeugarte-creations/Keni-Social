@@ -257,6 +257,38 @@ def test_metricas_de_post_parsea_granulares():
 
 
 @respx.mock
+def test_interacciones_se_derivan_del_desglose_si_el_agregado_es_cero():
+    """Metricool a veces da interactions=0 con el desglose poblado (típico en FB): se
+    deriva interacciones = likes+comentarios+compartidos+guardados, y el engagement deja
+    de ser un 0 falso. Aplica tanto a mejores_piezas (Pieza) como a metricas_de_post."""
+    posts = {
+        "data": [
+            {
+                "id": "fb1",
+                "publishedAt": "2026-05-20T12:00:00",
+                "impressions": 13400,
+                "interactions": 0,  # agregado 0...
+                "likes": 27,
+                "comments": 1,
+                "shares": 5,  # ...pero el desglose SÍ viene (27+1+5 = 33)
+                "mediaType": "feed_image",
+            }
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        fuente = _fuente(cli)
+        piezas = fuente.mejores_piezas("claro_sports", RANGO, 5)
+        m = fuente.metricas_de_post("claro_sports", Plataforma.instagram, "fb1")
+
+    assert piezas[0].interacciones == 33  # derivado del desglose, no el 0 agregado
+    assert piezas[0].engagement_pct == pytest.approx(33 / 13400 * 100, abs=0.01)
+    assert m is not None and m.interacciones == 33
+
+
+@respx.mock
 def test_seguidores_netos_ultimo_menos_primero():
     """seguidores_netos = (último punto - primer punto) de la serie de followers."""
     def responder(request: httpx.Request) -> httpx.Response:

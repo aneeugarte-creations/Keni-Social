@@ -67,13 +67,13 @@ def test_buckets_engagement_cuenta_por_tramo():
     assert buckets[-1].fin is None
 
 
-def test_top_y_peores_un_solo_grupo_ranking_por_engagement():
-    # Una sola marca/red (grupo único): degrada al ranking por mérito (engagement).
-    # top = los de mayor engagement; peores = los de menor (de las restantes).
-    piezas = [_pieza(eng=float(e), i=e) for e in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
+def test_top_y_peores_un_solo_grupo_ranking_por_vistas():
+    # Un solo grupo (una marca/red): ranking directo por VISUALIZACIONES (alcance).
+    # top = las MÁS vistas; peores = las MENOS vistas (de las restantes).
+    piezas = [_pieza(eng=1.0, vis=v * 1000, i=v) for v in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]]
     top, peores = top_y_peores(piezas, n=5)
-    assert [p.engagement_pct for p in top] == [12, 11, 10, 9, 8]
-    assert [p.engagement_pct for p in peores] == [1, 2, 3, 4, 5]
+    assert [p.visualizaciones for p in top] == [12000, 11000, 10000, 9000, 8000]
+    assert [p.visualizaciones for p in peores] == [1000, 2000, 3000, 4000, 5000]
     # ninguna pieza aparece en ambos
     assert not ({p.id for p in top} & {p.id for p in peores})
 

@@ -214,6 +214,24 @@ def _a_int_opt(v) -> int | None:
         return None
 
 
+_GRANULAR_INTERACCION = ("likes", "comentarios", "compartidos", "guardados")
+
+
+def _interacciones_efectivas(inter: int, gran: dict) -> int:
+    """Interacciones del post: el agregado de Metricool, o la SUMA del desglose si el
+    agregado viene 0/ausente.
+
+    Metricool a veces devuelve `interactions`=0 en posts (sobre todo Facebook) aunque el
+    desglose por tipo (likes/comentarios/compartidos/guardados) SÍ venga poblado. Tomar 0
+    daría un engagement 0 falso; cuando el agregado es 0 pero hay desglose, se usa su suma
+    (degradación honesta: mejor el dato disponible que un 0 engañoso). Si el agregado ya
+    es > 0, se respeta tal cual.
+    """
+    if inter:
+        return inter
+    return sum(gran[k] for k in _GRANULAR_INTERACCION if gran.get(k) is not None)
+
+
 def _formato_opt(v) -> str | None:
     """Normaliza el formato crudo a un literal del contrato, o None si no viene.
 
@@ -592,6 +610,8 @@ class FuenteMetricol:
         if not vis:
             return None  # sin visualizaciones no es una "mejor pieza" útil
         inter = _entero(_primero(post, _ALIAS_INT, 0))
+        gran = self._granulares(post)
+        inter = _interacciones_efectivas(inter, gran)
         return Pieza(
             id=str(_primero(post, _ALIAS_ID, "")),
             plataforma=plat,
@@ -602,7 +622,7 @@ class FuenteMetricol:
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(post, _ALIAS_URL),
             cuenta=cuenta_id,
-            **self._granulares(post),
+            **gran,
         )
 
     def metricas_de_post(
@@ -643,6 +663,8 @@ class FuenteMetricol:
                 continue
             vis = _entero(_primero(post, _ALIAS_VIS, 0))
             inter = _entero(_primero(post, _ALIAS_INT, 0))
+            gran = self._granulares(post)
+            inter = _interacciones_efectivas(inter, gran)
             return MetricaPieza(
                 id_post=objetivo,
                 plataforma=plat,
@@ -653,7 +675,7 @@ class FuenteMetricol:
                 url=_primero(post, _ALIAS_URL),
                 publicado=_fecha(_primero(post, _ALIAS_FECHA), hasta),
                 fuente=self.nombre,
-                **self._granulares(post),
+                **gran,
                 # Seguidores atribuidos al post: casi seguro Metricool no lo da a
                 # nivel post; None salvo que algún alias lo traiga.
                 seguidores_netos_atribuidos=_a_int_opt(_primero(post, _ALIAS_SEG_POST)),
