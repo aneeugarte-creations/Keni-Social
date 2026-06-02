@@ -84,6 +84,14 @@ ETAPA_QA = "QA"
 # seguridad: la QA léxica es barata, pero acotamos para no recorrer un histórico enorme.
 _QA_REVISAR_MAX = 50
 
+# CAP de LANZAMIENTOS de QA editorial (`claude -p`) por barrido. Cada uno es un job del worker
+# (KENI_MAX_JOBS); sin tope, una pasada que encuentra muchos borradores sin veredicto dispara
+# una RÁFAGA que satura el worker y deja decenas de QA "ejecutando" inundando Actividad (lo que
+# pasó al backfill inicial). Con el tope, cada barrido lanza pocos y el resto se valida en el
+# siguiente; el sweep es horario, así drena gradualmente. La validación LÉXICA (fallback sin
+# coste) NO cuenta para el tope.
+_QA_LANZAR_MAX = 4
+
 # Redes objetivo por defecto del pipeline: subconjunto sensato de las canónicas (las que el
 # piloto AMX usa a diario), intersecado con `redes.ids()` por si el catálogo cambiara.
 _REDES_DEFECTO_PIPELINE = ("instagram", "x", "facebook")
@@ -856,8 +864,14 @@ def ejecutar_qa() -> list[dict[str, Any]]:
         validados.extend(reconciliar_qa_en_curso())
     except Exception:  # noqa: BLE001 -- un fallo de reconciliación no debe matar la pasada
         _log.exception("pipeline: fallo la reconciliación de QA editorial en curso.")
-    # 2) Lanza/valida los borradores aún sin veredicto.
+    # 2) Lanza/valida los borradores aún sin veredicto, con TOPE de lanzamientos editoriales
+    #    por barrido (`_QA_LANZAR_MAX`): evita la ráfaga de `claude -p` que satura el worker e
+    #    inunda Actividad de QA "en curso". Los borradores restantes se validan en el siguiente
+    #    barrido (drenaje gradual). La validación LÉXICA (fallback, sin coste) no cuenta al tope.
+    lanzados_editorial = 0
     for pub in borradores_pipeline_sin_qa():
+        if lanzados_editorial >= _QA_LANZAR_MAX:
+            break
         try:
             r = validar_borrador(pub)
         except Exception:  # noqa: BLE001 -- un fallo por item no debe matar la pasada QA
@@ -865,6 +879,8 @@ def ejecutar_qa() -> list[dict[str, Any]]:
             continue
         if r:
             validados.append(r)
+            if r.get("modo") == "editorial":
+                lanzados_editorial += 1
     return validados
 
 
