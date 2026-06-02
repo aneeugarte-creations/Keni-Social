@@ -91,7 +91,8 @@ function categoriaDe(op: OperacionPropuesta): Categoria {
 
 // --- Helpers de franja (espejo de la lógica de Rota.tsx, sin CRUD) ----------
 
-function horaAMinutos(s: string): number | null {
+function horaAMinutos(s: string | null | undefined): number | null {
+  if (typeof s !== "string") return null;
   const m = s.match(/^(\d{1,2}):(\d{2})$/);
   if (!m) return null;
   const h = Number(m[1]);
@@ -111,11 +112,17 @@ function horaEnRangoFranja(hora: string, inicio: string, fin: string): boolean {
   return h >= ini || h < f;
 }
 
-/** El NOMBRE de la franja de la semana que contiene la hora del evento, o `null`. */
-function franjaNombreParaHoraEvento(hora: string, franjas: FranjaSemana[]): string | null {
+/** El NOMBRE de la franja de la semana que contiene la hora del evento, o `null`.
+ * Devuelve `null` si no hay franjas o si la hora es nula/ inválida (un evento SIN hora —caso
+ * habitual en imports— lo coloca el caller en la primera fila laboral, sin reventar). */
+function franjaNombreParaHoraEvento(
+  hora: string | null | undefined,
+  franjas: FranjaSemana[],
+): string | null {
   if (franjas.length === 0) return null;
+  if (horaAMinutos(hora) === null) return null; // sin hora válida: que decida el caller
   for (const f of franjas.filter((x) => !x.es_descanso)) {
-    if (horaEnRangoFranja(hora, f.inicio, f.fin)) return f.nombre;
+    if (horaEnRangoFranja(hora as string, f.inicio, f.fin)) return f.nombre;
   }
   return franjas.find((f) => f.es_descanso)?.nombre ?? franjas[0]?.nombre ?? null;
 }

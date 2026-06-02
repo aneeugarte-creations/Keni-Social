@@ -268,10 +268,10 @@ function VisorEnVivo({ id, onClose }: { id: string; onClose: () => void }) {
     <Dialog open onOpenChange={(abierto) => !abierto && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Generación en vivo</DialogTitle>
+          <DialogTitle>Generación</DialogTitle>
           <DialogDescription>
-            Sigue el progreso token a token. El trabajo corre en el servidor; cerrar esta
-            ventana no lo detiene.
+            Stream del modelo (token a token mientras corre) y el prompt exacto enviado. El
+            trabajo corre en el servidor; cerrar esta ventana no lo detiene.
           </DialogDescription>
         </DialogHeader>
         {cargaQuery.isError ? (
@@ -281,11 +281,23 @@ function VisorEnVivo({ id, onClose }: { id: string; onClose: () => void }) {
               : mensajeError(cargaQuery.error)}
           </p>
         ) : generacion ? (
-          <ProgresoGeneracion
-            generacion={generacion}
-            onCancelar={cancelar}
-            cancelando={cancelando}
-          />
+          <div className="space-y-3">
+            <ProgresoGeneracion
+              generacion={generacion}
+              onCancelar={cancelar}
+              cancelando={cancelando}
+            />
+            {generacion.prompt && (
+              <details className="rounded-md border bg-muted/30 text-sm">
+                <summary className="cursor-pointer select-none px-3 py-2 font-medium">
+                  Ver prompt enviado al modelo
+                </summary>
+                <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words border-t px-3 py-2 text-xs text-muted-foreground">
+                  {generacion.prompt}
+                </pre>
+              </details>
+            )}
+          </div>
         ) : (
           <Skeleton className="h-40 w-full rounded-xl" />
         )}
@@ -346,8 +358,12 @@ function TablaActividad({
                 const m = it.metricas;
                 // Acción PRINCIPAL del item (sin columna aparte): la fila entera la dispara.
                 // Generación en vivo -> verla en directo; con resultado -> abrirlo donde salga.
+                // Generación EN VIVO o SIN página de resultado (p.ej. importar parrilla) ->
+                // abrir el visor (stream + prompt + error), también en estados terminales.
+                // Generación/agente CON resultado -> abrir su página. Resto -> no clicable.
                 const accion =
-                  it.fuente === "generacion" && it.estado === "ejecutando"
+                  it.fuente === "generacion" &&
+                  (it.estado === "ejecutando" || !it.resultado_url)
                     ? () => onVerEnVivo(it.id)
                     : it.resultado_url
                       ? () => onVerResultado(it)
