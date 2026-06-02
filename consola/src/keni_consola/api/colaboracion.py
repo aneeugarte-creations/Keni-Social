@@ -306,37 +306,55 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
         return JSONResponse({"error": "Las etiquetas no son válidas."}, status_code=400)
     if not etiquetas:
         return JSONResponse({"error": "La cadena necesita al menos un nivel."}, status_code=400)
-
-    # --- item D: QA Editorial como PRIMER nivel automatico (gateado, def OFF) -----------
-    # Antepone "QA Editorial" a la cadena cuando el flag esta ON, dejando los niveles humanos
-    # detras (el ultimo SIEMPRE humano). El veredicto del QA se aplica luego, best-effort.
-    if config.auto_qa_editorial():
-        etiquetas = colaboracion.cadena_con_qa(etiquetas)
-    if len(etiquetas) > _MAX_NIVELES:
+    # El nivel "QA Editorial" (si el flag lo activa) se antepone DENTRO de `montar_cadena`,
+    # asi que cuenta para el limite de niveles.
+    if len(etiquetas) + (1 if config.auto_qa_editorial() else 0) > _MAX_NIVELES:
         return JSONResponse(
             {"error": f"Demasiados niveles (máximo {_MAX_NIVELES})."}, status_code=400
         )
 
-    # item C: cargo del organigrama EXIGIDO por nivel (derivado de la etiqueta). El QA
-    # automatico no exige cargo. Se sella en la cadena para validarlo al decidir.
-    cargos = [colaboracion.cargo_requerido_para(e) for e in etiquetas]
+    # Cadena del TABLERO (recrear a mano): respeta el cargo del organigrama por nivel
+    # (item C: Coordinación→coordinador, Dirección→director).
+    montar_cadena_aprobacion(plataforma_id, plat, etiquetas, con_cargos=True)
+    return JSONResponse(_cadena_publica(plataforma_id), status_code=201)
 
+
+def montar_cadena_aprobacion(
+    plataforma_id: str,
+    plat: dict,
+    etiquetas: list[str],
+    *,
+    con_cargos: bool,
+) -> None:
+    """Crea (o RECREA) la cadena de aprobacion de una pieza, con todos sus automatismos.
+
+    Punto unico compartido por `crear_aprobacion_cadena` (recrear la cadena del tablero) y
+    por `api/aprobacion.enviar_a_revision` (mandar al flujo "dale el OK" del feed). Pasos:
+
+      1. item D — QA Editorial como PRIMER nivel automatico, si `KENI_AUTO_QA_EDITORIAL` lo
+         activa (la "aprobacion de IA"). El ultimo nivel queda SIEMPRE humano.
+      2. cargos por nivel: si `con_cargos`, se exige el cargo del organigrama derivado de la
+         etiqueta (Coordinación→coordinador, etc.); si no, ningun nivel exige cargo (el flujo
+         "dale el OK" del feed se abre a cualquiera del equipo, salvo el autor).
+      3. crea la cadena (todos los niveles `pendiente`) via `repos.crear_cadena_aprobacion`.
+      4. aplica el veredicto de QA al nivel automatico (best-effort) y la pre-aprobacion de
+         piezas de bajo riesgo (ambos gateados por sus flags, def OFF).
+    """
+    if config.auto_qa_editorial():
+        etiquetas = colaboracion.cadena_con_qa(etiquetas)
+    cargos = [colaboracion.cargo_requerido_para(e) for e in etiquetas] if con_cargos else None
     repos.crear_cadena_aprobacion(
         plataforma_id=plataforma_id,
-        contenido_id=plat.get("contenido_id", ""),
+        contenido_id=plat.get("contenido_id", "") or "",
         etiquetas=etiquetas,
         cargos=cargos,
     )
     if config.auto_qa_editorial():
         _aplicar_qa_automatico(plataforma_id, plat)
-    # --- fase3 (auto-planificacion): PRE-APROBACION de piezas de bajo riesgo -----------
-    # Gateado por flag admin (def OFF). Si esta activo Y la pieza es de bajo riesgo
-    # (evergreen reutilizado sin cambios, o solo canal web/no-social), auto-aprueba los
-    # niveles INFERIORES de la cadena recien creada, dejando el ULTIMO a un humano. Trazable
-    # (decisor "auto"). Si todo lo demas queda aprobado, la cadena solo espera el nivel final.
+    # fase3 (auto-planificacion): pre-aprobacion de piezas de bajo riesgo (gateada, def OFF).
+    # Auto-aprueba los niveles INFERIORES, dejando el ULTIMO a un humano (trazable, decisor
+    # "auto"). Si todo lo demas queda aprobado, la cadena solo espera el OK final.
     _aplicar_preaprobacion_bajo_riesgo(plataforma_id, plat)
-    # --- fin fase3 ----------------------------------------------------------------------
-    return JSONResponse(_cadena_publica(plataforma_id), status_code=201)
 
 
 def _aplicar_preaprobacion_bajo_riesgo(

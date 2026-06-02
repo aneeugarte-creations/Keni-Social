@@ -26,13 +26,12 @@ function nivel(over: Partial<NivelAprobacion>): NivelAprobacion {
   };
 }
 
-/** Cadena de 3 niveles: Edición (aprobado) → Coordinación (actual, pendiente) → Dirección. */
-function cadena3(over: Partial<TCadena> = {}): TCadena {
+/** Cadena de los dos OK: Edición (OK de Ana) → Coordinación (el OK que toca ahora). */
+function cadenaOK(over: Partial<TCadena> = {}): TCadena {
   return {
     niveles: [
-      nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_nombre: "Ana" }),
-      nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación", cargo_requerido: "coordinador" }),
-      nivel({ id: "n3", nivel: 3, etiqueta: "Dirección", cargo_requerido: "director" }),
+      nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
+      nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
     ],
     estado: "pendiente",
     nivel_actual: "n2",
@@ -48,7 +47,8 @@ function renderCadena(
   {
     autorPiezaId = "autorX",
     usuario = {},
-  }: { autorPiezaId?: string; usuario?: Partial<UsuarioSesion> } = {},
+    veredictoIA,
+  }: { autorPiezaId?: string; usuario?: Partial<UsuarioSesion>; veredictoIA?: string } = {},
 ) {
   const valor: ValorSesion = {
     usuario: {
@@ -67,13 +67,18 @@ function renderCadena(
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={valor}>
-        <CadenaAprobacion cadena={cadena} plataformaId="p1" autorPiezaId={autorPiezaId} />
+        <CadenaAprobacion
+          cadena={cadena}
+          plataformaId="p1"
+          autorPiezaId={autorPiezaId}
+          veredictoIA={veredictoIA}
+        />
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
 }
 
-describe("CadenaAprobacion · UI multinivel", () => {
+describe("CadenaAprobacion · panel «dale el OK»", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -81,53 +86,57 @@ describe("CadenaAprobacion · UI multinivel", () => {
     vi.unstubAllGlobals();
   });
 
-  it("pinta cada nivel con su estado: aprobado, actual (pendiente) y en espera", () => {
-    renderCadena(cadena3());
-    // Los 3 niveles con sus etiquetas (Coordinación aparece también en "toca decidir").
-    expect(screen.getByText("Edición")).toBeInTheDocument();
-    expect(screen.getAllByText("Coordinación").length).toBeGreaterThan(0);
-    expect(screen.getByText("Dirección")).toBeInTheDocument();
-    // Estado por nivel: el primero aprobado, el último (no es su turno) en espera.
-    expect(screen.getByText("Aprobado")).toBeInTheDocument();
-    expect(screen.getByText("En espera")).toBeInTheDocument();
-    // El badge global resume "En aprobación".
-    expect(screen.getByText("En aprobación")).toBeInTheDocument();
+  it("muestra cuántos OK van y de quién + lo que falta", () => {
+    renderCadena(cadenaOK());
+    expect(screen.getByText("OK 1/2")).toBeInTheDocument();
+    expect(screen.getByText(/Ana/)).toBeInTheDocument();
+    expect(screen.getByText(/Faltan 1 OK/i)).toBeInTheDocument();
   });
 
-  it("solo ofrece decidir el nivel ACTUAL por orden (Coordinación)", () => {
-    renderCadena(cadena3());
-    expect(screen.getByText(/toca decidir/i)).toHaveTextContent("Coordinación");
-    expect(screen.getByRole("button", { name: /aprobar nivel/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
+  it("pinta el veredicto de IA cuando hay (🟢 lista)", () => {
+    renderCadena(cadenaOK(), { veredictoIA: "listo" });
+    expect(screen.getByText(/IA: lista/i)).toBeInTheDocument();
   });
 
-  it("llama al endpoint del nivel actual al aprobar (decisión por orden)", async () => {
-    const fetchMock = vi.fn(async (_url: string | URL) =>
-      new Response(JSON.stringify({ nivel: {}, estado: "pendiente", niveles: [] }), { status: 200 }),
+  it("«Dar mi OK» pega al endpoint del nivel actual (decisión por orden)", async () => {
+    const fetchMock = vi.fn(
+      async (_url: string | URL) =>
+        new Response(JSON.stringify({ nivel: {}, estado: "pendiente", niveles: [] }), { status: 200 }),
     );
     vi.stubGlobal("fetch", fetchMock);
-    renderCadena(cadena3());
-    fireEvent.click(screen.getByRole("button", { name: /aprobar nivel/i }));
+    renderCadena(cadenaOK());
+    fireEvent.click(screen.getByRole("button", { name: /dar mi ok/i }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    // Pega al endpoint del nivel actual (n2), no a otro.
     const url = String(fetchMock.mock.calls[0]?.[0] ?? "");
     expect(url).toContain("/aprobacion-nivel/n2/decidir");
   });
 
-  it("GATE autor: el autor (no admin) no puede decidir su propia pieza", () => {
-    renderCadena(cadena3(), { autorPiezaId: "u1", usuario: { id: "u1", rol: "editor" } });
-    expect(screen.getByText(/no puedes aprobar tu propia pieza/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /aprobar nivel/i })).not.toBeInTheDocument();
+  it("GATE autor: el autor (no admin) no puede dar OK a su propia pieza", () => {
+    renderCadena(cadenaOK(), { autorPiezaId: "u1", usuario: { id: "u1", rol: "editor" } });
+    expect(screen.getByText(/no puedes dar ok a tu propia pieza/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dar mi ok/i })).toBeDisabled();
   });
 
-  it("GATE autor: un admin SÍ puede decidir aunque sea el autor (desatascar)", () => {
-    renderCadena(cadena3(), { autorPiezaId: "u1", usuario: { id: "u1", rol: "admin" } });
-    expect(screen.queryByText(/no puedes aprobar tu propia pieza/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /aprobar nivel/i })).toBeInTheDocument();
+  it("GATE «otra persona»: quien ya dio un OK no puede dar el otro", () => {
+    // El usuario de sesión (u1) es quien aprobó Edición (decisor_id ana → lo ponemos a u1).
+    const c = cadenaOK({
+      niveles: [
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "u1", decisor_nombre: "Yo" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
+      ],
+    });
+    renderCadena(c, { usuario: { id: "u1", rol: "editor" } });
+    expect(screen.getByText(/ya diste tu ok/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /dar mi ok/i })).toBeDisabled();
   });
 
-  it("cadena RECHAZADA: no ofrece decisión y explica que vuelve a redacción", () => {
-    const c = cadena3({
+  it("GATE autor: un admin SÍ puede dar OK aunque sea el autor (desatascar)", () => {
+    renderCadena(cadenaOK(), { autorPiezaId: "u1", usuario: { id: "u1", rol: "admin" } });
+    expect(screen.getByRole("button", { name: /dar mi ok/i })).toBeEnabled();
+  });
+
+  it("cadena RECHAZADA: no ofrece OK y explica que vuelve a redacción", () => {
+    const c = cadenaOK({
       niveles: [
         nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "rechazado", decisor_nombre: "Ana" }),
         nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación" }),
@@ -136,22 +145,21 @@ describe("CadenaAprobacion · UI multinivel", () => {
       nivel_actual: "",
     });
     renderCadena(c);
-    expect(screen.getByText("Rechazada")).toBeInTheDocument();
     expect(screen.getByText(/vuelve a la redacción/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /aprobar nivel/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /dar mi ok/i })).not.toBeInTheDocument();
   });
 
-  it("cadena TOTALMENTE aprobada: sin decisión pendiente", () => {
-    const c = cadena3({
+  it("cadena TOTALMENTE aprobada: «Lista para publicar»", () => {
+    const c = cadenaOK({
       niveles: [
-        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado" }),
-        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación", decision: "aprobado" }),
+        nivel({ id: "n1", nivel: 1, etiqueta: "Edición", decision: "aprobado", decisor_id: "ana", decisor_nombre: "Ana" }),
+        nivel({ id: "n2", nivel: 2, etiqueta: "Coordinación", decision: "aprobado", decisor_id: "leo", decisor_nombre: "Leo" }),
       ],
       estado: "aprobado",
       nivel_actual: "",
     });
     renderCadena(c);
-    expect(screen.getByText("Aprobada")).toBeInTheDocument();
-    expect(screen.getByText(/todos los niveles están aprobados/i)).toBeInTheDocument();
+    expect(screen.getByText(/lista para publicar/i)).toBeInTheDocument();
+    expect(screen.getByText("OK 2/2")).toBeInTheDocument();
   });
 });

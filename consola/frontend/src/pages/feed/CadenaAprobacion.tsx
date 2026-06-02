@@ -1,28 +1,26 @@
 /**
- * UI de la APROBACION MULTINIVEL de una pieza en el feed (follow-up #4): pinta la cadena de
- * niveles (p. ej. Edición → Coordinación → Dirección) con su estado por nivel y deja DECIDIR
- * el nivel que toca, respetando las reglas del backend (`dominio/colaboracion.py`):
+ * PANEL "DALE EL OK" de una pieza en el feed (la cara amable de la cadena de aprobación):
+ * en vez de pintar la cadena multinivel cruda, la presenta como una RED SOCIAL interna —
  *
- *   - Se decide POR ORDEN: solo el primer nivel `pendiente` (`nivel_actual`) acepta decisión.
- *     Los anteriores ya están decididos; los posteriores se muestran en espera (deshabilitados).
- *   - "Otro par de ojos": el decisor NO puede ser el autor de la pieza (salvo admin). Aquí se
- *     deshabilita el control y se explica; el backend es la fuente de verdad (responde 409).
- *   - Un RECHAZO en cualquier nivel para la cadena (la pieza vuelve a borrador). Si la cadena
- *     ya está rechazada o totalmente aprobada, no hay decisión pendiente.
+ *   - Un veredicto de IA arriba (QA Editorial): 🟢 lista · 🟡 revisar · 🔴 no publicar.
+ *   - Los OK del equipo como "likes": cuántos van (p. ej. "OK 1/2") y DE QUIÉN.
+ *   - Un único botón "Dar mi OK" (aprueba el nivel humano que toca) + "Rechazar".
+ *   - Cuando junta la aprobación de IA + los OK que faltan, la pieza pasa SOLA a
+ *     "Lista para publicar" (el backend deriva `aprobado` al quedar toda la cadena aprobada).
  *
- * Consume los endpoints existentes (`api.cadenaAprobacion` / `api.decidirNivelAprobacion`); NO
- * crea backend nuevo. El estado global (badge) y los niveles vienen del servidor.
+ * Cada OK = aprobar un nivel humano de la cadena (`api.decidirNivelAprobacion`). El backend
+ * es la fuente de verdad de las reglas (no apruebas tu propia pieza; cada OK lo da una
+ * persona distinta), aquí solo deshabilitamos y explicamos antes de pedirlo. NO crea backend.
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, CircleDashed, Clock, Loader2, XCircle } from "lucide-react";
-import * as React from "react";
+import { Check, Loader2, Sparkles, ThumbsUp, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
-import type { CadenaAprobacion as TCadena, DecisionAprobacion, NivelAprobacion } from "@/types";
+import type { CadenaAprobacion as TCadena, NivelAprobacion } from "@/types";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -30,176 +28,152 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema. Vuelve a intentarlo.";
 }
 
-/** Etiqueta humana + variante de badge para la decisión de UN nivel. */
-function pintaDecision(decision: DecisionAprobacion): {
-  texto: string;
-  variant: "ok" | "error" | "aviso";
-  Icono: typeof Check;
-} {
-  if (decision === "aprobado") return { texto: "Aprobado", variant: "ok", Icono: Check };
-  if (decision === "rechazado") return { texto: "Rechazado", variant: "error", Icono: XCircle };
-  return { texto: "Pendiente", variant: "aviso", Icono: Clock };
-}
+/** El nivel automático de IA (QA Editorial) se reconoce por su etiqueta reservada. */
+const ETIQUETA_QA = "qa editorial";
+const esNivelIA = (n: NivelAprobacion) => n.etiqueta.trim().toLowerCase() === ETIQUETA_QA;
 
-/** Resumen del estado GLOBAL de la cadena (el badge de cabecera). */
-function pintaEstadoCadena(estado: TCadena["estado"]): { texto: string; variant: "ok" | "error" | "aviso" | "secondary" } {
-  switch (estado) {
-    case "aprobado":
-      return { texto: "Aprobada", variant: "ok" };
-    case "rechazado":
-      return { texto: "Rechazada", variant: "error" };
-    case "pendiente":
-      return { texto: "En aprobación", variant: "aviso" };
-    default:
-      return { texto: "Sin cadena", variant: "secondary" };
-  }
-}
-
-function Fila({
-  nivel,
-  esActual,
-  total,
-}: {
-  nivel: NivelAprobacion;
-  esActual: boolean;
-  total: number;
-}) {
-  const { texto, variant, Icono } = pintaDecision(nivel.decision);
-  // Niveles posteriores al actual (aún sin decidir y no es su turno): en espera.
-  const enEspera = nivel.decision === "pendiente" && !esActual;
-  return (
-    <li
-      className={
-        "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs " +
-        (esActual ? "border-amber-400/60 bg-amber-500/5" : "border-border")
-      }
-    >
-      <span className="font-medium tabular-nums text-muted-foreground">
-        {nivel.nivel}/{total}
-      </span>
-      <span className="font-medium text-foreground">{nivel.etiqueta || "Nivel"}</span>
-      {nivel.cargo_requerido && (
-        <span className="text-muted-foreground">· cargo: {nivel.cargo_requerido}</span>
-      )}
-      <Badge variant={enEspera ? "secondary" : variant} className="ml-auto gap-1">
-        {enEspera ? <CircleDashed className="h-3 w-3" /> : <Icono className="h-3 w-3" />}
-        {enEspera ? "En espera" : texto}
-      </Badge>
-      {nivel.decision !== "pendiente" && nivel.decisor_nombre && (
-        <span className="text-muted-foreground">por {nivel.decisor_nombre}</span>
-      )}
-    </li>
-  );
+/** Semáforo de la "aprobación de IA": del nivel QA de la cadena, o del veredicto suelto. */
+function pintaIA(
+  nivelIA: NivelAprobacion | undefined,
+  veredicto: string | undefined,
+): { emoji: string; texto: string; clase: string } | null {
+  // Si hay nivel QA en la cadena, su decisión manda; si no, el último veredicto de la pieza.
+  const v = nivelIA
+    ? nivelIA.decision === "aprobado"
+      ? "listo"
+      : nivelIA.decision === "rechazado"
+        ? "no_publicar"
+        : "revisar"
+    : (veredicto || "").trim().toLowerCase();
+  if (v === "listo") return { emoji: "🟢", texto: "IA: lista", clase: "text-emerald-600 dark:text-emerald-400" };
+  if (v === "no_publicar") return { emoji: "🔴", texto: "IA: no publicar", clase: "text-red-600 dark:text-red-400" };
+  if (v === "revisar") return { emoji: "🟡", texto: "IA: revisar", clase: "text-amber-600 dark:text-amber-400" };
+  return null; // sin veredicto: no afirmamos nada sobre la IA.
 }
 
 export function CadenaAprobacion({
   cadena,
   plataformaId,
   autorPiezaId,
+  veredictoIA,
 }: {
   cadena: TCadena;
   /** Id de la `contenido_plataforma` (== `Publicacion.id`); clave de las queries. */
   plataformaId: string;
-  /** Autor de la pieza: el gate "otro par de ojos" le impide decidir (salvo admin). */
+  /** Autor de la pieza: no puede dar OK a su propia pieza (salvo admin). */
   autorPiezaId: string;
+  /** Veredicto de QA suelto (cuando la IA no es un nivel de la cadena). Pinta el semáforo. */
+  veredictoIA?: string;
 }) {
   const queryClient = useQueryClient();
   const { usuario } = useSesion();
-  const [comentario, setComentario] = React.useState("");
 
   const niveles = [...cadena.niveles].sort((a, b) => a.nivel - b.nivel);
-  const total = niveles.length;
-  const estado = pintaEstadoCadena(cadena.estado);
+  const humanos = niveles.filter((n) => !esNivelIA(n));
+  const nivelIA = niveles.find(esNivelIA);
+  const okDados = humanos.filter((n) => n.decision === "aprobado");
+  const totalOK = humanos.length || 1;
   const nivelActual = niveles.find((n) => n.id === cadena.nivel_actual) ?? null;
+  const ia = pintaIA(nivelIA, veredictoIA);
 
-  // Gate "otro par de ojos" del lado cliente (el backend lo revalida): un autor no-admin no
-  // puede decidir su propia pieza. Sirve para deshabilitar y explicar antes de pedir al server.
+  // ¿Puede ESTE usuario dar su OK ahora? El backend revalida; aquí explicamos antes de pedir.
   const esAdmin = usuario?.rol === "admin";
   const esAutor = !!usuario?.id && !!autorPiezaId && usuario.id === autorPiezaId;
-  const bloqueadoPorAutor = esAutor && !esAdmin;
+  const yaDioOK = !!usuario?.id && humanos.some((n) => n.decisor_id === usuario.id);
+  // El OK humano solo se puede dar si el nivel que toca es humano (no el de IA pendiente).
+  const tocaHumano = !!nivelActual && !esNivelIA(nivelActual);
+  const motivoBloqueo = esAutor
+    ? "No puedes dar OK a tu propia pieza; el OK lo da otra persona."
+    : yaDioOK
+      ? "Ya diste tu OK; falta el de otra persona."
+      : !tocaHumano && nivelActual
+        ? "Esperando la verificación de la IA antes del OK del equipo."
+        : "";
+  const puedeOK = !!nivelActual && tocaHumano && (esAdmin || (!esAutor && !yaDioOK));
 
   const decidir = useMutation({
     mutationFn: (decision: "aprobado" | "rechazado") =>
-      api.decidirNivelAprobacion(cadena.nivel_actual, decision, comentario.trim() || undefined),
+      api.decidirNivelAprobacion(cadena.nivel_actual, decision),
     onSuccess: (_res, decision) => {
-      setComentario("");
       void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", plataformaId] });
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
-      toast.success(decision === "aprobado" ? "Nivel aprobado." : "Pieza rechazada.");
+      toast.success(decision === "aprobado" ? "¡OK dado!" : "Pieza rechazada.");
     },
     onError: (e: unknown) => toast.error(mensajeError(e)),
   });
   const ocupado = decidir.isPending;
 
+  const lista = cadena.estado === "aprobado";
+  const rechazada = cadena.estado === "rechazado";
+
   return (
-    <section className="border-t border-border px-4 py-3" aria-label="Cadena de aprobación">
-      <div className="mb-2 flex items-center gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Aprobación multinivel
-        </h4>
-        <Badge variant={estado.variant} className="ml-auto">
-          {estado.texto}
-        </Badge>
+    <section className="border-t border-border px-4 py-3" aria-label="Aprobación de la pieza">
+      {/* Veredicto de IA (la "aprobación de IA"). */}
+      {ia && (
+        <p className={"mb-2 flex items-center gap-1.5 text-xs font-medium " + ia.clase}>
+          <Sparkles className="h-3.5 w-3.5" />
+          {ia.emoji} {ia.texto}
+        </p>
+      )}
+
+      {/* Los OK del equipo como "likes": cuántos y de quién. */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+        <span className="inline-flex items-center gap-1 font-medium">
+          <ThumbsUp className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+          OK {okDados.length}/{totalOK}
+        </span>
+        {okDados.length > 0 && (
+          <span className="text-muted-foreground">
+            · {okDados.map((n) => n.decisor_nombre || "alguien").join(", ")}
+          </span>
+        )}
       </div>
 
-      <ol className="flex flex-col gap-1.5">
-        {niveles.map((nivel) => (
-          <Fila key={nivel.id} nivel={nivel} esActual={nivel.id === cadena.nivel_actual} total={total} />
-        ))}
-      </ol>
-
-      {/* Decisión del nivel que toca por orden (solo si la cadena espera decisión). */}
-      {nivelActual ? (
-        <div className="mt-3 flex flex-col gap-2">
-          <p className="text-xs text-muted-foreground">
-            Toca decidir: <span className="font-medium text-foreground">{nivelActual.etiqueta || "este nivel"}</span>
-          </p>
-          {bloqueadoPorAutor ? (
-            <p className="text-xs text-amber-600 dark:text-amber-400">
-              No puedes aprobar tu propia pieza; debe revisarla otra persona.
-            </p>
-          ) : (
-            <>
-              <textarea
-                value={comentario}
-                onChange={(e) => setComentario(e.target.value)}
-                placeholder="Comentario para esta decisión (opcional)"
-                rows={2}
+      {/* Estado / acción según dónde esté la pieza. */}
+      {lista ? (
+        <p className="mt-2 flex items-center gap-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+          <Check className="h-4 w-4" />
+          Lista para publicar
+        </p>
+      ) : rechazada ? (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+          Rechazada; la pieza vuelve a la redacción.
+        </p>
+      ) : (
+        <div className="mt-2 flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="positive"
+              size="sm"
+              onClick={() => decidir.mutate("aprobado")}
+              disabled={ocupado || !puedeOK}
+              title={puedeOK ? "Da tu OK a esta pieza" : motivoBloqueo}
+            >
+              {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <ThumbsUp className="h-4 w-4" />}
+              Dar mi OK
+            </Button>
+            {puedeOK && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => decidir.mutate("rechazado")}
                 disabled={ocupado}
-                className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="positive"
-                  size="sm"
-                  onClick={() => decidir.mutate("aprobado")}
-                  disabled={ocupado}
-                >
-                  {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                  Aprobar nivel
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => decidir.mutate("rechazado")}
-                  disabled={ocupado}
-                >
-                  {ocupado ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-                  Rechazar
-                </Button>
-              </div>
-            </>
+              >
+                <XCircle className="h-4 w-4" />
+                Rechazar
+              </Button>
+            )}
+          </div>
+          {!puedeOK && motivoBloqueo && (
+            <p className="text-xs text-muted-foreground">{motivoBloqueo}</p>
+          )}
+          {okDados.length < totalOK && (
+            <Badge variant="aviso" className="w-fit">
+              Faltan {totalOK - okDados.length} OK para que quede lista
+            </Badge>
           )}
         </div>
-      ) : (
-        <p className="mt-3 text-xs text-muted-foreground">
-          {cadena.estado === "rechazado"
-            ? "La cadena fue rechazada; la pieza vuelve a la redacción."
-            : cadena.estado === "aprobado"
-              ? "Todos los niveles están aprobados."
-              : "No hay ningún nivel pendiente de decisión."}
-        </p>
       )}
     </section>
   );

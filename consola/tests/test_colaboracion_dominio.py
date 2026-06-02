@@ -133,14 +133,39 @@ def test_decidir_token_mantenimiento_puede_decidir():
 
 
 # --------------------------------------------------------------------------- #
-# cadena_simple: defecto longitud 1 = aprobacion simple                       #
+# cadena_simple: defecto al mandar a revision = los dos OK (editor + coord)     #
 # --------------------------------------------------------------------------- #
 
 
-def test_cadena_simple_es_un_unico_nivel():
+def test_cadena_simple_son_los_dos_ok():
     etiquetas = colaboracion.cadena_simple()
-    assert len(etiquetas) == 1
-    assert isinstance(etiquetas[0], str) and etiquetas[0]
+    assert etiquetas == ["Edición", "Coordinación"]
+
+
+def test_decidir_misma_persona_no_da_los_dos_ok():
+    """Quien ya decidio un nivel de la cadena no puede decidir el otro (segundo OK = otra persona)."""
+    cadena = [
+        _nivel("n1", 1, "aprobado") | {"decisor_id": "u2"},
+        _nivel("n2", 2, "pendiente"),
+    ]
+    _, error = colaboracion.decidir(
+        cadena[1], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
+        autor_pieza_id="u1",
+    )
+    assert error is not None and "otra persona" in error.lower()
+
+
+def test_decidir_admin_ignora_la_regla_de_otra_persona():
+    """El admin desatasca: puede dar el segundo OK aunque ya diera el primero."""
+    cadena = [
+        _nivel("n1", 1, "aprobado") | {"decisor_id": "u2"},
+        _nivel("n2", 2, "pendiente"),
+    ]
+    campos, error = colaboracion.decidir(
+        cadena[1], cadena, "aprobado", {"id": "u2", "usuario": "jefa"}, rol="admin",
+        autor_pieza_id="u1",
+    )
+    assert error is None and campos is not None
 
 
 # --------------------------------------------------------------------------- #

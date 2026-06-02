@@ -43,12 +43,14 @@ def _ahora_iso() -> str:
 
 
 def cadena_simple() -> list[str]:
-    """Etiquetas de la cadena de aprobacion SIMPLE (longitud 1 = "otro par de ojos").
+    """Etiquetas de la cadena de aprobacion por defecto al mandar a revision (los dos OK).
 
-    Defecto razonable para una PUBLICACION suelta: un unico nivel `pendiente` que un
-    revisor (distinto del autor, salvo admin) aprueba o rechaza. Equivale al viejo flujo
-    lineal borrador→en_revision→aprobado, pero expresado como una cadena de un solo nivel
-    sobre el mismo modelo multinivel (cadena vacia = sin aprobacion; cadena de N = N niveles).
+    Defecto razonable para una PUBLICACION suelta: DOS niveles `pendiente` ("Edición" y
+    "Coordinación") = los dos OK del equipo que la pieza necesita. Cada uno lo da una persona
+    distinta (nunca el autor, salvo admin); con los dos, la pieza pasa sola a `aprobado`. Si
+    el QA editorial actua como aprobador automatico, el llamante antepone el nivel de IA.
+    Expresado sobre el mismo modelo multinivel (cadena vacia = sin aprobacion; cadena de N
+    = N niveles).
     """
     return list(CADENA_APROBACION_SIMPLE)
 
@@ -167,6 +169,17 @@ def decidir(
         decisor_id = (decisor or {}).get("id", "")
         if decisor_id and autor_pieza_id and decisor_id == autor_pieza_id:
             return None, "No puedes aprobar tu propia pieza; debe revisarla otra persona."
+        # Dos OK = dos PERSONAS distintas: quien ya decidio un nivel de ESTA cadena no puede
+        # dar tambien el otro OK (el "segundo par de ojos" no vale si es la misma persona). Los
+        # decisores automaticos (QA / pre-aprobacion, id reservado "auto") no cuentan como
+        # persona; el admin desatasca (no entra en esta rama).
+        if decisor_id and any(
+            n.get("id") != nivel.get("id")
+            and n.get("decisor_id") == decisor_id
+            and decisor_id != DECISOR_AUTO_ID
+            for n in cadena
+        ):
+            return None, "Ya diste tu OK en esta pieza; el otro OK lo da otra persona."
         cargo_req = (nivel.get("cargo_requerido") or "").strip()
         if cargo_req and not cargo_satisface(cargo_req, cargo_decisor):
             return None, (

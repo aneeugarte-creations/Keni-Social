@@ -18,7 +18,7 @@
  * NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, MessageSquare, XCircle } from "lucide-react";
+import { Check, Loader2, MessageSquare, Send, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -60,10 +60,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   });
   const cadena = cadenaQuery.data;
   const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
-  const minimo = cadena?.minimo_aprobaciones ?? 0;
-  const aprobados = cadena?.aprobados ?? 0;
-  // Hay cadena multinivel configurada => pintamos la UI por niveles; si no, camino simple.
+  // Hay cadena configurada => pintamos el panel "dale el OK"; si no, camino simple (legado).
   const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
+  // Borrador con copy ya generado: el equipo puede mandarlo a revisión para juntar los OK.
+  const listoParaOK = publicacion.estado === "borrador" && !!publicacion.contenido;
 
   const tras = (mensaje: string) => () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -73,6 +73,13 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   };
   const onError = (e: unknown) => toast.error(mensajeError(e));
 
+  // Mandar a revisión: monta la cadena (IA + Edición + Coordinación) y abre los OK del equipo.
+  const pedirOK = useMutation({
+    mutationFn: () => api.enviarARevision(publicacion.id),
+    onSuccess: tras("Pieza lista para que el equipo dé su OK."),
+    onError,
+  });
+  // Fallback para piezas legadas que estén en revisión SIN cadena (aprobar/rechazar forwardea).
   const aprobar = useMutation({
     mutationFn: () => api.aprobarPublicacion(publicacion.id),
     onSuccess: tras("Pieza aprobada."),
@@ -121,30 +128,30 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         />
       </div>
 
-      {/* Acciones en línea: comentar siempre; el gate humano va arriba (cadena o simple). */}
+      {/* Acciones en línea: pedir OK / dar OK (legado) / comentar. El gate vive en el panel. */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        {enRevision && !tieneCadena ? (
-          // Camino SIMPLE (sin cadena configurada): aprobar/rechazar forwardea a la cadena.
+        {listoParaOK ? (
+          // Borrador con copy: el equipo lo manda a revisión para empezar a juntar los OK.
+          <Button size="sm" onClick={() => pedirOK.mutate()} disabled={pedirOK.isPending}>
+            {pedirOK.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            Pedir OK del equipo
+          </Button>
+        ) : enRevision && !tieneCadena && !cadenaQuery.isLoading ? (
+          // Fallback (piezas legadas en revisión SIN cadena): aprobar/rechazar forwardea.
           <>
-            <Button
-              variant="positive"
-              size="sm"
-              onClick={() => aprobar.mutate()}
-              disabled={ocupado}
-            >
+            <Button variant="positive" size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
               {aprobar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Check className="h-4 w-4" />
               )}
-              Aprobar
+              Dar mi OK
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => rechazar.mutate()}
-              disabled={ocupado}
-            >
+            <Button variant="outline" size="sm" onClick={() => rechazar.mutate()} disabled={ocupado}>
               {rechazar.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -157,8 +164,8 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           <span className="text-sm text-muted-foreground">
             {etapa === "aprobada" || etapa === "programada" || etapa === "publicada"
               ? publicacion.revisor_nombre
-                ? `Aprobada por ${publicacion.revisor_nombre}`
-                : "Aprobada"
+                ? `Lista para publicar · último OK: ${publicacion.revisor_nombre}`
+                : "Lista para publicar"
               : "La IA todavía está preparando esta pieza."}
           </span>
         ) : null}
@@ -174,24 +181,20 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         </Button>
       </div>
 
-      {/* Aprobación MULTINIVEL: la cadena de niveles con su estado y la decisión por orden. */}
+      {/* Panel "dale el OK": veredicto de IA + OK del equipo (cuántos y de quién) + acción. */}
       {enRevision && tieneCadena && cadena && (
         <CadenaAprobacion
           cadena={cadena}
           plataformaId={publicacion.id}
           autorPiezaId={publicacion.autor_id}
+          veredictoIA={publicacion.veredicto}
         />
       )}
 
-      {/* Avisos del gate de gobernanza (firmas / comentarios) cuando aplica. */}
-      {enRevision && (sinResolver > 0 || (minimo > 0 && aprobados < minimo)) && (
+      {/* Aviso de comentarios sin resolver (bloquean programar). */}
+      {enRevision && sinResolver > 0 && (
         <div className="border-t border-border px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
-          {sinResolver > 0 && <p>{sinResolver} comentario(s) sin resolver antes de programar.</p>}
-          {minimo > 0 && aprobados < minimo && (
-            <p>
-              Aprobaciones: {aprobados} de {minimo}.
-            </p>
-          )}
+          {sinResolver} comentario(s) sin resolver antes de programar.
         </div>
       )}
 

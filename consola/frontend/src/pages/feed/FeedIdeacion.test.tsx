@@ -144,8 +144,8 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Etapa IA en vivo: en revisión → lista para revisar.
     expect(screen.getByText("Lista para revisar")).toBeInTheDocument();
-    // Aprobación en línea (gate humano).
-    expect(screen.getByRole("button", { name: /aprobar/i })).toBeInTheDocument();
+    // El OK en línea (gate humano): aparece tras resolver la cadena de la pieza.
+    expect(await screen.findByRole("button", { name: /dar mi ok/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
   });
 

@@ -66,21 +66,59 @@ def test_enviar_a_revision_pasa_a_en_revision_con_autor(entorno):
     assert actualizada["enviado_a_revision_en"]  # marca de tiempo puesta
 
 
-def test_aprobar_por_otra_persona_pasa_a_aprobado_con_revisor(entorno):
-    """Ana envia; Beto (otra cuenta) aprueba: pasa a aprobado y se registra a Beto."""
+def test_dos_ok_de_personas_distintas_pasan_a_aprobado(entorno):
+    """Ana envia; Beto da el 1er OK (sigue en revision) y Caro el 2o: pasa a aprobado.
+
+    La cadena por defecto del flujo "dale el OK" son DOS niveles humanos (Edición +
+    Coordinación): hace falta el OK de DOS personas distintas para quedar aprobada.
+    """
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
 
-    revisor = _cli_usuario("beto")
-    r = revisor.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
-    assert r.status_code == 200, r.text
-    aprobada = r.json()["publicacion"]
+    # 1er OK (Beto): aprueba el nivel "Edición" pero AÚN no basta (falta el 2o OK).
+    beto = _cli_usuario("beto")
+    r1 = beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["publicacion"]["estado"] == "en_revision"
+
+    # 2o OK (Caro, otra persona): completa la cadena -> aprobado, con el último revisor.
+    caro = _cli_usuario("caro")
+    r2 = caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r2.status_code == 200, r2.text
+    aprobada = r2.json()["publicacion"]
     assert aprobada["estado"] == "aprobado"
-    assert aprobada["revisor_nombre"] == "beto"
+    assert aprobada["revisor_nombre"] == "caro"
     assert aprobada["revisado_en"]
     # La autoria original se conserva (la envio ana).
     assert aprobada["autor_nombre"] == "ana"
+
+
+def test_enviar_a_revision_monta_los_dos_niveles_de_ok(entorno):
+    """Mandar a revisión crea la cadena por defecto: dos OK (Edición + Coordinación)."""
+    from keni_consola import repos
+
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    niveles = repos.listar_aprobaciones(pub["id"])
+    etiquetas = [n["etiqueta"] for n in sorted(niveles, key=lambda n: n["nivel"])]
+    assert etiquetas == ["Edición", "Coordinación"]
+    assert all(n["decision"] == "pendiente" for n in niveles)
+
+
+def test_misma_persona_no_puede_dar_los_dos_ok(entorno):
+    """Quien ya dio un OK no puede dar el otro: el 2o OK lo da OTRA persona (409)."""
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    beto = _cli_usuario("beto")
+    assert beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
+    # Beto intenta dar también el 2o OK (nivel Coordinación): bloqueado.
+    r = beto.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    assert r.status_code == 409
+    assert "otra persona" in r.json()["error"].lower()
+    assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
 
 
 # --------------------------------------------------------------------------- #
@@ -100,22 +138,25 @@ def test_autor_no_puede_aprobar_su_propia_pieza_409(entorno):
     assert autora.get(f"/api/publicaciones/{pub['id']}").json()["publicacion"]["estado"] == "en_revision"
 
 
-def test_admin_puede_aprobar_su_propia_pieza(entorno):
-    """Un admin SI puede aprobar su propia pieza (desatasco)."""
+def test_admin_puede_dar_los_dos_ok_de_su_propia_pieza(entorno):
+    """Un admin SI puede desatascar: da los dos OK de su propia pieza (salta las reglas)."""
     admin = _cli_usuario("jefa", rol="admin")
     pub = _crear_borrador(admin)
     admin.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    # 1er OK: aún en revisión; 2o OK: completa la cadena -> aprobado.
+    assert admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
     r = admin.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert r.json()["publicacion"]["estado"] == "aprobado"
 
 
 def test_token_de_mantenimiento_puede_aprobar(entorno):
-    """El acceso por token (sin usuario) es mantenimiento: puede aprobar (admin)."""
+    """El acceso por token (sin usuario) es mantenimiento: da ambos OK (admin)."""
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
     mantenimiento = _cli_token()
+    assert mantenimiento.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN).status_code == 200
     r = mantenimiento.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     assert r.status_code == 200, r.text
     assert r.json()["publicacion"]["estado"] == "aprobado"
@@ -217,36 +258,39 @@ def test_programar_sin_cadena_no_aplica_el_minimo(entorno):
     assert r.status_code == 200, r.text
 
 
-def test_programar_con_cadena_simple_bloquea_por_minimo(entorno, monkeypatch):
-    """Con KENI_MIN_APROBACIONES=2 y una cadena simple (1 firma), programar da 409 «1 de 2»."""
+def test_programar_bloquea_si_faltan_aprobaciones_para_el_minimo(entorno, monkeypatch):
+    """Con KENI_MIN_APROBACIONES=3 y los dos OK (2 firmas), programar da 409 «2 de 3»."""
+    monkeypatch.setenv("KENI_MIN_APROBACIONES", "3")
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    # Los dos OK (Beto + Caro) dejan la pieza aprobada con 2 firmas, pero el mínimo pide 3.
+    _cli_usuario("beto").post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    caro = _cli_usuario("caro")
+    caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    from datetime import datetime, timedelta
+
+    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+    r = caro.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r.status_code == 409
+    assert "2 de 3" in r.json()["error"]
+
+
+def test_programar_pasa_con_los_dos_ok(entorno, monkeypatch):
+    """KENI_MIN_APROBACIONES=2: los dos OK (editor + coordinador) bastan para programar."""
     monkeypatch.setenv("KENI_MIN_APROBACIONES", "2")
     autora = _cli_usuario("ana")
     pub = _crear_borrador(autora)
     autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    revisor = _cli_usuario("beto")
-    revisor.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)  # 1 firma
+    _cli_usuario("beto").post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    caro = _cli_usuario("caro")
+    caro.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
     from datetime import datetime, timedelta
 
     fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
-    r = revisor.post(
-        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
-    )
-    assert r.status_code == 409
-    assert "1 de 2" in r.json()["error"]
-
-
-def test_programar_con_minimo_uno_pasa_con_una_firma(entorno, monkeypatch):
-    """KENI_MIN_APROBACIONES=1: una sola firma (cadena simple) basta para programar."""
-    monkeypatch.setenv("KENI_MIN_APROBACIONES", "1")
-    autora = _cli_usuario("ana")
-    pub = _crear_borrador(autora)
-    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
-    revisor = _cli_usuario("beto")
-    revisor.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
-    from datetime import datetime, timedelta
-
-    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
-    r = revisor.post(
+    r = caro.post(
         f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
     )
     assert r.status_code == 200, r.text

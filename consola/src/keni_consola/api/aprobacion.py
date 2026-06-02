@@ -46,6 +46,7 @@ from ..estados import (
     ESTADO_PROGRAMADO,
 )
 from ..seguridad import autor_de_peticion
+from .colaboracion import montar_cadena_aprobacion
 
 
 def _rol_de_peticion(request: Request) -> str | None:
@@ -157,12 +158,13 @@ async def enviar_a_revision(request: Request) -> Response:
     # `contenido_id` no viaja en el dict publico de la publicacion; se lee de la fila
     # plataforma (la publicacion ES esa fila: su id es el `plataforma_id`).
     plat = repos.obtener_contenido_plataforma(publicacion_id)
-    # Crea la cadena SIMPLE (1 nivel pendiente) y marca la pieza en revision, fijando autoria
-    # y el sello de envio (lo que la cola muestra). El autor original no se pisa si ya existe.
-    repos.crear_cadena_aprobacion(
-        plataforma_id=publicacion_id,
-        contenido_id=(plat or {}).get("contenido_id", "") or "",
-        etiquetas=colaboracion.cadena_simple(),
+    # Monta la cadena por defecto del flujo "dale el OK": dos niveles humanos (Edición +
+    # Coordinación = los dos OK) y, si el flag lo activa, el nivel automatico "QA Editorial"
+    # (la aprobacion de IA) delante. SIN exigir cargo (`con_cargos=False`): cualquiera del
+    # equipo da su OK, salvo el autor. Con los dos OK la pieza pasa sola a `aprobado`. Luego
+    # marca la pieza en revision y fija autoria/sello de envio (el autor original no se pisa).
+    montar_cadena_aprobacion(
+        publicacion_id, plat or {}, colaboracion.cadena_simple(), con_cargos=False
     )
     actualizada = repos.actualizar_publicacion(
         publicacion_id,
