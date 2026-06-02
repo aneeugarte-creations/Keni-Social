@@ -5926,7 +5926,9 @@ def crear_publicacion(
     origen: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
-    tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
+    # Default "" (no TIPO_CONTENIDO_DEFECTO) para que la firma sea IDÉNTICA a la de
+    # `repos.crear_publicacion` (test de paridad); el valor real se coalesce abajo.
+    tipo_contenido: str = "",
     evergreen: bool = False,
     autor: dict[str, str] | None = None,
     id: str = "",
