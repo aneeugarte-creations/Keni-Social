@@ -197,6 +197,9 @@ def _validar_texto(t: Any) -> dict[str, Any]:
         },
         "sombra": sombra_limpia,
         "chip": chip_limpio,
+        # Borde de anclaje vertical del bloque: "abajo" => `y` es el borde INFERIOR y el
+        # bloque crece hacia arriba (no se desborda aunque tenga más líneas). Default "arriba".
+        "ancla": t.get("ancla") if t.get("ancla") in ("arriba", "abajo") else "arriba",
         "z": int(t.get("z", 20)),
     }
 
@@ -303,11 +306,15 @@ def _formato_por_defecto(nombre: str, plana: dict[str, Any]) -> dict[str, Any]:
     wordmark = str(plana.get("wordmark", "") or "")
     etiqueta = str(plana.get("etiqueta_default", "") or "")
 
-    # Titular: bloque inferior (igual que componer.py). bottom_limit = h - safe_bottom - margin.
-    # Reservamos ~2 líneas para que el default quede anclado cerca del borde inferior seguro.
+    # Titular: bloque inferior ANCLADO ABAJO (`ancla: "abajo"`): su `y` es el borde INFERIOR
+    # (justo sobre el área segura) y el bloque crece hacia ARRIBA. Así un titular de 1 o de 3
+    # líneas queda siempre pegado abajo SIN desbordarse. Limitado a 3 líneas (más sería ilegible
+    # en la placa; el render trunca con "…").
     tam_max = 88 if nombre == "vertical" else 78
     bottom_limit = h - base["safe_bottom"] - margin
-    titular_y = bottom_limit - int(tam_max * 1.14 * 2)
+    max_lineas_tit = 3
+    # Referencia para la pleca: el borde superior estimado de un titular de máximo de líneas.
+    titular_top_ref = bottom_limit - int(tam_max * 1.14 * max_lineas_tit)
 
     # Logo: caja en la esquina configurada.
     logo_ancho = 220
@@ -316,19 +323,19 @@ def _formato_por_defecto(nombre: str, plana: dict[str, Any]) -> dict[str, Any]:
     textos = [
         {
             "id": "titular", "binding": "copy_in", "texto": "",
-            "x": margin, "y": titular_y, "w": w - margin * 2,
+            "x": margin, "y": bottom_limit, "w": w - margin * 2,
             "familia": "condensada" if condensada else "sans",
             "tamano": tam_max, "peso": 800, "color": blanco, "alineacion": "izquierda",
             "mayusculas": mayus, "interlineado": 1.14,
-            "auto_ajuste": {"max_lineas": 4, "tam_min": 40},
+            "auto_ajuste": {"max_lineas": max_lineas_tit, "tam_min": 40},
             "sombra": {"dx": 2, "dy": 2, "color": "#000000"},
-            "chip": None, "z": 20,
+            "chip": None, "ancla": "abajo", "z": 20,
         },
     ]
     if etiqueta:
         textos.insert(0, {
             "id": "pleca", "binding": "etiqueta_default", "texto": etiqueta,
-            "x": margin, "y": titular_y - 70, "w": w - margin * 2,
+            "x": margin, "y": titular_top_ref - 70, "w": w - margin * 2,
             "familia": "sans", "tamano": _PLECA_TAM, "peso": 700, "color": blanco,
             "alineacion": "izquierda", "mayusculas": True, "interlineado": 1.0,
             "auto_ajuste": {"max_lineas": 1, "tam_min": _PLECA_TAM},

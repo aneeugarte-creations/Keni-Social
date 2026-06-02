@@ -142,8 +142,14 @@ export function EditorImagen({
   }, [src]);
   const tamRed = red ? tamanoRed(red) : null;
   const ratioRec = tamRed ? ratioDe(tamRed.ratio) : null;
+  // El warning de recorte es SOLO para fotos crudas (subir/biblioteca) en piezas SIN placa de
+  // marca: cuando hay marca, la placa ya se compone en el formato propio de la red, así que la
+  // plantilla auto-compuesta no debe avisar de "recorte" (su ratio es el correcto por diseño).
   const aspectoFueraDeEstandar =
-    ratioReal != null && ratioRec != null && Math.abs(ratioReal - ratioRec) / ratioRec > 0.1;
+    !componible &&
+    ratioReal != null &&
+    ratioRec != null &&
+    Math.abs(ratioReal - ratioRec) / ratioRec > 0.1;
 
   // --- Composición de la placa (job de imagen en background, sondeado) --- //
   const { generacion: genComp, ejecutando: componiendo, iniciar: iniciarComp } = useGeneracion();

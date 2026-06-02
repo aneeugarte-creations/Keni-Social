@@ -125,36 +125,24 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
   ctx.textAlign = t.alineacion === "centro" ? "center" : t.alineacion === "derecha" ? "right" : "left";
   const tx = t.alineacion === "centro" ? t.x + t.w / 2 : t.alineacion === "derecha" ? t.x + t.w : t.x;
 
-  // Chip (pleca): rectángulo de fondo bajo el bloque (1 línea típica).
-  if (t.chip && lineas.length) {
-    const m = ctx.measureText(lineas[0]);
-    const tw = m.width;
-    const px = t.chip.pad_x ?? 24, py = t.chip.pad_y ?? 14;
-    const chipW = tw + px * 2;
-    const chipH = altoLinea + py * 2;
-    const chipX = t.alineacion === "derecha" ? tx - chipW : t.alineacion === "centro" ? tx - chipW / 2 : t.x;
-    ctx.fillStyle = t.chip.color;
-    if (t.chip.radio) {
-      const r = t.chip.radio;
-      ctx.beginPath();
-      ctx.moveTo(chipX + r, t.y);
-      ctx.arcTo(chipX + chipW, t.y, chipX + chipW, t.y + chipH, r);
-      ctx.arcTo(chipX + chipW, t.y + chipH, chipX, t.y + chipH, r);
-      ctx.arcTo(chipX, t.y + chipH, chipX, t.y, r);
-      ctx.arcTo(chipX, t.y, chipX + chipW, t.y, r);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      ctx.fillRect(chipX, t.y, chipW, chipH);
-    }
-  }
+  // Alto total del bloque (con el padding del chip arriba y abajo si hay chip).
+  const py = t.chip ? (t.chip.pad_y ?? 14) : 0;
+  const blockH = lineas.length * altoLinea + (t.chip ? py * 2 : 0);
+  // ANCLA: por defecto el bloque crece hacia ABAJO desde `t.y` (su borde superior). Con
+  // `ancla: "abajo"`, `t.y` es el borde INFERIOR y el bloque crece hacia ARRIBA: así un
+  // titular de 1 o de 4 líneas queda siempre pegado al borde inferior seguro, sin desbordarse.
+  const top = t.ancla === "abajo" ? t.y - blockH : t.y;
 
-  const offsetY = t.chip ? (t.chip.pad_y ?? 14) : 0;
-  let y = t.y + offsetY;
+  let y = top + py;
   const justif = t.alineacion === "justificado";
   for (let i = 0; i < lineas.length; i++) {
     const ln = lineas[i];
     const ultima = i === lineas.length - 1;
+    // Chip POR LÍNEA: el fondo se ajusta al ancho de ESA línea, así CRECE con el texto y
+    // cubre TODAS las líneas (antes solo la primera).
+    if (t.chip && ln.trim()) {
+      dibujarChipLinea(ctx, t, ctx.measureText(ln).width, y, altoLinea, tx);
+    }
     if (justif && !ultima) {
       dibujarLineaJustificada(ctx, ln, t.x, y, t.w, t.color, t.sombra);
     } else {
@@ -166,6 +154,31 @@ function dibujarTexto(ctx, t, valor, fuentes, familiaReal) {
       ctx.fillText(ln, justif ? t.x : tx, y);
     }
     y += altoLinea;
+  }
+}
+
+// Dibuja el chip (fondo/pleca) de UNA línea de texto, ajustado a su ancho. `lineTop` es la
+// y (baseline "top") de la línea; el chip se centra verticalmente alrededor de ella.
+function dibujarChipLinea(ctx, t, lineWidth, lineTop, altoLinea, tx) {
+  const px = t.chip.pad_x ?? 24, py = t.chip.pad_y ?? 14;
+  const chipW = lineWidth + px * 2;
+  const chipH = altoLinea + py;
+  const topY = lineTop - py / 2;
+  const chipX = t.alineacion === "derecha" ? tx - chipW
+    : t.alineacion === "centro" ? tx - chipW / 2 : t.x;
+  ctx.fillStyle = t.chip.color;
+  const r = t.chip.radio || 0;
+  if (r) {
+    ctx.beginPath();
+    ctx.moveTo(chipX + r, topY);
+    ctx.arcTo(chipX + chipW, topY, chipX + chipW, topY + chipH, r);
+    ctx.arcTo(chipX + chipW, topY + chipH, chipX, topY + chipH, r);
+    ctx.arcTo(chipX, topY + chipH, chipX, topY, r);
+    ctx.arcTo(chipX, topY, chipX + chipW, topY, r);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillRect(chipX, topY, chipW, chipH);
   }
 }
 
