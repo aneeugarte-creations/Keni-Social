@@ -32,6 +32,7 @@ REGLAS
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from datetime import datetime
@@ -138,6 +139,50 @@ def piezas(rango: str, marca: str | None) -> tuple[dict, str]:
 def tendencia(rango: str, marca: str | None) -> tuple[dict, str]:
     """Serie diaria del periodo desde cache (lazy fill). `(dict, generado_en)`."""
     return _leer_o_calcular(TIPO_TENDENCIA, rango, marca)
+
+
+# --------------------------------------------------------------------------- #
+# Lectura ASÍNCRONA (lazy fill sin bloquear el event loop)                     #
+# --------------------------------------------------------------------------- #
+#
+# Las funciones de arriba son SÍNCRONAS: cuando un combo no está en cache, el lazy
+# fill llama a las APIs externas (Metricool/Meta), que pueden tardar decenas de
+# segundos. Si eso corre en el hilo del event loop de Starlette, BLOQUEA todas las
+# demás peticiones (el front se "traba" al cambiar de filtro a un combo frío). Las
+# variantes `*_async` delegan ese trabajo bloqueante al thread-pool por defecto del
+# loop (`run_in_executor`), de modo que el endpoint cede el control mientras espera.
+# El daemon de refresco sigue usando las versiones síncronas (corre en su propio hilo).
+
+
+async def _leer_o_calcular_async(tipo: str, rango: str, marca: str | None) -> tuple[dict, str]:
+    """Como `_leer_o_calcular` pero sin bloquear el event loop.
+
+    La lectura de cache es barata, pero el lazy fill (cálculo + golpe a la API externa)
+    puede tardar; se ejecuta en un hilo del executor para no congelar el loop. La
+    propagación de errores es idéntica a la versión síncrona (la captura el endpoint).
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _leer_o_calcular, tipo, rango, marca)
+
+
+async def reporte_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Reporte consolidado desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_REPORTE, rango, marca)
+
+
+async def analisis_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Análisis diario desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_ANALISIS, rango, marca)
+
+
+async def piezas_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Analítica de piezas desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_PIEZAS, rango, marca)
+
+
+async def tendencia_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Serie diaria desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_TENDENCIA, rango, marca)
 
 
 # --------------------------------------------------------------------------- #

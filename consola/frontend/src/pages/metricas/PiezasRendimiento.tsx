@@ -83,7 +83,9 @@ function ContenidoRendimiento({ marca }: { marca?: string }) {
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas-rendimiento", marca ?? "todas"],
     queryFn: ({ signal }) => api.metricasPiezasRendimiento({ marca }, signal),
-    staleTime: 5 * 60_000,
+    // Tabs por marca: 2 min de frescura para que alternar tabs no re-pegue a Metricool en
+    // cada click pero el dato no quede rancio; "Actualizar" invalida igualmente.
+    staleTime: 2 * 60_000,
   });
 
   if (isPending) return <Skeleton className="mt-2 h-72 w-full rounded-lg" />;

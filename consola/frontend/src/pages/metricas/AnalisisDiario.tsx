@@ -48,8 +48,9 @@ export function AnalisisDiario({
     queryKey: ["metricas", "analisis", rangoActual ?? "", marca_ ?? "todas"],
     queryFn: ({ signal }) => api.metricasAnalisis({ rango: rangoActual, marca: marca_ }, signal),
     enabled: habilitado,
-    // Servido desde la cache del backend; el botón "Actualizar" lo invalida al refrescar.
-    staleTime: 5 * 60_000,
+    // 2 min: al cambiar marca/rango la lectura se repinta pronto, sin re-pedir en cada
+    // toque; servido desde la cache del backend; "Actualizar" lo invalida al refrescar.
+    staleTime: 2 * 60_000,
   });
 
   return (

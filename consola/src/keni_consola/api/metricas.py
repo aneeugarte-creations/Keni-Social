@@ -14,6 +14,8 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
 
 from __future__ import annotations
 
+import asyncio
+
 from keni_metricas import servicio
 from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse, Response
@@ -202,7 +204,8 @@ async def reporte(request: Request) -> Response:
     marca = request.query_params.get("marca") or None
     try:
         # Lee de cache (instantaneo); si el combo falta, lo calcula al vuelo y lo guarda.
-        rep, generado_en = metricas_cache.reporte(rango, marca)
+        # En executor: un combo frío golpea la API externa y NO debe bloquear el loop.
+        rep, generado_en = await metricas_cache.reporte_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -218,8 +221,12 @@ async def comparar(request: Request) -> Response:
     marca = request.query_params.get("marca") or None
     try:
         # Ambos reportes salen de cache (lazy fill); la comparativa se computa en memoria.
-        rep_a, gen_a = metricas_cache.reporte(rango_a, marca)
-        rep_b, gen_b = metricas_cache.reporte(rango_b, marca)
+        # En executor y CONCURRENTES (gather): combos fríos no bloquean el event loop y,
+        # si ambos están fríos, se calculan en paralelo en vez de en serie.
+        (rep_a, gen_a), (rep_b, gen_b) = await asyncio.gather(
+            metricas_cache.reporte_async(rango_a, marca),
+            metricas_cache.reporte_async(rango_b, marca),
+        )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -316,8 +323,8 @@ async def analisis(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "semana"))
     marca = request.query_params.get("marca") or None
     try:
-        # Lee de cache (instantaneo); lazy fill si el combo aun no esta guardado.
-        a, generado_en = metricas_cache.analisis(rango, marca)
+        # Lee de cache (instantaneo); lazy fill (en executor) si el combo aun no esta guardado.
+        a, generado_en = await metricas_cache.analisis_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -336,7 +343,7 @@ async def piezas(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        payload, generado_en = metricas_cache.piezas(rango, marca)
+        payload, generado_en = await metricas_cache.piezas_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -353,7 +360,7 @@ async def tendencia(request: Request) -> Response:
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
     try:
-        payload, generado_en = metricas_cache.tendencia(rango, marca)
+        payload, generado_en = await metricas_cache.tendencia_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
@@ -376,6 +383,30 @@ def _marca_consola_de_metricas(id_metricas: str | None) -> str | None:
     return marca.id if marca is not None else id_metricas
 
 
+def _listado_piezas_publicadas(marca_consola: str | None) -> list[dict]:
+    """Construye el listado de piezas publicadas (con rendimiento) para una marca.
+
+    Trabajo BLOQUEANTE (lecturas de BD + golpe a Metricool por pieza): se ejecuta en un
+    hilo del executor desde `piezas_rendimiento`, no en el event loop. Aislado en una
+    función síncrona para poder pasarlo a `run_in_executor`.
+    """
+    items = repos.listar_contenido(marca=marca_consola)
+    por_contenido: dict[str, list[dict]] = {}
+    for plat in repos.listar_contenido_plataforma():
+        por_contenido.setdefault(plat["contenido_id"], []).append(plat)
+    contenidos = [
+        {
+            "id": it["id"],
+            "titulo": it.get("titulo", ""),
+            "marca": it.get("marca", ""),
+            "marca_nombre": marcas.etiqueta_de(it["marca"]) if it.get("marca") else "",
+            "plataformas": por_contenido.get(it["id"], []),
+        }
+        for it in items
+    ]
+    return metricas_pieza.listado_piezas_publicadas(contenidos)
+
+
 async def piezas_rendimiento(request: Request) -> Response:
     """GET /api/metricas/piezas-rendimiento: drill-down marca -> pieza con rendimiento REAL.
 
@@ -391,21 +422,11 @@ async def piezas_rendimiento(request: Request) -> Response:
     marca_metricas = request.query_params.get("marca") or None
     marca_consola = _marca_consola_de_metricas(marca_metricas)
     try:
-        items = repos.listar_contenido(marca=marca_consola)
-        por_contenido: dict[str, list[dict]] = {}
-        for plat in repos.listar_contenido_plataforma():
-            por_contenido.setdefault(plat["contenido_id"], []).append(plat)
-        contenidos = [
-            {
-                "id": it["id"],
-                "titulo": it.get("titulo", ""),
-                "marca": it.get("marca", ""),
-                "marca_nombre": marcas.etiqueta_de(it["marca"]) if it.get("marca") else "",
-                "plataformas": por_contenido.get(it["id"], []),
-            }
-            for it in items
-        ]
-        piezas = metricas_pieza.listado_piezas_publicadas(contenidos)
+        # Lee BD + golpea Metricool por pieza (lazy-fill con TTL): potencialmente lento, así
+        # que se ejecuta en el executor para no bloquear el event loop al cambiar de tab.
+        piezas = await asyncio.get_running_loop().run_in_executor(
+            None, _listado_piezas_publicadas, marca_consola
+        )
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         return JSONResponse(
             {"error": "No se pudo generar el listado de piezas."}, status_code=500

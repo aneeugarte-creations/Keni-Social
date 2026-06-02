@@ -85,7 +85,9 @@ function ContenidoPiezas({ marca, rango }: { marca?: string; rango?: string }) {
     queryKey: ["metricas", "piezas", rango ?? "", marca ?? "todas"],
     queryFn: ({ signal }) => api.metricasPiezas({ rango, marca }, signal),
     enabled: Boolean(rango),
-    staleTime: 5 * 60_000,
+    // Tabs por marca: al alternar tabs queremos datos razonablemente frescos sin re-pedir
+    // en cada click. 2 min equilibra frescura y coste; "Actualizar" invalida igualmente.
+    staleTime: 2 * 60_000,
   });
 
   if (isPending) return <Skeleton className="mt-2 h-72 w-full rounded-lg" />;

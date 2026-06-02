@@ -56,7 +56,9 @@ export function TendenciaDiaria({
     queryKey: ["metricas", "tendencia", rangoActual ?? "", marca_ ?? "todas"],
     queryFn: ({ signal }) => api.metricasTendencia({ rango: rangoActual, marca: marca_ }, signal),
     enabled: Boolean(rangoActual),
-    staleTime: 5 * 60_000,
+    // 2 min: el conmutador de métrica/marca no debe re-pegar a la fuente en cada cambio,
+    // pero tampoco queremos serie rancia; "Actualizar" invalida igualmente.
+    staleTime: 2 * 60_000,
   });
 
   const etiqueta = ETIQUETA[metrica];
