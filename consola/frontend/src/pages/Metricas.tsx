@@ -15,6 +15,7 @@ import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./metricas/Controles";
 import { Descargas } from "./metricas/Descargas";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
+import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
 import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
@@ -158,6 +159,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
           <TablaCuentas cuentas={reporteQuery.data.cuentas} />
           <PiezasAnalitica opciones={opciones} rangoActual={rango} />
+          {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
+              BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
+          <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
           {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
               (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
           <PiezasRendimiento opciones={opciones} />

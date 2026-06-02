@@ -511,6 +511,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         origen              TEXT NOT NULL DEFAULT '',
         notas               TEXT NOT NULL DEFAULT '',
         tipo_contenido      TEXT NOT NULL DEFAULT 'ia',
+        id_post_metricool   TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -1605,6 +1606,12 @@ def _migrar_columnas_piezas_rota(con: Any) -> None:
 _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Tipo de contenido (ia|galeria|fuente): de dónde sale la imagen de la pieza.
     ("tipo_contenido", "TEXT NOT NULL DEFAULT 'ia'"),
+    # id_post_metricool a NIVEL pieza (Item C, métricas↔contenido): el id de Metricool
+    # "principal" de la pieza, para enlazar el rendimiento de una pieza de Metricool de
+    # vuelta a su `contenido` (y resolver sus etiquetas/tipo en las gráficas por serie).
+    # El id REAL por red sigue viviendo en `contenido_plataforma.id_post_metricool` (una
+    # pieza publica en N redes); este es un acceso directo a NIVEL contenido. Legado -> "".
+    ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
@@ -3155,6 +3162,7 @@ _COLS_CONTENIDO = (
     "origen",
     "notas",
     "tipo_contenido",
+    "id_post_metricool",
     "creado",
     "actualizado",
 )
@@ -3179,6 +3187,9 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     "origen",
     "notas",
     "tipo_contenido",
+    # Editable para que el flujo de publicación pueda fijar el id de Metricool a nivel
+    # pieza cuando esté disponible (Item C); hoy se rellena solo si el publicador lo pasa.
+    "id_post_metricool",
 )
 
 
@@ -3210,6 +3221,7 @@ def crear_contenido(
     origen: str = "",
     notas: str = "",
     tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
+    id_post_metricool: str = "",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -3244,6 +3256,9 @@ def crear_contenido(
         "origen": origen or "",
         "notas": notas or "",
         "tipo_contenido": tipo_contenido if tipo_contenido in TIPOS_CONTENIDO else TIPO_CONTENIDO_DEFECTO,
+        # id de Metricool a nivel pieza (Item C): acceso directo opcional para el cruce
+        # métricas↔contenido; el id real por red sigue en `contenido_plataforma`. Legado -> "".
+        "id_post_metricool": id_post_metricool or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

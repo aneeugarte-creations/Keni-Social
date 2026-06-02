@@ -25,6 +25,7 @@ import type {
   EstadoMetricas,
   TendenciaDiaria,
   PiezasRendimiento,
+  PiezasPorEtiqueta,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
   CuerpoActualizarTurnoRota,
@@ -1450,6 +1451,10 @@ export const api = {
   // enlazables al tablero. Sin rango (es por pieza publicada, no por periodo).
   metricasPiezasRendimiento: (params: { marca?: string }, signal?: AbortSignal) =>
     peticion<PiezasRendimiento>(`/metricas/piezas-rendimiento${query(params)}`, { signal }),
+  // Rendimiento del periodo agrupado por serie/tipo (Item C): cruza piezas de Metricool
+  // con el contenido de la BD para resolver tipo_contenido + etiquetas.
+  metricasPiezasPorEtiqueta: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<PiezasPorEtiqueta>(`/metricas/piezas-por-etiqueta${query(params)}`, { signal }),
   // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
   metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),

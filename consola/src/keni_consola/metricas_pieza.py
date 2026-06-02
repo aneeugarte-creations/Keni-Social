@@ -33,6 +33,8 @@ segura entre hilos como el resto.
 from __future__ import annotations
 
 import logging
+import re
+import unicodedata
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -298,3 +300,196 @@ def refrescar_piezas_recientes(
             if datos.get("encontrado"):
                 refrescadas += 1
     return refrescadas
+
+
+# --------------------------------------------------------------------------- #
+# Analítica por SERIE / TIPO (Item C): metricas (Metricool) ↔ contenido (BD)    #
+# --------------------------------------------------------------------------- #
+#
+# Metricool NO expone la "categoría" editorial de un post (serie, tipo, campaña): eso
+# vive en la BD de la Consola (`contenido.tipo_contenido` + las `etiquetas` clase/nombre).
+# Para graficar el rendimiento POR SERIE/TIPO hay que ENLAZAR cada pieza de Metricool del
+# periodo con su `contenido` de la BD y leer ahí su clasificación. El enlace es:
+#
+#   1) PRIMARIO por id: `contenido_plataforma.id_post_metricool` (y, como acceso directo a
+#      nivel pieza, `contenido.id_post_metricool`) -> el id que Metricool devuelve al
+#      programar. Es el enlace fuerte y sin ambigüedad.
+#   2) FALLBACK por título: si una pieza de Metricool no tiene id enlazado en la BD (p. ej.
+#      publicada fuera de la Consola, o antes de guardar el id), se intenta casar por título
+#      NORMALIZADO (sin acentos/may/espacios extra). Es heurístico y puede fallar; se marca
+#      como `enlace="titulo"` para ser honestos en la UI. Las piezas sin enlace alguno caen
+#      en el grupo "Sin clasificar".
+#
+# TODO(captura del id al publicar): hoy el id de Metricool se guarda en
+# `contenido_plataforma.id_post_metricool` cuando el programador empuja la pieza (ver
+# `metricas_pieza.rendimiento` / el flujo de publicación). La columna
+# `contenido.id_post_metricool` (añadida en db.py) queda disponible como acceso directo a
+# nivel pieza para cuando el flujo de publicación la rellene; mientras no se rellene, el
+# enlace por `contenido_plataforma` ya cubre las piezas publicadas desde la Consola y el
+# fuzzy-match por título cubre el resto. No requiere cambios en el publicador para funcionar.
+
+# Ejes de agrupación de la analítica por serie/tipo. El eje "tipo" sale de
+# `contenido.tipo_contenido`; los EJES_ETIQUETA son CLASES de etiqueta (`etiquetas.clase`).
+# OJO: la clase de etiqueta "tipo" se renombra a "etiqueta_tipo" como eje para no chocar con
+# el eje "tipo" (tipo_contenido). El mapeo eje->clase vive en `_CLASE_DE_EJE`.
+EJES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "etiqueta_tipo")
+# Clase de etiqueta real de cada eje de etiqueta (el eje "etiqueta_tipo" mapea a clase "tipo").
+_CLASE_DE_EJE: dict[str, str] = {"campania": "campania", "vertical": "vertical", "etiqueta_tipo": "tipo"}
+SIN_CLASIFICAR = "Sin clasificar"
+
+
+def _normalizar_titulo(titulo: str) -> str:
+    """Título canónico para el fuzzy-match: sin acentos, minúsculas, espacios colapsados."""
+    s = unicodedata.normalize("NFKD", titulo or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.lower().strip()
+    return re.sub(r"\s+", " ", s)
+
+
+def _indice_contenido_por_post(
+    contenidos: list[dict[str, Any]],
+    plataformas: list[dict[str, Any]],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Construye los índices de enlace `id_post_metricool -> contenido_id` y `titulo_norm -> contenido_id`.
+
+    El índice por id usa tanto `contenido_plataforma.id_post_metricool` (enlace real por red)
+    como `contenido.id_post_metricool` (acceso directo a nivel pieza, si está relleno). El
+    índice por título normalizado es el fallback heurístico. En empates de título (dos piezas
+    con el mismo título) gana la primera vista: el fuzzy-match es best-effort, no autoritativo.
+    """
+    por_id: dict[str, str] = {}
+    por_titulo: dict[str, str] = {}
+    for c in contenidos:
+        cid = c.get("id") or ""
+        if not cid:
+            continue
+        id_directo = (c.get("id_post_metricool") or "").strip()
+        if id_directo:
+            por_id.setdefault(id_directo, cid)
+        titulo_norm = _normalizar_titulo(c.get("titulo", ""))
+        if titulo_norm:
+            por_titulo.setdefault(titulo_norm, cid)
+    for plat in plataformas:
+        id_post = (plat.get("id_post_metricool") or "").strip()
+        cid = plat.get("contenido_id") or ""
+        if id_post and cid:
+            por_id.setdefault(id_post, cid)
+    return por_id, por_titulo
+
+
+def _grupos_de_contenido(
+    contenido: dict[str, Any] | None, etiquetas_por_cid: dict[str, dict[str, str]]
+) -> dict[str, str]:
+    """Devuelve, para una pieza enlazada, su valor en cada eje (`tipo` + clases de etiqueta).
+
+    `etiquetas_por_cid` es `contenido_id -> {clase: nombre_etiqueta}`. Si la pieza no está
+    enlazada (`contenido is None`) o no tiene valor en un eje, ese eje queda "Sin clasificar".
+    """
+    grupos: dict[str, str] = {}
+    cid = (contenido or {}).get("id") or ""
+    etiquetas = etiquetas_por_cid.get(cid, {})
+    grupos["tipo"] = (contenido or {}).get("tipo_contenido") or SIN_CLASIFICAR if contenido else SIN_CLASIFICAR
+    for eje in EJES_ETIQUETA:
+        grupos[eje] = etiquetas.get(_CLASE_DE_EJE[eje], SIN_CLASIFICAR)
+    return grupos
+
+
+def _acumular(serie: dict[str, dict[str, Any]], valor: str, pieza: dict[str, Any]) -> None:
+    """Suma una pieza al grupo `valor` de una serie (n, visualizaciones, engagement acumulado)."""
+    g = serie.setdefault(valor, {"valor": valor, "n": 0, "visualizaciones": 0, "_eng_sum": 0.0})
+    g["n"] += 1
+    g["visualizaciones"] += int(pieza.get("visualizaciones", 0) or 0)
+    g["_eng_sum"] += float(pieza.get("engagement_pct", 0.0) or 0.0)
+
+
+def _serie_final(serie: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Cierra una serie: calcula engagement medio por grupo y ordena por engagement desc."""
+    salida = []
+    for g in serie.values():
+        n = g["n"] or 1
+        salida.append(
+            {
+                "valor": g["valor"],
+                "n": g["n"],
+                "visualizaciones": g["visualizaciones"],
+                "engagement_pct": round(g["_eng_sum"] / n, 2),
+            }
+        )
+    salida.sort(key=lambda x: (x["engagement_pct"], x["visualizaciones"]), reverse=True)
+    return salida
+
+
+def analitica_por_etiqueta(
+    rango: str, marca_consola: str | None, marca_metricas: str | None
+) -> dict[str, Any]:
+    """Rendimiento de las piezas del periodo AGRUPADO por tipo de contenido y por etiqueta.
+
+    Cruza las piezas de Metricool del periodo (`servicio.construir_listado_piezas`) con su
+    `contenido` de la BD (enlace por `id_post_metricool`; fallback fuzzy por título) y agrega
+    engagement medio + visualizaciones + nº de piezas por cada eje (`tipo` + clases de
+    etiqueta `campania`/`vertical`/`tipo`). Devuelve una estructura lista para graficar:
+
+        {"series": [{"eje": "tipo", "etiqueta": "Tipo de contenido",
+                     "grupos": [{"valor": ..., "n": ..., "visualizaciones": ..., "engagement_pct": ...}]}, ...],
+         "total": <piezas del periodo>, "enlazadas": <por id>, "enlazadas_titulo": <por fuzzy>,
+         "sin_enlace": <sin casar>, "fuente": <muestra|real|...>}
+
+    Best-effort y honesto: si nada enlaza, las series salen con todo en "Sin clasificar".
+    """
+    piezas = servicio.construir_listado_piezas(rango, marca_metricas)
+    fuente = servicio.nombre_fuente()
+
+    contenidos = repos.listar_contenido(marca=marca_consola)
+    plataformas = repos.listar_contenido_plataforma()
+    por_id, por_titulo = _indice_contenido_por_post(contenidos, plataformas)
+    contenido_por_id = {c["id"]: c for c in contenidos if c.get("id")}
+
+    # Resuelve etiquetas: contenido_id -> {clase: nombre}. Solo nos interesa el nombre por
+    # clase (el primero asignado de cada clase; el modelo garantiza nombre único por clase).
+    etiquetas = {e["id"]: e for e in repos.listar_etiquetas()}
+    asignaciones = repos.etiquetas_por_contenido()
+    etiquetas_por_cid: dict[str, dict[str, str]] = {}
+    for cid, ids in asignaciones.items():
+        for eid in ids:
+            et = etiquetas.get(eid)
+            if not et:
+                continue
+            etiquetas_por_cid.setdefault(cid, {}).setdefault(et.get("clase", ""), et.get("nombre", ""))
+
+    series_acum: dict[str, dict[str, dict[str, Any]]] = {
+        eje: {} for eje in ("tipo", *EJES_ETIQUETA)
+    }
+    enlazadas = enlazadas_titulo = sin_enlace = 0
+    for p in piezas:
+        cid = por_id.get(str(p.get("id") or ""))
+        if cid:
+            enlazadas += 1
+        else:
+            cid = por_titulo.get(_normalizar_titulo(p.get("titulo", "")))
+            if cid:
+                enlazadas_titulo += 1
+            else:
+                sin_enlace += 1
+        contenido = contenido_por_id.get(cid) if cid else None
+        grupos = _grupos_de_contenido(contenido, etiquetas_por_cid)
+        for eje, serie in series_acum.items():
+            _acumular(serie, grupos[eje], p)
+
+    etiquetas_eje = {
+        "tipo": "Tipo de contenido",
+        "campania": "Campaña",
+        "vertical": "Vertical",
+        "etiqueta_tipo": "Tipo (etiqueta)",
+    }
+    series = [
+        {"eje": eje, "etiqueta": etiquetas_eje.get(eje, eje.capitalize()), "grupos": _serie_final(serie)}
+        for eje, serie in series_acum.items()
+    ]
+    return {
+        "series": series,
+        "total": len(piezas),
+        "enlazadas": enlazadas,
+        "enlazadas_titulo": enlazadas_titulo,
+        "sin_enlace": sin_enlace,
+        "fuente": fuente,
+    }

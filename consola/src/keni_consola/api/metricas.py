@@ -445,6 +445,39 @@ async def piezas_rendimiento(request: Request) -> Response:
     )
 
 
+async def piezas_por_etiqueta(request: Request) -> Response:
+    """GET /api/metricas/piezas-por-etiqueta: rendimiento del periodo por SERIE/TIPO.
+
+    Metricool no expone la categoría editorial de un post; este endpoint la resuelve
+    cruzando las piezas del periodo con el `contenido` de la BD (enlace por
+    `id_post_metricool`; fallback fuzzy por título) y agrega engagement medio +
+    visualizaciones + nº de piezas por cada eje (tipo de contenido + clases de etiqueta).
+    `?marca=` (en forma `id_metricas`) acota; sin marca, todas. Trabajo bloqueante (BD +
+    listado de piezas de la fuente) en executor para no congelar el event loop.
+    """
+    marca_metricas = request.query_params.get("marca") or None
+    marca_consola = _marca_consola_de_metricas(marca_metricas)
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    try:
+        payload = await asyncio.get_running_loop().run_in_executor(
+            None, metricas_pieza.analitica_por_etiqueta, rango, marca_consola, marca_metricas
+        )
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse(
+            {"error": "No se pudo generar la analítica por serie."}, status_code=500
+        )
+    return JSONResponse(
+        {
+            "marca": marca_metricas or "",
+            "rango": rango,
+            "etiqueta_rango": _etiqueta_rango(rango),
+            **payload,
+        }
+    )
+
+
 def _rango_opcional(raw: str | None) -> str | None:
     """Rango para /estado y /refrescar: preset o token válido, si no None (sin combo)."""
     if not raw:
@@ -650,6 +683,7 @@ RUTAS = [
     Route("/api/metricas/piezas", piezas, methods=["GET"]),
     Route("/api/metricas/piezas-export", piezas_export, methods=["GET"]),
     Route("/api/metricas/piezas-rendimiento", piezas_rendimiento, methods=["GET"]),
+    Route("/api/metricas/piezas-por-etiqueta", piezas_por_etiqueta, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),
     Route("/api/metricas/refrescar", refrescar, methods=["POST"]),

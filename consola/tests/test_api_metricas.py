@@ -250,3 +250,77 @@ def test_piezas_rendimiento_acota_por_marca(cliente):
     # Sin marca: agrega todas.
     r_todas = cliente.get("/api/metricas/piezas-rendimiento")
     assert r_todas.json()["total"] == 2
+
+
+# --------------------------------------------------------------------------- #
+# Export del Top/Peores de piezas: /api/metricas/piezas-export (Item B)        #
+# --------------------------------------------------------------------------- #
+
+
+def test_piezas_export_csv_descarga_y_lleva_grupos(cliente):
+    r = cliente.get("/api/metricas/piezas-export?rango=mes&marca=claro_sports&fmt=csv")
+    assert r.status_code == 200
+    assert "attachment" in r.headers["content-disposition"]
+    assert "piezas-mes" in r.headers["content-disposition"]
+    # Cabecera + las dos categorías (Top 5 / Peores 5) presentes en el cuerpo.
+    assert "Engagement %" in r.text
+    assert "Top 5" in r.text and "Peores 5" in r.text
+
+
+def test_piezas_export_json_trae_top_y_peores(cliente):
+    r = cliente.get("/api/metricas/piezas-export?rango=mes&fmt=json")
+    assert r.status_code == 200
+    import json
+
+    data = json.loads(r.text)
+    assert len(data["top"]) == 5 and len(data["peores"]) == 5
+    assert len(data["filas"]) == 10
+
+
+def test_piezas_export_fmt_desconocido_cae_a_csv(cliente):
+    r = cliente.get("/api/metricas/piezas-export?rango=mes&fmt=xml")
+    assert r.status_code == 200
+    assert "text/csv" in r.headers["content-type"]
+
+
+# --------------------------------------------------------------------------- #
+# Analítica por serie/tipo: /api/metricas/piezas-por-etiqueta (Item C)         #
+# --------------------------------------------------------------------------- #
+
+
+def test_piezas_por_etiqueta_contrato_y_ejes(cliente):
+    r = cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["total"] > 0
+    ejes = {s["eje"] for s in data["series"]}
+    assert {"tipo", "campania", "vertical", "etiqueta_tipo"} <= ejes
+    # Sin nada enlazado en la BD, todas las piezas caen en "Sin clasificar".
+    assert data["enlazadas"] == 0
+    assert data["sin_enlace"] == data["total"]
+
+
+def test_piezas_por_etiqueta_enlaza_por_titulo_y_resuelve_etiqueta(cliente):
+    from keni_consola import repos
+
+    # Título idéntico a una pieza de la muestra de deportes -> fuzzy-match por título.
+    item = repos.crear_contenido(
+        clase="contenido",
+        titulo="Gol agónico en el último minuto",
+        marca="claro-sports",
+        tipo_contenido="galeria",
+    )
+    et = repos.crear_etiqueta(nombre="Mundial 2026", clase="campania", marca="claro-sports")
+    repos.asignar_etiqueta(item["id"], et["id"])
+
+    r = cliente.get("/api/metricas/piezas-por-etiqueta?rango=mes&marca=claro_sports")
+    assert r.status_code == 200
+    data = r.json()
+    # Al menos una pieza enlazó por título (la muestra repite títulos del pool).
+    assert data["enlazadas_titulo"] >= 1
+    # El eje "tipo" debe tener un grupo "galeria" (el tipo_contenido del contenido enlazado).
+    tipo = next(s for s in data["series"] if s["eje"] == "tipo")
+    assert any(g["valor"] == "galeria" for g in tipo["grupos"])
+    # Y el eje "campania" un grupo "Mundial 2026".
+    campania = next(s for s in data["series"] if s["eje"] == "campania")
+    assert any(g["valor"] == "Mundial 2026" for g in campania["grupos"])
