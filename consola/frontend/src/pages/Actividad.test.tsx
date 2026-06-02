@@ -81,14 +81,16 @@ describe("Actividad (feed unificado de IA)", () => {
     expect(screen.getByText("Completado")).toBeInTheDocument();
   });
 
-  it("ofrece 'Ver resultado' en un ítem completado con resultado_url", async () => {
+  it("la fila con resultado_url es la acción principal (clicable, sin botón aparte)", async () => {
     stubFetch();
     renderConProviders(<Actividad />);
-    expect(await screen.findByText("Resumen de la jornada")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ver resultado/ })).toBeInTheDocument();
+    const fila = (await screen.findByText("Resumen de la jornada")).closest("tr");
+    expect(fila).toHaveAttribute("role", "button");
+    // Ya no hay columna de acciones con su botón.
+    expect(screen.queryByRole("button", { name: /Ver resultado/ })).toBeNull();
   });
 
-  it("ofrece 'Ver en vivo' en una generación en curso (item D)", async () => {
+  it("la fila de una generación en curso es clicable (item D)", async () => {
     const enCurso = {
       items: [
         {
@@ -107,8 +109,9 @@ describe("Actividad (feed unificado de IA)", () => {
     };
     stubFetch(enCurso);
     renderConProviders(<Actividad />);
-    expect(await screen.findByText("En curso")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Ver en vivo/ })).toBeInTheDocument();
+    const fila = (await screen.findByText("En curso")).closest("tr");
+    expect(fila).toHaveAttribute("role", "button");
+    expect(screen.queryByRole("button", { name: /Ver en vivo/ })).toBeNull();
   });
 
   it("muestra el estado vacío honesto cuando no hay actividad", async () => {
