@@ -17,6 +17,8 @@ Los flujos con persistencia usan la fixture `entorno` (Postgres de pruebas; se s
 
 from __future__ import annotations
 
+import json
+
 from keni_consola import config, generaciones, redes, repos
 from keni_consola import pipeline_contenido as pc
 
@@ -241,6 +243,12 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
 
 
 def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
+    # `copy_pendiente` lo fija CI (`crear_tema_de`) en producción: parámetros del copy a lanzar
+    # SOLO si la QA de la fuente pasa. La fase CD exige que esté presente; lo sembramos aquí.
+    campos.setdefault(
+        "copy_pendiente",
+        json.dumps({"nota": "Nota de origen a cribar.", "redes_ids": ["x"]}),
+    )
     return repos.crear_contenido(
         clase="contenido", titulo=titulo, marca=marca, origen=pc.ORIGEN_PIPELINE,
         descripcion="Nota de origen a cribar.", **campos,
