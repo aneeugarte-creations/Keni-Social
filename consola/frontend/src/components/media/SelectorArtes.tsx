@@ -1,0 +1,152 @@
+/**
+ * Galería para elegir un ARTE ya guardado en la biblioteca (objeto de media catalogado).
+ *
+ * Lista las artes (`GET /api/artes`) acotadas a la `marca` de la pieza y con búsqueda por
+ * título/etiqueta. Al elegir una, devuelve su `{objeto, url}` al padre (el editor de imagen
+ * la usa como FONDO y compone la placa encima). Permite quitar un arte de la biblioteca.
+ *
+ * No persiste nada por sí mismo: solo selecciona. Guardar artes se hace desde el Estudio o
+ * tras componer en el editor de imagen.
+ */
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ImageOff, Loader2, Search, Trash2 } from "lucide-react";
+import * as React from "react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { api, ApiError, urlMedia } from "@/lib/api";
+import type { Arte } from "@/types";
+
+function mensajeError(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  if (error instanceof Error) return error.message;
+  return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
+
+export interface SelectorArtesProps {
+  open: boolean;
+  onCerrar: () => void;
+  /** Devuelve el arte elegido (su `objeto` se usará como fondo). */
+  onSeleccionar: (arte: Arte) => void;
+  /** Acota la galería a una marca (recomendado: la marca de la pieza). */
+  marca?: string;
+}
+
+export function SelectorArtes({ open, onCerrar, onSeleccionar, marca }: SelectorArtesProps) {
+  const queryClient = useQueryClient();
+  const [q, setQ] = React.useState("");
+
+  const clave = ["artes", marca ?? "", q.trim()] as const;
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: clave,
+    queryFn: ({ signal }) =>
+      api.listarArtes({ marca: marca || undefined, q: q.trim() || undefined }, signal),
+    enabled: open,
+  });
+
+  const borrar = useMutation({
+    mutationFn: (id: string) => api.borrarArte(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["artes"] });
+      toast.success("Arte quitado de la biblioteca");
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const artes = data?.artes ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Biblioteca de artes</DialogTitle>
+          <DialogDescription>
+            Elige una imagen guardada como fondo. La placa de marca y el copy-in se aplican
+            encima automáticamente.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar por título o etiqueta…"
+            className="pl-8"
+            aria-label="Buscar artes"
+          />
+        </div>
+
+        <div className="max-h-[55vh] min-h-[12rem] overflow-y-auto">
+          {isLoading ? (
+            <div className="flex h-48 items-center justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" />
+            </div>
+          ) : isError ? (
+            <p className="flex h-48 items-center justify-center text-sm text-destructive">
+              {mensajeError(error)}
+            </p>
+          ) : artes.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+              <ImageOff className="h-6 w-6" />
+              <p className="text-sm">
+                No hay artes guardadas{marca ? " para esta marca" : ""} todavía.
+              </p>
+              <p className="text-xs">
+                Guarda artes desde el Estudio o tras componer una imagen aquí.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {artes.map((arte) => (
+                <div key={arte.id} className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSeleccionar(arte);
+                      onCerrar();
+                    }}
+                    className="block w-full overflow-hidden rounded-md border border-border bg-muted/20 transition hover:ring-2 hover:ring-primary focus:outline-none focus:ring-2 focus:ring-primary"
+                    title={arte.titulo || "Usar este arte"}
+                  >
+                    <img
+                      src={urlMedia(arte.objeto)}
+                      alt={arte.titulo || "Arte de la biblioteca"}
+                      loading="lazy"
+                      className="aspect-square w-full object-cover"
+                    />
+                    {arte.titulo && (
+                      <span className="block truncate px-2 py-1 text-left text-xs text-muted-foreground">
+                        {arte.titulo}
+                      </span>
+                    )}
+                  </button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute right-1.5 top-1.5 h-7 w-7 opacity-0 transition group-hover:opacity-100"
+                    onClick={() => borrar.mutate(arte.id)}
+                    disabled={borrar.isPending}
+                    aria-label="Quitar arte de la biblioteca"
+                    title="Quitar de la biblioteca"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}

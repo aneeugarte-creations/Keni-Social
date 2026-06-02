@@ -103,6 +103,9 @@ import type {
   CuerpoImagenesExpandir,
   CuerpoImagenesRevisar,
   CuerpoImagenesComponer,
+  CuerpoGuardarArte,
+  RespuestaArte,
+  RespuestaArtes,
   RespuestaPlantillasMarca,
   RespuestaPlantillaMarca,
   PlantillaMarca,
@@ -771,6 +774,21 @@ export const api = {
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
     peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
+
+  // --- Biblioteca de artes (objetos de media catalogados para reutilizar) ---
+  // Guardar un arte lo PROTEGE del GC de media huérfana y lo hace seleccionable por marca
+  // desde el editor de imagen de una pieza. El `objeto` es UNIQUE: `guardarArte` es idempotente.
+  listarArtes: (
+    filtros: { marca?: string; tipo?: string; q?: string } = {},
+    signal?: AbortSignal,
+  ) => peticion<RespuestaArtes>(`/artes${query(filtros)}`, { signal }),
+  guardarArte: (cuerpo: CuerpoGuardarArte) =>
+    peticion<RespuestaArte>("/artes", { metodo: "POST", json: cuerpo }),
+  borrarArte: (id: string, purgar = false) =>
+    peticion<RespuestaMensaje>(
+      `/artes/${encodeURIComponent(id)}${purgar ? "?purgar=1" : ""}`,
+      { metodo: "DELETE" },
+    ),
 
   // --- Estudio de imagen (generar variantes · editar determinista · expandir generativo) ---
   // Cada endpoint responde de inmediato con registro(s) de generación (tipo "imagen") que se

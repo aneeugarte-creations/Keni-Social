@@ -24,6 +24,7 @@ import {
   Crop,
   Download,
   ImagePlus,
+  Library,
   Loader2,
   Maximize2,
   Settings2,
@@ -480,6 +481,20 @@ export default function Estudio() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo aplicar a la pieza."),
   });
 
+  // Guardar en la biblioteca de artes: catalogamos el FONDO limpio (la base de la que se
+  // compuso la placa, si la hay) para reutilizarlo después sin estampar dos veces la marca.
+  const guardarEnBiblioteca = useMutation({
+    mutationFn: () =>
+      api.guardarArte({
+        objeto: activa!.origen || activa!.id,
+        marca: ctx.marca || undefined,
+        tipo: "estudio",
+      }),
+    onSuccess: () => toast.success("Guardado en la biblioteca"),
+    onError: (e) =>
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar en la biblioteca."),
+  });
+
   const srcActiva = activa ? urlMedia(activa.url) : "";
 
   return (
@@ -618,6 +633,21 @@ export default function Estudio() {
                   Usar en la pieza
                 </Button>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => guardarEnBiblioteca.mutate()}
+                disabled={guardarEnBiblioteca.isPending}
+                title="Guardar esta imagen en la biblioteca de artes para reutilizarla en publicaciones"
+              >
+                {guardarEnBiblioteca.isPending ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <Library className="mr-1 h-4 w-4" />
+                )}
+                Guardar en biblioteca
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <a href={srcActiva} download>
                   <Download className="mr-1 h-4 w-4" />

@@ -1,27 +1,48 @@
 /**
- * Zona de imagen reutilizable para componer/editar publicaciones.
+ * Zona de imagen de una pieza: el usuario solo decide DE DÓNDE SALE EL FONDO y, si la pieza
+ * tiene marca con plantilla, la placa de marca + el copy-in se componen ENCIMA casi solos.
  *
- * Permite **adjuntar** un archivo (`POST /api/media`) o **generar con IA**
- * (`POST /api/media/generar`). Previsualiza la imagen (`imagen_url`) y permite
- * quitarla. Si la generación devuelve 400 ("no configurada"), se muestra un
- * aviso amable en ámbar (no un error rojo) y la zona sigue funcionando.
+ * Tres orígenes de fondo:
+ *   - **Biblioteca (S3)**: elegir un arte ya guardado (`SelectorArtes`).
+ *   - **Subir**: un archivo del equipo (`POST /api/media`).
+ *   - **Generar con IA**: a partir de un prompt (`POST /api/media/generar`).
  *
- * El componente es controlado: el padre guarda el `nombre` de la imagen (vacío
- * = sin imagen) y lo incluye al guardar la publicación.
+ * Tras obtener el fondo por cualquiera de las tres vías, si hay `marca` se AUTO-COMPONE la
+ * placa (`POST /api/imagenes/componer`, sondeada con `useGeneracion`) usando el copy-in como
+ * titular, y se muestra la preview; el usuario puede reajustar titular/etiqueta y re-componer,
+ * o **guardar el fondo en la biblioteca** para reutilizarlo. Sin `marca` (uso suelto, p. ej.
+ * en el tablero) el fondo se adjunta tal cual, sin componer.
+ *
+ * El componente es controlado: el padre guarda el `nombre` de la imagen final (vacío = sin
+ * imagen) y lo incluye al guardar la pieza. El FONDO limpio se recuerda solo en esta sesión
+ * (para re-componer y para guardarlo en la biblioteca sin la placa estampada).
  */
 import { useMutation } from "@tanstack/react-query";
-import { AlertTriangle, ImagePlus, Loader2, Upload, Wand2, X } from "lucide-react";
+import {
+  AlertTriangle,
+  ImageOff,
+  ImagePlus,
+  Library,
+  Loader2,
+  RefreshCw,
+  Save,
+  Upload,
+  Wand2,
+  X,
+} from "lucide-react";
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { MarcaIA } from "@/components/comunes/MarcaIA";
+import { SelectorArtes } from "@/components/media/SelectorArtes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
 import { nombreRed, tamanoRed } from "@/pages/publicaciones/meta";
+import type { Arte, FormatoImagen, TipoArte } from "@/types";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
@@ -35,6 +56,24 @@ function ratioDe(txt: string): number | null {
   return w && h ? w / h : null;
 }
 
+/**
+ * Formato de placa para una red (espejo de `estudio_imagen.formato_por_red` del backend):
+ * el compositor solo entiende `vertical|feed|cuadrado`; se elige el encaje más cercano.
+ */
+function formatoDeRed(red: string | undefined): FormatoImagen {
+  if (red === "tiktok") return "vertical";
+  if (red === "instagram") return "cuadrado";
+  return "feed";
+}
+
+/** Fondo limpio elegido en esta sesión (antes de estampar la placa). */
+interface Fondo {
+  id: string;
+  url: string;
+  /** De dónde salió, para catalogarlo con el origen correcto al guardarlo. */
+  tipo: TipoArte;
+}
+
 export interface EditorImagenProps {
   /** Nombre del archivo de imagen actual (`""` si no hay). */
   imagen: string;
@@ -42,7 +81,6 @@ export interface EditorImagenProps {
   imagenUrl?: string;
   /** Notifica el nuevo nombre de imagen (o `""` al quitarla). */
   onCambio: (nombre: string, url: string) => void;
-  /** Marca (para anteponer en el prompt de generación si se desea). */
   disabled?: boolean;
   idPrefijo?: string;
   /**
@@ -53,7 +91,7 @@ export interface EditorImagenProps {
   marca?: string;
   red?: string;
   copy?: string;
-  /** Texto que va DENTRO de la imagen (copy-in); titular al integrar la foto en la plantilla. */
+  /** Texto que va DENTRO de la imagen (copy-in); titular al componer la placa. */
   copyIn?: string;
 }
 
@@ -73,11 +111,24 @@ export function EditorImagen({
   const [prompt, setPrompt] = React.useState("");
   // Aviso amable cuando la generación no está configurada (400).
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
+  // Galería de artes (biblioteca S3).
+  const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
+  // Fondo limpio de ESTA sesión (lo que se compone y lo que se puede guardar sin placa).
+  const [fondo, setFondo] = React.useState<Fondo | null>(null);
+  // Ajustes de la placa (solo si hay marca). El titular parte del copy-in de la pieza.
+  const [titular, setTitular] = React.useState(copyIn ?? "");
+  const [etiqueta, setEtiqueta] = React.useState("");
 
+  // Si cambia el copy-in de la pieza y el usuario aún no tocó el titular, lo seguimos.
+  const titularTocado = React.useRef(false);
+  React.useEffect(() => {
+    if (!titularTocado.current) setTitular(copyIn ?? "");
+  }, [copyIn]);
+
+  const componible = !!marca; // solo las piezas con marca auto-componen la placa.
   const src = urlMedia(imagenUrl || imagen);
 
-  // Aspect-ratio real de la imagen (medido al cargar) frente al recomendado de la red:
-  // avisa si se desvía del estándar (la red la recortaría).
+  // Aspect-ratio real de la imagen (medido al cargar) frente al recomendado de la red.
   const [ratioReal, setRatioReal] = React.useState<number | null>(null);
   React.useEffect(() => {
     setRatioReal(null);
@@ -87,34 +138,74 @@ export function EditorImagen({
   const aspectoFueraDeEstandar =
     ratioReal != null && ratioRec != null && Math.abs(ratioReal - ratioRec) / ratioRec > 0.1;
 
+  // --- Composición de la placa (job de imagen en background, sondeado) --- //
+  const { generacion: genComp, ejecutando: componiendo, iniciar: iniciarComp } = useGeneracion();
+  const componer = useMutation({
+    mutationFn: (base: Fondo) =>
+      api.imagenesComponer({
+        imagen: base.id,
+        marca: marca!,
+        formato: formatoDeRed(red),
+        titular: titular.trim() || undefined,
+        etiqueta: etiqueta.trim() || undefined,
+      }),
+    onSuccess: (data) => iniciarComp(data.generacion),
+    onError: (e) => {
+      // Si la marca no tiene placa (o falla la composición), usamos el fondo tal cual.
+      toast.message("Se usó el fondo sin placa de marca.", { description: mensajeError(e) });
+      if (fondo) onCambio(fondo.id, fondo.url);
+    },
+  });
+
+  // Al completar la composición, fijamos la imagen compuesta como la de la pieza.
+  const compTerminal = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!genComp || genComp.id === compTerminal.current) return;
+    if (genComp.estado === "completado") {
+      compTerminal.current = genComp.id;
+      const r = genComp.resultado;
+      if (r?.id && r?.url) {
+        onCambio(r.id, r.url);
+        toast.success("Marca aplicada");
+      }
+    } else if (genComp.estado === "error") {
+      compTerminal.current = genComp.id;
+      toast.message("Se usó el fondo sin placa de marca.", { description: genComp.error || "" });
+      if (fondo) onCambio(fondo.id, fondo.url);
+    }
+  }, [genComp, onCambio, fondo]);
+
+  /** Aplica un fondo recién elegido: lo recuerda y, si hay marca, compone la placa encima. */
+  const aplicarFondo = React.useCallback(
+    (base: Fondo) => {
+      setFondo(base);
+      if (componible) {
+        componer.mutate(base);
+      } else {
+        onCambio(base.id, base.url); // uso suelto: se adjunta tal cual.
+      }
+    },
+    // `componer` es estable (useMutation); lo omitimos para no recrear el callback en cada render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [componible, onCambio],
+  );
+
+  // --- Subir un archivo como fondo --- //
   const subir = useMutation({
-    // Sube la foto y, si pertenece a una publicación, la INTEGRA en la plantilla de marca
-    // (logo + copy-in + pleca). Para marcas sin plantilla el backend devuelve la foto tal cual,
-    // así que el flujo es uniforme. Sin `publicacionId` (uso suelto), solo adjunta.
-    mutationFn: async (archivo: File) => {
-      const subida = await api.subirMedia(archivo);
-      if (!publicacionId) return { id: subida.id, url: subida.url };
-      const integrada = await api.integrarFotoPublicacion(publicacionId, subida.id, copyIn);
-      return { id: integrada.imagen, url: integrada.imagen_url };
-    },
-    onSuccess: (data) => {
-      onCambio(data.id, data.url);
-      toast.success(publicacionId ? "Foto integrada en la plantilla" : "Imagen adjuntada");
-    },
+    mutationFn: (archivo: File) => api.subirMedia(archivo),
+    onSuccess: (data) => aplicarFondo({ id: data.id, url: data.url, tipo: "subida" }),
     onError: (e) => toast.error(mensajeError(e)),
   });
 
-  // La imagen se genera como trabajo de IA en background; seguimos su progreso.
-  const { generacion, ejecutando, iniciar } = useGeneracion();
-
+  // --- Generar el fondo con IA (job de imagen en background, sondeado) --- //
+  const { generacion: genIA, ejecutando: generandoIA, iniciar: iniciarIA } = useGeneracion();
   const generar = useMutation({
     mutationFn: () => api.generarMedia({ prompt: prompt.trim() }),
     onSuccess: (data) => {
       setAvisoGenerar("");
-      iniciar(data.generacion);
+      iniciarIA(data.generacion);
     },
     onError: (e) => {
-      // 400 = generación no configurada: aviso amable, no error rojo (es síncrono).
       if (e instanceof ApiError && e.status === 400) {
         setAvisoGenerar(e.message);
         return;
@@ -122,40 +213,67 @@ export function EditorImagen({
       toast.error(mensajeError(e));
     },
   });
-
-  // Al completarse la generación, adjuntamos la imagen (una vez por id).
-  const terminalRef = React.useRef<string | null>(null);
+  const iaTerminal = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (!generacion || generacion.id === terminalRef.current) return;
-    if (generacion.estado === "completado") {
-      terminalRef.current = generacion.id;
-      const r = generacion.resultado;
+    if (!genIA || genIA.id === iaTerminal.current) return;
+    if (genIA.estado === "completado") {
+      iaTerminal.current = genIA.id;
+      const r = genIA.resultado;
       if (r?.id && r?.url) {
-        onCambio(r.id, r.url);
         setPrompt("");
-        toast.success("Imagen generada");
+        aplicarFondo({ id: r.id, url: r.url, tipo: "ia" });
       }
-    } else if (generacion.estado === "error") {
-      terminalRef.current = generacion.id;
-      toast.error(generacion.error || "No se pudo generar la imagen.");
+    } else if (genIA.estado === "error") {
+      iaTerminal.current = genIA.id;
+      toast.error(genIA.error || "No se pudo generar la imagen.");
     }
-  }, [generacion, onCambio]);
+  }, [genIA, aplicarFondo]);
 
-  const generando = generar.isPending || ejecutando;
+  // --- Guardar el fondo en la biblioteca (durable + reutilizable) --- //
+  const guardar = useMutation({
+    mutationFn: () => {
+      if (!fondo) throw new Error("Elige primero un fondo.");
+      return api.guardarArte({ objeto: fondo.id, marca: marca || undefined, tipo: fondo.tipo });
+    },
+    onSuccess: () => toast.success("Fondo guardado en la biblioteca"),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
     if (archivo) subir.mutate(archivo);
-    // Permite re-subir el mismo archivo más tarde.
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  function quitar() {
-    onCambio("", "");
-    setAvisoGenerar("");
+  function elegirArte(arte: Arte) {
+    aplicarFondo({ id: arte.objeto, url: arte.url, tipo: arte.tipo || "subida" });
   }
 
-  const ocupado = subir.isPending || generando || !!disabled;
+  function quitar() {
+    setFondo(null);
+    setAvisoGenerar("");
+    onCambio("", "");
+  }
+
+  const trabajando =
+    subir.isPending || generar.isPending || generandoIA || componer.isPending || componiendo;
+  const ocupado = trabajando || !!disabled;
+
+  const fuente = (
+    <FuenteFondo
+      idPrefijo={idPrefijo}
+      compacto={!!src}
+      ocupado={ocupado}
+      subiendo={subir.isPending}
+      generandoIA={generar.isPending || generandoIA}
+      prompt={prompt}
+      onPrompt={setPrompt}
+      onSubir={() => inputRef.current?.click()}
+      onBiblioteca={() => setGaleriaAbierta(true)}
+      onGenerar={() => generar.mutate()}
+      avisoGenerar={avisoGenerar}
+    />
+  );
 
   return (
     <div className="space-y-2.5">
@@ -173,10 +291,7 @@ export function EditorImagen({
             className="h-7 px-2 text-xs text-muted-foreground"
             disabled={!!disabled}
           >
-            <Link
-              to="/estudio"
-              state={{ publicacionId, marca, red, copy, imagen: imagen || undefined }}
-            >
+            <Link to="/estudio" state={{ publicacionId, marca, red, copy, imagen: imagen || undefined }}>
               <Wand2 className="mr-1 h-3.5 w-3.5" />
               Abrir en Estudio
             </Link>
@@ -204,6 +319,11 @@ export function EditorImagen({
               }
               className="max-h-56 w-auto rounded-md border border-border object-contain"
             />
+            {componiendo && (
+              <div className="absolute inset-0 flex items-center justify-center rounded-md bg-background/60">
+                <Loader2 className="h-5 w-5 animate-spin" />
+              </div>
+            )}
             <Button
               type="button"
               variant="destructive"
@@ -217,6 +337,7 @@ export function EditorImagen({
               <X className="h-4 w-4" />
             </Button>
           </div>
+
           {aspectoFueraDeEstandar && tamRed && red && (
             <p className="flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -226,64 +347,187 @@ export function EditorImagen({
               </span>
             </p>
           )}
-        </div>
-      ) : (
-        <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
-          <div className="flex flex-wrap items-center gap-2">
+
+          {/* Ajustes de la placa: solo cuando hay un fondo de esta sesión y la marca compone. */}
+          {componible && fondo && (
+            <div className="space-y-2 rounded-md border border-dashed border-border bg-muted/20 p-2.5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor={`${idPrefijo}-titular`} className="text-xs">
+                    Titular en la placa
+                  </Label>
+                  <Input
+                    id={`${idPrefijo}-titular`}
+                    value={titular}
+                    onChange={(e) => {
+                      titularTocado.current = true;
+                      setTitular(e.target.value);
+                    }}
+                    placeholder="Texto del titular…"
+                    disabled={ocupado}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`${idPrefijo}-etiqueta`} className="text-xs">
+                    Etiqueta <span className="text-muted-foreground">(vacío = la de marca)</span>
+                  </Label>
+                  <Input
+                    id={`${idPrefijo}-etiqueta`}
+                    value={etiqueta}
+                    onChange={(e) => setEtiqueta(e.target.value)}
+                    placeholder="ÚLTIMA HORA…"
+                    disabled={ocupado}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fondo && componer.mutate(fondo)}
+                  disabled={ocupado}
+                >
+                  {componiendo ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Re-componer
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => guardar.mutate()}
+                  disabled={ocupado || guardar.isPending}
+                >
+                  {guardar.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Guardar fondo en biblioteca
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Sin marca: aún se puede guardar el fondo (sin placa) para reutilizarlo. */}
+          {!componible && fondo && (
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => inputRef.current?.click()}
-              disabled={ocupado}
+              onClick={() => guardar.mutate()}
+              disabled={ocupado || guardar.isPending}
             >
-              {subir.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+              {guardar.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
               ) : (
-                <Upload className="h-4 w-4" />
+                <Save className="h-3.5 w-3.5" />
               )}
-              {subir.isPending && publicacionId ? "Integrando…" : "Adjuntar"}
+              Guardar en biblioteca
             </Button>
-            <span className="text-xs text-muted-foreground">o genera una con IA:</span>
-          </div>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Label htmlFor={`${idPrefijo}-prompt`} className="sr-only">
-              Describe la imagen a generar
-            </Label>
-            <Input
-              id={`${idPrefijo}-prompt`}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
-              disabled={ocupado}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && prompt.trim() && !ocupado) {
-                  e.preventDefault();
-                  generar.mutate();
-                }
-              }}
-            />
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => generar.mutate()}
-              disabled={ocupado || prompt.trim().length === 0}
-              className="shrink-0"
-            >
-              {generando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <MarcaIA costo />
-              )}
-              {generando ? "Generando…" : "Generar con IA"}
-            </Button>
-          </div>
-          {avisoGenerar && (
-            <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
-              {avisoGenerar}
-            </p>
           )}
+
+          {/* Cambiar de fondo desde la propia preview. */}
+          {fuente}
         </div>
+      ) : (
+        fuente
+      )}
+
+      <SelectorArtes
+        open={galeriaAbierta}
+        onCerrar={() => setGaleriaAbierta(false)}
+        onSeleccionar={elegirArte}
+        marca={marca}
+      />
+    </div>
+  );
+}
+
+/** Selector de origen del fondo: biblioteca · subir · generar con IA. */
+function FuenteFondo({
+  idPrefijo,
+  compacto,
+  ocupado,
+  subiendo,
+  generandoIA,
+  prompt,
+  onPrompt,
+  onSubir,
+  onBiblioteca,
+  onGenerar,
+  avisoGenerar,
+}: {
+  idPrefijo: string;
+  compacto?: boolean;
+  ocupado: boolean;
+  subiendo: boolean;
+  generandoIA: boolean;
+  prompt: string;
+  onPrompt: (v: string) => void;
+  onSubir: () => void;
+  onBiblioteca: () => void;
+  onGenerar: () => void;
+  avisoGenerar: string;
+}) {
+  return (
+    <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
+      {!compacto && (
+        <p className="text-xs text-muted-foreground">Elige de dónde sale la imagen de fondo:</p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onBiblioteca} disabled={ocupado}>
+          <Library className="h-4 w-4" />
+          Biblioteca
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onSubir} disabled={ocupado}>
+          {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+          Subir
+        </Button>
+        <span className="text-xs text-muted-foreground">o genera con IA:</span>
+      </div>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Label htmlFor={`${idPrefijo}-prompt`} className="sr-only">
+          Describe la imagen a generar
+        </Label>
+        <Input
+          id={`${idPrefijo}-prompt`}
+          value={prompt}
+          onChange={(e) => onPrompt(e.target.value)}
+          placeholder="Describe la imagen: p. ej. estadio iluminado al atardecer…"
+          disabled={ocupado}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && prompt.trim() && !ocupado) {
+              e.preventDefault();
+              onGenerar();
+            }
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={onGenerar}
+          disabled={ocupado || prompt.trim().length === 0}
+          className="shrink-0"
+        >
+          {generandoIA ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA costo />}
+          {generandoIA ? "Generando…" : "Generar con IA"}
+        </Button>
+      </div>
+      {avisoGenerar && (
+        <p className="rounded-md bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+          {avisoGenerar}
+        </p>
+      )}
+      {!compacto && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ImageOff className="h-3.5 w-3.5" />
+          La placa de marca y el copy-in se aplican encima automáticamente.
+        </p>
       )}
     </div>
   );

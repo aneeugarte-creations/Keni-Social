@@ -2558,6 +2558,50 @@ export interface CuerpoImagenesComponer {
   etiqueta?: string;
 }
 
+// --- Biblioteca de artes (objetos de media catalogados para reutilizar) ---
+
+/** Origen de un arte: trabajado en el Estudio, subido por el usuario o generado con IA. */
+export type TipoArte = "estudio" | "subida" | "ia";
+
+/**
+ * Un ARTE: una imagen del almacén que el equipo CONSERVA para reutilizar en publicaciones.
+ * Catalogarla la protege del GC de media huérfana y la hace seleccionable por marca.
+ */
+export interface Arte {
+  /** Id del item de biblioteca (no del objeto de media). */
+  id: string;
+  /** Nombre del objeto de media (lo que se persiste en la pieza y resuelve `urlMedia`). */
+  objeto: string;
+  /** URL para servir la imagen (`/api/media/{objeto}`). */
+  url: string;
+  marca: string;
+  marca_nombre: string;
+  tipo: TipoArte;
+  titulo: string;
+  etiquetas: string[];
+  creado: string;
+}
+
+/** Cuerpo de `POST /api/artes`: cataloga un objeto de media ya existente. */
+export interface CuerpoGuardarArte {
+  /** Id del objeto de media a catalogar. */
+  objeto: string;
+  marca?: string;
+  tipo?: TipoArte;
+  titulo?: string;
+  etiquetas?: string[];
+}
+
+/** Respuesta de `GET /api/artes`. */
+export interface RespuestaArtes {
+  artes: Arte[];
+}
+
+/** Respuesta de `POST /api/artes`. */
+export interface RespuestaArte {
+  arte: Arte;
+}
+
 // --- Hashtags ---
 
 /** Un grupo de hashtags guardado. */
