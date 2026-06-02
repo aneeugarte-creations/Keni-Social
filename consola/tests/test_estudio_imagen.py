@@ -223,3 +223,87 @@ def test_componer_node_unico_motor_propaga_error(entorno, monkeypatch):
     monkeypatch.setattr(e, "_correr_render_node", _node_boom)
     with pytest.raises(e.EstudioError):
         e.componer("", marca="unotv", formato="feed", titular="T")
+
+
+def test_componer_logo_path_override_va_a_los_assets(entorno, monkeypatch):
+    # `logo_path` (asset de marca mock/oficial) SUSTITUYE al logo del spec en el payload Node.
+    cap = _fake_render_node(monkeypatch)
+    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "x.png")
+    e.componer("", marca="unotv", formato="feed", titular="T", logo_path="/tmp/logo-unotv.png")
+    assert cap["payload"]["assets"]["logo"] == "/tmp/logo-unotv.png"
+
+
+# --------------------------------------------------------------------------- #
+# generar_set_formatos (de un tiro: encaje determinista + marca por lienzo)   #
+# --------------------------------------------------------------------------- #
+
+
+def test_set_formatos_marca_desconocida(entorno):
+    with pytest.raises(e.EstudioError):
+        e.generar_set_formatos("foto.png", marca="nope")
+
+
+def test_set_formatos_sin_imagen(entorno):
+    with pytest.raises(e.EstudioError):
+        e.generar_set_formatos("", marca="unotv")
+
+
+def _mock_set(monkeypatch):
+    """Mockea encaje (`editar`), marca (`componer`) y el asset de logo. Captura las llamadas."""
+    llamadas = {"encaje": [], "componer": []}
+
+    def _editar(imagen, op, params):
+        assert op == "extender"
+        llamadas["encaje"].append(params["formato"])
+        return {"id": f"enc-{params['formato']}.png", "url": f"/api/media/enc-{params['formato']}.png"}
+
+    def _componer(imagen, **kw):
+        llamadas["componer"].append(kw["formato"])
+        return {"id": f"marca-{kw['formato']}.png", "url": f"/api/media/marca-{kw['formato']}.png",
+                "imagenes": [], "info": {}}
+
+    monkeypatch.setattr(e, "editar", _editar)
+    monkeypatch.setattr(e, "componer", _componer)
+    monkeypatch.setattr(e, "_logo_de_marca", lambda marca: "/tmp/logo.png")
+    return llamadas
+
+
+def test_set_formatos_por_red_instagram(entorno, monkeypatch):
+    """IG -> feed (marcado) + vertical (marcado); cada lienzo se encaja y luego se marca."""
+    llamadas = _mock_set(monkeypatch)
+    res = e.generar_set_formatos("foto.png", marca="unotv", red="instagram", titular="Gol")
+    lienzos = [f["lienzo"] for f in res["formatos"]]
+    assert lienzos == ["feed", "vertical"]
+    assert llamadas["encaje"] == ["feed", "vertical"]  # encaja ambos
+    assert llamadas["componer"] == ["feed", "vertical"]  # ambos llevan marca (no horizontal)
+    assert all(f["marcado"] for f in res["formatos"])
+    assert res["formatos"][0]["url"] == "/api/media/marca-feed.png"
+    assert len(res["imagenes"]) == 2
+
+
+def test_set_formatos_x_horizontal_sin_placa(entorno, monkeypatch):
+    """X -> horizontal: se encaja pero NO se compone marca (el motor de placa no hace 16:9)."""
+    llamadas = _mock_set(monkeypatch)
+    res = e.generar_set_formatos("foto.png", marca="unotv", red="x")
+    assert [f["lienzo"] for f in res["formatos"]] == ["horizontal"]
+    assert llamadas["encaje"] == ["horizontal"]
+    assert llamadas["componer"] == []  # horizontal no se compone
+    assert res["formatos"][0]["marcado"] is False
+    assert res["formatos"][0]["url"] == "/api/media/enc-horizontal.png"  # el encaje, sin marca
+
+
+def test_set_formatos_sin_red_usa_lienzos_canonicos(entorno, monkeypatch):
+    """Sin red, el set MAXIMO: todos los lienzos canonicos de la matriz."""
+    from keni_consola import formatos_red
+
+    _mock_set(monkeypatch)
+    res = e.generar_set_formatos("foto.png", marca="claro-sports")
+    assert {f["lienzo"] for f in res["formatos"]} == set(formatos_red.lienzos_canonicos())
+
+
+def test_set_formatos_sin_aplicar_marca_solo_encaja(entorno, monkeypatch):
+    """`aplicar_marca=False`: solo encaja a los lienzos, sin estampar marca (ni en feed/cuadrado)."""
+    llamadas = _mock_set(monkeypatch)
+    res = e.generar_set_formatos("foto.png", marca="unotv", red="instagram", aplicar_marca=False)
+    assert llamadas["componer"] == []
+    assert all(not f["marcado"] for f in res["formatos"])

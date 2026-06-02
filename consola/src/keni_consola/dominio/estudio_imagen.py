@@ -28,7 +28,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .. import biblioteca, generaciones, marcas, media, plantillas_marca
+from .. import (
+    biblioteca,
+    formatos_red,
+    generaciones,
+    marca_assets,
+    marcas,
+    media,
+    plantillas_marca,
+)
 from ..motores.estudio_imagen import spec_plantilla
 from . import generar, jobspec
 
@@ -381,8 +389,14 @@ def _correr_render_node(payload: dict[str, Any], out: Path) -> None:
 
 def _componer_node(
     imagen: str, *, marca: str, fmt: str, titular: str, etiqueta: str | None,
+    logo_path: str | None = None,
 ) -> dict[str, Any]:
-    """Render por SPEC con el motor Node (lo que se diseña en el editor = lo que sale)."""
+    """Render por SPEC con el motor Node (lo que se diseña en el editor = lo que sale).
+
+    `logo_path`: ruta de disco a un logo (asset de marca, mock u oficial) que SUSTITUYE al
+    logo del spec. Lo usa el flujo de arte multi-formato para estampar el asset de la casa
+    sin pasar por un `media_id`; `None` mantiene el comportamiento normal (logo del spec).
+    """
     plana = plantillas_marca.obtener(marca)
     spec = plantillas_marca.obtener_spec(marca)
     formato_spec = spec.get("formatos", {}).get(fmt)
@@ -396,7 +410,7 @@ def _componer_node(
         carpeta = Path(tmp)
         foto = None if placeholder else str(_materializar(imagen, carpeta))
         logo_cfg = formato_spec.get("logo") or {}
-        ruta_logo = _materializar_logo(logo_cfg.get("media_id", ""), carpeta)
+        ruta_logo = logo_path or _materializar_logo(logo_cfg.get("media_id", ""), carpeta)
         fondo_cfg = formato_spec.get("fondo") or {}
         ruta_fondo = ""
         if fondo_cfg.get("tipo") == "imagen":
@@ -474,6 +488,7 @@ def componer(
     titular: str = "",
     etiqueta: str | None = None,
     autor: dict[str, str] | None = None,
+    logo_path: str | None = None,
 ) -> dict[str, Any]:
     """Compone la PLANTILLA de marca y devuelve `{id,url,imagenes,info}` (firma estable).
 
@@ -484,6 +499,8 @@ def componer(
     `imagen`: id de media de la foto; `""` => PLANTILLA con el hueco de foto vacío (placeholder
     "Sube una foto"). `etiqueta`: `None` => etiqueta_default de la marca; `""` => sin pleca;
     texto => esa pleca. `formato`: `vertical|feed|cuadrado`; `horizontal` se mapea a `feed`.
+    `logo_path`: ruta de disco a un logo (asset de marca mock/oficial) que sustituye al del
+    spec; `None` usa el logo de la plantilla (comportamiento normal).
     """
     if not marcas.es_marca(marca):
         raise EstudioError("Marca desconocida.")
@@ -492,7 +509,111 @@ def componer(
         raise EstudioError(
             "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
         )
-    return _componer_node(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
+    return _componer_node(
+        imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta, logo_path=logo_path
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Set multi-formato "de un tiro" desde UNA imagen aportada (Fase 3)            #
+# --------------------------------------------------------------------------- #
+
+
+def _logo_de_marca(marca: str) -> str | None:
+    """Ruta de disco al logo (asset de marca, mock/oficial) o `None` si no hay/falla.
+
+    `None` deja a `componer` usar el logo del spec (wordmark de texto por defecto): el flujo
+    NUNCA se queda sin placa por falta de asset.
+    """
+    try:
+        ruta = marca_assets.ruta_asset(marca, marca_assets.TIPO_LOGO)
+    except marca_assets.MarcaAssetError:
+        return None
+    return ruta or None
+
+
+def _encajar_a_lienzo(imagen: str, lienzo: str) -> str:
+    """Encaja la imagen aportada al lienzo (DETERMINISTA) y devuelve el id de media resultante.
+
+    Prefiere EXTENDER el fondo uniforme (no recorta al sujeto); si ningun borde es uniforme,
+    el motor `extender` cae solo al recorte cubriente. Sin coste, sin IA. Devuelve el id del
+    nuevo objeto de media ya encajado al lienzo, listo para estampar la marca encima.
+    """
+    res = editar(imagen, "extender", {"formato": lienzo, "metodo": "borde", "forzar": False})
+    return res["id"]
+
+
+def generar_set_formatos(
+    imagen: str,
+    *,
+    marca: str,
+    red: str = "",
+    titular: str = "",
+    etiqueta: str | None = None,
+    aplicar_marca: bool = True,
+) -> dict[str, Any]:
+    """Desde UNA imagen aportada, produce el SET de formatos de una red (o todos los lienzos).
+
+    Es el "de un tiro" de la Fase 3: el equipo trae la foto y la IA la encaja a TODOS los
+    lienzos de la red destino (matriz `formatos_red`) y le aplica la identidad de marca,
+    por via DETERMINISTA (Pillow, gratis, exacto). La generacion por IA NO interviene aqui.
+
+    Flujo por lienzo (todo determinista):
+      1. ENCAJAR la foto al lienzo extendiendo el fondo uniforme si se puede (no recorta al
+         sujeto); si no, recorte cubriente.
+      2. (si `aplicar_marca`) ESTAMPAR la plantilla de marca (logo del asset de la casa +
+         pleca + titular) con `componer`. El lienzo `horizontal` (16:9) no lo compone el
+         motor de placa (mapea a `feed`): para `horizontal` se entrega el encaje SIN placa
+         (la pieza 16:9 de X suele ir sin pleca) y se anota en `info`.
+
+    `red`: si es una red conocida, usa SUS lienzos (`formatos_red.lienzos_de`); si esta vacia
+    o no se conoce, usa el set MAXIMO de lienzos canonicos. `etiqueta`: contrato de `componer`
+    (None=default de marca, ""=sin pleca, texto=esa pleca).
+
+    Devuelve `{red, marca, formatos:[{lienzo, aspecto, marcado, id, url}], imagenes:[...]}`.
+    Los objetos intermedios (encajes sin marca) quedan como huerfanos del almacen (los recoge
+    el GC de media, como las variantes no elegidas del Estudio).
+    """
+    if not marcas.es_marca(marca):
+        raise EstudioError("Marca desconocida.")
+    if not (imagen or "").strip():
+        raise EstudioError("Falta la imagen aportada para generar el set de formatos.")
+
+    lienzos = formatos_red.lienzos_de(red) if red else []
+    if not lienzos:
+        lienzos = formatos_red.lienzos_canonicos()
+
+    logo_path = _logo_de_marca(marca) if aplicar_marca else None
+    resultados: list[dict[str, Any]] = []
+    for lienzo in lienzos:
+        encajada = _encajar_a_lienzo(imagen, lienzo)
+        marcado = False
+        salida_id, salida_url = encajada, f"/api/media/{encajada}"
+        # El motor de placa solo entiende vertical|feed|cuadrado; `horizontal` (16:9 de X) se
+        # entrega encajado SIN placa (no se fuerza el layout feed sobre un 16:9).
+        if aplicar_marca and lienzo in _FORMATOS_COMPONER:
+            comp = componer(
+                encajada, marca=marca, formato=lienzo, titular=titular,
+                etiqueta=etiqueta, logo_path=logo_path,
+            )
+            salida_id, salida_url = comp["id"], comp["url"]
+            marcado = True
+        resultados.append(
+            {
+                "lienzo": lienzo,
+                "aspecto": formatos_red.ASPECTOS.get(lienzo, ASPECTOS.get(lienzo, "")),
+                "marcado": marcado,
+                "id": salida_id,
+                "url": salida_url,
+            }
+        )
+
+    return {
+        "red": red,
+        "marca": marca,
+        "formatos": resultados,
+        "imagenes": [{"id": r["id"], "url": r["url"]} for r in resultados],
+    }
 
 
 # --------------------------------------------------------------------------- #

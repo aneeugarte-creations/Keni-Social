@@ -22,7 +22,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import generaciones, marcas, media
+from .. import formatos_red, generaciones, marcas, media, redes
 from .._http_json import leer_json
 from ..dominio import estudio_imagen
 from ..seguridad import autor_de_peticion
@@ -251,11 +251,64 @@ async def revisar(request: Request) -> Response:
     return JSONResponse({"generacion": gen})
 
 
+async def matriz(request: Request) -> Response:
+    """Matriz `red -> formatos de imagen` (Fase 3) para la UI/feed -> `{redes:[...], lienzos:[...]}`.
+
+    Solo lectura, sin estado: expone que LIENZOS necesita cada red (los dicta la red, no el
+    usuario) y los lienzos canonicos con su aspecto/medida. El frontend la usa para mostrar
+    "que sale por red" sin redefinir nada.
+    """
+    lienzos = [
+        {"lienzo": k, "aspecto": formatos_red.ASPECTOS[k],
+         "tamano": f"{formatos_red.LIENZOS[k][0]}x{formatos_red.LIENZOS[k][1]}"}
+        for k in formatos_red.LIENZOS
+    ]
+    return JSONResponse({"redes": formatos_red.como_lista(), "lienzos": lienzos})
+
+
+async def set_formatos(request: Request) -> Response:
+    """Genera el SET de formatos de marca DESDE UNA imagen aportada, de un tiro -> `{generacion}`.
+
+    Determinista (Pillow, gratis): encaja la foto a TODOS los lienzos de la red (matriz
+    `formatos_red`) y le estampa la identidad de marca. Patron de `editar`/`componer`: responde
+    con un registro de generacion y el frontend sondea `GET /api/generaciones/{id}`; al
+    completarse, `resultado` trae `{red, marca, formatos:[...], imagenes:[...]}`.
+
+    Si se pasa `red`, usa SUS lienzos; si no, el set MAXIMO de lienzos canonicos.
+    """
+    datos = await leer_json(request)
+    imagen = datos.get("imagen") if isinstance(datos.get("imagen"), str) else ""
+    if not imagen.strip():
+        return JSONResponse({"error": "Falta la imagen aportada para sacar los formatos."}, status_code=400)
+    marca = datos.get("marca")
+    if not isinstance(marca, str) or not marcas.es_marca(marca):
+        return JSONResponse({"error": "Marca desconocida."}, status_code=400)
+    red = datos.get("red") if isinstance(datos.get("red"), str) else ""
+    if red and not redes.es_red(red):
+        return JSONResponse({"error": "Red desconocida."}, status_code=400)
+    titular = datos.get("titular") if isinstance(datos.get("titular"), str) else ""
+    # `etiqueta`: None => etiqueta_default de la marca; "" => sin pleca; texto => esa pleca.
+    etiqueta = datos.get("etiqueta") if isinstance(datos.get("etiqueta"), str) else None
+    aplicar_marca = datos.get("aplicar_marca")
+    aplicar_marca = True if not isinstance(aplicar_marca, bool) else aplicar_marca
+
+    def _hacer() -> dict[str, Any]:
+        return estudio_imagen.generar_set_formatos(
+            imagen.strip(), marca=marca, red=red, titular=titular,
+            etiqueta=etiqueta, aplicar_marca=aplicar_marca,
+        )
+
+    etiqueta_gen = f"Formatos · {marca}" + (f" · {red}" if red else "")
+    return JSONResponse({"generacion": _lanzar(request, etiqueta_gen, _hacer)})
+
+
 RUTAS = [
+    Route("/api/imagenes/matriz", matriz, methods=["GET"]),
     Route("/api/imagenes/generar", generar, methods=["POST"]),
     Route("/api/imagenes/editar", editar, methods=["POST"]),
     Route("/api/imagenes/expandir", expandir, methods=["POST"]),
     Route("/api/imagenes/retocar", retocar, methods=["POST"]),
     Route("/api/imagenes/componer", componer, methods=["POST"]),
+    Route("/api/imagenes/set", set_formatos, methods=["POST"]),
     Route("/api/imagenes/revisar", revisar, methods=["POST"]),
 ]
