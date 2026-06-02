@@ -81,6 +81,11 @@ TOOLS_ESPERADAS = {
     "reporte_consolidado",
     "picos",
     "analisis_diario",
+    # Analíticas de estrategia (R2).
+    "serie_seguidores",
+    "desglose_interacciones",
+    "crosstab",
+    "correlacion_seguidores",
 }
 
 
@@ -91,8 +96,8 @@ def _tools_registradas(mcp) -> set[str]:
     return {t.name for t in asyncio.run(mcp.list_tools())}
 
 
-def test_crear_servidor_registra_las_ocho_tools(monkeypatch):
-    """crear_servidor construye un FastMCP REAL con las 8 tools registradas.
+def test_crear_servidor_registra_las_tools(monkeypatch):
+    """crear_servidor construye un FastMCP REAL con todas las tools registradas.
 
     No se parchea `registrar`: se verifica el efecto observable (las tools
     quedan disponibles). Se usa la fuente de muestra para no tocar red/credenciales.
