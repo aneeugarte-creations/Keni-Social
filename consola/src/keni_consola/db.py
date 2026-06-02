@@ -998,6 +998,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         clase        TEXT NOT NULL DEFAULT 'campania',
         marca        TEXT NOT NULL DEFAULT '',
         color        TEXT NOT NULL DEFAULT '',
+        keywords     TEXT NOT NULL DEFAULT '',
         activo       INTEGER NOT NULL DEFAULT 1,
         creado       TEXT NOT NULL DEFAULT '',
         actualizado  TEXT NOT NULL DEFAULT ''
@@ -1231,6 +1232,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_fuentes_rss(con)
     _migrar_columnas_grupos_hashtags(con)
     _migrar_columnas_noticias_algoritmo(con)
+    _migrar_columnas_etiquetas(con)
     _sembrar_fuentes_hub_desde_rss(con)
     con.commit()
     # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
@@ -1300,6 +1302,21 @@ def _migrar_columnas_noticias_algoritmo(con: Any) -> None:
     if "sugerida" not in _columnas_existentes(con, "noticias_algoritmo"):
         con.execute(
             "ALTER TABLE noticias_algoritmo ADD COLUMN IF NOT EXISTS sugerida INTEGER NOT NULL DEFAULT 0"
+        )
+
+
+def _migrar_columnas_etiquetas(con: Any) -> None:
+    """Anade `keywords` a `etiquetas` si una BD ya creada no la tuviera (idempotente).
+
+    `keywords` (CSV) alimenta el auto-etiquetado de líneas (clase `vertical`) y de
+    orígenes (clase `origen`) en la ingesta. Solo aplica si la tabla ya existe (un
+    primer arranque la crea con la columna).
+    """
+    if not _tabla_existe(con, "etiquetas"):
+        return
+    if "keywords" not in _columnas_existentes(con, "etiquetas"):
+        con.execute(
+            "ALTER TABLE etiquetas ADD COLUMN IF NOT EXISTS keywords TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -5983,12 +6000,20 @@ _COLS_ETIQUETA = (
     "clase",
     "marca",
     "color",
+    "keywords",
     "activo",
     "creado",
     "actualizado",
 )
 _SELECT_ETIQUETA = f"SELECT {', '.join(_COLS_ETIQUETA)} FROM etiquetas"
-_CAMPOS_EDITABLES_ETIQUETA: tuple[str, ...] = ("nombre", "clase", "marca", "color", "activo")
+_CAMPOS_EDITABLES_ETIQUETA: tuple[str, ...] = (
+    "nombre",
+    "clase",
+    "marca",
+    "color",
+    "keywords",
+    "activo",
+)
 
 
 def _fila_a_etiqueta(fila: Any) -> dict[str, Any]:
@@ -6004,6 +6029,7 @@ def crear_etiqueta(
     clase: str = "campania",
     marca: str = "",
     color: str = "",
+    keywords: str = "",
     activo: bool = True,
     creado: str = "",
     actualizado: str = "",
@@ -6017,6 +6043,7 @@ def crear_etiqueta(
         "clase": clase or "campania",
         "marca": marca or "",
         "color": color or "",
+        "keywords": keywords or "",
         "activo": 1 if activo else 0,
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,

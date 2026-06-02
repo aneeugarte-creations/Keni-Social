@@ -259,8 +259,17 @@ ORIGENES_AUTOGEN: tuple[str, ...] = (
 # Eje (clase) de una etiqueta editorial del tablero (ola "organizacion"). Una etiqueta
 # clasifica transversalmente una pieza: una CAMPAÑA ("Mundial 2026"), una VERTICAL/sección
 # editorial ("futbol", "espectaculos") o un TIPO de formato ("reel", "carrusel", "nota").
-CLASES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "tipo")
+CLASES_ETIQUETA: tuple[str, ...] = ("campania", "vertical", "tipo", "origen")
 CLASE_ETIQUETA_DEFECTO = "campania"
+
+# Las dos clases que el auto-etiquetado aplica a cada pieza en la ingesta:
+#   - `vertical` = la LÍNEA de contenido (futbol, beisbol, ultima hora...). Cada
+#     línea lleva `keywords` (CSV) para clasificar sin coste de IA.
+#   - `origen`   = de dónde nace la pieza: editorial propio (`interno`) o una
+#     publicación impuesta desde fuera del área —gobierno, comercial, marketing—
+#     (`peticion_externa`). Separa lo editorial de lo impuesto (clave para medir).
+ORIGENES_PIEZA: tuple[str, ...] = ("interno", "peticion_externa")
+ORIGEN_PIEZA_DEFECTO = "interno"
 
 # Estado de un contenido a nivel PADRE (resumen editable / estado directo de una tarea
 # libre). Cubre el ciclo de una tarea (pendiente/en_curso/hecha) y sirve de resumen.

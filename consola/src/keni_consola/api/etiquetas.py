@@ -61,6 +61,23 @@ def _validar_color(color: object) -> str:
     return ""
 
 
+_MAX_KEYWORDS = 400
+
+
+def _normalizar_keywords(valor: object) -> str:
+    """CSV de palabras clave para auto-etiquetar (líneas/orígenes): minúsculas, sin
+    duplicados, recortado. Solo aplica de verdad a clases `vertical` y `origen`, pero se
+    acepta en cualquiera sin romper nada."""
+    if not isinstance(valor, str):
+        return ""
+    vistas: list[str] = []
+    for kw in valor.split(","):
+        k = kw.strip().lower()
+        if k and k not in vistas:
+            vistas.append(k)
+    return ", ".join(vistas)[:_MAX_KEYWORDS]
+
+
 async def listar(request: Request) -> Response:
     """GET /api/etiquetas: catálogo de etiquetas.
 
@@ -103,7 +120,11 @@ async def crear(request: Request) -> Response:
         return JSONResponse({"error": "Ya existe una etiqueta con ese nombre."}, status_code=409)
 
     etiqueta = repos.crear_etiqueta(
-        nombre=nombre, clase=clase, marca=marca, color=_validar_color(datos.get("color"))
+        nombre=nombre,
+        clase=clase,
+        marca=marca,
+        color=_validar_color(datos.get("color")),
+        keywords=_normalizar_keywords(datos.get("keywords")),
     )
     return JSONResponse({"etiqueta": _etiqueta_a_dict(etiqueta)})
 
@@ -133,6 +154,8 @@ async def actualizar(request: Request) -> Response:
         campos["marca"] = marca
     if "color" in datos:
         campos["color"] = _validar_color(datos.get("color"))
+    if "keywords" in datos:
+        campos["keywords"] = _normalizar_keywords(datos.get("keywords"))
     if "activo" in datos:
         campos["activo"] = bool(datos["activo"])
 
