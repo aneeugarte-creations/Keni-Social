@@ -10,11 +10,12 @@
  *  - `estado` (pendiente/en_curso/en_revision/aprobado/programado/publicado), y
  *  - la checklist `falta_copy` / `falta_imagen` / `falta_revision`.
  *
- * CONTRATO ASUMIDO para el cableado con C (documentado a propósito):
- *  Si el Flujo C añade un campo explícito de etapa a la pieza (p.ej.
- *  `pieza.etapa_ia: EtapaIa` o un endpoint `GET /api/contenido/{id}/etapa`), basta con
- *  preferirlo en `etapaDePublicacion` antes de caer a esta derivación. La forma de
- *  salida (`EtapaIa`) ya es el contrato que consume el feed; C solo tiene que llenarla.
+ * CABLEADO CON C (follow-up #3, ya en producción):
+ *  El backend (Flujo C) YA expone la etapa real por pieza en `Publicacion.etapa_ia`,
+ *  derivada por `pipeline_estado.etapa_de_pieza` (misma lógica que la derivación de abajo,
+ *  pero como FUENTE ÚNICA en servidor). `etapaDePublicacion` la PREFIERE cuando viene; la
+ *  derivación en cliente queda solo como DEGRADACIÓN para piezas legadas/parciales que aún
+ *  no la traigan. La forma de salida (`EtapaIa`) es el contrato del feed.
  */
 import type { Publicacion } from "@/types";
 
@@ -54,12 +55,14 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
  *  - aún falta imagen y ya hay copy → generando_arte
  *  - en cualquier otro caso (falta copy / pendiente / en_curso) → generando_copy
  *
- * Si en el futuro la pieza trae un campo `etapa_ia` explícito (Flujo C), `etapaDePublicacion`
- * lo prefiere; esta derivación queda como degradación.
+ * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
+ * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
+ * legadas/parciales que no la traigan).
  */
 export function etapaDePublicacion(p: Publicacion): EtapaIa {
-  // Contrato asumido con Flujo C: campo opcional `etapa_ia` en la pieza. Si llega y es
-  // una etapa conocida, manda sobre la derivación. (`Publicacion` no lo declara aún.)
+  // Etapa REAL de la tubería (Flujo C, `pipeline_estado.etapa_de_pieza`): si llega y es una
+  // etapa conocida, manda sobre la derivación local. El backend la sirve hoy en
+  // `Publicacion.etapa_ia`; el guard cubre respuestas legadas/parciales que la omitan.
   const explicita = (p as { etapa_ia?: string }).etapa_ia;
   if (explicita && explicita in META_ETAPA) return explicita as EtapaIa;
 

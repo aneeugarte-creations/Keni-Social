@@ -128,6 +128,65 @@ def etapa_de_tema(
     return ETAPA_PRIORIZADA
 
 
+# --------------------------------------------------------------------------- #
+# Etapa POR PIEZA (no por tema): la etapa IA de UNA fila por plataforma         #
+# (`contenido_plataforma` / publicacion), para el Feed de ideacion (Flujo D).   #
+# Es un enum mas RICO que el de tema: el tema solo llega a "lista_para_revisar", #
+# pero una pieza concreta avanza por el gate humano (aprobada / programada /    #
+# publicada). Misma derivacion que documenta el front (`feed/etapa.ts`); este    #
+# modulo es la FUENTE UNICA en backend para no duplicar la heuristica en la UI.  #
+# --------------------------------------------------------------------------- #
+# Etapas terminales por-pieza, ademas de las tres de produccion de arriba
+# (GENERANDO_COPY / GENERANDO_ARTE / LISTA_REVISAR, que se reusan tal cual).
+ETAPA_APROBADA = "aprobada"
+ETAPA_PROGRAMADA = "programada"
+ETAPA_PUBLICADA = "publicada"
+
+# Orden canonico de las etapas IA de una PIEZA (entrada -> salida). Es el contrato
+# que consume el feed (`EtapaIa` en `feed/etapa.ts`): mismos literales, mismo orden.
+ETAPAS_PIEZA: tuple[str, ...] = (
+    ETAPA_GENERANDO_COPY,
+    ETAPA_GENERANDO_ARTE,
+    ETAPA_LISTA_REVISAR,
+    ETAPA_APROBADA,
+    ETAPA_PROGRAMADA,
+    ETAPA_PUBLICADA,
+)
+
+
+def etapa_de_pieza(pieza: dict[str, Any]) -> str:
+    """Etapa IA de UNA pieza serializada (publicacion), PURA. Devuelve un literal de `ETAPAS_PIEZA`.
+
+    `pieza` es la forma publica de una publicacion (`publicacion_a_dict`): usa su `estado`
+    editorial (`borrador`/`en_revision`/`aprobado`/`programado`/`publicado`) y la checklist
+    `falta_copy`/`falta_imagen`. Reglas (de "mas avanzado" a "menos"), ESPEJO de la
+    derivacion del front (`etapaDePublicacion` en `feed/etapa.ts`):
+
+      - estado `publicado`              -> publicada
+      - estado `programado`             -> programada
+      - estado `aprobado`               -> aprobada
+      - estado `en_revision`            -> lista_para_revisar (gate humano)
+      - ya hay copy pero falta imagen   -> generando_arte
+      - cualquier otro (falta copy / borrador) -> generando_copy
+
+    Backend y front comparten esta misma logica a proposito: el front PREFIERE este
+    `etapa_ia` cuando viene y cae a su propia derivacion solo si no llega (degradacion).
+    Determinista; depende solo de su argumento.
+    """
+    estado = _norm(pieza.get("estado"))
+    if estado == "publicado":
+        return ETAPA_PUBLICADA
+    if estado == "programado":
+        return ETAPA_PROGRAMADA
+    if estado == "aprobado":
+        return ETAPA_APROBADA
+    if estado == "en_revision":
+        return ETAPA_LISTA_REVISAR
+    if not pieza.get("falta_copy", True) and pieza.get("falta_imagen", True):
+        return ETAPA_GENERANDO_ARTE
+    return ETAPA_GENERANDO_COPY
+
+
 def contar_por_etapa(
     items: list[dict[str, Any]],
     *,

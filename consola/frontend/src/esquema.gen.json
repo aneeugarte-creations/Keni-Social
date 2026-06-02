@@ -1244,6 +1244,16 @@
         "falta_publicar": {
           "type": "boolean"
         },
+        "etapa_ia": {
+          "enum": [
+            "generando_copy",
+            "generando_arte",
+            "lista_para_revisar",
+            "aprobada",
+            "programada",
+            "publicada"
+          ]
+        },
         "fecha_creacion": {
           "type": "string"
         },
@@ -1294,6 +1304,7 @@
         "falta_imagen",
         "falta_revision",
         "falta_publicar",
+        "etapa_ia",
         "fecha_creacion",
         "fecha_actualizacion",
         "fecha_programada",

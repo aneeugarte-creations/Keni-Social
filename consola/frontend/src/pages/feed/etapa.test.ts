@@ -4,7 +4,13 @@ import type { Publicacion } from "@/types";
 
 import { etapaDePublicacion, META_ETAPA } from "./etapa";
 
-/** Base mínima de una `Publicacion` para variar solo lo relevante a la etapa. */
+/**
+ * Base mínima de una `Publicacion` para variar solo lo relevante a la etapa.
+ *
+ * El backend YA sirve `etapa_ia` (Flujo C). Para probar la DERIVACIÓN local (el camino
+ * de degradación) la limpiamos con `etapa_ia: undefined` en esos casos; para probar la
+ * PREFERENCIA, se pasa un `etapa_ia` explícito en el override.
+ */
 function pub(overrides: Partial<Publicacion>): Publicacion {
   return {
     id: "p1",
@@ -40,40 +46,51 @@ function pub(overrides: Partial<Publicacion>): Publicacion {
     imagen: "",
     imagen_url: "",
     evergreen: false,
+    // Real del backend (Flujo C). Coherente con el `estado: borrador, falta_copy:false,
+    // falta_imagen:false` por defecto -> lista para revisar; los tests de DERIVACIÓN lo
+    // sobrescriben con `undefined` para forzar el camino de degradación.
+    etapa_ia: "lista_para_revisar",
     ...overrides,
   };
 }
 
-describe("etapaDePublicacion · etapa IA derivada", () => {
+describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)", () => {
+  // `etapa_ia: undefined` fuerza el camino de derivación local (pieza legada/parcial).
   it("aún sin copy → generando_copy", () => {
-    expect(etapaDePublicacion(pub({ estado: "borrador", falta_copy: true }))).toBe("generando_copy");
+    expect(
+      etapaDePublicacion(pub({ estado: "borrador", falta_copy: true, etapa_ia: undefined })),
+    ).toBe("generando_copy");
   });
 
   it("con copy pero sin imagen → generando_arte", () => {
     expect(
-      etapaDePublicacion(pub({ estado: "borrador", falta_copy: false, falta_imagen: true })),
+      etapaDePublicacion(
+        pub({ estado: "borrador", falta_copy: false, falta_imagen: true, etapa_ia: undefined }),
+      ),
     ).toBe("generando_arte");
   });
 
   it("en revisión → lista_para_revisar (gate humano)", () => {
-    expect(etapaDePublicacion(pub({ estado: "en_revision" }))).toBe("lista_para_revisar");
+    expect(etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: undefined }))).toBe(
+      "lista_para_revisar",
+    );
   });
 
   it("aprobado / programado / publicado mapean a sus etapas", () => {
-    expect(etapaDePublicacion(pub({ estado: "aprobado" }))).toBe("aprobada");
-    expect(etapaDePublicacion(pub({ estado: "programado" }))).toBe("programada");
-    expect(etapaDePublicacion(pub({ estado: "publicado" }))).toBe("publicada");
+    expect(etapaDePublicacion(pub({ estado: "aprobado", etapa_ia: undefined }))).toBe("aprobada");
+    expect(etapaDePublicacion(pub({ estado: "programado", etapa_ia: undefined }))).toBe("programada");
+    expect(etapaDePublicacion(pub({ estado: "publicado", etapa_ia: undefined }))).toBe("publicada");
   });
 
-  it("prefiere el campo explícito `etapa_ia` (contrato asumido con Flujo C)", () => {
-    // Aunque el estado diría 'generando_copy', un campo explícito manda.
-    const conEtapa = { ...pub({ estado: "borrador", falta_copy: true }), etapa_ia: "generando_arte" };
-    expect(etapaDePublicacion(conEtapa as Publicacion)).toBe("generando_arte");
+  it("prefiere el `etapa_ia` REAL del backend (Flujo C) sobre la derivación", () => {
+    // Aunque el estado diría 'generando_copy', el campo real del backend manda.
+    const conEtapa = pub({ estado: "borrador", falta_copy: true, etapa_ia: "generando_arte" });
+    expect(etapaDePublicacion(conEtapa)).toBe("generando_arte");
   });
 
   it("ignora un `etapa_ia` desconocido y cae a la derivación", () => {
     const conBasura = { ...pub({ estado: "en_revision" }), etapa_ia: "no_existe" };
-    expect(etapaDePublicacion(conBasura as Publicacion)).toBe("lista_para_revisar");
+    expect(etapaDePublicacion(conBasura as unknown as Publicacion)).toBe("lista_para_revisar");
   });
 
   it("toda etapa derivable tiene metadatos", () => {

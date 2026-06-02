@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .. import marcas, redes, repos
+from .. import marcas, pipeline_estado, redes, repos
 from ..estados import ESTADO_EN_REVISION, ESTADO_PROGRAMADO
 
 
@@ -39,6 +39,18 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     """
     imagen = pub.get("imagen") or ""
     imagen_fuente = pub.get("imagen_fuente") or ""
+    # ETAPA IA real de la pieza (Flujo C, follow-up #3): se DERIVA aquí, en la única
+    # serialización pública de C, con la lógica PURA de `pipeline_estado.etapa_de_pieza`
+    # (NO se duplica la heurística). Aditivo/opcional: el feed (Flujo D) PREFIERE este
+    # `etapa_ia` y solo cae a su derivación en cliente si no llega; otros consumidores que
+    # no lo lean no se ven afectados.
+    etapa_ia = pipeline_estado.etapa_de_pieza(
+        {
+            "estado": pub.get("estado"),
+            "falta_copy": bool(pub.get("falta_copy", True)),
+            "falta_imagen": bool(pub.get("falta_imagen", True)),
+        }
+    )
     return {
         "id": pub["id"],
         # Id del `contenido` padre: la UI lo usa para colgar los comentarios del item
@@ -87,6 +99,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "falta_imagen": bool(pub.get("falta_imagen", True)),
         "falta_revision": bool(pub.get("falta_revision", True)),
         "falta_publicar": bool(pub.get("falta_publicar", True)),
+        # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
+        # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
+        "etapa_ia": etapa_ia,
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],

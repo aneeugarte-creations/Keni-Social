@@ -128,3 +128,40 @@ def test_contar_incluir_fuera_suma_los_excluidos():
 def test_contar_vacio_devuelve_etapas_en_cero():
     conteo = pe.contar_por_etapa([])
     assert conteo == {e: 0 for e in pe.ETAPAS[:-1]}
+
+
+# --------------------------------------------------------------------------- #
+# etapa_de_pieza (por PIEZA, para el Feed · Flujo C follow-up #3)               #
+# --------------------------------------------------------------------------- #
+
+
+def _pieza(**kw):
+    """Forma pública mínima de una publicacion (lo que mira `etapa_de_pieza`)."""
+    base = {"estado": "borrador", "falta_copy": True, "falta_imagen": True}
+    base.update(kw)
+    return base
+
+
+def test_pieza_sin_copy_generando_copy():
+    assert pe.etapa_de_pieza(_pieza(falta_copy=True)) == pe.ETAPA_GENERANDO_COPY
+
+
+def test_pieza_con_copy_sin_imagen_generando_arte():
+    etapa = pe.etapa_de_pieza(_pieza(falta_copy=False, falta_imagen=True))
+    assert etapa == pe.ETAPA_GENERANDO_ARTE
+
+
+def test_pieza_en_revision_lista_para_revisar():
+    assert pe.etapa_de_pieza(_pieza(estado="en_revision")) == pe.ETAPA_LISTA_REVISAR
+
+
+def test_pieza_estados_terminales_mapean_a_etapa():
+    assert pe.etapa_de_pieza(_pieza(estado="aprobado")) == pe.ETAPA_APROBADA
+    assert pe.etapa_de_pieza(_pieza(estado="programado")) == pe.ETAPA_PROGRAMADA
+    assert pe.etapa_de_pieza(_pieza(estado="publicado")) == pe.ETAPA_PUBLICADA
+
+
+def test_pieza_etapa_siempre_de_etapas_pieza():
+    """Sea cual sea la entrada, la etapa devuelta es un literal del contrato del feed."""
+    for estado in ("borrador", "en_revision", "aprobado", "programado", "publicado"):
+        assert pe.etapa_de_pieza(_pieza(estado=estado)) in pe.ETAPAS_PIEZA

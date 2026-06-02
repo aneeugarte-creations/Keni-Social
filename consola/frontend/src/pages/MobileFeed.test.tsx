@@ -54,6 +54,8 @@ const PUBLICACION = {
   imagen: "",
   imagen_url: "",
   evergreen: false,
+  // Etapa real del backend (Flujo C): coherente con estado 'en_revision'.
+  etapa_ia: "lista_para_revisar",
 };
 
 /** Stub de fetch: enruta /api/publicaciones y /api/publicaciones/opciones. */

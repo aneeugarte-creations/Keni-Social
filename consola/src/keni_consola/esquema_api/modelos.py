@@ -441,6 +441,18 @@ class MetricasRun(TypedDict):
 # El flujo de aprobacion de equipo (#9, Fase 3) intercala `en_revision` entre el
 # borrador y el aprobado.
 EstadoPublicacion = Literal["borrador", "en_revision", "aprobado", "programado", "publicado"]
+# Etapa REAL de la tubería IA de una pieza (Flujo C), derivada por
+# `pipeline_estado.etapa_de_pieza`. La consume el Feed de ideación (Flujo D): es el
+# estado-por-etapa "en vivo" de la pieza, más rico que `estado` (incluye el gate humano).
+# Mantener en sincronía con `pipeline_estado.ETAPAS_PIEZA` y con `EtapaIa` del front.
+EtapaIa = Literal[
+    "generando_copy",
+    "generando_arte",
+    "lista_para_revisar",
+    "aprobada",
+    "programada",
+    "publicada",
+]
 # Veredicto editorial de una pieza: TEXTO LIBRE. El auto-verificador (skills de copy)
 # escribe veredictos legibles y matizados ("ok — confirmar marcador con el equipo",
 # "marcar claramente como rumor", "pendiente resultado real del partido"), no un enum
@@ -501,6 +513,9 @@ class Publicacion(TypedDict):
     falta_imagen: bool
     falta_revision: bool
     falta_publicar: bool
+    # Etapa REAL de la tubería IA (Flujo C), derivada de `estado`+checklist por
+    # `pipeline_estado.etapa_de_pieza`. La prefiere el Feed (Flujo D) sobre su derivación.
+    etapa_ia: EtapaIa
     fecha_creacion: str
     fecha_actualizacion: str
     fecha_programada: str

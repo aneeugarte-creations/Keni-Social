@@ -1106,3 +1106,20 @@ def test_publicacion_a_dict_defaults_sin_imagen_de_fuente():
     assert d["tipo_contenido"] == "ia"
     assert d["imagen_fuente"] == ""
     assert d["imagen_url"] == ""
+
+
+def test_publicacion_a_dict_expone_etapa_ia():
+    """La pieza serializa `etapa_ia` derivada por `pipeline_estado.etapa_de_pieza` (Flujo C #3)."""
+    from keni_consola import pipeline_estado as pe
+
+    # borrador, falta copy -> generando_copy
+    d = publicacion_a_dict({**_PUB_BASE, "falta_copy": True, "falta_imagen": True})
+    assert d["etapa_ia"] == pe.ETAPA_GENERANDO_COPY
+    # con copy pero falta imagen -> generando_arte
+    d = publicacion_a_dict({**_PUB_BASE, "falta_copy": False, "falta_imagen": True})
+    assert d["etapa_ia"] == pe.ETAPA_GENERANDO_ARTE
+    # estado terminal manda sobre la checklist
+    d = publicacion_a_dict({**_PUB_BASE, "estado": "publicado"})
+    assert d["etapa_ia"] == pe.ETAPA_PUBLICADA
+    # toda etapa serializada pertenece al contrato del feed
+    assert d["etapa_ia"] in pe.ETAPAS_PIEZA

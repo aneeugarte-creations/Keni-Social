@@ -125,6 +125,8 @@ function publicacion(over: Record<string, unknown> = {}) {
     imagen: "",
     imagen_url: "",
     evergreen: false,
+    // Etapa real del backend (Flujo C): borrador sin copy -> generando_copy.
+    etapa_ia: "generando_copy",
     ...over,
   };
 }
