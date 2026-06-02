@@ -88,6 +88,42 @@ def _vigilar_cancelacion(job_id: str, gen_id: str, parar: threading.Event) -> No
             return
 
 
+def _prefetch_s3(job_id: str, gen_id: str, prefetch: dict[str, str]) -> bool:
+    """Baja el objeto S3 `clave` a la ruta local `destino` (lo usa la importacion de parrilla).
+
+    El worker tiene las credenciales S3 (a diferencia del back, no compartimos los bytes por
+    disco). Crea el dir padre del destino y escribe los bytes de `media.leer_objeto(clave)`.
+    Best-effort: si el objeto ya no esta o algo falla al escribirlo, marca el job en error y
+    devuelve False (el caller NO debe lanzar claude). True si el documento quedo en su sitio.
+    """
+    from pathlib import Path
+
+    from . import media
+
+    clave = prefetch["clave"]
+    destino = Path(prefetch["destino"])
+    try:
+        datos = media.leer_objeto(clave)
+    except Exception:  # noqa: BLE001 -- fallo de S3: error claro, sin traceback al cliente
+        _log.exception("worker: prefetch S3 falló al leer %s (job %s)", clave, job_id)
+        datos = None
+    if datos is None:
+        _finalizar_error(gen_id, "El documento subido ya no está disponible.")
+        generaciones.runner.liberar_admision()
+        cola.terminar(job_id)
+        return False
+    try:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(datos)
+    except OSError:
+        _log.exception("worker: prefetch S3 no pudo escribir %s (job %s)", destino, job_id)
+        _finalizar_error(gen_id, "No se pudo preparar el documento para leerlo.")
+        generaciones.runner.liberar_admision()
+        cola.terminar(job_id)
+        return False
+    return True
+
+
 def procesar_job(job: dict, worker_id: str = "") -> None:
     """Ejecuta UN job ya clavado: reconstruye el trabajo y corre `claude -p` (con #137).
 
@@ -118,11 +154,19 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         dir_temporal = jobspec.dir_temporal(spec)
         prompt = spec.get("prompt", "")
         endurecer = jobspec.endurecer(spec)
+        prefetch = jobspec.prefetch_s3(spec)
     except Exception:  # noqa: BLE001 -- spec mal formado: error claro, sin traceback al cliente
         _log.exception("worker: no se pudo reconstruir el job %s (gen %s)", job_id, gen_id)
         _finalizar_error(gen_id, "No se pudo iniciar la generación.")
         generaciones.runner.liberar_admision()
         cola.terminar(job_id)
+        return
+
+    # PREFETCH S3: si el spec lo pide (importacion de parrilla), bajamos el documento de S3 a
+    # la ruta destino ANTES de lanzar claude. El worker tiene las credenciales S3; el back NO
+    # comparte los bytes via disco (back y worker son contenedores distintos). Si el objeto ya
+    # no esta, marcamos el job en error sin lanzar claude (no tendria nada que leer).
+    if prefetch is not None and not _prefetch_s3(job_id, gen_id, prefetch):
         return
 
     # Vigia de cancelacion cross-proceso, activo mientras el job corre.

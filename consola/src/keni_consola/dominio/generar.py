@@ -142,6 +142,7 @@ def lanzar(
     procesar: generaciones.Procesar,
     procesar_spec: dict[str, Any],
     dir_temporal: Path | None = None,
+    prefetch_s3: dict[str, str] | None = None,
     autor: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -152,6 +153,8 @@ def lanzar(
 
     `endurecer` (opcional): overrides de seguridad para ESE run (vetar herramientas extra,
     topar turnos/coste mas bajo). Lo usa un job READ-ONLY como la importacion de parrilla.
+    `prefetch_s3` (opcional): `{clave, destino}` para que el WORKER baje un objeto de S3 a una
+    ruta local ANTES de claude (la importacion de parrilla no comparte los bytes via disco).
     """
     import shutil
 
@@ -166,6 +169,7 @@ def lanzar(
         procesar=procesar_spec,
         cwd_kind=jobspec.CWD_GENERACION,
         dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
+        prefetch_s3=prefetch_s3,
         endurecer=endurecer,
     )
     try:

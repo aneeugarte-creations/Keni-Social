@@ -1,9 +1,10 @@
 """Tests del dominio PURO de la importacion de parrilla (sin tocar DB ni red).
 
 Cubre: extraccion del bloque JSON de la salida de claude (fences, dict envoltorio, prefijos),
-validacion estricta contra el contexto (fechas dentro de la semana, franja/miembro/turno que
-existen, enums), deteccion de conflictos (celda ocupada / turno desaparecido) y la re-validacion
-de operaciones ya parseadas. Todo `dominio.parrilla_import`, ni una sola conexion a Postgres.
+validacion estricta contra el contexto RANGO (fechas dentro de la ventana temporal, franja por
+NOMBRE de slot, miembro/turno que existen, enums), deteccion de conflictos (celda ocupada por
+slot / turno desaparecido) y la re-validacion de operaciones ya parseadas. Todo
+`dominio.parrilla_import`, ni una sola conexion a Postgres.
 """
 
 from __future__ import annotations
@@ -11,21 +12,21 @@ from __future__ import annotations
 from keni_consola.dominio import parrilla_import as pi
 
 
-# Semana objetivo: lunes 2026-06-01 .. domingo 2026-06-07.
-_SEMANA = "2026-06-01"
-_DIAS = [
-    "2026-06-01", "2026-06-02", "2026-06-03", "2026-06-04",
-    "2026-06-05", "2026-06-06", "2026-06-07",
-]
+# Mapa id->nombre de las franjas existentes (de cualquier semana del rango).
+_FRANJAS_NOMBRE = {"fr-manana": "Mañana", "fr-tarde": "Tarde"}
+
+
+# Ventana FIJA (no atada a "hoy") para que los tests sean deterministas en CI.
+_VENTANA = ("2026-01-01", "2027-12-31")
 
 
 def _ctx(*, turnos=None) -> pi.Contexto:
     return pi.Contexto(
-        semana=_SEMANA,
-        dias=_DIAS,
-        franjas_ids={"fr-manana", "fr-tarde"},
         miembros={"u1": "Luis", "u2": "Ana"},
+        nombres_franja={"Mañana", "Tarde"},
         turnos=turnos or [],
+        franjas_nombre=_FRANJAS_NOMBRE,
+        ventana=_VENTANA,
     )
 
 
@@ -83,12 +84,21 @@ def test_crear_evento_valido():
     assert validas[0]["titulo"] == "Final Liga MX"
 
 
-def test_crear_evento_fecha_fuera_de_semana_es_error():
+def test_crear_evento_fecha_en_otra_semana_es_valida():
+    # El modelo RANGO ya no exige una sola semana: una fecha en otra semana del año es válida.
     txt = '[{"tipo": "crear_evento", "fecha": "2026-06-20", "titulo": "X"}]'
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert errores == []
+    assert len(validas) == 1
+
+
+def test_crear_evento_fecha_fuera_de_ventana_es_error():
+    # Una fecha absurda (lejísimos) cae fuera de la ventana temporal y se rechaza.
+    txt = '[{"tipo": "crear_evento", "fecha": "2099-01-01", "titulo": "X"}]'
     validas, errores = pi.parsear_y_validar(txt, _ctx())
     assert validas == []
     assert len(errores) == 1
-    assert "fuera de la semana" in errores[0]["error"]
+    assert "fuera del rango" in errores[0]["error"]
 
 
 def test_crear_evento_fecha_invalida_es_error():
@@ -129,27 +139,39 @@ def test_crear_evento_enum_invalido_es_error():
 
 def test_crear_turno_valido():
     txt = (
-        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-manana", '
+        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", '
         '"miembro_id": "u1"}]'
     )
     validas, errores = pi.parsear_y_validar(txt, _ctx())
     assert errores == []
     assert validas[0]["miembro_id"] == "u1"
+    assert validas[0]["franja"] == "Mañana"
+
+
+def test_crear_turno_franja_normaliza_mayusculas_espacios():
+    # El nombre de slot se compara case/space-insensitive.
+    txt = (
+        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "  mañana ", '
+        '"miembro_id": "u1"}]'
+    )
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert errores == []
+    assert len(validas) == 1
 
 
 def test_crear_turno_franja_inexistente_es_error():
     txt = (
-        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-fantasma", '
+        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Madrugada", '
         '"miembro_id": "u1"}]'
     )
     validas, errores = pi.parsear_y_validar(txt, _ctx())
     assert validas == []
-    assert "no existe en la semana" in errores[0]["error"]
+    assert "no es un slot válido" in errores[0]["error"]
 
 
 def test_crear_turno_miembro_inventado_es_error():
     txt = (
-        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-manana", '
+        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", '
         '"miembro_id": "fantasma"}]'
     )
     validas, errores = pi.parsear_y_validar(txt, _ctx())
@@ -184,6 +206,14 @@ def test_modificar_turno_inexistente_es_error():
     assert "ya no existe" in errores[0]["error"]
 
 
+def test_modificar_turno_devuelve_franja_por_nombre():
+    # `actual.franja` se expone como NOMBRE de slot (resuelto via franjas_nombre), no como id.
+    ctx = _ctx(turnos=[_turno(tid="t1", franja="fr-manana")])
+    op = {"tipo": "modificar_turno", "turno_id": "t1", "cambios": {"estado": "aprobado"}}
+    info = pi.calcular_conflicto(op, ctx)
+    assert info["actual"]["franja"] == "Mañana"
+
+
 def test_modificar_turno_estado_invalido_es_error():
     txt = '[{"tipo": "modificar_turno", "turno_id": "t1", "cambios": {"estado": "raro"}}]'
     validas, errores = pi.parsear_y_validar(txt, _ctx(turnos=[_turno()]))
@@ -212,7 +242,7 @@ def test_tipo_desconocido_es_error_de_esquema():
 
 def test_campo_extra_se_rechaza():
     txt = (
-        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-manana", '
+        '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", '
         '"miembro_id": "u1", "borrar_db": true}]'
     )
     validas, errores = pi.parsear_y_validar(txt, _ctx())
@@ -222,7 +252,7 @@ def test_campo_extra_se_rechaza():
 
 def test_operacion_no_objeto_es_error_sin_romper_el_resto():
     txt = '["soy una cadena", {"tipo": "crear_turno", "fecha": "2026-06-02", ' \
-        '"franja_id": "fr-manana", "miembro_id": "u1"}]'
+        '"franja": "Mañana", "miembro_id": "u1"}]'
     validas, errores = pi.parsear_y_validar(txt, _ctx())
     assert len(validas) == 1
     assert len(errores) == 1
@@ -241,8 +271,10 @@ def test_sin_json_devuelve_error_indice_cero():
 
 
 def test_conflicto_crear_turno_celda_ocupada():
+    # La celda se identifica por (fecha, NOMBRE de franja): el turno existente usa franja_id
+    # "fr-manana" que resuelve a "Mañana"; la op nueva referencia el slot por nombre.
     ctx = _ctx(turnos=[_turno(tid="t1", fecha="2026-06-02", franja="fr-manana", miembro="u1")])
-    op = {"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-manana", "miembro_id": "u2"}
+    op = {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u2"}
     info = pi.calcular_conflicto(op, ctx)
     assert info["conflicto"] is True
     assert info["ocupada_por"] == "u1"
@@ -250,7 +282,7 @@ def test_conflicto_crear_turno_celda_ocupada():
 
 def test_sin_conflicto_crear_turno_celda_libre():
     ctx = _ctx(turnos=[_turno(tid="t1", fecha="2026-06-02", franja="fr-manana")])
-    op = {"tipo": "crear_turno", "fecha": "2026-06-03", "franja_id": "fr-tarde", "miembro_id": "u2"}
+    op = {"tipo": "crear_turno", "fecha": "2026-06-03", "franja": "Tarde", "miembro_id": "u2"}
     info = pi.calcular_conflicto(op, ctx)
     assert info["conflicto"] is False
 
@@ -284,9 +316,9 @@ def test_crear_evento_nunca_conflictua():
 
 def test_validar_operaciones_re_chequea_contra_contexto_vivo():
     ops = [
-        {"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-manana", "miembro_id": "u1"},
+        {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u1"},
         # Esta era valida cuando se generó pero el miembro ya no está en el roster vivo.
-        {"tipo": "crear_turno", "fecha": "2026-06-02", "franja_id": "fr-manana", "miembro_id": "u9"},
+        {"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Mañana", "miembro_id": "u9"},
     ]
     validas, errores = pi.validar_operaciones(ops, _ctx())
     assert len(validas) == 1

@@ -184,6 +184,15 @@ def leer_media(nombre: str) -> bytes | None:
     return almacen_media.leer_objeto(nombre)
 
 
+def leer_objeto(nombre: str) -> bytes | None:
+    """Bytes de un objeto cualquiera del almacen por su key; None si no existe.
+
+    Alias backend-NEUTRAL de `leer_media` con nombre genérico (no solo imágenes): lo usa el
+    PREFETCH del worker para bajar un documento subido (la importación de parrilla) desde S3.
+    """
+    return almacen_media.leer_objeto(nombre)
+
+
 def mime_de(nombre: str) -> str:
     """Mime a partir de la extension del nombre de archivo (octet-stream si no se conoce)."""
     ext = Path(nombre).suffix.lower().lstrip(".")

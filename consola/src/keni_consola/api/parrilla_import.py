@@ -7,10 +7,13 @@ frontend la previsualiza sobre el calendario real y, al ACEPTAR, el back aplica 
 transaccion. Claude NUNCA escribe en el calendario: solo emite JSON; el codigo Python valida y
 aplica.
 
+Un documento puede cubrir VARIAS semanas (incluso un AÑO entero); las operaciones se validan
+y aplican contra el estado real de CADA semana que tocan, no de una sola.
+
 Endpoints:
-  - `POST   /api/parrilla/importar`               (multipart: archivo + semana) -> {propuesta_id, gen_id}
+  - `POST   /api/parrilla/importar`               (multipart: archivo; `semana` opcional) -> {propuesta_id, gen_id}
   - `GET    /api/parrilla/propuestas[?estado]`    lista propuestas (recientes primero).
-  - `GET    /api/parrilla/propuestas/{id}`        detalle (estado del job + operaciones + conflictos).
+  - `GET    /api/parrilla/propuestas/{id}`        detalle (estado del job + operaciones + conflictos + `rango`).
   - `POST   /api/parrilla/propuestas/{id}/aplicar`   re-valida contra BD viva y aplica (409 si choca).
   - `POST   /api/parrilla/propuestas/{id}/descartar` marca descartada.
 
@@ -94,20 +97,41 @@ def _propuesta_publica(propuesta: dict[str, Any], *, incluir_ops: bool = False) 
 
 
 def _operaciones_con_conflicto(
-    operaciones: list[dict[str, Any]] | None, semana: str, nombres: dict[str, str]
+    operaciones: list[dict[str, Any]] | None, nombres: dict[str, str]
 ) -> list[dict[str, Any]]:
     """Anota cada operacion con su `conflicto` (+ datos de overlay) contra el estado VIVO.
 
-    Construye el contexto de la semana desde la BD (turnos/franjas actuales) y usa el dominio
-    puro `calcular_conflicto` para que el frontend pinte nuevo/cambio/conflicto sin re-derivar.
+    Construye el contexto del RANGO desde la BD (franjas/turnos de TODAS las semanas tocadas por
+    las fechas de las operaciones) y usa el dominio puro `calcular_conflicto` para que el
+    frontend pinte nuevo/cambio/conflicto sin re-derivar.
     """
     ops = operaciones or []
-    ctx = job.construir_contexto(semana, nombres_miembros=nombres)
+    ctx = job.construir_contexto_validacion(ops, nombres_miembros=nombres)
     anotadas: list[dict[str, Any]] = []
     for op in ops:
         info = pi.calcular_conflicto(op, ctx)
         anotadas.append({**op, **info})
     return anotadas
+
+
+def _rango_de_operaciones(operaciones: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """Resumen `{desde, hasta, semanas, total}` del rango temporal cubierto por las operaciones.
+
+    `desde`/`hasta` son la fecha minima/maxima (ISO) de las ops; `semanas` los lunes ISO de las
+    semanas tocadas (ordenados); `total` el numero de operaciones. Lo consume el frontend para
+    mostrar un resumen y navegar las semanas. `desde`/`hasta` quedan "" si no hay fechas.
+    """
+    ops = operaciones or []
+    fechas = sorted(
+        f for f in (str(o.get("fecha", "") or "") for o in ops) if f
+    )
+    semanas = sorted(job.semanas_de_operaciones(ops))
+    return {
+        "desde": fechas[0] if fechas else "",
+        "hasta": fechas[-1] if fechas else "",
+        "semanas": semanas,
+        "total": len(ops),
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -118,10 +142,11 @@ def _operaciones_con_conflicto(
 async def importar(request: Request) -> Response:
     """POST /api/parrilla/importar (multipart): sube un documento y lanza la propuesta.
 
-    Campos: `archivo` (file, obligatorio), `semana` (AAAA-MM-DD del lunes objetivo). Guarda el
-    documento en el almacen de media, crea una `parrilla_propuesta` (estado `generando`) y
-    ENCOLA un job `claude -p` READ-ONLY que lee el doc y propone operaciones. Responde de
-    INMEDIATO con `{propuesta_id, gen_id}`; el frontend sondea el detalle hasta `pendiente`.
+    Campos: `archivo` (file, obligatorio). `semana` es OPCIONAL (mera pista; ya no ata la
+    propuesta a una sola semana: el documento puede traer un año entero). Guarda el documento en
+    el almacen de media, crea una `parrilla_propuesta` (estado `generando`, `semana=""`) y ENCOLA
+    un job `claude -p` READ-ONLY que lee el doc y propone operaciones en CUALQUIER fecha. Responde
+    de INMEDIATO con `{propuesta_id, gen_id}`; el frontend sondea el detalle hasta `pendiente`.
     """
     try:
         form = await request.form()
@@ -132,12 +157,9 @@ async def importar(request: Request) -> Response:
     if not isinstance(archivo, UploadFile) or not (archivo.filename or ""):
         return JSONResponse({"error": "Falta el documento a importar."}, status_code=400)
 
+    # `semana` es solo una pista opcional: ya no se exige ni ata la propuesta a una semana.
     semana_crudo = str(form.get("semana") or "").strip()
     semana = dominio_rota.lunes_de_semana_iso(semana_crudo) if semana_crudo else ""
-    if not semana:
-        return JSONResponse(
-            {"error": "Indica la semana objetivo (AAAA-MM-DD)."}, status_code=400
-        )
 
     try:
         doc_nombre, doc_ext = await media.guardar_documento_subido(archivo)
@@ -159,7 +181,6 @@ async def importar(request: Request) -> Response:
             propuesta_id=propuesta["id"],
             doc_nombre=doc_nombre,
             doc_ext=doc_ext,
-            semana=semana,
             nombres_miembros=_roster(),
             autor=autor,
         )
@@ -209,20 +230,22 @@ async def detalle_propuesta(request: Request) -> Response:
     """GET /api/parrilla/propuestas/{id}: detalle con estado del job + operaciones + conflictos.
 
     Cada operacion lleva un `conflicto` (bool) calculado en el server contra el estado VIVO de
-    la semana, y (para `modificar_turno`) los valores actuales de la fila referenciada, para que
-    el frontend renderice el overlay (nuevo / cambio / conflicto) sin re-derivarlo.
+    la semana que toca, y (para `modificar_turno`) los valores actuales de la fila referenciada,
+    para que el frontend renderice el overlay (nuevo / cambio / conflicto) sin re-derivarlo.
+    Ademas devuelve `rango` ({desde, hasta, semanas, total}) calculado de las fechas de las ops,
+    para que el frontend muestre un resumen y navegue las semanas cubiertas.
     """
     propuesta_id = request.path_params["propuesta_id"]
     propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
     if propuesta is None:
         return JSONResponse({"error": "La propuesta no existe."}, status_code=404)
     estado = _estado_efectivo(propuesta)
-    operaciones = _operaciones_con_conflicto(
-        propuesta.get("operaciones"), propuesta.get("semana", ""), _roster()
-    )
+    ops_crudas = propuesta.get("operaciones")
+    operaciones = _operaciones_con_conflicto(ops_crudas, _roster())
     cuerpo = _propuesta_publica(propuesta)
     cuerpo["estado"] = estado
     cuerpo["operaciones"] = operaciones
+    cuerpo["rango"] = _rango_de_operaciones(ops_crudas)
     return JSONResponse(cuerpo)
 
 
@@ -234,10 +257,11 @@ async def detalle_propuesta(request: Request) -> Response:
 async def aplicar_propuesta(request: Request) -> Response:
     """POST /api/parrilla/propuestas/{id}/aplicar: re-valida contra la BD viva y aplica.
 
-    Re-construye el contexto de la semana (las filas pudieron cambiar desde que se generó) y
-    re-valida con el dominio puro. Si hay errores de validacion o CONFLICTOS (celda ocupada /
-    turno desaparecido), devuelve 409 SIN aplicar. Si todo cuadra, aplica TODAS las operaciones
-    en UNA transaccion (`origen='import-doc'`) y marca la propuesta `aplicada`.
+    Re-construye el contexto del RANGO (las semanas tocadas por las fechas; las filas pudieron
+    cambiar desde que se generó) y re-valida con el dominio puro. Si hay errores de validacion o
+    CONFLICTOS (celda ocupada / turno desaparecido), devuelve 409 SIN aplicar. Si todo cuadra,
+    aplica TODAS las operaciones en UNA transaccion (`origen='import-doc'`, sembrando las franjas
+    por defecto de cada semana nueva) y marca la propuesta `aplicada`.
     """
     propuesta_id = request.path_params["propuesta_id"]
     propuesta = repos.obtener_propuesta_parrilla(propuesta_id)
@@ -249,12 +273,12 @@ async def aplicar_propuesta(request: Request) -> Response:
             status_code=409,
         )
 
-    semana = propuesta.get("semana", "")
+    operaciones = propuesta.get("operaciones") or []
     nombres = _roster()
-    ctx = job.construir_contexto(semana, nombres_miembros=nombres)
+    ctx = job.construir_contexto_validacion(operaciones, nombres_miembros=nombres)
 
     # Re-valida contra el estado ACTUAL (las filas pudieron cambiar tras generar la propuesta).
-    validas, errores = pi.validar_operaciones(propuesta.get("operaciones") or [], ctx)
+    validas, errores = pi.validar_operaciones(operaciones, ctx)
     if errores:
         return JSONResponse(
             {
@@ -279,9 +303,13 @@ async def aplicar_propuesta(request: Request) -> Response:
             status_code=409,
         )
 
-    resumen = repos.aplicar_propuesta_parrilla(
-        propuesta_id, validas, nombres_miembros=nombres, origen=pi.ORIGEN
-    )
+    try:
+        resumen = repos.aplicar_propuesta_parrilla(
+            propuesta_id, validas, nombres_miembros=nombres, origen=pi.ORIGEN
+        )
+    except ValueError as e:
+        # Una franja (slot) no resoluble para su semana: el diff entero se descartó (rollback).
+        return JSONResponse({"error": str(e)}, status_code=409)
     return JSONResponse({"aplicada": True, **resumen})
 
 

@@ -5,10 +5,17 @@
  *   - ámbar  = cambio     (modificar_turno)
  *   - rojo   = conflicto  (cualquier operación con `conflicto: true`)
  *
- * Renderiza la MISMA rejilla día × franja que el calendario real (`pages/Rota.tsx`),
- * reusando sus primitivas visuales (`@/lib/rota-calendario`: COBERTURA, COLOR_PRIORIDAD,
- * diaCorto, esFinDeSemana…). El usuario ve exactamente el calendario que resultaría tras
- * aceptar la propuesta: las filas reales aparecen atenuadas y las propuestas resaltadas.
+ * Una propuesta puede abarcar MUCHAS semanas (hasta un año): este componente recibe TODAS
+ * las operaciones (cada una con su `fecha`) y muestra UNA semana a la vez con un navegador
+ * prev/next IDÉNTICO al de la rota real (`pages/Rota.tsx`). La semana por defecto es la de
+ * la operación MÁS TEMPRANA; la navegación se acota al rango de semanas con cambios (±1 de
+ * holgura) para que el usuario no se pierda lejos de los datos.
+ *
+ * Renderiza la MISMA rejilla día × franja que el calendario real, reusando sus primitivas
+ * visuales (`@/lib/rota-calendario`). La diferencia clave con la rota real: las FILAS son
+ * NOMBRES de franja (plantilla), no `franja_id` — porque una propuesta multi-semana no
+ * puede referirse a `franja_id` (que son por-semana). Cada `crear_turno`/`modificar_turno`
+ * trae el NOMBRE de su franja y lo casamos contra las filas-plantilla (normalizado).
  *
  * No hace CRUD: es un espejo del resultado del merge. Por eso vive como componente propio
  * en vez de añadir un `modoPreview` a la rejilla editable (que arrastra dropdowns,
@@ -17,7 +24,10 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  CalendarDays,
   CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
   Pencil,
   Sunrise,
   Sunset,
@@ -27,6 +37,7 @@ import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
@@ -36,6 +47,9 @@ import {
   diaCorto,
   diasDeSemana,
   esFinDeSemana,
+  formatearRango,
+  lunesDeSemana,
+  lunesSiguiente,
 } from "@/lib/rota-calendario";
 import { cn } from "@/lib/utils";
 import type {
@@ -97,12 +111,31 @@ function horaEnRangoFranja(hora: string, inicio: string, fin: string): boolean {
   return h >= ini || h < f;
 }
 
-function franjaIdParaHoraEvento(hora: string, franjas: FranjaSemana[]): string | null {
+/** El NOMBRE de la franja de la semana que contiene la hora del evento, o `null`. */
+function franjaNombreParaHoraEvento(hora: string, franjas: FranjaSemana[]): string | null {
   if (franjas.length === 0) return null;
   for (const f of franjas.filter((x) => !x.es_descanso)) {
-    if (horaEnRangoFranja(hora, f.inicio, f.fin)) return f.id;
+    if (horaEnRangoFranja(hora, f.inicio, f.fin)) return f.nombre;
   }
-  return franjas.find((f) => f.es_descanso)?.id ?? franjas[0]?.id ?? null;
+  return franjas.find((f) => f.es_descanso)?.nombre ?? franjas[0]?.nombre ?? null;
+}
+
+/** Normaliza un nombre de franja para casar filas (lower + trim, sin acentos para robustez). */
+function normFranja(nombre: string): string {
+  return nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+// Plantilla por defecto de filas (NOMBRES de franja), en el orden de la rota real. Las
+// operaciones cuyo nombre de franja no caiga en esta plantilla añaden su propia fila.
+const PLANTILLA_FRANJAS_DEFECTO = ["Mañana", "Tarde", "Descanso"] as const;
+
+/** ¿Esta fila-plantilla es la franja de descanso (heurística por nombre)? */
+function esDescansoNombre(nombre: string): boolean {
+  return normFranja(nombre).includes("descanso");
 }
 
 const BANDAS_FRANJA_LABORAL = [
@@ -143,7 +176,9 @@ function resumirCambios(op: OperacionModificarTurno): string {
   const partes: string[] = [];
   const c = op.cambios ?? {};
   if (typeof c.fecha === "string") partes.push(`fecha → ${c.fecha}`);
-  if (typeof c.franja_id === "string") partes.push("cambia de franja");
+  // El backend puede mandar la nueva franja como nombre (`franja`) o id (`franja_id`).
+  if (typeof (c as Record<string, unknown>).franja === "string" || typeof c.franja_id === "string")
+    partes.push("cambia de franja");
   if (typeof c.miembro_id === "string") partes.push("reasigna persona");
   if (typeof c.motivo === "string") partes.push("motivo");
   if (typeof c.nota_relevo === "string") partes.push("nota de relevo");
@@ -151,25 +186,70 @@ function resumirCambios(op: OperacionModificarTurno): string {
   return partes.length > 0 ? partes.join(" · ") : "modificación";
 }
 
+/** La `fecha` (ISO) que ubica una operación en el calendario, o `null` si no parsea. */
+function fechaDeOperacion(op: OperacionPropuesta): string | null {
+  if (op.tipo === "crear_evento" || op.tipo === "crear_turno") {
+    return typeof op.fecha === "string" && op.fecha ? op.fecha : null;
+  }
+  // modificar_turno: la fecha actual (o la nueva si la mueve).
+  const c = op.cambios ?? {};
+  const nueva = typeof c.fecha === "string" ? c.fecha : null;
+  const actual = typeof op.actual?.fecha === "string" ? op.actual.fecha : null;
+  return nueva ?? actual;
+}
+
 export function CalendarioPreview({
-  semana,
   operaciones,
 }: {
-  /** Lunes ISO de la semana destino de la propuesta. */
-  semana: string;
+  /** TODAS las operaciones de la propuesta (cada una con su `fecha`). */
   operaciones: OperacionPropuesta[];
 }) {
-  // El estado REAL de la semana: turnos + cobertura (los mismos endpoints del calendario).
+  // Semanas (lunes ISO) que contienen alguna operación, ordenadas ascendente.
+  const semanasConCambios = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const op of operaciones) {
+      const f = fechaDeOperacion(op);
+      if (!f) continue;
+      const d = new Date(`${f}T00:00:00`);
+      if (Number.isNaN(d.getTime())) continue;
+      set.add(lunesDeSemana(d));
+    }
+    return Array.from(set).sort();
+  }, [operaciones]);
+
+  const primeraSemana = semanasConCambios[0] ?? lunesDeSemana(new Date());
+  const ultimaSemana = semanasConCambios[semanasConCambios.length - 1] ?? primeraSemana;
+  // Holgura de ±1 semana alrededor del rango con cambios (clamp de la navegación).
+  const minLunes = lunesSiguiente(primeraSemana, -1);
+  const maxLunes = lunesSiguiente(ultimaSemana, 1);
+
+  // Semana mostrada: por defecto la PRIMERA con cambios. Se re-ancla si cambian las ops.
+  const [lunes, setLunes] = React.useState(primeraSemana);
+  React.useEffect(() => {
+    setLunes(primeraSemana);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [primeraSemana]);
+
+  const irA = (nuevo: string) => {
+    if (nuevo < minLunes) return setLunes(minLunes);
+    if (nuevo > maxLunes) return setLunes(maxLunes);
+    setLunes(nuevo);
+  };
+  const puedeAnterior = lunes > minLunes;
+  const puedeSiguiente = lunes < maxLunes;
+
+  // El estado REAL de la semana mostrada: turnos + cobertura (los endpoints del calendario).
   const turnosQ = useQuery({
-    queryKey: ["rota", "turnos", semana],
-    queryFn: ({ signal }) => api.listarTurnos({ lunes: semana }, signal),
+    queryKey: ["rota", "turnos", lunes],
+    queryFn: ({ signal }) => api.listarTurnos({ lunes }, signal),
   });
   const coberturaQ = useQuery({
-    queryKey: ["rota", "cobertura", semana],
-    queryFn: ({ signal }) => api.cobertura({ lunes: semana }, signal),
+    queryKey: ["rota", "cobertura", lunes],
+    queryFn: ({ signal }) => api.cobertura({ lunes }, signal),
   });
 
-  const dias = React.useMemo(() => diasDeSemana(semana), [semana]);
+  const dias = React.useMemo(() => diasDeSemana(lunes), [lunes]);
+  const finDias = lunesSiguiente(lunes, 1); // exclusivo
 
   const franjasSemana = React.useMemo<FranjaSemana[]>(
     () =>
@@ -179,7 +259,57 @@ export function CalendarioPreview({
     [turnosQ.data?.franjas, coberturaQ.data?.franjas],
   );
 
-  // Construye el mapa `franja_id|fecha` → CeldaPreview a partir del estado REAL + overlay.
+  // Operaciones que caen en la semana mostrada (filtro por fecha).
+  const opsSemana = React.useMemo(
+    () =>
+      operaciones.filter((op) => {
+        const f = fechaDeOperacion(op);
+        return !!f && f >= dias[0]! && f < finDias;
+      }),
+    [operaciones, dias, finDias],
+  );
+
+  // FILAS de la rejilla = NOMBRES de franja. Plantilla por defecto (orden rota) UNIÓN los
+  // nombres reales de la semana UNIÓN los nombres que aparecen en las operaciones. Cada
+  // fila lleva su orden/horario si lo conocemos por la franja real homónima.
+  const filasFranja = React.useMemo(() => {
+    // Índice de franja real por nombre normalizado (para horario + es_descanso + orden).
+    const realPorNombre = new Map<string, FranjaSemana>();
+    for (const f of franjasSemana) realPorNombre.set(normFranja(f.nombre), f);
+
+    // Nombres a mostrar, preservando el primer "display name" visto.
+    const orden: string[] = [];
+    const vistos = new Set<string>();
+    const anadir = (nombre: string) => {
+      const k = normFranja(nombre);
+      if (!k || vistos.has(k)) return;
+      vistos.add(k);
+      orden.push(nombre);
+    };
+    // 1) franjas reales de la semana (en su orden), 2) plantilla por defecto, 3) ops.
+    for (const f of franjasSemana) anadir(f.nombre);
+    for (const n of PLANTILLA_FRANJAS_DEFECTO) anadir(n);
+    for (const op of opsSemana) {
+      if (op.tipo === "crear_turno") anadir((op as OperacionCrearTurno).franja);
+      else if (op.tipo === "modificar_turno") {
+        const a = (op as OperacionModificarTurno).actual;
+        if (typeof a?.franja === "string") anadir(a.franja);
+      }
+    }
+
+    return orden.map((nombre) => {
+      const real = realPorNombre.get(normFranja(nombre));
+      return {
+        clave: normFranja(nombre),
+        nombre: real?.nombre ?? nombre,
+        inicio: real?.inicio ?? "",
+        fin: real?.fin ?? "",
+        es_descanso: real?.es_descanso ?? esDescansoNombre(nombre),
+      };
+    });
+  }, [franjasSemana, opsSemana]);
+
+  // Mapa `franjaClave|fecha` → CeldaPreview a partir del estado REAL + overlay.
   const celdas = React.useMemo(() => {
     const m = new Map<string, CeldaPreview>();
     const obtener = (clave: string): CeldaPreview => {
@@ -190,10 +320,15 @@ export function CalendarioPreview({
       }
       return c;
     };
+    // Índice de franja real (id → nombre) para casar turnos/eventos reales por nombre.
+    const nombrePorId = new Map<string, string>();
+    for (const f of franjasSemana) nombrePorId.set(f.id, f.nombre);
 
-    // 1) Personas reales (turnos existentes), atenuadas.
+    // 1) Personas reales (turnos existentes), atenuadas. Casamos por NOMBRE de franja.
     for (const t of (turnosQ.data?.turnos ?? []) as TurnoRota[]) {
-      obtener(`${t.franja_id}|${t.fecha}`).personas.push({
+      const nombre = t.franja_nombre || nombrePorId.get(t.franja_id) || "";
+      if (!nombre) continue;
+      obtener(`${normFranja(nombre)}|${t.fecha}`).personas.push({
         clave: `real-${t.id}`,
         nombre: t.miembro_nombre,
         categoria: null,
@@ -203,10 +338,12 @@ export function CalendarioPreview({
     // 2) Eventos reales con cobertura, atenuados.
     for (const ev of (coberturaQ.data?.eventos ?? []) as CoberturaEvento[]) {
       if (ev.fecha < dias[0]! || ev.fecha > dias[6]!) continue;
-      const franjaId =
-        ev.cobertura[0]?.franja_id ?? franjaIdParaHoraEvento(ev.hora, franjasSemana);
-      if (!franjaId) continue;
-      obtener(`${franjaId}|${ev.fecha}`).eventos.push({
+      const franjaId = ev.cobertura[0]?.franja_id;
+      const nombre =
+        (franjaId && nombrePorId.get(franjaId)) ||
+        franjaNombreParaHoraEvento(ev.hora, franjasSemana);
+      if (!nombre) continue;
+      obtener(`${normFranja(nombre)}|${ev.fecha}`).eventos.push({
         clave: `real-ev-${ev.id}`,
         titulo: ev.titulo,
         hora: ev.hora,
@@ -216,14 +353,18 @@ export function CalendarioPreview({
       });
     }
 
-    // 3) Overlay: cada operación propuesta.
-    operaciones.forEach((op, i) => {
+    // 3) Overlay: cada operación propuesta de la semana mostrada.
+    opsSemana.forEach((op, i) => {
       const categoria = categoriaDe(op);
       if (op.tipo === "crear_evento") {
         const o = op as OperacionCrearEvento;
-        const franjaId = franjaIdParaHoraEvento(o.hora, franjasSemana);
-        if (!franjaId) return;
-        obtener(`${franjaId}|${o.fecha}`).eventos.push({
+        const nombre = franjaNombreParaHoraEvento(o.hora, franjasSemana);
+        // Sin franjas reales en la semana caemos a la primera fila-plantilla laboral.
+        const clave = nombre
+          ? normFranja(nombre)
+          : filasFranja.find((f) => !f.es_descanso)?.clave ?? filasFranja[0]?.clave;
+        if (!clave) return;
+        obtener(`${clave}|${o.fecha}`).eventos.push({
           clave: `op-${i}`,
           titulo: o.titulo,
           hora: o.hora,
@@ -233,7 +374,9 @@ export function CalendarioPreview({
         });
       } else if (op.tipo === "crear_turno") {
         const o = op as OperacionCrearTurno;
-        obtener(`${o.franja_id}|${o.fecha}`).personas.push({
+        const clave = normFranja(o.franja ?? "");
+        if (!clave) return;
+        obtener(`${clave}|${o.fecha}`).personas.push({
           clave: `op-${i}`,
           nombre: o.miembro_nombre,
           categoria,
@@ -242,11 +385,16 @@ export function CalendarioPreview({
         const o = op as OperacionModificarTurno;
         // El turno modificado se ubica donde está HOY (valores `actual`); si el cambio
         // mueve fecha/franja, lo reflejamos en el detalle del chip.
-        const fecha = (o.actual.fecha as string) ?? dias[0]!;
-        const franjaId = (o.actual.franja_id as string) ?? franjasSemana[0]?.id ?? "";
-        obtener(`${franjaId}|${fecha}`).personas.push({
+        const fecha = (typeof o.actual?.fecha === "string" && o.actual.fecha) || dias[0]!;
+        const nombre =
+          (typeof o.actual?.franja === "string" && o.actual.franja) ||
+          filasFranja[0]?.nombre ||
+          "";
+        const clave = normFranja(nombre);
+        if (!clave) return;
+        obtener(`${clave}|${fecha}`).personas.push({
           clave: `op-${i}`,
-          nombre: (o.actual.miembro_nombre as string) ?? "Turno",
+          nombre: (typeof o.actual?.miembro_nombre === "string" && o.actual.miembro_nombre) || "Turno",
           categoria,
           detalle: resumirCambios(o),
         });
@@ -254,101 +402,155 @@ export function CalendarioPreview({
     });
 
     return m;
-  }, [turnosQ.data?.turnos, coberturaQ.data?.eventos, operaciones, dias, franjasSemana]);
+  }, [turnosQ.data?.turnos, coberturaQ.data?.eventos, opsSemana, dias, franjasSemana, filasFranja]);
 
   const cargando = turnosQ.isPending || coberturaQ.isPending;
   const error = turnosQ.error || coberturaQ.error;
 
-  if (cargando) return <Skeleton className="h-[50vh] w-full rounded-md" />;
+  const finInclusivo = dias[6] ?? lunes;
+  const navegador = (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Semana anterior"
+          onClick={() => irA(lunesSiguiente(lunes, -1))}
+          disabled={!puedeAnterior}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        <div className="min-w-[12rem] text-center text-sm font-medium">
+          <CalendarDays className="mr-1.5 inline h-4 w-4 text-muted-foreground" />
+          {formatearRango(lunes, finInclusivo) || "Semana"}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label="Semana siguiente"
+          onClick={() => irA(lunesSiguiente(lunes, 1))}
+          disabled={!puedeSiguiente}
+        >
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+      <span className="text-xs text-muted-foreground">
+        {opsSemana.length === 0
+          ? "Sin cambios esta semana"
+          : `${opsSemana.length} cambio${opsSemana.length === 1 ? "" : "s"} esta semana`}
+        {semanasConCambios.length > 1 && ` · ${semanasConCambios.length} semanas con cambios`}
+      </span>
+    </div>
+  );
+
+  if (cargando)
+    return (
+      <div className="space-y-3">
+        {navegador}
+        <Skeleton className="h-[40vh] w-full rounded-md" />
+      </div>
+    );
   if (error) {
     return (
-      <BloqueError
-        titulo="No se pudo cargar el calendario para previsualizar"
-        mensaje={error instanceof Error ? error.message : "Error inesperado."}
-        onReintentar={() => {
-          void turnosQ.refetch();
-          void coberturaQ.refetch();
-        }}
-        cargando={turnosQ.isFetching}
-      />
+      <div className="space-y-3">
+        {navegador}
+        <BloqueError
+          titulo="No se pudo cargar el calendario para previsualizar"
+          mensaje={error instanceof Error ? error.message : "Error inesperado."}
+          onReintentar={() => {
+            void turnosQ.refetch();
+            void coberturaQ.refetch();
+          }}
+          cargando={turnosQ.isFetching}
+        />
+      </div>
     );
   }
 
   let indiceLaboral = 0;
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-0">
-        <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 24rem)" }}>
-          <div className="min-w-[56rem]">
-            {/* Cabecera de días (sticky). */}
-            <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
-              <div className="bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Franja
-              </div>
-              {dias.map((fecha) => (
-                <div
-                  key={fecha}
-                  className={cn(
-                    "flex items-baseline justify-between px-2 py-2",
-                    esFinDeSemana(fecha)
-                      ? "bg-amber-50/40 dark:bg-amber-950/10"
-                      : "bg-background",
-                  )}
-                >
-                  <span className="text-xs font-semibold capitalize">{diaCorto(fecha)}</span>
-                  <span className="text-xs text-muted-foreground">{fecha.slice(8, 10)}</span>
+    <div className="space-y-3">
+      {navegador}
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 26rem)" }}>
+            <div className="min-w-[56rem]">
+              {/* Cabecera de días (sticky). */}
+              <div className="sticky top-0 z-10 grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px border-b bg-background">
+                <div className="bg-background px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Franja
                 </div>
-              ))}
-            </div>
-
-            {franjasSemana.map((franja, idx) => {
-              const idxLab = franja.es_descanso ? -1 : indiceLaboral++;
-              const banda = franja.es_descanso
-                ? "border-l-zinc-300 dark:border-l-zinc-700"
-                : BANDAS_FRANJA_LABORAL[idxLab % BANDAS_FRANJA_LABORAL.length]!;
-              return (
-                <div
-                  key={franja.id}
-                  className={cn(
-                    "grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px",
-                    idx > 0 && "border-t-4 border-t-border",
-                  )}
-                >
+                {dias.map((fecha) => (
                   <div
+                    key={fecha}
                     className={cn(
-                      "sticky left-0 z-[1] flex flex-col justify-center border-l-4 bg-background px-3 py-3 text-sm font-semibold",
-                      banda,
+                      "flex items-baseline justify-between px-2 py-2",
+                      esFinDeSemana(fecha)
+                        ? "bg-amber-50/40 dark:bg-amber-950/10"
+                        : "bg-background",
                     )}
                   >
-                    <span className="flex items-center gap-1.5">
-                      {franja.es_descanso || idxLab > 0 ? (
-                        <Sunset className="h-3.5 w-3.5 text-muted-foreground" />
-                      ) : (
-                        <Sunrise className="h-3.5 w-3.5 text-muted-foreground" />
-                      )}
-                      {franja.nombre}
-                    </span>
-                    <span className="text-xs font-normal text-muted-foreground">
-                      {franja.es_descanso ? "(descanso)" : `${franja.inicio}–${franja.fin}`}
-                    </span>
+                    <span className="text-xs font-semibold capitalize">{diaCorto(fecha)}</span>
+                    <span className="text-xs text-muted-foreground">{fecha.slice(8, 10)}</span>
                   </div>
-                  {dias.map((fecha) => {
-                    const celda = celdas.get(`${franja.id}|${fecha}`);
-                    return (
-                      <CeldaDePreview
-                        key={`${franja.id}-${fecha}`}
-                        celda={celda}
-                        finde={esFinDeSemana(fecha)}
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })}
+                ))}
+              </div>
+
+              {filasFranja.map((franja, idx) => {
+                const idxLab = franja.es_descanso ? -1 : indiceLaboral++;
+                const banda = franja.es_descanso
+                  ? "border-l-zinc-300 dark:border-l-zinc-700"
+                  : BANDAS_FRANJA_LABORAL[idxLab % BANDAS_FRANJA_LABORAL.length]!;
+                return (
+                  <div
+                    key={franja.clave}
+                    className={cn(
+                      "grid grid-cols-[8rem_repeat(7,minmax(0,1fr))] gap-px",
+                      idx > 0 && "border-t-4 border-t-border",
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        "sticky left-0 z-[1] flex flex-col justify-center border-l-4 bg-background px-3 py-3 text-sm font-semibold",
+                        banda,
+                      )}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        {franja.es_descanso || idxLab > 0 ? (
+                          <Sunset className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <Sunrise className="h-3.5 w-3.5 text-muted-foreground" />
+                        )}
+                        {franja.nombre}
+                      </span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {franja.es_descanso
+                          ? "(descanso)"
+                          : franja.inicio && franja.fin
+                            ? `${franja.inicio}–${franja.fin}`
+                            : ""}
+                      </span>
+                    </div>
+                    {dias.map((fecha) => {
+                      const celda = celdas.get(`${franja.clave}|${fecha}`);
+                      return (
+                        <CeldaDePreview
+                          key={`${franja.clave}-${fecha}`}
+                          celda={celda}
+                          finde={esFinDeSemana(fecha)}
+                        />
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

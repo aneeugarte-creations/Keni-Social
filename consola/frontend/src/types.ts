@@ -2248,11 +2248,26 @@ export interface OperacionCrearTurno {
   conflicto: boolean;
   /** ISO (AAAA-MM-DD). */
   fecha: string;
-  franja_id: string;
+  /**
+   * NOMBRE de la franja (p. ej. "Mañana"/"Tarde"/"Descanso"), no su id: una propuesta
+   * abarca muchas semanas y los `franja_id` son por-semana, así que el modelo emite el
+   * nombre y la previsualización lo casa contra las filas-plantilla (normalizado).
+   */
+  franja: string;
   miembro_id: string;
   miembro_nombre: string;
   nota_relevo?: string;
   motivo?: string;
+}
+
+/** Forma de los valores `actual` de un `modificar_turno` (el "antes" de la fila).
+ *  `franja` es el NOMBRE de la franja (no su id), por la misma razón multi-semana. */
+export interface ActualTurnoPropuesta {
+  fecha?: string;
+  franja?: string;
+  miembro_id?: string;
+  miembro_nombre?: string;
+  [k: string]: unknown;
 }
 
 /** Modificar un turno existente (ámbar = cambio). Trae los valores actuales de la fila. */
@@ -2262,8 +2277,9 @@ export interface OperacionModificarTurno {
   turno_id: string;
   /** Campos a cambiar (parcial). */
   cambios: Partial<CuerpoActualizarTurnoRota> & Record<string, unknown>;
-  /** Valores actuales de la fila referenciada (para mostrar el "antes"). */
-  actual: Partial<TurnoRota> & Record<string, unknown>;
+  /** Valores actuales de la fila referenciada (para mostrar el "antes").
+   *  `franja` es el NOMBRE de la franja, no `franja_id` (placement multi-semana). */
+  actual: ActualTurnoPropuesta;
 }
 
 /** Una operación propuesta del diff. El `tipo` discrimina la forma. */
@@ -2283,6 +2299,12 @@ export interface PropuestaParrilla {
   /** Mensaje de error legible cuando `estado === "error"`. */
   error: string;
   operaciones: OperacionPropuesta[];
+  /**
+   * Rango que abarca la propuesta (puede cubrir muchas semanas, hasta un año). `semanas`
+   * son los lunes ISO con cambios, ordenados ascendente; `desde`/`hasta` son ISO de la
+   * primera/última fecha con operaciones; `total` es el nº de operaciones. Opcional:
+   * propuestas legadas (de una sola semana) pueden no traerlo. */
+  rango?: { desde: string; hasta: string; semanas: string[]; total: number };
   /** Id de la generación `claude -p` que la produjo (opcional). */
   gen_id?: string;
   /** Nombre del objeto en el almacén de media (uuid+ext; NO es el nombre original). Opcional. */

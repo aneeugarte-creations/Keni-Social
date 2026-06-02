@@ -16,8 +16,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   FileText,
   Inbox,
   Loader2,
@@ -41,7 +39,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
 import {
   MenuContextual,
   type EntradaMenuContextual,
@@ -49,13 +46,12 @@ import {
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, ApiError } from "@/lib/api";
-import {
-  formatearRango,
-  lunesDeSemana,
-  lunesSiguiente,
-} from "@/lib/rota-calendario";
 import { cn } from "@/lib/utils";
-import type { ConflictoAplicarParrilla, EstadoPropuestaParrilla } from "@/types";
+import type {
+  ConflictoAplicarParrilla,
+  EstadoPropuestaParrilla,
+  PropuestaParrilla,
+} from "@/types";
 
 function mensajeError(e: unknown): string {
   if (e instanceof ApiError || e instanceof Error) return e.message;
@@ -77,16 +73,44 @@ function VerPrompt({ prompt }: { prompt: string }) {
 }
 
 /**
+ * Línea-resumen de una propuesta multi-semana: "N cambios · M semanas · del DD/MM/AAAA al
+ * DD/MM/AAAA". Usa `propuesta.rango` cuando viene; si no (propuesta legada de una sola
+ * semana), cae a `nOperaciones` y a `propuesta.semana`.
+ */
+function ResumenRango({
+  propuesta,
+  nOperaciones,
+}: {
+  propuesta: PropuestaParrilla;
+  nOperaciones: number;
+}) {
+  const rango = propuesta.rango;
+  const total = rango?.total ?? nOperaciones;
+  const nSemanas = rango?.semanas?.length ?? (propuesta.semana ? 1 : 0);
+  const fmt = (iso: string) => {
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+  const partes: string[] = [`${total} cambio${total === 1 ? "" : "s"}`];
+  if (nSemanas > 0) partes.push(`${nSemanas} semana${nSemanas === 1 ? "" : "s"}`);
+  if (rango?.desde && rango?.hasta) partes.push(`del ${fmt(rango.desde)} al ${fmt(rango.hasta)}`);
+  return (
+    <p className="text-xs font-medium text-muted-foreground" data-testid="rota-importar-resumen-rango">
+      {partes.join(" · ")}
+    </p>
+  );
+}
+
+/**
  * Punto de entrada: botón "Importar documento" + badge de pendientes. La apertura del
- * Dialog y la propuesta en curso se gestionan aquí; el calendario padre solo nos pasa la
- * semana en vista (default del selector) y un `onAplicado` para refrescar tras el merge.
+ * Dialog y la propuesta en curso se gestionan aquí; el calendario padre solo nos pasa un
+ * `onAplicado` para refrescar tras el merge. Ya NO se elige semana destino: una propuesta
+ * puede abarcar muchas semanas (hasta un año) y cada operación lleva su propia fecha.
  */
 export function ImportarDocumentoParrilla({
-  semanaEnVista,
   onAplicado,
 }: {
-  /** Lunes ISO de la semana visible (default del selector de semana). */
-  semanaEnVista: string;
   /** Se invoca tras aplicar una propuesta (para refrescar el calendario real). */
   onAplicado: () => void;
 }) {
@@ -118,7 +142,6 @@ export function ImportarDocumentoParrilla({
 
       {abierto && (
         <DialogImportarParrilla
-          semanaEnVista={semanaEnVista}
           propuestaId={propuestaId}
           setPropuestaId={setPropuestaId}
           onCerrar={() => setAbierto(false)}
@@ -144,7 +167,7 @@ function BadgePropuestasPendientes({ onAbrir }: { onAbrir: (id: string) => void 
   if (propuestas.length === 0) return null;
 
   const items: EntradaMenuContextual[] = propuestas.map((p) => ({
-    etiqueta: `Documento${p.doc_tipo ? ` ${p.doc_tipo.toUpperCase()}` : ""} · semana ${p.semana}`,
+    etiqueta: `Documento${p.doc_tipo ? ` ${p.doc_tipo.toUpperCase()}` : ""}${p.creado ? ` · ${p.creado.slice(0, 10)}` : ""}`,
     icono: FileText,
     onClick: () => onAbrir(p.id),
   }));
@@ -158,45 +181,6 @@ function BadgePropuestasPendientes({ onAbrir }: { onAbrir: (id: string) => void 
         </Badge>
       </Button>
     </MenuContextual>
-  );
-}
-
-/** Selector de semana compacto (chevrons + rango legible). */
-function SelectorSemana({
-  lunes,
-  setLunes,
-}: {
-  lunes: string;
-  setLunes: (l: string) => void;
-}) {
-  const fin = lunesSiguiente(lunes, 1);
-  const finInclusivo = new Date(`${fin}T00:00:00`);
-  finInclusivo.setDate(finInclusivo.getDate() - 1);
-  const finIso = `${finInclusivo.getFullYear()}-${String(finInclusivo.getMonth() + 1).padStart(2, "0")}-${String(finInclusivo.getDate()).padStart(2, "0")}`;
-  return (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label="Semana anterior"
-        onClick={() => setLunes(lunesSiguiente(lunes, -1))}
-      >
-        <ChevronLeft className="h-4 w-4" />
-      </Button>
-      <div className="min-w-[11rem] text-center text-sm font-medium">
-        {formatearRango(lunes, finIso) || "Semana"}
-      </div>
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label="Semana siguiente"
-        onClick={() => setLunes(lunesSiguiente(lunes, 1))}
-      >
-        <ChevronRight className="h-4 w-4" />
-      </Button>
-    </div>
   );
 }
 
@@ -280,13 +264,11 @@ function Dropzone({
 }
 
 function DialogImportarParrilla({
-  semanaEnVista,
   propuestaId,
   setPropuestaId,
   onCerrar,
   onAplicado,
 }: {
-  semanaEnVista: string;
   propuestaId: string | null;
   setPropuestaId: (id: string | null) => void;
   onCerrar: () => void;
@@ -294,7 +276,6 @@ function DialogImportarParrilla({
 }) {
   const queryClient = useQueryClient();
   const [archivo, setArchivo] = React.useState<File | null>(null);
-  const [semana, setSemana] = React.useState(() => lunesDeSemana(new Date(`${semanaEnVista}T00:00:00`)));
   // Payload de un 409 al aplicar (el calendario cambió): lo mostramos para reabrir/refrescar.
   const [conflictoAplicar, setConflictoAplicar] = React.useState<ConflictoAplicarParrilla | null>(null);
 
@@ -313,7 +294,7 @@ function DialogImportarParrilla({
   const generacion = genQuery.data;
 
   const subir = useMutation({
-    mutationFn: () => api.importarParrilla(archivo!, semana),
+    mutationFn: () => api.importarParrilla(archivo!),
     onSuccess: (r) => {
       setPropuestaId(r.propuesta_id);
       queryClient.invalidateQueries({ queryKey: ["parrilla", "propuestas"] });
@@ -374,10 +355,10 @@ function DialogImportarParrilla({
 
         {enSubida ? (
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>Semana destino</Label>
-              <SelectorSemana lunes={semana} setLunes={setSemana} />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              El documento puede cubrir una semana o todo el año: Keni detecta las fechas y
+              propone los cambios en las semanas que correspondan.
+            </p>
             <Dropzone archivo={archivo} setArchivo={setArchivo} />
           </div>
         ) : generando || !propuesta ? (
@@ -417,6 +398,7 @@ function DialogImportarParrilla({
                 {propuesta.resumen}
               </p>
             )}
+            <ResumenRango propuesta={propuesta} nOperaciones={operaciones.length} />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <LeyendaPreview />
               {nConflictos > 0 && (
@@ -426,7 +408,7 @@ function DialogImportarParrilla({
                 </Badge>
               )}
             </div>
-            <CalendarioPreview semana={propuesta.semana} operaciones={operaciones} />
+            <CalendarioPreview operaciones={operaciones} />
             {operaciones.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 La propuesta no contiene cambios aplicables.

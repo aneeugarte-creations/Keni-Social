@@ -182,16 +182,16 @@ def construir_prompt_lib() -> dict[str, Any]:
     return {"kind": PROC_PROMPT}
 
 
-def construir_parrilla_import(*, propuesta_id: str, semana: str) -> dict[str, Any]:
+def construir_parrilla_import(*, propuesta_id: str) -> dict[str, Any]:
     """Spec del post-procesado de la IMPORTACION de parrilla (#parrilla-import).
 
-    `propuesta_id` es la fila `parrilla_propuesta` a actualizar; `semana` (lunes ISO) es la
-    semana objetivo contra la que se re-construye el contexto y se validan las operaciones.
+    `propuesta_id` es la fila `parrilla_propuesta` a actualizar. NO lleva semana: el contexto
+    de validacion se re-construye en el worker a partir de las FECHAS de las operaciones que
+    devuelva claude (un documento puede cubrir varias semanas / un año entero).
     """
     return {
         "kind": PROC_PARRILLA_IMPORT,
         "propuesta_id": propuesta_id,
-        "semana": semana,
     }
 
 
@@ -201,6 +201,7 @@ def construir(
     procesar: dict[str, Any],
     cwd_kind: str = CWD_GENERACION,
     dir_temporal: str | None = None,
+    prefetch_s3: dict[str, str] | None = None,
     endurecer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal).
@@ -208,12 +209,16 @@ def construir(
     `endurecer` (opcional): overrides de seguridad para ESE run (herramientas vetadas extra,
     max-turns/max-budget mas bajos). Solo ENDURECEN; ausente = comportamiento global. Lo usa
     un job READ-ONLY como la importacion de parrilla (vetar Write/Edit/Bash/MCP de escritura).
+    `prefetch_s3` (opcional): `{clave, destino}` para que el WORKER baje un objeto de S3 a la
+    ruta `destino` ANTES de correr claude (solo lo pone la importacion de parrilla: el doc viaja
+    por S3, no por un disco compartido entre back y worker).
     """
     return {
         "version": VERSION,
         "prompt": prompt,
         "cwd_kind": cwd_kind,
         "dir_temporal": dir_temporal,
+        "prefetch_s3": prefetch_s3 or None,
         "procesar": procesar,
         "endurecer": endurecer or None,
     }
@@ -223,6 +228,20 @@ def endurecer(spec: dict[str, Any]) -> dict[str, Any] | None:
     """Overrides de endurecimiento del run (o None). El worker los pasa a `lanzar_job_claude`."""
     e = spec.get("endurecer")
     return e if isinstance(e, dict) and e else None
+
+
+def prefetch_s3(spec: dict[str, Any]) -> dict[str, str] | None:
+    """Instruccion de PREFETCH de S3 del worker (o None).
+
+    Devuelve `{clave, destino}` SOLO si el spec lo trae (lo pone la importacion de parrilla):
+    `clave` es la key del objeto en el almacen de media y `destino` la ruta local absoluta a la
+    que el worker debe escribir los bytes ANTES de lanzar claude. None (o forma invalida) =>
+    sin prefetch.
+    """
+    p = spec.get("prefetch_s3")
+    if isinstance(p, dict) and p.get("clave") and p.get("destino"):
+        return {"clave": str(p["clave"]), "destino": str(p["destino"])}
+    return None
 
 
 def serializar(spec: dict[str, Any]) -> str:
@@ -300,7 +319,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         from . import parrilla_import_job
 
         return parrilla_import_job.construir_procesar_parrilla_import(
-            propuesta_id=p["propuesta_id"], semana=p.get("semana", "")
+            propuesta_id=p["propuesta_id"]
         )
 
     if kind == PROC_QA:

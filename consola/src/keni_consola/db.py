@@ -8401,11 +8401,43 @@ def aplicar_propuesta_parrilla(
     `nombres_miembros` resuelve el nombre vivo del miembro (el snapshot de la op puede estar
     desactualizado). Devuelve un resumen `{eventos_creados, turnos_creados, turnos_modificados,
     ids:{...}}`. NO re-valida (la API ya lo hizo contra la BD viva ANTES de llamar aqui).
+
+    RANGO / FRANJA POR NOMBRE: cada `crear_turno` trae `franja` (NOMBRE de slot, p.ej. "Mañana")
+    y una fecha cualquiera. Calcula su semana (`lunes`), SIEMBRA las franjas por defecto de esa
+    semana si no tiene ninguna (dentro de la misma transaccion) y resuelve el NOMBRE -> el
+    `franja_id` de esa semana (match normalizado case/space-insensitive). Si el nombre no se
+    puede resolver para esa semana, lanza `ValueError` (la API lo traduce a 409): el diff entero
+    se descarta (rollback). Cacheamos el mapa nombre->id por semana para no sembrar repetido.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     eventos_creados: list[str] = []
     turnos_creados: list[str] = []
     turnos_modificados: list[str] = []
+    # Cache por semana del mapa {nombre_normalizado -> franja_id} (siembra defaults una vez).
+    franjas_por_semana: dict[str, dict[str, str]] = {}
+
+    def _franja_id_de(con: Any, semana: str, nombre: str) -> str:
+        """Resuelve `nombre` de slot -> `franja_id` de `semana` (sembrando defaults si hace
+        falta). Lanza `ValueError` si el nombre no existe para esa semana."""
+        if semana not in franjas_por_semana:
+            mapa = _sembrar_franjas_por_defecto_en(con, semana)
+            # Re-leemos TODAS las franjas de la semana (la siembra solo añade las 3 por defecto;
+            # una semana puede tener slots extra ya creados a mano).
+            filas = con.execute(
+                "SELECT id, nombre FROM rota_franjas WHERE lunes = ?", (semana,)
+            ).fetchall()
+            por_nombre = {str(f["nombre"]).strip().lower(): f["id"] for f in filas}
+            # Incluye lo sembrado por si el SELECT corriera antes del commit en algun backend.
+            for n, fid in mapa.items():
+                por_nombre.setdefault(str(n).strip().lower(), fid)
+            franjas_por_semana[semana] = por_nombre
+        fid = franjas_por_semana[semana].get((nombre or "").strip().lower())
+        if not fid:
+            raise ValueError(
+                f"La franja {nombre!r} no existe en la semana {semana}."
+            )
+        return fid
+
     con = _conectar()
     try:
         for op in operaciones:
@@ -8438,6 +8470,8 @@ def aplicar_propuesta_parrilla(
                 tid = uuid.uuid4().hex[:12]
                 miembro_id = str(op.get("miembro_id", ""))
                 semana = _lunes_iso_de(op.get("fecha", ""))
+                # Resuelve el NOMBRE de slot -> franja_id de ESA semana (siembra si hace falta).
+                franja_id = _franja_id_de(con, semana, str(op.get("franja", "")))
                 con.execute(
                     "INSERT INTO rota_turnos "
                     "(id, semana, fecha, miembro_id, miembro_nombre, franja_id, estado, "
@@ -8449,7 +8483,7 @@ def aplicar_propuesta_parrilla(
                         str(op.get("fecha", "")),
                         miembro_id,
                         nombres_miembros.get(miembro_id, str(op.get("miembro_nombre") or "")),
-                        str(op.get("franja_id", "")),
+                        franja_id,
                         ESTADO_ROTA_PROPUESTO,
                         0,
                         str(op.get("motivo") or ""),

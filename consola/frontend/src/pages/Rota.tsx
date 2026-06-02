@@ -1049,7 +1049,7 @@ function Calendario({
             </Button>
           )}
           {esAdmin && (
-            <ImportarDocumentoParrilla semanaEnVista={lunes} onAplicado={invalidar} />
+            <ImportarDocumentoParrilla onAplicado={invalidar} />
           )}
           <MenuMasAcciones
             esAdmin={esAdmin}
