@@ -26,6 +26,10 @@ import type {
   TendenciaDiaria,
   PiezasRendimiento,
   PiezasPorEtiqueta,
+  SerieSeguidores,
+  DesgloseInteracciones,
+  Crosstab,
+  CorrelacionSeguidores,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
   CuerpoActualizarTurnoRota,
@@ -1563,6 +1567,19 @@ export const api = {
   // con el contenido de la BD para resolver tipo_contenido + etiquetas.
   metricasPiezasPorEtiqueta: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<PiezasPorEtiqueta>(`/metricas/piezas-por-etiqueta${query(params)}`, { signal }),
+  // --- Estrategia digital ---
+  // Evolución de seguidores del periodo (total + por red) con el neto ganado/perdido.
+  metricasSeguidores: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<SerieSeguidores>(`/metricas/seguidores${query(params)}`, { signal }),
+  // Desglose de interacciones (likes/comentarios/compartidos/guardados/video_views) por marca×red.
+  metricasDesglose: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<DesgloseInteracciones>(`/metricas/desglose${query(params)}`, { signal }),
+  // Rendimiento cruzado marca×red×formato (n_piezas, engagement, rendimiento relativo medio).
+  metricasCrosstab: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<Crosstab>(`/metricas/crosstab${query(params)}`, { signal }),
+  // Correlación seguidores ganados ↔ piezas publicadas por día (con la pieza estrella).
+  metricasCorrelacion: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<CorrelacionSeguidores>(`/metricas/correlacion${query(params)}`, { signal }),
   // Estado del refresco + "última actualización" del combo (para el botón Actualizar y el polling).
   metricasEstado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<EstadoMetricas>(`/metricas/estado${query(params)}`, { signal }),

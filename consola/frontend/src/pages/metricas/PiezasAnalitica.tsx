@@ -19,6 +19,7 @@ import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,6 +42,17 @@ const TAB_TODAS = "todas";
 function pct(v: number | null): string {
   return v == null ? "—" : porcentaje(v);
 }
+
+/**
+ * Componentes granulares del engagement de una pieza, en orden de lectura.
+ * Solo se pintan los que la fuente expone (`!= null`): distinguimos "0" de "sin dato".
+ */
+const GRANULAR: Array<{ clave: keyof PiezaMetrica; etiqueta: string }> = [
+  { clave: "likes", etiqueta: "♥" },
+  { clave: "comentarios", etiqueta: "💬" },
+  { clave: "compartidos", etiqueta: "↗" },
+  { clave: "guardados", etiqueta: "⤓" },
+];
 
 export function PiezasAnalitica({
   opciones,
@@ -234,6 +246,12 @@ function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
     ? [{ etiqueta: "Abrir en la red", icono: ExternalLink, onClick: abrir! }]
     : [];
 
+  // Marca de la pieza (`cuenta`) + red, para ubicarla cuando el tab agrega "Todas".
+  const procedencia = [pieza.cuenta, pieza.plataforma].filter(Boolean).join(" · ");
+
+  // Desglose granular: solo los componentes que la fuente expone (distingue 0 de null).
+  const granular = GRANULAR.filter((g) => pieza[g.clave] != null);
+
   return (
     <FilaConAcciones
       como="tr"
@@ -242,11 +260,33 @@ function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
       etiquetaAcciones={`Acciones de "${pieza.titulo}"`}
       kebab="hover"
     >
-      <TableCell className="max-w-[16rem]">
+      <TableCell className="max-w-[18rem]">
         <span className="block truncate" title={pieza.titulo}>
           {pieza.titulo}
         </span>
-        <span className="text-xs text-muted-foreground">{pieza.plataforma}</span>
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          <span>{procedencia}</span>
+          {pieza.rendimiento_relativo != null && (
+            <Badge
+              variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
+              title="Engagement de la pieza ÷ mediana de su red"
+            >
+              {pieza.rendimiento_relativo.toLocaleString("es-MX", {
+                maximumFractionDigits: 1,
+              })}
+              × mediana de su red
+            </Badge>
+          )}
+        </span>
+        {granular.length > 0 && (
+          <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground tabular-nums">
+            {granular.map((g) => (
+              <span key={g.clave as string} title={g.clave as string}>
+                {g.etiqueta} {numeroCompacto(pieza[g.clave] as number)}
+              </span>
+            ))}
+          </span>
+        )}
       </TableCell>
       <TableCell className="text-right tabular-nums">
         {numeroCompacto(pieza.visualizaciones)}

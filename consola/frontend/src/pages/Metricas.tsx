@@ -13,7 +13,11 @@ import { AnalisisDiario } from "./metricas/AnalisisDiario";
 import { BotonActualizar } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./metricas/Controles";
+import { Correlacion } from "./metricas/Correlacion";
+import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
+import { Crosstab } from "./metricas/Crosstab";
 import { Descargas } from "./metricas/Descargas";
+import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
@@ -165,6 +169,25 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
               (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
           <PiezasRendimiento opciones={opciones} />
+
+          {/* Estrategia digital: lectura más allá del día a día. Crecimiento de
+              audiencia, de qué se compone el engagement, qué formatos rinden y
+              cómo se relaciona publicar con ganar seguidores. Siguen marca/rango
+              global como el resto del dashboard. */}
+          <section className="space-y-4">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
+              <p className="text-sm text-muted-foreground">
+                Crecimiento de audiencia, composición del engagement y qué formatos
+                rinden mejor en el periodo seleccionado.
+              </p>
+            </div>
+            <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
+            <DesgloseInteracciones marcaActual={marca} rangoActual={rango} />
+            <Crosstab marcaActual={marca} rangoActual={rango} />
+            <Correlacion marcaActual={marca} rangoActual={rango} />
+          </section>
+
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>
       )}
