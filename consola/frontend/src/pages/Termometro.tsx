@@ -4,7 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
-import { ResultadoDocumento } from "@/components/generaciones/ResultadoDocumento";
+import { TermometroPreview } from "@/components/generaciones/TermometroPreview";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
@@ -58,7 +58,9 @@ function formatearItem(item: ItemRss): string {
  * Termómetro mundial. Página dedicada: configura el termómetro (número de slides,
  * regiones, hora del cron de las 7:00 y marca) y genera el posteo de galería con la
  * skill `termometro-mundial`. Reutiliza el motor de generación en segundo plano
- * (`useGeneracion` + `ProgresoGeneracion`) y muestra el resultado con `ResultadoDocumento`.
+ * (`useGeneracion` + `ProgresoGeneracion`) y muestra el resultado como PORTADA + SLIDES
+ * en miniatura con `TermometroPreview` (máquina de estados: armar → generando → revisar →
+ * guardar). El guardado multi-red sigue el mismo contrato neutro `{ redes: [...] }`.
  */
 export default function Termometro() {
   const query = useQuery({
@@ -194,6 +196,45 @@ function PanelConfig({ datos }: { datos: RespuestaTermometro }) {
   );
 }
 
+// --- Indicador de la máquina de estados (visual) --------------------------
+
+/**
+ * Muestra el avance del termómetro como una secuencia de pasos:
+ * Armar → Generando → Revisar → Guardar. Resalta el paso ACTIVO según el estado
+ * (`generando`/`completado`). Es solo orientación visual; los botones siguen siendo
+ * la acción real.
+ */
+function PasosTermometro({ generando, completado }: { generando: boolean; completado: boolean }) {
+  // Índice del paso activo: 0 armar · 1 generando · 2 revisar/guardar.
+  const activo = generando ? 1 : completado ? 2 : 0;
+  const pasos = ["Armar", "Generando", "Revisar y guardar"] as const;
+  return (
+    <ol className="flex items-center gap-1.5 text-xs" aria-label="Estado del termómetro">
+      {pasos.map((p, i) => {
+        const esActivo = i === activo;
+        const hecho = i < activo;
+        return (
+          <li key={p} className="flex items-center gap-1.5">
+            <span
+              aria-current={esActivo ? "step" : undefined}
+              className={
+                esActivo
+                  ? "rounded-full bg-primary px-2 py-0.5 font-medium text-primary-foreground"
+                  : hecho
+                    ? "rounded-full bg-muted px-2 py-0.5 text-foreground"
+                    : "rounded-full px-2 py-0.5 text-muted-foreground"
+              }
+            >
+              {p}
+            </span>
+            {i < pasos.length - 1 && <span className="text-muted-foreground">→</span>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 // --- Generación (panel derecho) -------------------------------------------
 
 function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
@@ -238,6 +279,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   const puedeGenerar = datos.skill_disponible && marca !== "" && noticias.trim().length > 0 && !generando;
   const resultado = generacion?.resultado;
   const completado = generacion?.estado === "completado" && resultado?.documento !== undefined;
+  const nombreMarca = (id: string) => datos.marcas.find((m) => m.id === id)?.nombre ?? id;
 
   // Al completarse una generación nueva, refrescamos el termómetro para que `datos.ultimo`
   // (el resultado PERSISTENTE leído del historial) refleje ya esta galería: así al navegar
@@ -320,16 +362,12 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
             </p>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => generar.mutate()} disabled={!puedeGenerar}>
               {generando ? <Loader2 className="h-4 w-4 animate-spin" /> : <MarcaIA />}
-              {generando ? "Generando…" : "Generar termómetro"}
+              {generando ? "Generando…" : completado ? "Regenerar termómetro" : "Generar termómetro"}
             </Button>
-            {generando && (
-              <span className="text-xs text-muted-foreground">
-                Se genera en segundo plano; lo verás aquí.
-              </span>
-            )}
+            <PasosTermometro generando={generando} completado={completado} />
           </div>
         </CardContent>
       </Card>
@@ -339,20 +377,22 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
         <ProgresoGeneracion generacion={generacion} onCancelar={cancelar} cancelando={cancelando} />
       )}
 
-      {/* Resultado de la galería, guardable como publicación. Prioriza el resultado en vivo
-          recién generado; si no lo hay, repinta el último termómetro del historial (`ultimo`):
-          fuente PERSISTENTE que sobrevive a navegaciones y recargas hasta que otro lo reemplace
-          o se borre del historial. */}
+      {/* Resultado de la galería (estado "revisar"/"guardar"), con la PORTADA + SLIDES en
+          miniatura y el guardado multi-red. Prioriza el resultado en vivo recién generado;
+          si no lo hay, repinta el último termómetro del historial (`ultimo`): fuente
+          PERSISTENTE que sobrevive a navegaciones y recargas hasta que otro lo reemplace o
+          se borre del historial. */}
       {completado && resultado?.documento !== undefined ? (
-        <ResultadoDocumento
+        <TermometroPreview
           documento={resultado.documento}
           historialId={resultado.historial_id ?? ""}
-          imagenes={resultado.imagenes ?? []}
+          marca={nombreMarca(marca)}
         />
       ) : datos.ultimo ? (
-        <ResultadoDocumento
+        <TermometroPreview
           documento={datos.ultimo.documento}
           historialId={datos.ultimo.historial_id}
+          marca={nombreMarca(datos.ultimo.marca)}
         />
       ) : null}
     </div>

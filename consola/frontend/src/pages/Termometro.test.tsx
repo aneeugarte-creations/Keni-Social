@@ -17,6 +17,14 @@ const PAYLOAD_BASE = {
   ultimo: null,
 };
 
+const OPCIONES_REDES = {
+  redes: [
+    { id: "x", nombre: "X" },
+    { id: "instagram", nombre: "Instagram" },
+    { id: "facebook", nombre: "Facebook" },
+  ],
+};
+
 function stubFetch(payload: object) {
   vi.stubGlobal(
     "fetch",
@@ -24,6 +32,9 @@ function stubFetch(payload: object) {
       const ruta = String(url);
       if (ruta.includes("/api/termometro")) {
         return new Response(JSON.stringify(payload), { status: 200 });
+      }
+      if (ruta.includes("/api/publicaciones/opciones")) {
+        return new Response(JSON.stringify(OPCIONES_REDES), { status: 200 });
       }
       return new Response("{}", { status: 200 });
     }),
@@ -84,6 +95,59 @@ describe("Termometro", () => {
 
     // El documento del último termómetro aparece sin haber generado nada en esta sesión.
     expect(await screen.findByText(/galeria internacional del dia de ayer/i)).toBeInTheDocument();
+    // Y se muestra dentro del nuevo visor visual del termómetro (no el Card genérico).
+    expect(screen.getByTestId("termometro-preview")).toBeInTheDocument();
+  });
+
+  it("renderiza la galería como portada + slides en miniatura", async () => {
+    const documento = [
+      "REVISAR ANTES DE PUBLICAR · pulso internacional cargado.",
+      "",
+      "Termómetro mundial · 2026-05-31",
+      "El mundo amanece con tres frentes calientes.",
+      "",
+      "2/8 — EEUU (serio): La Fed sube tasas",
+      "Wall Street reacciona a la baja.",
+      "",
+      "3/8 — Europa (viral/redes): Viral en Madrid",
+      "Un video se hace tendencia.",
+      "",
+      "## Fuentes",
+      "- [Reuters](https://reuters.com)",
+      "",
+      "## Auto-verificación",
+      "Frescura cruzada con 2 fuentes.",
+      "",
+      '```json',
+      '{"piezas": [{"red": "x", "texto": "hilo", "copy_in": ""}]}',
+      "```",
+    ].join("\n");
+    stubFetch({
+      ...PAYLOAD_BASE,
+      ultimo: {
+        historial_id: "h-456",
+        documento,
+        titulo: "Termómetro mundial · 2026-05-31",
+        fecha: "2026-05-31",
+        marca: "unotv",
+      },
+    });
+    renderConProviders(<Termometro />);
+
+    // Portada + los dos slides como tarjetas (texto por subcadena dentro del título).
+    expect(
+      await screen.findByText((t) => /term[óo]metro mundial · 2026-05-31/i.test(t)),
+    ).toBeInTheDocument();
+    expect(screen.getByText((t) => /la fed sube tasas/i.test(t))).toBeInTheDocument();
+    expect(screen.getByText((t) => /viral en madrid/i.test(t))).toBeInTheDocument();
+    // Veredicto destacado.
+    expect(screen.getByText((t) => /revisar antes de publicar/i.test(t))).toBeInTheDocument();
+    // El bloque JSON de piezas NO se muestra como texto.
+    expect(screen.queryByText(/"piezas"/)).not.toBeInTheDocument();
+    // Hay selector de redes (chips multi-red) para guardar.
+    const chips = await screen.findAllByRole("checkbox");
+    expect(chips.length).toBe(OPCIONES_REDES.redes.length);
+    expect(chips.map((c) => c.getAttribute("aria-label"))).toContain("X");
   });
 
   it("avisa cuando la skill no está instalada", async () => {
