@@ -353,7 +353,10 @@ export function DialogoEditar({
 
   return (
     <Dialog open={publicacion !== null} onOpenChange={(o) => !o && onCerrar()}>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+      {/* En móvil el editor ocupa toda la pantalla (h-dvh, ancho completo, sin
+          radios) para que el revisor edite cómodo en el feed; en escritorio
+          mantiene el modal centrado de 2xl. */}
+      <DialogContent className="max-h-dvh h-dvh max-w-full overflow-y-auto rounded-none sm:h-auto sm:max-h-[90vh] sm:max-w-2xl sm:rounded-lg">
         <DialogHeader>
           <DialogTitle>Editar publicación</DialogTitle>
           <DialogDescription className="flex items-center gap-2">

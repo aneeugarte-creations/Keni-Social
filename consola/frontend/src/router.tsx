@@ -1,7 +1,9 @@
-import { lazy } from "react";
+import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { FronteraError } from "@/components/comunes/FronteraError";
+import { Loader2 } from "lucide-react";
 
 // Carga diferida por ruta (code-splitting): cada pagina viaja en su propio chunk
 // y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
@@ -33,6 +35,11 @@ const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasConteni
 
 const Actividad = lazy(() => import("@/pages/Actividad"));
 
+// Feed móvil para revisores (#qa-movil-feed): superficie tipo red social, una
+// columna, SIN sidebar. Vive FUERA del AppShell (layout propio) y se llega por
+// enlace directo (no se registra en el catálogo de apps).
+const MobileFeed = lazy(() => import("@/pages/MobileFeed"));
+
 // Ajustes (ahora solo accesibles via dropdown del avatar).
 const Configuracion = lazy(() => import("@/pages/Configuracion"));
 const Sugerencias = lazy(() => import("@/pages/Sugerencias"));
@@ -52,6 +59,24 @@ const Sistema = lazy(() => import("@/pages/Sistema"));
  * sidebar como grupos de acordeón (ver Sidebar).
  */
 export const router = createBrowserRouter([
+  // Feed móvil para revisores: ruta hermana del AppShell (layout propio, sin
+  // sidebar). Su propia frontera de error + Suspense, ya que no cuelga del shell.
+  {
+    path: "/feed",
+    element: (
+      <FronteraError>
+        <Suspense
+          fallback={
+            <div className="flex min-h-dvh items-center justify-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin" aria-label="Cargando" />
+            </div>
+          }
+        >
+          <MobileFeed />
+        </Suspense>
+      </FronteraError>
+    ),
+  },
   {
     path: "/",
     element: <AppShell />,
