@@ -303,6 +303,148 @@ class SerieDiaria(BaseModel):
     puntos: list[PuntoSerie] = Field(default_factory=list)
 
 
+# --- Análisis de estrategia digital ----------------------------------------
+# Estructuras ricas que REUSAN datos ya consultados (serie de followers, piezas
+# granulares) para leer la estrategia digital: crecimiento de comunidad por día,
+# desglose de engagement por marca×red, cruce marca×red×formato y correlación
+# (no causalidad) entre crecimiento de seguidores y publicaciones.
+
+
+class PuntoSeguidores(BaseModel):
+    """Un día del stock de seguidores: total y desglose por red.
+
+    `por_red` solo incluye las redes que exponen followers ese día (una red sin
+    métrica de seguidores se OMITE, nunca aporta 0 falso). `total` = suma de
+    `por_red`.
+    """
+
+    fecha: date
+    total: int
+    por_red: dict[str, int] = Field(default_factory=dict)
+
+
+class SerieSeguidores(BaseModel):
+    """Crecimiento de seguidores por día y por red sobre un periodo.
+
+    `neto` = último punto − primer punto del total (la serie de followers es un
+    STOCK, no un flujo). `neto_por_red` aplica lo mismo por red. `puntos` vacío y
+    `neto` 0 = la fuente no expone followers (degradación honesta).
+    """
+
+    cuenta: str | None
+    rango: str
+    etiqueta_rango: str
+    periodo: Periodo
+    fuente: str = "desconocida"
+    puntos: list[PuntoSeguidores] = Field(default_factory=list)
+    neto: int = 0
+    neto_por_red: dict[str, int] = Field(default_factory=dict)
+
+
+class CeldaDesglose(BaseModel):
+    """Desglose de engagement de UNA marca×red: suma de los campos granulares.
+
+    Campos granulares ausentes (None en la pieza) cuentan como 0 en la suma, pero
+    `n_piezas` cuenta TODAS las piezas del grupo. `interacciones` es el total
+    homogéneo (#138); `engagement_pct` = interacciones/visualizaciones*100 (0 si
+    no hay visualizaciones).
+    """
+
+    marca: str
+    red: str
+    likes: int = 0
+    comentarios: int = 0
+    compartidos: int = 0
+    guardados: int = 0
+    video_views: int = 0
+    interacciones: int = 0
+    visualizaciones: int = 0
+    engagement_pct: float = 0.0
+    n_piezas: int = 0
+
+
+class DesgloseInteracciones(BaseModel):
+    """Desglose de engagement agregado por marca×red + totales globales del periodo."""
+
+    rango: str
+    etiqueta_rango: str
+    periodo: Periodo
+    fuente: str = "desconocida"
+    celdas: list[CeldaDesglose] = Field(default_factory=list)
+    totales: dict[str, int] = Field(default_factory=dict)
+
+
+class CeldaCrosstab(BaseModel):
+    """Una celda del cruce marca×red×formato.
+
+    `formato` es None cuando la fuente no trae el formato de las piezas del grupo.
+    `rendimiento_relativo_medio` = media del `rendimiento_relativo` (no-None) de
+    las piezas del grupo, o None si ninguna lo tiene.
+    """
+
+    marca: str
+    red: str
+    formato: str | None = None
+    n_piezas: int = 0
+    visualizaciones: int = 0
+    interacciones: int = 0
+    engagement_pct: float = 0.0
+    rendimiento_relativo_medio: float | None = None
+
+
+class Crosstab(BaseModel):
+    """Cruce marca×red×formato del periodo (una celda por combinación con piezas)."""
+
+    rango: str
+    etiqueta_rango: str
+    periodo: Periodo
+    fuente: str = "desconocida"
+    celdas: list[CeldaCrosstab] = Field(default_factory=list)
+
+
+class PostEstrella(BaseModel):
+    """La pieza de mayor engagement de un día (para la correlación)."""
+
+    id: str
+    titulo: str
+    engagement_pct: float
+    url: str | None = None
+
+
+class ItemCorrelacion(BaseModel):
+    """Un (marca, red, día) de la correlación crecimiento de seguidores ↔ posts.
+
+    `seguidores_ganados` = delta diario de la serie de followers (punto N − N-1).
+    `seguidores_por_post` = seguidores_ganados/n_posts si n_posts>0, None si 0.
+    `post_estrella` = la pieza de mayor engagement publicada ese día (None si no
+    hubo). ATRIBUCIÓN: correlación, no causalidad (ver `nota` en el contenedor).
+    """
+
+    marca: str
+    red: str
+    fecha: date
+    seguidores_ganados: int
+    n_posts: int
+    seguidores_por_post: float | None = None
+    post_estrella: PostEstrella | None = None
+
+
+class CorrelacionSeguidores(BaseModel):
+    """Correlación entre crecimiento de seguidores y publicaciones (NO causalidad).
+
+    `items` vacío = no hay serie de followers en la fuente (`nota` lo explica). El
+    delta diario de followers NO es atribuible 1:1 a un post: es una lectura
+    correlacional honesta, no de causa-efecto.
+    """
+
+    rango: str
+    etiqueta_rango: str
+    periodo: Periodo
+    fuente: str = "desconocida"
+    items: list[ItemCorrelacion] = Field(default_factory=list)
+    nota: str = ""
+
+
 # --- Rangos -----------------------------------------------------------------
 
 # Rangos RODANTES: ventana de N dias que TERMINA hoy (incluido). El mapa da los

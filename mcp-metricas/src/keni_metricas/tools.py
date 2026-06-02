@@ -128,6 +128,58 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             return {"error": str(e)}
 
     @mcp.tool()
+    def serie_seguidores(rango: str = "mes") -> dict:
+        """Crecimiento de SEGUIDORES por día y por red en el rango: stock diario de
+        followers por plataforma, total del día y neto del periodo (último − primero).
+        Responde '¿cómo crece la comunidad?'. Si la fuente no expone followers,
+        devuelve puntos vacíos y neto 0 (sin inventar)."""
+        from . import servicio
+
+        try:
+            return servicio.serie_seguidores_desde_fuente(fuente, rango)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
+    def desglose_interacciones(rango: str = "mes") -> dict:
+        """Desglose de ENGAGEMENT por marca×red en el rango: likes, comentarios,
+        compartidos, guardados y video_views agregados, más interacciones,
+        visualizaciones y engagement_pct por celda, y los totales globales. Responde
+        '¿de qué se compone la interacción de cada marca/red?'."""
+        from . import servicio
+
+        try:
+            return servicio.desglose_interacciones_desde_fuente(fuente, rango)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
+    def crosstab(rango: str = "mes") -> dict:
+        """Cruce MARCA×RED×FORMATO de las piezas del rango: nº de piezas,
+        visualizaciones, interacciones, engagement_pct y rendimiento relativo medio
+        (vs. la mediana de su grupo) por combinación. Responde '¿qué formato rinde
+        mejor en cada red y marca?'."""
+        from . import servicio
+
+        try:
+            return servicio.crosstab_desde_fuente(fuente, rango)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
+    def correlacion_seguidores(rango: str = "mes") -> dict:
+        """Correlación (NO causalidad) entre crecimiento de seguidores y
+        publicaciones: por marca×red×día, seguidores ganados, nº de posts,
+        seguidores por post y la pieza estrella del día. Incluye un caveat de
+        atribución. Si no hay serie de followers, items vacío y la nota lo explica."""
+        from . import servicio
+
+        try:
+            return servicio.correlacion_seguidores_desde_fuente(fuente, rango)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
     def analisis_diario(rango: str = "semana", marca: str = "") -> dict:
         """Lectura accionable del periodo: NO solo cifras, sino qué subió/bajó, la(s)
         pieza(s) que lo explican y el siguiente paso ("pide copy/clip de lo que

@@ -560,6 +560,39 @@ class FuenteMuestra:
             )
         return puntos
 
+    def serie_seguidores(self, cuenta_id: str, rango: str) -> list[dict]:
+        """Stock DIARIO de followers por red, determinista (demo/tests offline).
+
+        Modela, por cada red de la marca, una BASE de comunidad sembrada por
+        (cuenta, red) y un crecimiento neto del periodo (también sembrado) repartido
+        de forma estable sobre los días, de modo que el stock crezca de forma
+        plausible (monótono no estricto). Sin random ni fecha actual: el mismo
+        (cuenta, red, día) da siempre el mismo valor. Devuelve:
+
+            [{"fecha": "AAAA-MM-DD", "por_red": {"instagram": 1050, ...}}, ...]
+
+        El `total` y el `neto` los calcula el llamante (`servicio`), igual que con
+        Metricool, así la muestra no duplica esa lógica.
+        """
+        _, base_mes, plats, _ = self._marca(cuenta_id)
+        desde, hasta, dias = resolver_rango(rango)
+        if dias <= 0:
+            return []
+        puntos: list[dict] = []
+        for i in range(dias):
+            f = desde + timedelta(days=i)
+            por_red: dict[str, int] = {}
+            for plat in plats:
+                # base de comunidad por red (orden de magnitud anclado al volumen).
+                base = int(base_mes * _PESO[plat] * _entre(_rand(cuenta_id, plat, "segbase"), 0.004, 0.02))
+                # crecimiento neto del periodo, sembrado por (cuenta, red, rango).
+                neto = int(base * _entre(_rand(cuenta_id, plat, rango, "segneto"), 0.005, 0.04))
+                # reparto lineal del neto sobre los días (estable, no decreciente).
+                ganado = int(neto * (i / (dias - 1))) if dias > 1 else neto
+                por_red[plat.value] = base + ganado
+            puntos.append({"fecha": f.isoformat(), "por_red": por_red})
+        return puntos
+
     def mejores_por_plataforma(
         self, cuenta_id: str, rango: str, plataformas: list[Plataforma], n: int
     ) -> dict[Plataforma, list[Pieza]]:

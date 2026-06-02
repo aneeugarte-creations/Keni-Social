@@ -360,6 +360,18 @@ class FuenteScoped:
         self._verificar(cuenta_id)
         return self._fuente.serie_diaria(cuenta_id, rango)
 
+    def serie_seguidores(self, cuenta_id: str, rango: str):
+        """Delega la serie de seguidores si la fuente envuelta la expone (dispatch opcional).
+
+        Solo muestra/Metricool la implementan (las 'real' compuestas no). Si la
+        envuelta no la tiene, propaga `AttributeError` para que el llamante
+        (`servicio`) degrade a serie vacía — igual que `serie_diaria`.
+        """
+        if not hasattr(self._fuente, "serie_seguidores"):
+            raise AttributeError("la fuente envuelta no expone serie_seguidores")
+        self._verificar(cuenta_id)
+        return self._fuente.serie_seguidores(cuenta_id, rango)
+
     def metricas_de_post(self, cuenta_id: str, plat, id_post: str, **kw):
         """Delega el rendimiento de un post si la fuente envuelta lo expone (dispatch opcional).
 

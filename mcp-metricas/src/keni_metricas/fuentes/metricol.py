@@ -401,6 +401,73 @@ class FuenteMetricol:
         puntos.sort(key=lambda p: p[0])
         return int(puntos[-1][1] - puntos[0][1])
 
+    def serie_seguidores(self, cuenta_id: str, rango: str) -> list[dict]:
+        """Stock DIARIO de followers por red sobre el periodo (no flujo).
+
+        Reutiliza la misma serie de `/v2/analytics/timelines` que
+        `_seguidores_netos_plataforma`, pero CONSERVA los valores por día en vez de
+        quedarse solo con (último − primero). Devuelve una lista de puntos
+        ordenados por fecha:
+
+            [{"fecha": "AAAA-MM-DD", "por_red": {"instagram": 1050, ...}}, ...]
+
+        Una red que NO expone followers (sin métrica de seguidores, API caída o
+        serie vacía) simplemente NO aparece en `por_red` (degradación honesta: se
+        omite, nunca aporta 0 falso). Si NINGUNA red expone followers, la lista
+        sale vacía. El total y el neto los calcula el llamante (`servicio`).
+        """
+        marca = self._marca(cuenta_id)
+        desde, hasta, _ = resolver_rango(rango)
+        por_dia: dict[date, dict[str, int]] = {}
+        for plat in self._plataformas(marca):
+            for f, valor in self._stock_seguidores_plataforma(cuenta_id, plat, desde, hasta):
+                por_dia.setdefault(f, {})[plat.value] = valor
+        return [
+            {"fecha": f.isoformat(), "por_red": por_dia[f]} for f in sorted(por_dia)
+        ]
+
+    def _stock_seguidores_plataforma(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> list[tuple[date, int]]:
+        """Puntos (fecha, stock de followers) de UNA red, ordenados por fecha.
+
+        Degrada a [] si la red no declara métrica de seguidores, la API falla o la
+        serie viene vacía (mismo criterio honesto que `_seguidores_netos_plataforma`).
+        """
+        metrica = _METRICAS_RED.get(plat, {}).get(_METRICA_SEG)
+        if not metrica:
+            return []
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/timelines",
+                params={
+                    **self._params_base(cuenta_id),
+                    "network": _RED_METRICOOL[plat],
+                    "metric": metrica,
+                    "from": desde.isoformat() + "T00:00:00",
+                    "to": hasta.isoformat() + "T23:59:59",
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — degrada a [], como el resto
+            log.warning("metricool: serie seguidores %s/%s fallo: %s", plat.value, cuenta_id, e)
+            return []
+        # Un valor por día: si una fecha aparece en varias series, gana el último.
+        por_fecha: dict[date, int] = {}
+        for serie in datos.get("data") or []:
+            for v in serie.get("values", []):
+                crudo = v.get("dateTime") or v.get("date")
+                valor = v.get("value")
+                if crudo is None or valor is None:
+                    continue
+                try:
+                    f = date.fromisoformat(str(crudo)[:10])
+                except ValueError:
+                    continue
+                por_fecha[f] = _entero(valor)
+        return sorted(por_fecha.items())
+
     def _metrica_plataforma(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
     ) -> MetricaPlataforma | None:

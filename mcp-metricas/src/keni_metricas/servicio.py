@@ -36,11 +36,20 @@ from .schema import (
     RANGO_SEMANA_CERRADA,
     RANGOS_DIAS,
     AnaliticaPiezas,
+    CeldaCrosstab,
+    CeldaDesglose,
+    CorrelacionSeguidores,
+    Crosstab,
+    DesgloseInteracciones,
+    ItemCorrelacion,
     MetricaPieza,
     Periodo,
     Plataforma,
+    PostEstrella,
+    PuntoSeguidores,
     PuntoSerie,
     SerieDiaria,
+    SerieSeguidores,
     etiqueta_rango,
     resolver_rango,
 )
@@ -89,6 +98,10 @@ __all__ = [
     "construir_analitica_piezas",
     "construir_listado_piezas",
     "construir_tendencia_diaria",
+    "construir_serie_seguidores",
+    "construir_desglose_interacciones",
+    "construir_crosstab",
+    "construir_correlacion_seguidores",
     "construir_metricas_pieza",
     "etiqueta_rango",
     "construir_reporte_deportes",
@@ -309,6 +322,330 @@ def construir_tendencia_diaria(rango: str = "mes", marca: str | None = None) -> 
         puntos=puntos,
     )
     return serie.model_dump(mode="json")
+
+
+# --------------------------------------------------------------------------- #
+# Análisis de estrategia digital — REUSAN serie de followers + piezas          #
+# --------------------------------------------------------------------------- #
+#
+# Cuatro lecturas ricas de la estrategia digital, todas a COSTE 0 de API extra:
+# reúsan la serie de followers que ya consulta `seguidores_netos` (vía la nueva
+# `fuente.serie_seguidores`) y las piezas granulares que ya descarga el dashboard
+# (`mejores_piezas`). Filosofía: degradación honesta — si un dato no está, None/0/
+# vacío, nunca inventado.
+
+
+def _piezas_periodo(fuente, rango: str) -> list:
+    """Reúne las piezas del periodo de TODAS las cuentas en alcance de `fuente`.
+
+    Mismo camino que `construir_analitica_piezas`/`construir_listado_piezas`: itera
+    las cuentas y acumula `mejores_piezas` con un tope alto para cubrir el periodo.
+    Coste 0 de API extra (las piezas ya las descarga el dashboard).
+    """
+    piezas = []
+    for c in fuente.cuentas():
+        piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
+    return piezas
+
+
+def _serie_seguidores_cuentas(fuente, rango: str) -> dict[str, list[dict]]:
+    """Serie de followers por cuenta: `{cuenta_id: [{"fecha", "por_red"}, ...]}`.
+
+    Dispatch por capacidad: usa `fuente.serie_seguidores` si la fuente la expone
+    (muestra/Metricool); si no (fuentes 'real' compuestas) o si la cuenta no trae
+    serie, esa cuenta se omite. Devuelve `{}` cuando NINGUNA cuenta aporta serie
+    (la fuente no soporta followers) — degradación honesta.
+    """
+    serie_fn = getattr(fuente, "serie_seguidores", None)
+    if serie_fn is None:
+        return {}
+    out: dict[str, list[dict]] = {}
+    for c in fuente.cuentas():
+        try:
+            puntos = serie_fn(c.id, rango)
+        except AttributeError:
+            # La fuente envuelta no la implementa (FuenteScoped lo propaga): degrada.
+            return {}
+        if puntos:
+            out[c.id] = puntos
+    return out
+
+
+def construir_serie_seguidores(rango: str = "mes", marca: str | None = None) -> dict:
+    """Crecimiento de seguidores POR DÍA y por red (suma de las cuentas en alcance).
+
+    REÚSA la serie de followers que ya consulta `seguidores_netos` (la misma de
+    `/v2/analytics/timelines`), expuesta ahora como `fuente.serie_seguidores`. Por
+    cada día: `total` = suma del stock de followers de cada red ese día; `neto` =
+    último − primer total. Una red que no expone followers se OMITE (no 0 falso).
+    Si la fuente no soporta followers, `puntos=[]` y `neto=0` (degradación honesta).
+    Devuelve un dict JSON-serializable (`SerieSeguidores`).
+    """
+    return serie_seguidores_desde_fuente(_fuente(marca), rango, marca)
+
+
+def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) -> dict:
+    """Worker de `construir_serie_seguidores` sobre una `fuente` explícita (lo usa el MCP)."""
+    desde, hasta, _ = resolver_rango(rango)
+    series = _serie_seguidores_cuentas(fuente, rango)
+
+    # Suma el stock por (fecha, red) sobre todas las cuentas en alcance.
+    por_dia: dict[str, dict[str, int]] = {}
+    for puntos in series.values():
+        for punto in puntos:
+            fecha = punto["fecha"]
+            dest = por_dia.setdefault(fecha, {})
+            for red, valor in (punto.get("por_red") or {}).items():
+                dest[red] = dest.get(red, 0) + int(valor)
+
+    puntos_out: list[PuntoSeguidores] = []
+    for fecha in sorted(por_dia):
+        por_red = por_dia[fecha]
+        puntos_out.append(
+            PuntoSeguidores(fecha=fecha, total=sum(por_red.values()), por_red=por_red)
+        )
+
+    # Neto del periodo: último − primero (la serie de followers es un STOCK).
+    neto = 0
+    neto_por_red: dict[str, int] = {}
+    if len(puntos_out) >= 2:
+        primero, ultimo = puntos_out[0], puntos_out[-1]
+        neto = ultimo.total - primero.total
+        for red in set(primero.por_red) | set(ultimo.por_red):
+            neto_por_red[red] = ultimo.por_red.get(red, 0) - primero.por_red.get(red, 0)
+
+    serie = SerieSeguidores(
+        cuenta=marca,
+        rango=rango,
+        etiqueta_rango=etiqueta_rango(rango),
+        periodo=Periodo(desde=desde, hasta=hasta),
+        fuente=fuente.nombre,
+        puntos=puntos_out,
+        neto=neto,
+        neto_por_red=neto_por_red,
+    )
+    return serie.model_dump(mode="json")
+
+
+def construir_desglose_interacciones(rango: str = "mes", marca: str | None = None) -> dict:
+    """Desglose de engagement (likes/comentarios/compartidos/guardados/video_views)
+    agregado por MARCA×RED.
+
+    AGREGA desde las piezas del periodo (que ya traen los campos granulares). Los
+    campos granulares ausentes (None) cuentan como 0 SOLO en la suma; `n_piezas`
+    cuenta TODAS las piezas del grupo. `engagement_pct` de la celda =
+    interacciones/visualizaciones*100 (0 si no hay visualizaciones). Devuelve un
+    dict JSON-serializable (`DesgloseInteracciones`).
+    """
+    return desglose_interacciones_desde_fuente(_fuente(marca), rango)
+
+
+def desglose_interacciones_desde_fuente(fuente, rango: str) -> dict:
+    """Worker de `construir_desglose_interacciones` sobre una `fuente` explícita (MCP)."""
+    desde, hasta, _ = resolver_rango(rango)
+    piezas = _piezas_periodo(fuente, rango)
+
+    _campos = ("likes", "comentarios", "compartidos", "guardados", "video_views")
+    # Acumula por (marca, red). marca None -> "" (sin marca) para que la clave sea str.
+    acc: dict[tuple[str, str], dict] = {}
+    for p in piezas:
+        clave = (p.cuenta or "", p.plataforma.value)
+        celda = acc.setdefault(
+            clave,
+            {
+                "likes": 0, "comentarios": 0, "compartidos": 0, "guardados": 0,
+                "video_views": 0, "interacciones": 0, "visualizaciones": 0, "n_piezas": 0,
+            },
+        )
+        for campo in _campos:
+            celda[campo] += getattr(p, campo) or 0  # None -> 0 solo en la suma
+        celda["interacciones"] += p.interacciones or 0
+        celda["visualizaciones"] += p.visualizaciones or 0
+        celda["n_piezas"] += 1
+
+    celdas: list[CeldaDesglose] = []
+    totales = {c: 0 for c in (*_campos, "interacciones", "visualizaciones")}
+    for (marca_k, red), c in sorted(acc.items()):
+        vis = c["visualizaciones"]
+        celdas.append(
+            CeldaDesglose(
+                marca=marca_k,
+                red=red,
+                likes=c["likes"],
+                comentarios=c["comentarios"],
+                compartidos=c["compartidos"],
+                guardados=c["guardados"],
+                video_views=c["video_views"],
+                interacciones=c["interacciones"],
+                visualizaciones=vis,
+                engagement_pct=round(c["interacciones"] / vis * 100, 2) if vis else 0.0,
+                n_piezas=c["n_piezas"],
+            )
+        )
+        for campo in totales:
+            totales[campo] += c[campo]
+
+    desglose = DesgloseInteracciones(
+        rango=rango,
+        etiqueta_rango=etiqueta_rango(rango),
+        periodo=Periodo(desde=desde, hasta=hasta),
+        fuente=fuente.nombre,
+        celdas=celdas,
+        totales=totales,
+    )
+    return desglose.model_dump(mode="json")
+
+
+def construir_crosstab(rango: str = "mes", marca: str | None = None) -> dict:
+    """Cruce MARCA×RED×FORMATO de las piezas del periodo.
+
+    Agrupa las piezas por (marca, red, formato). `rendimiento_relativo_medio` = media
+    del `rendimiento_relativo` (no-None) del grupo, computado con
+    `estadisticas.anotar_rendimiento_relativo` sobre TODAS las piezas antes de agrupar
+    (normaliza contra el baseline marca×red). None si ninguna pieza del grupo lo tiene.
+    Devuelve un dict JSON-serializable (`Crosstab`).
+    """
+    return crosstab_desde_fuente(_fuente(marca), rango)
+
+
+def crosstab_desde_fuente(fuente, rango: str) -> dict:
+    """Worker de `construir_crosstab` sobre una `fuente` explícita (lo usa el MCP)."""
+    desde, hasta, _ = resolver_rango(rango)
+    piezas = _piezas_periodo(fuente, rango)
+    # Anota el rendimiento relativo (vs. la mediana del grupo marca×red) ANTES de
+    # agrupar por formato: así el score por pieza ya está disponible al promediar.
+    _estadisticas.anotar_rendimiento_relativo(piezas)
+
+    acc: dict[tuple[str, str, str | None], dict] = {}
+    for p in piezas:
+        clave = (p.cuenta or "", p.plataforma.value, p.formato)
+        grupo = acc.setdefault(
+            clave, {"n_piezas": 0, "visualizaciones": 0, "interacciones": 0, "rr": []}
+        )
+        grupo["n_piezas"] += 1
+        grupo["visualizaciones"] += p.visualizaciones or 0
+        grupo["interacciones"] += p.interacciones or 0
+        if p.rendimiento_relativo is not None:
+            grupo["rr"].append(p.rendimiento_relativo)
+
+    celdas: list[CeldaCrosstab] = []
+    # Orden estable: marca, red, formato (None al final).
+    for (marca_k, red, formato) in sorted(acc, key=lambda k: (k[0], k[1], k[2] is None, k[2] or "")):
+        g = acc[(marca_k, red, formato)]
+        vis = g["visualizaciones"]
+        rr = g["rr"]
+        celdas.append(
+            CeldaCrosstab(
+                marca=marca_k,
+                red=red,
+                formato=formato,
+                n_piezas=g["n_piezas"],
+                visualizaciones=vis,
+                interacciones=g["interacciones"],
+                engagement_pct=round(g["interacciones"] / vis * 100, 2) if vis else 0.0,
+                rendimiento_relativo_medio=round(sum(rr) / len(rr), 3) if rr else None,
+            )
+        )
+
+    crosstab = Crosstab(
+        rango=rango,
+        etiqueta_rango=etiqueta_rango(rango),
+        periodo=Periodo(desde=desde, hasta=hasta),
+        fuente=fuente.nombre,
+        celdas=celdas,
+    )
+    return crosstab.model_dump(mode="json")
+
+
+# Caveat de atribución para la correlación seguidores↔posts. Honesto a propósito:
+# el delta diario de followers NO es atribuible 1:1 a un post.
+_NOTA_CORRELACION = (
+    "Correlación, no causalidad: el crecimiento diario de seguidores no es atribuible "
+    "1:1 a las publicaciones de ese día (influyen campañas, tendencias, recomendación "
+    "del algoritmo y arrastre de días previos). 'seguidores_por_post' es un reparto "
+    "indicativo, no una métrica de atribución."
+)
+_NOTA_SIN_SERIE = (
+    "La fuente activa no expone serie de seguidores, así que no se puede correlacionar "
+    "crecimiento de comunidad con publicaciones."
+)
+
+
+def construir_correlacion_seguidores(rango: str = "mes", marca: str | None = None) -> dict:
+    """Correlación (NO causalidad) crecimiento de seguidores ↔ publicaciones.
+
+    Por (marca, red, día): `seguidores_ganados` = delta diario de la serie de
+    followers (punto N − N-1); `n_posts` = piezas publicadas ese día;
+    `seguidores_por_post` = ganados/n_posts si n_posts>0 (None si 0); `post_estrella`
+    = la pieza de mayor engagement ese día. Si no hay serie de followers, `items=[]`
+    y `nota` lo explica. Devuelve un dict JSON-serializable (`CorrelacionSeguidores`).
+    """
+    return correlacion_seguidores_desde_fuente(_fuente(marca), rango)
+
+
+def correlacion_seguidores_desde_fuente(fuente, rango: str) -> dict:
+    """Worker de `construir_correlacion_seguidores` sobre una `fuente` explícita (MCP)."""
+    desde, hasta, _ = resolver_rango(rango)
+    series = _serie_seguidores_cuentas(fuente, rango)
+    base = dict(
+        rango=rango,
+        etiqueta_rango=etiqueta_rango(rango),
+        periodo=Periodo(desde=desde, hasta=hasta),
+        fuente=fuente.nombre,
+    )
+    if not series:
+        return CorrelacionSeguidores(**base, items=[], nota=_NOTA_SIN_SERIE).model_dump(mode="json")
+
+    # Piezas indexadas por (marca, red, fecha) para contar posts y hallar la estrella.
+    piezas = _piezas_periodo(fuente, rango)
+    por_dia: dict[tuple[str, str, str], list] = {}
+    for p in piezas:
+        clave = (p.cuenta or "", p.plataforma.value, p.publicado.isoformat())
+        por_dia.setdefault(clave, []).append(p)
+
+    items: list[ItemCorrelacion] = []
+    for cuenta_id, puntos in series.items():
+        # delta diario de followers por red: punto N − N-1 (la serie es un STOCK).
+        anterior: dict[str, int] = {}
+        for idx, punto in enumerate(puntos):
+            fecha = punto["fecha"]
+            por_red = punto.get("por_red") or {}
+            for red, stock in por_red.items():
+                if idx == 0 or red not in anterior:
+                    # Primer punto (o primera vez que vemos esa red): no hay delta previo.
+                    anterior[red] = stock
+                    continue
+                ganados = int(stock) - anterior[red]
+                anterior[red] = stock
+                piezas_dia = por_dia.get((cuenta_id, red, fecha), [])
+                n_posts = len(piezas_dia)
+                estrella = None
+                if piezas_dia:
+                    mejor = max(piezas_dia, key=lambda x: x.engagement_pct)
+                    estrella = PostEstrella(
+                        id=mejor.id,
+                        titulo=mejor.titulo,
+                        engagement_pct=mejor.engagement_pct,
+                        url=mejor.url,
+                    )
+                items.append(
+                    ItemCorrelacion(
+                        marca=cuenta_id,
+                        red=red,
+                        fecha=fecha,
+                        seguidores_ganados=ganados,
+                        n_posts=n_posts,
+                        seguidores_por_post=(
+                            round(ganados / n_posts, 2) if n_posts > 0 else None
+                        ),
+                        post_estrella=estrella,
+                    )
+                )
+
+    items.sort(key=lambda it: (it.fecha.isoformat(), it.marca, it.red))
+    return CorrelacionSeguidores(**base, items=items, nota=_NOTA_CORRELACION).model_dump(
+        mode="json"
+    )
 
 
 def construir_metricas_pieza(marca: str, red: str, id_post: str) -> dict:
