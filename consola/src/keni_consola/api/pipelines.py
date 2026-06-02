@@ -16,13 +16,21 @@ Errores en español como `{"error": "..."}`; sin tracebacks crudos.
 
 from __future__ import annotations
 
+import json
+
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .. import generaciones, marcas, redes, repos
 from .._http_json import _entero_query
-from ..pipeline_contenido import ORIGEN_PIPELINE, TIPO_ACTIVIDAD, qa_lexico
+from ..pipeline_contenido import (
+    ORIGEN_PIPELINE,
+    TIPO_ACTIVIDAD,
+    VERDICTO_NO_VERIFICADO,
+    VERDICTO_PROBLEMA,
+    qa_lexico,
+)
 
 # Tope por defecto de runs por página (alineado con el resto de la consola).
 _LIMITE_DEF = 50
@@ -30,10 +38,11 @@ _LIMITE_MAX = 200
 
 # Etapas FIJAS del pipeline (en orden de flujo). La derivación de cada estado vive en
 # `_etapas_de_run`. El orden importa: `estado_global` toma la primera no-ok.
+# ORDEN NUEVO (rediseño QPC): la criba de la fuente (QA) va ANTES del copy (CD).
 _ETAPAS = (
     ("ci", "Ingesta"),
+    ("qa", "Criba de la fuente"),
     ("cd", "Copy + placa"),
-    ("qa", "Validación"),
     ("aprobacion", "Aprobación"),
 )
 
@@ -88,33 +97,62 @@ def _pieza_detalle(plat: dict) -> dict:
 
 
 def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
-    """Deriva las 4 etapas de una run desde el ESTADO REAL de la pieza y sus piezas.
+    """Deriva las 4 etapas de una run desde el ESTADO REAL del tema, su QA y sus piezas.
 
-    Robusto/auto-curativo (no depende de los logs): se mira el estado actual de las
-    publicaciones por plataforma. Cada etapa es `{clave, nombre, estado, detalle, ts}`.
+    Robusto/auto-curativo (no depende de los logs): se mira el estado actual del tema
+    (`qa_veredicto`) y de las publicaciones por plataforma. ORDEN NUEVO (rediseño QPC): la QA
+    de la FUENTE (criba pre-copy, por tema) va ANTES que el copy; un `problema` NO genera copy.
+    Cada etapa es `{clave, nombre, estado, detalle, ts}`.
     """
     creado = item.get("creado", "") or ""
     actualizado = item.get("actualizado", "") or ""
     total = len(piezas)
+    qa_veredicto = (item.get("qa_veredicto", "") or "").strip()
+    es_problema = qa_veredicto == VERDICTO_PROBLEMA
 
     # --- CI · Ingesta: siempre ok (el tema fue ingerido por el daemon). ----------------
     ci = {
         "clave": "ci",
         "nombre": "Ingesta",
         "estado": "ok",
-        "detalle": f"Tema ingerido de las fuentes ({total} red(es) objetivo).",
+        "detalle": "Nota de origen ingerida de las fuentes.",
         "ts": creado,
     }
 
-    # --- CD · Copy + placa: ok si ≥1 pieza tiene copy (no falta_copy). ------------------
+    # --- QA · Criba de la fuente (PRE-copy): por el veredicto persistido en el TEMA. -----
+    # 'en_curso' = la criba (claude -p) está en vuelo; 'no_verificado' (⚠️) = apta, sigue;
+    # 'problema' (❗) = algo de peso, NO se genera copy.
+    if qa_veredicto == VERDICTO_PROBLEMA:
+        qa_estado = "revisar"
+        qa_detalle = "La criba encontró un problema de peso: no se generó copy (revisa los hallazgos)."
+    elif qa_veredicto == "en_curso":
+        qa_estado = "en_curso"
+        qa_detalle = "Criba de la fuente en curso (el agente está revisando la nota de origen)."
+    elif qa_veredicto == VERDICTO_NO_VERIFICADO:
+        qa_estado = "ok"
+        qa_detalle = "Fuente apta (no verificada a fondo): el copy llevará un aviso de no verificado."
+    else:
+        qa_estado = "pendiente"
+        qa_detalle = "Sin cribar todavía."
+    qa = {
+        "clave": "qa",
+        "nombre": "Criba de la fuente",
+        "estado": qa_estado,
+        "detalle": qa_detalle,
+        "ts": "",
+    }
+
+    # --- CD · Copy + placa: ok si ≥1 pieza tiene copy. Saltada si la QA dio 'problema'. --
     con_copy = sum(1 for p in piezas if not p["falta_copy"])
-    if con_copy:
+    if es_problema:
+        cd_estado = "pendiente"
+        cd_detalle = "Copy omitido: la criba marcó un problema de peso en la fuente."
+    elif con_copy:
         cd_estado = "ok"
         cd_detalle = f"Copy generado en {con_copy}/{total} red(es)."
     else:
-        # "en_curso" si la pieza es muy reciente (el job de copy puede seguir en cola);
-        # si no, "pendiente". No instrumentamos la cola de generación por pieza (ver
-        # nota en el reporte): heurística por copy presente, conservadora.
+        # "pendiente": el job de copy puede seguir en cola o aún no haberse lanzado (la QA
+        # debe pasar antes). Heurística por copy presente, conservadora.
         cd_estado = "pendiente"
         cd_detalle = "Copy aún sin generar."
     cd = {
@@ -122,30 +160,6 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
         "nombre": "Copy + placa",
         "estado": cd_estado,
         "detalle": cd_detalle,
-        "ts": "",
-    }
-
-    # --- QA · Validación: por el veredicto persistido en las piezas. --------------------
-    # 'en_curso' = el QA editorial (claude -p) está en vuelo (lo deja `lanzar_qa_editorial`);
-    # se ve "en curso" hasta que `reconciliar_qa_en_curso` persiste el veredicto real.
-    veredictos = [p["veredicto"] for p in piezas if p["veredicto"]]
-    if any(v == "revisar" for v in veredictos):
-        qa_estado = "revisar"
-        qa_detalle = "La validación marcó observaciones a revisar."
-    elif any(v == "en_curso" for v in veredictos):
-        qa_estado = "en_curso"
-        qa_detalle = "Revisión editorial en curso (el agente está revisando el copy)."
-    elif any(v == "listo" for v in veredictos):
-        qa_estado = "ok"
-        qa_detalle = "Validación superada sin observaciones."
-    else:
-        qa_estado = "pendiente"
-        qa_detalle = "Sin validar todavía."
-    qa = {
-        "clave": "qa",
-        "nombre": "Validación",
-        "estado": qa_estado,
-        "detalle": qa_detalle,
         "ts": "",
     }
 
@@ -172,7 +186,7 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
         "ts": actualizado if ap_estado == "ok" else "",
     }
 
-    return [ci, cd, qa, aprobacion]
+    return [ci, qa, cd, aprobacion]
 
 
 def _estado_global(etapas: list[dict]) -> str:
@@ -184,6 +198,38 @@ def _estado_global(etapas: list[dict]) -> str:
         if etapa["estado"] != "ok":
             return etapa["estado"]
     return "ok"
+
+
+def _qa_fuente_de(item: dict) -> dict:
+    """Veredicto ESTRUCTURADO de la criba de la fuente (rediseño QPC), para la UI.
+
+    Lee el veredicto persistido en el TEMA (`qa_veredicto`/`qa_hallazgos`):
+      - `no_verificado` (⚠️): apta, no verificada a fondo; las piezas llevan el aviso.
+      - `problema` (❗): algo de peso; NO se generó copy. `hallazgos` trae el detalle.
+    `hallazgos` se parsea del JSON guardado (`{resumen, hallazgos:[...]}`); [] si vacío/ilegible.
+    """
+    veredicto = (item.get("qa_veredicto", "") or "").strip()
+    resumen = ""
+    hallazgos: list[dict] = []
+    crudo = (item.get("qa_hallazgos", "") or "").strip()
+    if crudo:
+        try:
+            datos = json.loads(crudo)
+        except (json.JSONDecodeError, ValueError):
+            datos = None
+        if isinstance(datos, dict):
+            resumen = str(datos.get("resumen", "") or "")
+            h = datos.get("hallazgos")
+            if isinstance(h, list):
+                hallazgos = [x for x in h if isinstance(x, dict)]
+    return {
+        "veredicto": veredicto,
+        "no_verificado": veredicto == VERDICTO_NO_VERIFICADO,
+        "problema": veredicto == VERDICTO_PROBLEMA,
+        "copy_omitido": veredicto == VERDICTO_PROBLEMA,
+        "resumen": resumen,
+        "hallazgos": hallazgos,
+    }
 
 
 def _run_de(item: dict, piezas_plat: list[dict], *, completo: bool = False) -> dict:
@@ -208,6 +254,8 @@ def _run_de(item: dict, piezas_plat: list[dict], *, completo: bool = False) -> d
         "actualizado": item.get("actualizado", "") or "",
         "estado_global": _estado_global(etapas),
         "etapas": etapas,
+        # Criba de la fuente (⚠️/❗ + hallazgos): la señal de QA pre-copy del tema.
+        "qa_fuente": _qa_fuente_de(item),
         "piezas": [_pieza_detalle(p) for p in piezas_plat] if completo else base,
     }
 

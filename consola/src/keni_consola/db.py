@@ -583,6 +583,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         tipo_contenido      TEXT NOT NULL DEFAULT 'ia',
         id_post_metricool   TEXT NOT NULL DEFAULT '',
         senal_viralidad     INTEGER NOT NULL DEFAULT 0,
+        qa_veredicto        TEXT NOT NULL DEFAULT '',
+        qa_hallazgos        TEXT NOT NULL DEFAULT '',
+        copy_pendiente      TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -1855,6 +1858,12 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # priorizacion (`priorizacion.peso_viralidad`) la use al ordenar la lista del dia. 0 =
     # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
     ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
+    # QA de la FUENTE (pre-copy, rediseño QPC): el pipeline criba la NOTA DE ORIGEN antes de
+    # generar copy. `qa_veredicto` = "no_verificado" (⚠️ OK para seguir) o "problema" (❗ algo de
+    # peso: NO se generó copy). `qa_hallazgos` = JSON estructurado de lo encontrado. BD vieja -> "".
+    ("qa_veredicto", "TEXT NOT NULL DEFAULT ''"),
+    ("qa_hallazgos", "TEXT NOT NULL DEFAULT ''"),
+    ("copy_pendiente", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
@@ -3663,6 +3672,15 @@ _COLS_CONTENIDO = (
     "tipo_contenido",
     "id_post_metricool",
     "senal_viralidad",
+    # QA DE LA FUENTE (pre-copy): veredicto del cribado de la nota de origen antes de generar
+    # copy. "no_verificado" (⚠️, OK para seguir, no verificado a fondo) o "problema" (❗, algo de
+    # peso en contra: NO se generó copy). `qa_hallazgos` es el JSON estructurado de hallazgos.
+    "qa_veredicto",
+    "qa_hallazgos",
+    # Parámetros de lanzamiento de copy PENDIENTE (JSON): el sweep guarda aquí, al crear el tema
+    # en CI, lo que la fase CD necesitará para lanzar el copy (redes, imagen ya resuelta, fuente,
+    # clave) SOLO si la QA de la fuente sale `no_verificado`. "" tras lanzar (o si no aplica).
+    "copy_pendiente",
     "creado",
     "actualizado",
 )
@@ -3690,6 +3708,13 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     # Editable para que el flujo de publicación pueda fijar el id de Metricool a nivel
     # pieza cuando esté disponible (Item C); hoy se rellena solo si el publicador lo pasa.
     "id_post_metricool",
+    # QA de la FUENTE: el sweep del pipeline persiste aquí el veredicto del cribado pre-copy
+    # (`no_verificado`/`problema`) y sus hallazgos estructurados (JSON) sobre la nota de origen.
+    "qa_veredicto",
+    "qa_hallazgos",
+    # Parámetros de lanzamiento de copy pendiente (JSON): editable para que el sweep lo fije al
+    # crear el tema y lo limpie ("") tras lanzar el copy en la fase CD.
+    "copy_pendiente",
 )
 
 
@@ -3737,6 +3762,9 @@ def crear_contenido(
     tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
     id_post_metricool: str = "",
     senal_viralidad: int = 0,
+    qa_veredicto: str = "",
+    qa_hallazgos: str = "",
+    copy_pendiente: str = "",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -3776,6 +3804,10 @@ def crear_contenido(
         "id_post_metricool": id_post_metricool or "",
         # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
         "senal_viralidad": _entero_no_negativo(senal_viralidad),
+        # QA de la fuente (pre-copy): suele nacer "" (lo fija el sweep tras cribar la nota).
+        "qa_veredicto": qa_veredicto or "",
+        "qa_hallazgos": qa_hallazgos or "",
+        "copy_pendiente": copy_pendiente or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

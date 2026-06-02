@@ -12,9 +12,9 @@ from keni_consola import generaciones, repos
 from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar_etapa
 
 
-def _tema_pipeline(titulo: str, marca: str = "unotv") -> dict:
+def _tema_pipeline(titulo: str, marca: str = "unotv", **campos) -> dict:
     return repos.crear_contenido(
-        clase="contenido", titulo=titulo, marca=marca, origen=ORIGEN_PIPELINE
+        clase="contenido", titulo=titulo, marca=marca, origen=ORIGEN_PIPELINE, **campos
     )
 
 
@@ -24,52 +24,63 @@ def _run_por_titulo(cliente, titulo: str) -> dict | None:
     return next((x for x in r.json()["pipelines"] if x["titulo"] == titulo), None)
 
 
-def test_run_con_copy_y_veredicto_listo(cliente):
-    """Tema con copy + veredicto 'listo' en borrador: CI/CD/QA ok, aprobación pendiente."""
-    tema = _tema_pipeline("Tema listo")
+def test_run_qa_no_verificado_con_copy(cliente):
+    """Tema con QA `no_verificado` + copy en borrador: CI/QA/CD ok, aprobación pendiente.
+
+    Orden NUEVO (rediseño QPC): CI -> Criba de la fuente (QA) -> Copy (CD) -> Aprobación.
+    """
+    tema = _tema_pipeline("Tema apto", qa_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador",
-        copy="Copy válido y corto.", veredicto="listo",
+        copy="Copy válido y corto.", veredicto="no_verificado",
     )
-    run = _run_por_titulo(cliente, "Tema listo")
+    run = _run_por_titulo(cliente, "Tema apto")
     assert run is not None
+    assert [e["clave"] for e in run["etapas"]] == ["ci", "qa", "cd", "aprobacion"]
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
-    assert etapas == {"ci": "ok", "cd": "ok", "qa": "ok", "aprobacion": "pendiente"}
-    # estado_global = primera no-ok en orden = aprobación (pendiente).
+    assert etapas == {"ci": "ok", "qa": "ok", "cd": "ok", "aprobacion": "pendiente"}
     assert run["estado_global"] == "pendiente"
-    assert any(p["red"] == "x" for p in run["piezas"])
+    # La criba de la fuente surface el aviso ⚠️.
+    assert run["qa_fuente"]["no_verificado"] is True
+    assert run["qa_fuente"]["problema"] is False
 
 
-def test_run_sin_copy_cd_pendiente(cliente):
-    """Tema sin copy todavía: CD y QA pendientes."""
-    tema = _tema_pipeline("Tema sin copy")
+def test_run_sin_qa_todo_pendiente(cliente):
+    """Tema sin veredicto de QA todavía: QA y CD pendientes (la QA va antes del copy)."""
+    tema = _tema_pipeline("Tema sin criba")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="borrador", copy="",
     )
-    run = _run_por_titulo(cliente, "Tema sin copy")
+    run = _run_por_titulo(cliente, "Tema sin criba")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
     assert etapas["ci"] == "ok"
-    assert etapas["cd"] == "pendiente"
     assert etapas["qa"] == "pendiente"
+    assert etapas["cd"] == "pendiente"
 
 
-def test_run_qa_revisar(cliente):
-    """Veredicto 'revisar' -> etapa QA en 'revisar'."""
-    tema = _tema_pipeline("Tema revisar")
-    repos.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="x", estado="borrador",
-        copy="Copy.", veredicto="revisar",
+def test_run_qa_problema_omite_copy(cliente):
+    """QA `problema` -> etapa QA 'revisar', CD pendiente (copy omitido) y ❗ con hallazgos."""
+    hallazgos = (
+        '{"resumen": "Dato falso", '
+        '"hallazgos": [{"tipo": "dato", "gravedad": "error", "explicacion": "x"}]}'
     )
-    run = _run_por_titulo(cliente, "Tema revisar")
-    assert {e["clave"]: e["estado"] for e in run["etapas"]}["qa"] == "revisar"
+    _tema_pipeline("Tema con problema", qa_veredicto="problema", qa_hallazgos=hallazgos)
+    run = _run_por_titulo(cliente, "Tema con problema")
+    etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
+    assert etapas["qa"] == "revisar"
+    assert etapas["cd"] == "pendiente"
+    qa = run["qa_fuente"]
+    assert qa["problema"] is True
+    assert qa["copy_omitido"] is True
+    assert qa["hallazgos"] and qa["hallazgos"][0]["tipo"] == "dato"
 
 
 def test_run_aprobado(cliente):
-    """Pieza aprobada -> etapa de aprobación ok y, con todo ok, estado_global ok."""
-    tema = _tema_pipeline("Tema aprobado")
+    """Pieza aprobada con QA `no_verificado` -> aprobación ok y estado_global ok."""
+    tema = _tema_pipeline("Tema aprobado", qa_veredicto="no_verificado")
     repos.crear_contenido_plataforma(
         contenido_id=tema["id"], red="x", estado="aprobado",
-        copy="Copy.", veredicto="listo",
+        copy="Copy.", veredicto="no_verificado",
     )
     run = _run_por_titulo(cliente, "Tema aprobado")
     etapas = {e["clave"]: e["estado"] for e in run["etapas"]}
@@ -105,8 +116,9 @@ def test_detalle_run(cliente):
     assert d.status_code == 200
     body = d.json()
     assert body["pipeline"]["id"] == tema["id"]
-    assert [e["clave"] for e in body["pipeline"]["etapas"]] == ["ci", "cd", "qa", "aprobacion"]
+    assert [e["clave"] for e in body["pipeline"]["etapas"]] == ["ci", "qa", "cd", "aprobacion"]
     assert "actividad" in body
+    assert "qa_fuente" in body["pipeline"]
     # El detalle trae las piezas COMPLETAS: el copy real + observaciones de la validación.
     pieza = body["pipeline"]["piezas"][0]
     assert pieza["copy"] == "Copy."

@@ -10,20 +10,31 @@ como un pipeline de CI/CD (visible en "Actividad IA"). Este daemon (espejo de `a
 `radar_auto`) hace exactamente eso, cada N horas y por marca con feeds activos:
 
   - CI — INGESTA DE FUENTES: lee items frescos (no usados) de los feeds activos de la marca,
-    elige hasta un CAP. Para feeds de MARCA PROPIA (`propia`) resuelve la `og:image` del
-    artículo (la foto real); para feeds de no-propia / tendencia, sin imagen (el pipeline de
-    copy ya compone una placa de marca con hueco de foto). Registra UNA entrada de actividad
-    etapa="CI".
-  - CD — CREACIÓN DE CONTENIDO: por cada item, lanza la generación de copy por el camino
-    PROBADO (`dominio.generar.lanzar_copy`), con `imagen_fuente` puesta para marca propia.
-    Marca el item del feed como USADO (dedup) para no re-ingerirlo. Registra una entrada de
-    actividad etapa="CD" por item.
-  - QA — VALIDACIÓN AUTOMÁTICA: una pasada aparte que, para los BORRADORES recientes del
-    pipeline (origen `pipeline`) COMPLETADOS y SIN veredicto, corre una validación léxica
-    mínima (longitud por red vs `redes`, copy vacío) y persiste un veredicto. Registra una
-    entrada de actividad etapa="QA" por borrador. (El gancho al QA editorial real —la skill
-    `qa-editorial`— queda como TODO: encolar un `claude -p` por pieza es pesado/asíncrono;
-    aquí basta una verificación determinista que deje la señal y la etapa en la actividad.)
+    elige hasta un CAP, y CREA un `contenido` (tema) por item SIN generar copy todavía. Para
+    feeds de MARCA PROPIA (`propia`) resuelve la `og:image` del artículo (la foto real); para
+    feeds de no-propia / tendencia, sin imagen. Guarda en el tema (`copy_pendiente`, JSON) los
+    parámetros que la fase CD necesitará para lanzar el copy. Marca el item del feed como USADO
+    (dedup). Registra UNA entrada de actividad etapa="CI".
+  - QA — CRIBA DE LA FUENTE (pre-copy): por cada TEMA nuevo sin veredicto, lanza un `claude -p`
+    que evalúa la NOTA DE ORIGEN (no el copy: aún no existe) contra el DOCUMENTO de Biblioteca
+    de criterios. Es PERMISIVO y devuelve un veredicto ESTRUCTURADO con dos salidas:
+    `no_verificado` (nada de peso en contra: seguir; la pieza llevará ⚠️ "no verificado") o
+    `problema` (algo de peso: NO se genera copy; el tema se marca ❗ con los hallazgos). Por
+    defecto `no_verificado` cuando hay duda (permisivo). El veredicto + hallazgos se PERSISTEN
+    sobre el tema (`qa_veredicto`/`qa_hallazgos`). Cota de lanzamientos por barrido
+    (`_QA_LANZAR_MAX`). Registra etapa="QA" por tema, enlazada a la generación (stream).
+  - CD — CREACIÓN DE CONTENIDO: por cada tema cuya QA salió `no_verificado` y que aún no tiene
+    copy, lanza la generación de copy por el camino PROBADO (`dominio.generar.lanzar_copy`) con
+    los parámetros guardados (`imagen_fuente` para marca propia). NUNCA genera copy de un tema
+    `problema` (ahorra tokens). Registra etapa="CD" por tema y limpia `copy_pendiente`.
+
+ORDEN Y ASINCRONÍA (DOS FASES ENTRE BARRIDOS)
+=============================================
+La QA es asíncrona (`claude -p`): un tema cribado en un barrido NO tiene veredicto en ESE mismo
+barrido. Por eso el flujo es de DOS FASES entre barridos: la fase QA marca el tema; la fase CD
+de un barrido POSTERIOR actúa sobre los temas `no_verificado` sin copy. Se eligió esta vía
+(no encadenar la QA→copy dentro del worker) por ser la más limpia y reusar el mismo patrón
+async que ya tenía el QA editorial: el estado vive en el TEMA, es idempotente y auto-curativo.
 
 El borrador queda `borrador` para el paso de APROBACIÓN HUMANA en la parrilla. Nada se
 publica; NUNCA se llama a Metricool.
@@ -38,8 +49,8 @@ SEGURO POR DISEÑO (CONSERVADOR)
     SSRF de los feeds sigue aplicando aguas arriba (`http_feed`).
   - CAP por barrido y por marca (`KENI_PIPELINE_MAX`, def 3): cada item lanza un `claude -p`;
     el cap evita avalanchas. El cap del worker (`KENI_MAX_JOBS`) sigue aplicando aguas abajo.
-  - DEDUP: tras lanzar, el item del feed se marca USADO (`repos.marcar_item`); el siguiente
-    barrido lo salta. La ingesta lee `claves_vistas` para no re-elegir lo ya usado.
+  - DEDUP: al crear el tema (CI), el item del feed se marca USADO (`repos.marcar_item`); el
+    siguiente barrido lo salta. La ingesta lee `claves_vistas` para no re-elegir lo ya usado.
   - NO PUBLICA: el borrador nace `borrador` y pasa por la MISMA revisión/aprobación humana;
     la publicación real (Metricool) sigue gated por `KENI_PUBLICAR_REAL` (no se toca aquí).
 
@@ -80,17 +91,19 @@ ETAPA_CI = "CI"
 ETAPA_CD = "CD"
 ETAPA_QA = "QA"
 
-# Cuantos borradores recientes (origen pipeline) revisa la pasada QA por barrido. Cota de
-# seguridad: la QA léxica es barata, pero acotamos para no recorrer un histórico enorme.
+# Cuantos temas recientes (origen pipeline) revisa cada fase por barrido. Cota de seguridad
+# para no recorrer un histórico enorme.
 _QA_REVISAR_MAX = 50
 
-# CAP de LANZAMIENTOS de QA editorial (`claude -p`) por barrido. Cada uno es un job del worker
-# (KENI_MAX_JOBS); sin tope, una pasada que encuentra muchos borradores sin veredicto dispara
-# una RÁFAGA que satura el worker y deja decenas de QA "ejecutando" inundando Actividad (lo que
-# pasó al backfill inicial). Con el tope, cada barrido lanza pocos y el resto se valida en el
-# siguiente; el sweep es horario, así drena gradualmente. La validación LÉXICA (fallback sin
-# coste) NO cuenta para el tope.
+# CAP de LANZAMIENTOS de QA de la FUENTE (`claude -p`) por barrido. Cada uno es un job del worker
+# (KENI_MAX_JOBS); sin tope, una pasada que encuentra muchos temas sin veredicto dispara una
+# RÁFAGA que satura el worker e inunda Actividad de QA "ejecutando". Con el tope, cada barrido
+# lanza pocos y el resto se criba en el siguiente; el sweep es horario, así drena gradualmente.
 _QA_LANZAR_MAX = 4
+
+# CAP de LANZAMIENTOS de COPY (CD) por barrido: la fase CD también encola `claude -p` (uno por
+# tema `no_verificado`); mismo motivo de anti-ráfaga que la QA. El resto entra en el siguiente.
+_CD_LANZAR_MAX = 4
 
 # Redes objetivo por defecto del pipeline: subconjunto sensato de las canónicas (las que el
 # piloto AMX usa a diario), intersecado con `redes.ids()` por si el catálogo cambiara.
@@ -103,45 +116,56 @@ _REDES_DEFECTO_PIPELINE = ("instagram", "x", "facebook")
 PROMPT_QA_ID = "prompt/qa-editorial"
 _TITULO_QA = "QA editorial"
 
-# Veredicto SENTINEL que se persiste en la pieza mientras su QA editorial (claude -p) está en
-# vuelo: la pasada QA NO la re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta
-# la etapa QA como "en curso". Al completar, el sweep lo sustituye por el veredicto real.
+# Veredicto SENTINEL que se persiste en el TEMA mientras su QA de la fuente (claude -p) está en
+# vuelo: la fase QA NO lo re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta la
+# etapa QA como "en curso". Al completar, el `procesar` lo sustituye por el veredicto real.
 QA_EN_CURSO = "en_curso"
 
-# Criterios por defecto del documento QA editorial que se CREA si aún no existe (idempotente).
-# Cubre lo que pidió el dueño: voz de marca, veracidad/factualidad, límites por red, coherencia
-# editorial y no clickbait. SEÑALA (no publica ni reescribe): abre con un veredicto claro.
+# Veredictos ESTRUCTURADOS de la QA de la FUENTE (rediseño QPC), reexportados del dominio para
+# que el sweep, la API y los tests compartan los literales sin acoplarse al módulo de dominio.
+VERDICTO_NO_VERIFICADO = dom_qa.VERDICTO_NO_VERIFICADO  # ⚠️ OK para seguir (no verificado a fondo)
+VERDICTO_PROBLEMA = dom_qa.VERDICTO_PROBLEMA  # ❗ algo de peso en contra: NO se genera copy
+
+# Criterios por defecto del documento QA que se CREA si aún no existe (idempotente). REDISEÑO:
+# la QA es PRE-COPY y criba la NOTA DE ORIGEN (no el copy, que aún no existe). Es PERMISIVA: solo
+# levanta `problema` ante algo de PESO (dato falso evidente, problema legal/ético claro); ante la
+# duda, `no_verificado`. SEÑALA (no publica ni reescribe).
 _DEFAULT_QA_CRITERIOS = """\
-Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO un copy ya
-redactado para una red social y haces una revisión de CALIDAD antes de que un humano lo
-apruebe. NO reescribes la pieza: la AUDITAS y devuelves un informe accionable. Aplica la
-LÍNEA EDITORIAL adjunta (voz de marca, plataformas, tropicalización, reglas).
+Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO la NOTA DE ORIGEN
+(título + resumen + enlace) de la que se generará copy para redes. Haces una CRIBA PREVIA,
+ANTES de que se redacte el copy: decides si la fuente es apta para producir contenido. NO
+redactas copy ni reescribes nada. Aplica la LÍNEA EDITORIAL adjunta (voz de marca, reglas).
 
 Modo dry-run: no publicas ni haces peticiones de red. SEÑALAS; el equipo decide.
 
+SÉ PERMISIVO: esta criba es un primer filtro barato, NO una verificación a fondo. Solo levanta
+un PROBLEMA cuando hay algo de PESO en contra (un dato claramente falso, un asunto legal o ético
+serio, una fuente no fiable o sensacionalista que no debería amplificarse). Ante la duda, DEJA
+PASAR: el copy generado llevará un aviso de "no verificado" y un humano lo revisará después.
+
 ## Veredicto (ANTES del detalle)
 
-Empieza, arriba del todo, por una sola línea de veredicto:
+Empieza, arriba del todo, por una sola línea de semáforo:
 
-LISTO PARA APROBAR · REVISAR ANTES DE PUBLICAR · NO PUBLICAR
+🟢 (apta, seguir) · 🔴 (problema de peso, NO generar copy)
 
-Y en una frase, lo más importante a corregir si no está listo.
+No uses el amarillo: o es apta (🟢) o tiene un problema de peso (🔴).
 
-## Qué revisas
+## Qué miras (a alto nivel, sin verificar a fondo)
 
-1. Voz de marca: ¿suena a la marca y a su tono? ¿quedó algún giro de España sin tropicalizar a México?
-2. Veracidad / factualidad: ¿todo dato, fecha y cifra tiene respaldo? Señala lo no verificable o
-   lo que parezca inventado. No des por buenos números sin fuente.
-3. Límites por red: ¿la pieza cabe en el límite de caracteres de su plataforma? ¿el gancho va al
-   principio? ¿el CTA es claro?
-4. Coherencia editorial: ¿es coherente con la línea editorial y con la nota de origen? Sin
-   contradicciones internas.
-5. No clickbait: nada de titulares engañosos, sensacionalismo ni promesas que el cuerpo no cumple.
+1. Veracidad evidente: ¿la nota afirma algo claramente falso o inventado? No verifiques datos uno
+   a uno; solo señala lo que salte a la vista como falso.
+2. Legal / ético: ¿hay algo serio (difamación, contenido sensible, desinformación) que desaconseje
+   amplificar esta fuente?
+3. Fuente: ¿es una fuente fiable o un clickbait/sensacionalismo que no deberíamos amplificar?
 
 ## Salida
 
-Tras el veredicto, un informe breve por cada punto (lo que está bien y lo que hay que corregir) y
-cierra con una lista numerada de correcciones priorizadas. Sin emojis.
+Tras el semáforo, cierra con un bloque ```json con la forma:
+{"veredicto": "🟢", "resumen": "una frase",
+ "hallazgos": [{"tipo": "dato|legal|voz", "gravedad": "error|aviso",
+                "fragmento": "...", "explicacion": "...", "sugerencia": "..."}]}
+Usa gravedad "error" SOLO para lo de peso (lo que hace 🔴). Sin emojis en el cuerpo.
 """
 
 
@@ -369,26 +393,73 @@ def _autor_pipeline() -> dict[str, str] | None:
     return _u(usuarios[0])
 
 
-def _crear_tema_pipeline(marca: str, titulo: str) -> str:
-    """Crea el `contenido` padre que NIDA los borradores del pipeline. "" si falla.
+def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str]) -> str:
+    """JSON con los parámetros que la fase CD necesitará para lanzar el copy de un tema.
 
-    El tema nace con `origen=ORIGEN_PIPELINE` para que sus borradores (que cuelgan de él, via
-    `lanzar_copy(contenido_id=...)`) hereden ese origen y la pasada QA pueda encontrarlos.
+    Se guarda en `contenido.copy_pendiente` al crear el tema (CI). La fase CD lo lee y lanza
+    `lanzar_copy` SOLO si la QA de la fuente salió `no_verificado`, sin re-leer el feed ni
+    re-resolver la og:image (ya resuelta en CI). "" si no se puede serializar (best-effort).
     """
+    import json
+
+    fuente = trabajo.get("fuente") or {}
+    item = trabajo.get("item") or {}
+    imagen = trabajo.get("imagen") or ""
+    try:
+        return json.dumps({
+            "nota": nota,
+            "redes_ids": list(redes_ids),
+            "fuente_id": fuente.get("id") or "",
+            "clave": (item.get("clave") or "").strip(),
+            "imagen": imagen,
+            "tipo_contenido": "fuente" if imagen else "",
+        }, ensure_ascii=False)
+    except (TypeError, ValueError):  # pragma: no cover -- entrada simple, no debería fallar
+        return ""
+
+
+def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
+    """CI — crea el `contenido` (tema) de UN trabajo de ingesta SIN generar copy, y marca el item.
+
+    Rediseño QPC: el copy se genera DESPUÉS, en la fase CD, y SOLO si la QA de la fuente pasa.
+    El tema nace con `origen=ORIGEN_PIPELINE` (para que la vista Pipelines y las fases QA/CD lo
+    encuentren), la nota en `descripcion` y los parámetros de copy pendiente en `copy_pendiente`
+    (JSON). Marca el item del feed como USADO (dedup) para no re-ingerirlo. None si se omite.
+    """
+    item = trabajo["item"]
+    fuente = trabajo["fuente"]
+    titulo = (item.get("titulo") or "").strip()
+    if not titulo:
+        return None
+    marca = (fuente.get("marca") or "").strip()
+    if not marca or not marcas.es_marca(marca):
+        return None
+    clave = (item.get("clave") or "").strip()
+    nota = _nota_de_item(item)[: gen_dom.MAX_TEXTO]
+    redes_ids = _redes_de_fuente(fuente)
     try:
         from datetime import date
 
         tema = repos.crear_contenido(
             clase="contenido",
             titulo=titulo[:300],
+            descripcion=nota[:5000],
             marca=marca,
             origen=ORIGEN_PIPELINE,
             fecha_objetivo=date.today().isoformat(),
+            copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
         )
-        return tema.get("id", "") or ""
-    except Exception:  # noqa: BLE001 -- sin tema padre, caemos a borrador suelto (no rompe)
-        _log.warning("pipeline: no se pudo crear el tema padre (%s)", marca, exc_info=True)
-        return ""
+    except Exception:  # noqa: BLE001 -- sin tema, este item no produce nada (no rompe el barrido)
+        _log.warning("pipeline: no se pudo crear el tema (%s)", marca, exc_info=True)
+        return None
+    # Dedup: marca el item del feed como usado tras crear el tema, para que un re-barrido
+    # inmediato no lo vuelva a elegir. Best-effort.
+    if clave:
+        try:
+            repos.marcar_item(fuente["id"], clave, True)
+        except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no debe romper el barrido
+            _log.warning("pipeline: no se pudo marcar el item usado (%s)", clave, exc_info=True)
+    return tema
 
 
 def _nota_de_item(item: dict[str, Any]) -> str:
@@ -444,34 +515,49 @@ def ingerir_marca(marca: str, *, maximo: int) -> list[dict[str, Any]]:
 
 
 # --------------------------------------------------------------------------- #
-# CD — creación de contenido (lanza copy + marca el item usado)               #
+# CD — creación de contenido (lanza copy de temas con QA `no_verificado`)      #
 # --------------------------------------------------------------------------- #
 
 
-def crear_contenido_de(trabajo: dict[str, Any], *, autor: dict[str, str] | None) -> dict[str, Any] | None:
-    """CD — lanza la generación de copy para UN trabajo de ingesta y marca el item usado.
+def _copy_pendiente_leido(tema: dict[str, Any]) -> dict[str, Any]:
+    """Lee y parsea `copy_pendiente` (JSON) de un tema. {} si vacío o ilegible (best-effort)."""
+    import json
 
-    Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` (mismo camino que `api/rss`):
-    compone el prompt copy-desde-nota, encola un `claude -p` y el borrador cae en la cola de
-    revisión, NIDADO bajo el tema padre del pipeline (`contenido_id`). Para marca PROPIA con
-    `og:image`, la pieza nace con esa imagen (`tipo_contenido='fuente'`). Marca el item del
-    feed como USADO (dedup) tras lanzar. Registra la etapa CD. None si se omite.
+    crudo = (tema.get("copy_pendiente") or "").strip()
+    if not crudo:
+        return {}
+    try:
+        datos = json.loads(crudo)
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    return datos if isinstance(datos, dict) else {}
+
+
+def lanzar_copy_de_tema(tema: dict[str, Any], *, autor: dict[str, str] | None) -> dict[str, Any] | None:
+    """CD — lanza la generación de copy de UN tema cuya QA de la fuente salió `no_verificado`.
+
+    Reutiliza el lanzador PROBADO `dominio.generar.lanzar_copy` con los parámetros que CI guardó
+    en `copy_pendiente` (nota, redes, imagen ya resuelta, fuente, clave). El borrador resultante
+    cuelga del tema (`contenido_id`) y hereda su origen. Para marca PROPIA con `og:image`, la
+    pieza nace con esa imagen (`tipo_contenido='fuente'`). Registra la etapa CD y limpia
+    `copy_pendiente` (evita relanzar). None si se omite (sin parámetros / marca inválida).
     """
-    item = trabajo["item"]
-    fuente = trabajo["fuente"]
-    imagen = trabajo.get("imagen") or ""
-    titulo = (item.get("titulo") or "").strip()
-    if not titulo:
+    tema_id = (tema.get("id") or "").strip()
+    marca = (tema.get("marca") or "").strip()
+    if not tema_id or not marca or not marcas.es_marca(marca):
         return None
-    marca = (fuente.get("marca") or "").strip()
-    if not marca or not marcas.es_marca(marca):
+    pend = _copy_pendiente_leido(tema)
+    nota = (pend.get("nota") or tema.get("descripcion") or "").strip()
+    if not nota:
         return None
-    clave = (item.get("clave") or "").strip()
-    nota = _nota_de_item(item)[: gen_dom.MAX_TEXTO]
-    redes_ids = _redes_de_fuente(fuente)
-
-    tema_id = _crear_tema_pipeline(marca, titulo)
+    titulo = (tema.get("titulo") or "").strip()
+    redes_ids = [r for r in (pend.get("redes_ids") or []) if redes.es_red(r)] or [
+        r for r in _REDES_DEFECTO_PIPELINE if redes.es_red(r)
+    ]
+    imagen = (pend.get("imagen") or "").strip()
     tipo_contenido = "fuente" if imagen else ""
+    fuente_id = (pend.get("fuente_id") or "").strip() or None
+    clave = (pend.get("clave") or "").strip() or None
     gen = gen_dom.lanzar_copy(
         # `pipeline`: la generación REAL (claude -p) queda etiquetada como pipeline y reporta
         # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/QA— no cuesta).
@@ -483,20 +569,21 @@ def crear_contenido_de(trabajo: dict[str, Any], *, autor: dict[str, str] | None)
         titulo_dado=titulo,
         texto_base=nota,
         autor=autor,
-        fuente_id=fuente.get("id") or None,
-        clave=clave or None,
+        fuente_id=fuente_id,
+        clave=clave,
         contenido_id=tema_id,
         imagen_fuente=imagen,
         tipo_contenido=tipo_contenido,
+        # La fuente pasó como `no_verificado` (criba permisiva, sin verificación a fondo): las
+        # piezas heredan ese aviso (⚠️) en su veredicto, para que la parrilla y Pipelines lo
+        # muestren. Si el copy trajera un veredicto propio, ese manda; aquí da el por defecto.
+        veredicto_inicial=VERDICTO_NO_VERIFICADO,
     )
-    # Dedup: marca el item del feed como usado (el post-procesado de copy también lo marca al
-    # completar con éxito, pero lo hacemos AQUÍ ya para que un re-barrido inmediato —antes de
-    # que el job complete— no lo vuelva a elegir). Best-effort.
-    if clave:
-        try:
-            repos.marcar_item(fuente["id"], clave, True)
-        except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no debe romper el barrido
-            _log.warning("pipeline: no se pudo marcar el item usado (%s)", clave, exc_info=True)
+    # Limpia `copy_pendiente`: el copy ya se lanzó; la fase CD no debe relanzarlo (idempotencia).
+    try:
+        repos.actualizar_contenido(tema_id, {"copy_pendiente": ""})
+    except Exception:  # noqa: BLE001 -- best-effort; sin esto, la guarda "sin copy" lo evita igual
+        _log.warning("pipeline: no se pudo limpiar copy_pendiente (%s)", tema_id, exc_info=True)
     registrar_etapa(
         ETAPA_CD,
         marca,
@@ -509,8 +596,47 @@ def crear_contenido_de(trabajo: dict[str, Any], *, autor: dict[str, str] | None)
     return gen
 
 
+def _tiene_copy(tema_id: str) -> bool:
+    """True si el tema ya tiene al menos una pieza por plataforma (copy en marcha). Best-effort."""
+    if not tema_id:
+        return False
+    try:
+        return bool(repos.listar_contenido_plataforma(tema_id))
+    except Exception:  # noqa: BLE001 -- sin lectura, conservador: asumimos que NO para reintentar
+        return False
+
+
+def temas_pipeline(marca: str | None = None) -> list[dict[str, Any]]:
+    """Temas del pipeline (origen `pipeline`), recientes acotados. [] si la lectura falla."""
+    try:
+        items = repos.listar_contenido(marca=marca)
+    except Exception:  # noqa: BLE001 -- sin temas legibles, el barrido no hace nada
+        return []
+    pipeline = [it for it in items if (it.get("origen") or "") == ORIGEN_PIPELINE]
+    return pipeline[:_QA_REVISAR_MAX]
+
+
+def temas_para_copy(marca: str | None = None) -> list[dict[str, Any]]:
+    """Temas listos para CD: QA `no_verificado`, con `copy_pendiente` y SIN copy aún.
+
+    La guarda de DOS niveles (copy_pendiente no vacío + sin piezas) hace la fase CD idempotente
+    y auto-curativa: un tema cuyo copy ya se lanzó no se relanza aunque su `copy_pendiente` no se
+    hubiera limpiado (p. ej. tras un fallo). Best-effort.
+    """
+    listos: list[dict[str, Any]] = []
+    for tema in temas_pipeline(marca):
+        if (tema.get("qa_veredicto") or "") != VERDICTO_NO_VERIFICADO:
+            continue
+        if not (tema.get("copy_pendiente") or "").strip():
+            continue
+        if _tiene_copy(tema.get("id", "") or ""):
+            continue
+        listos.append(tema)
+    return listos
+
+
 # --------------------------------------------------------------------------- #
-# QA — validación automática (léxica mínima; gancho editorial = TODO)         #
+# QA — criba de la FUENTE (pre-copy) + helper léxico (vista/detalle)           #
 # --------------------------------------------------------------------------- #
 
 
@@ -543,60 +669,16 @@ def qa_lexico(publicacion: dict[str, Any]) -> dict[str, Any]:
     return {"verdicto": verdicto, "observaciones": observaciones}
 
 
-def _es_del_pipeline(publicacion: dict[str, Any]) -> bool:
-    """True si un borrador procede del pipeline (origen `pipeline`), directo o heredado.
-
-    Acepta dos formas (robusto a cómo se propague el `origen` aguas abajo del copy):
-      - la PROPIA publicación trae `origen == 'pipeline'`, o
-      - su `contenido` PADRE (el tema que creó el pipeline con `origen='pipeline'`) lo trae.
-    Así la pasada QA encuentra los borradores reales aunque el post-procesado de copy no
-    copie el `origen` del tema a la publicación. Best-effort: si no se puede leer el padre,
-    cae a la comprobación directa.
-    """
-    if (publicacion.get("origen") or "") == ORIGEN_PIPELINE:
-        return True
-    cid = (publicacion.get("contenido_id") or "").strip()
-    if not cid:
-        return False
-    try:
-        padre = repos.obtener_contenido(cid)
-    except Exception:  # noqa: BLE001 -- sin padre legible, nos quedamos con la directa
-        return False
-    return bool(padre) and (padre.get("origen") or "") == ORIGEN_PIPELINE
-
-
-def borradores_pipeline_sin_qa(marca: str | None = None) -> list[dict[str, Any]]:
-    """Borradores recientes del pipeline COMPLETADOS y SIN veredicto.
-
-    Best-effort: [] si la lectura falla. Recorta a `_QA_REVISAR_MAX` (la pasada QA es barata
-    pero acotamos para no recorrer un histórico enorme). El "del pipeline" lo decide
-    `_es_del_pipeline` (origen propio o heredado del tema padre).
-    """
-    try:
-        pubs = repos.listar_publicaciones(
-            marca=marca, estado="borrador", limite=_QA_REVISAR_MAX
-        )
-    except Exception:  # noqa: BLE001 -- sin borradores legibles, la QA no hace nada
-        return []
-    return [
-        p
-        for p in pubs
-        if _es_del_pipeline(p)
-        and not (p.get("veredicto") or "").strip()
-        and (p.get("contenido") or "").strip()
-    ]
-
-
 def asegurar_documento_qa() -> str:
-    """Garantiza que el DOCUMENTO de criterios de QA editorial existe en la Biblioteca.
+    """Garantiza que el DOCUMENTO de criterios de QA existe en la Biblioteca.
 
     Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." El
-    equipo NO usa skills: el QA editorial se hace con un documento adjunto. Aquí:
+    equipo NO usa skills: el QA se hace con un documento adjunto. Aquí:
       - si el documento (`PROMPT_QA_ID`) ya está en el STORE de la Biblioteca, lo respeta;
-      - si no, lo CREA con `_DEFAULT_QA_CRITERIOS` (voz de marca, veracidad, límites por red,
-        coherencia editorial, no clickbait). IDEMPOTENTE (no duplica).
+      - si no, lo CREA con `_DEFAULT_QA_CRITERIOS` (criba pre-copy de la fuente). IDEMPOTENTE.
     Devuelve `PROMPT_QA_ID` si el documento queda disponible (creado o ya presente), o "" si no
-    se pudo asegurar (best-effort: el QA editorial caerá entonces al léxico).
+    se pudo asegurar (best-effort: sin documento, la QA de la fuente no corre y el tema queda sin
+    veredicto, de modo que la fase CD no genera copy hasta que haya criba).
 
     Nota: la semilla del paquete ya trae un `prompt/qa-editorial`; `cuerpo_efectivo` lo resuelve
     aunque no esté materializado en el store. Materializarlo aquí garantiza un documento EDITABLE
@@ -612,215 +694,127 @@ def asegurar_documento_qa() -> str:
         doc = biblioteca.crear(_TITULO_QA, tipo="prompt", cuerpo=cuerpo)
         # `crear` deriva el id del slug del título: "QA editorial" -> "prompt/qa-editorial".
         return doc.id if doc.id == PROMPT_QA_ID else (PROMPT_QA_ID if biblioteca.obtener(PROMPT_QA_ID) else doc.id)
-    except Exception:  # noqa: BLE001 -- asegurar el doc es best-effort; el léxico es el fallback
-        _log.warning("pipeline: no se pudo asegurar el documento de QA editorial", exc_info=True)
+    except Exception:  # noqa: BLE001 -- asegurar el doc es best-effort
+        _log.warning("pipeline: no se pudo asegurar el documento de QA", exc_info=True)
         return ""
 
 
-def _pieza_principal(publicacion: dict[str, Any]) -> tuple[str, str, str]:
-    """Datos de la pieza para el QA editorial: (plataforma_id, copy, red). "" si faltan."""
-    pid = (publicacion.get("id") or "").strip()
-    copy = (publicacion.get("contenido") or "").strip()
-    red = (publicacion.get("red") or "").strip()
-    return pid, copy, red
+def dom_qa_titulo(texto: str) -> str:
+    """Título corto del QA (deriva del texto, como el endpoint manual). Best-effort."""
+    try:
+        from .dominio import stream
+
+        return stream.derivar_titulo(texto)
+    except Exception:  # noqa: BLE001 -- el título es cosmético; nunca rompe el QA
+        return (texto or "").strip().splitlines()[0][:80] if texto.strip() else "Nota"
 
 
-def lanzar_qa_editorial(
-    publicacion: dict[str, Any], *, autor: dict[str, str] | None
+def _contexto_qa_fuente(nota: str) -> str:
+    """Bloque de contexto de la QA de la FUENTE: la nota de origen a cribar (titulo+resumen+enlace)."""
+    return "Nota de origen a cribar (aún no hay copy):\n\n" + nota
+
+
+def lanzar_qa_fuente(
+    tema: dict[str, Any], *, autor: dict[str, str] | None
 ) -> dict[str, Any] | None:
-    """QA editorial REAL via `claude -p`: evalúa el copy contra el DOCUMENTO de Biblioteca.
+    """QA de la FUENTE via `claude -p`: criba la NOTA de origen de un TEMA contra el doc de Biblioteca.
 
-    Reutiliza el camino PROBADO de generaciones (`gen_dom.lanzar`) con el mismo post-procesado
-    de QA editorial (`dominio.qa_editorial`) que el endpoint manual: parsea el informe, deriva
-    el veredicto (listo/revisar/no_publicar) y lo PERSISTE atado a la pieza
-    (`registrar_veredicto_qa`, con `copy_hash` para invalidarlo si el copy cambia). El stream
-    (proceso del agente) queda en la generación; el marcador QA la enlaza por `gen_id` (Feature
-    1), así su proceso se ve en el detalle del pipeline.
+    Rediseño QPC (pre-copy, por TEMA): evalúa el material de origen (no el copy: aún no existe) y
+    persiste un veredicto ESTRUCTURADO (`no_verificado`/`problema`) + hallazgos sobre el TEMA
+    (`construir_procesar_qa_fuente`). Reutiliza el camino PROBADO de generaciones (`gen_dom.lanzar`).
+    El stream queda en la generación; el marcador QA la enlaza por `gen_id` (su proceso se ve en
+    el detalle del pipeline).
 
-    ASÍNCRONO (como CD): encola y devuelve la generación; marca la pieza `veredicto='en_curso'`
-    para que la pasada QA no la re-lance y la etapa QA se vea "en curso" hasta que complete. El
-    sweep `reconciliar_qa_en_curso` recoge el veredicto real al terminar. None si no se pudo
-    lanzar (sin doc / sin marca / cola llena): el llamante cae al QA léxico.
+    ASÍNCRONO: encola y devuelve la generación; marca el tema `qa_veredicto='en_curso'` para que
+    la fase QA no lo re-lance y la etapa QA se vea "en curso" hasta que el `procesar` persista el
+    veredicto real al completar. None si no se pudo lanzar (sin doc / sin marca / sin nota). La
+    `ColaLlenaError` se PROPAGA (el barrido corta la fase QA de esa marca).
     """
-    pid, copy, red = _pieza_principal(publicacion)
-    if not pid or not copy:
+    tema_id = (tema.get("id") or "").strip()
+    if not tema_id:
         return None
-    marca = (publicacion.get("marca") or "").strip()
+    marca = (tema.get("marca") or "").strip()
     if not marca or not marcas.es_marca(marca):
         return None
-    contenido_id = (publicacion.get("contenido_id") or "").strip()
+    pend = _copy_pendiente_leido(tema)
+    nota = (pend.get("nota") or tema.get("descripcion") or "").strip()
+    if not nota:
+        return None
 
     # Regla del dueño: asegura (crea si falta) el documento de criterios y adjúntalo.
     doc_id = asegurar_documento_qa()
     cuerpo = biblioteca.cuerpo_efectivo(doc_id) if doc_id else None
     if not cuerpo:
-        return None  # sin documento de QA no hay QA editorial: el llamante cae al léxico.
+        return None  # sin documento de QA no hay criba: el tema queda sin veredicto (sin copy).
 
-    titulo = dom_qa_titulo(copy)
-    copy_hash = dom_qa.hash_copy(copy)
-    plataforma_label = redes.nombre_por_id(red) if red and redes.es_red(red) else ""
+    titulo = (tema.get("titulo") or "").strip() or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
         cuerpo,
         biblioteca.editoriales_de_marca(marca),
-        _contexto_qa_pipeline(copy, plataforma_label),
+        _contexto_qa_fuente(nota),
     )
+    gen = gen_dom.lanzar(
+        tipo="qa-fuente",
+        titulo=_TITULO_QA,
+        marca=marca,
+        prompt=prompt,
+        procesar=dom_qa.construir_procesar_qa_fuente(
+            marca, titulo, autor, contenido_id=tema_id,
+        ),
+        procesar_spec=jobspec.construir_qa_fuente(
+            marca=marca, titulo=titulo, autor=autor, contenido_id=tema_id,
+        ),
+        autor=autor,
+    )
+    # Marca el tema en curso para que la fase QA no lo re-lance (deja de estar "sin veredicto").
+    # El `procesar` lo sustituye por el veredicto real al completar.
     try:
-        gen = gen_dom.lanzar(
-            tipo="qa-editorial",
-            titulo=_TITULO_QA,
-            marca=marca,
-            prompt=prompt,
-            procesar=dom_qa.construir_procesar_qa(
-                marca, titulo, autor,
-                plataforma_id=pid, contenido_id=contenido_id, copy_hash=copy_hash,
-            ),
-            procesar_spec=jobspec.construir_qa(
-                marca=marca, titulo=titulo, autor=autor,
-                plataforma_id=pid, contenido_id=contenido_id, copy_hash=copy_hash,
-            ),
-            autor=autor,
-        )
-    except generaciones.ColaLlenaError:
-        # Cola llena: NO marcamos en_curso (que el siguiente barrido reintente) y dejamos que el
-        # llamante caiga al léxico para no quedarnos sin señal de QA en esta pieza.
-        raise
-    # Marca la pieza en curso para que la pasada QA no la re-lance (deja de estar "sin veredicto").
-    try:
-        repos.actualizar_publicacion(pid, {"veredicto": QA_EN_CURSO})
-    except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento se evita en el sweep
-        _log.warning("pipeline: no se pudo marcar la pieza en_curso para QA (%s)", pid, exc_info=True)
+        repos.actualizar_contenido(tema_id, {"qa_veredicto": QA_EN_CURSO})
+    except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento lo evita el sweep
+        _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
     registrar_etapa(
         ETAPA_QA,
         marca,
-        f"Revisión editorial (claude) — '{titulo[:120]}'",
-        contenido_id=contenido_id,
+        f"Criba de la fuente (claude) — '{titulo[:120]}'",
+        contenido_id=tema_id,
         gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
     )
     return gen
 
 
-def dom_qa_titulo(copy: str) -> str:
-    """Título corto del QA (deriva del copy, como el endpoint manual). Best-effort."""
-    try:
-        from .dominio import stream
+def temas_sin_qa(marca: str | None = None) -> list[dict[str, Any]]:
+    """Temas del pipeline SIN veredicto de QA todavía (criba pendiente). Best-effort.
 
-        return stream.derivar_titulo(copy)
-    except Exception:  # noqa: BLE001 -- el título es cosmético; nunca rompe el QA
-        return (copy or "").strip().splitlines()[0][:80] if copy.strip() else "Copy"
-
-
-def _contexto_qa_pipeline(copy: str, plataforma_label: str) -> str:
-    """Bloque de contexto del QA del pipeline: plataforma + el copy a revisar."""
-    partes: list[str] = []
-    if plataforma_label:
-        partes.append(f"Plataforma de destino: {plataforma_label}")
-    partes.append("Copy a revisar:\n\n" + copy)
-    return "\n\n".join(partes)
-
-
-def reconciliar_qa_en_curso(marca: str | None = None) -> list[dict[str, Any]]:
-    """Recoge el veredicto de las piezas con QA editorial EN CURSO ya resuelto.
-
-    Espeja cómo `ejecutar_qa` corría sobre borradores completados: aquí barremos los borradores
-    del pipeline marcados `veredicto='en_curso'` (su QA editorial se lanzó en un barrido previo)
-    y, si su veredicto editorial ya está persistido (`repos.ultimo_veredicto_qa`), lo MAPEAMOS al
-    veredicto de la pieza (listo / revisar; nunca 'no_publicar' en la pieza —el humano decide—,
-    pero el veredicto editorial completo queda en `contenido_qa_veredictos`). Best-effort por
-    item. Devuelve los que reconcilió.
+    Excluye los `en_curso` (su QA está en vuelo) y los ya cribados (`no_verificado`/`problema`).
     """
-    reconciliados: list[dict[str, Any]] = []
-    try:
-        pubs = repos.listar_publicaciones(marca=marca, estado="borrador", limite=_QA_REVISAR_MAX)
-    except Exception:  # noqa: BLE001 -- sin borradores legibles, nada que reconciliar
-        return reconciliados
-    for pub in pubs:
-        if (pub.get("veredicto") or "").strip() != QA_EN_CURSO:
-            continue
-        if not _es_del_pipeline(pub):
-            continue
-        pid = (pub.get("id") or "").strip()
-        if not pid:
-            continue
-        try:
-            veredicto_qa = repos.ultimo_veredicto_qa(pid, pub.get("contenido_id", "") or "")
-        except Exception:  # noqa: BLE001 -- una pieza ilegible no debe romper la pasada
-            continue
-        if not veredicto_qa:
-            continue  # aún sin resolver (QA en vuelo) o copy cambió: lo deja en_curso.
-        crudo = (veredicto_qa.get("verdicto") or "").strip()
-        # Mapeo conservador al veredicto de la PIEZA: 'listo' si listo; cualquier otro -> 'revisar'
-        # (incluido 'no_publicar': la pieza solo SEÑALA "revisar"; el detalle vive en el informe).
-        verdicto_pieza = "listo" if crudo == "listo" else "revisar"
-        try:
-            repos.actualizar_publicacion(pid, {"veredicto": verdicto_pieza})
-        except Exception:  # noqa: BLE001 -- un fallo al persistir no aborta la pasada
-            _log.warning("pipeline: no se pudo persistir el veredicto QA (%s)", pid, exc_info=True)
-            continue
-        reconciliados.append({"id": pid, "verdicto": verdicto_pieza})
-    return reconciliados
-
-
-def validar_borrador(publicacion: dict[str, Any]) -> dict[str, Any] | None:
-    """QA — valida UN borrador del pipeline. Prefiere el QA EDITORIAL real; cae al léxico.
-
-    1) Intenta el QA EDITORIAL via `claude -p` contra el DOCUMENTO de Biblioteca de criterios
-       (`lanzar_qa_editorial`): asíncrono, deja la pieza `en_curso` y enlaza su stream; el
-       `reconciliar_qa_en_curso` recoge el veredicto al completar. Si arranca, NO corremos el
-       léxico (la señal editorial es superior).
-    2) FALLBACK (sin documento / sin worker / cola llena): la QA LÉXICA determinista de antes
-       (longitud por red, copy vacío), que persiste un veredicto inmediato y registra la etapa.
-
-    None si no se puede (best-effort por item).
-    """
-    pid = (publicacion.get("id") or "").strip()
-    if not pid:
-        return None
-    # 1) QA editorial real (preferente). Best-effort: cualquier fallo cae al léxico.
-    try:
-        gen = lanzar_qa_editorial(publicacion, autor=_autor_pipeline())
-    except generaciones.ColaLlenaError:
-        gen = None  # cola llena: caemos al léxico para no dejar la pieza sin ninguna señal.
-    except Exception:  # noqa: BLE001 -- el QA editorial nunca debe romper la pasada
-        _log.warning("pipeline: fallo el QA editorial (%s); caigo al léxico", pid, exc_info=True)
-        gen = None
-    if gen is not None:
-        return {"id": pid, "verdicto": QA_EN_CURSO, "modo": "editorial", "gen_id": gen.get("id", "")}
-
-    # 2) Fallback léxico (determinista, inmediato).
-    resultado = qa_lexico(publicacion)
-    verdicto = resultado["verdicto"]
-    try:
-        repos.actualizar_publicacion(pid, {"veredicto": verdicto})
-    except Exception:  # noqa: BLE001 -- un fallo al persistir no debe abortar la pasada QA
-        _log.warning("pipeline: no se pudo persistir el veredicto QA (%s)", pid, exc_info=True)
-        return None
-    obs = resultado["observaciones"]
-    detalle_ok = "ok" if not obs else f"{len(obs)} observaciones"
-    titulo = (publicacion.get("titulo") or publicacion.get("contenido") or "").strip()[:120]
-    registrar_etapa(
-        ETAPA_QA,
-        (publicacion.get("marca") or "") or "",
-        f"Validación léxica (fallback) — '{titulo}': {detalle_ok}",
-        contenido_id=(publicacion.get("contenido_id") or ""),
-    )
-    return {"id": pid, "verdicto": verdicto, "modo": "lexico", "observaciones": obs}
+    return [t for t in temas_pipeline(marca) if not (t.get("qa_veredicto") or "").strip()]
 
 
 # --------------------------------------------------------------------------- #
-# Barrido (CI→CD por marca + pasada QA)                                       #
+# Barrido (CI → QA de la fuente → CD por marca)                               #
 # --------------------------------------------------------------------------- #
 
 
 def ejecutar_barrido() -> dict[str, Any]:
-    """Un barrido del pipeline: CI→CD por cada marca con feeds activos, luego pasada QA.
+    """Un barrido del pipeline: CI (crea temas) → QA de la fuente → CD (copy de los OK).
 
-    Best-effort: un fallo por marca/item se loguea y se sigue; si la cola de generación está
-    llena, se corta la fase CD de esa marca (reintenta el siguiente barrido). Devuelve un
-    resumen `{lanzados, validados}` (para el endpoint/los tests).
+    Tres fases EN ORDEN (rediseño QPC):
+      1) CI: por cada marca con feeds activos, crea temas SIN copy (`crear_tema_de`) y marca los
+         items usados (dedup).
+      2) QA: lanza la criba de la FUENTE (`claude -p`) de los temas nuevos sin veredicto, con tope
+         `_QA_LANZAR_MAX`. ASÍNCRONA: marca el tema `en_curso` y el `procesar` persiste el veredicto
+         (`no_verificado`/`problema`) al completar (normalmente en un barrido posterior).
+      3) CD: genera copy SOLO de los temas cuya QA salió `no_verificado` y que aún no tienen copy
+         (`temas_para_copy`), con tope `_CD_LANZAR_MAX`. Los `problema` NO generan copy (ahorro).
+
+    Best-effort: un fallo por marca/tema se loguea y se sigue; si la cola de generación está
+    llena, se corta la fase en curso (reintenta el siguiente barrido). Devuelve un resumen
+    `{temas, cribados, lanzados}` (para el endpoint/los tests).
     """
     autor = _autor_pipeline()
     maximo = config.pipeline_max()
-    lanzados: list[dict[str, Any]] = []
+    # --- Fase CI: crea los temas (sin copy) por marca. ---------------------------------------
+    temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids():
         try:
             trabajos = ingerir_marca(marca, maximo=maximo)
@@ -829,59 +823,78 @@ def ejecutar_barrido() -> dict[str, Any]:
             continue
         for trabajo in trabajos:
             try:
-                gen = crear_contenido_de(trabajo, autor=autor)
-            except generaciones.ColaLlenaError:
-                _log.info("pipeline: cola llena; el resto entra en el próximo barrido.")
-                break
+                tema = crear_tema_de(trabajo)
             except Exception:  # noqa: BLE001 -- un fallo por item no debe matar el barrido
-                _log.exception("pipeline: fallo la creación de contenido (CD) de un item.")
+                _log.exception("pipeline: fallo la creación del tema (CI) de un item.")
                 continue
-            if gen:
-                lanzados.append(gen)
-    validados = ejecutar_qa()
-    if lanzados or validados:
+            if tema:
+                temas_nuevos.append(tema)
+    # --- Fase QA (criba de la fuente) + Fase CD (copy de los OK). ----------------------------
+    cribados = ejecutar_qa(autor=autor)
+    lanzados = ejecutar_cd(autor=autor)
+    if temas_nuevos or cribados or lanzados:
         _log.info(
-            "pipeline: %d borrador(es) encolado(s) (CD), %d validado(s) (QA).",
-            len(lanzados), len(validados),
+            "pipeline: %d tema(s) ingerido(s) (CI), %d cribado(s) (QA), %d copy encolado(s) (CD).",
+            len(temas_nuevos), len(cribados), len(lanzados),
         )
-    return {"lanzados": lanzados, "validados": validados}
+    return {"temas": temas_nuevos, "cribados": cribados, "lanzados": lanzados}
 
 
-def ejecutar_qa() -> list[dict[str, Any]]:
-    """Pasada QA: reconcilia el QA editorial en vuelo y valida los borradores sin veredicto.
+def ejecutar_qa(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Fase QA del barrido: lanza la CRIBA de la fuente (`claude -p`) de los temas sin veredicto.
 
-    Separada de la fase CD a propósito (el enunciado): un borrador encolado en CD aún no está
-    COMPLETADO en el mismo barrido, así que la QA recoge los borradores que YA completaron en
-    barridos anteriores. Dos pasos, en orden:
-      1) RECONCILIA las piezas con QA editorial `en_curso` cuyo veredicto ya está resuelto
-         (`reconciliar_qa_en_curso`): persiste el veredicto real y cierra la etapa.
-      2) VALIDA los borradores SIN veredicto: lanza el QA editorial (claude) o cae al léxico.
-    Best-effort por item.
+    Con TOPE de lanzamientos por barrido (`_QA_LANZAR_MAX`): evita la ráfaga de `claude -p` que
+    satura el worker e inunda Actividad de QA "en curso". Los temas restantes se criban en el
+    siguiente barrido (drenaje gradual). Si la cola se llena, corta la fase (reintenta luego).
+    Best-effort por tema. Devuelve los temas cuya QA se lanzó.
     """
-    validados: list[dict[str, Any]] = []
-    # 1) Cierra los QA editoriales que ya completaron en barridos anteriores.
-    try:
-        validados.extend(reconciliar_qa_en_curso())
-    except Exception:  # noqa: BLE001 -- un fallo de reconciliación no debe matar la pasada
-        _log.exception("pipeline: fallo la reconciliación de QA editorial en curso.")
-    # 2) Lanza/valida los borradores aún sin veredicto, con TOPE de lanzamientos editoriales
-    #    por barrido (`_QA_LANZAR_MAX`): evita la ráfaga de `claude -p` que satura el worker e
-    #    inunda Actividad de QA "en curso". Los borradores restantes se validan en el siguiente
-    #    barrido (drenaje gradual). La validación LÉXICA (fallback, sin coste) no cuenta al tope.
-    lanzados_editorial = 0
-    for pub in borradores_pipeline_sin_qa():
-        if lanzados_editorial >= _QA_LANZAR_MAX:
+    if autor is None:
+        autor = _autor_pipeline()
+    cribados: list[dict[str, Any]] = []
+    lanzados = 0
+    for tema in temas_sin_qa():
+        if lanzados >= _QA_LANZAR_MAX:
             break
         try:
-            r = validar_borrador(pub)
-        except Exception:  # noqa: BLE001 -- un fallo por item no debe matar la pasada QA
-            _log.exception("pipeline: fallo la validación (QA) de un borrador.")
+            gen = lanzar_qa_fuente(tema, autor=autor)
+        except generaciones.ColaLlenaError:
+            _log.info("pipeline: cola llena en QA; el resto entra en el próximo barrido.")
+            break
+        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase QA
+            _log.exception("pipeline: fallo la criba de la fuente (QA) de un tema.")
             continue
-        if r:
-            validados.append(r)
-            if r.get("modo") == "editorial":
-                lanzados_editorial += 1
-    return validados
+        if gen is not None:
+            cribados.append({"id": tema.get("id", ""), "gen_id": gen.get("id", ""), "verdicto": QA_EN_CURSO})
+            lanzados += 1
+    return cribados
+
+
+def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
+    """Fase CD del barrido: genera copy SOLO de los temas con QA `no_verificado` y sin copy aún.
+
+    Con TOPE por barrido (`_CD_LANZAR_MAX`): mismo motivo anti-ráfaga que la QA. Un tema cuyo
+    copy ya se lanzó (o `problema`) no entra (lo decide `temas_para_copy`). Si la cola se llena,
+    corta la fase (reintenta luego). Best-effort por tema. Devuelve las generaciones de copy.
+    """
+    if autor is None:
+        autor = _autor_pipeline()
+    lanzados: list[dict[str, Any]] = []
+    contador = 0
+    for tema in temas_para_copy():
+        if contador >= _CD_LANZAR_MAX:
+            break
+        try:
+            gen = lanzar_copy_de_tema(tema, autor=autor)
+        except generaciones.ColaLlenaError:
+            _log.info("pipeline: cola llena en CD; el resto entra en el próximo barrido.")
+            break
+        except Exception:  # noqa: BLE001 -- un fallo por tema no debe matar la fase CD
+            _log.exception("pipeline: fallo la generación de copy (CD) de un tema.")
+            continue
+        if gen:
+            lanzados.append(gen)
+            contador += 1
+    return lanzados
 
 
 def _intervalo_segundos() -> float:

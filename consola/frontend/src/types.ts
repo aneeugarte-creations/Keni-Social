@@ -221,6 +221,27 @@ export interface PipelinePieza {
   creado?: string;
 }
 
+/** Un hallazgo estructurado de la criba de la fuente (lo que está mal en la nota de origen). */
+export interface PipelineHallazgo {
+  tipo?: string;
+  gravedad?: string;
+  fragmento?: string;
+  explicacion?: string;
+  sugerencia?: string;
+  no_verificable?: boolean;
+}
+
+/** Veredicto ESTRUCTURADO de la criba de la fuente (rediseño QPC, pre-copy):
+ *  `no_verificado` (⚠️ apta, no verificada a fondo) o `problema` (❗ algo de peso: sin copy). */
+export interface PipelineQaFuente {
+  veredicto: string;
+  no_verificado: boolean;
+  problema: boolean;
+  copy_omitido: boolean;
+  resumen: string;
+  hallazgos: PipelineHallazgo[];
+}
+
 /** Una RUN del pipeline: el recorrido de una pieza por sus etapas. */
 export interface Pipeline {
   id: string;
@@ -233,6 +254,8 @@ export interface Pipeline {
   actualizado: string;
   estado_global: "ok" | "en_curso" | "pendiente" | "revisar" | "fallo";
   etapas: PipelineEtapa[];
+  /** Criba de la fuente (⚠️/❗ + hallazgos). Siempre presente desde el back. */
+  qa_fuente?: PipelineQaFuente;
   piezas: PipelinePieza[];
 }
 
@@ -268,8 +291,10 @@ export interface RespuestaPipelineDetalle {
 
 // --- Generación de copy (resultado compartido) ---
 
-/** Veredicto editorial de una pieza/generación. "" = sin veredicto. */
-export type Veredicto = "listo" | "revisar" | "no_publicar" | "";
+/** Veredicto editorial de una pieza/generación. "" = sin veredicto.
+ *  `no_verificado` (rediseño QPC): la pieza nació de una fuente que pasó la criba PERMISIVA
+ *  pre-copy sin verificarse a fondo (lleva el aviso ⚠️ hasta que un humano la revise). */
+export type Veredicto = "listo" | "revisar" | "no_publicar" | "no_verificado" | "";
 
 /** Una pieza generada para una red concreta. */
 export interface PiezaGenerada {

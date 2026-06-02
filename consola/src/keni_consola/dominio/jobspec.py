@@ -48,6 +48,10 @@ PROC_GALERIA = "galeria"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
 PROC_QA = "qa"
+# QA de la FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la nota de origen por TEMA antes
+# de generar copy. Persiste el veredicto estructurado (`no_verificado`/`problema`) + hallazgos
+# sobre el `contenido` (tema), para que CD genere copy SOLO de los `no_verificado`.
+PROC_QA_FUENTE = "qa-fuente"
 # Biblioteca de prompts: post-procesado IDENTIDAD. Un prompt de la biblioteca devuelve el
 # texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
 PROC_PROMPT = "prompt"
@@ -78,6 +82,7 @@ def construir_copy(
     contenido_id: str = "",
     imagen_fuente: str = "",
     tipo_contenido: str = "",
+    veredicto_inicial: str = "",
 ) -> dict[str, Any]:
     """Spec del post-procesado de PIEZAS (copy/RSS): parsea piezas + crea borradores.
 
@@ -87,6 +92,9 @@ def construir_copy(
     reconstruir el post-procesado en el worker; sin el, borrador suelto (back-compat).
     `imagen_fuente`/`tipo_contenido` (RSS de marca propia): si vienen, cada borrador nace con
     la imagen original del articulo (`tipo_contenido='fuente'`) lista para usarse.
+    `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de cada borrador cuando la salida
+    no trae uno propio (p. ej. `no_verificado` para que la pieza herede el aviso de la criba de
+    la fuente). "" = comportamiento de hoy (el veredicto sale de la propia salida del copy).
     """
     return {
         "kind": PROC_COPY,
@@ -102,6 +110,7 @@ def construir_copy(
         "contenido_id": contenido_id or "",
         "imagen_fuente": imagen_fuente or "",
         "tipo_contenido": tipo_contenido or "",
+        "veredicto_inicial": veredicto_inicial or "",
     }
 
 
@@ -174,6 +183,27 @@ def construir_qa(
         "plataforma_id": plataforma_id or "",
         "contenido_id": contenido_id or "",
         "copy_hash": copy_hash or "",
+    }
+
+
+def construir_qa_fuente(
+    *,
+    marca: str,
+    titulo: str,
+    autor: dict[str, str] | None = None,
+    contenido_id: str = "",
+) -> dict[str, Any]:
+    """Spec del post-procesado de la QA de la FUENTE (pre-copy).
+
+    `contenido_id` es el TEMA cribado: el worker persiste sobre él el veredicto estructurado
+    (`no_verificado`/`problema`) + hallazgos, para que la fase CD genere copy solo de los OK.
+    """
+    return {
+        "kind": PROC_QA_FUENTE,
+        "marca": marca,
+        "titulo": titulo,
+        "autor": _autor_spec(autor),
+        "contenido_id": contenido_id or "",
     }
 
 
@@ -330,6 +360,12 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             copy_hash=p.get("copy_hash", "") or "",
         )
 
+    if kind == PROC_QA_FUENTE:
+        return dom_qa.construir_procesar_qa_fuente(
+            p["marca"], p.get("titulo", ""), autor=autor,
+            contenido_id=p.get("contenido_id", "") or "",
+        )
+
     if kind == PROC_GALERIA:
         return dom_copy.construir_procesar_galeria(
             p["skill"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
@@ -352,6 +388,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             contenido_id=p.get("contenido_id", "") or "",
             imagen_fuente=p.get("imagen_fuente", "") or "",
             tipo_contenido=p.get("tipo_contenido", "") or "",
+            veredicto_inicial=p.get("veredicto_inicial", "") or "",
         )
         fuente_id = p.get("fuente_id") or ""
         clave = p.get("clave") or ""

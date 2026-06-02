@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, GitBranch, RefreshCw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, GitBranch, OctagonAlert, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -24,6 +24,8 @@ import type {
   PipelineActividad,
   PipelineEtapa,
   PipelineGeneracion,
+  PipelineHallazgo,
+  PipelineQaFuente,
   RespuestaPipelineDetalle,
   RespuestaPipelines,
 } from "@/types";
@@ -66,6 +68,67 @@ function ChipEstado({ estado, className }: { estado: string; className?: string 
     <Badge variant={a.variant} className={cn("border", a.clase, className)}>
       {a.texto}
     </Badge>
+  );
+}
+
+/** Chip de la criba de la fuente (rediseño QPC): ⚠️ "No verificado" o ❗ "QA: problema".
+ *  Nada si aún no hay veredicto (criba pendiente/en curso: lo cubre la tira de etapas). */
+function BadgeQaFuente({ qa, className }: { qa?: PipelineQaFuente; className?: string }) {
+  if (!qa) return null;
+  if (qa.problema) {
+    return (
+      <Badge
+        variant="secondary"
+        className={cn("gap-1 border border-destructive/30 bg-destructive/10 text-destructive", className)}
+        title={qa.resumen || "La criba encontró un problema de peso; no se generó copy."}
+      >
+        <OctagonAlert className="h-3 w-3" aria-hidden="true" />
+        QA: problema
+      </Badge>
+    );
+  }
+  if (qa.no_verificado) {
+    return (
+      <Badge
+        variant="secondary"
+        className={cn("gap-1 border border-amber-500/30 bg-amber-500/15 text-amber-600", className)}
+        title="Fuente apta pero NO verificada a fondo: revisa antes de aprobar."
+      >
+        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
+        No verificado
+      </Badge>
+    );
+  }
+  return null;
+}
+
+/** Lista de hallazgos de la criba (lo que está mal en la nota de origen). Nada si vacía. */
+function ListaHallazgos({ hallazgos }: { hallazgos: PipelineHallazgo[] }) {
+  if (!hallazgos || hallazgos.length === 0) return null;
+  return (
+    <ul className="space-y-1.5">
+      {hallazgos.map((h, i) => (
+        <li key={i} className="rounded border border-destructive/20 bg-destructive/5 p-2 text-xs">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {h.tipo && <Badge variant="outline" className="text-[10px]">{h.tipo}</Badge>}
+            {h.gravedad && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  "text-[10px]",
+                  h.gravedad === "error" && "border-destructive/40 text-destructive",
+                )}
+              >
+                {h.gravedad}
+              </Badge>
+            )}
+          </div>
+          {h.fragmento && <p className="mt-1 italic text-muted-foreground">«{h.fragmento}»</p>}
+          {h.explicacion && <p className="mt-1 text-foreground/90">{h.explicacion}</p>}
+          {h.sugerencia && <p className="mt-1 text-muted-foreground">Sugerencia: {h.sugerencia}</p>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -138,9 +201,10 @@ function FilaPipeline({ run, onAbrir }: { run: Pipeline; onAbrir: (id: string) =
     >
       <CardContent className="flex items-center gap-3 p-4">
         <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Badge variant="outline" className="shrink-0">{run.marca_nombre || run.marca}</Badge>
             <ChipEstado estado={run.estado_global} />
+            <BadgeQaFuente qa={run.qa_fuente} />
             <span className="truncate text-xs text-muted-foreground">{tiempoRelativo(run.creado)}</span>
           </div>
           <p className="truncate text-sm font-medium" title={run.titulo}>{run.titulo}</p>
@@ -243,30 +307,33 @@ function ContenidoEtapa({
     );
   }
   if (clave === "qa") {
+    // Criba de la FUENTE (pre-copy, por tema): veredicto estructurado + hallazgos, NO por pieza.
+    const qa = run.qa_fuente;
     return (
       <div className="space-y-2">
-        {/* Headline: el proceso de pensamiento del agente que revisó el copy (QA editorial). */}
+        {/* Headline: el proceso de pensamiento del agente que cribó la nota de origen. */}
         {generacion && <ProcesoAgente gen={generacion} />}
-        {/* Secundario: el veredicto + observaciones por pieza. */}
-        {run.piezas.map((p, i) => (
-          <div key={`${p.red}-${i}`} className="rounded-md border p-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold">{p.red_nombre}</span>
-              {p.veredicto ? (
-                <ChipEstado estado={p.veredicto === "listo" ? "ok" : "revisar"} />
-              ) : (
-                <ChipEstado estado="pendiente" />
+        {qa && (qa.no_verificado || qa.problema) ? (
+          <div className="space-y-2 rounded-md border p-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <BadgeQaFuente qa={qa} />
+              {qa.copy_omitido && (
+                <span className="text-xs text-muted-foreground">
+                  Copy omitido: no se gastó generación en una fuente con problemas.
+                </span>
               )}
             </div>
-            {p.observaciones && p.observaciones.length > 0 ? (
-              <ul className="mt-1 list-disc pl-4 text-xs text-amber-600">
-                {p.observaciones.map((o, j) => <li key={j}>{o}</li>)}
-              </ul>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">Sin observaciones.</p>
+            {qa.resumen && <p className="text-xs text-foreground/90">{qa.resumen}</p>}
+            <ListaHallazgos hallazgos={qa.hallazgos} />
+            {qa.no_verificado && qa.hallazgos.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Sin hallazgos de peso: la fuente es apta, pero no se verificó a fondo.
+              </p>
             )}
           </div>
-        ))}
+        ) : (
+          <p className="text-xs text-muted-foreground">Criba de la fuente aún sin resolver.</p>
+        )}
       </div>
     );
   }
@@ -411,7 +478,7 @@ export default function Pipelines() {
     <div className="space-y-5">
       <PageHeader
         titulo="Pipelines"
-        descripcion="Cada pieza del pipeline de contenido, etapa a etapa (Ingesta → Copy → Validación → Aprobación), estilo CI/CD. Haz clic en una tarjeta para ver el detalle de cada paso."
+        descripcion="Cada pieza del pipeline de contenido, etapa a etapa (Ingesta → Criba de la fuente → Copy → Aprobación), estilo CI/CD. Haz clic en una tarjeta para ver el detalle de cada paso."
         acciones={
           <Button variant="outline" size="sm" onClick={() => q.refetch()} disabled={q.isFetching}>
             <RefreshCw className={cn("mr-2 h-4 w-4", q.isFetching && "animate-spin")} />

@@ -210,6 +210,7 @@ def construir_procesar_copy(
     contenido_id: str = "",
     imagen_fuente: str = "",
     tipo_contenido: str = "",
+    veredicto_inicial: str = "",
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
@@ -219,6 +220,8 @@ def construir_procesar_copy(
 
     `contenido_id` (lista viva): si apunta a un tema del tablero existente, cada borrador se
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
+    `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de las piezas cuando la salida no
+    trae uno propio (p. ej. `no_verificado`, para heredar el aviso de la criba de la fuente).
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -228,16 +231,18 @@ def construir_procesar_copy(
             skill, marca, parsed["resultado"], piezas=parsed["piezas"], titulo=titulo,
             metricas=stream.metricas_a_dict(metricas), autor=autor,
         )
+        # El veredicto de la salida manda; si viene vacío, cae al inicial (p. ej. no_verificado).
+        verdicto = (str(parsed["verdicto"]) or "").strip() or (veredicto_inicial or "")
         publicaciones = crear_publicaciones_desde_piezas(
             parsed["piezas"], marca=marca, titulo=titulo,
-            verdicto=parsed["verdicto"], origen=historial_id, autor=autor,
+            verdicto=verdicto, origen=historial_id, autor=autor,
             contenido_id=contenido_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
         )
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
             "historial_id": historial_id,
-            "verdicto": parsed["verdicto"],
+            "verdicto": verdicto,
             "piezas": parsed["piezas"],
             "publicaciones": publicaciones,
         }

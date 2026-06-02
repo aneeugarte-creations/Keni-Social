@@ -143,6 +143,101 @@ def parsear_informe(salida: str) -> dict[str, object]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# QA DE LA FUENTE (pre-copy, rediseño QPC): criba PERMISIVA de la NOTA de origen #
+# --------------------------------------------------------------------------- #
+# El QA se movió a ANTES del copy y por PIEZA (tema/fuente), no por plataforma: cribar la nota
+# de origen antes de gastar tokens generando copy. Es PERMISIVO y devuelve un veredicto
+# ESTRUCTURADO con SOLO dos salidas: `no_verificado` (nada de peso en contra: seguir, la pieza
+# llevará ⚠️) o `problema` (algo de peso: NO generar copy, marcar ❗ con los hallazgos). Por
+# defecto `no_verificado` cuando hay duda (permisivo).
+
+VERDICTO_NO_VERIFICADO = "no_verificado"
+VERDICTO_PROBLEMA = "problema"
+
+# Mapa del veredicto editorial clásico (semáforo) al veredicto de FUENTE: solo el rojo
+# (`no_publicar`) cuenta como `problema`; verde/amarillo (o sin veredicto) -> `no_verificado`
+# (permisivo: ante la duda, deja pasar). Cubre que la skill use el lenguaje de semáforo.
+_FUENTE_PROBLEMA_DESDE = frozenset({"no_publicar"})
+
+
+def parsear_verdicto_fuente(salida: str) -> dict[str, object]:
+    """Parsea la salida de la QA de la FUENTE en un veredicto ESTRUCTURADO permisivo.
+
+    Reusa `parsear_informe` (mismo formato ```json con `veredicto`/`resumen`/`hallazgos`), pero
+    COLAPSA el veredicto a dos valores de FUENTE:
+      - `problema` SOLO si el informe dice 🔴/no_publicar O trae algún hallazgo de gravedad
+        `error` (algo de peso en contra),
+      - `no_verificado` en cualquier otro caso (incluido sin veredicto / formato inesperado):
+        PERMISIVO por diseño (ante la duda, deja pasar y la pieza llevará ⚠️).
+
+    Devuelve `{verdicto, resumen, hallazgos: [...], informe_texto}` (mismas claves que
+    `parsear_informe`, con `verdicto` ya colapsado a `no_verificado`/`problema`). PURO.
+    """
+    informe = parsear_informe(salida)
+    crudo = str(informe.get("verdicto") or "")
+    hallazgos = informe.get("hallazgos")
+    hay_error = isinstance(hallazgos, list) and any(
+        isinstance(h, dict) and h.get("gravedad") == "error" for h in hallazgos
+    )
+    es_problema = crudo in _FUENTE_PROBLEMA_DESDE or hay_error
+    informe["verdicto"] = VERDICTO_PROBLEMA if es_problema else VERDICTO_NO_VERIFICADO
+    return informe
+
+
+def serializar_hallazgos(informe: dict[str, object]) -> str:
+    """Serializa los hallazgos (+resumen) del informe de fuente a JSON para persistir en el tema.
+
+    Compacto y autocontenido (lo lee la UI/API tal cual): `{resumen, hallazgos:[...]}`. "" si no
+    hay nada que guardar (verdicto `no_verificado` sin hallazgos), para no engordar el registro.
+    """
+    hallazgos = informe.get("hallazgos") or []
+    resumen = str(informe.get("resumen") or "")
+    if not hallazgos and not resumen:
+        return ""
+    return json.dumps({"resumen": resumen, "hallazgos": hallazgos}, ensure_ascii=False)
+
+
+def construir_procesar_qa_fuente(  # noqa: ANN201
+    marca: str,
+    titulo: str,
+    autor: dict[str, str] | None = None,
+    *,
+    contenido_id: str = "",
+):
+    """Callback de post-procesado de la QA de la FUENTE: persiste el veredicto en el TEMA.
+
+    Parsea el veredicto estructurado (`parsear_verdicto_fuente`), registra el informe en el
+    historial (trazabilidad, sin piezas: esto SEÑALA, no publica) y ESCRIBE el veredicto +
+    hallazgos sobre el `contenido` (tema) de origen (`repos.actualizar_contenido`), para que la
+    fase CD seleccione los `no_verificado` y la UI muestre ⚠️/❗ + hallazgos. Devuelve el
+    veredicto/informe para el sondeo del frontend. Se reconstruye igual en el worker (vía spec).
+    """
+    from .. import repos
+
+    def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
+        informe = parsear_verdicto_fuente(salida)
+        historial_id = repos.registrar_historial_skill(
+            SKILL_ID, marca, str(informe.get("informe_texto") or ""), piezas=[], titulo=titulo,
+            metricas=stream.metricas_a_dict(metricas), autor=autor,
+        )
+        verdicto = str(informe.get("verdicto") or VERDICTO_NO_VERIFICADO)
+        if contenido_id:
+            repos.actualizar_contenido(
+                contenido_id,
+                {"qa_veredicto": verdicto, "qa_hallazgos": serializar_hallazgos(informe)},
+            )
+        return {
+            "informe": informe,
+            "verdicto": verdicto,
+            "historial_id": historial_id,
+            "piezas": [],
+            "publicaciones": [],
+        }
+
+    return procesar
+
+
 def construir_procesar_qa(  # noqa: ANN201
     marca: str,
     titulo: str,

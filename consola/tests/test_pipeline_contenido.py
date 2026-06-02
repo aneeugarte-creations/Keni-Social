@@ -1,12 +1,15 @@
-"""Tests del pipeline de contenido CI→CD→QA (ADITIVO, gateado por `KENI_PIPELINE`).
+"""Tests del pipeline de contenido CI→QA(fuente)→CD (ADITIVO, gateado por `KENI_PIPELINE`).
 
-Todo OFFLINE: ni red (og:image mockeada), ni `claude` (`lanzar_copy` mockeado), ni feeds
-reales (la lectura de items se parchea con items canned). Cubre:
+REDISEÑO QPC: la QA se movió a ANTES del copy y por PIEZA (tema/fuente). El barrido es ahora
+CI (crea temas SIN copy) → QA de la FUENTE (criba permisiva por tema) → CD (copy SOLO de los
+temas `no_verificado`). Todo OFFLINE: ni red (og:image mockeada), ni `claude` (`lanzar_copy` y
+la generación de QA mockeados), ni feeds reales (items canned). Cubre:
   (a) gateado OFF por defecto -> el barrido NO produce nada;
-  (b) con el flag, selecciona <= cap por marca, llama a `lanzar_copy` con la marca/imagen
-      correctas y marca el item usado (dedup -> un segundo barrido lo salta);
-  (c) se emiten entradas de actividad de etapa CI y CD;
-  (d) la pasada QA registra una etapa QA y persiste el veredicto de un borrador completado.
+  (b) con el flag, CI selecciona <= cap por marca, crea temas SIN copy y marca el item usado;
+  (c) se emiten entradas de actividad de etapa CI (y, al lanzar, QA/CD);
+  (d) una fuente `problema` NO genera copy y marca el tema ❗; una `no_verificado` SÍ genera
+      copy y las piezas heredan el aviso ⚠️;
+  (e) el cap por barrido (QA y CD) se respeta.
 
 Las funciones PURAS (`items_ingeribles`, `qa_lexico`, `_extraer_og_image`) se prueban sin DB.
 Los flujos con persistencia usan la fixture `entorno` (Postgres de pruebas; se salta si no hay).
@@ -17,7 +20,21 @@ from __future__ import annotations
 from keni_consola import config, generaciones, redes, repos
 from keni_consola import pipeline_contenido as pc
 
+from .conftest import _cliente, lanzador_generacion_completa
+
 _URL_OK = "https://ejemplo.test/feed.xml"
+
+# Salidas canned de la QA de la fuente (semáforo + bloque json estructurado).
+_QA_OK = (
+    "🟢 Fuente apta.\n\n"
+    '```json\n{"veredicto": "🟢", "resumen": "Sin problemas de peso", "hallazgos": []}\n```\n'
+)
+_QA_PROBLEMA = (
+    "🔴 Problema de peso.\n\n"
+    '```json\n{"veredicto": "🔴", "resumen": "Dato falso evidente", '
+    '"hallazgos": [{"tipo": "dato", "gravedad": "error", "fragmento": "x", '
+    '"explicacion": "es falso", "sugerencia": "no publicar"}]}\n```\n'
+)
 
 
 # --------------------------------------------------------------------------- #
@@ -124,17 +141,12 @@ def test_gateado_off_no_arranca_el_daemon():
 
 
 def test_iniciar_pipeline_no_genera_sin_flag(entorno, monkeypatch):
-    """El daemon arranca pero, gateado OFF, NO llama a `lanzar_copy` (el barrido no corre).
-
-    Aislamos el riesgo a nivel de daemon: con el flag ausente el hilo no debe producir nada
-    aunque haya un feed activo con items frescos.
-    """
+    """El daemon arranca pero, gateado OFF, NO crea temas (el barrido no corre)."""
     llamadas = _mock_lanzar_copy(monkeypatch)
     repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
     _mock_feed(monkeypatch, [_item()])
     _mock_og_image(monkeypatch, "")
 
-    # Un solo tick del bucle gateado: con el flag OFF, `ejecutar_barrido` no debe correr.
     from keni_consola import daemon_util
 
     daemon_util.bucle_gateado(
@@ -145,17 +157,18 @@ def test_iniciar_pipeline_no_genera_sin_flag(entorno, monkeypatch):
         _max_vueltas=1,
     )
     assert llamadas == []
-    # Tampoco se sembró ninguna actividad de etapa.
     assert _etapas_de_actividad() == []
+    # No se creó ningún tema del pipeline.
+    assert pc.temas_pipeline() == []
 
 
 # --------------------------------------------------------------------------- #
-# (b)+(c) CON el flag: ingesta + creación, dedup, y etapas CI/CD en actividad  #
+# (b)+(c) CI: crea temas SIN copy, dedup, y etapa CI en actividad              #
 # --------------------------------------------------------------------------- #
 
 
 def _etapas_de_actividad():
-    """Etiquetas de las generaciones-marcador del pipeline (tipo 'pipeline'), recientes 1º."""
+    """Etiquetas de las generaciones-marcador del pipeline (tipo 'pipeline_etapa'), recientes 1º."""
     return [
         g["etiqueta"]
         for g in generaciones.listar(limite=None)
@@ -163,12 +176,15 @@ def _etapas_de_actividad():
     ]
 
 
-def test_barrido_con_flag_ingesta_genera_y_dedup(entorno, monkeypatch):
+def test_ci_crea_temas_sin_copy_y_dedup(entorno, monkeypatch):
+    """CI selecciona <= cap, crea temas SIN copy, marca items usados; QA queda sin documento."""
     monkeypatch.setenv("KENI_PIPELINE", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "2")
     llamadas = _mock_lanzar_copy(monkeypatch)
-    # Sin usuarios -> autor anónimo (no rompe); evitamos depender de bootstrap.
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    # Sin documento de QA disponible: la fase QA no lanza nada (temas quedan sin veredicto) y CD
+    # no genera copy. Aislamos así la fase CI sin tocar `claude`.
+    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
 
     fuente = repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
     items = [_item(clave="a", titulo="Tema A"), _item(clave="b", titulo="Tema B"),
@@ -178,34 +194,33 @@ def test_barrido_con_flag_ingesta_genera_y_dedup(entorno, monkeypatch):
 
     resumen = pc.ejecutar_barrido()
 
-    # (b) selecciona <= cap (2) por marca y llama a lanzar_copy con la marca correcta.
-    # Solo `unotv` tiene feed; las demás marcas no producen llamadas.
-    assert len(llamadas) == 2
-    assert all(c["marca"] == "unotv" for c in llamadas)
-    assert {c["titulo"] for c in llamadas} == {"Tema A", "Tema B"}
-    assert len(resumen["lanzados"]) == 2
+    # CI creó 2 temas (cap) SIN copy; CD no lanzó nada (sin QA aprobada).
+    assert len(resumen["temas"]) == 2
+    assert llamadas == []
+    titulos = {t["titulo"] for t in pc.temas_pipeline()}
+    assert {"Tema A", "Tema B"} <= titulos
+    assert all((t.get("qa_veredicto") or "") == "" for t in pc.temas_pipeline())
 
-    # dedup: los items A y B quedaron marcados usados.
+    # dedup: A y B quedaron marcados usados.
     vistas = repos.claves_vistas(fuente["id"])
     assert {"a", "b"} <= vistas
 
-    # (c) hay una etapa CI y al menos dos CD en la actividad.
-    etapas = _etapas_de_actividad()
-    assert any(e.startswith("CI · ") for e in etapas)
-    assert sum(1 for e in etapas if e.startswith("CD · ")) == 2
+    # Etapa CI en la actividad.
+    assert any(e.startswith("CI · ") for e in _etapas_de_actividad())
 
-    # dedup efectiva: un SEGUNDO barrido salta A/B (ya usados) y procesa el restante (C).
-    llamadas.clear()
+    # dedup efectiva: un SEGUNDO barrido crea el restante (C).
     pc.ejecutar_barrido()
-    assert [c["titulo"] for c in llamadas] == ["Tema C"]
+    assert {t["titulo"] for t in pc.temas_pipeline()} >= {"Tema A", "Tema B", "Tema C"}
 
 
-def test_barrido_marca_propia_pasa_imagen_fuente(entorno, monkeypatch):
-    """Feed de marca PROPIA: la og:image resuelta viaja como `imagen_fuente` a `lanzar_copy`."""
+def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
+    """Feed de marca PROPIA: la og:image resuelta queda en `copy_pendiente` del tema."""
+    import json
+
     monkeypatch.setenv("KENI_PIPELINE", "1")
     monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
-    llamadas = _mock_lanzar_copy(monkeypatch)
     monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
 
     repos.crear_fuente_rss("Casa", _URL_OK, marca="unotv", propia=True)
     _mock_feed(monkeypatch, [_item(clave="p1", titulo="Nota propia")])
@@ -213,80 +228,96 @@ def test_barrido_marca_propia_pasa_imagen_fuente(entorno, monkeypatch):
 
     pc.ejecutar_barrido()
 
-    assert len(llamadas) == 1
-    assert llamadas[0]["imagen_fuente"] == "https://casa.test/foto.jpg"
-    assert llamadas[0]["tipo_contenido"] == "fuente"
+    temas = pc.temas_pipeline()
+    assert len(temas) == 1
+    pend = json.loads(temas[0]["copy_pendiente"])
+    assert pend["imagen"] == "https://casa.test/foto.jpg"
+    assert pend["tipo_contenido"] == "fuente"
 
 
-def test_barrido_no_propia_sin_imagen(entorno, monkeypatch):
-    """Feed NO propio: no se resuelve foto; `imagen_fuente` queda vacío (placa de marca)."""
-    monkeypatch.setenv("KENI_PIPELINE", "1")
-    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
+# --------------------------------------------------------------------------- #
+# (d) QA de la fuente: problema NO genera copy (❗); no_verificado SÍ (⚠️)      #
+# --------------------------------------------------------------------------- #
+
+
+def _tema_pipeline(titulo="Tema", marca="unotv", **campos):
+    return repos.crear_contenido(
+        clase="contenido", titulo=titulo, marca=marca, origen=pc.ORIGEN_PIPELINE,
+        descripcion="Nota de origen a cribar.", **campos,
+    )
+
+
+def test_qa_problema_no_genera_copy_y_marca_tema(entorno, monkeypatch):
+    """Una QA de la fuente `problema` -> NO se lanza copy y el tema queda ❗ con hallazgos."""
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_PROBLEMA))  # noqa: F841
     llamadas = _mock_lanzar_copy(monkeypatch)
-    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    tema = _tema_pipeline(titulo="Tema malo")
 
-    repos.crear_fuente_rss("Externo", _URL_OK, marca="unotv", propia=False)
-    _mock_feed(monkeypatch, [_item(clave="e1")])
-    # Si por error se llamara, devolvería una URL; verificamos que NO se use en no-propia.
-    _mock_og_image(monkeypatch, "https://externo.test/foto.jpg")
+    # Fase QA: lanza la criba (síncrona en test) -> el procesar persiste el veredicto en el tema.
+    pc.ejecutar_qa(autor=None)
+    refrescado = repos.obtener_contenido(tema["id"])
+    assert refrescado["qa_veredicto"] == pc.VERDICTO_PROBLEMA
+    assert "es falso" in (refrescado["qa_hallazgos"] or "")
 
-    pc.ejecutar_barrido()
+    # Fase CD: un tema `problema` NO entra a copy (ahorro de tokens).
+    pc.ejecutar_cd(autor=None)
+    assert llamadas == []
+    assert pc.temas_para_copy() == []
 
+
+def test_qa_no_verificado_genera_copy_con_aviso(entorno, monkeypatch):
+    """Una QA `no_verificado` -> SÍ se lanza copy y las piezas heredan el aviso ⚠️."""
+    cliente = _cliente(lanzar_generacion=lanzador_generacion_completa(_QA_OK))  # noqa: F841
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    tema = _tema_pipeline(titulo="Tema ok")
+
+    pc.ejecutar_qa(autor=None)
+    refrescado = repos.obtener_contenido(tema["id"])
+    assert refrescado["qa_veredicto"] == pc.VERDICTO_NO_VERIFICADO
+
+    # Fase CD: el tema está listo para copy.
+    listos = pc.temas_para_copy()
+    assert [t["id"] for t in listos] == [tema["id"]]
+    pc.ejecutar_cd(autor=None)
     assert len(llamadas) == 1
-    assert llamadas[0]["imagen_fuente"] == ""
-    assert llamadas[0]["tipo_contenido"] == ""
+    # La pieza hereda el aviso ⚠️ por el veredicto inicial.
+    assert llamadas[0]["veredicto_inicial"] == pc.VERDICTO_NO_VERIFICADO
+    # Limpia copy_pendiente: la fase CD no lo relanza.
+    assert (repos.obtener_contenido(tema["id"])["copy_pendiente"] or "") == ""
+    pc.ejecutar_cd(autor=None)
+    assert len(llamadas) == 1
 
 
-# --------------------------------------------------------------------------- #
-# (d) Pasada QA: registra etapa QA y persiste el veredicto                     #
-# --------------------------------------------------------------------------- #
+def test_qa_no_relanza_tema_ya_cribado(entorno, monkeypatch):
+    """Un tema con veredicto ya no se re-criba (idempotente)."""
+    _tema_pipeline(titulo="Ya cribado", qa_veredicto=pc.VERDICTO_NO_VERIFICADO)
+    assert pc.temas_sin_qa() == []
 
 
-def test_qa_valida_borrador_del_pipeline(entorno, monkeypatch):
-    """Sin QA editorial disponible (fallback), un borrador del pipeline recibe veredicto léxico + etapa QA.
+def test_qa_respeta_cap_de_lanzamientos(entorno, monkeypatch):
+    """El cap por barrido de QA (`_QA_LANZAR_MAX`) acota los lanzamientos de criba."""
+    cliente = _cliente()  # noqa: F841 -- lanzador noop: deja la QA en `ejecutando` (en_curso)
+    monkeypatch.setattr(pc, "_QA_LANZAR_MAX", 2)
+    for i in range(4):
+        _tema_pipeline(titulo=f"T{i}", id=f"tqa{i}")
 
-    El QA editorial (claude -p) se prueba aislado en `test_pipeline_qa_editorial.py`; aquí
-    forzamos el FALLBACK léxico (mock de `lanzar_qa_editorial` -> None) para cubrir que la red de
-    seguridad determinista sigue persistiendo un veredicto y su etapa.
-    """
-    monkeypatch.setattr(pc, "lanzar_qa_editorial", lambda pub, *, autor: None)
-    # Borrador COMPLETADO del pipeline: lo creamos directamente (como dejaría la fase CD).
-    pub = repos.crear_publicacion(
-        "unotv", "x", titulo="Tema QA", contenido="Copy válido y corto.",
-        estado="borrador", origen=pc.ORIGEN_PIPELINE,
-    )
-    assert (pub.get("veredicto") or "") == ""
-
-    validados = pc.ejecutar_qa()
-
-    assert [v["id"] for v in validados] == [pub["id"]]
-    assert validados[0]["verdicto"] == "listo"
-
-    # El veredicto quedó PERSISTIDO en la pieza.
-    refrescada = repos.obtener_publicacion(pub["id"])
-    assert refrescada["veredicto"] == "listo"
-
-    # Se registró una etapa QA en la actividad.
-    assert any(e.startswith("QA · ") for e in _etapas_de_actividad())
+    cribados = pc.ejecutar_qa(autor=None)
+    assert len(cribados) == 2  # solo 2 cribas lanzadas; el resto en el próximo barrido.
 
 
-def test_qa_ignora_borradores_de_otro_origen(entorno, monkeypatch):
-    """La QA del pipeline NO toca borradores ajenos (otro origen)."""
-    monkeypatch.setattr(pc, "lanzar_qa_editorial", lambda pub, *, autor: None)
-    pub = repos.crear_publicacion(
-        "unotv", "x", titulo="Manual", contenido="Copy manual.",
-        estado="borrador", origen="equipo",
-    )
-    validados = pc.ejecutar_qa()
-    assert validados == []
-    refrescada = repos.obtener_publicacion(pub["id"])
-    assert (refrescada["veredicto"] or "") == ""
+def test_cd_respeta_cap_de_lanzamientos(entorno, monkeypatch):
+    """El cap por barrido de CD (`_CD_LANZAR_MAX`) acota los lanzamientos de copy."""
+    llamadas = _mock_lanzar_copy(monkeypatch)
+    monkeypatch.setattr(pc, "_CD_LANZAR_MAX", 2)
+    import json
 
+    pend = json.dumps({"nota": "n", "redes_ids": ["x"]})
+    for i in range(4):
+        _tema_pipeline(
+            titulo=f"C{i}", id=f"tcd{i}",
+            qa_veredicto=pc.VERDICTO_NO_VERIFICADO, copy_pendiente=pend,
+        )
 
-def test_qa_no_revalida_con_veredicto_existente(entorno, monkeypatch):
-    """Un borrador del pipeline que YA tiene veredicto no se vuelve a procesar (idempotente)."""
-    repos.crear_publicacion(
-        "unotv", "x", titulo="Ya QA", contenido="Copy.", estado="borrador",
-        origen=pc.ORIGEN_PIPELINE, veredicto="listo",
-    )
-    assert pc.ejecutar_qa() == []
+    lanzados = pc.ejecutar_cd(autor=None)
+    assert len(lanzados) == 2
+    assert len(llamadas) == 2

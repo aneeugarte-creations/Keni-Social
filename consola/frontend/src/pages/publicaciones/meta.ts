@@ -210,6 +210,8 @@ export const META_VEREDICTOS: Record<Exclude<Veredicto, "">, MetaVeredicto> = {
   listo: { nombre: "Listo", variante: "ok" },
   revisar: { nombre: "Revisar", variante: "aviso" },
   no_publicar: { nombre: "No publicar", variante: "error" },
+  // Rediseño QPC: fuente apta en la criba permisiva pero NO verificada a fondo (aviso ⚠️).
+  no_verificado: { nombre: "No verificado", variante: "aviso" },
 };
 
 /**
