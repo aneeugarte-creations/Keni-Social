@@ -27,6 +27,7 @@ from starlette.routing import Route
 from .. import (
     auth,
     auto_responsable,
+    autogen_copy,
     importador_calendario,
     marcas,
     metricas_pieza,
@@ -597,11 +598,34 @@ async def desde_radar(request: Request) -> Response:
         fecha_objetivo=date.today().isoformat(),
         autor=autor_de_peticion(request),
         origen="radar",
+        # El tema viene de una FUENTE (Radar), no de arte propio: tipo "fuente" (item E).
+        tipo_contenido="fuente",
     )
+    # Checklist "pendientes" (item E): cada plataforma nace con copy e imagen por hacer. Si
+    # luego lanzamos generacion de copy en background, su borrador rellenara el copy (y la UI
+    # marcara falta_copy=0); la imagen sigue manual (falta_imagen=1).
     for red in dict.fromkeys(redes_iniciales):
-        repos.crear_contenido_plataforma(contenido_id=item["id"], red=red)
+        repos.crear_contenido_plataforma(
+            contenido_id=item["id"], red=red, falta_copy=True, falta_imagen=True
+        )
+
+    # Generacion de copy en SEGUNDO PLANO (item E), reusando el flujo del asistente/RSS
+    # (`autogen_copy.lanzar_para_topic`): compone la nota desde el tema, infiere redes y
+    # encola un `claude -p` cuyo borrador cuelga del tema. GATEADO por marca (sin marca no
+    # hay voz) y por el flag `generar` del cuerpo (def True). Es BEST-EFFORT: si la skill o
+    # la cola fallan, NO rompe la promocion (queda el copy manual como fallback).
+    generar_copy = datos.get("generar", True)
+    genero = False
+    if marca and generar_copy:
+        try:
+            genero = autogen_copy.lanzar_para_topic(item) is not None
+        except Exception:  # noqa: BLE001 -- la generacion es opcional; nunca tumba la promocion
+            genero = False
+
     plataformas = repos.listar_contenido_plataforma(item["id"])
-    return JSONResponse({"contenido": _contenido_a_dict(item, plataformas)})
+    return JSONResponse(
+        {"contenido": _contenido_a_dict(item, plataformas), "copy_en_proceso": genero}
+    )
 
 
 async def metricas(request: Request) -> Response:
