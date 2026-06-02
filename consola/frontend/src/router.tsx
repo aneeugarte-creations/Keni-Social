@@ -30,6 +30,8 @@ const ReporteDeportes = lazy(() => import("@/pages/ReporteDeportes"));
 
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const Rota = lazy(() => import("@/pages/Rota"));
+// Feed de ideación (Flujo D, Fase 4): la "red social interna" dentro del AppShell.
+const FeedIdeacion = lazy(() => import("@/pages/feed/FeedIdeacion"));
 
 const PlantillasContenido = lazy(() => import("@/pages/activos/PlantillasContenido"));
 
@@ -132,6 +134,9 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="pendientes" replace /> },
           { path: "pendientes", element: <Tareas /> },
+          // Feed de ideación: la pieza vista como post (material → copy IA → arte) con
+          // estado de la cadena IA en vivo y aprobación en línea (Flujo D, Fase 4).
+          { path: "feed", element: <FeedIdeacion /> },
           { path: "calendario", element: <Rota /> },
           // La hoja "Piezas" se retiró: las piezas se gestionan en el tablero (Pendientes).
           { path: "piezas", element: <Navigate to="/parrilla/pendientes" replace /> },

@@ -3,6 +3,7 @@ import {
   CalendarClock,
   FileText,
   Globe,
+  LayoutGrid,
   ListTodo,
   Megaphone,
   Newspaper,
@@ -62,6 +63,7 @@ export const TABS_ANALITICAS: ItemTabHub[] = [
 
 export const TABS_PARRILLA: ItemTabHub[] = [
   { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
+  { ruta: "/parrilla/feed", etiqueta: "Feed", icono: LayoutGrid },
   { ruta: "/parrilla/calendario", etiqueta: "Turnos", icono: CalendarClock },
 ];
 
