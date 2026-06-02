@@ -304,6 +304,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         cliente              TEXT NOT NULL DEFAULT '',
         campania             TEXT NOT NULL DEFAULT '',
         red                  TEXT NOT NULL DEFAULT '',
+        formato              TEXT NOT NULL DEFAULT '',
         metrica_objetivo     TEXT NOT NULL DEFAULT 'interacciones',
         objetivo             INTEGER NOT NULL DEFAULT 0,
         estado               TEXT NOT NULL DEFAULT 'activa',
@@ -321,7 +322,15 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         ts              TEXT NOT NULL,
         interacciones   INTEGER NOT NULL DEFAULT 0,
         visualizaciones INTEGER NOT NULL DEFAULT 0,
-        alcance         INTEGER NOT NULL DEFAULT 0
+        alcance         INTEGER NOT NULL DEFAULT 0,
+        likes                          INTEGER NOT NULL DEFAULT 0,
+        comentarios                    INTEGER NOT NULL DEFAULT 0,
+        compartidos                    INTEGER NOT NULL DEFAULT 0,
+        guardados                      INTEGER NOT NULL DEFAULT 0,
+        video_views                    INTEGER NOT NULL DEFAULT 0,
+        tiempo_medio_vis_s             INTEGER NOT NULL DEFAULT 0,
+        clics_enlace                   INTEGER NOT NULL DEFAULT 0,
+        seguidores_netos_atribuidos    INTEGER NOT NULL DEFAULT 0
     )
     """,
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_comercial_snapshots_pub_ts "
@@ -1800,11 +1809,29 @@ def _migrar_columnas_aprobaciones(con: Any) -> None:
 # identificaba por `url`) ni `visualizaciones` en los snapshots (solo interacciones/
 # alcance, de la curva sintetica). El Postgres hosted persiste entre despliegues:
 # sin estos ALTER, una BD vieja reventaria al leer/escribir las columnas nuevas.
+#
+# Ola "metricas granulares por pieza": el snapshot pasa de 3 metricas (interacciones/
+# visualizaciones/alcance) a capturar tambien el desglose que la fuente (Metricool, via
+# `servicio.construir_metricas_pieza`) expone por pieza: likes, comentarios, compartidos,
+# guardados, video_views, tiempo medio de visualizacion (s), clics de enlace y seguidores
+# netos atribuidos. El `formato` (reel/foto/carrusel/video/link/texto) es propiedad ESTATICA
+# de la pieza, no del snapshot: vive en `comercial_publicaciones`. Las columnas nacen con
+# DEFAULT 0 / '' para alinear con las existentes (un dato ausente -> 0, sin ceros falsos en
+# la UI, que distingue "sin dato" por `interacciones`/`encontrado`).
 _COLUMNAS_COMERCIAL_PUBLICACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
+    ("formato", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("visualizaciones", "INTEGER NOT NULL DEFAULT 0"),
+    ("likes", "INTEGER NOT NULL DEFAULT 0"),
+    ("comentarios", "INTEGER NOT NULL DEFAULT 0"),
+    ("compartidos", "INTEGER NOT NULL DEFAULT 0"),
+    ("guardados", "INTEGER NOT NULL DEFAULT 0"),
+    ("video_views", "INTEGER NOT NULL DEFAULT 0"),
+    ("tiempo_medio_vis_s", "INTEGER NOT NULL DEFAULT 0"),
+    ("clics_enlace", "INTEGER NOT NULL DEFAULT 0"),
+    ("seguidores_netos_atribuidos", "INTEGER NOT NULL DEFAULT 0"),
 )
 
 
@@ -1918,6 +1945,7 @@ _COLS_COMERCIAL = (
     "cliente",
     "campania",
     "red",
+    "formato",
     "metrica_objetivo",
     "objetivo",
     "estado",
@@ -1936,6 +1964,7 @@ _CAMPOS_EDITABLES_COMERCIAL = (
     "cliente",
     "campania",
     "red",
+    "formato",
     "metrica_objetivo",
     "objetivo",
     "estado",
@@ -1960,6 +1989,7 @@ def crear_publicacion_comercial(
     cliente: str = "",
     campania: str = "",
     red: str = "",
+    formato: str = "",
     metrica_objetivo: str = "interacciones",
     objetivo: int = 0,
     estado: str = "activa",
@@ -1983,6 +2013,7 @@ def crear_publicacion_comercial(
         "cliente": cliente,
         "campania": campania,
         "red": red,
+        "formato": formato or "",
         "metrica_objetivo": metrica_objetivo or "interacciones",
         "objetivo": int(objetivo or 0),
         "estado": estado or "activa",
@@ -2117,6 +2148,40 @@ def borrar_publicacion_comercial(publicacion_id: str) -> bool:
 
 # --- Snapshots (serie temporal de interacciones/alcance por publicacion) ------
 
+# Metricas GRANULARES por pieza que el snapshot captura ademas de las "base"
+# (interacciones/visualizaciones/alcance). Son el desglose que la fuente (Metricool, via
+# `servicio.construir_metricas_pieza`) expone por pieza. Una sola tupla mantiene DRY el
+# INSERT y los SELECT: anadir una metrica nueva = anadir aqui + a `_DDL_ESQUEMA` +
+# `_COLUMNAS_COMERCIAL_SNAPSHOTS_AMPLIADAS`. Todas son enteros con DEFAULT 0 (dato ausente
+# -> 0; la UI distingue "sin dato" por interacciones/encontrado, no por estos ceros).
+_METRICAS_GRANULARES_SNAPSHOT: tuple[str, ...] = (
+    "likes",
+    "comentarios",
+    "compartidos",
+    "guardados",
+    "video_views",
+    "tiempo_medio_vis_s",
+    "clics_enlace",
+    "seguidores_netos_atribuidos",
+)
+# Orden de columnas del SELECT de la serie (base + granulares).
+_COLS_SNAPSHOT_LECTURA: tuple[str, ...] = (
+    "ts",
+    "interacciones",
+    "visualizaciones",
+    "alcance",
+    *_METRICAS_GRANULARES_SNAPSHOT,
+)
+_SELECT_SNAPSHOT = ", ".join(_COLS_SNAPSHOT_LECTURA)
+
+
+def _fila_a_snapshot(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `comercial_snapshots` en un dict (ts texto, resto enteros)."""
+    snap: dict[str, Any] = {"ts": fila["ts"]}
+    for col in _COLS_SNAPSHOT_LECTURA[1:]:
+        snap[col] = int(fila[col] or 0)
+    return snap
+
 
 def registrar_snapshot_comercial(
     publicacion_id: str,
@@ -2124,26 +2189,38 @@ def registrar_snapshot_comercial(
     interacciones: int,
     alcance: int,
     visualizaciones: int = 0,
+    *,
+    granulares: dict[str, Any] | None = None,
 ) -> bool:
     """Inserta un snapshot (idempotente por `(publicacion_id, ts)`).
 
     Devuelve True si inserto una fila nueva, False si ya habia un snapshot en ese `ts`
     (el indice UNICO lo evita; asi re-capturar en el mismo minuto no duplica puntos).
+
+    `granulares` (opcional) trae el desglose por pieza (likes/comentarios/compartidos/
+    guardados/video_views/tiempo_medio_vis_s/clics_enlace/seguidores_netos_atribuidos);
+    cada campo ausente o `None` se persiste como 0 (defensivo). El llamante normal es
+    `comercial._capturar_en`, que lo arma desde el dict de `metricas_pieza.recalcular`.
     """
+    granulares = granulares or {}
+    cols = ("id", "publicacion_id", "ts", "interacciones", "visualizaciones", "alcance",
+            *_METRICAS_GRANULARES_SNAPSHOT)
+    valores = [
+        uuid.uuid4().hex[:12],
+        publicacion_id,
+        ts,
+        int(interacciones),
+        int(visualizaciones),
+        int(alcance),
+        *(int(granulares.get(campo) or 0) for campo in _METRICAS_GRANULARES_SNAPSHOT),
+    ]
     con = _conectar()
     try:
+        marcadores = ", ".join("?" for _ in cols)
         cur = con.execute(
-            "INSERT OR IGNORE INTO comercial_snapshots "
-            "(id, publicacion_id, ts, interacciones, visualizaciones, alcance) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (
-                uuid.uuid4().hex[:12],
-                publicacion_id,
-                ts,
-                int(interacciones),
-                int(visualizaciones),
-                int(alcance),
-            ),
+            f"INSERT OR IGNORE INTO comercial_snapshots ({', '.join(cols)}) "
+            f"VALUES ({marcadores})",
+            tuple(valores),
         )
         con.commit()
         return cur.rowcount > 0
@@ -2156,21 +2233,13 @@ def listar_snapshots_comerciales(publicacion_id: str) -> list[dict[str, Any]]:
     con = _conectar()
     try:
         filas = con.execute(
-            "SELECT ts, interacciones, visualizaciones, alcance FROM comercial_snapshots "
+            f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
             "WHERE publicacion_id = ? ORDER BY ts ASC",
             (publicacion_id,),
         ).fetchall()
     finally:
         con.close()
-    return [
-        {
-            "ts": f["ts"],
-            "interacciones": int(f["interacciones"]),
-            "visualizaciones": int(f["visualizaciones"]),
-            "alcance": int(f["alcance"]),
-        }
-        for f in filas
-    ]
+    return [_fila_a_snapshot(f) for f in filas]
 
 
 def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
@@ -2178,7 +2247,7 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
     con = _conectar()
     try:
         fila = con.execute(
-            "SELECT ts, interacciones, visualizaciones, alcance FROM comercial_snapshots "
+            f"SELECT {_SELECT_SNAPSHOT} FROM comercial_snapshots "
             "WHERE publicacion_id = ? ORDER BY ts DESC LIMIT 1",
             (publicacion_id,),
         ).fetchone()
@@ -2186,12 +2255,7 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
         con.close()
     if fila is None:
         return None
-    return {
-        "ts": fila["ts"],
-        "interacciones": int(fila["interacciones"]),
-        "visualizaciones": int(fila["visualizaciones"]),
-        "alcance": int(fila["alcance"]),
-    }
+    return _fila_a_snapshot(fila)
 
 
 # --------------------------------------------------------------------------- #

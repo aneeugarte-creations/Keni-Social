@@ -556,6 +556,7 @@ def crear_publicacion_comercial(
     cliente: str = "",
     campania: str = "",
     red: str = "",
+    formato: str = "",
     metrica_objetivo: str = "interacciones",
     objetivo: int = 0,
     estado: str = "activa",
@@ -570,6 +571,7 @@ def crear_publicacion_comercial(
         cliente=cliente,
         campania=campania,
         red=red,
+        formato=formato,
         metrica_objetivo=metrica_objetivo,
         objetivo=objetivo,
         estado=estado,
@@ -610,9 +612,11 @@ def registrar_snapshot_comercial(
     interacciones: int,
     alcance: int,
     visualizaciones: int = 0,
+    *,
+    granulares: dict[str, Any] | None = None,
 ) -> bool:
     return db.registrar_snapshot_comercial(
-        publicacion_id, ts, interacciones, alcance, visualizaciones
+        publicacion_id, ts, interacciones, alcance, visualizaciones, granulares=granulares
     )
 
 

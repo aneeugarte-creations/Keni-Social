@@ -156,6 +156,25 @@ class FuenteCompuesta:
         # plataformas que lo miden; engagement no se divide sobre bases mixtas.
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
+        # Seguidores NETOS del periodo: suma, sobre las plataformas que respondieron,
+        # del neto que aporte cada adaptador SI expone la capacidad. Los adaptadores
+        # directos por red NO tienen serie de followers (a diferencia de Metricool, la
+        # fuente única), así que esto degrada honestamente a 0 salvo que un adaptador
+        # implemente `seguidores_netos(handle, desde, hasta)`. No se inventa.
+        seguidores_netos = 0
+        for plat, handle in cc.plataformas.items():
+            if plat not in cobertura.ok:
+                continue
+            ad = self._adaptadores.get(plat)
+            seg_fn = getattr(ad, "seguidores_netos", None)
+            if seg_fn is None:
+                continue
+            try:
+                neto = seg_fn(handle, desde, hasta)
+            except Exception:  # noqa: BLE001 — degrada a 0, nunca inventa
+                neto = None
+            if isinstance(neto, int):
+                seguidores_netos += neto
         return ResumenMetricas(
             cuenta=cuenta_id,
             rango=rango,
@@ -164,8 +183,8 @@ class FuenteCompuesta:
             alcance=agregar_alcance(por_plataforma),
             interacciones=inter,
             engagement_pct=agregar_engagement(por_plataforma, inter),
-            seguidores_netos=0,  # requiere historico; no se calcula en v1
-            variacion_vs_anterior={},  # idem
+            seguidores_netos=seguidores_netos,
+            variacion_vs_anterior={},  # requiere historico; no se calcula en v1
             por_plataforma=por_plataforma,
             fuente=self.nombre,
             cobertura=cobertura,

@@ -260,6 +260,73 @@ def _entre(r: float, a: float, b: float) -> float:
     return a + (b - a) * r
 
 
+# Formato determinista por (cuenta, plataforma, semilla): plausible por red.
+# IG/FB favorecen foto/reel/carrusel; YouTube vídeo; X texto/link; TikTok reel.
+_FORMATOS_POR_PLAT: dict[Plataforma, tuple[str, ...]] = {
+    Plataforma.facebook: ("foto", "video", "carrusel", "link"),
+    Plataforma.instagram: ("reel", "foto", "carrusel"),
+    Plataforma.x: ("texto", "foto", "link"),
+    Plataforma.tiktok: ("reel", "video"),
+    Plataforma.youtube: ("video", "reel"),
+}
+
+# Plataformas con concepto de vídeo (video_views + tiempo medio de visualización).
+_PLAT_VIDEO: frozenset[Plataforma] = frozenset(
+    {Plataforma.youtube, Plataforma.tiktok, Plataforma.instagram, Plataforma.facebook}
+)
+
+
+def _granulares_muestra(
+    cuenta_id: str, plat: Plataforma, sem: str, vistas: int, inter: int
+) -> dict:
+    """Desglose granular DETERMINISTA y coherente con (vistas, interacciones).
+
+    Reparte las `inter` (total homogéneo) entre likes/comentarios/compartidos/
+    guardados con pesos sembrados que SIEMPRE suman <= inter (likes son la mayoría).
+    Vídeo y clics se derivan de las vistas. Sin random ni fecha actual: el mismo
+    (cuenta, plataforma, semilla) da siempre los mismos números.
+    """
+    formato_opts = _FORMATOS_POR_PLAT.get(plat, ("foto",))
+    formato = formato_opts[int(_rand(cuenta_id, plat, sem, "fmt") * len(formato_opts))]
+
+    # Reparto de interacciones: likes dominan; comentarios/compartidos/guardados
+    # son fracciones menores. Se calculan sobre inter para que el desglose cierre.
+    comentarios = int(inter * _entre(_rand(cuenta_id, plat, sem, "gc"), 0.04, 0.12))
+    compartidos = int(inter * _entre(_rand(cuenta_id, plat, sem, "gs"), 0.03, 0.10))
+    guardados = (
+        int(inter * _entre(_rand(cuenta_id, plat, sem, "gg"), 0.02, 0.08))
+        if plat in (Plataforma.instagram, Plataforma.tiktok)
+        else None
+    )
+    likes = max(inter - comentarios - compartidos - (guardados or 0), 0)
+
+    es_video = plat in _PLAT_VIDEO and formato in ("reel", "video")
+    video_views = (
+        int(vistas * _entre(_rand(cuenta_id, plat, sem, "gvv"), 0.6, 0.95))
+        if es_video
+        else None
+    )
+    tiempo_medio_vis_s = (
+        int(_entre(_rand(cuenta_id, plat, sem, "gtv"), 8, 45)) if es_video else None
+    )
+    # Clics de enlace solo en formatos con enlace (link) o redes que los miden.
+    clics_enlace = (
+        int(vistas * _entre(_rand(cuenta_id, plat, sem, "gcl"), 0.002, 0.02))
+        if formato == "link" or plat in (Plataforma.facebook, Plataforma.x)
+        else None
+    )
+    return {
+        "likes": likes,
+        "comentarios": comentarios,
+        "compartidos": compartidos,
+        "guardados": guardados,
+        "video_views": video_views,
+        "tiempo_medio_vis_s": tiempo_medio_vis_s,
+        "clics_enlace": clics_enlace,
+        "formato": formato,
+    }
+
+
 def _pieza(
     cuenta_id: str,
     rango: str,
@@ -294,6 +361,7 @@ def _pieza(
         interacciones=inter,
         engagement_pct=eng,
         url=_URL_BASE[plat].format(cuenta=cuenta_id, pid=pid),
+        **_granulares_muestra(cuenta_id, plat, f"{rango}:{idx}", vistas, inter),
     )
 
 
@@ -457,6 +525,10 @@ class FuenteMuestra:
             ),
             publicado=dia,
             fuente=self.nombre,
+            **_granulares_muestra(cuenta_id, plat, f"post:{id_post}", vistas, inter),
+            # La muestra no modela atribución de seguidores a un post concreto:
+            # None (igual que Metricool, que tampoco lo da a nivel post).
+            seguidores_netos_atribuidos=None,
         )
 
     def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:

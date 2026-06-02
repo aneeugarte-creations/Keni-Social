@@ -259,6 +259,15 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
             "interacciones": p.interacciones,
             "engagement_pct": p.engagement_pct,
             "url": p.url,
+            # Métricas granulares (None cuando la fuente no las trae; ver schema).
+            "likes": p.likes,
+            "comentarios": p.comentarios,
+            "compartidos": p.compartidos,
+            "guardados": p.guardados,
+            "video_views": p.video_views,
+            "tiempo_medio_vis_s": p.tiempo_medio_vis_s,
+            "clics_enlace": p.clics_enlace,
+            "formato": p.formato,
         }
         for p in piezas
     ]

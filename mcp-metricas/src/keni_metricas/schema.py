@@ -166,6 +166,21 @@ class Pieza(BaseModel):
     interacciones: int
     engagement_pct: float
     url: str | None = None
+    # --- Métricas granulares por pieza (issue métricas granulares) -----------
+    # OPCIONALES y con default None/0: degradación honesta. Si Metricool no trae
+    # el campo a nivel post (la forma de `/v2/analytics/posts/{network}` NO está
+    # fijada por el swagger), queda en None, NUNCA se inventa. `interacciones`
+    # sigue siendo el total homogéneo (#138); estos son su desglose cuando viene.
+    likes: int | None = None
+    comentarios: int | None = None
+    compartidos: int | None = None
+    guardados: int | None = None
+    video_views: int | None = None
+    # tiempo medio de visualización en segundos.
+    tiempo_medio_vis_s: int | None = None
+    clics_enlace: int | None = None
+    # formato normalizado: 'reel'|'foto'|'carrusel'|'video'|'link'|'texto'|None.
+    formato: str | None = None
 
 
 class MetricaPieza(BaseModel):
@@ -189,6 +204,23 @@ class MetricaPieza(BaseModel):
     url: str | None = None
     publicado: date | None = None
     fuente: str = "desconocida"
+    # --- Métricas granulares por pieza (issue métricas granulares) -----------
+    # OPCIONALES y con default None: degradación honesta. Si Metricool no trae el
+    # campo a nivel post, queda en None, NUNCA se inventa. `interacciones` sigue
+    # siendo el total homogéneo (#138); estos son su desglose cuando viene.
+    likes: int | None = None
+    comentarios: int | None = None
+    compartidos: int | None = None
+    guardados: int | None = None
+    video_views: int | None = None
+    # tiempo medio de visualización en segundos.
+    tiempo_medio_vis_s: int | None = None
+    clics_enlace: int | None = None
+    # formato normalizado: 'reel'|'foto'|'carrusel'|'video'|'link'|'texto'|None.
+    formato: str | None = None
+    # seguidores netos atribuidos a ESTA pieza: casi seguro None (Metricool no lo
+    # da a nivel post); se captura si algún alias lo trae, si no queda None.
+    seguidores_netos_atribuidos: int | None = None
 
 
 class EstadisticasNumericas(BaseModel):

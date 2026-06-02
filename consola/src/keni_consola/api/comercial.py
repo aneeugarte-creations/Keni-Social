@@ -65,6 +65,9 @@ def _a_dict(pub: dict[str, Any], *, con_serie: bool = False) -> dict[str, Any]:
         "campania": pub.get("campania") or "",
         "red": pub.get("red") or "",
         "red_nombre": redes.nombre_por_id(pub["red"]) if pub.get("red") else "",
+        # Formato ESTATICO de la pieza (reel/foto/carrusel/...); se resuelve desde la fuente
+        # en la primera captura real. Vacio hasta entonces (o en modo muestra).
+        "formato": pub.get("formato") or "",
         "metrica_objetivo": pub.get("metrica_objetivo") or "interacciones",
         "objetivo": objetivo,
         "estado": pub.get("estado") or "activa",

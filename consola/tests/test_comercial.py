@@ -118,7 +118,21 @@ def test_reporte_campania_agrega(entorno):
 def test_post_real_arranca_serie_hacia_delante(entorno, monkeypatch):
     """En modo real (Metricool) la captura lee el dato real y la serie NO se rellena hacia atrás."""
     monkeypatch.setattr(comercial, "fuente_actual", lambda: "metricool")
-    lectura = {"interacciones": 1500, "visualizaciones": 42000, "encontrado": True}
+    lectura = {
+        "interacciones": 1500,
+        "visualizaciones": 42000,
+        "encontrado": True,
+        # Desglose granular por pieza + formato estatico, tal como lo da la fuente.
+        "likes": 1200,
+        "comentarios": 150,
+        "compartidos": 90,
+        "guardados": 60,
+        "video_views": 38000,
+        "tiempo_medio_vis_s": 9,
+        "clics_enlace": 30,
+        "seguidores_netos_atribuidos": 12,
+        "formato": "reel",
+    }
     monkeypatch.setattr(comercial.metricas_pieza, "recalcular", lambda m, r, i: lectura)
 
     pub = comercial.registrar(
@@ -134,6 +148,13 @@ def test_post_real_arranca_serie_hacia_delante(entorno, monkeypatch):
     assert len(serie) == 1  # solo el punto "ahora": Metricool no da histórico por pieza
     assert serie[0]["visualizaciones"] == 42000
     assert serie[0]["alcance"] == 0  # el alcance no viene por pieza en modo real
+    # El desglose granular del snapshot se persiste y se relee.
+    assert serie[0]["likes"] == 1200
+    assert serie[0]["comentarios"] == 150
+    assert serie[0]["video_views"] == 38000
+    assert serie[0]["seguidores_netos_atribuidos"] == 12
+    # El formato estatico se capturó en la primera captura real.
+    assert pub["formato"] == "reel"
 
     actual = comercial.resumen_actual(pub)
     assert actual["visualizaciones"] == 42000

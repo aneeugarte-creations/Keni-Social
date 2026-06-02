@@ -105,12 +105,35 @@ def listar_posts_seleccionables(
     return piezas
 
 
-def _leer_real(pub: dict[str, Any]) -> tuple[int, int] | None:
-    """`(interacciones, visualizaciones)` REALES del post, o None si no hay dato todavia.
+# Metricas GRANULARES por pieza que el snapshot persiste ademas de interacciones/
+# visualizaciones. Son las claves del dict de `metricas_pieza.recalcular` (que viene de
+# `servicio.construir_metricas_pieza`). `db.registrar_snapshot_comercial` las degrada a 0
+# defensivamente, asi que basta con pasarle lo que haya (un `.get` por clave).
+_CAMPOS_GRANULARES = (
+    "likes",
+    "comentarios",
+    "compartidos",
+    "guardados",
+    "video_views",
+    "tiempo_medio_vis_s",
+    "clics_enlace",
+    "seguidores_netos_atribuidos",
+)
+
+
+def _granulares_de(rend: dict[str, Any]) -> dict[str, Any]:
+    """Extrae el desglose granular del dict de rendimiento (None/ausente -> se omite)."""
+    return {campo: rend.get(campo) for campo in _CAMPOS_GRANULARES}
+
+
+def _leer_real(pub: dict[str, Any]) -> dict[str, Any] | None:
+    """Lectura REAL del post (dict de rendimiento), o None si no hay dato todavia.
 
     Reusa `metricas_pieza.recalcular` (mismo camino que el tablero: va a la fuente activa
     y degrada honestamente). Devuelve None si falta la identidad del post o si Metricool
     aun no tiene datos (post recien publicado): el llamante NO inserta un snapshot falso.
+    El dict trae interacciones/visualizaciones, el desglose granular (likes/comentarios/...)
+    y el `formato` estatico de la pieza; el llamante decide que persiste.
     """
     marca = pub.get("marca") or ""
     red = pub.get("red") or ""
@@ -120,7 +143,7 @@ def _leer_real(pub: dict[str, Any]) -> tuple[int, int] | None:
     rend = metricas_pieza.recalcular(marca, red, id_post)
     if not rend.get("encontrado"):
         return None
-    return int(rend.get("interacciones", 0)), int(rend.get("visualizaciones", 0))
+    return rend
 
 
 # --------------------------------------------------------------------------- #
@@ -183,19 +206,44 @@ def _capturar_en(pub: dict[str, Any], en: datetime) -> bool:
 
     En modo REAL lee el valor actual del post en Metricool (el instante real es "ahora";
     Metricool no da historico, asi que `en` solo fija el `ts` del punto) y guarda
-    interacciones + visualizaciones (alcance = 0, no disponible por pieza). Si Metricool
-    aun no tiene datos del post, NO inserta nada (sin ceros falsos). En modo MUESTRA usa
-    la curva sintetica (interacciones + alcance) como hasta ahora.
+    interacciones + visualizaciones + el desglose granular (likes/comentarios/...; alcance
+    = 0, no disponible por pieza). Si Metricool aun no tiene datos del post, NO inserta nada
+    (sin ceros falsos). De paso captura el `formato` ESTATICO de la pieza la primera vez que
+    la fuente lo expone. En modo MUESTRA usa la curva sintetica (interacciones + alcance).
     """
     ts = en.isoformat(timespec="seconds")
     if es_muestra():
         inter, alc = metrica_en(_clave_muestra(pub), pub["publicado"], en)
         return repos.registrar_snapshot_comercial(pub["id"], ts, inter, alc, visualizaciones=0)
-    real = _leer_real(pub)
-    if real is None:
+    rend = _leer_real(pub)
+    if rend is None:
         return False
-    inter, vis = real
-    return repos.registrar_snapshot_comercial(pub["id"], ts, inter, alcance=0, visualizaciones=vis)
+    _persistir_formato(pub, rend)
+    return repos.registrar_snapshot_comercial(
+        pub["id"],
+        ts,
+        int(rend.get("interacciones", 0)),
+        alcance=0,
+        visualizaciones=int(rend.get("visualizaciones", 0)),
+        granulares=_granulares_de(rend),
+    )
+
+
+def _persistir_formato(pub: dict[str, Any], rend: dict[str, Any]) -> None:
+    """Guarda el `formato` estatico de la pieza si aun no lo tiene y la fuente lo expone.
+
+    El formato (reel/foto/carrusel/video/link/texto) es propiedad de la pieza, no del
+    snapshot: se persiste UNA vez en `comercial_publicaciones`. Best-effort: si ya esta o
+    la fuente no lo da, no hace nada. Muta `pub` en memoria para que el mismo barrido no
+    reintente el UPDATE en cada captura.
+    """
+    if pub.get("formato"):
+        return
+    formato = (rend.get("formato") or "").strip()
+    if not formato:
+        return
+    repos.actualizar_publicacion_comercial(pub["id"], {"formato": formato})
+    pub["formato"] = formato
 
 
 def sembrar_historico(pub: dict[str, Any], *, hasta: datetime | None = None) -> int:
@@ -286,8 +334,9 @@ def registrar(url: str = "", *, id_post_metricool: str = "", **campos: Any) -> d
 
     En produccion la pieza se identifica por `id_post_metricool` (+ marca + red en
     `campos`) y la `url` es derivada/opcional. `campos` acepta: titulo, marca, cliente,
-    campania, red, metrica_objetivo, objetivo, estado, publicado, notas (la API ya valido
-    allowlists). Devuelve la pieza ya con `aviso_en` resuelto.
+    campania, red, formato, metrica_objetivo, objetivo, estado, publicado, notas (la API ya
+    valido allowlists). Si `formato` no llega en `campos`, lo resuelve la primera captura
+    REAL desde la fuente (`_capturar_en`). Devuelve la pieza ya con `aviso_en` resuelto.
     """
     pub = repos.crear_publicacion_comercial(url, id_post_metricool=id_post_metricool, **campos)
     sembrar_historico(pub)

@@ -90,6 +90,74 @@ def test_es_reciente_tolerante_con_fecha_vacia_o_invalida():
     assert metricas_pieza._es_reciente("no-es-fecha", AHORA, 30) is True
 
 
+def test_listado_piezas_propaga_metricas_granulares(monkeypatch):
+    """El drill-down de Analíticas aplana el desglose granular + formato de cada pieza.
+
+    `listado_piezas_publicadas` hace un mapeo campo-a-campo del dict de rendimiento; las
+    claves nuevas (likes/comentarios/.../formato) deben viajar a la salida. Mockeamos
+    `rendimiento` (la cache/fuente) para no tocar Postgres ni la red: test puro."""
+    rend = {
+        "encontrado": True,
+        "visualizaciones": 1000,
+        "interacciones": 80,
+        "engagement_pct": 8.0,
+        "likes": 60,
+        "comentarios": 12,
+        "compartidos": 5,
+        "guardados": 3,
+        "video_views": 900,
+        "tiempo_medio_vis_s": 7,
+        "clics_enlace": 4,
+        "seguidores_netos_atribuidos": 2,
+        "formato": "carrusel",
+        "url": "https://x/p",
+        "publicado": "2026-05-20",
+        "fuente": "metricool",
+        "generado_en": "2026-05-30T12:00:00",
+    }
+    monkeypatch.setattr(metricas_pieza, "rendimiento", lambda m, r, i: rend)
+    contenidos = [
+        {
+            "id": "c1",
+            "titulo": "Pieza",
+            "marca": "unotv",
+            "marca_nombre": "UnoTV",
+            "plataformas": [{"id": "p1", "red": "instagram", "id_post_metricool": "post-1"}],
+        }
+    ]
+    filas = metricas_pieza.listado_piezas_publicadas(contenidos)
+    assert len(filas) == 1
+    fila = filas[0]
+    assert fila["likes"] == 60
+    assert fila["comentarios"] == 12
+    assert fila["compartidos"] == 5
+    assert fila["guardados"] == 3
+    assert fila["video_views"] == 900
+    assert fila["tiempo_medio_vis_s"] == 7
+    assert fila["clics_enlace"] == 4
+    assert fila["seguidores_netos_atribuidos"] == 2
+    assert fila["formato"] == "carrusel"
+
+
+def test_calculo_error_incluye_claves_granulares_en_none(monkeypatch):
+    """El camino de ERROR de `_calcular` (la fuente revienta) deja las claves granulares
+    presentes como None (sin dato), no ausentes: el aplanado nunca tropieza con un KeyError."""
+    def _explota(*_a, **_k):
+        raise RuntimeError("fuente caída")
+
+    monkeypatch.setattr(metricas_pieza.servicio, "construir_metricas_pieza", _explota)
+    # `marcas.id_metricas_de` puede tocar config; lo neutralizamos para que el test sea puro.
+    monkeypatch.setattr(metricas_pieza.marcas, "id_metricas_de", lambda m: m)
+
+    payload = metricas_pieza._calcular("unotv", "instagram", "post-x")
+    assert payload["encontrado"] is False
+    for clave in (
+        "likes", "comentarios", "compartidos", "guardados", "video_views",
+        "tiempo_medio_vis_s", "clics_enlace", "seguidores_netos_atribuidos", "formato",
+    ):
+        assert clave in payload and payload[clave] is None
+
+
 # --------------------------------------------------------------------------- #
 # 3. Resumen humano de los nuevos eventos de alerta                            #
 # --------------------------------------------------------------------------- #

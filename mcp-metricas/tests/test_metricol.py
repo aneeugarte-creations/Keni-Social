@@ -131,6 +131,15 @@ def test_mejores_piezas_mapea_posts():
                 "interactions": 250,  # 5.0%
                 "text": "Gol agónico",
                 "url": "https://instagram.com/p/p1",
+                # Campos granulares (parseo defensivo por pieza).
+                "likes": 200,
+                "comments": 30,
+                "shares": 15,
+                "saves": 5,
+                "mediaType": "REEL",
+                "videoViews": 4200,
+                "avgWatchTime": 12,
+                "linkClicks": 8,
             },
             {
                 "id": "p2",
@@ -139,6 +148,7 @@ def test_mejores_piezas_mapea_posts():
                 "interactions": 200,  # 10.0% -> debe ir primero
                 "text": "Otra pieza",
                 "url": "https://instagram.com/p/p2",
+                "type": "CAROUSEL_ALBUM",
             },
             # post sin visualizaciones: se descarta (no es "mejor pieza" útil)
             {"id": "p3", "impressions": 0, "interactions": 5, "text": "vacía"},
@@ -154,6 +164,116 @@ def test_mejores_piezas_mapea_posts():
     assert piezas[0].plataforma == Plataforma.instagram
     assert piezas[0].engagement_pct == pytest.approx(10.0)
     assert piezas[0].url == "https://instagram.com/p/p2"
+    # Granulares: p2 solo trajo formato (carrusel); el resto None (no se inventa).
+    assert piezas[0].formato == "carrusel"
+    assert piezas[0].likes is None and piezas[0].comentarios is None
+    # p1 trajo el desglose completo y se parseó a los campos del contrato.
+    p1 = next(p for p in piezas if p.id == "p1")
+    assert p1.likes == 200
+    assert p1.comentarios == 30
+    assert p1.compartidos == 15
+    assert p1.guardados == 5
+    assert p1.formato == "reel"
+    assert p1.video_views == 4200
+    assert p1.tiempo_medio_vis_s == 12
+    assert p1.clics_enlace == 8
+
+
+@respx.mock
+def test_metricas_de_post_parsea_granulares():
+    """metricas_de_post mapea los campos granulares del post al contrato."""
+    posts = {
+        "data": [
+            {
+                "id": "abc",
+                "publishedAt": "2026-05-20T12:00:00",
+                "impressions": 5000,
+                "interactions": 250,
+                "url": "https://instagram.com/p/abc",
+                "likes": 180,
+                "comments": 40,
+                "shares": 20,
+                "saves": 10,
+                "mediaType": "VIDEO",
+                "avgWatchTime": 22,
+            }
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        m = _fuente(cli).metricas_de_post("claro_sports", Plataforma.instagram, "abc")
+
+    assert m is not None and m.encontrado
+    assert m.likes == 180
+    assert m.comentarios == 40
+    assert m.compartidos == 20
+    assert m.guardados == 10
+    assert m.formato == "video"
+    assert m.tiempo_medio_vis_s == 22
+    # Seguidores atribuidos al post: Metricool no lo trajo -> None (no se inventa).
+    assert m.seguidores_netos_atribuidos is None
+
+
+@respx.mock
+def test_seguidores_netos_ultimo_menos_primero():
+    """seguidores_netos = (último punto - primer punto) de la serie de followers."""
+    def responder(request: httpx.Request) -> httpx.Response:
+        metric = request.url.params.get("metric")
+        if metric in ("followers", "communitySize", "subscribers"):
+            # Comunidad: 1000 al inicio del periodo, 1075 al final -> neto +75.
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "metric": metric,
+                            "values": [
+                                {"dateTime": "2026-05-20T00:00:00", "value": 1000},
+                                {"dateTime": "2026-05-23T00:00:00", "value": 1050},
+                                {"dateTime": "2026-05-26T00:00:00", "value": 1075},
+                            ],
+                        }
+                    ]
+                },
+            )
+        # vis/int: un agregado cualquiera para que la plataforma "responda".
+        return httpx.Response(200, json=_serie(100))
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    # Una sola plataforma (instagram) configurada en MARCAS -> neto = 1075 - 1000.
+    assert resumen.seguidores_netos == 75
+
+
+@respx.mock
+def test_seguidores_netos_degrada_a_cero_sin_serie():
+    """Sin serie de followers (o un solo punto) seguidores_netos = 0, no inventa."""
+    def responder(request: httpx.Request) -> httpx.Response:
+        metric = request.url.params.get("metric")
+        if metric in ("followers", "communitySize", "subscribers"):
+            # Serie con un único punto: no hay variación medible -> 0.
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "metric": metric,
+                            "values": [{"dateTime": "2026-05-20T00:00:00", "value": 1000}],
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(200, json=_serie(100))
+
+    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+    with httpx.Client() as cli:
+        resumen = _fuente(cli).resumen("claro_sports", RANGO)
+
+    assert resumen.seguidores_netos == 0
 
 
 @respx.mock

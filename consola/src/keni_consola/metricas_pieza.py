@@ -100,6 +100,16 @@ def _calcular(marca: str, red: str, id_post: str) -> dict[str, Any]:
             "visualizaciones": 0,
             "interacciones": 0,
             "engagement_pct": 0.0,
+            # Granulares ausentes en el camino de error: None (sin dato), no 0 falso.
+            "likes": None,
+            "comentarios": None,
+            "compartidos": None,
+            "guardados": None,
+            "video_views": None,
+            "tiempo_medio_vis_s": None,
+            "clics_enlace": None,
+            "seguidores_netos_atribuidos": None,
+            "formato": None,
             "url": None,
             "publicado": None,
             "fuente": "desconocida",
@@ -202,6 +212,19 @@ def listado_piezas_publicadas(
                     "visualizaciones": rend.get("visualizaciones", 0),
                     "interacciones": rend.get("interacciones", 0),
                     "engagement_pct": rend.get("engagement_pct", 0.0),
+                    # Desglose granular por pieza (None cuando la fuente no lo da): se
+                    # propaga tal cual para el drill-down. El payload base (cache) ya lo
+                    # lleva por ser el dict completo de `construir_metricas_pieza`; aqui
+                    # solo lo aplanamos campo a campo para esta vista.
+                    "likes": rend.get("likes"),
+                    "comentarios": rend.get("comentarios"),
+                    "compartidos": rend.get("compartidos"),
+                    "guardados": rend.get("guardados"),
+                    "video_views": rend.get("video_views"),
+                    "tiempo_medio_vis_s": rend.get("tiempo_medio_vis_s"),
+                    "clics_enlace": rend.get("clics_enlace"),
+                    "seguidores_netos_atribuidos": rend.get("seguidores_netos_atribuidos"),
+                    "formato": rend.get("formato"),
                     "url": rend.get("url"),
                     "publicado": rend.get("publicado"),
                     "fuente": rend.get("fuente") or "desconocida",

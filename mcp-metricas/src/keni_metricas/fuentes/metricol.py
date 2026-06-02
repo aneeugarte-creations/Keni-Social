@@ -99,28 +99,40 @@ _RED_METRICOOL: dict[Plataforma, str] = {
 _METRICA_VIS = "vis"
 _METRICA_INT = "int"
 _METRICA_ALC = "alc"
+# Métrica de SEGUIDORES por red (tamaño de comunidad). SUPUESTO sin confirmar:
+# los nombres salen del enum de `/v2/analytics/timelines`; el swagger no fija de
+# forma inequívoca cuál es "la" de followers por red. Se usa para calcular el NETO
+# del periodo (último punto - primer punto de la serie), no como agregado SUM.
+# YouTube llama "subscribers" a sus seguidores. Si la métrica no está disponible
+# para una red, simplemente no se incluye y `seguidores_netos` queda en 0.
+_METRICA_SEG = "seg"
 _METRICAS_RED: dict[Plataforma, dict[str, str]] = {
     Plataforma.facebook: {
         _METRICA_VIS: "impressions",
         _METRICA_INT: "interactions",
         _METRICA_ALC: "impressionsunique",
+        _METRICA_SEG: "followers",
     },
     Plataforma.instagram: {
         _METRICA_VIS: "impressions",
         _METRICA_INT: "interactions",
         _METRICA_ALC: "reach",
+        _METRICA_SEG: "followers",
     },
     Plataforma.x: {
         _METRICA_VIS: "impressions",
         _METRICA_INT: "interactions",
+        _METRICA_SEG: "communitySize",
     },
     Plataforma.tiktok: {
         _METRICA_VIS: "views",
         _METRICA_INT: "interactions",
+        _METRICA_SEG: "followers",
     },
     Plataforma.youtube: {
         _METRICA_VIS: "views",
         _METRICA_INT: "interactions",
+        _METRICA_SEG: "subscribers",
     },
 }
 
@@ -132,6 +144,36 @@ _ALIAS_VIS = ("impressions", "views", "reach", "visualizations")
 _ALIAS_INT = ("interactions", "engagement", "engagements")
 _ALIAS_TEXTO = ("text", "title", "message", "caption", "content")
 _ALIAS_URL = ("url", "permalink", "permalinkUrl", "link")
+# Alias granulares por pieza (forma del post NO fijada por el swagger; ver
+# SUPUESTOS del módulo). Nombres plausibles de Metricool/redes; si ninguno viene,
+# el campo queda en None (degradación honesta), nunca 0 inventado.
+_ALIAS_LIKES = ("likes", "favorites", "reactions", "likeCount")
+_ALIAS_COMENTARIOS = ("comments", "replies", "commentsCount")
+_ALIAS_COMPARTIDOS = ("shares", "retweets", "reposts", "sharesCount")
+_ALIAS_GUARDADOS = ("saves", "saved", "bookmarks", "savedCount")
+_ALIAS_VIDEO_VIEWS = ("videoViews", "views", "plays", "videoViewCount", "reelPlays")
+_ALIAS_TIEMPO_VIS = ("avgWatchTime", "averageWatchTime", "avgTimeWatched", "averageViewDuration")
+_ALIAS_CLICS = ("linkClicks", "clicks", "urlClicks", "websiteClicks", "linkClicksCount")
+_ALIAS_FORMATO = ("type", "mediaType", "postType", "contentType", "format")
+# Seguidores ganados/atribuidos a UN post: casi seguro Metricool no lo expone a
+# nivel post; se captura si algún alias lo trae, si no queda None.
+_ALIAS_SEG_POST = ("followsFromPost", "newFollowers", "followersGained")
+
+# Normalización del formato crudo (mediaType/type de Metricool/redes) a los
+# literales del contrato. Claves comparadas en MAYÚSCULAS.
+_FORMATO_NORMAL: dict[str, str] = {
+    "IMAGE": "foto",
+    "PHOTO": "foto",
+    "VIDEO": "video",
+    "REEL": "reel",
+    "REELS": "reel",
+    "CAROUSEL": "carrusel",
+    "CAROUSEL_ALBUM": "carrusel",
+    "ALBUM": "carrusel",
+    "LINK": "link",
+    "TEXT": "texto",
+    "STATUS": "texto",
+}
 
 
 def _primero(d: dict, claves: tuple[str, ...], defecto=None):
@@ -148,6 +190,34 @@ def _entero(v) -> int:
         return int(float(v))
     except (TypeError, ValueError):
         return 0
+
+
+def _a_int_opt(v) -> int | None:
+    """Convierte a int de forma segura, o None si el valor es ausente/no numérico.
+
+    A diferencia de `_entero` (que cae a 0), aquí la ausencia es None: degradación
+    honesta para los campos granulares opcionales (un 0 sería un dato falso).
+    """
+    if v is None or v == "":
+        return None
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return None
+
+
+def _formato_opt(v) -> str | None:
+    """Normaliza el formato crudo a un literal del contrato, o None si no viene.
+
+    'IMAGE'/'PHOTO'->'foto', 'VIDEO'->'video', 'REEL'/'REELS'->'reel',
+    'CAROUSEL'/'CAROUSEL_ALBUM'->'carrusel', 'LINK'->'link', 'TEXT'/'STATUS'->'texto'.
+    Si no se reconoce, devuelve el valor crudo en minúsculas (mejor algo que None
+    cuando sí vino un dato); None solo si el campo está ausente.
+    """
+    if v is None or v == "":
+        return None
+    crudo = str(v).strip()
+    return _FORMATO_NORMAL.get(crudo.upper(), crudo.lower() or None)
 
 
 def _fecha(v, defecto: date) -> date:
@@ -250,6 +320,13 @@ class FuenteMetricol:
 
         vis = sum(m.visualizaciones for m in por_plataforma)
         inter = sum(m.interacciones for m in por_plataforma)
+        # Seguidores NETOS del periodo: suma, sobre las plataformas que respondieron,
+        # de (último punto - primer punto) de su serie de followers. Defensivo: una
+        # plataforma sin métrica de seguidores o con serie vacía aporta 0 (no inventa).
+        seguidores_netos = sum(
+            self._seguidores_netos_plataforma(cuenta_id, m.plataforma, desde, hasta)
+            for m in por_plataforma
+        )
         return ResumenMetricas(
             cuenta=cuenta_id,
             rango=rango,
@@ -258,12 +335,58 @@ class FuenteMetricol:
             alcance=agregar_alcance(por_plataforma),
             interacciones=inter,
             engagement_pct=agregar_engagement(por_plataforma, inter),
-            seguidores_netos=0,  # requiere serie de followers; no en v1 (TODO)
+            seguidores_netos=seguidores_netos,
             variacion_vs_anterior={},
             por_plataforma=por_plataforma,
             fuente=self.nombre,
             cobertura=cobertura,
         )
+
+    def _seguidores_netos_plataforma(
+        self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
+    ) -> int:
+        """Seguidores netos ganados en el periodo por UNA red: último - primer punto.
+
+        La serie de followers de `/v2/analytics/timelines` es un STOCK (tamaño de la
+        comunidad cada día), no un flujo: el neto del periodo es el valor del último
+        punto menos el del primero. Defensivo: si la red no declara métrica de
+        seguidores, la API falla o la serie viene vacía, devuelve 0 (no inventa).
+        """
+        metricas = _METRICAS_RED.get(plat, {})
+        metrica = metricas.get(_METRICA_SEG)
+        if not metrica:
+            return 0
+        try:
+            datos = get_json(
+                self._cli,
+                f"{BASE}/v2/analytics/timelines",
+                params={
+                    **self._params_base(cuenta_id),
+                    "network": _RED_METRICOOL[plat],
+                    "metric": metrica,
+                    "from": desde.isoformat() + "T00:00:00",
+                    "to": hasta.isoformat() + "T23:59:59",
+                },
+                headers=self._headers(cuenta_id),
+            )
+        except Exception as e:  # noqa: BLE001 — degrada a 0, como el resto
+            log.warning("metricool: seguidores %s/%s fallaron: %s", plat.value, cuenta_id, e)
+            return 0
+        # Reúne todos los puntos (fecha, valor) de las series, ordenados por fecha,
+        # y toma último - primero. Combina por si la red devuelve varias series.
+        puntos: list[tuple[str, float]] = []
+        for serie in datos.get("data") or []:
+            for v in serie.get("values", []):
+                crudo = v.get("dateTime") or v.get("date")
+                valor = v.get("value")
+                if crudo is None or valor is None:
+                    continue
+                puntos.append((str(crudo), float(valor)))
+        if len(puntos) < 2:
+            # 0 o 1 puntos: no hay variación medible del periodo.
+            return 0
+        puntos.sort(key=lambda p: p[0])
+        return int(puntos[-1][1] - puntos[0][1])
 
     def _metrica_plataforma(
         self, cuenta_id: str, plat: Plataforma, desde: date, hasta: date
@@ -357,6 +480,25 @@ class FuenteMetricol:
                 piezas.append(pieza)
         return piezas
 
+    @staticmethod
+    def _granulares(post: dict) -> dict:
+        """Extrae los campos granulares opcionales de un post (parseo defensivo).
+
+        Cada campo es None si su alias no viene (degradación honesta). Devuelve un
+        dict listo para desempaquetar al construir `Pieza`/`MetricaPieza`, con las
+        claves snake_case del contrato compartido.
+        """
+        return {
+            "likes": _a_int_opt(_primero(post, _ALIAS_LIKES)),
+            "comentarios": _a_int_opt(_primero(post, _ALIAS_COMENTARIOS)),
+            "compartidos": _a_int_opt(_primero(post, _ALIAS_COMPARTIDOS)),
+            "guardados": _a_int_opt(_primero(post, _ALIAS_GUARDADOS)),
+            "video_views": _a_int_opt(_primero(post, _ALIAS_VIDEO_VIEWS)),
+            "tiempo_medio_vis_s": _a_int_opt(_primero(post, _ALIAS_TIEMPO_VIS)),
+            "clics_enlace": _a_int_opt(_primero(post, _ALIAS_CLICS)),
+            "formato": _formato_opt(_primero(post, _ALIAS_FORMATO)),
+        }
+
     def _pieza_desde_post(self, post: dict, plat: Plataforma, defecto_fecha: date) -> Pieza | None:
         """Mapea un post de Metricool a `Pieza` (parseo defensivo; ver SUPUESTOS)."""
         vis = _entero(_primero(post, _ALIAS_VIS, 0))
@@ -372,6 +514,7 @@ class FuenteMetricol:
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
             url=_primero(post, _ALIAS_URL),
+            **self._granulares(post),
         )
 
     def metricas_de_post(
@@ -422,6 +565,10 @@ class FuenteMetricol:
                 url=_primero(post, _ALIAS_URL),
                 publicado=_fecha(_primero(post, _ALIAS_FECHA), hasta),
                 fuente=self.nombre,
+                **self._granulares(post),
+                # Seguidores atribuidos al post: casi seguro Metricool no lo da a
+                # nivel post; None salvo que algún alias lo traiga.
+                seguidores_netos_atribuidos=_a_int_opt(_primero(post, _ALIAS_SEG_POST)),
             )
         return None
 
