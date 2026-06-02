@@ -40,7 +40,9 @@ red. La URL del feed de Trends pasa por el guard SSRF de `api.rss.validar_url`.
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -345,12 +347,94 @@ def temas_de_feeds(items: list[dict[str, Any]]) -> list[Tema]:
 # --------------------------------------------------------------------------- #
 
 
-def consolidar(*grupos: list[Tema]) -> list[Tema]:
-    """Funde temas de varias fuentes por clave normalizada y ordena por señal desc.
+# Umbral de similitud para el SEGUNDO pase (fuzzy): dos titulos cuyo ratio de
+# `SequenceMatcher` supera esto se consideran el MISMO tema. Alto a proposito (0.85): el
+# objetivo es cazar variantes triviales ("Liga MX" vs "Liga mx jornada"), NO agrupar
+# semanticamente temas distintos. Subirlo reduce falsos positivos; bajarlo, falsos negativos.
+_UMBRAL_FUZZY = 0.85
+# Longitud minima de un titulo normalizado para entrar al fuzzy. Titulos muy cortos
+# ("ee", "tv") disparan ratios altos espurios entre si; se quedan SOLO en el dedup exacto.
+_MIN_LONGITUD_FUZZY = 6
 
-    Dedup: temas con el mismo titulo normalizado se funden (uniendo redes/fuentes/
-    enlaces y quedandose la señal mas alta). Orden: señal desc, y a igualdad, mas
-    fuentes (un tema que aparece en varias redes pesa mas) y luego alfabetico estable.
+# Diccionario de SINONIMOS / variantes de escritura para el fuzzy. Cada grupo se colapsa a
+# su forma CANONICA (la clave) ANTES de comparar, asi "cdmx"/"ciudad de mexico"/"df" o
+# "vs"/"versus" no cuentan como diferencia. Conservador: solo entradas inequivocas del
+# dominio (deportes/MX); ampliar con cuidado para no fusionar temas que no son el mismo.
+_SINONIMOS: dict[str, tuple[str, ...]] = {
+    "cdmx": ("ciudad de mexico", "df", "distrito federal"),
+    "vs": ("versus", "contra"),
+    "futbol": ("football", "soccer"),
+    "estados unidos": ("eeuu", "ee uu", "usa", "us"),
+    "seleccion mexicana": ("el tri", "tricolor"),
+}
+# Mapa inverso (variante -> canonica), pre-calculado una vez. Las variantes mas LARGAS
+# primero para que el reemplazo por substring no parta una variante dentro de otra.
+_VARIANTE_A_CANONICA: tuple[tuple[str, str], ...] = tuple(
+    sorted(
+        (
+            (variante, canonica)
+            for canonica, variantes in _SINONIMOS.items()
+            for variante in variantes
+        ),
+        key=lambda par: -len(par[0]),
+    )
+)
+
+
+def _sin_acentos(texto: str) -> str:
+    """Quita acentos (NFD + descarta diacriticos) para comparar sin depender de tildes."""
+    return "".join(c for c in unicodedata.normalize("NFD", texto) if not unicodedata.combining(c))
+
+
+def _clave_fuzzy(titulo: str) -> str:
+    """Clave NORMALIZADA para el fuzzy: minuscula, sin acentos, sin signos y con sinonimos.
+
+    Sobre la clave exacta (`_normalizar_clave`) aplica: quitar acentos y colapsar los grupos
+    de `_SINONIMOS` a su forma canonica. Asi "Selección Mexicana" y "el Tri" comparten base
+    y el `SequenceMatcher` los ve casi identicos. Determinista y pura.
+    """
+    base = _sin_acentos(_normalizar_clave(titulo))
+    for variante, canonica in _VARIANTE_A_CANONICA:
+        base = re.sub(rf"\b{re.escape(variante)}\b", canonica, base)
+    return _RE_ESPACIOS.sub(" ", base).strip()
+
+
+def _fundir_similares(temas: list[Tema]) -> list[Tema]:
+    """SEGUNDO pase de dedup: funde temas con titulos MUY similares (fuzzy + sinonimos).
+
+    Entra ya sin duplicados EXACTOS (los resolvio `_normalizar_clave`). Aqui se comparan las
+    claves fuzzy con `SequenceMatcher`: si el ratio supera `_UMBRAL_FUZZY`, se funde el tema
+    en el representante YA aceptado (orden de entrada = prioridad, asi gana el de mayor señal,
+    que `consolidar` ya ordeno antes de llamar aqui). Conservador para no agrupar temas
+    distintos: claves cortas no entran al fuzzy y el umbral es alto. Funcion PURA.
+    """
+    representantes: list[tuple[str, Tema]] = []  # (clave_fuzzy, tema)
+    for tema in temas:
+        clave = _clave_fuzzy(tema.titulo)
+        if not clave:
+            continue
+        fusionado = False
+        if len(clave) >= _MIN_LONGITUD_FUZZY:
+            for clave_rep, rep in representantes:
+                if len(clave_rep) < _MIN_LONGITUD_FUZZY:
+                    continue
+                if SequenceMatcher(None, clave_rep, clave).ratio() >= _UMBRAL_FUZZY:
+                    rep.fusionar(tema)
+                    fusionado = True
+                    break
+        if not fusionado:
+            representantes.append((clave, tema))
+    return [rep for _, rep in representantes]
+
+
+def consolidar(*grupos: list[Tema]) -> list[Tema]:
+    """Funde temas de varias fuentes y ordena por señal desc. Dedup en DOS pases.
+
+    Pase 1 (exacto): temas con el mismo titulo normalizado (`_normalizar_clave`) se funden
+    (uniendo redes/fuentes/enlaces y quedandose la señal mas alta). Pase 2 (fuzzy): sobre el
+    resultado YA ordenado por señal, se funden titulos MUY similares (`_fundir_similares`:
+    `SequenceMatcher` > umbral + diccionario de sinonimos), conservando el representante de
+    mayor señal. Orden final: señal desc, y a igualdad, mas fuentes y alfabetico estable.
     """
     por_clave: dict[str, Tema] = {}
     for grupo in grupos:
@@ -364,6 +448,10 @@ def consolidar(*grupos: list[Tema]) -> list[Tema]:
             else:
                 existente.fusionar(tema)
     temas = list(por_clave.values())
+    # Ordena ANTES del fuzzy para que el representante de cada cluster sea el de mayor señal
+    # (el primero que ve `_fundir_similares` en su orden de entrada).
+    temas.sort(key=lambda t: (-t.senal, -len(t.fuentes), t.titulo.lower()))
+    temas = _fundir_similares(temas)
     temas.sort(key=lambda t: (-t.senal, -len(t.fuentes), t.titulo.lower()))
     return temas[:MAX_TEMAS]
 

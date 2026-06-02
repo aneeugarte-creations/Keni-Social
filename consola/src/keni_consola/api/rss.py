@@ -40,6 +40,8 @@ import ipaddress
 import json
 import re
 import socket
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
@@ -323,6 +325,47 @@ def _clave_item(clave_feed: str, enlace: str) -> str:
     ni enlace, la clave queda vacia (el item no se puede marcar de forma estable).
     """
     return (clave_feed or "").strip() or (enlace or "").strip()
+
+
+# Epoch minima (UTC) para items sin fecha parseable: van AL FINAL del orden por fecha.
+_FECHA_MINIMA = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+
+def fecha_a_orden(crudo: str | None) -> datetime:
+    """Parsea la fecha de un item de feed a un `datetime` aware (UTC) para ORDENAR.
+
+    Tolerante con los dos formatos comunes en feeds: RFC 822 (RSS 2.0 `pubDate`, p.ej.
+    "Mon, 02 Jun 2025 10:00:00 GMT") e ISO 8601 (Atom `updated`/`published`, p.ej.
+    "2025-06-02T10:00:00Z"). Una fecha ausente o no parseable cae a `_FECHA_MINIMA`, de
+    forma que esos items quedan AL FINAL al ordenar por fecha desc (nunca arriba "por
+    suerte"). Las fechas naive se asumen UTC para que sean comparables entre formatos.
+    """
+    if not isinstance(crudo, str) or not crudo.strip():
+        return _FECHA_MINIMA
+    texto = crudo.strip()
+    # RFC 822 (pubDate de RSS 2.0). `parsedate_to_datetime` tolera zonas con nombre.
+    try:
+        fecha = parsedate_to_datetime(texto)
+        if fecha is not None:
+            return fecha if fecha.tzinfo else fecha.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        pass
+    # ISO 8601 (Atom). `fromisoformat` no acepta el sufijo "Z" hasta 3.11; lo normalizamos.
+    try:
+        fecha = datetime.fromisoformat(texto.replace("Z", "+00:00"))
+        return fecha if fecha.tzinfo else fecha.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return _FECHA_MINIMA
+
+
+def ordenar_items_por_fecha(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ordena items de feed por fecha DESC (lo MAS NUEVO arriba), no por feed/marca.
+
+    Funcion PURA (no toca red ni BD). El orden es estable: items con la misma fecha (o sin
+    fecha parseable) conservan su orden relativo de llegada. Asi un radar/listado multi-feed
+    se ve cronologico en vez de agrupado por la fuente que se descargo primero.
+    """
+    return sorted(items, key=lambda it: fecha_a_orden(it.get("fecha")), reverse=True)
 
 
 def _terminos_csv(crudo: str | None) -> list[str]:
@@ -665,6 +708,10 @@ async def listar_items(request: Request) -> Response:
                     "error": mensaje,
                 }
             )
+    # Orden cronologico GLOBAL (mas nuevo arriba), no por feed/marca: tras acumular los
+    # items de todas las fuentes se ordenan por su fecha. Los que no traen fecha parseable
+    # caen al final (ver `fecha_a_orden`), nunca arriba por azar del orden de descarga.
+    items = ordenar_items_por_fecha(items)
     return JSONResponse({"items": items, "errores": errores})
 
 

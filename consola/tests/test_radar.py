@@ -175,6 +175,54 @@ def test_normalizar_clave():
 
 
 # --------------------------------------------------------------------------- #
+# Dedup FUZZY (segundo pase): similitud + sinonimos                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_clave_fuzzy_quita_acentos_y_aplica_sinonimos():
+    # "Selección Mexicana" y "el Tri" colapsan a la MISMA forma canonica.
+    assert radar._clave_fuzzy("Selección Mexicana") == radar._clave_fuzzy("el tri")
+    # CDMX y sus variantes tambien.
+    assert radar._clave_fuzzy("CDMX") == radar._clave_fuzzy("Ciudad de México")
+
+
+def test_fundir_similares_funde_variantes_triviales():
+    # Mismo tema con una diferencia ortografica trivial (singular/plural): ratio > 0.85.
+    a = radar.Tema(titulo="Final de la Champions", senal=100, fuentes={"A"})
+    b = radar.Tema(titulo="Final de la Champion", senal=50, fuentes={"B"})
+    fundidos = radar._fundir_similares([a, b])
+    assert len(fundidos) == 1
+    # Gana el representante (primero en la lista) y une fuentes.
+    assert fundidos[0].titulo == "Final de la Champions"
+    assert {"A", "B"} <= fundidos[0].fuentes
+
+
+def test_fundir_similares_no_agrupa_temas_distintos():
+    a = radar.Tema(titulo="Elecciones presidenciales", senal=100)
+    b = radar.Tema(titulo="Huracán en el Caribe", senal=90)
+    fundidos = radar._fundir_similares([a, b])
+    assert len(fundidos) == 2
+
+
+def test_fundir_similares_titulos_cortos_no_entran_al_fuzzy():
+    # Titulos muy cortos (< _MIN_LONGITUD_FUZZY) NO se comparan por fuzzy (falsos positivos).
+    a = radar.Tema(titulo="TV", senal=10)
+    b = radar.Tema(titulo="EE", senal=9)
+    fundidos = radar._fundir_similares([a, b])
+    assert len(fundidos) == 2
+
+
+def test_consolidar_funde_sinonimos_via_fuzzy():
+    # Dos temas con el MISMO asunto via sinonimo (no clave exacta): se funden en consolidar.
+    tri = radar.Tema(titulo="Selección Mexicana golea", senal=5000, fuentes={"Trends"})
+    el_tri = radar.Tema(titulo="El Tri golea", senal=1, fuentes={"RSS"})
+    cons = radar.consolidar([tri, el_tri])
+    assert len(cons) == 1
+    assert cons[0].senal == 5000  # gana el de mayor señal como representante
+    assert {"Trends", "RSS"} <= cons[0].fuentes
+
+
+# --------------------------------------------------------------------------- #
 # Geos + fuentes pendientes                                                    #
 # --------------------------------------------------------------------------- #
 

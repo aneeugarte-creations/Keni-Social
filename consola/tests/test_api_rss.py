@@ -569,6 +569,45 @@ def test_item_pasa_filtros_vacios_pasan_todo():
 
 
 # --------------------------------------------------------------------------- #
+# Orden por fecha (funcion pura): mas nuevo arriba, sin fecha al final          #
+# --------------------------------------------------------------------------- #
+
+
+def test_fecha_a_orden_parsea_rfc822_y_iso():
+    # RFC 822 (pubDate RSS) e ISO 8601 (Atom) deben ser comparables entre si.
+    rfc = rss.fecha_a_orden("Mon, 02 Jun 2025 10:00:00 GMT")
+    iso = rss.fecha_a_orden("2025-06-02T11:00:00Z")
+    assert iso > rfc  # mismo dia, una hora mas tarde
+
+
+def test_fecha_a_orden_sin_fecha_va_al_minimo():
+    assert rss.fecha_a_orden("") == rss._FECHA_MINIMA
+    assert rss.fecha_a_orden(None) == rss._FECHA_MINIMA
+    assert rss.fecha_a_orden("no es una fecha") == rss._FECHA_MINIMA
+
+
+def test_ordenar_items_por_fecha_mas_nuevo_arriba():
+    items = [
+        {"titulo": "viejo", "fecha": "Mon, 01 Jan 2024 00:00:00 GMT"},
+        {"titulo": "nuevo", "fecha": "2025-06-02T10:00:00Z"},
+        {"titulo": "medio", "fecha": "Wed, 15 Jan 2025 00:00:00 GMT"},
+    ]
+    ordenados = rss.ordenar_items_por_fecha(items)
+    assert [i["titulo"] for i in ordenados] == ["nuevo", "medio", "viejo"]
+
+
+def test_ordenar_items_sin_fecha_al_final_y_estable():
+    items = [
+        {"titulo": "sin-a", "fecha": ""},
+        {"titulo": "con-fecha", "fecha": "2025-06-02T10:00:00Z"},
+        {"titulo": "sin-b", "fecha": ""},
+    ]
+    ordenados = rss.ordenar_items_por_fecha(items)
+    # El que tiene fecha va arriba; los sin fecha caen al final conservando su orden.
+    assert [i["titulo"] for i in ordenados] == ["con-fecha", "sin-a", "sin-b"]
+
+
+# --------------------------------------------------------------------------- #
 # Fuentes: crear con filtros/redes + PUT parcial + re-SSRF al cambiar url      #
 # --------------------------------------------------------------------------- #
 
