@@ -42,11 +42,14 @@ from ..seguridad import autor_de_peticion
 # `api/plantillas.py` y `api/publicaciones.py`.
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}
 
-# Clave de variable: identificador simple (lo que se sustituye en `{{clave}}`).
-_RE_CLAVE = re.compile(r"^[a-zA-Z0-9_]{1,40}$")
+# Clave de variable: identificador estilo lenguaje de programacion (lo que se sustituye en
+# `{{clave}}`). DEBE empezar por letra (no por digito ni guion bajo) y seguir con letras,
+# digitos o guion bajo, hasta 40 chars. Asi `123` o `_x` ya no son claves validas.
+_RE_CLAVE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_]{0,39}$")
 
-# Marcador en la estructura: `{{ clave }}` con espacios opcionales.
-_RE_MARCADOR = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
+# Marcador en la estructura: `{{ clave }}` con espacios opcionales. Mismo criterio que la
+# clave (empieza por letra) para que el marcador y la variable declarada casen exactamente.
+_RE_MARCADOR = re.compile(r"\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}")
 
 # Limites defensivos (mismo espiritu que el resto de la consola: textos acotados).
 _MAX_ESTRUCTURA = 8000

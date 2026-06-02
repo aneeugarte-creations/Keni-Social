@@ -7,7 +7,10 @@ import type { PlantillaContenido, VariablePlantilla } from "@/types";
 export const CLAVE_PLANTILLAS = ["plantillas-contenido"] as const;
 
 // Extrae los marcadores `{{clave}}` de una estructura (para detectar variables sin declarar).
-const RE_MARCADOR = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
+// La clave DEBE empezar por letra (idéntico al backend `_RE_MARCADOR` de
+// `api/plantillas_contenido.py`), para que lo que aquí se detecta case con lo que el servidor
+// valida y sustituye.
+const RE_MARCADOR = /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*)\s*\}\}/g;
 
 /** Claves `{{...}}` que aparecen en una estructura, en orden y sin repetir. */
 export function clavesEnEstructura(estructura: string): string[] {

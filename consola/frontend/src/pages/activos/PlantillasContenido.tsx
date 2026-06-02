@@ -187,6 +187,20 @@ export default function PlantillasContenido() {
   const clavesDeclaradas = new Set(form.variables.map((v) => v.clave).filter(Boolean));
   const sinDeclarar = clavesEstructura.filter((c) => !clavesDeclaradas.has(c));
 
+  // Auto-completar: declara las claves usadas en la estructura que faltan (`sinDeclarar`),
+  // una variable por cada una con la clave precargada (etiqueta/ejemplo en blanco). Respeta
+  // el orden en que aparecen en la estructura y no toca las ya declaradas.
+  function autocompletarVariables() {
+    if (sinDeclarar.length === 0) return;
+    setForm((f) => ({
+      ...f,
+      variables: [
+        ...f.variables,
+        ...sinDeclarar.map((clave) => ({ clave, etiqueta: "", ejemplo: "" })),
+      ],
+    }));
+  }
+
   const cuerpoLleno =
     form.modo === "plano" ? form.contenido.trim() !== "" : form.estructura.trim() !== "";
   const puedeGuardar = form.nombre.trim() !== "" && cuerpoLleno;
@@ -347,9 +361,22 @@ export default function PlantillasContenido() {
                     className="min-h-[120px] font-mono text-sm"
                   />
                   {sinDeclarar.length > 0 && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400">
-                      Variables usadas sin declarar: {sinDeclarar.join(", ")}.
-                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Variables usadas sin declarar: {sinDeclarar.join(", ")}.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7"
+                        onClick={autocompletarVariables}
+                        title="Declara automáticamente las variables usadas en la estructura que aún no existen"
+                      >
+                        <Wand2 className="mr-1 h-3.5 w-3.5" />
+                        Auto-completar variables
+                      </Button>
+                    </div>
                   )}
                 </div>
 

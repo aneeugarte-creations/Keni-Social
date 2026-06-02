@@ -86,6 +86,32 @@ def test_cambiar_a_plano_requiere_contenido_coherente(cliente):
     assert r.json()["plantilla"]["modo"] == "plano"
 
 
+def test_clave_variable_debe_empezar_por_letra(cliente):
+    # La clave de una variable DEBE empezar por letra: `123` o `_x` se rechazan (400).
+    for clave_mala in ("123", "_x", "9gol"):
+        r = cliente.post(
+            "/api/plantillas-contenido",
+            json={
+                "nombre": "T",
+                "modo": "estructura",
+                "estructura": "Hola {{x}}",
+                "variables": [{"clave": clave_mala}],
+            },
+        )
+        assert r.status_code == 400, f"{clave_mala} debió rechazarse: {r.text}"
+    # Una clave válida (empieza por letra) sí se acepta.
+    r = cliente.post(
+        "/api/plantillas-contenido",
+        json={
+            "nombre": "T2",
+            "modo": "estructura",
+            "estructura": "Hola {{equipo1}}",
+            "variables": [{"clave": "equipo1"}],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_default_modo_estructura_compatibilidad(cliente):
     # Sin `modo`, el alta sigue siendo de estructura (compatibilidad con clientes viejos).
     r = cliente.post(
