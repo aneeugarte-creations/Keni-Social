@@ -753,6 +753,14 @@ def lanzar_qa_fuente(
         biblioteca.editoriales_de_marca(marca),
         _contexto_qa_fuente(nota),
     )
+    # Marca el tema en curso ANTES de lanzar (para que la fase QA no lo re-lance). CLAVE con el
+    # lanzador SÍNCRONO de los tests: el `procesar` corre DURANTE `lanzar` y persiste el veredicto
+    # real; si marcáramos en_curso DESPUÉS, sobrescribiría ese veredicto. En prod (async) el orden
+    # es indiferente; así queda correcto en ambos. El `procesar` lo sustituye por el real al fin.
+    try:
+        repos.actualizar_contenido(tema_id, {"qa_veredicto": QA_EN_CURSO})
+    except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento lo evita el sweep
+        _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
     gen = gen_dom.lanzar(
         tipo="qa-fuente",
         titulo=_TITULO_QA,
@@ -766,12 +774,6 @@ def lanzar_qa_fuente(
         ),
         autor=autor,
     )
-    # Marca el tema en curso para que la fase QA no lo re-lance (deja de estar "sin veredicto").
-    # El `procesar` lo sustituye por el veredicto real al completar.
-    try:
-        repos.actualizar_contenido(tema_id, {"qa_veredicto": QA_EN_CURSO})
-    except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento lo evita el sweep
-        _log.warning("pipeline: no se pudo marcar el tema en_curso para QA (%s)", tema_id, exc_info=True)
     registrar_etapa(
         ETAPA_QA,
         marca,
