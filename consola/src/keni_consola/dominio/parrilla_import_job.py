@@ -13,11 +13,10 @@ codigo Python valida y, mas tarde y solo si el usuario acepta, aplica el diff (o
 from __future__ import annotations
 
 import logging
-import tempfile
-from pathlib import Path
+import uuid
 from typing import Any
 
-from .. import media, repos
+from .. import media, repos, rutas
 from . import generar, jobspec
 from . import parrilla_import as pi
 
@@ -193,7 +192,14 @@ def lanzar(
     if datos is None:
         raise ParrillaImportError("El documento subido ya no está disponible.")
 
-    carpeta = Path(tempfile.mkdtemp(prefix="keni-parrilla-"))
+    # Materializamos el documento bajo el volumen de datos COMPARTIDO (`KENI_DATA_DIR`), NO en
+    # /tmp: en hosted el `claude -p` corre en el contenedor WORKER, que comparte `/data` con el
+    # back pero NO su /tmp. Un doc en /tmp sería invisible al worker y claude no leería nada
+    # (→ 0 operaciones). `generaciones` borra este dir (`dir_temporal`) al terminar el job.
+    base = rutas.dir_config() / "subidas-tmp"
+    base.mkdir(parents=True, exist_ok=True)
+    carpeta = base / f"parrilla-{uuid.uuid4().hex}"
+    carpeta.mkdir(parents=True, exist_ok=True)
     ext = (doc_ext or "").lstrip(".") or "bin"
     archivo = f"documento.{ext}"
     (carpeta / archivo).write_bytes(datos)
