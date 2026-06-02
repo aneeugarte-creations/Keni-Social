@@ -136,10 +136,10 @@ def test_borrar_publicacion_suelta_borra_el_padre(entorno):
 def test_borrar_publicacion_anidada_conserva_el_tema(entorno):
     """Un borrador ANIDADO bajo un tema con mas piezas: se borra SOLO su fila, no el tema."""
     tema = db.crear_contenido(flujo="importante", titulo="Tema con copy")
-    # Pieza placeholder del tablero (no es publicacion) + borrador anidado (es_publicacion=1).
+    # Dos filas por plataforma del MISMO tema (ambas son publicaciones, clase='contenido').
     db.crear_contenido_plataforma(contenido_id=tema["id"], red="x")
     borrador = db.crear_contenido_plataforma(
-        contenido_id=tema["id"], red="instagram", copy="Hola", es_publicacion=True
+        contenido_id=tema["id"], red="instagram", copy="Hola"
     )
 
     assert db.borrar_publicacion(borrador["id"]) is True

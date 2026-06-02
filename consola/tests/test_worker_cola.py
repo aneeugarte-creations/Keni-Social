@@ -308,12 +308,12 @@ def test_reconstruir_procesar_copy_nida_bajo_el_tema(entorno):
     resultado = procesar(salida, None)
 
     assert len(resultado["publicaciones"]) == 1
-    # El borrador cuelga del tema: es una fila por plataforma es_publicacion=1 de ESE contenido.
-    plats = [p for p in repos.listar_contenido_plataforma(tema["id"]) if p.get("es_publicacion")]
+    # El borrador cuelga del tema: es una fila por plataforma de ESE contenido.
+    plats = repos.listar_contenido_plataforma(tema["id"])
     assert len(plats) == 1
     assert plats[0]["copy"] == "Hola X"
     assert not plats[0]["falta_copy"]
-    # Aparece en /api/publicaciones (filtra es_publicacion=1) ...
+    # Aparece en /api/publicaciones (toda fila por plataforma de un contenido es publicacion) ...
     pubs = repos.listar_publicaciones(marca=_MARCA, red="x")
     assert any("Hola X" in (p.get("contenido") or "") for p in pubs)
     # ... y en la cola de aprobacion (estado borrador == pendiente de plataforma).
@@ -352,8 +352,8 @@ def test_reconstruir_procesar_copy_sin_contenido_id_back_compat(entorno):
     )
     procesar = jobspec.reconstruir_procesar(spec)
     procesar('```json\n{"piezas": [{"red": "x", "texto": "Suelto"}]}\n```', None)
-    # El tema NO recibio ninguna fila publicacion.
-    assert [p for p in repos.listar_contenido_plataforma(tema["id"]) if p.get("es_publicacion")] == []
+    # El tema NO recibio ninguna fila por plataforma (el borrador no se nido en el).
+    assert repos.listar_contenido_plataforma(tema["id"]) == []
     # Pero el borrador existe (con su propio padre).
     assert any(
         "Suelto" in (p.get("contenido") or "")
