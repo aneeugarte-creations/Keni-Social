@@ -10,9 +10,9 @@ La app descubre este modulo por su variable `RUTAS` (ver `api/__init__.py`); no 
 `app.py`. Errores como JSON en espanol. `ColaLlenaError` se deja PROPAGAR: el manejador
 central de `app.py` la traduce a 429.
 
-ORDEN DE RUTAS: las estaticas (`/papelera`, `/editoriales`, `/areas`, `/lanzar`,
-`/lanzar-archivo`) van ANTES que la parametrica `/{doc_id:path}` (que captura barras) para
-que Starlette las case primero.
+ORDEN DE RUTAS: las estaticas (`/papelera`, `/editoriales`, `/validacion`, `/areas`,
+`/lanzar`, `/lanzar-archivo`) van ANTES que la parametrica `/{doc_id:path}` (que captura
+barras) para que Starlette las case primero.
 """
 
 from __future__ import annotations
@@ -147,6 +147,17 @@ async def editoriales(request: Request) -> Response:
     marca = request.query_params.get("marca") or ""
     docs = biblioteca.editoriales_de_marca(marca)
     return JSONResponse({"editoriales": [d.a_dict() for d in docs]})
+
+
+async def validacion(request: Request) -> Response:
+    """`GET /api/biblioteca/validacion?marca=` -> diagnostico de los 4 pilares editoriales.
+
+    Devuelve `{completa, faltan, recomendacion, pilares}` (ver `biblioteca.validacion_editorial`).
+    Lo consume el SPA para avisar si la linea editorial de la marca esta incompleta ANTES de
+    lanzar una generacion.
+    """
+    marca = request.query_params.get("marca") or ""
+    return JSONResponse(biblioteca.validacion_editorial(marca))
 
 
 async def areas(request: Request) -> Response:
@@ -367,6 +378,7 @@ RUTAS = [
     Route("/api/biblioteca/papelera", papelera_listar, methods=["GET"]),
     Route("/api/biblioteca/papelera/{pid}/restaurar", papelera_restaurar, methods=["POST"]),
     Route("/api/biblioteca/editoriales", editoriales, methods=["GET"]),
+    Route("/api/biblioteca/validacion", validacion, methods=["GET"]),
     Route("/api/biblioteca/areas", areas, methods=["GET"]),
     Route("/api/biblioteca/marcas", marcas_disponibles, methods=["GET"]),
     Route("/api/biblioteca/lanzar", lanzar, methods=["POST"]),

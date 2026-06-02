@@ -3284,6 +3284,14 @@ export interface RespuestaEditoriales {
   editoriales: DocumentoBiblioteca[];
 }
 
+/** Diagnóstico de los 4 pilares de la línea editorial de una marca (GET /biblioteca/validacion). */
+export interface ValidacionEditorial {
+  completa: boolean;
+  faltan: string[];
+  recomendacion: string;
+  pilares: Record<string, boolean>;
+}
+
 export interface AreaBiblioteca {
   id: string;
   nombre: string;

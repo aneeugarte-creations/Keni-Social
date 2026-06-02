@@ -13,6 +13,7 @@ import type {
   RespuestaDocumento,
   RespuestaPapelera,
   RespuestaEditoriales,
+  ValidacionEditorial,
   RespuestaAreas,
   RespuestaMarcasBiblioteca,
   CuerpoCrearDocumento,
@@ -630,6 +631,8 @@ export const api = {
     }),
   editorialesBiblioteca: (marca: string, signal?: AbortSignal) =>
     peticion<RespuestaEditoriales>(`/biblioteca/editoriales${query({ marca })}`, { signal }),
+  validacionBiblioteca: (marca: string, signal?: AbortSignal) =>
+    peticion<ValidacionEditorial>(`/biblioteca/validacion${query({ marca })}`, { signal }),
   areasBiblioteca: (signal?: AbortSignal) =>
     peticion<RespuestaAreas>("/biblioteca/areas", { signal }),
   marcasBiblioteca: (signal?: AbortSignal) =>

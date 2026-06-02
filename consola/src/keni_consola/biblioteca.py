@@ -60,6 +60,15 @@ SALIDAS = ("", "documento", "piezas")
 # Clases editoriales GLOBALES: aplican a TODAS las marcas (no llevan `marcas` propias).
 _CLASES_GLOBALES = frozenset({"plataforma", "tropicalizacion", "reglas"})
 
+# Los 4 PILARES que toda línea editorial COMPLETA debe cubrir para una marca:
+#   - `marca`           (específico de la marca): qué es la marca, su posicionamiento.
+#   - `voz`             (específico de la marca): tono y estilo de redacción.
+#   - `tropicalizacion` (global): adaptación a México (modismos, contexto local).
+#   - `plataforma`      (global): convenciones por red (formato, límites, hábitos).
+# `reglas` (global) es un pilar AUXILIAR, no obligatorio: refuerza, pero su ausencia no deja
+# la línea editorial incompleta. El auto-adjunto sigue incluyendo `reglas` si existe.
+PILARES_EDITORIALES = ("marca", "voz", "tropicalizacion", "plataforma")
+
 # Dir de la papelera (oculto; no es un tipo navegable).
 _PAPELERA = ".papelera"
 
@@ -519,6 +528,12 @@ def editoriales_de_marca(marca: str) -> list[Documento]:
     Incluye (a) los GLOBALES (clase plataforma/tropicalizacion/reglas, aplican a todas las
     marcas) y (b) los especificos de la marca (clase marca/voz cuyo `marcas` incluye `marca`).
     El usuario puede luego anadir/quitar en la UI; esto es solo el conjunto por defecto.
+
+    Endurecido: el resultado se ordena por PILAR (orden de `PILARES_EDITORIALES`, luego el
+    resto) y, dentro de cada pilar, por id, para que el auto-adjunto sea estable y legible.
+    (El filtro de "pilar realmente cubierto" —descartar editoriales vacios— vive en
+    `validacion_editorial`, que es quien decide si la linea editorial esta completa; aqui se
+    adjunta todo lo que aplica para no sorprender al usuario quitandole un documento.)
     """
     seleccion: list[Documento] = []
     for doc in listar(tipo="editorial"):
@@ -526,7 +541,52 @@ def editoriales_de_marca(marca: str) -> list[Documento]:
             seleccion.append(doc)
         elif marca and marca in doc.marcas:
             seleccion.append(doc)
+
+    orden = {clase: i for i, clase in enumerate(PILARES_EDITORIALES)}
+    seleccion.sort(key=lambda d: (orden.get(d.clase, len(orden)), d.id))
     return seleccion
+
+
+def validacion_editorial(marca: str) -> dict[str, object]:
+    """Diagnostica si la linea editorial de `marca` cubre los 4 PILARES obligatorios.
+
+    Devuelve `{completa, faltan, recomendacion, pilares}`:
+      - `completa`: True si los 4 pilares (`PILARES_EDITORIALES`) tienen al menos un
+        documento editorial con cuerpo.
+      - `faltan`: lista de pilares sin cubrir (en el orden canonico).
+      - `recomendacion`: frase en espanol lista para mostrar (vacia si esta completa).
+      - `pilares`: mapa pilar -> bool (cubierto o no), para una UI mas detallada.
+
+    Si `marca` es vacio, los pilares ESPECIFICOS (marca/voz) se consideran no cubiertos
+    (no hay marca de la que colgarlos): se exige elegir una marca primero.
+    """
+    if marca:
+        docs = editoriales_de_marca(marca)
+    else:
+        docs = [d for d in listar(tipo="editorial") if d.clase in _CLASES_GLOBALES]
+    # Un pilar solo cuenta como CUBIERTO si su documento tiene cuerpo (un editorial vacio no
+    # aporta contexto): el filtro de no-vacio vive aqui, donde se decide la completitud.
+    cubiertas = {d.clase for d in docs if d.cuerpo.strip()}
+    pilares = {p: (p in cubiertas) for p in PILARES_EDITORIALES}
+    faltan = [p for p in PILARES_EDITORIALES if not pilares[p]]
+
+    if not marca:
+        recomendacion = "Elige una marca para validar su línea editorial."
+    elif not faltan:
+        recomendacion = ""
+    else:
+        nombres = ", ".join(faltan)
+        recomendacion = (
+            f"La línea editorial de esta marca está incompleta: falta(n) {nombres}. "
+            "Crea o completa esos documentos en la Biblioteca (sección Editorial) para "
+            "que la generación tenga contexto suficiente."
+        )
+    return {
+        "completa": not faltan,
+        "faltan": faltan,
+        "recomendacion": recomendacion,
+        "pilares": pilares,
+    }
 
 
 # --------------------------------------------------------------------------- #

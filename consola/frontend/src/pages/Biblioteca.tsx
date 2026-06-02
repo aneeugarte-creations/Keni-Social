@@ -10,7 +10,9 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  AlertTriangle,
   BookOpen,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Eye,
@@ -521,7 +523,7 @@ export default function Biblioteca() {
                 ))}
               </datalist>
               {borrador.tipo === "prompt" ? (
-                <Button size="sm" onClick={() => setLanzarAbierto(true)}>
+                <Button variant="brand" size="sm" onClick={() => setLanzarAbierto(true)}>
                   <Send className="mr-1 h-3.5 w-3.5" /> Lanzar
                 </Button>
               ) : null}
@@ -661,6 +663,14 @@ function PanelLanzar({
     queryFn: ({ signal }) => api.editorialesBiblioteca(marca, signal),
     enabled: !!marca,
   });
+  // Diagnóstico de los 4 pilares editoriales de la marca elegida: avisa si la línea
+  // editorial está incompleta ANTES de lanzar (no bloquea, solo advierte).
+  const validacionQuery = useQuery({
+    queryKey: ["biblioteca-validacion", marca],
+    queryFn: ({ signal }) => api.validacionBiblioteca(marca, signal),
+    enabled: !!marca,
+  });
+  const validacion = validacionQuery.data;
   React.useEffect(() => {
     const ids = (editorialesQuery.data?.editoriales ?? []).map((d) => d.id);
     setAdjuntos(new Set(ids));
@@ -729,6 +739,20 @@ function PanelLanzar({
         <Label>Marca</Label>
         <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} incluirTodas={false} />
       </div>
+
+      {marca && validacion ? (
+        validacion.completa ? (
+          <div className="flex items-center gap-2 rounded-md border border-emerald-600/30 bg-emerald-600/5 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            <span>Línea editorial completa: cubre los 4 pilares (marca, voz, tropicalización y plataforma).</span>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{validacion.recomendacion}</span>
+          </div>
+        )
+      ) : null}
 
       {marca ? (
         <div className="space-y-1">
@@ -817,6 +841,7 @@ function PanelLanzar({
       ) : null}
 
       <Button
+        variant="brand"
         onClick={() => lanzarMut.mutate()}
         disabled={!marca || ejecutando || lanzarMut.isPending}
       >
@@ -827,6 +852,11 @@ function PanelLanzar({
         )}
         Lanzar
       </Button>
+      {!marca ? (
+        <p className="text-xs text-muted-foreground">
+          Elige una marca para lanzar: la generación necesita su línea editorial.
+        </p>
+      ) : null}
       {lanzarMut.isError ? (
         <p className="text-xs text-destructive">{(lanzarMut.error as Error).message}</p>
       ) : null}

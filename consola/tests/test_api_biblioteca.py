@@ -89,6 +89,53 @@ def test_editoriales_por_marca(cliente):
     assert ids == {"editorial/plataformas", "editorial/voz"}
 
 
+def test_validacion_marca_incompleta(cliente):
+    # Solo plataforma (con cuerpo): faltan marca, voz y tropicalizacion -> incompleta.
+    cliente.post(
+        "/api/biblioteca",
+        json={"titulo": "Plataformas", "tipo": "editorial", "clase": "plataforma", "cuerpo": "reglas de red"},
+    )
+    r = cliente.get("/api/biblioteca/validacion", params={"marca": _MARCA})
+    datos = r.json()
+    assert datos["completa"] is False
+    assert set(datos["faltan"]) == {"marca", "voz", "tropicalizacion"}
+    assert datos["recomendacion"]  # frase de ayuda no vacia
+
+
+def test_validacion_marca_completa(cliente):
+    # Los 4 pilares con cuerpo -> completa, sin recomendacion.
+    for clase, marcas_doc in [
+        ("plataforma", None),
+        ("tropicalizacion", None),
+        ("marca", [_MARCA]),
+        ("voz", [_MARCA]),
+    ]:
+        cuerpo = {"titulo": clase, "tipo": "editorial", "clase": clase, "cuerpo": f"contenido {clase}"}
+        if marcas_doc:
+            cuerpo["marcas"] = marcas_doc
+        cliente.post("/api/biblioteca", json=cuerpo)
+    r = cliente.get("/api/biblioteca/validacion", params={"marca": _MARCA})
+    datos = r.json()
+    assert datos["completa"] is True
+    assert datos["faltan"] == []
+    assert datos["recomendacion"] == ""
+
+
+def test_validacion_sin_marca_pide_marca(cliente):
+    r = cliente.get("/api/biblioteca/validacion")
+    datos = r.json()
+    assert datos["completa"] is False
+    assert "marca" in datos["faltan"] and "voz" in datos["faltan"]
+    assert "marca" in datos["recomendacion"].lower()
+
+
+def test_validacion_cuerpo_vacio_no_cubre_pilar(cliente):
+    # Un editorial SIN cuerpo no cuenta como pilar cubierto.
+    cliente.post("/api/biblioteca", json={"titulo": "Voz", "tipo": "editorial", "clase": "voz", "marcas": [_MARCA]})
+    r = cliente.get("/api/biblioteca/validacion", params={"marca": _MARCA})
+    assert "voz" in r.json()["faltan"]
+
+
 def test_areas_disponibles(cliente):
     r = cliente.get("/api/biblioteca/areas")
     ids = {a["id"] for a in r.json()["areas"]}
