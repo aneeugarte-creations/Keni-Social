@@ -84,33 +84,35 @@ def anotar_rendimiento_relativo(piezas: Sequence[Pieza]) -> list[Pieza]:
     """Anota cada pieza con su `rendimiento_relativo` vs. la mediana de su grupo.
 
     Para cada grupo (marca×red, o red si la pieza no lleva marca) calcula la mediana
-    de `engagement_pct` y asigna a cada pieza del grupo:
+    de `visualizaciones` y asigna a cada pieza del grupo:
 
-        rendimiento_relativo = engagement_pct_pieza / mediana_engagement_del_grupo
+        rendimiento_relativo = visualizaciones_pieza / mediana_vistas_del_grupo
 
-    Esto NORMALIZA el rendimiento contra el baseline propio de cada red/marca, de modo
-    que piezas de redes con escalas dispares (IG vs. TikTok) se comparen de forma JUSTA:
-    un valor 3.0 = "rindió 3× la mediana de su grupo".
+    Mide el ALCANCE relativo (vistas) contra el baseline de su red, REFORZANDO el orden
+    por vistas de top/peores: un valor 3.0 = "tuvo 3× las vistas de la mediana de su red"
+    (el #1 más visto sale con un múltiplo alto/verde; los menos vistos <1×/rojo). Se usa
+    vistas y no engagement a propósito: la tabla ordena por alcance, así que el badge debe
+    leer en el mismo eje (un post viral tiene baja TASA de engagement pero altísimo
+    alcance; comparar su tasa con la mediana lo pintaba en rojo y confundía).
 
-    División por cero: si la mediana del grupo es 0 (todas las piezas del grupo tienen
-    engagement 0), cae a la MEDIA del grupo; si la media también es 0, deja el ratio en
-    `None` (no hay baseline contra el que comparar). Muta y devuelve la misma lista de
-    piezas (los modelos pydantic se actualizan in-place) para encadenar con `top_y_peores`.
+    División por cero: si la mediana del grupo es 0, cae a la MEDIA del grupo; si la media
+    también es 0, deja el ratio en `None` (no hay baseline). Muta y devuelve la misma lista
+    de piezas (los modelos pydantic se actualizan in-place) para encadenar con `top_y_peores`.
     """
     grupos: dict[tuple[str | None, Plataforma], list[Pieza]] = {}
     for p in piezas:
         grupos.setdefault(_clave_grupo(p), []).append(p)
 
     for grupo in grupos.values():
-        engs = [p.engagement_pct for p in grupo]
-        base = statistics.median(engs)
+        vistas = [p.visualizaciones for p in grupo]
+        base = statistics.median(vistas)
         if base == 0:
-            # mediana 0 (mitad o más del grupo en 0): cae a la media para no perder
+            # mediana 0 (mitad o más del grupo sin vistas): cae a la media para no perder
             # toda señal; si la media también es 0, no hay baseline -> ratio None.
-            base = statistics.fmean(engs)
+            base = statistics.fmean(vistas)
         for p in grupo:
             p.rendimiento_relativo = (
-                round(p.engagement_pct / base, 3) if base else None
+                round(p.visualizaciones / base, 3) if base else None
             )
     return list(piezas)
 

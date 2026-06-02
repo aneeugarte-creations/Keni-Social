@@ -88,35 +88,38 @@ def test_peores_vacio_cuando_caben_en_top():
 # --- Rendimiento relativo (score normalizado por grupo) ---------------------
 
 
-def test_rendimiento_relativo_normaliza_contra_mediana_del_grupo():
-    # IG: engagements 2,4,6 -> mediana 4. La pieza de 6 rinde 1.5x su grupo.
-    ig = [_pieza(e, plat=Plataforma.instagram, cuenta="m", i=e) for e in [2.0, 4.0, 6.0]]
-    # TikTok con baseline mucho más bajo: 0.5,1,1.5 -> mediana 1. La de 1.5 rinde 1.5x.
-    tk = [_pieza(e, plat=Plataforma.tiktok, cuenta="m", i=int(e * 10)) for e in [0.5, 1.0, 1.5]]
+def test_rendimiento_relativo_normaliza_contra_mediana_de_vistas_del_grupo():
+    # IG: vistas 2000,4000,6000 -> mediana 4000. La pieza de 6000 rinde 1.5x su grupo.
+    ig = [_pieza(5.0, vis=v, plat=Plataforma.instagram, cuenta="m", i=i)
+          for i, v in enumerate([2000, 4000, 6000])]
+    # TikTok con escala de vistas más baja: 500,1000,1500 -> mediana 1000. La de 1500: 1.5x.
+    tk = [_pieza(5.0, vis=v, plat=Plataforma.tiktok, cuenta="m", i=i)
+          for i, v in enumerate([500, 1000, 1500])]
     anotar_rendimiento_relativo(ig + tk)
-    rr = {(p.plataforma, p.engagement_pct): p.rendimiento_relativo for p in ig + tk}
-    # mismo ratio (1.5x) pese a baselines dispares -> comparación JUSTA entre redes.
-    assert rr[(Plataforma.instagram, 6.0)] == 1.5
-    assert rr[(Plataforma.tiktok, 1.5)] == 1.5
-    assert rr[(Plataforma.instagram, 2.0)] == 0.5
-    assert rr[(Plataforma.tiktok, 0.5)] == 0.5
+    rr = {(p.plataforma, p.visualizaciones): p.rendimiento_relativo for p in ig + tk}
+    # mismo ratio (1.5x) pese a escalas de vistas dispares -> comparación JUSTA entre redes.
+    assert rr[(Plataforma.instagram, 6000)] == 1.5
+    assert rr[(Plataforma.tiktok, 1500)] == 1.5
+    assert rr[(Plataforma.instagram, 2000)] == 0.5
+    assert rr[(Plataforma.tiktok, 500)] == 0.5
 
 
 def test_rendimiento_relativo_mediana_cero_sin_division():
-    # Todo el grupo en 0: mediana 0 y media 0 -> ratio None (sin baseline), no crashea.
-    grupo = [_pieza(0.0, plat=Plataforma.x, cuenta="m", i=i) for i in range(4)]
+    # Todo el grupo sin vistas: mediana 0 y media 0 -> ratio None (sin baseline), no crashea.
+    grupo = [_pieza(1.0, vis=0, plat=Plataforma.x, cuenta="m", i=i) for i in range(4)]
     anotar_rendimiento_relativo(grupo)
     assert all(p.rendimiento_relativo is None for p in grupo)
 
 
 def test_rendimiento_relativo_mediana_cero_cae_a_media():
-    # mediana 0 (3 de 5 piezas en 0) pero media > 0 -> usa la media como baseline.
-    grupo = [_pieza(e, plat=Plataforma.x, cuenta="m", i=i) for i, e in enumerate([0.0, 0.0, 0.0, 2.0, 3.0])]
+    # mediana 0 (3 de 5 piezas sin vistas) pero media > 0 -> usa la media como baseline.
+    grupo = [_pieza(1.0, vis=v, plat=Plataforma.x, cuenta="m", i=i)
+             for i, v in enumerate([0, 0, 0, 2, 3])]
     anotar_rendimiento_relativo(grupo)
-    # media = 1.0 -> la de eng 2.0 rinde 2.0x; ninguna explota.
-    por_eng = {p.engagement_pct: p.rendimiento_relativo for p in grupo}
-    assert por_eng[2.0] == 2.0
-    assert por_eng[0.0] == 0.0
+    # media = 1.0 -> la de 2 vistas rinde 2.0x; ninguna explota.
+    por_v = {p.visualizaciones: p.rendimiento_relativo for p in grupo}
+    assert por_v[2] == 2.0
+    assert por_v[0] == 0.0
 
 
 # --- Orden global de top/peores por vistas (mezcla de marcas y redes) --------

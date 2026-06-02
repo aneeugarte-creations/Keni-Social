@@ -269,12 +269,12 @@ function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
           {pieza.rendimiento_relativo != null && (
             <Badge
               variant={pieza.rendimiento_relativo >= 1 ? "ok" : "error"}
-              title="Engagement de la pieza ÷ mediana de su red"
+              title="Vistas de la pieza ÷ mediana de vistas de su red"
             >
               {pieza.rendimiento_relativo.toLocaleString("es-MX", {
                 maximumFractionDigits: 1,
               })}
-              × mediana de su red
+              × mediana de vistas de su red
             </Badge>
           )}
         </span>

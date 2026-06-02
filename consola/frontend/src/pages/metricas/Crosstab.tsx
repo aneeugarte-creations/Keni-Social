@@ -2,9 +2,9 @@
  * Crosstab de rendimiento marca×red×formato (estrategia digital).
  *
  * Una tabla-mapa de calor: cada fila es una combinación marca×red×formato del periodo
- * con su número de piezas, engagement medio y `rendimiento_relativo_medio` (engagement de
- * la celda ÷ mediana de su grupo). El rendimiento relativo se colorea para leer de un
- * vistazo qué formatos rinden por encima (>1, verde) o por debajo (<1, rojo) de su grupo.
+ * con su número de piezas, engagement medio y `rendimiento_relativo_medio` (vistas de la
+ * celda ÷ mediana de VISTAS de su grupo). El rendimiento relativo se colorea para leer de
+ * un vistazo qué formatos alcanzan por encima (>1, verde) o por debajo (<1, rojo) de su grupo.
  *
  * Mismo stack y estados honestos (carga / vacío / error) que el resto de Métricas: si la
  * fuente no expone celdas, lo dice en vez de inventar.
@@ -75,8 +75,8 @@ export function Crosstab({
           <CardTitle className="text-base">Rendimiento por formato</CardTitle>
         </div>
         <p className="text-sm text-muted-foreground">
-          Cruce marca × red × formato. El rendimiento relativo compara el engagement de
-          cada combinación con la mediana de su grupo: <span className="text-emerald-700 dark:text-emerald-300">verde</span> rinde
+          Cruce marca × red × formato. El rendimiento relativo compara las VISTAS de
+          cada combinación con la mediana de vistas de su grupo: <span className="text-emerald-700 dark:text-emerald-300">verde</span> alcanza
           por encima, <span className="text-red-700 dark:text-red-300">rojo</span> por debajo.
         </p>
       </CardHeader>

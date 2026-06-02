@@ -98,7 +98,7 @@ describe("PiezasAnalitica (enriquecida)", () => {
     // (a) marca (`cuenta`) + red de cada pieza.
     expect(screen.getAllByText("UnoTV · instagram").length).toBeGreaterThan(0);
     // (b) badge de rendimiento relativo cuando no es null.
-    expect(screen.getByText(/2\.3× mediana de su red/)).toBeInTheDocument();
+    expect(screen.getByText(/2\.3× mediana de vistas de su red/)).toBeInTheDocument();
     // (c) desglose granular compacto (comentarios = 300, sin compactar).
     expect(
       screen.getByText((t) => t.includes("💬") && t.includes("300")),
@@ -114,7 +114,7 @@ describe("PiezasAnalitica (enriquecida)", () => {
     renderConProviders(<PiezasAnalitica opciones={OPCIONES} rangoActual="semana" />);
 
     expect(await screen.findByText("Nota floja")).toBeInTheDocument();
-    // sin rendimiento_relativo -> no hay badge "× mediana".
-    expect(screen.queryByText(/mediana de su red/)).not.toBeInTheDocument();
+    // sin rendimiento_relativo -> no hay badge "× mediana de vistas".
+    expect(screen.queryByText(/mediana de vistas de su red/)).not.toBeInTheDocument();
   });
 });
