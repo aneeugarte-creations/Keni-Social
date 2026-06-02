@@ -22,7 +22,7 @@ import logging
 import uuid
 from typing import Any
 
-from .. import media, repos, rota, rutas
+from .. import importador_calendario, media, repos, rota, rutas
 from ..estados import NOMBRE_FRANJA_MANANA_DEFAULT, NOMBRE_FRANJA_TARDE_DEFAULT
 from . import generar, jobspec
 from . import parrilla_import as pi
@@ -38,30 +38,78 @@ _SLOTS_DEFECTO: tuple[str, ...] = (
     "Descanso",
 )
 
-# Endurecimiento del run READ-ONLY: el job SOLO debe LEER el documento y emitir JSON. Vetamos
-# las herramientas de ESCRITURA (Write/Edit/Bash) y de RED (WebFetch/WebSearch), ademas de las
-# tools MCP de la consola que MUTAN datos (`keni_*` de creacion/edicion/aprobacion). Topamos
-# turnos y coste bajos (es una lectura + un JSON, no necesita muchos turnos).
-ENDURECER: dict[str, Any] = {
-    "disallowed_tools": [
-        "Write",
-        "Edit",
-        "MultiEdit",
-        "NotebookEdit",
-        "Bash",
-        "WebFetch",
-        "WebSearch",
-        # MCP de escritura de la consola (defensa: el job no debe mutar nada via MCP).
-        "mcp__keni-social__keni_crear_contenido",
-        "mcp__keni-social__keni_actualizar_contenido",
-        "mcp__keni-social__keni_enviar_a_revision",
-        "mcp__keni-social__keni_aprobar",
-        "mcp__keni-social__keni_rechazar",
-        "mcp__keni-social__keni_generar_copy",
-    ],
-    "max_turns": 6,
-    "max_budget_usd": 0.5,
-}
+# Endurecimiento del run READ-ONLY: el job SOLO lee el documento y emite JSON. Vetamos las
+# herramientas de ESCRITURA (Write/Edit/Bash) y de RED (WebFetch/WebSearch), mas las tools MCP
+# de la consola que MUTAN datos. Presupuesto/turnos GENEROSOS: un documento puede traer un año
+# entero (cientos/miles de operaciones); el tope de antes ($0.5 / 6 turnos) ahogaba esos casos
+# (error_max_budget_usd). El coste real lo acota el tamaño del documento, no un tope artificial.
+_TOOLS_VETADAS: tuple[str, ...] = (
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "NotebookEdit",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+    "mcp__keni-social__keni_crear_contenido",
+    "mcp__keni-social__keni_actualizar_contenido",
+    "mcp__keni-social__keni_enviar_a_revision",
+    "mcp__keni-social__keni_aprobar",
+    "mcp__keni-social__keni_rechazar",
+    "mcp__keni-social__keni_generar_copy",
+)
+
+# Herramientas de LECTURA de ficheros: solo se permiten cuando el documento se lee como FICHERO
+# (PDF/imagen). Si transcribimos la tabla y la EMBEBEMOS en el prompt, las vetamos tambien: el
+# run es una transformacion pura texto→JSON (ni siquiera necesita abrir nada), mas rapida/barata.
+_TOOLS_LECTURA: tuple[str, ...] = ("Read", "Glob", "Grep")
+
+
+def _endurecer(*, lee_fichero: bool) -> dict[str, Any]:
+    """Config de endurecimiento del job. `lee_fichero=False` (texto embebido) veta tambien las
+    tools de lectura: el modelo solo transforma el texto del prompt en JSON."""
+    vetadas = list(_TOOLS_VETADAS) + ([] if lee_fichero else list(_TOOLS_LECTURA))
+    return {
+        "disallowed_tools": vetadas,
+        "max_turns": 40,
+        "max_budget_usd": 10.0,
+    }
+
+
+# Extensiones que TRANSCRIBIMOS a texto en el server (claude no pelea con el binario): hojas de
+# cálculo y texto plano. Lo demas (PDF, imagen, docx) lo lee claude como FICHERO (nativo/visión).
+_EXTS_TABLA: tuple[str, ...] = (".xlsx", ".xlsm", ".csv", ".tsv")
+_EXTS_TEXTO: tuple[str, ...] = (".txt", ".md", ".markdown", ".text", ".log")
+
+
+def _tabla_a_texto(filas: list[list[Any]]) -> str:
+    """Filas de celdas -> texto TSV (una fila por línea, saltando filas totalmente vacías)."""
+    lineas: list[str] = []
+    for fila in filas:
+        celdas = ["" if c is None else str(c) for c in fila]
+        if any(c.strip() for c in celdas):
+            lineas.append("\t".join(celdas))
+    return "\n".join(lineas)
+
+
+def _extraer_texto_documento(datos: bytes, nombre: str) -> str | None:
+    """Transcribe a TEXTO los formatos que claude no debería leer como binario (Excel/CSV/texto).
+
+    Devuelve el texto a EMBEBER en el prompt, o None para formatos que claude lee mejor como
+    fichero (PDF, imagen, Word). PURO salvo por openpyxl (vía `importador_calendario`). Un .xlsx
+    es un ZIP que la tool Read NO interpreta: leerlo así costaba turnos y dinero (el bug del
+    `error_max_budget_usd`); transcrito a TSV, el run es una transformación texto→JSON.
+    """
+    n = (nombre or "").lower()
+    if n.endswith(_EXTS_TABLA):
+        try:
+            filas = importador_calendario._leer_tabla(datos, nombre=nombre)
+        except Exception:  # noqa: BLE001 -- si no se puede parsear, que lo lea claude como fichero
+            return None
+        return _tabla_a_texto(filas) or None
+    if n.endswith(_EXTS_TEXTO):
+        return datos.decode("utf-8", errors="replace") or None
+    return None
 
 
 # --------------------------------------------------------------------------- #
@@ -154,24 +202,45 @@ _ESQUEMA_JSON = (
 )
 
 
-def componer_prompt(*, ruta_doc: str, ctx: pi.Contexto) -> str:
-    """Prompt para que claude LEA el documento y EMITA las operaciones como JSON. PURO.
+def componer_prompt(
+    *,
+    ctx: pi.Contexto,
+    ruta_doc: str | None = None,
+    texto_documento: str | None = None,
+) -> str:
+    """Prompt para que claude convierta el documento en operaciones JSON. PURO.
 
-    NO se ata a una semana: embebe el roster valido (id+nombre), los NOMBRES de slot de franja
-    validos y los enums, y le pide extraer TODOS los eventos y turnos del documento, SEA CUAL
-    SEA su fecha (puede ser un año entero), cada uno con una fecha ISO explicita (AAAA-MM-DD).
-    Para los turnos usa el NOMBRE del slot de franja y un miembro existente. Le prohibe inventar
-    gente o franjas y le exige una unica salida: un bloque ```json con el esquema.
+    DOS modos para la FUENTE del documento:
+      - `texto_documento`: el documento ya viene TRANSCRITO (Excel/CSV/texto) e EMBEBIDO en el
+        prompt; el run es una transformación texto→JSON sin abrir ficheros (rápido y barato).
+      - `ruta_doc`: claude LEE el fichero en disco (PDF, imagen, Word) con su tool de lectura.
+
+    NO se ata a una semana: embebe el roster (id+nombre) y los enums, y pide extraer TODO el
+    documento (cualquier fecha, cualquier nº de franjas/día), cada operación con fecha ISO.
     """
     lineas_miembros = "\n".join(
         f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in ctx.miembros.items()
     ) or "  (no hay miembros asignables)"
     lineas_slots = "\n".join(f'  - "{n}"' for n in _SLOTS_DEFECTO)
 
+    if texto_documento is not None:
+        fuente = (
+            "El documento ya está TRANSCRITO a texto más abajo (es una hoja de cálculo/CSV o "
+            "texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO abras ni leas ningún "
+            "fichero ni uses herramientas."
+        )
+        regla_fuente = "- No uses herramientas: todo lo que necesitas está en el texto de abajo."
+        cola_fuente = f"\n\nDOCUMENTO (transcripción):\n```\n{texto_documento}\n```"
+    else:
+        fuente = (
+            f"Lee EXCLUSIVAMENTE el documento en la ruta {ruta_doc} (PDF, imagen/captura o Word)."
+        )
+        regla_fuente = "- No uses herramientas más allá de LEER el documento de la ruta indicada."
+        cola_fuente = ""
+
     return (
         "Eres un asistente que convierte un documento de PLANIFICACIÓN de la rota/parrilla de un "
-        "equipo de redes sociales en operaciones estructuradas. Lee EXCLUSIVAMENTE el documento "
-        f"en la ruta {ruta_doc} (puede ser PDF, imagen/captura, Word, Excel o texto).\n\n"
+        f"equipo de redes sociales en operaciones estructuradas. {fuente}\n\n"
         "EXTRAE TODO lo que encuentres en el documento, SIN RECORTAR: todos los eventos y todos "
         "los turnos, SEA CUAL SEA su fecha (el documento puede cubrir una semana, un mes o un "
         "AÑO ENTERO) y haya las franjas que haya por día (puede haber 3 o más). Cada operación "
@@ -187,7 +256,7 @@ def componer_prompt(*, ruta_doc: str, ctx: pi.Contexto) -> str:
         "Valores de enum válidos: tipo_cobertura ∈ {transmision, imagenes, no_cubrir}; "
         "prioridad ∈ {alta, media, baja}; estado ∈ {propuesto, aprobado}.\n\n"
         "REGLAS:\n"
-        "- NO escribas en ningún sitio ni uses herramientas más allá de LEER el documento.\n"
+        f"{regla_fuente}\n"
         "- Asigna turnos solo a miembros de la lista (mapea nombres→id); omite a los desconocidos.\n"
         "- Respeta las franjas del documento (nombre y horario); no las reduzcas ni renombres.\n"
         "- Emite TODO lo que refleje el documento; no inventes eventos ni turnos que no estén.\n\n"
@@ -196,6 +265,7 @@ def componer_prompt(*, ruta_doc: str, ctx: pi.Contexto) -> str:
         f"```json\n{_ESQUEMA_JSON}\n```\n"
         "Si el documento no contiene una parrilla, devuelve "
         '```json\n{"operaciones": []}\n```.'
+        f"{cola_fuente}"
     )
 
 
@@ -216,44 +286,60 @@ def lanzar(
     nombres_miembros: dict[str, str],
     autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Compone el prompt y ENCOLA el job READ-ONLY; el WORKER baja el documento de S3.
+    """Compone el prompt y ENCOLA el job READ-ONLY. Dos caminos según el FORMATO del documento:
 
-    `doc_nombre` es la KEY del objeto en el almacen de media (lo subio la API). El back NO
-    materializa los bytes: decide la RUTA local destino (bajo `KENI_DATA_DIR`, identica en back
-    y worker) y embebe en el spec una instruccion `prefetch_s3` para que el WORKER descargue el
-    objeto de S3 a esa ruta ANTES de correr claude (el worker tiene las credenciales S3). El dir
-    se pasa como `dir_temporal` para que `generaciones` lo borre al terminar. Devuelve el
-    registro de generacion (la API extrae su `id` -> `gen_id`). Verifica que el objeto exista.
+    - Hoja de cálculo / CSV / texto: lo TRANSCRIBIMOS a texto aquí (en el back, que tiene S3) y
+      lo EMBEBEMOS en el prompt. El run es una transformación texto→JSON sin abrir ficheros (sin
+      tools de lectura): rápido y barato. Esto evita el caso en que claude intentaba leer un
+      .xlsx BINARIO turno a turno hasta agotar el presupuesto (`error_max_budget_usd`) y bloquear
+      el worker ~45 min.
+    - PDF / imagen / Word: claude lo LEE como fichero. El back NO escribe los bytes: decide una
+      ruta local (bajo `KENI_DATA_DIR`, idéntica en back y worker) y el WORKER baja el objeto de
+      S3 a esa ruta (`prefetch_s3`) ANTES de correr claude. `dir_temporal` lo limpia al terminar.
+
+    `doc_nombre` es la KEY del objeto en el almacén de media. Devuelve el registro de generación.
     """
-    # Verificamos que el documento sigue en el almacen (el back tambien tiene S3 en hosted).
-    if media.leer_media(doc_nombre) is None:
+    datos = media.leer_media(doc_nombre)
+    if datos is None:
         raise ParrillaImportError("El documento subido ya no está disponible.")
 
-    # Ruta destino BAJO el volumen de datos COMPARTIDO (`KENI_DATA_DIR`): el back la decide pero
-    # NO escribe los bytes; los baja el WORKER de S3 (ver `prefetch_s3` en el spec). Asi back y
-    # worker resuelven la MISMA ruta y no dependemos de un /tmp compartido (que no existe entre
-    # contenedores). `generaciones` borra este dir (`dir_temporal`) al terminar el job.
+    ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
+    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
+    procesar = jobspec.reconstruir_procesar({"procesar": procesar_spec})
+
+    texto = _extraer_texto_documento(datos, doc_nombre)
+    if texto is not None:
+        # Documento TRANSCRITO y embebido: nada de ficheros ni tools de lectura.
+        return generar.lanzar(
+            tipo="parrilla-import",
+            titulo="Importar parrilla",
+            marca="",
+            prompt=componer_prompt(ctx=ctx, texto_documento=texto),
+            procesar=procesar,
+            procesar_spec=procesar_spec,
+            autor=autor,
+            endurecer=_endurecer(lee_fichero=False),
+        )
+
+    # Formato que claude lee como FICHERO (PDF/imagen/Word): el WORKER lo baja de S3 a `ruta_doc`
+    # (misma ruta en back y worker vía `KENI_DATA_DIR`; no dependemos de /tmp compartido).
     base = rutas.dir_config() / "subidas-tmp"
     base.mkdir(parents=True, exist_ok=True)
     carpeta = base / f"parrilla-{uuid.uuid4().hex}"
     carpeta.mkdir(parents=True, exist_ok=True)
     ext = (doc_ext or "").lstrip(".") or "bin"
     ruta_doc = str(carpeta / f"documento.{ext}")
-
-    ctx = construir_contexto_prompt(nombres_miembros=nombres_miembros)
-    prompt = componer_prompt(ruta_doc=ruta_doc, ctx=ctx)
-    procesar_spec = jobspec.construir_parrilla_import(propuesta_id=propuesta_id)
     return generar.lanzar(
         tipo="parrilla-import",
         titulo="Importar parrilla",
         marca="",
-        prompt=prompt,
-        procesar=jobspec.reconstruir_procesar({"procesar": procesar_spec}),
+        prompt=componer_prompt(ctx=ctx, ruta_doc=ruta_doc),
+        procesar=procesar,
         procesar_spec=procesar_spec,
         dir_temporal=carpeta,
         prefetch_s3={"clave": doc_nombre, "destino": ruta_doc},
         autor=autor,
-        endurecer=ENDURECER,
+        endurecer=_endurecer(lee_fichero=True),
     )
 
 
