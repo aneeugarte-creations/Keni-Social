@@ -371,6 +371,7 @@ export interface Publicacion {
   id_post_metricool: string;
   tipo_contenido: string;
   imagen_fuente: string;
+  foto: string;
   falta_copy: boolean;
   falta_imagen: boolean;
   falta_revision: boolean;

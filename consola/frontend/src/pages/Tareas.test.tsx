@@ -67,6 +67,7 @@ function contenido(over: Record<string, unknown> = {}) {
         copy: "",
         imagen: "",
         imagen_fuente: "",
+        foto: "",
         imagen_url: "",
         veredicto: "",
         fecha_programada: "",

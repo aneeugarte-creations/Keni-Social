@@ -492,6 +492,9 @@ class Publicacion(TypedDict):
     # URL original del articulo (p.ej. RSS de marca propia); el editor ofrece usarla.
     tipo_contenido: str
     imagen_fuente: str
+    # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
+    # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
+    foto: str
     # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar. El
     # editor unificado los expone como checks marcables (PATCH a la fila por plataforma).
     falta_copy: bool

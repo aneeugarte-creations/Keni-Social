@@ -553,6 +553,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         copy_in               TEXT NOT NULL DEFAULT '',
         imagen                TEXT NOT NULL DEFAULT '',
         imagen_fuente         TEXT NOT NULL DEFAULT '',
+        foto                  TEXT NOT NULL DEFAULT '',
         veredicto             TEXT NOT NULL DEFAULT '',
         revisor_id            TEXT NOT NULL DEFAULT '',
         revisor_nombre        TEXT NOT NULL DEFAULT '',
@@ -1744,6 +1745,9 @@ _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # URL de la imagen de la FUENTE original (cuando tipo_contenido='fuente'): se
     # previsualiza tal cual sin tener que descargarla a la biblioteca de media.
     ("imagen_fuente", "TEXT NOT NULL DEFAULT ''"),
+    # Media id de la FOTO CRUDA de fondo (la que el usuario sube/elige), separada de
+    # `imagen` (la placa ya compuesta y publicable). Permite recomponer la placa en vivo.
+    ("foto", "TEXT NOT NULL DEFAULT ''"),
     # Texto que va DENTRO de la imagen (copy-in: titular/claim sobre la placa), distinto
     # del `copy` que acompana a la publicacion. Se genera por marca con sus reglas/plantilla.
     ("copy_in", "TEXT NOT NULL DEFAULT ''"),
@@ -3547,6 +3551,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "copy_in",
     "imagen",
     "imagen_fuente",
+    "foto",
     "veredicto",
     "revisor_id",
     "revisor_nombre",
@@ -3614,6 +3619,7 @@ def crear_contenido_plataforma(
     copy_in: str = "",
     imagen: str = "",
     imagen_fuente: str = "",
+    foto: str = "",
     veredicto: str = "",
     revisor_id: str = "",
     revisor_nombre: str = "",
@@ -3652,6 +3658,7 @@ def crear_contenido_plataforma(
         "copy_in": copy_in or "",
         "imagen": imagen or "",
         "imagen_fuente": imagen_fuente or "",
+        "foto": foto or "",
         "veredicto": veredicto or "",
         "revisor_id": revisor_id or "",
         "revisor_nombre": revisor_nombre or "",
@@ -6263,7 +6270,7 @@ _ESTADO_PLAT_A_PUB: dict[str, str] = {
 _SELECT_PUBLICACION = (
     "SELECT cp.id AS pid, cp.red AS red, cp.estado AS pestado, cp.copy AS copy, "
     "cp.copy_in AS copy_in, "
-    "cp.imagen AS imagen, cp.imagen_fuente AS imagen_fuente, "
+    "cp.imagen AS imagen, cp.imagen_fuente AS imagen_fuente, cp.foto AS foto, "
     "cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
     "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
@@ -6306,6 +6313,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         # la URL original del artículo en `imagen_fuente` (el editor ofrece "usar original").
         "tipo_contenido": f["tipo_contenido"] or "ia",
         "imagen_fuente": f["imagen_fuente"] or "",
+        # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
+        # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
+        "foto": f["foto"] or "",
         # Checklist de producción por red (el editor lo expone como checks marcables).
         "falta_copy": bool(f["falta_copy"]),
         "falta_imagen": bool(f["falta_imagen"]),
@@ -6505,6 +6515,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "copy_in": "copy_in",
     "fecha_programada": "fecha_programada",
     "imagen": "imagen",
+    "foto": "foto",
     "evergreen": "evergreen",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",

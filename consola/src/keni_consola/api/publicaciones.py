@@ -263,6 +263,11 @@ async def actualizar(request: Request) -> Response:
         if not isinstance(imagen, str):
             return JSONResponse({"error": "La imagen debe ser texto."}, status_code=400)
         campos["imagen"] = imagen.strip()
+    if "foto" in datos:
+        foto = datos.get("foto")
+        if not isinstance(foto, str):
+            return JSONResponse({"error": "La foto debe ser texto."}, status_code=400)
+        campos["foto"] = foto.strip()
     if "evergreen" in datos:
         evergreen = datos.get("evergreen")
         if not isinstance(evergreen, bool):

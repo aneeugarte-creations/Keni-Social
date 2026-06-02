@@ -2231,6 +2231,8 @@ export interface CuerpoActualizarPublicacion {
   evergreen?: boolean;
   /** Nombre del archivo de imagen adjunto (`""` para quitarla). */
   imagen?: string;
+  /** Media id de la FOTO CRUDA de fondo (separada de la placa compuesta `imagen`). */
+  foto?: string;
 }
 
 /** Respuesta al reciclar una publicación perenne. */

@@ -78,6 +78,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # "usar imagen original" tomando esa URL.
         "tipo_contenido": pub.get("tipo_contenido") or "ia",
         "imagen_fuente": imagen_fuente,
+        # Media id de la FOTO CRUDA de fondo (separada de `imagen`, la placa ya compuesta);
+        # permite al editor inline recomponer la placa en vivo al reabrir la pieza.
+        "foto": pub.get("foto") or "",
         # Checklist de producción por red (Copy/Imagen/Revisión/Publicar pendientes). El
         # editor unificado lo muestra como checks marcables; default True (pendiente).
         "falta_copy": bool(pub.get("falta_copy", True)),

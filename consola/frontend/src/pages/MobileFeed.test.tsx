@@ -42,6 +42,7 @@ const PUBLICACION = {
   id_post_metricool: "",
   tipo_contenido: "",
   imagen_fuente: "",
+  foto: "",
   falta_copy: false,
   falta_imagen: false,
   falta_revision: false,

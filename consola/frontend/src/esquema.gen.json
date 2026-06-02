@@ -1229,6 +1229,9 @@
         "imagen_fuente": {
           "type": "string"
         },
+        "foto": {
+          "type": "string"
+        },
         "falta_copy": {
           "type": "boolean"
         },
@@ -1286,6 +1289,7 @@
         "id_post_metricool",
         "tipo_contenido",
         "imagen_fuente",
+        "foto",
         "falta_copy",
         "falta_imagen",
         "falta_revision",

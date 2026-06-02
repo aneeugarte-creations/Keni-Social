@@ -22,6 +22,7 @@ import { BarraFormato } from "@/components/editor/BarraFormato";
 import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
+import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { SelectorPlantilla } from "@/components/plantillas/SelectorPlantilla";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
@@ -307,6 +308,10 @@ export function DialogoEditar({
   // Imagen: nombre del archivo + url para previsualizar.
   const [imagen, setImagen] = React.useState("");
   const [imagenUrl, setImagenUrl] = React.useState("");
+  // Foto cruda de fondo (media id) para el editor inline de placa; se hornea a `imagen` al guardar.
+  const [foto, setFoto] = React.useState("");
+  // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
+  const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
   const [vista, setVista] = React.useState<VistaEditor>("previa");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
@@ -331,6 +336,7 @@ export function DialogoEditar({
     setFechaLocal(isoADatetimeLocal(publicacion.fecha_programada));
     setImagen(publicacion.imagen ?? "");
     setImagenUrl(publicacion.imagen_url ?? "");
+    setFoto(publicacion.foto ?? "");
     setVista("previa");
   }, [publicacion]);
 
@@ -347,8 +353,15 @@ export function DialogoEditar({
   );
 
   const guardar = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!publicacion) throw new Error("Sin publicación");
+      // Piezas de marca: HORNEAR el canvas de la placa a un media id publicable. Si falla, se
+      // conserva la imagen previa. La `foto` cruda se persiste para re-editar al reabrir.
+      let imagenFinal = imagen;
+      if (publicacion.marca && bakeRef.current) {
+        const horneada = await bakeRef.current();
+        if (horneada) imagenFinal = horneada;
+      }
       const cuerpo: CuerpoActualizarPublicacion = {
         titulo: titulo.trim(),
         contenido,
@@ -357,7 +370,8 @@ export function DialogoEditar({
         evergreen,
         // Solo mandamos fecha si está programado; al salir de programado, la limpiamos.
         fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
-        imagen,
+        imagen: imagenFinal,
+        foto,
       };
       return api.actualizarPublicacion(publicacion.id, cuerpo);
     },
@@ -474,21 +488,38 @@ export function DialogoEditar({
               />
             )}
 
-            <EditorImagen
-              imagen={imagen}
-              imagenUrl={imagenUrl}
-              onCambio={(nombre, url) => {
-                setImagen(nombre);
-                setImagenUrl(url);
-              }}
-              idPrefijo="editar"
-              publicacionId={publicacion?.id}
-              marca={publicacion?.marca}
-              red={publicacion?.red}
-              copy={contenido}
-              copyIn={copyIn}
-              imagenFuente={publicacion?.imagen_fuente}
-            />
+            {publicacion &&
+              (publicacion.marca ? (
+                // Piezas de marca: editor INLINE en vivo (la placa se compone en el navegador a
+                // medida que se teclea el titular; al guardar se hornea a `imagen`).
+                <EditorPlacaInline
+                  marca={publicacion.marca}
+                  red={publicacion.red}
+                  copyIn={copyIn}
+                  foto={foto}
+                  onCambioFoto={setFoto}
+                  imagenFuente={publicacion.imagen_fuente}
+                  registrarBake={(fn) => {
+                    bakeRef.current = fn;
+                  }}
+                />
+              ) : (
+                // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.
+                <EditorImagen
+                  imagen={imagen}
+                  imagenUrl={imagenUrl}
+                  onCambio={(nombre, url) => {
+                    setImagen(nombre);
+                    setImagenUrl(url);
+                  }}
+                  idPrefijo="editar"
+                  publicacionId={publicacion.id}
+                  red={publicacion.red}
+                  copy={contenido}
+                  copyIn={copyIn}
+                  imagenFuente={publicacion.imagen_fuente}
+                />
+              ))}
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">

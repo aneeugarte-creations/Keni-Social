@@ -433,6 +433,7 @@ async def actualizar_plataforma(request: Request) -> Response:
         "copy",
         "imagen",
         "imagen_fuente",
+        "foto",
         "enlace",
         "fecha_programada",
         "hora_post",
