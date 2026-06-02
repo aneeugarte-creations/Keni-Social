@@ -10,9 +10,12 @@ de skills ni de `claude`.
 - `expandir.py` — outpainting GENERATIVO fiel (re-compone el sujeto intacto) vía OpenRouter.
 - `generar.py`  — adaptador GENERATIVO (ilustración/fondo) vía OpenRouter. Conserva
   `construir_prompt` (estilo por marca + aspecto por formato).
-- `componer.py` — composición de marca (logo + pleca + breaking), relocalizado de
-  `breaking-express`.
-- `marcas.json` — tokens de marca para la placa/composición.
+- `render_node/` — composición de la PLANTILLA de marca por SPEC de capas (Node + Skia,
+  `@napi-rs/canvas`): el ÚNICO motor de placas (lo diseñado en el editor = lo que sale). Lee el
+  spec de `plantillas_marca` y las fuentes embebidas de `fuentes/`. (Sustituyó al viejo
+  `componer.py` de Pillow, retirado.)
+- `fuentes/` — tipografías embebidas (SIL OFL) del catálogo de la plantilla.
+- `marcas.json` — tokens de marca (semilla del spec por defecto y geometría de formatos).
 
 Estos motores se PRESERVAN intactos como cimiento del futuro **Estudio de imagen** descrito
 en `docs/diseno-estudio-imagen.md` (Fases 1-4: `api/imagenes.py` + UI propia). Mientras tanto,

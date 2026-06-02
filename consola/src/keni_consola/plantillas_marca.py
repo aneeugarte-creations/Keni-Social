@@ -1,6 +1,6 @@
 """Store EDITABLE de la "Plantilla de marca" del Estudio (override por marca, file-as-truth).
 
-El compositor determinista (`motores/estudio_imagen/componer.py`) estampa logo + pleca +
+El compositor determinista (`motores/estudio_imagen/render_node`) estampa logo + pleca +
 titular por marca leyendo un catalogo (`marcas.json`). Hoy ese catalogo es estatico y solo
 trae `unotv`/`claro-sports`, con `logo:""` (sin assets) -> cae a un wordmark de texto. Este
 modulo permite que el EQUIPO edite la plantilla por marca desde la app (colores, pleca por

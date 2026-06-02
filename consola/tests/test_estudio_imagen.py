@@ -173,33 +173,8 @@ def test_componer_etiqueta_resuelta_en_binding(entorno, monkeypatch):
     assert cap["payload"]["bindings"]["etiqueta_default"] == ""
 
 
-def test_componer_fallback_a_pillow_si_node_falla(entorno, monkeypatch):
-    # Si Node falla y el modo es 'auto' (default), cae al motor Pillow (sistema vivo nunca se queda
-    # sin placa). Mockeamos Node para que lance y el motor Pillow (_correr_motor real no, subprocess).
-    def _node_boom(payload, out):
-        raise e.EstudioError("node no disponible")
-
-    monkeypatch.setattr(e, "_correr_render_node", _node_boom)
-
-    from pathlib import Path
-    from types import SimpleNamespace
-
-    def _pillow_ok(cmd, **kw):
-        out = cmd[cmd.index("--salida") + 1]
-        Path(out).write_bytes(b"png")
-        return SimpleNamespace(returncode=0, stdout="", stderr="")
-
-    monkeypatch.setattr(e.subprocess, "run", _pillow_ok)
-    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "fallback.png")
-
-    res = e.componer("", marca="unotv", formato="feed", titular="T")
-    assert res["id"] == "fallback.png"
-    assert res["info"]["motor"] == "pillow"
-
-
-def test_componer_forzar_node_no_cae_a_pillow(entorno, monkeypatch):
-    monkeypatch.setenv("KENI_RENDER_PLANTILLA", "node")
-
+def test_componer_node_unico_motor_propaga_error(entorno, monkeypatch):
+    # Node es el ÚNICO motor (sin fallback Pillow): si falla, `componer` lanza EstudioError.
     def _node_boom(payload, out):
         raise e.EstudioError("node no disponible")
 

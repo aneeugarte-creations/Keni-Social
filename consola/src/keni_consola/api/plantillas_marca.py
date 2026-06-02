@@ -1,6 +1,6 @@
 """API Plantilla de marca: leer/editar el estampado determinista por marca (Estudio).
 
-El compositor del Estudio (`motores/estudio_imagen/componer.py`) estampa logo + pleca +
+El compositor del Estudio (`motores/estudio_imagen/render_node`) estampa logo + pleca +
 titular por marca. Esta API expone la "Plantilla de marca" EDITABLE: el equipo ajusta
 colores, pleca por defecto, flags de titular, posicion y wordmark, y referencia el LOGO
 real (subido aparte). La verdad vive en fichero (`plantillas_marca.py`, file-as-truth), un

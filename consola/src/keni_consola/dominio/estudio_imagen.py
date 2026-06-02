@@ -292,56 +292,13 @@ def expandir(
 # --------------------------------------------------------------------------- #
 
 
-def _formatos_base() -> dict[str, Any]:
-    """Bloque `formatos` del catalogo estatico `motores/.../marcas.json` (w/h/zonas seguras)."""
-    ruta = _ruta_motor("marcas.json")
-    cfg = json.loads(ruta.read_text(encoding="utf-8"))
-    formatos = cfg.get("formatos")
-    if not isinstance(formatos, dict) or not formatos:
-        raise EstudioError("No se pudo leer la configuración de formatos del compositor.")
-    return formatos
-
-
-def _cfg_marca(marca: str, plantilla: dict[str, Any], ruta_logo: str) -> dict[str, Any]:
-    """Construye un cfg COMPLETO de marca (schema de marcas.json) desde la plantilla editable.
-
-    Fusiona los campos editables de la plantilla con los campos NO editables que el motor
-    espera (`nombre`, `id_metricas`, overlays vacios, `verificar`). `logo` se materializa a
-    una RUTA de disco (PNG temporal) si la plantilla referencia un objeto de media; si no,
-    queda "" para que el motor caiga al wordmark.
-    """
-    return {
-        "nombre": marcas.etiqueta_de(marca),
-        "id_metricas": marcas.id_metricas_de(marca),
-        "rojo": plantilla["rojo"],
-        "tinta": plantilla["tinta"],
-        "blanco": plantilla["blanco"],
-        "etiqueta_default": plantilla["etiqueta_default"],
-        "titular_mayusculas": bool(plantilla["titular_mayusculas"]),
-        "titular_condensada": bool(plantilla["titular_condensada"]),
-        "logo": ruta_logo,
-        "marca_agua": "",
-        "overlay_breaking": "",
-        "logo_posicion": plantilla["logo_posicion"],
-        "wordmark": plantilla["wordmark"],
-        "verificar": "",
-    }
-
-
-# Render de la plantilla: "node" (motor por defecto, lee el SPEC de capas) o "pillow" (motor
-# legado, layout fijo). `auto` (default) intenta Node y, si falla, cae a Pillow para que el
-# sistema vivo NUNCA se quede sin placa. `KENI_NODE_BIN` apunta al binario de node.
-_ENV_RENDER = "KENI_RENDER_PLANTILLA"
+# Render de la plantilla: motor ÚNICO = Node (lee el SPEC de capas; lo diseñado en el editor =
+# lo que sale). `KENI_NODE_BIN` apunta al binario de node (def. `node`).
 _ENV_NODE_BIN = "KENI_NODE_BIN"
 
 
 def _node_bin() -> str:
     return (os.environ.get(_ENV_NODE_BIN) or "node").strip() or "node"
-
-
-def _render_modo() -> str:
-    modo = (os.environ.get(_ENV_RENDER) or "auto").strip().lower()
-    return modo if modo in ("auto", "node", "pillow") else "auto"
 
 
 def _ruta_render_node() -> Path:
@@ -470,55 +427,6 @@ def previsualizar_spec(
         return {"id": nombre, "url": f"/api/media/{nombre}"}
 
 
-def _componer_pillow(
-    imagen: str, *, marca: str, fmt: str, titular: str, etiqueta: str | None,
-) -> dict[str, Any]:
-    """Render legado (Pillow, layout fijo). Fallback si el motor Node no está disponible."""
-    plantilla = plantillas_marca.obtener(marca)
-    placeholder = not (imagen or "").strip()
-    with tempfile.TemporaryDirectory(prefix="keni-componer-") as tmp:
-        carpeta = Path(tmp)
-        foto = None if placeholder else _materializar(imagen, carpeta)
-        ruta_logo = _materializar_logo(plantilla.get("logo", ""), carpeta)
-        cfg = {"marcas": {marca: _cfg_marca(marca, plantilla, ruta_logo)}, "formatos": _formatos_base()}
-        cfg_path = carpeta / "marcas.json"
-        cfg_path.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
-        out = carpeta / "salida.png"
-        motor = _ruta_motor("componer.py")
-        cmd = [
-            sys.executable, str(motor), "--marca", marca, "--formato", fmt,
-            "--salida", str(out), "--config", str(cfg_path),
-        ]
-        cmd += ["--placeholder"] if placeholder else ["--foto", str(foto)]
-        if titular:
-            cmd += ["--titular", titular]
-        if etiqueta is not None:
-            cmd += ["--etiqueta", etiqueta]
-        try:
-            proc = subprocess.run(  # noqa: S603 -- argv lista, sin shell
-                cmd, capture_output=True, text=True, timeout=_TIMEOUT_COMPONER_S, check=False,
-            )
-        except subprocess.TimeoutExpired as e:
-            raise EstudioError(
-                f"La composición tardó demasiado (más de {_TIMEOUT_COMPONER_S} s) y se canceló."
-            ) from e
-        if proc.returncode != 0 or not out.is_file():
-            detalle = (proc.stderr or "").strip()[-300:]
-            raise EstudioError(
-                "El compositor de marca no produjo un resultado. " + (detalle or "Revisa la imagen de entrada.")
-            )
-        try:
-            nombre = media.importar_imagen(str(out))
-        except media.MediaError as e:
-            raise EstudioError(str(e)) from e
-        return {
-            "id": nombre, "url": f"/api/media/{nombre}",
-            "imagenes": [{"id": nombre, "url": f"/api/media/{nombre}"}],
-            "info": {"op": "componer", "marca": marca, "formato": fmt,
-                     "placeholder": placeholder, "motor": "pillow"},
-        }
-
-
 def componer(
     imagen: str,
     *,
@@ -530,9 +438,9 @@ def componer(
 ) -> dict[str, Any]:
     """Compone la PLANTILLA de marca y devuelve `{id,url,imagenes,info}` (firma estable).
 
-    Render por SPEC con el motor **Node** (lo diseñado en el editor = lo que sale); si Node no
-    está disponible o falla, cae al motor **Pillow** legado (layout fijo) salvo que se fuerce un
-    motor con `KENI_RENDER_PLANTILLA=node|pillow`.
+    Render por SPEC con el motor **Node** (`render_node`, único motor: lo diseñado en el editor
+    es lo que sale). Si Node falla, lanza `EstudioError` (los llamantes lo manejan: la auto-gen
+    de copy es tolerante y omite la placa; la API devuelve 4xx).
 
     `imagen`: id de media de la foto; `""` => PLANTILLA con el hueco de foto vacío (placeholder
     "Sube una foto"). `etiqueta`: `None` => etiqueta_default de la marca; `""` => sin pleca;
@@ -545,16 +453,7 @@ def componer(
         raise EstudioError(
             "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
         )
-
-    modo = _render_modo()
-    if modo == "pillow":
-        return _componer_pillow(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
-    try:
-        return _componer_node(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
-    except EstudioError:
-        if modo == "node":  # forzado: no hay red de seguridad
-            raise
-        return _componer_pillow(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
+    return _componer_node(imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta)
 
 
 # --------------------------------------------------------------------------- #
