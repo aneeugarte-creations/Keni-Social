@@ -23,6 +23,7 @@ import type {
   Pipeline,
   PipelineActividad,
   PipelineEtapa,
+  PipelineGeneracion,
   RespuestaPipelineDetalle,
   RespuestaPipelines,
 } from "@/types";
@@ -39,6 +40,21 @@ const ASPECTO: Record<string, { variant: BadgeProps["variant"]; clase: string; t
 
 // Etapa (clave) -> código de etapa de los eventos de actividad (la traza CI/CD/QA).
 const ETAPA_A_EVENTO: Record<string, string> = { ci: "CI", cd: "CD", qa: "QA" };
+
+// Fase de progreso de la generación (`claude -p`) -> etiqueta humana para la cabecera del
+// stream. Espeja las fases del dominio (stream.FASE_*): razonando → generando → completado.
+const FASE_TEXTO: Record<string, string> = {
+  razonando: "Razonando…",
+  generando: "Escribiendo…",
+  completado: "Completado",
+};
+
+/** Etiqueta legible del estado/fase de una generación del agente (para la cabecera). */
+function faseTexto(gen: PipelineGeneracion): string {
+  if (gen.estado === "error") return "Error";
+  if (gen.estado === "ejecutando") return FASE_TEXTO[gen.fase] ?? "En curso…";
+  return FASE_TEXTO[gen.fase] ?? "Completado";
+}
 
 function aspecto(estado: string) {
   return ASPECTO[estado] ?? ASPECTO.pendiente;
@@ -150,13 +166,42 @@ function EventosEtapa({ eventos }: { eventos: PipelineActividad[] }) {
   );
 }
 
+/** Stream del agente (`claude -p`) de una etapa: el PROCESO DE PENSAMIENTO (lo que el agente
+ *  dijo/hizo), no solo el resultado. Bloque monoespaciado, desplazable y prominente: es la
+ *  cabecera del paso. Si la generación sigue en curso, muestra la `salida` parcial tal cual
+ *  (sin sondeo en vivo: el detalle se lee una vez al abrir). */
+function ProcesoAgente({ gen }: { gen: PipelineGeneracion }) {
+  const enCurso = gen.estado === "ejecutando";
+  const salida = gen.salida.trim();
+  return (
+    <div className="space-y-1.5 rounded-md border bg-muted/30 p-2.5">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-foreground">Proceso del agente (Claude)</span>
+        <ChipEstado estado={enCurso ? "en_curso" : gen.estado === "error" ? "fallo" : "ok"} />
+        <span className="text-xs text-muted-foreground">{faseTexto(gen)}</span>
+      </div>
+      {salida ? (
+        <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground/90">
+          {salida}
+        </pre>
+      ) : (
+        <p className="text-xs italic text-muted-foreground">
+          {enCurso ? "El agente está arrancando…" : "Sin proceso registrado para esta etapa."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /** Contenido COMPLETO específico de cada etapa (lo que ocurrió de verdad). */
 function ContenidoEtapa({
   clave,
   run,
+  generacion,
 }: {
   clave: string;
   run: Pipeline;
+  generacion?: PipelineGeneracion;
 }) {
   if (clave === "ci") {
     return (
@@ -170,6 +215,9 @@ function ContenidoEtapa({
   if (clave === "cd") {
     return (
       <div className="space-y-3">
+        {/* Headline: el proceso de pensamiento del agente que generó el copy. */}
+        {generacion && <ProcesoAgente gen={generacion} />}
+        {/* Secundario: el resultado (copy + placa) que produjo. */}
         {run.piezas.map((p, i) => (
           <div key={`${p.red}-${i}`} className="rounded-md border p-2">
             <div className="mb-1 flex items-center gap-2">
@@ -197,6 +245,9 @@ function ContenidoEtapa({
   if (clave === "qa") {
     return (
       <div className="space-y-2">
+        {/* Headline: el proceso de pensamiento del agente que revisó el copy (QA editorial). */}
+        {generacion && <ProcesoAgente gen={generacion} />}
+        {/* Secundario: el veredicto + observaciones por pieza. */}
         {run.piezas.map((p, i) => (
           <div key={`${p.red}-${i}`} className="rounded-md border p-2">
             <div className="flex items-center justify-between">
@@ -245,11 +296,13 @@ function PanelEtapa({
   etapa,
   run,
   eventos,
+  generacion,
   defaultOpen,
 }: {
   etapa: PipelineEtapa;
   run: Pipeline;
   eventos: PipelineActividad[];
+  generacion?: PipelineGeneracion;
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
@@ -275,7 +328,7 @@ function PanelEtapa({
         <div className="space-y-3 border-t p-3">
           <p className="text-xs text-muted-foreground">{etapa.detalle}</p>
           <EventosEtapa eventos={eventos} />
-          <ContenidoEtapa clave={etapa.clave} run={run} />
+          <ContenidoEtapa clave={etapa.clave} run={run} generacion={generacion} />
         </div>
       )}
     </div>
@@ -293,6 +346,11 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
   const eventosDe = (clave: string): PipelineActividad[] => {
     const cod = ETAPA_A_EVENTO[clave];
     return cod && datos ? datos.actividad.filter((e) => e.etapa === cod) : [];
+  };
+  // Stream del agente (`claude -p`) de la etapa, si la run lo correlacionó (CD/QA).
+  const generacionDe = (clave: string): PipelineGeneracion | undefined => {
+    const cod = ETAPA_A_EVENTO[clave];
+    return cod ? datos?.generaciones_por_etapa?.[cod] : undefined;
   };
 
   return (
@@ -324,6 +382,7 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
                 etapa={e}
                 run={run}
                 eventos={eventosDe(e.clave)}
+                generacion={generacionDe(e.clave)}
                 // Abre por defecto la PRIMERA etapa no completada (donde está la acción);
                 // si todas están ok, abre la última (Aprobación). El resto, plegadas.
                 defaultOpen={

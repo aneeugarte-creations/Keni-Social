@@ -161,7 +161,7 @@ _FETCH_OG_IMAGE = _fetch_og_image_real
 
 
 def registrar_etapa(
-    etapa: str, marca: str, detalle: str, contenido_id: str = ""
+    etapa: str, marca: str, detalle: str, contenido_id: str = "", gen_id: str = ""
 ) -> dict[str, Any] | None:
     """Sella una entrada de ACTIVIDAD de una etapa del pipeline (CI/CD/QA). Best-effort.
 
@@ -174,6 +174,10 @@ def registrar_etapa(
     del pipeline) para la vista Pipelines (`/api/pipelines/{id}`). CD/QA lo pasan (la etapa va
     sobre un tema concreto); CI es brand-level y lo deja vacío. Es ADITIVO: vacío no engorda el
     registro (lo filtra `generaciones._cuerpo`) y los registros previos lo traen como "".
+
+    `gen_id` (opcional, def "") apunta a la GENERACIÓN REAL de `claude -p` que ejecutó esa
+    etapa (CD = copy, QA = revisión editorial). La vista Pipelines lo resuelve para mostrar el
+    STREAM del agente (su proceso de pensamiento). CI no lanza `claude`, así que lo deja vacío.
     """
     etiqueta = f"{etapa} · {detalle}".strip()
     try:
@@ -181,6 +185,7 @@ def registrar_etapa(
             "tipo": TIPO_ACTIVIDAD,
             "marca": marca or "",
             "contenido_id": contenido_id or "",
+            "gen_id": gen_id or "",
             "etiqueta": etiqueta[:200],
             "estado": generaciones.ESTADO_COMPLETADO,
             "fecha_fin": generaciones.ahora_iso(),
@@ -439,6 +444,9 @@ def crear_contenido_de(trabajo: dict[str, Any], *, autor: dict[str, str] | None)
         marca,
         f"Generación de copy+arte de marca — '{titulo[:120]}'",
         contenido_id=tema_id,
+        # Ata el marcador CD a la generación REAL de copy: su STREAM (proceso del agente)
+        # se muestra en el detalle del pipeline.
+        gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
     )
     return gen
 

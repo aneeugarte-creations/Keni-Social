@@ -234,6 +234,11 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         # (`tipo='pipeline'`) lo sellan para que la vista Pipelines ate cada etapa a su run.
         # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
         "contenido_id": _str("contenido_id"),
+        # Generación correlacionada (opcional): un MARCADOR de etapa del pipeline (CD/QA)
+        # apunta con `gen_id` a la generación REAL de `claude -p` de esa etapa, para que la
+        # vista Pipelines pueda mostrar su STREAM (el proceso de pensamiento del agente).
+        # Ausente en registros legados/normales => "" (lo filtra `_cuerpo`, así no engorda).
+        "gen_id": _str("gen_id"),
         "etiqueta": _str("etiqueta"),
         "estado": _str("estado"),
         # Fase de PROGRESO (en que etapa va; ausente en registros legados => "").

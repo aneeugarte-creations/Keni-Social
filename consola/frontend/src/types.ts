@@ -239,9 +239,22 @@ export interface RespuestaPipelines {
   pipelines: Pipeline[];
 }
 
+/** El STREAM (proceso de pensamiento de `claude -p`) de la generación de una etapa.
+ *  Lo expone el detalle del pipeline por código de etapa (CI/CD/QA): `salida` es el texto
+ *  del agente en vivo; `fase`/`estado` dicen en qué punto va (razonando/escribiendo/...). */
+export interface PipelineGeneracion {
+  id: string;
+  estado: string;
+  fase: string;
+  salida: string;
+  metricas: MetricasRun | null;
+}
+
 export interface RespuestaPipelineDetalle {
   pipeline: Pipeline;
   actividad: PipelineActividad[];
+  /** Stream del agente por código de etapa ("CI"/"CD"/"QA"). Ausente/{} si no hay. */
+  generaciones_por_etapa?: Record<string, PipelineGeneracion>;
 }
 
 // --- Generación de copy (resultado compartido) ---

@@ -8,8 +8,8 @@ exclusión de lo que NO es del pipeline. Usa la fixture `cliente` (entorno aisla
 
 from __future__ import annotations
 
-from keni_consola import repos
-from keni_consola.pipeline_contenido import ORIGEN_PIPELINE
+from keni_consola import generaciones, repos
+from keni_consola.pipeline_contenido import ETAPA_CD, ORIGEN_PIPELINE, registrar_etapa
 
 
 def _tema_pipeline(titulo: str, marca: str = "unotv") -> dict:
@@ -116,3 +116,43 @@ def test_detalle_run(cliente):
 
 def test_detalle_404(cliente):
     assert cliente.get("/api/pipelines/no-existe-xyz").status_code == 404
+
+
+def test_detalle_expone_stream_de_la_etapa(cliente):
+    """Un marcador de etapa CD con `gen_id` -> el detalle surface el STREAM de esa generación.
+
+    Crea una generación REAL (con `salida` = el proceso del agente) y un marcador de etapa
+    CD que la referencia por `gen_id`; el detalle debe traer `generaciones_por_etapa["CD"]`
+    con esa `salida` y su estado.
+    """
+    tema = _tema_pipeline("Tema con stream")
+    gen = generaciones.crear({
+        "tipo": "pipeline",
+        "marca": "unotv",
+        "etiqueta": "Copy · UnoTV",
+        "salida": "Razonando sobre la nota… escribiendo el copy…",
+        "fase": generaciones.FASE_COMPLETADO,
+        "estado": generaciones.ESTADO_COMPLETADO,
+    })
+    registrar_etapa(
+        ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"], gen_id=gen["id"],
+    )
+
+    d = cliente.get(f"/api/pipelines/{tema['id']}")
+    assert d.status_code == 200
+    body = d.json()
+    por_etapa = body["generaciones_por_etapa"]
+    assert "CD" in por_etapa
+    cd = por_etapa["CD"]
+    assert cd["id"] == gen["id"]
+    assert cd["salida"] == "Razonando sobre la nota… escribiendo el copy…"
+    assert cd["estado"] == generaciones.ESTADO_COMPLETADO
+    assert cd["fase"] == generaciones.FASE_COMPLETADO
+
+
+def test_detalle_sin_gen_id_no_trae_generacion(cliente):
+    """Back-compat: un marcador SIN `gen_id` no añade nada a `generaciones_por_etapa`."""
+    tema = _tema_pipeline("Tema sin stream")
+    registrar_etapa(ETAPA_CD, "unotv", "Generación de copy", contenido_id=tema["id"])
+    body = cliente.get(f"/api/pipelines/{tema['id']}").json()
+    assert body["generaciones_por_etapa"] == {}

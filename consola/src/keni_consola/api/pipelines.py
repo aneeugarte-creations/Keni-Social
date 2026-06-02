@@ -242,15 +242,44 @@ async def listar(request: Request) -> Response:
     return JSONResponse({"pipelines": pipelines})
 
 
-def _actividad_de(contenido_id: str) -> list[dict]:
-    """Log de etapas (`tipo='pipeline'`) correlacionadas a un contenido por `contenido_id`.
+def _generacion_publica(gen_id: str) -> dict | None:
+    """Resuelve una generación REAL (`claude -p`) por id y devuelve su STREAM + estado.
+
+    Solo los campos que la vista necesita para pintar el proceso del agente: `salida` es el
+    stream token a token (el "proceso de pensamiento"); `fase`/`estado` dicen en qué punto va
+    (Razonando/Escribiendo/Completado). None si el id no resuelve (best-effort, no rompe).
+    """
+    if not gen_id:
+        return None
+    gen = generaciones.obtener(gen_id)
+    if gen is None:
+        return None
+    return {
+        "id": gen.get("id", "") or "",
+        "estado": gen.get("estado", "") or "",
+        "fase": gen.get("fase", "") or "",
+        "salida": gen.get("salida", "") or "",
+        "metricas": gen.get("metricas"),
+    }
+
+
+def _actividad_y_generaciones(contenido_id: str) -> tuple[list[dict], dict[str, dict]]:
+    """Log de etapas (`tipo='pipeline'`) de un contenido + sus generaciones por etapa.
 
     Lee TODAS las generaciones-marcador del pipeline y filtra por el `contenido_id` que
     sella `pipeline_contenido.registrar_etapa` (CD/QA lo llevan; CI es brand-level y no
     queda atado a un contenido). Recientes primero. Cada evento normaliza la etiqueta
     ("CI · ..."/"CD · ..."/"QA · ...") a `{etapa, etiqueta, estado, fecha}`.
+
+    Además devuelve `generaciones_por_etapa`: un mapa código-de-etapa (CI/CD/QA) -> la
+    generación REAL de `claude -p` (resuelta por el `gen_id` del marcador) con su STREAM, para
+    que el detalle muestre el proceso del agente por etapa. Solo se incluye la etapa cuyo
+    marcador trae `gen_id` resoluble; si una etapa tiene varios (raro), gana el más reciente.
     """
     eventos: list[dict] = []
+    # Recolectamos (etapa, fecha, gen_pub) para quedarnos con la generación más reciente por
+    # etapa (los eventos vienen recientes-primero tras ordenar; iteramos sobre esa lista).
+    gens_por_etapa: dict[str, dict] = {}
     for gen in generaciones.listar(limite=None):
         if gen.get("tipo") != TIPO_ACTIVIDAD:
             continue
@@ -258,16 +287,24 @@ def _actividad_de(contenido_id: str) -> list[dict]:
             continue
         etiqueta = gen.get("etiqueta", "") or ""
         etapa = etiqueta.split(" · ", 1)[0].strip() if " · " in etiqueta else ""
+        fecha = gen.get("fecha_fin") or gen.get("fecha_inicio") or ""
         eventos.append(
             {
                 "etapa": etapa,
                 "etiqueta": etiqueta,
                 "estado": gen.get("estado", "") or "",
-                "fecha": gen.get("fecha_fin") or gen.get("fecha_inicio") or "",
+                "fecha": fecha,
             }
         )
+        gen_real = _generacion_publica(gen.get("gen_id", "") or "")
+        if gen_real is not None and etapa:
+            # Nos quedamos con la generación de marcador MÁS RECIENTE por etapa.
+            previa = gens_por_etapa.get(etapa)
+            if previa is None or fecha >= previa[0]:
+                gens_por_etapa[etapa] = (fecha, gen_real)
     eventos.sort(key=lambda e: e["fecha"], reverse=True)
-    return eventos
+    generaciones_por_etapa = {etapa: par[1] for etapa, par in gens_por_etapa.items()}
+    return eventos, generaciones_por_etapa
 
 
 async def detalle(request: Request) -> Response:
@@ -277,10 +314,14 @@ async def detalle(request: Request) -> Response:
     if item is None or (item.get("origen") or "") != ORIGEN_PIPELINE:
         return JSONResponse({"error": "Ese pipeline ya no existe."}, status_code=404)
     piezas = repos.listar_contenido_plataforma(pipeline_id)
+    actividad, generaciones_por_etapa = _actividad_y_generaciones(pipeline_id)
     return JSONResponse(
         {
             "pipeline": _run_de(item, piezas, completo=True),
-            "actividad": _actividad_de(pipeline_id),
+            "actividad": actividad,
+            # Stream del agente (`claude -p`) por código de etapa (CI/CD/QA). Aditivo y
+            # back-compat: vacío si ninguna etapa tiene una generación correlacionada.
+            "generaciones_por_etapa": generaciones_por_etapa,
         }
     )
 
