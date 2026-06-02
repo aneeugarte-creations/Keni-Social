@@ -46,6 +46,7 @@ import {
   MenuContextual,
   type EntradaMenuContextual,
 } from "@/components/comunes/MenuContextual";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { usePropuestaParrilla } from "@/hooks/use-propuesta-parrilla";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -59,6 +60,20 @@ import type { ConflictoAplicarParrilla, EstadoPropuestaParrilla } from "@/types"
 function mensajeError(e: unknown): string {
   if (e instanceof ApiError || e instanceof Error) return e.message;
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
+}
+
+/** Colapsable con el prompt EXACTO enviado a `claude -p` (visibilidad/control). */
+function VerPrompt({ prompt }: { prompt: string }) {
+  return (
+    <details className="rounded-md border bg-muted/30 text-sm">
+      <summary className="cursor-pointer select-none px-3 py-2 font-medium">
+        Ver prompt enviado a Keni
+      </summary>
+      <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words border-t px-3 py-2 text-xs text-muted-foreground">
+        {prompt}
+      </pre>
+    </details>
+  );
 }
 
 /**
@@ -285,6 +300,18 @@ function DialogImportarParrilla({
 
   const { propuesta, generando } = usePropuestaParrilla(propuestaId);
 
+  // Stream EN VIVO del `claude -p` + prompt exacto: sondeamos la generación por su id.
+  // Refresca token a token SOLO mientras genera; al terminar se queda quieto (pero seguimos
+  // teniendo el objeto, con su prompt, para "Ver prompt" en las fases error/pendiente).
+  const genId = propuesta?.gen_id || "";
+  const genQuery = useQuery({
+    queryKey: ["generacion", genId],
+    queryFn: ({ signal }) => api.generacion(genId, signal).then((r) => r.generacion),
+    enabled: !!genId,
+    refetchInterval: () => (propuesta?.estado === "generando" ? 1200 : false),
+  });
+  const generacion = genQuery.data;
+
   const subir = useMutation({
     mutationFn: () => api.importarParrilla(archivo!, semana),
     onSuccess: (r) => {
@@ -354,21 +381,33 @@ function DialogImportarParrilla({
             <Dropzone archivo={archivo} setArchivo={setArchivo} />
           </div>
         ) : generando || !propuesta ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <Loader2 className="h-7 w-7 animate-spin text-primary" />
-            <p className="text-sm font-medium">Analizando el documento…</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Keni está leyendo el documento y preparando la propuesta de cambios. Esto puede
-              tardar un momento; puedes cerrar y volver desde el badge de pendientes.
+          <div className="space-y-3">
+            {generacion ? (
+              // Stream en vivo del `claude -p` (fase + tokens + métricas), mismo
+              // componente que la generación de copy.
+              <ProgresoGeneracion generacion={generacion} />
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-10 text-center">
+                <Loader2 className="h-7 w-7 animate-spin text-primary" />
+                <p className="text-sm font-medium">Analizando el documento…</p>
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Keni está leyendo el documento y preparando la propuesta. Puedes cerrar y volver
+              desde el badge de pendientes; el análisis sigue en segundo plano.
             </p>
+            {generacion?.prompt && <VerPrompt prompt={generacion.prompt} />}
           </div>
         ) : estado === "error" ? (
-          <div className="flex flex-col items-center gap-3 py-10 text-center">
-            <AlertTriangle className="h-7 w-7 text-destructive" />
-            <p className="text-sm font-medium">No se pudo analizar el documento</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              {propuesta.error || "El análisis falló. Vuelve a intentarlo con otro documento."}
-            </p>
+          <div className="space-y-3">
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <AlertTriangle className="h-7 w-7 text-destructive" />
+              <p className="text-sm font-medium">No se pudo analizar el documento</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                {propuesta.error || "El análisis falló. Vuelve a intentarlo con otro documento."}
+              </p>
+            </div>
+            {generacion?.prompt && <VerPrompt prompt={generacion.prompt} />}
           </div>
         ) : (
           // estado === "pendiente" (o aplicada/descartada que tratamos como vista final)
@@ -393,6 +432,7 @@ function DialogImportarParrilla({
                 La propuesta no contiene cambios aplicables.
               </p>
             )}
+            {generacion?.prompt && <VerPrompt prompt={generacion.prompt} />}
             {conflictoAplicar && (
               <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
                 <p className="font-medium">El calendario cambió desde que se generó esta propuesta.</p>

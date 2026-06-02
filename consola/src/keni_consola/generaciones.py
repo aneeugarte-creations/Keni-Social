@@ -245,6 +245,10 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         "fase": _str("fase"),
         "motivo": _str("motivo"),
         "salida": _str("salida"),
+        # Prompt EXACTO enviado a `claude -p` (visibilidad/control). Se persiste pero se
+        # expone SOLO en el detalle (`obtener`); `_todas_ordenadas` lo quita del listado
+        # para no engordar Actividad. Ausente en registros legados => "".
+        "prompt": _str("prompt"),
         "error": _str("error"),
         # Atribucion por usuario (#130 Fase 1). Ausente en registros legados/anonimos => "".
         "autor_id": _str("autor_id"),
@@ -327,7 +331,11 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
         datos = _leer_yaml(ruta_fichero)
         if datos is None:
             continue
-        items.append(_publico(datos, ruta_fichero.stem))
+        pub = _publico(datos, ruta_fichero.stem)
+        # El prompt puede pesar (KB); solo se expone en el detalle (`obtener`), no en el
+        # listado de Actividad. Lo quitamos aquí para que la lista quede liviana.
+        pub.pop("prompt", None)
+        items.append(pub)
     items.sort(key=lambda g: (g["fecha_inicio"], g["id"]), reverse=True)
     return items
 
@@ -543,6 +551,15 @@ def encolar_job_claude(
     except Exception:  # noqa: BLE001 -- si el encolado falla, no fugar el cupo de admision
         runner.liberar_admision()
         raise
+    # Visibilidad/control: persistimos el prompt EXACTO que recibirá `claude -p`. Se expone
+    # SOLO en el detalle (`GET /api/generaciones/{id}`), nunca en el listado (lo quita
+    # `_todas_ordenadas`). Best-effort: el job ya está encolado; un fallo al persistir el
+    # prompt no debe tumbarlo.
+    if prompt:
+        try:
+            actualizar(gen_id, {"prompt": prompt})
+        except Exception:  # noqa: BLE001 -- best-effort
+            pass
 
 
 def lanzar_job_claude(

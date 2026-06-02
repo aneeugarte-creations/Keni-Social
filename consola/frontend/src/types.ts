@@ -525,6 +525,11 @@ export interface Generacion {
   salida: string;
   /** Mensaje de error legible (cuando `estado === "error"`). */
   error: string;
+  /**
+   * Prompt EXACTO enviado a `claude -p` (visibilidad/control). Solo lo devuelve el
+   * detalle `GET /api/generaciones/{id}`, no el listado de Actividad. Ausente => sin dato.
+   */
+  prompt?: string;
   /** Métricas (tokens/coste/turnos/duración); `null` mientras no hay. */
   metricas: MetricasRun | null;
   /** Payload al completar; `null` mientras corre o si falla. */
