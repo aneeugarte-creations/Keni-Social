@@ -1122,6 +1122,8 @@ export const api = {
     if (cuerpo.intencion) form.set("intencion", cuerpo.intencion);
     if (cuerpo.redes?.length) form.set("redes", cuerpo.redes.join(","));
     if (cuerpo.imagen) form.set("imagen", cuerpo.imagen);
+    // Vídeo/audio: se transcribe EN LOCAL en el back y el texto alimenta el auto-copy.
+    if (cuerpo.clip) form.set("clip", cuerpo.clip);
     return peticion<RespuestaContenidoItem>("/contenido/aportar", { metodo: "POST", form });
   },
   // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).

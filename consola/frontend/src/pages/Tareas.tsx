@@ -2444,6 +2444,7 @@ function DialogoAportar({
   const [intencion, setIntencion] = React.useState<IntencionMaterial | "">("");
   const [redes, setRedes] = React.useState<string[]>([]);
   const [imagen, setImagen] = React.useState<File | null>(null);
+  const [clip, setClip] = React.useState<File | null>(null);
 
   // Al abrir, preselecciona la marca del workspace activo.
   React.useEffect(() => {
@@ -2458,6 +2459,7 @@ function DialogoAportar({
     setIntencion("");
     setRedes([]);
     setImagen(null);
+    setClip(null);
   };
 
   const aportar = useMutation({
@@ -2471,6 +2473,7 @@ function DialogoAportar({
       };
       if (intencion) cuerpo.intencion = intencion;
       if (imagen) cuerpo.imagen = imagen;
+      if (clip) cuerpo.clip = clip;
       return api.aportarMaterial(cuerpo);
     },
     onSuccess: () => {
@@ -2498,8 +2501,9 @@ function DialogoAportar({
           </DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Sube material original (foto, nota o idea) con su marca. La IA escribirá el copy
-          sola y lo dejará en la cola de revisión para que lo apruebes.
+          Sube material original (foto, nota, idea o un vídeo/audio que se transcribe en local)
+          con su marca. La IA escribirá el copy sola y lo dejará en la cola de revisión para que
+          lo apruebes.
         </p>
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -2591,6 +2595,23 @@ function DialogoAportar({
             {imagen && (
               <p className="text-xs text-muted-foreground">{imagen.name}</p>
             )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ap-clip">
+              Vídeo / audio <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="ap-clip"
+              type="file"
+              accept="video/*,audio/*"
+              onChange={(e) => setClip(e.target.files?.[0] ?? null)}
+            />
+            <p className="text-xs text-muted-foreground">
+              {clip
+                ? clip.name
+                : "Se transcribe en local; el texto alimenta el copy (no se publica solo)."}
+            </p>
           </div>
 
           <div className="space-y-1.5">

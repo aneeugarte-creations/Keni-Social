@@ -34,6 +34,7 @@ from .. import (
     metricas_pieza,
     redes,
     repos,
+    transcripcion,
 )
 from .._http_json import leer_json
 from ..dominio import asistente, estudio_imagen, eventos, placeholders
@@ -883,8 +884,12 @@ async def aportar(request: Request) -> Response:
       - `imagen` (opcional): la FOTO que el equipo trae de fuera (la IA NO la genera). Se sube
         al almacen de media y se adjunta como `foto` (foto cruda de fondo) de cada red; el
         arte/marca/formatos los aplica luego el Flujo B sobre esa foto.
+      - `clip` (opcional): un VIDEO/AUDIO que el equipo graba (declaración, jugada, idea hablada).
+        Se TRANSCRIBE EN LOCAL (whisper.cpp, mismo camino que la skill clip-a-copy: el audio NO
+        sale de la máquina) y el texto se anexa al `material` como NOTA NO verificada (igual que
+        cualquier nota cruda): el auto-copy lo redacta y el borrador para en la cola de revisión.
+        El clip NO se guarda como media (v1 = solo su transcripción alimenta el copy).
 
-    MINIMO VIABLE: imagen y nota. Video/audio (transcripcion local) queda como follow-up.
     -> `{contenido}` | 400.
     """
     try:
@@ -936,6 +941,24 @@ async def aportar(request: Request) -> Response:
             return JSONResponse({"error": str(e)}, status_code=400)
         except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
             return JSONResponse({"error": "No se pudo guardar la imagen."}, status_code=500)
+
+    # Clip de video/audio (opcional): se TRANSCRIBE EN LOCAL (whisper.cpp; el audio no sale de
+    # la maquina, mismo camino que la skill clip-a-copy) y el texto se anexa al `material` como
+    # nota NO verificada. Asi entra al auto-copy igual que una nota escrita (autogen_copy lee
+    # titulo+descripcion). El clip NO se guarda; solo su transcripcion alimenta el copy.
+    clip = form.get("clip")
+    if isinstance(clip, UploadFile) and (clip.filename or ""):
+        try:
+            texto = await transcripcion.transcribir_subida(clip)
+        except transcripcion.TranscripcionError as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+        except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+            return JSONResponse({"error": "No se pudo transcribir el clip."}, status_code=500)
+        if texto:
+            # Etiqueta de procedencia: el copy debe saber que esto sale del audio del equipo
+            # (no verificado), no de una fuente. Se concatena al material existente.
+            bloque = f"Transcripción del clip aportado (sin verificar): {texto}"
+            material = f"{material}\n\n{bloque}".strip()[:_MAX_TEXTO] if material else bloque[:_MAX_TEXTO]
 
     # Reparto automatico de responsable desde la rota del dia (mismo patron que `crear`):
     # el equipo solo aporta; el reparto es automatico. Degrada a None sin romper.

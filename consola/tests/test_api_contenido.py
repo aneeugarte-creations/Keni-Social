@@ -327,3 +327,81 @@ def test_aportar_sin_redes_usa_canonicas(entorno):
     # Sin redes explicitas, se crean las canonicas del catalogo.
     assert len(cont["plataformas"]) >= 1
     assert all(p["red"] != "web" for p in cont["plataformas"])
+
+
+# Bytes mínimos de un "clip" (no es un MP4 real: la transcripción real está MOCKEADA).
+_CLIP_FALSO = b"\x00\x00\x00\x18ftypmp42fakeclipbytes"
+
+
+def test_aportar_con_clip_transcribe_en_local(entorno, monkeypatch):
+    """El clip de vídeo/audio se transcribe EN LOCAL (mock) y el texto entra como material."""
+    from keni_consola import transcripcion
+
+    # Mock del transcriptor LOCAL: nunca toca whisper/ffmpeg reales.
+    monkeypatch.setattr(
+        transcripcion, "_TRANSCRIPTOR", lambda datos, *, ext: "Hoy ganamos tres a cero."
+    )
+
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "Declaración del DT", "marca": "unotv", "redes": "x"},
+        files={"clip": ("declaracion.mp4", _CLIP_FALSO, "video/mp4")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    # La transcripción entra como material base (descripción), marcada como NO verificada.
+    assert "Hoy ganamos tres a cero" in cont["descripcion"]
+    assert "sin verificar" in cont["descripcion"].lower()
+    # Sigue siendo alta del equipo (enciende el auto-copy igual que una nota).
+    assert cont["origen"] == "equipo"
+
+
+def test_aportar_clip_se_concatena_al_material(entorno, monkeypatch):
+    """Si hay material escrito Y clip, la transcripción se anexa (no lo pisa)."""
+    from keni_consola import transcripcion
+
+    monkeypatch.setattr(transcripcion, "_TRANSCRIPTOR", lambda datos, *, ext: "lo que se dijo")
+
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "T", "marca": "unotv", "material": "contexto escrito", "redes": "x"},
+        files={"clip": ("a.m4a", _CLIP_FALSO, "audio/mp4")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    desc = r.json()["contenido"]["descripcion"]
+    assert "contexto escrito" in desc
+    assert "lo que se dijo" in desc
+
+
+def test_aportar_clip_formato_no_soportado_400(entorno):
+    """Un fichero que no es vídeo/audio se rechaza con 400 (mensaje en español)."""
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "T", "marca": "unotv", "redes": "x"},
+        files={"clip": ("notas.txt", b"hola", "text/plain")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    assert "vídeo o audio" in r.json()["error"].lower()
+
+
+def test_aportar_clip_sin_habla_no_rompe(entorno, monkeypatch):
+    """Un clip que transcribe a vacío crea la pieza igualmente (sin material del clip)."""
+    from keni_consola import transcripcion
+
+    monkeypatch.setattr(transcripcion, "_TRANSCRIPTOR", lambda datos, *, ext: "")
+
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "Solo música", "marca": "unotv", "redes": "x"},
+        files={"clip": ("clip.mp4", _CLIP_FALSO, "video/mp4")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["contenido"]["descripcion"] == ""

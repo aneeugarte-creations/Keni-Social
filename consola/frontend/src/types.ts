@@ -1261,6 +1261,9 @@ export interface CuerpoAportarMaterial {
   redes?: string[];
   /** La FOTO que el equipo trae de fuera (la IA no la genera). */
   imagen?: File;
+  /** Un VÍDEO/AUDIO que el equipo graba; se transcribe EN LOCAL y el texto entra como
+   *  material base del auto-copy (nota NO verificada). El clip no se guarda. */
+  clip?: File;
 }
 
 // --- Fase3 auto-planificación: sugerencia de hora + auto-promoción del Radar ---
