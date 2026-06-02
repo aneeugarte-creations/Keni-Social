@@ -28,13 +28,30 @@ from .._http_json import _entero_query
 # Tope por defecto de items por pagina (alineado con el contrato del frontend).
 _LIMITE_DEF = 50
 
-# Fuentes y tipos validos para filtrar (un filtro vacio no filtra por ese eje). El
-# `tipo` admite los tipos de generacion + "run" (los runs se exponen como tipo "run").
-# "pipeline" = las generaciones-marcador de las etapas del pipeline de contenido
-# (`pipeline_contenido.TIPO_ACTIVIDAD`): antes no era filtrable aquí (el usuario se quejó de
-# que quedaban enterradas). Añadirlo al set las hace seleccionables en el feed de Actividad IA.
+# Fuentes y tipos validos para filtrar (un filtro vacio no filtra por ese eje). El `tipo`
+# admite los tipos de generacion + "run" + "pipeline" (la generación de copy que lanza el
+# pipeline de contenido: trabajo real `claude -p` CON tokens/coste/tiempo). Los MARCADORES
+# de etapa (CI/CD/QA, `tipo='pipeline_etapa'`, SIN coste) NO se listan ni se muestran aquí:
+# son para la pestaña Pipelines y se EXCLUYEN del feed (ver `_es_marcador_pipeline`), para no
+# ensuciar Actividad con filas a 0.
 _FUENTES = frozenset({"generacion", "run"})
 _TIPOS = frozenset({*generaciones.TIPOS, "autogen", "run", "pipeline"})
+
+
+def _es_marcador_pipeline(gen: dict) -> bool:
+    """True si la generación es un MARCADOR de etapa del pipeline (CI/CD/QA) — fuera de Actividad.
+
+    Los marcadores no son trabajo con coste (el trabajo real es la generación de copy
+    `tipo='pipeline'`, que SÍ se muestra). Excluye el tipo propio `pipeline_etapa` y, por
+    retrocompat, los marcadores VIEJOS (`tipo='pipeline'` con `etiqueta` de etapa, anteriores
+    a separar el tipo).
+    """
+    tipo = gen.get("tipo")
+    if tipo == "pipeline_etapa":
+        return True
+    if tipo == "pipeline":
+        return (gen.get("etiqueta", "") or "").startswith(("CI · ", "CD · ", "QA · "))
+    return False
 
 
 def _filtro(valor: str | None, validos: frozenset[str]) -> str:
@@ -50,7 +67,7 @@ def _origenes() -> tuple[list, list]:
     aplica el dominio sobre la mezcla). Los runs vienen del dominio `agentes`
     (`listar_runs_globales`) con sus metricas y su agente denormalizado.
     """
-    gens = generaciones.listar(limite=None)
+    gens = [g for g in generaciones.listar(limite=None) if not _es_marcador_pipeline(g)]
     runs = agentes.listar_runs_globales()
     return gens, runs
 

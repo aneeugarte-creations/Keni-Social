@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, ExternalLink, Eye, RefreshCw } from "lucide-react";
+import { Activity, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -330,14 +330,13 @@ function TablaActividad({
               <TableHead>Fecha</TableHead>
               <TableHead className="text-right">Tokens</TableHead>
               <TableHead className="text-right">Coste</TableHead>
-              <TableHead className="text-right">Duración</TableHead>
-              <TableHead className="pr-6 text-right">Acciones</TableHead>
+              <TableHead className="pr-6 text-right">Duración</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                   No hay actividad para este filtro.
                 </TableCell>
               </TableRow>
@@ -345,8 +344,32 @@ function TablaActividad({
               items.map((it) => {
                 const est = presentacionEstado(it.estado);
                 const m = it.metricas;
+                // Acción PRINCIPAL del item (sin columna aparte): la fila entera la dispara.
+                // Generación en vivo -> verla en directo; con resultado -> abrirlo donde salga.
+                const accion =
+                  it.fuente === "generacion" && it.estado === "ejecutando"
+                    ? () => onVerEnVivo(it.id)
+                    : it.resultado_url
+                      ? () => onVerResultado(it)
+                      : null;
                 return (
-                  <TableRow key={`${it.fuente}:${it.id}`}>
+                  <TableRow
+                    key={`${it.fuente}:${it.id}`}
+                    onClick={accion ?? undefined}
+                    role={accion ? "button" : undefined}
+                    tabIndex={accion ? 0 : undefined}
+                    onKeyDown={
+                      accion
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              accion();
+                            }
+                          }
+                        : undefined
+                    }
+                    className={cn(accion && "cursor-pointer hover:bg-muted/40")}
+                  >
                     <TableCell className="max-w-[22rem] pl-6 font-medium">
                       <span className="block truncate" title={it.etiqueta}>
                         {it.etiqueta || <span className="text-muted-foreground">Sin etiqueta</span>}
@@ -378,33 +401,8 @@ function TablaActividad({
                     <TableCell className="text-right tabular-nums">
                       {costeCelda(m.coste_usd)}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="pr-6 text-right tabular-nums">
                       {duracionCelda(m.duration_ms)}
-                    </TableCell>
-                    <TableCell className="pr-6 text-right">
-                      <div className="flex justify-end gap-1">
-                        {it.fuente === "generacion" && it.estado === "ejecutando" ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onVerEnVivo(it.id)}
-                          >
-                            <Eye className="h-3.5 w-3.5" aria-hidden />
-                            Ver en vivo
-                          </Button>
-                        ) : it.resultado_url ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onVerResultado(it)}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                            Ver resultado
-                          </Button>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </div>
                     </TableCell>
                   </TableRow>
                 );

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, GitBranch, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronRight, GitBranch, RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -238,6 +238,50 @@ function ContenidoEtapa({
   );
 }
 
+/** Panel INDEPENDIENTE y plegable de una etapa: cabecera siempre visible (nombre + estado)
+ *  y, al desplegar, el detalle COMPLETO de lo ocurrido en ese paso. Cada panel se abre/cierra
+ *  por su cuenta (estado local propio). */
+function PanelEtapa({
+  etapa,
+  run,
+  eventos,
+  defaultOpen,
+}: {
+  etapa: PipelineEtapa;
+  run: Pipeline;
+  eventos: PipelineActividad[];
+  defaultOpen: boolean;
+}) {
+  const [open, setOpen] = React.useState(defaultOpen);
+  return (
+    <div className="rounded-lg border">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-left hover:bg-muted/40"
+      >
+        <span className="flex items-center gap-2">
+          <Punto estado={etapa.estado} />
+          <span className="text-sm font-semibold">{etapa.nombre}</span>
+          <ChipEstado estado={etapa.estado} />
+        </span>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+      {open && (
+        <div className="space-y-3 border-t p-3">
+          <p className="text-xs text-muted-foreground">{etapa.detalle}</p>
+          <EventosEtapa eventos={eventos} />
+          <ContenidoEtapa clave={etapa.clave} run={run} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void }) {
   const q = useQuery({
     queryKey: ["pipelines", "detalle", id],
@@ -273,22 +317,21 @@ function DetalleRun({ id, onCerrar }: { id: string | null; onCerrar: () => void 
             onReintentar={() => q.refetch()}
           />
         ) : (
-          <ol className="space-y-4 py-4">
-            {run.etapas.map((e) => (
-              <li key={e.clave} className="relative space-y-2 border-l-2 pl-4">
-                <span className="absolute -left-[5px] top-1.5">
-                  <Punto estado={e.estado} />
-                </span>
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold">{e.nombre}</h3>
-                  <ChipEstado estado={e.estado} />
-                </div>
-                <p className="text-xs text-muted-foreground">{e.detalle}</p>
-                <EventosEtapa eventos={eventosDe(e.clave)} />
-                <ContenidoEtapa clave={e.clave} run={run} />
-              </li>
+          <div className="space-y-2 py-4">
+            {run.etapas.map((e, i) => (
+              <PanelEtapa
+                key={e.clave}
+                etapa={e}
+                run={run}
+                eventos={eventosDe(e.clave)}
+                // Abre por defecto la PRIMERA etapa no completada (donde está la acción);
+                // si todas están ok, abre la última (Aprobación). El resto, plegadas.
+                defaultOpen={
+                  i === (run.etapas.findIndex((x) => x.estado !== "ok") + run.etapas.length) % run.etapas.length
+                }
+              />
             ))}
-          </ol>
+          </div>
         )}
       </DialogContent>
     </Dialog>

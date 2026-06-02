@@ -63,11 +63,16 @@ _log = logging.getLogger("keni_consola.pipeline_contenido")
 # los NIDA). La dedup de la pasada QA y la UI distinguen lo del pipeline de lo manual/otro auto.
 ORIGEN_PIPELINE = "pipeline"
 
-# `tipo` con el que se sellan las entradas de ACTIVIDAD de las etapas del pipeline. Las
-# generaciones-marcador (CI/CD/QA) son registros `generaciones` ligeros (sin `claude`) que la
-# vista "Actividad IA" (`/api/actividad`, que lee `generaciones.listar(None)`) muestra junto al
-# resto. La ETAPA viaja en la `etiqueta` (prefijo "CI · ..."/"CD · ..."/"QA · ...").
-TIPO_ACTIVIDAD = "pipeline"
+# `tipo` con el que se sellan los MARCADORES de etapa (CI/CD/QA): registros `generaciones`
+# ligeros SIN coste (no llaman a `claude`). Llevan tipo PROPIO `pipeline_etapa` para que la
+# vista "Actividad IA" los EXCLUYA (no son trabajo con tokens/coste; serían ruido a 0). El
+# trabajo REAL con coste es la generación de copy, que se sella `tipo='pipeline'` (TIPO_COPY)
+# y SÍ aparece en Actividad con sus tokens/coste/tiempo. La vista Pipelines lee estos
+# marcadores por `contenido_id`. La ETAPA viaja en la `etiqueta` ("CI · ..."/"CD · ..."/"QA · ...").
+TIPO_ACTIVIDAD = "pipeline_etapa"
+# `tipo` de la GENERACIÓN de copy que lanza el pipeline: la pieza real de trabajo (claude -p)
+# con tokens/coste/tiempo. Etiquetarla `pipeline` la hace identificable y medible en Actividad.
+TIPO_COPY = "pipeline"
 
 ETAPA_CI = "CI"
 ETAPA_CD = "CD"
@@ -405,7 +410,9 @@ def crear_contenido_de(trabajo: dict[str, Any], *, autor: dict[str, str] | None)
     tema_id = _crear_tema_pipeline(marca, titulo)
     tipo_contenido = "fuente" if imagen else ""
     gen = gen_dom.lanzar_copy(
-        tipo="rss",
+        # `pipeline`: la generación REAL (claude -p) queda etiquetada como pipeline y reporta
+        # sus tokens/coste/tiempo en Actividad IA (el resto del flujo —CI/QA— no cuesta).
+        tipo=TIPO_COPY,
         marca=marca,
         contexto=nota,
         redes_ids=redes_ids,
