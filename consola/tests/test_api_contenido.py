@@ -231,3 +231,99 @@ def test_adaptar_imagen_sin_imagen_400(entorno):
     ).json()["contenido"]
     r = c.post(f"/api/contenido/{cont['id']}/adaptar-imagen", json={}, headers=_ORIGIN)
     assert r.status_code == 400
+
+
+# --------------------------------------------------------------------------- #
+# Puerta creativa del equipo: POST /api/contenido/aportar (Fase 1 / Flujo A)    #
+# --------------------------------------------------------------------------- #
+
+# PNG minimo valido (1x1) para adjuntar como foto aportada por el equipo.
+_PNG_1x1 = (
+    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+    b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01"
+    b"\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
+)
+
+
+def test_aportar_crea_con_origen_equipo(entorno):
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={
+            "titulo": "Gol de último minuto",
+            "marca": "unotv",
+            "material": "El equipo grabó la jugada desde la grada.",
+            "intencion": "breaking",
+            "redes": "x,instagram",
+        },
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    # El alta creativa nace con el origen que enciende la auto-generacion (no opt-in).
+    assert cont["origen"] == "equipo"
+    # La imagen la trae el equipo de fuera => tipo "galeria" (no IA ni fuente).
+    assert cont["tipo_contenido"] == "galeria"
+    # "breaking" mapea a flujo "importante".
+    assert cont["flujo"] == "importante"
+    # El material crudo entra como descripcion (nota base del auto-copy).
+    assert "grabó la jugada" in cont["descripcion"]
+    # Una fila por red pedida, con la checklist pendiente.
+    assert {p["red"] for p in cont["plataformas"]} == {"x", "instagram"}
+    assert all(p["falta_copy"] for p in cont["plataformas"])
+
+
+def test_aportar_exige_marca(entorno):
+    c = _cli()
+    # Sin marca: la puerta creativa la EXIGE (sin voz no hay auto-generacion).
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "Idea suelta", "material": "algo"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 400
+    # Marca inexistente tambien se rechaza.
+    r2 = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "Idea", "marca": "no-existe"},
+        headers=_ORIGIN,
+    )
+    assert r2.status_code == 400
+
+
+def test_aportar_sin_titulo_400(entorno):
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar", data={"marca": "unotv"}, headers=_ORIGIN
+    )
+    assert r.status_code == 400
+
+
+def test_aportar_con_imagen_adjunta_se_guarda_como_foto(entorno):
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "Foto de la rueda de prensa", "marca": "unotv", "redes": "x"},
+        files={"imagen": ("foto.png", _PNG_1x1, "image/png")},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    plats = r.json()["contenido"]["plataformas"]
+    assert len(plats) == 1
+    # La foto aportada se adjunta como `foto` (foto cruda de fondo) de la red.
+    assert plats[0]["foto"].endswith(".png")
+
+
+def test_aportar_sin_redes_usa_canonicas(entorno):
+    c = _cli()
+    r = c.post(
+        "/api/contenido/aportar",
+        data={"titulo": "Nota sin redes", "marca": "unotv", "intencion": "evergreen"},
+        headers=_ORIGIN,
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["flujo"] == "evergreen"
+    # Sin redes explicitas, se crean las canonicas del catalogo.
+    assert len(cont["plataformas"]) >= 1
+    assert all(p["red"] != "web" for p in cont["plataformas"])

@@ -1240,6 +1240,29 @@ export interface CuerpoDesdeRadar {
   descripcion?: string;
 }
 
+/** Intención editorial opcional al aportar material (mapea el flujo del tablero). */
+export type IntencionMaterial = "breaking" | "evergreen" | "hilo";
+
+/** `POST /api/contenido/aportar` (multipart): la PUERTA CREATIVA del equipo (Fase 1).
+ *  El equipo sube material ORIGINAL con marca y eso enciende la auto-generación de copy
+ *  (origen='equipo'). La marca es OBLIGATORIA (sin voz no hay generación). */
+export interface CuerpoAportarMaterial {
+  /** De qué va la pieza (la auto-generación lo usa como nota base). */
+  titulo: string;
+  /** Marca obligatoria (id canónico). */
+  marca: string;
+  /** Nota / idea / texto crudo -> descripción del tema. */
+  material?: string;
+  /** Enlace de la fuente del material -> `imagen_fuente` de cada red. */
+  url?: string;
+  /** Intención editorial; mapea el flujo (breaking/hilo -> importante; evergreen). */
+  intencion?: IntencionMaterial;
+  /** Redes objetivo; por defecto, las canónicas. */
+  redes?: string[];
+  /** La FOTO que el equipo trae de fuera (la IA no la genera). */
+  imagen?: File;
+}
+
 // --- Fase3 auto-planificación: sugerencia de hora + auto-promoción del Radar ---
 
 /** `POST /api/planificacion/sugerir-hora`: pide la mejor fecha-hora para una marca/red. */

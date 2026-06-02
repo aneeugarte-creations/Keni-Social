@@ -91,7 +91,9 @@ import type {
   CatalogosContenido,
   Contenido,
   ContenidoPlataforma,
+  CuerpoAportarMaterial,
   CuerpoCrearContenido,
+  IntencionMaterial,
   EstadoContenidoPlataforma,
   Etiqueta,
   EtiquetaCatalogo,
@@ -215,6 +217,7 @@ export default function Tablero() {
     staleTime: 5 * 60 * 1000,
   });
   const [dialogoAbierto, setDialogoAbierto] = React.useState(false);
+  const [aportarAbierto, setAportarAbierto] = React.useState(false);
   const [importarAbierto, setImportarAbierto] = React.useState(false);
   const [gestionEtiquetas, setGestionEtiquetas] = React.useState(false);
   const [gestionFranjas, setGestionFranjas] = React.useState(false);
@@ -416,6 +419,18 @@ export default function Tablero() {
                 <ChevronDown className="h-4 w-4 opacity-60" />
               </Button>
             </MenuContextual>
+            {/* PUERTA CREATIVA (Fase 1): el equipo "postea" material original (foto/nota/
+                idea) con marca y eso enciende la auto-generación de copy. */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAportarAbierto(true)}
+              disabled={query.isPending}
+              title="Sube material original (foto / nota / idea) y la IA genera el copy sola"
+            >
+              <Sparkles className="h-4 w-4" />
+              Aportar material
+            </Button>
             <Button size="sm" onClick={() => setDialogoAbierto(true)} disabled={query.isPending}>
               <Plus className="h-4 w-4" />
               Nuevo contenido
@@ -486,6 +501,14 @@ export default function Tablero() {
           catalogos={catalogos}
           workspace={workspace}
           etiquetasWorkspace={etiquetasWorkspace}
+        />
+      )}
+      {catalogos && (
+        <DialogoAportar
+          abierto={aportarAbierto}
+          onCerrar={() => setAportarAbierto(false)}
+          catalogos={catalogos}
+          workspace={workspace}
         />
       )}
       <DialogoImportarCalendario
@@ -2386,6 +2409,219 @@ function DialogoNuevo({
               <Plus className="h-4 w-4" />
             )}
             Crear
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** PUERTA CREATIVA del equipo (Fase 1 / Flujo A): "postear" material ORIGINAL.
+ *
+ * El equipo sube material crudo (foto / nota / idea / enlace) con marca y eso ENCIENDE el
+ * pipeline: crea un contenido `origen='equipo'` que el daemon de auto-generación recoge
+ * solo para escribir el copy (gateado por `KENI_AUTOGEN`). La imagen la trae el equipo de
+ * fuera; la IA hace el copy (y, en otro flujo, el arte por formato). La MARCA es obligatoria
+ * (sin voz no hay generación). El borrador resultante para en la cola de revisión (gate
+ * humano intacto). Formulario MÍNIMO: foto/nota/url; el video queda como follow-up.
+ */
+function DialogoAportar({
+  abierto,
+  onCerrar,
+  catalogos,
+  workspace,
+}: {
+  abierto: boolean;
+  onCerrar: () => void;
+  catalogos: CatalogosContenido;
+  workspace: string;
+}) {
+  const queryClient = useQueryClient();
+  const [titulo, setTitulo] = React.useState("");
+  const [marca, setMarca] = React.useState(workspace === WORKSPACE_TODAS ? "" : workspace);
+  const [material, setMaterial] = React.useState("");
+  const [url, setUrl] = React.useState("");
+  const [intencion, setIntencion] = React.useState<IntencionMaterial | "">("");
+  const [redes, setRedes] = React.useState<string[]>([]);
+  const [imagen, setImagen] = React.useState<File | null>(null);
+
+  // Al abrir, preselecciona la marca del workspace activo.
+  React.useEffect(() => {
+    if (abierto) setMarca(workspace === WORKSPACE_TODAS ? "" : workspace);
+  }, [abierto, workspace]);
+
+  const reiniciar = () => {
+    setTitulo("");
+    setMarca(workspace === WORKSPACE_TODAS ? "" : workspace);
+    setMaterial("");
+    setUrl("");
+    setIntencion("");
+    setRedes([]);
+    setImagen(null);
+  };
+
+  const aportar = useMutation({
+    mutationFn: () => {
+      const cuerpo: CuerpoAportarMaterial = {
+        titulo: titulo.trim(),
+        marca,
+        material: material.trim(),
+        url: url.trim(),
+        redes,
+      };
+      if (intencion) cuerpo.intencion = intencion;
+      if (imagen) cuerpo.imagen = imagen;
+      return api.aportarMaterial(cuerpo);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: CLAVE });
+      toast.success("Material aportado. La IA generará el copy y lo dejará en revisión.");
+      reiniciar();
+      onCerrar();
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  const toggleRed = (id: string) =>
+    setRedes((rs) => (rs.includes(id) ? rs.filter((r) => r !== id) : [...rs, id]));
+
+  // La marca es OBLIGATORIA (a diferencia de "Nuevo contenido"): sin voz no hay generación.
+  const puedeAportar = titulo.trim().length > 0 && marca !== "" && !aportar.isPending;
+
+  return (
+    <Dialog open={abierto} onOpenChange={(o) => !o && onCerrar()}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Aportar material
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Sube material original (foto, nota o idea) con su marca. La IA escribirá el copy
+          sola y lo dejará en la cola de revisión para que lo apruebes.
+        </p>
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="ap-titulo">Título</Label>
+            <Input
+              id="ap-titulo"
+              value={titulo}
+              onChange={(e) => setTitulo(e.target.value)}
+              placeholder="Ej. Foto del entrenamiento de hoy"
+              maxLength={300}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="ap-marca">Marca</Label>
+              <Select value={marca || "__sin__"} onValueChange={(v) => setMarca(v === "__sin__" ? "" : v)}>
+                <SelectTrigger id="ap-marca" aria-label="Marca">
+                  <SelectValue placeholder="Elige una marca" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__sin__">(elige una marca)</SelectItem>
+                  {catalogos.marcas.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ap-intencion">
+                Intención <span className="font-normal text-muted-foreground">(opcional)</span>
+              </Label>
+              <Select
+                value={intencion || "__sin__"}
+                onValueChange={(v) => setIntencion(v === "__sin__" ? "" : (v as IntencionMaterial))}
+              >
+                <SelectTrigger id="ap-intencion" aria-label="Intención">
+                  <SelectValue placeholder="(sin intención)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__sin__">(sin intención)</SelectItem>
+                  <SelectItem value="breaking">Breaking (del día)</SelectItem>
+                  <SelectItem value="evergreen">Evergreen</SelectItem>
+                  <SelectItem value="hilo">Hilo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ap-material">
+              Nota / idea <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Textarea
+              id="ap-material"
+              value={material}
+              onChange={(e) => setMaterial(e.target.value)}
+              placeholder="Qué pasó, contexto, ángulo… lo que la IA debe saber para escribir."
+              rows={4}
+              maxLength={8000}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ap-url">
+              Enlace de origen <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input
+              id="ap-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://… (la fuente del material, si la hay)"
+              maxLength={8000}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="ap-imagen">
+              Foto <span className="font-normal text-muted-foreground">(opcional, la traes tú)</span>
+            </Label>
+            <Input
+              id="ap-imagen"
+              type="file"
+              accept="image/png,image/jpeg,image/gif,image/webp"
+              onChange={(e) => setImagen(e.target.files?.[0] ?? null)}
+            />
+            {imagen && (
+              <p className="text-xs text-muted-foreground">{imagen.name}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>
+              Plataformas <span className="font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {catalogos.redes.map((r) => (
+                <label key={r.id} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox
+                    checked={redes.includes(r.id)}
+                    onCheckedChange={() => toggleRed(r.id)}
+                    aria-label={r.nombre}
+                  />
+                  {r.nombre}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCerrar} disabled={aportar.isPending}>
+            Cancelar
+          </Button>
+          <Button onClick={() => aportar.mutate()} disabled={!puedeAportar}>
+            {aportar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            Aportar
           </Button>
         </DialogFooter>
       </DialogContent>

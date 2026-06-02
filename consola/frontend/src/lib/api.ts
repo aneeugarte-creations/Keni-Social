@@ -47,6 +47,7 @@ import type {
   CuerpoActualizarContenido,
   CuerpoActualizarEtiqueta,
   CuerpoActualizarPlataforma,
+  CuerpoAportarMaterial,
   CuerpoAsistenteContenido,
   CuerpoCrearContenido,
   CuerpoCrearEtiqueta,
@@ -1109,6 +1110,20 @@ export const api = {
     ),
   contenidoDesdeRadar: (cuerpo: CuerpoDesdeRadar) =>
     peticion<RespuestaContenidoItem>("/contenido/desde-radar", { metodo: "POST", json: cuerpo }),
+  // PUERTA CREATIVA (Fase 1 / Flujo A): el equipo "postea" material ORIGINAL (foto/nota/idea/
+  // url) con marca. Crea un contenido con origen='equipo' que ENCIENDE la auto-generación de
+  // copy automáticamente. Multipart porque puede llevar la foto que el equipo trae de fuera.
+  aportarMaterial: (cuerpo: CuerpoAportarMaterial) => {
+    const form = new FormData();
+    form.set("titulo", cuerpo.titulo);
+    form.set("marca", cuerpo.marca);
+    if (cuerpo.material) form.set("material", cuerpo.material);
+    if (cuerpo.url) form.set("url", cuerpo.url);
+    if (cuerpo.intencion) form.set("intencion", cuerpo.intencion);
+    if (cuerpo.redes?.length) form.set("redes", cuerpo.redes.join(","));
+    if (cuerpo.imagen) form.set("imagen", cuerpo.imagen);
+    return peticion<RespuestaContenidoItem>("/contenido/aportar", { metodo: "POST", form });
+  },
   // Fase3 auto-planificación: sugerir la mejor hora de publicación (1 clic en la UI).
   sugerirHora: (cuerpo: CuerpoSugerirHora) =>
     peticion<RespuestaSugerirHora>("/planificacion/sugerir-hora", { metodo: "POST", json: cuerpo }),
