@@ -522,3 +522,43 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.get("/api/metricas/piezas", rango=rango, marca=marca)
+
+    @mcp.tool()
+    async def keni_metricas_seguidores(rango: str = "mes", marca: str = "") -> dict:
+        """Evolución de seguidores del rango: serie diaria (total + por red) y el neto
+        ganado/perdido del periodo. `rango` ∈ {semana,mes,7d,30d} o un token de mes/rango
+        (ver keni_metricas_opciones); `marca` acota a una marca, vacío = todas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/seguidores", rango=rango, marca=marca)
+
+    @mcp.tool()
+    async def keni_metricas_desglose(rango: str = "mes", marca: str = "") -> dict:
+        """Desglose de interacciones por marca×red: likes, comentarios, compartidos,
+        guardados, video_views y agregados (con totales). `rango` ∈ {semana,mes,7d,30d};
+        `marca` acota a una marca, vacío = todas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/desglose", rango=rango, marca=marca)
+
+    @mcp.tool()
+    async def keni_metricas_crosstab(rango: str = "mes", marca: str = "") -> dict:
+        """Rendimiento cruzado marca×red×formato: nº de piezas, visualizaciones,
+        interacciones, engagement y rendimiento relativo medio por celda. `rango` ∈
+        {semana,mes,7d,30d}; `marca` acota a una marca, vacío = todas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/crosstab", rango=rango, marca=marca)
+
+    @mcp.tool()
+    async def keni_metricas_correlacion(rango: str = "mes", marca: str = "") -> dict:
+        """Correlación seguidores ganados ↔ piezas publicadas (no causalidad): por
+        marca×red×fecha, seguidores ganados, nº de posts, ratio por post y el post estrella
+        del día. `rango` ∈ {semana,mes,7d,30d}; `marca` acota a una marca, vacío = todas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/correlacion", rango=rango, marca=marca)

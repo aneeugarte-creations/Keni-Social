@@ -390,6 +390,75 @@ async def tendencia(request: Request) -> Response:
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
+async def seguidores(request: Request) -> Response:
+    """GET /api/metricas/seguidores: serie de seguidores del periodo (total + por red).
+
+    `?marca=` acota el ámbito; sin marca, todas. Servido desde cache (lazy fill).
+    `puntos` vacío = la fuente activa no expone serie de seguidores (degradación honesta).
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = await metricas_cache.seguidores_async(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar la serie de seguidores (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudo generar la serie de seguidores."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def desglose(request: Request) -> Response:
+    """GET /api/metricas/desglose: desglose de interacciones por marca×red.
+
+    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = await metricas_cache.desglose_async(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar el desglose (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudo generar el desglose de interacciones."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def crosstab(request: Request) -> Response:
+    """GET /api/metricas/crosstab: rendimiento cruzado marca×red×formato.
+
+    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = await metricas_cache.crosstab_async(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar el crosstab (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudo generar el crosstab."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
+async def correlacion(request: Request) -> Response:
+    """GET /api/metricas/correlacion: correlación seguidores ganados ↔ piezas publicadas.
+
+    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = await metricas_cache.correlacion_async(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar la correlación (rango=%s, marca=%s).", rango, marca or "todas")
+        return JSONResponse({"error": "No se pudo generar la correlación de seguidores."}, status_code=500)
+    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
+
+
 def _marca_consola_de_metricas(id_metricas: str | None) -> str | None:
     """Traduce un id de marca de la frontera de métricas (guion_bajo) al id de la Consola.
 
@@ -720,6 +789,10 @@ RUTAS = [
     Route("/api/metricas/piezas-rendimiento", piezas_rendimiento, methods=["GET"]),
     Route("/api/metricas/piezas-por-etiqueta", piezas_por_etiqueta, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),
+    Route("/api/metricas/seguidores", seguidores, methods=["GET"]),
+    Route("/api/metricas/desglose", desglose, methods=["GET"]),
+    Route("/api/metricas/crosstab", crosstab, methods=["GET"]),
+    Route("/api/metricas/correlacion", correlacion, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),
     Route("/api/metricas/refrescar", refrescar, methods=["POST"]),
     Route("/api/metricas/export.csv", export_csv, methods=["GET"]),

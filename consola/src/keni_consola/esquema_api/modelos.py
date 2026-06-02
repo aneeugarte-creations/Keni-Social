@@ -279,7 +279,15 @@ class EstadisticasNumericas(TypedDict):
 
 
 class PiezaMetrica(TypedDict):
-    """Una pieza/video del periodo (fila de top/peores)."""
+    """Una pieza/video del periodo (fila de top/peores).
+
+    El servicio de métricas serializa cada `Pieza` con el desglose GRANULAR (likes,
+    comentarios, compartidos, guardados, video_views, tiempo medio de visualización,
+    clics de enlace) además del agregado. Esos campos son `null` cuando la fuente no
+    los expone para esa pieza (no se inventa un 0): la UI distingue "0" de "sin dato".
+    `formato`/`cuenta` y `rendimiento_relativo` (vs la media de su grupo) también vienen
+    del servicio; `null` cuando no aplican.
+    """
 
     id: str
     plataforma: str
@@ -291,6 +299,20 @@ class PiezaMetrica(TypedDict):
     engagement_pct: float
     # url: puede no existir según la fuente/plataforma.
     url: str | None
+    # Desglose granular por pieza; null cuando la fuente no lo expone (no se inventa 0).
+    likes: int | None
+    comentarios: int | None
+    compartidos: int | None
+    guardados: int | None
+    video_views: int | None
+    tiempo_medio_vis_s: int | None
+    clics_enlace: int | None
+    # formato (reel/post/short…) y cuenta (id_metricas) de la pieza; null si no aplican.
+    formato: str | None
+    cuenta: str | None
+    # rendimiento_relativo: engagement de la pieza frente a la media de su grupo; null si
+    # no es comparable (grupo de 1, métrica n/d).
+    rendimiento_relativo: float | None
 
 
 class DistribucionBucket(TypedDict):
@@ -394,6 +416,149 @@ class PiezasRendimiento(TypedDict):
     fuente: str
     total: int
     piezas: list[PiezaRendimiento]
+
+
+# --------------------------------------------------------------------------- #
+# Analíticas R2: seguidores, desglose, crosstab, correlación — api/metricas.py #
+# --------------------------------------------------------------------------- #
+
+
+class PuntoSeguidores(TypedDict):
+    """Un día de la serie de seguidores: total + desglose por red."""
+
+    # fecha: ISO (AAAA-MM-DD).
+    fecha: str
+    total: int
+    # por_red: {red: seguidores} ese día.
+    por_red: dict[str, int]
+
+
+class SerieSeguidores(TypedDict):
+    """Respuesta de `GET /api/metricas/seguidores`: evolución de seguidores del periodo.
+
+    `cuenta` es `null` cuando agrega todas las marcas. `puntos` vacío = la fuente activa
+    no expone serie de seguidores (degradación honesta). `neto`/`neto_por_red` resumen la
+    ganancia/pérdida del periodo.
+    """
+
+    # cuenta: id_metricas de la marca, o null = todas.
+    cuenta: str | None
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    fuente: str
+    puntos: list[PuntoSeguidores]
+    neto: int
+    generado_en: str
+    # neto_por_red: {red: neto del periodo}. Va al final del modelo a propósito: el
+    # guard del esquema (test_esquema_api) parsea el .ts con un regex `[^}]*` que se
+    # detiene en el primer `}` del cuerpo, y un `dict` se emite como `{ [k: string]:
+    # number }` (lleva `}`); dejándolo último no se pierde ningún nombre de campo.
+    neto_por_red: dict[str, int]
+
+
+class CeldaDesglose(TypedDict):
+    """Una celda marca×red del desglose de interacciones (suma del periodo)."""
+
+    marca: str
+    red: str
+    likes: int
+    comentarios: int
+    compartidos: int
+    guardados: int
+    video_views: int
+    interacciones: int
+    visualizaciones: int
+    engagement_pct: float
+    n_piezas: int
+
+
+class DesgloseInteracciones(TypedDict):
+    """Respuesta de `GET /api/metricas/desglose`: interacciones por marca×red.
+
+    Cada celda detalla likes/comentarios/compartidos/guardados/video_views y los
+    agregados; `totales` cierra la tabla con la suma global (misma forma que una celda
+    sin `marca`/`red`).
+    """
+
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    fuente: str
+    celdas: list[CeldaDesglose]
+    generado_en: str
+    # totales: suma global de la tabla (mismas claves numéricas que una celda). Va al
+    # final del modelo a propósito (ver nota en `SerieSeguidores.neto_por_red`): un
+    # `dict` se emite como `{ [k: string]: number }` y el regex del guard se detiene en
+    # su `}`; dejándolo último no se pierde ningún campo del modelo.
+    totales: dict[str, float]
+
+
+class CeldaCrosstab(TypedDict):
+    """Una celda marca×red×formato del crosstab de rendimiento."""
+
+    marca: str
+    red: str
+    # formato: reel/post/short…; null si la fuente no lo conoce para esa celda.
+    formato: str | None
+    n_piezas: int
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+    # rendimiento_relativo_medio: engagement medio de la celda vs la media de su grupo;
+    # null si no es comparable.
+    rendimiento_relativo_medio: float | None
+
+
+class Crosstab(TypedDict):
+    """Respuesta de `GET /api/metricas/crosstab`: rendimiento cruzado marca×red×formato."""
+
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    fuente: str
+    celdas: list[CeldaCrosstab]
+    generado_en: str
+
+
+class PostEstrella(TypedDict):
+    """La pieza que mejor rindió de una marca×red×fecha (apuntala la correlación)."""
+
+    id: str
+    titulo: str
+    engagement_pct: float
+    # url: puede no existir según la fuente/plataforma.
+    url: str | None
+
+
+class ItemCorrelacion(TypedDict):
+    """Un punto de la correlación seguidores ganados ↔ piezas publicadas."""
+
+    marca: str
+    red: str
+    # fecha: ISO (AAAA-MM-DD).
+    fecha: str
+    seguidores_ganados: int
+    n_posts: int
+    # seguidores_por_post: ratio del día; null si no hubo posts (no se divide por cero).
+    seguidores_por_post: float | None
+    # post_estrella: la pieza que mejor rindió ese día; null si no hay piezas.
+    post_estrella: PostEstrella | None
+
+
+class CorrelacionSeguidores(TypedDict):
+    """Respuesta de `GET /api/metricas/correlacion`: seguidores ganados ↔ piezas.
+
+    `nota` explica la lectura (correlación, no causalidad) para la UI.
+    """
+
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    fuente: str
+    items: list[ItemCorrelacion]
+    nota: str
+    generado_en: str
 
 
 # --------------------------------------------------------------------------- #
@@ -825,6 +990,16 @@ MODELOS = [
     # Drill-down marca -> pieza (rendimiento por pieza publicada).
     PiezaRendimiento,
     PiezasRendimiento,
+    # Analíticas R2: seguidores, desglose, crosstab, correlación.
+    PuntoSeguidores,
+    SerieSeguidores,
+    CeldaDesglose,
+    DesgloseInteracciones,
+    CeldaCrosstab,
+    Crosstab,
+    PostEstrella,
+    ItemCorrelacion,
+    CorrelacionSeguidores,
     # Envelope/auxiliares compartidos.
     Paginacion,
     MetricasRun,

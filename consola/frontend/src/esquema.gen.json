@@ -804,9 +804,109 @@
               "type": "null"
             }
           ]
+        },
+        "likes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comentarios": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compartidos": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "guardados": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "video_views": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tiempo_medio_vis_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clics_enlace": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formato": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cuenta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rendimiento_relativo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
-      "description": "Una pieza/video del periodo (fila de top/peores).",
+      "description": "Una pieza/video del periodo (fila de top/peores).\n\nEl servicio de métricas serializa cada `Pieza` con el desglose GRANULAR (likes,\ncomentarios, compartidos, guardados, video_views, tiempo medio de visualización,\nclics de enlace) además del agregado. Esos campos son `null` cuando la fuente no\nlos expone para esa pieza (no se inventa un 0): la UI distingue \"0\" de \"sin dato\".\n`formato`/`cuenta` y `rendimiento_relativo` (vs la media de su grupo) también vienen\ndel servicio; `null` cuando no aplican.",
       "required": [
         "id",
         "plataforma",
@@ -815,7 +915,17 @@
         "visualizaciones",
         "interacciones",
         "engagement_pct",
-        "url"
+        "url",
+        "likes",
+        "comentarios",
+        "compartidos",
+        "guardados",
+        "video_views",
+        "tiempo_medio_vis_s",
+        "clics_enlace",
+        "formato",
+        "cuenta",
+        "rendimiento_relativo"
       ]
     },
     "DistribucionBucket": {
@@ -1100,6 +1210,398 @@
         "fuente",
         "total",
         "piezas"
+      ]
+    },
+    "PuntoSeguidores": {
+      "type": "object",
+      "title": "PuntoSeguidores",
+      "properties": {
+        "fecha": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "por_red": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      },
+      "description": "Un día de la serie de seguidores: total + desglose por red.",
+      "required": [
+        "fecha",
+        "total",
+        "por_red"
+      ]
+    },
+    "SerieSeguidores": {
+      "type": "object",
+      "title": "SerieSeguidores",
+      "properties": {
+        "cuenta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "puntos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PuntoSeguidores"
+          }
+        },
+        "neto": {
+          "type": "integer"
+        },
+        "generado_en": {
+          "type": "string"
+        },
+        "neto_por_red": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/seguidores`: evolución de seguidores del periodo.\n\n`cuenta` es `null` cuando agrega todas las marcas. `puntos` vacío = la fuente activa\nno expone serie de seguidores (degradación honesta). `neto`/`neto_por_red` resumen la\nganancia/pérdida del periodo.",
+      "required": [
+        "cuenta",
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "fuente",
+        "puntos",
+        "neto",
+        "generado_en",
+        "neto_por_red"
+      ]
+    },
+    "CeldaDesglose": {
+      "type": "object",
+      "title": "CeldaDesglose",
+      "properties": {
+        "marca": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "likes": {
+          "type": "integer"
+        },
+        "comentarios": {
+          "type": "integer"
+        },
+        "compartidos": {
+          "type": "integer"
+        },
+        "guardados": {
+          "type": "integer"
+        },
+        "video_views": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "n_piezas": {
+          "type": "integer"
+        }
+      },
+      "description": "Una celda marca×red del desglose de interacciones (suma del periodo).",
+      "required": [
+        "marca",
+        "red",
+        "likes",
+        "comentarios",
+        "compartidos",
+        "guardados",
+        "video_views",
+        "interacciones",
+        "visualizaciones",
+        "engagement_pct",
+        "n_piezas"
+      ]
+    },
+    "DesgloseInteracciones": {
+      "type": "object",
+      "title": "DesgloseInteracciones",
+      "properties": {
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "celdas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CeldaDesglose"
+          }
+        },
+        "generado_en": {
+          "type": "string"
+        },
+        "totales": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number"
+          }
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/desglose`: interacciones por marca×red.\n\nCada celda detalla likes/comentarios/compartidos/guardados/video_views y los\nagregados; `totales` cierra la tabla con la suma global (misma forma que una celda\nsin `marca`/`red`).",
+      "required": [
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "fuente",
+        "celdas",
+        "generado_en",
+        "totales"
+      ]
+    },
+    "CeldaCrosstab": {
+      "type": "object",
+      "title": "CeldaCrosstab",
+      "properties": {
+        "marca": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "formato": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "n_piezas": {
+          "type": "integer"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "rendimiento_relativo_medio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Una celda marca×red×formato del crosstab de rendimiento.",
+      "required": [
+        "marca",
+        "red",
+        "formato",
+        "n_piezas",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct",
+        "rendimiento_relativo_medio"
+      ]
+    },
+    "Crosstab": {
+      "type": "object",
+      "title": "Crosstab",
+      "properties": {
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "celdas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CeldaCrosstab"
+          }
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/crosstab`: rendimiento cruzado marca×red×formato.",
+      "required": [
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "fuente",
+        "celdas",
+        "generado_en"
+      ]
+    },
+    "PostEstrella": {
+      "type": "object",
+      "title": "PostEstrella",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "La pieza que mejor rindió de una marca×red×fecha (apuntala la correlación).",
+      "required": [
+        "id",
+        "titulo",
+        "engagement_pct",
+        "url"
+      ]
+    },
+    "ItemCorrelacion": {
+      "type": "object",
+      "title": "ItemCorrelacion",
+      "properties": {
+        "marca": {
+          "type": "string"
+        },
+        "red": {
+          "type": "string"
+        },
+        "fecha": {
+          "type": "string"
+        },
+        "seguidores_ganados": {
+          "type": "integer"
+        },
+        "n_posts": {
+          "type": "integer"
+        },
+        "seguidores_por_post": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "post_estrella": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PostEstrella"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Un punto de la correlación seguidores ganados ↔ piezas publicadas.",
+      "required": [
+        "marca",
+        "red",
+        "fecha",
+        "seguidores_ganados",
+        "n_posts",
+        "seguidores_por_post",
+        "post_estrella"
+      ]
+    },
+    "CorrelacionSeguidores": {
+      "type": "object",
+      "title": "CorrelacionSeguidores",
+      "properties": {
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ItemCorrelacion"
+          }
+        },
+        "nota": {
+          "type": "string"
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/correlacion`: seguidores ganados ↔ piezas.\n\n`nota` explica la lectura (correlación, no causalidad) para la UI.",
+      "required": [
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "fuente",
+        "items",
+        "nota",
+        "generado_en"
       ]
     },
     "Paginacion": {
@@ -1645,7 +2147,7 @@
           "type": "integer"
         }
       },
-      "description": "Un punto de la serie temporal de una pieza comercial (acumulado).",
+      "description": "Un punto de la serie temporal de una pieza comercial (acumulado).\n\nAdemas de las metricas \"base\" (interacciones/visualizaciones/alcance) lleva el\ndesglose GRANULAR por pieza; cada uno es 0 cuando la fuente no lo expone (no se\ninventa), igual que `alcance` por pieza.",
       "required": [
         "ts",
         "interacciones",
@@ -2020,6 +2522,33 @@
     },
     {
       "$ref": "#/$defs/PiezasRendimiento"
+    },
+    {
+      "$ref": "#/$defs/PuntoSeguidores"
+    },
+    {
+      "$ref": "#/$defs/SerieSeguidores"
+    },
+    {
+      "$ref": "#/$defs/CeldaDesglose"
+    },
+    {
+      "$ref": "#/$defs/DesgloseInteracciones"
+    },
+    {
+      "$ref": "#/$defs/CeldaCrosstab"
+    },
+    {
+      "$ref": "#/$defs/Crosstab"
+    },
+    {
+      "$ref": "#/$defs/PostEstrella"
+    },
+    {
+      "$ref": "#/$defs/ItemCorrelacion"
+    },
+    {
+      "$ref": "#/$defs/CorrelacionSeguidores"
     },
     {
       "$ref": "#/$defs/Paginacion"

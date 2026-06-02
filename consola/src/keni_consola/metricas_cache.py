@@ -48,6 +48,12 @@ TIPO_REPORTE = "reporte"
 TIPO_ANALISIS = "analisis"
 TIPO_PIEZAS = "piezas"
 TIPO_TENDENCIA = "tendencia"
+# Analíticas R2 (seguidores + desgloses): mismo patrón de lazy fill + persistencia que
+# el resto; coste 0 de API extra (se computan sobre lo que la fuente ya descarga del periodo).
+TIPO_SEGUIDORES = "seguidores"
+TIPO_DESGLOSE = "desglose"
+TIPO_CROSSTAB = "crosstab"
+TIPO_CORRELACION = "correlacion"
 
 # Estado del refresco en curso (en memoria; un solo proceso del back). Lo leen el
 # endpoint /estado y lo escriben el daemon y el disparador manual.
@@ -111,6 +117,14 @@ def _calcular(tipo: str, rango: str, marca: str | None) -> dict:
         return servicio.construir_analitica_piezas(rango, marca)
     if tipo == TIPO_TENDENCIA:
         return servicio.construir_tendencia_diaria(rango, marca)
+    if tipo == TIPO_SEGUIDORES:
+        return servicio.construir_serie_seguidores(rango, marca)
+    if tipo == TIPO_DESGLOSE:
+        return servicio.construir_desglose_interacciones(rango, marca)
+    if tipo == TIPO_CROSSTAB:
+        return servicio.construir_crosstab(rango, marca)
+    if tipo == TIPO_CORRELACION:
+        return servicio.construir_correlacion_seguidores(rango, marca)
     raise ValueError(f"Tipo de cache desconocido: {tipo!r}.")
 
 
@@ -170,6 +184,26 @@ def tendencia(rango: str, marca: str | None) -> tuple[dict, str]:
     return _leer_o_calcular(TIPO_TENDENCIA, rango, marca)
 
 
+def seguidores(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Serie de seguidores del periodo desde cache (lazy fill). `(dict, generado_en)`."""
+    return _leer_o_calcular(TIPO_SEGUIDORES, rango, marca)
+
+
+def desglose(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Desglose de interacciones (marca×red) desde cache (lazy fill)."""
+    return _leer_o_calcular(TIPO_DESGLOSE, rango, marca)
+
+
+def crosstab(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Crosstab marca×red×formato desde cache (lazy fill)."""
+    return _leer_o_calcular(TIPO_CROSSTAB, rango, marca)
+
+
+def correlacion(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Correlación seguidores↔piezas desde cache (lazy fill)."""
+    return _leer_o_calcular(TIPO_CORRELACION, rango, marca)
+
+
 # --------------------------------------------------------------------------- #
 # Lectura ASÍNCRONA (lazy fill sin bloquear el event loop)                     #
 # --------------------------------------------------------------------------- #
@@ -212,6 +246,26 @@ async def piezas_async(rango: str, marca: str | None) -> tuple[dict, str]:
 async def tendencia_async(rango: str, marca: str | None) -> tuple[dict, str]:
     """Serie diaria desde cache (lazy fill) sin bloquear el event loop."""
     return await _leer_o_calcular_async(TIPO_TENDENCIA, rango, marca)
+
+
+async def seguidores_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Serie de seguidores desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_SEGUIDORES, rango, marca)
+
+
+async def desglose_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Desglose de interacciones desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_DESGLOSE, rango, marca)
+
+
+async def crosstab_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Crosstab marca×red×formato desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_CROSSTAB, rango, marca)
+
+
+async def correlacion_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Correlación seguidores↔piezas desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_CORRELACION, rango, marca)
 
 
 # --------------------------------------------------------------------------- #

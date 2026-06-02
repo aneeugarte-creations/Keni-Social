@@ -208,6 +208,13 @@ export interface EstadisticasNumericas {
 }
 /**
  * Una pieza/video del periodo (fila de top/peores).
+ *
+ * El servicio de métricas serializa cada `Pieza` con el desglose GRANULAR (likes,
+ * comentarios, compartidos, guardados, video_views, tiempo medio de visualización,
+ * clics de enlace) además del agregado. Esos campos son `null` cuando la fuente no
+ * los expone para esa pieza (no se inventa un 0): la UI distingue "0" de "sin dato".
+ * `formato`/`cuenta` y `rendimiento_relativo` (vs la media de su grupo) también vienen
+ * del servicio; `null` cuando no aplican.
  */
 export interface PiezaMetrica {
   id: string;
@@ -218,6 +225,16 @@ export interface PiezaMetrica {
   interacciones: number;
   engagement_pct: number;
   url: string | null;
+  likes: number | null;
+  comentarios: number | null;
+  compartidos: number | null;
+  guardados: number | null;
+  video_views: number | null;
+  tiempo_medio_vis_s: number | null;
+  clics_enlace: number | null;
+  formato: string | null;
+  cuenta: string | null;
+  rendimiento_relativo: number | null;
 }
 /**
  * Un tramo del histograma de engagement (cuántas piezas caen en [inicio, fin)).
@@ -308,6 +325,129 @@ export interface PiezasRendimiento {
   fuente: string;
   total: number;
   piezas: PiezaRendimiento[];
+}
+/**
+ * Un día de la serie de seguidores: total + desglose por red.
+ */
+export interface PuntoSeguidores {
+  fecha: string;
+  total: number;
+  por_red: {
+    [k: string]: number;
+  };
+}
+/**
+ * Respuesta de `GET /api/metricas/seguidores`: evolución de seguidores del periodo.
+ *
+ * `cuenta` es `null` cuando agrega todas las marcas. `puntos` vacío = la fuente activa
+ * no expone serie de seguidores (degradación honesta). `neto`/`neto_por_red` resumen la
+ * ganancia/pérdida del periodo.
+ */
+export interface SerieSeguidores {
+  cuenta: string | null;
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  puntos: PuntoSeguidores[];
+  neto: number;
+  generado_en: string;
+  neto_por_red: {
+    [k: string]: number;
+  };
+}
+/**
+ * Una celda marca×red del desglose de interacciones (suma del periodo).
+ */
+export interface CeldaDesglose {
+  marca: string;
+  red: string;
+  likes: number;
+  comentarios: number;
+  compartidos: number;
+  guardados: number;
+  video_views: number;
+  interacciones: number;
+  visualizaciones: number;
+  engagement_pct: number;
+  n_piezas: number;
+}
+/**
+ * Respuesta de `GET /api/metricas/desglose`: interacciones por marca×red.
+ *
+ * Cada celda detalla likes/comentarios/compartidos/guardados/video_views y los
+ * agregados; `totales` cierra la tabla con la suma global (misma forma que una celda
+ * sin `marca`/`red`).
+ */
+export interface DesgloseInteracciones {
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  celdas: CeldaDesglose[];
+  generado_en: string;
+  totales: {
+    [k: string]: number;
+  };
+}
+/**
+ * Una celda marca×red×formato del crosstab de rendimiento.
+ */
+export interface CeldaCrosstab {
+  marca: string;
+  red: string;
+  formato: string | null;
+  n_piezas: number;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  rendimiento_relativo_medio: number | null;
+}
+/**
+ * Respuesta de `GET /api/metricas/crosstab`: rendimiento cruzado marca×red×formato.
+ */
+export interface Crosstab {
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  celdas: CeldaCrosstab[];
+  generado_en: string;
+}
+/**
+ * La pieza que mejor rindió de una marca×red×fecha (apuntala la correlación).
+ */
+export interface PostEstrella {
+  id: string;
+  titulo: string;
+  engagement_pct: number;
+  url: string | null;
+}
+/**
+ * Un punto de la correlación seguidores ganados ↔ piezas publicadas.
+ */
+export interface ItemCorrelacion {
+  marca: string;
+  red: string;
+  fecha: string;
+  seguidores_ganados: number;
+  n_posts: number;
+  seguidores_por_post: number | null;
+  post_estrella: PostEstrella | null;
+}
+/**
+ * Respuesta de `GET /api/metricas/correlacion`: seguidores ganados ↔ piezas.
+ *
+ * `nota` explica la lectura (correlación, no causalidad) para la UI.
+ */
+export interface CorrelacionSeguidores {
+  rango: string;
+  etiqueta_rango: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  items: ItemCorrelacion[];
+  nota: string;
+  generado_en: string;
 }
 /**
  * Envelope ADITIVO de paginacion (offset-based, #121).
@@ -502,6 +642,10 @@ export interface ActualComercial {
 }
 /**
  * Un punto de la serie temporal de una pieza comercial (acumulado).
+ *
+ * Ademas de las metricas "base" (interacciones/visualizaciones/alcance) lleva el
+ * desglose GRANULAR por pieza; cada uno es 0 cuando la fuente no lo expone (no se
+ * inventa), igual que `alcance` por pieza.
  */
 export interface SnapshotComercial {
   ts: string;

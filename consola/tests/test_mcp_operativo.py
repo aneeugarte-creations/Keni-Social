@@ -174,6 +174,8 @@ def test_tools_registradas(entorno):
         "keni_cola_aprobacion", "keni_enviar_a_revision", "keni_aprobar", "keni_rechazar",
         "keni_panel", "keni_tuberia", "keni_resumen_dia",
         "keni_metricas_reporte", "keni_metricas_analisis", "keni_metricas_piezas",
+        "keni_metricas_seguidores", "keni_metricas_desglose",
+        "keni_metricas_crosstab", "keni_metricas_correlacion",
     }
     faltan = esperadas - tools
     assert not faltan, f"faltan tools: {faltan}"
