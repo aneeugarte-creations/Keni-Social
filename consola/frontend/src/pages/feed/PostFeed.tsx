@@ -9,10 +9,13 @@
  *  4. Acciones EN LÍNEA: aprobar / rechazar la pieza (gate humano) sin salir del feed, más
  *     un toggle para abrir el hilo de comentarios del equipo (reusa `Comentarios`).
  *
- * Reusa el motor existente: la aprobación FORWARDEA a la cadena multinivel
- * (`aprobar`/`rechazar` de `api/aprobacion`, item del contrato A→C), y la cadena de
- * gobernanza (`cadenaAprobacion`) para avisar de firmas/comentarios pendientes. NO crea
- * backend nuevo.
+ * Reusa el motor existente: cuando la pieza tiene una CADENA de niveles, se pinta la UI
+ * multinivel completa (`CadenaAprobacion`: estado por nivel + decisión por orden, respetando
+ * "otro par de ojos" y "un rechazo para la cadena") sobre `api.decidirNivelAprobacion`. Si
+ * NO hay cadena (pieza sin aprobación configurada), cae al camino SIMPLE aprobar/rechazar
+ * (`aprobar`/`rechazar` de `api/aprobacion`, que forwardea a la cadena multinivel). En ambos
+ * casos la cadena de gobernanza (`cadenaAprobacion`) avisa de firmas/comentarios pendientes.
+ * NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2, MessageSquare, XCircle } from "lucide-react";
@@ -29,6 +32,7 @@ import { EtiquetaRed } from "@/pages/publicaciones/insignias";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
+import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
 import { BadgeEtapa } from "./TarjetaEtapa";
 
@@ -45,17 +49,21 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
 
-  // Cadena de gobernanza: solo para AVISAR (firmas / comentarios sin resolver). Se carga
-  // perezosamente cuando la pieza está en revisión (es cuando importa el gate). El motor
-  // de aprobación sigue siendo `aprobar`/`rechazar`, que forwardean a la cadena multinivel.
+  // Cadena de aprobación: alimenta tanto la UI MULTINIVEL (estado por nivel + decisión por
+  // orden) como los avisos de gobernanza (firmas / comentarios sin resolver). Se carga
+  // perezosamente cuando la pieza está en revisión (es cuando importa el gate). Si NO hay
+  // cadena, el motor simple `aprobar`/`rechazar` forwardea a la cadena multinivel.
   const cadenaQuery = useQuery({
     queryKey: ["cadena-aprobacion", publicacion.id],
     queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
     enabled: enRevision,
   });
-  const sinResolver = cadenaQuery.data?.comentarios_sin_resolver ?? 0;
-  const minimo = cadenaQuery.data?.minimo_aprobaciones ?? 0;
-  const aprobados = cadenaQuery.data?.aprobados ?? 0;
+  const cadena = cadenaQuery.data;
+  const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
+  const minimo = cadena?.minimo_aprobaciones ?? 0;
+  const aprobados = cadena?.aprobados ?? 0;
+  // Hay cadena multinivel configurada => pintamos la UI por niveles; si no, camino simple.
+  const tieneCadena = (cadena?.niveles?.length ?? 0) > 0;
 
   const tras = (mensaje: string) => () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
@@ -113,9 +121,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         />
       </div>
 
-      {/* Acciones en línea: aprobar/rechazar (gate humano) + comentar. */}
+      {/* Acciones en línea: comentar siempre; el gate humano va arriba (cadena o simple). */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        {enRevision ? (
+        {enRevision && !tieneCadena ? (
+          // Camino SIMPLE (sin cadena configurada): aprobar/rechazar forwardea a la cadena.
           <>
             <Button
               variant="positive"
@@ -144,7 +153,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               Rechazar
             </Button>
           </>
-        ) : (
+        ) : !enRevision ? (
           <span className="text-sm text-muted-foreground">
             {etapa === "aprobada" || etapa === "programada" || etapa === "publicada"
               ? publicacion.revisor_nombre
@@ -152,7 +161,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
                 : "Aprobada"
               : "La IA todavía está preparando esta pieza."}
           </span>
-        )}
+        ) : null}
         <Button
           variant="ghost"
           size="sm"
@@ -164,6 +173,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           {comentariosAbierto ? "Ocultar comentarios" : "Comentar"}
         </Button>
       </div>
+
+      {/* Aprobación MULTINIVEL: la cadena de niveles con su estado y la decisión por orden. */}
+      {enRevision && tieneCadena && cadena && (
+        <CadenaAprobacion
+          cadena={cadena}
+          plataformaId={publicacion.id}
+          autorPiezaId={publicacion.autor_id}
+        />
+      )}
 
       {/* Avisos del gate de gobernanza (firmas / comentarios) cuando aplica. */}
       {enRevision && (sinResolver > 0 || (minimo > 0 && aprobados < minimo)) && (
