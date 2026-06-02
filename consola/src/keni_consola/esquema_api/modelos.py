@@ -488,6 +488,12 @@ class Publicacion(TypedDict):
     revisado_en: str
     preparado_en: str
     id_post_metricool: str
+    # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar. El
+    # editor unificado los expone como checks marcables (PATCH a la fila por plataforma).
+    falta_copy: bool
+    falta_imagen: bool
+    falta_revision: bool
+    falta_publicar: bool
     fecha_creacion: str
     fecha_actualizacion: str
     fecha_programada: str

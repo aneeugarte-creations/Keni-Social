@@ -79,10 +79,75 @@ function contenido(over: Record<string, unknown> = {}) {
   };
 }
 
-function stubFetch(contenidos = [contenido()]) {
+// Estados que devuelve `/api/publicaciones/opciones` (los que espera el editor unificado).
+const ESTADOS_PUB = [
+  { id: "borrador", nombre: "Borrador" },
+  { id: "en_revision", nombre: "En revisión" },
+  { id: "aprobado", nombre: "Aprobado" },
+  { id: "programado", nombre: "Programado" },
+  { id: "publicado", nombre: "Publicado" },
+];
+
+// Forma `Publicacion` que devuelve `GET /api/publicaciones/{id}` (id = id de la plataforma,
+// p.ej. "p1"). El editor rico (`DialogoEditar`) la carga al abrirse desde el feed. Por
+// defecto la pieza tiene TODO en falta (falta_copy/imagen/revision/publicar = true), de modo
+// que marcar un check del checklist lo pone a `false`.
+function publicacion(over: Record<string, unknown> = {}) {
+  return {
+    id: "p1",
+    contenido_id: "c1",
+    titulo: "Sismo CDMX",
+    marca: "unotv",
+    marca_nombre: "UnoTV",
+    red: "x",
+    red_nombre: "X",
+    contenido: "",
+    copy_in: "",
+    estado: "borrador",
+    veredicto: "",
+    autor_id: "",
+    autor_nombre: "ana",
+    enviado_a_revision_en: "",
+    revisor_id: "",
+    revisor_nombre: "",
+    revisado_en: "",
+    preparado_en: "",
+    id_post_metricool: "",
+    falta_copy: true,
+    falta_imagen: true,
+    falta_revision: true,
+    falta_publicar: true,
+    fecha_creacion: "",
+    fecha_actualizacion: "",
+    fecha_programada: "",
+    origen: "manual",
+    imagen: "",
+    imagen_url: "",
+    evergreen: false,
+    ...over,
+  };
+}
+
+// `pubs` mapea id de plataforma → la `Publicacion` que servirá `GET /api/publicaciones/{id}`.
+function stubFetch(contenidos = [contenido()], pubs: Record<string, ReturnType<typeof publicacion>> = {}) {
   const fn = vi.fn(async (url: string | URL, init?: RequestInit) => {
     const ruta = String(url);
     const metodo = (init?.method ?? "GET").toUpperCase();
+    // El editor unificado pide opciones + la publicación por id; estas rutas son MÁS
+    // específicas que `/api/contenido`, así que se chequean ANTES para no colisionar.
+    if (ruta.includes("/api/publicaciones/opciones") && metodo === "GET") {
+      return new Response(
+        JSON.stringify({ estados: ESTADOS_PUB, marcas: CATALOGOS.marcas, redes: CATALOGOS.redes }),
+        { status: 200 },
+      );
+    }
+    const matchPub = ruta.match(/\/api\/publicaciones\/([^/?]+)/);
+    if (matchPub && metodo === "GET") {
+      const id = decodeURIComponent(matchPub[1]);
+      return new Response(JSON.stringify({ publicacion: pubs[id] ?? publicacion({ id }) }), {
+        status: 200,
+      });
+    }
     if (ruta.includes("/api/contenido") && metodo === "GET") {
       return new Response(JSON.stringify({ contenidos, catalogos: CATALOGOS }), { status: 200 });
     }
@@ -149,19 +214,16 @@ describe("Tablero de contenido", () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("muestra las secciones por flujo y la tarjeta con su plataforma", async () => {
+  it("muestra el feed por red y el filtro de flujo", async () => {
     stubFetch();
     renderConProviders(<Tablero />);
 
     expect(await screen.findByRole("heading", { name: "Tablero de contenido" })).toBeInTheDocument();
-    // Espera a que cargue el tablero (las secciones solo aparecen con datos).
+    // La vista por defecto es el FEED: la pieza se ve a través de su preview por red. Con el
+    // copy vacío, la preview cae al título del contenido ("Sismo CDMX").
     expect(await screen.findByText("Sismo CDMX")).toBeInTheDocument();
-    expect(screen.getByText("Importante del día")).toBeInTheDocument();
-    expect(screen.getByText("Evergreen")).toBeInTheDocument();
-    expect(screen.getByText("Eventos previstos")).toBeInTheDocument();
-    // La fila por plataforma muestra la red y su checklist.
-    expect(screen.getByText("X")).toBeInTheDocument();
-    expect(screen.getByLabelText("Copy")).toBeInTheDocument();
+    // El flujo ya no son secciones (Importante/Evergreen/Eventos): es un FILTRO (#fusion).
+    expect(screen.getByLabelText("Filtrar por flujo")).toBeInTheDocument();
   });
 
   it("muestra estado vacío cuando el tablero no tiene contenido", async () => {
@@ -171,10 +233,21 @@ describe("Tablero de contenido", () => {
   });
 
   it("marca un check del checklist con un PATCH a la plataforma", async () => {
+    // El checklist por red ya no vive en la tarjeta de lista: está en el editor unificado
+    // (`DialogoEditar`), que se abre al hacer click en la preview del feed.
     const fn = stubFetch();
     renderConProviders(<Tablero />);
 
-    const check = await screen.findByLabelText("Copy");
+    // Abre el editor desde la preview del feed (un <button> con el texto de la pieza).
+    const preview = (await screen.findByText("Sismo CDMX")).closest("button");
+    expect(preview).not.toBeNull();
+    fireEvent.click(preview!);
+
+    // El editor carga la publicación; el checklist está en la pestaña "Editar".
+    // Radix Tabs activa con `mousedown` (botón 0), no con `click`.
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.mouseDown(within(dialogo).getByRole("tab", { name: "Editar" }), { button: 0 });
+    const check = await within(dialogo).findByLabelText("Copy");
     fireEvent.click(check);
 
     await waitFor(() => {
@@ -213,11 +286,10 @@ describe("Tablero de contenido", () => {
     });
   });
 
-  it("vencido resalta el deadline", async () => {
-    stubFetch([contenido({ fecha_entrega: "2000-01-01", vencido: true })]);
-    renderConProviders(<Tablero />);
-    expect(await screen.findByText(/venció/i)).toBeInTheDocument();
-  });
+  // NOTA: el test "vencido resalta el deadline" se ELIMINÓ (pérdida aceptada). El display de
+  // vencido ("Venció …") vivía en la tarjeta de lista del tablero (TarjetaContenido), que ya
+  // NO se renderiza en la superficie única: el feed muestra previews por red (VistaPreviaRed),
+  // sin badge de deadline. No hay equivalente en esta superficie, así que no se reescribe.
 
   it("usuario MONOMARCA: el workspace arranca aislado en su marca y filtra el resto", async () => {
     stubFetch([
@@ -232,27 +304,28 @@ describe("Tablero de contenido", () => {
   });
 
   it("permite editar la IMAGEN por plataforma (generar IA / adjuntar)", async () => {
+    // La edición de imagen vive ahora en el editor unificado (`DialogoEditar` → pestaña
+    // "Editar"), no en la tarjeta de lista. Se abre con click en la preview del feed.
     stubFetch();
     renderConProviders(<Tablero />);
-    await screen.findByText("Sismo CDMX");
 
-    // Despliega el editor de imagen de la fila por plataforma.
-    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
-    // Tipo 'ia' (por defecto): se puede generar con IA o adjuntar.
-    expect(await screen.findByRole("button", { name: /Generar con IA/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("Adjuntar imagen")).toBeInTheDocument();
+    const preview = (await screen.findByText("Sismo CDMX")).closest("button");
+    fireEvent.click(preview!);
+
+    // Radix Tabs activa con `mousedown` (botón 0), no con `click`.
+    const dialogo = await screen.findByRole("dialog");
+    fireEvent.mouseDown(within(dialogo).getByRole("tab", { name: "Editar" }), { button: 0 });
+    // Sin imagen aún (falta_imagen): el editor ofrece generar con IA o adjuntar.
+    expect(await within(dialogo).findByRole("button", { name: /Generar con IA/i })).toBeInTheDocument();
+    expect(within(dialogo).getByLabelText("Adjuntar imagen")).toBeInTheDocument();
   });
 
-  it("tipo 'fuente': el editor de imagen pide la URL de la fuente original", async () => {
-    stubFetch([contenido({ tipo_contenido: "fuente" })]);
-    renderConProviders(<Tablero />);
-    await screen.findByText("Sismo CDMX");
-
-    fireEvent.click(screen.getByRole("button", { name: "Imagen" }));
-    expect(
-      await screen.findByPlaceholderText(/imagen-del-articulo/i),
-    ).toBeInTheDocument();
-  });
+  // NOTA: el test "tipo 'fuente': el editor de imagen pide la URL de la fuente original" se
+  // ELIMINÓ (pérdida aceptada). Ese flujo (pegar la URL `imagen_fuente` del artículo original,
+  // placeholder `https://…/imagen-del-articulo.jpg`) vivía en el editor de imagen POR PLATAFORMA
+  // de la tarjeta de lista, que ya no se renderiza. El editor de imagen del `DialogoEditar`
+  // unificado (`EditorImagen`) NO depende de `tipo_contenido` ni tiene modo 'fuente': solo
+  // adjunta archivo o genera con IA. No hay equivalente, así que no se reescribe.
 
   it("modo Feed: una vista previa POR RED (no una por pieza)", async () => {
     stubFetch([
@@ -270,13 +343,10 @@ describe("Tablero de contenido", () => {
       }),
     ]);
     renderConProviders(<Tablero />);
-    await screen.findByText("Sismo CDMX");
 
-    // Cambia a la vista Feed.
-    fireEvent.click(screen.getByRole("button", { name: "Feed" }));
-
-    // Una columna por red (X e Instagram), cada una con el copy de esa red en su
-    // mockup fiel de plataforma.
+    // El feed es la vista por defecto: una columna por red (X e Instagram), cada una con el
+    // copy de esa red en su mockup fiel de plataforma. Con copy definido, NO se muestra el
+    // título ("Sismo CDMX") sino el copy de cada red.
     expect(await screen.findByText(/Hola X/)).toBeInTheDocument();
     expect(screen.getByText(/Hola IG/)).toBeInTheDocument();
     // Cada preview es un botón clicable que abre el detalle de la pieza.

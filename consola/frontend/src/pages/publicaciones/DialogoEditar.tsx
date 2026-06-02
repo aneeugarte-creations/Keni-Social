@@ -4,6 +4,7 @@ import {
   Eye,
   History,
   Link2,
+  ListChecks,
   Loader2,
   MessageSquare,
   Pencil,
@@ -46,7 +47,13 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
-import type { CuerpoActualizarPublicacion, EstadoOpcion, EstadoPublicacion, Publicacion } from "@/types";
+import type {
+  CuerpoActualizarPlataforma,
+  CuerpoActualizarPublicacion,
+  EstadoOpcion,
+  EstadoPublicacion,
+  Publicacion,
+} from "@/types";
 
 import { CLAVE_PUBLICACIONES } from "./claves";
 import { GestionHashtags } from "./GestionHashtags";
@@ -76,6 +83,55 @@ const ESTADOS_DECISION_CADENA = new Set(["en_revision", "aprobado"]);
  *  - `aprobado`     → aviso de que ya está aprobada (lista para programar con su fecha).
  * Reusa los endpoints `/api/aprobacion/*`, que forwardean a la cadena.
  */
+/** Checklist de producción por red (Copy/Imagen/Revisión/Publicar). Vive aquí, en el editor
+ *  unificado (#fusion), desde que el tablero dejó de tener su lista propia. Marca = hecho
+ *  (`!falta_X`); cada toque hace un PATCH a la fila por plataforma e invalida ambas superficies. */
+const CHECKS_PRODUCCION = [
+  { campo: "falta_copy", etiqueta: "Copy" },
+  { campo: "falta_imagen", etiqueta: "Imagen" },
+  { campo: "falta_revision", etiqueta: "Revisión" },
+  { campo: "falta_publicar", etiqueta: "Publicar" },
+] as const;
+
+function ChecklistProduccion({ publicacion }: { publicacion: Publicacion }) {
+  const queryClient = useQueryClient();
+  const actualizar = useMutation({
+    mutationFn: (cuerpo: CuerpoActualizarPlataforma) =>
+      api.actualizarPlataforma(publicacion.contenido_id, publicacion.id, cuerpo),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["publicacion", publicacion.id] });
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  // Sin tema padre (piezas legadas) no hay fila de tablero que togglear.
+  if (!publicacion.contenido_id) return null;
+  return (
+    <div className="space-y-2 rounded-md border border-border bg-muted/20 p-3">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <ListChecks className="h-4 w-4 text-muted-foreground" />
+        Checklist de producción
+      </div>
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {CHECKS_PRODUCCION.map(({ campo, etiqueta }) => (
+          <label key={campo} className="flex cursor-pointer items-center gap-2 text-sm">
+            <Checkbox
+              checked={!publicacion[campo]}
+              disabled={actualizar.isPending}
+              onCheckedChange={(v) =>
+                actualizar.mutate({ [campo]: !v } as CuerpoActualizarPlataforma)
+              }
+              aria-label={etiqueta}
+            />
+            {etiqueta}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();
 
@@ -424,6 +480,8 @@ export function DialogoEditar({
                 </div>
               )}
             </div>
+
+            {publicacion && <ChecklistProduccion publicacion={publicacion} />}
 
             {publicacion && <PanelAprobacion publicacion={publicacion} />}
 

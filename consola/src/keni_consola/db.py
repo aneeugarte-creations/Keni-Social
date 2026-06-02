@@ -5800,6 +5800,8 @@ _SELECT_PUBLICACION = (
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
     "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
     "cp.preparado_en AS preparado_en, cp.id_post_metricool AS id_post_metricool, "
+    "cp.falta_copy AS falta_copy, cp.falta_imagen AS falta_imagen, "
+    "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
     "cp.evergreen AS evergreen, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado "
@@ -5831,6 +5833,11 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "revisado_en": f["revisado_en"] or "",
         "preparado_en": f["preparado_en"] or "",
         "id_post_metricool": f["id_post_metricool"] or "",
+        # Checklist de producción por red (el editor lo expone como checks marcables).
+        "falta_copy": bool(f["falta_copy"]),
+        "falta_imagen": bool(f["falta_imagen"]),
+        "falta_revision": bool(f["falta_revision"]),
+        "falta_publicar": bool(f["falta_publicar"]),
         "fecha_creacion": f["ccreado"] or "",
         "fecha_actualizacion": f["pactualizado"] or "",
         "fecha_programada": f["fecha_programada"] or "",

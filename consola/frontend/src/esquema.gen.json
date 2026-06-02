@@ -1223,6 +1223,18 @@
         "id_post_metricool": {
           "type": "string"
         },
+        "falta_copy": {
+          "type": "boolean"
+        },
+        "falta_imagen": {
+          "type": "boolean"
+        },
+        "falta_revision": {
+          "type": "boolean"
+        },
+        "falta_publicar": {
+          "type": "boolean"
+        },
         "fecha_creacion": {
           "type": "string"
         },
@@ -1266,6 +1278,10 @@
         "revisado_en",
         "preparado_en",
         "id_post_metricool",
+        "falta_copy",
+        "falta_imagen",
+        "falta_revision",
+        "falta_publicar",
         "fecha_creacion",
         "fecha_actualizacion",
         "fecha_programada",

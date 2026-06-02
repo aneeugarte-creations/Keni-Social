@@ -221,6 +221,9 @@ export default function Tablero() {
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [filtroResponsable, setFiltroResponsable] = React.useState(TODOS);
   const [filtroEtiqueta, setFiltroEtiqueta] = React.useState(TODOS);
+  // Flujo (importante/evergreen/evento): antes eran SECCIONES de la lista del tablero; al
+  // colapsar a una superficie única pasan a ser un FILTRO del feed (#fusion).
+  const [filtroFlujo, setFiltroFlujo] = React.useState(TODOS);
   // Deep-link opcional: `?marca=` fija el workspace y `?modo=` el modo (lo usa, p.ej.,
   // la pestaña Contenido de un agente para abrir el tablero ya filtrado por esa marca).
   const location = useLocation();
@@ -339,8 +342,11 @@ export default function Tablero() {
       lista = lista.filter((c) => c.responsable_id === filtroResponsable);
     if (filtroEtiqueta !== TODOS)
       lista = lista.filter((c) => (c.etiquetas ?? []).includes(filtroEtiqueta));
+    // El flujo solo aplica al contenido; las tareas (sin flujo) se conservan siempre.
+    if (filtroFlujo !== TODOS)
+      lista = lista.filter((c) => c.clase === "tarea" || c.flujo === filtroFlujo);
     return lista;
-  }, [contenidos, workspace, filtroResponsable, filtroEtiqueta]);
+  }, [contenidos, workspace, filtroResponsable, filtroEtiqueta, filtroFlujo]);
 
   const tareas = visibles.filter((c) => c.clase === "tarea");
 
@@ -466,6 +472,8 @@ export default function Tablero() {
           onResponsable={setFiltroResponsable}
           filtroEtiqueta={filtroEtiqueta}
           onEtiqueta={setFiltroEtiqueta}
+          filtroFlujo={filtroFlujo}
+          onFlujo={setFiltroFlujo}
           etiquetasWorkspace={etiquetasWorkspace}
           abrirId={abrirId}
         />
@@ -526,6 +534,8 @@ function ModoTablero({
   onResponsable,
   filtroEtiqueta,
   onEtiqueta,
+  filtroFlujo,
+  onFlujo,
   etiquetasWorkspace,
   abrirId,
 }: {
@@ -542,6 +552,8 @@ function ModoTablero({
   onResponsable: (v: string) => void;
   filtroEtiqueta: string;
   onEtiqueta: (v: string) => void;
+  filtroFlujo: string;
+  onFlujo: (v: string) => void;
   etiquetasWorkspace: EtiquetaCatalogo[];
   abrirId: string | null;
 }) {
@@ -556,6 +568,8 @@ function ModoTablero({
           onResponsable={onResponsable}
           filtroEtiqueta={filtroEtiqueta}
           onEtiqueta={onEtiqueta}
+          filtroFlujo={filtroFlujo}
+          onFlujo={onFlujo}
           etiquetasWorkspace={etiquetasWorkspace}
         />
       )}
@@ -807,6 +821,8 @@ function BarraControles({
   onResponsable,
   filtroEtiqueta,
   onEtiqueta,
+  filtroFlujo,
+  onFlujo,
   etiquetasWorkspace,
 }: {
   catalogos: CatalogosContenido;
@@ -816,6 +832,8 @@ function BarraControles({
   onResponsable: (v: string) => void;
   filtroEtiqueta: string;
   onEtiqueta: (v: string) => void;
+  filtroFlujo: string;
+  onFlujo: (v: string) => void;
   etiquetasWorkspace: EtiquetaCatalogo[];
 }) {
   // Al cambiar de workspace, si la etiqueta del filtro deja de pertenecer, se resetea.
@@ -896,6 +914,23 @@ function BarraControles({
                 {e.nombre}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <Label htmlFor="filtro-flujo" className="text-sm text-muted-foreground">
+          Flujo
+        </Label>
+        <Select value={filtroFlujo} onValueChange={onFlujo}>
+          <SelectTrigger id="filtro-flujo" aria-label="Filtrar por flujo" className="h-8 w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODOS}>Todos los flujos</SelectItem>
+            <SelectItem value="importante">Importante del día</SelectItem>
+            <SelectItem value="evergreen">Evergreen</SelectItem>
+            <SelectItem value="evento">Eventos previstos</SelectItem>
           </SelectContent>
         </Select>
       </div>
