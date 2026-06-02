@@ -34,11 +34,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Los tres paquetes Python del monorepo + las skills (mismo layout que el back).
+# Los tres paquetes Python del monorepo (mismo layout que el back).
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
-COPY skills-copy/ ./skills-copy/
 # Extras de persistencia HOSTED (#130): [postgres] (psycopg) para leer la cola compartida y
 # [s3] (boto3) porque el post-procesado de imagen importa al media (bucket en hosted).
 RUN pip install ./keni-shared "./mcp-metricas[deck]" "./consola[postgres,s3]"

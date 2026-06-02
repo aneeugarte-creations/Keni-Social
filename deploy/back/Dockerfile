@@ -39,7 +39,6 @@ WORKDIR /app
 COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 COPY consola/ ./consola/
-COPY skills-copy/ ./skills-copy/
 # El extra [deck] (python-pptx + reportlab) habilita el reporte del lunes: la
 # Consola exporta .pptx y PDF NATIVO (sin LibreOffice) desde la API (#141).
 # Extras de persistencia HOSTED (#130): [postgres] (psycopg) y [s3] (boto3), porque en el
