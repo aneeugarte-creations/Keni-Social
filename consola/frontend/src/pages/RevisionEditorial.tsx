@@ -215,7 +215,7 @@ export default function RevisionEditorial() {
   const skillDisponible = opcionesQuery.data?.skill_disponible ?? true;
 
   // Revisión en segundo plano (reanudable al cambiar de pestaña y volver).
-  const { generacion, ejecutando, iniciar } = useGeneracion(CLAVE_GEN_QA);
+  const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion(CLAVE_GEN_QA);
 
   const mutacion = useMutation<RespuestaGeneracion, Error>({
     mutationFn: () =>
@@ -338,6 +338,8 @@ export default function RevisionEditorial() {
         <ProgresoGeneracion
           generacion={generacion}
           onReintentar={() => mutacion.mutate()}
+          onCancelar={cancelar}
+          cancelando={cancelando}
           className="mt-6"
         />
       )}

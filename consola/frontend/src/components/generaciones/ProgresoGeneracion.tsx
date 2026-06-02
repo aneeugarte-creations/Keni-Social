@@ -110,7 +110,7 @@ export function ProgresoGeneracion({
           {ejecutando ? (
             <Badge variant="aviso" className="gap-1">
               <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-              Generando…
+              Visualizando…
             </Badge>
           ) : error ? (
             <Badge variant="error">Error</Badge>

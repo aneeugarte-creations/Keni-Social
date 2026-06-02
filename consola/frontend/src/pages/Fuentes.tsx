@@ -879,7 +879,7 @@ function DialogoGenerar({
   }
 
   // La generación corre en background; seguimos el progreso en el propio diálogo.
-  const { generacion, ejecutando, iniciar } = useGeneracion();
+  const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion();
 
   const generar = useMutation({
     mutationFn: () =>
@@ -974,7 +974,7 @@ function DialogoGenerar({
 
           {/* Progreso en vivo (texto token a token + métricas) mientras corre. */}
           {generacion && (ejecutando || generacion.estado === "error") && (
-            <ProgresoGeneracion generacion={generacion} />
+            <ProgresoGeneracion generacion={generacion} onCancelar={cancelar} cancelando={cancelando} />
           )}
           <p className="text-xs text-muted-foreground">
             Se crea un borrador por red en el{" "}

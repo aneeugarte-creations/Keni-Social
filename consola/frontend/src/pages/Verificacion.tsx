@@ -338,7 +338,7 @@ export default function Verificacion() {
   const [contexto, setContexto] = React.useState("");
 
   // Verificación en segundo plano (reanudable al cambiar de pestaña y volver).
-  const { generacion, ejecutando, iniciar } = useGeneracion(CLAVE_GEN_VERIF);
+  const { generacion, ejecutando, iniciar, cancelar, cancelando } = useGeneracion(CLAVE_GEN_VERIF);
 
   const mutacion = useMutation<RespuestaGeneracion, Error>({
     mutationFn: () => api.verificar({ enlace: enlace.trim(), contexto: contexto.trim() || undefined }),
@@ -414,6 +414,8 @@ export default function Verificacion() {
         <ProgresoGeneracion
           generacion={generacion}
           onReintentar={() => mutacion.mutate()}
+          onCancelar={cancelar}
+          cancelando={cancelando}
           className="mt-6"
         />
       )}

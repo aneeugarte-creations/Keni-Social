@@ -34,7 +34,7 @@ describe("ProgresoGeneracion", () => {
   it("muestra el texto del asistente mientras corre (streaming)", () => {
     render(<ProgresoGeneracion generacion={base({ salida: "Hola mundo en vivo" })} />);
     expect(screen.getByText("Copy desde nota · UnoTV")).toBeInTheDocument();
-    expect(screen.getByText("Generando…")).toBeInTheDocument();
+    expect(screen.getByText("Visualizando…")).toBeInTheDocument();
     expect(screen.getByText(/Hola mundo en vivo/)).toBeInTheDocument();
   });
 

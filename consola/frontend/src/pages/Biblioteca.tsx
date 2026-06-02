@@ -831,7 +831,10 @@ function PanelLanzar({
         <p className="text-xs text-destructive">{(lanzarMut.error as Error).message}</p>
       ) : null}
 
-      {generacion ? (
+      {/* C: el progreso aparece en cuanto ARRANCA el lanzamiento (estado intermedio
+          "Lanzando…"), sin esperar a que el POST devuelva `r.generacion`. En cuanto
+          llega la generación, el panel ya está montado y empieza a pintar el stream. */}
+      {generacion || lanzarMut.isPending ? (
         <div className="min-h-0 flex-1 space-y-2 border-t border-border pt-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium">Resultado</span>
@@ -841,7 +844,12 @@ function PanelLanzar({
               </Button>
             ) : null}
           </div>
-          {generacion.error ? (
+          {!generacion ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Lanzando…</span>
+            </div>
+          ) : generacion.error ? (
             <p className="text-sm text-destructive">{generacion.error}</p>
           ) : pensando ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">

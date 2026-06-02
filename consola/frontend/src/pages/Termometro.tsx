@@ -206,7 +206,8 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
   const [noticias, setNoticias] = React.useState("");
   const [trayendo, setTrayendo] = React.useState(false);
 
-  const { generacion, ejecutando, iniciar } = useGeneracion(CLAVE_GEN_TERMOMETRO);
+  const { generacion, ejecutando, iniciar, cancelar, cancelando } =
+    useGeneracion(CLAVE_GEN_TERMOMETRO);
 
   const generar = useMutation({
     mutationFn: () =>
@@ -335,7 +336,7 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
 
       {/* Progreso en vivo (texto token a token + métricas) mientras corre o si falla. */}
       {generacion && (ejecutando || generacion.estado === "error") && (
-        <ProgresoGeneracion generacion={generacion} />
+        <ProgresoGeneracion generacion={generacion} onCancelar={cancelar} cancelando={cancelando} />
       )}
 
       {/* Resultado de la galería, guardable como publicación. Prioriza el resultado en vivo

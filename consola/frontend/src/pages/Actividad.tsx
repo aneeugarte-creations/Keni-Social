@@ -97,7 +97,7 @@ function presentacionEstado(estado: string): {
     case "error":
       return { texto: "Error", variante: "error" };
     case "ejecutando":
-      return { texto: "Ejecutando…", variante: "aviso" };
+      return { texto: "Visualizando…", variante: "aviso" };
     case "lanzado":
       return { texto: "Lanzado", variante: "secondary" };
     default:
