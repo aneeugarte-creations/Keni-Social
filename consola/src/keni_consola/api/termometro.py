@@ -28,7 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import biblioteca, marcas, repos, termometro
+from .. import biblioteca, marcas, redes, repos, termometro
 from .._http_json import leer_json
 from ..dominio import copy as dom_copy
 from ..dominio import generar as gen_dom
@@ -126,9 +126,13 @@ async def generar(request: Request) -> Response:
     """`POST /api/termometro/generar` -> lanza la generacion EN SEGUNDO PLANO -> `{generacion}`.
 
     Cuerpo JSON: `{marca, noticias, numero?, regiones?, fecha?}`. Valida marca∈catalogo,
-    que `noticias` no este vacio y que la skill `termometro-mundial` exista. Renderiza la
-    invocacion y delega en `skills.lanzar_generacion_skill` (salida documento: registra el
-    historial, sin auto-crear publicaciones). El frontend sondea `GET /api/generaciones/{id}`.
+    que `noticias` no este vacio y que el prompt del termómetro exista. Compone el prompt
+    con instrucción de redes y lanza con el post-procesado de GALERÍA
+    (`construir_procesar_galeria`): el modelo emite el documento de la galería (portada +
+    slides + fuentes) MÁS un bloque JSON `{"piezas": [...]}` con el caption del posteo POR
+    RED, de modo que `parsear_salida` produce N piezas y el historial las guarda, pero SIN
+    auto-crear publicaciones. Así, al "Guardar como publicación", se crea UN borrador por
+    red elegida (sin explotar). El frontend sondea `GET /api/generaciones/{id}`.
     """
     datos = await leer_json(request)
     if not isinstance(datos, dict):
@@ -158,16 +162,27 @@ async def generar(request: Request) -> Response:
 
     titulo = titulo_termometro(valores["fecha"])
     autor = autor_de_peticion(request)
-    procesar_spec = jobspec.construir_documento(
-        skill=ORIGEN_HISTORIAL, marca=marca, titulo_base=titulo, autor=autor
+    # Una pieza por cada red canónica: el posteo de galería puede ir a varias redes; el
+    # usuario elige al guardar (selector multi-red en ResultadoDocumento). Generamos para
+    # TODAS, pero SIN auto-crear borradores (procesar de galería): así no se inunda el
+    # tablero y la elección de redes ocurre al guardar.
+    redes_ids = redes.ids()
+    prompt = gen_dom.componer(
+        cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores),
+        sin_emojis=True, redes_ids=redes_ids,
+    )
+    procesar_spec = jobspec.construir_galeria(
+        skill=ORIGEN_HISTORIAL, marca=marca, redes_ids=redes_ids, titulo_base=titulo,
+        titulo_dado=titulo, autor=autor,
     )
     gen = gen_dom.lanzar(
         tipo="copy",
         titulo=titulo,
         marca=marca,
-        prompt=gen_dom.componer(cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores)),
-        procesar=dom_copy.construir_procesar_documento(
-            ORIGEN_HISTORIAL, marca, titulo_base=titulo, autor=autor
+        prompt=prompt,
+        procesar=dom_copy.construir_procesar_galeria(
+            ORIGEN_HISTORIAL, marca, redes_ids=redes_ids, titulo_base=titulo,
+            titulo_dado=titulo, autor=autor,
         ),
         procesar_spec=procesar_spec,
         autor=autor,

@@ -3,9 +3,10 @@
  * Markdown: brief, calendario semanal, metadatos de YouTube, termómetro, etc.).
  *
  * Renderiza el documento con `Markdown`, ofrece copiar al portapapeles y permite
- * guardarlo como publicación eligiendo una red vía el historial NEUTRO
- * `POST /api/skills/historial/{id}/guardar` (común a todas las generaciones).
- * Componente compartido (lo usa Termómetro); ya no vive bajo `pages/copy/`.
+ * guardarlo como publicación eligiendo UNA O VARIAS redes vía el historial NEUTRO
+ * `POST /api/skills/historial/{id}/guardar` (común a todas las generaciones). El
+ * termómetro genera el caption del posteo por red; al guardar se crea UN borrador por
+ * red elegida (selector multi-red). Componente compartido (lo usa Termómetro).
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Download, ExternalLink, FileText, ImageIcon, Loader2, Save } from "lucide-react";
@@ -13,18 +14,11 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
+import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Markdown } from "@/components/ui/Markdown";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { api, ApiError, urlMedia } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import type { ImagenGenerada } from "@/types";
@@ -97,7 +91,7 @@ export function ResultadoDocumento({
   imagenes?: ImagenGenerada[];
 }) {
   const queryClient = useQueryClient();
-  const [red, setRed] = React.useState("");
+  const [redes, setRedes] = React.useState<Set<string>>(() => new Set());
   const [copiado, setCopiado] = React.useState(false);
   // A-4: timer de reset de 'copiado' con cleanup al desmontar.
   const timerRef = React.useRef<number | null>(null);
@@ -111,10 +105,19 @@ export function ResultadoDocumento({
     queryKey: ["publicaciones", "opciones"],
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
-  const redes = opcionesQuery.data?.redes.map((r) => ({ id: r.id, nombre: r.nombre })) ?? [];
+  const opcionesRedes = opcionesQuery.data?.redes.map((r) => ({ id: r.id, nombre: r.nombre })) ?? [];
+
+  function alternarRed(red: string, marcada: boolean) {
+    setRedes((prev) => {
+      const siguiente = new Set(prev);
+      if (marcada) siguiente.add(red);
+      else siguiente.delete(red);
+      return siguiente;
+    });
+  }
 
   const guardar = useMutation({
-    mutationFn: () => api.guardarHistorial(historialId, { red }),
+    mutationFn: () => api.guardarHistorial(historialId, { redes: [...redes] }),
     onSuccess: (data) => {
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       const n = data?.publicaciones?.length ?? 1;
@@ -138,7 +141,7 @@ export function ResultadoDocumento({
     }
   }
 
-  const puedeGuardar = !guardar.isPending && historialId !== "" && red !== "";
+  const puedeGuardar = !guardar.isPending && historialId !== "" && redes.size > 0;
 
   return (
     <Card>
@@ -160,22 +163,14 @@ export function ResultadoDocumento({
           )}
         </div>
 
+        <SelectorRedMultiple
+          opciones={opcionesRedes}
+          seleccionadas={redes}
+          onCambio={alternarRed}
+          disabled={guardar.isPending}
+        />
+
         <div className="flex flex-wrap items-end gap-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="doc-red">Red</Label>
-            <Select value={red} onValueChange={setRed}>
-              <SelectTrigger id="doc-red" className="w-44">
-                <SelectValue placeholder="Elige una red" />
-              </SelectTrigger>
-              <SelectContent>
-                {redes.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <Button size="sm" onClick={() => guardar.mutate()} disabled={!puedeGuardar}>
             {guardar.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

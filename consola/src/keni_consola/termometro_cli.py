@@ -32,7 +32,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from . import biblioteca, preferencias, repos, termometro
+from . import biblioteca, preferencias, redes, repos, termometro
 from .api import rss
 from .api.termometro import ORIGEN_HISTORIAL, PROMPT_ID, _contexto, titulo_termometro
 from .dominio import copy as dom_copy
@@ -148,9 +148,11 @@ def generar_termometro(
 ) -> dict[str, object]:
     """Arma el termometro de forma SINCRONA. Devuelve el resultado (o `{prompt}` en dry-run).
 
-    Renderiza la invocacion de la skill `termometro-mundial`, corre `claude` (salvo dry-run),
-    parsea la salida y registra el historial (salida documento; sin auto-crear publicaciones).
-    Lanza `TermometroCronError` si la skill no esta instalada o si la generacion falla.
+    Renderiza la invocacion del prompt `termometro-mundial`, corre `claude` (salvo dry-run),
+    parsea la salida en PIEZAS por red y registra el historial. NO auto-crea publicaciones
+    (procesar de galería): el community elige las redes al guardar desde la web. Mismo camino
+    que la generación web, para que el termómetro del cron sea igual de "guardable".
+    Lanza `TermometroCronError` si el prompt no esta instalado o si la generacion falla.
     """
     cuerpo = biblioteca.cuerpo_efectivo(PROMPT_ID)
     if cuerpo is None:
@@ -158,7 +160,11 @@ def generar_termometro(
             "No está disponible el prompt del termómetro. Reinstala la Consola."
         )
     valores = {"noticias": noticias, "numero": numero, "regiones": regiones, "fecha": fecha}
-    prompt = gen_dom.componer(cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores))
+    redes_ids = redes.ids()
+    prompt = gen_dom.componer(
+        cuerpo, biblioteca.editoriales_de_marca(marca), _contexto(valores),
+        sin_emojis=True, redes_ids=redes_ids,
+    )
     if dry_run:
         return {"prompt": prompt, "dry_run": True}
 
@@ -170,8 +176,9 @@ def generar_termometro(
     if not texto.strip():
         raise TermometroCronError("El asistente terminó sin devolver un termómetro.")
 
-    procesar = dom_copy.construir_procesar_documento(
-        ORIGEN_HISTORIAL, marca, titulo_base=titulo_termometro(fecha)
+    titulo = titulo_termometro(fecha)
+    procesar = dom_copy.construir_procesar_galeria(
+        ORIGEN_HISTORIAL, marca, redes_ids=redes_ids, titulo_base=titulo, titulo_dado=titulo,
     )
     return procesar(texto, metricas)
 

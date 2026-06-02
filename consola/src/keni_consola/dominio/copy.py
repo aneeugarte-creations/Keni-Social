@@ -110,6 +110,7 @@ def crear_publicaciones_desde_piezas(
     redes_filtro: set[str] | None = None,
     autor: dict[str, str] | None = None,
     contenido_id: str = "",
+    atomico: bool = False,
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -121,38 +122,58 @@ def crear_publicaciones_desde_piezas(
     cada pieza se ADJUNTA a ESE `contenido` (via `crear_borrador_en`) en vez de crear su
     propio padre, de modo que el borrador cuelga de la tarjeta del tema. Sin `contenido_id`
     (default ""), o si el tema no existe, es EXACTAMENTE el comportamiento de hoy.
+
+    `atomico` (default False): TODO-O-NADA. La capa de datos persiste cada borrador por su
+    cuenta (sin transacción cross-fila); con `atomico=True`, si la creación de una pieza
+    falla a mitad, se BORRAN las ya creadas y se RELANZA, para no dejar publicaciones rotas.
+    Lo usa el "Guardar como publicación" del termómetro; el auto-copy lo deja en False
+    (best-effort, no debe abortar toda la generación por una pieza).
     """
     creadas: list[dict[str, object]] = []
-    for pieza in piezas:
-        red = pieza.get("red")
-        contenido = pieza.get("contenido")
-        copy_in = pieza.get("copy_in")
-        if not isinstance(red, str) or not redes.es_red(red):
-            continue
-        if redes_filtro is not None and red not in redes_filtro:
-            continue
-        if not isinstance(contenido, str):
-            contenido = ""
-        if not isinstance(copy_in, str):
-            copy_in = ""
-        # Auto-compone la imagen-plantilla de marca (logo + copy_in, hueco de foto vacío). "" si
-        # la marca no tiene plantilla o si falla: el borrador se crea igual, sin imagen.
-        imagen = _componer_placa_placeholder(marca, red, copy_in)
-        creada: dict[str, object] | None = None
-        if contenido_id:
-            # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
-            # el tema no existe (entonces caemos al borrador suelto).
-            creada = contrato_publicaciones.crear_borrador_en(
-                contenido_id, marca, red, titulo=titulo, contenido=contenido,
-                copy_in=copy_in, veredicto=verdicto, imagen=imagen,
-            )
-        if creada is None:
-            creada = contrato_publicaciones.crear_borrador(
-                marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
-                veredicto=verdicto, origen=origen, autor=autor, imagen=imagen,
-            )
-        creadas.append(creada)
+    try:
+        for pieza in piezas:
+            red = pieza.get("red")
+            contenido = pieza.get("contenido")
+            copy_in = pieza.get("copy_in")
+            if not isinstance(red, str) or not redes.es_red(red):
+                continue
+            if redes_filtro is not None and red not in redes_filtro:
+                continue
+            if not isinstance(contenido, str):
+                contenido = ""
+            if not isinstance(copy_in, str):
+                copy_in = ""
+            # Auto-compone la imagen-plantilla de marca (logo + copy_in, hueco de foto vacío). "" si
+            # la marca no tiene plantilla o si falla: el borrador se crea igual, sin imagen.
+            imagen = _componer_placa_placeholder(marca, red, copy_in)
+            creada: dict[str, object] | None = None
+            if contenido_id:
+                # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
+                # el tema no existe (entonces caemos al borrador suelto).
+                creada = contrato_publicaciones.crear_borrador_en(
+                    contenido_id, marca, red, titulo=titulo, contenido=contenido,
+                    copy_in=copy_in, veredicto=verdicto, imagen=imagen,
+                )
+            if creada is None:
+                creada = contrato_publicaciones.crear_borrador(
+                    marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
+                    veredicto=verdicto, origen=origen, autor=autor, imagen=imagen,
+                )
+            creadas.append(creada)
+    except Exception:
+        if atomico:
+            _revertir_borradores([str(p.get("id")) for p in creadas if p.get("id")])
+        raise
     return creadas
+
+
+def _revertir_borradores(ids: list[str]) -> None:
+    """Borra borradores ya creados (rollback de un guardado a medias). Tolerante a fallos."""
+    for pid in ids:
+        try:
+            repos.borrar_publicacion(pid)
+        except Exception:  # noqa: BLE001 -- el rollback nunca debe enmascarar el error original
+            continue
 
 
 # --------------------------------------------------------------------------- #
@@ -203,6 +224,45 @@ def construir_procesar_copy(
         if con_imagenes:
             resultado["imagenes"] = cosechar_imagenes(salida)
         return resultado
+
+    return procesar
+
+
+def construir_procesar_galeria(
+    skill: str,
+    marca: str,
+    *,
+    redes_ids: list[str],
+    titulo_base: str,
+    titulo_dado: str = "",
+    autor: dict[str, str] | None = None,
+) -> generaciones.Procesar:
+    """Callback de post-procesado de una GALERÍA (termómetro): piezas SIN auto-borradores.
+
+    A medio camino entre copy y documento: parsea la salida en piezas por red (igual que
+    copy, vía el bloque ```json) y las REGISTRA en el historial, pero NO crea publicaciones
+    todavía. El usuario elige al guardar QUÉ redes quiere (`POST .../guardar` con `redes`),
+    y ahí se crean los borradores (uno por red). Así un termómetro no inunda el tablero con
+    una pieza por cada red de golpe. Devuelve `{documento, resultado, verdicto, historial_id,
+    piezas, publicaciones: []}` (`documento` por compat del visor de termómetro).
+    """
+
+    def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
+        parsed = stream.parsear_salida(salida, redes_ids)
+        resultado = str(parsed["resultado"])
+        titulo = titulo_dado or stream.derivar_titulo(titulo_base or resultado)
+        historial_id = repos.registrar_historial_skill(
+            skill, marca, resultado, piezas=parsed["piezas"], titulo=titulo,
+            metricas=stream.metricas_a_dict(metricas), autor=autor,
+        )
+        return {
+            "documento": resultado,
+            "resultado": resultado,
+            "verdicto": parsed["verdicto"],
+            "historial_id": historial_id,
+            "piezas": parsed["piezas"],
+            "publicaciones": [],
+        }
 
     return procesar
 

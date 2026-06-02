@@ -44,6 +44,7 @@ CWD_GENERACION = "generacion"
 
 # Kinds de post-procesado (`procesar`). Mapean a las fabricas de `dominio.copy`/`qa`/`hashtags`.
 PROC_COPY = "copy"
+PROC_GALERIA = "galeria"
 PROC_DOCUMENTO = "documento"
 PROC_HASHTAGS = "hashtags"
 PROC_QA = "qa"
@@ -91,6 +92,27 @@ def construir_copy(
         "fuente_id": fuente_id or "",
         "clave": clave or "",
         "contenido_id": contenido_id or "",
+    }
+
+
+def construir_galeria(
+    *,
+    skill: str,
+    marca: str,
+    redes_ids: list[str],
+    titulo_base: str,
+    titulo_dado: str = "",
+    autor: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Spec del post-procesado de una GALERÍA (termómetro): piezas sin auto-borradores."""
+    return {
+        "kind": PROC_GALERIA,
+        "skill": skill,
+        "marca": marca,
+        "redes_ids": list(redes_ids),
+        "titulo_base": titulo_base,
+        "titulo_dado": titulo_dado,
+        "autor": _autor_spec(autor),
     }
 
 
@@ -221,6 +243,13 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
 
     if kind == PROC_QA:
         return dom_qa.construir_procesar_qa(p["marca"], p.get("titulo", ""), autor=autor)
+
+    if kind == PROC_GALERIA:
+        return dom_copy.construir_procesar_galeria(
+            p["skill"], p["marca"], redes_ids=list(p.get("redes_ids") or []),
+            titulo_base=p.get("titulo_base", ""), titulo_dado=p.get("titulo_dado", ""),
+            autor=autor,
+        )
 
     if kind == PROC_DOCUMENTO:
         return dom_copy.construir_procesar_documento(

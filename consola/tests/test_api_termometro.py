@@ -3,15 +3,19 @@
 Cubre:
   - GET config: defectos + disponibilidad del prompt (semilla) + marcas + regiones sugeridas.
   - PUT config: guarda y valida (numero 5-8, hora HH:MM, marca del catalogo).
-  - POST generar: con el lanzador mockeado, completa la generacion (salida documento:
-    registra historial, sin auto-crear publicaciones); valida marca y noticias.
+  - POST generar: con el lanzador mockeado, completa la generacion (salida galería:
+    parsea piezas por red, registra historial, SIN auto-crear publicaciones); valida
+    marca y noticias.
+  - POST guardar (historial): crea N borradores (uno por red elegida) desde el termómetro.
 """
 
 from __future__ import annotations
 
 from .conftest import _cliente, lanzador_generacion_completa
 
-# Salida canned (documento con veredicto). Sin red, sin claude real.
+# Salida canned (documento con veredicto + bloque JSON de piezas por red). Sin claude real.
+# El termómetro ahora emite el caption del posteo POR RED en un bloque ```json al final;
+# `parsear_salida` lo reparte en piezas y deja el documento limpio (slides/fuentes arriba).
 _SALIDA_DOC = """✅ Termómetro listo.
 
 PORTADA
@@ -19,6 +23,10 @@ Termómetro mundial · 2026-05-25
 
 SLIDES
 2/5. [Europa] Algo pasó en Europa.
+
+```json
+{"piezas": [{"red": "x", "texto": "Pulso internacional de hoy. Desliza.", "copy_in": "TERMÓMETRO MUNDIAL"}, {"red": "instagram", "texto": "El mundo en una galería. Desliza para ver.", "copy_in": "TERMÓMETRO MUNDIAL"}]}
+```
 """
 
 
@@ -90,13 +98,55 @@ def test_generar_completa_y_registra_historial(entorno):
     )
     assert r.status_code == 200
     res = r.json()["generacion"]["resultado"]
-    # Salida documento: hay `documento`, sin publicaciones auto-creadas.
+    # Salida galería: hay `documento` (slides) + `piezas` por red, SIN publicaciones
+    # auto-creadas (el usuario elige redes al guardar).
     assert "documento" in res
     assert res["verdicto"] == "listo"
     assert res["publicaciones"] == []
-    # Se registro en el historial (descubrible desde "Generar copy").
+    redes_pieza = {p["red"] for p in res["piezas"]}
+    assert redes_pieza == {"x", "instagram"}
+    # El bloque JSON ya no contamina el documento visible.
+    assert "```json" not in res["documento"]
+    # Se registro en el historial CON piezas (descubrible desde "Generar copy").
     historial = cli.get("/api/skills/historial").json()["historial"]
-    assert any(h["skill"] == "termometro-mundial" for h in historial)
+    entrada = next(h for h in historial if h["skill"] == "termometro-mundial")
+    assert entrada["piezas"]
+
+
+def test_guardar_termometro_crea_borradores_por_red(entorno):
+    # Tras generar (con piezas), "Guardar como publicación" con `redes` plural crea UN
+    # borrador por red elegida (el bug original: explotaba al guardar el documento único).
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_DOC))
+    cli.post(
+        "/api/termometro/generar",
+        json={"marca": "unotv", "noticias": "China: algo grande.", "numero": "5"},
+    )
+    entrada = next(
+        h for h in cli.get("/api/skills/historial").json()["historial"]
+        if h["skill"] == "termometro-mundial"
+    )
+    r = cli.post(
+        f"/api/skills/historial/{entrada['id']}/guardar",
+        json={"redes": ["x", "instagram"]},
+    )
+    assert r.status_code == 200
+    pubs = r.json()["publicaciones"]
+    assert {p["red"] for p in pubs} == {"x", "instagram"}
+    assert all(p["estado"] == "borrador" for p in pubs)
+
+
+def test_guardar_termometro_sin_redes_400(entorno):
+    # Sin redes elegidas no se crea nada (evita inundar el tablero); no explota.
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_DOC))
+    cli.post(
+        "/api/termometro/generar",
+        json={"marca": "unotv", "noticias": "China: algo grande.", "numero": "5"},
+    )
+    entrada = next(
+        h for h in cli.get("/api/skills/historial").json()["historial"]
+        if h["skill"] == "termometro-mundial"
+    )
+    assert cli.post(f"/api/skills/historial/{entrada['id']}/guardar", json={}).status_code == 400
 
 
 def test_get_devuelve_ultimo_termometro_persistente(entorno):

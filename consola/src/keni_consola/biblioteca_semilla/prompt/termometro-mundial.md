@@ -73,8 +73,32 @@ Usa esos mismos estados POR SLIDE cuando una nota tenga un riesgo legal/editoria
 
 ## Formato de salida
 
-Tras el veredicto: la PORTADA, los SLIDES numerados (región + registro serio/viral + estado +
-titular + línea de contexto) y el COPY del posteo con sus hashtags. Luego una sección
-**"Fuentes:"** con los enlaces en markdown usados por cada tema (1–2 por slide). Cierra con una
-auto-verificación honesta (frescura cruzada con ≥2 fuentes, fechas/cifras/nombres y reglas
-legales por slide).
+Tras el veredicto, en este orden:
+
+1. **PORTADA** — `Termómetro mundial · <fecha>` + una bajada de una línea con el pulso del día.
+2. **SLIDES** numerados (`2/8`…), uno por nota: región + registro **(serio)**/**(viral/redes)** +
+   estado por slide si aplica + titular corto + una línea de contexto, tropicalizado a MX.
+3. **Fuentes:** los enlaces en markdown usados por cada tema (1–2 por slide).
+4. **Auto-verificación** honesta (frescura cruzada con ≥2 fuentes, fechas/cifras/nombres y
+   reglas legales por slide).
+
+Escribe TODO esto como prosa/markdown legible: es el documento de la galería que revisa el
+community. NO antepongas preámbulos del tipo "Aquí está…" / "Claro, te armo…"; arranca directo
+por el veredicto.
+
+## Bloque final para la Consola (OBLIGATORIO)
+
+Al FINAL de toda tu respuesta, añade un único bloque de código cercado ```json con el **copy
+del posteo** (el caption de la galería) POR CADA red pedida —el `texto` resume el pulso
+internacional, invita a deslizar y trae 3–6 hashtags pertinentes, en la voz de la marca y
+tropicalizado a MX, respetando los límites de plataforma y las reglas de emojis (cero en
+UnoTV/Fundación; 0–2 en Instagram/Facebook donde se admitan)—:
+
+```json
+{"piezas": [{"red": "<id>", "texto": "<caption de la galería para esa red>", "copy_in": "<texto de la portada>"}, ...]}
+```
+
+Usa como `<id>` únicamente los valores que te indique la instrucción de redes. El `copy_in` es
+el texto que va SOBRE la imagen de portada (titular/claim corto, sin emojis); deja `""` si esa
+red no lleva placa. Incluye una pieza por cada red pedida. Las slides y las fuentes van en la
+prosa de arriba, NO dentro del JSON.
