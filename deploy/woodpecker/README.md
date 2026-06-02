@@ -1,7 +1,7 @@
 # Woodpecker CI — keni-social (server Latitude)
 
 CI self-hosted para el repo privado `kenitech-io/keni-social`. Stack **separado**
-en el server Latitude (162.43.191.103) que reusa el Traefik de keni-social como
+en el server Latitude (<IP-DEL-SERVIDOR>) que reusa el Traefik de keni-social como
 ingress + TLS. Sustituye al CI de GitHub Actions (bloqueado por facturacion, ver
 issue #136). Pipelines en `.woodpecker/` (espejo de `.github/workflows/ci.yml`).
 
@@ -19,7 +19,7 @@ issue #136). Pipelines en `.woodpecker/` (espejo de `.github/workflows/ci.yml`).
 
 ## Prerrequisitos (una vez)
 
-1. **DNS:** registro `A` `ci-social.kenitech.io -> 162.43.191.103` en modo
+1. **DNS:** registro `A` `ci-social.kenitech.io -> <IP-DEL-SERVIDOR>` en modo
    **DNS-only (nube gris)**, gestionado por Terraform en
    `kenidevops/devops-iac/cloudflare/dns` (forma GitOps de DevOps). Imprescindible
    el modo DNS-only: Traefik valida el cert por HTTP-01; con proxy naranja falla.

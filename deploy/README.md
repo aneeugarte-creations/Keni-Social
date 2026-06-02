@@ -114,16 +114,16 @@ docker compose version            # comprobar
 
 ## DNS
 
-Hace falta `social.kenitech.io → 162.43.191.103` (A, **sin proxy** de Cloudflare —
+Hace falta `social.kenitech.io → <IP-DEL-SERVIDOR>` (A, **sin proxy** de Cloudflare —
 Let's Encrypt necesita acceso directo para el challenge HTTP). El DNS de la zona lo
 gestiona Terraform en `keni/devops-iac/cloudflare/dns/`. Añade el registro al mapa
 `custom_records` de `terraform.tfvars` (donde ya están `code` y `api`):
 
 ```hcl
 custom_records = {
-  "code"   = "162.43.191.103"
-  "api"    = "162.43.191.103"
-  "social" = "162.43.191.103"   # <-- añadir
+  "code"   = "<IP-DEL-SERVIDOR>"
+  "api"    = "<IP-DEL-SERVIDOR>"
+  "social" = "<IP-DEL-SERVIDOR>"   # <-- añadir
 }
 ```
 
