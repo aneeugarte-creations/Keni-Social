@@ -283,8 +283,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      # Password del rol de aplicacion de MINIMO PRIVILEGIO `keni_app` (lo consume el
+      # init script `postgres/initdb/10-app-role.sh` en el PRIMER arranque). El back
+      # conecta como keni_app via DATABASE_URL, no como el superuser bootstrap.
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # Crea `keni_app` SOLO al inicializar un cluster vacio (postgres ejecuta initdb.d
+      # una unica vez). En un volumen ya poblado no corre. Ver el script para detalles.
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
     networks:
       - internal
     healthcheck:
