@@ -112,3 +112,24 @@ def test_panel_rango_invalido_cae_a_semana(entorno):
     cli = _cli()
     datos = cli.get("/api/panel?rango=loquesea").json()
     assert datos["metricas"]["rango"] == "semana"
+
+
+def test_panel_tuberia_forma_y_conteo(entorno):
+    """Observabilidad de la tuberia (Flujo C): conteo de temas por etapa, forma estable.
+
+    Una pieza creada con `origen='equipo'` y sin imagen entra como 'generando_arte' (tiene
+    copy, le falta imagen); una pieza con copy + imagen es 'lista_para_revisar'.
+    """
+    from keni_consola import pipeline_estado as pe
+
+    cli = _cli()
+    _crear(cli, origen="equipo", titulo="Con copy sin arte")  # copy='C', sin imagen
+    _crear(cli, origen="equipo", titulo="Completa", imagen="img.png")
+
+    datos = cli.get("/api/panel/tuberia").json()
+    # Forma estable para la UI: todas las etapas de la tuberia presentes, en orden canonico.
+    assert set(datos["por_etapa"]) == set(pe.ETAPAS[:-1])
+    assert datos["etapas"] == list(pe.ETAPAS[:-1])
+    assert datos["por_etapa"][pe.ETAPA_GENERANDO_ARTE] >= 1
+    assert datos["por_etapa"][pe.ETAPA_LISTA_REVISAR] >= 1
+    assert datos["total"] == sum(datos["por_etapa"].values())

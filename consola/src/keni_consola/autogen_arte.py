@@ -34,9 +34,10 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import date
 from typing import Any
 
-from . import config, daemon_util, marcas, media, repos
+from . import config, daemon_util, marcas, media, priorizacion, repos
 from .estados import CLASE_CONTENIDO
 
 _log = logging.getLogger("keni_consola.autogen_arte")
@@ -87,12 +88,31 @@ def _le_falta_imagen(plataforma: dict[str, Any]) -> bool:
     return not bool((plataforma.get("imagen") or "").strip())
 
 
+def _etiquetas_por_item() -> dict[str, list[str]]:
+    """id de contenido -> NOMBRES de etiqueta resueltos (para el score). Best-effort: {}.
+
+    `priorizacion.score_contenido` resuelve compromiso/green por NOMBRE de etiqueta, asi que
+    traducimos los ids a nombres. Un fallo de lectura deja el mapa vacio (el score cae a sus
+    pesos base), nunca rompe el barrido.
+    """
+    try:
+        nombres = {e.get("id", ""): e.get("nombre", "") for e in repos.listar_etiquetas()}
+        return {
+            cid: [nombres.get(eid, "") for eid in eids]
+            for cid, eids in repos.etiquetas_por_contenido().items()
+        }
+    except Exception:  # noqa: BLE001 -- sin etiquetas legibles, el score usa sus pesos base
+        return {}
+
+
 def topics_sin_arte(
     items: list[dict[str, Any]],
     *,
     plataformas_por_item: dict[str, list[dict[str, Any]]],
     ya_procesados: set[str],
     maximo: int,
+    etiquetas_por_item: dict[str, list[str]] | None = None,
+    hoy: date | None = None,
 ) -> list[dict[str, Any]]:
     """Subconjunto de `items` del tablero que se debe auto-ilustrar (PURA, testeable).
 
@@ -107,9 +127,17 @@ def topics_sin_arte(
     `plataformas_por_item` mapea id de contenido -> sus filas `contenido_plataforma`
     (dicts con al menos `copy` e `imagen`), inyectado para ser testeable sin DB.
 
-    Conserva el ORDEN de entrada (el tablero ya viene ordenado por prioridad+fecha), asi
-    que con cap se atienden primero los de mayor prioridad. Determinista.
+    ORDEN (Flujo C): igual que en `autogen_copy.topics_pendientes`, si se pasan
+    `etiquetas_por_item` (id -> NOMBRES) y `hoy`, se CONSUME `priorizacion.ordenar_por_score`
+    ANTES de filtrar+capar, de modo que el arte se genera primero para los temas de MAYOR
+    score. WRAPPER: solo consume `ordenar_por_score`, no toca la firma de `score_contenido`
+    (compatible con el Flujo E). Sin esos argumentos, conserva el ORDEN de entrada (el tablero
+    ya viene por prioridad+fecha). Determinista.
     """
+    if etiquetas_por_item is not None and hoy is not None:
+        items = priorizacion.ordenar_por_score(
+            items, etiquetas_por_item=etiquetas_por_item, hoy=hoy
+        )
     elegidos: list[dict[str, Any]] = []
     for item in items:
         if len(elegidos) >= maximo:
@@ -234,6 +262,9 @@ def ejecutar_barrido() -> list[dict[str, Any]]:
         plataformas_por_item=_plataformas_por_item(items),
         ya_procesados=ids_ya_procesados(),
         maximo=config.autogen_arte_max(),
+        # El SCORE ordena que se auto-ilustra primero (la cola de trabajo de la IA).
+        etiquetas_por_item=_etiquetas_por_item(),
+        hoy=date.today(),
     )
     adjuntados: list[dict[str, Any]] = []
     for item in elegidos:

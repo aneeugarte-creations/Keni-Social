@@ -96,6 +96,42 @@ def test_origenes_topic_deriva_del_modulo_neutro():
     assert "" not in ag.ORIGENES_TOPIC
 
 
+def test_orden_por_defecto_conserva_entrada():
+    """Sin `etiquetas_por_item`/`hoy`, conserva el orden del tablero (prioridad+fecha)."""
+    items = [_item(id="a"), _item(id="b"), _item(id="c")]
+    elegidos = ag.topics_pendientes(items, ya_generados=set(), maximo=3)
+    assert [e["id"] for e in elegidos] == ["a", "b", "c"]
+
+
+def test_score_ordena_la_cola_de_trabajo_antes_del_cap():
+    """Flujo C: el SCORE ordena que se auto-genera PRIMERO. Con cap=1 entra el de mayor score
+    (compromiso), aunque NO sea el primero en orden de entrada."""
+    from datetime import date
+
+    items = [
+        _item(id="normal", prioridad="baja"),
+        _item(id="must", prioridad="baja"),
+    ]
+    etiquetas = {"must": ["compromiso"]}  # compromiso DOMINA el score
+    elegidos = ag.topics_pendientes(
+        items, ya_generados=set(), maximo=1, etiquetas_por_item=etiquetas, hoy=date(2026, 6, 1)
+    )
+    assert [e["id"] for e in elegidos] == ["must"]
+
+
+def test_score_no_consume_a_E_solo_ordena():
+    """El wrapper solo CONSUME `ordenar_por_score`; no toca la firma de `score_contenido`
+    (compatible con que el Flujo E la enriquezca). Sin etiquetas relevantes, el orden lo dicta
+    la prioridad base, no se rompe la seleccion."""
+    from datetime import date
+
+    items = [_item(id="baja", prioridad="baja"), _item(id="alta", prioridad="alta")]
+    elegidos = ag.topics_pendientes(
+        items, ya_generados=set(), maximo=2, etiquetas_por_item={}, hoy=date(2026, 6, 1)
+    )
+    assert [e["id"] for e in elegidos] == ["alta", "baja"]
+
+
 def test_nota_combina_titulo_y_descripcion():
     nota = ag._nota_de(_item(titulo="Título", descripcion="Por qué importa"))
     assert nota == "Título\n\nPor qué importa"

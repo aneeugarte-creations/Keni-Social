@@ -137,6 +137,34 @@ def test_respeta_cap_maximo_y_orden():
     assert [e["id"] for e in elegidos] == ["c0", "c1"]
 
 
+def test_score_ordena_que_se_ilustra_primero_antes_del_cap():
+    """Flujo C: el SCORE ordena el arte (que se ilustra PRIMERO). Con cap=1 entra el de mayor
+    score (compromiso), no el primero en orden de entrada."""
+    from datetime import date
+
+    items = [_item(id="normal", prioridad="baja"), _item(id="must", prioridad="baja")]
+    plats = {"normal": [_plat(id="pn")], "must": [_plat(id="pm")]}
+    elegidos = aa.topics_sin_arte(
+        items,
+        plataformas_por_item=plats,
+        ya_procesados=set(),
+        maximo=1,
+        etiquetas_por_item={"must": ["compromiso"]},
+        hoy=date(2026, 6, 1),
+    )
+    assert [e["id"] for e in elegidos] == ["must"]
+
+
+def test_orden_por_defecto_conserva_entrada():
+    """Sin `etiquetas_por_item`/`hoy`, conserva el orden del tablero."""
+    items = [_item(id="a"), _item(id="b")]
+    plats = {"a": [_plat(id="pa")], "b": [_plat(id="pb")]}
+    elegidos = aa.topics_sin_arte(
+        items, plataformas_por_item=plats, ya_procesados=set(), maximo=3
+    )
+    assert [e["id"] for e in elegidos] == ["a", "b"]
+
+
 # --------------------------------------------------------------------------- #
 # prompt_arte                                                                  #
 # --------------------------------------------------------------------------- #

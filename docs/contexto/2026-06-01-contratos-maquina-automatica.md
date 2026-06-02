@@ -94,6 +94,13 @@ tres primeros en el hosted del piloto: con `KENI_PUBLICAR_REAL` OFF, todo para e
 revisión y nada sale a redes sin que el humano lo autorice. (El encendido efectivo en el
 deploy lo aplica el Flujo C; este paso 0 solo fija la semántica.)
 
+**Cómo encender los flags para validar (Flujo C, Fase 2):** el procedimiento concreto (en
+caliente vía `/data/ajustes.toml` o por env en `deploy/docker-compose.yml`), por qué es seguro
+(todo para en la cola de revisión, gate humano intacto) y cómo observar el avance está en
+`deploy/README.md` §"Encender la tubería automática para VALIDACIÓN". El servicio que corre los
+daemons en prod es `daemons` (`python -m keni_consola.daemons`), que ahora arranca también
+`autogen_copy`/`autogen_arte` (gateados; def OFF). Los DEFAULTS de los flags siguen OFF en código.
+
 Tuning asociado (sin cambios): `KENI_AUTOGEN_MAX` (def 3), `KENI_AUTOGEN_INTERVALO_HORAS`
 (def 1), `KENI_AUTOGEN_ARTE_MAX` (def 3), `KENI_RADAR_AUTO_UMBRAL` (def 50000), etc.
 

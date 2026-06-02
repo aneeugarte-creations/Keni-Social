@@ -159,9 +159,12 @@ services:
     # sin este servicio los hilos demonio de fondo NO correrian en prod. Corre
     # `python -m keni_consola.daemons`: refresco de metricas (cuenta + por pieza), alertas de
     # rendimiento/reciclaje, scanner de vencimientos, captura comercial, programador (DRY-RUN
-    # salvo KENI_PUBLICAR_REAL) y auto-promocion del Radar (solo con KENI_RADAR_AUTO). NO
-    # publica ni crea contenido por su cuenta; NO publica puertos ni va por Traefik. Misma
-    # imagen que el `back`; comparte Postgres + /data (donde viven las credenciales Metricool).
+    # salvo KENI_PUBLICAR_REAL), auto-promocion del Radar (solo con KENI_RADAR_AUTO) y la
+    # AUTO-PRODUCCION de la tuberia (Flujo C): auto-copy (KENI_AUTOGEN) + auto-arte
+    # (KENI_AUTOGEN_ARTE), que llevan los temas a BORRADOR en la cola de revision. NO publica
+    # ni aprueba contenido por su cuenta (la auto-produccion para en el gate humano); NO
+    # publica puertos ni va por Traefik. Misma imagen que el `back`; comparte Postgres + /data
+    # (donde viven las credenciales Metricool y la clave del proveedor de imagen del auto-arte).
     build:
       context: ..
       dockerfile: deploy/back/Dockerfile
@@ -195,9 +198,15 @@ services:
       KENI_AFP_CLIENT_ID: ${KENI_AFP_CLIENT_ID:-}
       KENI_AFP_CLIENT_SECRET: ${KENI_AFP_CLIENT_SECRET:-}
       # GATES DE SEGURIDAD: ausentes por defecto. Sin estos, el sistema NO publica ni crea
-      # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md):
+      # contenido solo. Activar SOLO con decision explicita (ver deploy/README.md §Validacion):
+      #   KENI_RADAR_AUTO:    "1"   # auto-promueve temas del Radar (def: solo bandeja revisable)
+      #   KENI_AUTOGEN:       "1"   # auto-genera COPY de los temas (borrador a la cola de revision)
+      #   KENI_AUTOGEN_ARTE:  "1"   # auto-genera ARTE de los temas con copy sin imagen
       #   KENI_PUBLICAR_REAL: "1"   # publica de verdad a Metricool (def: dry-run, no postea)
-      #   KENI_RADAR_AUTO: "1"      # auto-promueve temas del Radar (def: solo bandeja revisable)
+      # VALIDACION (decision de direccion 2026-06-01): encender los TRES primeros con
+      # KENI_PUBLICAR_REAL OFF. Es seguro: todo para en la cola de revision; nada sale a redes
+      # sin que el humano lo autorice. Los flags tambien se encienden EN CALIENTE desde el store
+      # editable (/data/ajustes.toml), sin reiniciar el contenedor (store > env > defecto).
     volumes:
       - keni-data:/data
     networks:

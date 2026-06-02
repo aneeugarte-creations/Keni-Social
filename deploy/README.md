@@ -233,6 +233,64 @@ El comando es **idempotente**: si se interrumpe, vuelve a correrlo sin miedo (lo
 ya presentes se saltan). **No migra el YAML editorial** (fuera de alcance): ese viaja con
 el volumen `keni-data`. Tras el cutover, mantén el backup hasta verificar.
 
+## Encender la tubería automática para VALIDACIÓN (Flujo C, Fase 2)
+
+La "máquina automática" lleva cada tema de entrada a **borrador completo en la cola de
+revisión** encadenando los daemons: `entrada → (radar_auto) → autogen_copy → autogen_arte →
+cola de revisión`. Los cuatro flags vienen **OFF por defecto** (conservador). Para validar la
+cadena end-to-end en el hosted del piloto, la decisión de dirección (2026-06-01) es **encender
+los tres de producción y dejar el de publicar OFF**:
+
+| Flag | Qué hace | Validación |
+|---|---|---|
+| `KENI_RADAR_AUTO` | Auto-promueve temas virales del Radar al tablero | **ON** |
+| `KENI_AUTOGEN` | Auto-genera COPY de los temas (borrador a la cola) | **ON** |
+| `KENI_AUTOGEN_ARTE` | Auto-genera ARTE de los temas con copy sin imagen | **ON** |
+| `KENI_PUBLICAR_REAL` | Publica de verdad a Metricool | **OFF** (queda en dry-run) |
+
+**Por qué es SEGURO encender los tres primeros:** la auto-producción solo PRODUCE hasta el
+borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de revisión** (`/api/panel`,
+`/revision/editorial`); el **gate humano** (aprobación multinivel) sigue intacto. **Nada sale a
+redes** sin que el humano lo autorice: el posteo real va por Metricool y está gated por
+`KENI_PUBLICAR_REAL`, que se queda **OFF**. Además todos los daemons tienen cap por barrido
+(`KENI_AUTOGEN_MAX`, `KENI_AUTOGEN_ARTE_MAX`, `KENI_RADAR_AUTO_MAX`, def 3) y dedup por
+etiqueta, así que no hay avalanchas. El auto-arte **degrada** si no hay proveedor de imagen
+configurado (no hace nada). Los **defaults siguen OFF en código**: encender es una decisión de
+operación, no un cambio de fuente.
+
+Quién los lee: el servicio **`daemons`** (`python -m keni_consola.daemons`) es el que corre los
+hilos de fondo en prod (el `back` no arranca daemons; el `worker` solo procesa la cola). Los
+flags y el tuning se leen con precedencia **store editable (`/data/ajustes.toml`) > env >
+default**.
+
+**Dos formas de encender** (cualquiera vale; el store gana al env):
+
+1. **En caliente, sin reiniciar** (recomendado para validar): cambia el flag en el store editable
+   (`KENI_CONSOLA_AJUSTES=/data/ajustes.toml`, compartido por back/worker/daemons) desde la UI de
+   ajustes o editando el TOML. El bucle de cada daemon comprueba su flag **en cada ciclo**:
+   apagar aplica en ≤ ~1 min; encender tras estar apagado dispara un barrido de inmediato.
+
+2. **Por env** (persistente entre reinicios): descomenta en `deploy/docker-compose.yml` (servicio
+   `daemons`) y recrea el servicio:
+
+   ```yaml
+   #   KENI_RADAR_AUTO:    "1"
+   #   KENI_AUTOGEN:       "1"
+   #   KENI_AUTOGEN_ARTE:  "1"
+   #   KENI_PUBLICAR_REAL deliberadamente NO se pone (sigue OFF = dry-run).
+   ```
+
+   ```bash
+   docker compose up -d --no-deps daemons   # recrea solo el servicio de daemons
+   ```
+
+**Observar el avance:** `GET /api/panel/tuberia` cuenta los temas por etapa de la cadena
+(`priorizada → generando_copy → generando_arte → lista_para_revisar`); `GET /api/panel/dia`
+muestra la lista del día ordenada por score. La cola de aprobación está en `GET /api/panel`
+(`cola.total`).
+
+---
+
 ## Exponer el MCP (opcional)
 
 El `mcp` es interno y **sin auth propia**. Para que clientes Claude del equipo lo

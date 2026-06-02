@@ -12,13 +12,18 @@ NO correrian en produccion. Este proceso aparte los mantiene vivos:
   - scanner de vencimientos (emite `contenido.vencido` a los webhooks),
   - refresco de metricas por cuenta y POR PIEZA (cache caliente desde Metricool),
   - alertas de rendimiento / reciclaje (solo leen + emiten eventos internos),
-  - auto-promocion del Radar (solo arranca con `KENI_RADAR_AUTO=1`),
+  - auto-promocion del Radar (solo barre con `KENI_RADAR_AUTO=1`),
+  - auto-produccion (Flujo C): auto-copy (`KENI_AUTOGEN=1`) y auto-arte
+    (`KENI_AUTOGEN_ARTE=1`) que llevan los temas de entrada a borrador en la cola de
+    revision; el resultado para en el gate humano (nada se publica solo),
   - reaper de generaciones zombi (cierra como `error` las `ejecutando` huerfanas).
 
 SAFE BY DEFAULT: este proceso NO publica nada ni crea/aprueba contenido por su
 cuenta. Los unicos caminos que lo harian estan gated por env y vienen AUSENTES por
-defecto (`KENI_PUBLICAR_REAL`, `KENI_RADAR_AUTO`). Es el mismo conjunto de daemons
-que `python -m keni_consola` arranca junto al servidor; aqui van sin uvicorn.
+defecto (`KENI_PUBLICAR_REAL`, `KENI_RADAR_AUTO`, `KENI_AUTOGEN`, `KENI_AUTOGEN_ARTE`).
+La auto-produccion (autogen) PRODUCE hasta el borrador, pero NUNCA publica: el posteo
+real sigue gated por `KENI_PUBLICAR_REAL` (OFF). Es el mismo conjunto de daemons que
+`python -m keni_consola` arranca junto al servidor; aqui van sin uvicorn.
 """
 
 from __future__ import annotations
@@ -43,6 +48,8 @@ def main() -> int:
 
     from .alertas_rendimiento import iniciar_alertas_rendimiento
     from .algoritmos_refresco import iniciar_refresco_algoritmos
+    from .autogen_arte import iniciar_autogen_arte
+    from .autogen_copy import iniciar_autogen
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
     from .media_gc_daemon import iniciar_media_gc
@@ -60,6 +67,14 @@ def main() -> int:
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
+    # TUBERIA automatica (Flujo C): los daemons de auto-produccion. Encadenan
+    # entrada -> (radar_auto) -> copy -> arte -> cola de revision. GATEADOS y SAFE BY
+    # DEFAULT: el hilo arranca SIEMPRE pero solo barre con su flag ON (KENI_AUTOGEN /
+    # KENI_AUTOGEN_ARTE, def OFF). Sin ellos no se auto-genera nada. Antes solo `__main__`
+    # los arrancaba; con el split de servicios (NINGUN proceso hosted corre `__main__`) sin
+    # esto la auto-produccion NO correria en produccion aunque se encendieran los flags.
+    iniciar_autogen()  # auto-copy; no barre salvo KENI_AUTOGEN=1 (def OFF).
+    iniciar_autogen_arte()  # auto-arte; no barre salvo KENI_AUTOGEN_ARTE=1 (def OFF) ni sin proveedor de imagen.
     iniciar_refresco_algoritmos()  # ingesta de feeds de algoritmo; solo lee si KENI_ALGORITMOS_AUTO=1.
     iniciar_sugerencias_editoriales()  # digest diario de sugerencias; encola solo si KENI_SUGERENCIAS_EDITORIALES=1.
     iniciar_media_gc()  # GC de media huerfana; no borra salvo KENI_MEDIA_GC=1 (def OFF).

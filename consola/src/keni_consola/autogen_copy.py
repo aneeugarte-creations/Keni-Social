@@ -34,9 +34,10 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import date
 from typing import Any
 
-from . import config, daemon_util, generaciones, marcas, redes, repos
+from . import config, daemon_util, generaciones, marcas, priorizacion, redes, repos
 from .dominio import generar as dom_generar
 from .estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 
@@ -92,11 +93,30 @@ def ids_ya_generados() -> set[str]:
         return set()
 
 
+def _etiquetas_por_item() -> dict[str, list[str]]:
+    """id de contenido -> NOMBRES de etiqueta resueltos (para el score). Best-effort: {}.
+
+    `priorizacion.score_contenido` resuelve compromiso/green por NOMBRE de etiqueta, asi que
+    traducimos los ids a nombres. Un fallo de lectura deja el mapa vacio (el score cae a sus
+    pesos base: prioridad/flujo/fecha/frescura), nunca rompe el barrido.
+    """
+    try:
+        nombres = {e.get("id", ""): e.get("nombre", "") for e in repos.listar_etiquetas()}
+        return {
+            cid: [nombres.get(eid, "") for eid in eids]
+            for cid, eids in repos.etiquetas_por_contenido().items()
+        }
+    except Exception:  # noqa: BLE001 -- sin etiquetas legibles, el score usa sus pesos base
+        return {}
+
+
 def topics_pendientes(
     items: list[dict[str, Any]],
     *,
     ya_generados: set[str],
     maximo: int,
+    etiquetas_por_item: dict[str, list[str]] | None = None,
+    hoy: date | None = None,
 ) -> list[dict[str, Any]]:
     """Subconjunto de `items` del tablero que se debe auto-generar (PURA, testeable).
 
@@ -109,9 +129,18 @@ def topics_pendientes(
       - no ya generados (dedup por id),
       - se RECORTA a `maximo` (cap de seguridad por barrido).
 
-    Conserva el ORDEN de entrada (el tablero ya viene ordenado por prioridad+fecha), asi que
-    con cap se atienden primero los de mayor prioridad. Determinista.
+    ORDEN (Flujo C): el SCORE de priorizacion ordena la COLA DE TRABAJO de la IA (que se
+    auto-genera primero), no solo la vista Panel-9am. Si se pasan `etiquetas_por_item` (id ->
+    NOMBRES) y `hoy`, se CONSUME `priorizacion.ordenar_por_score` ANTES de filtrar+capar, de
+    modo que con cap entran los temas de MAYOR score. Es un WRAPPER que solo CONSUME esa
+    funcion: no toca la firma de `score_contenido` (compatible con que el Flujo E la enriquezca
+    despues). Si no se pasan, conserva el ORDEN de entrada (el tablero ya viene por
+    prioridad+fecha). Determinista en ambos casos.
     """
+    if etiquetas_por_item is not None and hoy is not None:
+        items = priorizacion.ordenar_por_score(
+            items, etiquetas_por_item=etiquetas_por_item, hoy=hoy
+        )
     elegidos: list[dict[str, Any]] = []
     for item in items:
         if len(elegidos) >= maximo:
@@ -201,7 +230,14 @@ def ejecutar_barrido() -> list[dict[str, Any]]:
         _log.exception("No se pudo leer el tablero para la auto-generacion.")
         return []
     elegidos = topics_pendientes(
-        items, ya_generados=ids_ya_generados(), maximo=config.autogen_max()
+        items,
+        ya_generados=ids_ya_generados(),
+        maximo=config.autogen_max(),
+        # El SCORE ordena que se auto-genera primero (la cola de trabajo de la IA, no solo
+        # el Panel-9am). Best-effort: si no se pueden resolver las etiquetas, cae al orden
+        # del tablero (prioridad+fecha) sin romper el barrido.
+        etiquetas_por_item=_etiquetas_por_item(),
+        hoy=date.today(),
     )
     lanzados: list[dict[str, Any]] = []
     for item in elegidos:

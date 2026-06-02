@@ -29,7 +29,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, metricas_cache, metricas_priorizacion, priorizacion, repos
+from .. import (
+    marcas,
+    metricas_cache,
+    metricas_priorizacion,
+    pipeline_estado,
+    priorizacion,
+    repos,
+)
 from ..dominio.publicaciones import cola_de_aprobacion, proximas_programadas
 from ..estados import CLASE_CONTENIDO
 
@@ -156,11 +163,7 @@ def _lista_dia(marca: str | None) -> dict[str, Any]:
         if (it.get("clase") or CLASE_CONTENIDO) == CLASE_CONTENIDO
         and (it.get("estado") or "") not in _ESTADOS_CERRADOS
     ]
-    nombres_et = _nombres_etiqueta()
-    etiquetas_por_item = {
-        cid: [nombres_et.get(eid, "") for eid in eids]
-        for cid, eids in repos.etiquetas_por_contenido().items()
-    }
+    etiquetas_por_item = _etiquetas_por_contenido_nombres()
     hoy = date.today()
     # Fase 5 (loop de aprendizaje): bonus por rendimiento historico de la marca. GATEADO por
     # `KENI_PRIORIZA_METRICAS` (def OFF) y BEST-EFFORT: si el flag esta off o las metricas no
@@ -228,7 +231,64 @@ async def lista_dia(request: Request) -> Response:
     return JSONResponse(_lista_dia(marca))
 
 
+def _etiquetas_por_contenido_nombres() -> dict[str, list[str]]:
+    """id de contenido -> NOMBRES de etiqueta resueltos (ids -> nombres). Best-effort."""
+    nombres_et = _nombres_etiqueta()
+    return {
+        cid: [nombres_et.get(eid, "") for eid in eids]
+        for cid, eids in repos.etiquetas_por_contenido().items()
+    }
+
+
+def _tuberia(marca: str | None) -> dict[str, Any]:
+    """Observabilidad de la TUBERIA automatica: cuantos temas hay EN CADA ETAPA (Flujo C).
+
+    Reusa los caminos de lectura existentes (`repos.listar_contenido` /
+    `listar_contenido_plataforma` / `etiquetas_por_contenido`) y la logica PURA de
+    `pipeline_estado`. Deriva la etapa de cada tema (priorizada / generando copy / generando
+    arte / lista para revisar) de las senales que YA existen (estado por plataforma, copy,
+    imagen, etiquetas de dedup), SIN persistir un campo nuevo. Solo LECTURA.
+
+    Best-effort: si la lectura del tablero falla, devuelve el conteo en cero (forma estable
+    para la UI) en vez de romper el panel.
+    """
+    etapas_base = {e: 0 for e in pipeline_estado.ETAPAS[:-1]}
+    try:
+        items = repos.listar_contenido(marca=marca)
+    except Exception:  # noqa: BLE001 -- el panel no debe caer por la lectura del tablero
+        return {"por_etapa": etapas_base, "total": 0, "etapas": list(etapas_base)}
+
+    plataformas_por_item: dict[str, list[dict[str, Any]]] = {}
+    for it in items:
+        cid = it.get("id") or ""
+        if not cid:
+            continue
+        try:
+            plataformas_por_item[cid] = repos.listar_contenido_plataforma(cid)
+        except Exception:  # noqa: BLE001 -- una lectura fallida deja el item sin plataformas
+            plataformas_por_item[cid] = []
+
+    por_etapa = pipeline_estado.contar_por_etapa(
+        items,
+        plataformas_por_item=plataformas_por_item,
+        etiquetas_por_item=_etiquetas_por_contenido_nombres(),
+    )
+    return {
+        "por_etapa": por_etapa,
+        "total": sum(por_etapa.values()),
+        # Orden canonico (entrada -> salida) para que la UI pinte las etapas en secuencia.
+        "etapas": list(pipeline_estado.ETAPAS[:-1]),
+    }
+
+
+async def tuberia(request: Request) -> Response:
+    """GET /api/panel/tuberia: conteo de temas por etapa de la tuberia. `?marca=` opcional."""
+    marca = request.query_params.get("marca") or None
+    return JSONResponse(_tuberia(marca))
+
+
 RUTAS = [
     Route("/api/panel", resumen, methods=["GET"]),
     Route("/api/panel/dia", lista_dia, methods=["GET"]),
+    Route("/api/panel/tuberia", tuberia, methods=["GET"]),
 ]
