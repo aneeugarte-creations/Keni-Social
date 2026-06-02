@@ -531,6 +531,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         notas               TEXT NOT NULL DEFAULT '',
         tipo_contenido      TEXT NOT NULL DEFAULT 'ia',
         id_post_metricool   TEXT NOT NULL DEFAULT '',
+        senal_viralidad     INTEGER NOT NULL DEFAULT 0,
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -1739,6 +1740,11 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # El id REAL por red sigue viviendo en `contenido_plataforma.id_post_metricool` (una
     # pieza publica en N redes); este es un acceso directo a NIVEL contenido. Legado -> "".
     ("id_post_metricool", "TEXT NOT NULL DEFAULT ''"),
+    # Señal de VIRALIDAD del Radar (Fase 5, loop de aprendizaje): el trafico aproximado REAL
+    # de Google Trends (`radar.Tema.senal`) con que nacio la pieza, para que el score de
+    # priorizacion (`priorizacion.peso_viralidad`) la use al ordenar la lista del dia. 0 =
+    # sin señal (alta manual, RSS, o BD vieja): la pieza puntua como antes de la Fase 5.
+    ("senal_viralidad", "INTEGER NOT NULL DEFAULT 0"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
@@ -3314,6 +3320,7 @@ _COLS_CONTENIDO = (
     "notas",
     "tipo_contenido",
     "id_post_metricool",
+    "senal_viralidad",
     "creado",
     "actualizado",
 )
@@ -3350,7 +3357,21 @@ def _fila_a_contenido(fila: Any) -> dict[str, Any]:
     item["estado"] = fila["estado"] or "pendiente"
     item["prioridad"] = fila["prioridad"] or PRIORIDAD_CONTENIDO_DEFECTO
     item["clase"] = fila["clase"] or CLASE_CONTENIDO
+    # Señal de viralidad como int (Fase 5): defensivo ante NULL/no-numerico de bases viejas.
+    try:
+        item["senal_viralidad"] = int(fila["senal_viralidad"] or 0)
+    except (TypeError, ValueError):
+        item["senal_viralidad"] = 0
     return item
+
+
+def _entero_no_negativo(valor: Any) -> int:
+    """Entero >=0 desde un valor del llamante; 0 si no parsea o es negativo (defensivo)."""
+    try:
+        n = int(valor)
+    except (TypeError, ValueError):
+        return 0
+    return n if n > 0 else 0
 
 
 def crear_contenido(
@@ -3373,6 +3394,7 @@ def crear_contenido(
     notas: str = "",
     tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
     id_post_metricool: str = "",
+    senal_viralidad: int = 0,
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -3410,6 +3432,8 @@ def crear_contenido(
         # id de Metricool a nivel pieza (Item C): acceso directo opcional para el cruce
         # métricas↔contenido; el id real por red sigue en `contenido_plataforma`. Legado -> "".
         "id_post_metricool": id_post_metricool or "",
+        # Señal de viralidad del Radar (Fase 5): >=0; defensivo ante valores no enteros.
+        "senal_viralidad": _entero_no_negativo(senal_viralidad),
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }

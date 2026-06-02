@@ -202,6 +202,14 @@ ENV_RADAR_AUTO_INTERVALO_HORAS = "KENI_RADAR_AUTO_INTERVALO_HORAS"
 ENV_RADAR_AUTO_MAX = "KENI_RADAR_AUTO_MAX"
 ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
 
+# Loop de aprendizaje (Fase 5): el score de priorizacion tiene en cuenta lo que
+# HISTORICAMENTE rinde por marca (engagement de la fachada de metricas). Gateado OFF por
+# defecto (conservador): sin el flag, la lista del dia ordena EXACTAMENTE como hoy. Con el
+# flag, las piezas de marcas que rinden mas reciben un pequeño bonus de score. Es ADITIVO y
+# DEGRADABLE: si las metricas no estan disponibles, se omite sin romper (vuelve al score base).
+ENV_PRIORIZA_METRICAS = "KENI_PRIORIZA_METRICAS"
+ENV_PRIORIZA_METRICAS_RANGO = "KENI_PRIORIZA_METRICAS_RANGO"
+
 # Auto-refresco de Algoritmos (inteligencia de plataforma): ingiere periodicamente los
 # feeds de blogs oficiales/agregadores. Gateado OFF por defecto (la pagina Algoritmos tiene
 # un boton "Refrescar" manual); con el flag ON, un daemon ingiere cada N horas.
@@ -913,6 +921,25 @@ def radar_auto_marca() -> str:
     llamante la ignora (cae a sin marca): no se confia ciegamente del entorno.
     """
     return _crudo(ENV_RADAR_AUTO_MARCA)
+
+
+def prioriza_metricas_activo() -> bool:
+    """True si el score de priorizacion debe usar las metricas historicas (`KENI_PRIORIZA_METRICAS`).
+
+    Def OFF (conservador): la lista del dia ordena EXACTAMENTE como hoy. Con el flag a un valor
+    afirmativo, las piezas de marcas que historicamente RINDEN mas reciben un pequeño bonus de
+    score. Aditivo y DEGRADABLE: si la fachada de metricas no esta disponible, se omite sin romper.
+    """
+    return _crudo(ENV_PRIORIZA_METRICAS).lower() in _VERDADEROS
+
+
+def prioriza_metricas_rango() -> str:
+    """Rango de metricas para el bonus de priorizacion (`KENI_PRIORIZA_METRICAS_RANGO`, def "mes").
+
+    Es uno de los rangos que entiende la fachada de metricas ("semana"/"mes"/...). Si el valor
+    es invalido, el llamante lo trata best-effort (degrada a sin bonus); no se valida aqui.
+    """
+    return _crudo(ENV_PRIORIZA_METRICAS_RANGO) or "mes"
 
 
 def algoritmos_auto_activo() -> bool:

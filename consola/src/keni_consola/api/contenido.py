@@ -589,6 +589,13 @@ async def desde_radar(request: Request) -> Response:
     if not isinstance(descripcion, str):
         descripcion = ""
 
+    # Señal de viralidad del tema del Radar (Fase 5): se PERSISTE para que el score la use.
+    # El cliente la manda tal cual la trae el Radar (`Tema.a_dict()["senal"]`); defensivo.
+    try:
+        senal_viralidad = int(datos.get("senal", 0) or 0)
+    except (TypeError, ValueError):
+        senal_viralidad = 0
+
     item = repos.crear_contenido(
         clase="contenido",
         flujo="importante",
@@ -601,6 +608,7 @@ async def desde_radar(request: Request) -> Response:
         origen="radar",
         # El tema viene de una FUENTE (Radar), no de arte propio: tipo "fuente" (item E).
         tipo_contenido="fuente",
+        senal_viralidad=senal_viralidad,
     )
     # Checklist "pendientes" (item E): cada plataforma nace con copy e imagen por hacer. Si
     # luego lanzamos generacion de copy en background, su borrador rellenara el copy (y la UI

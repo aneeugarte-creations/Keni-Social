@@ -24,6 +24,25 @@ def test_crear_contenido_minimal(entorno):
     assert c["creado"] and c["actualizado"]
 
 
+def test_senal_viralidad_se_persiste_y_se_lee_como_int(entorno):
+    """La señal del Radar (Fase 5) se guarda y vuelve como int; ausente => 0 (degrada)."""
+    con = db.crear_contenido(flujo="importante", titulo="Trending", senal_viralidad=125_000)
+    assert con["senal_viralidad"] == 125_000
+    leido = db.obtener_contenido(con["id"])
+    assert leido is not None
+    assert leido["senal_viralidad"] == 125_000
+
+    sin = db.crear_contenido(flujo="importante", titulo="Manual")
+    assert sin["senal_viralidad"] == 0
+    assert db.obtener_contenido(sin["id"])["senal_viralidad"] == 0
+
+
+def test_senal_viralidad_invalida_o_negativa_cae_a_cero(entorno):
+    """Un valor no entero o negativo se normaliza a 0 (defensivo ante el llamante)."""
+    c = db.crear_contenido(titulo="x", senal_viralidad=-9)
+    assert c["senal_viralidad"] == 0
+
+
 def test_crear_tarea_libre(entorno):
     """Una tarea libre del equipo se guarda con clase='tarea' y sin plataformas."""
     t = db.crear_contenido(clase="tarea", titulo="Revisar relevo de la noche")

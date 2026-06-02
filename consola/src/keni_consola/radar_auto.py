@@ -133,6 +133,12 @@ def promover_temas(temas: list[dict[str, Any]], *, marca: str = "") -> list[dict
         titulo = (tema.get("titulo") or "").strip()
         if not titulo:
             continue
+        # Señal de viralidad del Radar (Fase 5): se PERSISTE en el contenido para que el
+        # score de priorizacion la use. Defensivo ante valores no enteros (best-effort).
+        try:
+            senal = int(tema.get("senal", 0) or 0)
+        except (TypeError, ValueError):
+            senal = 0
         item = repos.crear_contenido(
             clase="contenido",
             flujo="importante",
@@ -142,6 +148,7 @@ def promover_temas(temas: list[dict[str, Any]], *, marca: str = "") -> list[dict
             prioridad="alta",  # supero un umbral alto de viralidad: merece prioridad
             fecha_objetivo=date.today().isoformat(),
             origen=ORIGEN_AUTO,
+            senal_viralidad=senal,
         )
         creados.append(item)
     return creados

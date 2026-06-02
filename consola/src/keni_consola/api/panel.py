@@ -29,7 +29,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, metricas_cache, priorizacion, repos
+from .. import marcas, metricas_cache, metricas_priorizacion, priorizacion, repos
 from ..dominio.publicaciones import cola_de_aprobacion, proximas_programadas
 from ..estados import CLASE_CONTENIDO
 
@@ -162,8 +162,15 @@ def _lista_dia(marca: str | None) -> dict[str, Any]:
         for cid, eids in repos.etiquetas_por_contenido().items()
     }
     hoy = date.today()
+    # Fase 5 (loop de aprendizaje): bonus por rendimiento historico de la marca. GATEADO por
+    # `KENI_PRIORIZA_METRICAS` (def OFF) y BEST-EFFORT: si el flag esta off o las metricas no
+    # estan, devuelve {} y la lista ordena EXACTAMENTE como antes.
+    bonus_metricas = metricas_priorizacion.bonus_por_marca()
     ordenados = priorizacion.ordenar_por_score(
-        items, etiquetas_por_item=etiquetas_por_item, hoy=hoy
+        items,
+        etiquetas_por_item=etiquetas_por_item,
+        hoy=hoy,
+        bonus_metricas_por_marca=bonus_metricas,
     )
     # Una misma pieza puede existir como VARIOS temas con el mismo título: el handoff A→C
     # crea un borrador —y por tanto un tema— por red. En la lista del día solo se muestra el
@@ -205,7 +212,10 @@ def _lista_dia(marca: str | None) -> dict[str, Any]:
                 "origen": it.get("origen") or "manual",
                 "etiquetas": [e for e in etiquetas_por_item.get(cid, []) if e],
                 "score": priorizacion.score_contenido(
-                    it, etiquetas=etiquetas_por_item.get(cid, []), hoy=hoy
+                    it,
+                    etiquetas=etiquetas_por_item.get(cid, []),
+                    hoy=hoy,
+                    bonus_metricas=bonus_metricas.get(marca_id),
                 ),
             }
         )
