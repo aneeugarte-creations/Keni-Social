@@ -9,7 +9,16 @@ internals (`config`/`reporte`/`schema`). El SPA dibuja el dashboard a partir de
   - `/api/metricas/comparar`: comparativa A vs B (total + por marca).
   - `/api/metricas/analisis`: análisis diario con narrativa "qué cambió y por qué"
     + siguiente paso (F6/#146); ensambla reporte + picos en una lectura accionable.
+  - `/api/metricas/piezas-export`: descarga del Top 5 / Peores 5 de piezas (csv|md|json).
+  - `/api/metricas/piezas-por-etiqueta`: rendimiento del periodo por serie/tipo (cruce
+    piezas↔contenido para resolver tipo_contenido + etiquetas; Item C).
   - `/api/metricas/export.{csv,md,json}`: descargas (misma serializacion que el CLI).
+
+DEFERIDO / BLOQUEADO — "procedencia de la audiencia" (de dónde viene quién ve el
+contenido): NO implementado a propósito. Requiere la Meta Graph API por cliente
+(insights de audiencia/demografía con token y permisos de cada página), que el
+proveedor primario (Metricool) no expone de forma uniforme. Queda fuera del v1 de
+solo-lectura multi-fuente hasta cablear Meta por cliente.
 """
 
 from __future__ import annotations
