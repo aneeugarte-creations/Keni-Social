@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from keni_consola.api import rss
+from keni_consola.dominio import extraccion_url
 from keni_consola.dominio.publicaciones import publicacion_a_dict
 
 from .conftest import _cliente, lanzador_generacion_completa
@@ -881,6 +882,8 @@ def test_generar_titulo_obligatorio_400(cliente):
 # Generar desde fuente PROPIA: imagen original del articulo -> imagen_fuente.    #
 # Gate SERVER-SIDE: solo si la fuente es `propia` Y la imagen es http(s) la pieza #
 # nace `tipo_contenido='fuente'` con esa URL; si no, se ignora (queda 'ia').      #
+# Ademas, con `imagen_fuente` la imagen original se DESCARGA a media (S3/disco) y #
+# la pieza nace con `imagen=<asset>` (la descarga se MOCKEA: sin red ni S3).      #
 # Se prueba END-TO-END por la API (lanzador completo sincrono): es el punto mas   #
 # robusto y realista (cubre TODA la cadena generar -> jobspec -> copy ->          #
 # crear_publicaciones_desde_piezas -> crear_borrador -> repos/db), no un atajo.   #
@@ -890,13 +893,22 @@ _IMG_FUENTE = "https://example.com/articulo/foto-original.jpg"
 
 
 def test_generar_fuente_propia_usa_imagen_original(entorno, monkeypatch):
-    """Fuente `propia=True` + `imagen=<http>` => la pieza nace con esa imagen_fuente.
+    """Fuente `propia=True` + `imagen=<http>` => la pieza nace hosteando la imagen original.
 
     Cadena completa: el gate del endpoint (fuente propia + http) propaga `imagen_fuente`
-    y `tipo_contenido='fuente'` hasta la publicacion. La pieza NO lleva placa compuesta
-    (su `imagen` queda vacia: el default es la imagen original del articulo).
+    y `tipo_contenido='fuente'` hasta la publicacion; `crear_publicaciones_desde_piezas`
+    DESCARGA la imagen original UNA vez a media (S3/disco) y fija `imagen=<nombre asset>`.
+    La descarga se MOCKEA (sin red) devolviendo un nombre de media fijo.
     """
     monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    # Mock de la descarga a media: nunca toca la red ni S3; devuelve un nombre de asset fijo.
+    descargas: list[str] = []
+
+    def fake_descargar(url):  # noqa: ANN001
+        descargas.append(url)
+        return "asset-hosteado.jpg"
+
+    monkeypatch.setattr(extraccion_url, "descargar_imagen_a_media", fake_descargar)
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
     f = cli.post(
         "/api/rss/fuentes",
@@ -917,16 +929,56 @@ def test_generar_fuente_propia_usa_imagen_original(entorno, monkeypatch):
         },
     )
     assert r.status_code == 200
+    # La imagen original se descargo a media UNA sola vez (no una por pieza).
+    assert descargas == [_IMG_FUENTE]
     pubs = cli.get("/api/publicaciones").json()["publicaciones"]
     assert len(pubs) == 2
     for p in pubs:
         assert p["tipo_contenido"] == "fuente"
         assert p["imagen_fuente"] == _IMG_FUENTE
-        # Sin placa compuesta: no hay archivo subido; la imagen mostrada cae a la URL fuente.
-        assert p["imagen"] == ""
-        assert p["imagen_url"] == _IMG_FUENTE
+        # Ahora la pieza nace con un ASSET hosteado (no ""): la imagen original ya es propia.
+        assert p["imagen"] == "asset-hosteado.jpg"
+        assert p["imagen_url"] == "/api/media/asset-hosteado.jpg"
         # Nace con la imagen ya puesta: el check de imagen NO queda pendiente.
         assert p["falta_imagen"] is False
+
+
+def test_generar_fuente_propia_descarga_falla_degrada_a_url(entorno, monkeypatch):
+    """Si la descarga de la imagen original FALLA, la pieza degrada a `imagen=""`.
+
+    La descarga es un extra TOLERANTE: si `descargar_imagen_a_media` lanza, la pieza no se
+    rompe, queda con `imagen=""` e `imagen_url` cae a la URL original (`imagen_fuente`).
+    """
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+
+    def revienta(url):  # noqa: ANN001
+        raise extraccion_url.ExtraccionError("La URL no devolvió ninguna imagen.")
+
+    monkeypatch.setattr(extraccion_url, "descargar_imagen_a_media", revienta)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    f = cli.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Sitio propio", "url": _URL_OK, "marca": "unotv", "propia": True},
+    ).json()["fuente"]
+
+    r = cli.post(
+        "/api/rss/generar",
+        json={
+            "titulo": "Avance de IA y agentes",
+            "marca": "unotv",
+            "redes": ["x"],
+            "fuente_id": f["id"],
+            "clave": "guid-ia",
+            "imagen": _IMG_FUENTE,
+        },
+    )
+    assert r.status_code == 200
+    p = cli.get("/api/publicaciones").json()["publicaciones"][0]
+    assert p["tipo_contenido"] == "fuente"
+    assert p["imagen_fuente"] == _IMG_FUENTE
+    # Degradacion: sin asset hosteado, la imagen mostrada cae a la URL original.
+    assert p["imagen"] == ""
+    assert p["imagen_url"] == _IMG_FUENTE
 
 
 def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):

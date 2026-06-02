@@ -201,6 +201,96 @@ def _descargar_real(url: str) -> str:
 _DESCARGADOR = _descargar_real
 
 
+# --------------------------------------------------------------------------- #
+# Descarga de una IMAGEN remota a media (S3/disco)                            #
+# --------------------------------------------------------------------------- #
+# Reutiliza el MISMO guard SSRF + límites que la extracción de texto. Sirve para
+# HOSTEAR la imagen original de un artículo (p.ej. un RSS de marca propia) como un
+# asset propio publicable, en vez de depender de una URL externa que puede caducar.
+
+
+def _descargar_bytes_real(url: str) -> bytes:
+    """Descarga los BYTES crudos de una URL (httpx, timeout + tope de tamaño).
+
+    El guard SSRF se aplica ANTES (en `descargar_imagen_a_media`). Import diferido de
+    httpx (igual que `_descargar_real`). Punto INYECTABLE (`_DESCARGADOR_BYTES`): los
+    tests lo parchean para NUNCA tocar la red. Lanza `ExtraccionError` (en español).
+    """
+    try:
+        import httpx
+    except ImportError as e:  # pragma: no cover -- httpx es dependencia transitiva
+        raise ExtraccionError("Falta la librería para descargar imágenes.") from e
+
+    cabeceras = {"User-Agent": "Mozilla/5.0 (compatible; KeniSocial/1.0; +operativo)"}
+    try:
+        with httpx.Client(timeout=_TIMEOUT, follow_redirects=True, headers=cabeceras) as cliente:
+            with cliente.stream("GET", url) as respuesta:
+                if respuesta.status_code != 200:
+                    raise ExtraccionError(
+                        f"La imagen respondió con un error (HTTP {respuesta.status_code})."
+                    )
+                trozos: list[bytes] = []
+                total = 0
+                for trozo in respuesta.iter_bytes():
+                    total += len(trozo)
+                    if total > _MAX_BYTES:
+                        raise ExtraccionError("La imagen es demasiado grande y se canceló la descarga.")
+                    trozos.append(trozo)
+    except ExtraccionError:
+        raise
+    except httpx.TimeoutException as e:
+        raise ExtraccionError("La imagen tardó demasiado y se canceló.") from e
+    except httpx.HTTPError as e:
+        raise ExtraccionError("No se pudo descargar la imagen.") from e
+    return b"".join(trozos)
+
+
+# Punto INYECTABLE para tests (sin red): la descarga binaria de imagen.
+_DESCARGADOR_BYTES = _descargar_bytes_real
+
+
+def _ext_imagen(datos: bytes) -> str | None:
+    """Extensión de imagen deducida por los magic bytes; None si no es una imagen soportada.
+
+    Validar el contenido REAL (no fiarse del content-type ajeno) evita guardar como imagen
+    algo que no lo es, y fija la extensión/`content-type` correctos al servirla.
+    """
+    if datos.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if datos.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if datos[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if datos[:4] == b"RIFF" and datos[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def descargar_imagen_a_media(url: str) -> str:
+    """Descarga una imagen desde `url` (SSRF guard) y la GUARDA en media (S3/disco).
+
+    Devuelve el nombre del objeto guardado (servible en `/api/media/{nombre}`), ya un
+    asset propio publicable. Lanza `ExtraccionError` (mensaje en español) si la URL es
+    inválida/insegura, la descarga falla, o el contenido no es una imagen soportada
+    (png/jpg/gif/webp).
+    """
+    from .. import media
+
+    url_limpia, error = validar_url(url)
+    if error is not None or url_limpia is None:
+        raise ExtraccionError(error or "La URL de la imagen no es válida.")
+    datos = _DESCARGADOR_BYTES(url_limpia)
+    if not datos:
+        raise ExtraccionError("La URL no devolvió ninguna imagen.")
+    ext = _ext_imagen(datos)
+    if ext is None:
+        raise ExtraccionError("El contenido descargado no es una imagen (png/jpg/gif/webp).")
+    try:
+        return media.guardar_bytes(datos, ext=ext)
+    except media.MediaError as e:
+        raise ExtraccionError(str(e)) from e
+
+
 class _ExtractorTexto(HTMLParser):
     """Extrae texto legible de un HTML: tira basura, separa bloques, capta el titulo.
 

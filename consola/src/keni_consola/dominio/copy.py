@@ -132,6 +132,18 @@ def crear_publicaciones_desde_piezas(
     (best-effort, no debe abortar toda la generación por una pieza).
     """
     creadas: list[dict[str, object]] = []
+    # Imagen ORIGINAL de fuente (RSS de marca propia): la DESCARGAMOS una sola vez a media
+    # (S3) para que la pieza nazca con un asset propio PUBLICABLE (no una URL externa que
+    # puede caducar). Tolerante: si la descarga falla, `imagen_descargada` queda "" y la
+    # pieza cae a `imagen_url`=`imagen_fuente` (visible, aunque no publicable).
+    imagen_descargada = ""
+    if imagen_fuente:
+        from . import extraccion_url
+
+        try:
+            imagen_descargada = extraccion_url.descargar_imagen_a_media(imagen_fuente)
+        except Exception:  # noqa: BLE001 -- la descarga es un extra; nunca rompe la generación
+            imagen_descargada = ""
     try:
         for pieza in piezas:
             red = pieza.get("red")
@@ -145,10 +157,10 @@ def crear_publicaciones_desde_piezas(
                 contenido = ""
             if not isinstance(copy_in, str):
                 copy_in = ""
-            # Con imagen ORIGINAL de fuente (RSS de marca propia) NO componemos la placa: la
-            # imagen del artículo es el default (el editor permite cambiarla). Si no, auto-compone
-            # la imagen-plantilla de marca (logo + copy_in, hueco vacío); "" si no hay plantilla.
-            imagen = "" if imagen_fuente else _componer_placa_placeholder(marca, red, copy_in)
+            # Con imagen ORIGINAL de fuente usamos la descargada a media (asset propio
+            # publicable); si la descarga falló, "" y la pieza cae a la URL original. Sin
+            # fuente, auto-compone la placa de marca (logo + copy_in, hueco vacío); "" si no hay.
+            imagen = imagen_descargada if imagen_fuente else _componer_placa_placeholder(marca, red, copy_in)
             creada: dict[str, object] | None = None
             if contenido_id:
                 # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si

@@ -21,6 +21,7 @@ from starlette.routing import Route
 
 from .. import generaciones, media
 from .._http_json import leer_json
+from ..dominio import extraccion_url
 from ..seguridad import autor_de_peticion
 
 
@@ -103,8 +104,29 @@ async def generar(request: Request) -> Response:
     return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
 
 
+async def desde_url(request: Request) -> Response:
+    """Descarga una imagen desde una URL externa al almacén -> `{id, url}`.
+
+    Reutiliza la imagen ORIGINAL de un artículo (p.ej. de un RSS de marca propia) como un
+    asset PROPIO y publicable. Guard SSRF + tope de tamaño + validación de que el contenido
+    sea realmente una imagen (en `extraccion_url.descargar_imagen_a_media`).
+    """
+    datos = await leer_json(request)
+    url = datos.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return JSONResponse({"error": "Falta la URL de la imagen."}, status_code=400)
+    try:
+        nombre = extraccion_url.descargar_imagen_a_media(url.strip())
+    except extraccion_url.ExtraccionError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        return JSONResponse({"error": "No se pudo descargar la imagen."}, status_code=500)
+    return JSONResponse({"id": nombre, "url": f"/api/media/{nombre}"})
+
+
 RUTAS = [
     Route("/api/media", subir, methods=["POST"]),
+    Route("/api/media/desde-url", desde_url, methods=["POST"]),
     Route("/api/media/generar", generar, methods=["POST"]),
     Route("/api/media/{nombre}", servir, methods=["GET"]),
 ]

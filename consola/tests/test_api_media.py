@@ -9,6 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 from keni_consola import media
+from keni_consola.dominio import extraccion_url
 
 from .conftest import _cliente, lanzador_imagen_ejecuta
 
@@ -79,6 +80,45 @@ def test_servir_anti_traversal(cliente):
 def test_resolver_media_rechaza_traversal(entorno):
     assert media.resolver_media("../../etc/passwd") is None
     assert media.resolver_media("/etc/passwd") is None
+
+
+# --------------------------------------------------------------------------- #
+# POST /api/media/desde-url (hostear la imagen original de una URL externa)    #
+# --------------------------------------------------------------------------- #
+# La descarga binaria vive detras de `extraccion_url._DESCARGADOR_BYTES`, que se
+# PARCHEA para NUNCA tocar la red (igual que `_PROVEEDOR` en la generacion).
+
+
+def test_desde_url_ok(cliente, monkeypatch):
+    """Bytes PNG validos => 200 con `{id, url}` y la imagen se puede servir."""
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: _PNG_1x1)
+    r = cliente.post("/api/media/desde-url", json={"url": "https://example.com/x.png"})
+    assert r.status_code == 200
+    cuerpo = r.json()
+    assert cuerpo["id"].endswith(".png")
+    assert cuerpo["url"] == f"/api/media/{cuerpo['id']}"
+    # El asset hosteado se sirve por la API de media.
+    servida = cliente.get(cuerpo["url"])
+    assert servida.status_code == 200
+    assert servida.content == _PNG_1x1
+
+
+def test_desde_url_sin_url_400(cliente):
+    r = cliente.post("/api/media/desde-url", json={})
+    assert r.status_code == 400
+
+
+def test_desde_url_vacia_400(cliente):
+    r = cliente.post("/api/media/desde-url", json={"url": "   "})
+    assert r.status_code == 400
+
+
+def test_desde_url_no_imagen_400(cliente, monkeypatch):
+    """Lo descargado NO es una imagen => 400 (ExtraccionError -> mensaje en espanol)."""
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR_BYTES", lambda url: b"<html>error</html>")
+    r = cliente.post("/api/media/desde-url", json={"url": "https://example.com/x.png"})
+    assert r.status_code == 400
+    assert "imagen" in r.json()["error"].lower()
 
 
 # --------------------------------------------------------------------------- #

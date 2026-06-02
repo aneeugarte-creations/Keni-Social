@@ -781,6 +781,10 @@ export const api = {
   },
   generarMedia: (cuerpo: CuerpoGenerarMedia) =>
     peticion<RespuestaGeneracion>("/media/generar", { metodo: "POST", json: cuerpo }),
+  /** Descarga una imagen externa (p.ej. la original de un artículo RSS) al almacén y
+   *  devuelve su `{id, url}` ya servible/publicable. */
+  mediaDesdeUrl: (url: string) =>
+    peticion<RespuestaMedia>("/media/desde-url", { metodo: "POST", json: { url } }),
 
   // --- Biblioteca de artes (objetos de media catalogados para reutilizar) ---
   // Guardar un arte lo PROTEGE del GC de media huérfana y lo hace seleccionable por marca
