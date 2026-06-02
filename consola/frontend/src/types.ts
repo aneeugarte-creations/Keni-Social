@@ -531,6 +531,45 @@ export interface CuerpoGenerarTermometro {
   fecha?: string;
 }
 
+// --- Hub genérico de fuentes (item G): RSS + API + galerías + ideas + internas ---
+
+/** Una fuente del hub genérico (cualquier tipo), con su config JSON y prioridad. */
+export interface FuenteHub {
+  id: string;
+  /** Tipo de fuente: rss / api / galeria / idea / interna. */
+  tipo: string;
+  nombre: string;
+  /** Config específica del tipo (p. ej. {url, incluir, excluir} para rss). */
+  config: Record<string, unknown>;
+  marca: string;
+  marca_nombre: string;
+  /** Prioridad entera (mayor = pesa más al priorizar). */
+  prioridad: number;
+  etiquetas: string[];
+  activo: boolean;
+  ultima_actualizacion: string;
+  ultimo_error: string;
+  ultimo_conteo: number;
+  /** Id de la `fuentes_rss` de la que se sembró (vacío si nació en el hub). */
+  origen_rss_id: string;
+}
+
+/** Estado HONESTO de una agencia de noticias (Reuters/AFP), gateada por credencial. */
+export interface AgenciaFuente {
+  red: string;
+  nombre: string;
+  disponible: boolean;
+  motivo: string;
+}
+
+/** Respuesta de GET /api/fuentes (hub genérico + estado de agencias). */
+export interface RespuestaFuentesHub {
+  fuentes: FuenteHub[];
+  tipos: string[];
+  agencias: AgenciaFuente[];
+  pendientes: AgenciaFuente[];
+}
+
 // --- Radar de tendencias (lo más viral del momento, multi-red · F7/#147) ---
 
 /** Una nota/enlace que explica por qué sube un tema (título + URL + medio). */

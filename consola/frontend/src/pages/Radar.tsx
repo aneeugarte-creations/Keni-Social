@@ -15,6 +15,8 @@ import * as React from "react";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { BotonExportarLista } from "@/components/comunes/BotonExportarLista";
+import type { ItemExportable } from "@/components/comunes/exportarLista";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,6 +86,17 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
+/** Mapea los temas del radar a ítems exportables (Markdown copiar-pegar). */
+function temasExportables(temas: TemaRadar[]): ItemExportable[] {
+  return temas.map((t) => ({
+    titulo: t.titulo,
+    senal: t.senal_texto,
+    fuentes: t.fuentes,
+    porQue: t.por_que,
+    enlaces: t.enlaces,
+  }));
+}
+
 /** Etiqueta humana de una red/superficie del radar (a partir de su id). */
 function etiquetaRed(red: string): string {
   if (red.startsWith("busquedas-")) return "Búsquedas";
@@ -132,7 +145,8 @@ function PanelTendencias() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-3xl text-sm text-muted-foreground">{INTRO_TENDENCIAS}</p>
         {query.isSuccess && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <BotonExportarLista titulo="Tendencias del Radar" items={temasExportables(query.data.temas)} />
             <Select value={geo} onValueChange={setGeo}>
               <SelectTrigger className="w-44" aria-label="País del radar">
                 <SelectValue />
@@ -269,6 +283,12 @@ function TarjetaTema({
                 </Badge>
               )}
             </div>
+            {tema.fuentes.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Fuente: </span>
+                {tema.fuentes.join(" · ")}
+              </p>
+            )}
           </div>
           <Button
             variant={relevante ? "default" : "outline"}

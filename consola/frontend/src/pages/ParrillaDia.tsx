@@ -17,6 +17,8 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
+import { BotonExportarLista } from "@/components/comunes/BotonExportarLista";
+import type { ItemExportable } from "@/components/comunes/exportarLista";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,6 +57,23 @@ function etiquetaRed(red: string): string {
   return red;
 }
 
+/** Etiqueta del tipo de un ítem del plan para anteponerla al título exportado. */
+function etiquetaTipoExport(item: ItemParrilla): string {
+  if (item.tipo === "posteo") return SUBTIPO[item.subtipo]?.etiqueta ?? SUBTIPO[""].etiqueta;
+  return "Video editorial";
+}
+
+/** Aplana posteos + editoriales del plan a ítems exportables (Markdown copiar-pegar). */
+function planExportable(datos: RespuestaParrilla): ItemExportable[] {
+  const todos = [...datos.posteos, ...datos.editorial, ...datos.sobrantes];
+  return todos.map((item) => ({
+    titulo: `[${etiquetaTipoExport(item)}] ${item.titulo}`,
+    senal: item.senal_texto,
+    porQue: item.razon || item.por_que,
+    enlaces: item.enlaces,
+  }));
+}
+
 /**
  * Panel "Plan del día": pestaña de Investigación (dentro de Radar). Antes era la
  * página `/investigacion/parrilla-dia`; conserva su fetch y lógica intactos. No
@@ -73,7 +92,8 @@ export function PanelPlanDelDia() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-3xl text-sm text-muted-foreground">{INTRO}</p>
         {query.isSuccess && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <BotonExportarLista titulo="Plan del día" items={planExportable(query.data)} />
             <Select value={geo} onValueChange={setGeo}>
               <SelectTrigger className="w-44" aria-label="País del contexto">
                 <SelectValue />

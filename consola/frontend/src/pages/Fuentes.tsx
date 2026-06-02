@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   CircleSlash,
+  CircleX,
   ExternalLink,
+  Layers,
   Loader2,
   Plus,
   RefreshCw,
@@ -46,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { useGeneracion } from "@/hooks/use-generacion";
@@ -119,11 +122,146 @@ export default function Fuentes() {
   return (
     <>
       <PageHeader {...CABECERA} />
-      <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
-        <GestionFuentes marcas={marcas} redes={opcionesRedes} />
-        <ItemsRecientes marcas={marcas} redes={opcionesRedes} />
-      </div>
+      <Tabs defaultValue="rss" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="rss">RSS</TabsTrigger>
+          <TabsTrigger value="todas">Todas las fuentes</TabsTrigger>
+        </TabsList>
+        <TabsContent value="rss">
+          <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
+            <GestionFuentes marcas={marcas} redes={opcionesRedes} />
+            <ItemsRecientes marcas={marcas} redes={opcionesRedes} />
+          </div>
+        </TabsContent>
+        <TabsContent value="todas">
+          <HubFuentes />
+        </TabsContent>
+      </Tabs>
     </>
+  );
+}
+
+// --- Hub de TODAS las fuentes (item G): RSS + API + galerías + ideas + internas ---
+
+/** Etiqueta humana de un tipo de fuente del hub. */
+const ETIQUETA_TIPO: Record<string, string> = {
+  rss: "RSS",
+  api: "API / Agencia",
+  galeria: "Galería",
+  idea: "Idea",
+  interna: "Interna",
+};
+
+/**
+ * Panel "Todas las fuentes": vista UNIFICADA del hub genérico (`/api/fuentes`).
+ * Muestra todas las fuentes dadas de alta (de cualquier tipo, con su prioridad y
+ * etiquetas) y el estado HONESTO de las agencias (Reuters/AFP): disponibles o
+ * "pendientes / no configuradas" según haya credencial, sin inventar nada.
+ *
+ * NOTA (deferido, item G): el alta/edición rica por tipo (formularios específicos
+ * por `config`) aún no está aquí; los feeds RSS se gestionan en la pestaña "RSS" y se
+ * espejan automáticamente al hub. Esta vista es de LECTURA/visibilidad por ahora.
+ */
+function HubFuentes() {
+  const query = useQuery({
+    queryKey: ["fuentes", "hub"],
+    queryFn: ({ signal }) => api.fuentesHub(undefined, signal),
+  });
+
+  if (query.isPending) {
+    return <Skeleton className="h-72 w-full rounded-md" />;
+  }
+  if (query.isError) {
+    return (
+      <BloqueError
+        titulo="No se pudieron cargar las fuentes"
+        mensaje={mensajeError(query.error)}
+        onReintentar={() => void query.refetch()}
+        cargando={query.isFetching}
+      />
+    );
+  }
+
+  const { fuentes, agencias, pendientes } = query.data;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <Card className="h-fit">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Layers className="h-4 w-4" />
+            Fuentes dadas de alta
+            <Badge variant="secondary" className="ml-1">
+              {fuentes.length}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {fuentes.length === 0 ? (
+            <EstadoVacioTexto
+              texto="Aún no hay fuentes en el hub. Da de alta feeds en la pestaña RSS (se espejan aquí)."
+              className="py-4"
+            />
+          ) : (
+            <ul className="space-y-2">
+              {fuentes.map((f) => (
+                <li key={f.id} className="flex items-start justify-between gap-3 rounded-md border p-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{f.nombre}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      <Badge variant="outline">{ETIQUETA_TIPO[f.tipo] ?? f.tipo}</Badge>
+                      {f.marca_nombre && <Badge variant="secondary">{f.marca_nombre}</Badge>}
+                      {f.prioridad !== 0 && <Badge variant="outline">Prioridad {f.prioridad}</Badge>}
+                      {f.etiquetas.map((e) => (
+                        <Badge key={e} variant="secondary">
+                          {e}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  {f.activo ? (
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <CircleSlash className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="h-fit">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Agencias de noticias</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <ul className="space-y-2.5">
+            {agencias.map((a) => (
+              <li key={a.red} className="flex items-start gap-2 text-sm">
+                {a.disponible ? (
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
+                <div className="min-w-0">
+                  <p className="font-medium">{a.nombre}</p>
+                  {!a.disponible && a.motivo && (
+                    <p className="text-xs text-muted-foreground">{a.motivo}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {pendientes.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Las agencias pendientes necesitan credenciales (ver README) para empezar a traer
+              notas. Hasta entonces aparecen aquí en claro, sin inventar contenido.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

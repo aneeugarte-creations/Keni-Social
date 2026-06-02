@@ -94,6 +94,8 @@ import type {
   RespuestaFranjas,
   RespuestaFuenteRss,
   RespuestaFuentesRss,
+  RespuestaFuentesHub,
+  FuenteHub,
   RespuestaGeneracion,
   RespuestaGeneraciones,
   RespuestaGrupoHashtags,
@@ -929,6 +931,26 @@ export const api = {
     peticion<RespuestaMensaje>("/rss/items/usado", { metodo: "POST", json: cuerpo }),
   generarDesdeItemRss: (cuerpo: CuerpoGenerarDesdeItem) =>
     peticion<RespuestaGeneracion>("/rss/generar", { metodo: "POST", json: cuerpo }),
+
+  // --- Hub genérico de fuentes (item G): RSS + API + galerías + ideas + internas ---
+  // ADITIVO sobre /rss: lista todas las fuentes de cualquier tipo + estado de agencias.
+  fuentesHub: (tipo?: string, signal?: AbortSignal) =>
+    peticion<RespuestaFuentesHub>(`/fuentes${query({ tipo })}`, { signal }),
+  crearFuenteHub: (cuerpo: {
+    tipo: string;
+    nombre: string;
+    config?: Record<string, unknown>;
+    marca?: string;
+    prioridad?: number;
+    etiquetas?: string[];
+  }) => peticion<{ fuente: FuenteHub }>("/fuentes", { metodo: "POST", json: cuerpo }),
+  actualizarFuenteHub: (id: string, cuerpo: Partial<{ activo: boolean; prioridad: number }>) =>
+    peticion<{ fuente: FuenteHub }>(`/fuentes/${encodeURIComponent(id)}`, {
+      metodo: "PUT",
+      json: cuerpo,
+    }),
+  eliminarFuenteHub: (id: string) =>
+    peticion<RespuestaMensaje>(`/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Radar de tendencias (lo más viral del momento, multi-red · #147) ---
   // Solo lectura: consolida tendencias por tema con su estado HONESTO por fuente.
