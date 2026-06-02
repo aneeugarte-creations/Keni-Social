@@ -49,6 +49,8 @@ ruta = "/parrilla"
 etiqueta = "Parrilla"
 icono = "CalendarClock"
 descripcion = "Tablero de contenido del equipo (importante/evergreen/eventos + publicaciones), calendario y rota de cobertura."
-grupo = "operacion"
-grupo_orden = 30
-orden = 10
+# Bloque "hoy": el tablero es la columna vertebral diaria del equipo, junto al Panel y
+# la cola de Revisión. (El `grupo` es VISUAL y se desacopla del dueño de la app.)
+grupo = "hoy"
+grupo_orden = 10
+orden = 20

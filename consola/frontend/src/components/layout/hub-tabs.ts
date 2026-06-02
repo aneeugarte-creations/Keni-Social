@@ -89,3 +89,19 @@ export const HUB_TABS: Record<string, ItemTabHub[]> = {
 export function subPestanasDe(ruta: string): ItemTabHub[] | undefined {
   return HUB_TABS[ruta];
 }
+
+/**
+ * Sub-pestañas del hub al que pertenece `pathname` (la sección de cabecera
+ * `/investigacion`, `/revision`, …), o `undefined` si la ruta no cae en un hub.
+ * A diferencia de `subPestanasDe` (que exige la ruta-padre EXACTA), esto matchea
+ * también las hojas del hub (`/investigacion/radar` → pestañas de Investigación),
+ * para que la barra de pestañas in-page se pinte estando en cualquier sub-ruta.
+ * Lo consume el `SubnavHub` del AppShell: los hubs son UNA entrada en el sidebar
+ * (calma la barra) y su sub-navegación vive aquí, como pestañas sobre el contenido.
+ */
+export function pestanasDeRuta(pathname: string): ItemTabHub[] | undefined {
+  for (const [ruta, pestanas] of Object.entries(HUB_TABS)) {
+    if (pathname === ruta || pathname.startsWith(`${ruta}/`)) return pestanas;
+  }
+  return undefined;
+}

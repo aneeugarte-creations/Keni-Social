@@ -48,14 +48,15 @@ rutas_frontend = [
   "/sistema",
 ]
 
-# Panel es la única ruta del shell que SÍ vive en el sidebar (el "vistazo" inicial,
-# primer bloque); el resto de servicios del shell cuelgan del dropdown del avatar.
-# Aunque el shell NO sea app de catálogo, SÍ aporta esta entrada de nav.
+# Panel es la única ruta del shell que SÍ vive en el sidebar (el "vistazo" inicial);
+# encabeza el bloque "hoy" (checkpoints diarios). El resto de servicios del shell
+# cuelgan del dropdown del avatar. Aunque el shell NO sea app de catálogo, SÍ aporta
+# esta entrada de nav.
 [[nav]]
 ruta = "/panel"
 etiqueta = "Panel"
 icono = "LayoutDashboard"
 descripcion = "Un vistazo: rendimiento del periodo, cola de aprobación y próximas publicaciones programadas."
-grupo = "vistazo"
+grupo = "hoy"
 grupo_orden = 10
 orden = 10

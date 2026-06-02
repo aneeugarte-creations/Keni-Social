@@ -21,7 +21,17 @@ const CATALOGO = {
       ],
     },
   ],
-  navegacion: [],
+  // El sidebar pinta los bloques de flujo de `navegacion` (Panel + la nav de las
+  // apps activas, ya agrupada por el backend).
+  navegacion: [
+    {
+      etiqueta: "Hoy",
+      items: [
+        { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "" },
+        { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "" },
+      ],
+    },
+  ],
 };
 
 function stubFetch() {

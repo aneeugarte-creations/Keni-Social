@@ -1,35 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, LayoutDashboard, PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
-import * as React from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { PanelLeftClose, PanelLeftOpen, Search } from "lucide-react";
+import { NavLink } from "react-router-dom";
 
 import { CuentaUsuario } from "@/components/layout/CuentaUsuario";
-import { usePaletaComandos } from "@/hooks/paleta-contexto";
-import { appDeRuta, hojasDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
 import { iconoDe } from "@/components/layout/navegacion";
+import { usePaletaComandos } from "@/hooks/paleta-contexto";
 import { Tooltip } from "@/components/ui/tooltip";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import type { AppCatalogo } from "@/types";
-
-/** Clave de localStorage del conjunto de apps abiertas del acordeón (multi-abierto). */
-const CLAVE_APPS_ABIERTAS = "keni:sidebar-apps-abiertas";
-
-/** Lee el conjunto de apps abiertas persistido (lista de ids). Tolerante a fallos. */
-function leerAppsAbiertas(): Set<string> {
-  try {
-    const crudo = localStorage.getItem(CLAVE_APPS_ABIERTAS);
-    if (!crudo) return new Set();
-    const ids = JSON.parse(crudo);
-    return Array.isArray(ids) ? new Set(ids.filter((x): x is string => typeof x === "string")) : new Set();
-  } catch {
-    return new Set();
-  }
-}
 
 /**
- * Trigger del buscador: botón que ABRE la paleta de comandos (⌘K). Sustituye al
- * antiguo input falso (que solo se enfocaba con "F" y no filtraba nada). Muestra
+ * Trigger del buscador: botón que ABRE la paleta de comandos (⌘K). Muestra
  * "Buscar…" con el hint ⌘K a la derecha.
  */
 function BuscadorSidebar() {
@@ -51,105 +32,40 @@ function BuscadorSidebar() {
   );
 }
 
-/**
- * Clases de un item del sidebar (estilo shadcn: activo resaltado con acento). El activo
- * lleva además un acento NARANJA Keni sutil: el icono se tiñe de marca, para dar color a la
- * navegación sin romper el minimalismo (el `[&_svg]` afecta solo al icono lucide del item).
- */
+/** Clases de un item del sidebar (estilo shadcn: activo resaltado con acento). */
 function clasesItem({ isActive }: { isActive: boolean }) {
   return cn(
     "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
     isActive
-      ? "bg-accent font-medium text-foreground [&_svg]:text-keni"
+      ? "bg-accent font-medium text-foreground"
       : "font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
   );
 }
 
-/** Clases del item PADRE de una app (cabecera colapsable del acordeón). El icono de la app
- * activa se tiñe de naranja Keni (acento de marca sutil, sin afectar el chevron de cierre). */
-function clasesPadre(activa: boolean) {
-  return cn(
-    "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-    activa
-      ? "font-medium text-foreground"
-      : "font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
-  );
-}
-
-/**
- * Clases de una HOJA (nivel 2, indentada bajo el padre-app). Minimalismo: las
- * hojas van en TEXTO (sin icono). El estado activo se marca con una barra/acento
- * a la izquierda (`border-l-2 border-keni` + texto en `font-medium`), no
- * con icono. Inactivas llevan un borde transparente para que no salte el layout.
- */
-function clasesHoja({ isActive }: { isActive: boolean }) {
-  return cn(
-    "flex items-center rounded-r-md border-l-2 py-1.5 pl-7 pr-3 text-[13px] transition-colors",
-    isActive
-      ? "border-keni bg-accent/50 font-medium text-foreground"
-      : "border-transparent font-normal text-muted-foreground hover:bg-accent hover:text-foreground",
-  );
-}
-
-/** Clases de un icono del rail (barra colapsada, solo iconos). El activo se tiñe de naranja
- * Keni sobre el fondo de acento (acento de marca sutil en la barra estrecha). */
+/** Clases de un icono del rail (barra colapsada, solo iconos). */
 function clasesIconoRail(activa: boolean) {
   return cn(
     "flex h-10 w-10 items-center justify-center rounded-md transition-colors",
     activa
-      ? "bg-accent text-keni"
+      ? "bg-accent text-foreground"
       : "text-muted-foreground hover:bg-accent hover:text-foreground",
   );
 }
 
 /**
- * Las HOJAS de UNA app: nivel 2 PLANO del sidebar. `hojasDeApp` aplana la nav
- * (los hubs aportan sus sub-pestañas como hojas directas; el resto aporta su
- * propia entrada), así que NO hay nivel-hub ni encabezados de sección: el nombre
- * de la app (el padre) ya nombra el grupo. 2 niveles máximo: App → hoja.
- */
-function HojasDeApp({
-  app,
-  onNavegar,
-}: {
-  app: AppCatalogo;
-  onNavegar?: () => void;
-}) {
-  const hojas = hojasDeApp(app);
-
-  return (
-    <ul className="mt-0.5 space-y-0.5">
-      {hojas.map((hoja) => (
-        <li key={hoja.ruta}>
-          <NavLink
-            to={hoja.ruta}
-            end={hoja.end}
-            onClick={onNavegar}
-            title={hoja.descripcion}
-            className={({ isActive }) => clasesHoja({ isActive })}
-          >
-            <span>{hoja.etiqueta}</span>
-          </NavLink>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * Barra lateral fija de la consola. De arriba a abajo: avatar/cuenta, buscador,
- * una entrada GLOBAL fija a **Panel**, y luego las apps del catálogo como grupos
- * de **acordeón PERMISIVO** (multi-abierto): cada app es un item padre
- * COLAPSABLE (icono + nombre + chevron) que, al abrirse, muestra sus hojas (en
- * texto, sin icono; el icono solo a nivel de app). Varias apps pueden estar
- * abiertas a la vez; el conjunto se persiste en localStorage. La app de la ruta
- * actual se asegura abierta automáticamente (se añade, sin cerrar las demás).
- * Sin encabezados de sección: el nombre de la app ya nombra su grupo.
+ * Barra lateral fija de la consola. La navegación se agrupa por MOMENTO DEL FLUJO
+ * (no por dueño de app): el backend (`/api/catalogo` → `navegacion`, ADR 0005)
+ * entrega los bloques ya ordenados y etiquetados — `Hoy` (checkpoints diarios) ·
+ * `Producir` (herramientas para crear/editar a mano) · `Entradas y señales` (lo que
+ * alimenta o refleja la automatización). Cada bloque pinta su encabezado y, debajo,
+ * sus entradas como enlaces (icono + nombre). Los hubs (Investigación, Revisión,
+ * Analíticas, Parrilla) son UNA entrada; su sub-navegación vive como pestañas
+ * in-page (`SubnavHub`), no en el sidebar: así la barra no lista herramientas que se
+ * usan dentro de un flujo, no sueltas.
  *
- * Toda la barra puede COLAPSARSE a un **rail** estrecho de solo iconos (Panel +
- * los iconos de cada app); en rail, un click en el icono de una app re-expande la
- * barra y abre esa app. El estado colapsado lo controla el AppShell (persistido
- * en localStorage) vía `colapsado`/`onToggleColapsar`.
+ * Toda la barra puede COLAPSARSE a un **rail** estrecho de solo iconos (los mismos
+ * items, agrupados por bloque con un separador). El estado colapsado lo controla el
+ * AppShell (persistido en localStorage) vía `colapsado`/`onToggleColapsar`.
  */
 export function Sidebar({
   onNavegar,
@@ -160,58 +76,17 @@ export function Sidebar({
   colapsado?: boolean;
   onToggleColapsar?: () => void;
 }) {
-  const { pathname } = useLocation();
-  const navigate = useNavigate();
-
-  // Sidebar DATA-DRIVEN (cajón de apps · ADR 0005): se hidrata de `/api/catalogo`
-  // (apps activas + su nav, filtradas por los flags del backend). Ya no hay
-  // launcher: las apps viven aquí como grupos de acordeón. `staleTime: Infinity`:
-  // el catálogo solo cambia con un redeploy (flags).
+  // Sidebar DATA-DRIVEN (ADR 0005): se hidrata de `/api/catalogo`. El backend ya
+  // agrupa la nav por bloque de flujo (apps activas según flags + el Panel del
+  // shell) y la ordena; aquí solo la pintamos. `staleTime: Infinity`: el catálogo
+  // solo cambia con un redeploy (flags).
   const catalogoQuery = useQuery({
     queryKey: ["catalogo"],
     queryFn: ({ signal }) => api.catalogo(signal),
     staleTime: Infinity,
   });
 
-  const apps = catalogoQuery.data?.apps ?? [];
-  const appActual = appDeRuta(apps, pathname);
-
-  // Acordeón PERMISIVO (multi-abierto): varias apps pueden estar expandidas a la
-  // vez. El conjunto de ids abiertos se persiste en localStorage para que
-  // sobreviva al refresco. Inicializa leyéndolo (lazy).
-  const [appsAbiertas, setAppsAbiertas] = React.useState<Set<string>>(leerAppsAbiertas);
-  const appActualId = appActual?.id;
-
-  // La app de la ruta actual se asegura ABIERTA (se añade al conjunto) sin cerrar
-  // las demás.
-  React.useEffect(() => {
-    if (!appActualId) return;
-    setAppsAbiertas((actual) => {
-      if (actual.has(appActualId)) return actual;
-      const siguiente = new Set(actual);
-      siguiente.add(appActualId);
-      return siguiente;
-    });
-  }, [appActualId]);
-
-  // Persiste el conjunto de apps abiertas (lista de ids). Tolerante a fallos.
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(CLAVE_APPS_ABIERTAS, JSON.stringify([...appsAbiertas]));
-    } catch {
-      // localStorage no disponible: el estado vive en memoria.
-    }
-  }, [appsAbiertas]);
-
-  // Alterna el abierto/cerrado de una app SIN tocar las demás.
-  const alternarApp = React.useCallback((id: string) => {
-    setAppsAbiertas((actual) => {
-      const siguiente = new Set(actual);
-      if (siguiente.has(id)) siguiente.delete(id);
-      else siguiente.add(id);
-      return siguiente;
-    });
-  }, []);
+  const bloques = catalogoQuery.data?.navegacion ?? [];
 
   // ---------- Rail (barra colapsada a solo iconos) ----------
   if (colapsado) {
@@ -225,41 +100,26 @@ export function Sidebar({
         </div>
 
         <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto py-3">
-          <Tooltip label="Panel" side="right">
-            <NavLink
-              to="/panel"
-              onClick={onNavegar}
-              className={({ isActive }) => clasesIconoRail(isActive)}
-            >
-              <LayoutDashboard className="h-4 w-4" aria-hidden="true" />
-            </NavLink>
-          </Tooltip>
-
-          <hr className="my-1 w-8 border-border" />
-
-          {apps.map((app) => {
-            const Icono = iconoDe(app.icono);
-            const activa = app.id === appActualId;
-            return (
-              <Tooltip key={app.id} label={app.etiqueta} side="right">
-                <button
-                  type="button"
-                  aria-label={app.etiqueta}
-                  className={clasesIconoRail(activa)}
-                  onClick={() => {
-                    // Click en rail: re-expande la barra y abre esa app (sin
-                    // cerrar las demás), y navega a su ruta primaria si no
-                    // estamos ya dentro de ella.
-                    setAppsAbiertas((actual) => new Set(actual).add(app.id));
-                    onToggleColapsar?.();
-                    if (!activa) navigate(rutaPrimaria(app));
-                  }}
-                >
-                  <Icono className="h-4 w-4" aria-hidden="true" />
-                </button>
-              </Tooltip>
-            );
-          })}
+          {bloques.map((bloque, i) => (
+            <div key={bloque.etiqueta || i} className="flex flex-col items-center gap-1">
+              {i > 0 && <hr className="my-1 w-8 border-border" />}
+              {bloque.items.map((item) => {
+                const Icono = iconoDe(item.icono);
+                return (
+                  <Tooltip key={item.ruta} label={item.etiqueta} side="right">
+                    <NavLink
+                      to={item.ruta}
+                      onClick={onNavegar}
+                      aria-label={item.etiqueta}
+                      className={({ isActive }) => clasesIconoRail(isActive)}
+                    >
+                      <Icono className="h-4 w-4" aria-hidden="true" />
+                    </NavLink>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          ))}
         </div>
 
         <div className="flex justify-center border-t border-border py-3">
@@ -278,7 +138,7 @@ export function Sidebar({
     );
   }
 
-  // ---------- Barra completa (acordeón de apps) ----------
+  // ---------- Barra completa (bloques de flujo con encabezado) ----------
   return (
     <nav
       aria-label="Navegación principal"
@@ -292,66 +152,34 @@ export function Sidebar({
         <BuscadorSidebar />
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
-        {/* Panel: entrada GLOBAL fija (no es app de catálogo), siempre arriba. */}
-        <ul className="space-y-0.5">
-          <li>
-            <NavLink to="/panel" onClick={onNavegar} className={clasesItem}>
-              <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>Panel</span>
-            </NavLink>
-          </li>
-        </ul>
-
-        <hr className="border-border" />
-
-        {/* Apps del catálogo como acordeón (sin encabezado de sección). */}
-        <ul className="space-y-0.5">
-          {apps.map((app) => {
-            const Icono = iconoDe(app.icono);
-            const abierta = appsAbiertas.has(app.id);
-            const activa = app.id === appActualId;
-            return (
-              <li key={app.id}>
-                <button
-                  type="button"
-                  aria-expanded={abierta}
-                  aria-controls={`app-hojas-${app.id}`}
-                  className={clasesPadre(activa)}
-                  onClick={() => {
-                    // El título de la app NO es un click muerto: ALTERNA su
-                    // acordeón (sin cerrar las demás: multi-abierto) Y, al abrir,
-                    // navega a su 1ª hoja si no estás ya dentro. Si ya estaba
-                    // abierta, solo togglea cerrado (sin re-navegar de balde).
-                    alternarApp(app.id);
-                    if (!abierta && !activa) {
-                      navigate(rutaPrimaria(app));
-                      onNavegar?.();
-                    }
-                  }}
-                >
-                  <Icono
-                    className={cn("h-4 w-4 shrink-0", activa && "text-keni")}
-                    aria-hidden="true"
-                  />
-                  <span className="flex-1 text-left">{app.etiqueta}</span>
-                  <ChevronRight
-                    className={cn(
-                      "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
-                      abierta && "rotate-90",
-                    )}
-                    aria-hidden="true"
-                  />
-                </button>
-                {abierta && (
-                  <div id={`app-hojas-${app.id}`}>
-                    <HojasDeApp app={app} onNavegar={onNavegar} />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+      <div className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
+        {bloques.map((bloque, i) => (
+          <div key={bloque.etiqueta || i} className="space-y-0.5">
+            {bloque.etiqueta && (
+              <p className="px-3 pb-1 pt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
+                {bloque.etiqueta}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {bloque.items.map((item) => {
+                const Icono = iconoDe(item.icono);
+                return (
+                  <li key={item.ruta}>
+                    <NavLink
+                      to={item.ruta}
+                      onClick={onNavegar}
+                      title={item.descripcion}
+                      className={clasesItem}
+                    >
+                      <Icono className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>{item.etiqueta}</span>
+                    </NavLink>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </div>
 
       {/* Toggle del rail (colapsar toda la barra a solo iconos). */}

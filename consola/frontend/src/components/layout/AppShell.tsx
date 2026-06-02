@@ -7,6 +7,7 @@ import { FronteraError } from "@/components/comunes/FronteraError";
 import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { Sidebar } from "@/components/layout/Sidebar";
+import { SubnavHub } from "@/components/layout/SubnavHub";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { appDeRuta, hojasDeApp, rutaPrimaria } from "@/components/layout/apps-scope";
 import { Button } from "@/components/ui/button";
@@ -205,6 +206,10 @@ export function AppShell() {
             {/* Frontera de error por ruta: aísla un fallo de página (TypeError,
                 chunk lazy de un deploy nuevo) en vez de tumbar toda la app. La
                 `key` por pathname la remonta al navegar, limpiando el estado. */}
+            {/* Pestañas del hub actual (Investigación, Revisión, …): los hubs son
+                UNA entrada en el sidebar y su sub-nav vive aquí, sobre el contenido.
+                Fuera del boundary: un fallo de página no debe tumbar la sub-nav. */}
+            <SubnavHub />
             <FronteraError key={location.pathname}>
               <React.Suspense fallback={<CargandoPagina />}>
                 <Outlet />

@@ -9,7 +9,11 @@ import { appDeRuta, gruposDeApp, hojasDeApp, rutaPrimaria } from "@/components/l
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
 import type { AppCatalogo, RolUsuario } from "@/types";
 
-/** Catálogo de prueba: tres apps con su nav (espejo de los manifests). */
+/**
+ * Catálogo de prueba. `navegacion` es lo que pinta el sidebar (bloques de flujo ya
+ * agrupados y etiquetados por el backend); `apps` se conserva para los helpers de
+ * `apps-scope` (breadcrumb, paleta) que siguen consumiéndolo.
+ */
 const CATALOGO = {
   apps: [
     {
@@ -18,24 +22,25 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, skills y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/generacion", "/investigacion", "/revision", "/skills", "/actividad"],
+      rutas_frontend: ["/estudio", "/investigacion", "/revision", "/actividad"],
       nav: [
-        { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 10 },
-        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 20 },
-        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "dia", grupo_orden: 20, orden: 30 },
-        { ruta: "/skills", etiqueta: "Skills", icono: "Wand2", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 30 },
-        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 40 },
+        { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "", grupo: "producir", grupo_orden: 20, orden: 10 },
+        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "", grupo: "producir", grupo_orden: 20, orden: 20 },
+        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "senales", grupo_orden: 30, orden: 10 },
+        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "hoy", grupo_orden: 10, orden: 30 },
+        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "senales", grupo_orden: 30, orden: 30 },
+        { ruta: "/activos", etiqueta: "Activos", icono: "Library", descripcion: "", grupo: "producir", grupo_orden: 20, orden: 30 },
       ],
     },
     {
       id: "metricas",
-      etiqueta: "Métricas",
+      etiqueta: "Analíticas",
       icono: "BarChart3",
-      descripcion: "Analíticas y comercial",
+      descripcion: "Métricas, comercial y reportes",
       permisos: ["editor", "admin"],
       rutas_frontend: ["/analiticas"],
       nav: [
-        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "x", grupo_orden: 10, orden: 10 },
+        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "senales", grupo_orden: 30, orden: 20 },
       ],
     },
     {
@@ -44,14 +49,41 @@ const CATALOGO = {
       icono: "Send",
       descripcion: "Rota, parrilla y publicación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/publicaciones", "/parrilla"],
+      rutas_frontend: ["/parrilla"],
       nav: [
-        { ruta: "/publicaciones", etiqueta: "Publicaciones", icono: "Send", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 10 },
-        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 30, orden: 20 },
+        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "hoy", grupo_orden: 10, orden: 20 },
       ],
     },
   ],
-  navegacion: [],
+  // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
+  // Panel (shell) encabeza "Hoy"; los hubs van como UNA entrada (su sub-nav es
+  // in-page, no en el sidebar).
+  navegacion: [
+    {
+      etiqueta: "Hoy",
+      items: [
+        { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "El vistazo del día" },
+        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "Tablero del equipo" },
+        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
+      ],
+    },
+    {
+      etiqueta: "Producir",
+      items: [
+        { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "Lienzo de imagen" },
+        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "Prompts y editorial" },
+        { ruta: "/activos", etiqueta: "Activos", icono: "Library", descripcion: "Plantillas" },
+      ],
+    },
+    {
+      etiqueta: "Entradas y señales",
+      items: [
+        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Fuentes y radar" },
+        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
+        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "Qué hizo la IA" },
+      ],
+    },
+  ],
 };
 
 function stubCatalogo() {
@@ -66,8 +98,9 @@ function stubCatalogo() {
 }
 
 /**
- * localStorage de juguete (jsdom no siempre expone `clear`). Aísla el conjunto
- * de apps abiertas (acordeón multi-abierto, persistido) entre tests.
+ * localStorage de juguete (jsdom no siempre expone `clear`). Aísla cualquier
+ * estado persistido entre tests (p. ej. el colapsado del sidebar lo guarda el
+ * AppShell, no el Sidebar, pero CuentaUsuario y otros podrían tocarlo).
  */
 function instalarLocalStorage() {
   let store: Record<string, string> = {};
@@ -115,12 +148,11 @@ function PathActual() {
 
 /**
  * Render del sidebar con sesión simulada y en una ruta dada. El Sidebar es
- * data-driven (hidrata de `/api/catalogo`) y AHORA es un acordeón de apps: cada
- * app es un item padre colapsable; la app de la ruta actual se abre sola.
+ * data-driven (hidrata de `/api/catalogo`) y agrupa la nav por bloques de flujo.
  */
 function renderSidebar(
   rol: RolUsuario,
-  ruta = "/generacion",
+  ruta = "/panel",
   props: { colapsado?: boolean; onToggleColapsar?: () => void } = {},
 ) {
   stubCatalogo();
@@ -150,180 +182,95 @@ function renderAvatarMenu(rol: RolUsuario) {
   );
 }
 
-describe("Sidebar · acordeón de apps", () => {
-  it("muestra Panel global (arriba) y las 3 apps como padres colapsables, sin ⊞ Apps", async () => {
-    renderSidebar("editor", "/generacion");
-    // Panel: entrada global fija, lleva a /panel.
-    const panel = await screen.findByRole("link", { name: /^panel$/i });
-    expect(panel).toHaveAttribute("href", "/panel");
-    // Las 3 apps como BOTONES padres (no enlaces): colapsables.
-    expect(await screen.findByRole("button", { name: /producción/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /métricas/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /operación/i })).toBeInTheDocument();
-    // Ya NO hay control "⊞ Apps" (no hay launcher al que volver).
-    expect(screen.queryByRole("link", { name: /^apps$/i })).not.toBeInTheDocument();
-  });
-
-  it("la app de la ruta actual se abre automáticamente y expande sus HOJAS planas (sin nivel-hub)", async () => {
-    renderSidebar("editor", "/generacion");
-    // Producción está abierta: se ven sus hojas planas (nivel 2 directo).
-    expect(await screen.findByRole("link", { name: /generación/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /skills/i })).toBeInTheDocument();
-    // NO hay nivel-hub: "Investigación" y "Revisión" desaparecen como entrada;
-    // se aplanan a sus sub-pestañas como hojas directas.
-    expect(screen.queryByRole("link", { name: /^investigación$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^revisión$/i })).not.toBeInTheDocument();
-    // Las sub-pestañas del hub Investigación son ahora hojas directas.
-    expect(screen.getByRole("link", { name: /fuentes/i })).toHaveAttribute("href", "/investigacion/fuentes");
-    expect(screen.getByRole("link", { name: /termómetro/i })).toBeInTheDocument();
-    // Las del hub Revisión también (Editorial, Verificación).
-    expect(screen.getByRole("link", { name: /editorial/i })).toHaveAttribute("href", "/revision/editorial");
-    expect(screen.getByRole("link", { name: /verificación/i })).toHaveAttribute("href", "/revision/verificacion");
-    // Actividad IA es una hoja directa (ya no es un hub con sub-pestañas).
-    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/actividad");
-    // Las OTRAS apps están cerradas: no se ven sus hojas.
-    expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /^métricas$/i })).not.toBeInTheDocument();
-  });
-
-  it("acordeón PERMISIVO: al abrir otra app NO se cierra la actual (multi-abierto)", async () => {
-    renderSidebar("editor", "/generacion");
-    // Producción abierta de inicio (app de la ruta actual).
-    await screen.findByRole("link", { name: /generación/i });
-    // Abre Operación: se ven SUS hojas y SIGUEN viéndose las de Producción.
-    fireEvent.click(screen.getByRole("button", { name: /operación/i }));
-    expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /generación/i })).toBeInTheDocument();
-  });
-
-  it("alterna el padre: un 2º clic en una app abierta la cierra (sin tocar las demás)", async () => {
-    renderSidebar("editor", "/generacion");
-    fireEvent.click(await screen.findByRole("button", { name: /operación/i }));
-    expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
-    // Cierra Operación: desaparecen sus hojas; Producción sigue abierta.
-    fireEvent.click(screen.getByRole("button", { name: /operación/i }));
-    expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /generación/i })).toBeInTheDocument();
-  });
-
-  it("persiste el conjunto de apps abiertas en localStorage", async () => {
-    renderSidebar("editor", "/generacion");
-    fireEvent.click(await screen.findByRole("button", { name: /operación/i }));
-    await screen.findByRole("link", { name: /publicaciones/i });
-    await waitFor(() => {
-      const guardado = JSON.parse(localStorage.getItem("keni:sidebar-apps-abiertas") ?? "[]");
-      expect(guardado).toEqual(expect.arrayContaining(["produccion", "operacion"]));
-    });
-  });
-
-  it("rehidrata el conjunto de apps abiertas desde localStorage", async () => {
-    // Operación quedó abierta de una sesión previa, aunque la ruta sea /panel.
-    localStorage.setItem("keni:sidebar-apps-abiertas", JSON.stringify(["operacion"]));
+describe("Sidebar · bloques de flujo", () => {
+  it("pinta los 3 bloques de flujo con su encabezado", async () => {
     renderSidebar("editor", "/panel");
-    expect(await screen.findByRole("link", { name: /publicaciones/i })).toBeInTheDocument();
+    expect(await screen.findByText("Hoy")).toBeInTheDocument();
+    expect(screen.getByText("Producir")).toBeInTheDocument();
+    expect(screen.getByText("Entradas y señales")).toBeInTheDocument();
   });
 
-  it("las HOJAS van en TEXTO (sin icono) y la activa marca acento a la izquierda", async () => {
-    renderSidebar("editor", "/generacion");
-    const hoja = await screen.findByRole("link", { name: /generación/i });
-    // La hoja activa lleva la barra/acento de marca a la izquierda (border-l-2 + border-keni).
-    expect(hoja.className).toContain("border-l-2");
-    expect(hoja.className).toContain("border-keni");
-    // Sin icono en la hoja: ningún <svg> dentro del enlace.
-    expect(hoja.querySelector("svg")).toBeNull();
-    // Una hoja inactiva tampoco lleva icono.
-    const inactiva = screen.getByRole("link", { name: /skills/i });
-    expect(inactiva.querySelector("svg")).toBeNull();
+  it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {
+    renderSidebar("editor", "/panel");
+    // Bloque "Hoy": Panel + tablero + revisión, los checkpoints diarios.
+    expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
+    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/parrilla");
+    expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/revision");
+    // Bloque "Producir".
+    expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/estudio");
+    expect(screen.getByRole("link", { name: /biblioteca/i })).toHaveAttribute("href", "/biblioteca");
+    // Bloque "Entradas y señales": los hubs son una entrada, no sus pestañas.
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/investigacion");
+    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/actividad");
+    // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
+    expect(screen.queryByRole("link", { name: /^fuentes$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^termómetro$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^editorial$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^comercial$/i })).not.toBeInTheDocument();
+  });
+
+  it("marca activa la entrada del hub aun estando en una de sus sub-rutas", async () => {
+    renderSidebar("editor", "/investigacion/radar");
+    const investigacion = await screen.findByRole("link", { name: /investigación/i });
+    // NavLink marca `aria-current=page` por prefijo (/investigacion ⊇ /investigacion/radar).
+    expect(investigacion).toHaveAttribute("aria-current", "page");
+    // Y una entrada de otro bloque NO está activa.
+    expect(screen.getByRole("link", { name: /estudio/i })).not.toHaveAttribute("aria-current");
+  });
+
+  it("las entradas llevan icono (no son texto plano)", async () => {
+    renderSidebar("editor", "/panel");
+    const panel = await screen.findByRole("link", { name: /panel/i });
+    expect(panel.querySelector("svg")).not.toBeNull();
   });
 
   it("muestra un trigger de paleta (Buscar… + ⌘K) en vez del input falso 'F'", async () => {
-    renderSidebar("editor", "/generacion");
-    // Es un BOTÓN que abre la paleta, no un input de texto muerto.
+    renderSidebar("editor", "/panel");
     const trigger = await screen.findByRole("button", { name: /buscar páginas/i });
     expect(trigger).toBeInTheDocument();
     expect(trigger).toHaveTextContent("⌘K");
-    // Ya no hay input de búsqueda ni el atajo "F".
     expect(screen.queryByRole("textbox", { name: /buscar/i })).not.toBeInTheDocument();
   });
 
-  it("el título de la app NO es click muerto: navega a su 1ª hoja y abre su acordeón", async () => {
-    renderSidebar("editor", "/panel");
-    // Desde /panel, click en Métricas debe navegar a su 1ª HOJA aplanada
-    // (Analíticas es un hub → /analiticas/metricas, NO /analiticas).
-    fireEvent.click(await screen.findByRole("button", { name: /métricas/i }));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/analiticas/metricas"));
-    // Y su acordeón queda abierto: se ven sus hojas (Métricas, Comercial…).
-    expect(screen.getByRole("link", { name: /comercial/i })).toHaveAttribute("href", "/analiticas/comercial");
-  });
-
-  it("no pone encabezados de sección: el nombre de la app ya nombra el grupo", async () => {
-    const { container } = renderSidebar("editor", "/generacion");
-    await screen.findByRole("link", { name: /generación/i });
-    // El nombre del bloque del manifest ("dia", "operacion") NO se pinta como
-    // encabezado de sección; el único agrupador es el botón padre de la app.
-    expect(screen.queryByText(/^dia$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^operacion$/i)).not.toBeInTheDocument();
-    // No hay <p> con estilo de encabezado de sección (uppercase tracking-wider).
-    expect(container.querySelector("p.uppercase")).toBeNull();
-  });
-
-  it("en `/panel` ninguna app se abre sola (Panel global activo)", async () => {
-    renderSidebar("editor", "/panel");
-    const panel = await screen.findByRole("link", { name: /^panel$/i });
-    expect(panel).toHaveAttribute("href", "/panel");
-    // Apps presentes como padres, pero cerradas: sin secciones visibles.
-    expect(await screen.findByRole("button", { name: /producción/i })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /generación/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: /publicaciones/i })).not.toBeInTheDocument();
-  });
-
   it("no muestra los ajustes en el sidebar (cuelgan del avatar)", async () => {
-    renderSidebar("admin", "/generacion");
-    await screen.findByRole("link", { name: /generación/i });
+    renderSidebar("admin", "/panel");
+    await screen.findByRole("link", { name: /panel/i });
     expect(screen.queryByRole("link", { name: /^configuración$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^usuarios$/i })).not.toBeInTheDocument();
   });
 });
 
 describe("Sidebar · rail colapsable", () => {
-  it("colapsado muestra solo iconos (Panel + apps) y un botón para expandir", async () => {
-    renderSidebar("editor", "/generacion", { colapsado: true, onToggleColapsar: () => {} });
-    // Panel sigue accesible como enlace de icono.
-    expect(await screen.findByRole("link", { name: /^panel$/i })).toHaveAttribute("href", "/panel");
-    // Las apps son botones de icono (tooltip = aria-label con el nombre).
-    expect(await screen.findByRole("button", { name: /producción/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /métricas/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /operación/i })).toBeInTheDocument();
+  it("colapsado muestra solo iconos (enlaces por entrada) y un botón para expandir", async () => {
+    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: () => {} });
+    // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
+    expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
+    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/parrilla");
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/investigacion");
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
-    // En rail no hay secciones expandidas (solo iconos).
-    expect(screen.queryByRole("link", { name: /generación/i })).not.toBeInTheDocument();
+    // En rail no se pintan los encabezados de bloque (solo iconos).
+    expect(screen.queryByText("Producir")).not.toBeInTheDocument();
   });
 
-  it("el toggle (« colapsar / » expandir) invoca onToggleColapsar", async () => {
+  it("el toggle (colapsar / expandir) invoca onToggleColapsar", async () => {
     const onToggle = vi.fn();
-    // Expandida: botón "Colapsar".
-    const { unmount } = renderSidebar("editor", "/generacion", {
+    const { unmount } = renderSidebar("editor", "/panel", {
       colapsado: false,
       onToggleColapsar: onToggle,
     });
     fireEvent.click(await screen.findByRole("button", { name: /colapsar/i }));
     expect(onToggle).toHaveBeenCalledTimes(1);
     unmount();
-    // Colapsada: botón "Expandir barra".
-    renderSidebar("editor", "/generacion", { colapsado: true, onToggleColapsar: onToggle });
+    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: onToggle });
     fireEvent.click(await screen.findByRole("button", { name: /expandir barra/i }));
     expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
-  it("click en el icono de una app (en rail) expande la barra y navega a su ruta primaria", async () => {
-    const onToggle = vi.fn();
-    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: onToggle });
-    fireEvent.click(await screen.findByRole("button", { name: /operación/i }));
-    // Re-expande la barra…
-    expect(onToggle).toHaveBeenCalledTimes(1);
-    // …y navega a la ruta primaria de Operación.
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/publicaciones"));
+  it("click en el icono de una entrada (en rail) navega a su ruta", async () => {
+    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: () => {} });
+    fireEvent.click(await screen.findByRole("link", { name: /parrilla/i }));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/parrilla"));
   });
 });
 
@@ -331,18 +278,19 @@ describe("apps-scope · helpers", () => {
   const apps = CATALOGO.apps as AppCatalogo[];
 
   it("rutaPrimaria es la PRIMERA HOJA (aplana hubs a su 1ª sub-pestaña)", () => {
-    // Producción: 1ª entrada /generacion no es hub → se queda igual.
-    expect(rutaPrimaria(apps[0])).toBe("/generacion");
+    // Producción: 1ª entrada /estudio no es hub → se queda igual.
+    expect(rutaPrimaria(apps[0])).toBe("/estudio");
     // Métricas: 1ª entrada /analiticas ES hub → resuelve a su 1ª sub-pestaña.
     expect(rutaPrimaria(apps[1])).toBe("/analiticas/metricas");
-    // Operación: 1ª entrada /publicaciones no es hub → se queda igual.
-    expect(rutaPrimaria(apps[2])).toBe("/publicaciones");
+    // Operación: 1ª entrada /parrilla ES hub → resuelve a su 1ª sub-pestaña.
+    expect(rutaPrimaria(apps[2])).toBe("/parrilla/pendientes");
   });
 
   it("hojasDeApp aplana hubs a sub-pestañas y conserva las no-hub", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
-      "/generacion",
+      "/estudio",
+      "/biblioteca",
       // /investigacion (hub) → sus 4 sub-pestañas
       "/investigacion/fuentes",
       "/investigacion/termometro",
@@ -351,14 +299,15 @@ describe("apps-scope · helpers", () => {
       // /revision (hub) → sus 2 sub-pestañas
       "/revision/editorial",
       "/revision/verificacion",
-      "/skills",
       // /actividad NO es hub: queda como hoja directa.
       "/actividad",
+      // /activos (hub) → su única sub-pestaña
+      "/activos/plantillas",
     ]);
   });
 
   it("appDeRuta resuelve por prefijo más largo", () => {
-    expect(appDeRuta(apps, "/generacion")?.id).toBe("produccion");
+    expect(appDeRuta(apps, "/estudio")?.id).toBe("produccion");
     expect(appDeRuta(apps, "/parrilla/calendario")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
@@ -368,7 +317,15 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    expect(rutas).toEqual(["/generacion", "/investigacion", "/revision", "/skills", "/actividad"]);
+    // Ordenado por (grupo_orden, orden): hoy(/revision) · producir(/estudio,/biblioteca,/activos) · senales(/investigacion,/actividad).
+    expect(rutas).toEqual([
+      "/revision",
+      "/estudio",
+      "/biblioteca",
+      "/activos",
+      "/investigacion",
+      "/actividad",
+    ]);
   });
 });
 

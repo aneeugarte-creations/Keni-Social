@@ -34,6 +34,18 @@ _DIR_MANIFESTS = Path(__file__).parent
 # Valores (lower) que apagan una app. Cualquier otra cosa (incl. ausente/vacía) la deja ON.
 _VALORES_OFF = frozenset({"0", "false", "no", "off"})
 
+# Etiqueta humana de cada bloque del sidebar (encabezado visible). El sidebar agrupa por
+# MOMENTO DEL FLUJO, no por dueño de app: `hoy` = checkpoints diarios (Panel, tablero,
+# revisión); `producir` = herramientas para crear/editar a mano (estudio, biblioteca,
+# plantillas); `senales` = entradas que alimentan o reflejan la automatización
+# (investigación, analíticas, actividad). Un `grupo` sin etiqueta aquí cae a "" (bloque
+# sin encabezado), así un manifest nuevo no rompe aunque estrene un bloque.
+ETIQUETAS_BLOQUE: dict[str, str] = {
+    "hoy": "Hoy",
+    "producir": "Producir",
+    "senales": "Entradas y señales",
+}
+
 
 @dataclass(frozen=True)
 class EntradaNav:
@@ -125,8 +137,10 @@ def entradas_nav_activas(entorno: dict[str, str] | None = None) -> list[dict]:
     """Entradas de nav del sidebar, agrupadas por bloque visual, solo de unidades activas.
 
     Devuelve `[{etiqueta, items: [{ruta, etiqueta, icono, descripcion}, ...]}, ...]`,
-    en el MISMO orden/aspecto que el sidebar hardcodeado de hoy (bloques sin encabezado,
-    `etiqueta=""`). El Shell aporta su entrada (Panel) aunque no sea app de catálogo.
+    ordenado por bloque de flujo (`grupo_orden`) y, dentro de cada bloque, por `orden`.
+    La `etiqueta` del bloque es su encabezado humano (`ETIQUETAS_BLOQUE`); un bloque sin
+    etiqueta declarada va sin encabezado (""). El Shell aporta su entrada (Panel) aunque
+    no sea app de catálogo.
     """
     # Recolecta todas las entradas de nav de las unidades activas.
     todas: list[EntradaNav] = []
@@ -145,8 +159,8 @@ def entradas_nav_activas(entorno: dict[str, str] | None = None) -> list[dict]:
         items = sorted(bloques[grupo], key=lambda e: (e.orden, e.ruta))
         salida.append(
             {
-                # Hoy todos los bloques van SIN encabezado (separador discreto).
-                "etiqueta": "",
+                # Encabezado humano del bloque de flujo (o "" si el grupo no lo declara).
+                "etiqueta": ETIQUETAS_BLOQUE.get(grupo, ""),
                 "items": [
                     {
                         "ruta": i.ruta,

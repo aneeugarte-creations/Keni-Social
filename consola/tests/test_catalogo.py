@@ -2,7 +2,8 @@
 
 Verifican el contrato de `apps/registro.py` (ADR 0005 / plan §1) SIN red ni BD:
   - las 3 apps de producto + el shell se cargan de sus manifests TOML,
-  - el catálogo reproduce EXACTAMENTE el sidebar hardcodeado de hoy (grupos/orden),
+  - el catálogo agrupa la nav por MOMENTO DEL FLUJO (hoy / producir / señales), con
+    encabezado de bloque visible, en el orden y con las etiquetas esperadas,
   - desactivar el flag de una app la OCULTA del catálogo sin romper nada,
   - el shell NO figura como app de catálogo (pero sí aporta su nav: Panel).
 
@@ -15,19 +16,22 @@ from __future__ import annotations
 
 from keni_consola.apps import registro
 
-# Estructura ESPERADA del sidebar (espejo del `navegacion.ts` hardcodeado de hoy):
-# 3 bloques sin encabezado, en este orden y con estas etiquetas.
-_SIDEBAR_HOY = [
-    ["Panel"],
-    # Biblioteca (prompts + línea editorial) es la única "Biblioteca" del producto; el
-    # copy se genera ahí (sustituyó a "Generación"). "Estudio" es la única superficie de
-    # imagen (variantes + editar + expandir); absorbió la antigua "Imágenes".
-    ["Estudio", "Biblioteca", "Investigación", "Revisión", "Analíticas"],
-    # Publicaciones se FUSIONÓ en el tablero (#fase2): ya no tiene nav propia; el
-    # tablero (Parrilla) es la superficie única de contenido. La pestaña "Skills
-    # (catálogo)" se retiró con el sistema de skills (la edición vive en la Biblioteca).
-    ["Parrilla", "Actividad IA", "Activos"],
+# Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
+# orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
+_SIDEBAR_BLOQUES = [
+    # "Hoy": los checkpoints que el equipo toca cada día — el vistazo (Panel), la columna
+    # vertebral (Parrilla/tablero) y la cola de aprobación (Revisión).
+    ["Panel", "Parrilla", "Revisión"],
+    # "Producir": herramientas para crear/editar a mano una pieza (consumidas por el
+    # pipeline cuando es automático). Estudio (imagen), Biblioteca (prompts), Activos.
+    ["Estudio", "Biblioteca", "Activos"],
+    # "Entradas y señales": lo que alimenta o refleja la automatización — Investigación
+    # (fuentes/radar), Analíticas (medición que cierra el loop), Actividad IA (qué hizo).
+    ["Investigación", "Analíticas", "Actividad IA"],
 ]
+
+# Encabezados humanos de cada bloque, en el mismo orden.
+_ETIQUETAS_BLOQUES = ["Hoy", "Producir", "Entradas y señales"]
 
 
 def _entorno(**flags: str) -> dict[str, str]:
@@ -69,12 +73,12 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     assert porid["operacion"]["nav"][0]["ruta"] == "/parrilla"
 
 
-def test_catalogo_reproduce_el_sidebar_de_hoy():
+def test_catalogo_agrupa_la_nav_por_flujo():
     cat = registro.catalogo(_entorno())
     grupos = [[i["etiqueta"] for i in g["items"]] for g in cat["navegacion"]]
-    assert grupos == _SIDEBAR_HOY
-    # Todos los bloques van sin encabezado (separador discreto), como hoy.
-    assert all(g["etiqueta"] == "" for g in cat["navegacion"])
+    assert grupos == _SIDEBAR_BLOQUES
+    # Cada bloque lleva su encabezado humano (no "") en el orden esperado.
+    assert [g["etiqueta"] for g in cat["navegacion"]] == _ETIQUETAS_BLOQUES
 
 
 def test_iconos_de_nav_son_strings_lucide():
@@ -138,7 +142,7 @@ def test_endpoint_catalogo_sirve_apps_y_navegacion(cliente):
     datos = cliente.get("/api/catalogo").json()
     assert sorted(a["id"] for a in datos["apps"]) == ["metricas", "operacion", "produccion"]
     grupos = [[i["etiqueta"] for i in g["items"]] for g in datos["navegacion"]]
-    assert grupos == _SIDEBAR_HOY
+    assert grupos == _SIDEBAR_BLOQUES
 
 
 def test_endpoint_catalogo_respeta_el_flag(cliente, monkeypatch):

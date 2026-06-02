@@ -69,46 +69,47 @@ rutas_frontend = [
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
 # `ruta` es el path que ya resuelve `router.tsx`; el sidebar no expande sub-rutas.
 #
-# El sidebar tiene 3 bloques visuales SIN encabezado (separadores discretos). Cada
-# entrada declara a qué bloque pertenece (`grupo` + `grupo_orden`) y su `orden`
-# dentro del bloque. El bloque es VISUAL y se desacopla del dueño de la app: Skills
-# y Agentes son de Producción pero viven en el bloque "operacion" del sidebar, igual
-# que hoy. Bloques: vistazo(10) · dia(20) · operacion(30).
+# El sidebar agrupa por MOMENTO DEL FLUJO (no por dueño de app), con encabezado de
+# bloque visible. Cada entrada declara a qué bloque pertenece (`grupo` + `grupo_orden`)
+# y su `orden` dentro del bloque. El bloque es VISUAL y se desacopla del dueño de la
+# app: Producción reparte sus entradas entre los tres bloques según cuánto las toca el
+# humano. Bloques: hoy(10) = checkpoints diarios · producir(20) = herramientas para
+# crear/editar a mano · senales(30) = entradas que alimentan o reflejan la automatización.
 
 [[nav]]
 ruta = "/estudio"
 etiqueta = "Estudio"
 icono = "Palette"
 descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o descárgala."
-grupo = "dia"
+grupo = "producir"
 grupo_orden = 20
-orden = 12
+orden = 10
 
 [[nav]]
 ruta = "/biblioteca"
 etiqueta = "Biblioteca"
 icono = "Library"
 descripcion = "Prompts y línea editorial en un editor markdown a pantalla completa. Lanza un prompt sobre contenido o una sección."
-grupo = "dia"
+grupo = "producir"
 grupo_orden = 20
-orden = 15
+orden = 20
 
 [[nav]]
 ruta = "/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
 descripcion = "Fuentes RSS, panorama mundial, tendencias virales y cambios de algoritmo. Pestañas Fuentes / Termómetro / Radar / Algoritmos."
-grupo = "dia"
-grupo_orden = 20
-orden = 20
+grupo = "senales"
+grupo_orden = 30
+orden = 10
 
 [[nav]]
 ruta = "/revision"
 etiqueta = "Revisión"
 icono = "ShieldCheck"
 descripcion = "QA editorial y verificación de imágenes/videos antes de publicar. Pestañas Editorial / Verificación."
-grupo = "dia"
-grupo_orden = 20
+grupo = "hoy"
+grupo_orden = 10
 orden = 30
 
 [[nav]]
@@ -116,15 +117,15 @@ ruta = "/actividad"
 etiqueta = "Actividad IA"
 icono = "Activity"
 descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) y runs de agente, con su coste y consumo."
-grupo = "operacion"
+grupo = "senales"
 grupo_orden = 30
-orden = 40
+orden = 30
 
 [[nav]]
 ruta = "/activos"
 etiqueta = "Activos"
 icono = "Library"
 descripcion = "Plantillas de contenido por tipo de nota, reutilizables al armar piezas."
-grupo = "operacion"
-grupo_orden = 30
-orden = 50
+grupo = "producir"
+grupo_orden = 20
+orden = 30

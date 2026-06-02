@@ -1,4 +1,5 @@
 import {
+  Activity,
   BarChart3,
   Bot,
   CalendarClock,
@@ -41,6 +42,7 @@ export interface GrupoNav {
  * `Sparkles` (visible, no rompe el render) — añade el icono a este mapa.
  */
 export const ICONOS: Record<string, LucideIcon> = {
+  Activity,
   BarChart3,
   Bot,
   CalendarClock,
