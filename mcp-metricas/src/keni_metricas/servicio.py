@@ -205,10 +205,13 @@ def analisis_diario_markdown(rango: str = "semana", marca: str | None = None) ->
     return _analisis.render_markdown(construir_analisis_diario(rango, marca))
 
 
-# Tope de piezas a descargar por cuenta para las estadísticas. `mejores_piezas` ya
-# trae TODAS las del periodo y recorta; con un tope alto cubrimos top/peores y la
-# distribución sin coste extra de API (la fuente de muestra crece su pool hasta n).
-_TOPE_PIEZAS = 100
+# Tope de piezas por cuenta para las ESTADÍSTICAS del periodo. Debe cubrir TODAS las
+# piezas del rango: si se trunca, la mediana/percentiles/distribución/`total` se calculan
+# sobre un subconjunto SESGADO (mejores_piezas ordena por engagement antes de recortar) y
+# no reflejan el periodo real (una marca puede tener cientos de posts/mes). El coste extra
+# es nulo en API (la llamada a /posts ya devuelve todo el periodo; esto solo evita el
+# recorte en memoria).
+_TOPE_PIEZAS = 100_000
 
 
 def construir_analitica_piezas(rango: str = "mes", marca: str | None = None) -> dict:

@@ -477,7 +477,10 @@ class FuenteMuestra:
                 desde,
                 titulos[i % len(titulos)],
             )
-            for i in range(max(n, 12))
+            # El pool sintético se acota a un máximo razonable: el llamante de stats pide
+            # n enorme ("todas"), pero generar cientos de miles de piezas falsas no aporta
+            # (es demo). 240 cubre de sobra top/peores y una distribución representativa.
+            for i in range(min(max(n, 12), 240))
         ]
         candidatas.sort(key=lambda p: p.engagement_pct, reverse=True)
         return candidatas[:n]

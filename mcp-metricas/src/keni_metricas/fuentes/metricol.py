@@ -50,7 +50,7 @@ documentados también en el reporte de la tarea):
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import httpx
 
@@ -251,14 +251,37 @@ def _formato_opt(v) -> str | None:
     return _FORMATO_NORMAL.get(clave, crudo.lower() or None)
 
 
-def _fecha(v, defecto: date) -> date:
-    """Primeros 10 chars en ISO (YYYY-MM-DD) -> date; `defecto` si no parsea."""
-    if isinstance(v, str) and len(v) >= 10:
+def _fecha(v) -> date | None:
+    """Fecha de publicación del post -> `date`, o None si no se puede determinar.
+
+    Metricool devuelve `publishedAt` como OBJETO `{'dateTime': 'AAAA-MM-DDTHH:MM:SS',
+    'timezone': '...'}`, NO como string plano; antes esto no se parseaba y CADA pieza
+    quedaba sellada con la fecha de hoy (colando posts viejos/sin-fecha como "en rango").
+    Aquí se extrae el `dateTime` del objeto, y se acepta también string ISO (con o sin
+    hora) o epoch (segundos/milisegundos). Devuelve None si no hay fecha reconocible: el
+    llamante NO debe fabricar una fecha (ver `_pieza_desde_post`)."""
+    if isinstance(v, dict):
+        v = v.get("dateTime") or v.get("date") or v.get("value") or v.get("iso")
+    if isinstance(v, bool):  # bool es subclase de int: no es una fecha
+        return None
+    if isinstance(v, (int, float)):
         try:
-            return date.fromisoformat(v[:10])
-        except ValueError:
-            return defecto
-    return defecto
+            ts = float(v)
+            if ts > 1e11:  # epoch en milisegundos
+                ts /= 1000.0
+            return datetime.fromtimestamp(ts).date()
+        except (ValueError, OSError, OverflowError):
+            return None
+    if isinstance(v, str):
+        s = v.strip()
+        if s.isdigit():
+            return _fecha(int(s))
+        if len(s) >= 10:
+            try:
+                return date.fromisoformat(s[:10])
+            except ValueError:
+                return None
+    return None
 
 
 class FuenteMetricol:
@@ -573,8 +596,11 @@ class FuenteMetricol:
         for post in datos.get("data") or []:
             if not isinstance(post, dict):
                 continue
-            pieza = self._pieza_desde_post(post, plat, hasta, cuenta_id)
-            if pieza is not None:
+            pieza = self._pieza_desde_post(post, plat, cuenta_id)
+            # Filtro DEFENSIVO por rango: aunque se envíen `from`/`to` a la API, se
+            # exige que la fecha REAL de la pieza caiga en [desde, hasta] (Metricool ha
+            # devuelto posts fuera de ventana; sin esto se colaban en top/peores/stats).
+            if pieza is not None and desde <= pieza.publicado <= hasta:
                 piezas.append(pieza)
         return piezas
 
@@ -598,17 +624,22 @@ class FuenteMetricol:
         }
 
     def _pieza_desde_post(
-        self, post: dict, plat: Plataforma, defecto_fecha: date, cuenta_id: str | None = None
+        self, post: dict, plat: Plataforma, cuenta_id: str | None = None
     ) -> Pieza | None:
         """Mapea un post de Metricool a `Pieza` (parseo defensivo; ver SUPUESTOS).
 
         `cuenta_id` (id_metricas de la marca) se sella en la pieza para poder
         ESTRATIFICAR top/peores por marca y normalizar el rendimiento por grupo
-        (ver `estadisticas.top_y_peores`).
+        (ver `estadisticas.top_y_peores`). Descarta el post si no tiene visualizaciones
+        o si no se puede determinar su fecha (sin fecha real no se puede ubicar en el
+        rango; NO se fabrica una fecha de hoy).
         """
         vis = _entero(_primero(post, _ALIAS_VIS, 0))
         if not vis:
             return None  # sin visualizaciones no es una "mejor pieza" útil
+        fecha = _fecha(_primero(post, _ALIAS_FECHA))
+        if fecha is None:
+            return None  # sin fecha real no se ubica en el rango (no se fabrica)
         inter = _entero(_primero(post, _ALIAS_INT, 0))
         gran = self._granulares(post)
         inter = _interacciones_efectivas(inter, gran)
@@ -616,7 +647,7 @@ class FuenteMetricol:
             id=str(_primero(post, _ALIAS_ID, "")),
             plataforma=plat,
             titulo=(str(_primero(post, _ALIAS_TEXTO, "(sin texto)")))[:120],
-            publicado=_fecha(_primero(post, _ALIAS_FECHA), defecto_fecha),
+            publicado=fecha,
             visualizaciones=vis,
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
@@ -673,7 +704,7 @@ class FuenteMetricol:
                 interacciones=inter,
                 engagement_pct=engagement_pct(inter, vis),
                 url=_primero(post, _ALIAS_URL),
-                publicado=_fecha(_primero(post, _ALIAS_FECHA), hasta),
+                publicado=_fecha(_primero(post, _ALIAS_FECHA)),
                 fuente=self.nombre,
                 **gran,
                 # Seguidores atribuidos al post: casi seguro Metricool no lo da a

@@ -10,17 +10,21 @@ SIN red real: toda llamada HTTP va mockeada con respx. Cubren:
 
 from __future__ import annotations
 
+from datetime import date
+
 import httpx
 import pytest
 import respx
 
 from keni_metricas.config import Config, MetricoolConfig, construir_fuente
 from keni_metricas.fuentes.base import FuenteMetricas
-from keni_metricas.fuentes.metricol import BASE, FuenteMetricol
+from keni_metricas.fuentes.metricol import BASE, FuenteMetricol, _fecha
 from keni_metricas.fuentes.muestra import FuenteMuestra
 from keni_metricas.schema import Plataforma, ResumenMetricas
 
-RANGO = "semana"
+# Rango ABSOLUTO (no relativo a hoy) para que las piezas mock con fecha 2026-05-xx caigan
+# siempre dentro de [desde, hasta] y pasen el filtro de rango, de forma determinista.
+RANGO = "mes:2026-05"
 
 MARCAS = {
     "claro_sports": {
@@ -312,6 +316,56 @@ def test_interacciones_toma_el_maximo_si_el_agregado_es_diminuto():
 
     assert piezas[0].interacciones == 23599  # max(12, 23599)
     assert piezas[0].engagement_pct > 0
+
+
+def test_fecha_parsea_objeto_publishedAt_y_no_fabrica():
+    """_fecha extrae el `dateTime` del OBJETO publishedAt de Metricool, acepta ISO/epoch,
+    y devuelve None (sin fabricar) cuando no hay fecha reconocible."""
+    # Metricool devuelve publishedAt como objeto {dateTime, timezone}.
+    assert _fecha({"dateTime": "2026-05-20T07:27:58", "timezone": "Europe/Madrid"}) == date(2026, 5, 20)
+    assert _fecha("2026-05-20T12:00:00") == date(2026, 5, 20)  # string ISO con hora
+    assert _fecha("2026-05-20") == date(2026, 5, 20)  # string fecha
+    assert isinstance(_fecha(1716163200), date)  # epoch segundos
+    # Sin fecha reconocible -> None (NO se fabrica una fecha de hoy).
+    assert _fecha(None) is None
+    assert _fecha("") is None
+    assert _fecha({}) is None
+    assert _fecha({"timezone": "Europe/Madrid"}) is None  # objeto sin dateTime
+
+
+@respx.mock
+def test_piezas_sin_fecha_o_fuera_de_rango_se_descartan():
+    """No se fabrica fecha (post sin publishedAt se descarta) y se filtra por la fecha
+    REAL contra el rango (mes:2026-05); solo sobrevive la pieza con fecha real en rango."""
+    posts = {
+        "data": [
+            {  # fecha real EN rango -> se queda
+                "id": "ok",
+                "publishedAt": {"dateTime": "2026-05-15T10:00:00", "timezone": "Europe/Madrid"},
+                "impressions": 5000,
+                "interactions": 100,
+            },
+            {  # SIN fecha -> se descarta (no se sella con hoy)
+                "id": "sin_fecha",
+                "impressions": 9999,
+                "interactions": 200,
+            },
+            {  # fecha real FUERA de rango (enero) -> se descarta
+                "id": "fuera",
+                "publishedAt": {"dateTime": "2026-01-10T10:00:00", "timezone": "Europe/Madrid"},
+                "impressions": 8888,
+                "interactions": 300,
+            },
+        ]
+    }
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(200, json=posts)
+    )
+    with httpx.Client() as cli:
+        piezas = _fuente(cli).mejores_piezas("claro_sports", RANGO, 50)
+
+    assert {p.id for p in piezas} == {"ok"}
+    assert piezas[0].publicado == date(2026, 5, 15)
 
 
 @respx.mock
