@@ -28,6 +28,7 @@ modulos_backend = [
   "conexiones",
   "limites",
   "media",
+  "artes",
   "panel",
   "alertas",
   "sugerencias",

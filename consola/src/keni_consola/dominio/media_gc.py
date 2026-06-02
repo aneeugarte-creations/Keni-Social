@@ -17,13 +17,14 @@ Un objeto del almacen es huerfano si y SOLO si cumple las DOS condiciones:
 Las referencias vivas se calculan SIEMPRE sobre el catalogo completo (sin filtros de
 estado/marca): un objeto referenciado por CUALQUIER pieza, en cualquier estado, se conserva.
 
-BIBLIOTECA DE MEDIOS (catalogo) — comprobacion DEFENSIVA y OPCIONAL
-==================================================================
-La biblioteca de medios (`api/biblioteca_media.py` / `repos.listar_media_biblioteca`) esta
-EN PROCESO DE RETIRADA (AMX usa su propia biblioteca). El GC NO depende de ella: si el repo
-existe en runtime, sus objetos catalogados se anaden a las referencias vivas como red de
-seguridad; si el modulo/funcion se elimina, el GC sigue funcionando sin tocar esa fuente (no
-se importa a nivel de modulo nada propio de biblioteca-media; se consulta via `hasattr`).
+BIBLIOTECA DE ARTES (catalogo) — referencia viva (comprobacion DEFENSIVA y OPCIONAL)
+====================================================================================
+La biblioteca de ARTES (`api/artes.py` / `repos.listar_media_biblioteca`) cataloga objetos
+que el equipo decide CONSERVAR para reutilizar en publicaciones. Un arte catalogado es una
+referencia viva: el GC NO lo borra aunque ninguna publicacion lo use todavia. El GC NO
+depende de forma DURA de ese repo: si existe en runtime sus objetos se anaden a las
+referencias vivas; si la funcion se eliminara, el GC sigue funcionando sin tocar esa fuente
+(no se importa a nivel de modulo nada propio de la biblioteca; se consulta via `hasattr`).
 
 SEGURO POR DISENO
 =================
@@ -58,12 +59,12 @@ def _imagenes_de(filas: list[dict[str, Any]]) -> set[str]:
 
 
 def _objetos_biblioteca_media() -> set[str]:
-    """Objetos catalogados en biblioteca-media, SI ese repo existe (comprobacion OPCIONAL).
+    """Objetos catalogados en la biblioteca de artes, SI ese repo existe (comprobacion OPCIONAL).
 
-    La biblioteca de medios esta en retirada: NO es una dependencia dura del GC. Si
-    `repos.listar_media_biblioteca` ya no existe (modulo eliminado), devuelve set vacio sin
-    fallar. Si existe, sus `objeto` se suman como red de seguridad. `hasattr` evita importar
-    nada propio de biblioteca-media a nivel de modulo.
+    La biblioteca de artes (`api/artes.py`) NO es una dependencia dura del GC. Si
+    `repos.listar_media_biblioteca` no existe en runtime, devuelve set vacio sin fallar. Si
+    existe, sus `objeto` se suman a las referencias vivas. `hasattr` evita importar nada
+    propio de la biblioteca a nivel de modulo.
     """
     listar = getattr(repos, "listar_media_biblioteca", None)
     if listar is None:
@@ -82,11 +83,11 @@ def referencias_vivas() -> set[str]:
       - el `imagen` de TODAS las publicaciones normales (sin filtro de estado/marca),
       - el `imagen` de las publicaciones comerciales (HOY no tienen ese campo: el `.get`
         devuelve None y no aporta nada; se incluye por si se anade en el futuro),
-      - DEFENSIVO Y OPCIONAL: el `objeto` de la biblioteca de medios SOLO si ese repo aun
-        existe en runtime (esta en retirada; ver `_objetos_biblioteca_media`).
+      - DEFENSIVO Y OPCIONAL: el `objeto` de la biblioteca de artes SOLO si ese repo existe
+        en runtime (ver `_objetos_biblioteca_media`).
 
-    Las publicaciones son la fuente de verdad de "media en uso". La biblioteca-media es una
-    red de seguridad transitoria, no una dependencia dura.
+    Las publicaciones son la fuente de verdad de "media en uso"; la biblioteca de artes anade
+    los objetos que el equipo decidio conservar para reutilizar.
     """
     vivas: set[str] = set()
     vivas |= _imagenes_de(repos.listar_publicaciones())
