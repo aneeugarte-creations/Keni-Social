@@ -1,7 +1,7 @@
 """Tests del dominio PURO de la importacion de parrilla (sin tocar DB ni red).
 
 Cubre: extraccion del bloque JSON de la salida de claude (fences, dict envoltorio, prefijos),
-validacion estricta contra el contexto RANGO (fechas dentro de la ventana temporal, franja por
+validacion estricta contra el contexto RANGO (fecha valida SIN limite de rango, franja por
 NOMBRE de slot, miembro/turno que existen, enums), deteccion de conflictos (celda ocupada por
 slot / turno desaparecido) y la re-validacion de operaciones ya parseadas. Todo
 `dominio.parrilla_import`, ni una sola conexion a Postgres.
@@ -16,17 +16,12 @@ from keni_consola.dominio import parrilla_import as pi
 _FRANJAS_NOMBRE = {"fr-manana": "Mañana", "fr-tarde": "Tarde"}
 
 
-# Ventana FIJA (no atada a "hoy") para que los tests sean deterministas en CI.
-_VENTANA = ("2026-01-01", "2027-12-31")
-
-
 def _ctx(*, turnos=None) -> pi.Contexto:
     return pi.Contexto(
         miembros={"u1": "Luis", "u2": "Ana"},
         nombres_franja={"Mañana", "Tarde"},
         turnos=turnos or [],
         franjas_nombre=_FRANJAS_NOMBRE,
-        ventana=_VENTANA,
     )
 
 
@@ -92,13 +87,12 @@ def test_crear_evento_fecha_en_otra_semana_es_valida():
     assert len(validas) == 1
 
 
-def test_crear_evento_fecha_fuera_de_ventana_es_error():
-    # Una fecha absurda (lejísimos) cae fuera de la ventana temporal y se rechaza.
+def test_crear_evento_fecha_lejana_es_valida_sin_limite():
+    # SIN límite de rango: una fecha lejana (otro año) es válida mientras parsee como ISO.
     txt = '[{"tipo": "crear_evento", "fecha": "2099-01-01", "titulo": "X"}]'
     validas, errores = pi.parsear_y_validar(txt, _ctx())
-    assert validas == []
-    assert len(errores) == 1
-    assert "fuera del rango" in errores[0]["error"]
+    assert errores == []
+    assert len(validas) == 1
 
 
 def test_crear_evento_fecha_invalida_es_error():
@@ -159,14 +153,18 @@ def test_crear_turno_franja_normaliza_mayusculas_espacios():
     assert len(validas) == 1
 
 
-def test_crear_turno_franja_inexistente_es_error():
+def test_crear_turno_franja_nueva_es_valida_y_acepta_horario():
+    # PERMISIVO: una franja que no está en la plantilla (p.ej. "Madrugada", o una 3ª franja del
+    # día) es válida; se crea al aplicar. Acepta horario opcional de la franja.
     txt = (
         '[{"tipo": "crear_turno", "fecha": "2026-06-02", "franja": "Madrugada", '
-        '"miembro_id": "u1"}]'
+        '"franja_inicio": "00:00", "franja_fin": "06:00", "miembro_id": "u1"}]'
     )
     validas, errores = pi.parsear_y_validar(txt, _ctx())
-    assert validas == []
-    assert "no es un slot válido" in errores[0]["error"]
+    assert errores == []
+    assert len(validas) == 1
+    assert validas[0]["franja"] == "Madrugada"
+    assert validas[0]["franja_inicio"] == "00:00"
 
 
 def test_crear_turno_miembro_inventado_es_error():
@@ -326,8 +324,13 @@ def test_validar_operaciones_re_chequea_contra_contexto_vivo():
     assert errores[0]["indice"] == 1
 
 
-def test_tope_de_operaciones_recorta():
-    ops = [{"tipo": "crear_evento"} for _ in range(pi.MAX_OPERACIONES + 50)]
-    # Todas inválidas (sin fecha/titulo) pero el punto es que no procesa más de MAX.
+def test_sin_tope_de_operaciones_procesa_todas():
+    # SIN límite de cantidad: se procesan TODAS las operaciones (un documento puede traer
+    # un periodo largo). Aquí 3000 válidas se devuelven enteras, sin recorte.
+    ops = [
+        {"tipo": "crear_evento", "fecha": "2026-06-20", "titulo": f"E{i}"}
+        for i in range(3000)
+    ]
     validas, errores = pi.parsear_y_validar(__import__("json").dumps(ops), _ctx())
-    assert len(validas) + len(errores) <= pi.MAX_OPERACIONES
+    assert errores == []
+    assert len(validas) == 3000

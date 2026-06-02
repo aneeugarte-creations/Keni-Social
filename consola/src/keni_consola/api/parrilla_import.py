@@ -45,12 +45,10 @@ from ..seguridad import autor_de_peticion
 
 
 def _roster() -> dict[str, str]:
-    """Roster valido id->nombre (usuarios con cobertura), MISMO criterio que la rota."""
-    return {
-        u["id"]: u["usuario"]
-        for u in auth.listar_usuarios()
-        if u.get("cobertura")
-    }
+    """Roster id->nombre del equipo COMPLETO (todos los usuarios), para no limitar a quién se
+    puede asignar un turno al importar. NO filtramos por `cobertura`: el documento puede
+    referenciar a cualquiera del equipo (los 16), y claude solo mapea a gente que ya existe."""
+    return {u["id"]: u["usuario"] for u in auth.listar_usuarios()}
 
 
 def _estado_efectivo(propuesta: dict[str, Any]) -> str:

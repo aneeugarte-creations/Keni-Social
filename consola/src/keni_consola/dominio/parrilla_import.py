@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, timedelta
+from datetime import date
 from typing import Annotated, Any, Literal, Union
 
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError
@@ -54,16 +54,11 @@ from ..estados import (
 # Origen reservado de las filas creadas/editadas por este flujo (provenance / dedup).
 ORIGEN = "import-doc"
 
-# Topes defensivos: un documento ANUAL puede traer muchas operaciones (un año = 52 semanas con
-# turnos diarios + eventos). Subimos el tope para cubrir un año sin recortar lo real.
-MAX_OPERACIONES = 2000
+# SIN límite de rango ni de cantidad: un documento puede traer cualquier fecha (pasado o
+# futuro) y todas las operaciones que el modelo extraiga. La cantidad ya está acotada de forma
+# natural por el presupuesto/turnos de `claude -p`; no imponemos un tope artificial que recorte
+# datos reales. `MAX_TEXTO` es solo higiene de longitud POR CAMPO (no un límite de rango).
 MAX_TEXTO = 4000
-
-# Ventana temporal LENIENTE: aceptamos fechas en [hoy-1año, hoy+2años]. No atamos a una semana
-# (un documento puede traer un año entero), pero rechazamos fechas absurdas (1999, 2099). El
-# borde se calcula con `ventana_por_defecto()` para no fijar un "hoy" al importar el modulo.
-MAX_DIAS_ATRAS = 366
-MAX_DIAS_ADELANTE = 366 * 2
 
 
 # --------------------------------------------------------------------------- #
@@ -90,8 +85,11 @@ class CrearTurno(BaseModel):
     """Alta de un turno (horario `(fecha, franja)` para un miembro existente).
 
     `franja` es el NOMBRE del slot (p.ej. "Mañana"), NO un `franja_id`: las franjas son filas
-    por semana y un documento anual referencia el slot por nombre. La resolucion
-    nombre->`franja_id` de la semana concreta ocurre al APLICAR.
+    por semana y un documento referencia el slot por nombre. NO se restringe a una plantilla
+    fija: un día puede tener 3+ franjas y el documento puede traer nombres nuevos. La resolucion
+    nombre->`franja_id` de la semana concreta ocurre al APLICAR, CREANDO la franja si no existe.
+    `franja_inicio`/`franja_fin` (HH:MM, opcionales) son el horario del slot SI el documento lo
+    indica; se usan al crear la franja (si no, horario por defecto).
     """
 
     model_config = {"extra": "forbid"}
@@ -99,6 +97,8 @@ class CrearTurno(BaseModel):
     tipo: Literal["crear_turno"]
     fecha: str
     franja: str
+    franja_inicio: str | None = None
+    franja_fin: str | None = None
     miembro_id: str
     miembro_nombre: str | None = None
     nota_relevo: str | None = None
@@ -147,21 +147,13 @@ def normaliza_franja(nombre: str) -> str:
     return (nombre or "").strip().lower()
 
 
-def ventana_por_defecto(hoy: date | None = None) -> tuple[str, str]:
-    """`(desde, hasta)` ISO de la ventana temporal leniente alrededor de `hoy` (o today)."""
-    base = hoy or date.today()
-    desde = (base - timedelta(days=MAX_DIAS_ATRAS)).isoformat()
-    hasta = (base + timedelta(days=MAX_DIAS_ADELANTE)).isoformat()
-    return desde, hasta
-
-
 class Contexto:
     """Estado real (multi-semana) contra el que se valida una propuesta.
 
     PURO: lo construye la capa de API/DB (desde `repos`) y se lo pasa al validador. No abre
     conexiones ni lee disco; es un snapshot inmutable de lo necesario para validar/conflictos.
-    A diferencia del modelo viejo (una sola semana), valida operaciones en CUALQUIER fecha
-    dentro de una ventana razonable: un documento puede traer un año entero.
+    A diferencia del modelo viejo (una sola semana), valida operaciones en CUALQUIER fecha,
+    SIN límite de rango: un documento puede traer cualquier periodo (pasado o futuro).
 
     - `miembros`: id -> nombre del roster valido (equipo completo asignable).
     - `nombres_franja`: conjunto de NOMBRES de slot validos, ya normalizados
@@ -170,7 +162,6 @@ class Contexto:
     - `turnos_por_id`: id -> dict del turno (para `modificar_turno` y valores actuales). Para
       `modificar_turno` el `actual.franja` se expone como NOMBRE (resuelto via `franjas_nombre`).
     - `turnos_por_celda`: (fecha, nombre_franja_norm) -> miembro_id ocupante (choque por slot).
-    - `ventana`: `(desde, hasta)` ISO de fechas aceptables (rechaza fechas absurdas).
 
     `franjas_nombre` (id -> nombre) resuelve el `franja_id` de un turno existente a su nombre
     (para construir `turnos_por_celda` y los valores `actual` de `modificar_turno`).
@@ -183,12 +174,10 @@ class Contexto:
         nombres_franja: set[str],
         turnos: list[dict[str, Any]],
         franjas_nombre: dict[str, str] | None = None,
-        ventana: tuple[str, str] | None = None,
     ) -> None:
         self.miembros = dict(miembros)
         # Nombres de franja validos, normalizados (case/space-insensitive).
         self.nombres_franja = {normaliza_franja(n) for n in nombres_franja if n}
-        self.ventana = ventana or ventana_por_defecto()
         # id de franja -> NOMBRE (para resolver el slot de un turno existente).
         franjas_nombre = dict(franjas_nombre or {})
         self.turnos_por_id: dict[str, dict[str, Any]] = {
@@ -209,11 +198,6 @@ class Contexto:
     def franja_valida(self, nombre: str) -> bool:
         """True si `nombre` (normalizado) es un slot de franja valido."""
         return normaliza_franja(nombre) in self.nombres_franja
-
-    def fecha_en_ventana(self, fecha_iso: str) -> bool:
-        """True si `fecha_iso` cae dentro de la ventana temporal aceptable."""
-        desde, hasta = self.ventana
-        return desde <= fecha_iso <= hasta
 
     def nombre_de_franja(self, franja_id: str) -> str:
         """NOMBRE de la franja `franja_id` de un turno existente ("" si no se conoce)."""
@@ -304,8 +288,6 @@ def _validar_semantica(op: Operacion, ctx: Contexto) -> str | None:
             return "El evento necesita un título."
         if not _fecha_iso_valida(op.fecha):
             return f"Fecha inválida: {op.fecha!r} (usa AAAA-MM-DD)."
-        if not ctx.fecha_en_ventana(op.fecha):
-            return f"La fecha {op.fecha} cae fuera del rango admitido."
         if op.hora not in (None, "") and not _hora_valida(op.hora or ""):
             return f"Hora inválida: {op.hora!r} (usa HH:MM)."
         if op.tipo_cobertura not in (None, "") and op.tipo_cobertura not in TIPOS_COBERTURA:
@@ -317,10 +299,14 @@ def _validar_semantica(op: Operacion, ctx: Contexto) -> str | None:
     if isinstance(op, CrearTurno):
         if not _fecha_iso_valida(op.fecha):
             return f"Fecha inválida: {op.fecha!r} (usa AAAA-MM-DD)."
-        if not ctx.fecha_en_ventana(op.fecha):
-            return f"La fecha {op.fecha} cae fuera del rango admitido."
-        if not ctx.franja_valida(op.franja):
-            return f"La franja {op.franja!r} no es un slot válido."
+        if not op.franja.strip():
+            return "El turno necesita el nombre de su franja."
+        # NO restringimos la franja a una plantilla fija: cualquier nombre es válido y, si no
+        # existe esa semana, se CREA al aplicar (un día puede tener 3+ franjas).
+        if op.franja_inicio not in (None, "") and not _hora_valida(op.franja_inicio or ""):
+            return f"Hora de inicio de franja inválida: {op.franja_inicio!r} (usa HH:MM)."
+        if op.franja_fin not in (None, "") and not _hora_valida(op.franja_fin or ""):
+            return f"Hora de fin de franja inválida: {op.franja_fin!r} (usa HH:MM)."
         if op.miembro_id not in ctx.miembros:
             return f"El miembro {op.miembro_id!r} no existe en el equipo."
         return None
@@ -413,8 +399,6 @@ def parsear_y_validar(
         return [], [
             {"indice": 0, "error": "El asistente no devolvió un bloque JSON legible con las operaciones."}
         ]
-    if len(crudas) > MAX_OPERACIONES:
-        crudas = crudas[:MAX_OPERACIONES]
 
     validas: list[dict[str, Any]] = []
     errores: list[dict[str, Any]] = []

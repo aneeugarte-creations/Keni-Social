@@ -8402,12 +8402,12 @@ def aplicar_propuesta_parrilla(
     desactualizado). Devuelve un resumen `{eventos_creados, turnos_creados, turnos_modificados,
     ids:{...}}`. NO re-valida (la API ya lo hizo contra la BD viva ANTES de llamar aqui).
 
-    RANGO / FRANJA POR NOMBRE: cada `crear_turno` trae `franja` (NOMBRE de slot, p.ej. "Mañana")
-    y una fecha cualquiera. Calcula su semana (`lunes`), SIEMBRA las franjas por defecto de esa
-    semana si no tiene ninguna (dentro de la misma transaccion) y resuelve el NOMBRE -> el
-    `franja_id` de esa semana (match normalizado case/space-insensitive). Si el nombre no se
-    puede resolver para esa semana, lanza `ValueError` (la API lo traduce a 409): el diff entero
-    se descarta (rollback). Cacheamos el mapa nombre->id por semana para no sembrar repetido.
+    RANGO / FRANJA POR NOMBRE (PERMISIVO): cada `crear_turno` trae `franja` (NOMBRE de slot,
+    p.ej. "Mañana") y una fecha cualquiera. Calcula su semana (`lunes`) y resuelve el NOMBRE ->
+    el `franja_id` de esa semana (match normalizado case/space-insensitive). Si el nombre NO
+    existe esa semana, CREA la franja en la misma transaccion (un día puede tener 3+ franjas y
+    el documento puede traer slots nuevos), con el horario `franja_inicio/fin` del documento si
+    vino. NO rechaza por plantilla. Cacheamos el mapa nombre->id por semana.
     """
     ahora = datetime.now().isoformat(timespec="seconds")
     eventos_creados: list[str] = []
@@ -8416,27 +8416,44 @@ def aplicar_propuesta_parrilla(
     # Cache por semana del mapa {nombre_normalizado -> franja_id} (siembra defaults una vez).
     franjas_por_semana: dict[str, dict[str, str]] = {}
 
-    def _franja_id_de(con: Any, semana: str, nombre: str) -> str:
-        """Resuelve `nombre` de slot -> `franja_id` de `semana` (sembrando defaults si hace
-        falta). Lanza `ValueError` si el nombre no existe para esa semana."""
+    def _franja_id_de(
+        con: Any, semana: str, nombre: str, *, inicio: str = "", fin: str = ""
+    ) -> str:
+        """Resuelve `nombre` de slot -> `franja_id` de `semana`. PERMISIVO: si el nombre no
+        existe en esa semana, CREA la franja (un día puede tener 3+ franjas y el documento
+        puede traer slots nuevos), usando `inicio`/`fin` si vienen o un horario por defecto.
+        `es_descanso` se infiere del nombre. No rechaza nada por plantilla."""
         if semana not in franjas_por_semana:
-            mapa = _sembrar_franjas_por_defecto_en(con, semana)
-            # Re-leemos TODAS las franjas de la semana (la siembra solo añade las 3 por defecto;
-            # una semana puede tener slots extra ya creados a mano).
+            # Cargamos las franjas YA existentes de la semana (sin sembrar: no imponemos la
+            # plantilla por defecto; solo creamos las que el documento realmente use).
             filas = con.execute(
                 "SELECT id, nombre FROM rota_franjas WHERE lunes = ?", (semana,)
             ).fetchall()
-            por_nombre = {str(f["nombre"]).strip().lower(): f["id"] for f in filas}
-            # Incluye lo sembrado por si el SELECT corriera antes del commit en algun backend.
-            for n, fid in mapa.items():
-                por_nombre.setdefault(str(n).strip().lower(), fid)
-            franjas_por_semana[semana] = por_nombre
-        fid = franjas_por_semana[semana].get((nombre or "").strip().lower())
-        if not fid:
-            raise ValueError(
-                f"La franja {nombre!r} no existe en la semana {semana}."
-            )
-        return fid
+            franjas_por_semana[semana] = {
+                str(f["nombre"]).strip().lower(): f["id"] for f in filas
+            }
+        clave = (nombre or "").strip().lower()
+        fid = franjas_por_semana[semana].get(clave)
+        if fid:
+            return fid
+        # No existe: la creamos en ESTA transacción (orden = nº de franjas ya en la semana).
+        nuevo_id = uuid.uuid4().hex[:12]
+        es_descanso = "descanso" in clave
+        con.execute(
+            "INSERT INTO rota_franjas (id, lunes, nombre, inicio, fin, orden, es_descanso) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                nuevo_id,
+                semana,
+                nombre.strip(),
+                (inicio or "").strip() or "00:00",
+                (fin or "").strip() or "23:59",
+                len(franjas_por_semana[semana]),
+                es_descanso,
+            ),
+        )
+        franjas_por_semana[semana][clave] = nuevo_id
+        return fid or nuevo_id
 
     con = _conectar()
     try:
@@ -8470,8 +8487,15 @@ def aplicar_propuesta_parrilla(
                 tid = uuid.uuid4().hex[:12]
                 miembro_id = str(op.get("miembro_id", ""))
                 semana = _lunes_iso_de(op.get("fecha", ""))
-                # Resuelve el NOMBRE de slot -> franja_id de ESA semana (siembra si hace falta).
-                franja_id = _franja_id_de(con, semana, str(op.get("franja", "")))
+                # Resuelve el NOMBRE de slot -> franja_id de ESA semana (CREA la franja si no
+                # existe, con el horario del documento si vino).
+                franja_id = _franja_id_de(
+                    con,
+                    semana,
+                    str(op.get("franja", "")),
+                    inicio=str(op.get("franja_inicio") or ""),
+                    fin=str(op.get("franja_fin") or ""),
+                )
                 con.execute(
                     "INSERT INTO rota_turnos "
                     "(id, semana, fecha, miembro_id, miembro_nombre, franja_id, estado, "

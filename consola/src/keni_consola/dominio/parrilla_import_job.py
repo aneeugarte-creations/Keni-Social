@@ -29,12 +29,9 @@ from . import parrilla_import as pi
 
 _log = logging.getLogger("keni_consola.parrilla_import_job")
 
-# Topes del prompt: acotamos por defensa el numero de filas de contexto que embebemos.
-_MAX_FILAS_CONTEXTO = 500
-
-# Nombres de slot por defecto (plantilla de la rota). Un turno propuesto puede usar SIEMPRE
-# estos slots aunque la semana objetivo aun no tenga franjas (se siembran al aplicar). El
-# "Descanso" se incluye: un documento puede planificar un descanso explicito.
+# Nombres de slot por defecto (plantilla de la rota), solo como REFERENCIA en el prompt: el
+# documento puede usar estos u otros (un día puede tener 3+ franjas). NO se restringe a ellos;
+# las franjas nuevas se crean al aplicar. "Descanso" se incluye (un documento puede planificarlo).
 _SLOTS_DEFECTO: tuple[str, ...] = (
     NOMBRE_FRANJA_MANANA_DEFAULT,
     NOMBRE_FRANJA_TARDE_DEFAULT,
@@ -146,7 +143,8 @@ _ESQUEMA_JSON = (
     '  {"tipo": "crear_evento", "fecha": "AAAA-MM-DD", "hora": "HH:MM"|null, '
     '"titulo": "...", "contenido": "..."?, "nota": "..."?, '
     '"tipo_cobertura": "transmision|imagenes|no_cubrir"?, "prioridad": "alta|media|baja"?},\n'
-    '  {"tipo": "crear_turno", "fecha": "AAAA-MM-DD", "franja": "<NOMBRE de slot existente>", '
+    '  {"tipo": "crear_turno", "fecha": "AAAA-MM-DD", "franja": "<NOMBRE de la franja/slot tal '
+    'como aparece en el documento>", "franja_inicio": "HH:MM"?, "franja_fin": "HH:MM"?, '
     '"miembro_id": "<id de miembro existente>", "miembro_nombre": "..."?, '
     '"nota_relevo": "..."?, "motivo": "..."?},\n'
     '  {"tipo": "modificar_turno", "turno_id": "<id de turno existente>", '
@@ -166,8 +164,7 @@ def componer_prompt(*, ruta_doc: str, ctx: pi.Contexto) -> str:
     gente o franjas y le exige una unica salida: un bloque ```json con el esquema.
     """
     lineas_miembros = "\n".join(
-        f'  - id="{mid}" nombre="{nombre}"'
-        for mid, nombre in list(ctx.miembros.items())[:_MAX_FILAS_CONTEXTO]
+        f'  - id="{mid}" nombre="{nombre}"' for mid, nombre in ctx.miembros.items()
     ) or "  (no hay miembros asignables)"
     lineas_slots = "\n".join(f'  - "{n}"' for n in _SLOTS_DEFECTO)
 
@@ -175,24 +172,25 @@ def componer_prompt(*, ruta_doc: str, ctx: pi.Contexto) -> str:
         "Eres un asistente que convierte un documento de PLANIFICACIÓN de la rota/parrilla de un "
         "equipo de redes sociales en operaciones estructuradas. Lee EXCLUSIVAMENTE el documento "
         f"en la ruta {ruta_doc} (puede ser PDF, imagen/captura, Word, Excel o texto).\n\n"
-        "EXTRAE TODOS los eventos y turnos que encuentres en el documento, SEA CUAL SEA su "
-        "fecha: el documento puede cubrir una semana, un mes o un AÑO ENTERO. Cada operación "
-        "DEBE llevar una fecha ISO explícita en formato AAAA-MM-DD (resuelve cualquier fecha "
-        "relativa o abreviada a su fecha absoluta).\n\n"
-        "MIEMBROS asignables (usa SOLO estos id en `miembro_id`; NO inventes personas; si el "
-        "documento nombra a alguien que no está en esta lista, OMÍTELO):\n"
+        "EXTRAE TODO lo que encuentres en el documento, SIN RECORTAR: todos los eventos y todos "
+        "los turnos, SEA CUAL SEA su fecha (el documento puede cubrir una semana, un mes o un "
+        "AÑO ENTERO) y haya las franjas que haya por día (puede haber 3 o más). Cada operación "
+        "DEBE llevar una fecha ISO explícita AAAA-MM-DD (resuelve fechas relativas/abreviadas).\n\n"
+        "MIEMBROS del equipo (usa estos id en `miembro_id`; mapea los nombres del documento a "
+        "esta lista; si alguien del documento no está aquí, OMÍTELO en vez de inventar un id):\n"
         f"{lineas_miembros}\n\n"
-        "FRANJAS (slots) válidas para `crear_turno` (usa el NOMBRE EXACTO del slot en `franja`; "
-        "NO inventes franjas ni uses ids):\n"
+        "FRANJAS: usa en `franja` el NOMBRE de la franja TAL COMO aparece en el documento (no lo "
+        "fuerces a una plantilla). Un día puede tener varias franjas (p.ej. 3). Si el documento "
+        "indica el horario de la franja, ponlo en `franja_inicio`/`franja_fin` (HH:MM). Como "
+        "REFERENCIA, los slots habituales del equipo son (pero NO te limites a ellos):\n"
         f"{lineas_slots}\n\n"
         "Valores de enum válidos: tipo_cobertura ∈ {transmision, imagenes, no_cubrir}; "
         "prioridad ∈ {alta, media, baja}; estado ∈ {propuesto, aprobado}.\n\n"
-        "REGLAS ESTRICTAS:\n"
+        "REGLAS:\n"
         "- NO escribas en ningún sitio ni uses herramientas más allá de LEER el documento.\n"
-        "- Solo puedes asignar miembros que aparezcan en la lista de arriba.\n"
-        "- En `franja` usa SOLO uno de los nombres de slot de arriba.\n"
-        "- Si el documento crea un turno para una persona que no existe, OMITE esa fila.\n"
-        "- Emite SOLO operaciones que reflejen el documento; no inventes eventos ni turnos.\n\n"
+        "- Asigna turnos solo a miembros de la lista (mapea nombres→id); omite a los desconocidos.\n"
+        "- Respeta las franjas del documento (nombre y horario); no las reduzcas ni renombres.\n"
+        "- Emite TODO lo que refleje el documento; no inventes eventos ni turnos que no estén.\n\n"
         "SALIDA: responde con UN ÚNICO bloque de código cercado ```json con esta forma EXACTA, "
         "y NADA de texto antes ni después:\n"
         f"```json\n{_ESQUEMA_JSON}\n```\n"
