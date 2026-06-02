@@ -103,6 +103,7 @@ import type {
   CuerpoImagenesGenerar,
   CuerpoImagenesEditar,
   CuerpoImagenesExpandir,
+  CuerpoImagenesRetocar,
   CuerpoImagenesRevisar,
   CuerpoImagenesComponer,
   CuerpoGuardarArte,
@@ -804,6 +805,11 @@ export const api = {
     peticion<RespuestaGeneracion>("/imagenes/editar", { metodo: "POST", json: cuerpo }),
   imagenesExpandir: (cuerpo: CuerpoImagenesExpandir) =>
     peticion<RespuestaGeneracion>("/imagenes/expandir", { metodo: "POST", json: cuerpo }),
+  // Retoque generativo por instrucción ("oscurece el cielo"): reinterpreta toda la imagen.
+  // Distinto de expandir (outpainting fiel). Generativo (con coste); se SONDEA con
+  // `useGeneracion` y completa con `resultado` `{id, url}`.
+  imagenesRetocar: (cuerpo: CuerpoImagenesRetocar) =>
+    peticion<RespuestaGeneracion>("/imagenes/retocar", { metodo: "POST", json: cuerpo }),
   // Revisión legal/editorial de una imagen (gate humano, no bloquea publicar): job
   // "qa-editorial" que se SONDEA con `useGeneracion`; el checklist ✅/⚠️/❌ llega en vivo
   // en `generacion.salida`.

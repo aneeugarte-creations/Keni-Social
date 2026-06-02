@@ -169,6 +169,35 @@ async def expandir(request: Request) -> Response:
     return JSONResponse({"generacion": _lanzar(request, f"Expandir · {formato}", _hacer)})
 
 
+async def retocar(request: Request) -> Response:
+    """Retoque GENERATIVO por instruccion ("oscurece el cielo") -> `{generacion}`.
+
+    Distinto de `expandir` (outpainting: solo rellena una banda, fiel al sujeto): aqui el modelo
+    reinterpreta TODA la imagen segun la instruccion. Generativo (coste); responde con un registro
+    de generacion y el frontend sondea `GET /api/generaciones/{id}` (mismo patron que expandir).
+    """
+    datos = await leer_json(request)
+    imagen = datos.get("imagen") if isinstance(datos.get("imagen"), str) else ""
+    if not imagen.strip():
+        return JSONResponse({"error": "Falta la imagen que quieres retocar."}, status_code=400)
+    instruccion = datos.get("instruccion") if isinstance(datos.get("instruccion"), str) else ""
+    if not instruccion.strip():
+        return JSONResponse({"error": "Escribe qué retoque quieres aplicar."}, status_code=400)
+    if not media.proveedor_configurado():
+        return JSONResponse(
+            {"error": "El retoque de imagen necesita un proveedor de imagen configurado."},
+            status_code=400,
+        )
+    strength = _num(datos, "strength")
+    if strength is not None:
+        strength = max(0.0, min(1.0, strength))
+
+    def _hacer() -> dict[str, Any]:
+        return estudio_imagen.retocar(imagen.strip(), instruccion.strip(), strength=strength)
+
+    return JSONResponse({"generacion": _lanzar(request, f"Retocar · {instruccion.strip()[:40]}", _hacer)})
+
+
 async def componer(request: Request) -> Response:
     """Estampa la PLANTILLA de marca (logo + pleca + titular) sobre una foto -> `{generacion}`.
 
@@ -226,6 +255,7 @@ RUTAS = [
     Route("/api/imagenes/generar", generar, methods=["POST"]),
     Route("/api/imagenes/editar", editar, methods=["POST"]),
     Route("/api/imagenes/expandir", expandir, methods=["POST"]),
+    Route("/api/imagenes/retocar", retocar, methods=["POST"]),
     Route("/api/imagenes/componer", componer, methods=["POST"]),
     Route("/api/imagenes/revisar", revisar, methods=["POST"]),
 ]

@@ -502,7 +502,10 @@ function FuenteFondo({
   return (
     <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
       {!compacto && (
-        <p className="text-xs text-muted-foreground">Elige de dónde sale la imagen de fondo:</p>
+        <p className="text-xs text-muted-foreground">
+          Elige de dónde sale la foto/fondo (puedes subir una foto real, elegir de la biblioteca
+          o generarla con IA):
+        </p>
       )}
       <div className="flex flex-wrap items-center gap-2">
         {mostrarOriginal && (
@@ -517,7 +520,7 @@ function FuenteFondo({
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onSubir} disabled={ocupado}>
           {subiendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-          Subir
+          Subir foto
         </Button>
         <span className="text-xs text-muted-foreground">o genera con IA:</span>
       </div>

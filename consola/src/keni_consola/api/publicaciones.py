@@ -467,9 +467,9 @@ async def integrar_foto(request: Request) -> Response:
     """Integra una FOTO subida dentro de la plantilla de marca de la publicación.
 
     `POST /api/publicaciones/{id}/integrar-foto {imagen}` (imagen = id de media de la foto).
-    Para marcas con plantilla visual (`unotv`/`claro-sports`) RECOMPONE de forma determinista
-    (síncrona, ~<1s) la foto detrás del marco de marca usando el `copy_in` de la pieza como
-    titular; para las demás marcas devuelve la foto tal cual. NO persiste: devuelve la imagen
+    Si la pieza tiene marca (cualquiera del catálogo) RECOMPONE de forma determinista
+    (síncrona, ~<1s) la foto detrás de la plantilla por SPEC usando el `copy_in` de la pieza
+    como titular; sin marca devuelve la foto tal cual. NO persiste: devuelve la imagen
     resultante para que el SPA la fije y la guarde con el resto de la edición.
     -> `{imagen, imagen_url}` | 400 | 404.
     """

@@ -68,7 +68,13 @@ export function EditorPlantillaMarca({
             />
           </div>
 
-          {marca && <EditorPlantillaSpec key={marca} marca={marca} />}
+          {marca && (
+            <EditorPlantillaSpec
+              key={marca}
+              marca={marca}
+              onGuardado={() => onOpenChange(false)}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>

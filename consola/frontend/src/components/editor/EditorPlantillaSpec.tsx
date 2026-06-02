@@ -73,7 +73,14 @@ const CLAVES_FIJAS = [
   { clave: "logo", etiqueta: "Logo" },
 ];
 
-export function EditorPlantillaSpec({ marca }: { marca: string }) {
+export function EditorPlantillaSpec({
+  marca,
+  onGuardado,
+}: {
+  marca: string;
+  /** Se invoca tras guardar el spec con éxito (p. ej. para cerrar el diálogo contenedor). */
+  onGuardado?: () => void;
+}) {
   const queryClient = useQueryClient();
   const [spec, setSpec] = React.useState<PlantillaSpec | null>(null);
   const [formato, setFormato] = React.useState<FormatoId>("feed");
@@ -119,6 +126,7 @@ export function EditorPlantillaSpec({ marca }: { marca: string }) {
       setSpec(d.spec);
       void queryClient.invalidateQueries({ queryKey: ["plantilla-spec", marca] });
       toast.success("Plantilla guardada");
+      onGuardado?.();
     },
     onError: (e) => toast.error(msg(e)),
   });

@@ -132,6 +132,46 @@ def test_expandir_ok(entorno, monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# POST /api/imagenes/retocar (retoque generativo por instruccion)             #
+# --------------------------------------------------------------------------- #
+
+
+def test_retocar_sin_imagen_400(cliente):
+    r = cliente.post("/api/imagenes/retocar", json={"instruccion": "oscurece el cielo"})
+    assert r.status_code == 400
+
+
+def test_retocar_sin_instruccion_400(cliente):
+    r = cliente.post("/api/imagenes/retocar", json={"imagen": "x.png"})
+    assert r.status_code == 400
+
+
+def test_retocar_no_configurado_400(cliente):
+    r = cliente.post("/api/imagenes/retocar", json={"imagen": "x.png", "instruccion": "oscurece"})
+    assert r.status_code == 400
+
+
+def test_retocar_ok(entorno, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "clave")
+    captado = {}
+
+    def _fake_retocar(imagen, instruccion, **kw):
+        captado.update(imagen=imagen, instruccion=instruccion, **kw)
+        return {"id": "r.png", "url": "/api/media/r.png", "imagenes": []}
+
+    monkeypatch.setattr(estudio_imagen, "retocar", _fake_retocar)
+    cli = _cliente(lanzar_imagen=lanzador_imagen_ejecuta())
+    r = cli.post(
+        "/api/imagenes/retocar",
+        json={"imagen": "src.png", "instruccion": "oscurece el cielo", "strength": 0.6},
+    )
+    assert r.status_code == 200
+    assert r.json()["generacion"]["resultado"]["id"] == "r.png"
+    assert captado["imagen"] == "src.png"
+    assert captado["instruccion"] == "oscurece el cielo"
+
+
+# --------------------------------------------------------------------------- #
 # POST /api/imagenes/componer (estampar la plantilla de marca, determinista)   #
 # --------------------------------------------------------------------------- #
 

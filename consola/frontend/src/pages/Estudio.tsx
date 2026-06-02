@@ -189,6 +189,15 @@ function Variante({
   );
 }
 
+/** Ayuda contextual breve de un paso del flujo (Origen→Generar→Ajustar→Marca→Revisar). */
+function AyudaPaso({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="rounded-md bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+      {children}
+    </p>
+  );
+}
+
 export default function Estudio() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -388,6 +397,24 @@ export default function Estudio() {
     },
   });
 
+  // Retoque por instrucción (generativo, con coste): pasa la imagen activa al modelo con una
+  // indicación ("oscurece el cielo") y devuelve una generación nueva. Entra como candidata vía
+  // el mismo hook `op`. Distinto de Expandir (outpainting): aquí el modelo reinterpreta la escena.
+  const lanzarRetocar = useMutation({
+    mutationFn: (cuerpo: Parameters<typeof api.imagenesRetocar>[0]) => api.imagenesRetocar(cuerpo),
+    onSuccess: (data) => {
+      setOpAviso("");
+      op.iniciar(data.generacion);
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 400) {
+        setOpAviso(e.message);
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : "No se pudo retocar la imagen.");
+    },
+  });
+
   // --- Aplicar marca (plantilla): estampa logo/pleca/titular sobre la activa ---
   // Composición DETERMINISTA en el backend; el resultado entra como candidata vía el
   // MISMO hook `op` (respeta la persistencia de sesión, igual que editar/expandir).
@@ -422,6 +449,7 @@ export default function Estudio() {
     op.ejecutando ||
     lanzarEditar.isPending ||
     lanzarExpandir.isPending ||
+    lanzarRetocar.isPending ||
     lanzarComponer.isPending;
 
   // --- Revisión legal/editorial (gate humano, no bloquea publicar) ---
@@ -467,13 +495,33 @@ export default function Estudio() {
   const [maxPx, setMaxPx] = React.useState("1080");
   const [pesoMb, setPesoMb] = React.useState("2");
   const [expStrength, setExpStrength] = React.useState("0.6");
+  const [retoqueInstruccion, setRetoqueInstruccion] = React.useState("");
   const [expLado, setExpLado] = React.useState<
     "auto" | "arriba" | "abajo" | "izquierda" | "derecha"
   >("auto");
 
   // --- Elegir final ---
+  // SIEMPRE pasa por la composición antes de guardar: si la pieza tiene marca y la imagen
+  // activa AÚN no lleva la plantilla estampada (no tiene `origen`), integramos la foto en la
+  // plantilla de marca (composición determinista por SPEC en el backend) usando el titular
+  // vigente. Así no se pierde la plantilla al "Usar en la pieza". Si la activa ya está
+  // compuesta (`origen` presente) o la pieza no tiene marca, se guarda tal cual. En todos los
+  // casos ACTUALIZA la pieza existente (no duplica): vuelve a ella al terminar.
+  const marcaPieza = ctx.marca || marcaPlantilla || marca;
   const usarEnPieza = useMutation({
-    mutationFn: () => api.actualizarPublicacion(ctx.publicacionId!, { imagen: activa!.id }),
+    mutationFn: async () => {
+      let imagenFinal = activa!.id;
+      const yaCompuesta = !!activa!.origen;
+      if (marcaPieza && !yaCompuesta) {
+        const r = await api.integrarFotoPublicacion(
+          ctx.publicacionId!,
+          activa!.id,
+          titularPlantilla.trim() || undefined,
+        );
+        imagenFinal = r.imagen;
+      }
+      return api.actualizarPublicacion(ctx.publicacionId!, { imagen: imagenFinal });
+    },
     onSuccess: () => {
       toast.success("Imagen aplicada a la pieza");
       navigate(-1);
@@ -501,7 +549,7 @@ export default function Estudio() {
     <>
       <PageHeader
         titulo="Estudio de imagen"
-        descripcion="Origen, ajustes, marca y revisión de una imagen, por pestañas. Luego úsala en la pieza o descárgala."
+        descripcion="Sigue el flujo paso a paso: Origen → Generar → Ajustar → Marca → Revisar. Luego úsala en la pieza o descárgala."
       />
 
       {ctx.publicacionId && (
@@ -658,17 +706,22 @@ export default function Estudio() {
           )}
 
           <Tabs defaultValue="origen">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="origen">Origen</TabsTrigger>
-              <TabsTrigger value="ajustar">Ajustar</TabsTrigger>
-              <TabsTrigger value="marca">Marca</TabsTrigger>
-              <TabsTrigger value="revisar">Revisar</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="origen">1 · Origen</TabsTrigger>
+              <TabsTrigger value="generar">2 · Generar</TabsTrigger>
+              <TabsTrigger value="ajustar">3 · Ajustar</TabsTrigger>
+              <TabsTrigger value="marca">4 · Marca</TabsTrigger>
+              <TabsTrigger value="revisar">5 · Revisar</TabsTrigger>
             </TabsList>
 
             <TabsContent value="origen" className="space-y-4">
           {/* Origen */}
           <section className="space-y-2">
             <Label className="text-sm font-medium">Origen</Label>
+            <AyudaPaso>
+              Empieza por una imagen: sube una foto real o pásate a la pestaña Generar para crearla
+              con IA desde un texto.
+            </AyudaPaso>
             <input
               ref={inputRef}
               type="file"
@@ -691,11 +744,18 @@ export default function Estudio() {
               )}
               Subir foto
             </Button>
-            <p className="text-xs text-muted-foreground">o genera desde cero abajo.</p>
+            <p className="text-xs text-muted-foreground">o genera desde cero en el paso 2.</p>
           </section>
 
+            </TabsContent>
+
+            <TabsContent value="generar" className="space-y-4">
           {/* Generar variantes */}
           <section className="space-y-3 rounded-md border border-border p-3">
+            <AyudaPaso>
+              Describe la imagen y la IA crea varias opciones. Elige una en las Candidatas; podrás
+              ajustarla y ponerle la marca en los pasos siguientes.
+            </AyudaPaso>
             <Label htmlFor="estudio-prompt" className="text-sm font-medium">
               Generar variantes
             </Label>
@@ -791,6 +851,10 @@ export default function Estudio() {
           {/* Editar (determinista) + Expandir (generativo) sobre la activa */}
           <section className="space-y-3 rounded-md border border-border p-3">
             <Label className="text-sm font-medium">Editar la imagen activa</Label>
+            <AyudaPaso>
+              Recorta, redimensiona o comprime (sin coste), o usa IA: Expandir encaja a formato sin
+              tocar el sujeto y Retocar cambia la escena con una instrucción.
+            </AyudaPaso>
             {!activa ? (
               <p className="text-xs text-muted-foreground">
                 Selecciona una candidata para editarla.
@@ -951,6 +1015,43 @@ export default function Estudio() {
                     Expandir
                   </Button>
                 </div>
+
+                {/* Retoque por instrucción (generativo, con coste) */}
+                <div className="space-y-1.5 rounded-md border border-border p-2">
+                  <Label htmlFor="estudio-retoque" className="flex items-center gap-1 text-xs">
+                    <Wand2 className="h-3.5 w-3.5" />
+                    Retocar con instrucción (IA)
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Describe el cambio en lenguaje natural; el modelo reinterpreta la imagen. Para
+                    encajar a formato sin tocar el sujeto, usa Expandir.
+                  </p>
+                  <Textarea
+                    id="estudio-retoque"
+                    value={retoqueInstruccion}
+                    onChange={(e) => setRetoqueInstruccion(e.target.value)}
+                    placeholder="p. ej. oscurece el cielo, haz el fondo más cálido, quita el reflejo del cristal…"
+                    rows={2}
+                    disabled={opEjecutando}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={opEjecutando || retoqueInstruccion.trim().length === 0}
+                    onClick={() => {
+                      if (!activa || retoqueInstruccion.trim().length === 0) return;
+                      setOpEtiqueta("Retoque");
+                      lanzarRetocar.mutate({
+                        imagen: activa.id,
+                        instruccion: retoqueInstruccion.trim(),
+                      });
+                    }}
+                  >
+                    <MarcaIA costo />
+                    Retocar
+                  </Button>
+                </div>
               </div>
             )}
           </section>
@@ -976,6 +1077,10 @@ export default function Estudio() {
                 Editar plantilla de marca
               </Button>
             </div>
+            <AyudaPaso>
+              Estampa la identidad de la marca (logo, pleca y titular) sobre la imagen. Diseña esa
+              plantilla con "Editar plantilla de marca"; disponible para todas las marcas.
+            </AyudaPaso>
             {!activa ? (
               <p className="text-xs text-muted-foreground">
                 Selecciona una candidata para estamparle la marca.

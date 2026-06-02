@@ -108,14 +108,48 @@ def test_expandir_sin_imagen(entorno):
 
 
 # --------------------------------------------------------------------------- #
+# retocar (instruccion generativa, motor mockeado)                            #
+# --------------------------------------------------------------------------- #
+
+
+def test_retocar_importa_salida(entorno, monkeypatch):
+    monkeypatch.setattr(media, "leer_media", lambda nombre: b"bytes")
+    capt = {}
+
+    def _fake(cmd, **kw):
+        capt["cmd"] = cmd
+        return {"op": "retocar", "modelo": "x", "salidas": [{"salida": "/tmp/ret.png"}]}
+
+    monkeypatch.setattr(e, "_correr_motor", _fake)
+    monkeypatch.setattr(media, "importar_imagen", lambda ruta: "ret.png")
+    res = e.retocar("origen.png", "oscurece el cielo", strength=0.6)
+    assert res["id"] == "ret.png"
+    assert "--instruccion" in capt["cmd"]
+    assert "oscurece el cielo" in capt["cmd"]
+
+
+def test_retocar_sin_imagen(entorno):
+    with pytest.raises(e.EstudioError):
+        e.retocar("", "algo")
+
+
+def test_retocar_sin_instruccion(entorno):
+    with pytest.raises(e.EstudioError):
+        e.retocar("origen.png", "  ")
+
+
+# --------------------------------------------------------------------------- #
 # componer (plantilla de marca: con foto y placeholder)                       #
 # --------------------------------------------------------------------------- #
 
 
 def test_marca_tiene_plantilla():
+    # Toda marca del catalogo puede componer su plantilla por SPEC (derivado de los campos
+    # planos): no solo las de tokens precargados, tambien Fundacion, Piso 15, etc.
     assert e.marca_tiene_plantilla("unotv")
     assert e.marca_tiene_plantilla("claro-sports")
-    assert not e.marca_tiene_plantilla("piso-15")
+    assert e.marca_tiene_plantilla("piso-15")
+    assert e.marca_tiene_plantilla("fundacion")
     assert not e.marca_tiene_plantilla("desconocida")
 
 

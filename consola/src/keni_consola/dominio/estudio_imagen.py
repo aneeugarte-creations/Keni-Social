@@ -45,7 +45,11 @@ OPS_EDITAR = ("recortar", "redimensionar", "comprimir", "extender", "placa")
 # Prompt base de imagen en la Biblioteca (editable por el equipo; cae a "" si falta).
 PROMPT_IMAGEN_DEFECTO = "prompt/imagen/ilustracion-fondo"
 
-# Marcas con identidad visual definida en `motores/estudio_imagen/marcas.json` (placa/breaking).
+# Marcas con tokens de diseno PRECARGADOS en `motores/estudio_imagen/marcas.json`
+# (colores/pleca afinados). Es el conjunto que admite la PLACA de texto legacy (`editar.py
+# placa`, Pillow). NO limita la PLANTILLA por SPEC: esa funciona para toda marca del catalogo
+# (el spec se deriva de los campos planos, que existen para cualquier marca; ver
+# `marca_tiene_plantilla`).
 _MARCAS_VISUALES = ("unotv", "claro-sports")
 
 # Nota de estilo por marca para el prompt generativo (referencia corta; la guia completa
@@ -55,9 +59,10 @@ _ESTILO_MARCA = {
     "claro-sports": "Estilo Claro Sports: deportivo, energia, alto contraste, rojo #CF2E2E de marca.",
 }
 
-# Wall-timeouts: editar es determinista (rapido); expandir llama al proveedor (lento).
+# Wall-timeouts: editar es determinista (rapido); expandir/retocar llaman al proveedor (lento).
 _TIMEOUT_EDITAR_S = 60
 _TIMEOUT_EXPANDIR_S = 240
+_TIMEOUT_RETOCAR_S = 240
 # Componer es determinista (Pillow), como editar: rapido, sin red.
 _TIMEOUT_COMPONER_S = 60
 
@@ -72,12 +77,15 @@ class EstudioError(RuntimeError):
 
 
 def marca_tiene_plantilla(marca: str) -> bool:
-    """True si la marca tiene identidad visual de placa (tokens en `marcas.json`).
+    """True si la marca puede auto-componer su PLANTILLA por SPEC (logo + pleca + titular).
 
-    Solo esas marcas pueden auto-componer la imagen-plantilla (logo + pleca + titular). Las
-    demas del catalogo no tienen tokens todavia, asi que se omiten (no se compone nada).
+    Vale para CUALQUIER marca del catalogo: el spec de capas se DERIVA de los campos planos
+    efectivos (`plantillas_marca.spec_por_defecto`), que existen para toda marca (defaults
+    genericos cuando no hay tokens propios). Asi Fundacion y el resto componen como UnoTV /
+    Claro Sports, y el editor visual puede disenar y guardar el spec de cada una. Las marcas
+    con tokens precargados (`_MARCAS_VISUALES`) solo arrancan con colores/pleca afinados.
     """
-    return marca in _MARCAS_VISUALES
+    return marcas.es_marca(marca)
 
 
 # Formato de placa por red. El compositor solo entiende vertical|feed|cuadrado; se elige el
@@ -284,6 +292,32 @@ def expandir(
         if lado and lado != "auto":
             cmd += ["--lado", lado]
         info = _correr_motor(cmd, timeout=_TIMEOUT_EXPANDIR_S, env=generaciones._entorno_skill())
+        return _resultado(_importar_salidas(info), info)
+
+
+def retocar(imagen: str, instruccion: str, *, strength: float | None = None) -> dict[str, Any]:
+    """Retoque GENERATIVO por INSTRUCCION ("oscurece el cielo") -> resultado uniforme.
+
+    A diferencia de `expandir` (outpainting fiel: solo rellena una banda), `retocar` reinterpreta
+    TODA la imagen segun la instruccion. Es generativo (coste + timeout como expandir); requiere
+    proveedor configurado (la clave viaja al subproceso via `_entorno_skill`).
+    """
+    if not imagen:
+        raise EstudioError("Falta la imagen de entrada para retocar.")
+    if not (instruccion or "").strip():
+        raise EstudioError("Escribe qué retoque quieres aplicar.")
+    with tempfile.TemporaryDirectory(prefix="keni-estudio-") as tmp:
+        carpeta = Path(tmp)
+        foto = _materializar(imagen, carpeta)
+        out = carpeta / "salida.png"
+        motor = _ruta_motor("retocar.py")
+        cmd = [
+            sys.executable, str(motor), "--foto", str(foto),
+            "--instruccion", instruccion.strip(), "--salida", str(out),
+        ]
+        if strength is not None:
+            cmd += ["--strength", str(strength)]
+        info = _correr_motor(cmd, timeout=_TIMEOUT_RETOCAR_S, env=generaciones._entorno_skill())
         return _resultado(_importar_salidas(info), info)
 
 

@@ -2524,6 +2524,19 @@ export interface CuerpoImagenesExpandir {
   lado?: "auto" | "arriba" | "abajo" | "izquierda" | "derecha";
 }
 
+/**
+ * Cuerpo de `POST /api/imagenes/retocar`: retoque GENERATIVO por instrucción (IA, con coste).
+ * Reinterpreta toda la imagen según la indicación ("oscurece el cielo"); distinto de expandir
+ * (outpainting fiel al sujeto).
+ */
+export interface CuerpoImagenesRetocar {
+  imagen: string;
+  /** Qué cambiar, en lenguaje natural. */
+  instruccion: string;
+  /** Cuánto cambia respecto al original (0..1; alto = cambia más). */
+  strength?: number;
+}
+
 /** Cuerpo de `POST /api/imagenes/revisar`: revisión legal/editorial (gate humano, no bloquea). */
 export interface CuerpoImagenesRevisar {
   /** Nombre del objeto de media a revisar. */
