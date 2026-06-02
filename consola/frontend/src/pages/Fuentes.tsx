@@ -1,17 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Building2,
   CheckCircle2,
   CircleSlash,
   CircleX,
   ExternalLink,
   Layers,
+  Lightbulb,
+  Link2,
   Loader2,
   Plus,
   RefreshCw,
   Rss,
   Search,
+  Send,
   Sparkles,
   Trash2,
+  TrendingUp,
 } from "lucide-react";
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -49,6 +54,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { useGeneracion } from "@/hooks/use-generacion";
@@ -94,15 +100,39 @@ function limpiarMensaje(texto: string): string {
 const CABECERA = {
   titulo: "Fuentes",
   descripcion:
-    "Da de alta feeds RSS, vigila su salud y genera copy directamente desde sus noticias.",
+    "El hub de insumos: vigila TODAS tus fuentes en un sitio y aporta material por tipo " +
+    "(RSS, Google Trends, ideas, enlaces y contenido interno). Lo que aportas llega al pipeline.",
 };
 
 /**
- * Página de Fuentes RSS.
+ * Taxonomía de TIPOS de fuente en UN SOLO sitio (item G): añadir un tipo nuevo es declarar
+ * una entrada aquí + su componente de pestaña. Cada tipo decide su propia alta/edición.
  *
- * Panel izquierdo: alta, edición, activación y salud de los feeds. Panel
- * derecho: items recientes con refresco, filtro por palabra clave, ocultar
- * usados, marcar usado/no usado y generación de copy directa desde el item.
+ *   - `standing`: fuentes CONFIGURABLES que se quedan dadas de alta (RSS, Trends, agencias).
+ *   - `manual`:   APORTACIONES puntuales que producen un item REAL en Pendientes (ideas,
+ *                 enlaces pegados, contenido interno), reusando `POST /api/fuentes/aportar`.
+ */
+type PestanaTipo = {
+  valor: string;
+  etiqueta: string;
+};
+
+const PESTANAS_TIPO: PestanaTipo[] = [
+  { valor: "todas", etiqueta: "Todas" },
+  { valor: "rss", etiqueta: "RSS" },
+  { valor: "trends", etiqueta: "Google Trends" },
+  { valor: "idea", etiqueta: "Ideas" },
+  { valor: "enlace", etiqueta: "Enlaces" },
+  { valor: "interna", etiqueta: "Interno AMX" },
+];
+
+/**
+ * Página de Fuentes: HUB multi-tipo de insumos.
+ *
+ * Pestaña por defecto "Todas": vista unificada de todas las fuentes configuradas (de
+ * cualquier tipo) + estado de agencias. Luego, una pestaña INDEPENDIENTE por tipo, cada
+ * una con su propia alta/edición coherente con el tipo. Los tipos MANUALES (ideas, enlaces,
+ * interno) producen ítems reales en el pipeline con su fuente visible.
  */
 export default function Fuentes() {
   // Las marcas y redes viven en el catálogo de opciones de publicaciones.
@@ -122,19 +152,34 @@ export default function Fuentes() {
   return (
     <>
       <PageHeader {...CABECERA} />
-      <Tabs defaultValue="rss" className="space-y-4">
+      <Tabs defaultValue="todas" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="rss">RSS</TabsTrigger>
-          <TabsTrigger value="todas">Todas las fuentes</TabsTrigger>
+          {PESTANAS_TIPO.map((p) => (
+            <TabsTrigger key={p.valor} value={p.valor}>
+              {p.etiqueta}
+            </TabsTrigger>
+          ))}
         </TabsList>
+        <TabsContent value="todas">
+          <HubFuentes />
+        </TabsContent>
         <TabsContent value="rss">
           <div className="grid gap-6 lg:grid-cols-[24rem_minmax(0,1fr)]">
             <GestionFuentes marcas={marcas} redes={opcionesRedes} />
             <ItemsRecientes marcas={marcas} redes={opcionesRedes} />
           </div>
         </TabsContent>
-        <TabsContent value="todas">
-          <HubFuentes />
+        <TabsContent value="trends">
+          <FuenteTrends />
+        </TabsContent>
+        <TabsContent value="idea">
+          <AportarManual tipo="idea" marcas={marcas} redes={opcionesRedes} />
+        </TabsContent>
+        <TabsContent value="enlace">
+          <AportarManual tipo="enlace" marcas={marcas} redes={opcionesRedes} />
+        </TabsContent>
+        <TabsContent value="interna">
+          <AportarManual tipo="interna" marcas={marcas} redes={opcionesRedes} />
         </TabsContent>
       </Tabs>
     </>
@@ -158,9 +203,9 @@ const ETIQUETA_TIPO: Record<string, string> = {
  * etiquetas) y el estado HONESTO de las agencias (Reuters/AFP): disponibles o
  * "pendientes / no configuradas" según haya credencial, sin inventar nada.
  *
- * NOTA (deferido, item G): el alta/edición rica por tipo (formularios específicos
- * por `config`) aún no está aquí; los feeds RSS se gestionan en la pestaña "RSS" y se
- * espejan automáticamente al hub. Esta vista es de LECTURA/visibilidad por ahora.
+ * Esta vista es de LECTURA/visibilidad: el alta/edición de cada tipo vive en su pestaña
+ * dedicada (RSS, Google Trends, Ideas, Enlaces, Interno AMX). Los feeds RSS dados de alta
+ * se espejan automáticamente al hub y aparecen aquí.
  */
 function HubFuentes() {
   const query = useQuery({
@@ -199,7 +244,7 @@ function HubFuentes() {
         <CardContent>
           {fuentes.length === 0 ? (
             <EstadoVacioTexto
-              texto="Aún no hay fuentes en el hub. Da de alta feeds en la pestaña RSS (se espejan aquí)."
+              texto="Aún no hay fuentes configuradas. Da de alta feeds en la pestaña RSS (se espejan aquí) o configura Google Trends."
               className="py-4"
             />
           ) : (
@@ -259,6 +304,327 @@ function HubFuentes() {
               notas. Hasta entonces aparecen aquí en claro, sin inventar contenido.
             </p>
           )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// --- Google Trends (fuente built-in del Radar) -----------------------------
+
+/**
+ * Pestaña Google Trends. Trends NO es multi-instancia: es una fuente BUILT-IN del Radar,
+ * configurable GLOBALMENTE (geo + umbral de señal) vía las variables del daemon de
+ * auto-promoción. Aquí se muestra esa config viva y su estado de forma honesta, sin inventar
+ * multi-instancia que no aplica. La config se ajusta por entorno (no editable desde la UI).
+ */
+function FuenteTrends() {
+  const query = useQuery({
+    queryKey: ["radar", "auto", "bandeja"],
+    queryFn: ({ signal }) => api.bandejaRadarAuto(signal),
+  });
+
+  if (query.isPending) {
+    return <Skeleton className="h-56 w-full rounded-md" />;
+  }
+  if (query.isError) {
+    return (
+      <BloqueError
+        titulo="No se pudo cargar la configuración de Google Trends"
+        mensaje={mensajeError(query.error)}
+        onReintentar={() => void query.refetch()}
+        cargando={query.isFetching}
+      />
+    );
+  }
+
+  const { config } = query.data;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <Card className="h-fit">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="h-4 w-4" />
+            Google Trends
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm">
+          <p className="text-muted-foreground">
+            Tendencias de búsqueda de Google como señal del Radar. Es una fuente única
+            (built-in), no se dan de alta varias: se configura globalmente y alimenta el{" "}
+            <Link to="/investigacion/radar" className="underline hover:text-foreground">
+              Radar
+            </Link>{" "}
+            y la auto-promoción del día.
+          </p>
+          <dl className="grid grid-cols-2 gap-3">
+            <div className="rounded-md border p-3">
+              <dt className="text-xs text-muted-foreground">Región (geo)</dt>
+              <dd className="mt-0.5 font-medium">{config.geo || "MX"}</dd>
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-xs text-muted-foreground">Umbral de señal</dt>
+              <dd className="mt-0.5 font-medium">{config.umbral.toLocaleString("es-MX")}</dd>
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-xs text-muted-foreground">Auto-promoción</dt>
+              <dd className="mt-0.5 font-medium">{config.activo ? "Activa" : "Inactiva"}</dd>
+            </div>
+            <div className="rounded-md border p-3">
+              <dt className="text-xs text-muted-foreground">Máximo por barrido</dt>
+              <dd className="mt-0.5 font-medium">{config.max_por_barrido}</dd>
+            </div>
+          </dl>
+          <p className="text-xs text-muted-foreground">
+            Estos valores se ajustan por entorno (variables del servidor); por eso aquí se
+            muestran en claro pero no se editan. Para revisar lo que entraría hoy, mira la
+            bandeja del Radar.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="h-fit">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Estado</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            <span>Disponible como señal del Radar.</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            La disponibilidad real (si Google responde) se ve por fuente en el panel del Radar,
+            sin inventar nada.
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// --- Aportación MANUAL (idea / enlace / interno) ----------------------------
+
+/** Copys por tipo de aportación manual (taxonomía centralizada). */
+const APORTAR_UI: Record<
+  string,
+  {
+    icono: typeof Lightbulb;
+    titulo: string;
+    descripcion: string;
+    placeholder: string;
+    etiquetaCampo: string;
+    multilinea: boolean;
+    boton: string;
+    nota?: string;
+  }
+> = {
+  idea: {
+    icono: Lightbulb,
+    titulo: "Ideas del equipo",
+    descripcion:
+      "Escribe una idea en texto libre. Al enviarla se crea un ítem real en Pendientes " +
+      "(etiquetado como “Idea”) y, si eliges marca, se le genera copy en segundo plano.",
+    placeholder:
+      "Ej. Hilo sobre los 5 momentazos de la jornada con datos curiosos de cada equipo…",
+    etiquetaCampo: "Tu idea",
+    multilinea: true,
+    boton: "Enviar idea",
+  },
+  enlace: {
+    icono: Link2,
+    titulo: "Enlaces de redes / internet",
+    descripcion:
+      "Pega un enlace (nota, post, video). Se extrae su contenido y se crea un ítem real en " +
+      "Pendientes (etiquetado como “Enlace”) con copy en segundo plano si eliges marca.",
+    placeholder: "https://…",
+    etiquetaCampo: "URL",
+    multilinea: false,
+    boton: "Procesar enlace",
+  },
+  interna: {
+    icono: Building2,
+    titulo: "Contenido interno de AMX",
+    descripcion:
+      "Registra a mano contenido interno de AMX (briefs, material de programa, avisos). Crea " +
+      "un ítem real en Pendientes (etiquetado como “Interno AMX”) con copy en segundo plano.",
+    placeholder: "Pega aquí el contenido interno (texto, brief, transcripción)…",
+    etiquetaCampo: "Contenido interno",
+    multilinea: true,
+    boton: "Registrar contenido",
+    nota: "El conector automático con los sistemas internos de AMX queda PENDIENTE; por ahora la ingestión es manual.",
+  },
+};
+
+/**
+ * Formulario de aportación MANUAL. Reusa `POST /api/fuentes/aportar`: el backend crea un
+ * `contenido` `flujo='importante'` con su `origen` (idea/enlace/interna) y, best-effort,
+ * lanza copy en segundo plano. No es UI decorativa: produce un ítem real en el pipeline.
+ */
+function AportarManual({
+  tipo,
+  marcas,
+  redes,
+}: {
+  tipo: "idea" | "enlace" | "interna";
+  marcas: MarcaDisponible[];
+  redes: RedPublicacion[];
+}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const ui = APORTAR_UI[tipo];
+  const Icono = ui.icono;
+
+  const [texto, setTexto] = React.useState("");
+  const [marca, setMarca] = React.useState("");
+  const [generar, setGenerar] = React.useState(true);
+  const [redesDef, setRedesDef] = React.useState<Set<string>>(() => new Set());
+
+  const opcionesRedes = React.useMemo(
+    () => redes.map((r) => ({ id: r.id, nombre: r.nombre })),
+    [redes],
+  );
+
+  function alternarRed(red: string, marcada: boolean) {
+    setRedesDef((prev) => {
+      const siguiente = new Set(prev);
+      if (marcada) siguiente.add(red);
+      else siguiente.delete(red);
+      return siguiente;
+    });
+  }
+
+  const aportar = useMutation({
+    mutationFn: () =>
+      api.aportarFuente({
+        tipo,
+        marca: marca || undefined,
+        redes: redesDef.size > 0 ? [...redesDef] : undefined,
+        generar,
+        ...(tipo === "enlace" ? { url: texto.trim() } : { texto: texto.trim() }),
+      }),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      setTexto("");
+      toast.success(
+        data.copy_en_proceso
+          ? "Aportación creada; generando copy en segundo plano"
+          : "Aportación creada en Pendientes",
+        {
+          action: {
+            label: "Ver en el tablero",
+            onClick: () => navigate("/parrilla/pendientes"),
+          },
+        },
+      );
+    },
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+
+  // Si se quiere copy automático hace falta marca (sin voz no hay copy). Sin generar, la
+  // marca es opcional (el ítem entra a Pendientes y la marca/copy se completan a mano).
+  const puedeEnviar =
+    texto.trim().length > 0 && !aportar.isPending && (!generar || marca !== "");
+
+  return (
+    <div className="mx-auto grid max-w-2xl gap-6">
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Icono className="h-4 w-4" />
+            {ui.titulo}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">{ui.descripcion}</p>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="aportar-texto">{ui.etiquetaCampo}</Label>
+            {ui.multilinea ? (
+              <Textarea
+                id="aportar-texto"
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                placeholder={ui.placeholder}
+                rows={6}
+              />
+            ) : (
+              <Input
+                id="aportar-texto"
+                value={texto}
+                onChange={(e) => setTexto(e.target.value)}
+                placeholder={ui.placeholder}
+                type="url"
+                inputMode="url"
+              />
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="aportar-marca">
+              Marca{" "}
+              {!generar && (
+                <span className="font-normal text-muted-foreground">(opcional)</span>
+              )}
+            </Label>
+            <Select value={marca} onValueChange={setMarca}>
+              <SelectTrigger id="aportar-marca">
+                <SelectValue placeholder="Elige una marca" />
+              </SelectTrigger>
+              <SelectContent>
+                {marcas.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="aportar-generar"
+              checked={generar}
+              onCheckedChange={(v) => setGenerar(!!v)}
+              className="mt-0.5"
+              aria-label="Generar copy en segundo plano"
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="aportar-generar" className="cursor-pointer font-normal">
+                Generar copy en segundo plano
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Crea borradores por red en el tablero. Si lo desmarcas, el ítem entra a
+                Pendientes y completas copy a mano.
+              </p>
+            </div>
+          </div>
+
+          {generar && (
+            <SelectorRedMultiple
+              opciones={opcionesRedes}
+              seleccionadas={redesDef}
+              onCambio={alternarRed}
+            />
+          )}
+
+          {ui.nota && (
+            <p className="rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+              {ui.nota}
+            </p>
+          )}
+
+          <div className="flex justify-end">
+            <Button onClick={() => aportar.mutate()} disabled={!puedeEnviar}>
+              {aportar.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              {ui.boton}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

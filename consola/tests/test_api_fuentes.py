@@ -100,3 +100,67 @@ def test_fuentes_rss_se_espejan_en_el_hub(cliente):
         con.close()
     rss_en_hub = [f for f in cliente.get("/api/fuentes?tipo=rss").json()["fuentes"]]
     assert any(f["nombre"] == "Diario" and f["origen_rss_id"] for f in rss_en_hub)
+
+
+# --- Aportacion MANUAL (idea / enlace / interna) -> item REAL en el tablero --- #
+
+
+def test_aportar_idea_crea_item_en_pendientes(cliente):
+    # Sin marca -> NO se lanza copy (gateado), pero el item REAL entra al tablero con su origen.
+    r = cliente.post(
+        "/api/fuentes/aportar",
+        json={"tipo": "idea", "texto": "Hilo con los momentazos de la jornada"},
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["flujo"] == "importante"
+    assert cont["origen"] == "idea"
+    assert cont["titulo"] == "Hilo con los momentazos de la jornada"
+    assert r.json()["copy_en_proceso"] is False
+    # El item aparece en el tablero (clase contenido, flujo importante).
+    tablero = cliente.get("/api/contenido").json()["contenidos"]
+    assert any(c["origen"] == "idea" for c in tablero)
+
+
+def test_aportar_interna_crea_item_con_redes(cliente):
+    r = cliente.post(
+        "/api/fuentes/aportar",
+        json={"tipo": "interna", "texto": "Brief interno de AMX", "redes": ["x", "instagram"]},
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["origen"] == "interna"
+    assert len(cont["plataformas"]) == 2
+
+
+def test_aportar_idea_vacia_400(cliente):
+    assert cliente.post("/api/fuentes/aportar", json={"tipo": "idea", "texto": "   "}).status_code == 400
+
+
+def test_aportar_tipo_invalido_400(cliente):
+    assert cliente.post("/api/fuentes/aportar", json={"tipo": "rss", "texto": "x"}).status_code == 400
+
+
+def test_aportar_enlace_extrae_y_crea_item(cliente, monkeypatch):
+    # Mockeamos la descarga de la URL: el enlace pegado dispara el flujo URL->item.
+    from keni_consola.dominio import extraccion_url
+
+    html = "<html><head><title>Gol histórico</title></head><body><p>Una nota de prueba.</p></body></html>"
+    monkeypatch.setattr(extraccion_url, "_DESCARGADOR", lambda _url: html)
+    r = cliente.post(
+        "/api/fuentes/aportar",
+        json={"tipo": "enlace", "url": "https://93.184.216.34/nota"},
+    )
+    assert r.status_code == 200, r.text
+    cont = r.json()["contenido"]
+    assert cont["origen"] == "enlace"
+    # El titular extraido titula el item; la URL queda en la descripcion (nota no verificada).
+    assert "Gol histórico" in cont["titulo"]
+    assert "93.184.216.34" in cont["descripcion"]
+
+
+def test_aportar_enlace_url_invalida_400(cliente):
+    assert (
+        cliente.post("/api/fuentes/aportar", json={"tipo": "enlace", "url": "no-es-url"}).status_code
+        == 400
+    )

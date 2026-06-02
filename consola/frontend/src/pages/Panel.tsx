@@ -218,6 +218,10 @@ const ORIGEN_ETIQUETA: Record<string, string> = {
   radar: "Radar",
   rss: "RSS",
   manual: "Manual",
+  // Aportaciones manuales desde Fuentes (idea / enlace pegado / contenido interno AMX).
+  idea: "Idea",
+  enlace: "Enlace",
+  interna: "Interno AMX",
 };
 
 /** Fila de la "lista viva" del día: tema con su score, fuente, fecha y estado. */

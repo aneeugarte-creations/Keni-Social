@@ -11,6 +11,15 @@ desde_rss`) y NO la sustituye.
                                        prioridad?, etiquetas?}
   - PUT  /api/fuentes/{id}          -> edita parcialmente
   - DELETE /api/fuentes/{id}        -> borra
+  - POST /api/fuentes/aportar       -> APORTACION MANUAL (idea / enlace / interna): crea un
+                                       item REAL en el tablero (`flujo='importante'`) con su
+                                       `origen` y, best-effort, le lanza copy en segundo plano.
+
+Las fuentes "standing" (rss/api/galeria/interna configurada) son CONFIGURABLES y se guardan
+en el hub. Los tipos MANUALES (idea / enlace / interna) producen APORTACIONES: no se guardan
+como fuente, sino que entran al PIPELINE como un item del tablero con su `origen` visible,
+reutilizando el mismo camino que `desde-radar` (crear contenido + auto-copy). Asi nada es UI
+decorativa: cada aportacion llega a Pendientes con su fuente.
 
 Las AGENCIAS (Reuters/AFP, item F) se exponen como su estado HONESTO (`agencias`): cada una
 disponible o "pendiente/no configurada" segun haya credencial, sin inventar nada. Validacion:
@@ -20,17 +29,33 @@ espanol; SQL parametrizado en `db`.
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agencias, marcas, repos
+from .. import agencias, autogen_copy, marcas, redes, repos
 from .._http_json import leer_json
 from ..db import _TIPOS_FUENTE
+from ..dominio import extraccion_url
+from ..seguridad import autor_de_peticion
 
 _MARCAS_IDS = {m[0] for m in marcas.opciones()}
+
+# Tipos de APORTACION MANUAL: producen items del tablero (no fuentes "standing"). El valor de
+# cada uno es el `origen` con que nace el item, asi su fuente queda VISIBLE en Radar/Plan.
+#   idea    -> texto libre del equipo (caja de ideas verde)
+#   enlace  -> URL de redes/internet pegada (extrae la nota y dispara URL->copy)
+#   interna -> contenido interno de AMX registrado a mano (conector automatico PENDIENTE)
+_ORIGEN_APORTACION: dict[str, str] = {
+    "idea": "idea",
+    "enlace": "enlace",
+    "interna": "interna",
+}
+_MAX_TITULO = 300
+_MAX_TEXTO = 8000
 
 
 def _validar_tipo(tipo: Any) -> tuple[str | None, str | None]:
@@ -179,9 +204,119 @@ async def borrar(request: Request) -> Response:
     return JSONResponse({"mensaje": "Fuente borrada."})
 
 
+# --------------------------------------------------------------------------- #
+# Aportacion MANUAL: idea / enlace / interna -> item REAL en el tablero        #
+# --------------------------------------------------------------------------- #
+
+
+def _redes_iniciales(crudo: Any) -> list[str]:
+    """Filtra una lista de ids de red contra las canonicas (sin duplicar, en orden)."""
+    if not isinstance(crudo, list):
+        return []
+    vistas: list[str] = []
+    for r in crudo:
+        if isinstance(r, str) and redes.es_red(r) and r not in vistas:
+            vistas.append(r)
+    return vistas
+
+
+async def aportar(request: Request) -> Response:
+    """`POST /api/fuentes/aportar` -> APORTACION MANUAL al pipeline -> `{contenido, copy_en_proceso}`.
+
+    Cuerpo: `{tipo: idea|enlace|interna, marca?, redes?: [ids], generar?: bool,`
+            ` texto?: str, url?: str, titulo?: str}`.
+
+      - `idea`    usa `texto` (texto libre del equipo) como nota de partida.
+      - `enlace`  usa `url`: se valida (SSRF) y se EXTRAE la nota (titular + cuerpo) con
+                  `extraccion_url`, reutilizando el mismo flujo URL->copy de la Biblioteca.
+      - `interna` usa `texto` (contenido interno de AMX pegado a mano). El conector
+                  automatico de AMX queda PENDIENTE; esta es la ingestion manual entretanto.
+
+    Crea un item del tablero `flujo='importante'` con `origen` = el tipo (fuente VISIBLE) y,
+    si hay marca y `generar` (def True), le lanza copy en SEGUNDO PLANO reutilizando
+    `autogen_copy.lanzar_para_topic` (mismo camino que `desde-radar`). Best-effort: si la
+    generacion falla, NO rompe la aportacion (queda el copy manual como fallback).
+    """
+    datos = await leer_json(request)
+    tipo = datos.get("tipo")
+    if tipo not in _ORIGEN_APORTACION:
+        return JSONResponse({"error": "Tipo de aportación no permitido."}, status_code=400)
+
+    marca, error = _validar_marca(datos.get("marca"))
+    if error is not None:
+        return JSONResponse({"error": error}, status_code=400)
+
+    redes_iniciales = _redes_iniciales(datos.get("redes"))
+
+    # Resuelve titulo + descripcion (la nota) segun el tipo.
+    titulo = datos.get("titulo") if isinstance(datos.get("titulo"), str) else ""
+    titulo = titulo.strip()
+    descripcion = ""
+
+    if tipo == "enlace":
+        url_limpia, err = extraccion_url.validar_url(datos.get("url"))
+        if err is not None:
+            return JSONResponse({"error": err}, status_code=400)
+        try:
+            titulo_url, cuerpo = extraccion_url.extraer_texto(url_limpia)
+        except extraccion_url.ExtraccionError as e:
+            return JSONResponse({"error": str(e)}, status_code=502)
+        descripcion = extraccion_url.componer_nota_no_verificada(url_limpia, titulo_url, cuerpo)
+        titulo = titulo or titulo_url.strip() or url_limpia
+    else:
+        texto = datos.get("texto")
+        if not isinstance(texto, str) or not texto.strip():
+            campo = "la idea" if tipo == "idea" else "el contenido interno"
+            return JSONResponse({"error": f"Escribe {campo} antes de enviarla."}, status_code=400)
+        descripcion = texto.strip()
+        # Titulo por defecto: la primera linea del texto (recortada).
+        if not titulo:
+            titulo = descripcion.splitlines()[0]
+
+    if not titulo:
+        return JSONResponse({"error": "La aportación necesita un título."}, status_code=400)
+
+    item = repos.crear_contenido(
+        clase="contenido",
+        flujo="importante",
+        titulo=titulo[:_MAX_TITULO],
+        descripcion=descripcion[:_MAX_TEXTO],
+        marca=marca,
+        prioridad="media",
+        fecha_objetivo=date.today().isoformat(),
+        autor=autor_de_peticion(request),
+        # `origen` = el tipo de aportacion: queda VISIBLE en el tablero / Plan del día.
+        origen=_ORIGEN_APORTACION[tipo],
+        # Viene de una FUENTE externa/manual, no de arte propio: tipo "fuente".
+        tipo_contenido="fuente",
+    )
+    for red in redes_iniciales:
+        repos.crear_contenido_plataforma(
+            contenido_id=item["id"], red=red, falta_copy=True, falta_imagen=True
+        )
+
+    # Copy en SEGUNDO PLANO (best-effort), GATEADO por marca y por el flag `generar` (def True).
+    generar = datos.get("generar", True)
+    genero = False
+    if marca and generar:
+        try:
+            genero = autogen_copy.lanzar_para_topic(item) is not None
+        except Exception:  # noqa: BLE001 -- la generacion es opcional; nunca tumba la aportacion
+            genero = False
+
+    plataformas = repos.listar_contenido_plataforma(item["id"])
+    return JSONResponse(
+        {
+            "contenido": {**item, "plataformas": plataformas},
+            "copy_en_proceso": genero,
+        }
+    )
+
+
 RUTAS = [
     Route("/api/fuentes", listar, methods=["GET"]),
     Route("/api/fuentes", crear, methods=["POST"]),
+    Route("/api/fuentes/aportar", aportar, methods=["POST"]),
     Route("/api/fuentes/{fuente_id}", actualizar, methods=["PUT"]),
     Route("/api/fuentes/{fuente_id}", borrar, methods=["DELETE"]),
 ]

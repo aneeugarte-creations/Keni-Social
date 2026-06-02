@@ -96,6 +96,8 @@ import type {
   RespuestaFuentesRss,
   RespuestaFuentesHub,
   FuenteHub,
+  CuerpoAportarFuente,
+  RespuestaAportarFuente,
   RespuestaGeneracion,
   RespuestaGeneraciones,
   RespuestaGrupoHashtags,
@@ -955,6 +957,10 @@ export const api = {
     }),
   eliminarFuenteHub: (id: string) =>
     peticion<RespuestaMensaje>(`/fuentes/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  // APORTACION MANUAL (idea / enlace pegado / contenido interno): crea un item REAL en el
+  // tablero (`flujo='importante'`) con su `origen` y, best-effort, le lanza copy de fondo.
+  aportarFuente: (cuerpo: CuerpoAportarFuente) =>
+    peticion<RespuestaAportarFuente>("/fuentes/aportar", { metodo: "POST", json: cuerpo }),
 
   // --- Radar de tendencias (lo más viral del momento, multi-red · #147) ---
   // Solo lectura: consolida tendencias por tema con su estado HONESTO por fuente.

@@ -570,6 +570,33 @@ export interface RespuestaFuentesHub {
   pendientes: AgenciaFuente[];
 }
 
+/** Tipo de aportación manual al pipeline desde Fuentes. */
+export type TipoAportacion = "idea" | "enlace" | "interna";
+
+/**
+ * Cuerpo de `POST /api/fuentes/aportar`: una aportación MANUAL que produce un item REAL
+ * en el tablero (Pendientes) con su `origen`. `texto` para idea/interna; `url` para enlace.
+ */
+export interface CuerpoAportarFuente {
+  tipo: TipoAportacion;
+  marca?: string;
+  redes?: string[];
+  /** Lanza copy en segundo plano (def true en backend). */
+  generar?: boolean;
+  /** Texto libre (idea / contenido interno). */
+  texto?: string;
+  /** URL pegada (tipo enlace). */
+  url?: string;
+  titulo?: string;
+}
+
+/** Respuesta de `POST /api/fuentes/aportar`. */
+export interface RespuestaAportarFuente {
+  contenido: Contenido;
+  /** `true` si se lanzó la generación de copy en segundo plano. */
+  copy_en_proceso: boolean;
+}
+
 // --- Radar de tendencias (lo más viral del momento, multi-red · F7/#147) ---
 
 /** Una nota/enlace que explica por qué sube un tema (título + URL + medio). */
