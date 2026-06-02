@@ -69,7 +69,31 @@ def test_normalizar_generacion():
         "metricas": {
             "tokens": 140, "coste_usd": 0.01, "duration_ms": 1200, "num_turns": 2,
         },
+        "resultado_url": "/parrilla/pendientes",
     }
+
+
+def test_normalizar_generacion_resultado_url_por_tipo():
+    # Cada tipo COMPLETADO con pagina de resultado enlaza a su superficie.
+    casos = {
+        "copy": "/parrilla/pendientes",
+        "rss": "/parrilla/pendientes",
+        "imagen": "/estudio",
+        "verificacion": "/revision/verificacion",
+        "qa-editorial": "/revision/editorial",
+    }
+    for tipo, url in casos.items():
+        item = actividad.normalizar_generacion(_gen(tipo=tipo))
+        assert item["resultado_url"] == url
+
+
+def test_normalizar_generacion_resultado_url_none_si_no_completado_o_sin_pagina():
+    # En curso / error: aun no hay resultado al que ir.
+    assert actividad.normalizar_generacion(_gen(estado="ejecutando"))["resultado_url"] is None
+    assert actividad.normalizar_generacion(_gen(estado="error"))["resultado_url"] is None
+    # Tipos sin pagina de resultado propia: sin enlace.
+    assert actividad.normalizar_generacion(_gen(tipo="hashtags"))["resultado_url"] is None
+    assert actividad.normalizar_generacion(_gen(tipo="prompt"))["resultado_url"] is None
 
 
 def test_normalizar_generacion_sin_metricas():
@@ -97,6 +121,7 @@ def test_normalizar_run():
         "metricas": {
             "tokens": 180, "coste_usd": 0.0123, "duration_ms": 4200, "num_turns": 3,
         },
+        "resultado_url": None,
     }
 
 

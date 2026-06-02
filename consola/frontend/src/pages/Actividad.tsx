@@ -1,15 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity, RefreshCw } from "lucide-react";
+import { Activity, ExternalLink, Eye, RefreshCw } from "lucide-react";
 import * as React from "react";
+import { useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
+import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import type { BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -26,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
@@ -234,17 +244,71 @@ function DesglosePorDia({ filas }: { filas: ActividadPorDia[] }) {
   );
 }
 
+/**
+ * Visor EN VIVO de una generación en curso (item D): carga el estado ACTUAL de la
+ * generación por id (`GET /api/generaciones/{id}`) y, en cuanto lo tiene, lo entrega
+ * a `useGeneracion` para REANUDAR el polling (~1.2 s) y pintar el stream con
+ * `ProgresoGeneracion` —incluido el botón Cancelar—. Reusa el mismo hook que las
+ * páginas de generación; el trabajo corre en el servidor, esto solo recupera la vista.
+ */
+function VisorEnVivo({ id, onClose }: { id: string; onClose: () => void }) {
+  const { generacion, iniciar, cancelar, cancelando } = useGeneracion();
+
+  // Carga el estado actual de la generación y arranca el seguimiento (polling). Si la
+  // generación ya no existe (404) o falla la carga, lo reflejamos como error visible.
+  const cargaQuery = useQuery({
+    queryKey: ["generacion-visor", id],
+    queryFn: ({ signal }) => api.generacion(id, signal),
+  });
+  React.useEffect(() => {
+    if (cargaQuery.data) iniciar(cargaQuery.data.generacion);
+  }, [cargaQuery.data, iniciar]);
+
+  return (
+    <Dialog open onOpenChange={(abierto) => !abierto && onClose()}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Generación en vivo</DialogTitle>
+          <DialogDescription>
+            Sigue el progreso token a token. El trabajo corre en el servidor; cerrar esta
+            ventana no lo detiene.
+          </DialogDescription>
+        </DialogHeader>
+        {cargaQuery.isError ? (
+          <p className="text-sm text-destructive">
+            {cargaQuery.error instanceof ApiError && cargaQuery.error.status === 404
+              ? "Esa generación ya no está disponible."
+              : mensajeError(cargaQuery.error)}
+          </p>
+        ) : generacion ? (
+          <ProgresoGeneracion
+            generacion={generacion}
+            onCancelar={cancelar}
+            cancelando={cancelando}
+          />
+        ) : (
+          <Skeleton className="h-40 w-full rounded-xl" />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** Tabla principal del feed unificado de actividad (recientes primero). */
 function TablaActividad({
   items,
   total,
   cargando,
   onCargarMas,
+  onVerEnVivo,
+  onVerResultado,
 }: {
   items: ActividadItem[];
   total: number;
   cargando: boolean;
   onCargarMas: () => void;
+  onVerEnVivo: (id: string) => void;
+  onVerResultado: (item: ActividadItem) => void;
 }) {
   const hayMas = items.length < total;
   return (
@@ -266,13 +330,14 @@ function TablaActividad({
               <TableHead>Fecha</TableHead>
               <TableHead className="text-right">Tokens</TableHead>
               <TableHead className="text-right">Coste</TableHead>
-              <TableHead className="pr-6 text-right">Duración</TableHead>
+              <TableHead className="text-right">Duración</TableHead>
+              <TableHead className="pr-6 text-right">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                   No hay actividad para este filtro.
                 </TableCell>
               </TableRow>
@@ -313,8 +378,33 @@ function TablaActividad({
                     <TableCell className="text-right tabular-nums">
                       {costeCelda(m.coste_usd)}
                     </TableCell>
-                    <TableCell className="pr-6 text-right tabular-nums">
+                    <TableCell className="text-right tabular-nums">
                       {duracionCelda(m.duration_ms)}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right">
+                      <div className="flex justify-end gap-1">
+                        {it.fuente === "generacion" && it.estado === "ejecutando" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onVerEnVivo(it.id)}
+                          >
+                            <Eye className="h-3.5 w-3.5" aria-hidden />
+                            Ver en vivo
+                          </Button>
+                        ) : it.resultado_url ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onVerResultado(it)}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                            Ver resultado
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -365,6 +455,9 @@ function EsqueletoActividad() {
  * error en cualquiera de las dos consultas se muestra como bloque de error.
  */
 export default function Actividad() {
+  const navigate = useNavigate();
+  // Item D: id de la generación que se está viendo EN VIVO en el modal (o null).
+  const [visorId, setVisorId] = React.useState<string | null>(null);
   const [fuente, setFuente] = React.useState<string>(TODOS);
   const [tipo, setTipo] = React.useState<string>(TODOS);
   // Paginación offset-based: pedimos `paginas * TAM_PAGINA` (offset 0) y "Cargar
@@ -474,8 +567,14 @@ export default function Actividad() {
           filtrado={fuenteParam != null || tipoParam != null}
           cargando={listaQuery.isFetching}
           onCargarMas={() => setPaginas((p) => p + 1)}
+          onVerEnVivo={setVisorId}
+          onVerResultado={(item) => {
+            if (item.resultado_url) navigate(item.resultado_url);
+          }}
         />
       )}
+
+      {visorId && <VisorEnVivo id={visorId} onClose={() => setVisorId(null)} />}
     </>
   );
 }
@@ -488,6 +587,8 @@ function Contenido({
   filtrado,
   cargando,
   onCargarMas,
+  onVerEnVivo,
+  onVerResultado,
 }: {
   agregados: ActividadAgregados;
   items: ActividadItem[];
@@ -495,6 +596,8 @@ function Contenido({
   filtrado: boolean;
   cargando: boolean;
   onCargarMas: () => void;
+  onVerEnVivo: (id: string) => void;
+  onVerResultado: (item: ActividadItem) => void;
 }) {
   // Sin filtros y sin nada en absoluto: estado vacío honesto.
   if (!filtrado && agregados.total.items === 0 && items.length === 0) {
@@ -519,6 +622,8 @@ function Contenido({
         total={total}
         cargando={cargando}
         onCargarMas={onCargarMas}
+        onVerEnVivo={onVerEnVivo}
+        onVerResultado={onVerResultado}
       />
     </div>
   );

@@ -26,6 +26,7 @@ FORMA del ITEM (congelada; el frontend depende de ella):
       "fecha": str,           # ISO (fecha_inicio del origen)
       "metricas": {"tokens": int|None, "coste_usd": float|None,
                    "duration_ms": int|None, "num_turns": int|None},
+      "resultado_url": str|None,  # ruta del SPA al resultado (solo generaciones COMPLETADAS)
     }
 """
 
@@ -90,6 +91,31 @@ def _metricas_run(metricas: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+# Ruta del SPA donde aterriza el RESULTADO de cada tipo de generacion COMPLETADA. Los
+# resultados no tienen deep-link por id, asi que enlazamos a la superficie que los
+# muestra (el copy/rss cae como borradores en el tablero; la imagen en el estudio; etc.).
+# Los tipos sin pagina de resultado propia (hashtags/prompt) y los runs no llevan enlace.
+_URL_RESULTADO_POR_TIPO = {
+    "copy": "/parrilla/pendientes",
+    "rss": "/parrilla/pendientes",
+    "imagen": "/estudio",
+    "verificacion": "/revision/verificacion",
+    "qa-editorial": "/revision/editorial",
+}
+
+
+def _resultado_url(g: dict[str, Any]) -> str | None:
+    """Ruta del SPA al resultado de una generacion COMPLETADA, o None.
+
+    Solo aplica a generaciones en estado `completado` con un `tipo` que tenga pagina de
+    resultado. No hay deep-link por id: enlazamos a la superficie que muestra ese tipo
+    de resultado (el frontend resuelve el 404/estado vacio si ya no esta).
+    """
+    if str(g.get("estado", "") or "") != "completado":
+        return None
+    return _URL_RESULTADO_POR_TIPO.get(str(g.get("tipo", "") or ""))
+
+
 def normalizar_generacion(g: dict[str, Any]) -> dict[str, Any]:
     """Normaliza una GENERACION (dict publico de `generaciones`) a un ITEM de actividad."""
     return {
@@ -101,6 +127,7 @@ def normalizar_generacion(g: dict[str, Any]) -> dict[str, Any]:
         "estado": str(g.get("estado", "") or ""),
         "fecha": str(g.get("fecha_inicio", "") or ""),
         "metricas": _metricas_generacion(g.get("metricas")),
+        "resultado_url": _resultado_url(g),
     }
 
 
@@ -136,6 +163,7 @@ def normalizar_run(r: dict[str, Any]) -> dict[str, Any]:
         "estado": str(r.get("estado", "") or ""),
         "fecha": str(r.get("fecha_inicio", "") or ""),
         "metricas": _metricas_run(r.get("metricas")),
+        "resultado_url": None,
     }
 
 

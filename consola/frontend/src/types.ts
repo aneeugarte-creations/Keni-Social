@@ -137,6 +137,13 @@ export interface ActividadItem {
   estado: string;
   fecha: string;
   metricas: MetricasActividad;
+  /**
+   * Ruta del SPA al resultado (solo generaciones COMPLETADAS con página de resultado:
+   * copy/rss → tablero, imagen → estudio, verificación/qa → su hoja). `null` si no aplica
+   * (en curso, error, tipo sin página, o runs). No es deep-link por id: la página resuelve
+   * su propio estado vacío/404.
+   */
+  resultado_url: string | null;
 }
 
 /** Respuesta paginada del feed de Actividad IA (`GET /api/actividad`). */

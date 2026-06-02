@@ -17,6 +17,7 @@ const LISTA = {
       estado: "completado",
       fecha: "2026-05-28T10:00:00",
       metricas: { tokens: 12345, coste_usd: 0.038, duration_ms: 4200, num_turns: 3 },
+      resultado_url: "/parrilla/pendientes",
     },
   ],
   total: 1,
@@ -78,6 +79,36 @@ describe("Actividad (feed unificado de IA)", () => {
     // Badge de fuente (Generación) y de tipo (copy) — copy aparece también en "Por tipo".
     expect(screen.getAllByText("Generación").length).toBeGreaterThan(0);
     expect(screen.getByText("Completado")).toBeInTheDocument();
+  });
+
+  it("ofrece 'Ver resultado' en un ítem completado con resultado_url", async () => {
+    stubFetch();
+    renderConProviders(<Actividad />);
+    expect(await screen.findByText("Resumen de la jornada")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver resultado/ })).toBeInTheDocument();
+  });
+
+  it("ofrece 'Ver en vivo' en una generación en curso (item D)", async () => {
+    const enCurso = {
+      items: [
+        {
+          id: "g2",
+          fuente: "generacion",
+          tipo: "copy",
+          etiqueta: "En curso",
+          marca: "UnoTV",
+          estado: "ejecutando",
+          fecha: "2026-05-28T11:00:00",
+          metricas: { tokens: null, coste_usd: null, duration_ms: null, num_turns: null },
+          resultado_url: null,
+        },
+      ],
+      total: 1,
+    };
+    stubFetch(enCurso);
+    renderConProviders(<Actividad />);
+    expect(await screen.findByText("En curso")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ver en vivo/ })).toBeInTheDocument();
   });
 
   it("muestra el estado vacío honesto cuando no hay actividad", async () => {
