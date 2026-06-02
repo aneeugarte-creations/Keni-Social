@@ -50,6 +50,35 @@ services:
       - traefik.http.routers.woodpecker.tls.certresolver=le
       - traefik.http.services.woodpecker.loadbalancer.server.port=8000
 
+  # Proxy de la API Docker (tecnativa): unico con acceso al socket crudo. Expone una
+  # API FILTRADA al agente (solo lo que el backend docker de Woodpecker necesita) y
+  # DENIEGA por defecto lo peligroso (swarm/secrets/configs/services/nodes/plugins/
+  # system/exec). En su PROPIA red `proxy` (interna), que los contenedores de step NO
+  # ven: solo el agente la alcanza. Sustituye al montaje directo de /var/run/docker.sock.
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.3.0
+    container_name: woodpecker-docker-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    privileged: false
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      CONTAINERS: "1"
+      IMAGES: "1"
+      NETWORKS: "1"
+      VOLUMES: "1"
+      POST: "1"
+      INFO: "1"
+      VERSION: "1"
+    networks:
+      - proxy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
   woodpecker-agent:
     image: woodpeckerci/woodpecker-agent:${WOODPECKER_VERSION:-v3.13.0}
     container_name: woodpecker-agent
@@ -58,11 +87,12 @@ services:
       - no-new-privileges:true
     depends_on:
       - woodpecker-server
+      - docker-socket-proxy
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - woodpecker_agent_data:/var/lib/woodpecker
     environment:
       WOODPECKER_SERVER: "woodpecker-server:9000"
+      DOCKER_HOST: "tcp://docker-socket-proxy:2375"
       WOODPECKER_AGENT_SECRET: "${WOODPECKER_AGENT_SECRET}"
       WOODPECKER_MAX_WORKFLOWS: "${WOODPECKER_MAX_WORKFLOWS:-3}"
       # Red donde el agente engancha los contenedores de cada step del pipeline.
@@ -70,6 +100,7 @@ services:
       WOODPECKER_LOG_LEVEL: "info"
     networks:
       - woodpecker
+      - proxy
     deploy:
       resources:
         limits:
@@ -82,6 +113,11 @@ volumes:
     name: woodpecker_agent_data
 
 networks:
+  # Red dedicada agente<->proxy. `internal`: sin salida externa; los contenedores de
+  # step (en `woodpecker`) no la ven, asi no pueden hablar con la API Docker.
+  proxy:
+    name: keni-ci_proxy
+    internal: true
   # Red interna del stack de CI (server <-> agent <-> steps). Nombre explicito
   # para que coincida con WOODPECKER_BACKEND_DOCKER_NETWORK.
   woodpecker:
