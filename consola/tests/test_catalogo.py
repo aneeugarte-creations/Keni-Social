@@ -27,8 +27,8 @@ _SIDEBAR_BLOQUES = [
     # plantillas; "Activos" se fusionó como pestaña de la Biblioteca).
     ["Estudio", "Biblioteca"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
-    # Analíticas (medición que cierra el loop), Actividad IA (qué hizo).
-    ["Investigación", "Analíticas", "Actividad IA"],
+    # Analíticas (medición que cierra el loop), Actividad IA (qué hizo), Pipelines (CI/CD).
+    ["Investigación", "Analíticas", "Actividad IA", "Pipelines"],
 ]
 
 # Encabezados humanos de cada bloque, en el mismo orden.
