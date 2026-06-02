@@ -15,6 +15,14 @@ COPY keni-shared/ ./keni-shared/
 COPY mcp-metricas/ ./mcp-metricas/
 RUN pip install ./keni-shared ./mcp-metricas
 
+# HARDENING: el MCP NO corre como root (mismo patron que back/worker, #130). El v1 es
+# SOLO lectura y arranca con la fuente `muestra`, asi que no necesita un volumen de estado;
+# le basta con /app (codigo, solo lectura en runtime) y un HOME propio. Mismo uid 10001
+# que back/worker para que los volumenes compartidos (si algun dia los hubiera) casen.
+RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin keni \
+ && chown -R keni:keni /app
+USER keni
+
 EXPOSE 8000
 
 # El endpoint /mcp (streamable-http) no responde 200 a un GET simple; comprobamos

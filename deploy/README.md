@@ -71,7 +71,7 @@ Esto **dockeriza la arquitectura objetivo**, pero el código aún no la consume 
 
 ## Ingress (estado actual: Traefik único, Caddy retirado)
 
-**HECHO.** En el servidor Latitude (162.43.191.103) Traefik es el **ingress único**
+**HECHO.** En el servidor Latitude (`social.kenitech.io`) Traefik es el **ingress único**
 (`network_mode: host`, dueño de `:80/:443`, ACME Let's Encrypt). El Caddy de sistema
 fue **parado y deshabilitado** (`sudo systemctl disable --now caddy`). Traefik sirve,
 además de keni-social:
@@ -92,10 +92,11 @@ además de keni-social:
 ## Conexión al servidor
 
 ```bash
-ssh -i ~/.ssh/ai-learning ubuntu@162.43.191.103
+ssh -i <clave-ssh> <usuario>@<servidor>
 ```
-- Usuario `ubuntu` (sudo NOPASSWD). Llave SSH `~/.ssh/ai-learning` (el privado **no**
-  está en el repo). Origen del acceso: `keni/code-kenitech/infra/deploy.sh`.
+- El acceso (IP del servidor, usuario sudo NOPASSWD y nombre de la llave SSH) lo conoce el
+  equipo; **no se publica aquí** la receta completa para no exponer la combinación exacta. El
+  privado de la llave **no** está en el repo. Origen del acceso: `keni/code-kenitech/infra/deploy.sh`.
 - El stack vive en `/home/ubuntu/keni-social/deploy`. Operar desde ahí:
   `docker compose ps` · `docker compose logs -f back` · `docker compose up -d`.
 - Rollback de emergencia (restaura code/api bajo Caddy):

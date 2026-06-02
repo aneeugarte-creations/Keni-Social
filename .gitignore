@@ -14,6 +14,8 @@ htmlcov/
 # Credenciales locales (NUNCA se versionan)
 credenciales.toml
 *.secret.toml
+secretos.toml
+**/secretos.toml
 .env
 
 # SO / editor

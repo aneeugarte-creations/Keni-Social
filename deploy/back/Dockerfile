@@ -79,10 +79,14 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # --factory: `crear_app()` resuelve token (KENI_CONSOLA_TOKEN) y bootstrapea el
 #   admin (#130) desde env. Bind 0.0.0.0 es seguro: el contenedor NO publica
 #   puertos al host; solo Traefik lo alcanza por la red interna de Docker.
-# --proxy-headers + --forwarded-allow-ips=*: confiar en las X-Forwarded-* de Traefik.
+# --proxy-headers + --forwarded-allow-ips: confiar en las X-Forwarded-* SOLO desde la red
+#   privada Docker (172.16.0.0/12 cubre los rangos por defecto de bridge/compose), no desde
+#   cualquier IP ("*"). Traefik puede correr en host-mode, pero alcanza al back por la red
+#   interna del compose, asi que la IP de origen cae en ese rango privado. OJO: si cambia la
+#   topologia de red (otra subred Docker, ingress en otra red, etc.) hay que ajustar este valor.
 # 1 worker uvicorn: el back solo ENCOLA (la cola vive en Postgres compartido). La
 #   ejecucion (`claude -p`) corre en el servicio `worker`. Concurrencia real = KENI_MAX_JOBS
 #   por proceso worker (el tope de admision lo respeta tambien el encolado del back).
 CMD ["uvicorn", "keni_consola.app:crear_app", "--factory", \
      "--host", "0.0.0.0", "--port", "8765", \
-     "--proxy-headers", "--forwarded-allow-ips=*"]
+     "--proxy-headers", "--forwarded-allow-ips=172.16.0.0/12"]
