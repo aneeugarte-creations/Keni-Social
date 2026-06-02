@@ -1,3 +1,10 @@
+/**
+ * @deprecated COMPONENTE AISLADO (QA): la vista «Calendario» se retiró de la superficie
+ * única de contenido (`Tareas.tsx`), que ahora solo ofrece Feed + Lista. La planificación
+ * mensual de publicaciones programadas vive en la app Parrilla → Calendario (`Rota`).
+ * Este componente NO se importa en ninguna parte; se conserva (sin borrar) por si se quiere
+ * reintroducir una rejilla mensual aquí en el futuro. No añadir nuevas dependencias hacia él.
+ */
 import { CalendarOff, ChevronLeft, ChevronRight } from "lucide-react";
 import * as React from "react";
 

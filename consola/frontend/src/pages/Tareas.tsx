@@ -3,7 +3,6 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import {
   BarChart3,
   CalendarClock,
-  CalendarDays,
   Check,
   ChevronDown,
   ClipboardList,
@@ -79,7 +78,9 @@ import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
 import { GestionHashtags } from "@/pages/publicaciones/GestionHashtags";
 import { PanelReciclaje } from "@/pages/publicaciones/PanelReciclaje";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
-import { VistaCalendario } from "@/pages/publicaciones/VistaCalendario";
+// NOTA: la vista CALENDARIO se retiró de la superficie única (QA): el equipo trabaja en
+// Feed + Lista. `VistaCalendario` queda DEPRECADA y sin uso aquí (la rejilla mensual vive
+// en la app Parrilla → Calendario, que es `Rota`); no se importa para no montarla.
 import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { VistaLista } from "@/pages/publicaciones/VistaLista";
 import { DialogoDuplicar } from "@/pages/publicaciones/DialogoDuplicar";
@@ -139,14 +140,16 @@ const CLAVE_MODO = "keni.tablero.modo";
  * VISTA de la SUPERFICIE ÚNICA de contenido (#fusion). Antes había un modo "tablero" (con su
  * propio toggle lista/feed) separado de "publicaciones": eran dos lentes sobre el MISMO dato
  * (una publicación es una fila `contenido_plataforma` de un `contenido`). Se fusionan en una
- * sola superficie con tres vistas, todas con el editor rico único (`DialogoEditar`):
+ * sola superficie con dos vistas, ambas con el editor rico único (`DialogoEditar`):
  *   - `feed`: el contenido del día por RED (mockup fiel) + las tareas del equipo. Lee
  *     `/api/contenido`.
  *   - `lista`: las piezas en lista con su gestión de publicación completa (estado, programar,
  *     reciclar, duplicar…) en menú contextual. Lee `/api/publicaciones`.
- *   - `calendario`: las piezas PROGRAMADAS en una rejilla mensual. Lee `/api/publicaciones`.
+ *
+ * La vista `calendario` (rejilla mensual de programadas) se RETIRÓ de esta superficie (QA):
+ * la planificación mensual vive en la app Parrilla → Calendario (`Rota`). Aquí solo Feed/Lista.
  */
-type Modo = "feed" | "lista" | "calendario";
+type Modo = "feed" | "lista";
 
 const ESTADO_PLAT_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
@@ -258,15 +261,14 @@ export default function Tablero() {
     if (usuario) sinPreferenciaInicial.current = false;
   }, [usuario, workspace]);
   const [modo, setModo] = React.useState<Modo>(() => {
-    // Compat de valores antiguos: `tablero`→`feed`, `publicaciones`→`lista`.
+    // Compat de valores antiguos: `tablero`→`feed`, `publicaciones`→`lista`. La antigua vista
+    // `calendario` se retiró: cae a `lista` (su gestión de programadas vive ahí + en Parrilla).
     const migrar = (v: string | null): Modo | null =>
       v === "feed" || v === "tablero"
         ? "feed"
-        : v === "lista" || v === "publicaciones"
+        : v === "lista" || v === "publicaciones" || v === "calendario"
           ? "lista"
-          : v === "calendario"
-            ? "calendario"
-            : null;
+          : null;
     const desdeUrl = migrar(new URLSearchParams(location.search).get("modo"));
     if (desdeUrl) return desdeUrl;
     // Deep-link `?abrir=<id>` abre el detalle de un contenido: vive en la vista Feed.
@@ -436,10 +438,6 @@ export default function Tablero() {
               <ListTodo className="h-4 w-4" />
               Lista
             </TabsTrigger>
-            <TabsTrigger value="calendario" className="gap-1.5">
-              <CalendarDays className="h-4 w-4" />
-              Calendario
-            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -453,7 +451,6 @@ export default function Tablero() {
 
       {modo !== "feed" ? (
         <VistaPublicaciones
-          modo={modo}
           workspace={workspace}
           onGestionarFranjas={() => setGestionFranjas(true)}
         />
@@ -617,19 +614,18 @@ function ModoTablero({
 }
 
 /**
- * Vistas LISTA y CALENDARIO de la superficie única (#fusion).
+ * Vista LISTA de la superficie única (#fusion).
  *
  * Lee `/api/publicaciones` (misma BD que `/api/contenido`: una publicación ES una fila
  * `contenido_plataforma` de un `contenido`) y reutiliza el editor rico
- * (`VistaLista`/`VistaCalendario`/`DialogoEditar`/`DialogoDuplicar`). Su query está gateada
- * por vista: en la vista `feed` no se monta, así el feed depende solo de `/api/contenido`.
+ * (`VistaLista`/`DialogoEditar`/`DialogoDuplicar`). Su query está gateada por vista: en la
+ * vista `feed` no se monta, así el feed depende solo de `/api/contenido`. (La rejilla mensual
+ * de programadas se retiró de aquí; vive en Parrilla → Calendario.)
  */
 function VistaPublicaciones({
-  modo,
   workspace,
   onGestionarFranjas,
 }: {
-  modo: Exclude<Modo, "feed">;
   workspace: string;
   onGestionarFranjas: () => void;
 }) {
@@ -660,7 +656,6 @@ function VistaPublicaciones({
 
   return (
     <GestionPublicaciones
-      modo={modo}
       workspace={workspace}
       opciones={opcionesQuery.data}
       onGestionarFranjas={onGestionarFranjas}
@@ -671,12 +666,10 @@ function VistaPublicaciones({
 const TAM_PAGINA_PUB = 30;
 
 function GestionPublicaciones({
-  modo,
   workspace,
   opciones,
   onGestionarFranjas,
 }: {
-  modo: Exclude<Modo, "feed">;
   workspace: string;
   opciones: OpcionesPublicaciones;
   onGestionarFranjas: () => void;
@@ -696,13 +689,12 @@ function GestionPublicaciones({
     setMarca(marcaWorkspace);
   }, [marcaWorkspace]);
 
-  const calendario = modo === "calendario";
-  const limite = calendario ? undefined : paginas * TAM_PAGINA_PUB;
+  const limite = paginas * TAM_PAGINA_PUB;
 
   const filtros = {
     marca: marca === FILTRO_TODOS ? undefined : marca,
     red: red === FILTRO_TODOS ? undefined : red,
-    estado: calendario || estado === FILTRO_TODOS ? undefined : estado,
+    estado: estado === FILTRO_TODOS ? undefined : estado,
     evergreen: soloPerennes ? "1" : undefined,
     limite: limite != null ? String(limite) : undefined,
     desplazamiento: undefined,
@@ -710,7 +702,7 @@ function GestionPublicaciones({
 
   React.useEffect(() => {
     setPaginas(1);
-  }, [marca, red, estado, soloPerennes, modo]);
+  }, [marca, red, estado, soloPerennes]);
 
   const query = useQuery({
     queryKey: [
@@ -725,9 +717,24 @@ function GestionPublicaciones({
     queryFn: ({ signal }) => api.publicaciones(filtros, signal),
   });
 
-  const publicaciones = query.data?.publicaciones ?? [];
+  const publicacionesCrudas = query.data?.publicaciones ?? [];
+  // Orden razonable de la lista (compensa la retirada del calendario): las programadas
+  // primero por su fecha (las más próximas arriba), y el resto por creación descendente
+  // (lo más nuevo primero). `localeCompare` sobre ISO ordena cronológicamente.
+  const publicaciones = React.useMemo(() => {
+    const clave = (p: Publicacion) => p.fecha_programada || "";
+    return [...publicacionesCrudas].sort((a, b) => {
+      const pa = clave(a);
+      const pb = clave(b);
+      if (pa && pb) return pa.localeCompare(pb);
+      if (pa) return -1; // las programadas suben sobre las que no lo están
+      if (pb) return 1;
+      // Sin fecha programada: lo más reciente (mayor fecha_creacion) primero.
+      return (b.fecha_creacion || "").localeCompare(a.fecha_creacion || "");
+    });
+  }, [publicacionesCrudas]);
   const total = query.data?.paginacion?.total ?? publicaciones.length;
-  const hayMas = !calendario && publicaciones.length < total;
+  const hayMas = publicaciones.length < total;
   const filtrando =
     marca !== FILTRO_TODOS || red !== FILTRO_TODOS || estado !== FILTRO_TODOS || soloPerennes;
 
@@ -760,8 +767,6 @@ function GestionPublicaciones({
           onReintentar={() => void query.refetch()}
           cargando={query.isFetching}
         />
-      ) : calendario ? (
-        <VistaCalendario publicaciones={publicaciones} onEditar={setEditando} />
       ) : publicaciones.length === 0 ? (
         <EstadoVacio
           icono={Send}
@@ -2379,7 +2384,7 @@ function DialogoNuevo({
           <Button variant="outline" onClick={onCerrar} disabled={crear.isPending}>
             Cancelar
           </Button>
-          <Button onClick={() => crear.mutate()} disabled={!puedeCrear}>
+          <Button variant="brand" onClick={() => crear.mutate()} disabled={!puedeCrear}>
             {crear.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
