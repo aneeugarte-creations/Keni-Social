@@ -4497,10 +4497,13 @@ def _migrar_columnas_grupos_hashtags(con: Any) -> None:
 # `IF NOT EXISTS` lo hace idempotente cuando ya existe; los INSERT correspondientes usan
 # `ON CONFLICT (...) DO NOTHING` (mismo patron que `rota_franjas`), inofensivo aunque el
 # indice aun no exista (sin conflicto que ignorar).
+# NOTA: `fuentes_rss` NO lleva UNIQUE(url) a proposito: el producto permite registrar la
+# MISMA URL en varias fuentes (distinta marca, filtros incluir/excluir o nombre). La
+# deduplicacion de ITEMS ya la cubre `rss_items_vistos` (PK compuesta). Imponer UNIQUE(url)
+# rompia ese caso de uso legitimo.
 _INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
     ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
     ("idx_franjas_editoriales_uniq", "franjas_editoriales (marca, red, dia_semana, hora)"),
-    ("idx_fuentes_rss_url_uniq", "fuentes_rss (url)"),
 )
 
 
@@ -4649,14 +4652,10 @@ def crear_fuente_rss(
     con = _conectar()
     try:
         marcadores = ", ".join("?" for _ in _COLS_FUENTE_RSS)
-        # ON CONFLICT (url) DO NOTHING: idempotente frente a un alta repetida de la misma URL
-        # (mismo patron que `rota_franjas`). Requiere el indice unico `idx_fuentes_rss_url_uniq`
-        # (lo crea `_crear_indices_unicos_idempotencia`); en una BD limpia o nueva siempre
-        # existe. PRECONDICION: una BD productiva con URLs duplicadas previas impide crear ese
-        # indice -> hay que limpiar los duplicados antes de que esta clausula opere.
+        # Sin ON CONFLICT: se permite la MISMA URL en varias fuentes (distinta marca/filtros/
+        # nombre). Ver nota en `_INDICES_UNICOS_IDEMPOTENCIA`.
         con.execute(
-            f"INSERT INTO fuentes_rss ({', '.join(_COLS_FUENTE_RSS)}) VALUES ({marcadores}) "
-            "ON CONFLICT (url) DO NOTHING",
+            f"INSERT INTO fuentes_rss ({', '.join(_COLS_FUENTE_RSS)}) VALUES ({marcadores})",
             tuple(fila[col] for col in _COLS_FUENTE_RSS),
         )
         con.commit()
