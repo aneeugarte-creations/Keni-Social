@@ -70,6 +70,12 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # fachada: el router de `panel` importa esas funciones públicas de C, así que el
         # lint SÍ lo detecta hoy. Se mantiene explícito aquí. (ADR 0005 §Seams #3.)
         ("panel", "publicaciones"),
+        # Seam #7 (operación C usa la infra de jobs de A): `api/parrilla_import.py` (C)
+        # importa documento a la rota con un `claude -p` READ-ONLY en SEGUNDO PLANO, y
+        # para ello usa la infraestructura de jobs `generaciones` (A) — encolar y leer el
+        # estado del job. Mismo acoplamiento que el Seam #4 de `media`, ahora app→app.
+        # T-futura puede moverlo tras la fachada de jobs del gateway. (ADR 0005 §Seams.)
+        ("parrilla_import", "generaciones"),
         # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2):
         #   ("reciclaje", "publicaciones")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
         #       de C en su router; pide el universo a la función-contrato de lectura de C

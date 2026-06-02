@@ -22,6 +22,10 @@ modulos_backend = [
   # (operacional) con el histórico de engagement; SOLO lectura, lo consume el botón del tablero.
   "sugerencias_hora",
   "rota",
+  # Importar un documento a la rota: un `claude -p` READ-ONLY lo lee y propone
+  # eventos/turnos; el back valida y aplica tras la previsualización. Usa la infra
+  # de jobs `generaciones` (A) en segundo plano (seam #7 en test_fronteras).
+  "parrilla_import",
   "tareas",
   "contenido",
   # Sub-features del tablero de contenido (sin nav propia; cuelgan de la tarjeta):
