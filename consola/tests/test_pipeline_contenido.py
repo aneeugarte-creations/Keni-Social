@@ -243,7 +243,13 @@ def test_barrido_no_propia_sin_imagen(entorno, monkeypatch):
 
 
 def test_qa_valida_borrador_del_pipeline(entorno, monkeypatch):
-    """Un borrador del pipeline (origen 'pipeline') sin veredicto recibe veredicto + etapa QA."""
+    """Sin QA editorial disponible (fallback), un borrador del pipeline recibe veredicto léxico + etapa QA.
+
+    El QA editorial (claude -p) se prueba aislado en `test_pipeline_qa_editorial.py`; aquí
+    forzamos el FALLBACK léxico (mock de `lanzar_qa_editorial` -> None) para cubrir que la red de
+    seguridad determinista sigue persistiendo un veredicto y su etapa.
+    """
+    monkeypatch.setattr(pc, "lanzar_qa_editorial", lambda pub, *, autor: None)
     # Borrador COMPLETADO del pipeline: lo creamos directamente (como dejaría la fase CD).
     pub = repos.crear_publicacion(
         "unotv", "x", titulo="Tema QA", contenido="Copy válido y corto.",
@@ -266,6 +272,7 @@ def test_qa_valida_borrador_del_pipeline(entorno, monkeypatch):
 
 def test_qa_ignora_borradores_de_otro_origen(entorno, monkeypatch):
     """La QA del pipeline NO toca borradores ajenos (otro origen)."""
+    monkeypatch.setattr(pc, "lanzar_qa_editorial", lambda pub, *, autor: None)
     pub = repos.crear_publicacion(
         "unotv", "x", titulo="Manual", contenido="Copy manual.",
         estado="borrador", origen="equipo",

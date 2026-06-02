@@ -125,11 +125,16 @@ def _etapas_de_run(item: dict, piezas: list[dict]) -> list[dict]:
         "ts": "",
     }
 
-    # --- QA · Validación: por el veredicto léxico persistido en las piezas. -------------
+    # --- QA · Validación: por el veredicto persistido en las piezas. --------------------
+    # 'en_curso' = el QA editorial (claude -p) está en vuelo (lo deja `lanzar_qa_editorial`);
+    # se ve "en curso" hasta que `reconciliar_qa_en_curso` persiste el veredicto real.
     veredictos = [p["veredicto"] for p in piezas if p["veredicto"]]
     if any(v == "revisar" for v in veredictos):
         qa_estado = "revisar"
         qa_detalle = "La validación marcó observaciones a revisar."
+    elif any(v == "en_curso" for v in veredictos):
+        qa_estado = "en_curso"
+        qa_detalle = "Revisión editorial en curso (el agente está revisando el copy)."
     elif any(v == "listo" for v in veredictos):
         qa_estado = "ok"
         qa_detalle = "Validación superada sin observaciones."

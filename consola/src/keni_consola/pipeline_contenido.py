@@ -54,8 +54,10 @@ import re
 import threading
 from typing import Any
 
-from . import config, daemon_util, generaciones, marcas, redes, repos
+from . import biblioteca, config, daemon_util, generaciones, marcas, redes, repos
 from .dominio import generar as gen_dom
+from .dominio import jobspec
+from .dominio import qa_editorial as dom_qa
 
 _log = logging.getLogger("keni_consola.pipeline_contenido")
 
@@ -85,6 +87,54 @@ _QA_REVISAR_MAX = 50
 # Redes objetivo por defecto del pipeline: subconjunto sensato de las canónicas (las que el
 # piloto AMX usa a diario), intersecado con `redes.ids()` por si el catálogo cambiara.
 _REDES_DEFECTO_PIPELINE = ("instagram", "x", "facebook")
+
+# --- QA editorial por DOCUMENTO de Biblioteca (no skills) ---------------------------------
+# El equipo NO usa skills: el QA editorial se hace adjuntando un DOCUMENTO de la Biblioteca con
+# los criterios de revisión. Regla del dueño: "si el documento existe, adjúntalo; si no existe,
+# créalo y adjúntalo." Este es el id (prompt) de ese documento de criterios.
+PROMPT_QA_ID = "prompt/qa-editorial"
+_TITULO_QA = "QA editorial"
+
+# Veredicto SENTINEL que se persiste en la pieza mientras su QA editorial (claude -p) está en
+# vuelo: la pasada QA NO la re-lanza (deja de estar "sin veredicto") y la vista Pipelines pinta
+# la etapa QA como "en curso". Al completar, el sweep lo sustituye por el veredicto real.
+QA_EN_CURSO = "en_curso"
+
+# Criterios por defecto del documento QA editorial que se CREA si aún no existe (idempotente).
+# Cubre lo que pidió el dueño: voz de marca, veracidad/factualidad, límites por red, coherencia
+# editorial y no clickbait. SEÑALA (no publica ni reescribe): abre con un veredicto claro.
+_DEFAULT_QA_CRITERIOS = """\
+Eres el revisor editorial de AMX Contenido. Recibes en el bloque CONTEXTO un copy ya
+redactado para una red social y haces una revisión de CALIDAD antes de que un humano lo
+apruebe. NO reescribes la pieza: la AUDITAS y devuelves un informe accionable. Aplica la
+LÍNEA EDITORIAL adjunta (voz de marca, plataformas, tropicalización, reglas).
+
+Modo dry-run: no publicas ni haces peticiones de red. SEÑALAS; el equipo decide.
+
+## Veredicto (ANTES del detalle)
+
+Empieza, arriba del todo, por una sola línea de veredicto:
+
+LISTO PARA APROBAR · REVISAR ANTES DE PUBLICAR · NO PUBLICAR
+
+Y en una frase, lo más importante a corregir si no está listo.
+
+## Qué revisas
+
+1. Voz de marca: ¿suena a la marca y a su tono? ¿quedó algún giro de España sin tropicalizar a México?
+2. Veracidad / factualidad: ¿todo dato, fecha y cifra tiene respaldo? Señala lo no verificable o
+   lo que parezca inventado. No des por buenos números sin fuente.
+3. Límites por red: ¿la pieza cabe en el límite de caracteres de su plataforma? ¿el gancho va al
+   principio? ¿el CTA es claro?
+4. Coherencia editorial: ¿es coherente con la línea editorial y con la nota de origen? Sin
+   contradicciones internas.
+5. No clickbait: nada de titulares engañosos, sensacionalismo ni promesas que el cuerpo no cumple.
+
+## Salida
+
+Tras el veredicto, un informe breve por cada punto (lo que está bien y lo que hay que corregir) y
+cierra con una lista numerada de correcciones priorizadas. Sin emojis.
+"""
 
 
 # --------------------------------------------------------------------------- #
@@ -529,17 +579,206 @@ def borradores_pipeline_sin_qa(marca: str | None = None) -> list[dict[str, Any]]
     ]
 
 
-def validar_borrador(publicacion: dict[str, Any]) -> dict[str, Any] | None:
-    """QA — valida UN borrador del pipeline, persiste el veredicto y registra la etapa QA.
+def asegurar_documento_qa() -> str:
+    """Garantiza que el DOCUMENTO de criterios de QA editorial existe en la Biblioteca.
 
-    Corre la QA léxica, escribe el `veredicto` en la pieza y registra la etapa QA en la
-    actividad. None si no se puede (best-effort por item). El gancho al QA editorial real
-    (skill `qa-editorial` via `claude -p`) queda como TODO: aquí es una verificación léxica
-    determinista que deja la señal y la etapa.
+    Regla del dueño: "si el documento existe, adjúntalo; si no existe, créalo y adjúntalo." El
+    equipo NO usa skills: el QA editorial se hace con un documento adjunto. Aquí:
+      - si el documento (`PROMPT_QA_ID`) ya está en el STORE de la Biblioteca, lo respeta;
+      - si no, lo CREA con `_DEFAULT_QA_CRITERIOS` (voz de marca, veracidad, límites por red,
+        coherencia editorial, no clickbait). IDEMPOTENTE (no duplica).
+    Devuelve `PROMPT_QA_ID` si el documento queda disponible (creado o ya presente), o "" si no
+    se pudo asegurar (best-effort: el QA editorial caerá entonces al léxico).
+
+    Nota: la semilla del paquete ya trae un `prompt/qa-editorial`; `cuerpo_efectivo` lo resuelve
+    aunque no esté materializado en el store. Materializarlo aquí garantiza un documento EDITABLE
+    por el equipo (la regla pide un documento real, adjuntable y versionado).
+    """
+    try:
+        if biblioteca.obtener(PROMPT_QA_ID) is not None:
+            return PROMPT_QA_ID
+        # No está en el store: si la semilla lo trae, ya hay cuerpo efectivo; aun así CREAMOS el
+        # documento del store para que sea editable/adjuntable (la regla pide un doc real).
+        cuerpo_semilla = biblioteca.cuerpo_efectivo(PROMPT_QA_ID)
+        cuerpo = cuerpo_semilla if cuerpo_semilla else _DEFAULT_QA_CRITERIOS
+        doc = biblioteca.crear(_TITULO_QA, tipo="prompt", cuerpo=cuerpo)
+        # `crear` deriva el id del slug del título: "QA editorial" -> "prompt/qa-editorial".
+        return doc.id if doc.id == PROMPT_QA_ID else (PROMPT_QA_ID if biblioteca.obtener(PROMPT_QA_ID) else doc.id)
+    except Exception:  # noqa: BLE001 -- asegurar el doc es best-effort; el léxico es el fallback
+        _log.warning("pipeline: no se pudo asegurar el documento de QA editorial", exc_info=True)
+        return ""
+
+
+def _pieza_principal(publicacion: dict[str, Any]) -> tuple[str, str, str]:
+    """Datos de la pieza para el QA editorial: (plataforma_id, copy, red). "" si faltan."""
+    pid = (publicacion.get("id") or "").strip()
+    copy = (publicacion.get("contenido") or "").strip()
+    red = (publicacion.get("red") or "").strip()
+    return pid, copy, red
+
+
+def lanzar_qa_editorial(
+    publicacion: dict[str, Any], *, autor: dict[str, str] | None
+) -> dict[str, Any] | None:
+    """QA editorial REAL via `claude -p`: evalúa el copy contra el DOCUMENTO de Biblioteca.
+
+    Reutiliza el camino PROBADO de generaciones (`gen_dom.lanzar`) con el mismo post-procesado
+    de QA editorial (`dominio.qa_editorial`) que el endpoint manual: parsea el informe, deriva
+    el veredicto (listo/revisar/no_publicar) y lo PERSISTE atado a la pieza
+    (`registrar_veredicto_qa`, con `copy_hash` para invalidarlo si el copy cambia). El stream
+    (proceso del agente) queda en la generación; el marcador QA la enlaza por `gen_id` (Feature
+    1), así su proceso se ve en el detalle del pipeline.
+
+    ASÍNCRONO (como CD): encola y devuelve la generación; marca la pieza `veredicto='en_curso'`
+    para que la pasada QA no la re-lance y la etapa QA se vea "en curso" hasta que complete. El
+    sweep `reconciliar_qa_en_curso` recoge el veredicto real al terminar. None si no se pudo
+    lanzar (sin doc / sin marca / cola llena): el llamante cae al QA léxico.
+    """
+    pid, copy, red = _pieza_principal(publicacion)
+    if not pid or not copy:
+        return None
+    marca = (publicacion.get("marca") or "").strip()
+    if not marca or not marcas.es_marca(marca):
+        return None
+    contenido_id = (publicacion.get("contenido_id") or "").strip()
+
+    # Regla del dueño: asegura (crea si falta) el documento de criterios y adjúntalo.
+    doc_id = asegurar_documento_qa()
+    cuerpo = biblioteca.cuerpo_efectivo(doc_id) if doc_id else None
+    if not cuerpo:
+        return None  # sin documento de QA no hay QA editorial: el llamante cae al léxico.
+
+    titulo = dom_qa_titulo(copy)
+    copy_hash = dom_qa.hash_copy(copy)
+    plataforma_label = redes.nombre_por_id(red) if red and redes.es_red(red) else ""
+    prompt = gen_dom.componer(
+        cuerpo,
+        biblioteca.editoriales_de_marca(marca),
+        _contexto_qa_pipeline(copy, plataforma_label),
+    )
+    try:
+        gen = gen_dom.lanzar(
+            tipo="qa-editorial",
+            titulo=_TITULO_QA,
+            marca=marca,
+            prompt=prompt,
+            procesar=dom_qa.construir_procesar_qa(
+                marca, titulo, autor,
+                plataforma_id=pid, contenido_id=contenido_id, copy_hash=copy_hash,
+            ),
+            procesar_spec=jobspec.construir_qa(
+                marca=marca, titulo=titulo, autor=autor,
+                plataforma_id=pid, contenido_id=contenido_id, copy_hash=copy_hash,
+            ),
+            autor=autor,
+        )
+    except generaciones.ColaLlenaError:
+        # Cola llena: NO marcamos en_curso (que el siguiente barrido reintente) y dejamos que el
+        # llamante caiga al léxico para no quedarnos sin señal de QA en esta pieza.
+        raise
+    # Marca la pieza en curso para que la pasada QA no la re-lance (deja de estar "sin veredicto").
+    try:
+        repos.actualizar_publicacion(pid, {"veredicto": QA_EN_CURSO})
+    except Exception:  # noqa: BLE001 -- best-effort; sin esto el doble-lanzamiento se evita en el sweep
+        _log.warning("pipeline: no se pudo marcar la pieza en_curso para QA (%s)", pid, exc_info=True)
+    registrar_etapa(
+        ETAPA_QA,
+        marca,
+        f"Revisión editorial (claude) — '{titulo[:120]}'",
+        contenido_id=contenido_id,
+        gen_id=gen.get("id", "") if isinstance(gen, dict) else "",
+    )
+    return gen
+
+
+def dom_qa_titulo(copy: str) -> str:
+    """Título corto del QA (deriva del copy, como el endpoint manual). Best-effort."""
+    try:
+        from .dominio import stream
+
+        return stream.derivar_titulo(copy)
+    except Exception:  # noqa: BLE001 -- el título es cosmético; nunca rompe el QA
+        return (copy or "").strip().splitlines()[0][:80] if copy.strip() else "Copy"
+
+
+def _contexto_qa_pipeline(copy: str, plataforma_label: str) -> str:
+    """Bloque de contexto del QA del pipeline: plataforma + el copy a revisar."""
+    partes: list[str] = []
+    if plataforma_label:
+        partes.append(f"Plataforma de destino: {plataforma_label}")
+    partes.append("Copy a revisar:\n\n" + copy)
+    return "\n\n".join(partes)
+
+
+def reconciliar_qa_en_curso(marca: str | None = None) -> list[dict[str, Any]]:
+    """Recoge el veredicto de las piezas con QA editorial EN CURSO ya resuelto.
+
+    Espeja cómo `ejecutar_qa` corría sobre borradores completados: aquí barremos los borradores
+    del pipeline marcados `veredicto='en_curso'` (su QA editorial se lanzó en un barrido previo)
+    y, si su veredicto editorial ya está persistido (`repos.ultimo_veredicto_qa`), lo MAPEAMOS al
+    veredicto de la pieza (listo / revisar; nunca 'no_publicar' en la pieza —el humano decide—,
+    pero el veredicto editorial completo queda en `contenido_qa_veredictos`). Best-effort por
+    item. Devuelve los que reconcilió.
+    """
+    reconciliados: list[dict[str, Any]] = []
+    try:
+        pubs = repos.listar_publicaciones(marca=marca, estado="borrador", limite=_QA_REVISAR_MAX)
+    except Exception:  # noqa: BLE001 -- sin borradores legibles, nada que reconciliar
+        return reconciliados
+    for pub in pubs:
+        if (pub.get("veredicto") or "").strip() != QA_EN_CURSO:
+            continue
+        if not _es_del_pipeline(pub):
+            continue
+        pid = (pub.get("id") or "").strip()
+        if not pid:
+            continue
+        try:
+            veredicto_qa = repos.ultimo_veredicto_qa(pid, pub.get("contenido_id", "") or "")
+        except Exception:  # noqa: BLE001 -- una pieza ilegible no debe romper la pasada
+            continue
+        if not veredicto_qa:
+            continue  # aún sin resolver (QA en vuelo) o copy cambió: lo deja en_curso.
+        crudo = (veredicto_qa.get("verdicto") or "").strip()
+        # Mapeo conservador al veredicto de la PIEZA: 'listo' si listo; cualquier otro -> 'revisar'
+        # (incluido 'no_publicar': la pieza solo SEÑALA "revisar"; el detalle vive en el informe).
+        verdicto_pieza = "listo" if crudo == "listo" else "revisar"
+        try:
+            repos.actualizar_publicacion(pid, {"veredicto": verdicto_pieza})
+        except Exception:  # noqa: BLE001 -- un fallo al persistir no aborta la pasada
+            _log.warning("pipeline: no se pudo persistir el veredicto QA (%s)", pid, exc_info=True)
+            continue
+        reconciliados.append({"id": pid, "verdicto": verdicto_pieza})
+    return reconciliados
+
+
+def validar_borrador(publicacion: dict[str, Any]) -> dict[str, Any] | None:
+    """QA — valida UN borrador del pipeline. Prefiere el QA EDITORIAL real; cae al léxico.
+
+    1) Intenta el QA EDITORIAL via `claude -p` contra el DOCUMENTO de Biblioteca de criterios
+       (`lanzar_qa_editorial`): asíncrono, deja la pieza `en_curso` y enlaza su stream; el
+       `reconciliar_qa_en_curso` recoge el veredicto al completar. Si arranca, NO corremos el
+       léxico (la señal editorial es superior).
+    2) FALLBACK (sin documento / sin worker / cola llena): la QA LÉXICA determinista de antes
+       (longitud por red, copy vacío), que persiste un veredicto inmediato y registra la etapa.
+
+    None si no se puede (best-effort por item).
     """
     pid = (publicacion.get("id") or "").strip()
     if not pid:
         return None
+    # 1) QA editorial real (preferente). Best-effort: cualquier fallo cae al léxico.
+    try:
+        gen = lanzar_qa_editorial(publicacion, autor=_autor_pipeline())
+    except generaciones.ColaLlenaError:
+        gen = None  # cola llena: caemos al léxico para no dejar la pieza sin ninguna señal.
+    except Exception:  # noqa: BLE001 -- el QA editorial nunca debe romper la pasada
+        _log.warning("pipeline: fallo el QA editorial (%s); caigo al léxico", pid, exc_info=True)
+        gen = None
+    if gen is not None:
+        return {"id": pid, "verdicto": QA_EN_CURSO, "modo": "editorial", "gen_id": gen.get("id", "")}
+
+    # 2) Fallback léxico (determinista, inmediato).
     resultado = qa_lexico(publicacion)
     verdicto = resultado["verdicto"]
     try:
@@ -553,10 +792,10 @@ def validar_borrador(publicacion: dict[str, Any]) -> dict[str, Any] | None:
     registrar_etapa(
         ETAPA_QA,
         (publicacion.get("marca") or "") or "",
-        f"Validación automática — '{titulo}': {detalle_ok}",
+        f"Validación léxica (fallback) — '{titulo}': {detalle_ok}",
         contenido_id=(publicacion.get("contenido_id") or ""),
     )
-    return {"id": pid, "verdicto": verdicto, "observaciones": obs}
+    return {"id": pid, "verdicto": verdicto, "modo": "lexico", "observaciones": obs}
 
 
 # --------------------------------------------------------------------------- #
@@ -601,13 +840,23 @@ def ejecutar_barrido() -> dict[str, Any]:
 
 
 def ejecutar_qa() -> list[dict[str, Any]]:
-    """Pasada QA: valida los borradores del pipeline sin veredicto. Devuelve lo validado.
+    """Pasada QA: reconcilia el QA editorial en vuelo y valida los borradores sin veredicto.
 
     Separada de la fase CD a propósito (el enunciado): un borrador encolado en CD aún no está
     COMPLETADO en el mismo barrido, así que la QA recoge los borradores que YA completaron en
-    barridos anteriores. Best-effort por item.
+    barridos anteriores. Dos pasos, en orden:
+      1) RECONCILIA las piezas con QA editorial `en_curso` cuyo veredicto ya está resuelto
+         (`reconciliar_qa_en_curso`): persiste el veredicto real y cierra la etapa.
+      2) VALIDA los borradores SIN veredicto: lanza el QA editorial (claude) o cae al léxico.
+    Best-effort por item.
     """
     validados: list[dict[str, Any]] = []
+    # 1) Cierra los QA editoriales que ya completaron en barridos anteriores.
+    try:
+        validados.extend(reconciliar_qa_en_curso())
+    except Exception:  # noqa: BLE001 -- un fallo de reconciliación no debe matar la pasada
+        _log.exception("pipeline: fallo la reconciliación de QA editorial en curso.")
+    # 2) Lanza/valida los borradores aún sin veredicto.
     for pub in borradores_pipeline_sin_qa():
         try:
             r = validar_borrador(pub)
