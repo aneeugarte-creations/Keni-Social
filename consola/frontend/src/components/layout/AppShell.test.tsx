@@ -31,6 +31,14 @@ const CATALOGO = {
         { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "" },
       ],
     },
+    {
+      // Un hub (Investigación) como entrada única: su sub-nav son pestañas in-page,
+      // y el breadcrumb en una de sus hojas debe leer "Investigación › Pestaña".
+      etiqueta: "Datos",
+      items: [
+        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "" },
+      ],
+    },
   ],
 };
 
@@ -104,6 +112,7 @@ function renderShell(ruta: string) {
               <Route index element={<Navigate to="/panel" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
               <Route path="panel" element={<div>contenido panel</div>} />
+              <Route path="investigacion/radar" element={<div>contenido radar</div>} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -135,25 +144,40 @@ describe("AppShell · sidebar siempre presente", () => {
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
   });
 
-  it("dentro de una app muestra breadcrumb 'App › Página' con la App clicable", async () => {
+  it("breadcrumb de una página suelta: solo su nombre, sin el nombre de app viejo", async () => {
     renderShell("/generacion");
     await screen.findByText("contenido app");
-    // "Producción" es un ENLACE a su 1ª página (rutaPrimaria → /generacion).
-    const enlaceApp = await screen.findByRole("link", { name: /^producción$/i });
-    expect(enlaceApp).toHaveAttribute("href", "/generacion");
-    // "Generación" es la página actual (texto, marcada aria-current). Acotamos al
-    // breadcrumb (la misma etiqueta también aparece como hoja en el sidebar).
     const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
-    const pagina = within(ruta).getByText("Generación");
-    expect(pagina).toHaveAttribute("aria-current", "page");
+    // Espera a que el catálogo (async) hidrate el breadcrumb: la página es el único
+    // segmento, marcado actual.
+    await waitFor(() =>
+      expect(within(ruta).getByText("Generación")).toHaveAttribute("aria-current", "page"),
+    );
+    // Ya NO se muestra el nombre de app A/B/C ("Producción"), ni hay "›"/enlaces.
+    expect(within(ruta).queryByText("Producción")).not.toBeInTheDocument();
+    expect(ruta.querySelector("a")).toBeNull();
   });
 
-  it("fuera de apps (Panel) muestra solo 'Panel', sin '›' ni enlace de app", async () => {
+  it("breadcrumb en una hoja de hub: 'Hub › Pestaña' con el hub enlazable", async () => {
+    renderShell("/investigacion/radar");
+    await screen.findByText("contenido radar");
+    const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
+    // El hub es un enlace a su ruta; la pestaña activa es el segmento actual.
+    await waitFor(() =>
+      expect(within(ruta).getByRole("link", { name: /^investigación$/i })).toHaveAttribute(
+        "href",
+        "/investigacion",
+      ),
+    );
+    expect(within(ruta).getByText("Radar")).toHaveAttribute("aria-current", "page");
+  });
+
+  it("fuera de apps (Panel) muestra solo 'Panel', sin '›' ni enlace", async () => {
     renderShell("/panel");
     await screen.findByText("contenido panel");
     const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
     expect(ruta).toHaveTextContent("Panel");
-    // En el breadcrumb, "Panel" va como TEXTO (no como enlace de app) y no hay "›".
+    // En el breadcrumb, "Panel" va como TEXTO (no como enlace) y no hay "›".
     expect(ruta.querySelector("a")).toBeNull();
   });
 
