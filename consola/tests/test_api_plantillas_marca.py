@@ -83,11 +83,13 @@ def test_put_logo_posicion_invalida_400(cli):
 # --------------------------------------------------------------------------- #
 
 
-def test_get_spec_devuelve_tres_formatos(cli):
+def test_get_spec_devuelve_cuatro_formatos(cli):
     r = cli.get("/api/plantillas-marca/unotv/spec")
     assert r.status_code == 200
     spec = r.json()["spec"]
-    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "vertical"]
+    # `horizontal` (16:9 de X) se añadió cuando la placa de marca pasó a componer
+    # también ese lienzo (follow-up #2); antes eran tres.
+    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "horizontal", "vertical"]
 
 
 def test_put_spec_persiste(cli):
