@@ -187,6 +187,13 @@ class GuardBearerMcp:
             )
             await resp(scope, receive, send)
             return
+        # NORMALIZA el path desnudo: el sub-app del MCP se monta en `/mcp` y su ruta interna
+        # es `/`, así que `Mount` espera `/mcp/` (con `/mcp` a secas el prefijo se consume y
+        # la ruta interna no casa -> caería al SPA). Reescribimos `/mcp` -> `/mcp/` para que el
+        # cliente pueda apuntar a la URL limpia `…/mcp` sin depender de redirecciones (que el
+        # cliente HTTP del MCP no sigue por defecto).
+        if scope.get("path") == "/mcp":
+            scope = {**scope, "path": "/mcp/", "raw_path": b"/mcp/"}
         await self.app(scope, receive, send)
 
     def _autorizado(self, scope: Scope) -> bool:
@@ -210,6 +217,7 @@ class ServidorMcp:
     def __init__(self, usuario: str | None) -> None:
         # Import perezoso del SDK: solo cuando el MCP está encendido (bearer configurado).
         from mcp.server.fastmcp import FastMCP
+        from mcp.server.transport_security import TransportSecuritySettings
 
         self._usuario = usuario
         self.holder = _Holder()
@@ -222,6 +230,12 @@ class ServidorMcp:
             streamable_http_path="/",
             stateless_http=True,
             json_response=True,
+            # DNS-rebinding protection DESACTIVADA a propósito: por defecto el SDK exige que
+            # el Host esté en una allowlist (localhost), y tras Traefik el Host es el público
+            # (`social.kenitech.io`) -> daría 421 "Invalid Host header". Esa protección cubre
+            # navegadores atacando un server local; aquí NO es el modelo de amenaza: el back
+            # solo es alcanzable por Traefik y el endpoint exige el bearer del MCP.
+            transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
             instructions=(
                 "Operación de redes sociales de keni-social (piloto AMX: UnoTV / Claro "
                 "Sports). Con estas tools puedes consultar el catálogo de marcas y redes, "

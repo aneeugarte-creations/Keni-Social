@@ -63,6 +63,37 @@ def test_con_bearer_exige_autorizacion(entorno, monkeypatch):
     assert bueno.status_code != 401
 
 
+def test_mcp_initialize_responde_en_path_desnudo(entorno, monkeypatch):
+    """Handshake MCP real: POST initialize a `/mcp` (sin barra) con Host público responde 200.
+
+    Blinda las dos trampas del montaje: (1) el path desnudo `/mcp` debe llegar al sub-app
+    (no caer al SPA) y (2) el Host público no debe rebotar por la protección DNS-rebinding.
+    """
+    monkeypatch.setenv("KENI_MCP_BEARER", BEARER)
+    monkeypatch.setenv("KENI_MCP_USUARIO", OWNER)
+    init = {
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "test", "version": "0"},
+        },
+    }
+    with TestClient(app_modulo.crear_app(token="t", bootstrap=False)) as cliente:
+        r = cliente.post(
+            "/mcp",
+            headers={
+                "Authorization": f"Bearer {BEARER}",
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+                "Host": "social.kenitech.io",
+            },
+            json=init,
+        )
+    assert r.status_code == 200, r.text
+    cuerpo = r.json()
+    assert cuerpo.get("result", {}).get("serverInfo", {}).get("name") == "keni-social"
+
+
 # --------------------------------------------------------------------------- #
 # ClienteConsola: sesión del dueño + atribución + renovación                   #
 # --------------------------------------------------------------------------- #
