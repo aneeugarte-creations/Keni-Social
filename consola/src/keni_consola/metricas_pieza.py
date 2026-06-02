@@ -40,7 +40,7 @@ from typing import Any
 
 from keni_metricas import servicio
 
-from . import marcas, repos
+from . import config, marcas, repos
 
 _log = logging.getLogger("keni_consola.metricas_pieza")
 
@@ -262,12 +262,34 @@ def _es_reciente(fecha_iso: str, ahora: datetime, ventana_dias: int) -> bool:
     return ts >= ahora - timedelta(days=ventana_dias)
 
 
+def _registrar_historico(
+    marca: str, red: str, id_post: str, payload: dict[str, Any], ts: str
+) -> None:
+    """Escribe un punto en el HISTÓRICO por pieza (`metricas_pieza_snapshots`). Best-effort.
+
+    Además de cachear el valor ACTUAL, el daemon acumula la SERIE histórica: una fila por
+    pieza por refresco, para análisis temporales por marca×red×formato (ADR 0007). El `ts`
+    (ISO, del reloj del llamante) da la idempotencia por `(pieza_id, ts)`. Si la escritura
+    falla, se loguea y NO se rompe el refresco (el cache ya quedó actualizado).
+    """
+    try:
+        repos.registrar_snapshot_pieza(
+            id_post, marca, red, payload.get("formato") or "", ts, payload
+        )
+    except Exception:  # noqa: BLE001 -- el histórico es best-effort; nunca rompe el refresco
+        _log.exception(
+            "metricas_pieza: fallo al registrar histórico de marca=%s red=%s id_post=%s.",
+            marca, red, id_post,
+        )
+
+
 def recalcular(marca: str, red: str, id_post: str) -> dict[str, Any]:
     """Recalcula el rendimiento de UNA pieza SALTANDO el TTL y refresca la cache.
 
     A diferencia de `rendimiento` (lazy: respeta el TTL), esta SIEMPRE va a la fuente.
     La usa el daemon de refresco proactivo. Best-effort: degrada a `encontrado=False`
-    sin romper. Solo cachea lo encontrado (igual que `rendimiento`).
+    sin romper. Solo cachea lo encontrado (igual que `rendimiento`) y, ADEMÁS, si la pieza
+    tiene datos, persiste un punto en el histórico por pieza (`metricas_pieza_snapshots`).
     """
     if not (marca and red and id_post):
         return {**_calcular(marca, red, id_post), "generado_en": ""}
@@ -284,6 +306,8 @@ def recalcular(marca: str, red: str, id_post: str) -> dict[str, Any]:
             payload.get("fuente") or "muestra",
             generado_en,
         )
+        # Acumula la serie histórica (best-effort, no rompe el refresco si falla).
+        _registrar_historico(marca, red, id_post, payload, generado_en)
     return {**payload, "generado_en": generado_en if payload.get("encontrado") else ""}
 
 
@@ -322,6 +346,20 @@ def refrescar_piezas_recientes(
             datos = recalcular(marca, red, id_post)
             if datos.get("encontrado"):
                 refrescadas += 1
+    # Tras acumular puntos nuevos en el histórico, poda los antiguos para acotar el
+    # crecimiento de `metricas_pieza_snapshots` (ADR 0007). El "ahora" lo pasa este
+    # llamante (que ya tiene el reloj), no db.py. Best-effort: un fallo de poda no
+    # invalida el barrido (los puntos ya quedaron escritos).
+    try:
+        retencion = config.metricas_historico_retencion_dias()
+        borrados = repos.podar_snapshots_piezas(retencion, ahora.isoformat(timespec="seconds"))
+        if borrados:
+            _log.info(
+                "Poda del histórico por pieza: %d snapshot(s) > %d días eliminados.",
+                borrados, retencion,
+            )
+    except Exception:  # noqa: BLE001 -- la poda es best-effort; no debe romper el barrido
+        _log.exception("metricas_pieza: fallo al podar el histórico por pieza.")
     return refrescadas
 
 

@@ -162,6 +162,8 @@ ENV_PROGRAMADOR_INTERVALO_SEGUNDOS = "KENI_PROGRAMADOR_INTERVALO_SEGUNDOS"
 ENV_METRICAS_REFRESCO_HORAS = "KENI_METRICAS_REFRESCO_HORAS"
 # Refresco PROACTIVO de la cache de metricas POR PIEZA (tablero) — Fase 3 auto-operativa.
 ENV_METRICAS_PIEZAS_REFRESCO_HORAS = "KENI_METRICAS_PIEZAS_REFRESCO_HORAS"
+# Retencion (dias) del HISTORICO de metricas por pieza (`metricas_pieza_snapshots`, ADR 0007).
+ENV_METRICAS_HISTORICO_RETENCION_DIAS = "KENI_METRICAS_HISTORICO_RETENCION_DIAS"
 # Barrido de ALERTAS de rendimiento / reciclaje proactivo (emite eventos internos).
 ENV_ALERTAS_INTERVALO_HORAS = "KENI_ALERTAS_RENDIMIENTO_HORAS"
 ENV_ALERTAS_ACTIVAS = "KENI_ALERTAS_RENDIMIENTO"
@@ -360,6 +362,9 @@ METRICAS_REFRESCO_HORAS_DEF = 4
 # Cadencia del refresco proactivo de la cache POR PIEZA (tablero). Casa con el TTL de
 # `metricas_pieza` (4h): un post no cambia minuto a minuto.
 METRICAS_PIEZAS_REFRESCO_HORAS_DEF = 4
+# Retencion del historico por pieza (`metricas_pieza_snapshots`): a 4h de cadencia, 90 dias
+# son ~540 puntos por pieza; la poda mantiene la tabla acotada (ADR 0007).
+METRICAS_HISTORICO_RETENCION_DIAS_DEF = 90
 # Cadencia del barrido de alertas de rendimiento / reciclaje proactivo (horas).
 ALERTAS_INTERVALO_HORAS_DEF = 6
 # Umbral de engagement (%) por debajo del cual una pieza dispara alerta de bajo rendimiento.
@@ -818,6 +823,17 @@ def metricas_piezas_refresco_horas() -> int:
     """
     return _entero(
         ENV_METRICAS_PIEZAS_REFRESCO_HORAS, METRICAS_PIEZAS_REFRESCO_HORAS_DEF, minimo=1
+    )
+
+
+def metricas_historico_retencion_dias() -> int:
+    """Días de retención del HISTÓRICO de métricas por pieza (`metricas_pieza_snapshots`).
+
+    `KENI_METRICAS_HISTORICO_RETENCION_DIAS`, def 90, min 1. El daemon de refresco poda los
+    snapshots más antiguos que esta ventana para acotar el crecimiento de la tabla (ADR 0007).
+    """
+    return _entero(
+        ENV_METRICAS_HISTORICO_RETENCION_DIAS, METRICAS_HISTORICO_RETENCION_DIAS_DEF, minimo=1
     )
 
 

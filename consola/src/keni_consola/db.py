@@ -193,6 +193,7 @@ __all__ = [
     "listar_programas_rota",
     "listar_publicaciones_comerciales",
     "listar_snapshots_comerciales",
+    "listar_snapshots_piezas",
     "listar_swaps_turno",
     "listar_turnos_rota",
     "marcar_aviso_comercial",
@@ -207,11 +208,14 @@ __all__ = [
     "obtener_publicacion_comercial",
     "obtener_swap_turno",
     "obtener_turno_rota",
+    "podar_snapshots_piezas",
     "reclamar_job",
     "reclamar_preparacion",
     "registrar_salud_fuente_rss",
     "registrar_snapshot_comercial",
+    "registrar_snapshot_pieza",
     "sembrar_franjas_por_defecto",
+    "serie_pieza",
     "terminar_job",
     "ultimo_snapshot_comercial",
     "actualizar_swap_turno",
@@ -337,6 +341,40 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "ON comercial_snapshots (publicacion_id, ts)",
     "CREATE INDEX IF NOT EXISTS idx_comercial_snapshots_pub "
     "ON comercial_snapshots (publicacion_id)",
+    # Histórico de métricas por pieza para TODAS las publicaciones (no solo el módulo
+    # comercial): una fila por pieza por refresco del daemon, para análisis temporales
+    # (velocidad, curvas de crecimiento, correlación) por marca×red×formato. A diferencia de
+    # `metricas_cache` (valor ACTUAL, sobrescrito), esta tabla es la SERIE histórica; a
+    # diferencia de `comercial_snapshots` (seguimiento de OBJETIVOS de piezas comerciales),
+    # esta es GENERAL. El crecimiento lo acota la poda por retención (ADR 0007).
+    """
+    CREATE TABLE IF NOT EXISTS metricas_pieza_snapshots (
+        id                             TEXT PRIMARY KEY,
+        pieza_id                       TEXT NOT NULL,
+        marca                          TEXT NOT NULL DEFAULT '',
+        red                            TEXT NOT NULL DEFAULT '',
+        formato                        TEXT NOT NULL DEFAULT '',
+        ts                             TEXT NOT NULL,
+        visualizaciones                INTEGER NOT NULL DEFAULT 0,
+        interacciones                  INTEGER NOT NULL DEFAULT 0,
+        alcance                        INTEGER NOT NULL DEFAULT 0,
+        engagement_pct                 REAL    NOT NULL DEFAULT 0,
+        likes                          INTEGER NOT NULL DEFAULT 0,
+        comentarios                    INTEGER NOT NULL DEFAULT 0,
+        compartidos                    INTEGER NOT NULL DEFAULT 0,
+        guardados                      INTEGER NOT NULL DEFAULT 0,
+        video_views                    INTEGER NOT NULL DEFAULT 0,
+        tiempo_medio_vis_s             INTEGER NOT NULL DEFAULT 0,
+        clics_enlace                   INTEGER NOT NULL DEFAULT 0,
+        seguidores_netos_atribuidos    INTEGER NOT NULL DEFAULT 0
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_pieza_ts "
+    "ON metricas_pieza_snapshots (pieza_id, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_marca_red_ts "
+    "ON metricas_pieza_snapshots (marca, red, ts)",
+    "CREATE INDEX IF NOT EXISTS idx_metricas_pieza_snapshots_pieza "
+    "ON metricas_pieza_snapshots (pieza_id)",
     """
     CREATE TABLE IF NOT EXISTS usuarios (
         id                     TEXT PRIMARY KEY,
@@ -2319,6 +2357,183 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
     if fila is None:
         return None
     return _fila_a_snapshot(fila)
+
+
+# --------------------------------------------------------------------------- #
+# Histórico de metricas POR PIEZA (serie temporal general, todas las piezas)   #
+# --------------------------------------------------------------------------- #
+#
+# `metricas_pieza_snapshots`: una fila por pieza por refresco del daemon
+# (`metricas_piezas_refresco`, cada 4h) para TODAS las publicaciones recientes (no solo las
+# del modulo comercial). Habilita analisis temporales por marca×red×formato. Relacion con
+# las otras dos series: `metricas_cache` guarda el valor ACTUAL (sobrescrito); esta guarda
+# la SERIE; `comercial_snapshots` sigue para el seguimiento de OBJETIVOS comerciales. Ver
+# ADR 0007. El crecimiento lo acota la poda por retencion (`podar_snapshots_piezas`).
+
+# Metricas que el snapshot por pieza captura ademas de la clave (pieza/marca/red/formato/ts).
+# Una sola tupla DRY mantiene alineados INSERT y SELECT: anadir una metrica = anadir aqui +
+# a la columna en `_DDL_ESQUEMA`. Cada par es (columna, "int"|"float"); todas DEFAULT 0
+# (dato ausente -> 0). `engagement_pct` es REAL (porcentaje); el resto enteros.
+_METRICAS_PIEZA_SNAPSHOT: tuple[tuple[str, str], ...] = (
+    ("visualizaciones", "int"),
+    ("interacciones", "int"),
+    ("alcance", "int"),
+    ("engagement_pct", "float"),
+    ("likes", "int"),
+    ("comentarios", "int"),
+    ("compartidos", "int"),
+    ("guardados", "int"),
+    ("video_views", "int"),
+    ("tiempo_medio_vis_s", "int"),
+    ("clics_enlace", "int"),
+    ("seguidores_netos_atribuidos", "int"),
+)
+# Columnas de la clave (no-metricas) que devuelve la lectura, en orden.
+_COLS_PIEZA_SNAPSHOT_CLAVE: tuple[str, ...] = ("pieza_id", "marca", "red", "formato", "ts")
+_COLS_PIEZA_SNAPSHOT_LECTURA: tuple[str, ...] = (
+    *_COLS_PIEZA_SNAPSHOT_CLAVE,
+    *(col for col, _ in _METRICAS_PIEZA_SNAPSHOT),
+)
+_SELECT_PIEZA_SNAPSHOT = ", ".join(_COLS_PIEZA_SNAPSHOT_LECTURA)
+
+
+def _coaccionar_metrica(valor: Any, tipo: str) -> Any:
+    """Convierte un valor de metrica a su tipo (int/float), tolerando None/no parseable -> 0."""
+    if valor is None:
+        return 0.0 if tipo == "float" else 0
+    try:
+        return float(valor) if tipo == "float" else int(valor)
+    except (TypeError, ValueError):
+        return 0.0 if tipo == "float" else 0
+
+
+def _fila_a_snapshot_pieza(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `metricas_pieza_snapshots` en un dict (clave texto, metricas tipadas)."""
+    snap: dict[str, Any] = {col: fila[col] for col in _COLS_PIEZA_SNAPSHOT_CLAVE}
+    for col, tipo in _METRICAS_PIEZA_SNAPSHOT:
+        snap[col] = _coaccionar_metrica(fila[col], tipo)
+    return snap
+
+
+def registrar_snapshot_pieza(
+    pieza_id: str,
+    marca: str,
+    red: str,
+    formato: str,
+    ts: str,
+    metricas: dict[str, Any],
+) -> bool:
+    """Inserta un snapshot histórico de UNA pieza (idempotente por `(pieza_id, ts)`).
+
+    Devuelve True si insertó una fila nueva, False si ya había un snapshot en ese `ts` (el
+    índice ÚNICO -> `ON CONFLICT DO NOTHING` evita duplicar el mismo instante). Cada métrica
+    ausente o `None` en `metricas` se persiste como 0 (defensivo). El llamante normal es el
+    daemon de refresco proactivo (`metricas_pieza.recalcular` -> `repos.registrar_snapshot_pieza`).
+    """
+    metricas = metricas or {}
+    cols = (
+        "id",
+        *_COLS_PIEZA_SNAPSHOT_CLAVE,
+        *(col for col, _ in _METRICAS_PIEZA_SNAPSHOT),
+    )
+    valores = [
+        uuid.uuid4().hex[:12],
+        pieza_id,
+        marca or "",
+        red or "",
+        formato or "",
+        ts,
+        *(_coaccionar_metrica(metricas.get(col), tipo) for col, tipo in _METRICAS_PIEZA_SNAPSHOT),
+    ]
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in cols)
+        cur = con.execute(
+            f"INSERT OR IGNORE INTO metricas_pieza_snapshots ({', '.join(cols)}) "
+            f"VALUES ({marcadores})",
+            tuple(valores),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
+
+
+def serie_pieza(pieza_id: str) -> list[dict[str, Any]]:
+    """Serie temporal histórica de UNA pieza (más antiguo primero), lista para graficar."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
+            "WHERE pieza_id = ? ORDER BY ts ASC",
+            (pieza_id,),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_snapshot_pieza(f) for f in filas]
+
+
+def listar_snapshots_piezas(
+    marca: str | None = None,
+    red: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[dict[str, Any]]:
+    """Snapshots históricos por pieza FILTRADOS (para análisis agregados futuros).
+
+    Filtros opcionales por `marca`, `red` y ventana de `ts` (`desde`/`hasta`, ISO, inclusivos).
+    Devuelve las filas ordenadas por `ts` ascendente. Sin filtros, devuelve toda la serie.
+    """
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if red:
+        clausulas.append("red = ?")
+        params.append(red)
+    if desde:
+        clausulas.append("ts >= ?")
+        params.append(desde)
+    if hasta:
+        clausulas.append("ts <= ?")
+        params.append(hasta)
+    where = f"WHERE {' AND '.join(clausulas)} " if clausulas else ""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"SELECT {_SELECT_PIEZA_SNAPSHOT} FROM metricas_pieza_snapshots "
+            f"{where}ORDER BY ts ASC",
+            tuple(params),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_snapshot_pieza(f) for f in filas]
+
+
+def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
+    """Borra los snapshots por pieza con `ts` < (`ahora_iso` - `retencion_dias`). Devuelve nº borrados.
+
+    El corte se calcula a partir del `ahora_iso` que pasa el LLAMANTE (el daemon ya tiene un
+    reloj): db.py NO genera la hora del sistema, para que la poda sea testeable de forma
+    determinista. `ahora_iso` se parsea como ISO; si no parsea, no se poda nada (defensivo).
+    """
+    if retencion_dias <= 0:
+        return 0
+    try:
+        corte = datetime.fromisoformat(ahora_iso) - timedelta(days=retencion_dias)
+    except (TypeError, ValueError):
+        return 0
+    corte_iso = corte.isoformat()
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "DELETE FROM metricas_pieza_snapshots WHERE ts < ?", (corte_iso,)
+        )
+        con.commit()
+        return cur.rowcount
+    finally:
+        con.close()
 
 
 # --------------------------------------------------------------------------- #

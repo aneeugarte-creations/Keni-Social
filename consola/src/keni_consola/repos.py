@@ -629,6 +629,39 @@ def ultimo_snapshot_comercial(publicacion_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Histórico de metricas POR PIEZA (serie temporal general; ADR 0007)            #
+# --------------------------------------------------------------------------- #
+
+
+def registrar_snapshot_pieza(
+    pieza_id: str,
+    marca: str,
+    red: str,
+    formato: str,
+    ts: str,
+    metricas: dict[str, Any],
+) -> bool:
+    return db.registrar_snapshot_pieza(pieza_id, marca, red, formato, ts, metricas)
+
+
+def serie_pieza(pieza_id: str) -> list[dict[str, Any]]:
+    return db.serie_pieza(pieza_id)
+
+
+def listar_snapshots_piezas(
+    marca: str | None = None,
+    red: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> list[dict[str, Any]]:
+    return db.listar_snapshots_piezas(marca=marca, red=red, desde=desde, hasta=hasta)
+
+
+def podar_snapshots_piezas(retencion_dias: int, ahora_iso: str) -> int:
+    return db.podar_snapshots_piezas(retencion_dias, ahora_iso)
+
+
+# --------------------------------------------------------------------------- #
 # Cache de metricas (OPERACIONAL: Postgres via db.py; lo orquesta metricas_cache.py) #
 # --------------------------------------------------------------------------- #
 
