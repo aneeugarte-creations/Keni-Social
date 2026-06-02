@@ -7,6 +7,7 @@ import {
   Check,
   ChevronDown,
   ClipboardList,
+  Copy,
   Eye,
   FileText,
   Flag,
@@ -15,9 +16,10 @@ import {
   Image as ImageIcon,
   Loader2,
   ListTodo,
+  LayoutGrid,
   Pencil,
   Plus,
-  Rows3,
+  Recycle,
   Send,
   Settings2,
   Smartphone,
@@ -129,33 +131,22 @@ function etiquetaEvento(e: { titulo: string; fecha: string }): string {
 }
 /** Workspace "todas las marcas" (sin aislar). */
 const WORKSPACE_TODAS = "__todas__";
-/** localStorage: workspace (marca) activo + vista del tablero, para que sobrevivan al refresco. */
+/** localStorage: workspace (marca) activo + vista activa, para que sobrevivan al refresco. */
 const CLAVE_WORKSPACE = "keni.tablero.workspace";
-const CLAVE_VISTA = "keni.tablero.vista";
 const CLAVE_MODO = "keni.tablero.modo";
 
-/** Densidad de la sección del tablero: lista / cuadrícula / feed. */
-type Vista = "lista" | "feed";
-
 /**
- * MODO del tablero (superficie única de contenido, #fase2):
- *   - `tablero`: el contenido del día por flujo (importante/evergreen/evento) + tareas.
- *   - `publicaciones`: las PUBLICACIONES (es_publicacion) en lista, con su gestión completa.
- *   - `calendario`: las publicaciones PROGRAMADAS en una rejilla mensual.
- *
- * Las publicaciones y el contenido del tablero comparten el MISMO dato (una publicación es
- * una fila `contenido_plataforma` con `es_publicacion=1`). El modo solo cambia la lente:
- * `tablero` lee `/api/contenido`; `publicaciones`/`calendario` leen `/api/publicaciones`
- * (misma BD, forma `Publicacion` con su editor rico ya existente).
+ * VISTA de la SUPERFICIE ÚNICA de contenido (#fusion). Antes había un modo "tablero" (con su
+ * propio toggle lista/feed) separado de "publicaciones": eran dos lentes sobre el MISMO dato
+ * (una publicación es una fila `contenido_plataforma` de un `contenido`). Se fusionan en una
+ * sola superficie con tres vistas, todas con el editor rico único (`DialogoEditar`):
+ *   - `feed`: el contenido del día por RED (mockup fiel) + las tareas del equipo. Lee
+ *     `/api/contenido`.
+ *   - `lista`: las piezas en lista con su gestión de publicación completa (estado, programar,
+ *     reciclar, duplicar…) en menú contextual. Lee `/api/publicaciones`.
+ *   - `calendario`: las piezas PROGRAMADAS en una rejilla mensual. Lee `/api/publicaciones`.
  */
-type Modo = "tablero" | "publicaciones" | "calendario";
-
-/** Secciones del tablero por flujo (el orden manda en pantalla). */
-const SECCIONES: { flujo: Contenido["flujo"]; titulo: string }[] = [
-  { flujo: "importante", titulo: "Importante del día" },
-  { flujo: "evergreen", titulo: "Evergreen" },
-  { flujo: "evento", titulo: "Eventos previstos" },
-];
+type Modo = "feed" | "lista" | "calendario";
 
 const ESTADO_PLAT_LABEL: Record<string, string> = {
   pendiente: "Pendiente",
@@ -263,17 +254,21 @@ export default function Tablero() {
     }
     if (usuario) sinPreferenciaInicial.current = false;
   }, [usuario, workspace]);
-  const [vista, setVista] = React.useState<Vista>(() =>
-    leerLS(CLAVE_VISTA, "lista") === "feed" ? "feed" : "lista",
-  );
   const [modo, setModo] = React.useState<Modo>(() => {
-    const desdeUrl = new URLSearchParams(location.search).get("modo");
-    if (desdeUrl === "publicaciones" || desdeUrl === "calendario" || desdeUrl === "tablero") {
-      return desdeUrl;
-    }
-    // Deep-link `?abrir=<id>` abre el detalle de un contenido: vive en el modo Tablero.
-    if (new URLSearchParams(location.search).get("abrir")) return "tablero";
-    return leerLS(CLAVE_MODO, "tablero") as Modo;
+    // Compat de valores antiguos: `tablero`→`feed`, `publicaciones`→`lista`.
+    const migrar = (v: string | null): Modo | null =>
+      v === "feed" || v === "tablero"
+        ? "feed"
+        : v === "lista" || v === "publicaciones"
+          ? "lista"
+          : v === "calendario"
+            ? "calendario"
+            : null;
+    const desdeUrl = migrar(new URLSearchParams(location.search).get("modo"));
+    if (desdeUrl) return desdeUrl;
+    // Deep-link `?abrir=<id>` abre el detalle de un contenido: vive en la vista Feed.
+    if (new URLSearchParams(location.search).get("abrir")) return "feed";
+    return migrar(leerLS(CLAVE_MODO, "feed")) ?? "feed";
   });
   // Deep-link `?abrir=<contenido_id>` (p.ej. desde el Panel): abre el detalle de ESE
   // contenido en el tablero. Lo pasamos a la tarjeta correspondiente, que se auto-abre.
@@ -291,13 +286,6 @@ export default function Tablero() {
       /* localStorage no disponible: no es crítico */
     }
   }, [workspace]);
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(CLAVE_VISTA, vista);
-    } catch {
-      /* idem */
-    }
-  }, [vista]);
   React.useEffect(() => {
     try {
       localStorage.setItem(CLAVE_MODO, modo);
@@ -430,17 +418,17 @@ export default function Tablero() {
         }
       />
 
-      {/* Selector de MODO: la lente sobre el MISMO dato (contenido vs publicaciones). */}
+      {/* Selector de VISTA de la superficie única: tres lentes sobre el MISMO dato. */}
       <div className="mb-3 mt-1">
         <Tabs value={modo} onValueChange={(v) => setModo(v as Modo)}>
           <TabsList>
-            <TabsTrigger value="tablero" className="gap-1.5">
-              <ListTodo className="h-4 w-4" />
-              Tablero
+            <TabsTrigger value="feed" className="gap-1.5">
+              <LayoutGrid className="h-4 w-4" />
+              Feed
             </TabsTrigger>
-            <TabsTrigger value="publicaciones" className="gap-1.5">
-              <Send className="h-4 w-4" />
-              Publicaciones
+            <TabsTrigger value="lista" className="gap-1.5">
+              <ListTodo className="h-4 w-4" />
+              Lista
             </TabsTrigger>
             <TabsTrigger value="calendario" className="gap-1.5">
               <CalendarDays className="h-4 w-4" />
@@ -457,7 +445,7 @@ export default function Tablero() {
         onGestionarFranjas={() => setGestionFranjas(true)}
       />
 
-      {modo !== "tablero" ? (
+      {modo !== "feed" ? (
         <VistaPublicaciones
           modo={modo}
           workspace={workspace}
@@ -479,8 +467,7 @@ export default function Tablero() {
           filtroEtiqueta={filtroEtiqueta}
           onEtiqueta={setFiltroEtiqueta}
           etiquetasWorkspace={etiquetasWorkspace}
-          vista={vista}
-          onVista={setVista}
+          abrirId={abrirId}
         />
       )}
 
@@ -540,8 +527,7 @@ function ModoTablero({
   filtroEtiqueta,
   onEtiqueta,
   etiquetasWorkspace,
-  vista,
-  onVista,
+  abrirId,
 }: {
   query: UseQueryResult<RespuestaContenido>;
   catalogos: CatalogosContenido | undefined;
@@ -557,8 +543,7 @@ function ModoTablero({
   filtroEtiqueta: string;
   onEtiqueta: (v: string) => void;
   etiquetasWorkspace: EtiquetaCatalogo[];
-  vista: Vista;
-  onVista: (v: Vista) => void;
+  abrirId: string | null;
 }) {
   return (
     <>
@@ -572,8 +557,6 @@ function ModoTablero({
           filtroEtiqueta={filtroEtiqueta}
           onEtiqueta={onEtiqueta}
           etiquetasWorkspace={etiquetasWorkspace}
-          vista={vista}
-          onVista={onVista}
         />
       )}
 
@@ -602,20 +585,12 @@ function ModoTablero({
           titulo="Nada que mostrar"
           texto="Ningún contenido coincide con el workspace o los filtros activos."
         />
-      ) : vista === "feed" ? (
-        <VistaFeedPorRed contenidos={visibles} catalogos={catalogos!} />
       ) : (
         <div className="mt-4 space-y-8">
-          {SECCIONES.map((s) => {
-            const items = visibles.filter(
-              (c) => c.clase === "contenido" && c.flujo === s.flujo,
-            );
-            return (
-              <Seccion key={s.flujo} titulo={s.titulo} cantidad={items.length}>
-                <div className={contenedorClase}>{items.map(renderItem)}</div>
-              </Seccion>
-            );
-          })}
+          {/* El feed por red: la lente principal de contenido (la pieza la editas con click). */}
+          <VistaFeedPorRed contenidos={visibles} catalogos={catalogos!} abrirId={abrirId} />
+          {/* Las tareas del equipo (clase=tarea) no tienen red: no caben en el feed ni en la
+              lista de publicaciones, así que conservan aquí su hogar. */}
           {tareas.length > 0 && (
             <Seccion titulo="Tareas del equipo" cantidad={tareas.length}>
               <div className={contenedorClase}>{tareas.map(renderItem)}</div>
@@ -628,20 +603,19 @@ function ModoTablero({
 }
 
 /**
- * Modos PUBLICACIONES y CALENDARIO del tablero (superficie única, #fase2).
+ * Vistas LISTA y CALENDARIO de la superficie única (#fusion).
  *
  * Lee `/api/publicaciones` (misma BD que `/api/contenido`: una publicación ES una fila
- * `contenido_plataforma` con `es_publicacion=1`) y reutiliza el editor rico ya existente
- * (`VistaLista`/`VistaCalendario`/`DialogoEditar`/`DialogoDuplicar`) en vez de duplicarlo.
- * Su query está gateada por modo: en modo `tablero` no se monta, así el resto del tablero
- * sigue dependiendo solo de `/api/contenido`.
+ * `contenido_plataforma` de un `contenido`) y reutiliza el editor rico
+ * (`VistaLista`/`VistaCalendario`/`DialogoEditar`/`DialogoDuplicar`). Su query está gateada
+ * por vista: en la vista `feed` no se monta, así el feed depende solo de `/api/contenido`.
  */
 function VistaPublicaciones({
   modo,
   workspace,
   onGestionarFranjas,
 }: {
-  modo: Exclude<Modo, "tablero">;
+  modo: Exclude<Modo, "feed">;
   workspace: string;
   onGestionarFranjas: () => void;
 }) {
@@ -688,7 +662,7 @@ function GestionPublicaciones({
   opciones,
   onGestionarFranjas,
 }: {
-  modo: Exclude<Modo, "tablero">;
+  modo: Exclude<Modo, "feed">;
   workspace: string;
   opciones: OpcionesPublicaciones;
   onGestionarFranjas: () => void;
@@ -834,8 +808,6 @@ function BarraControles({
   filtroEtiqueta,
   onEtiqueta,
   etiquetasWorkspace,
-  vista,
-  onVista,
 }: {
   catalogos: CatalogosContenido;
   workspace: string;
@@ -845,8 +817,6 @@ function BarraControles({
   filtroEtiqueta: string;
   onEtiqueta: (v: string) => void;
   etiquetasWorkspace: EtiquetaCatalogo[];
-  vista: Vista;
-  onVista: (v: Vista) => void;
 }) {
   // Al cambiar de workspace, si la etiqueta del filtro deja de pertenecer, se resetea.
   React.useEffect(() => {
@@ -929,37 +899,6 @@ function BarraControles({
           </SelectContent>
         </Select>
       </div>
-
-      {/* Vista del tablero: lista / feed por red. */}
-      <div
-        className="ml-auto inline-flex items-center rounded-lg bg-muted p-0.5"
-        role="group"
-        aria-label="Vista del tablero"
-      >
-        {(
-          [
-            { v: "lista", icono: Rows3, etiqueta: "Lista" },
-            { v: "feed", icono: Smartphone, etiqueta: "Feed" },
-          ] as const
-        ).map(({ v, icono: Icono, etiqueta }) => (
-          <Tooltip key={v} label={etiqueta}>
-            <button
-              type="button"
-              aria-label={etiqueta}
-              aria-pressed={vista === v}
-              onClick={() => onVista(v)}
-              className={cn(
-                "inline-flex h-7 w-9 items-center justify-center rounded-md transition-colors",
-                vista === v
-                  ? "bg-background text-foreground shadow"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icono className="h-4 w-4" />
-            </button>
-          </Tooltip>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1034,11 +973,14 @@ function ChipEtiqueta({
  */
 function AccionesPieza({
   contenido,
+  plataforma,
   abrirDetalle = false,
   abrirDetalleRef,
   children,
 }: {
   contenido: Contenido;
+  /** Red concreta (solo en el feed): habilita las acciones de publicación por pieza. */
+  plataforma?: ContenidoPlataforma;
   /** Deep-link `?abrir=`: si es esta pieza, abre su panel de detalle al montar. */
   abrirDetalle?: boolean;
   /** Expone al cuerpo clicable de cada vista la acción "abrir detalle" (acción primaria). */
@@ -1063,10 +1005,11 @@ function AccionesPieza({
     [contenido.plataformas],
   );
 
-  // Deep-link `?abrir=<id>` (desde el Panel): abre el detalle de la pieza apuntada.
+  // Deep-link `?abrir=<id>` (desde el Panel): abre el detalle de la pieza apuntada (la red
+  // concreta en el feed; la primera plataforma si no se conoce).
   React.useEffect(() => {
-    if (abrirDetalle && esContenido) abrirEditor();
-  }, [abrirDetalle, esContenido, abrirEditor]);
+    if (abrirDetalle && esContenido) abrirEditor(plataforma?.id);
+  }, [abrirDetalle, esContenido, abrirEditor, plataforma?.id]);
 
   // Expone "abrir detalle" al cuerpo clicable de la tarjeta (lo engancha cada vista).
   abrirDetalleRef.current = esContenido ? abrirEditor : null;
@@ -1097,6 +1040,23 @@ function AccionesPieza({
     onSuccess: invalidar,
     onError: (e) => toast.error(mensajeError(e)),
   });
+  // Acciones de PUBLICACIÓN sobre la fila por red. Solo en el feed (que conoce la
+  // `plataforma`); ambas refrescan tablero y lista de publicaciones.
+  const trasPublicacion = (mensaje: string) => () => {
+    invalidar();
+    void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
+    toast.success(mensaje);
+  };
+  const duplicar = useMutation({
+    mutationFn: () => api.duplicarPublicacion(plataforma!.id),
+    onSuccess: trasPublicacion("Pieza duplicada como borrador."),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
+  const reciclar = useMutation({
+    mutationFn: () => api.reciclarPublicacion(plataforma!.id),
+    onSuccess: trasPublicacion("Reciclada como nuevo borrador."),
+    onError: (e) => toast.error(mensajeError(e)),
+  });
 
   const items: EntradaMenuContextual[] = [
     ...(esContenido
@@ -1105,6 +1065,23 @@ function AccionesPieza({
             etiqueta: "Generar / mejorar copy con IA",
             icono: Sparkles,
             onClick: () => setAsistenteAbierto(true),
+          },
+          { separador: true } as const,
+        ]
+      : []),
+    ...(esContenido && plataforma
+      ? [
+          {
+            etiqueta: "Duplicar pieza",
+            icono: Copy,
+            deshabilitado: duplicar.isPending,
+            onClick: () => duplicar.mutate(),
+          },
+          {
+            etiqueta: "Reciclar como borrador",
+            icono: Recycle,
+            deshabilitado: reciclar.isPending,
+            onClick: () => reciclar.mutate(),
           },
           { separador: true } as const,
         ]
@@ -1481,9 +1458,12 @@ function TarjetaContenido({
 function VistaFeedPorRed({
   contenidos,
   catalogos,
+  abrirId,
 }: {
   contenidos: Contenido[];
   catalogos: CatalogosContenido;
+  /** Deep-link `?abrir=`: id de tema o de plataforma a auto-abrir al montar. */
+  abrirId?: string | null;
 }) {
   const piezas = contenidos.filter((c) => c.clase === "contenido");
 
@@ -1523,7 +1503,16 @@ function VistaFeedPorRed({
               </span>
             </header>
             {items.map(({ c, p }) => (
-              <TarjetaFeed key={`${c.id}-${p.id}`} contenido={c} plataforma={p} />
+              <TarjetaFeed
+                key={`${c.id}-${p.id}`}
+                contenido={c}
+                plataforma={p}
+                abrirDetalle={
+                  abrirId != null &&
+                  (abrirId === p.id ||
+                    (abrirId === c.id && c.plataformas[0]?.id === p.id))
+                }
+              />
             ))}
           </section>
         );
@@ -1533,21 +1522,28 @@ function VistaFeedPorRed({
 }
 
 /**
- * Una previa del feed (mockup fiel de la red) envuelta en `AccionesPieza`: click
- * IZQUIERDO abre el detalle de la pieza; click DERECHO abre el mismo menú contextual que
- * en la vista lista (Generar/mejorar copy con IA · Borrar). Así lista y feed comparten
- * exactamente las mismas opciones.
+ * Una previa del feed (mockup fiel de la red) envuelta en `AccionesPieza`: click IZQUIERDO
+ * abre el editor rico de ESA pieza por red (`DialogoEditar`); click DERECHO abre el menú
+ * contextual (IA · Duplicar · Reciclar · Prioridad · Borrar).
  */
 function TarjetaFeed({
   contenido,
   plataforma,
+  abrirDetalle = false,
 }: {
   contenido: Contenido;
   plataforma: ContenidoPlataforma;
+  /** Deep-link `?abrir=`: auto-abre el editor de esta pieza al montar. */
+  abrirDetalle?: boolean;
 }) {
   const abrirDetalleRef = React.useRef<((plataformaId?: string) => void) | null>(null);
   return (
-    <AccionesPieza contenido={contenido} abrirDetalleRef={abrirDetalleRef}>
+    <AccionesPieza
+      contenido={contenido}
+      plataforma={plataforma}
+      abrirDetalle={abrirDetalle}
+      abrirDetalleRef={abrirDetalleRef}
+    >
       <button
         type="button"
         onClick={() => abrirDetalleRef.current?.(plataforma.id)}
