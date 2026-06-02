@@ -41,10 +41,13 @@ QUE EXPORTA TU MODULO:
 from __future__ import annotations
 
 import importlib
+import logging
 import pkgutil
 from collections.abc import Sequence
 
 from starlette.routing import Route
+
+_log = logging.getLogger("keni_consola.api")
 
 # Cache del descubrimiento (los modulos solo se importan una vez). `crear_app` lo
 # reusa; los tests pueden forzar un redescubrimiento con `descubrir(refresco=True)`.
@@ -66,7 +69,15 @@ def descubrir(refresco: bool = False) -> list[Route]:
     for info in sorted(pkgutil.iter_modules(__path__), key=lambda i: i.name):
         if info.name.startswith("_"):
             continue
-        modulo = importlib.import_module(f"{__name__}.{info.name}")
+        try:
+            modulo = importlib.import_module(f"{__name__}.{info.name}")
+        except ImportError as e:
+            # Un modulo listado por `iter_modules` puede no poder importarse: lo mas comun es
+            # una CARRERA en tests (un fichero temporal en `api/` que otro worker xdist borro
+            # entre el escaneo y el import; ver test_app). Tambien un modulo a medio escribir.
+            # No debe tumbar el arranque de toda la app: lo saltamos con aviso, no crasheamos.
+            _log.warning("api.descubrir: omito el modulo '%s' (no importable): %s", info.name, e)
+            continue
         crudas = getattr(modulo, "RUTAS", None)
         if crudas is None:
             continue  # submodulo helper, no aporta rutas
