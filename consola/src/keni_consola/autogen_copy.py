@@ -38,15 +38,17 @@ from typing import Any
 
 from . import config, daemon_util, generaciones, marcas, redes, repos
 from .dominio import generar as dom_generar
-from .estados import CLASE_CONTENIDO
+from .estados import CLASE_CONTENIDO, ORIGENES_AUTOGEN
 
 _log = logging.getLogger("keni_consola.autogen_copy")
 
-# Origenes de contenido que cuentan como "tema de una fuente" a redactar. El alta MANUAL
-# (origen "") queda fuera a proposito (no auto-generamos lo que el equipo teclea).
-ORIGENES_TOPIC: frozenset[str] = frozenset(
-    {"import-calendario", "radar-auto", "radar", "rss"}
-)
+# Origenes de contenido que cuentan como "tema redactable" (un borrador se encola solo).
+# Fuente UNICA del vocabulario: `estados.ORIGENES_AUTOGEN` (modulo neutro), para que los
+# flujos transversales no compitan por este literal. Incluye las fuentes externas historicas
+# (import-calendario, radar-auto, radar, rss) Y el alta creativa del equipo (`equipo`), que
+# la direccion decidio auto-generar SIEMPRE (2026-06-01). El alta TECLEADA legada (origen "")
+# sigue EXCLUIDA a proposito: no auto-generamos lo que el equipo teclea sin marcar como alta.
+ORIGENES_TOPIC: frozenset[str] = frozenset(ORIGENES_AUTOGEN)
 
 # Etiqueta de origen del historial para el copy auto-generado (nota -> piezas por red, con
 # auto-verificacion). Tras retirar el sistema de skills, el copy va por el lanzador NEUTRO

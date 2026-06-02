@@ -231,6 +231,31 @@ PRIORIDAD_CONTENIDO_DEFECTO = PRIORIDAD_EVENTO_DEFECTO
 TIPOS_CONTENIDO: tuple[str, ...] = ("ia", "galeria", "fuente")
 TIPO_CONTENIDO_DEFECTO = "ia"
 
+# `origen` de un item del tablero: de QUÉ fuente nació. Es texto libre en la DB (no hay
+# enum duro en `repos.crear_contenido`), pero las FUENTES que la auto-generación de copy
+# considera "tema redactable" se enumeran aquí, en el módulo neutro, para que tanto el
+# daemon (`autogen_copy.ORIGENES_TOPIC`) como los flujos transversales referencien UN
+# único valor en vez de literales sueltos.
+#   - `import-calendario` · `radar-auto` · `radar` · `rss`: fuentes EXTERNAS (lo histórico).
+#   - `equipo`: ALTA CREATIVA del equipo (Fase 1 / Flujo A). El equipo "postea" material
+#     original (foto/nota/idea) con marca; se AUTO-GENERA SIEMPRE (decisión de dirección
+#     2026-06-01: no opt-in). Es DISTINTO del alta tecleada legada (`origen=""`), que sigue
+#     EXCLUIDA de la auto-generación (la genera quien la crea, si quiere). El endpoint/UI que
+#     da de alta con este origen lo añade el Flujo A; aquí solo se fija el valor y la regla.
+ORIGEN_EQUIPO = "equipo"
+
+# Orígenes de FUENTE que la auto-generación de copy trata como "tema redactable" (un
+# borrador se encola solo). Incluye las fuentes externas históricas + el alta creativa del
+# equipo (`equipo`). El alta tecleada legada (`origen=""`) NO está aquí: queda fuera de la
+# auto-generación a propósito.
+ORIGENES_AUTOGEN: tuple[str, ...] = (
+    "import-calendario",
+    "radar-auto",
+    "radar",
+    "rss",
+    ORIGEN_EQUIPO,
+)
+
 # Eje (clase) de una etiqueta editorial del tablero (ola "organizacion"). Una etiqueta
 # clasifica transversalmente una pieza: una CAMPAÑA ("Mundial 2026"), una VERTICAL/sección
 # editorial ("futbol", "espectaculos") o un TIPO de formato ("reel", "carrusel", "nota").

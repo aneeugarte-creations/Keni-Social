@@ -75,6 +75,27 @@ def test_acepta_todas_las_fuentes_conocidas():
     assert {e["id"] for e in elegidos} == {"imp", "rad", "rdr", "rss"}
 
 
+def test_acepta_alta_creativa_del_equipo():
+    """`origen='equipo'` AUTO-GENERA SIEMPRE (Fase 1 / Flujo A): el alta creativa del equipo
+    entra al pipeline igual que una fuente externa. Es la INVERSION del plan §2 (antes el alta
+    manual quedaba fuera). Distinto del alta tecleada legada (`origen=''`), que sigue excluida.
+    """
+    elegidos = ag.topics_pendientes(
+        [_item(id="eq", origen="equipo")], ya_generados=set(), maximo=3
+    )
+    assert [e["id"] for e in elegidos] == ["eq"]
+
+
+def test_origenes_topic_deriva_del_modulo_neutro():
+    """`ORIGENES_TOPIC` es la fuente UNICA `estados.ORIGENES_AUTOGEN` e incluye `equipo`,
+    pero NUNCA el alta tecleada legada (`origen=''`)."""
+    from keni_consola import estados
+
+    assert ag.ORIGENES_TOPIC == frozenset(estados.ORIGENES_AUTOGEN)
+    assert estados.ORIGEN_EQUIPO in ag.ORIGENES_TOPIC
+    assert "" not in ag.ORIGENES_TOPIC
+
+
 def test_nota_combina_titulo_y_descripcion():
     nota = ag._nota_de(_item(titulo="Título", descripcion="Por qué importa"))
     assert nota == "Título\n\nPor qué importa"
