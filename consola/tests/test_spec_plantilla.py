@@ -18,10 +18,10 @@ def _plana(**over):
     return base
 
 
-def test_spec_por_defecto_tres_formatos_y_capas():
+def test_spec_por_defecto_cuatro_formatos_y_capas():
     spec = sp.spec_por_defecto("unotv", _plana())
     assert spec["version"] == sp.VERSION
-    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "vertical"]
+    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "horizontal", "vertical"]
     feed = spec["formatos"]["feed"]
     assert feed["lienzo"] == {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96}
     assert feed["foto_slot"]["w"] == 1080 and feed["foto_slot"]["ajuste"] == "cover"
@@ -31,6 +31,31 @@ def test_spec_por_defecto_tres_formatos_y_capas():
     titular = next(t for t in feed["textos"] if t["id"] == "titular")
     assert titular["binding"] == "copy_in"
     assert titular["familia"] == "condensada"  # titular_condensada=True
+
+
+def test_spec_por_defecto_horizontal_16_9_con_placa():
+    """El lienzo 16:9 (X) deriva su SPEC en 1600×900 con logo + pleca + titular legibles."""
+    spec = sp.spec_por_defecto("unotv", _plana())
+    h = spec["formatos"]["horizontal"]
+    assert h["lienzo"] == {"w": 1600, "h": 900, "safe_top": 56, "safe_bottom": 72}
+    # Foto a lienzo completo (cover) + las mismas capas de marca que el resto.
+    assert h["foto_slot"]["w"] == 1600 and h["foto_slot"]["h"] == 900
+    assert h["foto_slot"]["ajuste"] == "cover"
+    assert h["logo"]["w"] == 220  # logo presente
+    ids = [t["id"] for t in h["textos"]]
+    assert "titular" in ids and "pleca" in ids
+    titular = next(t for t in h["textos"] if t["id"] == "titular")
+    assert titular["binding"] == "copy_in" and titular["ancla"] == "abajo"
+    # El titular cabe dentro del lienzo (anclado abajo, sobre la zona segura inferior).
+    assert titular["y"] <= h["lienzo"]["h"] - h["lienzo"]["safe_bottom"]
+
+
+def test_validar_acepta_spec_horizontal_round_trip():
+    """Un spec con el formato horizontal valida y es idempotente bajo `validar`."""
+    spec = sp.spec_por_defecto("claro-sports", _plana())
+    v1 = sp.validar(spec)
+    assert "horizontal" in v1["formatos"]
+    assert sp.validar(v1) == v1
 
 
 def test_spec_por_defecto_sin_etiqueta_omite_pleca():

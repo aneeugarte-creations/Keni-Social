@@ -1,12 +1,12 @@
 """Esquema del SPEC de plantilla de marca: capas por formato, fuente de verdad del render.
 
 Una "plantilla" pasa de ser campos planos (color, logo + 1 de 4 esquinas, pleca...) a un SPEC
-de CAPAS por formato (9:16 / 4:5 / 1:1) que el equipo diseña visualmente y que TANTO el editor
+de CAPAS por formato (9:16 / 4:5 / 1:1 / 16:9) que el equipo diseña visualmente y que TANTO el editor
 (navegador, react-konva) COMO el servidor (Node + node-canvas) renderizan idéntico. Este módulo
 es el contrato canónico: define el esquema, lo valida y deriva un spec por defecto desde los
 campos planos actuales (continuidad visual sin migración explícita).
 
-Coordenadas: píxeles sobre el lienzo de cada formato (1080×1920 / 1080×1350 / 1080×1080).
+Coordenadas: píxeles sobre el lienzo de cada formato (1080×1920 / 1080×1350 / 1080×1080 / 1600×900).
 
 Capas por formato:
   - `fondo`: relleno base detrás de la foto (`color` | `degradado` | `imagen`).
@@ -32,6 +32,10 @@ FORMATOS: dict[str, dict[str, int]] = {
     "vertical": {"w": 1080, "h": 1920, "safe_top": 220, "safe_bottom": 420},
     "feed": {"w": 1080, "h": 1350, "safe_top": 60, "safe_bottom": 96},
     "cuadrado": {"w": 1080, "h": 1080, "safe_top": 60, "safe_bottom": 96},
+    # 16:9 (lienzo de X y de web/YouTube). Medidas 1600×900 espejo de `formatos_red`
+    # (la matriz red→lienzo declara el 16:9 a 1600×900). Es ancho y bajo, así que las
+    # zonas seguras arriba/abajo son pequeñas (como feed); el ancho da sitio al titular.
+    "horizontal": {"w": 1600, "h": 900, "safe_top": 56, "safe_bottom": 72},
 }
 
 # Familias lógicas de fuente -> el renderer y el editor las resuelven a su archivo embebido.

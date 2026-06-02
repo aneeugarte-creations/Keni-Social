@@ -153,7 +153,7 @@ def test_hex_valido_acepta_mayusculas_y_minusculas(store):
 
 def test_obtener_spec_deriva_de_planos_si_no_hay_guardado(store):
     spec = plantillas_marca.obtener_spec("unotv")
-    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "vertical"]
+    assert sorted(spec["formatos"]) == ["cuadrado", "feed", "horizontal", "vertical"]
     assert spec["marca"] == "unotv"
 
 

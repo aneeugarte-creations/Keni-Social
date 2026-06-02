@@ -74,10 +74,11 @@ _TIMEOUT_RETOCAR_S = 240
 # Componer es determinista (Pillow), como editar: rapido, sin red.
 _TIMEOUT_COMPONER_S = 60
 
-# Formatos que ENTIENDE el compositor (`componer.py`): subconjunto de FORMATOS sin
-# `horizontal`. `horizontal` (16:9) NO es un formato de breaking del compositor, asi que
-# se MAPEA a `feed` (4:5): es el encaje editorial mas cercano para una pieza de feed/post.
-_FORMATOS_COMPONER = ("vertical", "feed", "cuadrado")
+# Formatos que ENTIENDE el compositor (`render_node`, via SPEC de capas): TODOS los de
+# FORMATOS, incluido `horizontal` (16:9, lienzo de X). El spec deriva el layout (logo +
+# pleca + titular) para cada lienzo desde la geometria de `spec_plantilla.FORMATOS`, asi
+# que el 16:9 sale con la marca aplicada como los demas (no se mapea a `feed`).
+_FORMATOS_COMPONER = ("vertical", "feed", "cuadrado", "horizontal")
 
 
 class EstudioError(RuntimeError):
@@ -447,7 +448,7 @@ def previsualizar_spec(
     renderiza con el motor Node (placeholder, sin foto) usando un titular/pleca de muestra, e
     importa el PNG a media. Fuerza Node (sin fallback Pillow: el editor previsualiza el spec real).
     """
-    fmt = "feed" if formato == "horizontal" else formato
+    fmt = formato
     if fmt not in _FORMATOS_COMPONER:
         raise EstudioError("Formato no soportado. Usa: " + ", ".join(_FORMATOS_COMPONER) + ".")
     try:
@@ -498,13 +499,13 @@ def componer(
 
     `imagen`: id de media de la foto; `""` => PLANTILLA con el hueco de foto vacío (placeholder
     "Sube una foto"). `etiqueta`: `None` => etiqueta_default de la marca; `""` => sin pleca;
-    texto => esa pleca. `formato`: `vertical|feed|cuadrado`; `horizontal` se mapea a `feed`.
+    texto => esa pleca. `formato`: `vertical|feed|cuadrado|horizontal` (cada uno tiene su SPEC).
     `logo_path`: ruta de disco a un logo (asset de marca mock/oficial) que sustituye al del
     spec; `None` usa el logo de la plantilla (comportamiento normal).
     """
     if not marcas.es_marca(marca):
         raise EstudioError("Marca desconocida.")
-    fmt = "feed" if formato == "horizontal" else formato
+    fmt = formato
     if fmt not in _FORMATOS_COMPONER:
         raise EstudioError(
             "Formato no soportado para componer. Usa: " + ", ".join(_FORMATOS_COMPONER) + "."
@@ -562,9 +563,9 @@ def generar_set_formatos(
       1. ENCAJAR la foto al lienzo extendiendo el fondo uniforme si se puede (no recorta al
          sujeto); si no, recorte cubriente.
       2. (si `aplicar_marca`) ESTAMPAR la plantilla de marca (logo del asset de la casa +
-         pleca + titular) con `componer`. El lienzo `horizontal` (16:9) no lo compone el
-         motor de placa (mapea a `feed`): para `horizontal` se entrega el encaje SIN placa
-         (la pieza 16:9 de X suele ir sin pleca) y se anota en `info`.
+         pleca + titular) con `componer`. TODOS los lienzos llevan placa, incluido
+         `horizontal` (16:9 de X): el SPEC deriva su layout en 1600×900 igual que los demas,
+         asi que el formato de X sale `marcado:true` como feed/vertical/cuadrado.
 
     `red`: si es una red conocida, usa SUS lienzos (`formatos_red.lienzos_de`); si esta vacia
     o no se conoce, usa el set MAXIMO de lienzos canonicos. `etiqueta`: contrato de `componer`
@@ -589,8 +590,8 @@ def generar_set_formatos(
         encajada = _encajar_a_lienzo(imagen, lienzo)
         marcado = False
         salida_id, salida_url = encajada, f"/api/media/{encajada}"
-        # El motor de placa solo entiende vertical|feed|cuadrado; `horizontal` (16:9 de X) se
-        # entrega encajado SIN placa (no se fuerza el layout feed sobre un 16:9).
+        # El compositor por SPEC entiende todos los lienzos de FORMATOS (incl. `horizontal`,
+        # 16:9 de X): cada uno estampa su placa con su layout derivado del spec.
         if aplicar_marca and lienzo in _FORMATOS_COMPONER:
             comp = componer(
                 encajada, marca=marca, formato=lienzo, titular=titular,

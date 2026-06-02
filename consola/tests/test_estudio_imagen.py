@@ -281,15 +281,15 @@ def test_set_formatos_por_red_instagram(entorno, monkeypatch):
     assert len(res["imagenes"]) == 2
 
 
-def test_set_formatos_x_horizontal_sin_placa(entorno, monkeypatch):
-    """X -> horizontal: se encaja pero NO se compone marca (el motor de placa no hace 16:9)."""
+def test_set_formatos_x_horizontal_con_placa(entorno, monkeypatch):
+    """X -> horizontal: se encaja Y se compone la marca (el compositor por SPEC sí hace 16:9)."""
     llamadas = _mock_set(monkeypatch)
     res = e.generar_set_formatos("foto.png", marca="unotv", red="x")
     assert [f["lienzo"] for f in res["formatos"]] == ["horizontal"]
     assert llamadas["encaje"] == ["horizontal"]
-    assert llamadas["componer"] == []  # horizontal no se compone
-    assert res["formatos"][0]["marcado"] is False
-    assert res["formatos"][0]["url"] == "/api/media/enc-horizontal.png"  # el encaje, sin marca
+    assert llamadas["componer"] == ["horizontal"]  # ahora SÍ se compone la placa 16:9
+    assert res["formatos"][0]["marcado"] is True
+    assert res["formatos"][0]["url"] == "/api/media/marca-horizontal.png"  # el encaje YA marcado
 
 
 def test_set_formatos_sin_red_usa_lienzos_canonicos(entorno, monkeypatch):

@@ -41,7 +41,7 @@ FORMATOS = {
     "vertical": (1080, 1920),   # 9:16 — Reels / TikTok / Shorts / Stories
     "feed": (1080, 1350),       # 4:5  — post IG / Facebook
     "cuadrado": (1080, 1080),   # 1:1
-    "horizontal": (1920, 1080),  # 16:9 — YouTube / web
+    "horizontal": (1600, 900),  # 16:9 — X / web / YouTube (espejo de formatos_red)
 }
 
 # Defaults internos por marca, por si no se encuentra el marcas.json hermano del

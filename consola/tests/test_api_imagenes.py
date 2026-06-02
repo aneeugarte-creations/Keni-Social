@@ -212,7 +212,7 @@ def test_componer_ok(entorno, monkeypatch):
 
 
 def test_componer_horizontal_se_pasa_tal_cual(entorno, monkeypatch):
-    """El endpoint deja pasar `horizontal`; el dominio lo mapea a `feed`."""
+    """El endpoint deja pasar `horizontal`; el dominio lo compone con su SPEC 16:9 propio."""
     captado = {}
     monkeypatch.setattr(
         estudio_imagen, "componer",
