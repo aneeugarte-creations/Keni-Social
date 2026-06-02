@@ -174,6 +174,8 @@ def lanzar_copy(
     clave: str | None = None,
     tipo: str = "copy",
     contenido_id: str = "",
+    imagen_fuente: str = "",
+    tipo_contenido: str = "",
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
@@ -207,6 +209,7 @@ def lanzar_copy(
         texto_base=texto_base or contexto, con_imagenes=con_imagenes, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
         contenido_id=contenido_id or "",
+        imagen_fuente=imagen_fuente or "", tipo_contenido=tipo_contenido or "",
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,

@@ -111,6 +111,8 @@ def crear_publicaciones_desde_piezas(
     autor: dict[str, str] | None = None,
     contenido_id: str = "",
     atomico: bool = False,
+    imagen_fuente: str = "",
+    tipo_contenido: str = "",
 ) -> list[dict[str, object]]:
     """Crea UNA publicacion (borrador) por pieza y devuelve sus dicts serializados.
 
@@ -143,9 +145,10 @@ def crear_publicaciones_desde_piezas(
                 contenido = ""
             if not isinstance(copy_in, str):
                 copy_in = ""
-            # Auto-compone la imagen-plantilla de marca (logo + copy_in, hueco de foto vacío). "" si
-            # la marca no tiene plantilla o si falla: el borrador se crea igual, sin imagen.
-            imagen = _componer_placa_placeholder(marca, red, copy_in)
+            # Con imagen ORIGINAL de fuente (RSS de marca propia) NO componemos la placa: la
+            # imagen del artículo es el default (el editor permite cambiarla). Si no, auto-compone
+            # la imagen-plantilla de marca (logo + copy_in, hueco vacío); "" si no hay plantilla.
+            imagen = "" if imagen_fuente else _componer_placa_placeholder(marca, red, copy_in)
             creada: dict[str, object] | None = None
             if contenido_id:
                 # Nido bajo el tema: adjunta la pieza al `contenido` existente. Devuelve None si
@@ -153,11 +156,13 @@ def crear_publicaciones_desde_piezas(
                 creada = contrato_publicaciones.crear_borrador_en(
                     contenido_id, marca, red, titulo=titulo, contenido=contenido,
                     copy_in=copy_in, veredicto=verdicto, imagen=imagen,
+                    imagen_fuente=imagen_fuente,
                 )
             if creada is None:
                 creada = contrato_publicaciones.crear_borrador(
                     marca, red, titulo=titulo, contenido=contenido, copy_in=copy_in,
                     veredicto=verdicto, origen=origen, autor=autor, imagen=imagen,
+                    imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
                 )
             creadas.append(creada)
     except Exception:
@@ -191,6 +196,8 @@ def construir_procesar_copy(
     con_imagenes: bool = False,
     autor: dict[str, str] | None = None,
     contenido_id: str = "",
+    imagen_fuente: str = "",
+    tipo_contenido: str = "",
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
@@ -213,6 +220,7 @@ def construir_procesar_copy(
             parsed["piezas"], marca=marca, titulo=titulo,
             verdicto=parsed["verdicto"], origen=historial_id, autor=autor,
             contenido_id=contenido_id,
+            imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
         )
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],

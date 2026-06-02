@@ -1223,6 +1223,12 @@
         "id_post_metricool": {
           "type": "string"
         },
+        "tipo_contenido": {
+          "type": "string"
+        },
+        "imagen_fuente": {
+          "type": "string"
+        },
         "falta_copy": {
           "type": "boolean"
         },
@@ -1278,6 +1284,8 @@
         "revisado_en",
         "preparado_en",
         "id_post_metricool",
+        "tipo_contenido",
+        "imagen_fuente",
         "falta_copy",
         "falta_imagen",
         "falta_revision",

@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 
 from keni_consola.api import rss
+from keni_consola.dominio.publicaciones import publicacion_a_dict
 
 from .conftest import _cliente, lanzador_generacion_completa
 
@@ -234,6 +235,177 @@ def test_resumen_se_recorta(monkeypatch):
     largo = [i for i in items if i["titulo"] == "Noticia 2"][0]
     assert largo["resumen"].endswith("…")
     assert len(largo["resumen"]) <= 11
+
+
+# --------------------------------------------------------------------------- #
+# Parser: imagen del item (media:content / media:thumbnail / enclosure)         #
+# Funcion PURA (sin red): extrae la URL de la imagen del ARTICULO, "" si no la   #
+# trae. NO usa el <image> del canal (logo del sitio).                           #
+# --------------------------------------------------------------------------- #
+
+# RSS 2.0 con namespace Media RSS (mrss): item con <media:content medium="image">.
+_RSS_MEDIA_CONTENT_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <image><url>https://example.com/LOGO-del-sitio.png</url></image>
+    <item>
+      <title>Con media:content</title>
+      <link>https://example.com/mc</link>
+      <media:content url="https://example.com/foto-mc.jpg" medium="image"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+# RSS 2.0 con <media:content type="image/*"> (sin medium, pero type de imagen).
+_RSS_MEDIA_CONTENT_TYPE_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <item>
+      <title>media:content por type</title>
+      <link>https://example.com/mct</link>
+      <media:content url="https://example.com/foto-mct.jpg" type="image/jpeg"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+# RSS 2.0 con <media:thumbnail url=...>.
+_RSS_MEDIA_THUMBNAIL_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <item>
+      <title>Con media:thumbnail</title>
+      <link>https://example.com/mt</link>
+      <media:thumbnail url="https://example.com/thumb.jpg"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+# RSS 2.0 con <enclosure url=... type="image/jpeg">.
+_RSS_ENCLOSURE_IMG_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Con enclosure imagen</title>
+      <link>https://example.com/enc</link>
+      <enclosure url="https://example.com/enc.jpg" type="image/jpeg"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+# RSS 2.0 con <enclosure> de AUDIO (no imagen): no debe extraerse.
+_RSS_ENCLOSURE_AUDIO_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Con enclosure audio</title>
+      <link>https://example.com/audio</link>
+      <enclosure url="https://example.com/pod.mp3" type="audio/mpeg"/>
+    </item>
+  </channel>
+</rss>
+"""
+
+# Media RSS dentro de <media:group> (la imagen cuelga anidada, no directa del item):
+# `_imagen_item` recorre con `.iter()`, asi que la encuentra igualmente.
+_RSS_MEDIA_GROUP_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <item>
+      <title>media dentro de group</title>
+      <link>https://example.com/grp</link>
+      <media:group>
+        <media:content url="https://example.com/foto-grp.jpg" medium="image"/>
+      </media:group>
+    </item>
+  </channel>
+</rss>
+"""
+
+# Atom con <media:content medium="image"> (mrss sobre Atom): el helper SI lo cubre
+# (mira el attr `url`, presente aqui).
+_ATOM_MEDIA_CONTENT_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <entry>
+    <title>Atom con media:content</title>
+    <link rel="alternate" href="https://example.com/am"/>
+    <media:content url="https://example.com/foto-atom.jpg" medium="image"/>
+  </entry>
+</feed>
+"""
+
+# Atom con <link rel="enclosure" type="image/*" href=...>: el enclosure de Atom expone la
+# URL en `href` (no `url`); `_imagen_item` lo soporta.
+_ATOM_LINK_ENCLOSURE_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry>
+    <title>Atom con link enclosure</title>
+    <link rel="alternate" href="https://example.com/ale"/>
+    <link rel="enclosure" type="image/jpeg" href="https://example.com/atom-enc.jpg"/>
+  </entry>
+</feed>
+"""
+
+
+def test_parsear_imagen_enclosure_rss():
+    """<enclosure type=image/*> -> item['imagen'] es esa url."""
+    items = rss.parsear_feed(_RSS_ENCLOSURE_IMG_XML)
+    assert items[0]["imagen"] == "https://example.com/enc.jpg"
+
+
+def test_parsear_imagen_media_content_por_medium():
+    """<media:content medium='image'> -> se extrae; el <image> del canal NO se usa."""
+    items = rss.parsear_feed(_RSS_MEDIA_CONTENT_XML)
+    assert items[0]["imagen"] == "https://example.com/foto-mc.jpg"
+    # El logo del canal (<image><url>) jamas debe colarse como imagen del item.
+    assert "LOGO-del-sitio" not in items[0]["imagen"]
+
+
+def test_parsear_imagen_media_content_por_type():
+    """<media:content type='image/*'> (sin medium) -> tambien se extrae."""
+    items = rss.parsear_feed(_RSS_MEDIA_CONTENT_TYPE_XML)
+    assert items[0]["imagen"] == "https://example.com/foto-mct.jpg"
+
+
+def test_parsear_imagen_media_thumbnail():
+    """<media:thumbnail url=...> -> se extrae."""
+    items = rss.parsear_feed(_RSS_MEDIA_THUMBNAIL_XML)
+    assert items[0]["imagen"] == "https://example.com/thumb.jpg"
+
+
+def test_parsear_imagen_media_group_anidada():
+    """<media:content> dentro de <media:group> -> el .iter() la encuentra igual."""
+    items = rss.parsear_feed(_RSS_MEDIA_GROUP_XML)
+    assert items[0]["imagen"] == "https://example.com/foto-grp.jpg"
+
+
+def test_parsear_imagen_enclosure_audio_no_es_imagen():
+    """<enclosure type='audio/*'> -> NO es imagen: item['imagen'] == ''."""
+    items = rss.parsear_feed(_RSS_ENCLOSURE_AUDIO_XML)
+    assert items[0]["imagen"] == ""
+
+
+def test_parsear_imagen_ausente_es_vacia():
+    """Un item sin media/enclosure de imagen -> item['imagen'] == ''."""
+    items = rss.parsear_feed(_RSS_XML)
+    assert all(i["imagen"] == "" for i in items)
+    # Y el campo SIEMPRE esta presente (clave estable del contrato del parser).
+    assert all("imagen" in i for i in items)
+
+
+def test_parsear_imagen_atom_media_content():
+    """Atom + <media:content medium='image'> (attr url) -> se extrae."""
+    items = rss.parsear_feed(_ATOM_MEDIA_CONTENT_XML)
+    assert items[0]["imagen"] == "https://example.com/foto-atom.jpg"
+
+
+def test_parsear_atom_link_enclosure_se_extrae():
+    """Atom <link rel='enclosure' type='image/*' href=...> -> se extrae (usa `href`)."""
+    items = rss.parsear_feed(_ATOM_LINK_ENCLOSURE_XML)
+    assert items[0]["imagen"] == "https://example.com/atom-enc.jpg"
 
 
 # --------------------------------------------------------------------------- #
@@ -469,6 +641,51 @@ def test_put_fuente_marca_invalida_400(cliente):
 
 
 # --------------------------------------------------------------------------- #
+# Fuentes: bandera `propia` (sitio de marca propia => imagen original reusable)  #
+# --------------------------------------------------------------------------- #
+
+
+def test_crear_fuente_propia_por_defecto_false(cliente):
+    """Una fuente nace `propia=False` salvo que se pida explicitamente."""
+    f = _fuente(cliente, "Diario")
+    assert f["propia"] is False
+
+
+def test_crear_fuente_propia_true(cliente):
+    """POST con `propia=true` -> la fuente devuelta tiene `propia: true`."""
+    r = cliente.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Sitio propio", "url": _URL_OK, "marca": "unotv", "propia": True},
+    )
+    assert r.status_code == 200
+    f = r.json()["fuente"]
+    assert f["propia"] is True
+    # Persiste: al listar tambien sale propia=True.
+    listada = next(x for x in cliente.get("/api/rss/fuentes").json()["fuentes"] if x["id"] == f["id"])
+    assert listada["propia"] is True
+
+
+def test_put_fuente_alterna_propia(cliente):
+    """PUT alterna `propia` en ambos sentidos (whitelist del campo)."""
+    f = _fuente(cliente, "Original")
+    assert f["propia"] is False
+    act = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"propia": True}).json()["fuente"]
+    assert act["propia"] is True
+    act = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"propia": False}).json()["fuente"]
+    assert act["propia"] is False
+
+
+def test_put_fuente_propia_no_se_toca_si_ausente(cliente):
+    """Un PUT que no menciona `propia` la deja intacta (PUT parcial)."""
+    f = cliente.post(
+        "/api/rss/fuentes", json={"nombre": "Propia", "url": _URL_OK, "propia": True}
+    ).json()["fuente"]
+    act = cliente.put(f"/api/rss/fuentes/{f['id']}", json={"nombre": "Renombrada"}).json()["fuente"]
+    assert act["nombre"] == "Renombrada"
+    assert act["propia"] is True  # intacta
+
+
+# --------------------------------------------------------------------------- #
 # Items: filtros del feed + usado + ocultar_usados + inactivas + salud         #
 # --------------------------------------------------------------------------- #
 
@@ -621,6 +838,109 @@ def test_generar_titulo_obligatorio_400(cliente):
     assert r.status_code == 400
 
 
+# --------------------------------------------------------------------------- #
+# Generar desde fuente PROPIA: imagen original del articulo -> imagen_fuente.    #
+# Gate SERVER-SIDE: solo si la fuente es `propia` Y la imagen es http(s) la pieza #
+# nace `tipo_contenido='fuente'` con esa URL; si no, se ignora (queda 'ia').      #
+# Se prueba END-TO-END por la API (lanzador completo sincrono): es el punto mas   #
+# robusto y realista (cubre TODA la cadena generar -> jobspec -> copy ->          #
+# crear_publicaciones_desde_piezas -> crear_borrador -> repos/db), no un atajo.   #
+# --------------------------------------------------------------------------- #
+
+_IMG_FUENTE = "https://example.com/articulo/foto-original.jpg"
+
+
+def test_generar_fuente_propia_usa_imagen_original(entorno, monkeypatch):
+    """Fuente `propia=True` + `imagen=<http>` => la pieza nace con esa imagen_fuente.
+
+    Cadena completa: el gate del endpoint (fuente propia + http) propaga `imagen_fuente`
+    y `tipo_contenido='fuente'` hasta la publicacion. La pieza NO lleva placa compuesta
+    (su `imagen` queda vacia: el default es la imagen original del articulo).
+    """
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    f = cli.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Sitio propio", "url": _URL_OK, "marca": "unotv", "propia": True},
+    ).json()["fuente"]
+
+    r = cli.post(
+        "/api/rss/generar",
+        json={
+            "titulo": "Avance de IA y agentes",
+            "resumen": "Nuevos agentes autonomos",
+            "enlace": "https://example.com/ia",
+            "marca": "unotv",
+            "redes": ["x", "instagram"],
+            "fuente_id": f["id"],
+            "clave": "guid-ia",
+            "imagen": _IMG_FUENTE,
+        },
+    )
+    assert r.status_code == 200
+    pubs = cli.get("/api/publicaciones").json()["publicaciones"]
+    assert len(pubs) == 2
+    for p in pubs:
+        assert p["tipo_contenido"] == "fuente"
+        assert p["imagen_fuente"] == _IMG_FUENTE
+        # Sin placa compuesta: no hay archivo subido; la imagen mostrada cae a la URL fuente.
+        assert p["imagen"] == ""
+        assert p["imagen_url"] == _IMG_FUENTE
+        # Nace con la imagen ya puesta: el check de imagen NO queda pendiente.
+        assert p["falta_imagen"] is False
+
+
+def test_generar_fuente_no_propia_ignora_imagen(entorno, monkeypatch):
+    """Fuente NO propia + `imagen=<http>` => el gate la descarta: pieza 'ia', sin imagen_fuente."""
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    f = _fuente(cli, "Diario ajeno", marca="unotv")  # propia=False por defecto
+
+    r = cli.post(
+        "/api/rss/generar",
+        json={
+            "titulo": "Avance de IA y agentes",
+            "marca": "unotv",
+            "redes": ["x"],
+            "fuente_id": f["id"],
+            "clave": "guid-ia",
+            "imagen": _IMG_FUENTE,
+        },
+    )
+    assert r.status_code == 200
+    pubs = cli.get("/api/publicaciones").json()["publicaciones"]
+    assert len(pubs) == 1
+    p = pubs[0]
+    assert p["tipo_contenido"] == "ia"
+    assert p["imagen_fuente"] == ""
+
+
+def test_generar_fuente_propia_imagen_no_http_se_ignora(entorno, monkeypatch):
+    """Aunque la fuente sea propia, una imagen que NO es http(s) no se reutiliza (gate)."""
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    f = cli.post(
+        "/api/rss/fuentes",
+        json={"nombre": "Propio", "url": _URL_OK, "marca": "unotv", "propia": True},
+    ).json()["fuente"]
+
+    r = cli.post(
+        "/api/rss/generar",
+        json={
+            "titulo": "Avance de IA y agentes",
+            "marca": "unotv",
+            "redes": ["x"],
+            "fuente_id": f["id"],
+            "clave": "guid-ia",
+            "imagen": "ftp://example.com/no-permitida.jpg",
+        },
+    )
+    assert r.status_code == 200
+    p = cli.get("/api/publicaciones").json()["publicaciones"][0]
+    assert p["tipo_contenido"] == "ia"
+    assert p["imagen_fuente"] == ""
+
+
 def test_generar_skill_por_defecto(entorno):
     capturado = {}
     base = lanzador_generacion_completa(_SALIDA_SKILL)
@@ -637,3 +957,59 @@ def test_generar_skill_por_defecto(entorno):
     # skill por defecto: copy-desde-nota (prompt autocontenido) + la nota (titulo + resumen)
     assert "redactor de redes" in capturado["prompt"]
     assert "T" in capturado["prompt"] and "R" in capturado["prompt"]
+
+
+# --------------------------------------------------------------------------- #
+# Serializacion: publicacion_a_dict expone tipo_contenido + imagen_fuente, y     #
+# imagen_url cae a imagen_fuente cuando no hay archivo subido. Funcion PURA       #
+# (catalogos marcas/redes), sin DB.                                             #
+# --------------------------------------------------------------------------- #
+
+_PUB_BASE: dict = {
+    "id": "p1",
+    "titulo": "Titular",
+    "marca": "unotv",
+    "red": "x",
+    "contenido": "cuerpo",
+    "estado": "borrador",
+    "veredicto": "",
+    "fecha_creacion": "2026-05-19T10:00:00Z",
+    "fecha_actualizacion": "2026-05-19T10:00:00Z",
+    "fecha_programada": "",
+    "origen": "",
+}
+
+
+def test_publicacion_a_dict_expone_tipo_e_imagen_fuente():
+    """tipo_contenido='fuente' + imagen_fuente se serializan tal cual."""
+    d = publicacion_a_dict(
+        {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg"}
+    )
+    assert d["tipo_contenido"] == "fuente"
+    assert d["imagen_fuente"] == "https://e.com/orig.jpg"
+
+
+def test_publicacion_a_dict_imagen_url_cae_a_imagen_fuente():
+    """Sin archivo subido (imagen=''), imagen_url usa la URL de la fuente."""
+    d = publicacion_a_dict(
+        {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg"}
+    )
+    assert d["imagen"] == ""
+    assert d["imagen_url"] == "https://e.com/orig.jpg"
+
+
+def test_publicacion_a_dict_archivo_subido_gana_a_imagen_fuente():
+    """Con archivo subido, imagen_url sirve el archivo local (no la URL externa)."""
+    d = publicacion_a_dict(
+        {**_PUB_BASE, "tipo_contenido": "fuente", "imagen_fuente": "https://e.com/orig.jpg",
+         "imagen": "subida.jpg"}
+    )
+    assert d["imagen_url"] == "/api/media/subida.jpg"
+
+
+def test_publicacion_a_dict_defaults_sin_imagen_de_fuente():
+    """Sin tipo/imagen_fuente: tipo_contenido cae a 'ia' e imagen_fuente/imagen_url vacios."""
+    d = publicacion_a_dict(_PUB_BASE)
+    assert d["tipo_contenido"] == "ia"
+    assert d["imagen_fuente"] == ""
+    assert d["imagen_url"] == ""

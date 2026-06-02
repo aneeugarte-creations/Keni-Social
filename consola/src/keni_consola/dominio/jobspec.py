@@ -72,6 +72,8 @@ def construir_copy(
     fuente_id: str | None = None,
     clave: str | None = None,
     contenido_id: str = "",
+    imagen_fuente: str = "",
+    tipo_contenido: str = "",
 ) -> dict[str, Any]:
     """Spec del post-procesado de PIEZAS (copy/RSS): parsea piezas + crea borradores.
 
@@ -79,6 +81,8 @@ def construir_copy(
     completar con exito (el wrap que antes hacia `api/rss.generar`). Sin ellos, es copy puro.
     `contenido_id` (lista viva): si viene, el borrador se NIDA bajo ese tema del tablero al
     reconstruir el post-procesado en el worker; sin el, borrador suelto (back-compat).
+    `imagen_fuente`/`tipo_contenido` (RSS de marca propia): si vienen, cada borrador nace con
+    la imagen original del articulo (`tipo_contenido='fuente'`) lista para usarse.
     """
     return {
         "kind": PROC_COPY,
@@ -92,6 +96,8 @@ def construir_copy(
         "fuente_id": fuente_id or "",
         "clave": clave or "",
         "contenido_id": contenido_id or "",
+        "imagen_fuente": imagen_fuente or "",
+        "tipo_contenido": tipo_contenido or "",
     }
 
 
@@ -264,6 +270,8 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             titulo_dado=p.get("titulo_dado", ""), texto_base=p.get("texto_base", ""),
             con_imagenes=bool(p.get("con_imagenes")), autor=autor,
             contenido_id=p.get("contenido_id", "") or "",
+            imagen_fuente=p.get("imagen_fuente", "") or "",
+            tipo_contenido=p.get("tipo_contenido", "") or "",
         )
         fuente_id = p.get("fuente_id") or ""
         clave = p.get("clave") or ""

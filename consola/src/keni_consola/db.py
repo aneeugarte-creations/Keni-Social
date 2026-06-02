@@ -914,6 +914,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         ultima_actualizacion  TEXT NOT NULL DEFAULT '',
         ultimo_error          TEXT NOT NULL DEFAULT '',
         ultimo_conteo         INTEGER NOT NULL DEFAULT 0,
+        propia                INTEGER NOT NULL DEFAULT 0,
         creado                TEXT NOT NULL DEFAULT ''
     )
     """,
@@ -4337,7 +4338,12 @@ def listar_eventos_internos(*, limite: int = 50) -> list[dict[str, Any]]:
 # Columnas ampliables (mismo patron idempotente que `_migrar_columnas_*`): hoy ambas tablas
 # nacen enteras en el DDL declarativo; estos hooks existen por coherencia para futuras
 # ampliaciones sin reescribir el esquema en bases hosted. Vacios no hacen nada.
-_COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
+_COLUMNAS_FUENTES_RSS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    # `propia`: la fuente es un sitio de MARCA PROPIA, así que su imagen original es
+    # reutilizable. Al generar desde un item de una fuente propia, la pieza nace con la
+    # imagen del artículo en `imagen_fuente` + `tipo_contenido='fuente'`.
+    ("propia", "INTEGER NOT NULL DEFAULT 0"),
+)
 _COLUMNAS_GRUPOS_HASHTAGS_AMPLIADAS: tuple[tuple[str, str], ...] = ()
 
 
@@ -4378,11 +4384,12 @@ _COLS_FUENTE_RSS = (
     "ultima_actualizacion",
     "ultimo_error",
     "ultimo_conteo",
+    "propia",
     "creado",
 )
 _SELECT_FUENTE_RSS = f"SELECT {', '.join(_COLS_FUENTE_RSS)} FROM fuentes_rss"
 _CAMPOS_EDITABLES_FUENTE_RSS: tuple[str, ...] = (
-    "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def",
+    "nombre", "url", "marca", "activo", "incluir", "excluir", "redes_def", "propia",
 )
 
 
@@ -4401,6 +4408,8 @@ def _fila_a_fuente_rss(fila: Any) -> dict[str, Any]:
         "ultima_actualizacion": fila["ultima_actualizacion"] or "",
         "ultimo_error": fila["ultimo_error"] or "",
         "ultimo_conteo": int(fila["ultimo_conteo"] or 0),
+        # Sitio de marca PROPIA: habilita reutilizar la imagen original del artículo.
+        "propia": bool(fila["propia"]),
     }
 
 
@@ -4452,6 +4461,7 @@ def crear_fuente_rss(
     incluir: str = "",
     excluir: str = "",
     redes_def: str = "",
+    propia: bool = False,
 ) -> dict[str, Any]:
     """Crea una fuente RSS (activa, salud vacia) y la devuelve."""
     # Microsegundos (no segundos): el listado ordena por `creado DESC` y dos fuentes creadas
@@ -4470,6 +4480,7 @@ def crear_fuente_rss(
         "ultima_actualizacion": "",
         "ultimo_error": "",
         "ultimo_conteo": 0,
+        "propia": 1 if propia else 0,
         "creado": ahora,
     }
     con = _conectar()
@@ -4492,6 +4503,8 @@ def actualizar_fuente_rss(
     cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_FUENTE_RSS}
     if "activo" in cambios:
         cambios["activo"] = 1 if cambios["activo"] else 0
+    if "propia" in cambios:
+        cambios["propia"] = 1 if cambios["propia"] else 0
     if not cambios:
         return obtener_fuente_rss(fuente_id)
     asignaciones = [f"{k} = ?" for k in cambios]
@@ -5843,7 +5856,8 @@ _ESTADO_PLAT_A_PUB: dict[str, str] = {
 _SELECT_PUBLICACION = (
     "SELECT cp.id AS pid, cp.red AS red, cp.estado AS pestado, cp.copy AS copy, "
     "cp.copy_in AS copy_in, "
-    "cp.imagen AS imagen, cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
+    "cp.imagen AS imagen, cp.imagen_fuente AS imagen_fuente, "
+    "cp.veredicto AS veredicto, cp.revisor_id AS revisor_id, "
     "cp.revisor_nombre AS revisor_nombre, cp.revisado_en AS revisado_en, "
     "cp.enviado_a_revision_en AS enviado_a_revision_en, cp.fecha_programada AS fecha_programada, "
     "cp.preparado_en AS preparado_en, cp.id_post_metricool AS id_post_metricool, "
@@ -5851,7 +5865,8 @@ _SELECT_PUBLICACION = (
     "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
     "cp.evergreen AS evergreen, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
-    "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado "
+    "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
+    "c.tipo_contenido AS tipo_contenido "
     "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una publicacion:
     # el muro `es_publicacion` se retiro al fusionar Tablero y Publicaciones (#fusion). La
@@ -5880,6 +5895,10 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "revisado_en": f["revisado_en"] or "",
         "preparado_en": f["preparado_en"] or "",
         "id_post_metricool": f["id_post_metricool"] or "",
+        # Origen de la imagen: `tipo_contenido` ('ia'|'galeria'|'fuente') y, si es 'fuente',
+        # la URL original del artículo en `imagen_fuente` (el editor ofrece "usar original").
+        "tipo_contenido": f["tipo_contenido"] or "ia",
+        "imagen_fuente": f["imagen_fuente"] or "",
         # Checklist de producción por red (el editor lo expone como checks marcables).
         "falta_copy": bool(f["falta_copy"]),
         "falta_imagen": bool(f["falta_imagen"]),
@@ -5906,6 +5925,8 @@ def crear_publicacion(
     fecha_programada: str = "",
     origen: str = "",
     imagen: str = "",
+    imagen_fuente: str = "",
+    tipo_contenido: str = TIPO_CONTENIDO_DEFECTO,
     evergreen: bool = False,
     autor: dict[str, str] | None = None,
     id: str = "",
@@ -5915,13 +5936,16 @@ def crear_publicacion(
 
     Conserva la firma de `ficheros.crear_publicacion` (+ `id`/`fecha_creacion` opcionales
     para PRESERVAR identidad al migrar desde YAML). El `estado` editorial se traduce al de
-    plataforma.
+    plataforma. `imagen_fuente` (URL original, p.ej. de un RSS de marca propia) +
+    `tipo_contenido='fuente'` nacen juntos: hay imagen (la del artículo), así que la pieza
+    no queda con `falta_imagen`.
     """
     padre = crear_contenido(
         clase="contenido",
         flujo="evergreen" if evergreen else "",
         titulo=titulo,
         marca=marca,
+        tipo_contenido=tipo_contenido or TIPO_CONTENIDO_DEFECTO,
         autor=autor,
         origen=origen,
         creado=fecha_creacion,
@@ -5935,6 +5959,9 @@ def crear_publicacion(
         copy=contenido,
         copy_in=copy_in,
         imagen=imagen,
+        imagen_fuente=imagen_fuente,
+        # Si hay imagen de fuente (URL del artículo), la pieza YA tiene imagen.
+        falta_imagen=False if imagen_fuente else None,
         veredicto=veredicto,
         fecha_programada=fecha_programada,
         evergreen=evergreen,

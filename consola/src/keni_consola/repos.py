@@ -144,6 +144,8 @@ def crear_publicacion(
     fecha_programada: str = "",
     origen: str = "",
     imagen: str = "",
+    imagen_fuente: str = "",
+    tipo_contenido: str = "",
     evergreen: bool = False,
     autor: dict[str, str] | None = None,
     id: str = "",
@@ -160,6 +162,8 @@ def crear_publicacion(
         fecha_programada=fecha_programada,
         origen=origen,
         imagen=imagen,
+        imagen_fuente=imagen_fuente,
+        tipo_contenido=tipo_contenido,
         evergreen=evergreen,
         autor=autor,
         id=id,
@@ -308,9 +312,16 @@ def crear_fuente_rss(
     incluir: str = "",
     excluir: str = "",
     redes_def: str = "",
+    propia: bool = False,
 ) -> dict[str, Any]:
     return db.crear_fuente_rss(
-        nombre, url, marca=marca, incluir=incluir, excluir=excluir, redes_def=redes_def
+        nombre,
+        url,
+        marca=marca,
+        incluir=incluir,
+        excluir=excluir,
+        redes_def=redes_def,
+        propia=propia,
     )
 
 

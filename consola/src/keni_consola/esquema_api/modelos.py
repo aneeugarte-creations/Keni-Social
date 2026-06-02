@@ -488,6 +488,10 @@ class Publicacion(TypedDict):
     revisado_en: str
     preparado_en: str
     id_post_metricool: str
+    # Origen de la imagen: "ia"|"galeria"|"fuente". Si es "fuente", `imagen_fuente` trae la
+    # URL original del articulo (p.ej. RSS de marca propia); el editor ofrece usarla.
+    tipo_contenido: str
+    imagen_fuente: str
     # Checklist de produccion por red (pendiente=True): Copy/Imagen/Revision/Publicar. El
     # editor unificado los expone como checks marcables (PATCH a la fila por plataforma).
     falta_copy: bool

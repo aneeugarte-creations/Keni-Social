@@ -380,6 +380,7 @@ function FormularioFuente({
   const [incluir, setIncluir] = React.useState(fuente?.incluir ?? "");
   const [excluir, setExcluir] = React.useState(fuente?.excluir ?? "");
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);
+  const [propia, setPropia] = React.useState(fuente?.propia ?? false);
   const [redesDef, setRedesDef] = React.useState<Set<string>>(
     () => new Set(fuente?.redes_def ?? []),
   );
@@ -397,6 +398,7 @@ function FormularioFuente({
           incluir: incluir.trim(),
           excluir: excluir.trim(),
           redes_def: redesArr,
+          propia,
         });
       }
       return api.crearFuenteRss({
@@ -406,6 +408,7 @@ function FormularioFuente({
         incluir: incluir.trim() || undefined,
         excluir: excluir.trim() || undefined,
         redes_def: redesArr.length > 0 ? redesArr : undefined,
+        propia: propia || undefined,
       });
     },
     onSuccess: () => {
@@ -513,6 +516,24 @@ function FormularioFuente({
         <Label htmlFor="fuente-activo" className="cursor-pointer font-normal">
           Feed activo
         </Label>
+      </div>
+      <div className="flex items-start gap-2">
+        <Checkbox
+          id="fuente-propia"
+          checked={propia}
+          onCheckedChange={(v) => setPropia(!!v)}
+          aria-label="Fuente de marca propia"
+          className="mt-0.5"
+        />
+        <div className="space-y-0.5">
+          <Label htmlFor="fuente-propia" className="cursor-pointer font-normal">
+            Fuente de marca propia
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Sitio propio: su imagen original es reutilizable, así que las piezas generadas
+            desde sus noticias nacen con la imagen del artículo lista para usarse.
+          </p>
+        </div>
       </div>
       <div className="flex justify-end gap-2">
         <Button variant="outline" size="sm" onClick={onListo} disabled={guardar.isPending}>
@@ -891,6 +912,7 @@ function DialogoGenerar({
         redes: [...seleccionadas],
         fuente_id: item.fuente_id || undefined,
         clave: item.clave || undefined,
+        imagen: item.imagen || undefined,
       }),
     onSuccess: (data) => iniciar(data.generacion),
     onError: (e) => toast.error(mensajeError(e)),

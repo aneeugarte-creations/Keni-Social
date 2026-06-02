@@ -288,6 +288,34 @@ def _enlace_atom(entrada: ET.Element) -> str:
     return candidato
 
 
+def _imagen_item(entrada: ET.Element) -> str:
+    """URL de la imagen de un item, si la trae; "" si no.
+
+    Busca (ignorando namespaces, en cualquier nivel del item, p.ej. dentro de
+    `<media:group>`): `<media:content url type=image/*|medium=image>`,
+    `<media:thumbnail url>`, `<enclosure url type=image/*>` (RSS) y el enclosure de Atom
+    `<link rel=enclosure type=image/* href=...>`. NO usa el `<image>` del canal (ese es el
+    logo del sitio, no la imagen del artículo).
+    """
+    for el in entrada.iter():
+        local = _quitar_ns(el.tag)
+        tipo = (el.get("type") or "").lower()
+        medium = (el.get("medium") or "").lower()
+        # En Atom la URL del enclosure va en `href`; en RSS/mrss va en `url`.
+        url = (el.get("url") or el.get("href") or "").strip()
+        if not url:
+            continue
+        if local == "thumbnail":
+            return url
+        if local == "content" and (medium == "image" or tipo.startswith("image/")):
+            return url
+        if local == "enclosure" and tipo.startswith("image/"):
+            return url
+        if local == "link" and el.get("rel") == "enclosure" and tipo.startswith("image/"):
+            return url
+    return ""
+
+
 def _clave_item(clave_feed: str, enlace: str) -> str:
     """Clave estable de un item: el `<guid>`/`<id>` del feed, o el enlace como fallback.
 
@@ -323,10 +351,11 @@ def item_pasa_filtros(item: dict[str, Any], incluir: str, excluir: str) -> bool:
 def parsear_feed(xml: str) -> list[dict[str, str]]:
     """Parsea un feed RSS 2.0 o Atom y devuelve hasta `_MAX_ITEMS` items.
 
-    Cada item es `{titulo, resumen, enlace, fecha, clave}`. La `clave` es estable
-    (`<guid>`/`<id>` del feed, con fallback al enlace) y sirve para dedup / marcar
-    usado. Tolerante: campos ausentes salen como ''. Lanza `RSSError` si el XML no
-    se puede parsear.
+    Cada item es `{titulo, resumen, enlace, fecha, clave, imagen}`. La `clave` es
+    estable (`<guid>`/`<id>` del feed, con fallback al enlace) y sirve para dedup /
+    marcar usado. `imagen` es la URL de la imagen del artículo (media:content/
+    thumbnail/enclosure), "" si no la trae. Tolerante: campos ausentes salen como ''.
+    Lanza `RSSError` si el XML no se puede parsear.
 
     No depende de feedparser: la stdlib `xml.etree.ElementTree` basta para RSS 2.0
     (`<channel><item>`) y Atom (`<feed><entry>`), que cubren el caso de uso.
@@ -355,6 +384,7 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
                     "enlace": enlace,
                     "fecha": fecha,
                     "clave": _clave_item(clave_feed, enlace),
+                    "imagen": _imagen_item(entrada),
                 }
             )
         return items
@@ -379,6 +409,7 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
                 "enlace": enlace,
                 "fecha": fecha,
                 "clave": _clave_item(clave_feed, enlace),
+                "imagen": _imagen_item(entrada),
             }
         )
     return items
@@ -445,6 +476,8 @@ def _fuente_a_dict(fuente: dict[str, Any]) -> dict[str, Any]:
         "ultima_actualizacion": fuente.get("ultima_actualizacion", ""),
         "ultimo_error": fuente.get("ultimo_error", ""),
         "ultimo_conteo": fuente.get("ultimo_conteo", 0),
+        # Sitio de marca propia: su imagen original es reutilizable al generar.
+        "propia": bool(fuente.get("propia", False)),
     }
 
 
@@ -481,7 +514,13 @@ async def crear_fuente(request: Request) -> Response:
         return JSONResponse({"error": error}, status_code=400)
 
     fuente = repos.crear_fuente_rss(
-        nombre.strip(), url, marca=marca, incluir=incluir, excluir=excluir, redes_def=redes_def
+        nombre.strip(),
+        url,
+        marca=marca,
+        incluir=incluir,
+        excluir=excluir,
+        redes_def=redes_def,
+        propia=bool(datos.get("propia")),
     )
     return JSONResponse({"fuente": _fuente_a_dict(fuente)})
 
@@ -532,6 +571,8 @@ async def actualizar_fuente(request: Request) -> Response:
         if error is not None:
             return JSONResponse({"error": error}, status_code=400)
         campos["redes_def"] = redes_def
+    if "propia" in datos:
+        campos["propia"] = bool(datos.get("propia"))
 
     fuente = repos.actualizar_fuente_rss(fuente_id, campos)
     if fuente is None:
@@ -701,11 +742,26 @@ async def generar(request: Request) -> Response:
     autor = autor_de_peticion(request)
     fuente = fuente_id.strip() if isinstance(fuente_id, str) and fuente_id.strip() else None
     clave_item = clave.strip() if isinstance(clave, str) and clave.strip() else None
+
+    # Imagen ORIGINAL del artículo: solo se reutiliza si la fuente es de MARCA PROPIA
+    # (gate server-side; el cliente no puede forzarlo). La pieza nace `tipo_contenido='fuente'`
+    # con esa URL en `imagen_fuente`, lista para usarse en el editor.
+    imagen_item = datos.get("imagen")
+    imagen_item = imagen_item.strip() if isinstance(imagen_item, str) else ""
+    imagen_fuente = ""
+    tipo_contenido = ""
+    if fuente and imagen_item.startswith(("http://", "https://")):
+        f = repos.obtener_fuente_rss(fuente)
+        if f and f.get("propia"):
+            imagen_fuente = imagen_item
+            tipo_contenido = "fuente"
+
     gen = gen_dom.lanzar_copy(
         tipo="rss", prompt_id=prompt_id, origen_historial=skill.strip(), marca=marca,
         contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), titulo_dado=titulo.strip(),
         texto_base=nota, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
+        imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
     )
     return JSONResponse({"generacion": gen})
 

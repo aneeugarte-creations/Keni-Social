@@ -38,6 +38,7 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     (`/api/media/{imagen}` o "" si no hay imagen) para que la UI la pueda mostrar.
     """
     imagen = pub.get("imagen") or ""
+    imagen_fuente = pub.get("imagen_fuente") or ""
     return {
         "id": pub["id"],
         # Id del `contenido` padre: la UI lo usa para colgar los comentarios del item
@@ -72,6 +73,11 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Id del post en Metricool cuando KENI_PUBLICAR_REAL esta activo y la pieza
         # se envio al scheduler de Metricool. "" en dry-run y en piezas legadas.
         "id_post_metricool": pub.get("id_post_metricool") or "",
+        # Origen de la imagen: 'ia'|'galeria'|'fuente'. Si es 'fuente', `imagen_fuente` trae
+        # la URL original del artículo (p.ej. de un RSS de marca propia). El editor ofrece
+        # "usar imagen original" tomando esa URL.
+        "tipo_contenido": pub.get("tipo_contenido") or "ia",
+        "imagen_fuente": imagen_fuente,
         # Checklist de producción por red (Copy/Imagen/Revisión/Publicar pendientes). El
         # editor unificado lo muestra como checks marcables; default True (pendiente).
         "falta_copy": bool(pub.get("falta_copy", True)),
@@ -83,7 +89,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "fecha_programada": pub["fecha_programada"],
         "origen": pub["origen"],
         "imagen": imagen,
-        "imagen_url": f"/api/media/{imagen}" if imagen else "",
+        # Si no hay archivo subido pero hay imagen de fuente (URL externa), se sirve ESA
+        # (ya es navegable), igual que en `_fila_a_contenido_plataforma`.
+        "imagen_url": f"/api/media/{imagen}" if imagen else imagen_fuente,
         "evergreen": bool(pub.get("evergreen")),
     }
 
@@ -152,6 +160,8 @@ def crear_borrador(
     veredicto: str = "",
     origen: str = "",
     imagen: str = "",
+    imagen_fuente: str = "",
+    tipo_contenido: str = "",
     evergreen: bool = False,
     autor: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -161,6 +171,9 @@ def crear_borrador(
     su resultado como pieza editable en C. El estado inicial SIEMPRE es `borrador`
     (no se expone `estado`: A no puede crear nada ya aprobado/programado por esta vía);
     el resto del flujo (revisión, programación, publicación) es responsabilidad de C.
+
+    `imagen_fuente` + `tipo_contenido='fuente'` permiten que un handoff desde un RSS de
+    marca propia nazca con la imagen original del artículo lista para usarse.
     """
     pub = repos.crear_publicacion(
         marca,
@@ -172,6 +185,8 @@ def crear_borrador(
         veredicto=veredicto,
         origen=origen,
         imagen=imagen,
+        imagen_fuente=imagen_fuente,
+        tipo_contenido=tipo_contenido,
         evergreen=evergreen,
         autor=autor,
     )
@@ -188,6 +203,7 @@ def crear_borrador_en(
     copy_in: str = "",
     veredicto: str = "",
     imagen: str = "",
+    imagen_fuente: str = "",
     evergreen: bool = False,
 ) -> dict[str, Any] | None:
     """Adjunta un BORRADOR a un `contenido` (tema) EXISTENTE y lo devuelve serializado.
@@ -214,9 +230,12 @@ def crear_borrador_en(
         red=red,
         estado="pendiente",
         falta_copy=False,
+        # Con imagen de fuente (URL del artículo) la pieza YA tiene imagen.
+        falta_imagen=False if imagen_fuente else None,
         copy=contenido,
         copy_in=copy_in,
         imagen=imagen,
+        imagen_fuente=imagen_fuente,
         veredicto=veredicto,
         evergreen=evergreen,
         es_publicacion=True,

@@ -2334,6 +2334,9 @@ export interface FuenteRss {
   ultimo_error: string | null;
   /** Nº de items obtenidos en el último refresco. */
   ultimo_conteo: number;
+  /** `true` si es un sitio de MARCA PROPIA: su imagen original es reutilizable, así que las
+   *  piezas generadas desde sus items nacen con la imagen del artículo (`tipo_contenido='fuente'`). */
+  propia: boolean;
 }
 
 export interface RespuestaFuentesRss {
@@ -2356,6 +2359,8 @@ export interface CuerpoCrearFuenteRss {
   excluir?: string;
   /** Redes por defecto (opcional). */
   redes_def?: string[];
+  /** `true` si es un sitio de marca propia (su imagen original es reutilizable). */
+  propia?: boolean;
 }
 
 /** Cuerpo parcial para actualizar una fuente RSS. */
@@ -2367,6 +2372,7 @@ export interface CuerpoActualizarFuenteRss {
   incluir?: string;
   excluir?: string;
   redes_def?: string[];
+  propia?: boolean;
 }
 
 /** Un elemento (item) de un feed RSS. */
@@ -2379,6 +2385,8 @@ export interface ItemRss {
   fuente_nombre: string;
   /** Clave estable del item dentro de su feed (para marcar usado/dedup). */
   clave: string;
+  /** URL de la imagen del artículo (media:content/thumbnail/enclosure); `""` si no la trae. */
+  imagen: string;
   /** `true` si el item ya se marcó como usado. */
   usado: boolean;
 }
@@ -2414,6 +2422,9 @@ export interface CuerpoGenerarDesdeItem {
   redes: string[];
   fuente_id?: string;
   clave?: string;
+  /** URL de la imagen del artículo; solo se reutiliza si la fuente es de marca propia (gate
+   *  server-side). La pieza nace con esa imagen original (`tipo_contenido='fuente'`). */
+  imagen?: string;
 }
 
 /**

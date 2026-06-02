@@ -93,6 +93,12 @@ export interface EditorImagenProps {
   copy?: string;
   /** Texto que va DENTRO de la imagen (copy-in); titular al componer la placa. */
   copyIn?: string;
+  /**
+   * Imagen ORIGINAL del artículo (URL), p.ej. de un RSS de marca propia. Si la pieza la
+   * trae, se ofrece "Usar imagen original" para volver a ella tras haberla reemplazado.
+   * La pieza ya la muestra por defecto (imagen_url cae a esta URL cuando no hay archivo).
+   */
+  imagenFuente?: string;
 }
 
 export function EditorImagen({
@@ -106,6 +112,7 @@ export function EditorImagen({
   red,
   copy,
   copyIn,
+  imagenFuente,
 }: EditorImagenProps) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = React.useState("");
@@ -255,6 +262,17 @@ export function EditorImagen({
     onCambio("", "");
   }
 
+  /** Vuelve a la imagen ORIGINAL del artículo: limpia el archivo compuesto/subido, de modo
+   *  que `imagen_url` cae de nuevo a `imagen_fuente` (la URL original). */
+  function usarOriginal() {
+    if (!imagenFuente) return;
+    setFondo(null);
+    setAvisoGenerar("");
+    onCambio("", imagenFuente);
+  }
+  // Ofrecemos el botón solo si hay original Y no es ya la imagen mostrada.
+  const mostrandoOriginal = !imagen && (imagenUrl || "") === imagenFuente;
+
   const trabajando =
     subir.isPending || generar.isPending || generandoIA || componer.isPending || componiendo;
   const ocupado = trabajando || !!disabled;
@@ -272,6 +290,8 @@ export function EditorImagen({
       onBiblioteca={() => setGaleriaAbierta(true)}
       onGenerar={() => generar.mutate()}
       avisoGenerar={avisoGenerar}
+      mostrarOriginal={!!imagenFuente && !mostrandoOriginal}
+      onOriginal={usarOriginal}
     />
   );
 
@@ -461,6 +481,8 @@ function FuenteFondo({
   onBiblioteca,
   onGenerar,
   avisoGenerar,
+  mostrarOriginal,
+  onOriginal,
 }: {
   idPrefijo: string;
   compacto?: boolean;
@@ -473,6 +495,9 @@ function FuenteFondo({
   onBiblioteca: () => void;
   onGenerar: () => void;
   avisoGenerar: string;
+  /** La pieza trae imagen original (RSS de marca propia) y NO es la mostrada ahora. */
+  mostrarOriginal?: boolean;
+  onOriginal?: () => void;
 }) {
   return (
     <div className="space-y-2.5 rounded-md border border-dashed border-border bg-muted/20 p-3">
@@ -480,6 +505,12 @@ function FuenteFondo({
         <p className="text-xs text-muted-foreground">Elige de dónde sale la imagen de fondo:</p>
       )}
       <div className="flex flex-wrap items-center gap-2">
+        {mostrarOriginal && (
+          <Button type="button" variant="outline" size="sm" onClick={onOriginal} disabled={ocupado}>
+            <ImagePlus className="h-4 w-4" />
+            Usar imagen original
+          </Button>
+        )}
         <Button type="button" variant="outline" size="sm" onClick={onBiblioteca} disabled={ocupado}>
           <Library className="h-4 w-4" />
           Biblioteca
