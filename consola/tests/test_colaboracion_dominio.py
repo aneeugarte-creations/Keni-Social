@@ -163,3 +163,125 @@ def test_estado_publicacion_para_rechazado_vuelve_a_borrador():
 def test_estado_publicacion_para_sin_cadena_no_toca_estado():
     # Cadena vacia: ninguna aprobacion configurada -> no se altera el estado editorial.
     assert colaboracion.estado_publicacion_para("sin_cadena") is None
+
+
+# --------------------------------------------------------------------------- #
+# Item A: minimo de aprobaciones (gate de gobernanza)                          #
+# --------------------------------------------------------------------------- #
+
+
+def test_contar_aprobados_cuenta_solo_los_aprobados():
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado"), _nivel("c", 3, "pendiente")]
+    assert colaboracion.contar_aprobados(cadena) == 2
+
+
+def test_cumple_minimo_aprobaciones_no_cumple_devuelve_conteo():
+    cadena = [_nivel("a", 1, "aprobado")]
+    cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, 2)
+    assert cumple is False and aprobados == 1
+
+
+def test_cumple_minimo_aprobaciones_cumple_con_justo():
+    cadena = [_nivel("a", 1, "aprobado"), _nivel("b", 2, "aprobado")]
+    cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, 2)
+    assert cumple is True and aprobados == 2
+
+
+def test_cumple_minimo_cero_desactiva_el_gate():
+    cumple, _ = colaboracion.cumple_minimo_aprobaciones([], 0)
+    assert cumple is True
+
+
+# --------------------------------------------------------------------------- #
+# Item D: QA editorial como aprobador automatico                               #
+# --------------------------------------------------------------------------- #
+
+
+def test_decision_por_veredicto_qa_mapea_semaforo():
+    assert colaboracion.decision_por_veredicto_qa("listo") == "aprobado"
+    assert colaboracion.decision_por_veredicto_qa("no_publicar") == "rechazado"
+    # 🟡 y cualquier desconocido caen a pendiente (lo decide un humano).
+    assert colaboracion.decision_por_veredicto_qa("revisar") == "pendiente"
+    assert colaboracion.decision_por_veredicto_qa("") == "pendiente"
+    assert colaboracion.decision_por_veredicto_qa("???") == "pendiente"
+
+
+def test_campos_nivel_qa_aprobado_sella_decisor():
+    campos = colaboracion.campos_nivel_qa("listo", resumen="todo ok")
+    assert campos["decision"] == "aprobado"
+    assert campos["decisor_id"] == colaboracion.DECISOR_QA_ID
+    assert campos["decisor_nombre"] == colaboracion.DECISOR_QA_NOMBRE
+    assert campos["decidido_en"]
+
+
+def test_campos_nivel_qa_pendiente_no_sella_decisor():
+    campos = colaboracion.campos_nivel_qa("revisar")
+    assert campos["decision"] == "pendiente"
+    assert "decisor_id" not in campos
+
+
+def test_cadena_con_qa_antepone_y_es_idempotente():
+    base = ["Edición", "Dirección"]
+    con_qa = colaboracion.cadena_con_qa(base)
+    assert con_qa[0] == colaboracion.ETIQUETA_QA
+    assert con_qa[1:] == base
+    # Idempotente: no duplica el nivel de QA.
+    assert colaboracion.cadena_con_qa(con_qa) == con_qa
+
+
+def test_cadena_con_qa_nunca_deja_qa_como_unico_nivel():
+    # Hay siempre al menos un nivel humano detras del QA automatico.
+    con_qa = colaboracion.cadena_con_qa(["Revisión"])
+    assert len(con_qa) >= 2 and con_qa[-1] != colaboracion.ETIQUETA_QA
+
+
+# --------------------------------------------------------------------------- #
+# Item C: cargo requerido por nivel                                           #
+# --------------------------------------------------------------------------- #
+
+
+def test_cargo_requerido_por_etiqueta_del_organigrama():
+    assert colaboracion.cargo_requerido_para("Coordinación") == "coordinador"
+    assert colaboracion.cargo_requerido_para("Dirección") == "director"
+    assert colaboracion.cargo_requerido_para("Edición") == ""
+
+
+def test_cargo_satisface_sin_requisito_siempre():
+    assert colaboracion.cargo_satisface("", "redactor") is True
+
+
+def test_cargo_satisface_coincidencia_y_especializacion():
+    assert colaboracion.cargo_satisface("coordinador", "coordinador") is True
+    # Una especializacion del cargo generico tambien satisface.
+    assert colaboracion.cargo_satisface("coordinador", "coordinador_redes") is True
+    # Un cargo distinto no satisface.
+    assert colaboracion.cargo_satisface("director", "coordinador") is False
+    # Sin cargo no satisface un requisito.
+    assert colaboracion.cargo_satisface("director", "") is False
+
+
+def test_decidir_bloquea_si_el_cargo_no_satisface():
+    cadena = [{"id": "a", "nivel": 1, "decision": "pendiente", "cargo_requerido": "director"}]
+    _, error = colaboracion.decidir(
+        cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
+        autor_pieza_id="u1", cargo_decisor="redactor",
+    )
+    assert error is not None and "cargo" in error.lower()
+
+
+def test_decidir_permite_si_el_cargo_satisface():
+    cadena = [{"id": "a", "nivel": 1, "decision": "pendiente", "cargo_requerido": "coordinador"}]
+    campos, error = colaboracion.decidir(
+        cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "beto"}, rol="editor",
+        autor_pieza_id="u1", cargo_decisor="coordinador_redes",
+    )
+    assert error is None and campos is not None
+
+
+def test_decidir_admin_ignora_el_cargo_requerido():
+    cadena = [{"id": "a", "nivel": 1, "decision": "pendiente", "cargo_requerido": "director"}]
+    campos, error = colaboracion.decidir(
+        cadena[0], cadena, "aprobado", {"id": "u2", "usuario": "jefa"}, rol="admin",
+        autor_pieza_id="u1", cargo_decisor="redactor",
+    )
+    assert error is None and campos is not None

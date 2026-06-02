@@ -50,7 +50,7 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
         fila = con.execute(
             "SELECT s.token AS s_token, s.expira AS s_expira, u.id AS id, u.usuario AS usuario, "
             "u.rol AS rol, u.debe_cambiar_password AS debe_cambiar_password, "
-            "u.creado AS creado, u.ultimo_acceso AS ultimo_acceso "
+            "u.cargo AS cargo, u.creado AS creado, u.ultimo_acceso AS ultimo_acceso "
             "FROM sesiones s JOIN usuarios u ON u.id = s.usuario_id WHERE s.token = ?",
             (token,),
         ).fetchone()
@@ -77,6 +77,9 @@ def sesion_valida(token: str) -> dict[str, Any] | None:
             "id": fila["id"],
             "usuario": fila["usuario"],
             "rol": fila["rol"],
+            # `cargo` (organigrama) lo usa la cadena de aprobacion para validar el cargo
+            # requerido por nivel (item C). "" si el usuario no tiene cargo asignado.
+            "cargo": fila["cargo"] or "",
             "debe_cambiar_password": bool(fila["debe_cambiar_password"]),
             "creado": fila["creado"],
             "ultimo_acceso": _comun.iso(ahora),

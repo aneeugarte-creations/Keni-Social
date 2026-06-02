@@ -606,17 +606,20 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     # `rechazado` en cualquier nivel para la cadena. Trazabilidad completa (quien, que, cuando).
     """
     CREATE TABLE IF NOT EXISTS contenido_aprobaciones (
-        id              TEXT PRIMARY KEY,
-        plataforma_id   TEXT NOT NULL DEFAULT '',
-        contenido_id    TEXT NOT NULL DEFAULT '',
-        nivel           INTEGER NOT NULL DEFAULT 1,
-        etiqueta        TEXT NOT NULL DEFAULT '',
-        decision        TEXT NOT NULL DEFAULT 'pendiente',
-        decisor_id      TEXT NOT NULL DEFAULT '',
-        decisor_nombre  TEXT NOT NULL DEFAULT '',
-        comentario      TEXT NOT NULL DEFAULT '',
-        creado          TEXT NOT NULL DEFAULT '',
-        decidido_en     TEXT NOT NULL DEFAULT ''
+        id               TEXT PRIMARY KEY,
+        plataforma_id    TEXT NOT NULL DEFAULT '',
+        contenido_id     TEXT NOT NULL DEFAULT '',
+        nivel            INTEGER NOT NULL DEFAULT 1,
+        etiqueta         TEXT NOT NULL DEFAULT '',
+        decision         TEXT NOT NULL DEFAULT 'pendiente',
+        decisor_id       TEXT NOT NULL DEFAULT '',
+        decisor_nombre   TEXT NOT NULL DEFAULT '',
+        comentario       TEXT NOT NULL DEFAULT '',
+        creado           TEXT NOT NULL DEFAULT '',
+        decidido_en      TEXT NOT NULL DEFAULT '',
+        -- Cargo del organigrama EXIGIDO para decidir este nivel ("" = sin requisito). Item C:
+        -- p. ej. "Coordinación" la decide un coordinador, "Dirección" un director.
+        cargo_requerido  TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_aprob_plataforma ON contenido_aprobaciones (plataforma_id)",
@@ -1062,6 +1065,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_contenido(con)
+    _migrar_columnas_aprobaciones(con)
     _migrar_columnas_comercial(con)
     _migrar_columnas_swaps(con)
     _migrar_columnas_programas(con)
@@ -1636,6 +1640,27 @@ def _migrar_columnas_contenido(con: Any) -> None:
         for columna, tipo in ampliadas:
             if columna not in columnas:
                 con.execute(f"ALTER TABLE {tabla} ADD COLUMN IF NOT EXISTS {columna} {tipo}")
+
+
+# Columnas que se anaden a `contenido_aprobaciones` en bases creadas por una version
+# anterior (el Postgres hosted persiste entre despliegues). `cargo_requerido` (item C: cargo
+# del organigrama exigido por nivel) nace en el `CREATE TABLE` de las bases NUEVAS; este
+# migrador la inyecta a las VIEJAS. Idempotente (no-op si ya esta o si la tabla no existe).
+_COLUMNAS_APROBACIONES_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("cargo_requerido", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_aprobaciones(con: Any) -> None:
+    """Anade a `contenido_aprobaciones` las columnas que una BD vieja no tuviera (idempotente)."""
+    if not _tabla_existe(con, "contenido_aprobaciones"):
+        return
+    columnas = _columnas_existentes(con, "contenido_aprobaciones")
+    for columna, tipo in _COLUMNAS_APROBACIONES_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(
+                f"ALTER TABLE contenido_aprobaciones ADD COLUMN IF NOT EXISTS {columna} {tipo}"
+            )
 
 
 # Columnas ampliadas del apartado comercial. Las bases creadas antes del paso a
@@ -5672,6 +5697,7 @@ _COLS_APROBACION = (
     "comentario",
     "creado",
     "decidido_en",
+    "cargo_requerido",
 )
 _SELECT_APROBACION = f"SELECT {', '.join(_COLS_APROBACION)} FROM contenido_aprobaciones"
 
@@ -5685,12 +5711,16 @@ def crear_cadena_aprobacion(
     plataforma_id: str,
     contenido_id: str,
     etiquetas: list[str],
+    cargos: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Crea (o RECREA) la cadena de aprobacion de una plataforma a partir de `etiquetas`.
 
     Borra cualquier cadena previa de esa plataforma y crea un nivel `pendiente` por cada
-    etiqueta, en orden (nivel 1-based). Devuelve la cadena nueva. NO valida.
+    etiqueta, en orden (nivel 1-based). `cargos` (opcional, paralela a `etiquetas`) sella el
+    `cargo_requerido` de cada nivel (item C); "" o lista corta -> sin requisito en ese nivel.
+    Devuelve la cadena nueva. NO valida.
     """
+    cargos = cargos or []
     ahora = datetime.now().isoformat(timespec="seconds")
     con = _conectar()
     try:
@@ -5699,6 +5729,7 @@ def crear_cadena_aprobacion(
         )
         creados: list[dict[str, Any]] = []
         for indice, etiqueta in enumerate(etiquetas, start=1):
+            cargo = cargos[indice - 1] if indice - 1 < len(cargos) else ""
             fila = {
                 "id": uuid.uuid4().hex[:12],
                 "plataforma_id": plataforma_id,
@@ -5711,6 +5742,7 @@ def crear_cadena_aprobacion(
                 "comentario": "",
                 "creado": ahora,
                 "decidido_en": "",
+                "cargo_requerido": cargo or "",
             }
             marcadores = ", ".join("?" for _ in _COLS_APROBACION)
             con.execute(

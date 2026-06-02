@@ -135,9 +135,23 @@ function ChecklistProduccion({ publicacion }: { publicacion: Publicacion }) {
 function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();
 
+  // La publicación ES una fila por plataforma: su id es el `plataforma_id` de la cadena.
+  // Leemos la cadena para mostrar los GATES de gobernanza (item A: mínimo de aprobaciones;
+  // item B: comentarios sin resolver) y avisar antes de programar.
+  const cadenaQuery = useQuery({
+    queryKey: ["cadena-aprobacion", publicacion.id],
+    queryFn: ({ signal }) => api.cadenaAprobacion(publicacion.id, signal),
+  });
+  const cadena = cadenaQuery.data;
+  const sinResolver = cadena?.comentarios_sin_resolver ?? 0;
+  const minimo = cadena?.minimo_aprobaciones ?? 0;
+  const aprobados = cadena?.aprobados ?? 0;
+  const faltanFirmas = minimo > 0 && aprobados < minimo;
+
   const tras = (mensaje: string) => () => {
     void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
     void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+    void queryClient.invalidateQueries({ queryKey: ["cadena-aprobacion", publicacion.id] });
     toast.success(mensaje);
   };
   const onError = (e: unknown) => toast.error(mensajeError(e));
@@ -180,6 +194,11 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
           </Button>
         </>
       )}
+      {sinResolver > 0 && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          {sinResolver} comentario(s) sin resolver. Resuélvelos antes de programar.
+        </p>
+      )}
       {publicacion.estado === "en_revision" && (
         <>
           <p className="text-xs text-muted-foreground">
@@ -213,12 +232,27 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
       {(publicacion.estado === "aprobado" ||
         publicacion.estado === "programado" ||
         publicacion.estado === "publicado") && (
-        <p className="text-xs text-muted-foreground">
-          {publicacion.revisor_nombre
-            ? `Aprobada por ${publicacion.revisor_nombre}.`
-            : "Aprobada."}{" "}
-          Ya puedes programarla eligiendo el estado “Programado” y su fecha.
-        </p>
+        <>
+          <p className="text-xs text-muted-foreground">
+            {publicacion.revisor_nombre
+              ? `Aprobada por ${publicacion.revisor_nombre}.`
+              : "Aprobada."}{" "}
+            {faltanFirmas || sinResolver > 0
+              ? "Aún no se puede programar (revisa los avisos)."
+              : "Ya puedes programarla eligiendo el estado “Programado” y su fecha."}
+          </p>
+          {minimo > 0 && (
+            <p
+              className={
+                faltanFirmas
+                  ? "text-xs text-amber-600 dark:text-amber-400"
+                  : "text-xs text-muted-foreground"
+              }
+            >
+              Aprobaciones: {aprobados} de {minimo}.
+            </p>
+          )}
+        </>
       )}
     </div>
   );

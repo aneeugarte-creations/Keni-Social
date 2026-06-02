@@ -1366,6 +1366,8 @@ export interface NivelAprobacion {
   comentario: string;
   creado: string;
   decidido_en: string;
+  /** Cargo del organigrama exigido para decidir este nivel ("" = sin requisito). Item C. */
+  cargo_requerido: string;
 }
 
 /** Estado GLOBAL de una cadena: sin_cadena | pendiente | aprobado | rechazado. */
@@ -1380,6 +1382,12 @@ export interface CadenaAprobacion {
   estado: EstadoCadenaAprobacion;
   /** Id del nivel que toca decidir ("" si la cadena no espera decisión). */
   nivel_actual: string;
+  /** Niveles ya aprobados (gate A: cuántas firmas lleva). */
+  aprobados: number;
+  /** Mínimo de aprobaciones exigido para programar (gate A; 0 = gate desactivado). */
+  minimo_aprobaciones: number;
+  /** Comentarios sin resolver que bloquean publicar (gate B). */
+  comentarios_sin_resolver: number;
 }
 
 /** Respuesta de decidir un nivel: el nivel actualizado + el estado global y la cadena. */

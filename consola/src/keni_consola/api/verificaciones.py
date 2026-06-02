@@ -20,6 +20,7 @@ solo lee metadatos publicos; los errores salen como JSON en espanol, sin traceba
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,6 +36,39 @@ from ..seguridad import autor_de_peticion
 
 # Wall-timeout del motor (descargar el video + OCR pueden tardar). Generoso pero acotado.
 _TIMEOUT_S = 420
+
+# Binarios del motor LOCAL de verificacion. `yt-dlp` es el UNICO IMPRESCINDIBLE: da la fecha
+# de SUBIDA y el origen (autor/plataforma), que es el objetivo MINIMO ("identificar dónde se
+# subió/de dónde es"). `ffmpeg`/`ffprobe`/`tesseract` enriquecen (fotogramas + OCR de fechas en
+# pantalla) pero NO son obligatorios: sin ellos el motor degrada con gracia (menos evidencia).
+_BINARIO_IMPRESCINDIBLE = "yt-dlp"
+_BINARIOS_OPCIONALES = ("ffmpeg", "ffprobe", "tesseract")
+
+
+def binarios_disponibles() -> dict[str, bool]:
+    """Mapa binario -> ¿esta en el PATH? (health-check; no ejecuta nada, item E).
+
+    Modulo-nivel para que la API lo exponga y los tests lo monkeypatcheen sin tocar el PATH.
+    """
+    nombres = (_BINARIO_IMPRESCINDIBLE, *_BINARIOS_OPCIONALES)
+    return {nombre: shutil.which(nombre) is not None for nombre in nombres}
+
+
+def _diagnostico_binarios() -> dict[str, object]:
+    """Resumen del health-check: ¿se puede verificar? + que binarios faltan (item E).
+
+    `puede_verificar` es True si esta el binario IMPRESCINDIBLE (`yt-dlp`): basta para datar la
+    subida y el origen aunque falten los opcionales. `degradado` indica que falta algun opcional
+    (no habra OCR/fotogramas, pero el analisis no se rompe).
+    """
+    estado = binarios_disponibles()
+    faltan_opcionales = [b for b in _BINARIOS_OPCIONALES if not estado.get(b)]
+    return {
+        "binarios": estado,
+        "puede_verificar": estado.get(_BINARIO_IMPRESCINDIBLE, False),
+        "degradado": bool(faltan_opcionales),
+        "faltan_opcionales": faltan_opcionales,
+    }
 
 
 def _ruta_motor() -> Path:
@@ -52,6 +86,16 @@ def analizar(enlace: str, contexto: str) -> dict[str, object]:
     if not motor.is_file():
         raise RuntimeError(
             "No se encontró el motor de verificación (verifica-video/analiza-video.py)."
+        )
+    # Health-check de binarios (item E): sin el IMPRESCINDIBLE no hay forma de datar el video,
+    # asi que cortamos con un mensaje claro ANTES de lanzar el subproceso (degradacion con
+    # gracia: no revienta con un traceback ni deja un tmp colgado). Los opcionales que falten
+    # NO bloquean; el motor entrega menos evidencia pero igual data la subida.
+    diag = _diagnostico_binarios()
+    if not diag["puede_verificar"]:
+        raise RuntimeError(
+            f"Falta «{_BINARIO_IMPRESCINDIBLE}», imprescindible para verificar videos. "
+            "Instálalo (p. ej. 'pipx install yt-dlp') y vuelve a intentarlo."
         )
     salida = Path(tempfile.mkdtemp(prefix="keni-verificacion-"))
     cmd = [sys.executable, str(motor), enlace, "--salida", str(salida)]
@@ -72,10 +116,13 @@ def analizar(enlace: str, contexto: str) -> dict[str, object]:
             ruta_reporte = linea[len("REPORTE="):].strip()
     if not ruta_reporte or not Path(ruta_reporte).is_file():
         detalle = (proc.stderr or "").strip()[-300:]
-        raise RuntimeError(
-            "El análisis no produjo un reporte. "
-            + (detalle or "Revisa que yt-dlp, ffmpeg y tesseract estén instalados.")
+        faltan = _diagnostico_binarios()["faltan_opcionales"]
+        pista = (
+            f"Faltan binarios opcionales ({', '.join(faltan)}): el análisis es más pobre."
+            if faltan
+            else "Revisa que yt-dlp, ffmpeg y tesseract estén instalados."
         )
+        raise RuntimeError("El análisis no produjo un reporte. " + (detalle or pista))
     try:
         reporte = json.loads(Path(ruta_reporte).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as e:
@@ -128,6 +175,16 @@ async def verificar(request: Request) -> Response:
     return JSONResponse({"generacion": generaciones.obtener(gen["id"]) or gen})
 
 
+async def estado_verificacion(request: Request) -> Response:
+    """`GET /api/verificar/estado` -> health-check de binarios del motor (item E).
+
+    La UI lo consulta para avisar ANTES de pegar un enlace si el motor puede verificar
+    (yt-dlp presente) y si va degradado (faltan ffmpeg/tesseract: sin OCR/fotogramas).
+    """
+    return JSONResponse(_diagnostico_binarios())
+
+
 RUTAS = [
     Route("/api/verificar", verificar, methods=["POST"]),
+    Route("/api/verificar/estado", estado_verificacion, methods=["GET"]),
 ]

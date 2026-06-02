@@ -34,7 +34,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import repos
+from .. import config, repos
 from .._http_json import leer_json
 from ..dominio import colaboracion
 from ..dominio.publicaciones import publicacion_a_dict
@@ -225,6 +225,37 @@ async def programar(request: Request) -> Response:
     if pub.get("estado") != ESTADO_APROBADO:
         return JSONResponse(
             {"error": "Solo se puede programar una pieza aprobada."}, status_code=409
+        )
+
+    # GATE A (gobernanza): no se programa sin un MINIMO de aprobaciones acumuladas en la
+    # cadena (def 2, "cuatro ojos" reales). El gate SOLO aplica si la pieza tiene una CADENA
+    # de aprobacion configurada: una pieza marcada `aprobado` SIN cadena (atajo admin/legado)
+    # ya paso por su propio control y no se le exige el minimo (no hay nada que contar). Una
+    # cadena simple de 1 nivel SI queda sujeta al minimo (debe acumular las firmas exigidas).
+    minimo = config.min_aprobaciones()
+    cadena = repos.listar_aprobaciones(publicacion_id)
+    if cadena:
+        cumple, aprobados = colaboracion.cumple_minimo_aprobaciones(cadena, minimo)
+        if not cumple:
+            return JSONResponse(
+                {"error": f"Faltan aprobaciones: {aprobados} de {minimo}."}, status_code=409
+            )
+
+    # GATE B (QA editorial): un comentario sin resolver es una objecion pendiente; bloquea
+    # programar hasta que el equipo lo cierre. Se cuentan los del item entero + los de esta red.
+    plat = repos.obtener_contenido_plataforma(publicacion_id)
+    pendientes = repos.comentarios_sin_resolver(
+        (plat or {}).get("contenido_id", "") or "", publicacion_id
+    )
+    if pendientes:
+        return JSONResponse(
+            {
+                "error": (
+                    f"Hay {pendientes} comentario(s) sin resolver; "
+                    "resuélvelos antes de programar."
+                )
+            },
+            status_code=409,
         )
 
     datos = await leer_json(request)

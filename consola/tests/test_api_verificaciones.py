@@ -45,6 +45,45 @@ def test_verificar_sin_enlace_400(cliente):
     assert "enlace" in r.json()["error"].lower()
 
 
+# --------------------------------------------------------------------------- #
+# Item E: health-check de binarios (PURO, sin Postgres ni red)                #
+# --------------------------------------------------------------------------- #
+
+
+def test_diagnostico_puede_verificar_si_esta_ytdlp(monkeypatch):
+    monkeypatch.setattr(
+        verificaciones, "binarios_disponibles",
+        lambda: {"yt-dlp": True, "ffmpeg": False, "ffprobe": False, "tesseract": False},
+    )
+    diag = verificaciones._diagnostico_binarios()
+    assert diag["puede_verificar"] is True
+    assert diag["degradado"] is True
+    assert set(diag["faltan_opcionales"]) == {"ffmpeg", "ffprobe", "tesseract"}
+
+
+def test_diagnostico_no_puede_verificar_sin_ytdlp(monkeypatch):
+    monkeypatch.setattr(
+        verificaciones, "binarios_disponibles",
+        lambda: {"yt-dlp": False, "ffmpeg": True, "ffprobe": True, "tesseract": True},
+    )
+    diag = verificaciones._diagnostico_binarios()
+    assert diag["puede_verificar"] is False
+    assert diag["degradado"] is False
+
+
+def test_analizar_sin_ytdlp_degrada_con_mensaje_claro(monkeypatch):
+    """Sin el binario imprescindible, `analizar` corta con un error legible (no traceback)."""
+    monkeypatch.setattr(
+        verificaciones, "binarios_disponibles",
+        lambda: {"yt-dlp": False, "ffmpeg": False, "ffprobe": False, "tesseract": False},
+    )
+    import pytest
+
+    with pytest.raises(RuntimeError) as exc:
+        verificaciones.analizar("https://x.com/u/status/1", "")
+    assert "yt-dlp" in str(exc.value)
+
+
 def test_verificar_ok(entorno, monkeypatch):
     """Con el motor MOCK, la verificacion (background) completa con `{verificacion: ...}`."""
     monkeypatch.setattr(verificaciones, "analizar", lambda enlace, contexto: {"verificacion": _REPORTE})

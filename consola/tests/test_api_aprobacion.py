@@ -197,3 +197,86 @@ def test_cola_vacia_cuando_no_hay_nada_en_revision(entorno):
     _crear_borrador(autora)
     datos = autora.get("/api/aprobacion/cola").json()
     assert datos == {"cola": [], "total": 0}
+
+
+# --------------------------------------------------------------------------- #
+# Gate A: minimo de aprobaciones para programar (item A)                       #
+# --------------------------------------------------------------------------- #
+
+
+def test_programar_sin_cadena_no_aplica_el_minimo(entorno):
+    """Una pieza `aprobado` SIN cadena (atajo) se programa sin exigir el minimo."""
+    mantenimiento = _cli_token()
+    pub = _crear_borrador(mantenimiento, estado="aprobado")
+    from datetime import datetime, timedelta
+
+    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+    r = mantenimiento.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+
+
+def test_programar_con_cadena_simple_bloquea_por_minimo(entorno, monkeypatch):
+    """Con KENI_MIN_APROBACIONES=2 y una cadena simple (1 firma), programar da 409 «1 de 2»."""
+    monkeypatch.setenv("KENI_MIN_APROBACIONES", "2")
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    revisor = _cli_usuario("beto")
+    revisor.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)  # 1 firma
+    from datetime import datetime, timedelta
+
+    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+    r = revisor.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r.status_code == 409
+    assert "1 de 2" in r.json()["error"]
+
+
+def test_programar_con_minimo_uno_pasa_con_una_firma(entorno, monkeypatch):
+    """KENI_MIN_APROBACIONES=1: una sola firma (cadena simple) basta para programar."""
+    monkeypatch.setenv("KENI_MIN_APROBACIONES", "1")
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora)
+    autora.post(f"/api/aprobacion/{pub['id']}/enviar-a-revision", headers=_ORIGIN)
+    revisor = _cli_usuario("beto")
+    revisor.post(f"/api/aprobacion/{pub['id']}/aprobar", headers=_ORIGIN)
+    from datetime import datetime, timedelta
+
+    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+    r = revisor.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r.status_code == 200, r.text
+
+
+# --------------------------------------------------------------------------- #
+# Gate B: comentarios sin resolver bloquean programar (item B)                 #
+# --------------------------------------------------------------------------- #
+
+
+def test_comentario_sin_resolver_bloquea_programar(entorno, monkeypatch):
+    """Un comentario abierto en el item da 409 al programar, aunque la pieza este aprobada."""
+    monkeypatch.setenv("KENI_MIN_APROBACIONES", "0")  # aislar el gate B del gate A
+    autora = _cli_usuario("ana")
+    pub = _crear_borrador(autora, estado="aprobado")
+    # El contenido padre de la publicacion (su contenido_id) recibe un comentario abierto.
+    from keni_consola import repos
+
+    plat = repos.obtener_contenido_plataforma(pub["id"])
+    contenido_id = plat["contenido_id"]
+    autora.post(
+        f"/api/contenido/{contenido_id}/comentarios",
+        json={"texto": "Revisar el dato de la fecha"},
+        headers=_ORIGIN,
+    )
+    from datetime import datetime, timedelta
+
+    fecha = (datetime.now() + timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+    r = autora.post(
+        f"/api/aprobacion/{pub['id']}/programar", json={"fecha": fecha}, headers=_ORIGIN
+    )
+    assert r.status_code == 409
+    assert "sin resolver" in r.json()["error"].lower()

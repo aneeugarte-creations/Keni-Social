@@ -175,6 +175,17 @@ ENV_CONSOLA_URL_PUBLICA = "KENI_CONSOLA_URL_PUBLICA"
 # enciende; sin el (o falsy), la cadena nace toda `pendiente` como hasta ahora.
 ENV_AUTO_PREAPROBACION = "KENI_AUTO_PREAPROBACION"
 
+# Gate de gobernanza "minimo N aprobaciones" (item A QA/aprobaciones). Antes de PROGRAMAR una
+# pieza se exige que su cadena de aprobacion acumule al menos N niveles aprobados (defecto 2:
+# "cuatro ojos" reales). `KENI_MIN_APROBACIONES=0` desactiva el gate; valor invalido -> def.
+ENV_MIN_APROBACIONES = "KENI_MIN_APROBACIONES"
+
+# QA Editorial como APROBADOR AUTOMATICO (item D). Flag admin, CONSERVADOR por defecto (OFF):
+# cuando se activa, la cadena de aprobacion nace con un PRIMER nivel automatico "QA Editorial"
+# que aprueba/pendiente/rechaza segun el veredicto 🟢/🟡/🔴 de la skill de QA. El ULTIMO nivel
+# sigue siendo humano. `KENI_AUTO_QA_EDITORIAL=1` lo enciende.
+ENV_AUTO_QA_EDITORIAL = "KENI_AUTO_QA_EDITORIAL"
+
 # Auto-promocion del Radar de tendencias a "lo importante del dia" (fase3 auto-planificacion).
 # `KENI_RADAR_AUTO=1` arranca el daemon que, cada N horas, promueve los temas que superan el
 # umbral de señal a contenido `flujo='importante'` (origen 'radar-auto'). CONSERVADOR por
@@ -288,6 +299,9 @@ ENV_GENERACIONES = "KENI_CONSOLA_GENERACIONES"
 
 HOST_DEF = "127.0.0.1"
 PORT_DEF = 8765
+# Gate de gobernanza: minimo de aprobaciones acumuladas para PROGRAMAR (item A). Def 2
+# ("cuatro ojos" reales: dos personas distintas firman antes de que entre al calendario).
+MIN_APROBACIONES_DEF = 2
 SESION_HORAS_DEF = 12
 ADMIN_USER_DEF = "admin"
 LOG_LEVEL_DEF = "INFO"
@@ -783,6 +797,25 @@ def auto_preaprobacion() -> bool:
     los niveles inferiores (nunca el ultimo, que queda a un humano). Trazable como "auto".
     """
     return _crudo(ENV_AUTO_PREAPROBACION).lower() in _VERDADEROS
+
+
+def min_aprobaciones() -> int:
+    """Minimo de aprobaciones acumuladas para PROGRAMAR una pieza (`KENI_MIN_APROBACIONES`).
+
+    Def 2 (item A: "cuatro ojos" reales). `0` (o negativo) DESACTIVA el gate (cualquier pieza
+    aprobada se puede programar, comportamiento legado). Valor no entero -> def. Min 0.
+    """
+    return _entero(ENV_MIN_APROBACIONES, MIN_APROBACIONES_DEF, minimo=0)
+
+
+def auto_qa_editorial() -> bool:
+    """True si el QA editorial actua como aprobador AUTOMATICO de la cadena (`KENI_AUTO_QA_EDITORIAL`).
+
+    Def OFF (conservador): la cadena nace toda humana. Con el flag, al crear la cadena se
+    antepone un nivel automatico "QA Editorial" cuyo veredicto (🟢/🟡/🔴) aprueba/deja
+    pendiente/rechaza ese primer nivel. El ultimo nivel sigue siendo humano.
+    """
+    return _crudo(ENV_AUTO_QA_EDITORIAL).lower() in _VERDADEROS
 
 
 def radar_auto_activo() -> bool:

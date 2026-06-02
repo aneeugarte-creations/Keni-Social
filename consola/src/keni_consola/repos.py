@@ -107,6 +107,23 @@ def obtener_historial_skill(historial_id: str) -> dict[str, Any] | None:
     return ficheros.obtener_historial_skill(historial_id)
 
 
+def ultimo_veredicto_qa(
+    plataforma_id: str, contenido_id: str
+) -> dict[str, Any] | None:
+    """Ultimo veredicto del QA editorial asociado a una pieza, o None si no hay (item D).
+
+    DEFERIDO (hook): hoy el historial de QA (`registrar_historial_skill` con `piezas=[]`) NO
+    guarda el `plataforma_id`/`contenido_id` de la pieza revisada, asi que no hay forma fiable
+    de atar un job de QA a una pieza concreta. Esta funcion existe como punto de extension: el
+    consumidor (`api/colaboracion._aplicar_qa_automatico`) la llama y, mientras devuelva None,
+    el nivel automatico de QA queda `pendiente` (lo decide un humano) — comportamiento
+    CONSERVADOR y seguro. Para activarlo de verdad bastaria con persistir el veredicto + la
+    pieza al correr el QA (p. ej. una columna en `contenido_plataforma` o una tabla
+    `contenido_qa`) y devolver aqui `{"verdicto": "listo|revisar|no_publicar", "resumen": ...}`.
+    """
+    return None
+
+
 # --------------------------------------------------------------------------- #
 # Publicaciones (OPERACIONAL: Postgres via db.py; fusión sobre `contenido`, paso 3)    #
 # --------------------------------------------------------------------------- #
@@ -1338,6 +1355,26 @@ def obtener_comentario(comentario_id: str) -> dict[str, Any] | None:
     return db.obtener_comentario(comentario_id)
 
 
+def comentarios_sin_resolver(contenido_id: str, plataforma_id: str = "") -> int:
+    """Cuenta los comentarios SIN resolver que afectan a una pieza (item B).
+
+    Un comentario afecta a la pieza si es del item entero (`plataforma_id`="") o de ESTA
+    plataforma concreta. Un hilo sin resolver es una objecion editorial pendiente: bloquea
+    publicar (gate en `api/aprobacion.programar`) y la UI lo muestra como contador. Lectura
+    sobre `contenido_comentarios` (sin esquema nuevo).
+    """
+    if not contenido_id:
+        return 0
+    sin_resolver = 0
+    for c in db.listar_comentarios(contenido_id):
+        if c.get("resuelto"):
+            continue
+        pid = (c.get("plataforma_id") or "").strip()
+        if not pid or (plataforma_id and pid == plataforma_id):
+            sin_resolver += 1
+    return sin_resolver
+
+
 def actualizar_comentario(
     comentario_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
@@ -1378,11 +1415,13 @@ def crear_cadena_aprobacion(
     plataforma_id: str,
     contenido_id: str,
     etiquetas: list[str],
+    cargos: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     return db.crear_cadena_aprobacion(
         plataforma_id=plataforma_id,
         contenido_id=contenido_id,
         etiquetas=etiquetas,
+        cargos=cargos,
     )
 
 

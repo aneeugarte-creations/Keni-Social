@@ -89,6 +89,32 @@ def estado_cadena(cadena: list[dict[str, Any]]) -> str:
     return DECISION_PENDIENTE
 
 
+def contar_aprobados(cadena: list[dict[str, Any]]) -> int:
+    """Cuenta cuantos niveles de la cadena estan en `aprobado` (PURA).
+
+    Es la metrica que alimenta el GATE de gobernanza "minimo N aprobaciones" (item A): una
+    pieza no se puede PROGRAMAR si no acumula al menos `MINIMO_APROBACIONES` niveles aprobados,
+    aunque su estado editorial ya sea `aprobado` (p. ej. una cadena simple de 1 solo nivel).
+    Cuenta TODOS los niveles aprobados, incluidos los automaticos (QA / pre-aprobacion): son
+    aprobaciones validas y trazables. No distingue humano vs auto aqui (eso lo deja a la UI).
+    """
+    return sum(1 for n in cadena if n.get("decision") == DECISION_APROBADO)
+
+
+def cumple_minimo_aprobaciones(
+    cadena: list[dict[str, Any]], minimo: int
+) -> tuple[bool, int]:
+    """¿La cadena acumula al menos `minimo` aprobaciones? Devuelve `(cumple, aprobados)`.
+
+    `minimo <= 0` desactiva el gate (siempre cumple). El llamante (api/aprobacion.programar)
+    usa `aprobados` para construir el mensaje "X de N" del 409 cuando NO cumple.
+    """
+    aprobados = contar_aprobados(cadena)
+    if minimo <= 0:
+        return True, aprobados
+    return aprobados >= minimo, aprobados
+
+
 def nivel_actual(cadena: list[dict[str, Any]]) -> dict[str, Any] | None:
     """El primer nivel `pendiente` por orden (el que toca decidir); None si no queda.
 
@@ -120,12 +146,15 @@ def decidir(
     rol: str | None,
     comentario: str = "",
     autor_pieza_id: str = "",
+    cargo_decisor: str = "",
 ) -> tuple[dict[str, Any] | None, str | None]:
     """Decide (aprueba/rechaza) UN nivel de la cadena. Devuelve `(campos, None)` o `(None, error)`.
 
     Valida que: la decision sea aprobado/rechazado; el nivel sea el que TOCA (el primer
-    pendiente por orden); el nivel no este ya decidido; y el decisor no sea el autor de la
-    pieza (salvo admin). `campos` son los cambios a aplicar al registro del nivel.
+    pendiente por orden); el nivel no este ya decidido; el decisor no sea el autor de la
+    pieza (salvo admin); y, si el nivel exige un `cargo_requerido` (item C), que el cargo
+    del decisor lo satisfaga (salvo admin, que puede desatascar). `campos` son los cambios
+    a aplicar al registro del nivel.
     """
     if decision not in (DECISION_APROBADO, DECISION_RECHAZADO):
         return None, "La decisión debe ser aprobar o rechazar."
@@ -138,6 +167,11 @@ def decidir(
         decisor_id = (decisor or {}).get("id", "")
         if decisor_id and autor_pieza_id and decisor_id == autor_pieza_id:
             return None, "No puedes aprobar tu propia pieza; debe revisarla otra persona."
+        cargo_req = (nivel.get("cargo_requerido") or "").strip()
+        if cargo_req and not cargo_satisface(cargo_req, cargo_decisor):
+            return None, (
+                f"Este nivel solo lo puede decidir alguien con el cargo «{cargo_req}»."
+            )
     decisor = decisor or {}
     return (
         {
@@ -168,6 +202,120 @@ def decidir(
 # Identidad reservada del decisor AUTOMATICO (trazabilidad: la UI puede pintarlo distinto).
 DECISOR_AUTO_ID = "auto"
 DECISOR_AUTO_NOMBRE = "Pre-aprobación automática"
+
+# --------------------------------------------------------------------------- #
+# QA Editorial como APROBADOR AUTOMATICO (item D)                              #
+# --------------------------------------------------------------------------- #
+#
+# La revision de QA editorial (skill `qa-editorial`) deja de ser un workflow APARTE y se
+# integra como el PRIMER nivel (automatico) de la cadena de aprobacion: la maquina senala,
+# el humano decide. Mapeo del veredicto del semaforo de QA a la decision del nivel:
+#   🟢 (listo)        -> aprobado   (el QA no encontro nada que bloquee)
+#   🟡 (revisar)      -> pendiente  (queda a juicio humano: el nivel arranca pendiente)
+#   🔴 (no_publicar)  -> rechazado  (para la cadena: hay un error serio que corregir)
+# El ULTIMO nivel SIEMPRE es humano (este nivel se inserta el PRIMERO, nunca el ultimo).
+# Trazable con un decisor reservado propio ("QA Editorial").
+DECISOR_QA_ID = "auto"
+DECISOR_QA_NOMBRE = "QA Editorial"
+ETIQUETA_QA = "QA Editorial"
+
+# Veredictos internos de la skill de QA (`dominio.qa_editorial._VERDICTO_POR_SEMAFORO`):
+# "listo" (🟢), "revisar" (🟡), "no_publicar" (🔴). Se duplican aqui como literales (sin
+# importar de `dominio.qa_editorial`) para no acoplar esta capa pura al parseo del informe.
+_QA_VERDICTO_A_DECISION = {
+    "listo": DECISION_APROBADO,
+    "revisar": DECISION_PENDIENTE,
+    "no_publicar": DECISION_RECHAZADO,
+}
+
+
+def decision_por_veredicto_qa(veredicto: str) -> str:
+    """Mapea el veredicto de la skill de QA a la decision del nivel automatico (PURA).
+
+    🟢/"listo" -> aprobado; 🟡/"revisar" -> pendiente; 🔴/"no_publicar" -> rechazado.
+    Cualquier otro valor (vacio, desconocido) cae a `pendiente` (CONSERVADOR: si no hay un
+    veredicto claro, lo decide un humano, no se auto-aprueba ni se auto-rechaza).
+    """
+    return _QA_VERDICTO_A_DECISION.get((veredicto or "").strip().lower(), DECISION_PENDIENTE)
+
+
+def campos_nivel_qa(veredicto: str, *, resumen: str = "") -> dict[str, Any]:
+    """Campos a aplicar al nivel automatico de QA segun el veredicto (PURA, trazable).
+
+    Mismos campos que escribiria una decision manual, pero con el decisor reservado de QA.
+    Si la decision es `pendiente` (🟡), NO se sella decisor/fecha: el nivel sigue abierto a
+    un humano. `resumen` (del informe de QA) se guarda como comentario para dar contexto.
+    """
+    decision = decision_por_veredicto_qa(veredicto)
+    if decision == DECISION_PENDIENTE:
+        return {
+            "decision": DECISION_PENDIENTE,
+            "comentario": (resumen or "QA editorial: requiere revisión humana.").strip()[:1000],
+        }
+    return {
+        "decision": decision,
+        "decisor_id": DECISOR_QA_ID,
+        "decisor_nombre": DECISOR_QA_NOMBRE,
+        "comentario": (resumen or f"QA editorial automático: {decision}.").strip()[:1000],
+        "decidido_en": _ahora_iso(),
+    }
+
+
+def cadena_con_qa(etiquetas: list[str]) -> list[str]:
+    """Antepone el nivel automatico "QA Editorial" a una cadena de etiquetas (PURA).
+
+    El QA va SIEMPRE primero (nivel 1) y la cadena conserva al menos un nivel humano detras
+    (las `etiquetas` originales). Idempotente: si ya empieza por "QA Editorial", no duplica.
+    """
+    limpias = [e for e in etiquetas if isinstance(e, str) and e.strip()]
+    if limpias and limpias[0].strip().lower() == ETIQUETA_QA.lower():
+        return list(limpias)
+    return [ETIQUETA_QA, *limpias]
+
+
+# --------------------------------------------------------------------------- #
+# ROLES en la cadena: cargo requerido por nivel (item C)                       #
+# --------------------------------------------------------------------------- #
+#
+# Cada nivel de la cadena puede exigir un CARGO concreto del organigrama (`auth/usuarios.cargo`,
+# allowlist en `estados.CARGOS_USUARIO`): p. ej. "Coordinación" la decide un coordinador y
+# "Dirección" un director. Es una guarda EDITORIAL ortogonal a la separacion de funciones
+# ("otro par de ojos") y al rol de permisos (admin/editor). Mapa por defecto razonable a
+# partir del organigrama de AMX; lo demas no exige cargo (cualquiera del equipo decide).
+CARGO_POR_ETIQUETA: dict[str, str] = {
+    "coordinación": "coordinador",
+    "coordinacion": "coordinador",
+    "dirección": "director",
+    "direccion": "director",
+}
+
+
+def cargo_requerido_para(etiqueta: str) -> str:
+    """Cargo que se EXIGE para decidir un nivel con esa etiqueta ("" = sin requisito).
+
+    Normaliza la etiqueta (minusculas, sin acentos via el mapa) y devuelve el cargo del mapa
+    por defecto, o "" si la etiqueta no tiene requisito. PURA: la API la usa al CREAR la cadena
+    para sellar `cargo_requerido` en cada nivel; los cargos especificos (coordinador_redes,
+    coordinador_youtube...) los puede afinar el llamante, aqui damos el defecto del organigrama.
+    """
+    return CARGO_POR_ETIQUETA.get((etiqueta or "").strip().lower(), "")
+
+
+def cargo_satisface(cargo_requerido: str, cargo_decisor: str) -> bool:
+    """¿El `cargo_decisor` satisface el `cargo_requerido` de un nivel? (PURA).
+
+    Sin requisito ("") -> siempre True (cualquiera decide). Con requisito, el cargo del decisor
+    debe COINCIDIR exactamente, o ser una ESPECIALIZACION que empiece por el cargo generico
+    (p. ej. requisito "coordinador" lo satisface "coordinador_redes"/"coordinador_youtube";
+    requisito "director" exige "director"). Comparacion en minusculas.
+    """
+    req = (cargo_requerido or "").strip().lower()
+    if not req:
+        return True
+    cargo = (cargo_decisor or "").strip().lower()
+    if not cargo:
+        return False
+    return cargo == req or cargo.startswith(req + "_")
 
 
 def es_pieza_bajo_riesgo(

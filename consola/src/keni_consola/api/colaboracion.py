@@ -56,6 +56,14 @@ def _rol_de_peticion(request: Request) -> str | None:
     return None
 
 
+def _cargo_de_peticion(request: Request) -> str:
+    """Cargo del organigrama del usuario de la sesion ("" si por token / sin cargo). Item C."""
+    usuario = getattr(request.state, "usuario", None)
+    if isinstance(usuario, dict):
+        return usuario.get("cargo", "") or ""
+    return ""
+
+
 def _puede_gestionar(request: Request, autor_id: str) -> bool:
     """True si quien pide es el autor del recurso, un admin, o entro por token (mantenimiento)."""
     autor = autor_de_peticion(request)
@@ -246,12 +254,24 @@ async def revertir_copy(request: Request) -> Response:
 
 
 def _cadena_publica(plataforma_id: str) -> dict[str, object]:
-    """Cadena de aprobacion + su estado global resumido (para la UI)."""
+    """Cadena de aprobacion + su estado global resumido + gates de gobernanza (para la UI).
+
+    Incluye `aprobados`/`minimo_aprobaciones` (gate A: cuantas firmas lleva vs cuantas exige
+    programar) y `comentarios_sin_resolver` (gate B: objeciones abiertas que bloquean publicar),
+    para que la UI muestre el contador y deshabilite el boton de programar cuando no cumple.
+    """
     cadena = repos.listar_aprobaciones(plataforma_id)
+    plat = repos.obtener_contenido_plataforma(plataforma_id)
+    sin_resolver = repos.comentarios_sin_resolver(
+        (plat or {}).get("contenido_id", "") or "", plataforma_id
+    )
     return {
         "niveles": cadena,
         "estado": colaboracion.estado_cadena(cadena),
         "nivel_actual": (colaboracion.nivel_actual(cadena) or {}).get("id", ""),
+        "aprobados": colaboracion.contar_aprobados(cadena),
+        "minimo_aprobaciones": config.min_aprobaciones(),
+        "comentarios_sin_resolver": sin_resolver,
     }
 
 
@@ -286,16 +306,29 @@ async def crear_aprobacion_cadena(request: Request) -> Response:
         return JSONResponse({"error": "Las etiquetas no son válidas."}, status_code=400)
     if not etiquetas:
         return JSONResponse({"error": "La cadena necesita al menos un nivel."}, status_code=400)
+
+    # --- item D: QA Editorial como PRIMER nivel automatico (gateado, def OFF) -----------
+    # Antepone "QA Editorial" a la cadena cuando el flag esta ON, dejando los niveles humanos
+    # detras (el ultimo SIEMPRE humano). El veredicto del QA se aplica luego, best-effort.
+    if config.auto_qa_editorial():
+        etiquetas = colaboracion.cadena_con_qa(etiquetas)
     if len(etiquetas) > _MAX_NIVELES:
         return JSONResponse(
             {"error": f"Demasiados niveles (máximo {_MAX_NIVELES})."}, status_code=400
         )
 
+    # item C: cargo del organigrama EXIGIDO por nivel (derivado de la etiqueta). El QA
+    # automatico no exige cargo. Se sella en la cadena para validarlo al decidir.
+    cargos = [colaboracion.cargo_requerido_para(e) for e in etiquetas]
+
     repos.crear_cadena_aprobacion(
         plataforma_id=plataforma_id,
         contenido_id=plat.get("contenido_id", ""),
         etiquetas=etiquetas,
+        cargos=cargos,
     )
+    if config.auto_qa_editorial():
+        _aplicar_qa_automatico(plataforma_id, plat)
     # --- fase3 (auto-planificacion): PRE-APROBACION de piezas de bajo riesgo -----------
     # Gateado por flag admin (def OFF). Si esta activo Y la pieza es de bajo riesgo
     # (evergreen reutilizado sin cambios, o solo canal web/no-social), auto-aprueba los
@@ -326,6 +359,33 @@ def _aplicar_preaprobacion_bajo_riesgo(
         cadena, activa=True, bajo_riesgo=True
     ):
         repos.actualizar_aprobacion(nivel_id, campos)
+
+
+def _aplicar_qa_automatico(plataforma_id: str, plat: dict[str, object]) -> None:
+    """Aplica el veredicto del QA editorial al PRIMER nivel "QA Editorial" de la cadena (item D).
+
+    Best-effort y gateado (el llamante ya verifico el flag). Busca el ULTIMO veredicto de QA
+    de la pieza (`repos.ultimo_veredicto_qa`) y lo traduce a la decision del nivel automatico:
+    🟢 aprueba, 🟡 lo deja pendiente (a un humano), 🔴 lo rechaza (para la cadena). Si no hay
+    veredicto disponible, el nivel queda `pendiente` (CONSERVADOR: nada se auto-decide sin
+    evidencia de QA). El ULTIMO nivel de la cadena es humano y este nunca se toca.
+    """
+    cadena = repos.listar_aprobaciones(plataforma_id)
+    # El nivel QA es el PRIMERO (nivel 1) y nunca el ultimo (hay al menos un humano detras).
+    primero = colaboracion.nivel_actual(cadena)
+    if (
+        primero is None
+        or len(cadena) <= 1
+        or (primero.get("etiqueta") or "").strip().lower() != colaboracion.ETIQUETA_QA.lower()
+    ):
+        return
+    veredicto = repos.ultimo_veredicto_qa(
+        plataforma_id, plat.get("contenido_id", "") or ""
+    )
+    if not veredicto:
+        return  # sin veredicto de QA: el nivel sigue pendiente, lo decide un humano.
+    campos = colaboracion.campos_nivel_qa(veredicto.get("verdicto", ""), resumen=veredicto.get("resumen", ""))
+    repos.actualizar_aprobacion(primero["id"], campos)
 
 
 async def decidir_nivel(request: Request) -> Response:
@@ -362,6 +422,7 @@ async def decidir_nivel(request: Request) -> Response:
         rol=_rol_de_peticion(request),
         comentario=comentario,
         autor_pieza_id=autor_pieza_id,
+        cargo_decisor=_cargo_de_peticion(request),
     )
     if error is not None:
         return JSONResponse({"error": error}, status_code=409)
