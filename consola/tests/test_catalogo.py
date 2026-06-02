@@ -70,9 +70,9 @@ def test_cada_app_lleva_descripcion_y_nav_para_la_tarjeta():
     # La ruta primaria (primer item) de cada app: `nav` viene ordenada por bloque de
     # flujo (grupo_orden, orden), así que la 1ª es la entrada de Producción que cae más
     # arriba en el sidebar — Revisión (bloque "operacion"), no Estudio (bloque "contenido").
-    assert porid["produccion"]["nav"][0]["ruta"] == "/revision"
-    assert porid["metricas"]["nav"][0]["ruta"] == "/analiticas"
-    assert porid["operacion"]["nav"][0]["ruta"] == "/parrilla"
+    assert porid["produccion"]["nav"][0]["ruta"] == "/operacion/revision"
+    assert porid["metricas"]["nav"][0]["ruta"] == "/datos/analiticas"
+    assert porid["operacion"]["nav"][0]["ruta"] == "/operacion/parrilla"
 
 
 def test_catalogo_agrupa_la_nav_por_flujo():
@@ -87,12 +87,12 @@ def test_iconos_de_nav_son_strings_lucide():
     cat = registro.catalogo(_entorno())
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
     assert iconos["/panel"] == "LayoutDashboard"
-    assert iconos["/estudio"] == "Palette"
-    assert iconos["/investigacion"] == "Search"
-    assert iconos["/revision"] == "ShieldCheck"
-    assert iconos["/analiticas"] == "BarChart3"
-    assert iconos["/parrilla"] == "CalendarClock"
-    assert iconos["/actividad"] == "Activity"
+    assert iconos["/contenido/estudio"] == "Palette"
+    assert iconos["/datos/investigacion"] == "Search"
+    assert iconos["/operacion/revision"] == "ShieldCheck"
+    assert iconos["/datos/analiticas"] == "BarChart3"
+    assert iconos["/operacion/parrilla"] == "CalendarClock"
+    assert iconos["/datos/actividad"] == "Activity"
 
 
 def test_desactivar_flag_oculta_la_app_del_catalogo():
@@ -102,9 +102,9 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     assert ids == ["operacion", "produccion"]
     # Y su entrada de nav (Analíticas) desaparece del sidebar.
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
-    assert "/analiticas" not in rutas
+    assert "/datos/analiticas" not in rutas
     # Las demás siguen.
-    assert "/estudio" in rutas and "/parrilla" in rutas and "/panel" in rutas
+    assert "/contenido/estudio" in rutas and "/operacion/parrilla" in rutas and "/panel" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():
@@ -153,4 +153,4 @@ def test_endpoint_catalogo_respeta_el_flag(cliente, monkeypatch):
     datos = cliente.get("/api/catalogo").json()
     assert "metricas" not in [a["id"] for a in datos["apps"]]
     rutas = [i["ruta"] for g in datos["navegacion"] for i in g["items"]]
-    assert "/analiticas" not in rutas
+    assert "/datos/analiticas" not in rutas

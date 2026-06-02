@@ -353,7 +353,7 @@ function FuenteTrends() {
           <p className="text-muted-foreground">
             Tendencias de búsqueda de Google como señal del Radar. Es una fuente única
             (built-in), no se dan de alta varias: se configura globalmente y alimenta el{" "}
-            <Link to="/investigacion/radar" className="underline hover:text-foreground">
+            <Link to="/datos/investigacion/radar" className="underline hover:text-foreground">
               Radar
             </Link>{" "}
             y la auto-promoción del día.
@@ -514,7 +514,7 @@ function AportarManual({
         {
           action: {
             label: "Ver en el tablero",
-            onClick: () => navigate("/parrilla/pendientes"),
+            onClick: () => navigate("/operacion/parrilla/pendientes"),
           },
         },
       );
@@ -1433,7 +1433,7 @@ function DialogoGenerar({
         n > 0
           ? `Generado y guardado en ${n} ${n === 1 ? "publicación" : "publicaciones"}`
           : "Copy generado",
-        { action: { label: "Ver en el tablero", onClick: () => navigate("/parrilla/pendientes") } },
+        { action: { label: "Ver en el tablero", onClick: () => navigate("/operacion/parrilla/pendientes") } },
       );
       void queryClient.invalidateQueries({ queryKey: CLAVE_ITEMS });
       void queryClient.invalidateQueries({ queryKey: ["publicaciones"] });
@@ -1504,7 +1504,7 @@ function DialogoGenerar({
           )}
           <p className="text-xs text-muted-foreground">
             Se crea un borrador por red en el{" "}
-            <Link to="/parrilla/pendientes" className="underline hover:text-foreground">
+            <Link to="/operacion/parrilla/pendientes" className="underline hover:text-foreground">
               tablero
             </Link>{" "}
             y la noticia queda marcada como usada.

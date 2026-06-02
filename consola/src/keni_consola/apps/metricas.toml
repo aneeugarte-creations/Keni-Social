@@ -22,14 +22,14 @@ modulos_backend = [
 ]
 
 rutas_frontend = [
-  "/analiticas",
-  "/analiticas/metricas",
-  "/analiticas/comercial",
-  "/analiticas/reporte-deportes",
+  "/datos/analiticas",
+  "/datos/analiticas/metricas",
+  "/datos/analiticas/comercial",
+  "/datos/analiticas/reporte-deportes",
 ]
 
 [[nav]]
-ruta = "/analiticas"
+ruta = "/datos/analiticas"
 etiqueta = "Analíticas"
 icono = "BarChart3"
 descripcion = "Rendimiento de las cuentas, seguimiento de comercial y deck deportivo. Pestañas Métricas / Comercial / Reporte deportes."

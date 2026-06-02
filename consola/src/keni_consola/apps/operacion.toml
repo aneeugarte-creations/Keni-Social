@@ -37,15 +37,16 @@ rutas_frontend = [
   # la ruta en el scope para que la redirección legacy /publicaciones -> /parrilla/pendientes
   # (ver router.tsx) resuelva dentro de esta app; ya NO tiene entrada de nav propia.
   "/publicaciones",
-  "/parrilla",
-  "/parrilla/pendientes",
-  "/parrilla/calendario",
+  "/operacion/parrilla",
+  "/operacion/parrilla/pendientes",
+  "/operacion/parrilla/feed",
+  "/operacion/parrilla/turnos",
   # Webhooks salientes (admin; sin nav, se entra por URL directa). Ver router.tsx.
   "/webhooks",
 ]
 
 [[nav]]
-ruta = "/parrilla"
+ruta = "/operacion/parrilla"
 etiqueta = "Parrilla"
 icono = "CalendarClock"
 descripcion = "Tablero de contenido del equipo (importante/evergreen/eventos + publicaciones), calendario y rota de cobertura."

@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { FronteraError } from "@/components/comunes/FronteraError";
+import { RedirigirPrefijo } from "@/components/comunes/RedirigirPrefijo";
 import { Loader2 } from "lucide-react";
 
 // Carga diferida por ruta (code-splitting): cada pagina viaja en su propio chunk
@@ -13,9 +14,9 @@ const Panel = lazy(() => import("@/pages/Panel"));
 const Estudio = lazy(() => import("@/pages/Estudio"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 
-// Sub-paginas de cada hub. Los hubs ya no tienen componente wrapper propio:
-// eran solo `<Outlet/>` (la subnav vive en el sidebar via HUB_TABS), asi que la
-// ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto.
+// Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la
+// ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
+// la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
 const Radar = lazy(() => import("@/pages/Radar"));
@@ -52,13 +53,15 @@ const Sistema = lazy(() => import("@/pages/Sistema"));
 
 /**
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
- * cuelgan de el. Cada "hub" (Investigación, Revisión, Analíticas, Parrilla,
- * Activos) es una ruta-layout SIN componente propio: react-router renderiza
- * `<Outlet/>` por defecto, y la subnav entre sub-rutas vive en el sidebar
- * (acordeón, via HUB_TABS en components/layout/hub-tabs.ts).
+ * cuelgan de el. La navegación se agrupa por MOMENTO DEL FLUJO y ese bloque vive
+ * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
+ * (herramientas de creación) y `/datos/*` (entradas y señales). Panel es la home
+ * transversal y se queda en `/panel`. Cada hub (Parrilla, Revisión, Investigación,
+ * Analíticas, Biblioteca) es una ruta-layout sin componente: react-router renderiza
+ * `<Outlet/>` y la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
  *
- * La landing `/` ya NO es un launcher: redirige a `/panel`. Las apps viven en el
- * sidebar como grupos de acordeón (ver Sidebar).
+ * Las rutas planas anteriores (`/estudio`, `/investigacion/...`, `/parrilla/...`, etc.)
+ * se mantienen como redirecciones a su nuevo path con prefijo de bloque.
  */
 export const router = createBrowserRouter([
   // Feed móvil para revisores: ruta hermana del AppShell (layout propio, sin
@@ -85,74 +88,86 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/panel" replace /> },
 
-      // Diario
+      // Home transversal (shell): el vistazo del día. Encabeza el bloque Operación
+      // en el sidebar pero vive sin prefijo (es la landing, no una página de sección).
       { path: "panel", element: <Panel /> },
-      // "Imágenes" se fusionó en el Estudio (única superficie de generación de imagen).
-      { path: "imagenes", element: <Navigate to="/estudio" replace /> },
-      { path: "estudio", element: <Estudio /> },
-      { path: "biblioteca", element: <Biblioteca /> },
 
-      // Hub Investigación (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
-      // Radar fusiona Tendencias + Plan del día (antes /parrilla-dia) en pestañas internas.
+      // ===== Bloque OPERACIÓN (checkpoints diarios) =====
       {
-        path: "investigacion",
+        path: "operacion",
         children: [
-          { index: true, element: <Navigate to="fuentes" replace /> },
-          { path: "fuentes", element: <Fuentes /> },
-          { path: "termometro", element: <Termometro /> },
-          { path: "radar", element: <Radar /> },
-          { path: "algoritmos", element: <Algoritmos /> },
-          // Legacy: la antigua hoja "Parrilla del día" ahora es una pestaña dentro de Radar.
-          { path: "parrilla-dia", element: <Navigate to="/investigacion/radar" replace /> },
+          { index: true, element: <Navigate to="/operacion/parrilla" replace /> },
+          // Hub Parrilla (tablero del equipo): pendientes · feed · turnos.
+          {
+            path: "parrilla",
+            children: [
+              { index: true, element: <Navigate to="pendientes" replace /> },
+              { path: "pendientes", element: <Tareas /> },
+              // Feed de ideación: la pieza vista como post (material → copy IA → arte) con
+              // estado de la cadena IA en vivo y aprobación en línea (Flujo D, Fase 4).
+              { path: "feed", element: <FeedIdeacion /> },
+              { path: "turnos", element: <Rota /> },
+            ],
+          },
+          // Hub Revisión: cola de aprobación (editorial) + verificación de media.
+          {
+            path: "revision",
+            children: [
+              { index: true, element: <Navigate to="editorial" replace /> },
+              { path: "editorial", element: <RevisionEditorial /> },
+              { path: "verificacion", element: <Verificacion /> },
+            ],
+          },
         ],
       },
 
-      // Hub Revisión (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
+      // ===== Bloque CONTENIDO (herramientas para crear/editar a mano) =====
       {
-        path: "revision",
+        path: "contenido",
         children: [
-          { index: true, element: <Navigate to="editorial" replace /> },
-          { path: "editorial", element: <RevisionEditorial /> },
-          { path: "verificacion", element: <Verificacion /> },
+          { index: true, element: <Navigate to="/contenido/estudio" replace /> },
+          { path: "estudio", element: <Estudio /> },
+          // Hub Biblioteca: documentos (prompts + línea editorial) + plantillas de
+          // contenido (antes su propia página "Activos", ahora una pestaña más).
+          {
+            path: "biblioteca",
+            children: [
+              { index: true, element: <Navigate to="documentos" replace /> },
+              { path: "documentos", element: <Biblioteca /> },
+              { path: "plantillas", element: <PlantillasContenido /> },
+            ],
+          },
         ],
       },
 
-      // Hub Analíticas (ruta-layout sin wrapper: renderiza <Outlet/> por defecto).
+      // ===== Bloque DATOS (entradas y señales que alimentan/reflejan la automatización) =====
       {
-        path: "analiticas",
+        path: "datos",
         children: [
-          { index: true, element: <Navigate to="metricas" replace /> },
-          { path: "metricas", element: <Metricas /> },
-          { path: "comercial", element: <Comercial /> },
-          { path: "reporte-deportes", element: <ReporteDeportes /> },
-        ],
-      },
-
-      // Hub Parrilla (antes /tareas + /rota; ruta-layout sin wrapper: <Outlet/> por defecto).
-      {
-        path: "parrilla",
-        children: [
-          { index: true, element: <Navigate to="pendientes" replace /> },
-          { path: "pendientes", element: <Tareas /> },
-          // Feed de ideación: la pieza vista como post (material → copy IA → arte) con
-          // estado de la cadena IA en vivo y aprobación en línea (Flujo D, Fase 4).
-          { path: "feed", element: <FeedIdeacion /> },
-          { path: "calendario", element: <Rota /> },
-          // La hoja "Piezas" se retiró: las piezas se gestionan en el tablero (Pendientes).
-          { path: "piezas", element: <Navigate to="/parrilla/pendientes" replace /> },
-        ],
-      },
-
-      // Actividad IA: feed unificado de generaciones + runs de agentes con métricas.
-      { path: "actividad", element: <Actividad /> },
-
-      // Hub Activos (plantillas de contenido reutilizables al armar piezas).
-      // Ruta-layout sin wrapper: renderiza <Outlet/> por defecto.
-      {
-        path: "activos",
-        children: [
-          { index: true, element: <Navigate to="plantillas" replace /> },
-          { path: "plantillas", element: <PlantillasContenido /> },
+          { index: true, element: <Navigate to="/datos/investigacion" replace /> },
+          // Hub Investigación: fuentes RSS, termómetro mundial, radar y algoritmos.
+          {
+            path: "investigacion",
+            children: [
+              { index: true, element: <Navigate to="fuentes" replace /> },
+              { path: "fuentes", element: <Fuentes /> },
+              { path: "termometro", element: <Termometro /> },
+              { path: "radar", element: <Radar /> },
+              { path: "algoritmos", element: <Algoritmos /> },
+            ],
+          },
+          // Hub Analíticas: métricas, comercial y deck deportivo.
+          {
+            path: "analiticas",
+            children: [
+              { index: true, element: <Navigate to="metricas" replace /> },
+              { path: "metricas", element: <Metricas /> },
+              { path: "comercial", element: <Comercial /> },
+              { path: "reporte-deportes", element: <ReporteDeportes /> },
+            ],
+          },
+          // Actividad IA: feed unificado de generaciones + runs de agentes con métricas.
+          { path: "actividad", element: <Actividad /> },
         ],
       },
 
@@ -167,39 +182,53 @@ export const router = createBrowserRouter([
       // propia pagina muestra el aviso al entrar por URL directa).
       { path: "usuarios", element: <Usuarios /> },
       // Panel de sistema: solo admin (el backend devuelve 403 si no, y la propia
-      // página muestra el aviso al entrar por URL directa). Monitorización del
-      // servidor (CPU/RAM/disco) + estado del almacenamiento S3/Garage.
+      // página muestra el aviso al entrar por URL directa).
       { path: "sistema", element: <Sistema /> },
 
       // ===== Redirecciones de rutas legacy =====
-      // Fusiones de paginas individuales en hubs:
-      { path: "fuentes", element: <Navigate to="/investigacion/fuentes" replace /> },
-      { path: "termometro", element: <Navigate to="/investigacion/termometro" replace /> },
-      { path: "radar", element: <Navigate to="/investigacion/radar" replace /> },
-      { path: "revision-editorial", element: <Navigate to="/revision/editorial" replace /> },
-      { path: "verificacion", element: <Navigate to="/revision/verificacion" replace /> },
-      { path: "metricas", element: <Navigate to="/analiticas/metricas" replace /> },
-      { path: "comercial", element: <Navigate to="/analiticas/comercial" replace /> },
-      { path: "reporte-deportes", element: <Navigate to="/analiticas/reporte-deportes" replace /> },
-      { path: "tareas", element: <Navigate to="/parrilla/pendientes" replace /> },
-      { path: "rota", element: <Navigate to="/parrilla/calendario" replace /> },
-      // Publicaciones se FUSIONÓ en el tablero (#fase2): el tablero es la superficie
-      // única de contenido (modos Tablero/Publicaciones/Calendario).
-      { path: "publicaciones", element: <Navigate to="/parrilla/pendientes" replace /> },
-      // El hub Agentes se retiró: su Actividad IA vive ahora en /actividad (feed unificado).
-      { path: "monitor", element: <Navigate to="/actividad" replace /> },
-      { path: "agentes", element: <Navigate to="/actividad" replace /> },
-      { path: "agentes/actividad", element: <Navigate to="/actividad" replace /> },
-      // Fusiones anteriores (mantener compatibilidad):
-      // El copy se generaba en /generacion (motor de skills, retirado): ahora vive en la
-      // Biblioteca de prompts. El catálogo de skills (/skills) también pasa a la Biblioteca.
-      { path: "generar-copy", element: <Navigate to="/biblioteca" replace /> },
-      { path: "generacion", element: <Navigate to="/biblioteca" replace /> },
-      { path: "skills", element: <Navigate to="/biblioteca" replace /> },
+      // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando
+      // la pestaña con `RedirigirPrefijo` donde aplica).
+      { path: "imagenes", element: <Navigate to="/contenido/estudio" replace /> },
+      { path: "estudio", element: <Navigate to="/contenido/estudio" replace /> },
+      { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/biblioteca" /> },
+      { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion/radar" replace /> },
+      { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
+      { path: "revision/*", element: <RedirigirPrefijo a="/operacion/revision" /> },
+      { path: "analiticas/*", element: <RedirigirPrefijo a="/datos/analiticas" /> },
+      // Parrilla: la pestaña "calendario" se renombró a "turnos"; el resto preserva.
+      { path: "parrilla/calendario", element: <Navigate to="/operacion/parrilla/turnos" replace /> },
+      { path: "parrilla/piezas", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      { path: "parrilla/*", element: <RedirigirPrefijo a="/operacion/parrilla" /> },
+      { path: "actividad", element: <Navigate to="/datos/actividad" replace /> },
+      // "Activos" se fusionó como pestaña "Plantillas" dentro de la Biblioteca.
+      { path: "activos", element: <Navigate to="/contenido/biblioteca/plantillas" replace /> },
+      { path: "activos/plantillas", element: <Navigate to="/contenido/biblioteca/plantillas" replace /> },
+      // Hojas planas antiguas (pre-hub) y fusiones previas:
+      { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
+      { path: "termometro", element: <Navigate to="/datos/investigacion/termometro" replace /> },
+      { path: "radar", element: <Navigate to="/datos/investigacion/radar" replace /> },
+      { path: "revision-editorial", element: <Navigate to="/operacion/revision/editorial" replace /> },
+      { path: "verificacion", element: <Navigate to="/operacion/revision/verificacion" replace /> },
+      { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },
+      { path: "comercial", element: <Navigate to="/datos/analiticas/comercial" replace /> },
+      { path: "reporte-deportes", element: <Navigate to="/datos/analiticas/reporte-deportes" replace /> },
+      { path: "tareas", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      { path: "rota", element: <Navigate to="/operacion/parrilla/turnos" replace /> },
+      // Publicaciones se FUSIONÓ en el tablero (#fase2).
+      { path: "publicaciones", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      // El hub Agentes se retiró: su Actividad IA vive ahora en /datos/actividad.
+      { path: "monitor", element: <Navigate to="/datos/actividad" replace /> },
+      { path: "agentes", element: <Navigate to="/datos/actividad" replace /> },
+      { path: "agentes/actividad", element: <Navigate to="/datos/actividad" replace /> },
+      // El copy se generaba en /generacion (motor de skills, retirado): ahora vive en
+      // la Biblioteca; el catálogo de skills (/skills) también pasa a la Biblioteca.
+      { path: "generar-copy", element: <Navigate to="/contenido/biblioteca" replace /> },
+      { path: "generacion", element: <Navigate to="/contenido/biblioteca" replace /> },
+      { path: "skills", element: <Navigate to="/contenido/biblioteca" replace /> },
       { path: "conexiones", element: <Navigate to="/configuracion" replace /> },
       { path: "estado", element: <Navigate to="/configuracion" replace /> },
-      { path: "proyectos", element: <Navigate to="/actividad" replace /> },
-      { path: "carpetas", element: <Navigate to="/actividad" replace /> },
+      { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },
+      { path: "carpetas", element: <Navigate to="/datos/actividad" replace /> },
 
       // Cualquier otra ruta: de vuelta al Panel (ya no hay launcher).
       { path: "*", element: <Navigate to="/panel" replace /> },

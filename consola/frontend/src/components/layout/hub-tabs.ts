@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BookText,
   CalendarClock,
   FileText,
   Globe,
@@ -32,56 +33,54 @@ export interface ItemTabHub {
 /**
  * Registro COMPARTIDO de las sub-pestañas de cada hub de la consola.
  *
- * Antes cada hub (Investigación, Revisión, Analíticas, Parrilla, Activos)
- * declaraba sus `TABS` como `const` local. Ahora viven aquí, una sola vez, para
- * que las consuman TANTO la página del hub (que no cambia de comportamiento)
- * COMO el sidebar con scope (que las expande indentadas bajo la sección del
- * hub). Así no se hardcodean en el sidebar: este mapea cada entrada de nav de
- * la app a sus sub-pestañas vía `subPestanasDe(ruta)`; si la entrada no es un
- * hub, no expande nada.
- *
- * Cada bloque es la fuente de verdad de un hub; el mapa de abajo los indexa por
- * la ruta PADRE (la del item de nav de la app que abre el hub).
+ * Cada hub (Investigación, Revisión, Analíticas, Parrilla, Biblioteca) declara
+ * aquí sus pestañas, una sola vez, para que las consuman tanto la página del hub
+ * como la barra de pestañas in-page (`SubnavHub`). El mapa de abajo las indexa por
+ * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
+ * `/datos`).
  */
 export const TABS_INVESTIGACION: ItemTabHub[] = [
-  { ruta: "/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
-  { ruta: "/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
-  { ruta: "/investigacion/radar", etiqueta: "Radar", icono: Radar },
-  { ruta: "/investigacion/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
+  { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
+  { ruta: "/datos/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
+  { ruta: "/datos/investigacion/radar", etiqueta: "Radar", icono: Radar },
+  { ruta: "/datos/investigacion/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [
-  { ruta: "/revision/editorial", etiqueta: "Editorial", icono: ScanText },
-  { ruta: "/revision/verificacion", etiqueta: "Verificación", icono: ScanSearch },
+  { ruta: "/operacion/revision/editorial", etiqueta: "Editorial", icono: ScanText },
+  { ruta: "/operacion/revision/verificacion", etiqueta: "Verificación", icono: ScanSearch },
 ];
 
 export const TABS_ANALITICAS: ItemTabHub[] = [
-  { ruta: "/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
-  { ruta: "/analiticas/comercial", etiqueta: "Comercial", icono: Megaphone },
-  { ruta: "/analiticas/reporte-deportes", etiqueta: "Reporte deportes", icono: Presentation },
+  { ruta: "/datos/analiticas/metricas", etiqueta: "Métricas", icono: BarChart3 },
+  { ruta: "/datos/analiticas/comercial", etiqueta: "Comercial", icono: Megaphone },
+  { ruta: "/datos/analiticas/reporte-deportes", etiqueta: "Reporte deportes", icono: Presentation },
 ];
 
 export const TABS_PARRILLA: ItemTabHub[] = [
-  { ruta: "/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
-  { ruta: "/parrilla/feed", etiqueta: "Feed", icono: LayoutGrid },
-  { ruta: "/parrilla/calendario", etiqueta: "Turnos", icono: CalendarClock },
+  { ruta: "/operacion/parrilla/pendientes", etiqueta: "Pendientes", icono: ListTodo },
+  { ruta: "/operacion/parrilla/feed", etiqueta: "Feed", icono: LayoutGrid },
+  { ruta: "/operacion/parrilla/turnos", etiqueta: "Turnos", icono: CalendarClock },
 ];
 
-export const TABS_ACTIVOS: ItemTabHub[] = [
-  { ruta: "/activos/plantillas", etiqueta: "Plantillas", icono: FileText },
+// Biblioteca es ahora un hub: sus documentos (prompts + línea editorial) y las
+// plantillas de contenido (antes la página "Activos", absorbida como pestaña).
+export const TABS_BIBLIOTECA: ItemTabHub[] = [
+  { ruta: "/contenido/biblioteca/documentos", etiqueta: "Documentos", icono: BookText },
+  { ruta: "/contenido/biblioteca/plantillas", etiqueta: "Plantillas", icono: FileText },
 ];
 
 /**
- * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del item de nav de la
- * app que abre el hub (la misma que entrega el catálogo). El sidebar lo usa para
- * expandir; cada página de hub toma su array directo (export con nombre).
+ * Mapa `rutaPadre -> sub-pestañas`. La clave es la ruta del hub (la misma que
+ * entrega el catálogo para esa entrada de nav). El sidebar la usa para saber que
+ * una entrada es un hub; la barra in-page pinta las pestañas.
  */
 export const HUB_TABS: Record<string, ItemTabHub[]> = {
-  "/investigacion": TABS_INVESTIGACION,
-  "/revision": TABS_REVISION,
-  "/analiticas": TABS_ANALITICAS,
-  "/parrilla": TABS_PARRILLA,
-  "/activos": TABS_ACTIVOS,
+  "/datos/investigacion": TABS_INVESTIGACION,
+  "/operacion/revision": TABS_REVISION,
+  "/datos/analiticas": TABS_ANALITICAS,
+  "/operacion/parrilla": TABS_PARRILLA,
+  "/contenido/biblioteca": TABS_BIBLIOTECA,
 };
 
 /**

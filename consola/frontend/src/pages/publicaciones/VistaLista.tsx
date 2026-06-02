@@ -208,7 +208,7 @@ function TarjetaPublicacion({
             etiqueta: "Ver métricas de la marca",
             icono: BarChart3,
             onClick: () =>
-              navigate("/analiticas/metricas", {
+              navigate("/datos/analiticas/metricas", {
                 state: { marca: marcaMetricasDesdeCanonica(publicacion.marca) },
               }),
           },

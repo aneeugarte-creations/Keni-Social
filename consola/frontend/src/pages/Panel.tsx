@@ -319,7 +319,7 @@ export default function Panel() {
 
       {nuevasSugerencias > 0 && (
         <Link
-          to="/investigacion/algoritmos"
+          to="/datos/investigacion/algoritmos"
           className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 transition-colors hover:bg-amber-500/20 dark:text-amber-300"
         >
           <Lightbulb className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -390,7 +390,7 @@ export default function Panel() {
                 Cambios de algoritmo
               </CardTitle>
               <Button asChild variant="ghost" size="sm">
-                <Link to="/investigacion/algoritmos">Ver todo</Link>
+                <Link to="/datos/investigacion/algoritmos">Ver todo</Link>
               </Button>
             </CardHeader>
             <CardContent>
@@ -444,7 +444,7 @@ export default function Panel() {
                   texto="Configura las fuentes y refresca en Investigación › Algoritmos para ver lo último."
                   accion={
                     <Button asChild variant="outline" size="sm">
-                      <Link to="/investigacion/algoritmos">Ir a Algoritmos</Link>
+                      <Link to="/datos/investigacion/algoritmos">Ir a Algoritmos</Link>
                     </Button>
                   }
                 />
@@ -498,7 +498,7 @@ export default function Panel() {
                   Cola de aprobación
                 </CardTitle>
                 <Button asChild variant="ghost" size="sm">
-                  <Link to="/parrilla/pendientes">Ver todo</Link>
+                  <Link to="/operacion/parrilla/pendientes">Ver todo</Link>
                 </Button>
               </CardHeader>
               <CardContent>
@@ -582,7 +582,7 @@ export default function Panel() {
                   texto="Aprueba una pieza y prográmala desde el tablero."
                   accion={
                     <Button asChild variant="outline" size="sm">
-                      <Link to="/parrilla/pendientes">Ir al tablero</Link>
+                      <Link to="/operacion/parrilla/pendientes">Ir al tablero</Link>
                     </Button>
                   }
                 />

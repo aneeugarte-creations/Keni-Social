@@ -22,14 +22,13 @@ const CATALOGO = {
       icono: "Sparkles",
       descripcion: "Copy, clips, skills y verificación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/estudio", "/investigacion", "/revision", "/actividad"],
+      rutas_frontend: ["/contenido/estudio", "/datos/investigacion", "/operacion/revision", "/datos/actividad"],
       nav: [
-        { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
-        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
-        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
-        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 30 },
-        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
-        { ruta: "/activos", etiqueta: "Activos", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 30 },
+        { ruta: "/contenido/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 10 },
+        { ruta: "/contenido/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "", grupo: "contenido", grupo_orden: 20, orden: 20 },
+        { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 10 },
+        { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 30 },
+        { ruta: "/datos/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 30 },
       ],
     },
     {
@@ -38,9 +37,9 @@ const CATALOGO = {
       icono: "BarChart3",
       descripcion: "Métricas, comercial y reportes",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/analiticas"],
+      rutas_frontend: ["/datos/analiticas"],
       nav: [
-        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 20 },
+        { ruta: "/datos/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "", grupo: "datos", grupo_orden: 30, orden: 20 },
       ],
     },
     {
@@ -49,38 +48,37 @@ const CATALOGO = {
       icono: "Send",
       descripcion: "Rota, parrilla y publicación",
       permisos: ["editor", "admin"],
-      rutas_frontend: ["/parrilla"],
+      rutas_frontend: ["/operacion/parrilla"],
       nav: [
-        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
+        { ruta: "/operacion/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "", grupo: "operacion", grupo_orden: 10, orden: 20 },
       ],
     },
   ],
   // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
   // Panel (shell) encabeza "Operación"; los hubs van como UNA entrada (su sub-nav es
-  // in-page, no en el sidebar).
+  // in-page, no en el sidebar). El bloque vive también en el path (/operacion, /contenido, /datos).
   navegacion: [
     {
       etiqueta: "Operación",
       items: [
         { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "El vistazo del día" },
-        { ruta: "/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "Tablero del equipo" },
-        { ruta: "/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
+        { ruta: "/operacion/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "Tablero del equipo" },
+        { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
       ],
     },
     {
       etiqueta: "Contenido",
       items: [
-        { ruta: "/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "Lienzo de imagen" },
-        { ruta: "/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "Prompts y editorial" },
-        { ruta: "/activos", etiqueta: "Activos", icono: "Library", descripcion: "Plantillas" },
+        { ruta: "/contenido/estudio", etiqueta: "Estudio", icono: "Palette", descripcion: "Lienzo de imagen" },
+        { ruta: "/contenido/biblioteca", etiqueta: "Biblioteca", icono: "Library", descripcion: "Prompts, editorial y plantillas" },
       ],
     },
     {
       etiqueta: "Datos",
       items: [
-        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Fuentes y radar" },
-        { ruta: "/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
-        { ruta: "/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "Qué hizo la IA" },
+        { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "Fuentes y radar" },
+        { ruta: "/datos/analiticas", etiqueta: "Analíticas", icono: "BarChart3", descripcion: "Medición" },
+        { ruta: "/datos/actividad", etiqueta: "Actividad IA", icono: "Activity", descripcion: "Qué hizo la IA" },
       ],
     },
   ],
@@ -194,14 +192,14 @@ describe("Sidebar · bloques de flujo", () => {
     renderSidebar("editor", "/panel");
     // Bloque "Operación": Panel + tablero + revisión, los checkpoints diarios.
     expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
-    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/parrilla");
-    expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/revision");
+    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
+    expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/operacion/revision");
     // Bloque "Contenido".
-    expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/estudio");
-    expect(screen.getByRole("link", { name: /biblioteca/i })).toHaveAttribute("href", "/biblioteca");
+    expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/contenido/estudio");
+    expect(screen.getByRole("link", { name: /biblioteca/i })).toHaveAttribute("href", "/contenido/biblioteca");
     // Bloque "Datos": los hubs son una entrada, no sus pestañas.
-    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/investigacion");
-    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/actividad");
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
+    expect(screen.getByRole("link", { name: /actividad ia/i })).toHaveAttribute("href", "/datos/actividad");
     // Las pestañas internas de un hub NO viven en el sidebar (van in-page).
     expect(screen.queryByRole("link", { name: /^fuentes$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^termómetro$/i })).not.toBeInTheDocument();
@@ -210,9 +208,9 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("marca activa la entrada del hub aun estando en una de sus sub-rutas", async () => {
-    renderSidebar("editor", "/investigacion/radar");
+    renderSidebar("editor", "/datos/investigacion/radar");
     const investigacion = await screen.findByRole("link", { name: /investigación/i });
-    // NavLink marca `aria-current=page` por prefijo (/investigacion ⊇ /investigacion/radar).
+    // NavLink marca `aria-current=page` por prefijo (/datos/investigacion ⊇ …/radar).
     expect(investigacion).toHaveAttribute("aria-current", "page");
     // Y una entrada de otro bloque NO está activa.
     expect(screen.getByRole("link", { name: /estudio/i })).not.toHaveAttribute("aria-current");
@@ -245,8 +243,8 @@ describe("Sidebar · rail colapsable", () => {
     renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: () => {} });
     // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
     expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
-    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/parrilla");
-    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/investigacion");
+    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
+    expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
     // En rail no se pintan los encabezados de bloque (solo iconos).
@@ -270,7 +268,7 @@ describe("Sidebar · rail colapsable", () => {
   it("click en el icono de una entrada (en rail) navega a su ruta", async () => {
     renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: () => {} });
     fireEvent.click(await screen.findByRole("link", { name: /parrilla/i }));
-    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/parrilla"));
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/operacion/parrilla"));
   });
 });
 
@@ -278,37 +276,37 @@ describe("apps-scope · helpers", () => {
   const apps = CATALOGO.apps as AppCatalogo[];
 
   it("rutaPrimaria es la PRIMERA HOJA (aplana hubs a su 1ª sub-pestaña)", () => {
-    // Producción: 1ª entrada /estudio no es hub → se queda igual.
-    expect(rutaPrimaria(apps[0])).toBe("/estudio");
-    // Métricas: 1ª entrada /analiticas ES hub → resuelve a su 1ª sub-pestaña.
-    expect(rutaPrimaria(apps[1])).toBe("/analiticas/metricas");
-    // Operación: 1ª entrada /parrilla ES hub → resuelve a su 1ª sub-pestaña.
-    expect(rutaPrimaria(apps[2])).toBe("/parrilla/pendientes");
+    // Producción: 1ª entrada /contenido/estudio no es hub → se queda igual.
+    expect(rutaPrimaria(apps[0])).toBe("/contenido/estudio");
+    // Métricas: 1ª entrada /datos/analiticas ES hub → resuelve a su 1ª sub-pestaña.
+    expect(rutaPrimaria(apps[1])).toBe("/datos/analiticas/metricas");
+    // Operación: 1ª entrada /operacion/parrilla ES hub → resuelve a su 1ª sub-pestaña.
+    expect(rutaPrimaria(apps[2])).toBe("/operacion/parrilla/pendientes");
   });
 
   it("hojasDeApp aplana hubs a sub-pestañas y conserva las no-hub", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
-      "/estudio",
-      "/biblioteca",
-      // /investigacion (hub) → sus 4 sub-pestañas
-      "/investigacion/fuentes",
-      "/investigacion/termometro",
-      "/investigacion/radar",
-      "/investigacion/algoritmos",
-      // /revision (hub) → sus 2 sub-pestañas
-      "/revision/editorial",
-      "/revision/verificacion",
-      // /actividad NO es hub: queda como hoja directa.
-      "/actividad",
-      // /activos (hub) → su única sub-pestaña
-      "/activos/plantillas",
+      "/contenido/estudio",
+      // /contenido/biblioteca (hub) → sus 2 sub-pestañas (Activos se fusionó aquí)
+      "/contenido/biblioteca/documentos",
+      "/contenido/biblioteca/plantillas",
+      // /datos/investigacion (hub) → sus 4 sub-pestañas
+      "/datos/investigacion/fuentes",
+      "/datos/investigacion/termometro",
+      "/datos/investigacion/radar",
+      "/datos/investigacion/algoritmos",
+      // /operacion/revision (hub) → sus 2 sub-pestañas
+      "/operacion/revision/editorial",
+      "/operacion/revision/verificacion",
+      // /datos/actividad NO es hub: queda como hoja directa.
+      "/datos/actividad",
     ]);
   });
 
   it("appDeRuta resuelve por prefijo más largo", () => {
-    expect(appDeRuta(apps, "/estudio")?.id).toBe("produccion");
-    expect(appDeRuta(apps, "/parrilla/calendario")?.id).toBe("operacion");
+    expect(appDeRuta(apps, "/contenido/estudio")?.id).toBe("produccion");
+    expect(appDeRuta(apps, "/operacion/parrilla/turnos")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
     expect(appDeRuta(apps, "/panel")).toBeUndefined();
@@ -317,14 +315,13 @@ describe("apps-scope · helpers", () => {
   it("gruposDeApp respeta los bloques visuales por orden", () => {
     const grupos = gruposDeApp(apps[0]);
     const rutas = grupos.flatMap((g) => g.items.map((i) => i.ruta));
-    // Ordenado por (grupo_orden, orden): hoy(/revision) · producir(/estudio,/biblioteca,/activos) · senales(/investigacion,/actividad).
+    // Ordenado por (grupo_orden, orden): operacion(/revision) · contenido(/estudio,/biblioteca) · datos(/investigacion,/actividad).
     expect(rutas).toEqual([
-      "/revision",
-      "/estudio",
-      "/biblioteca",
-      "/activos",
-      "/investigacion",
-      "/actividad",
+      "/operacion/revision",
+      "/contenido/estudio",
+      "/contenido/biblioteca",
+      "/datos/investigacion",
+      "/datos/actividad",
     ]);
   });
 });

@@ -51,19 +51,20 @@ modulos_backend = [
 # Rutas frontend que pertenecen a la app (incluye sub-rutas de los hubs). Útil para el
 # test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
 rutas_frontend = [
-  "/estudio",
-  "/biblioteca",
-  "/investigacion",
-  "/investigacion/fuentes",
-  "/investigacion/termometro",
-  "/investigacion/radar",
-  "/investigacion/algoritmos",
-  "/revision",
-  "/revision/editorial",
-  "/revision/verificacion",
-  "/actividad",
-  "/activos",
-  "/activos/plantillas",
+  "/contenido/estudio",
+  "/contenido/biblioteca",
+  "/contenido/biblioteca/documentos",
+  # "Activos" se fusionó como pestaña "Plantillas" de la Biblioteca.
+  "/contenido/biblioteca/plantillas",
+  "/datos/investigacion",
+  "/datos/investigacion/fuentes",
+  "/datos/investigacion/termometro",
+  "/datos/investigacion/radar",
+  "/datos/investigacion/algoritmos",
+  "/operacion/revision",
+  "/operacion/revision/editorial",
+  "/operacion/revision/verificacion",
+  "/datos/actividad",
 ]
 
 # Entradas de navegación de esta app (mismo orden/aspecto que el sidebar actual).
@@ -77,7 +78,7 @@ rutas_frontend = [
 # para crear/editar a mano · datos(30) = entradas que alimentan o reflejan la automatización.
 
 [[nav]]
-ruta = "/estudio"
+ruta = "/contenido/estudio"
 etiqueta = "Estudio"
 icono = "Palette"
 descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o descárgala."
@@ -86,16 +87,16 @@ grupo_orden = 20
 orden = 10
 
 [[nav]]
-ruta = "/biblioteca"
+ruta = "/contenido/biblioteca"
 etiqueta = "Biblioteca"
 icono = "Library"
-descripcion = "Prompts y línea editorial en un editor markdown a pantalla completa. Lanza un prompt sobre contenido o una sección."
+descripcion = "Prompts y línea editorial + plantillas de contenido reutilizables. Pestañas Documentos / Plantillas."
 grupo = "contenido"
 grupo_orden = 20
 orden = 20
 
 [[nav]]
-ruta = "/investigacion"
+ruta = "/datos/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
 descripcion = "Fuentes RSS, panorama mundial, tendencias virales y cambios de algoritmo. Pestañas Fuentes / Termómetro / Radar / Algoritmos."
@@ -104,7 +105,7 @@ grupo_orden = 30
 orden = 10
 
 [[nav]]
-ruta = "/revision"
+ruta = "/operacion/revision"
 etiqueta = "Revisión"
 icono = "ShieldCheck"
 descripcion = "QA editorial y verificación de imágenes/videos antes de publicar. Pestañas Editorial / Verificación."
@@ -113,7 +114,7 @@ grupo_orden = 10
 orden = 30
 
 [[nav]]
-ruta = "/actividad"
+ruta = "/datos/actividad"
 etiqueta = "Actividad IA"
 icono = "Activity"
 descripcion = "Toda la actividad de IA en un solo sitio: generaciones (copy, RSS, imágenes, verificación) y runs de agente, con su coste y consumo."
@@ -121,11 +122,5 @@ grupo = "datos"
 grupo_orden = 30
 orden = 30
 
-[[nav]]
-ruta = "/activos"
-etiqueta = "Activos"
-icono = "Library"
-descripcion = "Plantillas de contenido por tipo de nota, reutilizables al armar piezas."
-grupo = "contenido"
-grupo_orden = 20
-orden = 30
+# (Antes existía una entrada "Activos" propia; se fusionó como pestaña "Plantillas"
+# de la Biblioteca y dejó de ser una entrada de nav.)

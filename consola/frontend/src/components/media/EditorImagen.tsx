@@ -328,7 +328,7 @@ export function EditorImagen({
             className="h-7 px-2 text-xs text-muted-foreground"
             disabled={!!disabled}
           >
-            <Link to="/estudio" state={{ publicacionId, marca, red, copy, imagen: imagen || undefined }}>
+            <Link to="/contenido/estudio" state={{ publicacionId, marca, red, copy, imagen: imagen || undefined }}>
               <Wand2 className="mr-1 h-3.5 w-3.5" />
               Abrir en Estudio
             </Link>

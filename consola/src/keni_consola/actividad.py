@@ -96,11 +96,11 @@ def _metricas_run(metricas: dict[str, Any] | None) -> dict[str, Any]:
 # muestra (el copy/rss cae como borradores en el tablero; la imagen en el estudio; etc.).
 # Los tipos sin pagina de resultado propia (hashtags/prompt) y los runs no llevan enlace.
 _URL_RESULTADO_POR_TIPO = {
-    "copy": "/parrilla/pendientes",
-    "rss": "/parrilla/pendientes",
-    "imagen": "/estudio",
-    "verificacion": "/revision/verificacion",
-    "qa-editorial": "/revision/editorial",
+    "copy": "/operacion/parrilla/pendientes",
+    "rss": "/operacion/parrilla/pendientes",
+    "imagen": "/contenido/estudio",
+    "verificacion": "/operacion/revision/verificacion",
+    "qa-editorial": "/operacion/revision/editorial",
 }
 
 

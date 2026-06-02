@@ -387,7 +387,7 @@ export default function Tablero() {
                 {
                   etiqueta: "Plantillas",
                   icono: FileText,
-                  onClick: () => navigate("/activos/plantillas"),
+                  onClick: () => navigate("/contenido/biblioteca/plantillas"),
                 },
                 {
                   etiqueta: "Hashtags",

@@ -36,7 +36,7 @@ const CATALOGO = {
       // y el breadcrumb en una de sus hojas debe leer "Investigación › Pestaña".
       etiqueta: "Datos",
       items: [
-        { ruta: "/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "" },
+        { ruta: "/datos/investigacion", etiqueta: "Investigación", icono: "Search", descripcion: "" },
       ],
     },
   ],
@@ -112,7 +112,7 @@ function renderShell(ruta: string) {
               <Route index element={<Navigate to="/panel" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
               <Route path="panel" element={<div>contenido panel</div>} />
-              <Route path="investigacion/radar" element={<div>contenido radar</div>} />
+              <Route path="datos/investigacion/radar" element={<div>contenido radar</div>} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -159,14 +159,14 @@ describe("AppShell · sidebar siempre presente", () => {
   });
 
   it("breadcrumb en una hoja de hub: 'Hub › Pestaña' con el hub enlazable", async () => {
-    renderShell("/investigacion/radar");
+    renderShell("/datos/investigacion/radar");
     await screen.findByText("contenido radar");
     const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
     // El hub es un enlace a su ruta; la pestaña activa es el segmento actual.
     await waitFor(() =>
       expect(within(ruta).getByRole("link", { name: /^investigación$/i })).toHaveAttribute(
         "href",
-        "/investigacion",
+        "/datos/investigacion",
       ),
     );
     expect(within(ruta).getByText("Radar")).toHaveAttribute("aria-current", "page");

@@ -69,18 +69,18 @@ def test_normalizar_generacion():
         "metricas": {
             "tokens": 140, "coste_usd": 0.01, "duration_ms": 1200, "num_turns": 2,
         },
-        "resultado_url": "/parrilla/pendientes",
+        "resultado_url": "/operacion/parrilla/pendientes",
     }
 
 
 def test_normalizar_generacion_resultado_url_por_tipo():
     # Cada tipo COMPLETADO con pagina de resultado enlaza a su superficie.
     casos = {
-        "copy": "/parrilla/pendientes",
-        "rss": "/parrilla/pendientes",
-        "imagen": "/estudio",
-        "verificacion": "/revision/verificacion",
-        "qa-editorial": "/revision/editorial",
+        "copy": "/operacion/parrilla/pendientes",
+        "rss": "/operacion/parrilla/pendientes",
+        "imagen": "/contenido/estudio",
+        "verificacion": "/operacion/revision/verificacion",
+        "qa-editorial": "/operacion/revision/editorial",
     }
     for tipo, url in casos.items():
         item = actividad.normalizar_generacion(_gen(tipo=tipo))
