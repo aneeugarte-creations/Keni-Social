@@ -171,6 +171,13 @@ services:
     image: keni-social/back:${KENI_VERSION:-latest}
     restart: unless-stopped
     command: ["python", "-m", "keni_consola.daemons"]
+    # El daemons NO levanta uvicorn (corre solo los hilos de fondo), pero comparte imagen
+    # con el back, cuyo Dockerfile define un HEALTHCHECK `curl :8765/healthz`. Heredado aqui
+    # daria SIEMPRE "unhealthy" (no hay servidor en 8765) -> estado de salud enganoso. Lo
+    # desactivamos: la liveness la cubre `restart: unless-stopped` (si el proceso muere, el
+    # contenedor sale y se reinicia).
+    healthcheck:
+      disable: true
     environment:
       XDG_CONFIG_HOME: /data
       KENI_DATA_DIR: /data

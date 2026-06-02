@@ -51,4 +51,7 @@ steps:
       # consola en PARALELO (pytest-xdist): cada worker usa su PROPIA BD Postgres (`keni_test_gwN`,
       # ver tests/_postgres.py), asi el aislamiento por TRUNCATE no choca entre workers. Es el paso
       # dominante del pipeline (la suite monohilo era ~5min en un agente de 12 nucleos).
-      - python -m pytest consola/tests -q -n auto
+      # `-n 6` (no `auto`): el runner self-hosted COMPARTE host con prod (keni-social) y otros
+      # contenedores; `auto`=12 workers, cada uno con su BD + la app cargada, saturaba memoria y
+      # abortaba un worker a mitad de la suite (fallo flaky sin test roto). 6 da margen y sigue rapido.
+      - python -m pytest consola/tests -q -n 6

@@ -107,10 +107,16 @@ services:
           memory: 4G
 
 volumes:
+  # `external: true`: volumenes gestionados FUERA de compose (no los crea/borra). Silencia el
+  # warning "already exists but was not created by Docker Compose" y protege los datos de CI de
+  # un `docker compose down -v` accidental. En un host NUEVO, pre-crearlos una vez:
+  #   docker volume create woodpecker_data && docker volume create woodpecker_agent_data
   woodpecker_data:
     name: woodpecker_data
+    external: true
   woodpecker_agent_data:
     name: woodpecker_agent_data
+    external: true
 
 networks:
   # Red dedicada agente<->proxy. `internal`: sin salida externa; los contenedores de
