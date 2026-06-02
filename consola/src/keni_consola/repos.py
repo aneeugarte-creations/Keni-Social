@@ -252,6 +252,10 @@ def borrar_publicacion(publicacion_id: str) -> bool:
     return db.borrar_publicacion(publicacion_id)
 
 
+def reclamar_preparacion(publicacion_id: str, ts: str) -> bool:
+    return db.reclamar_preparacion(publicacion_id, ts)
+
+
 # --------------------------------------------------------------------------- #
 # Grupos de hashtags (OPERACIONAL: Postgres via db.py; rezago cerrado, ADR 0006) #
 # --------------------------------------------------------------------------- #

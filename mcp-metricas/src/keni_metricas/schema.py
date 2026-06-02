@@ -332,6 +332,10 @@ def _parsear_rango_fechas(token: str) -> tuple[date, date]:
         ) from e
     if hasta < desde:
         raise ValueError("Rango invalido: 'hasta' es anterior a 'desde'.")
+    # `+ 1` porque el rango es INCLUSIVO en ambos extremos (desde y hasta cuentan).
+    # Se usa `>` (no `>=`) a proposito: MAX_DIAS_RANGO=366 dias esta PERMITIDO, para
+    # que un año natural completo en bisiesto (p.ej. 2024-01-01..2024-12-31 = 366
+    # dias) no se rechace. Solo se rechaza a partir de 367.
     if (hasta - desde).days + 1 > MAX_DIAS_RANGO:
         raise ValueError(f"Rango demasiado amplio (maximo {MAX_DIAS_RANGO} dias).")
     return desde, hasta

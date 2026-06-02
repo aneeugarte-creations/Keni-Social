@@ -732,12 +732,16 @@ async def asistente_ia(request: Request) -> Response:
             status_code=400,
         )
 
+    # Defensa en profundidad contra token-flooding del prompt: aunque estos campos se
+    # guardan ya recortados a `_MAX_TEXTO` al escribir el contenido, se vuelve a truncar
+    # aqui (mismo limite) antes de armar el brief del asistente, por si el almacen trajera
+    # un valor mas largo.
     gen = asistente.lanzar(
         modo=modo,
         marca=marca,
-        titulo=item.get("titulo", "") or "",
-        descripcion=item.get("descripcion", "") or "",
-        notas=item.get("notas", "") or "",
+        titulo=(item.get("titulo", "") or "")[:_MAX_TEXTO],
+        descripcion=(item.get("descripcion", "") or "")[:_MAX_TEXTO],
+        notas=(item.get("notas", "") or "")[:_MAX_TEXTO],
         redes_ids=redes_ids,
         autor=autor_de_peticion(request),
     )

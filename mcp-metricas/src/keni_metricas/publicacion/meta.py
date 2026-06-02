@@ -222,7 +222,10 @@ class AdaptadorPublicacionMeta:
 
     def _cliente(self) -> httpx.Client:
         if self._cli is None:
-            self._cli = self._cli_externo or cliente_http()
+            # Timeout 30s (no el default 15s de lectura): publicar en IG crea un
+            # contenedor de media que Graph API tarda en procesar, sobre todo con
+            # video; 15s se queda corto y aborta antes de tiempo.
+            self._cli = self._cli_externo or cliente_http(timeout=30.0)
         return self._cli
 
     def _ejecutar_facebook(
@@ -232,13 +235,25 @@ class AdaptadorPublicacionMeta:
         pet = peticiones[0]
         datos = {**pet.data, "access_token": self._token}
         resp = post_json(cli, pet.url, data=datos)
+        # El endpoint /videos devuelve `video_id` en vez de `id`/`post_id`; lo
+        # incluimos en el fallback para no perder el identificador de un video.
+        id_publicacion = resp.get("id") or resp.get("post_id") or resp.get("video_id")
+        if id_publicacion is None:
+            # 200 sin id reconocible: no podemos rastrear la publicacion despues.
+            # Avisamos en vez de devolver None en silencio (la respuesta cruda
+            # queda en `respuestas` para diagnosticar).
+            log.warning(
+                "FB %s: respuesta 200 sin id/post_id/video_id: %r",
+                borrador.cuenta,
+                resp,
+            )
         return ResultadoPublicacion(
             dry_run=False,
             plataforma=borrador.plataforma,
             cuenta=borrador.cuenta,
             peticiones=peticiones,
             respuestas=[resp],
-            id_publicacion=resp.get("id") or resp.get("post_id"),
+            id_publicacion=id_publicacion,
         )
 
     def _ejecutar_instagram(

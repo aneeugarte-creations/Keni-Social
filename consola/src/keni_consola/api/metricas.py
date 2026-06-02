@@ -24,6 +24,7 @@ solo-lectura multi-fuente hasta cablear Meta por cliente.
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from keni_metricas import servicio
 from starlette.requests import Request
@@ -31,6 +32,8 @@ from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
 from .. import marcas, metricas_cache, metricas_pieza, repos
+
+_log = logging.getLogger("keni_consola.api.metricas")
 
 # Rangos validos: contrato de la fachada (no se importa el schema directamente).
 RANGOS_VALIDOS = servicio.RANGOS_VALIDOS
@@ -164,8 +167,8 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     nombres = rep.get("nombres") or {}
     cuentas = []
     for fila in rep.get("cuentas", []):
-        r = fila["resumen"]
-        cid = r["cuenta"]
+        r = fila.get("resumen") or {}
+        cid = r.get("cuenta", "")
         cuentas.append(
             {
                 "marca_id": cid,
@@ -218,6 +221,7 @@ async def reporte(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar el reporte (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el reporte."}, status_code=500)
     salida = _reporte_serializable(rep, rango, marca)
     salida["generado_en"] = generado_en
@@ -239,6 +243,10 @@ async def comparar(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al construir la comparativa (rango_a=%s, rango_b=%s, marca=%s).",
+            rango_a, rango_b, marca or "todas",
+        )
         return JSONResponse({"error": "No se pudo construir la comparativa."}, status_code=500)
     return JSONResponse(
         {
@@ -253,7 +261,7 @@ async def comparar(request: Request) -> Response:
             # reportes lo es. La UI pinta un badge de advertencia con esto (N6, igual que
             # /reporte) para no confundir datos de muestra con reales (piloto AMX).
             "fuente": _fuente_combinada(rep_a, rep_b),
-            "total": _comparar_totales(rep_a["total"], rep_b["total"]),
+            "total": _comparar_totales(rep_a.get("total") or {}, rep_b.get("total") or {}),
             "por_marca": _comparar_por_marca(rep_a, rep_b),
         }
     )
@@ -337,6 +345,7 @@ async def analisis(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar el análisis (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar el análisis."}, status_code=500)
     salida = _analisis_serializable(a, rango, marca)
     salida["generado_en"] = generado_en
@@ -356,6 +365,9 @@ async def piezas(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al generar la analítica de piezas (rango=%s, marca=%s).", rango, marca or "todas"
+        )
         return JSONResponse({"error": "No se pudo generar la analítica de piezas."}, status_code=500)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
@@ -373,6 +385,7 @@ async def tendencia(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al generar la tendencia (rango=%s, marca=%s).", rango, marca or "todas")
         return JSONResponse({"error": "No se pudo generar la tendencia."}, status_code=500)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
@@ -437,6 +450,9 @@ async def piezas_rendimiento(request: Request) -> Response:
             None, _listado_piezas_publicadas, marca_consola
         )
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al generar el listado de piezas (marca=%s).", marca_metricas or "todas"
+        )
         return JSONResponse(
             {"error": "No se pudo generar el listado de piezas."}, status_code=500
         )
@@ -474,6 +490,10 @@ async def piezas_por_etiqueta(request: Request) -> Response:
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al generar la analítica por serie (rango=%s, marca=%s).",
+            rango, marca_metricas or "todas",
+        )
         return JSONResponse(
             {"error": "No se pudo generar la analítica por serie."}, status_code=500
         )
@@ -539,6 +559,7 @@ async def export_csv(request: Request) -> Response:
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001
+        _log.exception("Fallo al exportar CSV (rango=%s, marca=%s).", rango, marca or "todas")
         return PlainTextResponse("No se pudo generar el CSV.", status_code=500)
     return _descarga(texto, _nombre_descarga(rango, marca, "csv"), "text/csv; charset=utf-8")
 
@@ -551,6 +572,7 @@ async def export_md(request: Request) -> Response:
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001
+        _log.exception("Fallo al exportar Markdown (rango=%s, marca=%s).", rango, marca or "todas")
         return PlainTextResponse("No se pudo generar el reporte.", status_code=500)
     return _descarga(texto, _nombre_descarga(rango, marca, "md"), "text/markdown; charset=utf-8")
 
@@ -563,6 +585,7 @@ async def export_json(request: Request) -> Response:
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001
+        _log.exception("Fallo al exportar JSON (rango=%s, marca=%s).", rango, marca or "todas")
         return PlainTextResponse("No se pudo generar el reporte.", status_code=500)
     return _descarga(texto, _nombre_descarga(rango, marca, "json"), "application/json; charset=utf-8")
 
@@ -666,6 +689,9 @@ async def piezas_export(request: Request) -> Response:
     except ValueError as e:
         return PlainTextResponse(f"Error: {e}", status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al exportar piezas (fmt=%s, rango=%s, marca=%s).", fmt, rango, marca or "todas"
+        )
         return PlainTextResponse("No se pudo generar la descarga de piezas.", status_code=500)
 
     payload = {**payload, "rango": rango, "etiqueta_rango": _etiqueta_rango(rango)}

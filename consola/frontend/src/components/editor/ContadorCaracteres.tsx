@@ -16,6 +16,8 @@ export interface ContadorCaracteresProps {
 }
 
 export function ContadorCaracteres({ caracteres, limite, className }: ContadorCaracteresProps) {
+  // Límite INCLUSIVO: `caracteres == limite` es válido (p. ej. X permite 280 exactos);
+  // solo se considera excedido a partir de limite + 1. Por eso `>` y no `>=`.
   const excede = limite !== null && caracteres > limite;
   return (
     <span

@@ -56,8 +56,13 @@ def detectar_picos(
 
         # 2) cuenta vs. baseline histórico (sólo si hay historia previa suficiente)
         if historico is not None:
+            # `historico.serie` devuelve los N periodos MAS recientes (incluido el
+            # periodo actual si ya se guardo una lectura de el). Al filtrar luego
+            # los "anteriores al actual" se descarta al menos uno, asi que pedir
+            # justo el umbral (2) podia dejar <2 previos y silenciar la alerta.
+            # Pedimos 12 con holgura para que tras el filtro queden >=2 periodos.
             previos = [
-                s for s in historico.serie(c.id, rango, 8) if s["periodo_hasta"] < r.periodo.hasta.isoformat()
+                s for s in historico.serie(c.id, rango, 12) if s["periodo_hasta"] < r.periodo.hasta.isoformat()
             ]
             if len(previos) >= 2:
                 base = sum(s["visualizaciones"] for s in previos) / len(previos)

@@ -89,6 +89,7 @@ def metricas_a_dict(metricas: MetricasRun | None) -> dict[str, object] | None:
 _ENV_MAX_USD = config.ENV_CLAUDE_MAX_USD
 _ENV_MAX_TURNS = config.ENV_CLAUDE_MAX_TURNS
 _ENV_SKIP_PERMISOS = config.ENV_CLAUDE_SKIP_PERMISSIONS
+_ENV_DISALLOWED_TOOLS = config.ENV_CLAUDE_DISALLOWED_TOOLS
 
 # Subtipos de error conocidos del campo `result` que conviene reportar especificamente.
 _SUBTIPOS_PRESUPUESTO = frozenset({"error_max_budget", "error_budget_exceeded"})
@@ -132,8 +133,36 @@ def arg_skip_permisos() -> list[str]:
     de skills, tope de turnos/coste/wall-timeout y, en hosted, dentro del contenedor), por
     lo que se saltan los permisos por defecto. Desactivable con
     `KENI_CLAUDE_SKIP_PERMISSIONS=0` (p.ej. para depurar qué permiso falta). La decision
-    vive en `config.claude_skip_permisos`."""
+    vive en `config.claude_skip_permisos`.
+
+    DEFENSA EN PROFUNDIDAD: como corremos con skip-permissions, las herramientas
+    peligrosas (Bash/WebFetch/WebSearch) se VETAN aparte con `arg_tools_restringidas`,
+    para que un prompt-injection en el contenido de usuario/RSS no acabe ejecutando
+    comandos ni saliendo a la red."""
     return ["--dangerously-skip-permissions"] if config.claude_skip_permisos() else []
+
+
+def arg_tools_restringidas() -> list[str]:
+    """Devuelve `['--disallowed-tools', '<t1>', '<t2>', ...]` con las herramientas vetadas.
+
+    DEFENSA contra prompt-injection: como corremos con `--dangerously-skip-permissions`
+    (para cargar skills y leer ficheros del cwd sin aprobacion interactiva), vetamos por
+    defecto `Bash` —el vector de mayor impacto (ejecucion de comandos, exfiltracion de
+    secretos)— que NINGUN flujo de generacion necesita. Web (`WebFetch`/`WebSearch`) NO se
+    veta por defecto: los prompts de investigacion (`brief-tendencias`/`termometro-mundial`)
+    la usan y comparten este constructor de argv. Asi, aunque el contenido de usuario/RSS
+    inyectado intente abrir una shell, `claude` lo rechaza. La lista es configurable
+    (`config.claude_disallowed_tools`); un operador puede endurecerla.
+
+    El flag de Claude Code es `--disallowed-tools` (alias `--disallowedTools`); usamos la
+    forma kebab-case, consistente con `--max-budget-usd`/`--max-turns`. Los nombres de
+    herramienta van como argumentos separados (acepta lista separada por coma/espacio).
+    Si la lista esta vacia (config explicita) NO se añade el flag. La lista vive en
+    `config.claude_disallowed_tools`."""
+    tools = config.claude_disallowed_tools()
+    if not tools:
+        return []
+    return ["--disallowed-tools", *tools]
 
 
 # --------------------------------------------------------------------------- #
@@ -339,7 +368,11 @@ class AcumuladorStream:
         elif tipo == "assistant":
             self.iniciado = True
             mensaje = evento.get("message")
-            modelo = mensaje.get("model") if isinstance(mensaje, dict) else None
+            # Guarda: un `assistant` sin `message` dict (o malformado) no es un turno real;
+            # no lo contamos ni leemos usage de el (evita un `turnos += 1` espurio).
+            if not isinstance(mensaje, dict):
+                return
+            modelo = mensaje.get("model")
             if isinstance(modelo, str) and modelo and self.modelo is None:
                 self.modelo = modelo
             # En modo parcial los turnos/tokens los cuentan los `stream_event`; aqui solo
@@ -347,15 +380,14 @@ class AcumuladorStream:
             if self._vio_stream:
                 return
             self.turnos += 1
-            if isinstance(mensaje, dict):
-                uso = mensaje.get("usage")
-                if isinstance(uso, dict):
-                    ti = _entero(uso.get("input_tokens"))
-                    to = _entero(uso.get("output_tokens"))
-                    if ti is not None:
-                        self.tokens_in += ti
-                    if to is not None:
-                        self.tokens_out += to
+            uso = mensaje.get("usage")
+            if isinstance(uso, dict):
+                ti = _entero(uso.get("input_tokens"))
+                to = _entero(uso.get("output_tokens"))
+                if ti is not None:
+                    self.tokens_in += ti
+                if to is not None:
+                    self.tokens_out += to
         elif tipo == "result":
             self.terminado = True
             try:
@@ -701,7 +733,11 @@ def derivar_titulo(texto: str) -> str:
         limpia = linea.strip()
         if limpia:
             if len(limpia) > _MAX_TITULO:
-                return limpia[:_MAX_TITULO].rstrip() + "…"
+                # Cortamos en el ULTIMO espacio antes del tope para no partir una palabra.
+                # Si no hay ningun espacio (una sola palabra larga), cortamos en seco.
+                recorte = limpia[:_MAX_TITULO]
+                corte = recorte.rsplit(" ", 1)[0].rstrip() if " " in recorte else recorte.rstrip()
+                return corte + "…"
             return limpia
     return f"Borrador {date.today().isoformat()}"
 

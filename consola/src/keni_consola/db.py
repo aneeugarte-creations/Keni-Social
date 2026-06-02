@@ -59,9 +59,13 @@ motivo de migrar y de retirar SQLite (ADR 0004).
 from __future__ import annotations
 
 import json
+import logging
+import threading
 import uuid
 from datetime import date, datetime, timedelta
 from typing import Any
+
+_log = logging.getLogger("keni_consola.db")
 
 # Allowlists de dominio (neutras, sin acoplar al backend): viven en `estados.py`.
 from . import config, motor_db
@@ -204,6 +208,7 @@ __all__ = [
     "obtener_swap_turno",
     "obtener_turno_rota",
     "reclamar_job",
+    "reclamar_preparacion",
     "registrar_salud_fuente_rss",
     "registrar_snapshot_comercial",
     "sembrar_franjas_por_defecto",
@@ -226,6 +231,11 @@ __all__ = [
 # En tests, un fixture autouse lo limpia por test, de modo que la PRIMERA conexion de cada test
 # re-asegura el esquema (preserva la auto-curacion que ejercitan los tests de "BD vieja"/on-demand).
 _esquemas_asegurados: set[str] = set()
+# Protege el check-then-act sobre `_esquemas_asegurados`: varios hilos daemon (refrescos,
+# worker, scanners) abren su PRIMERA conexion casi a la vez al arrancar y correrian el DDL en
+# paralelo. El DDL es idempotente (riesgo bajo), pero el lock evita el doble trabajo y deja el
+# "asegurar una vez por proceso/URL" limpio y determinista.
+_lock_esquemas = threading.Lock()
 
 
 def _conectar() -> Any:
@@ -240,9 +250,13 @@ def _conectar() -> Any:
     """
     con = motor_db.conectar_cruda()
     url = config.database_url() or ""
+    # Lock de modulo: el check-then-act corre en varios hilos daemon al arranque (ver
+    # `_lock_esquemas`). Doble-check dentro del lock para asegurar el esquema UNA sola vez.
     if url not in _esquemas_asegurados:
-        _crear_esquema(con)
-        _esquemas_asegurados.add(url)
+        with _lock_esquemas:
+            if url not in _esquemas_asegurados:
+                _crear_esquema(con)
+                _esquemas_asegurados.add(url)
     return con
 
 
@@ -1130,6 +1144,9 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_noticias_algoritmo(con)
     _sembrar_fuentes_hub_desde_rss(con)
     con.commit()
+    # Indices UNICOS de idempotencia: AL FINAL y aislados (commit propio por indice), porque
+    # pueden fallar sobre BDs con duplicados previos sin tumbar el arranque (ver helper).
+    _crear_indices_unicos_idempotencia(con)
 
 
 def _sembrar_fuentes_hub_desde_rss(con: Any) -> None:
@@ -4471,6 +4488,48 @@ def _migrar_columnas_grupos_hashtags(con: Any) -> None:
             con.execute(f"ALTER TABLE grupos_hashtags ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
+# Indices UNICOS que dan idempotencia a tres tablas que hoy se duplican (mismo grupo/franja/
+# fuente insertados dos veces). Se crean DEFENSIVAMENTE (no en el DDL declarativo): una BD
+# productiva PUEDE tener ya duplicados, y un `CREATE UNIQUE INDEX` sobre datos duplicados
+# revienta. Por eso van fuera del bucle de `_DDL_ESQUEMA` (que aborta el arranque ante
+# cualquier fallo) y cada uno se intenta aislado: si falla por duplicados, se loguea y se
+# sigue (la tabla queda sin el constraint hasta que se limpien los duplicados a mano). El
+# `IF NOT EXISTS` lo hace idempotente cuando ya existe; los INSERT correspondientes usan
+# `ON CONFLICT (...) DO NOTHING` (mismo patron que `rota_franjas`), inofensivo aunque el
+# indice aun no exista (sin conflicto que ignorar).
+_INDICES_UNICOS_IDEMPOTENCIA: tuple[tuple[str, str], ...] = (
+    ("idx_grupos_hashtags_uniq", "grupos_hashtags (nombre, marca)"),
+    ("idx_franjas_editoriales_uniq", "franjas_editoriales (marca, red, dia_semana, hora)"),
+    ("idx_fuentes_rss_url_uniq", "fuentes_rss (url)"),
+)
+
+
+def _crear_indices_unicos_idempotencia(con: Any) -> None:
+    """Crea los indices UNICOS de idempotencia, aislando cada uno ante duplicados previos.
+
+    Cada `CREATE UNIQUE INDEX IF NOT EXISTS` se ejecuta + commitea por separado: si una tabla
+    ya tiene duplicados en prod, Postgres lanza una `UniqueViolation` (23505), que el shim de
+    `motor_db` ya re-lanza como `IntegrityError` TRAS hacer rollback de la conexion. Se loguea
+    un WARNING y se sigue (no rompe el arranque), pero los demas indices SI se aplican.
+    Requiere limpieza manual de los duplicados para que el indice fallido entre en un arranque
+    posterior. El `IF NOT EXISTS` lo hace idempotente cuando el indice ya existe.
+    """
+    for nombre_indice, destino in _INDICES_UNICOS_IDEMPOTENCIA:
+        try:
+            con.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS {nombre_indice} ON {destino}")
+            con.commit()
+        except IntegrityError as e:
+            # El shim de `motor_db` ya hizo rollback de la conexion al mapear la
+            # UniqueViolation; aqui solo dejamos rastro y seguimos con el resto de indices.
+            _log.warning(
+                "No se pudo crear el indice unico %s ON %s (probables duplicados previos; "
+                "requiere limpieza manual): %s",
+                nombre_indice,
+                destino,
+                e,
+            )
+
+
 # --- Fuentes RSS ----------------------------------------------------------- #
 # El dict publico (paridad con `ficheros._parsear_fuente`) NO incluye `creado` (orden
 # interno): solo `id, nombre, url, marca, fecha, activo(bool), incluir, excluir, redes_def,
@@ -4590,8 +4649,14 @@ def crear_fuente_rss(
     con = _conectar()
     try:
         marcadores = ", ".join("?" for _ in _COLS_FUENTE_RSS)
+        # ON CONFLICT (url) DO NOTHING: idempotente frente a un alta repetida de la misma URL
+        # (mismo patron que `rota_franjas`). Requiere el indice unico `idx_fuentes_rss_url_uniq`
+        # (lo crea `_crear_indices_unicos_idempotencia`); en una BD limpia o nueva siempre
+        # existe. PRECONDICION: una BD productiva con URLs duplicadas previas impide crear ese
+        # indice -> hay que limpiar los duplicados antes de que esta clausula opere.
         con.execute(
-            f"INSERT INTO fuentes_rss ({', '.join(_COLS_FUENTE_RSS)}) VALUES ({marcadores})",
+            f"INSERT INTO fuentes_rss ({', '.join(_COLS_FUENTE_RSS)}) VALUES ({marcadores}) "
+            "ON CONFLICT (url) DO NOTHING",
             tuple(fila[col] for col in _COLS_FUENTE_RSS),
         )
         con.commit()
@@ -5374,9 +5439,13 @@ def crear_grupo_hashtags(
     grupo_id = uuid.uuid4().hex[:12]
     con = _conectar()
     try:
+        # ON CONFLICT (nombre, marca) DO NOTHING: idempotente frente a un alta repetida del
+        # mismo grupo en la misma marca (mismo patron que `rota_franjas`). Requiere el indice
+        # unico `idx_grupos_hashtags_uniq` (lo crea `_crear_indices_unicos_idempotencia`);
+        # PRECONDICION: una BD con duplicados previos impide crearlo -> limpiar antes.
         con.execute(
             "INSERT INTO grupos_hashtags (id, nombre, marca, hashtags, creado) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (nombre, marca) DO NOTHING",
             (
                 grupo_id,
                 nombre or "",
@@ -5472,9 +5541,13 @@ def crear_franja(
     }
     con = _conectar()
     try:
+        # ON CONFLICT (marca, red, dia_semana, hora) DO NOTHING: idempotente frente a un alta
+        # repetida de la misma franja (mismo patron que `rota_franjas`). Requiere el indice
+        # unico `idx_franjas_editoriales_uniq` (lo crea `_crear_indices_unicos_idempotencia`);
+        # PRECONDICION: una BD con duplicados previos impide crearlo -> limpiar antes.
         con.execute(
             "INSERT INTO franjas_editoriales (id, marca, red, dia_semana, hora) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT (marca, red, dia_semana, hora) DO NOTHING",
             (franja["id"], franja["marca"], franja["red"], franja["dia_semana"], franja["hora"]),
         )
         con.commit()
@@ -6474,6 +6547,29 @@ def actualizar_publicacion(
         actualizar_contenido(plat["contenido_id"], cambios_padre)
 
     return obtener_publicacion(publicacion_id)
+
+
+def reclamar_preparacion(publicacion_id: str, ts: str) -> bool:
+    """Claim ATOMICO de la preparacion de una publicacion. True si ESTE llamante la reclamo.
+
+    Estampa `preparado_en = ts` SOLO si aun estaba sin preparar (`'' / NULL`), en un unico
+    UPDATE condicional. Devuelve `rowcount > 0`: True si la fila pasó de "sin preparar" a
+    "preparada" en esta llamada; False si ya estaba preparada (otro barrido/replica gano la
+    carrera) o si la publicacion no existe. Evita la doble preparacion/publicacion del
+    patron leer-`preparado_en`-y-luego-UPDATE cuando hay >1 barrido en paralelo (varias
+    replicas). La publicacion es la fila `contenido_plataforma` (su id ES `publicacion_id`).
+    """
+    con = _conectar()
+    try:
+        cur = con.execute(
+            "UPDATE contenido_plataforma SET preparado_en = ? "
+            "WHERE id = ? AND (preparado_en = '' OR preparado_en IS NULL)",
+            (ts, publicacion_id),
+        )
+        con.commit()
+        return cur.rowcount > 0
+    finally:
+        con.close()
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:
@@ -7545,20 +7641,34 @@ def encolar_job(gen_id: str, spec: str) -> str:
     `spec` es el JSON serializable que el worker usa para reconstruir el trabajo (prompt +
     post-procesado + cwd). Idempotente por `gen_id` (indice UNICO): re-encolar el mismo
     registro no duplica filas. El back lo llama dentro de la peticion y responde al instante.
+
+    Devuelve SIEMPRE el job id REAL de la fila (no el generado a la ligera): en un re-encolar
+    del mismo `gen_id` el INSERT no inserta nada (`ON CONFLICT DO NOTHING`) y la fila viva
+    conserva su id previo; devolver el id recien generado dejaria al worker actualizando un id
+    inexistente (UPDATE de 0 filas). SQL estandar Postgres (NO `INSERT OR IGNORE`, que el shim
+    de `motor_db` no sabe combinar con `RETURNING`): `ON CONFLICT (gen_id) DO NOTHING RETURNING
+    id`; si el RETURNING viene vacio (hubo conflicto), se relee el id real con un SELECT.
     """
     job_id = uuid.uuid4().hex[:12]
     ahora = datetime.now().isoformat(timespec="seconds")
     con = _conectar()
     try:
-        con.execute(
-            "INSERT OR IGNORE INTO jobs (id, gen_id, spec, estado, creado) "
-            "VALUES (?, ?, ?, ?, ?)",
+        fila = con.execute(
+            "INSERT INTO jobs (id, gen_id, spec, estado, creado) "
+            "VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT (gen_id) DO NOTHING RETURNING id",
             (job_id, gen_id, spec, JOB_PENDIENTE, ahora),
-        )
+        ).fetchone()
+        if fila is None:
+            # Hubo conflicto (gen_id ya encolado): el INSERT no inserto. Releemos el id REAL
+            # de la fila viva para que el llamante/worker operen sobre la fila correcta.
+            fila = con.execute(
+                "SELECT id FROM jobs WHERE gen_id = ?", (gen_id,)
+            ).fetchone()
         con.commit()
     finally:
         con.close()
-    return job_id
+    return fila["id"] if fila is not None else job_id
 
 
 def reclamar_job(worker: str = "") -> dict[str, Any] | None:

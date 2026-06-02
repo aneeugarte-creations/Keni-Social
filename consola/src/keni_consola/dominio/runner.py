@@ -60,11 +60,13 @@ THROTTLE_S = 0.4
 
 def argv_claude(prompt: str, *, dirs_permitidos: list[Path] | None = None) -> list[str]:
     """argv de `claude -p <prompt> --output-format stream-json --verbose
-    --include-partial-messages [--effort N] [--max-budget-usd N] [--max-turns N]
-    [--add-dir D ...]`. Sin shell (prompt como argumento de la lista).
+    --include-partial-messages [--disallowed-tools ...] [--effort N]
+    [--max-budget-usd N] [--max-turns N] [--add-dir D ...]`. Sin shell (prompt como
+    argumento de la lista).
 
     Es la fuente UNICA del argv para los dos lanzadores: asi ambos aplican SIEMPRE
-    `--max-turns`/`--max-budget-usd` (antes los runs de agente no los ponian).
+    `--max-turns`/`--max-budget-usd` (antes los runs de agente no los ponian) Y la
+    restriccion de herramientas (`arg_tools_restringidas`), defensa frente a inyeccion.
     """
     from .. import preferencias  # import perezoso: evita ciclo dominio<-paquete
 
@@ -77,6 +79,11 @@ def argv_claude(prompt: str, *, dirs_permitidos: list[Path] | None = None) -> li
         # Headless: sin esto `claude` no carga las skills del proyecto ni usa WebFetch/Bash
         # (no hay forma de aprobar el "trust"/permiso en `-p`). Acotado por cwd + topes.
         *stream.arg_skip_permisos(),
+        # Defensa contra prompt-injection: aunque corramos con skip-permissions, vetamos
+        # por defecto `Bash` (ejecucion de comandos / exfiltracion de secretos), que ningun
+        # flujo de generacion necesita. Web queda disponible para prompts de investigacion.
+        # Ver `arg_tools_restringidas` y `config.claude_disallowed_tools`.
+        *stream.arg_tools_restringidas(),
         *preferencias.arg_esfuerzo(),
         *stream.arg_presupuesto(),
         *stream.arg_max_turns(),
@@ -113,8 +120,8 @@ def leer_stream(
                     on_avance()
                 except Exception:  # noqa: BLE001 -- el avance nunca debe romper el hilo
                     pass
-    except Exception:  # noqa: BLE001 -- el lector nunca propaga
-        pass
+    except Exception:  # noqa: BLE001 -- el lector nunca propaga, pero deja rastro
+        _log.warning("error leyendo el stream de claude (ignorado)", exc_info=True)
 
 
 def lanzar_proc(
@@ -130,13 +137,19 @@ def lanzar_proc(
     `claude` lance). Sin esto, un `proc.kill()` mataba SOLO el padre y dejaba zombis.
     En Windows no hay grupos POSIX, pero el piloto corre en macOS/Linux. argv como lista
     (sin shell). El llamante elige stdout/stderr/text via los kwargs fijos de aqui.
+
+    `stderr=PIPE` (antes DEVNULL): los errores de `claude` (auth, flag invalido, crash)
+    iban a /dev/null y un fallo quedaba mudo. Ahora se captura y, si el proceso acaba con
+    returncode != 0, se loguea (truncado) en `esperar()`. El stderr se DRENA SOLO tras
+    cerrar el proceso (stdout lo agota `leer_stream` y el volumen de stderr es bajo), asi
+    no hay riesgo de bloqueo por buffer lleno.
     """
     return subprocess.Popen(  # noqa: S603 -- argv lista, sin shell
         argv,
         cwd=cwd,
         env=env,
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         text=True,
         bufsize=1,
         start_new_session=True,
@@ -166,17 +179,47 @@ def matar_arbol(proc: subprocess.Popen, *, espera: float = 10.0) -> None:
         pass
 
 
+# Tope de chars del stderr que logueamos (un crash de `claude` puede volcar mucho).
+_MAX_STDERR_LOG = 4096
+
+
+def _loguear_stderr(proc: subprocess.Popen) -> None:
+    """Si el proceso acabo con returncode != 0/None, lee su stderr y lo loguea (truncado).
+
+    Best-effort: se llama tras cerrar el proceso (stdout ya agotado por `leer_stream`),
+    asi drenar stderr no bloquea. Antes el stderr iba a DEVNULL y un fallo de `claude`
+    (auth, flag invalido, crash) quedaba mudo; ahora deja rastro en el log.
+    """
+    rc = proc.returncode
+    if rc is None or rc == 0 or proc.stderr is None:
+        return
+    try:
+        err = proc.stderr.read() or ""
+    except Exception:  # noqa: BLE001 -- leer el stderr nunca debe romper la finalizacion
+        return
+    err = err.strip()
+    if not err:
+        return
+    if len(err) > _MAX_STDERR_LOG:
+        err = err[:_MAX_STDERR_LOG] + "…"
+    _log.warning("claude terminó con returncode=%s; stderr: %s", rc, err)
+
+
 def esperar(proc: subprocess.Popen, timeout: int) -> bool:
     """Espera al proceso con wall-timeout; si lo supera mata el ARBOL y devuelve True.
 
     PERMANENTE (#137): el timeout ahora mata el GRUPO de procesos (via `matar_arbol`), no
-    solo el padre, para no dejar herramientas hijas huerfanas.
+    solo el padre, para no dejar herramientas hijas huerfanas. Al cerrar, si el proceso
+    acabo con returncode != 0, loguea su stderr (`_loguear_stderr`) para no perder el
+    motivo del fallo (antes iba a DEVNULL).
     """
     try:
         proc.wait(timeout=timeout)
+        _loguear_stderr(proc)
         return False
     except subprocess.TimeoutExpired:
         matar_arbol(proc)
+        _loguear_stderr(proc)
         return True
 
 

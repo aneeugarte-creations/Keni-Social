@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
+import { toast } from "sonner";
 
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { Generacion } from "@/types";
 
 /** Cada cuánto sondeamos una generación en curso. */
@@ -102,8 +103,16 @@ export function useGeneracion(persistKey?: string) {
     try {
       const r = await api.cancelarGeneracion(actualId);
       setGeneracion(r.generacion);
-    } catch {
-      // Ignorado a propósito: el job ya pudo terminar; el sondeo refleja el estado real.
+    } catch (e) {
+      // El job ya pudo terminar antes de que llegara la cancelación: 404 (ya no existe)
+      // o 409 (ya en estado terminal) se ignoran a propósito; el sondeo refleja el
+      // estado real. Cualquier OTRO error (red caída, 401, 5xx) sí merece feedback:
+      // la cancelación no se aplicó y el usuario debe saberlo.
+      const yaTermino = e instanceof ApiError && (e.status === 404 || e.status === 409);
+      if (!yaTermino) {
+        const mensaje = e instanceof ApiError || e instanceof Error ? e.message : null;
+        toast.error(mensaje ? `No se pudo cancelar: ${mensaje}` : "No se pudo cancelar el trabajo.");
+      }
     } finally {
       setCancelando(false);
     }

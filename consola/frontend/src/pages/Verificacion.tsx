@@ -292,7 +292,7 @@ function ResultadoVerificacion({ reporte }: { reporte: ReporteVerificacion }) {
           <div className="space-y-2">
             <h4 className="text-sm font-medium">Verificaciones previas</h4>
             <ul className="space-y-1 text-sm">
-              {reporte.fact_check.resultados!.map((r, i) => (
+              {(reporte.fact_check?.resultados ?? []).map((r, i) => (
                 <li key={i}>
                   <a
                     href={r.url ?? "#"}
@@ -312,7 +312,7 @@ function ResultadoVerificacion({ reporte }: { reporte: ReporteVerificacion }) {
         {/* Avisos del análisis */}
         {(reporte.avisos?.length ?? 0) > 0 && (
           <ul className="space-y-1 text-xs text-muted-foreground">
-            {reporte.avisos!.map((a, i) => (
+            {(reporte.avisos ?? []).map((a, i) => (
               <li key={i} className="flex items-start gap-1.5">
                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
                 {a}

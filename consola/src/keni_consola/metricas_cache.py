@@ -59,6 +59,24 @@ _ESTADO: dict[str, object] = {
     "ultimo_error": "",
 }
 
+# Anti-stampede del lazy fill: un lock POR clave de combo serializa el cálculo caro (golpe
+# a la API externa) de modo que N requests concurrentes del mismo combo frío disparen UN
+# solo refresco; el resto espera y lee la cache ya rellenada. `_LOCKS_GUARDIAN` protege la
+# creación/lectura del dict de locks (no es el mismo `_LOCK` del estado de refresco, que se
+# usa de forma reentrante vía `estado()` y no debe acoplarse a esto).
+_LOCKS_GUARDIAN = threading.Lock()
+_LOCKS_COMBO: dict[str, threading.Lock] = {}
+
+
+def _lock_combo(clave: str) -> threading.Lock:
+    """Lock dedicado a una clave de combo (creado al vuelo, bajo el lock guardián)."""
+    with _LOCKS_GUARDIAN:
+        lock = _LOCKS_COMBO.get(clave)
+        if lock is None:
+            lock = threading.Lock()
+            _LOCKS_COMBO[clave] = lock
+        return lock
+
 
 def _ahora() -> str:
     return datetime.now().isoformat(timespec="seconds")
@@ -114,11 +132,22 @@ def _refrescar(tipo: str, rango: str, marca: str | None) -> tuple[dict, str]:
 
 
 def _leer_o_calcular(tipo: str, rango: str, marca: str | None) -> tuple[dict, str]:
-    """Devuelve `(payload, generado_en)` desde cache, o lo calcula+guarda si falta."""
+    """Devuelve `(payload, generado_en)` desde cache, o lo calcula+guarda si falta.
+
+    Anti-stampede: si el combo está frío, se serializa el lazy fill con un lock por clave
+    de combo, de modo que N requests concurrentes del mismo combo disparen UN solo cálculo
+    caro (golpe a la API externa) en vez de N. Tras adquirir el lock se RE-LEE la cache por
+    si otro hilo ya la rellenó mientras esperábamos (entonces no recalculamos).
+    """
     entrada = _leer(tipo, rango, marca)
     if entrada is not None:
         return entrada["payload"], entrada["generado_en"]
-    return _refrescar(tipo, rango, marca)
+    with _lock_combo(_clave(tipo, rango, marca)):
+        # Re-lee dentro del lock: otro hilo pudo haber rellenado la cache mientras esperábamos.
+        entrada = _leer(tipo, rango, marca)
+        if entrada is not None:
+            return entrada["payload"], entrada["generado_en"]
+        return _refrescar(tipo, rango, marca)
 
 
 def reporte(rango: str, marca: str | None) -> tuple[dict, str]:

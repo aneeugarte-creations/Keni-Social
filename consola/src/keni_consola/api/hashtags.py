@@ -103,7 +103,18 @@ async def crear(request: Request) -> Response:
     tags = _normalizar_lista_tags(crudas)
     if tags is None:
         return JSONResponse({"error": "Los hashtags deben ser una lista de texto."}, status_code=400)
-    grupo = repos.crear_grupo_hashtags(nombre.strip(), marca=marca, hashtags=tags)
+    nombre = nombre.strip()
+    # Idempotencia (nombre, marca): la BD tiene un indice unico + `ON CONFLICT DO NOTHING`,
+    # asi que un alta duplicada NO inserta y `crear_grupo_hashtags` devolveria un id fantasma
+    # (nunca persistido). Pre-chequeamos para responder un 409 claro en vez de un grupo
+    # inexistente. (Defensa en profundidad: el indice unico cubre la carrera residual.)
+    existentes = repos.listar_grupos_hashtags()
+    if any(g.get("nombre") == nombre and (g.get("marca") or "") == marca for g in existentes):
+        return JSONResponse(
+            {"error": "Ya existe un grupo de hashtags con ese nombre para esa marca."},
+            status_code=409,
+        )
+    grupo = repos.crear_grupo_hashtags(nombre, marca=marca, hashtags=tags)
     return JSONResponse({"grupo": _grupo_a_dict(grupo)})
 
 

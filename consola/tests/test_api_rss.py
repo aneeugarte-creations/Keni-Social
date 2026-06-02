@@ -15,7 +15,7 @@ from __future__ import annotations
 import pytest
 
 from keni_consola.api import rss
-from keni_consola.dominio import extraccion_url
+from keni_consola.dominio import extraccion_url, http_feed
 from keni_consola.dominio.publicaciones import publicacion_a_dict
 
 from .conftest import _cliente, lanzador_generacion_completa
@@ -223,13 +223,15 @@ def test_parsear_xml_invalido_lanza():
 
 
 def test_parsear_limita_items(monkeypatch):
-    monkeypatch.setattr(rss, "_MAX_ITEMS", 1)
+    # La logica de parseo vive en `dominio.http_feed` (rss.parsear_feed la re-exporta);
+    # el limite se parchea alli, donde se lee.
+    monkeypatch.setattr(http_feed, "_MAX_ITEMS", 1)
     items = rss.parsear_feed(_RSS_XML)
     assert len(items) == 1
 
 
 def test_resumen_se_recorta(monkeypatch):
-    monkeypatch.setattr(rss, "_RESUMEN_MAX", 10)
+    monkeypatch.setattr(http_feed, "_RESUMEN_MAX", 10)
     xml = _RSS_XML.replace("Texto plano dos", "x" * 50)
     items = rss.parsear_feed(xml)
     # el segundo item tiene el resumen largo recortado con elipsis

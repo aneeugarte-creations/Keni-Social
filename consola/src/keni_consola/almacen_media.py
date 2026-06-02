@@ -19,6 +19,7 @@ El cliente S3 (boto3) se importa de forma DIFERIDA: en local no es necesario (ex
 from __future__ import annotations
 
 import re
+import threading
 from pathlib import Path
 
 from . import config, rutas
@@ -93,7 +94,10 @@ def _nombre_objeto_seguro(nombre: str) -> str:
 
 
 # Cliente S3 cacheado por proceso: boto3 es caro de crear y la config no cambia en runtime.
+# `_CLIENTE_LOCK` serializa la creacion perezosa (double-checked): sin el, dos hilos podrian
+# crear dos clientes boto3 a la vez al primer uso.
 _cliente_s3 = None
+_CLIENTE_LOCK = threading.Lock()
 
 
 def _s3():  # noqa: ANN202 -- tipo de boto3 client (no anotamos para no importar al cargar)
@@ -105,30 +109,35 @@ def _s3():  # noqa: ANN202 -- tipo de boto3 client (no anotamos para no importar
     global _cliente_s3
     if _cliente_s3 is not None:
         return _cliente_s3
-    try:
-        import boto3
-        from botocore.config import Config as BotoConfig
-    except ImportError as e:  # pragma: no cover -- solo si falta el extra en hosted
-        raise RuntimeError(
-            "S3 esta cableado pero falta el cliente. Instala el extra `s3` (boto3) en la "
-            "imagen del back."
-        ) from e
-    _cliente_s3 = boto3.client(
-        "s3",
-        endpoint_url=config.s3_endpoint(),
-        region_name=config.s3_region(),
-        aws_access_key_id=config.s3_access_key(),
-        aws_secret_access_key=config.s3_secret_key(),
-        # Path-style (Garage no soporta virtual-host style por subdominio de bucket).
-        config=BotoConfig(s3={"addressing_style": "path"}),
-    )
-    return _cliente_s3
+    with _CLIENTE_LOCK:
+        # Re-verifica dentro del lock: otro hilo pudo crearlo mientras esperabamos.
+        if _cliente_s3 is not None:
+            return _cliente_s3
+        try:
+            import boto3
+            from botocore.config import Config as BotoConfig
+        except ImportError as e:  # pragma: no cover -- solo si falta el extra en hosted
+            raise RuntimeError(
+                "S3 esta cableado pero falta el cliente. Instala el extra `s3` (boto3) en la "
+                "imagen del back."
+            ) from e
+        _cliente_s3 = boto3.client(
+            "s3",
+            endpoint_url=config.s3_endpoint(),
+            region_name=config.s3_region(),
+            aws_access_key_id=config.s3_access_key(),
+            aws_secret_access_key=config.s3_secret_key(),
+            # Path-style (Garage no soporta virtual-host style por subdominio de bucket).
+            config=BotoConfig(s3={"addressing_style": "path"}),
+        )
+        return _cliente_s3
 
 
 def _resetear_cliente_s3() -> None:
     """Olvida el cliente S3 cacheado (tests: cambian credenciales entre casos)."""
     global _cliente_s3
-    _cliente_s3 = None
+    with _CLIENTE_LOCK:
+        _cliente_s3 = None
 
 
 # --------------------------------------------------------------------------- #

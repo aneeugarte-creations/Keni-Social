@@ -51,11 +51,26 @@ def post_json(
     json: dict | None = None,
     headers: dict | None = None,
 ) -> dict:
-    """POST simple (para endpoints de token / TikTok). Sin reintentos."""
-    r = cliente.post(url, params=params, data=data, json=json, headers=headers)
-    log.debug("POST %s -> %s", url, r.status_code)
-    r.raise_for_status()
-    return r.json()
+    """POST simple (para endpoints de token / TikTok / publicacion). Sin reintentos.
+
+    A proposito NO reintenta (a diferencia de `get_json`): un POST no es idempotente,
+    asi que reintentar un fallo transitorio podria duplicar el efecto (p.ej. publicar
+    dos veces o crear dos contenedores en IG). Si se quiere reintentar, debe hacerse
+    con una clave de idempotencia a nivel del endpoint, no a ciegas aqui.
+
+    Si falla, se loguea el error antes de propagarlo (el llamante decide que hacer).
+    """
+    try:
+        r = cliente.post(url, params=params, data=data, json=json, headers=headers)
+        log.debug("POST %s -> %s", url, r.status_code)
+        r.raise_for_status()
+        return r.json()
+    except httpx.HTTPStatusError as e:
+        log.warning("POST %s fallo: %s %s", url, e.response.status_code, e.response.text[:300])
+        raise
+    except httpx.HTTPError as e:
+        log.warning("POST %s fallo (red): %s", url, e)
+        raise
 
 
 def con_refresh(hacer, refrescar):

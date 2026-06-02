@@ -48,7 +48,7 @@ from keni_shared.esquema_yaml import migrar, sellar
 
 from . import config, indice, marcas, redes, rutas
 from .estados import ESTADOS_PUBLICACION, ESTADOS_TAREA  # re-export para la fachada
-from .io_atomico import escribir_atomico
+from .io_atomico import bloqueo_archivo, escribir_atomico
 
 _log = logging.getLogger("keni_consola.ficheros")
 
@@ -599,15 +599,22 @@ def actualizar_publicacion(
     publicacion_id: str, campos: dict[str, Any]
 ) -> dict[str, Any] | None:
     """Edita parcialmente una publicacion (titulo/contenido/estado/fecha_programada/imagen/evergreen)."""
-    actual = obtener_publicacion(publicacion_id)
-    if actual is None:
+    ruta = _buscar_ruta("publicacion", publicacion_id)
+    if ruta is None:
         return None
-    for clave in _CAMPOS_EDITABLES_PUBLICACION:
-        if clave in campos:
-            actual[clave] = bool(campos[clave]) if clave == "evergreen" else campos[clave]
-    actual["fecha_actualizacion"] = _ahora_iso()
-    _guardar_publicacion(actual)
-    return actual
+    # leer-modificar-escribir bajo bloqueo de fichero: evita last-write-wins entre escrituras
+    # concurrentes del mismo YAML (igual que `generaciones.actualizar`). `marca` no es editable
+    # aqui, asi que la ruta no cambia dentro de la seccion critica.
+    with bloqueo_archivo(ruta):
+        actual = obtener_publicacion(publicacion_id)
+        if actual is None:
+            return None
+        for clave in _CAMPOS_EDITABLES_PUBLICACION:
+            if clave in campos:
+                actual[clave] = bool(campos[clave]) if clave == "evergreen" else campos[clave]
+        actual["fecha_actualizacion"] = _ahora_iso()
+        _guardar_publicacion(actual)
+        return actual
 
 
 def borrar_publicacion(publicacion_id: str) -> bool:
@@ -714,33 +721,36 @@ def actualizar_plantilla(
     ruta = _buscar_ruta("plantilla", plantilla_id)
     if ruta is None:
         return None
-    datos = _leer_yaml(ruta, tipo="plantilla")
-    if datos is None:
-        return None
-    marca_actual = _marca_de_slug(ruta.parent.parent.name)
-    actual = _parsear_plantilla(datos, marca_actual, plantilla_id)
-    actual["fecha_creacion"] = datos.get("fecha_creacion", actual["fecha"])
+    # leer-modificar-escribir bajo bloqueo del fichero de origen: evita last-write-wins entre
+    # escrituras concurrentes de la misma plantilla (igual que `generaciones.actualizar`).
+    with bloqueo_archivo(ruta):
+        datos = _leer_yaml(ruta, tipo="plantilla")
+        if datos is None:
+            return None
+        marca_actual = _marca_de_slug(ruta.parent.parent.name)
+        actual = _parsear_plantilla(datos, marca_actual, plantilla_id)
+        actual["fecha_creacion"] = datos.get("fecha_creacion", actual["fecha"])
 
-    editables = ("nombre", "marca", "red", "contenido")
-    cambios = {k: v for k, v in campos.items() if k in editables}
-    if not cambios:
-        return _parsear_plantilla(datos, marca_actual, plantilla_id)
-    nueva_marca = cambios.get("marca", marca_actual)
-    for k, v in cambios.items():
-        actual[k] = v
-    actual["marca"] = nueva_marca
-    if nueva_marca != marca_actual:
-        ruta.unlink(missing_ok=True)
-        indice.borrar("plantilla", plantilla_id)
-    _guardar_plantilla(actual)
-    return {
-        "id": plantilla_id,
-        "nombre": actual["nombre"],
-        "marca": nueva_marca,
-        "red": actual["red"],
-        "contenido": actual["contenido"],
-        "fecha": actual["fecha"],
-    }
+        editables = ("nombre", "marca", "red", "contenido")
+        cambios = {k: v for k, v in campos.items() if k in editables}
+        if not cambios:
+            return _parsear_plantilla(datos, marca_actual, plantilla_id)
+        nueva_marca = cambios.get("marca", marca_actual)
+        for k, v in cambios.items():
+            actual[k] = v
+        actual["marca"] = nueva_marca
+        if nueva_marca != marca_actual:
+            ruta.unlink(missing_ok=True)
+            indice.borrar("plantilla", plantilla_id)
+        _guardar_plantilla(actual)
+        return {
+            "id": plantilla_id,
+            "nombre": actual["nombre"],
+            "marca": nueva_marca,
+            "red": actual["red"],
+            "contenido": actual["contenido"],
+            "fecha": actual["fecha"],
+        }
 
 
 def borrar_plantilla(plantilla_id: str) -> bool:

@@ -32,9 +32,12 @@ motivo para que la UI las muestre como "fuente no disponible" sin inventar nada.
 
 REUTILIZACION
 --------------------------------------------------------------------------------------
-La descarga pasa por `api.rss._DESCARGADOR` (mismo punto INYECTABLE que el RSS del
-equipo): aplica los limites de tamaño/timeout y, en tests, se parchea para NO tocar la
-red. La URL del feed de Trends pasa por el guard SSRF de `api.rss.validar_url`.
+El parseo del feed de Trends reutiliza los helpers PUROS de la infra `dominio.http_feed`
+(`_buscar_hijo`/`_texto_local`/`_quitar_ns` y `RSSError`), no el router `api.rss`: el
+dominio no debe importar la capa de transporte. La DESCARGA del feed de Trends (con sus
+limites de tamaño/timeout y el guard SSRF) la hace el router `api/radar.py` via el punto
+INYECTABLE `rss._DESCARGADOR` (re-exportado desde `http_feed`); en tests se parchea para
+NO tocar la red.
 """
 
 from __future__ import annotations
@@ -46,7 +49,7 @@ from difflib import SequenceMatcher
 from typing import Any
 from xml.etree import ElementTree as ET
 
-from .api import rss
+from .dominio import http_feed
 
 # --------------------------------------------------------------------------- #
 # Geos soportados por el feed de Google Trends (pais -> etiqueta humana)        #
@@ -228,23 +231,24 @@ def traduce_trafico(crudo: str) -> int:
 # Parser del feed de Google Trends (namespace `ht:`)                            #
 # --------------------------------------------------------------------------- #
 #
-# El RSS generico de `api.rss.parsear_feed` descarta el namespace `ht:` (trafico y
+# El RSS generico de `http_feed.parsear_feed` descarta el namespace `ht:` (trafico y
 # notas), que es justo la señal que necesita el radar. Por eso el radar parsea el feed
-# de Trends con su propio lector (misma stdlib `xml.etree`, tolerante), reutilizando el
-# DESCARGADOR inyectable y el guard SSRF de `api.rss`.
+# de Trends con su propio lector (misma stdlib `xml.etree`, tolerante), reutilizando los
+# helpers PUROS de `dominio.http_feed` (el guard SSRF y el DESCARGADOR inyectable los
+# aplica el router `api/radar.py`).
 
 
 def _texto_hijo(elemento: ET.Element, *nombres: str) -> str:
     """Texto del primer hijo cuyo nombre local este en `nombres` (ignora namespace)."""
-    hijo = rss._buscar_hijo(elemento, *nombres)
-    return rss._texto_local(hijo)
+    hijo = http_feed._buscar_hijo(elemento, *nombres)
+    return http_feed._texto_local(hijo)
 
 
 def _enlaces_de_item(item: ET.Element) -> list[Enlace]:
     """Extrae los `ht:news_item` de un item de Trends como enlaces (titulo+url+medio)."""
     enlaces: list[Enlace] = []
     for hijo in item:
-        if rss._quitar_ns(hijo.tag) != "news_item":
+        if http_feed._quitar_ns(hijo.tag) != "news_item":
             continue
         titulo = _texto_hijo(hijo, "news_item_title")
         url = _texto_hijo(hijo, "news_item_url")
@@ -266,11 +270,11 @@ def parsear_trends(xml: str, *, geo: str) -> list[Tema]:
     try:
         raiz = ET.fromstring(xml)
     except ET.ParseError as e:
-        raise rss.RSSError("El feed de tendencias no es un XML válido.") from e
+        raise http_feed.RSSError("El feed de tendencias no es un XML válido.") from e
 
-    canal = rss._buscar_hijo(raiz, "channel")
+    canal = http_feed._buscar_hijo(raiz, "channel")
     contenedor = canal if canal is not None else raiz
-    items = [h for h in contenedor if rss._quitar_ns(h.tag) == "item"]
+    items = [h for h in contenedor if http_feed._quitar_ns(h.tag) == "item"]
 
     temas: list[Tema] = []
     red = f"busquedas-{geo.lower()}"
@@ -315,7 +319,7 @@ _SENAL_FEED = 1
 def temas_de_feeds(items: list[dict[str, Any]]) -> list[Tema]:
     """Convierte items de feeds RSS del equipo en `Tema` (señal cualitativa).
 
-    `items` son los que devuelve `api.rss._items_de_fuente` ({titulo, resumen, enlace,
+    `items` son los que devuelve `api.rss._items_de_fuente` (router; {titulo, resumen, enlace,
     fuente_nombre, ...}). El "por que sube" es el resumen del feed (no un conteo), y se
     deja claro que la señal es editorial, no de viralidad.
     """

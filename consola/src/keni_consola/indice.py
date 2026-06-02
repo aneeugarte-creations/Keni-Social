@@ -16,10 +16,10 @@ CONTRATO:
 Tabla unica `entradas`:
   id, tipo, marca, ruta, mtime, red, estado, evergreen, fecha, fecha_creacion
 
-`tipo` ∈ {publicacion, plantilla, fuente_rss, grupo_hashtags, historial}.
-Las franjas NO se indexan (viven en un unico fichero lista por marca; se leen
-escaneando esos ficheros, que son pocos). Los items RSS vistos tampoco (viven en
-`.keni/rss-vistos.yaml` por marca).
+`tipo` ∈ {publicacion, plantilla, historial, run}. Las fuentes RSS y los grupos de
+hashtags ya NO se indexan: migraron a Postgres (ADR 0006), donde son la fuente de
+verdad y se consultan directo (no via este indice de ficheros). Las franjas tampoco se
+indexan (operacionales en Postgres). Los items RSS vistos viven tambien en Postgres.
 
 SEGURIDAD: SIEMPRE consultas parametrizadas. La base es local y derivada; ninguna
 fila es autoritativa.
@@ -42,7 +42,7 @@ from . import config, rutas
 # agente, mas las columnas extra (`agente`, `coste_usd`, `tokens_in`, `tokens_out`,
 # `fecha_inicio`, `dia`). El resto de tipos no usa esas columnas (quedan a 0/'').
 TIPOS: tuple[str, ...] = (
-    "publicacion", "plantilla", "fuente_rss", "grupo_hashtags", "historial", "run",
+    "publicacion", "plantilla", "historial", "run",
 )
 
 

@@ -24,6 +24,7 @@ escritor distinto —otro proceso/daemon que comparte el volumen— se nota por 
 from __future__ import annotations
 
 import os
+import threading
 import tomllib
 from pathlib import Path
 
@@ -41,6 +42,9 @@ _CABECERA = (
 )
 
 # Cache de la ultima lectura, invalidada por (ruta, mtime). `_CACHE_MTIME = -1` => sin cache.
+# `_CACHE_LOCK` (reentrante) protege el estado de modulo del check-then-act de `leer()` y la
+# invalidacion de `_escribir()`: la cache la leen/escriben varios hilos (cada `config._crudo`).
+_CACHE_LOCK = threading.RLock()
 _CACHE_DATOS: dict[str, str] = {}
 _CACHE_RUTA: str | None = None
 _CACHE_MTIME: float = -1.0
@@ -90,17 +94,21 @@ def leer() -> dict[str, str]:
     try:
         mtime = ruta.stat().st_mtime
     except OSError:
-        # No existe: cachea vacio (mtime -1) para no golpear el disco en cada llamada.
-        if _CACHE_RUTA != ruta_str or _CACHE_MTIME != -1.0:
-            _CACHE_DATOS = {}
+        mtime = None
+    # check-then-act sobre el estado de modulo: atomico bajo lock (varios hilos lo tocan).
+    with _CACHE_LOCK:
+        if mtime is None:
+            # No existe: cachea vacio (mtime -1) para no golpear el disco en cada llamada.
+            if _CACHE_RUTA != ruta_str or _CACHE_MTIME != -1.0:
+                _CACHE_DATOS = {}
+                _CACHE_RUTA = ruta_str
+                _CACHE_MTIME = -1.0
+            return dict(_CACHE_DATOS)
+        if _CACHE_RUTA != ruta_str or _CACHE_MTIME != mtime:
+            _CACHE_DATOS = _leer_disco(ruta)
             _CACHE_RUTA = ruta_str
-            _CACHE_MTIME = -1.0
+            _CACHE_MTIME = mtime
         return dict(_CACHE_DATOS)
-    if _CACHE_RUTA != ruta_str or _CACHE_MTIME != mtime:
-        _CACHE_DATOS = _leer_disco(ruta)
-        _CACHE_RUTA = ruta_str
-        _CACHE_MTIME = mtime
-    return dict(_CACHE_DATOS)
 
 
 def _toml_str(valor: str) -> str:
@@ -124,7 +132,8 @@ def _escribir(datos: dict[str, str]) -> None:
         ruta_ajustes(), contenido, prefijo=".ajustes-", sufijo=".toml.tmp"
     )
     # Fuerza relectura en la proxima `leer()` (el mtime nuevo no siempre difiere al instante).
-    _CACHE_MTIME = -1.0
+    with _CACHE_LOCK:
+        _CACHE_MTIME = -1.0
 
 
 # --------------------------------------------------------------------------- #

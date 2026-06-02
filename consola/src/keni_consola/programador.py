@@ -301,6 +301,18 @@ def programar_pieza_metricool(
     dry_run = not config.publicar_real()
     marca_id = pub.get("marca") or ""
 
+    # GUARDA DE RE-PUBLICACION (solo camino REAL): el barrido automatico evita el doble envio
+    # via `preparado_en` (claim atomico), pero el boton manual no pasaba por ahi. Si la pieza
+    # YA fue publicada (tiene `id_post_metricool` o estado `publicado`), no la re-enviamos a
+    # Metricool. En dry-run NO bloqueamos: previsualizar el cuerpo de una pieza ya publicada
+    # es inofensivo y util.
+    if not dry_run and (pub.get("id_post_metricool") or pub.get("estado") == "publicado"):
+        return {
+            "ok": False,
+            "dry_run": dry_run,
+            "motivo": "Esta pieza ya fue publicada en Metricool; no se vuelve a publicar.",
+        }
+
     creds = _creds_metricool(marca_id)
     if not creds:
         return {
@@ -362,9 +374,17 @@ def preparar_vencidas(ahora: datetime | None = None) -> int:
     Lee SOLO las piezas en estado `programado` (filtro en el indice), no todo el catalogo.
     """
     ahora = ahora or datetime.now()
+    ts = ahora.isoformat(timespec="seconds")
     programadas = repos.listar_publicaciones(estado=ESTADO_PROGRAMADO)
     preparadas = 0
     for pub in piezas_vencidas(programadas, ahora):
+        # CLAIM ATOMICO antes de publicar: estampa `preparado_en` solo si nadie lo hizo ya
+        # (UPDATE condicional, ver `repos.reclamar_preparacion`). Sustituye el patron previo
+        # SELECT(`piezas_vencidas`)->UPDATE, que con >1 replica/barrido en paralelo podia
+        # preparar/publicar DOS veces la misma pieza. Solo el barrido que GANA el claim
+        # procede a `_preparar` (publicar real). Los demas la ven ya reclamada y la saltan.
+        if not repos.reclamar_preparacion(pub["id"], ts):
+            continue
         if _preparar(pub, ahora) is not None:
             preparadas += 1
     return preparadas

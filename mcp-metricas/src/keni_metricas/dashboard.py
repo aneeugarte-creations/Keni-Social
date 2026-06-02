@@ -695,7 +695,9 @@ def _render_engagement(
 
     # Ranking por marca, ordenado por engagement descendente. Las marcas sin
     # engagement comparable (None, #138) van al final con su sentinel -1.0.
-    filas = rep.get("cuentas") or []
+    # Defensivo: omite entradas sin `resumen` (p.ej. una fila cacheada incompleta)
+    # para no lanzar KeyError al ordenar/leer.
+    filas = [f for f in (rep.get("cuentas") or []) if f.get("resumen")]
     ordenadas = sorted(
         filas,
         key=lambda f: _eng_sortable(f["resumen"].get("engagement_pct")),
@@ -791,7 +793,9 @@ def _marca_top_engagement(rep: dict, nombres: dict[str, str]) -> str | None:
 
     None si no hay marcas. No escapa: lo hace el llamante al inyectarlo en HTML.
     """
-    filas = rep.get("cuentas") or []
+    # Defensivo: solo entradas con `resumen` (una fila cacheada incompleta sin
+    # resumen lanzaria KeyError al leer su engagement).
+    filas = [f for f in (rep.get("cuentas") or []) if f.get("resumen")]
     if not filas:
         return None
     mejor = max(filas, key=lambda f: _eng_sortable(f["resumen"].get("engagement_pct")))
@@ -847,7 +851,11 @@ def construir_html(
         else ""
     )
 
-    tarjetas = "".join(_render_tarjeta(f, nombres) for f in rep.get("cuentas", []))
+    # Defensivo: omite filas sin `resumen` (cacheadas incompletas) para que
+    # `_render_tarjeta` no lance KeyError al acceder a fila["resumen"].
+    tarjetas = "".join(
+        _render_tarjeta(f, nombres) for f in rep.get("cuentas", []) if f.get("resumen")
+    )
     engagement = _render_engagement(rep, nombres, rango_serie, historico)
     estrella = _render_estrella(rep, nombres)
     cta = _render_cta(rep, nombres)

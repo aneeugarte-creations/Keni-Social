@@ -418,6 +418,10 @@ def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list
         # Headless: sin esto `claude` no carga las skills del proyecto ni usa WebFetch/Bash
         # (no hay forma de aprobar el "trust"/permiso en `-p`). Acotado por cwd + topes.
         *stream.arg_skip_permisos(),
+        # Defensa en profundidad anti prompt-injection: veta herramientas peligrosas (por
+        # defecto `Bash`). Va DESPUES de skip-permisos para tener efecto. Ver
+        # `config.claude_disallowed_tools` y `dominio.generar.componer` (delimitador).
+        *stream.arg_tools_restringidas(),
         *preferencias.arg_esfuerzo(),
         *stream.arg_presupuesto(),
         *stream.arg_max_turns(),

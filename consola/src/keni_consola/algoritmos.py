@@ -23,9 +23,13 @@ su cobertura llega via los agregadores, no inventada.
 
 REUTILIZACION
 --------------------------------------------------------------------------------------
-La descarga/parseo/guard-SSRF se reusan TAL CUAL de `api.rss` (mismo `_DESCARGADOR`
-inyectable que los tests parchean para no tocar la red). La clasificacion vive aqui; la
-persistencia, en `repos`/`db` (tablas `fuentes_algoritmo` + `noticias_algoritmo`).
+La descarga/parseo/guard-SSRF viven en la infra `dominio.http_feed` (capa sin Starlette).
+La descarga es el punto INYECTABLE `_DESCARGADOR`; los tests lo parchean sobre `api.rss`
+(`monkeypatch.setattr(rss, "_DESCARGADOR", ...)`), que es el seam estable del proyecto,
+asi que la ingesta llama a `rss.leer_items_fuente` (re-export de `http_feed` que respeta
+ese parche). El TIPO de error controlado es `http_feed.RSSError` (re-exportado tambien
+como `rss.RSSError`: misma clase). La clasificacion vive aqui; la persistencia, en
+`repos`/`db` (tablas `fuentes_algoritmo` + `noticias_algoritmo`).
 """
 
 from __future__ import annotations
@@ -35,7 +39,8 @@ import unicodedata
 from typing import Any
 
 from . import repos
-from .api import rss
+from .api import rss  # seam de descarga inyectable (`rss._DESCARGADOR`); ver REUTILIZACION
+from .dominio import http_feed
 
 # --------------------------------------------------------------------------- #
 # Vocabulario controlado: plataformas, tipos de fuente, niveles                 #
@@ -218,10 +223,11 @@ def clasificar(item: dict[str, Any], fuente: dict[str, Any]) -> dict[str, Any]:
 def ingerir_fuente(fuente: dict[str, Any]) -> dict[str, int]:
     """Descarga, parsea, clasifica y PERSISTE las noticias de UNA fuente.
 
-    Reusa `rss.leer_items_fuente` (guard SSRF + `_DESCARGADOR` inyectable). Propaga
-    `rss.RSSError` si la URL ya no es valida, la descarga falla o el XML no parsea (el
-    llamante anota el error y la salud). Items sin `clave` estable se OMITEN (no se pueden
-    deduplicar). Devuelve `{insertadas, actualizadas, omitidas}`.
+    Reusa `rss.leer_items_fuente` (seam de descarga inyectable `rss._DESCARGADOR` + guard
+    SSRF de `http_feed`). Propaga `http_feed.RSSError` si la URL ya no es valida, la
+    descarga falla o el XML no parsea (el llamante anota el error y la salud). Items sin
+    `clave` estable se OMITEN (no se pueden deduplicar). Devuelve `{insertadas,
+    actualizadas, omitidas}`.
     """
     items = rss.leer_items_fuente(fuente)
     contador = {"insertadas": 0, "actualizadas": 0, "omitidas": 0}
@@ -277,7 +283,7 @@ def refrescar(solo_fuente: str | None = None) -> dict[str, Any]:
             repos.registrar_salud_fuente_algoritmo(
                 fuente["id"], conteo=cont["insertadas"] + cont["actualizadas"], error=""
             )
-        except rss.RSSError as e:
+        except http_feed.RSSError as e:
             repos.registrar_salud_fuente_algoritmo(fuente["id"], conteo=0, error=str(e))
             resumen["errores"].append(
                 {"fuente_id": fuente["id"], "fuente_nombre": fuente.get("nombre", ""), "error": str(e)}

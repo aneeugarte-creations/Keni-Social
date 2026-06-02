@@ -87,6 +87,34 @@ def test_argv_skip_permissions_desactivable_por_env(entorno, monkeypatch):
     assert "--dangerously-skip-permissions" not in generaciones._argv_claude("hola")
 
 
+def test_argv_veta_bash_por_defecto(entorno, monkeypatch):
+    # Defensa en profundidad anti prompt-injection EN LA RUTA VIVA del worker
+    # (`generaciones._argv_claude`): por defecto se veta `Bash` (ejecucion de comandos /
+    # exfiltracion de secretos), que ningun flujo de generacion necesita.
+    monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
+    argv = generaciones._argv_claude("hola")
+    assert "--disallowed-tools" in argv
+    i = argv.index("--disallowed-tools")
+    assert "Bash" in argv[i + 1 :]
+
+
+def test_argv_no_veta_web_por_defecto(entorno, monkeypatch):
+    # Web NO se veta por defecto: los prompts de investigacion (brief-tendencias /
+    # termometro-mundial) usan WebSearch/WebFetch y comparten este constructor de argv.
+    monkeypatch.delenv("KENI_CLAUDE_DISALLOWED_TOOLS", raising=False)
+    argv = generaciones._argv_claude("hola")
+    assert "WebFetch" not in argv
+    assert "WebSearch" not in argv
+
+
+def test_argv_disallowed_tools_endurecible_por_env(entorno, monkeypatch):
+    # Un operador puede endurecer el veto (p.ej. tambien Web) por entorno.
+    monkeypatch.setenv("KENI_CLAUDE_DISALLOWED_TOOLS", "Bash WebFetch WebSearch")
+    argv = generaciones._argv_claude("hola")
+    i = argv.index("--disallowed-tools")
+    assert {"Bash", "WebFetch", "WebSearch"} <= set(argv[i + 1 :])
+
+
 # --------------------------------------------------------------------------- #
 # argv de claude: --max-turns desde KENI_CLAUDE_MAX_TURNS (#103, F-T-01)        #
 # --------------------------------------------------------------------------- #

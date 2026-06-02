@@ -29,6 +29,12 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             return {"error": str(e)}
         if historico is not None:
             historico.aplicar_variacion(r)  # variacion REAL si hay periodo anterior
+            # NOTA "v1 solo lectura": esto SI escribe, pero NO a plataformas externas:
+            # es un snapshot en la cache LOCAL SQLite (historico.db, por persona) que
+            # alimenta la variacion y `tendencia_historica`. Es OPT-IN, controlada por
+            # el flag que ya existe (`KENI_METRICAS_HISTORICO`, ver historico.py): si
+            # esta desactivado, `historico` es None y no se guarda nada. Las redes
+            # siguen siendo solo lectura.
             historico.guardar(r)
         return r.model_dump(mode="json")
 
