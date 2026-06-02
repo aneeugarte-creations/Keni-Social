@@ -162,6 +162,45 @@ def _comparar_por_marca(rep_a: dict, rep_b: dict) -> list[dict]:
     return filas
 
 
+def _agregar_por_red(rep: dict) -> list[dict]:
+    """Agrega el `por_plataforma` de TODAS las cuentas del reporte, por red.
+
+    Suma `visualizaciones` e `interacciones`; el `alcance` suma solo los no-null y
+    queda `None` si NINGUNA cuenta mide esa red (criterio #138, igual que el `total`:
+    no se inventa un 0). El engagement se recalcula sobre los agregados de la red.
+    Devuelve las redes ordenadas por visualizaciones desc. La red se emite como id de
+    plataforma (el frontend lo traduce a nombre legible).
+    """
+    acc: dict[str, dict] = {}
+    for fila in rep.get("cuentas", []):
+        r = fila.get("resumen") or {}
+        for p in r.get("por_plataforma", []) or []:
+            red = p.get("plataforma", "")
+            d = acc.setdefault(
+                red, {"visualizaciones": 0, "alcance": None, "interacciones": 0}
+            )
+            d["visualizaciones"] += p.get("visualizaciones", 0) or 0
+            d["interacciones"] += p.get("interacciones", 0) or 0
+            alcance = p.get("alcance")
+            if alcance is not None:
+                d["alcance"] = (d["alcance"] or 0) + alcance
+    por_red = []
+    for red, d in acc.items():
+        vis = d["visualizaciones"]
+        inter = d["interacciones"]
+        por_red.append(
+            {
+                "red": red,
+                "visualizaciones": vis,
+                "alcance": d["alcance"],
+                "interacciones": inter,
+                "engagement_pct": round(inter / vis * 100, 1) if vis else 0.0,
+            }
+        )
+    por_red.sort(key=lambda x: x["visualizaciones"], reverse=True)
+    return por_red
+
+
 def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     """Forma JSON del reporte para el SPA: total + cuentas con nombres resueltos."""
     nombres = rep.get("nombres") or {}
@@ -179,6 +218,7 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
                 "engagement_pct": r.get("engagement_pct", 0.0),
             }
         )
+    por_red = _agregar_por_red(rep)
     t = rep.get("total") or {}
     return {
         "rango": rango,
@@ -195,6 +235,7 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
             "engagement_pct": t.get("engagement_pct", 0.0),
         },
         "cuentas": cuentas,
+        "por_red": por_red,
     }
 
 

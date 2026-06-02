@@ -78,6 +78,20 @@ export interface CuentaMetrica {
   engagement_pct: number;
 }
 /**
+ * Una red (plataforma) del reporte con sus métricas agregadas entre marcas.
+ *
+ * Agrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`
+ * es el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si
+ * NINGUNA cuenta mide esa red (#138: no se inventa un 0).
+ */
+export interface RedMetrica {
+  red: string;
+  visualizaciones: number;
+  alcance: number | null;
+  interacciones: number;
+  engagement_pct: number;
+}
+/**
  * Respuesta de `GET /api/metricas/reporte`.
  */
 export interface ReporteMetricas {
@@ -87,6 +101,7 @@ export interface ReporteMetricas {
   fuente: string;
   total: TotalMetricas;
   cuentas: CuentaMetrica[];
+  por_red: RedMetrica[];
   generado_en: string;
 }
 export interface ComparativaMetrica {

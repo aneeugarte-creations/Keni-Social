@@ -24,6 +24,7 @@ import { Kpis } from "./metricas/Kpis";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
 import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
 import { TablaCuentas } from "./metricas/TablaCuentas";
+import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
 
 /** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
@@ -161,7 +162,16 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <AnalisisDiario marcaActual={marca} rangoActual={rango} />
           <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
           <GraficaMarcas cuentas={reporteQuery.data.cuentas} />
-          <TablaCuentas cuentas={reporteQuery.data.cuentas} />
+          {/* Dos lecturas del mismo periodo: por marca (cada cuenta) y por red
+              (agregando las plataformas de todas las marcas del reporte). */}
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold tracking-tight">Por marca</h2>
+            <TablaCuentas cuentas={reporteQuery.data.cuentas} />
+          </div>
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold tracking-tight">Por red</h2>
+            <TablaRedes redes={reporteQuery.data.por_red} />
+          </div>
           <PiezasAnalitica opciones={opciones} rangoActual={rango} />
           {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
               BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}

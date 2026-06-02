@@ -288,6 +288,42 @@
         "engagement_pct"
       ]
     },
+    "RedMetrica": {
+      "type": "object",
+      "title": "RedMetrica",
+      "properties": {
+        "red": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "alcance": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        }
+      },
+      "description": "Una red (plataforma) del reporte con sus métricas agregadas entre marcas.\n\nAgrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`\nes el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si\nNINGUNA cuenta mide esa red (#138: no se inventa un 0).",
+      "required": [
+        "red",
+        "visualizaciones",
+        "alcance",
+        "interacciones",
+        "engagement_pct"
+      ]
+    },
     "ReporteMetricas": {
       "type": "object",
       "title": "ReporteMetricas",
@@ -313,6 +349,12 @@
             "$ref": "#/$defs/CuentaMetrica"
           }
         },
+        "por_red": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RedMetrica"
+          }
+        },
         "generado_en": {
           "type": "string"
         }
@@ -325,6 +367,7 @@
         "fuente",
         "total",
         "cuentas",
+        "por_red",
         "generado_en"
       ]
     },
@@ -2465,6 +2508,9 @@
     },
     {
       "$ref": "#/$defs/CuentaMetrica"
+    },
+    {
+      "$ref": "#/$defs/RedMetrica"
     },
     {
       "$ref": "#/$defs/ReporteMetricas"

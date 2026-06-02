@@ -31,6 +31,7 @@ export type {
   OpcionesMetricas,
   TotalMetricas,
   CuentaMetrica,
+  RedMetrica,
   ReporteMetricas,
   ComparativaMetrica,
   ComparativaPorMarca,

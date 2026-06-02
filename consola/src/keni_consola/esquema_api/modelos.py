@@ -120,6 +120,22 @@ class CuentaMetrica(TypedDict):
     engagement_pct: float
 
 
+class RedMetrica(TypedDict):
+    """Una red (plataforma) del reporte con sus métricas agregadas entre marcas.
+
+    Agrega el `por_plataforma` de TODAS las cuentas del reporte por plataforma. `red`
+    es el id de plataforma (el frontend lo traduce a nombre). `alcance` es `null` si
+    NINGUNA cuenta mide esa red (#138: no se inventa un 0).
+    """
+
+    red: str
+    visualizaciones: int
+    # alcance: None = ninguna cuenta mide alcance en esta red (no es 0 real).
+    alcance: int | None
+    interacciones: int
+    engagement_pct: float
+
+
 class ReporteMetricas(TypedDict):
     """Respuesta de `GET /api/metricas/reporte`."""
 
@@ -131,6 +147,9 @@ class ReporteMetricas(TypedDict):
     fuente: str
     total: TotalMetricas
     cuentas: list[CuentaMetrica]
+    # Las métricas agregadas POR RED (suma de todas las marcas del reporte por
+    # plataforma). Acotada a la marca seleccionada cuando el filtro está activo.
+    por_red: list[RedMetrica]
     # Cuándo se calculó este reporte (ISO). La UI lo muestra como "Actualizado hace X".
     # Sale de la cache de métricas (refresco en 2º plano + botón Actualizar).
     generado_en: str
@@ -967,6 +986,7 @@ MODELOS = [
     OpcionesMetricas,
     TotalMetricas,
     CuentaMetrica,
+    RedMetrica,
     ReporteMetricas,
     ComparativaMetrica,
     ComparativaPorMarca,
