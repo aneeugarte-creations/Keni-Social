@@ -103,7 +103,10 @@ MOTIVO_CANCELADO = "cancelado"
 MOTIVO_INTERRUMPIDO = "interrumpido"
 
 # Tipos de trabajo (para que el frontend sepa como renderizar el resultado).
-TIPOS = ("copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt")
+TIPOS = (
+    "copy", "rss", "hashtags", "imagen", "verificacion", "qa-editorial", "prompt",
+    "parrilla-import",
+)
 
 # Wall-timeout (segundos) de un trabajo de claude en background. Override por
 # `KENI_CLAUDE_TIMEOUT` (centralizado en `config.claude_timeout`). Sustituye al viejo
@@ -395,7 +398,12 @@ def reclamar_zombis(max_edad_seg: float, *, ahora: datetime | None = None) -> in
 Procesar = Callable[[str, Any], dict[str, Any]]
 
 
-def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list[str]:
+def _argv_claude(
+    prompt: str,
+    dirs_permitidos: list[Path] | None = None,
+    *,
+    endurecer: dict[str, Any] | None = None,
+) -> list[str]:
     """argv de `claude -p <prompt> --output-format stream-json --verbose
     --include-partial-messages [--effort N] [--max-budget-usd N] [--max-turns N]
     [--add-dir D ...]`.
@@ -412,10 +420,41 @@ def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list
 
     El presupuesto/max-turns salen del DOMINIO (`dominio.stream`), no de `api.skills`:
     asi `generaciones` ya no necesita el import perezoso que rompia el ciclo dominio↔API.
+
+    ENDURECIMIENTO POR JOB (`endurecer`): un job READ-ONLY (p.ej. la importacion de parrilla)
+    pasa overrides que ENDURECEN el argv para ESE run sin tocar la config global:
+      - `disallowed_tools`: lista de herramientas EXTRA a vetar (se UNE a la global; sirve
+        para prohibir Write/Edit/MCP de escritura en un job que solo debe LEER).
+      - `max_turns` / `max_budget_usd`: topes especificos (mas bajos) que SUSTITUYEN a los
+        globales para ese run. Se aplican solo si vienen; si no, se usan los globales.
+    Los overrides solo pueden ENDURECER (vetar mas, topar mas bajo), nunca relajar.
     """
+    endurecer = endurecer or {}
     extra: list[str] = []
     for d in dirs_permitidos or []:
         extra += ["--add-dir", str(d)]
+
+    # Herramientas vetadas: global (config) UNIDA a las extra del job (orden estable, sin dups).
+    vetadas_global = stream.arg_tools_restringidas()
+    tools_global = vetadas_global[1:] if vetadas_global else []
+    extra_tools = [str(t) for t in (endurecer.get("disallowed_tools") or []) if str(t)]
+    todas_tools: list[str] = []
+    for t in (*tools_global, *extra_tools):
+        if t not in todas_tools:
+            todas_tools.append(t)
+    arg_tools = ["--disallowed-tools", *todas_tools] if todas_tools else []
+
+    # Topes: override del job si viene; si no, el global del dominio.
+    if "max_turns" in endurecer and endurecer["max_turns"]:
+        arg_turns = ["--max-turns", str(int(endurecer["max_turns"]))]
+    else:
+        arg_turns = stream.arg_max_turns()
+    if "max_budget_usd" in endurecer and endurecer["max_budget_usd"]:
+        texto = f"{float(endurecer['max_budget_usd']):.10f}".rstrip("0").rstrip(".")
+        arg_budget = ["--max-budget-usd", texto]
+    else:
+        arg_budget = stream.arg_presupuesto()
+
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -423,12 +462,11 @@ def _argv_claude(prompt: str, dirs_permitidos: list[Path] | None = None) -> list
         # (no hay forma de aprobar el "trust"/permiso en `-p`). Acotado por cwd + topes.
         *stream.arg_skip_permisos(),
         # Defensa en profundidad anti prompt-injection: veta herramientas peligrosas (por
-        # defecto `Bash`). Va DESPUES de skip-permisos para tener efecto. Ver
-        # `config.claude_disallowed_tools` y `dominio.generar.componer` (delimitador).
-        *stream.arg_tools_restringidas(),
+        # defecto `Bash`, mas las extra del job). Va DESPUES de skip-permisos para tener efecto.
+        *arg_tools,
         *preferencias.arg_esfuerzo(),
-        *stream.arg_presupuesto(),
-        *stream.arg_max_turns(),
+        *arg_budget,
+        *arg_turns,
         *extra,
     ]
 
@@ -510,6 +548,7 @@ def lanzar_job_claude(
     procesar: Procesar,
     dir_temporal: Path | None = None,
     ya_admitido: bool = False,
+    endurecer: dict[str, Any] | None = None,
 ) -> None:
     """Lanza un trabajo de claude EN SEGUNDO PLANO (Popen + hilo lector). NO bloquea.
 
@@ -674,7 +713,11 @@ def lanzar_job_claude(
                     # Subproceso en SU PROPIO grupo (#137): al timeout/cancel matamos el
                     # ARBOL entero (`runner.matar_arbol`), no solo el padre.
                     proc = runner.lanzar_proc(
-                        _argv_claude(prompt, [dir_temporal] if dir_temporal else None),
+                        _argv_claude(
+                            prompt,
+                            [dir_temporal] if dir_temporal else None,
+                            endurecer=endurecer,
+                        ),
                         cwd=str(cwd),
                         env=_entorno_skill(),
                     )

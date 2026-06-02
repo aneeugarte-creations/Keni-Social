@@ -63,6 +63,37 @@ _MIME_A_EXT: dict[str, str] = {
 # Limite de tamano de una imagen subida o generada (bytes).
 LIMITE_IMAGEN = 15 * 1024 * 1024  # 15 MB
 
+# DOCUMENTOS (importacion de parrilla): tipos que un `claude -p` READ-ONLY puede leer del
+# documento subido (PDF, captura, Word, Excel, texto). NO afectan al camino de imagen (mimes
+# de imagen siguen yendo por `_MIME_A_EXT`). El limite es mayor (un PDF/escaneo pesa mas que
+# una imagen suelta) pero acotado para no permitir subidas enormes.
+LIMITE_DOCUMENTO = 25 * 1024 * 1024  # 25 MB
+
+# Mimes de documento aceptados -> extension canonica del archivo en el almacen.
+_MIME_A_EXT_DOC: dict[str, str] = {
+    "application/pdf": "pdf",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "text/plain": "txt",
+    "text/csv": "csv",
+}
+# Extensiones de documento aceptadas (subida por nombre cuando no hay content-type fiable).
+_EXT_DOC: frozenset[str] = frozenset(
+    {"pdf", "doc", "docx", "xls", "xlsx", "txt", "csv", *_MIME_A_EXT_DOC.values()}
+)
+# Mimes que se sirven con un content-type util (el resto, octet-stream).
+_EXT_A_MIME_DOC: dict[str, str] = {
+    "pdf": "application/pdf",
+    "doc": "application/msword",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "xls": "application/vnd.ms-excel",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "txt": "text/plain; charset=utf-8",
+    "csv": "text/csv; charset=utf-8",
+}
+
 # Trozo de lectura al volcar a disco (medir tamano sin cargar todo en memoria).
 _TROZO = 1024 * 1024  # 1 MB
 
@@ -229,6 +260,80 @@ async def guardar_subida(archivo, *, content_type: str | None = None) -> str:  #
     except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
         raise MediaError("No se pudo guardar la imagen subida.") from e
     return nombre
+
+
+def _ext_doc_desde_content_type(content_type: str | None) -> str | None:
+    """Extension canonica de DOCUMENTO a partir del content-type; None si no es documento."""
+    if not content_type:
+        return None
+    base = content_type.split(";", 1)[0].strip().lower()
+    return _MIME_A_EXT_DOC.get(base)
+
+
+def _ext_doc_desde_nombre(nombre_cliente: str | None) -> str | None:
+    """Extension de DOCUMENTO a partir del nombre del cliente; None si no es aceptada."""
+    if not nombre_cliente:
+        return None
+    sufijo = Path(nombre_cliente).suffix.lower().lstrip(".")
+    if _RE_EXT.match(sufijo) and sufijo in _EXT_DOC:
+        return sufijo
+    return None
+
+
+async def guardar_documento_subido(
+    archivo, *, content_type: str | None = None
+) -> tuple[str, str]:  # noqa: ANN001
+    """Vuelca un `UploadFile` de DOCUMENTO (PDF/imagen/docx/xlsx/txt/csv) al almacen de media.
+
+    Camino PARALELO a `guardar_subida` (NO lo modifica): la importacion de parrilla acepta MAS
+    tipos (documentos y tambien imagenes/capturas) y un limite mayor (`LIMITE_DOCUMENTO`). El
+    NOMBRE del objeto lo generamos (uuid + extension canonica); NUNCA el del cliente. Lee en
+    trozos midiendo el tamano y aborta si supera el limite. Devuelve `(nombre_objeto, ext)`.
+    Lanza `MediaError` (en espanol) ante tipo no permitido, archivo vacio o demasiado grande.
+    """
+    ct = content_type if content_type is not None else getattr(archivo, "content_type", None)
+    nombre_cli = getattr(archivo, "filename", None)
+    # Acepta imagen (mismo mapa que las fotos) O documento. Imagen primero por compatibilidad.
+    ext = (
+        _ext_desde_content_type(ct)
+        or _ext_doc_desde_content_type(ct)
+        or _ext_desde_nombre(nombre_cli)
+        or _ext_doc_desde_nombre(nombre_cli)
+    )
+    if ext is None:
+        raise MediaError(
+            "Tipo de archivo no admitido. Sube un PDF, imagen, Word, Excel o texto."
+        )
+
+    trozos: list[bytes] = []
+    total = 0
+    try:
+        while True:
+            trozo = await archivo.read(_TROZO)
+            if not trozo:
+                break
+            total += len(trozo)
+            if total > LIMITE_DOCUMENTO:
+                raise MediaError(
+                    "El archivo es demasiado grande (máximo 25 MB); sube uno más pequeño."
+                )
+            trozos.append(trozo)
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- cualquier fallo de E/S: reporta en espanol
+        raise MediaError("No se pudo guardar el documento subido.") from e
+    if total == 0:
+        raise MediaError("El documento está vacío.")
+    datos = b"".join(trozos)
+    nombre = f"{uuid.uuid4().hex}.{ext}"
+    mime = _EXT_A_MIME.get(ext) or _EXT_A_MIME_DOC.get(ext) or "application/octet-stream"
+    try:
+        almacen_media.guardar_objeto(nombre, datos, content_type=mime)
+    except MediaError:
+        raise
+    except Exception as e:  # noqa: BLE001 -- fallo del backend (disco/S3): reporta en espanol
+        raise MediaError("No se pudo guardar el documento subido.") from e
+    return nombre, ext
 
 
 def guardar_bytes(datos: bytes, *, ext: str = "png") -> str:

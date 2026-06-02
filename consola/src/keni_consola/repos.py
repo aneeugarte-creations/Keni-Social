@@ -1797,3 +1797,57 @@ def guardar_franjas_config(
     return db.guardar_franjas_config(
         matutino_inicio, matutino_fin, vespertino_inicio, vespertino_fin
     )
+
+
+# --------------------------------------------------------------------------- #
+# PARRILLA: propuestas de importacion desde documento                          #
+# --------------------------------------------------------------------------- #
+
+
+def crear_propuesta_parrilla(
+    *,
+    semana: str,
+    doc_nombre: str,
+    doc_tipo: str = "",
+    gen_id: str = "",
+    autor_id: str = "",
+    autor_nombre: str = "",
+    estado: str = "generando",
+) -> dict[str, Any]:
+    return db.crear_propuesta_parrilla(
+        semana=semana,
+        doc_nombre=doc_nombre,
+        doc_tipo=doc_tipo,
+        gen_id=gen_id,
+        autor_id=autor_id,
+        autor_nombre=autor_nombre,
+        estado=estado,
+    )
+
+
+def obtener_propuesta_parrilla(propuesta_id: str) -> dict[str, Any] | None:
+    return db.obtener_propuesta_parrilla(propuesta_id)
+
+
+def listar_propuestas_parrilla(
+    *, estado: str | None = None, limite: int = 100
+) -> list[dict[str, Any]]:
+    return db.listar_propuestas_parrilla(estado=estado, limite=limite)
+
+
+def actualizar_propuesta_parrilla(
+    propuesta_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    return db.actualizar_propuesta_parrilla(propuesta_id, campos)
+
+
+def aplicar_propuesta_parrilla(
+    propuesta_id: str,
+    operaciones: list[dict[str, Any]],
+    *,
+    nombres_miembros: dict[str, str],
+    origen: str = "import-doc",
+) -> dict[str, Any]:
+    return db.aplicar_propuesta_parrilla(
+        propuesta_id, operaciones, nombres_miembros=nombres_miembros, origen=origen
+    )

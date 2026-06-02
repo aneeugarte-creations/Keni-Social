@@ -6,7 +6,6 @@ import {
   CalendarDays,
   CalendarOff,
   CalendarPlus,
-  Camera,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -22,7 +21,6 @@ import {
   Pencil,
   Plane,
   Plus,
-  Radio,
   Search,
   Send,
   Shield,
@@ -81,6 +79,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
+import {
+  COBERTURA,
+  COLOR_PRIORIDAD,
+  diaCorto,
+  esFinDeSemana,
+  formatearRango,
+  iso,
+  lunesDeSemana,
+  lunesSiguiente,
+} from "@/lib/rota-calendario";
+import { ImportarDocumentoParrilla } from "@/components/parrilla/ImportarDocumentoParrilla";
 import { cn } from "@/lib/utils";
 import type {
   AusenciaRota,
@@ -136,31 +145,9 @@ const ETIQUETA_FRANJA: Record<FranjaTurno, string> = {
   descanso: "Descanso",
 };
 
-// Presentación de cada tipo de cobertura: etiqueta, icono y clases de color (chips/leyenda).
-// Tropicalización MX y consistente con la voz del producto (Elías decide qué se cubre).
-const COBERTURA: Record<
-  TipoCoberturaEvento,
-  { etiqueta: string; icono: typeof Radio; chip: string; punto: string }
-> = {
-  transmision: {
-    etiqueta: "Transmisión",
-    icono: Radio,
-    chip: "border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300",
-    punto: "bg-sky-500",
-  },
-  imagenes: {
-    etiqueta: "Solo imágenes",
-    icono: Camera,
-    chip: "border-violet-300 bg-violet-50 text-violet-800 dark:border-violet-800 dark:bg-violet-950/40 dark:text-violet-300",
-    punto: "bg-violet-500",
-  },
-  no_cubrir: {
-    etiqueta: "No cubrir",
-    icono: CalendarOff,
-    chip: "border-zinc-300 bg-zinc-100 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-400",
-    punto: "bg-zinc-400",
-  },
-};
+// `COBERTURA` (presentación por tipo de cobertura) y `COLOR_PRIORIDAD` viven en
+// `@/lib/rota-calendario` como única fuente de verdad (los reusa la previsualización
+// de import para verse idéntica al calendario real).
 
 const TIPOS_COBERTURA: { valor: TipoCoberturaEvento; etiqueta: string }[] = [
   { valor: "transmision", etiqueta: "Transmisión (con señal)" },
@@ -173,13 +160,6 @@ const PRIORIDADES: { valor: PrioridadEvento; etiqueta: string }[] = [
   { valor: "media", etiqueta: "Media" },
   { valor: "baja", etiqueta: "Baja" },
 ];
-
-// Color del texto de la prioridad (sutil; la alta resalta).
-const COLOR_PRIORIDAD: Record<PrioridadEvento, string> = {
-  alta: "text-red-600 dark:text-red-400",
-  media: "text-muted-foreground",
-  baja: "text-muted-foreground",
-};
 
 const TIPOS_AUSENCIA: { valor: TipoAusencia; etiqueta: string }[] = [
   { valor: "vacaciones", etiqueta: "Vacaciones" },
@@ -222,33 +202,10 @@ function mensajeError(error: unknown): string {
 }
 
 // --- Utilidades de fechas (semana lunes->domingo) --------------------------
-
-/** Lunes (ISO AAAA-MM-DD) de la semana que contiene `d`. */
-function lunesDeSemana(d: Date): string {
-  const copia = new Date(d);
-  const dia = (copia.getDay() + 6) % 7; // lunes=0 ... domingo=6
-  copia.setDate(copia.getDate() - dia);
-  return iso(copia);
-}
-
-function iso(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
-
-function lunesSiguiente(lunesIso: string, semanas: number): string {
-  const d = new Date(`${lunesIso}T00:00:00`);
-  d.setDate(d.getDate() + semanas * 7);
-  return lunesDeSemana(d);
-}
-
-function formatearRango(inicio: string, fin: string): string {
-  if (!inicio || !fin) return "";
-  const fmt = (s: string) =>
-    new Date(`${s}T00:00:00`).toLocaleDateString("es-MX", { day: "numeric", month: "short" });
-  return `${fmt(inicio)} – ${fmt(fin)}`;
-}
+//
+// `lunesDeSemana`, `iso`, `lunesSiguiente`, `formatearRango`, `diaCorto` y
+// `esFinDeSemana` viven en `@/lib/rota-calendario` (única fuente de verdad, reusada
+// por la previsualización de import). Aquí solo queda lo específico de esta página.
 
 function formatearFechaCorta(s: string): string {
   if (!s) return "";
@@ -1090,6 +1047,9 @@ function Calendario({
               )}
               Despublicar
             </Button>
+          )}
+          {esAdmin && (
+            <ImportarDocumentoParrilla semanaEnVista={lunes} onAplicado={invalidar} />
           )}
           <MenuMasAcciones
             esAdmin={esAdmin}
@@ -2533,18 +2493,7 @@ function ListaMisTurnos({ turnos }: { turnos: TurnoRota[] }) {
 
 // --- Día de la semana + utilidades de fecha ---------------------------------
 
-function diaCorto(fechaIso: string): string {
-  const d = new Date(`${fechaIso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("es-MX", { weekday: "short" });
-}
-
-function esFinDeSemana(fechaIso: string): boolean {
-  const d = new Date(`${fechaIso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return false;
-  const dia = d.getDay();
-  return dia === 0 || dia === 6;
-}
+// `diaCorto` y `esFinDeSemana` se movieron a `@/lib/rota-calendario`.
 
 // --- Dialog "Configurar franjas" (solo admin) -------------------------------
 //

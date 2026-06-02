@@ -2185,6 +2185,112 @@ export interface RespuestaCargaRota {
   miembros: CargaMiembroRota[];
 }
 
+// --- Importar documento a la parrilla (turnos + eventos) ---
+//
+// Flujo: el usuario sube un documento (PDF/imagen/docx/xlsx/txt) + la semana destino;
+// un `claude -p` lo analiza en 2º plano y produce una PROPUESTA: un diff de operaciones
+// que, al aceptarse, se mergea sobre el calendario real. La propuesta se SONDEA hasta que
+// `estado != "generando"`; en estado `pendiente` se previsualiza superpuesta al calendario.
+
+/** Estado del ciclo de vida de una propuesta de import. */
+export type EstadoPropuestaParrilla =
+  | "generando"
+  | "pendiente"
+  | "aplicada"
+  | "descartada"
+  | "error";
+
+/** Crear un evento del calendario (verde = nuevo). */
+export interface OperacionCrearEvento {
+  tipo: "crear_evento";
+  /** `true` si el server detectó un conflicto con el calendario actual (rojo). */
+  conflicto: boolean;
+  /** ISO (AAAA-MM-DD). */
+  fecha: string;
+  hora: string;
+  titulo: string;
+  contenido?: string;
+  nota?: string;
+  tipo_cobertura?: TipoCoberturaEvento;
+  prioridad?: PrioridadEvento;
+}
+
+/** Crear un turno (persona × día × franja) (verde = nuevo). */
+export interface OperacionCrearTurno {
+  tipo: "crear_turno";
+  conflicto: boolean;
+  /** ISO (AAAA-MM-DD). */
+  fecha: string;
+  franja_id: string;
+  miembro_id: string;
+  miembro_nombre: string;
+  nota_relevo?: string;
+  motivo?: string;
+}
+
+/** Modificar un turno existente (ámbar = cambio). Trae los valores actuales de la fila. */
+export interface OperacionModificarTurno {
+  tipo: "modificar_turno";
+  conflicto: boolean;
+  turno_id: string;
+  /** Campos a cambiar (parcial). */
+  cambios: Partial<CuerpoActualizarTurnoRota> & Record<string, unknown>;
+  /** Valores actuales de la fila referenciada (para mostrar el "antes"). */
+  actual: Partial<TurnoRota> & Record<string, unknown>;
+}
+
+/** Una operación propuesta del diff. El `tipo` discrimina la forma. */
+export type OperacionPropuesta =
+  | OperacionCrearEvento
+  | OperacionCrearTurno
+  | OperacionModificarTurno;
+
+/** Una propuesta de import: el diff staged que produjo el `claude -p`. */
+export interface PropuestaParrilla {
+  id: string;
+  estado: EstadoPropuestaParrilla;
+  /** Lunes ISO de la semana destino. */
+  semana: string;
+  /** Resumen legible de lo que propone (lo emite el modelo). */
+  resumen: string;
+  /** Mensaje de error legible cuando `estado === "error"`. */
+  error: string;
+  operaciones: OperacionPropuesta[];
+  /** Id de la generación `claude -p` que la produjo (opcional). */
+  gen_id?: string;
+  /** Nombre del objeto en el almacén de media (uuid+ext; NO es el nombre original). Opcional. */
+  doc_nombre?: string;
+  /** Extensión/tipo del documento subido (p.ej. "pdf"). Opcional. */
+  doc_tipo?: string;
+  /** ISO de creación (para ordenar la lista de pendientes). Opcional. */
+  creado?: string;
+}
+
+/** Respuesta de `POST /api/parrilla/importar`. */
+export interface RespuestaImportarParrilla {
+  propuesta_id: string;
+  gen_id: string;
+}
+
+/** Respuesta de `GET /api/parrilla/propuestas`. */
+export interface RespuestaPropuestasParrilla {
+  propuestas: PropuestaParrilla[];
+}
+
+/**
+ * Payload de un 409 al aplicar: el calendario cambió desde que se generó la propuesta.
+ * Best-effort: solo nos importa mostrar el mensaje y que el usuario reabra/refresque.
+ */
+export interface ConflictoAplicarParrilla {
+  /** El backend manda la clave `error`; `mensaje` se mantiene por compatibilidad. */
+  mensaje?: string;
+  error?: string;
+  /** Operaciones que chocan con una celda ocupada / turno desaparecido. */
+  conflictos?: OperacionPropuesta[];
+  /** Errores de re-validación contra el estado vivo (índice + motivo). */
+  errores?: { indice: number; error: string }[];
+}
+
 // --- Metricas ---
 //
 // Los tipos de métricas (`RangoMetrica`, `OpcionesMetricas`, `TotalMetricas`,

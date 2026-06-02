@@ -51,6 +51,10 @@ PROC_QA = "qa"
 # Biblioteca de prompts: post-procesado IDENTIDAD. Un prompt de la biblioteca devuelve el
 # texto markdown tal cual (ya queda en `salida` del registro); NO crea piezas/publicaciones.
 PROC_PROMPT = "prompt"
+# Importacion de PARRILLA desde documento: parsea el JSON de claude, re-construye el contexto
+# de la semana desde la BD, valida con `dominio.parrilla_import` y guarda las operaciones +
+# resumen en la fila `parrilla_propuesta` (estado pendiente | error). NO toca el calendario.
+PROC_PARRILLA_IMPORT = "parrilla-import"
 
 
 def _autor_spec(autor: dict[str, str] | None) -> dict[str, str] | None:
@@ -178,21 +182,47 @@ def construir_prompt_lib() -> dict[str, Any]:
     return {"kind": PROC_PROMPT}
 
 
+def construir_parrilla_import(*, propuesta_id: str, semana: str) -> dict[str, Any]:
+    """Spec del post-procesado de la IMPORTACION de parrilla (#parrilla-import).
+
+    `propuesta_id` es la fila `parrilla_propuesta` a actualizar; `semana` (lunes ISO) es la
+    semana objetivo contra la que se re-construye el contexto y se validan las operaciones.
+    """
+    return {
+        "kind": PROC_PARRILLA_IMPORT,
+        "propuesta_id": propuesta_id,
+        "semana": semana,
+    }
+
+
 def construir(
     *,
     prompt: str,
     procesar: dict[str, Any],
     cwd_kind: str = CWD_GENERACION,
     dir_temporal: str | None = None,
+    endurecer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal)."""
+    """Arma el spec completo de un job (prompt + cwd + post-procesado + temporal).
+
+    `endurecer` (opcional): overrides de seguridad para ESE run (herramientas vetadas extra,
+    max-turns/max-budget mas bajos). Solo ENDURECEN; ausente = comportamiento global. Lo usa
+    un job READ-ONLY como la importacion de parrilla (vetar Write/Edit/Bash/MCP de escritura).
+    """
     return {
         "version": VERSION,
         "prompt": prompt,
         "cwd_kind": cwd_kind,
         "dir_temporal": dir_temporal,
         "procesar": procesar,
+        "endurecer": endurecer or None,
     }
+
+
+def endurecer(spec: dict[str, Any]) -> dict[str, Any] | None:
+    """Overrides de endurecimiento del run (o None). El worker los pasa a `lanzar_job_claude`."""
+    e = spec.get("endurecer")
+    return e if isinstance(e, dict) and e else None
 
 
 def serializar(spec: dict[str, Any]) -> str:
@@ -264,6 +294,14 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
         def procesar(salida: str, _metricas: object) -> dict[str, object]:
             return {"hashtags": dom_hashtags.parsear_hashtags(salida)}
         return procesar
+
+    if kind == PROC_PARRILLA_IMPORT:
+        # Import perezoso: el factory toca BD (`repos`), no cabe en este modulo de dominio puro.
+        from . import parrilla_import_job
+
+        return parrilla_import_job.construir_procesar_parrilla_import(
+            propuesta_id=p["propuesta_id"], semana=p.get("semana", "")
+        )
 
     if kind == PROC_QA:
         return dom_qa.construir_procesar_qa(

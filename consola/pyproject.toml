@@ -17,6 +17,11 @@ dependencies = [
     "uvicorn>=0.31.1",
     # Backend de ficheros: el contenido vive en YAML por marca (fuente de verdad).
     "PyYAML>=6",
+    # Validacion estricta del JSON que propone `claude -p` al importar la parrilla desde un
+    # documento (dominio.parrilla_import: union discriminada por `tipo`). Hoy entraria
+    # transitivo por keni-metricas, pero lo fijamos EXPLICITO: lo usamos DIRECTAMENTE en el
+    # back/worker y no debe depender de un transitivo que pueda cambiar.
+    "pydantic>=2.6",
     # Render del deck semanal de deportes (reporte_deck). En keni-metricas es un
     # extra opcional; la consola SI lo necesita, asi que lo fija como dependencia:
     # python-pptx para el .pptx y reportlab para el PDF NATIVO (sin LibreOffice, #141).

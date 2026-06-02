@@ -212,6 +212,10 @@ import type {
   FiltrosSwaps,
   RespuestaSwap,
   RespuestaSwaps,
+  EstadoPropuestaParrilla,
+  PropuestaParrilla,
+  RespuestaImportarParrilla,
+  RespuestaPropuestasParrilla,
   CuerpoActualizarSugerencia,
   CuerpoCrearSugerencia,
   CuerpoActualizarComercial,
@@ -1497,6 +1501,41 @@ export const api = {
     peticion<RespuestaSwap>(`/rota/swaps/${encodeURIComponent(id)}/cancelar`, {
       metodo: "POST",
       signal,
+    }),
+
+  // --- Importar documento a la parrilla (turnos + eventos) ---
+  // Sube un documento (PDF/imagen/docx/xlsx/txt) + la semana destino; un `claude -p`
+  // lo analiza en 2º plano y produce una PROPUESTA (diff de operaciones) que se SONDEA
+  // por su propio estado (`/parrilla/propuestas/{id}`) hasta `estado != "generando"`.
+  // Aceptar mergea sobre el calendario real; descartar la archiva.
+  importarParrilla: (archivo: File, semana: string) => {
+    const form = new FormData();
+    form.set("archivo", archivo);
+    form.set("semana", semana);
+    return peticion<RespuestaImportarParrilla>("/parrilla/importar", {
+      metodo: "POST",
+      form,
+    });
+  },
+  propuestasParrilla: (
+    params: { estado?: EstadoPropuestaParrilla } = {},
+    signal?: AbortSignal,
+  ) =>
+    peticion<RespuestaPropuestasParrilla>(
+      `/parrilla/propuestas${query({ estado: params.estado })}`,
+      { signal },
+    ),
+  propuestaParrilla: (id: string, signal?: AbortSignal) =>
+    peticion<PropuestaParrilla>(`/parrilla/propuestas/${encodeURIComponent(id)}`, {
+      signal,
+    }),
+  aplicarPropuestaParrilla: (id: string) =>
+    peticion<RespuestaMensaje>(`/parrilla/propuestas/${encodeURIComponent(id)}/aplicar`, {
+      metodo: "POST",
+    }),
+  descartarPropuestaParrilla: (id: string) =>
+    peticion<RespuestaMensaje>(`/parrilla/propuestas/${encodeURIComponent(id)}/descartar`, {
+      metodo: "POST",
     }),
 
   // --- Metricas ---

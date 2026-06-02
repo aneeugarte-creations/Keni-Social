@@ -117,6 +117,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         cwd = jobspec.cwd(spec)
         dir_temporal = jobspec.dir_temporal(spec)
         prompt = spec.get("prompt", "")
+        endurecer = jobspec.endurecer(spec)
     except Exception:  # noqa: BLE001 -- spec mal formado: error claro, sin traceback al cliente
         _log.exception("worker: no se pudo reconstruir el job %s (gen %s)", job_id, gen_id)
         _finalizar_error(gen_id, "No se pudo iniciar la generación.")
@@ -138,7 +139,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         # vuelve; esperamos al estado terminal del registro para marcar el job terminado.
         generaciones.lanzar_job_claude(
             gen_id, prompt=prompt, cwd=cwd, procesar=procesar,
-            dir_temporal=dir_temporal, ya_admitido=True,
+            dir_temporal=dir_temporal, ya_admitido=True, endurecer=endurecer,
         )
         _esperar_terminal(gen_id)
     finally:

@@ -143,11 +143,15 @@ def lanzar(
     procesar_spec: dict[str, Any],
     dir_temporal: Path | None = None,
     autor: dict[str, str] | None = None,
+    endurecer: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Crea el registro de generación, ENCOLA el trabajo y devuelve el registro (para sondeo).
 
     El back solo ENCOLA (responde al instante); un WORKER clava el job y corre `claude -p`
     con cwd NEUTRO. Maneja `ColaLlenaError` (la propaga -> 429 central) y limpia el temporal.
+
+    `endurecer` (opcional): overrides de seguridad para ESE run (vetar herramientas extra,
+    topar turnos/coste mas bajo). Lo usa un job READ-ONLY como la importacion de parrilla.
     """
     import shutil
 
@@ -162,6 +166,7 @@ def lanzar(
         procesar=procesar_spec,
         cwd_kind=jobspec.CWD_GENERACION,
         dir_temporal=str(dir_temporal) if dir_temporal is not None else None,
+        endurecer=endurecer,
     )
     try:
         generaciones.encolar_job_claude(

@@ -397,7 +397,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         prioridad      TEXT NOT NULL DEFAULT 'media',
         cambiado       INTEGER NOT NULL DEFAULT 0,
         actualizado    TEXT NOT NULL DEFAULT '',
-        creado         TEXT NOT NULL DEFAULT ''
+        creado         TEXT NOT NULL DEFAULT '',
+        origen         TEXT NOT NULL DEFAULT '',
+        origen_ref     TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_eventos_fecha ON rota_eventos (fecha)",
@@ -451,7 +453,9 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         motivo         TEXT NOT NULL DEFAULT '',
         nota_relevo    TEXT NOT NULL DEFAULT '',
         creado         TEXT NOT NULL DEFAULT '',
-        actualizado    TEXT NOT NULL DEFAULT ''
+        actualizado    TEXT NOT NULL DEFAULT '',
+        origen         TEXT NOT NULL DEFAULT '',
+        origen_ref     TEXT NOT NULL DEFAULT ''
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_turnos_semana ON rota_turnos (semana)",
@@ -762,6 +766,38 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_rota_coord_lunes ON rota_coordinacion (lunes)",
     "CREATE INDEX IF NOT EXISTS idx_rota_coord_franja ON rota_coordinacion (franja_id)",
+    # PROPUESTA de importacion de la parrilla desde un documento (PDF/imagen/docx/xlsx/txt).
+    # El usuario suelta un documento; un `claude -p` READ-ONLY lo lee y PROPONE operaciones
+    # (eventos/turnos nuevos, modificaciones) como JSON. La propuesta se ESTACIONA aqui (NO se
+    # aplica): el frontend la previsualiza sobre el calendario real y, al aceptar, el back
+    # aplica el diff en UNA transaccion. Claude NUNCA escribe en el calendario.
+    #   - `estado`: generando|pendiente|aplicada|descartada|error (ver dominio.parrilla_import).
+    #   - `doc_nombre`: KEY del objeto en el almacen de media (el documento subido).
+    #   - `semana`: lunes ISO de la semana objetivo (todas las ops caen en ella).
+    #   - `gen_id`: id del registro de generacion (el job de claude que la produjo).
+    #   - `operaciones`: lista JSON de operaciones VALIDADAS (NULL hasta que el job termina).
+    #     Se guarda como TEXT/JSON serializado (mismo patron que el resto de columnas JSON del
+    #     esquema, portable desde la era SQLite; la app (de)serializa con json.dumps/loads).
+    """
+    CREATE TABLE IF NOT EXISTS parrilla_propuesta (
+        id            TEXT PRIMARY KEY,
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'generando',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        doc_nombre    TEXT NOT NULL DEFAULT '',
+        doc_tipo      TEXT NOT NULL DEFAULT '',
+        semana        TEXT NOT NULL DEFAULT '',
+        gen_id        TEXT NOT NULL DEFAULT '',
+        operaciones   TEXT NOT NULL DEFAULT '',
+        resumen       TEXT NOT NULL DEFAULT '',
+        error         TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_estado ON parrilla_propuesta (estado)",
+    "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_semana ON parrilla_propuesta (semana)",
+    "CREATE INDEX IF NOT EXISTS idx_parrilla_propuesta_gen ON parrilla_propuesta (gen_id)",
     # Cola de jobs de generacion (#130 Fase 2 / ADR 0002 Fase B): el back ENCOLA y un
     # WORKER (in-proceso en local, servicio aparte en hosted) los CLAVA y ejecuta `claude
     # -p`. La fila es el "sobre" de despacho: `gen_id` es el registro de generacion
@@ -1142,6 +1178,7 @@ def _crear_esquema(con: Any) -> None:
     for sentencia in _DDL_ESQUEMA:
         con.execute(sentencia)
     _migrar_columnas_eventos_rota(con)
+    _migrar_columnas_turnos_rota(con)
     _migrar_columnas_piezas_rota(con)
     _migrar_columnas_contenido(con)
     _migrar_columnas_aprobaciones(con)
@@ -1673,12 +1710,38 @@ def _migrar_modelo_franjas(con: Any) -> None:
 #   - cambiado: 0/1, "se reprogramo, hay que avisar"; legado -> 0 (sin reprogramar).
 #   - actualizado: timestamp de la ultima edicion; legado -> "" (nunca editado tras migrar).
 # Cada par es (columna, fragmento de tipo/DEFAULT) para emitir el ALTER correcto.
+#   - origen/origen_ref: PROVENANCE de las filas creadas por la importacion de documentos
+#     (`dominio.parrilla_import.ORIGEN == 'import-doc'`, `origen_ref` = id de la propuesta).
+#     Legado -> "" (alta manual / migracion). Permite auditar y, en el futuro, deshacer.
 _COLUMNAS_EVENTO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("tipo_cobertura", "TEXT NOT NULL DEFAULT 'transmision'"),
     ("prioridad", "TEXT NOT NULL DEFAULT 'media'"),
     ("cambiado", "INTEGER NOT NULL DEFAULT 0"),
     ("actualizado", "TEXT NOT NULL DEFAULT ''"),
+    ("origen", "TEXT NOT NULL DEFAULT ''"),
+    ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
 )
+
+# Columnas de PROVENANCE que se anaden a `rota_turnos` para bases viejas (idempotente; el DDL
+# declarativo ya las trae en bases nuevas). Mismo patron que `_COLUMNAS_EVENTO_ROTA_AMPLIADAS`.
+_COLUMNAS_TURNO_ROTA_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("origen", "TEXT NOT NULL DEFAULT ''"),
+    ("origen_ref", "TEXT NOT NULL DEFAULT ''"),
+)
+
+
+def _migrar_columnas_turnos_rota(con: Any) -> None:
+    """Anade a `rota_turnos` las columnas de provenance (origen/origen_ref) si faltaran.
+
+    Idempotente: una BD nueva ya las trae por el DDL declarativo; una vieja las recibe con
+    DEFAULT '' sin reescribir nada (las filas existentes quedan como alta manual).
+    """
+    if not _COLUMNAS_TURNO_ROTA_AMPLIADAS:
+        return
+    columnas = _columnas_existentes(con, "rota_turnos")
+    for columna, tipo in _COLUMNAS_TURNO_ROTA_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE rota_turnos ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 def _migrar_columnas_eventos_rota(con: Any) -> None:
@@ -7939,3 +8002,315 @@ def quitar_coordinador_rota(fecha: str, franja_id: str) -> bool:
         return cur.rowcount > 0
     finally:
         con.close()
+
+
+# --------------------------------------------------------------------------- #
+# PARRILLA: propuestas de importacion desde documento (#parrilla-import)        #
+# --------------------------------------------------------------------------- #
+#
+# Una `parrilla_propuesta` es el resultado ESTACIONADO de un `claude -p` que leyo un documento
+# y propuso operaciones (eventos/turnos nuevos, modificaciones). NO se aplica hasta que el
+# usuario acepta: entonces `aplicar_propuesta_parrilla` aplica TODO el diff en UNA transaccion
+# reusando las MISMAS tablas (`rota_eventos`/`rota_turnos`) que los endpoints de la rota.
+
+_COLS_PROPUESTA = (
+    "id",
+    "creado",
+    "actualizado",
+    "estado",
+    "autor_id",
+    "autor_nombre",
+    "doc_nombre",
+    "doc_tipo",
+    "semana",
+    "gen_id",
+    "operaciones",
+    "resumen",
+    "error",
+)
+_SELECT_PROPUESTA = f"SELECT {', '.join(_COLS_PROPUESTA)} FROM parrilla_propuesta"
+
+# Campos editables via `actualizar_propuesta_parrilla` (allowlist). `id`/`creado` no se tocan;
+# `actualizado` lo gestiona el sistema.
+_CAMPOS_EDITABLES_PROPUESTA: tuple[str, ...] = (
+    "estado",
+    "operaciones",
+    "resumen",
+    "error",
+    "doc_nombre",
+    "doc_tipo",
+    "gen_id",
+)
+
+
+def _fila_a_propuesta(fila: Any) -> dict[str, Any]:
+    """Fila de `parrilla_propuesta` -> dict publico. `operaciones` se deserializa de JSON.
+
+    `operaciones` vive como TEXT JSON ("" si el job aun no termino); lo exponemos como lista
+    (o None si esta vacio) para que la API no tenga que (de)serializar.
+    """
+    p = {col: fila[col] for col in _COLS_PROPUESTA}
+    crudo = p.get("operaciones") or ""
+    if crudo:
+        try:
+            cargado = json.loads(crudo)
+            p["operaciones"] = cargado if isinstance(cargado, list) else None
+        except (json.JSONDecodeError, ValueError):
+            p["operaciones"] = None
+    else:
+        p["operaciones"] = None
+    return p
+
+
+def crear_propuesta_parrilla(
+    *,
+    semana: str,
+    doc_nombre: str,
+    doc_tipo: str = "",
+    gen_id: str = "",
+    autor_id: str = "",
+    autor_nombre: str = "",
+    estado: str = "generando",
+) -> dict[str, Any]:
+    """Crea una propuesta en estado `generando` y la devuelve. NO valida (lo hace la API)."""
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": uuid.uuid4().hex,
+        "creado": ahora,
+        "actualizado": ahora,
+        "estado": estado,
+        "autor_id": autor_id or "",
+        "autor_nombre": autor_nombre or "",
+        "doc_nombre": doc_nombre or "",
+        "doc_tipo": doc_tipo or "",
+        "semana": semana or "",
+        "gen_id": gen_id or "",
+        "operaciones": "",
+        "resumen": "",
+        "error": "",
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_PROPUESTA)
+        con.execute(
+            f"INSERT INTO parrilla_propuesta ({', '.join(_COLS_PROPUESTA)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_PROPUESTA),
+        )
+        con.commit()
+    finally:
+        con.close()
+    fila["operaciones"] = None
+    return fila
+
+
+def obtener_propuesta_parrilla(propuesta_id: str) -> dict[str, Any] | None:
+    """Una propuesta por id; None si no existe."""
+    if not propuesta_id:
+        return None
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_PROPUESTA} WHERE id = ?", (propuesta_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_propuesta(fila) if fila is not None else None
+
+
+def listar_propuestas_parrilla(
+    *, estado: str | None = None, limite: int = 100
+) -> list[dict[str, Any]]:
+    """Propuestas mas recientes primero; filtro opcional por `estado`."""
+    sql = _SELECT_PROPUESTA
+    params: list[Any] = []
+    if estado:
+        sql += " WHERE estado = ?"
+        params.append(estado)
+    sql += " ORDER BY creado DESC, id DESC LIMIT ?"
+    params.append(int(limite))
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_propuesta(f) for f in filas]
+
+
+def actualizar_propuesta_parrilla(
+    propuesta_id: str, campos: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Edita una propuesta (allowlist `_CAMPOS_EDITABLES_PROPUESTA`); None si el id no existe.
+
+    `operaciones` puede llegar como lista (se serializa a JSON) o como str ya serializado.
+    Pone `actualizado` a ahora.
+    """
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_PROPUESTA}
+    if "operaciones" in cambios and not isinstance(cambios["operaciones"], str):
+        cambios["operaciones"] = json.dumps(cambios["operaciones"] or [], ensure_ascii=False)
+    if not cambios:
+        return obtener_propuesta_parrilla(propuesta_id)
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = list(cambios.values())
+    params.append(datetime.now().isoformat(timespec="seconds"))
+    params.append(propuesta_id)
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE parrilla_propuesta SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(
+            f"{_SELECT_PROPUESTA} WHERE id = ?", (propuesta_id,)
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_propuesta(fila) if fila is not None else None
+
+
+def aplicar_propuesta_parrilla(
+    propuesta_id: str,
+    operaciones: list[dict[str, Any]],
+    *,
+    nombres_miembros: dict[str, str],
+    origen: str = "import-doc",
+) -> dict[str, Any]:
+    """Aplica TODAS las `operaciones` (ya validadas) en UNA transaccion y marca aplicada.
+
+    Reusa las MISMAS tablas que la rota (`rota_eventos`/`rota_turnos`) con un SOLO `_conectar()`
+    para que el diff sea atomico (todo o nada): si algo revienta, `_ConexionPg` hace rollback y
+    NADA queda escrito. Cada fila creada se etiqueta con `origen`/`origen_ref` (provenance).
+    `nombres_miembros` resuelve el nombre vivo del miembro (el snapshot de la op puede estar
+    desactualizado). Devuelve un resumen `{eventos_creados, turnos_creados, turnos_modificados,
+    ids:{...}}`. NO re-valida (la API ya lo hizo contra la BD viva ANTES de llamar aqui).
+    """
+    ahora = datetime.now().isoformat(timespec="seconds")
+    eventos_creados: list[str] = []
+    turnos_creados: list[str] = []
+    turnos_modificados: list[str] = []
+    con = _conectar()
+    try:
+        for op in operaciones:
+            tipo = op.get("tipo")
+            if tipo == "crear_evento":
+                eid = uuid.uuid4().hex[:12]
+                con.execute(
+                    "INSERT INTO rota_eventos "
+                    "(id, titulo, fecha, hora, contenido, nota, tipo_cobertura, prioridad, "
+                    "cambiado, actualizado, creado, origen, origen_ref) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        eid,
+                        str(op.get("titulo", "")),
+                        str(op.get("fecha", "")),
+                        str(op.get("hora") or ""),
+                        str(op.get("contenido") or ""),
+                        str(op.get("nota") or ""),
+                        str(op.get("tipo_cobertura") or "transmision"),
+                        str(op.get("prioridad") or "media"),
+                        0,
+                        ahora,
+                        ahora,
+                        origen,
+                        propuesta_id,
+                    ),
+                )
+                eventos_creados.append(eid)
+            elif tipo == "crear_turno":
+                tid = uuid.uuid4().hex[:12]
+                miembro_id = str(op.get("miembro_id", ""))
+                semana = _lunes_iso_de(op.get("fecha", ""))
+                con.execute(
+                    "INSERT INTO rota_turnos "
+                    "(id, semana, fecha, miembro_id, miembro_nombre, franja_id, estado, "
+                    "override, motivo, nota_relevo, creado, actualizado, origen, origen_ref) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        tid,
+                        semana,
+                        str(op.get("fecha", "")),
+                        miembro_id,
+                        nombres_miembros.get(miembro_id, str(op.get("miembro_nombre") or "")),
+                        str(op.get("franja_id", "")),
+                        ESTADO_ROTA_PROPUESTO,
+                        0,
+                        str(op.get("motivo") or ""),
+                        str(op.get("nota_relevo") or ""),
+                        ahora,
+                        ahora,
+                        origen,
+                        propuesta_id,
+                    ),
+                )
+                turnos_creados.append(tid)
+            elif tipo == "modificar_turno":
+                turno_id = str(op.get("turno_id", ""))
+                cambios_op = op.get("cambios") or {}
+                asignaciones: list[str] = []
+                valores: list[Any] = []
+                if cambios_op.get("miembro_id") not in (None, ""):
+                    mid = str(cambios_op["miembro_id"])
+                    asignaciones.append("miembro_id = ?")
+                    valores.append(mid)
+                    asignaciones.append("miembro_nombre = ?")
+                    valores.append(
+                        nombres_miembros.get(mid, str(cambios_op.get("miembro_nombre") or ""))
+                    )
+                elif cambios_op.get("miembro_nombre") not in (None, ""):
+                    asignaciones.append("miembro_nombre = ?")
+                    valores.append(str(cambios_op["miembro_nombre"]))
+                if cambios_op.get("estado") not in (None, ""):
+                    asignaciones.append("estado = ?")
+                    valores.append(str(cambios_op["estado"]))
+                if cambios_op.get("override") is not None:
+                    asignaciones.append("override = ?")
+                    valores.append(1 if cambios_op["override"] else 0)
+                if cambios_op.get("motivo") is not None:
+                    asignaciones.append("motivo = ?")
+                    valores.append(str(cambios_op["motivo"]))
+                if cambios_op.get("nota_relevo") is not None:
+                    asignaciones.append("nota_relevo = ?")
+                    valores.append(str(cambios_op["nota_relevo"]))
+                # Provenance del cambio (no toca filas de alta manual: solo las que tocamos aqui).
+                asignaciones.append("origen = ?")
+                valores.append(origen)
+                asignaciones.append("origen_ref = ?")
+                valores.append(propuesta_id)
+                asignaciones.append("actualizado = ?")
+                valores.append(ahora)
+                valores.append(turno_id)
+                con.execute(
+                    f"UPDATE rota_turnos SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+                    tuple(valores),
+                )
+                turnos_modificados.append(turno_id)
+        # Marca la propuesta como aplicada DENTRO de la misma transaccion (atomico con el diff).
+        con.execute(
+            "UPDATE parrilla_propuesta SET estado = ?, actualizado = ? WHERE id = ?",
+            ("aplicada", ahora, propuesta_id),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return {
+        "eventos_creados": len(eventos_creados),
+        "turnos_creados": len(turnos_creados),
+        "turnos_modificados": len(turnos_modificados),
+        "ids": {
+            "eventos": eventos_creados,
+            "turnos": turnos_creados,
+            "turnos_modificados": turnos_modificados,
+        },
+    }
+
+
+def _lunes_iso_de(fecha_iso: str) -> str:
+    """Lunes (ISO) de la semana que contiene `fecha_iso`; "" si no parsea. Sin dep a `rota`."""
+    try:
+        d = date.fromisoformat(fecha_iso)
+    except (ValueError, TypeError):
+        return ""
+    return (d - timedelta(days=d.weekday())).isoformat()
