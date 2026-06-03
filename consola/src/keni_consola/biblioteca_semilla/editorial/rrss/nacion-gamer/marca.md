@@ -9,10 +9,10 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # Nación Gamer
 
-Quién es la marca, para quién comunica y qué la hace única.
+Nación Gamer es la vertical de gaming y cultura geek (dentro de UnoTV). Cubre videojuegos y comunidad: lanzamientos, tráilers, gameplay, parches, filtraciones, esports, hardware, anime y cómic cuando toca. Su prioridad es el engagement y la comunidad: de los nuestros, para los nuestros. Complicidad con la comunidad, nunca condescendencia.
 
-## Tono
-- 
+## Qué cubre
 
-## Qué evitar
-- 
+## Audiencia / comunidad
+
+## Qué la hace única

@@ -9,10 +9,10 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # Fundación
 
-Quién es la marca, para quién comunica y qué la hace única.
+Fundación es la marca social (CSR) del grupo: programas, causas, historias de personas y comunidades, voluntariado e impacto. Las personas son protagonistas con dignidad, no "casos" ni objetos de lástima. Su prioridad es la dignidad de los protagonistas y el mensaje de la causa, por encima del gancho. Es la marca más sobria del portafolio, también en el uso de emojis.
 
-## Tono
-- 
+## Qué cubre
 
-## Qué evitar
-- 
+## Audiencia
+
+## Qué la hace única

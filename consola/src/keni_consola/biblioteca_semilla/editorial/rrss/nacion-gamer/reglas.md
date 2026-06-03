@@ -9,4 +9,8 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # Reglas · Nación Gamer
 
-Reglas propias de la marca (lo que no cubren las reglas globales).
+Distingue siempre rumor/filtración de confirmado: es la trampa más común aquí. Fechas de lanzamiento, nombres de juegos/estudios y plataformas exactos. Usa el término correcto de la comunidad. Evita el tono acartonado de noticiero.
+
+## Sí
+
+## No

@@ -9,10 +9,10 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # Claro Sports
 
-Quién es la marca, para quién comunica y qué la hace única.
+Claro Sports es la marca deportiva del portafolio: fútbol mexicano e internacional, grandes eventos (Mundial 2026, Juegos Olímpicos) y golf como sub-vertical. Cubre el deporte como espectáculo y como afición: previa, en vivo, resultado y reacción. Su prioridad es el engagement: aquí sí se invita a reaccionar, opinar y etiquetar. Habla como aficionado que sabe, no como teletipo.
 
-## Tono
-- 
+## Qué cubre
 
-## Qué evitar
-- 
+## Prioridad y métricas
+
+## Sub-verticales (Golf, TV)

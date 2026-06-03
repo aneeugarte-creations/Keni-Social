@@ -9,4 +9,12 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # Voz · Claro Sports
 
-Tono y estilo de redacción de la marca.
+Emoción, cercanía y pasión por el deporte, con energía desde la primera palabra. Coloquial pero correcto (es-MX): modismos sí, groserías no. Léxico vibrante ("golazo", "se armó", "la rompió") y picos de intensidad en días de partido. El registro de Golf es más sobrio y técnico.
+
+## Registro
+
+## Léxico
+
+## Ganchos típicos
+
+## Qué evitar

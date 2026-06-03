@@ -9,10 +9,12 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # UnoTV
 
-Quién es la marca, para quién comunica y qué la hace única.
+UnoTV es el medio de noticias en español de México y la marca insignia de noticias del portafolio. Cubre actualidad nacional e internacional con inmediatez: política, seguridad, economía, sociedad, clima, salud y servicio. Su prioridad es la distribución y el alcance: que la nota llegue y sea útil. La interacción es secundaria; el valor está en informar primero, claro y verificado.
 
-## Tono
-- 
+## Qué cubre
 
-## Qué evitar
-- 
+## Audiencia
+
+## Qué la hace única
+
+## Sub-verticales

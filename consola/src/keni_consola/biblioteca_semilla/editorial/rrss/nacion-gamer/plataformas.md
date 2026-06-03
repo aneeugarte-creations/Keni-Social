@@ -9,4 +9,12 @@ actualizado: 2026-05-31T00:00:00+00:00
 
 # Plataformas · Nación Gamer
 
-Notas por red específicas de la marca.
+Notas de formato por red propias de Nación Gamer. El tráiler, la filtración y el lanzamiento son el gancho. Formatos cortos y de comunidad funcionan mejor que el comunicado. El equipo completa el detalle por red abajo.
+
+## X / Twitter
+
+## Instagram
+
+## TikTok
+
+## YouTube
