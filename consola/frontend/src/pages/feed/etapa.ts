@@ -37,7 +37,9 @@ export interface MetaEtapa {
 
 export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
   generando_copy: { etiqueta: "Generando copy", enCurso: true },
-  generando_arte: { etiqueta: "Generando arte", enCurso: true },
+  // "Generando arte" = en realidad la pieza LLEVA imagen pero le falta la FOTO real (la IA solo
+  // hace la plantilla; la foto la sube una persona en "Editar"). El label lo dice claro.
+  generando_arte: { etiqueta: "Falta imagen", enCurso: true },
   lista_para_revisar: { etiqueta: "Lista para revisar", enCurso: false },
   aprobada: { etiqueta: "Aprobada", enCurso: false },
   programada: { etiqueta: "Programada", enCurso: false },
@@ -53,8 +55,11 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
  *  - `aprobado`                → aprobada
  *  - `en_revision`             → lista_para_revisar (gate humano: espera tu firma)
  *  - falta copy                → generando_copy
- *  - hay copy, falta imagen    → generando_arte
- *  - copy E imagen listos (aún en pendiente) → lista_para_revisar (la IA terminó; lista)
+ *  - lleva imagen (copy-in / exenta) pero falta la FOTO real → generando_arte ("Falta imagen")
+ *  - de solo texto, o con copy + foto real → lista_para_revisar
+ *
+ * IMAGEN vs PLANTILLA: la placa (`imagen`) es solo la PLANTILLA (parte del copy-in), no cuenta
+ * como imagen real. "Lleva imagen" = hay copy-in o exención; necesita FOTO (`foto`/`imagen_fuente`).
  *
  * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
  * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
@@ -71,9 +76,12 @@ export function etapaDePublicacion(p: Publicacion): EtapaIa {
   if (p.estado === "programado") return "programada";
   if (p.estado === "aprobado") return "aprobada";
   if (p.estado === "en_revision") return "lista_para_revisar";
-  // Orden explícito (ESPEJO del backend): solo "generando_copy" si DE VERDAD falta el copy.
-  // Una pieza con copy e imagen ya hechos pero aún en `pendiente` está LISTA, no generando copy.
-  if (p.falta_copy) return "generando_copy";
-  if (p.falta_imagen) return "generando_arte";
+  // ESPEJO del backend. Solo "generando_copy" si DE VERDAD falta el copy. La placa NO cuenta como
+  // imagen: una pieza "lleva imagen" si tiene copy-in (o está exenta) y entonces necesita una FOTO
+  // real (`foto`/`imagen_fuente`); las de solo texto no necesitan imagen.
+  if (!p.contenido?.trim()) return "generando_copy";
+  const necesitaImagen = !!p.copy_in?.trim() || !!p.copy_in_exento;
+  const hayImagenReal = !!p.foto || !!p.imagen_fuente;
+  if (necesitaImagen && !hayImagenReal) return "generando_arte";
   return "lista_para_revisar";
 }

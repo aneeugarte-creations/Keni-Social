@@ -43,15 +43,21 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     # serialización pública de C, con la lógica PURA de `pipeline_estado.etapa_de_pieza`
     # (NO se duplica la heurística). El feed (Flujo D) PREFIERE este `etapa_ia`.
     #
-    # IMPORTANTE: la etapa se deriva del CONTENIDO REAL (¿hay copy?, ¿hay imagen compuesta?), NO
-    # de los flags `falta_*` almacenados. Esos flags se DESINCRONIZAN del contenido (la tubería
-    # rellena `copy`/`imagen` sin tocar siempre el flag), y eso mentía en el label del feed
-    # (p. ej. "Generando copy" en una pieza que YA tiene copy). El label debe reflejar lo que hay.
+    # IMPORTANTE: la etapa se deriva del CONTENIDO REAL, NO de los flags `falta_*` almacenados
+    # (se DESINCRONIZAN: la tubería rellena copy/imagen sin tocar siempre el flag).
+    #
+    # IMAGEN vs PLANTILLA: el campo `imagen` guarda la PLACA compuesta, que es solo la PLANTILLA
+    # (parte del copy-in), NO una imagen real. Una pieza "lleva imagen" si tiene copy-in/placa o
+    # está exenta; entonces necesita una FOTO real —subida (`foto`) o de fuente (`imagen_fuente`)—.
+    # Las piezas de SOLO TEXTO (sin copy-in ni exención) NO necesitan imagen y están listas con
+    # el copy. Por eso `imagen` (la placa) NO basta: lo que cuenta es la foto real.
+    necesita_imagen = bool(str(pub.get("copy_in") or "").strip()) or bool(pub.get("copy_in_exento"))
+    hay_imagen_real = bool(pub.get("foto") or "") or bool(imagen_fuente)
     etapa_ia = pipeline_estado.etapa_de_pieza(
         {
             "estado": pub.get("estado"),
             "falta_copy": not str(pub.get("contenido") or "").strip(),
-            "falta_imagen": not bool(imagen),
+            "falta_imagen": necesita_imagen and not hay_imagen_real,
         }
     )
     return {

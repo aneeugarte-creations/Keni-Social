@@ -59,22 +59,30 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
   // `etapa_ia: undefined` fuerza el camino de derivación local (pieza legada/parcial).
   it("aún sin copy → generando_copy", () => {
     expect(
-      etapaDePublicacion(pub({ estado: "borrador", falta_copy: true, etapa_ia: undefined })),
+      etapaDePublicacion(pub({ estado: "borrador", contenido: "", etapa_ia: undefined })),
     ).toBe("generando_copy");
   });
 
-  it("con copy pero sin imagen → generando_arte", () => {
+  it("lleva imagen (copy-in) pero sin foto real → generando_arte (falta imagen)", () => {
     expect(
       etapaDePublicacion(
-        pub({ estado: "borrador", falta_copy: false, falta_imagen: true, etapa_ia: undefined }),
+        pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "", etapa_ia: undefined }),
       ),
     ).toBe("generando_arte");
   });
 
-  it("copy e imagen listos aunque siga en borrador → lista_para_revisar (no generando_copy)", () => {
+  it("pieza de SOLO TEXTO (sin copy-in) no necesita imagen → lista_para_revisar", () => {
     expect(
       etapaDePublicacion(
-        pub({ estado: "borrador", falta_copy: false, falta_imagen: false, etapa_ia: undefined }),
+        pub({ estado: "borrador", contenido: "copy", copy_in: "", foto: "", etapa_ia: undefined }),
+      ),
+    ).toBe("lista_para_revisar");
+  });
+
+  it("lleva imagen y ya tiene foto real → lista_para_revisar", () => {
+    expect(
+      etapaDePublicacion(
+        pub({ estado: "borrador", contenido: "copy", copy_in: "TITULAR", foto: "bg.png", etapa_ia: undefined }),
       ),
     ).toBe("lista_para_revisar");
   });

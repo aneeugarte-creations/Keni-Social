@@ -87,11 +87,11 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.getByRole("button", { name: /comentar/i })).toBeInTheDocument();
   });
 
-  it("el «Me gusta» está deshabilitado y avisa de qué falta cuando la IA aún la prepara", () => {
+  it("el «Me gusta» está deshabilitado y avisa que falta la imagen (subir en Editar)", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
     expect(screen.getByRole("button", { name: /me gusta/i })).toBeDisabled();
-    // Aviso VISIBLE (no solo tooltip) de qué falta.
-    expect(screen.getByText(/Falta el arte/i)).toBeInTheDocument();
+    // Aviso VISIBLE (no solo tooltip): falta la FOTO, súbela en Editar (la IA solo hace plantilla).
+    expect(screen.getByText(/Falta la imagen/i)).toBeInTheDocument();
   });
 
   it("pieza con copy e imagen pero aún en pendiente: avisa que está lista, NO «falta copy»", () => {
