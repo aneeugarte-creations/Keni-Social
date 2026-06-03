@@ -5,9 +5,10 @@
  *  1. Cabecera EN UNA LÍNEA: autor + marca + red (un solo logo) + formato + etapa IA en vivo.
  *  2. Copy generado por la IA: el cuerpo del post (`contenido`), dentro de una previa fiel de la
  *     red (`VistaPreviaRed`, variante limpia: sin chrome social falso ni cabecera duplicada).
- *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): "Me gusta" (el OK humano) y
- *     "Comentar"; "Rechazar" cuando puedes decidir. El "me gusta" se habilita solo cuando te
- *     toca el OK (`elegibilidadOK`); en otros estados se ve deshabilitado y el tooltip explica.
+ *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): "Me gusta" (el OK humano),
+ *     "Editar" (copy, copy-in, foto+plantilla, vía `DialogoEditar`) y "Comentar"; "Rechazar"
+ *     cuando puedes decidir. El "me gusta" se habilita solo cuando te toca el OK
+ *     (`elegibilidadOK`); en otros estados se ve deshabilitado y el aviso explica qué falta.
  *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): veredicto de IA + OK del
  *     equipo (cuántos y de quién) + lo que falta. La acción vive en la fila, no aquí.
  *
@@ -16,7 +17,7 @@
  * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Check, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Loader2, MessageSquare, Pencil, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -28,9 +29,10 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import { plural } from "@/lib/formato";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
+import { DialogoEditar } from "@/pages/publicaciones/DialogoEditar";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
 import { tamanoRed, tiempoRelativo } from "@/pages/publicaciones/meta";
-import type { Publicacion } from "@/types";
+import type { EstadoOpcion, Publicacion } from "@/types";
 
 import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
@@ -47,6 +49,15 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();
   const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
+  const [editando, setEditando] = React.useState(false);
+
+  // Estados para el select del editor. Misma queryKey que el resto: React Query la comparte
+  // (cacheada), así que abrir "Editar" no dispara otra llamada.
+  const opcionesQuery = useQuery({
+    queryKey: ["publicaciones", "opciones"],
+    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
+  });
+  const estados: EstadoOpcion[] = opcionesQuery.data?.estados ?? [];
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
@@ -208,10 +219,21 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
             Rechazar
           </Button>
         )}
+        {/* Editar: copy, copy-in y la imagen (subir foto -> se aplica la plantilla) en el editor
+            rico. Tercer botón fijo del post, junto a "Me gusta" y "Comentar". */}
         <Button
           variant="ghost"
           size="sm"
           className="ml-auto"
+          onClick={() => setEditando(true)}
+          title="Editar copy, copy-in e imagen"
+        >
+          <Pencil className="h-4 w-4" />
+          Editar
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setComentariosAbierto((v) => !v)}
           aria-expanded={comentariosAbierto}
         >
@@ -219,6 +241,16 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           {comentariosAbierto ? "Ocultar comentarios" : "Comentar"}
         </Button>
       </div>
+
+      {/* Editor rico (reusa el de Publicaciones): copy, copy-in, foto + plantilla, estado. Se MONTA
+          solo al editar (el feed tiene muchos posts; no queremos un diálogo por cada uno). */}
+      {editando && (
+        <DialogoEditar
+          publicacion={publicacion}
+          estados={estados}
+          onCerrar={() => setEditando(false)}
+        />
+      )}
 
       {/* Aviso VISIBLE de por qué el "me gusta" está bloqueado (qué falta). Ámbar cuando hay un
           gate que resolver (en revisión: tu pieza / ya diste OK / espera a la IA); gris cuando

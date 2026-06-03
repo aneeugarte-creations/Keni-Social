@@ -80,6 +80,13 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     expect(screen.queryByText(/^IA$/)).not.toBeInTheDocument();
   });
 
+  it("toda pieza ofrece los 3 botones: Me gusta, Editar y Comentar", () => {
+    renderPost(pub());
+    expect(screen.getByRole("button", { name: /me gusta/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /editar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /comentar/i })).toBeInTheDocument();
+  });
+
   it("el «Me gusta» está deshabilitado y avisa de qué falta cuando la IA aún la prepara", () => {
     renderPost(pub({ etapa_ia: "generando_arte" }));
     expect(screen.getByRole("button", { name: /me gusta/i })).toBeDisabled();
