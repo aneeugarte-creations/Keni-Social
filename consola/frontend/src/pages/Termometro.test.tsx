@@ -150,12 +150,12 @@ describe("Termometro", () => {
     expect(chips.map((c) => c.getAttribute("aria-label"))).toContain("X");
   });
 
-  it("avisa cuando la skill no está instalada", async () => {
+  it("avisa cuando falta el prompt base en la Biblioteca", async () => {
     stubFetch({ ...PAYLOAD_BASE, skill_disponible: false });
     renderConProviders(<Termometro />);
 
-    expect(await screen.findByText(/no está instalada en este equipo/i)).toBeInTheDocument();
-    // Sin la skill, no se puede generar aunque haya noticias.
+    expect(await screen.findByText(/falta el prompt base del termómetro/i)).toBeInTheDocument();
+    // Sin el prompt base, no se puede generar aunque haya noticias.
     const noticias = await screen.findByLabelText(/noticias internacionales del día/i);
     fireEvent.change(noticias, { target: { value: "algo" } });
     expect(screen.getByRole("button", { name: /generar termómetro/i })).toBeDisabled();
