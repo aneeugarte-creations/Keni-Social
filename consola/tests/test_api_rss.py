@@ -850,6 +850,60 @@ def test_generar_autocrea_publicaciones_y_marca_usado(entorno, monkeypatch):
     assert "guid-ia" not in {i["clave"] for i in items}
 
 
+def test_generar_persiste_url_fuente_canonica(entorno, monkeypatch):
+    """El `enlace` del item se persiste CANÓNICO en `contenido.url_fuente` del tema padre.
+
+    Cadena completa (generar -> jobspec -> copy -> crear_publicaciones_desde_piezas ->
+    crear_borrador -> repos/db): tras crear los borradores, el post-procesado escribe la URL
+    canónica en el `contenido` padre de cada pieza (dedup por URL). El enlace lleva tracking +
+    `www` + fragmento; la canónica los normaliza.
+    """
+    from keni_consola import repos
+
+    monkeypatch.setattr(rss, "_DESCARGADOR", lambda url: _RSS_GUID_XML)
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    f = _fuente(cli, "Diario", marca="unotv")
+
+    r = cli.post(
+        "/api/rss/generar",
+        json={
+            "titulo": "Avance de IA y agentes",
+            "resumen": "Nuevos agentes autonomos",
+            "enlace": "https://www.example.com/ia?utm_source=rss&id=3#x",
+            "marca": "unotv",
+            "redes": ["x", "instagram"],
+            "fuente_id": f["id"],
+            "clave": "guid-ia",
+        },
+    )
+    assert r.status_code == 200
+    pubs = r.json()["generacion"]["resultado"]["publicaciones"]
+    assert pubs
+    # Cada pieza cuelga de un `contenido` cuyo `url_fuente` es la URL canónica del enlace.
+    cids = {p.get("contenido_id") for p in pubs if p.get("contenido_id")}
+    assert cids
+    for cid in cids:
+        tema = repos.obtener_contenido(cid)
+        assert (tema.get("url_fuente") or "") == "example.com/ia?id=3"
+
+
+def test_generar_sin_enlace_no_persiste_url_fuente(entorno, monkeypatch):
+    """Sin enlace http(s), `url_fuente` queda vacía (no rompe la generación)."""
+    from keni_consola import repos
+
+    cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
+    r = cli.post(
+        "/api/rss/generar",
+        json={"titulo": "Solo titulo", "marca": "unotv", "redes": ["x"]},
+    )
+    assert r.status_code == 200
+    pubs = r.json()["generacion"]["resultado"]["publicaciones"]
+    for p in pubs:
+        cid = p.get("contenido_id")
+        if cid:
+            assert (repos.obtener_contenido(cid).get("url_fuente") or "") == ""
+
+
 def test_generar_sin_fuente_no_marca_pero_genera(entorno):
     cli = _cliente(lanzar_generacion=lanzador_generacion_completa(_SALIDA_SKILL))
     r = cli.post(

@@ -587,6 +587,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         qa_hallazgos        TEXT NOT NULL DEFAULT '',
         copy_pendiente      TEXT NOT NULL DEFAULT '',
         fecha_fuente        TEXT NOT NULL DEFAULT '',
+        url_fuente          TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -1296,6 +1297,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         enlaces       TEXT NOT NULL DEFAULT '[]',
         curado        INTEGER NOT NULL DEFAULT 0,
         url_canonica  TEXT NOT NULL DEFAULT '',
+        breaking      INTEGER NOT NULL DEFAULT 0,
         score         REAL NOT NULL DEFAULT 0,
         razon         TEXT NOT NULL DEFAULT '',
         estado        TEXT NOT NULL DEFAULT 'nuevo',
@@ -1342,6 +1344,7 @@ def _crear_esquema(con: Any) -> None:
     _migrar_columnas_eventos_rota(con)
     _migrar_columnas_turnos_rota(con)
     _migrar_columnas_piezas_rota(con)
+    _migrar_columnas_radar_items(con)
     _migrar_columnas_contenido(con)
     _migrar_columnas_aprobaciones(con)
     _migrar_columnas_comercial(con)
@@ -2041,6 +2044,10 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC. Las bases
     # creadas antes de esta columna la reciben aquí (idempotente). Legado -> "".
     ("fecha_fuente", "TEXT NOT NULL DEFAULT ''"),
+    # URL de la NOTA DE ORIGEN (Investigador F3, dedup por URL): la URL canónica de la
+    # fuente con que nació la pieza, para cruzar `existe_publicado_similar` por URL antes
+    # de caer al fuzzy de título. "" si la pieza no nació de una URL (alta manual) o BD vieja.
+    ("url_fuente", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
@@ -2054,6 +2061,26 @@ _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     # del `copy` que acompana a la publicacion. Se genera por marca con sus reglas/plantilla.
     ("copy_in", "TEXT NOT NULL DEFAULT ''"),
 )
+
+
+# Columnas que se anaden a `radar_items` en bases creadas por una version anterior (el
+# Postgres hosted persiste entre despliegues). `breaking` (Investigador F3: flag de
+# ACELERACION de señal, tema "calentando" entre snapshots) nace en el `CREATE TABLE` de las
+# bases NUEVAS; este migrador la inyecta a las VIEJAS. Idempotente (no-op si ya esta o si la
+# tabla aun no existe). Mismo patron que `_migrar_columnas_*`.
+_COLUMNAS_RADAR_ITEMS_AMPLIADAS: tuple[tuple[str, str], ...] = (
+    ("breaking", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+def _migrar_columnas_radar_items(con: Any) -> None:
+    """Anade a `radar_items` las columnas ampliadas que una BD vieja no tuviera (idempotente)."""
+    if not _COLUMNAS_RADAR_ITEMS_AMPLIADAS or not _tabla_existe(con, "radar_items"):
+        return
+    columnas = _columnas_existentes(con, "radar_items")
+    for columna, tipo in _COLUMNAS_RADAR_ITEMS_AMPLIADAS:
+        if columna not in columnas:
+            con.execute(f"ALTER TABLE radar_items ADD COLUMN IF NOT EXISTS {columna} {tipo}")
 
 
 def _migrar_columnas_contenido(con: Any) -> None:
@@ -3863,6 +3890,10 @@ _COLS_CONTENIDO = (
     # "Fuente del …" junto a "Generado el …" (`creado`). "" si la fuente no traía fecha o
     # si la pieza no nació del pipeline (alta manual).
     "fecha_fuente",
+    # URL de la NOTA DE ORIGEN (Investigador F3): la URL de la fuente con que nació la pieza.
+    # Permite el dedup por URL en `existe_publicado_similar` (cruza la url canónica contra lo
+    # publicado) antes de caer al fuzzy de título. "" en alta manual o BD vieja.
+    "url_fuente",
     "creado",
     "actualizado",
 )
@@ -3897,6 +3928,9 @@ _CAMPOS_EDITABLES_CONTENIDO: tuple[str, ...] = (
     # Parámetros de lanzamiento de copy pendiente (JSON): editable para que el sweep lo fije al
     # crear el tema y lo limpie ("") tras lanzar el copy en la fase CD.
     "copy_pendiente",
+    # URL de la nota de origen (Investigador F3): editable para poder rellenarla post-creación
+    # cuando el pipeline resuelve la fuente de la pieza.
+    "url_fuente",
 )
 
 
@@ -3948,6 +3982,7 @@ def crear_contenido(
     qa_hallazgos: str = "",
     copy_pendiente: str = "",
     fecha_fuente: str = "",
+    url_fuente: str = "",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -3992,6 +4027,8 @@ def crear_contenido(
         "qa_hallazgos": qa_hallazgos or "",
         "copy_pendiente": copy_pendiente or "",
         "fecha_fuente": fecha_fuente or "",
+        # URL de la nota de origen (Investigador F3): la conserva la pieza para el dedup por URL.
+        "url_fuente": url_fuente or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -4092,7 +4129,7 @@ def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int
 
     Cada `item` es un dict con: `clave, titulo, por_que, senal, senal_texto,
     redes(list[str]), fuentes(list[str]), enlaces(list[dict]), curado(bool),
-    url_canonica, score(float), razon, estado`. La identidad es `(marca, geo, clave)`
+    url_canonica, breaking(bool), score(float), razon, estado`. La identidad es `(marca, geo, clave)`
     (clave = `dedup.clave(titulo)`): el mismo tema visto en otro snapshot se REFRESCA, no
     se duplica. redes/fuentes/enlaces se serializan a JSON. `snapshot_ts` (UTC ISO) se fija
     en INSERT y UPDATE; `creado` solo en INSERT (en UPDATE se conserva, ON CONFLICT no toca
@@ -4110,15 +4147,16 @@ def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int
             con.execute(
                 "INSERT INTO radar_items "
                 "(id, marca, geo, clave, titulo, por_que, senal, senal_texto, "
-                "redes, fuentes, enlaces, curado, url_canonica, score, razon, estado, "
+                "redes, fuentes, enlaces, curado, url_canonica, breaking, score, razon, estado, "
                 "snapshot_ts, creado, actualizado) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT (marca, geo, clave) DO UPDATE SET "
                 "titulo = EXCLUDED.titulo, por_que = EXCLUDED.por_que, "
                 "senal = EXCLUDED.senal, senal_texto = EXCLUDED.senal_texto, "
                 "redes = EXCLUDED.redes, fuentes = EXCLUDED.fuentes, "
                 "enlaces = EXCLUDED.enlaces, curado = EXCLUDED.curado, "
-                "url_canonica = EXCLUDED.url_canonica, score = EXCLUDED.score, "
+                "url_canonica = EXCLUDED.url_canonica, breaking = EXCLUDED.breaking, "
+                "score = EXCLUDED.score, "
                 "razon = EXCLUDED.razon, estado = EXCLUDED.estado, "
                 "snapshot_ts = EXCLUDED.snapshot_ts, actualizado = EXCLUDED.actualizado",
                 (
@@ -4135,6 +4173,7 @@ def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int
                     json.dumps(list(item.get("enlaces") or []), ensure_ascii=False),
                     1 if item.get("curado") else 0,
                     item.get("url_canonica") or "",
+                    1 if item.get("breaking") else 0,
                     float(item.get("score") or 0),
                     item.get("razon") or "",
                     item.get("estado") or "nuevo",
@@ -4166,6 +4205,7 @@ def _fila_a_radar_item(fila: Any) -> dict[str, Any]:
         "enlaces": _json_lista(fila["enlaces"]),
         "curado": bool(fila["curado"]),
         "url_canonica": fila["url_canonica"] or "",
+        "breaking": bool(fila["breaking"]),
         "score": fila["score"] or 0,
         "razon": fila["razon"] or "",
         "estado": fila["estado"] or "nuevo",
@@ -4249,9 +4289,11 @@ def existe_publicado_similar(
     """True si `marca` ya PUBLICO algo equivalente al `titulo` (o `url`) dado.
 
     Best-effort (nunca rompe el flujo: ante cualquier error -> False):
-      (a) por URL: HOY `contenido` no tiene columna de URL fuente, asi que esta rama queda
-          inactiva (no se cruza por URL). Si en el futuro existe esa columna, se cruzaria
-          `dedup.url_canonica(url)` contra lo publicado.
+      (a) por URL: si `url` no es vacia, cruza `dedup.url_canonica(url)` contra la `url_fuente`
+          (canonizada) del contenido PUBLICADO de la marca (JOIN `contenido` x
+          `contenido_plataforma`, ventana de 90 dias). Match exacto de URL canonica -> True
+          (señal mas fuerte que el titulo: la MISMA fuente ya salio). Si no hay URL o no casa,
+          cae a la rama (b).
       (b) por TITULO: trae los titulos del contenido de la marca con alguna plataforma en
           estado 'publicado' (JOIN `contenido` x `contenido_plataforma`), ventana de 90 dias,
           y aplica `dedup.es_similar` (exacto o fuzzy >= `umbral`).
@@ -4259,10 +4301,28 @@ def existe_publicado_similar(
     from .dominio import dedup
 
     try:
-        # Rama (b): titulos del contenido de la marca con alguna plataforma 'publicado'.
         desde = (datetime.now() - timedelta(days=90)).isoformat(timespec="seconds")
         con = _conectar()
         try:
+            # Rama (a) por URL: solo si traemos una url candidata. La url_fuente publicada se
+            # canoniza en Python (mismo `dedup.url_canonica` que se usa al guardar la pieza),
+            # para que el cruce sea robusto a variantes (querystring de tracking, etc.).
+            url_canon = dedup.url_canonica(url) if url else ""
+            if url_canon:
+                filas_url = con.execute(
+                    "SELECT DISTINCT c.url_fuente FROM contenido c "
+                    "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "
+                    "WHERE c.marca = ? AND c.clase = 'contenido' "
+                    "AND cp.estado = 'publicado' AND c.url_fuente <> '' AND c.creado >= ?",
+                    (marca, desde),
+                ).fetchall()
+                publicadas = {
+                    dedup.url_canonica(f["url_fuente"] or "") for f in filas_url
+                }
+                publicadas.discard("")
+                if url_canon in publicadas:
+                    return True
+            # Rama (b): titulos del contenido de la marca con alguna plataforma 'publicado'.
             filas = con.execute(
                 "SELECT DISTINCT c.titulo FROM contenido c "
                 "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "

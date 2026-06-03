@@ -223,6 +223,7 @@ def lanzar_copy(
     imagen_fuente: str = "",
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
+    url_fuente: str = "",
 ) -> dict[str, Any]:
     """Lanza una generación de COPY (piezas por red -> borradores). Camino unificado.
 
@@ -239,6 +240,10 @@ def lanzar_copy(
     `contenido_id` (lista viva): si apunta a un tema del tablero, el borrador resultante se
     NIDA bajo ese tema (cuelga de su tarjeta) en vez de nacer como contenido suelto. Lo usa
     el auto-copy (`autogen_copy`); sin el (default ""), borrador suelto como hoy.
+
+    `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
+    procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
+    URL). "" = no se toca (comportamiento de hoy).
     """
     # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
     # "copy" decide su prompt base (que puede haberse re-bindeado en la Biblioteca sin tocar
@@ -262,6 +267,7 @@ def lanzar_copy(
         contenido_id=contenido_id or "",
         imagen_fuente=imagen_fuente or "", tipo_contenido=tipo_contenido or "",
         veredicto_inicial=veredicto_inicial or "",
+        url_fuente=url_fuente or "",
     )
     return lanzar(
         tipo=tipo, titulo=titulo or "Copy", marca=marca, prompt=prompt,

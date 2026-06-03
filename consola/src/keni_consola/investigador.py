@@ -35,6 +35,36 @@ _log = logging.getLogger("keni_consola.investigador")
 # Ventana (dias) para mapear el estado editorial reciente de la marca (publicado/en_parrilla).
 _VENTANA_ESTADO_DIAS = 60
 
+# BREAKING (Fase 3): un tema es "breaking" cuando su señal ACELERA fuerte entre el snapshot
+# anterior y el actual (no solo "es viral", sino "esta calentando AHORA"). Dos umbrales:
+#   - `_ACEL_BREAKING`: incremento RELATIVO minimo respecto a la señal previa para considerarlo
+#     una aceleracion (0.5 = +50% snapshot-a-snapshot).
+#   - `_MIN_SENAL_BREAKING`: piso ABSOLUTO de señal nueva, para no marcar como breaking saltos
+#     porcentualmente grandes sobre numeros minusculos (p.ej. 100 -> 200 es +100% pero
+#     irrelevante). Solo temas que ademas superan este volumen cuentan.
+# Sin señal PREVIA (primer snapshot del tema) -> NO breaking: sin historial no se inventa.
+_ACEL_BREAKING = 0.5  # +50% de aceleracion relativa minima
+_MIN_SENAL_BREAKING = 10_000  # piso absoluto de señal nueva para que la aceleracion cuente
+
+
+def _es_breaking(senal_nueva: Any, senal_previa: Any | None) -> bool:
+    """True si `senal_nueva` ACELERA respecto a `senal_previa` (aceleracion de señal = breaking).
+
+    Requiere las TRES condiciones: (1) hay señal previa (snapshot anterior con el tema),
+    (2) la nueva supera la previa por al menos `_ACEL_BREAKING` (relativo), y (3) la nueva
+    supera el piso absoluto `_MIN_SENAL_BREAKING`. Best-effort ante tipos raros -> False.
+    """
+    if senal_previa is None:
+        return False
+    try:
+        nueva = float(senal_nueva)
+        previa = float(senal_previa)
+    except (TypeError, ValueError):
+        return False
+    if previa <= 0:
+        return False
+    return nueva >= previa * (1 + _ACEL_BREAKING) and nueva >= _MIN_SENAL_BREAKING
+
 
 def _estado_por_clave(marca: str) -> dict[str, str]:
     """Mapea `dedup.clave(titulo) -> 'publicado'|'en_parrilla'` del contenido reciente de la marca.
@@ -68,6 +98,54 @@ def _estado_por_clave(marca: str) -> dict[str, str]:
     return estados
 
 
+def _senal_previa_por_clave(marca: str, geo: str) -> dict[str, int]:
+    """Mapea `clave -> senal` del snapshot PERSISTIDO de `(marca, geo)` (para detectar breaking).
+
+    Lee el snapshot anterior via `repos.listar_radar_items`. Vacio (primer snapshot, daemon
+    OFF, o fallo de lectura) -> `{}` (best-effort: nadie sera breaking sin historial).
+    """
+    try:
+        previos = repos.listar_radar_items(marca=marca, geo=geo)
+    except Exception:  # noqa: BLE001 -- un fallo de lectura no debe abortar la materializacion
+        _log.exception("investigador: no se pudo leer el snapshot previo (marca=%s, geo=%s)", marca, geo)
+        return {}
+    mapa: dict[str, int] = {}
+    for it in previos:
+        clave = (it.get("clave") or "").strip()
+        if not clave:
+            continue
+        try:
+            mapa[clave] = int(it.get("senal") or 0)
+        except (TypeError, ValueError):
+            mapa[clave] = 0
+    return mapa
+
+
+def _breaking_por_clave(marca: str | None, geo: str | None = None) -> dict[str, bool]:
+    """Mapea `clave -> breaking(bool)` desde el snapshot persistido de la marca.
+
+    Lee el flag `breaking` que el daemon materializo en `radar_items`. Sin marca, sin snapshot
+    (daemon OFF) o ante fallo -> `{}` (cero efecto: todo tema cae a `breaking=False`). El `geo`
+    es opcional: si no se pasa, no se filtra por geo (toma el del barrido configurado).
+    """
+    if not marca:
+        return {}
+    try:
+        # Default de geo: el del barrido del daemon (mismo que usa `ejecutar_barrido`), para
+        # apuntar al snapshot que el Investigador escribe. Sin filtrar si no se puede derivar.
+        geo_eff = geo if geo is not None else config.radar_auto_geo()
+        items = repos.listar_radar_items(marca=marca, geo=geo_eff or "")
+    except Exception:  # noqa: BLE001 -- best-effort: el badge breaking nunca tumba el endpoint
+        _log.exception("investigador: no se pudo leer breaking del snapshot (marca=%s)", marca)
+        return {}
+    mapa: dict[str, bool] = {}
+    for it in items:
+        clave = (it.get("clave") or "").strip()
+        if clave:
+            mapa[clave] = bool(it.get("breaking"))
+    return mapa
+
+
 def umbral_prioritario() -> int:
     """Umbral de señal a partir del cual un tema es PRIORITARIO (muy viral / atender primero).
 
@@ -88,22 +166,28 @@ def prioritario_de_senal(senal: Any) -> bool:
 
 
 def anotar_estado_prioritario(temas: list[dict[str, Any]], marca: str | None) -> None:
-    """Anota IN-PLACE cada tema serializado con `estado` y `prioritario` (campos ADITIVOS).
+    """Anota IN-PLACE cada tema serializado con `estado`, `prioritario` y `breaking` (ADITIVOS).
 
     - `estado`: `'publicado' | 'en_parrilla' | 'nuevo'`, cruzando el titulo del tema contra el
       estado editorial reciente de la marca (`_estado_por_clave`). Se calcula AL LEER, asi el
       badge funciona AUNQUE el daemon del Investigador este OFF. UNA sola query al tablero por
       request (no N+1): el mapa clave->estado se computa una vez y se consulta en memoria.
     - `prioritario`: `senal >= umbral_prioritario()` (tema muy viral, atenderlo primero).
+    - `breaking`: flag de ACELERACION de señal, leido del snapshot persistido (`radar_items`,
+      lo materializa el daemon del Investigador). UNA sola query extra al snapshot (no N+1).
+      Sin marca / sin snapshot (daemon OFF) -> `breaking=False` para todos (cero efecto).
 
     BEST-EFFORT / CERO REGRESION: si el cruce al tablero falla (o no hay marca), todo cae a
-    `estado='nuevo'`; nunca lanza, nunca rompe el endpoint. No toca los campos existentes.
+    `estado='nuevo'` y `breaking=False`; nunca lanza, nunca rompe el endpoint. No toca los
+    campos existentes. La firma publica `(temas, marca)` NO cambia (los endpoints la llaman asi).
     """
     estados = _estado_por_clave(marca) if marca else {}
+    breaking = _breaking_por_clave(marca)
     for tema in temas:
         clave = dedup.clave(str(tema.get("titulo", "")))
         tema["estado"] = estados.get(clave, "nuevo") if clave else "nuevo"
         tema["prioritario"] = prioritario_de_senal(tema.get("senal", 0))
+        tema["breaking"] = breaking.get(clave, False) if clave else False
 
 
 def materializar_snapshot(marca: str, geo: str) -> int:
@@ -133,6 +217,11 @@ def materializar_snapshot(marca: str, geo: str) -> int:
 
         estados = _estado_por_clave(marca)
 
+        # BREAKING: señal PREVIA por clave (snapshot ANTERIOR de esta misma marca/geo). Una
+        # sola lectura ANTES del upsert (el upsert refresca las filas: hay que leer antes).
+        # Primera materializacion (sin filas previas) -> mapa vacio -> nadie es breaking.
+        senal_previa = _senal_previa_por_clave(marca, geo)
+
         items: list[dict[str, Any]] = []
         for tema in temas:
             clave = dedup.clave(tema.titulo)
@@ -149,6 +238,7 @@ def materializar_snapshot(marca: str, geo: str) -> int:
                 razon=razon,
                 estado=estados.get(clave, "nuevo"),
                 url_canonica=url_canonica,
+                breaking=_es_breaking(d.get("senal", 0), senal_previa.get(clave)),
             )
             items.append(d)
 

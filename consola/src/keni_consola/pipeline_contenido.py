@@ -526,6 +526,9 @@ def crear_tema_de(
             # Fecha de la FUENTE (pubDate del item), para mostrar en la Consola "Fuente del …"
             # junto a "Generado el …" (`creado`). "" si la fuente no traía fecha.
             fecha_fuente=_fecha_fuente_iso(item),
+            # URL CANÓNICA de la nota de origen (trazabilidad + dedup por URL). El enlace ya va
+            # como texto en la nota; aquí se persiste estructurado. "" si no es http(s) válido.
+            url_fuente=_url_fuente_de(item),
         )
     except Exception:  # noqa: BLE001 -- sin tema, este item no produce nada (no rompe el barrido)
         _log.warning("pipeline: no se pudo crear el tema (%s)", marca, exc_info=True)
@@ -562,6 +565,19 @@ def _claves_dedup_marca(marca: str) -> set[str]:
         _log.warning("pipeline: no se pudieron leer títulos para dedup (%s)", marca, exc_info=True)
         return set()
     return {k for t in titulos if (k := dedup.clave(t))}
+
+
+def _url_fuente_de(item: dict[str, Any]) -> str:
+    """URL CANÓNICA del enlace de origen del item, para `contenido.url_fuente` (trazabilidad/dedup).
+
+    Solo canoniza http/https (la canonización ya descarta lo demás devolviendo ""). El enlace
+    sigue viajando como texto en la nota; esto lo persiste estructurado. "" si no hay enlace
+    válido. Best-effort y puro (delega en `dedup.url_canonica`).
+    """
+    enlace = (item.get("enlace") or "").strip()
+    if not enlace.startswith(("http://", "https://")):
+        return ""
+    return dedup.url_canonica(enlace)
 
 
 def _nota_de_item(item: dict[str, Any]) -> str:

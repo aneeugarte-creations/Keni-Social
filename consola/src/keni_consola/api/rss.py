@@ -49,6 +49,7 @@ from starlette.routing import Route
 
 from .. import biblioteca, marcas, redes, repos
 from .._http_json import leer_json
+from ..dominio import dedup
 from ..dominio import generar as gen_dom
 from ..dominio import http_feed
 from ..dominio import stream
@@ -482,12 +483,18 @@ async def generar(request: Request) -> Response:
             imagen_fuente = imagen_item
             tipo_contenido = "fuente"
 
+    # URL CANONICA de la nota de origen: el enlace ya viaja como texto en la nota; aquí se
+    # PERSISTE estructurado en `contenido.url_fuente` (trazabilidad + dedup por URL). "" si el
+    # enlace no es http(s) válido (la canonización lo descarta).
+    url_fuente = dedup.url_canonica(enlace) if enlace.strip().startswith(("http://", "https://")) else ""
+
     gen = gen_dom.lanzar_copy(
         tipo="rss", prompt_id=prompt_id, origen_historial=skill.strip(), marca=marca,
         contexto=nota, redes_ids=redes_ids, titulo=titulo.strip(), titulo_dado=titulo.strip(),
         texto_base=nota, autor=autor,
         fuente_id=fuente if clave_item else None, clave=clave_item if fuente else None,
         imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
+        url_fuente=url_fuente,
     )
     return JSONResponse({"generacion": gen})
 

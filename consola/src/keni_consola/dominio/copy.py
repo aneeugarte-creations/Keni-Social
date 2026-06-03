@@ -193,6 +193,27 @@ def _revertir_borradores(ids: list[str]) -> None:
             continue
 
 
+def _persistir_url_fuente(publicaciones: list[dict[str, object]], url_fuente: str) -> None:
+    """Persiste `url_fuente` en el `contenido` padre de cada borrador creado (dedup por URL).
+
+    POST-HOC: cada borrador serializado trae el `contenido_id` de su tema padre (sea uno nuevo
+    creado por la pieza o uno existente al que se nidó). Escribimos la URL canónica en ese
+    `contenido` via `repos.actualizar_contenido` (campo `url_fuente`, editable). Deduplicamos
+    los `contenido_id` (varias piezas pueden colgar del mismo tema). Best-effort por tema: un
+    fallo NUNCA rompe el post-procesado (el copy ya está hecho).
+    """
+    vistos: set[str] = set()
+    for pub in publicaciones:
+        cid = str(pub.get("contenido_id") or "").strip()
+        if not cid or cid in vistos:
+            continue
+        vistos.add(cid)
+        try:
+            repos.actualizar_contenido(cid, {"url_fuente": url_fuente})
+        except Exception:  # noqa: BLE001 -- la trazabilidad es un extra; nunca rompe el post-procesado
+            continue
+
+
 # --------------------------------------------------------------------------- #
 # Callbacks de post-procesado (corren al completarse la generacion)            #
 # --------------------------------------------------------------------------- #
@@ -211,6 +232,7 @@ def construir_procesar_copy(
     imagen_fuente: str = "",
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
+    url_fuente: str = "",
 ) -> generaciones.Procesar:
     """Callback de post-procesado de una generacion de PIEZAS (copy/RSS).
 
@@ -222,6 +244,9 @@ def construir_procesar_copy(
     ADJUNTA a ese `contenido` (cuelga de su tarjeta); sin el (default ""), borrador suelto.
     `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de las piezas cuando la salida no
     trae uno propio (p. ej. `no_verificado`, para heredar el aviso de la criba de la fuente).
+    `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, se PERSISTE en
+    `contenido.url_fuente` del tema padre de cada borrador creado (dedup por URL). Best-effort:
+    un fallo NUNCA rompe el post-procesado (el copy ya esta hecho). "" = no se toca.
     """
 
     def procesar(salida: str, metricas: stream.MetricasRun | None) -> dict[str, object]:
@@ -239,6 +264,12 @@ def construir_procesar_copy(
             contenido_id=contenido_id,
             imagen_fuente=imagen_fuente, tipo_contenido=tipo_contenido,
         )
+        # Trazabilidad de la fuente (RSS): persiste la URL canonica en el `contenido` padre de
+        # cada borrador creado. Best-effort: el copy YA esta hecho; un fallo aqui no debe romper
+        # el post-procesado. Se deduplican los `contenido_id` (varias piezas pueden compartir
+        # tema cuando se nida bajo uno existente).
+        if url_fuente:
+            _persistir_url_fuente(publicaciones, url_fuente)
         resultado: dict[str, object] = {
             "resultado": parsed["resultado"],
             "historial_id": historial_id,

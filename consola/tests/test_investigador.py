@@ -239,6 +239,111 @@ def test_estado_por_clave_best_effort(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+# BREAKING (Fase 3): aceleracion de señal entre snapshots                       #
+# --------------------------------------------------------------------------- #
+
+def test_es_breaking_umbrales():
+    """`_es_breaking` exige señal previa, +50% relativo y piso absoluto de señal nueva."""
+    # Sin señal previa (primer snapshot del tema) -> NO breaking (no inventa historial).
+    assert investigador._es_breaking(50_000, None) is False
+    # +50% y sobre el piso (12_000 >= 8_000 * 1.5 = 12_000, y >= 10_000) -> breaking.
+    assert investigador._es_breaking(12_000, 8_000) is True
+    # Subida pequeña (+20%, < +50%) -> NO breaking, aunque grande en absoluto.
+    assert investigador._es_breaking(60_000, 50_000) is False
+    # +200% pero por debajo del piso absoluto (300 < 10_000) -> NO breaking.
+    assert investigador._es_breaking(300, 100) is False
+    # Previa 0 (no aporta base) -> NO breaking.
+    assert investigador._es_breaking(50_000, 0) is False
+    # Tipos raros -> best-effort False.
+    assert investigador._es_breaking("x", 1000) is False
+
+
+def test_materializar_sin_previo_no_es_breaking(monkeypatch):
+    """Primera materializacion (snapshot previo vacio): ningun tema es breaking."""
+    temas = [_tema("Tema fuerte", senal=90_000)]
+    monkeypatch.setattr(
+        api_radar, "_radar_consolidado", lambda geo, **k: ([temas], []), raising=True
+    )
+    monkeypatch.setattr(dedup, "url_canonica", lambda u: u, raising=False)
+    monkeypatch.setattr(repos_modulo, "listar_contenido", lambda **k: [], raising=False)
+    # Snapshot PREVIO vacio (primera materializacion).
+    monkeypatch.setattr(repos_modulo, "listar_radar_items", lambda **k: [], raising=False)
+
+    capturado = {}
+    monkeypatch.setattr(
+        repos_modulo, "upsert_radar_items",
+        lambda m, g, items: capturado.update(items=items) or len(items),
+        raising=False,
+    )
+    investigador.materializar_snapshot("claro-sports", "MX")
+    assert all(it["breaking"] is False for it in capturado["items"])
+
+
+def test_materializar_marca_breaking_si_acelera(monkeypatch):
+    """Un tema cuya señal acelera +50% sobre el snapshot previo (y >= piso) se marca breaking."""
+    # Nuevo snapshot: 'Sube fuerte' 60K (antes 30K, +100%), 'Sube poco' 31K (antes 30K, +3%).
+    temas = [_tema("Sube fuerte", senal=60_000), _tema("Sube poco", senal=31_000)]
+    monkeypatch.setattr(
+        api_radar, "_radar_consolidado", lambda geo, **k: ([temas], []), raising=True
+    )
+    monkeypatch.setattr(dedup, "url_canonica", lambda u: u, raising=False)
+    monkeypatch.setattr(repos_modulo, "listar_contenido", lambda **k: [], raising=False)
+    # Snapshot PREVIO con la señal anterior por clave.
+    previo = [
+        {"clave": dedup.clave("Sube fuerte"), "senal": 30_000},
+        {"clave": dedup.clave("Sube poco"), "senal": 30_000},
+    ]
+    monkeypatch.setattr(repos_modulo, "listar_radar_items", lambda **k: previo, raising=False)
+
+    capturado = {}
+    monkeypatch.setattr(
+        repos_modulo, "upsert_radar_items",
+        lambda m, g, items: capturado.update(items=items) or len(items),
+        raising=False,
+    )
+    investigador.materializar_snapshot("claro-sports", "MX")
+    por_titulo = {it["titulo"]: it["breaking"] for it in capturado["items"]}
+    assert por_titulo["Sube fuerte"] is True
+    assert por_titulo["Sube poco"] is False
+
+
+def test_anotar_breaking_sin_snapshot_es_false(monkeypatch):
+    """Sin daemon (snapshot vacio): `anotar_estado_prioritario` deja `breaking=False` para todos."""
+    monkeypatch.setattr(repos_modulo, "listar_contenido", lambda **k: [], raising=False)
+    monkeypatch.setattr(repos_modulo, "listar_radar_items", lambda **k: [], raising=False)
+    temas = [{"titulo": "Tema A", "senal": 90_000}, {"titulo": "Tema B", "senal": 5}]
+    investigador.anotar_estado_prioritario(temas, "claro-sports")
+    assert all(t["breaking"] is False for t in temas)
+    # Campos existentes intactos.
+    assert temas[0]["prioritario"] is not None and temas[0]["estado"] == "nuevo"
+
+
+def test_anotar_breaking_desde_snapshot(monkeypatch):
+    """`anotar_estado_prioritario` lee el flag `breaking` del snapshot persistido por clave."""
+    monkeypatch.setattr(repos_modulo, "listar_contenido", lambda **k: [], raising=False)
+    snapshot = [
+        {"clave": dedup.clave("Tema caliente"), "breaking": True},
+        {"clave": dedup.clave("Tema frio"), "breaking": False},
+    ]
+    monkeypatch.setattr(repos_modulo, "listar_radar_items", lambda **k: snapshot, raising=False)
+    temas = [{"titulo": "Tema caliente", "senal": 1}, {"titulo": "Tema frio", "senal": 1}]
+    investigador.anotar_estado_prioritario(temas, "claro-sports")
+    por_titulo = {t["titulo"]: t["breaking"] for t in temas}
+    assert por_titulo["Tema caliente"] is True
+    assert por_titulo["Tema frio"] is False
+
+
+def test_anotar_breaking_sin_marca_es_false(monkeypatch):
+    """Sin marca no hay snapshot que cruzar: `breaking=False` para todos (no consulta el snapshot)."""
+    def _boom(**k):  # noqa: ANN003
+        raise AssertionError("no debe leer el snapshot sin marca")
+    monkeypatch.setattr(repos_modulo, "listar_radar_items", _boom, raising=False)
+    temas = [{"titulo": "Tema X", "senal": 1}]
+    investigador.anotar_estado_prioritario(temas, None)
+    assert temas[0]["breaking"] is False
+
+
+# --------------------------------------------------------------------------- #
 # Daemon: arranca SIEMPRE; gateado en vivo                                      #
 # --------------------------------------------------------------------------- #
 

@@ -753,6 +753,8 @@ export interface TemaRadar {
   estado?: EstadoTema;
   /** `true` si el tema es prioritario (algo fuerte que debe salir rápido). Opcional. */
   prioritario?: boolean;
+  /** `true` si la señal del tema está acelerando ("En aumento"/breaking). Opcional. */
+  breaking?: boolean;
   /** Redes/superficies donde aparece (p. ej. "busquedas-mx", "rss"). */
   redes: string[];
   /** Fuentes que lo reportan (p. ej. "Google Trends", el nombre del feed). */
@@ -1000,6 +1002,8 @@ export interface ItemParrilla {
   estado?: EstadoTema;
   /** `true` si el ítem es prioritario (algo fuerte que debe salir rápido). Opcional. */
   prioritario?: boolean;
+  /** `true` si la señal del ítem está acelerando ("En aumento"/breaking). Opcional. */
+  breaking?: boolean;
   /** "posteo" (clip/galería/infografía/normal) o "editorial" (video con carnita). */
   tipo: "posteo" | "editorial";
   subtipo: SubtipoParrilla;

@@ -11,9 +11,9 @@ from __future__ import annotations
 from keni_consola import db, repos
 
 
-def _publicar(marca: str, titulo: str) -> str:
+def _publicar(marca: str, titulo: str, *, url_fuente: str = "") -> str:
     """Crea un contenido de `marca` con una plataforma en estado 'publicado'. Devuelve id."""
-    c = db.crear_contenido(titulo=titulo, marca=marca)
+    c = db.crear_contenido(titulo=titulo, marca=marca, url_fuente=url_fuente)
     db.crear_contenido_plataforma(contenido_id=c["id"], red="x", estado="publicado")
     return c["id"]
 
@@ -63,3 +63,68 @@ def test_sin_contenido_devuelve_false(entorno):
 def test_delegado_repos(entorno):
     _publicar("unotv", "Gol de último minuto del Cruz Azul")
     assert repos.existe_publicado_similar("unotv", "gol de ultimo minuto del cruz azul") is True
+
+
+# --------------------------------------------------------------------------- #
+# Dedup por URL (F3): `url_fuente` persiste y cruza por URL canonica             #
+# --------------------------------------------------------------------------- #
+
+def test_crear_contenido_persiste_url_fuente(entorno):
+    """`crear_contenido(url_fuente=...)` la guarda y se lee de vuelta."""
+    c = db.crear_contenido(titulo="Algo", marca="unotv", url_fuente="https://medio.com/nota")
+    assert c["url_fuente"] == "https://medio.com/nota"
+    leido = db.obtener_contenido(c["id"])
+    assert leido is not None and leido["url_fuente"] == "https://medio.com/nota"
+
+
+def test_match_por_url_canonica(entorno):
+    """Una pieza PUBLICADA con la misma url_fuente (canonica) dispara el dedup por URL.
+
+    El titulo dado NO casa con el publicado (forzamos el match por la rama de URL): aun con
+    parametros de tracking distintos, la url canonica coincide -> True.
+    """
+    _publicar("unotv", "Titular original publicado", url_fuente="https://medio.com/nota-x")
+    # Misma URL con tracking + `www` + barra final: canoniza igual -> match por URL.
+    assert (
+        db.existe_publicado_similar(
+            "unotv",
+            "Un titular completamente distinto que no casaria por similitud",
+            url="https://www.medio.com/nota-x/?utm_source=tw",
+        )
+        is True
+    )
+
+
+def test_no_match_por_url_cae_al_titulo(entorno):
+    """Si la URL no casa con ninguna publicada, se evalua por TITULO (fallback)."""
+    _publicar("unotv", "El América gana el clásico", url_fuente="https://medio.com/nota-a")
+    # URL distinta (no casa por URL) pero titulo equivalente -> True por la rama de titulo.
+    assert (
+        db.existe_publicado_similar(
+            "unotv",
+            "el america GANA el clasico",
+            url="https://otro.com/nota-distinta",
+        )
+        is True
+    )
+    # URL distinta Y titulo distinto -> False.
+    assert (
+        db.existe_publicado_similar(
+            "unotv",
+            "Pronóstico del clima en CDMX mañana",
+            url="https://otro.com/nota-distinta",
+        )
+        is False
+    )
+
+
+def test_url_match_aislado_por_marca(entorno):
+    """La url_fuente publicada por OTRA marca no cuenta para la marca consultada."""
+    _publicar("clarosports", "Final", url_fuente="https://medio.com/final")
+    assert (
+        db.existe_publicado_similar("unotv", "x", url="https://medio.com/final") is False
+    )
+    assert (
+        db.existe_publicado_similar("clarosports", "x", url="https://medio.com/final")
+        is True
+    )

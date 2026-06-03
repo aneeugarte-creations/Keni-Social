@@ -34,8 +34,10 @@ const PARRILLA = {
       redes: ["x"],
       enlaces: [],
       // Investigador F2b: prioritario (algo fuerte) y aún sin gestionar (nuevo => sin badge de estado).
+      // F3: además su señal está acelerando => badge "En aumento".
       estado: "nuevo",
       prioritario: true,
+      breaking: true,
     },
     {
       tipo: "posteo",
@@ -49,8 +51,10 @@ const PARRILLA = {
       redes: ["x"],
       enlaces: [],
       // En parrilla y no prioritario => badge "En parrilla", sin "Prioritario".
+      // F3: breaking false => sin badge "En aumento".
       estado: "en_parrilla",
       prioritario: false,
+      breaking: false,
     },
   ],
   editorial: [],
@@ -73,8 +77,10 @@ const RADAR = {
       por_que: "Pico de interés.",
       enlaces: [],
       // Investigador F2b: ya publicado y prioritario => badges "Publicado" + "Prioritario".
+      // F3: además su señal está acelerando => badge "En aumento".
       estado: "publicado",
       prioritario: true,
+      breaking: true,
     },
     {
       titulo: "Tendencia nueva sin marcar",
@@ -190,6 +196,9 @@ describe("Investigador", () => {
     expect(screen.queryByText("Publicado")).not.toBeInTheDocument();
     // Solo un ítem es prioritario (el primero); no hay un segundo badge "Prioritario".
     expect(screen.getAllByText("Prioritario")).toHaveLength(1);
+    // F3: el primer ítem trae breaking:true => badge "En aumento"; el segundo (false) no.
+    expect(screen.getByText("En aumento")).toBeInTheDocument();
+    expect(screen.getAllByText("En aumento")).toHaveLength(1);
   });
 
   it("pinta los badges de estado y prioridad en Descubrimiento (F2b)", async () => {
@@ -207,5 +216,8 @@ describe("Investigador", () => {
     expect(screen.getByText("Tendencia nueva sin marcar")).toBeInTheDocument();
     expect(screen.getAllByText("Prioritario")).toHaveLength(1);
     expect(screen.queryByText("En parrilla")).not.toBeInTheDocument();
+    // F3: el primer tema trae breaking:true => "En aumento"; el segundo (sin la clave) no.
+    expect(screen.getByText("En aumento")).toBeInTheDocument();
+    expect(screen.getAllByText("En aumento")).toHaveLength(1);
   });
 });

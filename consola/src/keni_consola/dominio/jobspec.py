@@ -87,6 +87,7 @@ def construir_copy(
     imagen_fuente: str = "",
     tipo_contenido: str = "",
     veredicto_inicial: str = "",
+    url_fuente: str = "",
 ) -> dict[str, Any]:
     """Spec del post-procesado de PIEZAS (copy/RSS): parsea piezas + crea borradores.
 
@@ -99,6 +100,9 @@ def construir_copy(
     `veredicto_inicial` (pipeline QPC): veredicto por DEFECTO de cada borrador cuando la salida
     no trae uno propio (p. ej. `no_verificado` para que la pieza herede el aviso de la criba de
     la fuente). "" = comportamiento de hoy (el veredicto sale de la propia salida del copy).
+    `url_fuente` (RSS, trazabilidad): URL CANONICA de la nota de origen. Si viene, el post-
+    procesado la PERSISTE en `contenido.url_fuente` del tema padre de cada borrador (dedup por
+    URL). "" = no se toca (comportamiento de hoy).
     """
     return {
         "kind": PROC_COPY,
@@ -115,6 +119,7 @@ def construir_copy(
         "imagen_fuente": imagen_fuente or "",
         "tipo_contenido": tipo_contenido or "",
         "veredicto_inicial": veredicto_inicial or "",
+        "url_fuente": url_fuente or "",
     }
 
 
@@ -418,6 +423,7 @@ def reconstruir_procesar(spec: dict[str, Any]):  # noqa: ANN201 -- generaciones.
             imagen_fuente=p.get("imagen_fuente", "") or "",
             tipo_contenido=p.get("tipo_contenido", "") or "",
             veredicto_inicial=p.get("veredicto_inicial", "") or "",
+            url_fuente=p.get("url_fuente", "") or "",
         )
         fuente_id = p.get("fuente_id") or ""
         clave = p.get("clave") or ""

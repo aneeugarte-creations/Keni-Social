@@ -25,6 +25,7 @@ def _item(clave: str, titulo: str, **extra):
         "enlaces": [],
         "curado": False,
         "url_canonica": "",
+        "breaking": False,
         "score": 0.0,
         "razon": "",
         "estado": "nuevo",

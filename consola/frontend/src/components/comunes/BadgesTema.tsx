@@ -11,6 +11,10 @@ import type { EstadoTema } from "@/types";
  *  - PRIORIDAD: responde a "si pasa algo fuerte tiene que salir rápido". Una sola
  *    palabra, "Prioritario" (texto exacto, SIN emoji ni iconos), con un acento ámbar
  *    sobrio del tema para llamar la atención de forma profesional.
+ *  - BREAKING: responde a "la señal del tema está acelerando, conviene atender ya".
+ *    Etiqueta "En aumento" (texto exacto, SIN emoji ni iconos). Acento azul/cielo
+ *    sobrio del sistema de diseño, DISTINTO del ámbar de "Prioritario" y del verde de
+ *    "Publicado": máxima visibilidad sin estridencia. Va primero por ser lo más urgente.
  */
 
 /** Badge de estado de gestión. `null` cuando el tema es nuevo (no se pinta). */
@@ -24,6 +28,24 @@ export function BadgeEstadoTema({ estado }: { estado?: EstadoTema }) {
     return <Badge variant="secondary">En parrilla</Badge>;
   }
   return null;
+}
+
+/**
+ * Badge de "breaking" (señal en aumento). `null` salvo que `breaking === true`.
+ * Lo más urgente: va antes que "Prioritario" para máxima visibilidad.
+ */
+export function BadgeBreakingTema({ breaking }: { breaking?: boolean }) {
+  if (breaking !== true) return null;
+  // Acento azul/cielo sobrio del sistema de diseño: distinto del ámbar ("Prioritario")
+  // y del verde ("Publicado"). Llama la atención sin estridencia, sin iconos ni emojis.
+  return (
+    <Badge
+      variant="secondary"
+      className="border-sky-500/40 bg-sky-500/20 text-sky-700 font-semibold uppercase tracking-wide dark:text-sky-300"
+    >
+      En aumento
+    </Badge>
+  );
 }
 
 /** Badge de prioridad. `null` salvo que el tema sea prioritario. */

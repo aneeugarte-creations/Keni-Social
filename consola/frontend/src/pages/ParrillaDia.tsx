@@ -16,7 +16,11 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
-import { BadgeEstadoTema, BadgePrioridadTema } from "@/components/comunes/BadgesTema";
+import {
+  BadgeBreakingTema,
+  BadgeEstadoTema,
+  BadgePrioridadTema,
+} from "@/components/comunes/BadgesTema";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { BotonExportarLista } from "@/components/comunes/BotonExportarLista";
 import type { ItemExportable } from "@/components/comunes/exportarLista";
@@ -328,6 +332,7 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
+          <BadgeBreakingTema breaking={item.breaking} />
           <BadgePrioridadTema prioritario={item.prioritario} />
           <BadgeEstadoTema estado={item.estado} />
           {item.tipo === "posteo" && (

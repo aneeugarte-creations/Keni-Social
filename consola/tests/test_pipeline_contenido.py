@@ -102,6 +102,17 @@ def test_items_ingeribles_omite_sin_clave_o_sin_titulo():
     assert [i["clave"] for i in elegidos] == ["ok"]
 
 
+def test_url_fuente_de_canoniza_http():
+    item = _item(enlace="https://www.ejemplo.test/n/?utm_source=x&id=9#a")
+    assert pc._url_fuente_de(item) == "ejemplo.test/n?id=9"
+
+
+def test_url_fuente_de_vacia_si_no_http():
+    assert pc._url_fuente_de(_item(enlace="")) == ""
+    assert pc._url_fuente_de(_item(enlace="ftp://x/y")) == ""
+    assert pc._url_fuente_de({"titulo": "x"}) == ""
+
+
 def test_extraer_og_image():
     html = '<head><meta property="og:image" content="https://x.test/foto.jpg"></head>'
     assert pc._extraer_og_image(html) == "https://x.test/foto.jpg"
@@ -235,6 +246,46 @@ def test_ci_guarda_copy_pendiente_con_imagen_propia(entorno, monkeypatch):
     pend = json.loads(temas[0]["copy_pendiente"])
     assert pend["imagen"] == "https://casa.test/foto.jpg"
     assert pend["tipo_contenido"] == "fuente"
+
+
+def test_ci_persiste_url_fuente_canonica(entorno, monkeypatch):
+    """CI: un item con `enlace` http(s) persiste `url_fuente` CANÓNICA en el tema creado."""
+    monkeypatch.setenv("KENI_PIPELINE", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
+
+    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
+    # Enlace con tracking + esquema + www: la canónica los normaliza (cruce por URL).
+    enlace = "https://www.ejemplo.test/nota-1?utm_source=rss&id=7#frag"
+    _mock_feed(monkeypatch, [_item(clave="u1", titulo="Tema con URL", enlace=enlace)])
+    _mock_og_image(monkeypatch, "")
+
+    pc.ejecutar_barrido()
+
+    temas = pc.temas_pipeline()
+    assert len(temas) == 1
+    tema = repos.obtener_contenido(temas[0]["id"])
+    assert (tema.get("url_fuente") or "") == "ejemplo.test/nota-1?id=7"
+
+
+def test_ci_url_fuente_vacia_si_enlace_no_http(entorno, monkeypatch):
+    """CI: un item sin enlace http(s) deja `url_fuente` vacía (no rompe la creación del tema)."""
+    monkeypatch.setenv("KENI_PIPELINE", "1")
+    monkeypatch.setenv("KENI_PIPELINE_MAX", "1")
+    monkeypatch.setattr(pc, "_autor_pipeline", lambda: None)
+    monkeypatch.setattr(pc, "asegurar_documento_qa", lambda: "")
+
+    repos.crear_fuente_rss("Diario", _URL_OK, marca="unotv")
+    _mock_feed(monkeypatch, [_item(clave="u2", titulo="Sin enlace", enlace="")])
+    _mock_og_image(monkeypatch, "")
+
+    pc.ejecutar_barrido()
+
+    temas = pc.temas_pipeline()
+    assert len(temas) == 1
+    tema = repos.obtener_contenido(temas[0]["id"])
+    assert (tema.get("url_fuente") or "") == ""
 
 
 # --------------------------------------------------------------------------- #
