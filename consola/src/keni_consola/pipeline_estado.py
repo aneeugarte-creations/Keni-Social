@@ -166,8 +166,14 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
       - estado `programado`             -> programada
       - estado `aprobado`               -> aprobada
       - estado `en_revision`            -> lista_para_revisar (gate humano)
-      - ya hay copy pero falta imagen   -> generando_arte
-      - cualquier otro (falta copy / borrador) -> generando_copy
+      - falta copy                      -> generando_copy
+      - hay copy pero falta imagen      -> generando_arte
+      - copy E imagen listos (aún sin entrar a revisión) -> lista_para_revisar
+
+    OJO con el último caso: una pieza con copy + imagen pero todavía en `pendiente` (que el
+    auto-avance no ha movido aún) está LISTA, no "generando copy". Antes el caso por defecto
+    era `generando_copy`, así que estas piezas mentían ("Generando copy" con copy e imagen ya
+    hechos). El orden ahora es explícito: solo es `generando_copy` si DE VERDAD falta el copy.
 
     Backend y front comparten esta misma logica a proposito: el front PREFIERE este
     `etapa_ia` cuando viene y cae a su propia derivacion solo si no llega (degradacion).
@@ -182,9 +188,11 @@ def etapa_de_pieza(pieza: dict[str, Any]) -> str:
         return ETAPA_APROBADA
     if estado == "en_revision":
         return ETAPA_LISTA_REVISAR
-    if not pieza.get("falta_copy", True) and pieza.get("falta_imagen", True):
+    if pieza.get("falta_copy", True):
+        return ETAPA_GENERANDO_COPY
+    if pieza.get("falta_imagen", True):
         return ETAPA_GENERANDO_ARTE
-    return ETAPA_GENERANDO_COPY
+    return ETAPA_LISTA_REVISAR
 
 
 def contar_por_etapa(

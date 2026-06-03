@@ -71,6 +71,14 @@ describe("etapaDePublicacion · etapa IA derivada (degradación, sin `etapa_ia`)
     ).toBe("generando_arte");
   });
 
+  it("copy e imagen listos aunque siga en borrador → lista_para_revisar (no generando_copy)", () => {
+    expect(
+      etapaDePublicacion(
+        pub({ estado: "borrador", falta_copy: false, falta_imagen: false, etapa_ia: undefined }),
+      ),
+    ).toBe("lista_para_revisar");
+  });
+
   it("en revisión → lista_para_revisar (gate humano)", () => {
     expect(etapaDePublicacion(pub({ estado: "en_revision", etapa_ia: undefined }))).toBe(
       "lista_para_revisar",

@@ -118,7 +118,8 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           ? "Falta el copy: la IA aún lo está redactando."
           : etapa === "generando_arte"
             ? "Falta el arte: la IA aún está generando la imagen."
-            : "La IA aún está preparando esta pieza.";
+            : // copy + imagen listos pero aún en `pendiente`: lista, falta entrar a revisión.
+              "Pieza lista; pendiente de entrar a revisión para que puedas darle tu OK.";
 
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
   // el material original como marcador para que el post no quede vacío en "generando copy".

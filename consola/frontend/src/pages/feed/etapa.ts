@@ -52,8 +52,9 @@ export const META_ETAPA: Record<EtapaIa, MetaEtapa> = {
  *  - `programado`              → programada
  *  - `aprobado`                → aprobada
  *  - `en_revision`             → lista_para_revisar (gate humano: espera tu firma)
- *  - aún falta imagen y ya hay copy → generando_arte
- *  - en cualquier otro caso (falta copy / pendiente / en_curso) → generando_copy
+ *  - falta copy                → generando_copy
+ *  - hay copy, falta imagen    → generando_arte
+ *  - copy E imagen listos (aún en pendiente) → lista_para_revisar (la IA terminó; lista)
  *
  * El backend (Flujo C) trae la etapa real en `p.etapa_ia`; `etapaDePublicacion` la PREFIERE
  * cuando llega y es una etapa conocida. Esta derivación queda como degradación (piezas
@@ -70,6 +71,9 @@ export function etapaDePublicacion(p: Publicacion): EtapaIa {
   if (p.estado === "programado") return "programada";
   if (p.estado === "aprobado") return "aprobada";
   if (p.estado === "en_revision") return "lista_para_revisar";
-  if (!p.falta_copy && p.falta_imagen) return "generando_arte";
-  return "generando_copy";
+  // Orden explícito (ESPEJO del backend): solo "generando_copy" si DE VERDAD falta el copy.
+  // Una pieza con copy e imagen ya hechos pero aún en `pendiente` está LISTA, no generando copy.
+  if (p.falta_copy) return "generando_copy";
+  if (p.falta_imagen) return "generando_arte";
+  return "lista_para_revisar";
 }

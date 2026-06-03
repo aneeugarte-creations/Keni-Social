@@ -86,4 +86,10 @@ describe("PostFeed · firma IA y aviso de bloqueo", () => {
     // Aviso VISIBLE (no solo tooltip) de qué falta.
     expect(screen.getByText(/Falta el arte/i)).toBeInTheDocument();
   });
+
+  it("pieza con copy e imagen pero aún en pendiente: avisa que está lista, NO «falta copy»", () => {
+    renderPost(pub({ etapa_ia: "lista_para_revisar", falta_copy: false, falta_imagen: false }));
+    expect(screen.queryByText(/Falta el copy/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Pieza lista/i)).toBeInTheDocument();
+  });
 });
