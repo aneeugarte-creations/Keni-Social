@@ -29,7 +29,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agencias, marcas, parrilla, radar, relevancia_marca
+from .. import agencias, config, marcas, parrilla, radar, relevancia_marca
 from . import rss
 
 # --------------------------------------------------------------------------- #
@@ -49,6 +49,17 @@ from . import rss
 
 _TTL_CACHE = 180.0  # segundos: ventana corta; refresca de fuentes reales pasado el TTL.
 _cache_lock = threading.Lock()
+
+# TTL del SNAPSHOT del Investigador (Fase 1): distinto de `_TTL_CACHE` (la cache en vivo de
+# Trends/feeds). El snapshot lo materializa el daemon cada `KENI_INVESTIGADOR_INTERVALO_HORAS`;
+# lo damos por valido durante ~2 intervalos (margen ante un barrido perdido) antes de caer al
+# camino en vivo. Lazy (no usa config a nivel de modulo): se calcula en cada lectura.
+
+
+def _ttl_snapshot() -> float:
+    """TTL del snapshot del Investigador en segundos (~2 intervalos del daemon, min 1h)."""
+    return max(config.investigador_intervalo_horas() * 2, 1) * 3600.0
+
 # clave -> (instante_monotonic, (grupos, fuentes))
 _cache: dict[tuple[str, bool, str | None], tuple[float, tuple[list[list[radar.Tema]], list[dict[str, Any]]]]] = {}
 
@@ -112,6 +123,36 @@ def _grupos_para_consolidar(grupos: list[list[radar.Tema]]) -> list[list[radar.T
     import copy
 
     return [[copy.deepcopy(t) for t in grupo] for grupo in grupos]
+
+
+def _temas_desde_snapshot(
+    marca: str | None, geo: str, *, refrescar: bool = False
+) -> list[radar.Tema] | None:
+    """Temas del SNAPSHOT del Investigador (Fase 1), o None para caer al camino en vivo.
+
+    Contrato de CERO REGRESION: la PRIMERA linea devuelve None si el flag esta OFF o si se pide
+    `?refresh=1`, asi que con `KENI_INVESTIGADOR` ausente el comportamiento es IDENTICO a hoy y
+    `?refresh=1` SIEMPRE golpea fuentes reales (nunca sirve el snapshot). Si el flag esta ON y no
+    se refresca, lee del snapshot fresco (`repos.listar_radar_items` con `frescas_seg`); devuelve
+    None si esta vacio (sin snapshot aun) o ante cualquier excepcion (degradacion al camino en
+    vivo). Reconstruye los `Tema` con `api.parrilla._tema_desde_dict` (misma reconstruccion que
+    los temas pasados por body).
+    """
+    if not config.investigador_activo() or refrescar:
+        return None
+    try:
+        from .. import repos
+        from . import parrilla as api_parrilla
+
+        filas = repos.listar_radar_items(
+            marca=marca or "", geo=geo, frescas_seg=_ttl_snapshot()
+        )
+        if not filas:
+            return None
+        temas = [t for t in (api_parrilla._tema_desde_dict(f) for f in filas) if t is not None]
+        return temas or None
+    except Exception:  # noqa: BLE001 -- ante cualquier fallo, caer al camino en vivo (sin regresion)
+        return None
 
 
 def _flag(request: Request, nombre: str, *, defecto: bool) -> bool:
@@ -274,11 +315,20 @@ async def obtener(request: Request) -> Response:
     # el parametro basta el TTL, asi no se rompe a quien ya llama sin el).
     refrescar = _flag(request, "refresh", defecto=False)
 
-    # Cacheado (TTL) y compartido con la Parrilla: abrir Plan + Descubrimiento no re-descarga.
-    grupos, fuentes = _radar_consolidado(
-        geo, incluir_feeds=incluir_feeds, marca=marca, refrescar=refrescar
-    )
-    temas = radar.consolidar(*_grupos_para_consolidar(grupos))
+    # Snapshot del Investigador (Fase 1): si el flag esta ON y hay snapshot fresco (y no se
+    # pidio `?refresh=1`), se sirve del snapshot (sin re-descargar). None => camino en vivo
+    # INTACTO de Fase 0. Con el flag OFF, `_temas_desde_snapshot` devuelve None en su primera
+    # linea: cero regresion.
+    temas = _temas_desde_snapshot(marca, geo, refrescar=refrescar)
+    if temas is None:
+        # Cacheado (TTL) y compartido con la Parrilla: abrir Plan + Descubrimiento no re-descarga.
+        grupos, fuentes = _radar_consolidado(
+            geo, incluir_feeds=incluir_feeds, marca=marca, refrescar=refrescar
+        )
+        temas = radar.consolidar(*_grupos_para_consolidar(grupos))
+    else:
+        # Del snapshot: las fuentes en vivo no se consultaron (la frescura la garantiza el TTL).
+        fuentes = []
 
     # Filtro por marca: solo las tendencias en el foco de la marca (las demas se
     # reportan como `total_fuera_foco`, no se inventan ni se ocultan en silencio).

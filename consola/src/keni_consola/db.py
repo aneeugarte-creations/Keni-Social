@@ -62,7 +62,7 @@ import json
 import logging
 import threading
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 _log = logging.getLogger("keni_consola.db")
@@ -1273,6 +1273,40 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     """,
     "CREATE INDEX IF NOT EXISTS idx_fuentes_tipo ON fuentes (tipo)",
     "CREATE INDEX IF NOT EXISTS idx_fuentes_creado ON fuentes (creado)",
+    # ------------------------------------------------------------------- #
+    # Investigador (Fase 1): SNAPSHOT persistido del Radar curado por (marca, geo).
+    # Cada fila es un TEMA detectado (titulo + por_que + senal + redes/fuentes/enlaces),
+    # ya curado/scoreado. Upsert por (marca, geo, clave) -> idempotente entre snapshots:
+    # el mismo tema (misma `clave` = dedup.clave(titulo)) se REFRESCA, no se duplica.
+    # redes/fuentes/enlaces se guardan como JSON (TEXT portable). `estado` sigue el ciclo
+    # nuevo|en_parrilla|publicado.
+    """
+    CREATE TABLE IF NOT EXISTS radar_items (
+        id            TEXT PRIMARY KEY,
+        marca         TEXT NOT NULL DEFAULT '',
+        geo           TEXT NOT NULL DEFAULT '',
+        clave         TEXT NOT NULL DEFAULT '',
+        titulo        TEXT NOT NULL DEFAULT '',
+        por_que       TEXT NOT NULL DEFAULT '',
+        senal         INTEGER NOT NULL DEFAULT 0,
+        senal_texto   TEXT NOT NULL DEFAULT '',
+        redes         TEXT NOT NULL DEFAULT '[]',
+        fuentes       TEXT NOT NULL DEFAULT '[]',
+        enlaces       TEXT NOT NULL DEFAULT '[]',
+        curado        INTEGER NOT NULL DEFAULT 0,
+        url_canonica  TEXT NOT NULL DEFAULT '',
+        score         REAL NOT NULL DEFAULT 0,
+        razon         TEXT NOT NULL DEFAULT '',
+        estado        TEXT NOT NULL DEFAULT 'nuevo',
+        snapshot_ts   TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT '',
+        actualizado   TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_radar_items_marca_geo_clave "
+    "ON radar_items (marca, geo, clave)",
+    "CREATE INDEX IF NOT EXISTS idx_radar_items_marca_geo_snapshot "
+    "ON radar_items (marca, geo, snapshot_ts)",
 )
 
 
@@ -4038,6 +4072,203 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     finally:
         con.close()
     return [(f["titulo"] or "") for f in filas]
+
+
+# --------------------------------------------------------------------------- #
+# Investigador (Fase 1): snapshot persistido del Radar curado (`radar_items`)   #
+# --------------------------------------------------------------------------- #
+
+
+def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int:
+    """Upsert idempotente del snapshot curado del Radar en `radar_items`.
+
+    Cada `item` es un dict con: `clave, titulo, por_que, senal, senal_texto,
+    redes(list[str]), fuentes(list[str]), enlaces(list[dict]), curado(bool),
+    url_canonica, score(float), razon, estado`. La identidad es `(marca, geo, clave)`
+    (clave = `dedup.clave(titulo)`): el mismo tema visto en otro snapshot se REFRESCA, no
+    se duplica. redes/fuentes/enlaces se serializan a JSON. `snapshot_ts` (UTC ISO) se fija
+    en INSERT y UPDATE; `creado` solo en INSERT (en UPDATE se conserva, ON CONFLICT no toca
+    `creado`); `actualizado` se refresca siempre. Items con `clave` vacia se SALTAN (un tema
+    sin clave fiable no se persiste). Devuelve el numero de filas tocadas.
+    """
+    ahora = datetime.now(timezone.utc).isoformat()
+    tocadas = 0
+    con = _conectar()
+    try:
+        for item in items:
+            clave = (item.get("clave") or "").strip()
+            if not clave:
+                continue
+            con.execute(
+                "INSERT INTO radar_items "
+                "(id, marca, geo, clave, titulo, por_que, senal, senal_texto, "
+                "redes, fuentes, enlaces, curado, url_canonica, score, razon, estado, "
+                "snapshot_ts, creado, actualizado) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (marca, geo, clave) DO UPDATE SET "
+                "titulo = EXCLUDED.titulo, por_que = EXCLUDED.por_que, "
+                "senal = EXCLUDED.senal, senal_texto = EXCLUDED.senal_texto, "
+                "redes = EXCLUDED.redes, fuentes = EXCLUDED.fuentes, "
+                "enlaces = EXCLUDED.enlaces, curado = EXCLUDED.curado, "
+                "url_canonica = EXCLUDED.url_canonica, score = EXCLUDED.score, "
+                "razon = EXCLUDED.razon, estado = EXCLUDED.estado, "
+                "snapshot_ts = EXCLUDED.snapshot_ts, actualizado = EXCLUDED.actualizado",
+                (
+                    uuid.uuid4().hex[:12],
+                    marca,
+                    geo,
+                    clave,
+                    item.get("titulo") or "",
+                    item.get("por_que") or "",
+                    int(item.get("senal") or 0),
+                    item.get("senal_texto") or "",
+                    json.dumps(list(item.get("redes") or []), ensure_ascii=False),
+                    json.dumps(list(item.get("fuentes") or []), ensure_ascii=False),
+                    json.dumps(list(item.get("enlaces") or []), ensure_ascii=False),
+                    1 if item.get("curado") else 0,
+                    item.get("url_canonica") or "",
+                    float(item.get("score") or 0),
+                    item.get("razon") or "",
+                    item.get("estado") or "nuevo",
+                    ahora,
+                    ahora,
+                    ahora,
+                ),
+            )
+            tocadas += 1
+        con.commit()
+    finally:
+        con.close()
+    return tocadas
+
+
+def _fila_a_radar_item(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `radar_items` al dict de dominio (JSON->listas, curado->bool)."""
+    return {
+        "id": fila["id"],
+        "marca": fila["marca"] or "",
+        "geo": fila["geo"] or "",
+        "clave": fila["clave"] or "",
+        "titulo": fila["titulo"] or "",
+        "por_que": fila["por_que"] or "",
+        "senal": fila["senal"] or 0,
+        "senal_texto": fila["senal_texto"] or "",
+        "redes": _json_lista(fila["redes"]),
+        "fuentes": _json_lista(fila["fuentes"]),
+        "enlaces": _json_lista(fila["enlaces"]),
+        "curado": bool(fila["curado"]),
+        "url_canonica": fila["url_canonica"] or "",
+        "score": fila["score"] or 0,
+        "razon": fila["razon"] or "",
+        "estado": fila["estado"] or "nuevo",
+        "snapshot_ts": fila["snapshot_ts"] or "",
+        "creado": fila["creado"] or "",
+        "actualizado": fila["actualizado"] or "",
+    }
+
+
+def _json_lista(crudo: Any) -> list[Any]:
+    """Deserializa un campo JSON a lista; [] si vacio/malformado (best-effort)."""
+    if not crudo:
+        return []
+    try:
+        valor = json.loads(crudo)
+    except (TypeError, ValueError):
+        return []
+    return valor if isinstance(valor, list) else []
+
+
+def listar_radar_items(
+    *, marca: str = "", geo: str = "", frescas_seg: float | None = None
+) -> list[dict[str, Any]]:
+    """Items del Radar persistido de `(marca, geo)`, listos para reconstruir un Tema.
+
+    Filtros combinables: `marca`/`geo` vacios = sin filtrar ese campo. Orden por
+    `senal DESC, score DESC`. redes/fuentes/enlaces se deserializan a listas y `curado` se
+    devuelve como bool. Si `frescas_seg` no es None, se DESCARTAN las filas cuyo
+    `snapshot_ts` tenga mas de esa antiguedad (parseo ISO en Python; filas sin snapshot_ts
+    valido se descartan cuando se pide frescura).
+    """
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if geo:
+        clausulas.append("geo = ?")
+        params.append(geo)
+    sql = "SELECT * FROM radar_items"
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY senal DESC, score DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    items = [_fila_a_radar_item(f) for f in filas]
+    if frescas_seg is None:
+        return items
+    limite = datetime.now(timezone.utc).timestamp() - float(frescas_seg)
+    frescas: list[dict[str, Any]] = []
+    for item in items:
+        ts = _epoch_iso(item["snapshot_ts"])
+        if ts is not None and ts >= limite:
+            frescas.append(item)
+    return frescas
+
+
+def _epoch_iso(crudo: str) -> float | None:
+    """Parsea un ISO 8601 a epoch (segundos). None si vacio/malformado.
+
+    Naive (sin tz) se asume UTC para comparar de forma consistente con los ts que escribe
+    `upsert_radar_items` (siempre UTC con offset).
+    """
+    if not crudo:
+        return None
+    try:
+        dt = datetime.fromisoformat(crudo)
+    except (TypeError, ValueError):
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.timestamp()
+
+
+def existe_publicado_similar(
+    marca: str, titulo: str, url: str = "", *, umbral: float = 0.85
+) -> bool:
+    """True si `marca` ya PUBLICO algo equivalente al `titulo` (o `url`) dado.
+
+    Best-effort (nunca rompe el flujo: ante cualquier error -> False):
+      (a) por URL: HOY `contenido` no tiene columna de URL fuente, asi que esta rama queda
+          inactiva (no se cruza por URL). Si en el futuro existe esa columna, se cruzaria
+          `dedup.url_canonica(url)` contra lo publicado.
+      (b) por TITULO: trae los titulos del contenido de la marca con alguna plataforma en
+          estado 'publicado' (JOIN `contenido` x `contenido_plataforma`), ventana de 90 dias,
+          y aplica `dedup.es_similar` (exacto o fuzzy >= `umbral`).
+    """
+    from .dominio import dedup
+
+    try:
+        # Rama (b): titulos del contenido de la marca con alguna plataforma 'publicado'.
+        desde = (datetime.now() - timedelta(days=90)).isoformat(timespec="seconds")
+        con = _conectar()
+        try:
+            filas = con.execute(
+                "SELECT DISTINCT c.titulo FROM contenido c "
+                "JOIN contenido_plataforma cp ON cp.contenido_id = c.id "
+                "WHERE c.marca = ? AND c.clase = 'contenido' "
+                "AND cp.estado = 'publicado' AND c.creado >= ?",
+                (marca, desde),
+            ).fetchall()
+        finally:
+            con.close()
+        titulos_norm = {dedup.clave(f["titulo"] or "") for f in filas}
+        titulos_norm.discard("")
+        return dedup.es_similar(titulo, titulos_norm, umbral=umbral)
+    except Exception:  # noqa: BLE001 -- best-effort: el dedup nunca debe tumbar el pipeline
+        return False
 
 
 def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:

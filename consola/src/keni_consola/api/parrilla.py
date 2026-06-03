@@ -131,6 +131,13 @@ def _obtener_temas_radar(geo: str, marca: str | None = None) -> list[radar.Tema]
     """
     from . import radar as api_radar
 
+    # Snapshot del Investigador (Fase 1): si el flag esta ON y hay snapshot fresco, la Parrilla
+    # hereda el fallback GRATIS (mismo helper que el Radar). None (flag OFF o sin snapshot) =>
+    # camino en vivo INTACTO de Fase 0: cero regresion con el flag ausente.
+    temas = api_radar._temas_desde_snapshot(marca, geo)
+    if temas is not None:
+        return temas
+
     grupos, _fuentes = api_radar._radar_consolidado(geo, incluir_feeds=True, marca=marca)
     return radar.consolidar(*api_radar._grupos_para_consolidar(grupos))
 

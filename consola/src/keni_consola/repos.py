@@ -1077,6 +1077,25 @@ def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
     return db.titulos_recientes_marca(marca, desde_iso)
 
 
+def upsert_radar_items(marca: str, geo: str, items: list[dict[str, Any]]) -> int:
+    """Upsert del snapshot curado del Radar por (marca, geo, clave). Delegado en `db.py`."""
+    return db.upsert_radar_items(marca, geo, items)
+
+
+def listar_radar_items(
+    *, marca: str = "", geo: str = "", frescas_seg: float | None = None
+) -> list[dict[str, Any]]:
+    """Items del Radar persistido de (marca, geo), opcionalmente frescos. Delegado en `db.py`."""
+    return db.listar_radar_items(marca=marca, geo=geo, frescas_seg=frescas_seg)
+
+
+def existe_publicado_similar(
+    marca: str, titulo: str, url: str = "", *, umbral: float = 0.85
+) -> bool:
+    """True si la marca ya publicó algo equivalente (título/URL). Delegado en `db.py`."""
+    return db.existe_publicado_similar(marca, titulo, url, umbral=umbral)
+
+
 def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
     return db.obtener_contenido(contenido_id)
 

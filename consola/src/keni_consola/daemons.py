@@ -53,6 +53,7 @@ def main() -> int:
     from .autogen_copy import iniciar_autogen
     from .comercial import iniciar_captura_programada
     from .eventos_scanner import iniciar_scanner_vencimientos
+    from .investigador import iniciar_investigador
     from .media_gc_daemon import iniciar_media_gc
     from .metricas_piezas_refresco import iniciar_refresco_piezas
     from .metricas_refresco import iniciar_refresco_metricas
@@ -69,6 +70,11 @@ def main() -> int:
     iniciar_refresco_piezas()
     iniciar_alertas_rendimiento()  # solo lee + emite eventos; KENI_ALERTAS_RENDIMIENTO=0 lo apaga.
     iniciar_radar_auto()  # no arranca salvo KENI_RADAR_AUTO=1 (def OFF).
+    # Investigador (Fase 1): materializa el snapshot del Radar por marca para que Radar/Parrilla
+    # lean del snapshot (rapido, sin red) en vez de golpear fuentes en cada request. GATEADO y
+    # SAFE BY DEFAULT: el hilo arranca SIEMPRE pero solo materializa con KENI_INVESTIGADOR=1
+    # (def OFF). Sin el flag, los endpoints siguen en vivo (comportamiento de Fase 0 intacto).
+    iniciar_investigador()
     # TUBERIA automatica (Flujo C): los daemons de auto-produccion. Encadenan
     # entrada -> (radar_auto) -> copy -> arte -> cola de revision. GATEADOS y SAFE BY
     # DEFAULT: el hilo arranca SIEMPRE pero solo barre con su flag ON (KENI_AUTOGEN /

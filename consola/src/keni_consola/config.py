@@ -213,6 +213,14 @@ ENV_RADAR_AUTO_INTERVALO_HORAS = "KENI_RADAR_AUTO_INTERVALO_HORAS"
 ENV_RADAR_AUTO_MAX = "KENI_RADAR_AUTO_MAX"
 ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
 
+# Investigador (Fase 1): daemon que MATERIALIZA por marca un snapshot del Radar (temas
+# consolidados + score/razon/estado) en Postgres, para que la Parrilla y el Radar lean del
+# snapshot (rapido, sin re-descargar fuentes) en vez de golpear Trends/feeds en cada request.
+# CONSERVADOR por defecto (OFF): sin el flag, el snapshot NUNCA se lee (los endpoints siguen
+# en vivo, comportamiento de Fase 0 intacto) y el daemon arranca pero no materializa nada.
+ENV_INVESTIGADOR = "KENI_INVESTIGADOR"
+ENV_INVESTIGADOR_INTERVALO_HORAS = "KENI_INVESTIGADOR_INTERVALO_HORAS"
+
 # `KENI_PIPELINE_LINEAS=1` activa el auto-etiquetado de la ingesta: cada pieza nueva se
 # clasifica en su LÍNEA (etiqueta clase 'vertical') y su ORIGEN (clase 'origen') por
 # palabras clave. CONSERVADOR por defecto (OFF): sin el flag, la ingesta no etiqueta nada
@@ -403,6 +411,11 @@ RADAR_AUTO_UMBRAL_DEF = 50_000
 RADAR_AUTO_GEO_DEF = "MX"
 RADAR_AUTO_INTERVALO_HORAS_DEF = 6
 RADAR_AUTO_MAX_DEF = 3
+
+# Cadencia del barrido del Investigador (Fase 1): materializa el snapshot del Radar por marca
+# cada N horas. Intervalo holgado (def 6h, igual que radar-auto): el snapshot vive con un TTL
+# de ~2 intervalos, asi que con 6h las lecturas sirven datos de a lo sumo medio dia.
+INVESTIGADOR_INTERVALO_HORAS_DEF = 6
 
 # Auto-refresco de Algoritmos: intervalo holgado (def 6h); los blogs de plataforma no
 # cambian a cada minuto y no conviene martillear los feeds.
@@ -1020,6 +1033,22 @@ def radar_auto_marca() -> str:
     llamante la ignora (cae a sin marca): no se confia ciegamente del entorno.
     """
     return _crudo(ENV_RADAR_AUTO_MARCA)
+
+
+def investigador_activo() -> bool:
+    """True si el Investigador (snapshot del Radar por marca) debe materializar (`KENI_INVESTIGADOR`).
+
+    Def OFF (conservador): sin el flag, el daemon arranca pero NO materializa, y los endpoints
+    (Radar/Parrilla) NUNCA leen del snapshot (siguen en vivo, comportamiento de Fase 0 intacto).
+    Con el flag a un valor afirmativo, el daemon escribe el snapshot por marca y los endpoints
+    lo sirven (rapido, sin re-descargar fuentes) mientras este fresco.
+    """
+    return _crudo(ENV_INVESTIGADOR).lower() in _VERDADEROS
+
+
+def investigador_intervalo_horas() -> int:
+    """Cada cuantas horas barre el Investigador (`KENI_INVESTIGADOR_INTERVALO_HORAS`, def 6, min 1)."""
+    return _entero(ENV_INVESTIGADOR_INTERVALO_HORAS, INVESTIGADOR_INTERVALO_HORAS_DEF, minimo=1)
 
 
 def prioriza_metricas_activo() -> bool:

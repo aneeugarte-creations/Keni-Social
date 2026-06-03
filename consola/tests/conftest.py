@@ -394,6 +394,7 @@ _APP_POR_STEM: dict[str, str] = {
     "test_api_termometro": "app_produccion",
     "test_api_radar": "app_produccion",
     "test_radar": "app_produccion",
+    "test_investigador": "app_produccion",
     "test_api_algoritmos": "app_produccion",
     "test_algoritmos": "app_produccion",
     "test_sugerencias_algoritmo": "app_produccion",
