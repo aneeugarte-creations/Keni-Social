@@ -1116,8 +1116,9 @@ def test_publicacion_a_dict_expone_etapa_ia():
     # almacenados (a54a3267): sin copy real -> generando_copy.
     d = publicacion_a_dict({**_PUB_BASE, "contenido": ""})
     assert d["etapa_ia"] == pe.ETAPA_GENERANDO_COPY
-    # con copy (el contenido de _PUB_BASE) pero sin imagen compuesta -> generando_arte
-    d = publicacion_a_dict({**_PUB_BASE})
+    # con copy y copy-in (la pieza LLEVA imagen) pero sin foto real -> generando_arte
+    # ("Falta imagen"): la placa/plantilla no cuenta, hace falta foto subida o de fuente (95c28829).
+    d = publicacion_a_dict({**_PUB_BASE, "copy_in": "TITULAR"})
     assert d["etapa_ia"] == pe.ETAPA_GENERANDO_ARTE
     # estado terminal manda sobre la checklist
     d = publicacion_a_dict({**_PUB_BASE, "estado": "publicado"})
