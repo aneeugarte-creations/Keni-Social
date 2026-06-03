@@ -23,9 +23,9 @@ _SIDEBAR_BLOQUES = [
     # columna vertebral (Parrilla/tablero) y la cola de aprobación (Revisión).
     ["Panel", "Parrilla", "Revisión"],
     # "Contenido": herramientas para crear/editar a mano una pieza (consumidas por el
-    # pipeline cuando es automático). Estudio (imagen) y Biblioteca (prompts +
-    # plantillas; "Activos" se fusionó como pestaña de la Biblioteca).
-    ["Estudio", "Biblioteca"],
+    # pipeline cuando es automático). Estudio (imagen), Editor (lienzo por capas) y
+    # Biblioteca (prompts + plantillas; "Activos" se fusionó como pestaña de la Biblioteca).
+    ["Estudio", "Editor", "Biblioteca"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
     # Analíticas (medición que cierra el loop), Actividad IA (qué hizo), Pipelines (CI/CD).
     ["Investigación", "Analíticas", "Actividad IA", "Pipelines"],
