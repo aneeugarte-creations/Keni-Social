@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { nombreMarca, nombreRed, numeroCompleto, porcentaje, variacion } from "@/lib/formato";
+import { nombreMarca, nombreRed, porcentaje, variacion } from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
@@ -167,7 +167,7 @@ function PiezaEstrella({ post }: { post: PostEstrella | null }) {
       target="_blank"
       rel="noopener noreferrer"
       className="group inline-flex max-w-full items-center gap-1 hover:underline"
-      title={numeroCompleto(post.engagement_pct)}
+      title={`Engagement ${porcentaje(post.engagement_pct)}`}
     >
       <span className="min-w-0">{contenido}</span>
       <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60 group-hover:opacity-100" aria-hidden="true" />

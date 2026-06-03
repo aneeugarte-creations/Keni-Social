@@ -9,8 +9,9 @@ import type { CuentaMetrica, TotalMetricas } from "@/types";
 
 import { numeroCompacto, numeroCompleto, porcentaje } from "./formato";
 
-/** Claves de métrica comunes a `TotalMetricas` y `CuentaMetrica`. */
-export type ClaveMetrica = "visualizaciones" | "alcance" | "interacciones" | "engagement_pct";
+/** Claves de métrica que se MUESTRAN (el `alcance` del contrato no se mide en ninguna
+ * red con la fuente actual de posts, así que no se expone en la UI). */
+export type ClaveMetrica = "visualizaciones" | "interacciones" | "engagement_pct";
 
 export interface MetaMetrica {
   clave: ClaveMetrica;
@@ -35,14 +36,6 @@ export const METRICAS: MetaMetrica[] = [
     compacto: numeroCompacto,
     completo: numeroCompleto,
     color: "orange",
-  },
-  {
-    clave: "alcance",
-    etiqueta: "Alcance",
-    metrica: "alcance",
-    compacto: numeroCompacto,
-    completo: numeroCompleto,
-    color: "sky",
   },
   {
     clave: "interacciones",

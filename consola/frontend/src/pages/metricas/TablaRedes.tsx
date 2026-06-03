@@ -26,21 +26,17 @@ import type { RedMetrica } from "@/types";
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { useOrdenTabla } from "./useOrdenTabla";
 
-type ClaveRed = "visualizaciones" | "alcance" | "interacciones" | "engagement_pct";
+type ClaveRed = "visualizaciones" | "interacciones" | "engagement_pct";
 
 /** Columnas numéricas en el mismo orden y formato que la tabla por marca. */
 const COLUMNAS: Array<{ clave: ClaveRed; etiqueta: string }> = [
   { clave: "visualizaciones", etiqueta: "Vistas" },
-  { clave: "alcance", etiqueta: "Alcance" },
   { clave: "interacciones", etiqueta: "Interacciones" },
   { clave: "engagement_pct", etiqueta: "Engagement" },
 ];
 
-/** Formatea el valor de una columna; `alcance` null se muestra "—" (no es un 0 real). */
+/** Formatea el valor de una columna. */
 function valorCelda(r: RedMetrica, clave: ClaveRed): string {
-  if (clave === "alcance") {
-    return r.alcance == null ? "—" : numeroCompleto(r.alcance);
-  }
   if (clave === "engagement_pct") {
     return porcentaje(r.engagement_pct);
   }
@@ -50,24 +46,18 @@ function valorCelda(r: RedMetrica, clave: ClaveRed): string {
 /** Totales del periodo por red: suma de las brutas + engagement global derivado. */
 function calcularTotales(redes: RedMetrica[]): {
   visualizaciones: number;
-  alcance: number | null;
   interacciones: number;
   engagement_pct: number;
 } {
   const visualizaciones = redes.reduce((s, r) => s + r.visualizaciones, 0);
   const interacciones = redes.reduce((s, r) => s + r.interacciones, 0);
-  // Solo sumamos alcance de las redes que lo miden; si ninguna lo mide -> null (no 0 falso).
-  const conAlcance = redes.filter((r) => r.alcance != null);
-  const alcance =
-    conAlcance.length === 0 ? null : conAlcance.reduce((s, r) => s + (r.alcance ?? 0), 0);
   const engagement_pct = visualizaciones > 0 ? (interacciones / visualizaciones) * 100 : 0;
-  return { visualizaciones, alcance, interacciones, engagement_pct };
+  return { visualizaciones, interacciones, engagement_pct };
 }
 
 export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<RedMetrica, ClaveRed>(redes, {
     visualizaciones: (r) => r.visualizaciones,
-    alcance: (r) => r.alcance,
     interacciones: (r) => r.interacciones,
     engagement_pct: (r) => r.engagement_pct,
   });
@@ -140,13 +130,9 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
                       key={c.clave}
                       className="pr-6 text-right tabular-nums last:pr-6"
                     >
-                      {c.clave === "alcance"
-                        ? totales.alcance == null
-                          ? "—"
-                          : numeroCompleto(totales.alcance)
-                        : c.clave === "engagement_pct"
-                          ? porcentaje(totales.engagement_pct)
-                          : numeroCompleto(totales[c.clave])}
+                      {c.clave === "engagement_pct"
+                        ? porcentaje(totales.engagement_pct)
+                        : numeroCompleto(totales[c.clave])}
                     </TableCell>
                   ))}
                 </TableRow>

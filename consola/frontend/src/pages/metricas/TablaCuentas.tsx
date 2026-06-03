@@ -33,16 +33,14 @@ import { useOrdenTabla } from "./useOrdenTabla";
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
 function calcularTotales(cuentas: CuentaMetrica[]): {
   visualizaciones: number;
-  alcance: number;
   interacciones: number;
   engagement_pct: number;
 } {
   const visualizaciones = cuentas.reduce((s, c) => s + c.visualizaciones, 0);
-  const alcance = cuentas.reduce((s, c) => s + c.alcance, 0);
   const interacciones = cuentas.reduce((s, c) => s + c.interacciones, 0);
   // Engagement global = interacciones totales ÷ vistas totales (no la media de %).
   const engagement_pct = visualizaciones > 0 ? (interacciones / visualizaciones) * 100 : 0;
-  return { visualizaciones, alcance, interacciones, engagement_pct };
+  return { visualizaciones, interacciones, engagement_pct };
 }
 
 export function TablaCuentas({
@@ -59,7 +57,6 @@ export function TablaCuentas({
     cuentas,
     {
       visualizaciones: (c) => c.visualizaciones,
-      alcance: (c) => c.alcance,
       interacciones: (c) => c.interacciones,
       engagement_pct: (c) => c.engagement_pct,
     },
@@ -152,9 +149,6 @@ export function TablaCuentas({
                   <TableCell className="pl-6">Total</TableCell>
                   <TableCell className="text-right tabular-nums">
                     {numeroCompleto(totales.visualizaciones)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {numeroCompleto(totales.alcance)}
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {numeroCompleto(totales.interacciones)}

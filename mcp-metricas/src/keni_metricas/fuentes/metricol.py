@@ -793,20 +793,28 @@ class FuenteMetricol:
         return None
 
     def serie_diaria(self, cuenta_id: str, rango: str) -> list[PuntoSerie]:
-        """Serie diaria del periodo (visualizaciones + interacciones) sumada entre plataformas.
+        """Serie diaria del periodo: vistas + interacciones de las piezas, por día de publicación.
 
-        Reutiliza /v2/analytics/timelines (la misma llamada del agregado) pero CONSERVA
-        los valores por dia en vez de sumarlos al total. Degrada por plataforma: si una
-        falla, se omite y la serie se arma con el resto (honestidad, como `resumen`).
+        Suma los POSTS de cada red (vía `_piezas_plataforma`) agrupados por su fecha de
+        publicación. Antes usaba `/v2/analytics/timelines` con métricas de vis/int por red,
+        que solo respondía TikTok (vocabulario distinto por red); la serie salía solo-TikTok,
+        incoherente con el `resumen` (basado en posts). Ahora ambos comparten la MISMA fuente.
+
+        Semántica: cada punto es la suma de vistas/interacciones de las piezas PUBLICADAS ese
+        día (no impresiones acumuladas ese día) — consistente con las piezas que ve el usuario.
+        Una red no conectada o cuya API de posts falla se omite (la serie se arma con el resto).
         """
         marca = self._marca(cuenta_id)
         desde, hasta, _ = resolver_rango(rango)
+        conectadas = self._redes_conectadas(cuenta_id)
         vis_por_dia: dict[date, int] = {}
         int_por_dia: dict[date, int] = {}
         for plat in self._plataformas(marca):
-            metricas = _METRICAS_RED[plat]
-            self._acumular_serie(cuenta_id, plat, metricas[_METRICA_VIS], desde, hasta, vis_por_dia)
-            self._acumular_serie(cuenta_id, plat, metricas[_METRICA_INT], desde, hasta, int_por_dia)
+            if conectadas is not None and plat not in conectadas:
+                continue
+            for p in self._piezas_plataforma(cuenta_id, plat, desde, hasta, 100_000):
+                vis_por_dia[p.publicado] = vis_por_dia.get(p.publicado, 0) + p.visualizaciones
+                int_por_dia[p.publicado] = int_por_dia.get(p.publicado, 0) + p.interacciones
         fechas = sorted(set(vis_por_dia) | set(int_por_dia))
         return [
             PuntoSerie(
@@ -816,40 +824,3 @@ class FuenteMetricol:
             )
             for f in fechas
         ]
-
-    def _acumular_serie(
-        self,
-        cuenta_id: str,
-        plat: Plataforma,
-        metrica: str,
-        desde: date,
-        hasta: date,
-        acc: dict[date, int],
-    ) -> None:
-        """Suma en `acc` (fecha->valor) los puntos diarios de (red, metrica). No-op si la API falla."""
-        try:
-            datos = get_json(
-                self._cli,
-                f"{BASE}/v2/analytics/timelines",
-                params={
-                    **self._params_base(cuenta_id),
-                    "network": _RED_METRICOOL[plat],
-                    "metric": metrica,
-                    "from": desde.isoformat() + "T00:00:00",
-                    "to": hasta.isoformat() + "T23:59:59",
-                },
-                headers=self._headers(cuenta_id),
-            )
-        except Exception as e:  # noqa: BLE001 — degrada sin romper, como _metrica_plataforma
-            log.warning("metricool: serie %s/%s %s fallo: %s", plat.value, metrica, cuenta_id, e)
-            return
-        for serie in datos.get("data") or []:
-            for punto in serie.get("values", []):
-                crudo = punto.get("dateTime") or punto.get("date")
-                if not crudo:
-                    continue
-                try:
-                    f = date.fromisoformat(str(crudo)[:10])
-                except ValueError:
-                    continue
-                acc[f] = acc.get(f, 0) + _entero(punto.get("value", 0))

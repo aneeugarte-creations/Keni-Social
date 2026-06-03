@@ -33,20 +33,12 @@ describe("TablaRedes", () => {
     // Cabeceras de las columnas pedidas.
     expect(screen.getByText("Red")).toBeInTheDocument();
     expect(screen.getByText("Vistas")).toBeInTheDocument();
-    expect(screen.getByText("Alcance")).toBeInTheDocument();
     expect(screen.getByText("Interacciones")).toBeInTheDocument();
     expect(screen.getByText("Engagement")).toBeInTheDocument();
+    // El 'Alcance' ya NO se muestra (no se mide con la fuente de posts).
+    expect(screen.queryByText("Alcance")).not.toBeInTheDocument();
     // Una métrica concreta formateada (vistas de instagram).
     expect(screen.getByText("120,000")).toBeInTheDocument();
-  });
-
-  it("muestra '—' cuando una red no mide alcance (null), no un 0 falso", () => {
-    render(<TablaRedes redes={REDES} />);
-
-    // tiktok.alcance === null -> "—"; ninguna celda debe pintar "0" para ese alcance.
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
-    // instagram.alcance sí se formatea (en su fila y, sumado, en la de totales).
-    expect(screen.getAllByText("45,000").length).toBeGreaterThan(0);
   });
 
   it("muestra una fila de totales con suma de brutas y engagement global", () => {

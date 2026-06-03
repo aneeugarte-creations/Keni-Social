@@ -665,40 +665,34 @@ def test_fuente_resuelve_credenciales_distintas_por_marca():
 
 
 @respx.mock
-def test_serie_diaria_suma_por_dia():
-    """serie_diaria conserva los valores por día (vis+int) y los suma por fecha."""
-    def responder(request: httpx.Request) -> httpx.Response:
-        metric = request.url.params.get("metric")
-        base = {"impressions": 1000, "interactions": 50}.get(metric, 0)
-        return httpx.Response(
-            200,
-            json={
-                "data": [
-                    {
-                        "metric": metric,
-                        "values": [
-                            {"dateTime": "2026-05-20T00:00:00", "value": base},
-                            {"dateTime": "2026-05-21T00:00:00", "value": base * 2},
-                        ],
-                    }
-                ]
-            },
-        )
-
-    respx.get(f"{BASE}/v2/analytics/timelines").mock(side_effect=responder)
+def test_serie_diaria_suma_piezas_por_dia_de_publicacion():
+    """serie_diaria agrupa las PIEZAS por su día de publicación (vis+int), desde posts."""
+    _mock_perfiles(_perfil(instagram="x"))
+    _mock_posts(
+        "instagram",
+        [
+            _post_ig("p1", 1000, 50, "2026-05-20T10:00:00"),
+            _post_ig("p3", 500, 20, "2026-05-20T15:00:00"),  # mismo día que p1 -> suma
+            _post_ig("p2", 2000, 100, "2026-05-21T10:00:00"),
+        ],
+    )
     with httpx.Client() as cli:
         puntos = _fuente(cli).serie_diaria("claro_sports", RANGO)
 
-    assert [str(p.fecha) for p in puntos] == ["2026-05-20", "2026-05-21"]
-    assert puntos[0].visualizaciones == 1000 and puntos[0].interacciones == 50
-    assert puntos[1].visualizaciones == 2000 and puntos[1].interacciones == 100
+    por_fecha = {str(p.fecha): p for p in puntos}
+    assert set(por_fecha) == {"2026-05-20", "2026-05-21"}
+    assert por_fecha["2026-05-20"].visualizaciones == 1500  # 1000 + 500
+    assert por_fecha["2026-05-20"].interacciones == 70  # 50 + 20
+    assert por_fecha["2026-05-21"].visualizaciones == 2000
+    assert por_fecha["2026-05-21"].interacciones == 100
 
 
 @respx.mock
 def test_serie_diaria_degrada_si_falla():
-    """Si la API falla, la serie sale vacía (no inventa días)."""
-    respx.get(f"{BASE}/v2/analytics/timelines").mock(
-        return_value=httpx.Response(500, json={"error": "boom"})
+    """Si la API de posts falla, la serie sale vacía (no inventa días)."""
+    _mock_perfiles(_perfil(instagram="x"))
+    respx.get(f"{BASE}/v2/analytics/posts/instagram").mock(
+        return_value=httpx.Response(403, json={"error": "boom"})
     )
     with httpx.Client() as cli:
         puntos = _fuente(cli).serie_diaria("claro_sports", RANGO)

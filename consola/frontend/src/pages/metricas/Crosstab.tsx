@@ -186,7 +186,7 @@ function TablaCrosstab({
                   "text-right font-medium tabular-nums",
                   claseRendimiento(c.rendimiento_relativo_medio),
                 )}
-                title="Engagement de la celda ÷ mediana de su grupo"
+                title="Vistas de la celda ÷ mediana de vistas de su grupo"
               >
                 {textoRendimiento(c.rendimiento_relativo_medio)}
               </TableCell>
