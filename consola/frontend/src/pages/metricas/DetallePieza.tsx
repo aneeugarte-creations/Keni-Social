@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { formatearFechaHoraCorta } from "@/lib/fecha";
+import { formatearDia, formatearFechaHoraCorta } from "@/lib/fecha";
 import {
   nombreFormato,
   nombreRed,
@@ -73,7 +73,8 @@ function Contenido({ pieza }: { pieza: PiezaMetrica }) {
       <DialogHeader>
         <DialogTitle className="pr-6">{titulo}</DialogTitle>
         <DialogDescription>
-          {nombreRed(pieza.plataforma)} · {nombreFormato(pieza.formato)} · {pieza.publicado}
+          {nombreRed(pieza.plataforma)} · {nombreFormato(pieza.formato)} ·{" "}
+          {formatearDia(pieza.publicado)}
           {pieza.url ? (
             <>
               {" · "}

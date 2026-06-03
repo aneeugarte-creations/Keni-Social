@@ -114,6 +114,17 @@ export function tiempoVis(segundos: number): string {
   return seg === 0 ? `${min}m` : `${min}m ${seg}s`;
 }
 
+/**
+ * Conteo con sustantivo pluralizado (es-MX). Evita los feos "1 comentario(s)".
+ * Ej.: `plural(1, "comentario")` → "1 comentario"; `plural(3, "comentario")` →
+ * "3 comentarios". El plural por defecto es `singular + "s"`; para irregulares,
+ * pásalo explícito: `plural(2, "pieza", "piezas")`.
+ */
+export function plural(n: number, singular: string, formaPlural?: string): string {
+  const palabra = n === 1 ? singular : (formaPlural ?? `${singular}s`);
+  return `${n} ${palabra}`;
+}
+
 // ---------------------------------------------------------------------------
 // Etiquetas legibles de marca / red / formato
 //

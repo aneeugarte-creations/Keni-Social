@@ -27,6 +27,7 @@ import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
+import { plural } from "@/lib/formato";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
 import { tiempoRelativo } from "@/pages/publicaciones/meta";
@@ -178,7 +179,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
       {/* Aviso de comentarios sin resolver (bloquean programar). */}
       {enRevision && sinResolver > 0 && (
         <div className="border-t border-border px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
-          {sinResolver} comentario(s) sin resolver antes de programar.
+          {plural(sinResolver, "comentario")} sin resolver antes de programar.
         </div>
       )}
 

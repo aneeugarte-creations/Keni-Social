@@ -1,8 +1,9 @@
-import { AlertTriangle, RefreshCw, RotateCw } from "lucide-react";
+import { AlertTriangle, Loader2, RefreshCw, RotateCw } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { recargaSegura } from "@/lib/version";
 
 /**
  * Frontera de error (React error boundary): atrapa cualquier excepción lanzada
@@ -14,8 +15,10 @@ import { Card, CardContent } from "@/components/ui/card";
  *    se aísla a esa página; el resto de la consola sigue navegable.
  *  - "Failed to fetch dynamically imported module": ocurre cuando hay un deploy
  *    nuevo mientras la pestaña está abierta y el chunk con hash viejo ya no existe
- *    en el servidor. En ese caso la única salida es recargar (trae el index.html
- *    nuevo), así que ofrecemos un botón de "Recargar la app".
+ *    en el servidor. La única salida es recargar (trae el index.html nuevo), así que
+ *    lo hacemos AUTOMÁTICAMENTE (`recargaSegura`, con guard anti-bucle). Solo si el
+ *    guard sospecha un bucle (recargó hace nada y volvió a fallar) caemos al botón
+ *    manual, para no atrapar al usuario en un ciclo de recargas.
  *
  * El padre debe forzar el remontaje al cambiar de ruta (key={pathname}) para que,
  * tras un error, navegar a otra sección limpie el estado de error.
@@ -37,25 +40,50 @@ interface Props {
 
 interface Estado {
   error: Error | null;
+  /** En un error de chunk: ¿se disparó la recarga automática? (false = guard anti-bucle). */
+  recargando: boolean;
 }
 
 export class FronteraError extends React.Component<Props, Estado> {
-  state: Estado = { error: null };
+  state: Estado = { error: null, recargando: false };
 
   static getDerivedStateFromError(error: Error): Estado {
-    return { error };
+    // Optimista: si es un error de chunk asumimos que vamos a recargar (lo confirma
+    // `componentDidCatch`), así el primer render ya muestra "Actualizando…" y no el botón.
+    return { error, recargando: esErrorDeChunk(error) };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Deja rastro en consola para depurar (Sentry/observabilidad podría engancharse aquí).
     console.error("Frontera de error atrapó una excepción de página:", error, info);
+    // Deploy nuevo: el chunk viejo ya no existe. Recarga sola (trae el index.html nuevo).
+    // `recargaSegura` devuelve false si sospecha un bucle: ahí mostramos el botón manual.
+    if (esErrorDeChunk(error)) {
+      const recargando = recargaSegura();
+      if (!recargando) this.setState({ recargando: false });
+    }
   }
 
   render() {
-    const { error } = this.state;
+    const { error, recargando } = this.state;
     if (!error) return this.props.children;
 
     const chunk = esErrorDeChunk(error);
+
+    // Caso normal de deploy: estamos recargando solos. Mensaje breve, sin botón.
+    if (chunk && recargando) {
+      return (
+        <Card className="mx-auto mt-8 max-w-lg">
+          <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">
+              Hay una versión nueva de la consola. Actualizando…
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return (
       <Card className="mx-auto mt-8 max-w-lg">
         <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
@@ -76,7 +104,10 @@ export class FronteraError extends React.Component<Props, Estado> {
               Recargar la app
             </Button>
           ) : (
-            <Button variant="outline" onClick={() => this.setState({ error: null })}>
+            <Button
+              variant="outline"
+              onClick={() => this.setState({ error: null, recargando: false })}
+            >
               <RefreshCw className="h-4 w-4" />
               Reintentar
             </Button>

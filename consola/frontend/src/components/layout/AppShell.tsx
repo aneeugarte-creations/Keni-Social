@@ -13,6 +13,7 @@ import { pestanasDeRuta } from "@/components/layout/hub-tabs";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useDetectorActualizacion } from "@/lib/version";
 import { hidratarLimites } from "@/pages/publicaciones/meta";
 import type { GrupoNavCatalogo } from "@/types";
 
@@ -85,6 +86,9 @@ function migajaDeRuta(pathname: string, navegacion: GrupoNavCatalogo[]): Migaja[
 export function AppShell() {
   const location = useLocation();
   const [menuAbierto, setMenuAbierto] = React.useState(false);
+
+  // Detecta un deploy nuevo y recarga en la siguiente navegación (sin pedirlo a mano).
+  useDetectorActualizacion();
 
   // Estado colapsado del sidebar (rail de solo iconos), persistido en
   // localStorage para que sobreviva al refresco. Inicializa leyéndolo (lazy).

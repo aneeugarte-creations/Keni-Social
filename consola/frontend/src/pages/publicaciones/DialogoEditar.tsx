@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
+import { plural } from "@/lib/formato";
 import type {
   CuerpoActualizarPlataforma,
   CuerpoActualizarPublicacion,
@@ -233,7 +234,7 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
       )}
       {sinResolver > 0 && (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          {sinResolver} comentario(s) sin resolver. Resuélvelos antes de programar.
+          {plural(sinResolver, "comentario")} sin resolver. Resuélvelos antes de programar.
         </p>
       )}
       {publicacion.estado === "en_revision" && (
