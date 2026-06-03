@@ -1,6 +1,7 @@
 /**
  * Gestión de LÍNEAS de contenido (etiquetas clase `vertical`) y de ORÍGENES
- * (etiquetas clase `origen` = interno / petición externa).
+ * (etiquetas clase `origen` = interno / externo). Las líneas son POR MARCA; el
+ * panel se filtra por marca para no mezclarlas.
  *
  * Es CRUD sobre el catálogo de etiquetas (`/api/etiquetas`) acotado a esas dos clases,
  * con el campo `keywords` (CSV de palabras clave para auto-clasificar) editable. Permite
@@ -46,7 +47,7 @@ const CLASE_AYUDA: Record<ClaseLinea, string> = {
     "Las líneas (verticales) agrupan el contenido por tema/sección. Las keywords ayudan a " +
     "auto-clasificar cada pieza en su línea.",
   origen:
-    "El origen distingue contenido interno de peticiones externas. Las keywords ayudan a " +
+    "El origen distingue contenido interno de externo. Las keywords ayudan a " +
     "clasificarlo automáticamente.",
 };
 
@@ -84,6 +85,19 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
   const marcas = query.data?.marcas ?? [];
 
   const [creando, setCreando] = React.useState(false);
+  const [filtroMarca, setFiltroMarca] = React.useState<string>("todas");
+
+  const visibles = React.useMemo(
+    () =>
+      etiquetas.filter((e) =>
+        filtroMarca === "todas"
+          ? true
+          : filtroMarca === GLOBAL
+            ? !e.marca
+            : e.marca === filtroMarca,
+      ),
+    [etiquetas, filtroMarca],
+  );
 
   return (
     <Card className="h-fit">
@@ -92,7 +106,7 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
           <Tags className="h-4 w-4" />
           {clase === "vertical" ? "Líneas de contenido" : "Orígenes"}
           <Badge variant="secondary" className="ml-1">
-            {etiquetas.length}
+            {visibles.length}
           </Badge>
         </CardTitle>
         <Button
@@ -107,6 +121,31 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">{CLASE_AYUDA[clase]}</p>
+
+        {marcas.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Label
+              htmlFor={`filtro-marca-${clase}`}
+              className="text-xs text-muted-foreground"
+            >
+              Marca
+            </Label>
+            <Select value={filtroMarca} onValueChange={setFiltroMarca}>
+              <SelectTrigger id={`filtro-marca-${clase}`} className="h-8 w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas las marcas</SelectItem>
+                <SelectItem value={GLOBAL}>Global</SelectItem>
+                {marcas.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.nombre}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
 
         {creando && (
           <FormularioLinea
@@ -129,16 +168,20 @@ function PanelClase({ clase }: { clase: ClaseLinea }) {
             onReintentar={() => void query.refetch()}
             cargando={query.isFetching}
           />
-        ) : etiquetas.length === 0 ? (
+        ) : visibles.length === 0 ? (
           <EstadoVacioTexto
-            texto={`Aún no hay ${
-              clase === "vertical" ? "líneas" : "orígenes"
-            }. Crea el primero con el botón de arriba.`}
+            texto={
+              etiquetas.length === 0
+                ? `Aún no hay ${
+                    clase === "vertical" ? "líneas" : "orígenes"
+                  }. Crea el primero con el botón de arriba.`
+                : "No hay nada para esta marca. Cambia el filtro o crea una."
+            }
             className="py-4"
           />
         ) : (
           <div className="space-y-2">
-            {etiquetas.map((e) => (
+            {visibles.map((e) => (
               <FilaLinea key={e.id} etiqueta={e} clase={clase} marcas={marcas} />
             ))}
           </div>
@@ -190,7 +233,7 @@ function FormularioLinea({
             id={`linea-nombre-${clase}`}
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            placeholder={clase === "vertical" ? "Ej. Futbol" : "Ej. Petición externa"}
+            placeholder={clase === "vertical" ? "Ej. Futbol" : "Ej. Externo"}
             maxLength={60}
           />
         </div>
