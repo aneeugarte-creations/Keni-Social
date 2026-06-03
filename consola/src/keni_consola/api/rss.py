@@ -297,16 +297,27 @@ def _flag(request: Request, nombre: str) -> bool:
     return (request.query_params.get(nombre) or "").strip().lower() in ("1", "true", "si", "yes")
 
 
-def _items_de_fuente(fuente: dict[str, Any], *, ocultar_usados: bool) -> list[dict[str, Any]]:
+def _items_de_fuente(
+    fuente: dict[str, Any],
+    *,
+    ocultar_usados: bool,
+    vistas: set[str] | None = None,
+) -> list[dict[str, Any]]:
     """Lee, filtra (incluir/excluir) y marca `usado` los items de UNA fuente.
 
     Aplica los filtros del feed sobre titulo+resumen, marca cada item segun
     `rss_items_vistos`, y con `ocultar_usados` omite los ya usados. Cada item sale
     como `{titulo, resumen, enlace, fecha, fuente_id, fuente_nombre, clave, usado}`.
     Propaga `RSSError` (la maneja el llamante para anotar el error y la salud).
+
+    `vistas` (opcional): conjunto de claves ya usadas de ESTA fuente, ya resuelto por el
+    llamante. Permite evitar el N+1 a Postgres (`repos.claves_vistas` por fuente DENTRO de
+    un bucle): el descubrimiento (Radar) pasa `set()` porque NO necesita la marca `usado`
+    (sus consumidores no la leen). Si es `None`, se consulta aqui (compat: feed unico).
     """
     crudos = leer_items_fuente(fuente)
-    vistas = repos.claves_vistas(fuente["id"])
+    if vistas is None:
+        vistas = repos.claves_vistas(fuente["id"])
     incluir = fuente.get("incluir", "")
     excluir = fuente.get("excluir", "")
     resultado: list[dict[str, Any]] = []
@@ -345,25 +356,34 @@ async def listar_items(request: Request) -> Response:
     if not incluir_inactivas:
         fuentes = [f for f in fuentes if f.get("activo", True)]
 
+    # Descarga EN PARALELO (F0 rendimiento): cada fuente (descarga httpx sincrona + filtros)
+    # corre en su hilo; un feed lento ya no bloquea a los demas. La marca `usado` se resuelve
+    # por fuente DENTRO de cada hilo (`vistas=None`): aqui SI se usa (a diferencia del Radar),
+    # asi que mantenemos la consulta por fuente, pero ahora en paralelo con la descarga (no
+    # un N+1 serial). `mapear_en_paralelo` RECOMPONE el orden de `fuentes`; el resultado de
+    # cada fuente es `(propios, error)` para omitir las caidas sin romper a las demas.
+    def _trabajo(fuente: dict[str, Any]) -> tuple[list[dict[str, Any]], str | None]:
+        try:
+            return _items_de_fuente(fuente, ocultar_usados=ocultar_usados), None
+        except RSSError as e:
+            return [], str(e)
+        except Exception:  # noqa: BLE001 -- nunca un traceback crudo; se omite la fuente
+            return [], "No se pudo leer el feed."
+
+    resultados = http_feed.mapear_en_paralelo(_trabajo, fuentes)
+
     items: list[dict[str, Any]] = []
     errores: list[dict[str, str]] = []
-    for fuente in fuentes:
-        try:
-            propios = _items_de_fuente(fuente, ocultar_usados=ocultar_usados)
+    # Las escrituras de salud a Postgres se hacen SECUENCIALES tras el abanico (evita abrir
+    # muchas conexiones concurrentes); el orden sigue el de `fuentes` (determinista).
+    for fuente, (propios, error) in zip(fuentes, resultados):
+        if error is None:
             items.extend(propios)
             repos.registrar_salud_fuente_rss(fuente["id"], conteo=len(propios), error="")
-        except RSSError as e:
-            repos.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=str(e))
-            errores.append({"fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"], "error": str(e)})
-        except Exception:  # noqa: BLE001 -- nunca un traceback crudo; se omite la fuente
-            mensaje = "No se pudo leer el feed."
-            repos.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=mensaje)
+        else:
+            repos.registrar_salud_fuente_rss(fuente["id"], conteo=0, error=error)
             errores.append(
-                {
-                    "fuente_id": fuente["id"],
-                    "fuente_nombre": fuente["nombre"],
-                    "error": mensaje,
-                }
+                {"fuente_id": fuente["id"], "fuente_nombre": fuente["nombre"], "error": error}
             )
     # Orden cronologico GLOBAL (mas nuevo arriba), no por feed/marca: tras acumular los
     # items de todas las fuentes se ordenan por su fecha. Los que no traen fecha parseable

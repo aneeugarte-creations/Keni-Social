@@ -67,6 +67,23 @@ def _esquema_fresco_por_test():
 
 
 @pytest.fixture(autouse=True)
+def _limpiar_cache_radar():
+    """Vacia la cache (TTL) del Radar al INICIO de cada test (F0 rendimiento).
+
+    `api.radar` cachea el radar consolidado (Trends + feeds + agencias) keyed por
+    `(geo, feeds, marca)` con TTL corto, compartido con la Parrilla. Es estado module-level:
+    sin limpiarlo, un test que cachea un resultado (con su `_DESCARGADOR` mockeado) lo serviria
+    al siguiente test (otro mock distinto) -> contaminacion cruzada / asserts erraticos. Aqui
+    lo vaciamos ANTES de cada test para que cada uno arranque con cache vacia y vea SUS datos.
+    Import diferido: no todos los tests cargan la app del Radar.
+    """
+    from keni_consola.api import radar as api_radar
+
+    api_radar.limpiar_cache()
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _aislar_logging_keni():
     """Aisla el estado del logger del paquete entre tests (contaminacion cruzada de logging).
 

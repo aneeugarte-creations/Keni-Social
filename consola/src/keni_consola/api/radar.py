@@ -21,6 +21,8 @@ valida contra la allowlist. Errores en español, sin tracebacks.
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Any
 
 from starlette.requests import Request
@@ -29,6 +31,87 @@ from starlette.routing import Route
 
 from .. import agencias, marcas, parrilla, radar, relevancia_marca
 from . import rss
+
+# --------------------------------------------------------------------------- #
+# Cache con TTL del radar consolidado (F0 rendimiento)                          #
+# --------------------------------------------------------------------------- #
+#
+# El radar descarga Trends + TODOS los feeds del equipo + agencias en el path de carga.
+# Abrir Plan, luego Descubrimiento y la bandeja Auto lo recalculaba TODO cada vez (varias
+# descargas de red repetidas en segundos). Aqui cacheamos el resultado CONSOLIDADO (los
+# grupos de temas por fuente + el estado por fuente) keyed por `(geo, incluir_feeds, marca)`,
+# con un TTL corto, compartido entre `api/radar.py` y `api/parrilla.py`.
+#
+# Honestidad intacta: el TTL es corto (los datos siguen siendo "de ahora"); pasado el TTL
+# se vuelve a descargar de fuentes reales. Thread-safe con un Lock (los handlers async corren
+# las descargas en hilos). `limpiar_cache()` invalida (lo usan los tests entre casos, ver la
+# fixture autouse del conftest, para que la cache de un test no contamine al siguiente).
+
+_TTL_CACHE = 180.0  # segundos: ventana corta; refresca de fuentes reales pasado el TTL.
+_cache_lock = threading.Lock()
+# clave -> (instante_monotonic, (grupos, fuentes))
+_cache: dict[tuple[str, bool, str | None], tuple[float, tuple[list[list[radar.Tema]], list[dict[str, Any]]]]] = {}
+
+
+def limpiar_cache() -> None:
+    """Vacia la cache del radar consolidado (invalidacion manual / aislamiento de tests)."""
+    with _cache_lock:
+        _cache.clear()
+
+
+def _radar_consolidado(
+    geo: str, *, incluir_feeds: bool, marca: str | None, refrescar: bool = False
+) -> tuple[list[list[radar.Tema]], list[dict[str, Any]]]:
+    """Trae los grupos de temas (Trends + feeds + agencias) y el estado por fuente, CACHEADO.
+
+    Devuelve `(grupos, fuentes)` listo para consolidar. Cacheado por `(geo, incluir_feeds,
+    marca)` con TTL corto; `refrescar=True` fuerza el recalculo (boton "Actualizar"). Nunca
+    lanza: cada `_radar_*` degrada honesto por fuente.
+
+    NOTA sobre la cache y los `Tema`: los `Tema` se reutilizan entre llamadas dentro del TTL.
+    `consolidar` FUNDE temas mutando el representante (`fusionar`), asi que NO debe correr dos
+    veces sobre los MISMOS objetos. Por eso la cache guarda los grupos CRUDOS (sin consolidar)
+    y cada llamante hace su propio `consolidar` sobre COPIAS (ver `_grupos_para_consolidar`).
+    """
+    clave = (geo, incluir_feeds, marca)
+    if not refrescar:
+        with _cache_lock:
+            entrada = _cache.get(clave)
+            if entrada is not None and (time.monotonic() - entrada[0]) < _TTL_CACHE:
+                return entrada[1]
+
+    grupos: list[list[radar.Tema]] = []
+    fuentes: list[dict[str, Any]] = []
+
+    temas_trends, estado_trends = _radar_trends(geo)
+    grupos.append(temas_trends)
+    fuentes.append(estado_trends)
+
+    if incluir_feeds:
+        temas_feeds, estados_feeds = _radar_feeds(marca)
+        grupos.append(temas_feeds)
+        fuentes.extend(estados_feeds)
+        # Agencias (Reuters/AFP): gateadas por credencial; sin ella salen como NO disponibles.
+        temas_agencias, estados_agencias = _radar_agencias()
+        grupos.append(temas_agencias)
+        fuentes.extend(estados_agencias)
+
+    resultado = (grupos, fuentes)
+    with _cache_lock:
+        _cache[clave] = (time.monotonic(), resultado)
+    return resultado
+
+
+def _grupos_para_consolidar(grupos: list[list[radar.Tema]]) -> list[list[radar.Tema]]:
+    """Clona los `Tema` de los grupos cacheados para que `consolidar` no mute el original.
+
+    `consolidar`/`fusionar` mutan el representante de cada cluster; correrlo sobre los objetos
+    cacheados los corromperia para la siguiente lectura. Devolvemos COPIAS superficiales con
+    sus colecciones duplicadas (lo que `fusionar` toca), baratas frente a una descarga de red.
+    """
+    import copy
+
+    return [[copy.deepcopy(t) for t in grupo] for grupo in grupos]
 
 
 def _flag(request: Request, nombre: str, *, defecto: bool) -> bool:
@@ -79,9 +162,9 @@ def _radar_agencias() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
     via `radar.temas_de_feeds` (señal cualitativa, igual que un feed). Un fallo de descarga se
     OMITE con su motivo sin romper los demas.
     """
-    temas: list[radar.Tema] = []
-    estados: list[dict[str, Any]] = []
-    for agencia in ("reuters", "afp"):
+    from ..dominio import http_feed
+
+    def _trabajo(agencia: str) -> tuple[list[radar.Tema], dict[str, Any]]:
         estado = agencias.estado_fuente(agencia)
         estado_salida: dict[str, Any] = {
             "id": f"agencia-{agencia}",
@@ -95,13 +178,21 @@ def _radar_agencias() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
             try:
                 items = agencias.traer_items(agencia)
                 propios = radar.temas_de_feeds(items)
-                temas.extend(propios)
                 estado_salida["conteo"] = len(propios)
+                return propios, estado_salida
             except rss.RSSError as e:
                 estado_salida.update(disponible=False, motivo=str(e))
             except Exception:  # noqa: BLE001 -- nunca traceback crudo; se omite la agencia
                 estado_salida.update(disponible=False, motivo="No se pudo leer la agencia.")
-        estados.append(estado_salida)
+        return [], estado_salida
+
+    # Descarga EN PARALELO (F0 rendimiento); recompone el orden original (reuters, afp).
+    resultados = http_feed.mapear_en_paralelo(_trabajo, ("reuters", "afp"))
+    temas: list[radar.Tema] = []
+    estados: list[dict[str, Any]] = []
+    for propios, estado in resultados:
+        temas.extend(propios)
+        estados.append(estado)
     return temas, estados
 
 
@@ -117,17 +208,21 @@ def _radar_feeds(marca: str | None = None) -> tuple[list[radar.Tema], list[dict[
     sin pasar por el filtro de keywords). Sin `marca`, se leen todos los feeds activos.
     """
     from .. import repos
+    from ..dominio import http_feed
 
-    temas: list[radar.Tema] = []
-    estados: list[dict[str, Any]] = []
-    for fuente in repos.listar_fuentes_rss():
-        if not fuente.get("activo", True):
-            continue
-        fuente_marca = (fuente.get("marca") or "").strip()
+    # Filtra ANTES las fuentes a leer (activas + de la marca/compartidas) para abanicar solo
+    # las que tocan; conserva el orden de `listar_fuentes_rss` (determinista).
+    fuentes = [
+        fuente
+        for fuente in repos.listar_fuentes_rss()
+        if fuente.get("activo", True)
         # Feed de OTRA marca: fuera del radar de la marca activa. Sin marca = compartido.
-        if marca and fuente_marca and fuente_marca != marca:
-            continue
-        es_de_marca = bool(marca and fuente_marca == marca)
+        and not (marca and (fuente.get("marca") or "").strip()
+                 and (fuente.get("marca") or "").strip() != marca)
+    ]
+
+    def _trabajo(fuente: dict[str, Any]) -> tuple[list[radar.Tema], dict[str, Any]]:
+        es_de_marca = bool(marca and (fuente.get("marca") or "").strip() == marca)
         estado: dict[str, Any] = {
             "id": f"rss-{fuente['id']}",
             "nombre": fuente["nombre"],
@@ -137,14 +232,24 @@ def _radar_feeds(marca: str | None = None) -> tuple[list[radar.Tema], list[dict[
             "conteo": 0,
         }
         try:
-            items = rss._items_de_fuente(fuente, ocultar_usados=False)
+            # `vistas=set()`: el Radar NO usa la marca `usado` (sus consumidores no la leen),
+            # asi evitamos el N+1 a Postgres (`repos.claves_vistas` por feed) en el path de carga.
+            items = rss._items_de_fuente(fuente, ocultar_usados=False, vistas=set())
             propios = radar.temas_de_feeds(items, curado=es_de_marca)
-            temas.extend(propios)
             estado["conteo"] = len(propios)
+            return propios, estado
         except rss.RSSError as e:
             estado.update(disponible=False, motivo=str(e))
         except Exception:  # noqa: BLE001 -- nunca traceback crudo; se omite el feed
             estado.update(disponible=False, motivo="No se pudo leer el feed.")
+        return [], estado
+
+    # Descarga EN PARALELO (F0 rendimiento); recompone el orden original de `fuentes`.
+    resultados = http_feed.mapear_en_paralelo(_trabajo, fuentes)
+    temas: list[radar.Tema] = []
+    estados: list[dict[str, Any]] = []
+    for propios, estado in resultados:
+        temas.extend(propios)
         estados.append(estado)
     return temas, estados
 
@@ -165,25 +270,15 @@ async def obtener(request: Request) -> Response:
     marca_crudo = (request.query_params.get("marca") or "").strip()
     marca = marca_crudo if marca_crudo and marcas.es_marca(marca_crudo) else None
     palabras = relevancia_marca.palabras_de_marca(marca)
+    # "Actualizar": `?refresh=1` fuerza el recalculo saltando la cache (contrato OPCIONAL; sin
+    # el parametro basta el TTL, asi no se rompe a quien ya llama sin el).
+    refrescar = _flag(request, "refresh", defecto=False)
 
-    grupos: list[list[radar.Tema]] = []
-    fuentes: list[dict[str, Any]] = []
-
-    temas_trends, estado_trends = _radar_trends(geo)
-    grupos.append(temas_trends)
-    fuentes.append(estado_trends)
-
-    if incluir_feeds:
-        temas_feeds, estados_feeds = _radar_feeds(marca)
-        grupos.append(temas_feeds)
-        fuentes.extend(estados_feeds)
-        # Agencias (Reuters/AFP, item F): gateadas por credencial. Sin credencial salen como
-        # fuente NO disponible con su motivo (no aportan items); con credencial, como un feed.
-        temas_agencias, estados_agencias = _radar_agencias()
-        grupos.append(temas_agencias)
-        fuentes.extend(estados_agencias)
-
-    temas = radar.consolidar(*grupos)
+    # Cacheado (TTL) y compartido con la Parrilla: abrir Plan + Descubrimiento no re-descarga.
+    grupos, fuentes = _radar_consolidado(
+        geo, incluir_feeds=incluir_feeds, marca=marca, refrescar=refrescar
+    )
+    temas = radar.consolidar(*_grupos_para_consolidar(grupos))
 
     # Filtro por marca: solo las tendencias en el foco de la marca (las demas se
     # reportan como `total_fuera_foco`, no se inventan ni se ocultan en silencio).

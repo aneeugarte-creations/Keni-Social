@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CircleCheck,
   CircleX,
@@ -7,7 +7,6 @@ import {
   Play,
   Radar as RadarIcon,
   RefreshCw,
-  Star,
   TrendingUp,
   Zap,
 } from "lucide-react";
@@ -39,12 +38,12 @@ import type { FuenteRadar, RespuestaRadar, TemaRadar } from "@/types";
 const CABECERA = {
   titulo: "Descubrimiento",
   descripcion:
-    "Tendencias virales y señales del momento, a partir de fuentes reales. SOLO propone: marca lo relevante y aliméntalo al Plan del día; publicar lo decides tú.",
+    "Tendencias virales y señales del momento, a partir de fuentes reales. SOLO propone y alimenta el Plan del día; publicar lo decides tú.",
 };
 
 /** Texto introductorio del panel "Tendencias" (antes la descripción de la página Radar). */
 const INTRO_TENDENCIAS =
-  "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone: marca lo relevante; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.";
+  "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.";
 
 /**
  * Página Descubrimiento: dos vistas que derivan de las mismas fuentes reales en
@@ -72,9 +71,6 @@ export default function Radar() {
     </>
   );
 }
-
-/** Clave de localStorage para recordar qué temas marcó el equipo como relevantes. */
-const CLAVE_RELEVANTES = "keni:radar-relevantes";
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -111,62 +107,47 @@ function PanelTendencias() {
   const query = useQuery({
     queryKey: ["radar", geo, marcaActiva],
     queryFn: ({ signal }) => api.radar(geo, true, marcaActiva ?? undefined, signal),
+    // Al cambiar de marca/país no repintamos un skeleton frío: mantenemos lo previo
+    // mientras refresca, y consideramos fresco el dato unos minutos (menos refetch).
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Selección del equipo (qué temas son relevantes). SOLO marca; no publica nada.
-  const [relevantes, setRelevantes] = React.useState<Set<string>>(() => {
-    try {
-      const crudo = localStorage.getItem(CLAVE_RELEVANTES);
-      return new Set(crudo ? (JSON.parse(crudo) as string[]) : []);
-    } catch {
-      return new Set();
-    }
-  });
-
-  function alternarRelevante(titulo: string) {
-    setRelevantes((prev) => {
-      const siguiente = new Set(prev);
-      if (siguiente.has(titulo)) siguiente.delete(titulo);
-      else siguiente.add(titulo);
-      try {
-        localStorage.setItem(CLAVE_RELEVANTES, JSON.stringify([...siguiente]));
-      } catch {
-        // localStorage lleno o no disponible: la marca vive solo en memoria.
-      }
-      return siguiente;
-    });
-  }
+  // El selector de país (geo) y el listado de geos disponibles. En carga/error usamos
+  // un fallback con solo el geo actual para que el usuario PUEDA cambiar de país y
+  // reintentar aunque la query no haya tenido éxito (no se esconde tras isSuccess).
+  const geosDisponibles = query.data?.geos_disponibles ?? [{ id: geo, nombre: geo }];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-3xl text-sm text-muted-foreground">{INTRO_TENDENCIAS}</p>
-        {query.isSuccess && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {query.isSuccess && (
             <BotonExportarLista titulo="Tendencias del Radar" items={temasExportables(query.data.temas)} />
-            <Select value={geo} onValueChange={setGeo}>
-              <SelectTrigger className="w-44" aria-label="País del radar">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {query.data.geos_disponibles.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              Actualizar
-            </Button>
-          </div>
-        )}
+          )}
+          <Select value={geo} onValueChange={setGeo}>
+            <SelectTrigger className="w-44" aria-label="País del radar">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {geosDisponibles.map((g) => (
+                <SelectItem key={g.id} value={g.id}>
+                  {g.nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+          >
+            <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            Actualizar
+          </Button>
+        </div>
       </div>
 
       {query.isPending ? (
@@ -183,12 +164,7 @@ function PanelTendencias() {
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <ListaTemas
-            datos={query.data}
-            relevantes={relevantes}
-            onAlternar={alternarRelevante}
-            nombreMarca={nombreActiva}
-          />
+          <ListaTemas datos={query.data} nombreMarca={nombreActiva} />
           <PanelFuentes datos={query.data} />
         </div>
       )}
@@ -200,13 +176,9 @@ function PanelTendencias() {
 
 function ListaTemas({
   datos,
-  relevantes,
-  onAlternar,
   nombreMarca,
 }: {
   datos: RespuestaRadar;
-  relevantes: Set<string>;
-  onAlternar: (titulo: string) => void;
   nombreMarca: string | null;
 }) {
   const sinDatos = datos.temas.length === 0;
@@ -251,16 +223,11 @@ function ListaTemas({
             {filtradoPorMarca && nombreMarca ? ` de ${nombreMarca}` : ""} · ordenados por señal (lo
             más viral arriba).{" "}
             {filtradoPorMarca && fueraFoco > 0 && `${fueraFoco} fuera del foco de la marca. `}
-            {relevantes.size > 0 && `${relevantes.size} marcado(s) como relevante.`}
           </p>
           <ul className="space-y-3">
             {datos.temas.map((tema) => (
               <li key={tema.titulo}>
-                <TarjetaTema
-                  tema={tema}
-                  relevante={relevantes.has(tema.titulo)}
-                  onAlternar={() => onAlternar(tema.titulo)}
-                />
+                <TarjetaTema tema={tema} />
               </li>
             ))}
           </ul>
@@ -270,58 +237,38 @@ function ListaTemas({
   );
 }
 
-function TarjetaTema({
-  tema,
-  relevante,
-  onAlternar,
-}: {
-  tema: TemaRadar;
-  relevante: boolean;
-  onAlternar: () => void;
-}) {
+function TarjetaTema({ tema }: { tema: TemaRadar }) {
   return (
-    <Card className={relevante ? "border-primary/60" : undefined}>
+    <Card>
       <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1.5">
-            <CardTitle className="text-base leading-snug">{tema.titulo}</CardTitle>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {tema.curado && <Badge variant="ok">De tu fuente</Badge>}
-              {tema.senal_texto && (
-                <Badge variant="aviso" className="gap-1">
-                  <TrendingUp className="h-3 w-3" />
-                  {tema.senal_texto}
-                </Badge>
-              )}
-              {[...new Set(tema.redes.map(etiquetaRed))].map((r) => (
-                <Badge key={r} variant="secondary">
-                  {r}
-                </Badge>
-              ))}
-              {tema.fuentes.length > 1 && (
-                <Badge variant="outline" className="gap-1">
-                  <Flame className="h-3 w-3" />
-                  {tema.fuentes.length} fuentes
-                </Badge>
-              )}
-            </div>
-            {tema.fuentes.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Fuente: </span>
-                {tema.fuentes.join(" · ")}
-              </p>
+        <div className="min-w-0 space-y-1.5">
+          <CardTitle className="text-base leading-snug">{tema.titulo}</CardTitle>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {tema.curado && <Badge variant="ok">De tu fuente</Badge>}
+            {tema.senal_texto && (
+              <Badge variant="aviso" className="gap-1">
+                <TrendingUp className="h-3 w-3" />
+                {tema.senal_texto}
+              </Badge>
+            )}
+            {[...new Set(tema.redes.map(etiquetaRed))].map((r) => (
+              <Badge key={r} variant="secondary">
+                {r}
+              </Badge>
+            ))}
+            {tema.fuentes.length > 1 && (
+              <Badge variant="outline" className="gap-1">
+                <Flame className="h-3 w-3" />
+                {tema.fuentes.length} fuentes
+              </Badge>
             )}
           </div>
-          <Button
-            variant={relevante ? "default" : "outline"}
-            size="sm"
-            className="shrink-0"
-            onClick={onAlternar}
-            aria-pressed={relevante}
-          >
-            <Star className={relevante ? "h-4 w-4 fill-current" : "h-4 w-4"} />
-            {relevante ? "Relevante" : "Marcar"}
-          </Button>
+          {tema.fuentes.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Fuente: </span>
+              {tema.fuentes.join(" · ")}
+            </p>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -513,7 +460,7 @@ function PanelRadarAuto() {
             title="Promueve ahora los temas de la bandeja a “importante del día”"
           >
             {ejecutar.isPending ? (
-              <Loader2Spin />
+              <RefreshCw className="h-4 w-4 animate-spin" />
             ) : (
               <Play className="h-4 w-4" />
             )}
@@ -550,11 +497,6 @@ function PanelRadarAuto() {
       )}
     </div>
   );
-}
-
-/** Spinner reutilizado (evita importar el icono dos veces con otro nombre). */
-function Loader2Spin() {
-  return <RefreshCw className="h-4 w-4 animate-spin" />;
 }
 
 /** Tarjeta de un tema de la bandeja auto (solo lectura; sin acciones por tema). */

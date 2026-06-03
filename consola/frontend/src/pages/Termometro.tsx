@@ -38,7 +38,7 @@ const CABECERA = {
     "El posteo de galería con las 5–8 noticias internacionales más importantes del día, una por región. Pega las notas, jerarquízalas y arma el copy del posteo listo para revisar.",
 };
 
-/** Opciones del número de slides (coinciden con la skill y el backend). */
+/** Opciones del número de slides (coinciden con el backend). */
 const OPCIONES_NUMERO = ["5", "6", "7", "8"] as const;
 
 function mensajeError(error: unknown): string {
@@ -56,8 +56,8 @@ function formatearItem(item: ItemRss): string {
 
 /**
  * Termómetro mundial. Página dedicada: configura el termómetro (número de slides,
- * regiones, hora del cron de las 7:00 y marca) y genera el posteo de galería con la
- * skill `termometro-mundial`. Reutiliza el motor de generación en segundo plano
+ * regiones, hora del cron de las 7:00 y marca) y genera el posteo de galería con el
+ * prompt base del Termómetro (Biblioteca). Reutiliza el motor de generación en segundo plano
  * (`useGeneracion` + `ProgresoGeneracion`) y muestra el resultado como PORTADA + SLIDES
  * en miniatura con `TermometroPreview` (máquina de estados: armar → generando → revisar →
  * guardar). El guardado multi-red sigue el mismo contrato neutro `{ redes: [...] }`.
@@ -300,8 +300,8 @@ function PanelGenerar({ datos }: { datos: RespuestaTermometro }) {
         <CardContent className="space-y-4">
           {!datos.skill_disponible && (
             <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">
-              La skill <code>termometro-mundial</code> no está instalada en este equipo. Actualiza
-              el plugin de skills de Keni para poder generar.
+              Falta el prompt base del Termómetro en la Biblioteca, así que ahora mismo no se puede
+              generar. Restáuralo desde la semilla para volver a habilitarlo.
             </div>
           )}
 

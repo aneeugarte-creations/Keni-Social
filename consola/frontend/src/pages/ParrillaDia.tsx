@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import {
   ExternalLink,
   Film,
@@ -10,11 +10,10 @@ import {
   Loader2,
   RefreshCw,
   ScrollText,
-  Sparkles,
   Video,
 } from "lucide-react";
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
@@ -35,10 +34,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { ItemParrilla, RespuestaParrilla, SubtipoParrilla } from "@/types";
-
-/** Texto introductorio del panel "Plan del día" (antes la descripción de la página). */
-const INTRO =
-  "A partir del Radar, propone la parrilla editorial del día: 13 posteos (clip, galería, infografía o normal) y 6 video-editoriales, jerarquizados por importancia para México. SOLO propone el orden; qué y cuándo publicar lo decides tú. No inventa nada: deriva de las fuentes reales del Radar.";
 
 /** Etiqueta + icono por subtipo de posteo (vacío => posteo normal). */
 const SUBTIPO: Record<SubtipoParrilla, { etiqueta: string; Icono: typeof Film }> = {
@@ -116,38 +111,43 @@ export function PanelPlanDelDia() {
   const query = useQuery({
     queryKey: ["parrilla-dia", geo, marcaActiva],
     queryFn: ({ signal }) => api.parrillaDia(geo, marcaActiva ?? undefined, signal),
+    // Al cambiar de marca/país mantenemos el plan previo mientras refresca (sin
+    // skeleton frío) y lo consideramos fresco unos minutos (menos refetch).
+    placeholderData: keepPreviousData,
+    staleTime: 5 * 60 * 1000,
   });
+
+  // País (geo) disponible aun en carga/error: fallback con solo el geo actual para que
+  // el usuario PUEDA cambiar de país y reintentar sin esperar a que la query tenga éxito.
+  const geosDisponibles = query.data?.geos_disponibles ?? [{ id: geo, nombre: geo }];
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-3xl text-sm text-muted-foreground">{INTRO}</p>
+      <div className="flex flex-wrap items-center justify-end gap-2">
         {query.isSuccess && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <BotonExportarLista titulo="Plan del día" items={planExportable(query.data)} />
-            <Select value={geo} onValueChange={setGeo}>
-              <SelectTrigger className="w-44" aria-label="País del contexto">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {query.data.geos_disponibles.map((g) => (
-                  <SelectItem key={g.id} value={g.id}>
-                    {g.nombre}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void query.refetch()}
-              disabled={query.isFetching}
-            >
-              <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              Actualizar
-            </Button>
-          </div>
+          <BotonExportarLista titulo="Plan del día" items={planExportable(query.data)} />
         )}
+        <Select value={geo} onValueChange={setGeo}>
+          <SelectTrigger className="w-44" aria-label="País del contexto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {geosDisponibles.map((g) => (
+              <SelectItem key={g.id} value={g.id}>
+                {g.nombre}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void query.refetch()}
+          disabled={query.isFetching}
+        >
+          <RefreshCw className={query.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          Actualizar
+        </Button>
       </div>
 
       {query.isPending ? (
@@ -293,18 +293,8 @@ function Columna({
 }
 
 function TarjetaItem({ item }: { item: ItemParrilla }) {
-  const navigate = useNavigate();
   const sub = SUBTIPO[item.subtipo] ?? SUBTIPO[""];
   const SubIcono = sub.Icono;
-
-  // Siembra la generación con el tema (título + por qué + enlaces); FlujoGeneracion
-  // lee `location.state.texto`. Solo PROPONE el texto base; el copy lo decide el humano.
-  function generarCopy() {
-    const texto = [item.titulo, item.por_que, ...item.enlaces.map((e) => e.url)]
-      .filter(Boolean)
-      .join("\n\n");
-    navigate("/generacion", { state: { texto, modo: "copy" } });
-  }
 
   // Promueve el tema al tablero del CM como "importante del día" (origen Radar). El CM
   // luego elige plataformas y responsable allí. Prioridad alta para los 3 primeros.
@@ -385,10 +375,6 @@ function TarjetaItem({ item }: { item: ItemParrilla }) {
         )}
 
         <div className="flex flex-wrap gap-2 pt-1">
-          <Button variant="outline" size="sm" onClick={generarCopy}>
-            <Sparkles className="h-3.5 w-3.5" />
-            Generar copy
-          </Button>
           <Button
             variant="outline"
             size="sm"

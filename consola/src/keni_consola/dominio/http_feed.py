@@ -22,17 +22,26 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
 # Limites de descarga (defensa frente a feeds maliciosos o gigantes).
-_TIMEOUT = 10.0  # segundos
+# `_TIMEOUT` baja de 10s a 6s (F0 rendimiento): un feed lento ya no bloquea 10s el path de
+# carga del Radar/Parrilla. 6s es holgado para un RSS sano y recorta la cola larga.
+_TIMEOUT = 6.0  # segundos
 _MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _MAX_ITEMS = 30  # items por feed
 _RESUMEN_MAX = 500  # caracteres del resumen (tras limpiar HTML)
+
+# Concurrencia de descargas por feed/fuente (F0 rendimiento). La descarga es httpx
+# SINCRONA (I/O-bound), asi que un pool de hilos acotado abanica las descargas sin bloquear
+# unas con otras. Acotado para no abrir cientos de conexiones de golpe ante muchas fuentes.
+_MAX_WORKERS = 8
 
 # Etiquetas HTML a texto plano (tolerante; los feeds suelen traer HTML en el resumen).
 _RE_TAGS = re.compile(r"<[^>]+>")
@@ -379,6 +388,39 @@ def parsear_feed(xml: str) -> list[dict[str, str]]:
             }
         )
     return items
+
+
+_T = TypeVar("_T")
+_R = TypeVar("_R")
+
+
+def mapear_en_paralelo(
+    funcion: Callable[[_T], _R],
+    elementos: Sequence[_T],
+    *,
+    max_workers: int = _MAX_WORKERS,
+) -> list[_R]:
+    """Aplica `funcion` a cada elemento EN PARALELO (hilos) y RECOMPONE el orden original.
+
+    Pensado para abanicar descargas de feeds (I/O-bound, httpx sincrono) sin bloquear unas
+    con otras. DETERMINISTA: el resultado conserva el MISMO orden que `elementos`, de modo
+    que el usuario ve exactamente el mismo orden que con el `for` serial de antes.
+
+    NO atrapa excepciones: si `funcion` lanza para un elemento, la excepcion se propaga al
+    llamante (igual que en el bucle serial). Los llamantes que omiten una fuente caida lo
+    hacen DENTRO de `funcion` (devolviendo un resultado con su error), no aqui.
+
+    Con 0 o 1 elemento (o `max_workers <= 1`) evita el coste de crear el pool y corre en
+    linea, preservando el comportamiento.
+    """
+    items = list(elementos)
+    if not items:
+        return []
+    if len(items) == 1 or max_workers <= 1:
+        return [funcion(items[0])] if len(items) == 1 else [funcion(e) for e in items]
+    # `map` de ThreadPoolExecutor ya devuelve los resultados EN ORDEN de entrada.
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(items))) as pool:
+        return list(pool.map(funcion, items))
 
 
 def leer_items_fuente(

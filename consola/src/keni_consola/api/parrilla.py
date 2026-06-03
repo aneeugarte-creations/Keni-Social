@@ -120,24 +120,19 @@ def _tema_desde_dict(d: Any) -> radar.Tema | None:
 
 
 def _obtener_temas_radar(geo: str, marca: str | None = None) -> list[radar.Tema]:
-    """Trae temas del Radar (Trends + feeds RSS activos). Degrada honestamente si falla.
+    """Trae temas del Radar (Trends + feeds RSS activos + agencias). Degrada si falla.
 
     Con `marca`, los feeds se leen POR MARCA (los propios + los compartidos), y los
     propios entran curados (al foco de la marca sin filtro de keywords).
+
+    REUSA la cache con TTL del Radar (`api.radar._radar_consolidado`): asi abrir el Plan y
+    luego Descubrimiento (y la bandeja Auto) NO re-descarga Trends + feeds. La descarga ya
+    degrada honesto por fuente; consolidamos sobre COPIAS para no mutar los temas cacheados.
     """
     from . import radar as api_radar
 
-    grupos: list[list[radar.Tema]] = []
-    temas_trends, _ = api_radar._radar_trends(geo)
-    grupos.append(temas_trends)
-
-    try:
-        temas_feeds, _ = api_radar._radar_feeds(marca)
-        grupos.append(temas_feeds)
-    except Exception:  # noqa: BLE001 -- feeds opcionales; si fallan, seguimos sin ellos
-        pass
-
-    return radar.consolidar(*grupos)
+    grupos, _fuentes = api_radar._radar_consolidado(geo, incluir_feeds=True, marca=marca)
+    return radar.consolidar(*api_radar._grupos_para_consolidar(grupos))
 
 
 def _construir_respuesta(

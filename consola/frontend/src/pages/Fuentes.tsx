@@ -103,7 +103,7 @@ const CABECERA = {
   titulo: "Fuentes",
   descripcion:
     "El hub de insumos: vigila TODAS tus fuentes en un sitio y aporta material por tipo " +
-    "(RSS, Google Trends, ideas, enlaces y contenido interno). Lo que aportas llega al pipeline.",
+    "(RSS, ideas, enlaces y contenido interno). Lo que aportas llega al pipeline.",
 };
 
 /**
@@ -122,7 +122,6 @@ type PestanaTipo = {
 const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "todas", etiqueta: "Todas" },
   { valor: "rss", etiqueta: "RSS" },
-  { valor: "trends", etiqueta: "Google Trends" },
   { valor: "idea", etiqueta: "Ideas" },
   { valor: "enlace", etiqueta: "Enlaces" },
   { valor: "interna", etiqueta: "Interno AMX" },
@@ -171,9 +170,6 @@ export default function Fuentes() {
             <GestionFuentes marcas={marcas} redes={opcionesRedes} />
             <ItemsRecientes marcas={marcas} redes={opcionesRedes} />
           </div>
-        </TabsContent>
-        <TabsContent value="trends">
-          <FuenteTrends />
         </TabsContent>
         <TabsContent value="idea">
           <AportarManual tipo="idea" marcas={marcas} redes={opcionesRedes} />
@@ -310,102 +306,26 @@ function HubFuentes() {
               notas. Hasta entonces aparecen aquí en claro, sin inventar contenido.
             </p>
           )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-// --- Google Trends (fuente built-in del Radar) -----------------------------
-
-/**
- * Pestaña Google Trends. Trends NO es multi-instancia: es una fuente BUILT-IN del Radar,
- * configurable GLOBALMENTE (geo + umbral de señal) vía las variables del daemon de
- * auto-promoción. Aquí se muestra esa config viva y su estado de forma honesta, sin inventar
- * multi-instancia que no aplica. La config se ajusta por entorno (no editable desde la UI).
- */
-function FuenteTrends() {
-  const query = useQuery({
-    queryKey: ["radar", "auto", "bandeja"],
-    queryFn: ({ signal }) => api.bandejaRadarAuto(signal),
-  });
-
-  if (query.isPending) {
-    return <Skeleton className="h-56 w-full rounded-md" />;
-  }
-  if (query.isError) {
-    return (
-      <BloqueError
-        titulo="No se pudo cargar la configuración de Google Trends"
-        mensaje={mensajeError(query.error)}
-        onReintentar={() => void query.refetch()}
-        cargando={query.isFetching}
-      />
-    );
-  }
-
-  const { config } = query.data;
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <TrendingUp className="h-4 w-4" />
-            Google Trends
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4 text-sm">
-          <p className="text-muted-foreground">
-            Tendencias de búsqueda de Google como señal del Radar. Es una fuente única
-            (built-in), no se dan de alta varias: se configura globalmente y alimenta el{" "}
-            <Link
-              to="/datos/investigacion/descubrimiento"
-              className="underline hover:text-foreground"
-            >
-              Descubrimiento
-            </Link>{" "}
-            y la auto-promoción del día.
-          </p>
-          <dl className="grid grid-cols-2 gap-3">
-            <div className="rounded-md border p-3">
-              <dt className="text-xs text-muted-foreground">Región (geo)</dt>
-              <dd className="mt-0.5 font-medium">{config.geo || "MX"}</dd>
+          {/* Google Trends ya no tiene pestaña propia: era solo lectura de una config no
+              editable. Se resume aquí como la señal built-in que es; su estado real se ve
+              por fuente en el panel del Radar. */}
+          <div className="flex items-start gap-2 border-t pt-3 text-sm">
+            <TrendingUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="min-w-0">
+              <p className="font-medium">Google Trends</p>
+              <p className="text-xs text-muted-foreground">
+                Señal built-in del Radar (no se da de alta): se configura por entorno y alimenta
+                el{" "}
+                <Link
+                  to="/datos/investigacion/descubrimiento"
+                  className="underline hover:text-foreground"
+                >
+                  Descubrimiento
+                </Link>{" "}
+                y la auto-promoción. Su disponibilidad real se ve por fuente en el panel del Radar.
+              </p>
             </div>
-            <div className="rounded-md border p-3">
-              <dt className="text-xs text-muted-foreground">Umbral de señal</dt>
-              <dd className="mt-0.5 font-medium">{config.umbral.toLocaleString("es-MX")}</dd>
-            </div>
-            <div className="rounded-md border p-3">
-              <dt className="text-xs text-muted-foreground">Auto-promoción</dt>
-              <dd className="mt-0.5 font-medium">{config.activo ? "Activa" : "Inactiva"}</dd>
-            </div>
-            <div className="rounded-md border p-3">
-              <dt className="text-xs text-muted-foreground">Máximo por barrido</dt>
-              <dd className="mt-0.5 font-medium">{config.max_por_barrido}</dd>
-            </div>
-          </dl>
-          <p className="text-xs text-muted-foreground">
-            Estos valores se ajustan por entorno (variables del servidor); por eso aquí se
-            muestran en claro pero no se editan. Para revisar lo que entraría hoy, mira la
-            bandeja del Radar.
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="h-fit">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Estado</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Disponible como señal del Radar.</span>
           </div>
-          <p className="text-xs text-muted-foreground">
-            La disponibilidad real (si Google responde) se ve por fuente en el panel del Radar,
-            sin inventar nada.
-          </p>
         </CardContent>
       </Card>
     </div>
@@ -1287,7 +1207,6 @@ function ItemNoticia({
   marcaDefecto: string;
 }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
   const [generarAbierto, setGenerarAbierto] = React.useState(false);
 
   const marcarUsado = useMutation({
@@ -1303,11 +1222,6 @@ function ItemNoticia({
     },
     onError: (e) => toast.error(mensajeError(e)),
   });
-
-  function usarEnGenerar() {
-    const texto = [item.titulo, item.resumen, item.enlace].filter(Boolean).join("\n\n");
-    navigate("/generacion", { state: { texto } });
-  }
 
   return (
     <div
@@ -1336,10 +1250,6 @@ function ItemNoticia({
         <Button size="sm" onClick={() => setGenerarAbierto(true)}>
           <MarcaIA />
           Generar copy
-        </Button>
-        <Button variant="outline" size="sm" onClick={usarEnGenerar}>
-          <ExternalLink className="h-4 w-4" />
-          Abrir en Generar copy
         </Button>
         <Button
           variant="ghost"
