@@ -36,6 +36,7 @@ el gateway no mata los jobs") lo cumple el modo hosted, que es el del servicio c
 from __future__ import annotations
 
 import logging
+import signal
 import threading
 import time
 import uuid
@@ -44,6 +45,24 @@ from . import cola, config, generaciones
 from .dominio import jobspec
 
 _log = logging.getLogger("keni_consola.worker")
+
+# Job (id, gen_id) que el worker está EJECUTANDO ahora mismo (claude en vuelo), o None.
+# Lo usa el manejador de apagado: si el worker muere a mitad (deploy/SIGTERM), marca esa
+# generación como INTERRUMPIDA al instante (en vez de dejarla "ejecutando" fantasma hasta el
+# reaper) y saca el job de la cola para que NO se re-ejecute en bucle reiniciando el run.
+_JOB_EN_CURSO: dict[str, str] | None = None
+_JOB_EN_CURSO_LOCK = threading.Lock()
+
+
+def _marcar_job_en_curso(job: dict[str, str] | None) -> None:
+    global _JOB_EN_CURSO
+    with _JOB_EN_CURSO_LOCK:
+        _JOB_EN_CURSO = job
+
+
+def _job_en_curso() -> dict[str, str] | None:
+    with _JOB_EN_CURSO_LOCK:
+        return _JOB_EN_CURSO
 
 # Cuanto sondea el vigia de cancelacion el flag de la cola (s). Bajo para que cancelar
 # se sienta inmediato sin martillear la BD.
@@ -177,6 +196,9 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
     )
     vigia.start()
 
+    # Marca este job como "en curso" mientras corre claude: si el worker recibe SIGTERM
+    # (deploy) durante este tramo, el manejador de apagado lo marca interrumpido al instante.
+    _marcar_job_en_curso({"id": job_id, "gen_id": gen_id})
     try:
         # El runner real (con TODO el #137). `ya_admitido=True`: el cupo lo tomo el
         # encolado; `slot` lo libera al terminar el hilo del job. Esto arranca el hilo y
@@ -187,6 +209,7 @@ def procesar_job(job: dict, worker_id: str = "") -> None:
         )
         _esperar_terminal(gen_id)
     finally:
+        _marcar_job_en_curso(None)
         parar.set()
         cola.terminar(job_id)
 
@@ -266,10 +289,44 @@ def main() -> int:
 
     parar = threading.Event()
     worker_id = f"svc-{uuid.uuid4().hex[:8]}"
+
+    def _al_apagar(signum: int, _frame: object) -> None:
+        """SIGTERM/SIGINT (apagado por deploy): detecta el job EN CURSO y lo deja en estado
+        honesto en vez de "ejecutando" fantasma. Lo marca INTERRUMPIDO y lo SACA de la cola
+        (no se re-ejecuta en bucle, que reiniciaría el razonamiento desde cero). El reaper
+        cubre las muertes NO graciosas (SIGKILL/OOM), donde este manejador no llega a correr."""
+        parar.set()
+        job = _job_en_curso()
+        if job:
+            gid, jid = job.get("gen_id", ""), job.get("id", "")
+            _log.warning(
+                "worker: apagado (señal %s) con job en curso gen=%s; lo marco interrumpido", signum, gid
+            )
+            try:
+                generaciones.actualizar(gid, {
+                    "estado": generaciones.ESTADO_ERROR,
+                    "motivo": generaciones.MOTIVO_INTERRUMPIDO,
+                    "error": "Interrumpida por un reinicio del worker (despliegue). Vuelve a intentarla.",
+                    "fecha_fin": generaciones.ahora_iso(),
+                })
+            except Exception:  # noqa: BLE001 -- en apagado, best-effort
+                pass
+            try:
+                cola.terminar(jid)  # fuera de la cola: NO re-ejecutar (evita reinicio en bucle)
+            except Exception:  # noqa: BLE001
+                pass
+            try:
+                generaciones.cancelar(gid)  # mata el árbol de claude si sigue vivo
+            except Exception:  # noqa: BLE001
+                pass
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _al_apagar)
+    signal.signal(signal.SIGINT, _al_apagar)
     _log.info("Worker de generacion (servicio) iniciado: %s", worker_id)
     try:
         _bucle(parar, worker_id)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         parar.set()
     return 0
 
