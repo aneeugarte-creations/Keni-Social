@@ -30,6 +30,7 @@ modulos_backend = [
   "actividad",
   "biblioteca",
   "generaciones",
+  "green",
   "hashtags",
   "historial",
   "imagenes",
