@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
 import type { FormatoImagen } from "@/types";
@@ -105,7 +106,7 @@ export function PanelIA({ marca, formato }: { marca: string; formato: string }) 
         className="min-h-[56px] rounded border border-input bg-background p-1.5 text-sm"
       />
       <Button size="sm" disabled={ocupado || !prompt.trim()} onClick={() => lanzar("generar")}>
-        {ocupado && trabajo?.tipo === "generar" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Sparkles className="mr-1 h-4 w-4" />}
+        {ocupado && trabajo?.tipo === "generar" ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <MarcaIA costo className="mr-1" />}
         Generar imagen
       </Button>
 

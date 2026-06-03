@@ -12,7 +12,6 @@ import {
   Maximize2,
   Replace,
   Settings2,
-  Sparkles,
 } from "lucide-react";
 
 import type { Capa, CapaImagen, CapaMarco, CapaTexto } from "./documento";
@@ -87,13 +86,11 @@ function Swatch({ color, onChange, titulo }: { color: string; onChange: (c: stri
 export function BarraContextual({
   fuentesExtra = [],
   onAbrirAjustes,
-  onAbrirIA,
   onReencuadrar,
   onReemplazar,
 }: {
   fuentesExtra?: string[];
   onAbrirAjustes: () => void;
-  onAbrirIA: () => void;
   onReencuadrar: () => void;
   onReemplazar: () => void;
 }) {
@@ -116,12 +113,11 @@ export function BarraContextual({
   }
 
   if (!capa) {
-    // Sin selección: pista + acceso a IA (la edición de lienzo/fondo está en Ajustes).
+    // Sin selección: pista + acceso al lienzo/fondo (IA vive en el rail; no se duplica).
     return (
       <div className="flex h-11 items-center gap-1 overflow-x-auto bg-background px-2">
         <span className="truncate text-sm text-muted-foreground">Selecciona una capa, o añade elementos desde el panel.</span>
         <div className="ml-auto flex items-center gap-1">
-          <BotonIcono titulo="Generar con IA" onClick={onAbrirIA}><Sparkles className="h-4 w-4" /> IA</BotonIcono>
           <BotonIcono titulo="Lienzo y fondo" onClick={onAbrirAjustes}><Maximize2 className="h-4 w-4" /> Lienzo</BotonIcono>
         </div>
       </div>

@@ -187,7 +187,9 @@ export function PanelBiblioteca({
                     className="block aspect-square w-full overflow-hidden rounded border border-border bg-[repeating-conic-gradient(#0000_0_25%,#8884_0_50%)] bg-[length:16px_16px] hover:ring-2 hover:ring-primary"
                   >
                     {a.objeto ? (
-                      <img src={urlMedia(a.objeto)} alt={a.nombre} className="h-full w-full object-contain" />
+                      // draggable=false + pointer-events-none: el <img> nativo NO debe robar el
+                      // arrastre (payload del activo) ni el click del botón contenedor.
+                      <img src={urlMedia(a.objeto)} alt={a.nombre} draggable={false} className="pointer-events-none h-full w-full object-contain" />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
                         {a.tipo}

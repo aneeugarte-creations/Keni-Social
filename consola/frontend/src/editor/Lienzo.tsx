@@ -193,6 +193,17 @@ export function Lienzo({
   // El grupo solo se mueve (resize/rotación se hacen desagrupando).
   const esGrupo = capaSel?.tipo === "grupo";
 
+  // Las webfonts (catálogo + tipografías de marca) cargan async; Konva pinta con la fuente
+  // disponible en ese instante. Redibuja cuando el navegador termina de cargar fuentes para que
+  // el texto deje de caer a la fuente de respaldo.
+  useEffect(() => {
+    if (typeof document === "undefined" || !("fonts" in document)) return;
+    const redibujar = () => stageRef.current?.getLayers().forEach((l) => l.batchDraw());
+    document.fonts.ready.then(redibujar);
+    document.fonts.addEventListener?.("loadingdone", redibujar);
+    return () => document.fonts.removeEventListener?.("loadingdone", redibujar);
+  }, []);
+
   // Adjunta el Transformer a TODAS las capas seleccionadas.
   useEffect(() => {
     const tr = trRef.current;
@@ -527,8 +538,9 @@ export function Lienzo({
               Array.from({ length: Math.floor(h / paso) }, (_, i) => (
                 <Line key={`gy${i}`} points={[0, (i + 1) * paso, w, (i + 1) * paso]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.12} />
               ))}
-            {documento.formato.safe_top > 0 && <Rect x={0} y={documento.formato.safe_top} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
-            {documento.formato.safe_bottom > 0 && <Rect x={0} y={h - documento.formato.safe_bottom} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
+            {/* Guías de zona segura: solo con la cuadrícula activa (antes confundían siempre visibles). */}
+            {grid && documento.formato.safe_top > 0 && <Rect x={0} y={documento.formato.safe_top} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
+            {grid && documento.formato.safe_bottom > 0 && <Rect x={0} y={h - documento.formato.safe_bottom} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
             {guias.x !== null && <Line points={[guias.x, 0, guias.x, h]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
             {guias.y !== null && <Line points={[0, guias.y, w, guias.y]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
           </Layer>

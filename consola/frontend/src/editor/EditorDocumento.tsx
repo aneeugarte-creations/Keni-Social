@@ -13,6 +13,7 @@
 //   en móvil (clases `max-md:`), con backdrop solo en móvil.
 
 import {
+  DollarSign,
   LayoutTemplate,
   Layers,
   Image as ImageIcon,
@@ -38,10 +39,10 @@ import { useFuentesMarca } from "./useFuentesMarca";
 
 type Herramienta = "elementos" | "biblioteca" | "ia" | "capas";
 
-const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes }[] = [
+const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes; costo?: boolean }[] = [
   { clave: "elementos", etiqueta: "Elementos", Icono: Shapes },
   { clave: "biblioteca", etiqueta: "Biblioteca", Icono: ImageIcon },
-  { clave: "ia", etiqueta: "IA", Icono: Sparkles },
+  { clave: "ia", etiqueta: "IA", Icono: Sparkles, costo: true },
   { clave: "capas", etiqueta: "Capas", Icono: Layers },
 ];
 
@@ -109,7 +110,7 @@ export function EditorDocumento({
             <RailBtn etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />
           )}
           {HERRAMIENTAS.map((h) => (
-            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
+            <RailBtn key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
           ))}
         </nav>
 
@@ -137,7 +138,6 @@ export function EditorDocumento({
               <BarraContextual
                 fuentesExtra={fuentesExtra}
                 onAbrirAjustes={() => setAjustes(true)}
-                onAbrirIA={() => setTool("ia")}
                 onReencuadrar={abrirReencuadre}
                 onReemplazar={abrirReemplazo}
               />
@@ -194,7 +194,7 @@ export function EditorDocumento({
         <nav className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t border-border bg-background md:hidden">
           {onPlantillas && <RailBtnMovil etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />}
           {HERRAMIENTAS.map((h) => (
-            <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
+            <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
           ))}
         </nav>
       </div>
@@ -202,28 +202,34 @@ export function EditorDocumento({
   );
 }
 
-function RailBtn({ etiqueta, Icono, activo, onClick }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; onClick: () => void }) {
+function RailBtn({ etiqueta, Icono, activo, costo, onClick }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; costo?: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      title={etiqueta}
+      title={costo ? `${etiqueta} · usa IA con coste` : etiqueta}
       className={`flex w-full flex-col items-center gap-0.5 rounded-md py-2 text-[10px] transition-colors ${
         activo ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
       }`}
     >
-      <Icono className="h-5 w-5" />
+      <span className="relative">
+        <Icono className="h-5 w-5" />
+        {costo && <DollarSign className="absolute -right-2 -top-1 h-3 w-3 rounded-full bg-background" />}
+      </span>
       {etiqueta}
     </button>
   );
 }
 
-function RailBtnMovil({ etiqueta, Icono, activo, onClick }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; onClick: () => void }) {
+function RailBtnMovil({ etiqueta, Icono, activo, costo, onClick }: { etiqueta: string; Icono: typeof Shapes; activo?: boolean; costo?: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
       className={`flex flex-col items-center justify-center gap-0.5 text-[10px] ${activo ? "text-primary" : "text-muted-foreground"}`}
     >
-      <Icono className="h-5 w-5" />
+      <span className="relative">
+        <Icono className="h-5 w-5" />
+        {costo && <DollarSign className="absolute -right-2 -top-1 h-3 w-3 rounded-full bg-background" />}
+      </span>
       {etiqueta}
     </button>
   );
