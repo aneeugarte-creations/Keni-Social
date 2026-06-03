@@ -108,7 +108,12 @@ def _routers() -> dict[str, str]:
     for info in pkgutil.iter_modules(api.__path__):
         if info.name.startswith("_"):
             continue
-        modulo = importlib.import_module(f"{api.__name__}.{info.name}")
+        try:
+            modulo = importlib.import_module(f"{api.__name__}.{info.name}")
+        except ImportError:
+            # Carrera xdist: otro worker pudo crear/borrar un módulo temporal en `api/`
+            # (ver test_app) entre el listado y el import. Lo saltamos en vez de petar.
+            continue
         if getattr(modulo, "RUTAS", None) is None:
             continue  # helper, no es router
         # `catalogo` es del shell (lo sirve el shell) aunque no esté en un manifest.
@@ -161,7 +166,11 @@ def _cruces() -> list[tuple[str, str, str, str]]:
     cruces: list[tuple[str, str, str, str]] = []
     for nombre, app_origen in routers.items():
         ruta = _RAIZ_API / f"{nombre}.py"
-        arbol = ast.parse(ruta.read_text(encoding="utf-8"))
+        try:
+            fuente = ruta.read_text(encoding="utf-8")
+        except OSError:
+            continue  # el fichero pudo desaparecer (carrera xdist con test_app)
+        arbol = ast.parse(fuente)
         for node in ast.walk(arbol):
             if not isinstance(node, ast.ImportFrom):
                 continue
