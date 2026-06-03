@@ -9,9 +9,13 @@ import { describe, expect, it } from "vitest";
 import {
   costeUsd,
   duracion,
+  nombreFormato,
+  nombreMarca,
+  nombreRed,
   numeroCompacto,
   numeroCompleto,
   porcentaje,
+  tiempoVis,
   variacion,
 } from "./formato";
 
@@ -168,5 +172,111 @@ describe("duracion", () => {
     const r = duracion(60_000);
     expect(r).toContain("min");
     expect(r).toContain("1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// tiempoVis (segundos → "Xs" / "Xm Ys")
+// ---------------------------------------------------------------------------
+describe("tiempoVis", () => {
+  it("devuelve — para valores no finitos o negativos", () => {
+    expect(tiempoVis(NaN)).toBe("—");
+    expect(tiempoVis(-1)).toBe("—");
+  });
+
+  it("muestra segundos sueltos hasta el minuto", () => {
+    expect(tiempoVis(0)).toBe("0s");
+    expect(tiempoVis(12)).toBe("12s");
+    expect(tiempoVis(59)).toBe("59s");
+  });
+
+  it("muestra 'Xm Ys' a partir del minuto y omite los segundos en punto", () => {
+    expect(tiempoVis(60)).toBe("1m");
+    expect(tiempoVis(95)).toBe("1m 35s");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// nombreRed
+// ---------------------------------------------------------------------------
+describe("nombreRed", () => {
+  it("traduce los ids conocidos a su forma de marca", () => {
+    expect(nombreRed("instagram")).toBe("Instagram");
+    expect(nombreRed("tiktok")).toBe("TikTok");
+    expect(nombreRed("youtube")).toBe("YouTube");
+    expect(nombreRed("linkedin")).toBe("LinkedIn");
+    expect(nombreRed("bluesky")).toBe("Bluesky");
+  });
+
+  it("normaliza twitter y x a 'X'", () => {
+    expect(nombreRed("twitter")).toBe("X");
+    expect(nombreRed("x")).toBe("X");
+  });
+
+  it("capitaliza ids desconocidos (degradación honesta) y '' → —", () => {
+    expect(nombreRed("kwai")).toBe("Kwai");
+    expect(nombreRed("")).toBe("—");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// nombreFormato
+// ---------------------------------------------------------------------------
+describe("nombreFormato", () => {
+  it("null y vacío → 'Sin formato'", () => {
+    expect(nombreFormato(null)).toBe("Sin formato");
+    expect(nombreFormato("")).toBe("Sin formato");
+    expect(nombreFormato("   ")).toBe("Sin formato");
+  });
+
+  it("maneja el prefijo feed_ de Meta", () => {
+    expect(nombreFormato("feed_image")).toBe("Feed image");
+    expect(nombreFormato("feed_carousel_album")).toBe("Carrusel");
+    expect(nombreFormato("feed_video")).toBe("Vídeo");
+    expect(nombreFormato("feed_reel")).toBe("Reel");
+  });
+
+  it("normaliza los formatos genéricos", () => {
+    expect(nombreFormato("reel")).toBe("Reel");
+    expect(nombreFormato("foto")).toBe("Foto");
+    expect(nombreFormato("photo")).toBe("Foto");
+    expect(nombreFormato("carrusel")).toBe("Carrusel");
+    expect(nombreFormato("carousel")).toBe("Carrusel");
+    expect(nombreFormato("video")).toBe("Vídeo");
+    expect(nombreFormato("link")).toBe("Enlace");
+    expect(nombreFormato("texto")).toBe("Texto");
+    expect(nombreFormato("text")).toBe("Texto");
+  });
+
+  it("capitaliza formatos desconocidos (degradación honesta)", () => {
+    expect(nombreFormato("story")).toBe("Story");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// nombreMarca (resolver por catálogo, degradación honesta)
+// ---------------------------------------------------------------------------
+describe("nombreMarca", () => {
+  const CATALOGO = [
+    { id: "unotv", nombre: "UnoTV" },
+    { id: "claro_sports", nombre: "Claro Sports" },
+  ];
+
+  it("resuelve el id contra el catálogo (lista)", () => {
+    expect(nombreMarca("unotv", CATALOGO)).toBe("UnoTV");
+    expect(nombreMarca("claro_sports", CATALOGO)).toBe("Claro Sports");
+  });
+
+  it("resuelve el id contra un Map<id, nombre>", () => {
+    const mapa = new Map(CATALOGO.map((m) => [m.id, m.nombre]));
+    expect(nombreMarca("unotv", mapa)).toBe("UnoTV");
+  });
+
+  it("si el id no está en el catálogo, devuelve el id tal cual (no inventa)", () => {
+    expect(nombreMarca("desconocida", CATALOGO)).toBe("desconocida");
+  });
+
+  it("'' → —", () => {
+    expect(nombreMarca("", CATALOGO)).toBe("—");
   });
 });

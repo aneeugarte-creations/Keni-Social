@@ -1,9 +1,16 @@
 /**
  * Sub-sección "Comparar periodos".
  *
- * Selecciona rango A, rango B y marca, consulta `api.metricasComparar` y muestra
- * por métrica el valor A, el valor B y la variación con flecha y color (Tremor
- * BadgeDelta: verde sube / rojo baja). Incluye el desglose `por_marca`.
+ * Selecciona Periodo A (origen), Periodo B (comparado) y marca, consulta
+ * `api.metricasComparar` y muestra por métrica el valor A, el valor B y la variación
+ * con flecha y color (Tremor BadgeDelta: verde sube / rojo baja). Incluye el desglose
+ * `por_marca`.
+ *
+ * Ambos periodos usan `SelectorTiempo` (atajos · mes concreto · rango personalizado),
+ * así que se pueden comparar periodos ARBITRARIOS —p. ej. "mayo 2026" vs "abril 2026"
+ * o dos rangos de fechas a medida—, no solo presets contra presets. El backend
+ * (`/api/metricas/comparar`) acepta cualquier token (`mes:AAAA-MM`,
+ * `rango:AAAA-MM-DD_AAAA-MM-DD` o preset).
  */
 import { useQuery } from "@tanstack/react-query";
 import { BadgeDelta, type DeltaType } from "@tremor/react";
@@ -15,16 +22,29 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { nombreMarca, variacion } from "@/lib/formato";
 import { cn } from "@/lib/utils";
-import type { ComparativaMetrica, OpcionesMetricas } from "@/types";
+import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
 
-import { MARCA_TODAS, SelectorMarca, SelectorRango } from "./Controles";
-import { variacion } from "./formato";
+import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./Controles";
 import { METRICAS } from "./metricas-meta";
 
 /** Etiqueta legible de una métrica del backend según su nombre interno. */
 function etiquetaMetrica(metrica: string): string {
   return METRICAS.find((m) => m.metrica === metrica)?.etiqueta ?? metrica;
+}
+
+/**
+ * Nombre legible de una marca del desglose: prioriza el catálogo de opciones
+ * (resuelto por `marca_id`); si el id no está, cae al nombre que ya trae el backend
+ * (`pm.marca`), nunca al id crudo (degradación honesta).
+ */
+function etiquetaMarca(
+  pm: ComparativaPorMarca,
+  marcas: OpcionesMetricas["marcas"],
+): string {
+  const porCatalogo = nombreMarca(pm.marca_id, marcas);
+  return porCatalogo !== pm.marca_id ? porCatalogo : pm.marca || pm.marca_id;
 }
 
 /** Formatea un valor según el tipo de métrica (porcentaje vs número). */
@@ -91,24 +111,18 @@ export function CompararPeriodos({
     <Card>
       <CardHeader className="gap-4 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <CardTitle className="text-base">Comparar periodos</CardTitle>
-        <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+        <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">De</span>
-            <SelectorRango
-              rangos={rangos}
-              valor={rangoA}
-              onCambio={setRangoA}
-              ariaLabel="Rango A (origen)"
-            />
+            <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
+              Periodo A
+            </span>
+            <SelectorTiempo rangos={rangos} valor={rangoA} onCambio={setRangoA} />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">a</span>
-            <SelectorRango
-              rangos={rangos}
-              valor={rangoB}
-              onCambio={setRangoB}
-              ariaLabel="Rango B (comparado)"
-            />
+            <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
+              Periodo B
+            </span>
+            <SelectorTiempo rangos={rangos} valor={rangoB} onCambio={setRangoB} />
           </div>
           <SelectorMarca marcas={opciones.marcas} valor={marca} onCambio={setMarca} />
         </div>
@@ -150,7 +164,9 @@ export function CompararPeriodos({
                 <div className="space-y-3">
                   {data.por_marca.map((pm) => (
                     <div key={pm.marca_id} className="rounded-lg border border-border p-4">
-                      <p className="mb-3 text-sm font-medium">{pm.marca}</p>
+                      <p className="mb-3 text-sm font-medium">
+                        {etiquetaMarca(pm, opciones.marcas)}
+                      </p>
                       <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
                         {pm.comparativa.map((comp) => (
                           <FilaComparativa key={comp.metrica} comp={comp} />

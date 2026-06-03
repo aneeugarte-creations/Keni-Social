@@ -17,7 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
-import { numeroCompacto, numeroCompleto, variacion } from "@/lib/formato";
+import { nombreRed, numeroCompacto, numeroCompleto, variacion } from "@/lib/formato";
 import type { PuntoSeguidores } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
@@ -55,13 +55,17 @@ export function CrecimientoSeguidores({
     [data],
   );
 
-  const datos = (data?.puntos ?? []).map((p: PuntoSeguidores) =>
-    porRed
-      ? { fecha: fechaCorta(p.fecha), ...p.por_red }
-      : { fecha: fechaCorta(p.fecha), Total: p.total },
-  );
+  // Categorías legibles para la leyenda/serie: cada id de red → su nombre de marca.
+  // Re-mapeamos las claves de `por_red` a ese nombre para que el chart use la etiqueta
+  // legible como serie (no el id crudo).
+  const datos = (data?.puntos ?? []).map((p: PuntoSeguidores) => {
+    if (!porRed) return { fecha: fechaCorta(p.fecha), Total: p.total };
+    const fila: Record<string, string | number> = { fecha: fechaCorta(p.fecha) };
+    for (const red of redes) fila[nombreRed(red)] = p.por_red[red] ?? 0;
+    return fila;
+  });
 
-  const categorias = porRed ? redes : ["Total"];
+  const categorias = porRed ? redes.map(nombreRed) : ["Total"];
   const colores = porRed ? COLORES_RED.slice(0, redes.length) : ["blue"];
 
   return (
@@ -133,7 +137,7 @@ function KpisNeto({
         titulo={`${numeroCompleto(neto)} seguidores`}
       />
       {redes.map((red) => (
-        <TarjetaKpi key={red} etiqueta={red} valor={variacion(netoPorRed[red])} />
+        <TarjetaKpi key={red} etiqueta={nombreRed(red)} valor={variacion(netoPorRed[red])} />
       ))}
     </div>
   );

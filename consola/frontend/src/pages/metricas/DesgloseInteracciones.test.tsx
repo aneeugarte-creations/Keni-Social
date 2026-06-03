@@ -18,6 +18,9 @@ beforeAll(() => {
   }
 });
 
+const MARCAS = [{ id: "unotv", nombre: "UnoTV" }];
+
+// `marca`/`red` llegan como IDS CRUDOS de la fuente; la UI los resuelve a nombre.
 const RESP: DesgloseResp = {
   rango: "semana",
   etiqueta_rango: "Últimos 7 días",
@@ -26,7 +29,7 @@ const RESP: DesgloseResp = {
   generado_en: "2026-06-02T00:00:00",
   celdas: [
     {
-      marca: "UnoTV",
+      marca: "unotv",
       red: "instagram",
       likes: 5000,
       comentarios: 300,
@@ -55,13 +58,16 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("DesgloseInteracciones", () => {
-  it("muestra la tabla por marca×red con la fila de totales", async () => {
+  it("muestra la tabla por marca×red LEGIBLE con la fila de totales", async () => {
     vi.spyOn(api, "metricasDesglose").mockResolvedValue(RESP);
-    renderConProviders(<DesgloseInteracciones marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(
+      <DesgloseInteracciones marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
 
+    // marca (unotv → "UnoTV") y red (instagram → "Instagram") legibles, no el id crudo.
     expect(await screen.findByText("UnoTV")).toBeInTheDocument();
-    // separación clara por marca y red.
-    expect(screen.getByText("instagram")).toBeInTheDocument();
+    expect(screen.getAllByText("Instagram").length).toBeGreaterThan(0);
+    expect(screen.queryByText("instagram")).not.toBeInTheDocument();
     // fila de totales.
     expect(screen.getByText("Total")).toBeInTheDocument();
     // valor sin compactar (comentarios = 300) presente en celda y total.
@@ -70,7 +76,9 @@ describe("DesgloseInteracciones", () => {
 
   it("dice con honestidad cuando no hay celdas", async () => {
     vi.spyOn(api, "metricasDesglose").mockResolvedValue({ ...RESP, celdas: [] });
-    renderConProviders(<DesgloseInteracciones marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(
+      <DesgloseInteracciones marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
 
     expect(await screen.findByText(/no expone el desglose/i)).toBeInTheDocument();
   });

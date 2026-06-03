@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import { numeroCompacto, porcentaje } from "@/lib/formato";
+import { nombreRed, numeroCompacto, porcentaje } from "@/lib/formato";
 import type { OpcionesMetricas, PiezaRendimiento } from "@/types";
 
 const TAB_TODAS = "todas";
@@ -157,7 +157,7 @@ function FilaPieza({ pieza }: { pieza: PiezaRendimiento }) {
           {titulo}
         </span>
         <span className="text-xs text-muted-foreground">
-          {pieza.marca_nombre} · {pieza.red}
+          {pieza.marca_nombre} · {nombreRed(pieza.red)}
         </span>
       </TableCell>
       {pieza.encontrado ? (

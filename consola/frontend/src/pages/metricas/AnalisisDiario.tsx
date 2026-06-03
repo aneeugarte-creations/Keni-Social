@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
-import { numeroCompacto, porcentaje, variacion } from "@/lib/formato";
+import { nombreRed, numeroCompacto, porcentaje, variacion } from "@/lib/formato";
 import { cn } from "@/lib/utils";
 import type { AnalisisDiario as Analisis, MovimientoAnalisis } from "@/types";
 
@@ -164,7 +164,7 @@ function FilaMovimiento({ mov }: { mov: MovimientoAnalisis }) {
         <p className="mt-1 text-xs text-muted-foreground">
           Lo explica{" "}
           <span className="font-medium text-foreground">«{mov.pieza.titulo}»</span> en{" "}
-          {mov.pieza.plataforma} ({porcentaje(mov.pieza.engagement_pct)} eng).
+          {nombreRed(mov.pieza.plataforma)} ({porcentaje(mov.pieza.engagement_pct)} eng).
         </p>
       )}
     </li>

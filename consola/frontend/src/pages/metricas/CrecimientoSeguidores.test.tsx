@@ -46,9 +46,11 @@ describe("CrecimientoSeguidores", () => {
     expect(await screen.findByText("Neto del periodo")).toBeInTheDocument();
     // neto global como variación con signo.
     expect(screen.getByText("+1,234.0 %")).toBeInTheDocument();
-    // un KPI por red presente en neto_por_red.
-    expect(screen.getByText("instagram")).toBeInTheDocument();
-    expect(screen.getByText("x")).toBeInTheDocument();
+    // un KPI por red presente en neto_por_red, con la etiqueta de red LEGIBLE
+    // (instagram → "Instagram", x → "X"), no el id crudo.
+    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.getByText("X")).toBeInTheDocument();
+    expect(screen.queryByText("instagram")).not.toBeInTheDocument();
   });
 
   it("dice con honestidad cuando la fuente no expone seguidores", async () => {

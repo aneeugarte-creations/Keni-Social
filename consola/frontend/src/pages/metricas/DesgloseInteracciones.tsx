@@ -25,8 +25,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { numeroCompacto } from "@/lib/formato";
-import type { CeldaDesglose } from "@/types";
+import { nombreMarca, nombreRed, numeroCompacto } from "@/lib/formato";
+import type { CeldaDesglose, MarcaDisponible } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 
@@ -43,9 +43,12 @@ const ETIQUETAS = COMPONENTES.map((c) => c.etiqueta);
 const COLORES = COMPONENTES.map((c) => c.color);
 
 export function DesgloseInteracciones({
+  marcas,
   marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
+  /** Catálogo {id, nombre} para resolver el id crudo de marca de cada celda. */
+  marcas: MarcaDisponible[];
   marcaActual?: string;
   rangoActual?: string;
 }) {
@@ -83,8 +86,8 @@ export function DesgloseInteracciones({
           </p>
         ) : (
           <>
-            <GraficaApilada celdas={data.celdas} />
-            <TablaDesglose celdas={data.celdas} totales={data.totales} />
+            <GraficaApilada celdas={data.celdas} marcas={marcas} />
+            <TablaDesglose celdas={data.celdas} totales={data.totales} marcas={marcas} />
           </>
         )}
       </CardContent>
@@ -92,14 +95,20 @@ export function DesgloseInteracciones({
   );
 }
 
-/** Una etiqueta legible "Marca · red" por celda (eje del BarChart / filas de tabla). */
-function etiquetaCelda(c: CeldaDesglose): string {
-  return `${c.marca} · ${c.red}`;
+/** Una etiqueta legible "Marca · Red" por celda (eje del BarChart / filas de tabla). */
+function etiquetaCelda(c: CeldaDesglose, marcas: MarcaDisponible[]): string {
+  return `${nombreMarca(c.marca, marcas)} · ${nombreRed(c.red)}`;
 }
 
-function GraficaApilada({ celdas }: { celdas: CeldaDesglose[] }) {
+function GraficaApilada({
+  celdas,
+  marcas,
+}: {
+  celdas: CeldaDesglose[];
+  marcas: MarcaDisponible[];
+}) {
   const datos = celdas.map((c) => ({
-    grupo: etiquetaCelda(c),
+    grupo: etiquetaCelda(c, marcas),
     Likes: c.likes,
     Comentarios: c.comentarios,
     Compartidos: c.compartidos,
@@ -123,9 +132,11 @@ function GraficaApilada({ celdas }: { celdas: CeldaDesglose[] }) {
 function TablaDesglose({
   celdas,
   totales,
+  marcas,
 }: {
   celdas: CeldaDesglose[];
   totales: Record<string, number>;
+  marcas: MarcaDisponible[];
 }) {
   return (
     <div className="overflow-x-auto">
@@ -145,8 +156,8 @@ function TablaDesglose({
         <TableBody>
           {celdas.map((c) => (
             <TableRow key={`${c.marca}-${c.red}`}>
-              <TableCell className="font-medium">{c.marca}</TableCell>
-              <TableCell className="text-muted-foreground">{c.red}</TableCell>
+              <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
+              <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>
               {COMPONENTES.map((comp) => (
                 <TableCell key={comp.clave} className="text-right tabular-nums">
                   {numeroCompacto(c[comp.clave] as number)}

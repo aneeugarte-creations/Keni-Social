@@ -193,9 +193,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               </p>
             </div>
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
-            <DesgloseInteracciones marcaActual={marca} rangoActual={rango} />
-            <Crosstab marcaActual={marca} rangoActual={rango} />
-            <Correlacion marcaActual={marca} rangoActual={rango} />
+            <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </section>
 
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />

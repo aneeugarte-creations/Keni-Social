@@ -24,8 +24,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { numeroCompleto, porcentaje, variacion } from "@/lib/formato";
-import type { ItemCorrelacion, PostEstrella } from "@/types";
+import { nombreMarca, nombreRed, numeroCompleto, porcentaje, variacion } from "@/lib/formato";
+import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
 
@@ -42,9 +42,12 @@ function ratio(v: number | null): string {
 }
 
 export function Correlacion({
+  marcas,
   marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
+  /** Catálogo {id, nombre} para resolver el id crudo de marca de cada fila. */
+  marcas: MarcaDisponible[];
   marcaActual?: string;
   rangoActual?: string;
 }) {
@@ -87,7 +90,7 @@ export function Correlacion({
               <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
               <span>{data.nota}</span>
             </p>
-            <TablaCorrelacion items={data.items} />
+            <TablaCorrelacion items={data.items} marcas={marcas} />
           </>
         )}
       </CardContent>
@@ -95,7 +98,13 @@ export function Correlacion({
   );
 }
 
-function TablaCorrelacion({ items }: { items: ItemCorrelacion[] }) {
+function TablaCorrelacion({
+  items,
+  marcas,
+}: {
+  items: ItemCorrelacion[];
+  marcas: MarcaDisponible[];
+}) {
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -116,8 +125,8 @@ function TablaCorrelacion({ items }: { items: ItemCorrelacion[] }) {
               <TableCell className="whitespace-nowrap text-muted-foreground">
                 {fechaCorta(it.fecha)}
               </TableCell>
-              <TableCell className="font-medium">{it.marca}</TableCell>
-              <TableCell className="text-muted-foreground">{it.red}</TableCell>
+              <TableCell className="font-medium">{nombreMarca(it.marca, marcas)}</TableCell>
+              <TableCell className="text-muted-foreground">{nombreRed(it.red)}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {variacion(it.seguidores_ganados)}
               </TableCell>

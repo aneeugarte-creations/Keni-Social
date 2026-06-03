@@ -20,6 +20,13 @@ beforeAll(() => {
   }
 });
 
+// Catálogo de marcas {id, nombre} para resolver el id crudo de cada celda.
+const MARCAS = [
+  { id: "unotv", nombre: "UnoTV" },
+  { id: "claro_sports", nombre: "Claro Sports" },
+];
+
+// `marca`/`red`/`formato` llegan como IDS CRUDOS de la fuente.
 const RESP: CrosstabResp = {
   rango: "semana",
   etiqueta_rango: "Últimos 7 días",
@@ -28,9 +35,9 @@ const RESP: CrosstabResp = {
   generado_en: "2026-06-02T00:00:00",
   celdas: [
     {
-      marca: "UnoTV",
+      marca: "unotv",
       red: "instagram",
-      formato: "reel",
+      formato: "feed_image",
       n_piezas: 12,
       visualizaciones: 120000,
       interacciones: 8000,
@@ -38,7 +45,7 @@ const RESP: CrosstabResp = {
       rendimiento_relativo_medio: 1.4,
     },
     {
-      marca: "Claro Sports",
+      marca: "claro_sports",
       red: "x",
       formato: null,
       n_piezas: 5,
@@ -56,12 +63,20 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("Crosstab (rendimiento por formato)", () => {
-  it("pinta las celdas marca×red×formato con su rendimiento relativo", async () => {
+  it("pinta las celdas marca×red×formato LEGIBLES con su rendimiento relativo", async () => {
     vi.spyOn(api, "metricasCrosstab").mockResolvedValue(RESP);
-    renderConProviders(<Crosstab marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(
+      <Crosstab marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
 
+    // marca (unotv → "UnoTV"), red (instagram → "Instagram"), formato (feed_image → "Feed image").
     expect(await screen.findByText("UnoTV")).toBeInTheDocument();
-    expect(screen.getByText("reel")).toBeInTheDocument();
+    expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.getByText("Feed image")).toBeInTheDocument();
+    // no muestra ids crudos.
+    expect(screen.queryByText("unotv")).not.toBeInTheDocument();
+    expect(screen.queryByText("feed_image")).not.toBeInTheDocument();
     // formato null se muestra como "Sin formato".
     expect(screen.getByText("Sin formato")).toBeInTheDocument();
     // rendimiento relativo formateado con sufijo "×".
@@ -71,7 +86,9 @@ describe("Crosstab (rendimiento por formato)", () => {
 
   it("muestra un vacío honesto cuando la fuente no expone celdas", async () => {
     vi.spyOn(api, "metricasCrosstab").mockResolvedValue({ ...RESP, celdas: [] });
-    renderConProviders(<Crosstab marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(
+      <Crosstab marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
 
     expect(
       await screen.findByText(/no expone el cruce por formato/i),

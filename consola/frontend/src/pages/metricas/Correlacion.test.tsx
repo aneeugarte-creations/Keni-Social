@@ -20,6 +20,12 @@ beforeAll(() => {
 
 const NOTA = "Correlación, no causalidad: ganar seguidores depende de muchos factores.";
 
+const MARCAS = [
+  { id: "unotv", nombre: "UnoTV" },
+  { id: "claro_sports", nombre: "Claro Sports" },
+];
+
+// `marca`/`red` llegan como IDS CRUDOS de la fuente; la UI los resuelve a nombre.
 const RESP: CorrelacionSeguidores = {
   rango: "semana",
   etiqueta_rango: "Últimos 7 días",
@@ -29,7 +35,7 @@ const RESP: CorrelacionSeguidores = {
   nota: NOTA,
   items: [
     {
-      marca: "UnoTV",
+      marca: "unotv",
       red: "instagram",
       fecha: "2026-05-27",
       seguidores_ganados: 320,
@@ -43,7 +49,7 @@ const RESP: CorrelacionSeguidores = {
       },
     },
     {
-      marca: "Claro Sports",
+      marca: "claro_sports",
       red: "x",
       fecha: "2026-05-28",
       seguidores_ganados: 10,
@@ -60,9 +66,11 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("Correlacion (seguidores vs publicación)", () => {
-  it("renderiza la nota honesta y los items con la pieza estrella enlazada", async () => {
+  it("renderiza la nota honesta y los items con marca legible y la pieza estrella enlazada", async () => {
     vi.spyOn(api, "metricasCorrelacion").mockResolvedValue(RESP);
-    renderConProviders(<Correlacion marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
 
     // La nota (correlación ≠ causalidad) SIEMPRE visible.
     expect(await screen.findByText(NOTA)).toBeInTheDocument();
@@ -71,13 +79,19 @@ describe("Correlacion (seguidores vs publicación)", () => {
     const enlace = estrella.closest("a");
     expect(enlace).not.toBeNull();
     expect(enlace).toHaveAttribute("href", "https://example.com/p1");
-    // El día sin posts no inventa ratio.
+    // marca (unotv → "UnoTV") y red (instagram → "Instagram") legibles, no el id crudo.
+    expect(screen.getByText("UnoTV")).toBeInTheDocument();
+    expect(screen.getByText("Instagram")).toBeInTheDocument();
+    expect(screen.queryByText("instagram")).not.toBeInTheDocument();
+    // El día sin posts no inventa ratio; claro_sports → "Claro Sports".
     expect(screen.getByText("Claro Sports")).toBeInTheDocument();
   });
 
   it("dice con honestidad cuando no hay seguidores", async () => {
     vi.spyOn(api, "metricasCorrelacion").mockResolvedValue({ ...RESP, items: [] });
-    renderConProviders(<Correlacion marcaActual="__todas__" rangoActual="semana" />);
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
 
     expect(await screen.findByText(/no expone seguidores/i)).toBeInTheDocument();
   });

@@ -18,31 +18,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { numeroCompleto, porcentaje } from "@/lib/formato";
+import { nombreRed, numeroCompleto, porcentaje } from "@/lib/formato";
 import type { RedMetrica } from "@/types";
-
-/**
- * Nombre legible de una red a partir de su id de plataforma (`red`). El backend
- * emite el id crudo (p. ej. `instagram`, `tiktok`); aquí lo traducimos a su forma
- * de marca. Para ids desconocidos, capitaliza la primera letra (degradación honesta,
- * sin inventar un nombre).
- */
-const NOMBRES_RED: Record<string, string> = {
-  facebook: "Facebook",
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  youtube: "YouTube",
-  x: "X",
-  twitter: "X",
-  linkedin: "LinkedIn",
-  threads: "Threads",
-};
-
-function nombreRed(red: string): string {
-  const conocida = NOMBRES_RED[red.toLowerCase()];
-  if (conocida) return conocida;
-  return red ? red.charAt(0).toUpperCase() + red.slice(1) : "—";
-}
 
 /** Columnas numéricas en el mismo orden y formato que la tabla por marca. */
 const COLUMNAS: Array<{

@@ -25,15 +25,16 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
-import { numeroCompacto, porcentaje } from "@/lib/formato";
-import type { CeldaCrosstab } from "@/types";
+import {
+  nombreFormato,
+  nombreMarca,
+  nombreRed,
+  numeroCompacto,
+  porcentaje,
+} from "@/lib/formato";
+import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
-
-/** Sin formato declarado: el backend manda `null`. */
-function formatoLegible(f: string | null): string {
-  return f && f.trim() ? f : "Sin formato";
-}
 
 /**
  * Color del rendimiento relativo (>1 rinde por encima de la mediana de su grupo, <1
@@ -52,9 +53,12 @@ function textoRendimiento(v: number | null): string {
 }
 
 export function Crosstab({
+  marcas,
   marcaActual = MARCA_TODAS,
   rangoActual,
 }: {
+  /** Catálogo {id, nombre} para resolver el id crudo de marca de cada celda. */
+  marcas: MarcaDisponible[];
   marcaActual?: string;
   rangoActual?: string;
 }) {
@@ -92,14 +96,20 @@ export function Crosstab({
             La fuente activa no expone el cruce por formato para este periodo.
           </p>
         ) : (
-          <TablaCrosstab celdas={data.celdas} />
+          <TablaCrosstab celdas={data.celdas} marcas={marcas} />
         )}
       </CardContent>
     </Card>
   );
 }
 
-function TablaCrosstab({ celdas }: { celdas: CeldaCrosstab[] }) {
+function TablaCrosstab({
+  celdas,
+  marcas,
+}: {
+  celdas: CeldaCrosstab[];
+  marcas: MarcaDisponible[];
+}) {
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -117,9 +127,9 @@ function TablaCrosstab({ celdas }: { celdas: CeldaCrosstab[] }) {
         <TableBody>
           {celdas.map((c) => (
             <TableRow key={`${c.marca}-${c.red}-${c.formato ?? "sin"}`}>
-              <TableCell className="font-medium">{c.marca}</TableCell>
-              <TableCell className="text-muted-foreground">{c.red}</TableCell>
-              <TableCell className="text-muted-foreground">{formatoLegible(c.formato)}</TableCell>
+              <TableCell className="font-medium">{nombreMarca(c.marca, marcas)}</TableCell>
+              <TableCell className="text-muted-foreground">{nombreRed(c.red)}</TableCell>
+              <TableCell className="text-muted-foreground">{nombreFormato(c.formato)}</TableCell>
               <TableCell className="text-right tabular-nums">{c.n_piezas}</TableCell>
               <TableCell className="text-right tabular-nums">
                 {numeroCompacto(c.visualizaciones)}

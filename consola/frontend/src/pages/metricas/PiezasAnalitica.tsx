@@ -33,8 +33,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import { numeroCompacto, porcentaje } from "@/lib/formato";
-import type { EstadisticasNumericas, OpcionesMetricas, PiezaMetrica } from "@/types";
+import { nombreMarca, nombreRed, numeroCompacto, porcentaje, tiempoVis } from "@/lib/formato";
+import type {
+  EstadisticasNumericas,
+  MarcaDisponible,
+  OpcionesMetricas,
+  PiezaMetrica,
+} from "@/types";
 
 const TAB_TODAS = "todas";
 
@@ -81,11 +86,11 @@ export function PiezasAnalitica({
           </TabsList>
 
           <TabsContent value={TAB_TODAS}>
-            <ContenidoPiezas marca={undefined} rango={rangoActual} />
+            <ContenidoPiezas marca={undefined} rango={rangoActual} marcas={opciones.marcas} />
           </TabsContent>
           {opciones.marcas.map((m) => (
             <TabsContent key={m.id} value={m.id}>
-              <ContenidoPiezas marca={m.id} rango={rangoActual} />
+              <ContenidoPiezas marca={m.id} rango={rangoActual} marcas={opciones.marcas} />
             </TabsContent>
           ))}
         </Tabs>
@@ -94,7 +99,16 @@ export function PiezasAnalitica({
   );
 }
 
-function ContenidoPiezas({ marca, rango }: { marca?: string; rango?: string }) {
+function ContenidoPiezas({
+  marca,
+  rango,
+  marcas,
+}: {
+  marca?: string;
+  rango?: string;
+  /** Catálogo {id, nombre} para resolver el id crudo de marca de cada pieza. */
+  marcas: MarcaDisponible[];
+}) {
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas", rango ?? "", marca ?? "todas"],
     queryFn: ({ signal }) => api.metricasPiezas({ rango, marca }, signal),
@@ -134,8 +148,8 @@ function ContenidoPiezas({ marca, rango }: { marca?: string; rango?: string }) {
           <DescargarPiezas rango={rango} marca={marca} />
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <TablaPiezas titulo="Top 10" piezas={data.top} />
-          <TablaPiezas titulo="Peores 10" piezas={data.peores} />
+          <TablaPiezas titulo="Top 10" piezas={data.top} marcas={marcas} />
+          <TablaPiezas titulo="Peores 10" piezas={data.peores} marcas={marcas} />
         </div>
       </div>
 
@@ -205,7 +219,15 @@ function TiraEstadisticas({
   );
 }
 
-function TablaPiezas({ titulo, piezas }: { titulo: string; piezas: PiezaMetrica[] }) {
+function TablaPiezas({
+  titulo,
+  piezas,
+  marcas,
+}: {
+  titulo: string;
+  piezas: PiezaMetrica[];
+  marcas: MarcaDisponible[];
+}) {
   return (
     <div className="space-y-2">
       <h4 className="text-sm font-semibold">{titulo}</h4>
@@ -227,7 +249,7 @@ function TablaPiezas({ titulo, piezas }: { titulo: string; piezas: PiezaMetrica[
           </TableHeader>
           <TableBody>
             {piezas.map((p) => (
-              <FilaAnalitica key={`${p.plataforma}-${p.id}`} pieza={p} />
+              <FilaAnalitica key={`${p.plataforma}-${p.id}`} pieza={p} marcas={marcas} />
             ))}
           </TableBody>
         </Table>
@@ -236,7 +258,7 @@ function TablaPiezas({ titulo, piezas }: { titulo: string; piezas: PiezaMetrica[
   );
 }
 
-function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
+function FilaAnalitica({ pieza, marcas }: { pieza: PiezaMetrica; marcas: MarcaDisponible[] }) {
   // Acción primaria = abrir la pieza en la red (cuando hay url). "Abrir en la red"
   // queda también como acción secundaria en el menú (click derecho / kebab).
   const abrir = pieza.url
@@ -246,11 +268,19 @@ function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
     ? [{ etiqueta: "Abrir en la red", icono: ExternalLink, onClick: abrir! }]
     : [];
 
-  // Marca de la pieza (`cuenta`) + red, para ubicarla cuando el tab agrega "Todas".
-  const procedencia = [pieza.cuenta, pieza.plataforma].filter(Boolean).join(" · ");
+  // Marca de la pieza (`cuenta`, id crudo) + red, para ubicarla cuando el tab agrega
+  // "Todas". Resolvemos ambos a su nombre legible (id desconocido se degrada honesto).
+  const procedencia = [
+    pieza.cuenta ? nombreMarca(pieza.cuenta, marcas) : "",
+    pieza.plataforma ? nombreRed(pieza.plataforma) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   // Desglose granular: solo los componentes que la fuente expone (distingue 0 de null).
   const granular = GRANULAR.filter((g) => pieza[g.clave] != null);
+  // Clics a enlace alto: ~señal de que el copy llevó tráfico fuera de la red.
+  const clicsAltos = pieza.clics_enlace != null && pieza.clics_enlace >= 1000;
 
   return (
     <FilaConAcciones
@@ -278,13 +308,30 @@ function FilaAnalitica({ pieza }: { pieza: PiezaMetrica }) {
             </Badge>
           )}
         </span>
-        {granular.length > 0 && (
-          <span className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted-foreground tabular-nums">
+        {(granular.length > 0 ||
+          pieza.clics_enlace != null ||
+          pieza.tiempo_medio_vis_s != null) && (
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground tabular-nums">
             {granular.map((g) => (
               <span key={g.clave as string} title={g.clave as string}>
                 {g.etiqueta} {numeroCompacto(pieza[g.clave] as number)}
               </span>
             ))}
+            {/* Clics a enlace: solo si la fuente lo expone (distingue 0 de sin dato). */}
+            {pieza.clics_enlace != null && (
+              <span title="Clics al enlace">🔗 {numeroCompacto(pieza.clics_enlace)}</span>
+            )}
+            {/* Tiempo medio de visualización (vídeo): "Xs" / "Xm Ys". */}
+            {pieza.tiempo_medio_vis_s != null && (
+              <span title="Tiempo medio de visualización">
+                ⏱ {tiempoVis(pieza.tiempo_medio_vis_s)}
+              </span>
+            )}
+            {clicsAltos && (
+              <Badge variant="ok" title="Muchos clics al enlace en este periodo">
+                clics altos
+              </Badge>
+            )}
           </span>
         )}
       </TableCell>

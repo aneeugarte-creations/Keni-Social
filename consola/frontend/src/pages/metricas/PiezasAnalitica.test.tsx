@@ -23,6 +23,9 @@ const OPCIONES: OpcionesMetricas = {
   rangos: [{ id: "semana", etiqueta: "Últimos 7 días" }],
 };
 
+// `cuenta` y `plataforma` llegan como IDS CRUDOS de la fuente: la UI los resuelve a
+// nombre legible (catálogo de marcas + mapa de redes), no los muestra tal cual.
+
 const ESTADISTICAS = {
   n: 3,
   media: 5.5,
@@ -51,7 +54,7 @@ const PIEZA_TOP: PiezaMetrica = {
   tiempo_medio_vis_s: 12,
   clics_enlace: 40,
   formato: "reel",
-  cuenta: "UnoTV",
+  cuenta: "unotv",
   rendimiento_relativo: 2.3,
 };
 
@@ -66,7 +69,10 @@ const PIEZA_PEOR: PiezaMetrica = {
   compartidos: null,
   guardados: null,
   rendimiento_relativo: null,
-  cuenta: "UnoTV",
+  cuenta: "unotv",
+  // Riqueza barata ausente: la UI no debe inventar 0 ni pintar el campo.
+  tiempo_medio_vis_s: null,
+  clics_enlace: null,
 };
 
 const RESP: AnaliticaPiezas = {
@@ -90,22 +96,31 @@ function renderConProviders(ui: React.ReactElement) {
 }
 
 describe("PiezasAnalitica (enriquecida)", () => {
-  it("muestra marca·red, el badge de rendimiento relativo y el desglose granular", async () => {
+  it("muestra marca·red LEGIBLE, el badge de rendimiento relativo y el desglose granular", async () => {
     vi.spyOn(api, "metricasPiezas").mockResolvedValue(RESP);
     renderConProviders(<PiezasAnalitica opciones={OPCIONES} rangoActual="semana" />);
 
     expect(await screen.findByText("Gol de último minuto")).toBeInTheDocument();
-    // (a) marca (`cuenta`) + red de cada pieza.
-    expect(screen.getAllByText("UnoTV · instagram").length).toBeGreaterThan(0);
+    // (a) marca (`cuenta`=unotv → "UnoTV") + red (instagram → "Instagram"): legibles,
+    //     NUNCA el id crudo "unotv · instagram".
+    expect(screen.getAllByText("UnoTV · Instagram").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/unotv · instagram/)).not.toBeInTheDocument();
     // (b) badge de rendimiento relativo cuando no es null.
     expect(screen.getByText(/2\.3× mediana de vistas de su red/)).toBeInTheDocument();
     // (c) desglose granular compacto (comentarios = 300, sin compactar).
     expect(
       screen.getByText((t) => t.includes("💬") && t.includes("300")),
     ).toBeInTheDocument();
+    // (d) riqueza barata: clics a enlace (🔗) y tiempo de visualización (⏱) cuando != null.
+    expect(
+      screen.getByText((t) => t.includes("🔗") && t.includes("40")),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText((t) => t.includes("⏱") && t.includes("12s")),
+    ).toBeInTheDocument();
   });
 
-  it("no inventa desglose ni badge cuando la fuente no los expone (null)", async () => {
+  it("no inventa desglose, badge ni riqueza cuando la fuente no los expone (null)", async () => {
     vi.spyOn(api, "metricasPiezas").mockResolvedValue({
       ...RESP,
       top: [PIEZA_PEOR],
@@ -116,5 +131,8 @@ describe("PiezasAnalitica (enriquecida)", () => {
     expect(await screen.findByText("Nota floja")).toBeInTheDocument();
     // sin rendimiento_relativo -> no hay badge "× mediana de vistas".
     expect(screen.queryByText(/mediana de vistas de su red/)).not.toBeInTheDocument();
+    // clics_enlace/tiempo null -> no se pintan (sin 0 falso).
+    expect(screen.queryByText(/🔗/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/⏱/)).not.toBeInTheDocument();
   });
 });
