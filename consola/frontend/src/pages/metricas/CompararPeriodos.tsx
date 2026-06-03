@@ -19,7 +19,6 @@ import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { nombreMarca, variacion } from "@/lib/formato";
@@ -27,6 +26,7 @@ import { cn } from "@/lib/utils";
 import type { ComparativaMetrica, ComparativaPorMarca, OpcionesMetricas } from "@/types";
 
 import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { METRICAS } from "./metricas-meta";
 
 /** Etiqueta legible de una métrica del backend según su nombre interno. */
@@ -112,9 +112,9 @@ export function CompararPeriodos({
   });
 
   return (
-    <Card>
-      <CardHeader className="gap-4 pb-4 sm:flex-row sm:items-end sm:justify-between">
-        <CardTitle className="text-base">Comparar periodos</CardTitle>
+    <SeccionColapsable
+      titulo="Comparar periodos"
+      acciones={
         <div className="grid grid-cols-1 gap-3 sm:flex sm:flex-wrap sm:items-center">
           <div className="flex items-center gap-2">
             <span className="w-20 shrink-0 text-xs font-medium text-muted-foreground sm:w-auto">
@@ -130,10 +130,10 @@ export function CompararPeriodos({
           </div>
           <SelectorMarca marcas={opciones.marcas} valor={marca} onCambio={setMarca} />
         </div>
-      </CardHeader>
-
-      <CardContent className="space-y-6">
-        {!habilitado ? (
+      }
+      contentClassName="space-y-6"
+    >
+      {!habilitado ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Elige dos rangos para comparar.
           </p>
@@ -183,8 +183,7 @@ export function CompararPeriodos({
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }
 

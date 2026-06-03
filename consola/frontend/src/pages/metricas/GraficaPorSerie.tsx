@@ -16,7 +16,6 @@ import { Layers } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
@@ -24,6 +23,7 @@ import { numeroCompacto, porcentaje } from "@/lib/formato";
 import type { SeriePorEtiqueta } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 export function GraficaPorSerie({
   marcaActual = MARCA_TODAS,
@@ -54,18 +54,12 @@ export function GraficaPorSerie({
   }, [ejeInicial, tab]);
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-4">
-        <div className="flex items-center gap-2">
-          <Layers className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Rendimiento por serie / tipo</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Engagement medio del periodo agrupado por la clasificación editorial de cada
-          pieza (cruce con el tablero por id de Metricool; título como respaldo).
-        </p>
-
-        {isPending ? (
+    <SeccionColapsable
+      titulo="Rendimiento por serie / tipo"
+      descripcion="Engagement medio del periodo agrupado por la clasificación editorial de cada pieza (cruce con el tablero por id de Metricool; título como respaldo)."
+      icono={Layers}
+    >
+      {isPending ? (
           <Skeleton className="mt-2 h-72 w-full rounded-lg" />
         ) : isError ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
@@ -99,8 +93,7 @@ export function GraficaPorSerie({
             />
           </>
         )}
-      </CardHeader>
-    </Card>
+    </SeccionColapsable>
   );
 }
 
@@ -117,7 +110,7 @@ function SerieChart({ serie }: { serie: SeriePorEtiqueta }) {
     "Engagement %": g.engagement_pct,
   }));
   return (
-    <CardContent className="space-y-2 px-0 pb-0">
+    <div className="space-y-2 pt-2">
       <BarChart
         data={datos}
         index="grupo"
@@ -137,7 +130,7 @@ function SerieChart({ serie }: { serie: SeriePorEtiqueta }) {
           </span>
         ))}
       </p>
-    </CardContent>
+    </div>
   );
 }
 

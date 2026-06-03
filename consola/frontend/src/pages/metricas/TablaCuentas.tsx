@@ -22,12 +22,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { numeroCompleto, porcentaje } from "@/lib/formato";
 import type { CuentaMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { METRICAS, valorMetrica, type ClaveMetrica } from "./metricas-meta";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 /** Totales del periodo: suma de las métricas brutas + engagement global derivado. */
@@ -65,12 +65,8 @@ export function TablaCuentas({
   const totales = calcularTotales(cuentas);
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Detalle por cuenta</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
+    <SeccionColapsable titulo="Detalle por cuenta" contentClassName="p-0">
+      <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="pl-6">Cuenta</TableHead>
@@ -162,7 +158,6 @@ export function TablaCuentas({
             )}
           </TableBody>
         </Table>
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }

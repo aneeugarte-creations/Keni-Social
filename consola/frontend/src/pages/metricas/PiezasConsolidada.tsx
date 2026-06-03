@@ -21,7 +21,7 @@ import * as React from "react";
 import { marcaParam } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -216,17 +216,14 @@ export function PiezasConsolidada({
     marcaSel !== TODAS;
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-4">
-        <div className="flex items-center gap-2">
-          <ListChecks className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Piezas del periodo</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Todas las piezas del rango. Filtra por marca, línea o red; ordena por columna
-          (Vistas desc = top, asc = peores); navega día a día y toca una pieza para su detalle.
-        </p>
-
+    <>
+      <SeccionColapsable
+        titulo="Piezas del periodo"
+        icono={ListChecks}
+        descripcion="Todas las piezas del rango. Filtra por marca, línea o red; ordena por columna (Vistas desc = top, asc = peores); navega día a día y toca una pieza para su detalle."
+        contentClassName="px-0 pb-0"
+      >
+        <div className="space-y-3 px-6 pb-3">
         {/* Filtros */}
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <div className="relative max-w-sm flex-1">
@@ -305,9 +302,8 @@ export function PiezasConsolidada({
             />
           </div>
         )}
-      </CardHeader>
+        </div>
 
-      <CardContent className="px-0 pb-0">
         {isPending ? (
           <Skeleton className="mx-6 mb-6 h-72 rounded-lg" />
         ) : isError ? (
@@ -411,14 +407,14 @@ export function PiezasConsolidada({
             </p>
           </>
         )}
-      </CardContent>
+      </SeccionColapsable>
 
       <DetallePieza
         pieza={seleccion}
         abierto={detalleAbierto}
         onOpenChange={setDetalleAbierto}
       />
-    </Card>
+    </>
   );
 }
 

@@ -7,14 +7,22 @@
  * con el detalle y los `totales` del periodo. Separación clara por marca y por red.
  *
  * Mismo stack (Tremor) y estados honestos (carga / vacío / error) que el resto de
- * Métricas: si la fuente no expone celdas, lo dice en vez de inventar.
+ * Métricas: si la fuente no expone celdas, lo dice en vez de inventar. La sección es
+ * colapsable y filtra client-side por red y por marca (selectores en la cabecera).
  */
 import { useQuery } from "@tanstack/react-query";
 import { BarChart } from "@tremor/react";
 import { Heart } from "lucide-react";
+import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -30,6 +38,7 @@ import type { CeldaDesglose, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 // Componentes del engagement bruto: orden y color estables en la barra apilada.
@@ -43,6 +52,9 @@ const COMPONENTES: Array<{ clave: keyof CeldaDesglose; etiqueta: string; color: 
 
 const ETIQUETAS = COMPONENTES.map((c) => c.etiqueta);
 const COLORES = COMPONENTES.map((c) => c.color);
+
+/** Centinela "sin filtro" para los selectores de red/marca. */
+const TODAS = "__todas__";
 
 export function DesgloseInteracciones({
   marcas,
@@ -63,37 +75,90 @@ export function DesgloseInteracciones({
     staleTime: 2 * 60_000,
   });
 
+  // Filtros client-side por red y marca, derivados de las celdas del periodo.
+  const [redFiltro, setRedFiltro] = React.useState(TODAS);
+  const [marcaFiltro, setMarcaFiltro] = React.useState(TODAS);
+
+  const celdas = React.useMemo(() => data?.celdas ?? [], [data]);
+  const redesDisp = React.useMemo(
+    () => Array.from(new Set(celdas.map((c) => c.red))),
+    [celdas],
+  );
+  const marcasDisp = React.useMemo(
+    () => Array.from(new Set(celdas.map((c) => c.marca))),
+    [celdas],
+  );
+  const celdasFiltradas = React.useMemo(
+    () =>
+      celdas.filter(
+        (c) =>
+          (redFiltro === TODAS || c.red === redFiltro) &&
+          (marcaFiltro === TODAS || c.marca === marcaFiltro),
+      ),
+    [celdas, redFiltro, marcaFiltro],
+  );
+
+  const acciones =
+    redesDisp.length || marcasDisp.length ? (
+      <>
+        <Select value={redFiltro} onValueChange={setRedFiltro}>
+          <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
+            <SelectValue placeholder="Red" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODAS}>Todas las redes</SelectItem>
+            {redesDisp.map((r) => (
+              <SelectItem key={r} value={r}>
+                {nombreRed(r)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={marcaFiltro} onValueChange={setMarcaFiltro}>
+          <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por marca">
+            <SelectValue placeholder="Marca" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODAS}>Todas las marcas</SelectItem>
+            {marcasDisp.map((m) => (
+              <SelectItem key={m} value={m}>
+                {nombreMarca(m, marcas)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </>
+    ) : undefined;
+
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-4">
-        <div className="flex items-center gap-2">
-          <Heart className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Desglose de interacciones</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          De qué se compone el engagement de cada marca y red: likes, comentarios,
-          compartidos, guardados y reproducciones del periodo.
+    <SeccionColapsable
+      titulo="Desglose de interacciones"
+      icono={Heart}
+      descripcion="De qué se compone el engagement de cada marca y red: likes, comentarios, compartidos, guardados y reproducciones del periodo."
+      acciones={acciones}
+      contentClassName="space-y-6"
+    >
+      {isPending ? (
+        <Skeleton className="h-72 w-full rounded-lg" />
+      ) : isError ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No se pudo cargar el desglose de interacciones.
         </p>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {isPending ? (
-          <Skeleton className="h-72 w-full rounded-lg" />
-        ) : isError ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            No se pudo cargar el desglose de interacciones.
-          </p>
-        ) : data.celdas.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            La fuente activa no expone el desglose de interacciones para este periodo.
-          </p>
-        ) : (
-          <>
-            <GraficaApilada celdas={data.celdas} marcas={marcas} />
-            <TablaDesglose celdas={data.celdas} totales={data.totales} marcas={marcas} />
-          </>
-        )}
-      </CardContent>
-    </Card>
+      ) : data.celdas.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          La fuente activa no expone el desglose de interacciones para este periodo.
+        </p>
+      ) : celdasFiltradas.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          Ninguna celda coincide con los filtros seleccionados.
+        </p>
+      ) : (
+        <>
+          <GraficaApilada celdas={celdasFiltradas} marcas={marcas} />
+          <TablaDesglose celdas={celdasFiltradas} totales={data.totales} marcas={marcas} />
+        </>
+      )}
+    </SeccionColapsable>
   );
 }
 

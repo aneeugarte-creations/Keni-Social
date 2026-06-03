@@ -13,7 +13,6 @@ import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
@@ -21,6 +20,7 @@ import { nombreRed, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { PuntoSeguidores } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Neto de seguidores con signo: es un CONTEO (`+1.2K` / `−5K`), NO un porcentaje. */
 function netoSeguidores(n: number): string {
@@ -75,26 +75,23 @@ export function CrecimientoSeguidores({
   const colores = porRed ? COLORES_RED.slice(0, redes.length) : ["blue"];
 
   return (
-    <Card>
-      <CardHeader className="gap-1 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <CardTitle className="text-base">Crecimiento de seguidores</CardTitle>
-          </div>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Switch
-              checked={porRed}
-              onCheckedChange={setPorRed}
-              aria-label="Desglosar por red"
-              disabled={redes.length === 0}
-            />
-            Por red
-          </label>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isPending ? (
+    <SeccionColapsable
+      titulo="Crecimiento de seguidores"
+      icono={Users}
+      acciones={
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Switch
+            checked={porRed}
+            onCheckedChange={setPorRed}
+            aria-label="Desglosar por red"
+            disabled={redes.length === 0}
+          />
+          Por red
+        </label>
+      }
+      contentClassName="space-y-4"
+    >
+      {isPending ? (
           <Skeleton className="h-56 w-full rounded-lg" />
         ) : isError ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
@@ -121,8 +118,7 @@ export function CrecimientoSeguidores({
             />
           </>
         )}
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }
 

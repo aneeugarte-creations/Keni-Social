@@ -16,7 +16,6 @@ import { AlertCircle, ArrowRight, RefreshCw, Sparkles } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
 import { nombreRed, numeroCompacto, porcentaje, variacion } from "@/lib/formato";
@@ -24,6 +23,7 @@ import { cn } from "@/lib/utils";
 import type { AnalisisDiario as Analisis, MovimientoAnalisis } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 /** Traduce la dirección del movimiento al `deltaType` de Tremor BadgeDelta. */
 function deltaType(direccion: string): DeltaType {
@@ -54,16 +54,8 @@ export function AnalisisDiario({
   });
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Lectura del periodo</CardTitle>
-        </div>
-      </CardHeader>
-
-      <CardContent className="space-y-5">
-        {!habilitado ? (
+    <SeccionColapsable titulo="Lectura del periodo" icono={Sparkles} contentClassName="space-y-5">
+      {!habilitado ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             Elige un rango para leer el periodo.
           </p>
@@ -78,8 +70,7 @@ export function AnalisisDiario({
         ) : (
           <CuerpoAnalisis data={data} />
         )}
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }
 

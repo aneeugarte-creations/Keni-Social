@@ -12,7 +12,6 @@ import { LineChart as LineChartIcon } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -26,6 +25,7 @@ import { numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { PuntoSerie } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 type Metrica = "visualizaciones" | "interacciones";
 
@@ -68,26 +68,22 @@ export function TendenciaDiaria({
   }));
 
   return (
-    <Card>
-      <CardHeader className="gap-1 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <LineChartIcon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-            <CardTitle className="text-base">Tendencia diaria</CardTitle>
-          </div>
-          <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
-            <SelectTrigger className="w-[170px]" aria-label="Métrica de la tendencia">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="visualizaciones">Visualizaciones</SelectItem>
-              <SelectItem value="interacciones">Interacciones</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isPending ? (
+    <SeccionColapsable
+      titulo="Tendencia diaria"
+      icono={LineChartIcon}
+      acciones={
+        <Select value={metrica} onValueChange={(v) => setMetrica(v as Metrica)}>
+          <SelectTrigger className="w-[170px]" aria-label="Métrica de la tendencia">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="visualizaciones">Visualizaciones</SelectItem>
+            <SelectItem value="interacciones">Interacciones</SelectItem>
+          </SelectContent>
+        </Select>
+      }
+    >
+      {isPending ? (
           <Skeleton className="h-56 w-full rounded-lg" />
         ) : isError ? (
           <p className="py-12 text-center text-sm text-muted-foreground">
@@ -121,7 +117,6 @@ export function TendenciaDiaria({
             }
           />
         )}
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }

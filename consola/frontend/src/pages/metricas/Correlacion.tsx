@@ -4,16 +4,24 @@
  * Cruza, por marca×red×día, cuántos seguidores se ganaron contra cuántas piezas se
  * publicaron, con `seguidores_por_post` como ratio crudo y un enlace a la pieza estrella
  * de ese día. RENDERIZA la `nota` del backend (correlación ≠ causalidad) de forma visible
- * para no inducir lecturas causales.
+ * para no inducir lecturas causales. La tabla es ORDENABLE por columna numérica y
+ * FILTRABLE por red (cliente).
  *
  * Mismo stack y estados honestos (carga / vacío / error) que el resto de Métricas: si la
  * fuente no expone los datos (sin seguidores), lo dice en vez de inventar.
  */
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink, GitCompareArrows, Info } from "lucide-react";
+import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -27,7 +35,12 @@ import { api } from "@/lib/api";
 import { nombreMarca, nombreRed, porcentaje, variacion } from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
+import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
+import { useOrdenTabla } from "./useOrdenTabla";
+
+const RED_TODAS = "__todas__";
 
 /** "12 may" a partir de una fecha ISO (AAAA-MM-DD), en es-MX. */
 function fechaCorta(iso: string): string {
@@ -52,6 +65,7 @@ export function Correlacion({
   rangoActual?: string;
 }) {
   const marca_ = marcaParam(marcaActual);
+  const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "correlacion", rangoActual ?? "", marca_ ?? "todas"],
@@ -60,51 +74,86 @@ export function Correlacion({
     staleTime: 2 * 60_000,
   });
 
+  const items = React.useMemo(() => data?.items ?? [], [data]);
+  const redesDisponibles = React.useMemo(
+    () => Array.from(new Set(items.map((it) => it.red).filter(Boolean))).sort(),
+    [items],
+  );
+
+  // El filtro de red solo tiene sentido cuando hay datos cargados.
+  const filtroRed =
+    !isPending && !isError && items.length > 0 ? (
+      <Select value={redFiltro} onValueChange={setRedFiltro}>
+        <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
+          <SelectValue placeholder="Red" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={RED_TODAS}>Todas las redes</SelectItem>
+          {redesDisponibles.map((r) => (
+            <SelectItem key={r} value={r}>
+              {nombreRed(r)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ) : undefined;
+
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-4">
-        <div className="flex items-center gap-2">
-          <GitCompareArrows className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Seguidores vs publicación</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Por día y red: seguidores ganados frente a piezas publicadas, con la pieza que
-          mejor rindió ese día.
+    <SeccionColapsable
+      titulo="Seguidores vs publicación"
+      icono={GitCompareArrows}
+      descripcion="Por día y red: seguidores ganados frente a piezas publicadas, con la pieza que mejor rindió ese día."
+      acciones={filtroRed}
+      contentClassName="space-y-4"
+    >
+      {isPending ? (
+        <Skeleton className="h-64 w-full rounded-lg" />
+      ) : isError ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No se pudo cargar la correlación de seguidores.
         </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {isPending ? (
-          <Skeleton className="h-64 w-full rounded-lg" />
-        ) : isError ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            No se pudo cargar la correlación de seguidores.
+      ) : items.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          La fuente activa no expone seguidores aún para este periodo.
+        </p>
+      ) : (
+        <>
+          {/* La nota del backend (correlación, no causalidad) SIEMPRE visible. */}
+          <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+            <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>{data.nota}</span>
           </p>
-        ) : data.items.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            La fuente activa no expone seguidores aún para este periodo.
-          </p>
-        ) : (
-          <>
-            {/* La nota del backend (correlación, no causalidad) SIEMPRE visible. */}
-            <p className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-              <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              <span>{data.nota}</span>
-            </p>
-            <TablaCorrelacion items={data.items} marcas={marcas} />
-          </>
-        )}
-      </CardContent>
-    </Card>
+          <TablaCorrelacion items={items} marcas={marcas} redFiltro={redFiltro} />
+        </>
+      )}
+    </SeccionColapsable>
   );
 }
+
+type ClaveCorrelacion = "seguidores_ganados" | "n_posts" | "seguidores_por_post";
 
 function TablaCorrelacion({
   items,
   marcas,
+  redFiltro,
 }: {
   items: ItemCorrelacion[];
   marcas: MarcaDisponible[];
+  redFiltro: string;
 }) {
+  // Filtro de red (cliente) antes de ordenar.
+  const visibles =
+    redFiltro === RED_TODAS ? items : items.filter((it) => it.red === redFiltro);
+
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<ItemCorrelacion, ClaveCorrelacion>(
+    visibles,
+    {
+      seguidores_ganados: (it) => it.seguidores_ganados,
+      n_posts: (it) => it.n_posts,
+      seguidores_por_post: (it) => it.seguidores_por_post,
+    },
+  );
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -113,32 +162,61 @@ function TablaCorrelacion({
             <TableHead>Fecha</TableHead>
             <TableHead>Marca</TableHead>
             <TableHead>Red</TableHead>
-            <TableHead className="text-right">Seguidores</TableHead>
-            <TableHead className="text-right">Posts</TableHead>
-            <TableHead className="text-right">Seg./post</TableHead>
+            <CabeceraOrdenable
+              activa={estado.clave === "seguidores_ganados"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("seguidores_ganados")}
+              alinear="right"
+            >
+              Seguidores
+            </CabeceraOrdenable>
+            <CabeceraOrdenable
+              activa={estado.clave === "n_posts"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("n_posts")}
+              alinear="right"
+            >
+              Posts
+            </CabeceraOrdenable>
+            <CabeceraOrdenable
+              activa={estado.clave === "seguidores_por_post"}
+              direccion={estado.direccion}
+              onClick={() => alClicar("seguidores_por_post")}
+              alinear="right"
+            >
+              Seg./post
+            </CabeceraOrdenable>
             <TableHead>Pieza estrella</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((it) => (
-            <TableRow key={`${it.marca}-${it.red}-${it.fecha}`}>
-              <TableCell className="whitespace-nowrap text-muted-foreground">
-                {fechaCorta(it.fecha)}
-              </TableCell>
-              <TableCell className="font-medium">{nombreMarca(it.marca, marcas)}</TableCell>
-              <TableCell className="text-muted-foreground">{nombreRed(it.red)}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {variacion(it.seguidores_ganados)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{it.n_posts}</TableCell>
-              <TableCell className="text-right tabular-nums">
-                {ratio(it.seguidores_por_post)}
-              </TableCell>
-              <TableCell className="max-w-[18rem]">
-                <PiezaEstrella post={it.post_estrella} />
+          {filasOrdenadas.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                No hay datos para la red seleccionada.
               </TableCell>
             </TableRow>
-          ))}
+          ) : (
+            filasOrdenadas.map((it) => (
+              <TableRow key={`${it.marca}-${it.red}-${it.fecha}`}>
+                <TableCell className="whitespace-nowrap text-muted-foreground">
+                  {fechaCorta(it.fecha)}
+                </TableCell>
+                <TableCell className="font-medium">{nombreMarca(it.marca, marcas)}</TableCell>
+                <TableCell className="text-muted-foreground">{nombreRed(it.red)}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {variacion(it.seguidores_ganados)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{it.n_posts}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {ratio(it.seguidores_por_post)}
+                </TableCell>
+                <TableCell className="max-w-[18rem]">
+                  <PiezaEstrella post={it.post_estrella} />
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
       </Table>
     </div>

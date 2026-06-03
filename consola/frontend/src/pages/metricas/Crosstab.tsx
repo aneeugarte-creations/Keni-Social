@@ -13,7 +13,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Grid3x3 } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -36,6 +35,7 @@ import type { CeldaCrosstab, MarcaDisponible } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
 
 /**
@@ -74,34 +74,32 @@ export function Crosstab({
   });
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-4">
-        <div className="flex items-center gap-2">
-          <Grid3x3 className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Rendimiento por formato</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
+    <SeccionColapsable
+      titulo="Rendimiento por formato"
+      icono={Grid3x3}
+      descripcion={
+        <>
           Cruce marca × red × formato. El rendimiento relativo compara las VISTAS de
-          cada combinación con la mediana de vistas de su grupo: <span className="text-emerald-700 dark:text-emerald-300">verde</span> alcanza
+          cada combinación con la mediana de vistas de su grupo:{" "}
+          <span className="text-emerald-700 dark:text-emerald-300">verde</span> alcanza
           por encima, <span className="text-red-700 dark:text-red-300">rojo</span> por debajo.
+        </>
+      }
+    >
+      {isPending ? (
+        <Skeleton className="h-64 w-full rounded-lg" />
+      ) : isError ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          No se pudo cargar el rendimiento por formato.
         </p>
-      </CardHeader>
-      <CardContent>
-        {isPending ? (
-          <Skeleton className="h-64 w-full rounded-lg" />
-        ) : isError ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            No se pudo cargar el rendimiento por formato.
-          </p>
-        ) : data.celdas.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">
-            La fuente activa no expone el cruce por formato para este periodo.
-          </p>
-        ) : (
-          <TablaCrosstab celdas={data.celdas} marcas={marcas} />
-        )}
-      </CardContent>
-    </Card>
+      ) : data.celdas.length === 0 ? (
+        <p className="py-10 text-center text-sm text-muted-foreground">
+          La fuente activa no expone el cruce por formato para este periodo.
+        </p>
+      ) : (
+        <TablaCrosstab celdas={data.celdas} marcas={marcas} />
+      )}
+    </SeccionColapsable>
   );
 }
 

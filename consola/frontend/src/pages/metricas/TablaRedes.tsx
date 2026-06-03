@@ -11,6 +11,15 @@
  * GraficaMarcas. `alcance` es `null` cuando ninguna cuenta mide alcance en esa red
  * (#138): se muestra "—" en vez de un 0 falso.
  */
+import * as React from "react";
+
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -19,12 +28,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { nombreRed, numeroCompacto, numeroCompleto, porcentaje } from "@/lib/formato";
 import type { RedMetrica } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
+import { SeccionColapsable } from "./SeccionColapsable";
 import { useOrdenTabla } from "./useOrdenTabla";
+
+const RED_TODAS = "__todas__";
 
 type ClaveRed = "visualizaciones" | "interacciones" | "engagement_pct";
 
@@ -56,17 +67,26 @@ function calcularTotales(redes: RedMetrica[]): {
 }
 
 export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
-  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<RedMetrica, ClaveRed>(redes, {
+  const [redFiltro, setRedFiltro] = React.useState(RED_TODAS);
+  const redesDisponibles = React.useMemo(
+    () => Array.from(new Set(redes.map((r) => r.red).filter(Boolean))).sort(),
+    [redes],
+  );
+
+  // Filas tras aplicar el filtro de red (cliente). `visibles` alimenta orden, totales y reparto.
+  const visibles = redFiltro === RED_TODAS ? redes : redes.filter((r) => r.red === redFiltro);
+
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<RedMetrica, ClaveRed>(visibles, {
     visualizaciones: (r) => r.visualizaciones,
     interacciones: (r) => r.interacciones,
     engagement_pct: (r) => r.engagement_pct,
   });
 
-  const totales = calcularTotales(redes);
+  const totales = calcularTotales(visibles);
 
   // Reparto "% de vistas por red", ordenado de mayor a menor (como GraficaMarcas).
   const totalVis = totales.visualizaciones;
-  const reparto = [...redes]
+  const reparto = [...visibles]
     .sort((a, b) => b.visualizaciones - a.visualizaciones)
     .map((r) => ({
       red: r.red,
@@ -74,13 +94,25 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
       pct: totalVis > 0 ? Math.round((r.visualizaciones / totalVis) * 100) : 0,
     }));
 
+  const filtroRed = (
+    <Select value={redFiltro} onValueChange={setRedFiltro}>
+      <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por red">
+        <SelectValue placeholder="Red" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={RED_TODAS}>Todas las redes</SelectItem>
+        {redesDisponibles.map((r) => (
+          <SelectItem key={r} value={r}>
+            {nombreRed(r)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Detalle por red</CardTitle>
-      </CardHeader>
-      <CardContent className="p-0">
-        <Table>
+    <SeccionColapsable titulo="Detalle por red" acciones={filtroRed} contentClassName="p-0">
+      <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="pl-6">Red</TableHead>
@@ -99,7 +131,7 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {redes.length === 0 ? (
+            {visibles.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={COLUMNAS.length + 1}
@@ -141,7 +173,7 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
           </TableBody>
         </Table>
 
-        {redes.length > 0 && (
+        {visibles.length > 0 && (
           <div className="space-y-3 border-t border-border px-6 py-4">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Reparto de vistas por red
@@ -171,7 +203,6 @@ export function TablaRedes({ redes }: { redes: RedMetrica[] }) {
             </ul>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }

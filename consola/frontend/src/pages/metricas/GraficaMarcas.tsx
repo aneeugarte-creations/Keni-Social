@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { CuentaMetrica } from "@/types";
 
 import { numeroCompacto, numeroCompleto } from "./formato";
+import { SeccionColapsable } from "./SeccionColapsable";
 
 export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
   // Una entrada por cuenta. Acortamos nombres muy largos para el eje.
@@ -34,21 +35,17 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
 
   if (cuentas.length === 0) {
     return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Comparativa por marca</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            No hay cuentas para mostrar en este rango.
-          </p>
-        </CardContent>
-      </Card>
+      <SeccionColapsable titulo="Comparativa por marca">
+        <p className="py-8 text-center text-sm text-muted-foreground">
+          No hay cuentas para mostrar en este rango.
+        </p>
+      </SeccionColapsable>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
+    <SeccionColapsable titulo="Comparativa por marca" contentClassName="p-0">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
       <Card className="lg:col-span-3">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Visualizaciones e interacciones por cuenta</CardTitle>
@@ -95,7 +92,8 @@ export function GraficaMarcas({ cuentas }: { cuentas: CuentaMetrica[] }) {
           </ul>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </SeccionColapsable>
   );
 }
 

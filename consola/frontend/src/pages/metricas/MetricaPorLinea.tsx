@@ -13,7 +13,6 @@ import { useQuery } from "@tanstack/react-query";
 import { GitBranch } from "lucide-react";
 
 import { marcaParam } from "@/components/comunes/selectores";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -27,7 +26,12 @@ import { api } from "@/lib/api";
 import { numeroCompacto, porcentaje } from "@/lib/formato";
 import type { FilaMetricaLinea } from "@/types";
 
+import { CabeceraOrdenable } from "./CabeceraOrdenable";
 import { MARCA_TODAS } from "./Controles";
+import { SeccionColapsable } from "./SeccionColapsable";
+import { useOrdenTabla } from "./useOrdenTabla";
+
+type ClaveOrden = "piezas" | "visualizaciones" | "interacciones" | "engagement_pct";
 
 export function MetricaPorLinea({
   marcaActual = MARCA_TODAS,
@@ -47,19 +51,13 @@ export function MetricaPorLinea({
   });
 
   return (
-    <Card>
-      <CardHeader className="gap-3 pb-4">
-        <div className="flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle className="text-base">Rendimiento por línea y origen</CardTitle>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Qué líneas de contenido y qué orígenes (interno / petición externa) rinden mejor en
-          el periodo: piezas publicadas, visualizaciones, interacciones y engagement.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-8">
-        {isPending ? (
+    <SeccionColapsable
+      titulo="Rendimiento por línea y origen"
+      descripcion="Qué líneas de contenido y qué orígenes (interno / petición externa) rinden mejor en el periodo: piezas publicadas, visualizaciones, interacciones y engagement."
+      icono={GitBranch}
+      contentClassName="space-y-8"
+    >
+      {isPending ? (
           <Skeleton className="h-72 w-full rounded-lg" />
         ) : isError ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
@@ -85,8 +83,7 @@ export function MetricaPorLinea({
             />
           </>
         )}
-      </CardContent>
-    </Card>
+    </SeccionColapsable>
   );
 }
 
@@ -101,6 +98,17 @@ function TablaLineas({
   total: FilaMetricaLinea;
   etiquetaPrimera: string;
 }) {
+  const { filasOrdenadas, estado, alClicar } = useOrdenTabla<FilaMetricaLinea, ClaveOrden>(
+    filas,
+    {
+      piezas: (f) => f.piezas,
+      visualizaciones: (f) => f.visualizaciones,
+      interacciones: (f) => f.interacciones,
+      engagement_pct: (f) => f.engagement_pct,
+    },
+    { clave: "visualizaciones", direccion: "desc" },
+  );
+
   return (
     <div className="space-y-3">
       <h3 className="text-sm font-semibold tracking-tight">{titulo}</h3>
@@ -114,14 +122,42 @@ function TablaLineas({
             <TableHeader>
               <TableRow>
                 <TableHead>{etiquetaPrimera}</TableHead>
-                <TableHead className="text-right">Piezas</TableHead>
-                <TableHead className="text-right">Visualizaciones</TableHead>
-                <TableHead className="text-right">Interacciones</TableHead>
-                <TableHead className="text-right">Engagement</TableHead>
+                <CabeceraOrdenable
+                  activa={estado.clave === "piezas"}
+                  direccion={estado.direccion}
+                  onClick={() => alClicar("piezas")}
+                  alinear="right"
+                >
+                  Piezas
+                </CabeceraOrdenable>
+                <CabeceraOrdenable
+                  activa={estado.clave === "visualizaciones"}
+                  direccion={estado.direccion}
+                  onClick={() => alClicar("visualizaciones")}
+                  alinear="right"
+                >
+                  Visualizaciones
+                </CabeceraOrdenable>
+                <CabeceraOrdenable
+                  activa={estado.clave === "interacciones"}
+                  direccion={estado.direccion}
+                  onClick={() => alClicar("interacciones")}
+                  alinear="right"
+                >
+                  Interacciones
+                </CabeceraOrdenable>
+                <CabeceraOrdenable
+                  activa={estado.clave === "engagement_pct"}
+                  direccion={estado.direccion}
+                  onClick={() => alClicar("engagement_pct")}
+                  alinear="right"
+                >
+                  Engagement
+                </CabeceraOrdenable>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filas.map((f) => (
+              {filasOrdenadas.map((f) => (
                 <TableRow key={f.id}>
                   <TableCell className="font-medium">{f.nombre}</TableCell>
                   <TableCell className="text-right tabular-nums">{f.piezas}</TableCell>
