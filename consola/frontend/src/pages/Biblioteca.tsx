@@ -15,15 +15,14 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Eye,
   FileText,
   Folder,
   History,
   Loader2,
-  Pencil,
   Plus,
   RotateCcw,
   Send,
+  Settings2,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,7 +32,7 @@ import { confirmar } from "@/components/comunes/confirmar";
 import { MarcaIA } from "@/components/comunes/MarcaIA";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { SelectorRedMultiple } from "@/components/comunes/SelectorRedMultiple";
-import { BarraFormato } from "@/components/editor/BarraFormato";
+import { EditorWysiwyg } from "@/components/editor/EditorWysiwyg";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -65,7 +64,6 @@ type FiltroEstado = "todo" | "activo" | "borrador" | "archivado";
 
 const CLASES_EDITORIAL = ["marca", "voz", "plataforma", "tropicalizacion", "reglas"] as const;
 const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
-const ROLES_PROMPT = ["", "copy", "qa", "green", "arte"] as const;
 // Pipelines del registro backend (mismo orden/ids que `biblioteca.PIPELINES`).
 const PIPELINES = [
   { id: "copy", nombre: "Copy" },
@@ -100,8 +98,8 @@ export default function Biblioteca() {
   const [etiquetaFiltro, setEtiquetaFiltro] = React.useState<string | null>(null);
   const [enPapelera, setEnPapelera] = React.useState(false);
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
-  // Por defecto se EDITA en modo renderizado (vista); el toggle pasa al markdown crudo.
-  const [preview, setPreview] = React.useState(true);
+  // Config avanzada (estado, etiquetas, clase/marcas, atribución) plegada tras el engranaje.
+  const [ajustesAbiertos, setAjustesAbiertos] = React.useState(false);
   const [historialAbierto, setHistorialAbierto] = React.useState(false);
   const [carpetasCerradas, setCarpetasCerradas] = React.useState<Set<string>>(new Set());
   const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
@@ -239,12 +237,11 @@ export default function Biblioteca() {
       setBorrador(null);
       setFrontmatterOculto("");
     }
-    setPreview(true); // se abre en modo renderizado por defecto
+    setAjustesAbiertos(false);
     setLanzarAbierto(false);
     setHistorialAbierto(false);
   }, [seleccionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const areaRef = React.useRef<HTMLTextAreaElement>(null);
   const guardarTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const guardarMut = useMutation({
@@ -564,26 +561,14 @@ export default function Biblioteca() {
           </div>
         ) : (
           <>
+            {/* Barra mínima: título + Lanzar (prompt) + engranaje (config) + historial + borrar. */}
             <div className="flex items-center gap-2">
               <Input
                 value={borrador.titulo}
                 onChange={(e) => editar({ titulo: e.target.value })}
-                className="text-base font-medium"
+                className="flex-1 text-base font-medium"
                 placeholder="Título"
               />
-              <Input
-                value={borrador.carpeta}
-                onChange={(e) => editar({ carpeta: e.target.value })}
-                className="w-40"
-                placeholder="carpeta/…"
-                list="carpetas-biblioteca"
-                title="Carpeta (organiza el documento; usa una existente o crea una nueva)"
-              />
-              <datalist id="carpetas-biblioteca">
-                {carpetasExistentes.map((c) => (
-                  <option key={c} value={c} />
-                ))}
-              </datalist>
               {borrador.tipo === "prompt" ? (
                 <Button variant="brand" size="sm" onClick={() => setLanzarAbierto(true)}>
                   <Send className="mr-1 h-3.5 w-3.5" /> Lanzar
@@ -591,11 +576,11 @@ export default function Biblioteca() {
               ) : null}
               <Button
                 size="sm"
-                variant="outline"
-                onClick={() => setPreview((v) => !v)}
+                variant={ajustesAbiertos ? "secondary" : "outline"}
+                onClick={() => setAjustesAbiertos((v) => !v)}
+                title="Ajustes del documento"
               >
-                {preview ? <Pencil className="mr-1 h-3.5 w-3.5" /> : <Eye className="mr-1 h-3.5 w-3.5" />}
-                {preview ? "Editar" : "Vista"}
+                <Settings2 className="mr-1 h-3.5 w-3.5" /> Ajustes
               </Button>
               <Button
                 size="sm"
@@ -620,112 +605,103 @@ export default function Biblioteca() {
               </Button>
             </div>
 
-            {/* Metadatos unificados: estado/etiquetas (todos) + clase/marcas (editorial) +
-                rol (prompt) + atribución a pipelines (todos) + prioridad de ensamblaje. */}
-            <div className="flex flex-wrap items-center gap-2">
-              <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
-                <SelectTrigger className="w-32" title="Estado del ciclo de vida"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ESTADOS_DOC.map((s) => (
-                    <SelectItem key={s} value={s}>{s}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Input
-                value={(borrador.etiquetas ?? []).join(", ")}
-                onChange={(e) =>
-                  editar({ etiquetas: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })
-                }
-                placeholder="etiquetas (coma)"
-                className="w-44"
-                title="Tags transversales para navegación"
-              />
-              {borrador.tipo === "editorial" ? (
-                <>
-                  <Select value={borrador.clase || "marca"} onValueChange={(v) => editar({ clase: v })}>
-                    <SelectTrigger className="w-36"><SelectValue placeholder="Clase" /></SelectTrigger>
+            {/* Panel de AJUSTES (plegado por defecto): carpeta, estado, etiquetas, clase/marcas
+                (editorial) y atribución a pipelines. Fuera del flujo de escritura. */}
+            {ajustesAbiertos ? (
+              <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={borrador.carpeta}
+                    onChange={(e) => editar({ carpeta: e.target.value })}
+                    className="w-44"
+                    placeholder="carpeta/…"
+                    list="carpetas-biblioteca"
+                    title="Carpeta"
+                  />
+                  <datalist id="carpetas-biblioteca">
+                    {carpetasExistentes.map((c) => (
+                      <option key={c} value={c} />
+                    ))}
+                  </datalist>
+                  <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
+                    <SelectTrigger className="w-32" title="Estado"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {CLASES_EDITORIAL.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      {ESTADOS_DOC.map((s) => (
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <Input
-                    value={borrador.marcas.join(", ")}
+                    value={(borrador.etiquetas ?? []).join(", ")}
                     onChange={(e) =>
-                      editar({ marcas: e.target.value.split(",").map((m) => m.trim()).filter(Boolean) })
+                      editar({ etiquetas: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })
                     }
-                    placeholder="marcas (coma)"
-                    className="w-40"
+                    placeholder="etiquetas (coma)"
+                    className="w-44"
                   />
-                </>
-              ) : (
-                <Select value={borrador.rol || "_"} onValueChange={(v) => editar({ rol: v === "_" ? "" : v })}>
-                  <SelectTrigger className="w-36" title="Rol: ata el prompt a un pipeline">
-                    <SelectValue placeholder="rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES_PROMPT.map((r) => (
-                      <SelectItem key={r || "_"} value={r || "_"}>{r || "sin rol"}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-              <Input
-                type="number"
-                value={borrador.prioridad ?? 0}
-                onChange={(e) => editar({ prioridad: Number(e.target.value) || 0 })}
-                className="w-20"
-                title="Prioridad de ensamblaje (menor = antes)"
-              />
-            </div>
+                </div>
 
-            {/* Atribución a pipelines: en qué procesos entra este documento (toggle). */}
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-xs text-muted-foreground">Se inyecta en:</span>
-              {PIPELINES.map((p) => {
-                const sel = (borrador.pipelines ?? []).includes(p.id);
-                return (
-                  <Badge
-                    key={p.id}
-                    variant={sel ? "default" : "outline"}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      const actual = borrador.pipelines ?? [];
-                      editar({
-                        pipelines: sel ? actual.filter((x) => x !== p.id) : [...actual, p.id],
-                      });
-                    }}
-                  >
-                    {p.nombre}
-                  </Badge>
-                );
-              })}
-              {(borrador.pipelines ?? []).length === 0 ? (
-                <span className="text-xs text-muted-foreground">
-                  {borrador.tipo === "editorial" ? "(todos los pipelines)" : "(ninguno)"}
-                </span>
-              ) : null}
-            </div>
+                {borrador.tipo === "editorial" ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Select value={borrador.clase || "marca"} onValueChange={(v) => editar({ clase: v })}>
+                      <SelectTrigger className="w-36"><SelectValue placeholder="Clase" /></SelectTrigger>
+                      <SelectContent>
+                        {CLASES_EDITORIAL.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      value={borrador.marcas.join(", ")}
+                      onChange={(e) =>
+                        editar({ marcas: e.target.value.split(",").map((m) => m.trim()).filter(Boolean) })
+                      }
+                      placeholder="marcas (coma)"
+                      className="w-40"
+                    />
+                  </div>
+                ) : null}
 
-            {!preview && <BarraFormato refArea={areaRef} valor={borrador.cuerpo} onContenido={(v) => editar({ cuerpo: v })} />}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs text-muted-foreground">Se inyecta en:</span>
+                  {PIPELINES.map((p) => {
+                    const sel = (borrador.pipelines ?? []).includes(p.id);
+                    return (
+                      <Badge
+                        key={p.id}
+                        variant={sel ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          const actual = borrador.pipelines ?? [];
+                          editar({
+                            pipelines: sel ? actual.filter((x) => x !== p.id) : [...actual, p.id],
+                          });
+                        }}
+                      >
+                        {p.nombre}
+                      </Badge>
+                    );
+                  })}
+                  {(borrador.pipelines ?? []).length === 0 ? (
+                    <span className="text-xs text-muted-foreground">
+                      {borrador.tipo === "editorial" ? "(todos los pipelines)" : "(ninguno)"}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
+            {/* Cuerpo: WYSIWYG (escribes con formato aplicado). El cuerpo se guarda como markdown. */}
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
-              {preview ? (
-                <Markdown>{borrador.cuerpo || "_Sin contenido_"}</Markdown>
-              ) : (
-                <AutoTextarea
-                  ref={areaRef}
-                  value={borrador.cuerpo}
-                  onChange={(e) => editar({ cuerpo: e.target.value })}
-                  className="min-h-[300px] w-full resize-none border-0 p-0 font-mono text-sm focus-visible:ring-0"
-                  placeholder={
-                    borrador.tipo === "prompt"
-                      ? "Escribe el prompt en markdown…"
-                      : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
-                  }
-                />
-              )}
+              <EditorWysiwyg
+                value={borrador.cuerpo}
+                onContenido={(md) => editar({ cuerpo: md })}
+                placeholder={
+                  borrador.tipo === "prompt"
+                    ? "Escribe el prompt…"
+                    : "Escribe la pieza editorial (voz, reglas, plataforma…)…"
+                }
+              />
             </div>
             <p className="text-xs text-muted-foreground">
               {guardarMut.isPending ? "Guardando…" : `Actualizado ${borrador.actualizado || "—"}`}
