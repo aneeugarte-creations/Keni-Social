@@ -81,6 +81,8 @@ TOOLS_ESPERADAS = {
     "reporte_consolidado",
     "picos",
     "analisis_diario",
+    # Mejores días y horas para publicar (heatmap día×hora).
+    "horarios",
     # Analíticas de estrategia (R2).
     "serie_seguidores",
     "desglose_interacciones",
