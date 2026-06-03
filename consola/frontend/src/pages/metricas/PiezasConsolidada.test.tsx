@@ -95,6 +95,26 @@ describe("PiezasConsolidada", () => {
     expect(within(filas[0]).getByText("Noticia local")).toBeInTheDocument(); // 9000 vistas
   });
 
+  it("muestra columnas de comentarios/compartidos/guardados y ordena por ellas; sin columna de clics", async () => {
+    const datos = [
+      pieza({ id: "a", titulo: "Pocos comentarios", comentarios: 2 }),
+      pieza({ id: "b", titulo: "Muchos comentarios", comentarios: 99 }),
+    ];
+    vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(datos));
+    renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
+    await screen.findByText("Muchos comentarios");
+
+    // El número de comentarios se ve y ya NO hay cabecera de Clics.
+    expect(screen.getByText("99")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Clics/i })).not.toBeInTheDocument();
+
+    // Orden por comentarios (clic en columna nueva = desc): la de más comentarios primero.
+    // Nombre EXACTO "Comentarios" (la cabecera); los botones de fila contienen el título.
+    fireEvent.click(screen.getByRole("button", { name: "Comentarios" }));
+    const filas = screen.getAllByRole("button", { name: /Ver detalle de/ });
+    expect(within(filas[0]).getByText("Muchos comentarios")).toBeInTheDocument();
+  });
+
   it("filtra por título con el buscador", async () => {
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(MISMO_DIA));
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);

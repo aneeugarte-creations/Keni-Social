@@ -5,7 +5,8 @@
  *   - Filtros (client-side): marca, línea editorial, red y buscador por título.
  *   - Estadísticas del conjunto filtrado: nº de piezas, vistas media/mediana y
  *     engagement medio/mediana (top/peores = ordenar por la columna Vistas).
- *   - Orden por columna (vistas / engagement / clics) reusando `useOrdenTabla`.
+ *   - Columnas ordenables (vistas / engagement / comentarios / compartidos / guardados,
+ *     estas tres con icono en la cabecera) reusando `useOrdenTabla`.
  *   - Paginación POR DÍA (un día por página, pager Prev/Siguiente).
  *   - Cada fila muestra "Plataforma · Línea (· Marca)" + badge de rendimiento relativo y
  *     es ABRIBLE: drill-down al `DetallePieza` (métricas + granulares + histórico + velocidad).
@@ -15,7 +16,17 @@
  * (lo controla también el drill-down desde la tabla por marca).
  */
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, ExternalLink, ListChecks, Search } from "lucide-react";
+import {
+  Bookmark,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  ListChecks,
+  type LucideIcon,
+  MessageCircle,
+  Search,
+  Share2,
+} from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
@@ -56,13 +67,27 @@ import { MARCA_TODAS } from "./Controles";
 import { DetallePieza } from "./DetallePieza";
 import { useOrdenTabla } from "./useOrdenTabla";
 
-type ClaveOrden = "visualizaciones" | "engagement_pct" | "clics_enlace";
+type ClaveOrden =
+  | "visualizaciones"
+  | "engagement_pct"
+  | "comentarios"
+  | "compartidos"
+  | "guardados";
 
 const ACCESORES: Record<ClaveOrden, (p: PiezaListado) => number | string | null> = {
   visualizaciones: (p) => p.visualizaciones,
   engagement_pct: (p) => p.engagement_pct,
-  clics_enlace: (p) => p.clics_enlace,
+  comentarios: (p) => p.comentarios,
+  compartidos: (p) => p.compartidos,
+  guardados: (p) => p.guardados,
 };
+
+/** Columnas de interacción granular: icono (logo) en la cabecera + número por fila. */
+const COLS_INTERACCION: Array<{ clave: ClaveOrden; etiqueta: string; icono: LucideIcon }> = [
+  { clave: "comentarios", etiqueta: "Comentarios", icono: MessageCircle },
+  { clave: "compartidos", etiqueta: "Compartidos", icono: Share2 },
+  { clave: "guardados", etiqueta: "Guardados", icono: Bookmark },
+];
 
 const TODAS = "__todas__";
 const SIN_LINEA = "Sin línea";
@@ -344,15 +369,21 @@ export function PiezasConsolidada({
                   >
                     Eng.
                   </CabeceraOrdenable>
-                  <CabeceraOrdenable
-                    activa={estado.clave === "clics_enlace"}
-                    direccion={estado.direccion}
-                    onClick={() => alClicar("clics_enlace")}
-                    alinear="right"
-                    className="hidden text-right sm:table-cell"
-                  >
-                    Clics
-                  </CabeceraOrdenable>
+                  {COLS_INTERACCION.map(({ clave, etiqueta, icono: Icono }) => (
+                    <CabeceraOrdenable
+                      key={clave}
+                      activa={estado.clave === clave}
+                      direccion={estado.direccion}
+                      onClick={() => alClicar(clave)}
+                      alinear="right"
+                      className="hidden text-right sm:table-cell"
+                    >
+                      <span className="inline-flex items-center" title={etiqueta}>
+                        <Icono className="h-3.5 w-3.5" aria-hidden="true" />
+                        <span className="sr-only">{etiqueta}</span>
+                      </span>
+                    </CabeceraOrdenable>
+                  ))}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -455,9 +486,17 @@ function FilaPieza({
       <TableCell className="text-right tabular-nums">
         {porcentaje(pieza.engagement_pct)}
       </TableCell>
-      <TableCell className="hidden text-right tabular-nums sm:table-cell">
-        {pieza.clics_enlace == null ? "—" : numeroCompacto(pieza.clics_enlace)}
-      </TableCell>
+      {COLS_INTERACCION.map(({ clave }) => {
+        const valor = pieza[clave] as number | null;
+        return (
+          <TableCell
+            key={clave}
+            className="hidden text-right tabular-nums sm:table-cell"
+          >
+            {valor == null ? "—" : numeroCompacto(valor)}
+          </TableCell>
+        );
+      })}
     </TableRow>
   );
 }
