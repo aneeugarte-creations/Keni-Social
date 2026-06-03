@@ -314,14 +314,6 @@ def borrar_franja(franja_id: str) -> bool:
 
 
 # --------------------------------------------------------------------------- #
-# Plantillas de copy PLANO: el concepto se FUSIONÓ en el catálogo unificado          #
-# `plantilla_contenido` (modo 'plano'). Las funciones planas YAML (`ficheros.*`) ya     #
-# no tienen fachada aquí; solo las usa `migrar_contenido.migrar_plantillas_plano` para  #
-# la migración one-shot. Ver `crear_plantilla_contenido` (modo) más abajo.              #
-# --------------------------------------------------------------------------- #
-
-
-# --------------------------------------------------------------------------- #
 # Fuentes RSS + items vistos + salud (OPERACIONAL: Postgres via db.py; ADR 0006) #
 # --------------------------------------------------------------------------- #
 # Ultimo rezago file-backed cerrado: el indice SQLite de rutas absolutas dejaba la pagina de
@@ -1183,71 +1175,6 @@ def actualizar_contenido_plataforma(
 
 def borrar_contenido_plataforma(plataforma_id: str) -> bool:
     return db.borrar_contenido_plataforma(plataforma_id)
-
-
-# --------------------------------------------------------------------------- #
-# Plantillas de CONTENIDO por tipo de nota (OPERACIONAL: Postgres via db.py)    #
-# --------------------------------------------------------------------------- #
-# Distintas de `plantillas` (copy plano en YAML): modelan un TIPO de nota recurrente con
-# ESTRUCTURA `{{variables}}` + lista declarada de variables. Activos reutilizables (no
-# editorial por marca en fichero): viven en Postgres. La fachada delega 1:1 en `db.py`.
-
-
-def crear_plantilla_contenido(
-    *,
-    nombre: str,
-    modo: str = "estructura",
-    tipo_nota: str = "",
-    descripcion: str = "",
-    marca: str = "",
-    red: str = "",
-    contenido: str = "",
-    estructura: str = "",
-    variables: str = "[]",
-    activo: bool = True,
-    autor: dict[str, str] | None = None,
-    id: str = "",
-    creado: str = "",
-    actualizado: str = "",
-) -> dict[str, Any]:
-    return db.crear_plantilla_contenido(
-        nombre=nombre,
-        modo=modo,
-        tipo_nota=tipo_nota,
-        descripcion=descripcion,
-        marca=marca,
-        red=red,
-        contenido=contenido,
-        estructura=estructura,
-        variables=variables,
-        activo=activo,
-        autor=autor,
-        id=id,
-        creado=creado,
-        actualizado=actualizado,
-    )
-
-
-def listar_plantillas_contenido(
-    *, marca: str | None = None, tipo_nota: str | None = None, solo_activas: bool = False
-) -> list[dict[str, Any]]:
-    return db.listar_plantillas_contenido(
-        marca=marca, tipo_nota=tipo_nota, solo_activas=solo_activas
-    )
-
-
-def obtener_plantilla_contenido(plantilla_id: str) -> dict[str, Any] | None:
-    return db.obtener_plantilla_contenido(plantilla_id)
-
-
-def actualizar_plantilla_contenido(
-    plantilla_id: str, campos: dict[str, Any]
-) -> dict[str, Any] | None:
-    return db.actualizar_plantilla_contenido(plantilla_id, campos)
-
-
-def borrar_plantilla_contenido(plantilla_id: str) -> bool:
-    return db.borrar_plantilla_contenido(plantilla_id)
 
 
 # --------------------------------------------------------------------------- #

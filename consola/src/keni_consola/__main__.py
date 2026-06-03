@@ -109,18 +109,6 @@ def main() -> int:
     except Exception:  # noqa: BLE001 -- la siembra nunca debe impedir el arranque
         pass
 
-    # Migracion Fase 4 (best-effort, idempotente, NO destructiva): pasa las plantillas de
-    # contenido que aun viven en Postgres a ficheros versionados bajo la Biblioteca. No borra
-    # filas de la BD (red de seguridad). Vive aqui (servidor real), no en `crear_app`.
-    try:
-        from . import plantillas_doc
-
-        m = plantillas_doc.importar_de_postgres()
-        if m:
-            print(f"Plantillas: {m} plantilla(s) migradas de Postgres a ficheros.")
-    except Exception:  # noqa: BLE001 -- la migracion nunca debe impedir el arranque
-        pass
-
     # Captura programada del apartado Comercial: un hilo demonio que va tomando
     # snapshots de las piezas activas (interacciones/alcance) aunque nadie mire.
     # Vive aqui (servidor real) y NO en `crear_app`, para no arrancarlo en los tests.

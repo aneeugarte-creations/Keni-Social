@@ -50,7 +50,6 @@ modulos_backend = [
   "fuentes",
   "algoritmos",
   "parrilla",
-  "plantillas_contenido",
   "pipelines",
 ]
 
@@ -61,8 +60,6 @@ rutas_frontend = [
   "/contenido/editor",
   "/contenido/biblioteca",
   "/contenido/biblioteca/documentos",
-  # "Activos" se fusionó como pestaña "Plantillas" de la Biblioteca.
-  "/contenido/biblioteca/plantillas",
   "/contenido/biblioteca/estrategia",
   # Algoritmos (inteligencia de plataforma) pasó de Investigación a la Biblioteca.
   "/contenido/biblioteca/algoritmos",
@@ -101,7 +98,7 @@ orden = 10
 ruta = "/contenido/biblioteca"
 etiqueta = "Biblioteca"
 icono = "Library"
-descripcion = "Prompts y línea editorial, plantillas de contenido, estrategia de marcas e inteligencia de plataforma. Pestañas Documentos / Plantillas / Estrategia / Algoritmos."
+descripcion = "Prompts y línea editorial, estrategia de marcas e inteligencia de plataforma. Pestañas Biblioteca / Estrategia / Algoritmos."
 grupo = "contenido"
 grupo_orden = 20
 orden = 20

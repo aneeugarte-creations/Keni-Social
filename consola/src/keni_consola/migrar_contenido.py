@@ -212,36 +212,11 @@ def migrar_publicaciones() -> int:
     return creadas
 
 
-def migrar_plantillas_plano() -> int:
-    """Migra las plantillas de copy PLANO (YAML legado) al catálogo unificado en Postgres.
-
-    El catálogo unificado vive en `plantilla_contenido` (`repos.crear_plantilla_contenido`):
-    las plantillas planas entran con `modo='plano'` y su texto en `contenido`. Idempotente:
-    se preserva el id YAML y, si ya existe en Postgres, se salta. La fuente legada (YAML) NO
-    se destruye; las nuevas planas ya nacen en Postgres por la API unificada.
-    """
-    creadas = 0
-    for p in ficheros.listar_plantillas():
-        if repos.obtener_plantilla_contenido(p["id"]) is not None:
-            continue
-        repos.crear_plantilla_contenido(
-            nombre=p.get("nombre", "") or "",
-            modo="plano",
-            marca=p.get("marca", "") or "",
-            red=p.get("red", "") or "",
-            contenido=p.get("contenido", "") or "",
-            id=p["id"],
-        )
-        creadas += 1
-    return creadas
-
-
 def migrar() -> dict[str, int]:
     """Ejecuta toda la migración (idempotente). Devuelve recuentos por origen."""
     resultado = {
         "piezas": migrar_piezas(),
         "publicaciones": migrar_publicaciones(),
-        "plantillas_plano": migrar_plantillas_plano(),
     }
     _logger.info("Migración a contenido: %s", resultado)
     return resultado

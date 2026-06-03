@@ -58,7 +58,6 @@ _TABLAS = (
     "contenido",
     # Catálogos/activos operacionales independientes (olas organizacion/activos/automatizacion).
     "etiquetas",
-    "plantilla_contenido",
     "biblioteca_media",
     "marca_activos",
     "plantillas_diseno",

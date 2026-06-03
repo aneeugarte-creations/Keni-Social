@@ -24,7 +24,6 @@ import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
-import { SelectorPlantilla } from "@/components/plantillas/SelectorPlantilla";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -471,11 +470,6 @@ export function DialogoEditar({
               />
               {publicacion && (
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <SelectorPlantilla
-                    marca={publicacion.marca}
-                    red={publicacion.red}
-                    onUsar={setContenido}
-                  />
                   <Button
                     type="button"
                     variant="outline"

@@ -136,14 +136,12 @@ export const router = createBrowserRouter([
           { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
           // Editor profesional por capas (Konva): diseña/edita el Documento de la pieza.
           { path: "editor", element: <EditorPro /> },
-          // Hub Biblioteca: UNA sola Biblioteca (prompts + línea editorial + plantillas) con
-          // filtros; "plantillas" se fusionó en "documentos" (redirige por compatibilidad).
+          // Hub Biblioteca: UNA sola Biblioteca (prompts + línea editorial) con filtros.
           {
             path: "biblioteca",
             children: [
               { index: true, element: <Navigate to="documentos" replace /> },
               { path: "documentos", element: <Biblioteca /> },
-              { path: "plantillas", element: <Navigate to="/contenido/biblioteca/documentos" replace /> },
               { path: "estrategia", element: <EstrategiaMarcas /> },
               // Algoritmos: inteligencia de plataforma (alimenta las fichas editoriales).
               { path: "algoritmos", element: <Algoritmos /> },

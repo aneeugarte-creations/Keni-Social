@@ -127,12 +127,6 @@ import type {
   RespuestaPlantillaMarca,
   PlantillaMarca,
   RespuestaMensaje,
-  CuerpoCrearPlantillaContenido,
-  CuerpoActualizarPlantillaContenido,
-  CuerpoAplicarPlantilla,
-  RespuestaPlantillasContenido,
-  RespuestaPlantillaContenido,
-  RespuestaAplicarPlantilla,
   RespuestaRadar,
   RespuestaParrilla,
   RespuestaProgramarMetricool,
@@ -1093,55 +1087,6 @@ export const api = {
     peticion<RespuestaMensaje>(`/hashtags/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
   sugerirHashtags: (cuerpo: CuerpoSugerirHashtags) =>
     peticion<RespuestaGeneracion>("/hashtags/sugerir", { metodo: "POST", json: cuerpo }),
-
-  // --- Plantillas: catálogo unificado (planas + de estructura) ---
-  plantillasContenido: (
-    filtros?: { marca?: string; tipo?: string; soloActivas?: boolean },
-    signal?: AbortSignal,
-  ) =>
-    peticion<RespuestaPlantillasContenido>(
-      `/plantillas-contenido${query({
-        marca: filtros?.marca || undefined,
-        tipo: filtros?.tipo || undefined,
-        solo_activas: filtros?.soloActivas ? "1" : undefined,
-      })}`,
-      { signal },
-    ),
-  crearPlantillaContenido: (cuerpo: CuerpoCrearPlantillaContenido) =>
-    peticion<RespuestaPlantillaContenido>("/plantillas-contenido", {
-      metodo: "POST",
-      json: cuerpo,
-    }),
-  actualizarPlantillaContenido: (id: string, cuerpo: CuerpoActualizarPlantillaContenido) =>
-    peticion<RespuestaPlantillaContenido>(`/plantillas-contenido/${encodeURIComponent(id)}`, {
-      metodo: "PUT",
-      json: cuerpo,
-    }),
-  eliminarPlantillaContenido: (id: string) =>
-    peticion<RespuestaMensaje>(`/plantillas-contenido/${encodeURIComponent(id)}`, {
-      metodo: "DELETE",
-    }),
-  aplicarPlantillaContenido: (id: string, cuerpo: CuerpoAplicarPlantilla) =>
-    peticion<RespuestaAplicarPlantilla>(
-      `/plantillas-contenido/${encodeURIComponent(id)}/aplicar`,
-      { metodo: "POST", json: cuerpo },
-    ),
-  // --- Versionado git de plantillas (paridad con los documentos) ---
-  historialPlantilla: (id: string, signal?: AbortSignal) =>
-    peticion<RespuestaHistorialBiblioteca>(
-      `/plantillas-contenido/${encodeURIComponent(id)}/historial`,
-      { signal },
-    ),
-  versionPlantilla: (id: string, sha: string, signal?: AbortSignal) =>
-    peticion<RespuestaPlantillaContenido>(
-      `/plantillas-contenido/${encodeURIComponent(id)}/version/${sha}`,
-      { signal },
-    ),
-  revertirPlantilla: (id: string, sha: string) =>
-    peticion<RespuestaPlantillaContenido>(
-      `/plantillas-contenido/${encodeURIComponent(id)}/revertir/${sha}`,
-      { metodo: "POST" },
-    ),
 
   // --- RSS (fuentes + items) ---
   fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),
