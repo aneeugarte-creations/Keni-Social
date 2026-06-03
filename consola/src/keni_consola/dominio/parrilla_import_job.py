@@ -76,9 +76,8 @@ def _endurecer(*, lee_fichero: bool) -> dict[str, Any]:
     }
 
 
-# Extensiones que TRANSCRIBIMOS a texto en el server (claude no pelea con el binario): hojas de
-# cálculo y texto plano. Lo demas (PDF, imagen, docx) lo lee claude como FICHERO (nativo/visión).
-_EXTS_TABLA: tuple[str, ...] = (".xlsx", ".xlsm", ".csv", ".tsv")
+# Formatos que TRANSCRIBIMOS a texto en el server (claude no pelea con el binario): Excel (todas
+# las hojas), CSV/TSV y texto plano. Lo demás (PDF, imagen, docx) lo lee claude como FICHERO.
 _EXTS_TEXTO: tuple[str, ...] = (".txt", ".md", ".markdown", ".text", ".log")
 
 
@@ -92,16 +91,47 @@ def _tabla_a_texto(filas: list[list[Any]]) -> str:
     return "\n".join(lineas)
 
 
+def _xlsx_todas_las_hojas(datos: bytes) -> str | None:
+    """Transcribe TODAS las hojas de un .xlsx a texto (una sección por hoja, con cabecera).
+
+    CRÍTICO: un libro de parrilla suele tener MUCHAS hojas (una por sección/tema/semana). El
+    helper de `importador_calendario` solo lee la PRIMERA hoja (`active`), así que claude veía
+    ~1/N del documento. Aquí recorremos `wb.worksheets` enteras para no perder secciones.
+    """
+    import io
+
+    try:
+        import openpyxl
+    except ImportError:
+        return None
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(datos), read_only=True, data_only=True)
+    except Exception:  # noqa: BLE001 -- no es un xlsx legible: que lo intente claude como fichero
+        return None
+    bloques: list[str] = []
+    try:
+        for ws in wb.worksheets:
+            filas = [list(f) for f in ws.iter_rows(values_only=True)]
+            texto = _tabla_a_texto(filas)
+            if texto.strip():
+                bloques.append(f"### HOJA: {ws.title}\n{texto}")
+    finally:
+        wb.close()
+    return "\n\n".join(bloques) or None
+
+
 def _extraer_texto_documento(datos: bytes, nombre: str) -> str | None:
     """Transcribe a TEXTO los formatos que claude no debería leer como binario (Excel/CSV/texto).
 
     Devuelve el texto a EMBEBER en el prompt, o None para formatos que claude lee mejor como
-    fichero (PDF, imagen, Word). PURO salvo por openpyxl (vía `importador_calendario`). Un .xlsx
-    es un ZIP que la tool Read NO interpreta: leerlo así costaba turnos y dinero (el bug del
-    `error_max_budget_usd`); transcrito a TSV, el run es una transformación texto→JSON.
+    fichero (PDF, imagen, Word). PURO salvo por openpyxl. Un .xlsx es un ZIP que la tool Read NO
+    interpreta: leerlo así costaba turnos y dinero (el bug del `error_max_budget_usd`);
+    transcrito a TSV (TODAS las hojas), el run es una transformación texto→JSON.
     """
     n = (nombre or "").lower()
-    if n.endswith(_EXTS_TABLA):
+    if n.endswith((".xlsx", ".xlsm")):
+        return _xlsx_todas_las_hojas(datos)
+    if n.endswith((".csv", ".tsv")):
         try:
             filas = importador_calendario._leer_tabla(datos, nombre=nombre)
         except Exception:  # noqa: BLE001 -- si no se puede parsear, que lo lea claude como fichero
@@ -227,7 +257,9 @@ def componer_prompt(
         fuente = (
             "El documento ya está TRANSCRITO a texto más abajo (es una hoja de cálculo/CSV o "
             "texto plano). Trabaja EXCLUSIVAMENTE con ese texto; NO abras ni leas ningún "
-            "fichero ni uses herramientas."
+            "fichero ni uses herramientas. IMPORTANTE: el documento puede tener VARIAS HOJAS/"
+            "secciones, cada una marcada con una línea «### HOJA: <nombre>»; recórrelas TODAS y "
+            "extrae las operaciones de CADA hoja (no te quedes solo en la primera)."
         )
         regla_fuente = "- No uses herramientas: todo lo que necesitas está en el texto de abajo."
         cola_fuente = f"\n\nDOCUMENTO (transcripción):\n```\n{texto_documento}\n```"
