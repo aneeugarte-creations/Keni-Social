@@ -21,6 +21,7 @@ import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
+import { ListaPiezas } from "./metricas/ListaPiezas";
 import { MejoresHorarios } from "./metricas/MejoresHorarios";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
@@ -231,6 +232,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
               (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
           <PiezasRendimiento opciones={opciones} />
+          {/* Lista COMPLETA de piezas del periodo (todas, no solo top/peores): buscador
+              + orden + detalle por pieza con su curva histórica y velocidad. Sigue la
+              marca/rango global como el resto de las secciones de detalle. */}
+          <ListaPiezas marcaActual={marca} rangoActual={rango} />
 
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>

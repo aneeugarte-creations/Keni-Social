@@ -55,6 +55,11 @@ TIPO_DESGLOSE = "desglose"
 TIPO_CROSSTAB = "crosstab"
 TIPO_HORARIOS = "horarios"
 TIPO_CORRELACION = "correlacion"
+# Listado COMPLETO de piezas del periodo (todas, no solo top/peores): mismo patrón de
+# lazy fill + persistencia; coste 0 de API extra (se construye sobre lo que ya descarga
+# el dashboard). Es el listado de `servicio.construir_listado_piezas`, no las publicaciones
+# de la Consola (eso es `piezas-rendimiento`).
+TIPO_PIEZAS_LISTADO = "piezas_listado"
 
 # Estado del refresco en curso (en memoria; un solo proceso del back). Lo leen el
 # endpoint /estado y lo escriben el daemon y el disparador manual.
@@ -128,6 +133,24 @@ def _calcular(tipo: str, rango: str, marca: str | None) -> dict:
         return servicio.construir_horarios(rango, marca)
     if tipo == TIPO_CORRELACION:
         return servicio.construir_correlacion_seguidores(rango, marca)
+    if tipo == TIPO_PIEZAS_LISTADO:
+        # `construir_listado_piezas` devuelve una LISTA; la cache guarda dicts (lee
+        # `.get("fuente")`). La envolvemos en un dict con la fuente y el periodo para
+        # cumplir el contrato de la cache sin perder ningún campo de las piezas.
+        from datetime import date
+
+        piezas = servicio.construir_listado_piezas(rango, marca)
+        desde, hasta, _ = servicio.resolver_rango(rango)
+
+        def _iso(d: object) -> str:
+            return d.isoformat() if isinstance(d, date) else str(d)
+
+        return {
+            "fuente": servicio.nombre_fuente(),
+            "periodo": {"desde": _iso(desde), "hasta": _iso(hasta)},
+            "piezas": piezas,
+            "total": len(piezas),
+        }
     raise ValueError(f"Tipo de cache desconocido: {tipo!r}.")
 
 
@@ -212,6 +235,11 @@ def correlacion(rango: str, marca: str | None) -> tuple[dict, str]:
     return _leer_o_calcular(TIPO_CORRELACION, rango, marca)
 
 
+def piezas_listado(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Listado COMPLETO de piezas del periodo desde cache (lazy fill)."""
+    return _leer_o_calcular(TIPO_PIEZAS_LISTADO, rango, marca)
+
+
 # --------------------------------------------------------------------------- #
 # Lectura ASÍNCRONA (lazy fill sin bloquear el event loop)                     #
 # --------------------------------------------------------------------------- #
@@ -279,6 +307,11 @@ async def horarios_async(rango: str, marca: str | None) -> tuple[dict, str]:
 async def correlacion_async(rango: str, marca: str | None) -> tuple[dict, str]:
     """Correlación seguidores↔piezas desde cache (lazy fill) sin bloquear el event loop."""
     return await _leer_o_calcular_async(TIPO_CORRELACION, rango, marca)
+
+
+async def piezas_listado_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Listado COMPLETO de piezas del periodo desde cache (lazy fill) sin bloquear el loop."""
+    return await _leer_o_calcular_async(TIPO_PIEZAS_LISTADO, rango, marca)
 
 
 # --------------------------------------------------------------------------- #

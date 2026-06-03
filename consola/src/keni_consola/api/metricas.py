@@ -599,6 +599,158 @@ async def piezas_rendimiento(request: Request) -> Response:
     )
 
 
+async def piezas_listado(request: Request) -> Response:
+    """GET /api/metricas/piezas-listado: listado COMPLETO de piezas del periodo.
+
+    A diferencia de `/api/metricas/piezas` (estadísticas + top/peores) y de
+    `/api/metricas/piezas-rendimiento` (las publicaciones de la Consola con su
+    rendimiento real), esto devuelve TODAS las piezas de la(s) cuenta(s) del periodo
+    tal como las emite la fuente única (`servicio.construir_listado_piezas`): cada una
+    con su id de Metricool, granulares y url. Es el insumo de la tabla "Todas las piezas
+    del periodo" (con buscador + orden + detalle por pieza). Servido desde cache (lazy fill).
+
+    `?marca=` (en forma `id_metricas`) acota a una marca; sin marca, agrega todas.
+    """
+    rango = _validar_rango(request.query_params.get("rango", "mes"))
+    marca = request.query_params.get("marca") or None
+    try:
+        payload, generado_en = await metricas_cache.piezas_listado_async(rango, marca)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception(
+            "Fallo al generar el listado de piezas (rango=%s, marca=%s).", rango, marca or "todas"
+        )
+        return JSONResponse(
+            {"error": "No se pudo generar el listado de piezas."}, status_code=500
+        )
+    return JSONResponse(
+        {
+            "rango": rango,
+            "etiqueta_rango": _etiqueta_rango(rango),
+            "marca": marca or "",
+            "periodo": payload.get("periodo") or {"desde": "", "hasta": ""},
+            "fuente": payload.get("fuente") or "muestra",
+            "piezas": payload.get("piezas", []),
+            "total": payload.get("total", 0),
+            "generado_en": generado_en,
+        }
+    )
+
+
+def _velocidad_pieza(serie: list[dict]) -> dict | None:
+    """Calcula la VELOCIDAD de una pieza a partir de sus snapshots (None si <2 puntos).
+
+    Honesto, sin inventar datos. Sobre los snapshots ordenados por `ts` (la serie ya
+    viene ascendente de `repos.serie_pieza`):
+
+      - `pct_en_primeras_24h`: qué fracción de las visualizaciones FINALES había
+        acumulado la pieza en su 1er snapshot dentro de las 24 h del primero
+        (vis_24h / vis_final * 100). Mide si la pieza "explota" pronto o crece lento.
+        None si vis_final es 0 (sin baseline) o no hay un snapshot dentro de 24 h.
+      - `delta_medio_por_dia`: visualizaciones ganadas por día entre el primer y el
+        último snapshot ((vis_final - vis_inicial) / días transcurridos). None si el
+        lapso es < ~1 min (no se divide por casi-cero).
+      - `n_snapshots`: cuántos puntos respaldan el cálculo (transparencia).
+
+    Devuelve None si hay menos de 2 snapshots (no hay velocidad medible).
+    """
+    if len(serie) < 2:
+        return None
+
+    def _ts(p: dict):
+        from datetime import datetime
+
+        try:
+            return datetime.fromisoformat(str(p.get("ts", "")))
+        except ValueError:
+            return None
+
+    primero = serie[0]
+    ultimo = serie[-1]
+    t0 = _ts(primero)
+    t1 = _ts(ultimo)
+    vis_inicial = float(primero.get("visualizaciones", 0) or 0)
+    vis_final = float(ultimo.get("visualizaciones", 0) or 0)
+
+    # pct en las primeras 24 h: último snapshot cuyo ts está dentro de 24 h del primero.
+    from datetime import timedelta
+
+    pct_24h: float | None = None
+    if t0 is not None and vis_final > 0:
+        vis_24h: float | None = None
+        for p in serie:
+            tp = _ts(p)
+            if tp is not None and tp - t0 <= timedelta(hours=24):
+                vis_24h = float(p.get("visualizaciones", 0) or 0)
+        if vis_24h is not None:
+            pct_24h = round(vis_24h / vis_final * 100, 1)
+
+    # delta medio por día entre el primer y el último snapshot.
+    delta_dia: float | None = None
+    if t0 is not None and t1 is not None:
+        dias = (t1 - t0).total_seconds() / 86400.0
+        if dias >= (60 / 86400.0):  # al menos ~1 min de lapso real
+            delta_dia = round((vis_final - vis_inicial) / dias, 1)
+
+    return {
+        "pct_en_primeras_24h": pct_24h,
+        "delta_medio_por_dia": delta_dia,
+        "n_snapshots": len(serie),
+    }
+
+
+def _punto_historico(snap: dict) -> dict:
+    """Forma JSON de un punto del histórico de una pieza (ts + métricas disponibles)."""
+    return {
+        "ts": snap.get("ts", ""),
+        "visualizaciones": snap.get("visualizaciones", 0),
+        "interacciones": snap.get("interacciones", 0),
+        "engagement_pct": snap.get("engagement_pct", 0.0),
+        "alcance": snap.get("alcance", 0),
+        "likes": snap.get("likes", 0),
+        "comentarios": snap.get("comentarios", 0),
+        "compartidos": snap.get("compartidos", 0),
+        "guardados": snap.get("guardados", 0),
+        "video_views": snap.get("video_views", 0),
+        "tiempo_medio_vis_s": snap.get("tiempo_medio_vis_s", 0),
+        "clics_enlace": snap.get("clics_enlace", 0),
+    }
+
+
+async def pieza_historico(request: Request) -> Response:
+    """GET /api/metricas/pieza-historico?id=<pieza_id>: serie histórica + velocidad.
+
+    Devuelve los snapshots acumulados de UNA pieza (ADR 0007, tabla
+    `metricas_pieza_snapshots`), que el daemon de refresco alimenta SOLO para las piezas
+    SEGUIDAS por la Consola (con `id_post_metricool`). Para la mayoría de piezas de
+    Metricool aún no habrá histórico: `puntos` vacío => la UI lo dice honestamente
+    ("sin histórico todavía"), nunca inventa una curva.
+
+    `velocidad` resume cómo crece la pieza (pct en las primeras 24 h, delta medio por
+    día); None si hay menos de 2 snapshots (sin velocidad medible).
+    """
+    pieza_id = request.query_params.get("id") or ""
+    if not pieza_id:
+        return JSONResponse({"error": "Falta el parámetro 'id'."}, status_code=400)
+    try:
+        serie = await asyncio.get_running_loop().run_in_executor(
+            None, repos.serie_pieza, pieza_id
+        )
+    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
+        _log.exception("Fallo al leer el histórico de la pieza (id=%s).", pieza_id)
+        return JSONResponse(
+            {"error": "No se pudo leer el histórico de la pieza."}, status_code=500
+        )
+    return JSONResponse(
+        {
+            "pieza_id": pieza_id,
+            "puntos": [_punto_historico(s) for s in serie],
+            "velocidad": _velocidad_pieza(serie),
+        }
+    )
+
+
 async def piezas_por_etiqueta(request: Request) -> Response:
     """GET /api/metricas/piezas-por-etiqueta: rendimiento del periodo por SERIE/TIPO.
 
@@ -892,6 +1044,8 @@ RUTAS = [
     Route("/api/metricas/piezas", piezas, methods=["GET"]),
     Route("/api/metricas/piezas-export", piezas_export, methods=["GET"]),
     Route("/api/metricas/piezas-rendimiento", piezas_rendimiento, methods=["GET"]),
+    Route("/api/metricas/piezas-listado", piezas_listado, methods=["GET"]),
+    Route("/api/metricas/pieza-historico", pieza_historico, methods=["GET"]),
     Route("/api/metricas/piezas-por-etiqueta", piezas_por_etiqueta, methods=["GET"]),
     Route("/api/metricas/lineas", lineas, methods=["GET"]),
     Route("/api/metricas/tendencia", tendencia, methods=["GET"]),

@@ -437,6 +437,80 @@ class PiezasRendimiento(TypedDict):
     piezas: list[PiezaRendimiento]
 
 
+class PiezasListado(TypedDict):
+    """Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.
+
+    TODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única
+    (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaMetrica` trae
+    su `id` (de Metricool), granulares y url. Es el insumo de la tabla "Todas las piezas
+    del periodo" (buscador + orden + detalle por pieza). Coste 0 de API: reúsa lo que el
+    dashboard ya descarga.
+    """
+
+    rango: str
+    etiqueta_rango: str
+    # marca: id_metricas con el que se acotó, o "".
+    marca: str
+    periodo: PeriodoMetricas
+    fuente: str
+    piezas: list[PiezaMetrica]
+    total: int
+    generado_en: str
+
+
+class PuntoHistorico(TypedDict):
+    """Un snapshot acumulado de UNA pieza en el histórico (ADR 0007).
+
+    El daemon de refresco escribe un punto por pieza seguida cada N horas. Todas las
+    métricas son los valores ACUMULADOS en ese instante (`ts`, ISO). Las granulares
+    valen 0 cuando la fuente no las trajo en ese snapshot (no se distingue de un 0 real
+    en la serie persistida; la honestidad está a nivel de pieza: si no se sigue, no hay
+    puntos).
+    """
+
+    # ts: instante del snapshot (ISO).
+    ts: str
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+    alcance: int
+    likes: int
+    comentarios: int
+    compartidos: int
+    guardados: int
+    video_views: int
+    tiempo_medio_vis_s: int
+    clics_enlace: int
+
+
+class VelocidadPieza(TypedDict):
+    """Resumen de cómo CRECE una pieza, derivado de sus snapshots (honesto, sin inventar).
+
+    `null` (la respuesta entera) cuando hay menos de 2 snapshots: sin dos puntos no hay
+    velocidad medible. Dentro, cada campo puede ser `null` si su cálculo no aplica
+    (p. ej. `pct_en_primeras_24h` cuando las visualizaciones finales son 0).
+    """
+
+    # pct_en_primeras_24h: % de las visualizaciones FINALES ya acumuladas en las 1as 24 h.
+    pct_en_primeras_24h: float | None
+    # delta_medio_por_dia: visualizaciones ganadas por día entre el 1er y el último snapshot.
+    delta_medio_por_dia: float | None
+    n_snapshots: int
+
+
+class HistoricoPieza(TypedDict):
+    """Respuesta de `GET /api/metricas/pieza-historico`: serie histórica + velocidad de una pieza.
+
+    `puntos` vacío = la pieza aún NO se está siguiendo (no hay snapshots): la UI lo dice
+    honestamente ("sin histórico todavía"), nunca dibuja una curva inventada. `velocidad`
+    es `null` con menos de 2 puntos.
+    """
+
+    pieza_id: str
+    puntos: list[PuntoHistorico]
+    velocidad: VelocidadPieza | None
+
+
 # --------------------------------------------------------------------------- #
 # Analíticas R2: seguidores, desglose, crosstab, correlación — api/metricas.py #
 # --------------------------------------------------------------------------- #
@@ -1038,6 +1112,11 @@ MODELOS = [
     # Drill-down marca -> pieza (rendimiento por pieza publicada).
     PiezaRendimiento,
     PiezasRendimiento,
+    # Listado completo de piezas del periodo + histórico por pieza + velocidad.
+    PiezasListado,
+    PuntoHistorico,
+    VelocidadPieza,
+    HistoricoPieza,
     # Analíticas R2: seguidores, desglose, crosstab, correlación.
     PuntoSeguidores,
     SerieSeguidores,

@@ -342,6 +342,72 @@ export interface PiezasRendimiento {
   piezas: PiezaRendimiento[];
 }
 /**
+ * Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.
+ *
+ * TODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única
+ * (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaMetrica` trae
+ * su `id` (de Metricool), granulares y url. Es el insumo de la tabla "Todas las piezas
+ * del periodo" (buscador + orden + detalle por pieza). Coste 0 de API: reúsa lo que el
+ * dashboard ya descarga.
+ */
+export interface PiezasListado {
+  rango: string;
+  etiqueta_rango: string;
+  marca: string;
+  periodo: PeriodoMetricas;
+  fuente: string;
+  piezas: PiezaMetrica[];
+  total: number;
+  generado_en: string;
+}
+/**
+ * Un snapshot acumulado de UNA pieza en el histórico (ADR 0007).
+ *
+ * El daemon de refresco escribe un punto por pieza seguida cada N horas. Todas las
+ * métricas son los valores ACUMULADOS en ese instante (`ts`, ISO). Las granulares
+ * valen 0 cuando la fuente no las trajo en ese snapshot (no se distingue de un 0 real
+ * en la serie persistida; la honestidad está a nivel de pieza: si no se sigue, no hay
+ * puntos).
+ */
+export interface PuntoHistorico {
+  ts: string;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  alcance: number;
+  likes: number;
+  comentarios: number;
+  compartidos: number;
+  guardados: number;
+  video_views: number;
+  tiempo_medio_vis_s: number;
+  clics_enlace: number;
+}
+/**
+ * Resumen de cómo CRECE una pieza, derivado de sus snapshots (honesto, sin inventar).
+ *
+ * `null` (la respuesta entera) cuando hay menos de 2 snapshots: sin dos puntos no hay
+ * velocidad medible. Dentro, cada campo puede ser `null` si su cálculo no aplica
+ * (p. ej. `pct_en_primeras_24h` cuando las visualizaciones finales son 0).
+ */
+export interface VelocidadPieza {
+  pct_en_primeras_24h: number | null;
+  delta_medio_por_dia: number | null;
+  n_snapshots: number;
+}
+/**
+ * Respuesta de `GET /api/metricas/pieza-historico`: serie histórica + velocidad de una pieza.
+ *
+ * `puntos` vacío = la pieza aún NO se está siguiendo (no hay snapshots): la UI lo dice
+ * honestamente ("sin histórico todavía"), nunca dibuja una curva inventada. `velocidad`
+ * es `null` con menos de 2 puntos.
+ */
+export interface HistoricoPieza {
+  pieza_id: string;
+  puntos: PuntoHistorico[];
+  velocidad: VelocidadPieza | null;
+}
+/**
  * Un día de la serie de seguidores: total + desglose por red.
  */
 export interface PuntoSeguidores {

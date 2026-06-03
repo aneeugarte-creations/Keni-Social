@@ -287,6 +287,10 @@ def construir_listado_piezas(rango: str = "mes", marca: str | None = None) -> li
             "tiempo_medio_vis_s": p.tiempo_medio_vis_s,
             "clics_enlace": p.clics_enlace,
             "formato": p.formato,
+            # cuenta (id_metricas) y rendimiento_relativo (vs la mediana del grupo):
+            # None cuando la fuente no los aporta. Mismos campos que `Pieza`/`PiezaMetrica`.
+            "cuenta": p.cuenta,
+            "rendimiento_relativo": p.rendimiento_relativo,
         }
         for p in piezas
     ]

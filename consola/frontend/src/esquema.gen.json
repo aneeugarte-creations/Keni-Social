@@ -1255,6 +1255,173 @@
         "piezas"
       ]
     },
+    "PiezasListado": {
+      "type": "object",
+      "title": "PiezasListado",
+      "properties": {
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "piezas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PiezaMetrica"
+          }
+        },
+        "total": {
+          "type": "integer"
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.\n\nTODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única\n(`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaMetrica` trae\nsu `id` (de Metricool), granulares y url. Es el insumo de la tabla \"Todas las piezas\ndel periodo\" (buscador + orden + detalle por pieza). Coste 0 de API: reúsa lo que el\ndashboard ya descarga.",
+      "required": [
+        "rango",
+        "etiqueta_rango",
+        "marca",
+        "periodo",
+        "fuente",
+        "piezas",
+        "total",
+        "generado_en"
+      ]
+    },
+    "PuntoHistorico": {
+      "type": "object",
+      "title": "PuntoHistorico",
+      "properties": {
+        "ts": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "alcance": {
+          "type": "integer"
+        },
+        "likes": {
+          "type": "integer"
+        },
+        "comentarios": {
+          "type": "integer"
+        },
+        "compartidos": {
+          "type": "integer"
+        },
+        "guardados": {
+          "type": "integer"
+        },
+        "video_views": {
+          "type": "integer"
+        },
+        "tiempo_medio_vis_s": {
+          "type": "integer"
+        },
+        "clics_enlace": {
+          "type": "integer"
+        }
+      },
+      "description": "Un snapshot acumulado de UNA pieza en el histórico (ADR 0007).\n\nEl daemon de refresco escribe un punto por pieza seguida cada N horas. Todas las\nmétricas son los valores ACUMULADOS en ese instante (`ts`, ISO). Las granulares\nvalen 0 cuando la fuente no las trajo en ese snapshot (no se distingue de un 0 real\nen la serie persistida; la honestidad está a nivel de pieza: si no se sigue, no hay\npuntos).",
+      "required": [
+        "ts",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct",
+        "alcance",
+        "likes",
+        "comentarios",
+        "compartidos",
+        "guardados",
+        "video_views",
+        "tiempo_medio_vis_s",
+        "clics_enlace"
+      ]
+    },
+    "VelocidadPieza": {
+      "type": "object",
+      "title": "VelocidadPieza",
+      "properties": {
+        "pct_en_primeras_24h": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "delta_medio_por_dia": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "n_snapshots": {
+          "type": "integer"
+        }
+      },
+      "description": "Resumen de cómo CRECE una pieza, derivado de sus snapshots (honesto, sin inventar).\n\n`null` (la respuesta entera) cuando hay menos de 2 snapshots: sin dos puntos no hay\nvelocidad medible. Dentro, cada campo puede ser `null` si su cálculo no aplica\n(p. ej. `pct_en_primeras_24h` cuando las visualizaciones finales son 0).",
+      "required": [
+        "pct_en_primeras_24h",
+        "delta_medio_por_dia",
+        "n_snapshots"
+      ]
+    },
+    "HistoricoPieza": {
+      "type": "object",
+      "title": "HistoricoPieza",
+      "properties": {
+        "pieza_id": {
+          "type": "string"
+        },
+        "puntos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PuntoHistorico"
+          }
+        },
+        "velocidad": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VelocidadPieza"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/pieza-historico`: serie histórica + velocidad de una pieza.\n\n`puntos` vacío = la pieza aún NO se está siguiendo (no hay snapshots): la UI lo dice\nhonestamente (\"sin histórico todavía\"), nunca dibuja una curva inventada. `velocidad`\nes `null` con menos de 2 puntos.",
+      "required": [
+        "pieza_id",
+        "puntos",
+        "velocidad"
+      ]
+    },
     "PuntoSeguidores": {
       "type": "object",
       "title": "PuntoSeguidores",
@@ -2659,6 +2826,18 @@
     },
     {
       "$ref": "#/$defs/PiezasRendimiento"
+    },
+    {
+      "$ref": "#/$defs/PiezasListado"
+    },
+    {
+      "$ref": "#/$defs/PuntoHistorico"
+    },
+    {
+      "$ref": "#/$defs/VelocidadPieza"
+    },
+    {
+      "$ref": "#/$defs/HistoricoPieza"
     },
     {
       "$ref": "#/$defs/PuntoSeguidores"

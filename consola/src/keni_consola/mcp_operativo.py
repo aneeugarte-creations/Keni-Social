@@ -574,3 +574,15 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         if cli is None:
             return {"error": _MSG_NO_INIT}
         return await cli.get("/api/metricas/correlacion", rango=rango, marca=marca)
+
+    @mcp.tool()
+    async def keni_metricas_pieza_historico(id: str) -> dict:
+        """Histórico de UNA pieza por su id (de Metricool): la serie de snapshots
+        acumulados (visualizaciones, interacciones, engagement, granulares) y un resumen
+        de velocidad (% en las primeras 24 h, delta medio por día). `puntos` vacío = la
+        pieza aún no se está siguiendo (sin histórico todavía); `velocidad` nula con menos
+        de 2 snapshots."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/pieza-historico", id=id)

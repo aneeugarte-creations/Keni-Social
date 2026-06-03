@@ -25,6 +25,8 @@ import type {
   EstadoMetricas,
   TendenciaDiaria,
   PiezasRendimiento,
+  PiezasListado,
+  HistoricoPieza,
   PiezasPorEtiqueta,
   SerieSeguidores,
   DesgloseInteracciones,
@@ -1595,6 +1597,14 @@ export const api = {
   // enlazables al tablero. Sin rango (es por pieza publicada, no por periodo).
   metricasPiezasRendimiento: (params: { marca?: string }, signal?: AbortSignal) =>
     peticion<PiezasRendimiento>(`/metricas/piezas-rendimiento${query(params)}`, { signal }),
+  // Listado COMPLETO de piezas del periodo (todas, no solo top/peores), tal como las
+  // emite la fuente única; insumo de la tabla "Todas las piezas del periodo".
+  metricasPiezasListado: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<PiezasListado>(`/metricas/piezas-listado${query(params)}`, { signal }),
+  // Histórico por pieza (snapshots acumulados, ADR 0007) + velocidad. `puntos` vacío =
+  // la pieza aún no se sigue (sin histórico todavía). Se carga perezosamente por id.
+  metricasPiezaHistorico: (params: { id: string }, signal?: AbortSignal) =>
+    peticion<HistoricoPieza>(`/metricas/pieza-historico${query(params)}`, { signal }),
   // Rendimiento del periodo agrupado por serie/tipo (Item C): cruza piezas de Metricool
   // con el contenido de la BD para resolver tipo_contenido + etiquetas.
   metricasPiezasPorEtiqueta: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
