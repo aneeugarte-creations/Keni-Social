@@ -58,7 +58,8 @@ export function EditorDocumento({
   onPlantillas?: () => void;
 }) {
   const fuentesExtra = useFuentesMarca(marca);
-  const [tool, setTool] = useState<Herramienta | null>("elementos");
+  // Sin panel abierto al entrar: el lienzo se ve completo (en móvil un panel tapaba la mitad).
+  const [tool, setTool] = useState<Herramienta | null>(null);
   const [ajustes, setAjustes] = useState(false);
   // Capa de imagen a REENCUADRAR (B5) y a REEMPLAZAR (clic en activo de la biblioteca).
   const [reencuadreId, setReencuadreId] = useState<string | null>(null);
@@ -116,7 +117,8 @@ export function EditorDocumento({
         {tool && (
           <>
             <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setTool(null)} />
-            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-16 max-md:top-auto max-md:h-[58vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-r">
+            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-r">
+              <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
                 <span className="text-sm font-semibold">{tituloTool}</span>
                 <button onClick={() => setTool(null)} className="text-muted-foreground hover:text-foreground" title="Cerrar">
@@ -130,7 +132,7 @@ export function EditorDocumento({
 
         {/* COLUMNA CENTRAL: barra contextual + acciones + lienzo. En móvil deja hueco inferior
             para que el rail fijo (h-16) no tape el lienzo. */}
-        <div className="flex min-w-0 flex-1 flex-col max-md:pb-16">
+        <div className="flex min-w-0 flex-1 flex-col max-md:pb-[calc(4rem_+_env(safe-area-inset-bottom))]">
           <div className="flex items-stretch border-b border-border">
             <div className="min-w-0 flex-1">
               <BarraContextual
@@ -174,7 +176,8 @@ export function EditorDocumento({
         {ajustes && (
           <>
             <div className="fixed inset-0 z-20 bg-black/30 md:hidden" onClick={() => setAjustes(false)} />
-            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-16 max-md:top-auto max-md:h-[58vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-l">
+            <aside className="z-30 flex flex-col overflow-hidden border-border bg-background max-md:fixed max-md:inset-x-0 max-md:bottom-[calc(4rem_+_env(safe-area-inset-bottom))] max-md:top-auto max-md:h-[55vh] max-md:rounded-t-xl max-md:border-t max-md:shadow-2xl md:relative md:w-72 md:border-l">
+              <div className="mx-auto mt-1.5 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/30 md:hidden" />
               <div className="flex shrink-0 items-center justify-between border-b border-border px-3 py-2">
                 <span className="text-sm font-semibold">{seleccion ? "Ajustes de la capa" : "Lienzo y fondo"}</span>
                 <button onClick={() => setAjustes(false)} className="text-muted-foreground hover:text-foreground" title="Cerrar">
@@ -188,8 +191,8 @@ export function EditorDocumento({
           </>
         )}
 
-        {/* RAIL móvil (barra inferior fija). */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 grid h-16 grid-cols-5 border-t border-border bg-background md:hidden">
+        {/* RAIL móvil (barra inferior fija, respetando el safe-area del notch inferior). */}
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid h-[calc(4rem_+_env(safe-area-inset-bottom))] grid-cols-5 border-t border-border bg-background pb-[env(safe-area-inset-bottom)] md:hidden">
           {onPlantillas && <RailBtnMovil etiqueta="Plantillas" Icono={LayoutTemplate} onClick={onPlantillas} />}
           {HERRAMIENTAS.map((h) => (
             <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} costo={h.costo} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />

@@ -2,7 +2,6 @@
 // Todos operan sobre el store del documento via contexto.
 
 import {
-  Copy,
   Eye,
   EyeOff,
   GripVertical,
@@ -11,23 +10,20 @@ import {
   Layers as LayersIcon,
   Lock,
   PanelBottom,
-  Redo2,
   Square,
   Trash2,
   Type,
   Ungroup,
   Unlock,
-  Undo2,
 } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
 import { urlMedia } from "@/lib/api";
 
 import { ColorControl } from "./ColorControl";
 
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
-import { CATALOGO_FUENTES, ETIQUETA_BINDING, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaTexto, zTope } from "./documento";
+import { CATALOGO_FUENTES, ETIQUETA_BINDING } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ETIQUETA_TIPO: Record<Capa["tipo"], string> = {
@@ -53,53 +49,6 @@ function nombreCapa(c: Capa): string {
   if (c.nombre) return c.nombre;
   if (c.tipo === "texto") return (c as CapaTexto).texto?.slice(0, 22) || "Texto";
   return ETIQUETA_TIPO[c.tipo];
-}
-
-export function BarraHerramientas({ onExportar }: { onExportar?: () => void }) {
-  const store = useStoreEditor();
-  const seleccion = useEditor((s) => s.seleccion);
-  const puedeDeshacer = useEditor((s) => s.pasado.length > 0);
-  const puedeRehacer = useEditor((s) => s.futuro.length > 0);
-
-  const agregar = (capa: Capa) => {
-    const st = store.getState();
-    const z = zTope(st.documento);
-    st.agregar({ ...capa, z } as Capa);
-    st.seleccionar(capa.id);
-  };
-
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-border p-2">
-      <Button variant="outline" size="sm" onClick={() => agregar(nuevaCapaTexto())}>
-        <Type className="mr-1 h-4 w-4" /> Texto
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => agregar(nuevaCapaMarco())}>
-        <Square className="mr-1 h-4 w-4" /> Marco
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => agregar(nuevaCapaImagen(""))}>
-        <ImageIcon className="mr-1 h-4 w-4" /> Imagen
-      </Button>
-      <div className="mx-1 h-5 w-px bg-border" />
-      <Button variant="ghost" size="sm" disabled={!puedeDeshacer} onClick={() => store.getState().deshacer()}>
-        <Undo2 className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="sm" disabled={!puedeRehacer} onClick={() => store.getState().rehacer()}>
-        <Redo2 className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="sm" disabled={!seleccion} onClick={() => seleccion && store.getState().duplicar(seleccion)}>
-        <Copy className="h-4 w-4" />
-      </Button>
-      <Button variant="ghost" size="sm" disabled={!seleccion} onClick={() => seleccion && store.getState().quitar(seleccion)}>
-        <Trash2 className="h-4 w-4" />
-      </Button>
-      <div className="ml-auto" />
-      {onExportar && (
-        <Button size="sm" onClick={onExportar}>
-          Exportar PNG
-        </Button>
-      )}
-    </div>
-  );
 }
 
 // Miniatura/icono de una capa para el panel.

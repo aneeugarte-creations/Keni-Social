@@ -99,22 +99,15 @@ export default function EditorPro() {
     return store;
   };
 
-  const abrirPestana = async (marcaArg?: string, redArg?: string) => {
+  // Lienzo EN BLANCO de verdad: documento vacío (sin las capas de la plantilla de marca, que el
+  // usuario tenía que borrar). Solo restaura un autoguardado previo de ese marca+red si existe.
+  const abrirPestana = (marcaArg?: string, redArg?: string) => {
     const marca = marcaArg || marcaEfectiva;
     const red = redArg || redEfectiva;
     if (!marca) return;
     const store = nuevaPestana(marca, red);
     const guardado = leerAuto(claveAuto({ marca, red }));
-    if (guardado) {
-      store.getState().cargar(guardado);
-      return;
-    }
-    try {
-      const res = await api.editorPlantilla(marca, "feed");
-      store.getState().cargar(res.documento as Documento);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "No se pudo cargar la plantilla.");
-    }
+    if (guardado) store.getState().cargar(guardado);
   };
 
   // Abre una plantilla guardada EN UNA PESTAÑA NUEVA (su red = categoria de la plantilla).
