@@ -1,13 +1,13 @@
 /**
  * Badge de ETAPA IA de una pieza en el Feed de ideación (Flujo D, Fase 4).
  *
- * Pinta el estado de la cadena IA en vivo ("Generando copy / Generando arte / Lista para
- * revisar / Aprobada …"), con un punto que PULSA mientras la IA trabaja la pieza. La etapa
- * la deriva `etapaDePublicacion` (ver `etapa.ts`); cuando el Flujo C exponga la etapa real
- * por pieza, esta tarjeta no cambia: solo cambia la fuente del valor.
+ * Es un LABEL del estado en la tubería ("Generando copy / Generando arte / Lista para
+ * revisar / Aprobada / Programada / Publicada"), con un punto de color por estado. NO usa
+ * spinner en bucle: el feed enseña muchas piezas a la vez y un icono girando en cada una es
+ * ruido; el color del punto (ámbar = la IA trabaja, azul = espera tu OK, verde = lista/ya
+ * salió) basta para leer el estado de un vistazo. La etapa la deriva `etapaDePublicacion`
+ * (ver `etapa.ts`), o el backend (Flujo C) la trae ya resuelta.
  */
-import { Loader2 } from "lucide-react";
-
 import { cn } from "@/lib/utils";
 
 import { META_ETAPA, type EtapaIa } from "./etapa";
@@ -27,17 +27,17 @@ export function BadgeEtapa({ etapa, className }: { etapa: EtapaIa; className?: s
       )}
       title={meta.enCurso ? "La IA aún está trabajando esta pieza" : undefined}
     >
-      {meta.enCurso ? (
-        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-      ) : (
-        <span
-          className={cn(
-            "h-1.5 w-1.5 rounded-full",
-            etapa === "lista_para_revisar" ? "bg-sky-500" : "bg-emerald-500",
-          )}
-          aria-hidden="true"
-        />
-      )}
+      <span
+        className={cn(
+          "h-1.5 w-1.5 rounded-full",
+          meta.enCurso
+            ? "bg-amber-500"
+            : etapa === "lista_para_revisar"
+              ? "bg-sky-500"
+              : "bg-emerald-500",
+        )}
+        aria-hidden="true"
+      />
       {meta.etiqueta}
     </span>
   );

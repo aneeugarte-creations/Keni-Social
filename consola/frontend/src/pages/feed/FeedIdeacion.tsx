@@ -1,17 +1,21 @@
 /**
  * FEED DE IDEACIÓN (`/parrilla/feed`) — Flujo D, Fase 4 del plan de máquina automática.
  *
- * La superficie de "red social interna": el equipo ve las piezas como POSTS (material
- * original → copy de IA → arte/formato), el ESTADO de la IA en vivo por pieza ("generando
- * copy / generando arte / lista para revisar / aprobada"), y APRUEBA en línea —como quien
+ * La superficie de "red social interna": el equipo ve las piezas como POSTS (copy de IA +
+ * arte/formato), con un LABEL de su etapa en la tubería, y APRUEBA en línea —como quien
  * interactúa con un post— sin abrir el kanban.
+ *
+ * UNA SOLA LÍNEA, sin bandejas: el flujo no se separa por estado (autogeneración → auto QA →
+ * tu OK → programada → publicada), va todo mezclado y ordenado por fecha (lo más reciente
+ * primero). No hay tabs "por revisar / en proceso / aprobadas": la etapa la dice el label de
+ * cada pieza, y el OK aparece en línea solo cuando te toca.
  *
  * Vive DENTRO del AppShell (a diferencia del feed móvil `/feed`, que es de una columna y sin
  * sidebar para revisores en el móvil). Aquí es una pestaña del hub Parrilla, pensada para
  * trabajar el día entero desde el feed.
  *
  * Reutiliza lo existente sin tocar backend:
- *  - `GET /api/publicaciones?estado=&marca=` para listar piezas por bandeja/marca.
+ *  - `GET /api/publicaciones?marca=` (sin `estado`) para listar TODAS las piezas por fecha.
  *  - `PostFeed`: cada pieza como post + aprobación en línea (forwardea a la cadena multinivel)
  *    + comentarios (`Comentarios`).
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
@@ -38,20 +42,10 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema. Vuelve a intentarlo.";
 }
 
-/** Bandejas del feed: lo que la IA aún cocina, lo que espera tu firma, y lo ya aprobado. */
-type Bandeja = "en_revision" | "borrador" | "aprobado";
-
-const BANDEJAS: { id: Bandeja; etiqueta: string }[] = [
-  { id: "en_revision", etiqueta: "Por revisar" },
-  { id: "borrador", etiqueta: "En proceso" },
-  { id: "aprobado", etiqueta: "Aprobadas" },
-];
-
 export default function FeedIdeacion() {
   const { usuario } = useSesion();
   const queryClient = useQueryClient();
 
-  const [bandeja, setBandeja] = React.useState<Bandeja>("en_revision");
   const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
   const [marca, setMarca] = React.useState<string>(
     marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS,
@@ -67,10 +61,13 @@ export default function FeedIdeacion() {
       ? catalogoMarcas.filter((m) => marcasUsuario.includes(m.id))
       : catalogoMarcas;
 
+  // UN solo feed, TODAS las etapas mezcladas y ordenadas por fecha (el backend devuelve
+  // `creado DESC` cuando no se filtra estado). El flujo es una sola línea —autogeneración →
+  // auto QA → tu OK (2 likes) → programada/publicada—, no bandejas que separen las etapas:
+  // cada pieza enseña en qué va con su label de etapa y, si te toca, su OK en línea.
   const feedQuery = useQuery({
-    queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion", bandeja, marca],
-    queryFn: ({ signal }) =>
-      api.publicaciones({ estado: bandeja, marca: marcaParam(marca) }, signal),
+    queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion", marca],
+    queryFn: ({ signal }) => api.publicaciones({ marca: marcaParam(marca) }, signal),
   });
 
   // Si el usuario tiene marcas y el filtro está en "todas", acota a sus marcas en cliente.
@@ -88,7 +85,7 @@ export default function FeedIdeacion() {
     <div>
       <PageHeader
         titulo="Feed de ideación"
-        descripcion="El equipo postea material; la IA lo convierte en piezas y tú apruebas en línea."
+        descripcion="Una sola línea por fecha: la IA genera y verifica, tú das tu OK en línea, y la pieza sigue a programada y publicada."
         acciones={
           <Button
             variant="outline"
@@ -102,26 +99,9 @@ export default function FeedIdeacion() {
         }
       />
 
-      {/* Filtros: bandeja + marca. */}
+      {/* Filtro: solo marca. El feed NO separa por etapa (no es bandejas): todas las piezas
+          van en una línea por fecha, cada una con su label de etapa. */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex gap-1" role="tablist" aria-label="Bandeja">
-          {BANDEJAS.map((b) => (
-            <button
-              key={b.id}
-              type="button"
-              role="tab"
-              aria-selected={bandeja === b.id}
-              onClick={() => setBandeja(b.id)}
-              className={
-                bandeja === b.id
-                  ? "rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground"
-                  : "rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted"
-              }
-            >
-              {b.etiqueta}
-            </button>
-          ))}
-        </div>
         <SelectorMarca
           marcas={marcas}
           valor={marca}
@@ -142,20 +122,8 @@ export default function FeedIdeacion() {
           </div>
         ) : piezas.length === 0 ? (
           <EstadoVacio
-            titulo={
-              bandeja === "en_revision"
-                ? "Nada por revisar"
-                : bandeja === "borrador"
-                  ? "Nada en proceso"
-                  : "Sin piezas aprobadas"
-            }
-            texto={
-              bandeja === "en_revision"
-                ? "Cuando la IA deje piezas listas, aparecerán aquí para tu visto bueno."
-                : bandeja === "borrador"
-                  ? "El equipo postea material y la IA lo procesa; las piezas en curso saldrán aquí."
-                  : "Las piezas que apruebes se mostrarán en esta bandeja."
-            }
+            titulo="El feed está vacío"
+            texto="El equipo postea material y la IA lo convierte en piezas; aparecerán aquí, las más recientes primero, y aprobarás en línea cuando alguna esté lista."
           />
         ) : (
           piezas.map((p) => <PostFeed key={p.id} publicacion={p} />)

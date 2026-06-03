@@ -104,12 +104,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         <BadgeEtapa etapa={etapa} className={publicacion.enviado_a_revision_en ? "" : "ml-auto"} />
       </header>
 
-      {/* Título del material original (lo que "posteó" el equipo). */}
-      {publicacion.titulo && (
-        <h3 className="px-4 pb-2 text-sm font-semibold leading-snug">{publicacion.titulo}</h3>
-      )}
-
-      {/* El post tal como se verá en la red: copy IA + arte/formato. */}
+      {/* El post tal como se verá en la red: copy IA + arte/formato. Variante LIMPIA: sin el
+          chrome social simulado ni el pie "Mockup aproximado" — el feed enseña la pieza real,
+          no una maqueta de Facebook. (El título del material original NO se pinta: es el tema
+          que "posteó" el equipo, no el copy publicable, y solo confundía.) */}
       <div className="px-4">
         <VistaPreviaRed
           red={publicacion.red}
@@ -117,6 +115,7 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           contenido={cuerpo}
           copy_in={publicacion.copy_in}
           imagen_url={imagen || undefined}
+          variante="limpia"
         />
       </div>
 
@@ -144,13 +143,14 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
               Rechazar
             </Button>
           </>
-        ) : !enRevision ? (
+        ) : !enRevision &&
+          (etapa === "aprobada" || etapa === "programada" || etapa === "publicada") ? (
+          // Ya pasó el gate: solo el dato útil (quién dio el OK). Mientras la IA prepara la
+          // pieza NO ponemos texto: el label de etapa del encabezado ya dice en qué va.
           <span className="text-sm text-muted-foreground">
-            {etapa === "aprobada" || etapa === "programada" || etapa === "publicada"
-              ? publicacion.revisor_nombre
-                ? `Lista para publicar · último OK: ${publicacion.revisor_nombre}`
-                : "Lista para publicar"
-              : "La IA prepara esta pieza; entrará a revisión sola cuando esté lista."}
+            {publicacion.revisor_nombre
+              ? `Lista para publicar · último OK: ${publicacion.revisor_nombre}`
+              : "Lista para publicar"}
           </span>
         ) : null}
         <Button

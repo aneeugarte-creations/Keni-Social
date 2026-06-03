@@ -130,13 +130,14 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera y las bandejas del feed", async () => {
+  it("muestra la cabecera y un feed único sin bandejas (una sola línea por fecha)", async () => {
     stubFetch();
     renderFeed();
     expect(await screen.findByText("Feed de ideación")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Por revisar" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "En proceso" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Aprobadas" })).toBeInTheDocument();
+    // Ya NO hay tabs por estado: el flujo va en una sola línea, no en bandejas separadas.
+    expect(screen.queryByRole("tab", { name: "Por revisar" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "En proceso" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Aprobadas" })).not.toBeInTheDocument();
   });
 
   it("renderiza la pieza como post con etapa IA y acciones de aprobación en línea", async () => {
