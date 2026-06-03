@@ -37,6 +37,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
+import { formatearFecha as fmtFechaCdmx } from "@/lib/fecha";
 import {
   cabezaDeArea,
   descendientes,
@@ -91,12 +92,8 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-function formatearFecha(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
-}
+// Fecha en CDMX (instantes UTC del backend); ver `@/lib/fecha`.
+const formatearFecha = (iso: string | null): string => fmtFechaCdmx(iso) || "—";
 
 /**
  * Página del Organigrama (rediseño de "Usuarios"). Pinta el equipo como un árbol top-down

@@ -38,6 +38,7 @@ import {
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { formatearDia, formatearFechaHoraCorta } from "@/lib/fecha";
 import { costeUsd, duracion, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type {
   ActividadAgregados,
@@ -60,31 +61,9 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo en un momento.";
 }
 
-/** Formatea una fecha ISO completa en formato corto es-MX; tolera inválidas. */
-function formatearFecha(iso: string): string {
-  if (!iso) return "—";
-  const fecha = new Date(iso);
-  if (Number.isNaN(fecha.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(fecha);
-}
-
-/** Formatea un día (`YYYY-MM-DD`) en es-MX; tolera valores inesperados. */
-function formatearDia(dia: string): string {
-  if (!dia) return "—";
-  // Interpretamos como fecha local a mediodía para evitar desfases de zona.
-  const fecha = new Date(`${dia}T12:00:00`);
-  if (Number.isNaN(fecha.getTime())) return dia;
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(fecha);
-}
+// Fecha/hora en hora CDMX (los instantes del backend son UTC): se formatean con
+// `@/lib/fecha`. `formatearFecha` aquí es la variante corta (sin año) con hora.
+const formatearFecha = (iso: string): string => formatearFechaHoraCorta(iso) || "—";
 
 /** Etiqueta legible de la fuente de un ítem. */
 function etiquetaFuente(fuente: FuenteActividad): string {

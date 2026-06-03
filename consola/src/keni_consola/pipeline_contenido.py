@@ -425,6 +425,30 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
         return ""
 
 
+def _fecha_fuente_iso(item: dict[str, Any]) -> str:
+    """ISO UTC de la fecha de la FUENTE (pubDate/updated del item); "" si falta o no parsea.
+
+    Reutiliza el parser tolerante del feed (`http_feed.fecha_a_orden`, que cubre RFC 822 e
+    ISO 8601 y asume UTC para naive). Un crudo ausente/ilegible cae a la fecha mínima
+    (epoch); lo tratamos como "" (la pieza no conserva fecha de fuente). Best-effort: nunca
+    rompe la ingesta.
+    """
+    crudo = (item.get("fecha") or "").strip()
+    if not crudo:
+        return ""
+    try:
+        from datetime import UTC
+
+        from .dominio import http_feed
+
+        dt = http_feed.fecha_a_orden(crudo)
+        if dt.year <= 1970:  # epoch = no se pudo parsear
+            return ""
+        return dt.astimezone(UTC).isoformat(timespec="seconds")
+    except Exception:  # noqa: BLE001 -- el dato es informativo; un fallo no debe romper la ingesta
+        return ""
+
+
 _AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
 
 
@@ -499,6 +523,9 @@ def crear_tema_de(
             origen=ORIGEN_PIPELINE,
             fecha_objetivo=date.today().isoformat(),
             copy_pendiente=_copy_pendiente_de(trabajo, nota, redes_ids),
+            # Fecha de la FUENTE (pubDate del item), para mostrar en la Consola "Fuente del …"
+            # junto a "Generado el …" (`creado`). "" si la fuente no traía fecha.
+            fecha_fuente=_fecha_fuente_iso(item),
         )
     except Exception:  # noqa: BLE001 -- sin tema, este item no produce nada (no rompe el barrido)
         _log.warning("pipeline: no se pudo crear el tema (%s)", marca, exc_info=True)

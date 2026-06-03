@@ -2247,6 +2247,9 @@
         "fecha_programada": {
           "type": "string"
         },
+        "fecha_fuente": {
+          "type": "string"
+        },
         "origen": {
           "type": "string"
         },
@@ -2295,6 +2298,7 @@
         "fecha_creacion",
         "fecha_actualizacion",
         "fecha_programada",
+        "fecha_fuente",
         "origen",
         "imagen",
         "imagen_url",

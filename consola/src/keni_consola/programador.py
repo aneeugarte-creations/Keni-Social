@@ -45,7 +45,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from . import config, marcas, repos
@@ -58,12 +58,23 @@ _log = logging.getLogger("keni_consola.programador")
 INTERVALO_SEGUNDOS_DEF = 60.0
 
 
+def _a_utc(dt: datetime) -> datetime:
+    """Normaliza un datetime a UTC consciente. Naive → se asume UTC (convención del
+    sistema: el servidor corre en UTC y los timestamps sin zona SON UTC)."""
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt.astimezone(UTC)
+
+
 def _parsear_fecha(valor: str) -> datetime | None:
-    """Parsea una `fecha_programada` ISO ('YYYY-MM-DDTHH:MM' o con segundos); None si no es valida."""
+    """Parsea una `fecha_programada` ISO a un instante UTC consciente; None si no es valida.
+
+    Acepta 'YYYY-MM-DDTHH:MM' (o con segundos) y formatos con zona ('...Z'/'+00:00',
+    que es lo que envía la UI: el picker es hora CDMX y se manda como instante UTC). Las
+    cadenas SIN zona se interpretan como UTC. Así la comparación con `ahora` (UTC) en
+    `piezas_vencidas` siempre es aware-vs-aware (nunca naive-vs-aware → TypeError)."""
     if not valor:
         return None
     try:
-        return datetime.fromisoformat(valor)
+        return _a_utc(datetime.fromisoformat(valor))
     except ValueError:
         return None
 
@@ -77,6 +88,9 @@ def piezas_vencidas(
     valida <= `ahora`, y NO tiene `preparado_en` (no se preparo ya). Determinista:
     depende solo de sus argumentos (no del reloj real ni de la BD).
     """
+    # `ahora` puede llegar naive (p.ej. desde tests o un llamador antiguo): se normaliza a
+    # UTC para comparar aware-vs-aware con las fechas parseadas (que siempre son UTC).
+    ahora = _a_utc(ahora)
     vencidas: list[dict[str, Any]] = []
     for pub in programadas:
         if pub.get("estado") != ESTADO_PROGRAMADO:
@@ -297,7 +311,7 @@ def programar_pieza_metricool(
     Forma del resultado:
         {ok, dry_run, motivo?, redes, cuerpo?, id_post?, estados?}
     """
-    ahora = ahora or datetime.now()
+    ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
     dry_run = not config.publicar_real()
     marca_id = pub.get("marca") or ""
 
@@ -373,7 +387,7 @@ def preparar_vencidas(ahora: datetime | None = None) -> int:
     Es lo que corre cada barrido del hilo y tambien se puede llamar a mano (test/CLI).
     Lee SOLO las piezas en estado `programado` (filtro en el indice), no todo el catalogo.
     """
-    ahora = ahora or datetime.now()
+    ahora = _a_utc(ahora) if ahora is not None else datetime.now(UTC)
     ts = ahora.isoformat(timespec="seconds")
     programadas = repos.listar_publicaciones(estado=ESTADO_PROGRAMADO)
     preparadas = 0

@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import {
   nombreFormato,
   nombreRed,
@@ -40,16 +41,9 @@ function granular(valor: number | null): string {
   return valor == null ? "—" : numeroCompleto(valor);
 }
 
-/** Fecha+hora corta de un ts ISO (es-MX); cadena vacía/no parseable → el ts crudo. */
+/** Fecha+hora corta en CDMX de un ts ISO (UTC); vacía/no parseable → "—". */
 function fechaHoraCorta(ts: string): string {
-  const d = new Date(ts);
-  if (Number.isNaN(d.getTime())) return ts || "—";
-  return d.toLocaleString("es-MX", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatearFechaHoraCorta(ts) || "—";
 }
 
 export function DetallePieza({

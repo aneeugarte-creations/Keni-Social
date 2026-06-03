@@ -25,6 +25,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
+import { formatearFecha as fmtFechaCdmx } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { Sugerencia } from "@/types";
 
@@ -69,12 +70,8 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-function formatearFecha(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
-}
+// Fecha en CDMX (el instante "creada" del backend es UTC); ver `@/lib/fecha`.
+const formatearFecha = (iso: string): string => fmtFechaCdmx(iso);
 
 /**
  * Buzón de sugerencias: panel izquierdo para enviar una idea; panel derecho con

@@ -27,7 +27,7 @@ PREPARA (dry-run) al vencer. "El humano aprueba; el sistema no publica solo."
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from starlette.requests import Request
@@ -196,9 +196,11 @@ async def rechazar(request: Request) -> Response:
 def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
     """Valida `fecha` como datetime ISO FUTURO; devuelve `(iso_normalizada, None)` o `(None, error)`.
 
-    Acepta 'YYYY-MM-DDTHH:MM' (o con segundos). Debe ser estrictamente futura: no tiene
-    sentido programar para un instante ya pasado (el programador la prepararia de inmediato,
-    sorprendiendo al usuario). Se normaliza a minutos ('YYYY-MM-DDTHH:MM').
+    Acepta 'YYYY-MM-DDTHH:MM' (o con segundos), con o sin zona ('...Z'/'+00:00'). Una
+    cadena SIN zona se interpreta como UTC (convención del sistema). Debe ser estrictamente
+    futura: no tiene sentido programar para un instante ya pasado (el programador la
+    prepararia de inmediato, sorprendiendo al usuario). Se normaliza a minutos en UTC
+    ('YYYY-MM-DDTHH:MM', hora de pared UTC) para que el programador la compare en UTC.
     """
     if not isinstance(valor, str) or not valor.strip():
         return None, "Indica la fecha y hora de publicación (formato YYYY-MM-DDTHH:MM)."
@@ -206,7 +208,9 @@ def _validar_fecha_programada(valor: Any) -> tuple[str | None, str | None]:
         fecha = datetime.fromisoformat(valor.strip())
     except ValueError:
         return None, "La fecha no es válida (usa el formato YYYY-MM-DDTHH:MM)."
-    if fecha <= datetime.now():
+    # Normaliza a UTC consciente (naive → se asume UTC) y compara aware-vs-aware.
+    fecha = fecha.replace(tzinfo=UTC) if fecha.tzinfo is None else fecha.astimezone(UTC)
+    if fecha <= datetime.now(UTC):
         return None, "La fecha debe ser futura."
     return fecha.strftime("%Y-%m-%dT%H:%M"), None
 

@@ -63,7 +63,8 @@ sitio contra la API real sin tocar el resto:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -257,7 +258,17 @@ class AdaptadorPublicacionMetricool:
 
         Es el corazon del dry-run y tambien lo que el camino real ejecuta.
         """
-        cuando = b.publicar_en or ahora or datetime.now()
+        cuando = b.publicar_en or ahora or datetime.now(UTC)
+        # Metricool interpreta `dateTime` como HORA DE PARED en `timezone` (sin offset).
+        # `cuando` llega como instante UTC consciente (el programador lo normaliza); lo
+        # pasamos a la hora de pared de `b.timezone` (CDMX) y le quitamos la zona. Si por
+        # legado llega naive, se asume que ya ES la hora de pared (comportamiento previo).
+        if cuando.tzinfo is not None:
+            try:
+                cuando = cuando.astimezone(ZoneInfo(b.timezone))
+            except Exception:  # noqa: BLE001 -- zona inválida: cae a UTC, mejor que romper
+                cuando = cuando.astimezone(UTC)
+            cuando = cuando.replace(tzinfo=None)
         cuerpo: dict = {
             "text": b.texto_final(),
             "publicationDate": {

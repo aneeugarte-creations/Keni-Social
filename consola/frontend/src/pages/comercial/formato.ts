@@ -5,39 +5,25 @@
  * para que toda la consola hable el mismo idioma visual.
  */
 import type { BadgeProps } from "@/components/ui/badge";
+import { formatearDia, formatearFechaCorta, formatearFechaHoraCorta } from "@/lib/fecha";
 import type { EstadoComercial, MetricaComercial } from "@/types";
+
+// Fechas en hora CDMX (los instantes del backend son UTC): el formateo vive en
+// `@/lib/fecha`. Aquí solo se conserva el fallback "—" propio de Comercial.
 
 /** Fecha corta es-MX a partir de un ISO (día + mes). Ej.: "25 may". */
 export function fechaCorta(iso: string): string {
-  if (!iso) return "—";
-  const f = new Date(iso);
-  if (Number.isNaN(f.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(f);
+  return formatearFechaCorta(iso) || "—";
 }
 
 /** Fecha con hora es-MX a partir de un ISO. Ej.: "25 may, 12:00". */
 export function fechaHora(iso: string): string {
-  if (!iso) return "—";
-  const f = new Date(iso);
-  if (Number.isNaN(f.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(f);
+  return formatearFechaHoraCorta(iso) || "—";
 }
 
-/** Día legible es-MX a partir de `YYYY-MM-DD` (mediodía local para evitar desfases). */
+/** Día legible es-MX a partir de `YYYY-MM-DD`. */
 export function fechaDia(dia: string): string {
-  if (!dia) return "—";
-  const f = new Date(`${dia}T12:00:00`);
-  if (Number.isNaN(f.getTime())) return dia;
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(f);
+  return formatearDia(dia);
 }
 
 /** Etiqueta + variante de badge para el estado del seguimiento. */

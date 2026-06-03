@@ -41,6 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api, ApiError, urlS3Objeto } from "@/lib/api";
+import { formatearFecha } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 import type { DiscoSistema, MigaS3, ObjetoS3, RespuestaProbarS3, RespuestaS3 } from "@/types";
 
@@ -683,13 +684,7 @@ function SeccionNavegadorS3() {
 
               {/* Objetos del nivel actual */}
               {objetos.map((obj) => {
-                const fechaCorta = obj.modificado
-                  ? new Date(obj.modificado).toLocaleDateString("es-MX", {
-                      year: "numeric",
-                      month: "short",
-                      day: "numeric",
-                    })
-                  : "—";
+                const fechaCorta = obj.modificado ? formatearFecha(obj.modificado) : "—";
                 return (
                   <TableRow
                     key={obj.key}

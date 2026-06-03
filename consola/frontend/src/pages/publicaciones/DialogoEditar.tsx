@@ -59,7 +59,7 @@ import type {
 import { CLAVE_PUBLICACIONES } from "./claves";
 import { GestionHashtags } from "./GestionHashtags";
 import { EtiquetaRed } from "./insignias";
-import { datetimeLocalAIso, isoADatetimeLocal, metaRed } from "./meta";
+import { datetimeLocalAIso, formatearFechaHora, isoADatetimeLocal, metaRed } from "./meta";
 import { agregarEnlace } from "./plantillas";
 
 function mensajeError(error: unknown): string {
@@ -585,6 +585,27 @@ export function DialogoEditar({
                 </div>
               )}
             </div>
+
+            {publicacion && (publicacion.fecha_creacion || publicacion.fecha_fuente) && (
+              // Trazabilidad de la pieza (sobre todo las que nacen del pipeline automático):
+              // cuándo la generó el sistema y de qué fecha es la nota/fuente de origen. Ambas
+              // en hora CDMX (los instantes del backend son UTC). "Fuente" se omite si la
+              // fuente no traía fecha o si la pieza es de alta manual.
+              <dl className="flex flex-wrap gap-x-6 gap-y-1 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                {publicacion.fecha_creacion && (
+                  <div className="flex gap-1.5">
+                    <dt className="font-medium text-foreground">Generado</dt>
+                    <dd>{formatearFechaHora(publicacion.fecha_creacion)}</dd>
+                  </div>
+                )}
+                {publicacion.fecha_fuente && (
+                  <div className="flex gap-1.5">
+                    <dt className="font-medium text-foreground">Fuente</dt>
+                    <dd>{formatearFechaHora(publicacion.fecha_fuente)}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
 
             {publicacion && <ChecklistProduccion publicacion={publicacion} />}
 

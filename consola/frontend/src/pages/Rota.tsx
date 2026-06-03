@@ -79,6 +79,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import {
   COBERTURA,
   COLOR_PRIORIDAD,
@@ -3873,18 +3874,8 @@ const ESTADOS_TERMINALES_SWAP: ReadonlySet<EstadoSwap> = new Set([
   "cancelado",
 ]);
 
-/** Formatea un timestamp ISO ("2026-05-25T18:42:11") como fecha-hora corta es-MX. */
-function formatearMomentoCorto(s: string): string {
-  if (!s) return "";
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return s;
-  return d.toLocaleString("es-MX", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+/** Timestamp ISO ("2026-05-25T18:42:11", UTC) como fecha-hora corta en CDMX. */
+const formatearMomentoCorto = (s: string): string => formatearFechaHoraCorta(s);
 
 /**
  * Vista FUSIONADA de Cambios de turno + Ausencias en una sola lista cronologica.

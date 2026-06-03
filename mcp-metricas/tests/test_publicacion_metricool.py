@@ -8,7 +8,7 @@ userId/blogId), incluido el mapeo x -> twitter y la programacion con fecha.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -98,6 +98,20 @@ def test_dry_run_no_requiere_credenciales():
 def test_programacion_con_fecha_y_timezone():
     ad = AdaptadorPublicacionMetricool(creds=CREDS)
     cuando = datetime(2026, 5, 30, 18, 0, 0)
+    b = BorradorMetricool(redes=[Plataforma.x], texto="hola", publicar_en=cuando)
+    body = ad.cuerpo_para(b)
+    assert body["publicationDate"] == {
+        "dateTime": "2026-05-30T18:00:00",
+        "timezone": "America/Mexico_City",
+    }
+
+
+def test_programacion_con_fecha_utc_se_convierte_a_pared_cdmx():
+    """Un `publicar_en` CONSCIENTE (instante UTC, lo que produce el programador) se
+    convierte a la HORA DE PARED de `timezone` (Metricool interpreta dateTime en esa
+    zona). 00:00Z = 18:00 del día anterior en CDMX (UTC-6)."""
+    ad = AdaptadorPublicacionMetricool(creds=CREDS)
+    cuando = datetime(2026, 5, 31, 0, 0, 0, tzinfo=UTC)
     b = BorradorMetricool(redes=[Plataforma.x], texto="hola", publicar_en=cuando)
     body = ad.cuerpo_para(b)
     assert body["publicationDate"] == {

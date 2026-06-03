@@ -670,6 +670,7 @@ export interface Publicacion {
   fecha_creacion: string;
   fecha_actualizacion: string;
   fecha_programada: string;
+  fecha_fuente: string;
   origen: string;
   imagen: string;
   imagen_url: string;

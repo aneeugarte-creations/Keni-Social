@@ -586,6 +586,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         qa_veredicto        TEXT NOT NULL DEFAULT '',
         qa_hallazgos        TEXT NOT NULL DEFAULT '',
         copy_pendiente      TEXT NOT NULL DEFAULT '',
+        fecha_fuente        TEXT NOT NULL DEFAULT '',
         creado              TEXT NOT NULL DEFAULT '',
         actualizado         TEXT NOT NULL DEFAULT ''
     )
@@ -1930,6 +1931,9 @@ _COLUMNAS_CONTENIDO_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("qa_veredicto", "TEXT NOT NULL DEFAULT ''"),
     ("qa_hallazgos", "TEXT NOT NULL DEFAULT ''"),
     ("copy_pendiente", "TEXT NOT NULL DEFAULT ''"),
+    # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC. Las bases
+    # creadas antes de esta columna la reciben aquí (idempotente). Legado -> "".
+    ("fecha_fuente", "TEXT NOT NULL DEFAULT ''"),
 )
 _COLUMNAS_CONTENIDO_PLATAFORMA_AMPLIADAS: tuple[tuple[str, str], ...] = (
     ("es_publicacion", "INTEGER NOT NULL DEFAULT 0"),
@@ -3747,6 +3751,11 @@ _COLS_CONTENIDO = (
     # en CI, lo que la fase CD necesitará para lanzar el copy (redes, imagen ya resuelta, fuente,
     # clave) SOLO si la QA de la fuente sale `no_verificado`. "" tras lanzar (o si no aplica).
     "copy_pendiente",
+    # FECHA DE LA FUENTE (pipeline automático): pubDate/updated del item de origen (RSS/
+    # noticia), normalizada a ISO UTC. La pieza la conserva para mostrar en la Consola
+    # "Fuente del …" junto a "Generado el …" (`creado`). "" si la fuente no traía fecha o
+    # si la pieza no nació del pipeline (alta manual).
+    "fecha_fuente",
     "creado",
     "actualizado",
 )
@@ -3831,6 +3840,7 @@ def crear_contenido(
     qa_veredicto: str = "",
     qa_hallazgos: str = "",
     copy_pendiente: str = "",
+    fecha_fuente: str = "",
     creado: str = "",
     actualizado: str = "",
     id: str = "",
@@ -3874,6 +3884,7 @@ def crear_contenido(
         "qa_veredicto": qa_veredicto or "",
         "qa_hallazgos": qa_hallazgos or "",
         "copy_pendiente": copy_pendiente or "",
+        "fecha_fuente": fecha_fuente or "",
         "creado": creado or ahora,
         "actualizado": actualizado or ahora,
     }
@@ -6927,6 +6938,7 @@ _SELECT_PUBLICACION = (
     "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
+    "c.fecha_fuente AS fecha_fuente, "
     "c.tipo_contenido AS tipo_contenido "
     "FROM contenido_plataforma cp JOIN contenido c ON cp.contenido_id = c.id "
     # Toda fila por plataforma de un `contenido` (no de una `tarea`) ES una publicacion:
@@ -6971,6 +6983,9 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "fecha_creacion": f["ccreado"] or "",
         "fecha_actualizacion": f["pactualizado"] or "",
         "fecha_programada": f["fecha_programada"] or "",
+        # Fecha de la FUENTE de origen (pipeline): pubDate normalizado a ISO UTC; "" si la
+        # pieza no nació de una fuente con fecha. La UI muestra "Fuente del …".
+        "fecha_fuente": f["fecha_fuente"] or "",
         "origen": f["origen"] or "",
         "imagen": f["imagen"] or "",
         "evergreen": bool(f["evergreen"]),

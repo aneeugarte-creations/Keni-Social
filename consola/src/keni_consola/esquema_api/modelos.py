@@ -853,6 +853,10 @@ class Publicacion(TypedDict):
     fecha_creacion: str
     fecha_actualizacion: str
     fecha_programada: str
+    # Fecha de la FUENTE de origen (pipeline automático): pubDate/updated del item de RSS/
+    # noticia, normalizado a ISO UTC. La consola muestra "Fuente del …" junto a "Generado el
+    # …" (`fecha_creacion`). "" si la pieza no nació de una fuente con fecha (alta manual).
+    fecha_fuente: str
     origen: str
     imagen: str
     imagen_url: str

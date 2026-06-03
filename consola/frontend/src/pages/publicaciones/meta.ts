@@ -241,96 +241,14 @@ export function metaVeredicto(veredicto: string): MetaVeredicto | null {
   return { nombre: veredicto, variante };
 }
 
-/** Formatea una fecha ISO en es-MX (corto, con hora); tolera valores inválidos. */
-export function formatearFechaHora(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(d);
-}
-
-/** Formatea solo la fecha (sin hora). */
-export function formatearFecha(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(d);
-}
-
-/** Formatea solo la hora (HH:mm) en es-MX. */
-export function formatearHora(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digit" }).format(d);
-}
-
-/**
- * Tiempo relativo legible en es-MX (p. ej. "hace 5 min", "en 2 h"). Usa
- * `Intl.RelativeTimeFormat`; tolera valores vacíos/inválidos devolviendo "".
- */
-export function tiempoRelativo(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const seg = Math.round((d.getTime() - Date.now()) / 1000);
-  const abs = Math.abs(seg);
-  const rtf = new Intl.RelativeTimeFormat("es-MX", { numeric: "auto" });
-  const divisiones: [number, Intl.RelativeTimeFormatUnit][] = [
-    [60, "second"],
-    [3600, "minute"],
-    [86400, "hour"],
-    [604800, "day"],
-    [2629800, "week"],
-    [31557600, "month"],
-    [Infinity, "year"],
-  ];
-  const factores: Record<string, number> = {
-    second: 1,
-    minute: 60,
-    hour: 3600,
-    day: 86400,
-    week: 604800,
-    month: 2629800,
-    year: 31557600,
-  };
-  for (const [umbral, unidad] of divisiones) {
-    if (abs < umbral) {
-      return rtf.format(Math.round(seg / factores[unidad]), unidad);
-    }
-  }
-  return rtf.format(Math.round(seg / factores.year), "year");
-}
-
-/**
- * Convierte un ISO a un valor para `<input type="datetime-local">`
- * (`YYYY-MM-DDTHH:mm`) en hora local. Cadena vacía si no hay fecha válida.
- */
-export function isoADatetimeLocal(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-/**
- * Convierte un valor de `datetime-local` (hora local) a ISO 8601. Devuelve
- * `null` para cadena vacía o valor inválido.
- */
-export function datetimeLocalAIso(valor: string): string | null {
-  if (!valor) return null;
-  const d = new Date(valor);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
+// Fechas/horas en hora CDMX: el formateo y la conversión del picker viven en
+// `@/lib/fecha` (única fuente de la zona de operación). Se re-exportan aquí para
+// no tocar los imports existentes (`./meta`) de las páginas de publicaciones.
+export {
+  datetimeLocalAIso,
+  formatearFecha,
+  formatearFechaHora,
+  formatearHora,
+  isoADatetimeLocal,
+  tiempoRelativo,
+} from "@/lib/fecha";

@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { ApiError, api } from "@/lib/api";
+import { formatearFechaHora as fmtFechaHoraCdmx } from "@/lib/fecha";
 import type { RolUsuario } from "@/types";
 
 /** Clave de caché del usuario actual (`me`); se refresca al cambiar la contraseña. */
@@ -43,18 +44,9 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-/** Fecha + hora legible (es-MX); guion si está vacía o no es válida. */
+/** Fecha + hora legible en CDMX (instantes UTC del backend); guion si vacía/inválida. */
 function formatearFechaHora(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("es-MX", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return fmtFechaHoraCdmx(iso) || "—";
 }
 
 /* ------------------------------------------------------------------ */

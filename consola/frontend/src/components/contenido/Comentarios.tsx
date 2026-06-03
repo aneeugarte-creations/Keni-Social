@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { api, ApiError } from "@/lib/api";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import { cn } from "@/lib/utils";
 
 function mensajeError(error: unknown): string {
@@ -28,13 +29,8 @@ function mensajeError(error: unknown): string {
   return "No se pudo completar la acción.";
 }
 
-function fecha(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
-}
+// Fecha+hora en CDMX (el instante del backend es UTC).
+const fecha = (iso: string): string => formatearFechaHoraCorta(iso);
 
 export function Comentarios({ contenidoId }: { contenidoId: string }) {
   const queryClient = useQueryClient();

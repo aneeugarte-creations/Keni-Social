@@ -108,6 +108,10 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         "fecha_creacion": pub["fecha_creacion"],
         "fecha_actualizacion": pub["fecha_actualizacion"],
         "fecha_programada": pub["fecha_programada"],
+        # Fecha de la FUENTE de origen (pipeline automático): pubDate normalizado a ISO UTC.
+        # La UI la muestra junto a `fecha_creacion` ("Generado el …" + "Fuente del …"). "" si
+        # la pieza no nació de una fuente con fecha (alta manual, fuente sin pubDate).
+        "fecha_fuente": pub.get("fecha_fuente") or "",
         "origen": pub["origen"],
         "imagen": imagen,
         # Si no hay archivo subido pero hay imagen de fuente (URL externa), se sirve ESA

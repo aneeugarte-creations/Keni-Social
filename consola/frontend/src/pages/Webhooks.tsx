@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, ApiError } from "@/lib/api";
+import { formatearFechaHoraCorta } from "@/lib/fecha";
 import type {
   CuerpoCrearWebhook,
   FormatoWebhook,
@@ -81,17 +82,8 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema inesperado. Vuelve a intentarlo.";
 }
 
-function formatearFechaHora(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleString("es-MX", {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+// Fecha+hora en CDMX (los instantes del backend son UTC); ver `@/lib/fecha`.
+const formatearFechaHora = (iso: string): string => formatearFechaHoraCorta(iso);
 
 export default function Webhooks() {
   const query = useQuery({
