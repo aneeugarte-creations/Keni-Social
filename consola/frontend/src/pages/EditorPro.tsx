@@ -91,7 +91,7 @@ export default function EditorPro() {
         )}
       </div>
       <div className="min-h-0 flex-1">
-        <EditorDocumento store={store} onExportar={() => exportar.mutate()} />
+        <EditorDocumento store={store} marca={marca} onExportar={() => exportar.mutate()} />
       </div>
     </div>
   );

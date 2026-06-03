@@ -523,6 +523,25 @@ async function descargarPost(ruta: string, json: unknown, nombrePorDefecto: stri
   URL.revokeObjectURL(url);
 }
 
+// Activo de marca (biblioteca del editor): logo, tipografía, arte, infografía, icono, paleta o
+// fondo, con sus metadatos y líneas. Espejo de `api/marca_activos.py::_activo_a_dict`.
+export interface ActivoMarca {
+  id: string;
+  marca: string;
+  tipo: "logo" | "tipografia" | "arte" | "infografia" | "icono" | "paleta" | "fondo";
+  nombre: string;
+  objeto: string;
+  metadatos: Record<string, unknown>;
+  lineas: string[];
+  aprobado: boolean;
+  url: string;
+  marca_nombre: string;
+  autor_id: string;
+  autor_nombre: string;
+  creado: string;
+  actualizado: string;
+}
+
 export const api = {
   // --- Catálogo de apps (ADR 0005): apps activas + navegación data-driven ---
   // El sidebar se hidrata de aquí en vez de hardcodear las entradas. Filtra por los
@@ -871,6 +890,32 @@ export const api = {
     peticion<{ documento: unknown }>(
       `/editor/plantilla/${encodeURIComponent(marca)}/${encodeURIComponent(formato)}`,
       { signal },
+    ),
+
+  // --- Biblioteca de activos por marca (logos, tipografías, artes, infografías, …) ---
+  marcaActivos: (
+    filtros: { marca?: string; tipo?: string; linea?: string; q?: string } = {},
+    signal?: AbortSignal,
+  ) => {
+    const qp = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) if (v) qp.set(k, v);
+    const cola = qp.toString();
+    return peticion<{ activos: ActivoMarca[] }>(`/marca-activos${cola ? `?${cola}` : ""}`, { signal });
+  },
+  crearMarcaActivo: (cuerpo: {
+    tipo: string;
+    marca?: string;
+    nombre?: string;
+    objeto?: string;
+    metadatos?: Record<string, unknown>;
+    lineas?: string[];
+  }) => peticion<{ activo: ActivoMarca }>("/marca-activos", { metodo: "POST", json: cuerpo }),
+  actualizarMarcaActivo: (id: string, cuerpo: Record<string, unknown>) =>
+    peticion<{ activo: ActivoMarca }>(`/marca-activos/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
+  borrarMarcaActivo: (id: string, purgar?: boolean) =>
+    peticion<{ mensaje: string }>(
+      `/marca-activos/${encodeURIComponent(id)}${purgar ? "?purgar=1" : ""}`,
+      { metodo: "DELETE" },
     ),
 
   // --- Plantillas de marca (identidad visual con la que se estampa una imagen) ---
