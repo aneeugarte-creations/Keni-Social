@@ -106,6 +106,10 @@ PIPELINES: dict[str, dict[str, str]] = {
 # Clases editoriales GLOBALES: aplican a TODAS las marcas (no llevan `marcas` propias).
 _CLASES_GLOBALES = frozenset({"plataforma", "tropicalizacion", "reglas"})
 
+# Carpetas (primer segmento) cuyos documentos aplican a TODAS las marcas. La marca, si no, se
+# deriva de la carpeta (la marca ES una carpeta): un doc bajo `…/<marca>/…` aplica a esa marca.
+_CARPETAS_GLOBALES = frozenset({"global", "comun", "general", "todas"})
+
 # Los 4 PILARES que toda línea editorial COMPLETA debe cubrir para una marca:
 #   - `marca`           (específico de la marca): qué es la marca, su posicionamiento.
 #   - `voz`             (específico de la marca): tono y estilo de redacción.
@@ -764,9 +768,13 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
             continue
         if pipeline is not None and doc.pipelines and pipeline not in doc.pipelines:
             continue
-        if doc.clase in _CLASES_GLOBALES:
-            seleccion.append(doc)
-        elif marca and marca in doc.marcas:
+        # La pertenencia a marca se deriva de la CARPETA (la marca es una carpeta): un doc bajo
+        # `…/<marca>/…` aplica a esa marca; uno bajo `global/` (o comun/general/todas) aplica a
+        # TODAS. Se conservan `clase`/`marcas` por retrocompatibilidad con los docs existentes.
+        segmentos = doc.carpeta.split("/") if doc.carpeta else []
+        es_global = doc.clase in _CLASES_GLOBALES or (bool(segmentos) and segmentos[0] in _CARPETAS_GLOBALES)
+        es_de_marca = bool(marca) and (marca in doc.marcas or marca in segmentos)
+        if es_global or es_de_marca:
             seleccion.append(doc)
 
     orden = {clase: i for i, clase in enumerate(PILARES_EDITORIALES)}

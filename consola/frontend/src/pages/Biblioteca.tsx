@@ -21,7 +21,6 @@ import {
   Plus,
   RotateCcw,
   Send,
-  Settings2,
   Trash2,
   X,
 } from "lucide-react";
@@ -59,14 +58,7 @@ import type { DocumentoBiblioteca, TargetLanzamiento } from "@/types";
 
 type TipoTarget = TargetLanzamiento["tipo"] | "archivo";
 
-const CLASES_EDITORIAL = ["marca", "voz", "plataforma", "tropicalizacion", "reglas"] as const;
 const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
-// Pipelines del registro backend (mismo orden/ids que `biblioteca.PIPELINES`).
-const PIPELINES = [
-  { id: "copy", nombre: "Copy" },
-  { id: "qa", nombre: "QA fuente" },
-  { id: "green", nombre: "GREEN" },
-] as const;
 
 /**
  * Separa un bloque de "frontmatter" al INICIO del cuerpo (un bloque `---\n…\n---`) del
@@ -99,7 +91,6 @@ export default function Biblioteca() {
   const [enPapelera, setEnPapelera] = React.useState(false);
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
   // Config avanzada (estado, etiquetas, clase/marcas, atribución) plegada tras el engranaje.
-  const [ajustesAbiertos, setAjustesAbiertos] = React.useState(false);
   const [historialAbierto, setHistorialAbierto] = React.useState(false);
   const [carpetasCerradas, setCarpetasCerradas] = React.useState<Set<string>>(new Set());
   const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
@@ -154,14 +145,6 @@ export default function Biblioteca() {
   }, [documentos]);
 
   // Carpetas existentes para el autocompletado del editor (mover un doc a una carpeta).
-  const carpetasExistentes = React.useMemo(
-    () =>
-      [...new Set(documentos.map((d) => d.carpeta).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b, "es"),
-      ),
-    [documentos],
-  );
-
   function alternarCarpeta(c: string) {
     setCarpetasCerradas((prev) => {
       const s = new Set(prev);
@@ -226,7 +209,6 @@ export default function Biblioteca() {
       setBorrador(null);
       setFrontmatterOculto("");
     }
-    setAjustesAbiertos(false);
     setLanzarAbierto(false);
     setHistorialAbierto(false);
   }, [seleccionId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -505,7 +487,8 @@ export default function Biblioteca() {
           </div>
         ) : (
           <>
-            {/* Barra mínima: título + Lanzar (prompt) + engranaje (config) + historial + borrar. */}
+            {/* Barra mínima: título + estado + Lanzar (prompt) + historial + borrar. La marca y
+                la organización salen de la CARPETA (explorador del lateral); no hay metadatos. */}
             <div className="flex items-center gap-2">
               <Input
                 value={borrador.titulo}
@@ -513,19 +496,19 @@ export default function Biblioteca() {
                 className="flex-1 text-base font-medium"
                 placeholder="Título"
               />
+              <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
+                <SelectTrigger className="h-8 w-28 text-xs" title="Estado"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ESTADOS_DOC.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {borrador.tipo === "prompt" ? (
                 <Button variant="brand" size="sm" onClick={() => setLanzarAbierto(true)}>
                   <Send className="mr-1 h-3.5 w-3.5" /> Lanzar
                 </Button>
               ) : null}
-              <Button
-                size="sm"
-                variant={ajustesAbiertos ? "secondary" : "outline"}
-                onClick={() => setAjustesAbiertos((v) => !v)}
-                title="Ajustes del documento"
-              >
-                <Settings2 className="mr-1 h-3.5 w-3.5" /> Ajustes
-              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -548,92 +531,6 @@ export default function Biblioteca() {
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
-
-            {/* Panel de AJUSTES (plegado por defecto): carpeta, estado, etiquetas, clase/marcas
-                (editorial) y atribución a pipelines. Fuera del flujo de escritura. */}
-            {ajustesAbiertos ? (
-              <div className="space-y-3 rounded-md border border-border bg-muted/30 p-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    value={borrador.carpeta}
-                    onChange={(e) => editar({ carpeta: e.target.value })}
-                    className="w-44"
-                    placeholder="carpeta/…"
-                    list="carpetas-biblioteca"
-                    title="Carpeta"
-                  />
-                  <datalist id="carpetas-biblioteca">
-                    {carpetasExistentes.map((c) => (
-                      <option key={c} value={c} />
-                    ))}
-                  </datalist>
-                  <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
-                    <SelectTrigger className="w-32" title="Estado"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {ESTADOS_DOC.map((s) => (
-                        <SelectItem key={s} value={s}>{s}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    value={(borrador.etiquetas ?? []).join(", ")}
-                    onChange={(e) =>
-                      editar({ etiquetas: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })
-                    }
-                    placeholder="etiquetas (coma)"
-                    className="w-44"
-                  />
-                </div>
-
-                {borrador.tipo === "editorial" ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Select value={borrador.clase || "marca"} onValueChange={(v) => editar({ clase: v })}>
-                      <SelectTrigger className="w-36"><SelectValue placeholder="Clase" /></SelectTrigger>
-                      <SelectContent>
-                        {CLASES_EDITORIAL.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      value={borrador.marcas.join(", ")}
-                      onChange={(e) =>
-                        editar({ marcas: e.target.value.split(",").map((m) => m.trim()).filter(Boolean) })
-                      }
-                      placeholder="marcas (coma)"
-                      className="w-40"
-                    />
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-muted-foreground">Se inyecta en:</span>
-                  {PIPELINES.map((p) => {
-                    const sel = (borrador.pipelines ?? []).includes(p.id);
-                    return (
-                      <Badge
-                        key={p.id}
-                        variant={sel ? "default" : "outline"}
-                        className="cursor-pointer"
-                        onClick={() => {
-                          const actual = borrador.pipelines ?? [];
-                          editar({
-                            pipelines: sel ? actual.filter((x) => x !== p.id) : [...actual, p.id],
-                          });
-                        }}
-                      >
-                        {p.nombre}
-                      </Badge>
-                    );
-                  })}
-                  {(borrador.pipelines ?? []).length === 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      {borrador.tipo === "editorial" ? "(todos los pipelines)" : "(ninguno)"}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
 
             {/* Cuerpo: WYSIWYG (escribes con formato aplicado). El cuerpo se guarda como markdown. */}
             <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
