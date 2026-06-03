@@ -604,6 +604,18 @@ def renderizar_documento(
         return {"id": nombre, "url": f"/api/media/{nombre}"}
 
 
+def validar_documento(documento: dict[str, Any]) -> dict[str, Any]:
+    """Valida y normaliza un Documento de capas -> dict normalizado. Lanza EstudioError si falla.
+
+    Lo usan las APIs que PERSISTEN un documento (plantillas de diseño, bloques) para no guardar
+    JSON inválido. Mantiene la frontera API->dominio (la API no importa motores directamente).
+    """
+    try:
+        return doc_capas.validar(documento)
+    except doc_capas.DocumentoError as exc:
+        raise EstudioError(str(exc)) from exc
+
+
 def documento_desde_plantilla(marca: str, formato: str) -> dict[str, Any]:
     """Documento de capas EDITABLE derivado de la plantilla de marca (punto de partida del editor).
 

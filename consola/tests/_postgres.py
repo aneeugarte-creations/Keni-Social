@@ -61,6 +61,7 @@ _TABLAS = (
     "plantilla_contenido",
     "biblioteca_media",
     "marca_activos",
+    "plantillas_diseno",
     "webhooks",
     "eventos_internos",
     "jobs",

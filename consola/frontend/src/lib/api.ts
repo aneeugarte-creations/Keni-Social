@@ -545,6 +545,26 @@ export interface ActivoMarca {
   actualizado: string;
 }
 
+// Plantilla de diseño: un Documento de capas reutilizable por marca (categoría + líneas).
+// Espejo de `api/plantillas_diseno.py::_plantilla_a_dict`. `documento` es unknown aquí para no
+// acoplar el cliente API a los tipos del editor (el editor lo castea a Documento).
+export interface PlantillaDiseno {
+  id: string;
+  marca: string;
+  nombre: string;
+  categoria: string;
+  documento: unknown;
+  miniatura: string;
+  miniatura_url: string;
+  lineas: string[];
+  activo: boolean;
+  marca_nombre: string;
+  autor_id: string;
+  autor_nombre: string;
+  creado: string;
+  actualizado: string;
+}
+
 export const api = {
   // --- Catálogo de apps (ADR 0005): apps activas + navegación data-driven ---
   // El sidebar se hidrata de aquí en vez de hardcodear las entradas. Filtra por los
@@ -956,6 +976,27 @@ export const api = {
       `/marca-activos/${encodeURIComponent(id)}${purgar ? "?purgar=1" : ""}`,
       { metodo: "DELETE" },
     ),
+
+  // --- Biblioteca de plantillas de diseño (N por marca, etiquetadas por línea) ---
+  plantillasDiseno: (
+    filtros: { marca?: string; categoria?: string; linea?: string; q?: string } = {},
+    signal?: AbortSignal,
+  ) => {
+    const qp = new URLSearchParams();
+    for (const [k, v] of Object.entries(filtros)) if (v) qp.set(k, v);
+    const cola = qp.toString();
+    return peticion<{ plantillas: PlantillaDiseno[] }>(`/plantillas-diseno${cola ? `?${cola}` : ""}`, { signal });
+  },
+  crearPlantillaDiseno: (cuerpo: {
+    marca?: string;
+    nombre?: string;
+    categoria?: string;
+    documento: unknown;
+    miniatura?: string;
+    lineas?: string[];
+  }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
+  borrarPlantillaDiseno: (id: string) =>
+    peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
   // --- Plantillas de marca (identidad visual con la que se estampa una imagen) ---
   // Solo lectura del catálogo + edición de la plantilla de una marca (logo, colores,

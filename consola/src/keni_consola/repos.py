@@ -1367,6 +1367,58 @@ def borrar_marca_activo(activo_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Plantillas de diseño (editor profesional)                                      #
+# --------------------------------------------------------------------------- #
+
+
+def crear_plantilla_diseno(
+    *,
+    marca: str,
+    nombre: str = "",
+    categoria: str = "post",
+    documento: str = "{}",
+    miniatura: str = "",
+    lineas: str = "[]",
+    activo: bool = True,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    return db.crear_plantilla_diseno(
+        marca=marca,
+        nombre=nombre,
+        categoria=categoria,
+        documento=documento,
+        miniatura=miniatura,
+        lineas=lineas,
+        activo=activo,
+        autor=autor,
+        id=id,
+        creado=creado,
+        actualizado=actualizado,
+    )
+
+
+def listar_plantillas_diseno(
+    *, marca: str | None = None, categoria: str | None = None, solo_activas: bool = False
+) -> list[dict[str, Any]]:
+    return db.listar_plantillas_diseno(marca=marca, categoria=categoria, solo_activas=solo_activas)
+
+
+def obtener_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
+    return db.obtener_plantilla_diseno(plantilla_id)
+
+
+def actualizar_plantilla_diseno(plantilla_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_plantilla_diseno(plantilla_id, campos)
+
+
+def borrar_plantilla_diseno(plantilla_id: str) -> dict[str, Any] | None:
+    return db.borrar_plantilla_diseno(plantilla_id)
+
+
+# --------------------------------------------------------------------------- #
 # Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
 # --------------------------------------------------------------------------- #
 

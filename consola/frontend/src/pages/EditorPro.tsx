@@ -5,8 +5,8 @@
 // para abrir otra. Los stores persisten en un ref por id de pestaña: cambiar de pestaña conserva
 // las ediciones (no recarga la plantilla).
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { Plus, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Save, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -94,6 +94,45 @@ export default function EditorPro() {
   const pestanaActiva = pestanas.find((t) => t.id === activa) ?? null;
   const storeActivo = activa ? stores.current.get(activa) ?? null : null;
 
+  const qc = useQueryClient();
+
+  // Plantillas de diseño guardadas para la marca de la pestaña activa.
+  const plantillasQ = useQuery({
+    queryKey: ["plantillas-diseno", pestanaActiva?.marca ?? ""],
+    queryFn: ({ signal }) => api.plantillasDiseno({ marca: pestanaActiva?.marca || undefined }, signal),
+    enabled: !!pestanaActiva,
+  });
+
+  const guardarPlantilla = useMutation({
+    mutationFn: () => {
+      if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
+      const nombre = window.prompt("Nombre de la plantilla")?.trim();
+      if (!nombre) throw new Error("__cancelado__");
+      return api.crearPlantillaDiseno({
+        marca: pestanaActiva.marca,
+        nombre,
+        categoria: pestanaActiva.formato,
+        documento: storeActivo.getState().documento,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno", pestanaActiva?.marca ?? ""] });
+      toast.success("Plantilla guardada.");
+    },
+    onError: (e: unknown) => {
+      if (e instanceof Error && e.message === "__cancelado__") return;
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar.");
+    },
+  });
+
+  const cargarPlantilla = (id: string) => {
+    const p = plantillasQ.data?.plantillas.find((x) => x.id === id);
+    if (p && storeActivo) {
+      storeActivo.getState().cargar(p.documento as Documento);
+      toast.success(`Plantilla «${p.nombre}» cargada.`);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       {/* Barra superior: abrir pestaña (marca + formato) + export. */}
@@ -115,6 +154,36 @@ export default function EditorPro() {
         <Button variant="outline" size="sm" onClick={abrirPestana} disabled={!marcaEfectiva}>
           <Plus className="mr-1 h-4 w-4" /> Abrir
         </Button>
+        {pestanaActiva && (
+          <>
+            <div className="mx-1 h-5 w-px bg-border" />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={guardarPlantilla.isPending}
+              onClick={() => guardarPlantilla.mutate()}
+            >
+              <Save className="mr-1 h-4 w-4" /> Guardar plantilla
+            </Button>
+            {(plantillasQ.data?.plantillas.length ?? 0) > 0 && (
+              <select
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) cargarPlantilla(e.target.value);
+                }}
+                className="rounded border border-input bg-background px-2 py-1.5 text-sm"
+                aria-label="Cargar plantilla"
+              >
+                <option value="">Cargar plantilla…</option>
+                {plantillasQ.data!.plantillas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre || "(sin nombre)"}
+                  </option>
+                ))}
+              </select>
+            )}
+          </>
+        )}
         {exportUrl && (
           <a href={exportUrl} target="_blank" rel="noreferrer" className="ml-auto text-sm text-primary underline">
             Ver PNG exportado
