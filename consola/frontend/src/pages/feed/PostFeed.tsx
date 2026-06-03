@@ -16,7 +16,7 @@
  * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
+import { Bot, Check, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -52,6 +52,9 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const enRevision = publicacion.estado === "en_revision";
   const yaAprobada = etapa === "aprobada" || etapa === "programada" || etapa === "publicada";
   const tam = tamanoRed(publicacion.red);
+  // Autogenerada por la IA: sin autor humano (las piezas de la tubería —pipeline/rss/radar— no
+  // tienen autor; las que postea el equipo SÍ). En ese caso la firma es "IA", no "desconocido".
+  const generadaPorIA = !publicacion.autor_nombre?.trim();
 
   // Cadena de aprobación: alimenta tanto la UI MULTINIVEL (estado por nivel + decisión por
   // orden) como los avisos de gobernanza (firmas / comentarios sin resolver). Se carga
@@ -103,6 +106,20 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         ? motivo || "Esperando turno para tu OK"
         : "La IA aún prepara esta pieza; podrás darle tu OK cuando esté lista.";
 
+  // Aviso VISIBLE de por qué el "me gusta" está bloqueado (no solo el tooltip): qué falta. Vacío
+  // cuando puedes dar OK o cuando ya está aprobada (no hay nada que avisar). En revisión explica
+  // el gate (tu pieza / ya diste OK / espera a la IA); antes, qué le falta a la pieza.
+  const avisoBloqueo =
+    puedeDar || yaAprobada
+      ? ""
+      : enRevision
+        ? motivo || "Esperando el turno para tu OK."
+        : etapa === "generando_copy"
+          ? "Falta el copy: la IA aún lo está redactando."
+          : etapa === "generando_arte"
+            ? "Falta el arte: la IA aún está generando la imagen."
+            : "La IA aún está preparando esta pieza.";
+
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
   // el material original como marcador para que el post no quede vacío en "generando copy".
   const cuerpo = publicacion.contenido || publicacion.titulo;
@@ -114,7 +131,17 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           El logo/red y el formato NO se repiten en la previa (va en variante limpia, sin su propia
           cabecera): aquí están una vez y ya. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
-        <Autor nombre={publicacion.autor_nombre} className="text-xs font-medium text-foreground" />
+        {generadaPorIA ? (
+          <span
+            className="inline-flex items-center gap-1 text-xs font-medium text-foreground"
+            title="Pieza autogenerada por la IA"
+          >
+            <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+            IA
+          </span>
+        ) : (
+          <Autor nombre={publicacion.autor_nombre} className="text-xs font-medium text-foreground" />
+        )}
         <span>·</span>
         <span>{publicacion.marca_nombre}</span>
         <span>·</span>
@@ -191,6 +218,20 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
           {comentariosAbierto ? "Ocultar comentarios" : "Comentar"}
         </Button>
       </div>
+
+      {/* Aviso VISIBLE de por qué el "me gusta" está bloqueado (qué falta). Ámbar cuando hay un
+          gate que resolver (en revisión: tu pieza / ya diste OK / espera a la IA); gris cuando
+          solo es que la IA aún la prepara. */}
+      {avisoBloqueo && (
+        <div
+          className={
+            "px-4 pb-3 text-xs " +
+            (enRevision ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground")
+          }
+        >
+          {avisoBloqueo}
+        </div>
+      )}
 
       {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
           (cuántos y de quién) + lo que falta. La acción vive arriba, en la fila. */}

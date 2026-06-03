@@ -41,14 +41,17 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
     imagen_fuente = pub.get("imagen_fuente") or ""
     # ETAPA IA real de la pieza (Flujo C, follow-up #3): se DERIVA aquí, en la única
     # serialización pública de C, con la lógica PURA de `pipeline_estado.etapa_de_pieza`
-    # (NO se duplica la heurística). Aditivo/opcional: el feed (Flujo D) PREFIERE este
-    # `etapa_ia` y solo cae a su derivación en cliente si no llega; otros consumidores que
-    # no lo lean no se ven afectados.
+    # (NO se duplica la heurística). El feed (Flujo D) PREFIERE este `etapa_ia`.
+    #
+    # IMPORTANTE: la etapa se deriva del CONTENIDO REAL (¿hay copy?, ¿hay imagen compuesta?), NO
+    # de los flags `falta_*` almacenados. Esos flags se DESINCRONIZAN del contenido (la tubería
+    # rellena `copy`/`imagen` sin tocar siempre el flag), y eso mentía en el label del feed
+    # (p. ej. "Generando copy" en una pieza que YA tiene copy). El label debe reflejar lo que hay.
     etapa_ia = pipeline_estado.etapa_de_pieza(
         {
             "estado": pub.get("estado"),
-            "falta_copy": bool(pub.get("falta_copy", True)),
-            "falta_imagen": bool(pub.get("falta_imagen", True)),
+            "falta_copy": not str(pub.get("contenido") or "").strip(),
+            "falta_imagen": not bool(imagen),
         }
     )
     return {
