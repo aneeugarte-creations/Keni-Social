@@ -57,6 +57,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api } from "@/lib/api";
 import type { DocumentoBiblioteca, PlantillaContenido, TargetLanzamiento } from "@/types";
@@ -93,10 +94,13 @@ function separarFrontmatter(cuerpo: string): { oculto: string; visible: string }
 
 export default function Biblioteca() {
   const qc = useQueryClient();
+  // Marca activa del workspace: default del filtro (con "Todas" disponible: la
+  // biblioteca es editorial y consultar otras marcas es legítimo).
+  const { marcaActiva } = useMarcaActiva();
 
   // --- Navegación / lista ---
   const [filtro, setFiltro] = React.useState<Filtro>("todo");
-  const [marcaFiltro, setMarcaFiltro] = React.useState("");
+  const [marcaFiltro, setMarcaFiltro] = React.useState(marcaActiva ?? "");
   const [q, setQ] = React.useState("");
   const [estadoFiltro, setEstadoFiltro] = React.useState<FiltroEstado>("todo");
   const [etiquetaFiltro, setEtiquetaFiltro] = React.useState<string | null>(null);

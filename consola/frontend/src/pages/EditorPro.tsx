@@ -17,6 +17,7 @@ import { EditorDocumento } from "@/editor/EditorDocumento";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { documentoVacio, type Capa, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 
 const DIMS: Record<string, Documento["formato"]> = {
@@ -60,6 +61,11 @@ export default function EditorPro() {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opciones.data?.marcas ?? [];
+  // Marca activa del workspace: default al abrir una pieza/pestaña nueva.
+  const { marcaActiva } = useMarcaActiva();
+  const marcaInicial = marcaActiva && marcas.some((m) => m.id === marcaActiva)
+    ? marcaActiva
+    : marcas[0]?.id;
 
   const [searchParams] = useSearchParams();
 
@@ -74,7 +80,7 @@ export default function EditorPro() {
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [galeria, setGaleria] = useState(false);
 
-  const marcaEfectiva = marcaNueva || marcas[0]?.id || "";
+  const marcaEfectiva = marcaNueva || marcaInicial || "";
 
   const abrirPestana = async (marcaArg?: string, formatoArg?: string) => {
     const marca = marcaArg || marcaEfectiva;
@@ -139,13 +145,13 @@ export default function EditorPro() {
     const pid = searchParams.get("plataforma");
     if (cid && pid) {
       abiertoInicial.current = true;
-      const marca = searchParams.get("marca") || marcas[0]?.id || "";
+      const marca = searchParams.get("marca") || marcaInicial || "";
       void abrirPiezaTab(cid, pid, marca, searchParams.get("formato") || "feed");
       return;
     }
     if (marcas.length > 0) {
       abiertoInicial.current = true;
-      void abrirPestana(marcas[0].id, "feed");
+      void abrirPestana(marcaInicial ?? marcas[0].id, "feed");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, marcas]);
