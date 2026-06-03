@@ -1330,6 +1330,8 @@ def crear_marca_activo(
     aprobado: bool = True,
     autor: dict[str, str] | None = None,
     id: str = "",
+    creado: str = "",
+    actualizado: str = "",
 ) -> dict[str, Any]:
     return db.crear_marca_activo(
         marca=marca,
@@ -1341,6 +1343,8 @@ def crear_marca_activo(
         aprobado=aprobado,
         autor=autor,
         id=id,
+        creado=creado,
+        actualizado=actualizado,
     )
 
 
