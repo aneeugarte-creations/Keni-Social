@@ -49,13 +49,11 @@ const HERRAMIENTAS: { clave: Herramienta; etiqueta: string; Icono: typeof Shapes
 export function EditorDocumento({
   store,
   marca,
-  formato,
   onExportar,
   onPlantillas,
 }: {
   store: StoreEditor;
   marca: string;
-  formato: string;
   onExportar?: () => void;
   onPlantillas?: () => void;
 }) {
@@ -94,7 +92,7 @@ export function EditorDocumento({
     switch (tool) {
       case "elementos": return <PanelElementos />;
       case "biblioteca": return <PanelBiblioteca marca={marca} reemplazarId={reemplazarId} onReemplazado={() => setReemplazarId(null)} />;
-      case "ia": return <PanelIA marca={marca} formato={formato} />;
+      case "ia": return <PanelIA marca={marca} />;
       case "capas": return <PanelCapas />;
       default: return null;
     }

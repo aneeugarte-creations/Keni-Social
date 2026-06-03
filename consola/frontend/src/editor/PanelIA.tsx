@@ -18,9 +18,20 @@ import { useEditor, useStoreEditor } from "./usarEditor";
 
 type TipoTrabajo = "generar" | "expandir" | "retocar" | "revisar";
 
-export function PanelIA({ marca, formato }: { marca: string; formato: string }) {
+// Deriva el FormatoImagen de la IA de las DIMENSIONES reales del lienzo (no de la red), para que
+// la imagen generada cuadre con el documento aunque se haya ajustado el tamaño.
+function formatoDeDimensiones(w: number, h: number): FormatoImagen {
+  const r = w / (h || 1);
+  if (r <= 0.7) return "vertical";
+  if (r <= 0.92) return "feed";
+  if (r <= 1.15) return "cuadrado";
+  return "horizontal";
+}
+
+export function PanelIA({ marca }: { marca: string }) {
   const store = useStoreEditor();
   const capaSel = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
+  const formato = useEditor((s) => s.documento.formato);
   const imagenSel = capaSel?.tipo === "imagen" ? (capaSel as CapaImagen) : null;
 
   const [prompt, setPrompt] = useState("");
@@ -29,7 +40,7 @@ export function PanelIA({ marca, formato }: { marca: string; formato: string }) 
   const [trabajo, setTrabajo] = useState<{ tipo: TipoTrabajo; capaId?: string } | null>(null);
   const aplicado = useRef<string | null>(null);
 
-  const fmt = formato as FormatoImagen;
+  const fmt = formatoDeDimensiones(formato.w, formato.h);
 
   // Aplica el resultado del job al terminar (una sola vez por id).
   useEffect(() => {

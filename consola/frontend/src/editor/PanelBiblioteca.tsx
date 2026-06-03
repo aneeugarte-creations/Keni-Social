@@ -4,7 +4,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,14 @@ import { useStoreEditor } from "./usarEditor";
 // Tipos que se insertan como capa de imagen (el logo va como capa logo).
 const TIPOS_IMAGEN = new Set(["arte", "infografia", "icono", "fondo"]);
 
-const TIPOS_SUBIDA = ["logo", "arte", "infografia", "icono", "fondo"] as const;
+// Deduce el tipo de activo del propio archivo (sin pedir nada al usuario): fuentes por extensión,
+// «logo» si el nombre lo sugiere, y el resto como imagen/arte.
+function tipoDeArchivo(nombre: string): string {
+  const n = nombre.toLowerCase();
+  if (/\.(woff2?|ttf|otf)$/.test(n)) return "tipografia";
+  if (/\blogo\b|logotipo|isotipo/.test(n)) return "logo";
+  return "arte";
+}
 
 export function PanelBiblioteca({
   marca,
@@ -33,7 +40,6 @@ export function PanelBiblioteca({
   const store = useStoreEditor();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
-  const [tipoSubida, setTipoSubida] = useState<string>("arte");
 
   const activosQuery = useQuery({
     queryKey: ["marca-activos", marca],
@@ -46,7 +52,7 @@ export function PanelBiblioteca({
     mutationFn: async (archivo: File) => {
       const media = await api.subirMedia(archivo);
       return api.crearMarcaActivo({
-        tipo: tipoSubida,
+        tipo: tipoDeArchivo(archivo.name),
         marca: marca || undefined,
         objeto: media.id,
         nombre: archivo.name.replace(/\.[^.]+$/, ""),
@@ -117,26 +123,14 @@ export function PanelBiblioteca({
       <div className="flex items-center gap-1 border-b border-border px-3 py-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Biblioteca</span>
         <div className="ml-auto flex items-center gap-1">
-          <select
-            value={tipoSubida}
-            onChange={(e) => setTipoSubida(e.target.value)}
-            className="rounded border border-input bg-background px-1 py-0.5 text-xs"
-            aria-label="Tipo de activo a subir"
-          >
-            {TIPOS_SUBIDA.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
           <Button
             variant="outline"
             size="sm"
             disabled={subir.isPending}
             onClick={() => fileRef.current?.click()}
-            title="Subir activo"
+            title="Subir imagen, logo o tipografía"
           >
-            <Upload className="h-4 w-4" />
+            <Upload className="mr-1 h-4 w-4" /> Subir
           </Button>
           <input
             ref={fileRef}

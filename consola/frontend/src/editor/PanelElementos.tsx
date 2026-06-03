@@ -1,28 +1,29 @@
-// Panel «Elementos» del rail (patrón Canva): inserta capas nuevas con estilos listos para usar
-// — textos (titular/subtítulo/cuerpo/pleca), formas (rectángulo/elipse/línea), imagen vacía y
-// degradado de legibilidad. Cada inserción queda seleccionada para editarla al instante.
+// Panel «Elementos» del rail (patrón Canva): inserta capas listas para usar — textos con estilo,
+// formas (con vista previa real), bloques compuestos típicos de noticias/deportes (pleca inferior),
+// imagen y degradado. Cada inserción queda seleccionada para editarla al instante.
 
-import { Minus, Square, Circle, Image as ImageIcon, Type, PanelBottom } from "lucide-react";
+import { Image as ImageIcon, PanelBottom } from "lucide-react";
 
 import type { Capa } from "./documento";
 import { nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, zTope } from "./documento";
 import { useStoreEditor } from "./usarEditor";
 
-// Presets de texto: tamaños/pesos típicos de un post de noticias/deportes.
-// Los presets de Titular y Pleca quedan ENLAZADOS al copy de la pieza (binding): al aplicar la
+// Presets de texto. Titular y Pleca quedan ENLAZADOS al copy de la pieza (binding): al aplicar la
 // plantilla a una publicación se rellenan solos. Subtítulo y Cuerpo son texto fijo.
-const TEXTOS: { etiqueta: string; clase: string; parcial: Parameters<typeof nuevaCapaTexto>[0] }[] = [
-  { etiqueta: "Titular (copy)", clase: "text-2xl font-extrabold", parcial: { texto: "TITULAR", tamano: 96, peso: 800, mayusculas: true, ancla: "abajo", binding: "copy_in" } },
-  { etiqueta: "Subtítulo", clase: "text-lg font-bold", parcial: { texto: "Subtítulo", tamano: 56, peso: 700 } },
-  { etiqueta: "Cuerpo", clase: "text-sm", parcial: { texto: "Texto de cuerpo", tamano: 40, peso: 400 } },
-  { etiqueta: "Pleca / etiqueta", clase: "text-xs font-bold", parcial: { texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, binding: "etiqueta_default", chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } } },
+const TEXTOS: { etiqueta: string; vista: string; clase: string; parcial: Parameters<typeof nuevaCapaTexto>[0] }[] = [
+  { etiqueta: "Titular", vista: "Titular", clase: "text-xl font-extrabold tracking-tight", parcial: { texto: "TITULAR", tamano: 96, peso: 800, mayusculas: true, ancla: "abajo", binding: "copy_in" } },
+  { etiqueta: "Subtítulo", vista: "Subtítulo", clase: "text-base font-bold", parcial: { texto: "Subtítulo", tamano: 56, peso: 700 } },
+  { etiqueta: "Cuerpo", vista: "Texto de cuerpo", clase: "text-xs", parcial: { texto: "Texto de cuerpo", tamano: 40, peso: 400 } },
+  { etiqueta: "Pleca", vista: "EN VIVO", clase: "text-[10px] font-bold", parcial: { texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, binding: "etiqueta_default", chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } } },
 ];
 
-const FORMAS: { etiqueta: string; Icono: typeof Square; parcial: Parameters<typeof nuevaCapaMarco>[0] }[] = [
-  { etiqueta: "Rectángulo", Icono: Square, parcial: { forma: "rect", relleno: "#E30613", borde: null } },
-  { etiqueta: "Elipse", Icono: Circle, parcial: { forma: "elipse", relleno: "#E30613", borde: null } },
-  { etiqueta: "Línea", Icono: Minus, parcial: { forma: "linea", borde: { color: "#FFFFFF", grosor: 8 }, h: 0, w: 480 } },
-  { etiqueta: "Marco", Icono: Square, parcial: { forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } } },
+// Formas, con una vista previa real (no solo un icono).
+const FORMAS: { etiqueta: string; vista: React.ReactNode; parcial: Parameters<typeof nuevaCapaMarco>[0] }[] = [
+  { etiqueta: "Rectángulo", vista: <span className="h-6 w-9 rounded-sm bg-foreground/80" />, parcial: { forma: "rect", relleno: "#E30613", borde: null } },
+  { etiqueta: "Redondeado", vista: <span className="h-6 w-9 rounded-lg bg-foreground/80" />, parcial: { forma: "rect", relleno: "#E30613", borde: null, radio: 32 } },
+  { etiqueta: "Elipse", vista: <span className="h-7 w-7 rounded-full bg-foreground/80" />, parcial: { forma: "elipse", relleno: "#E30613", borde: null, w: 320, h: 320 } },
+  { etiqueta: "Marco", vista: <span className="h-6 w-9 rounded-sm border-2 border-foreground/80" />, parcial: { forma: "rect", relleno: null, borde: { color: "#FFFFFF", grosor: 8 } } },
+  { etiqueta: "Línea", vista: <span className="h-0.5 w-9 bg-foreground/80" />, parcial: { forma: "linea", borde: { color: "#FFFFFF", grosor: 8 }, h: 0, w: 480 } },
 ];
 
 function Seccion({ titulo, children }: { titulo: string; children: React.ReactNode }) {
@@ -40,13 +41,36 @@ export function PanelElementos() {
   const insertar = (capa: Capa) => {
     const st = store.getState();
     const doc = st.documento;
-    // Centrada horizontalmente en el lienzo, dentro de la zona segura superior.
     const x = Math.round((doc.formato.w - capa.w) / 2);
     const y = capa.tipo === "texto" && capa.ancla === "abajo"
       ? doc.formato.h - doc.formato.safe_bottom
       : Math.max(doc.formato.safe_top, Math.round(doc.formato.h * 0.12));
     st.agregar({ ...capa, x, y, z: zTope(doc) } as Capa);
     st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);
+  };
+
+  const seleccionarUltima = () => {
+    const st = store.getState();
+    st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);
+  };
+
+  // Bloque compuesto: PLECA INFERIOR de noticia (degradado + etiqueta roja + titular ligado al copy).
+  const insertarPleca = () => {
+    const st = store.getState();
+    const { w, h, safe_bottom } = st.documento.formato;
+    st.insertarBloque([
+      nuevaCapaOverlay({ x: 0, y: 0, w, h, color: "#000000", alto_frac: 0.5, alpha: 210 }),
+      nuevaCapaTexto({
+        texto: "EN VIVO", binding: "etiqueta_default", mayusculas: true, tamano: 38, peso: 700,
+        x: 80, y: Math.round(h - safe_bottom - h * 0.18), w: 420,
+        chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 },
+      }),
+      nuevaCapaTexto({
+        texto: "Titular de la noticia", binding: "copy_in", mayusculas: true, tamano: 92, peso: 800,
+        ancla: "abajo", x: 80, y: h - safe_bottom, w: w - 160, contorno: null,
+      }),
+    ]);
+    seleccionarUltima();
   };
 
   return (
@@ -57,24 +81,43 @@ export function PanelElementos() {
             <button
               key={t.etiqueta}
               onClick={() => insertar(nuevaCapaTexto({ w: 760, ...t.parcial }))}
-              className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-left hover:border-primary hover:bg-accent/50"
+              className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-neutral-900 px-3 py-2.5 text-left hover:border-primary"
             >
-              <Type className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <span className={t.clase}>{t.etiqueta}</span>
+              <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-neutral-500">{t.etiqueta}</span>
+              <span className={`truncate text-white ${t.clase}`}>
+                {t.parcial?.chip ? <span className="rounded-sm bg-[#E30613] px-1.5 py-0.5">{t.vista}</span> : t.vista}
+              </span>
             </button>
           ))}
         </div>
       </Seccion>
 
+      <Seccion titulo="Bloques">
+        <button
+          onClick={insertarPleca}
+          className="flex w-full items-end overflow-hidden rounded-md border border-border bg-neutral-800 p-0 text-left hover:border-primary"
+        >
+          {/* Mini-maqueta de la pleca inferior. */}
+          <div className="relative h-20 w-full bg-gradient-to-t from-black via-black/60 to-transparent">
+            <div className="absolute bottom-2 left-2 flex flex-col gap-1">
+              <span className="w-fit rounded-sm bg-[#E30613] px-1.5 py-0.5 text-[8px] font-bold text-white">EN VIVO</span>
+              <span className="text-[11px] font-extrabold uppercase leading-tight text-white">Titular de la noticia</span>
+            </div>
+          </div>
+        </button>
+        <p className="mt-1 px-1 text-[10px] text-muted-foreground">Pleca inferior: degradado + etiqueta + titular (se rellena con el copy).</p>
+      </Seccion>
+
       <Seccion titulo="Formas">
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5">
           {FORMAS.map((f) => (
             <button
               key={f.etiqueta}
               onClick={() => insertar(nuevaCapaMarco({ w: 360, h: 240, ...f.parcial }))}
-              className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
+              title={f.etiqueta}
+              className="flex aspect-square flex-col items-center justify-center gap-1.5 rounded-md border border-border text-[9px] text-muted-foreground hover:border-primary hover:bg-accent/50"
             >
-              <f.Icono className="h-5 w-5" />
+              {f.vista}
               {f.etiqueta}
             </button>
           ))}
@@ -95,7 +138,7 @@ export function PanelElementos() {
               const st = store.getState();
               const doc = st.documento;
               st.agregar(nuevaCapaOverlay({ w: doc.formato.w, h: doc.formato.h, z: zTope(doc) }));
-              st.seleccionar(st.documento.capas[st.documento.capas.length - 1]?.id ?? null);
+              seleccionarUltima();
             }}
             className="flex flex-col items-center gap-1 rounded-md border border-border px-2 py-3 text-xs text-muted-foreground hover:border-primary hover:bg-accent/50"
           >

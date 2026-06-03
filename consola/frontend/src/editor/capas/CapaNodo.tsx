@@ -91,6 +91,10 @@ function NodoImagenAjustada({
 
   return (
     <Group {...props} clipX={0} clipY={0} clipWidth={w} clipHeight={h}>
+      {/* Zona sensible al puntero del tamaño de la caja: la imagen interior va con listening=false,
+          así que sin este Rect el Group no recibiría clic/arrastre (no se podían mover las fotos).
+          opacity 0 = invisible en escena pero presente en el hit graph de Konva. */}
+      <Rect x={0} y={0} width={w} height={h} fill="#000000" opacity={0} />
       <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} />
     </Group>
   );
