@@ -677,6 +677,7 @@ export interface Publicacion {
   evergreen: boolean;
   copy_in_exento?: boolean;
   placa_oculta?: boolean;
+  plantilla_diseno_id?: string;
 }
 /**
  * Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).

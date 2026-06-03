@@ -284,6 +284,11 @@ async def actualizar(request: Request) -> Response:
                 {"error": "El campo placa_oculta debe ser verdadero o falso."}, status_code=400
             )
         campos["placa_oculta"] = placa_oculta
+    if "plantilla_diseno_id" in datos:
+        plantilla_diseno_id = datos.get("plantilla_diseno_id")
+        if not isinstance(plantilla_diseno_id, str):
+            return JSONResponse({"error": "La plantilla debe ser texto."}, status_code=400)
+        campos["plantilla_diseno_id"] = plantilla_diseno_id.strip()
 
     if not campos:
         return JSONResponse(
@@ -525,6 +530,53 @@ async def integrar_foto(request: Request) -> Response:
     return JSONResponse({"imagen": final, "imagen_url": f"/api/media/{final}"})
 
 
+async def aplicar_plantilla(request: Request) -> Response:
+    """Aplica una PLANTILLA del estudio a la publicación y RECOMPONE su imagen.
+
+    `POST /api/publicaciones/{id}/aplicar-plantilla {plantilla_id}`: renderiza el documento de la
+    plantilla (PlantillaDiseno) con la FOTO y el COPY-IN actuales de la pieza, fija la imagen
+    resultante y recuerda la plantilla elegida (`plantilla_diseno_id`). Persiste. Así el equipo
+    prueba distintas plantillas y compara el resultado real. -> `{publicacion}` | 400 | 404.
+    """
+    from ..dominio import estudio_imagen
+
+    publicacion_id = request.path_params["publicacion_id"]
+    pub = repos.obtener_publicacion(publicacion_id)
+    if pub is None:
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+
+    datos = await leer_json(request)
+    plantilla_id = datos.get("plantilla_id")
+    if not isinstance(plantilla_id, str) or not plantilla_id.strip():
+        return JSONResponse({"error": "Falta la plantilla a aplicar."}, status_code=400)
+    plantilla_id = plantilla_id.strip()
+    plantilla = repos.obtener_plantilla_diseno(plantilla_id)
+    if plantilla is None:
+        return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
+
+    # `foto`/`copy_in` opcionales: el SPA manda los valores VIGENTES del editor (aún sin guardar)
+    # para componer con ellos; si no vienen, se usan los persistidos de la pieza.
+    foto_req = datos.get("foto")
+    foto = foto_req if isinstance(foto_req, str) else (pub.get("foto") or "")
+    copy_in_req = datos.get("copy_in")
+    copy_in = copy_in_req if isinstance(copy_in_req, str) else (pub.get("copy_in") or "")
+
+    try:
+        resultado = estudio_imagen.componer_desde_plantilla(
+            plantilla.get("documento") or "{}", copy_in=copy_in, foto=foto,
+        )
+    except estudio_imagen.EstudioError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    actualizada = repos.actualizar_publicacion(
+        publicacion_id,
+        {"imagen": resultado["id"], "plantilla_diseno_id": plantilla_id, "foto": foto},
+    )
+    if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
+        return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    return JSONResponse({"publicacion": _publicacion_a_dict(actualizada)})
+
+
 RUTAS = [
     Route("/api/publicaciones/opciones", opciones, methods=["GET"]),
     Route("/api/publicaciones", listar, methods=["GET"]),
@@ -535,6 +587,7 @@ RUTAS = [
     Route("/api/publicaciones/{publicacion_id}/reciclar", reciclar, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/metricool", programar_metricool, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}/integrar-foto", integrar_foto, methods=["POST"]),
+    Route("/api/publicaciones/{publicacion_id}/aplicar-plantilla", aplicar_plantilla, methods=["POST"]),
     Route("/api/publicaciones/{publicacion_id}", detalle, methods=["GET"]),
     Route("/api/publicaciones/{publicacion_id}", actualizar, methods=["PUT"]),
     Route("/api/publicaciones/{publicacion_id}", borrar, methods=["DELETE"]),

@@ -13,7 +13,8 @@ export function GaleriaPlantillas({
 }: {
   plantillas: PlantillaDiseno[];
   onCargar: (p: PlantillaDiseno) => void;
-  onBorrar: (p: PlantillaDiseno) => void;
+  /** Si se omite, no se ofrece borrar (modo SELECTOR, p. ej. elegir plantilla para una pieza). */
+  onBorrar?: (p: PlantillaDiseno) => void;
   onCerrar: () => void;
 }) {
   return (
@@ -53,13 +54,15 @@ export function GaleriaPlantillas({
                     </div>
                     <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
                   </button>
-                  <button
-                    onClick={() => onBorrar(p)}
-                    title="Borrar plantilla"
-                    className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {onBorrar && (
+                    <button
+                      onClick={() => onBorrar(p)}
+                      title="Borrar plantilla"
+                      className="absolute right-1 top-1 rounded bg-background/80 p-1 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

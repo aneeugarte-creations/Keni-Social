@@ -867,6 +867,8 @@ class Publicacion(TypedDict):
     # "Quitar plantilla": publicar SOLO la foto, sin la placa de marca encima. Opcional: las
     # piezas legadas no lo traen y se lee como False (con plantilla).
     placa_oculta: NotRequired[bool]
+    # Plantilla del estudio (PlantillaDiseno) elegida para esta pieza; "" = ninguna. Opcional.
+    plantilla_diseno_id: NotRequired[str]
 
 
 class RespuestaPublicaciones(TypedDict):

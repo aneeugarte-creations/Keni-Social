@@ -4,6 +4,7 @@ import {
   Eye,
   History,
   Layers,
+  LayoutTemplate,
   Link2,
   ListChecks,
   Loader2,
@@ -25,6 +26,7 @@ import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
+import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
 import { Button } from "@/components/ui/button";
@@ -324,6 +326,10 @@ export function DialogoEditar({
   const [foto, setFoto] = React.useState("");
   // "Quitar plantilla": publicar solo la foto, sin placa. Se persiste en la pieza (`placa_oculta`).
   const [placaOculta, setPlacaOculta] = React.useState(false);
+  // Plantilla del estudio elegida ("" = placa de marca por defecto / editor en vivo). La pieza la
+  // recuerda (`plantilla_diseno_id`); en modo plantilla el editor muestra el resultado renderizado.
+  const [plantillaId, setPlantillaId] = React.useState("");
+  const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
   // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
   const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
   const [vista, setVista] = React.useState<VistaEditor>("previa");
@@ -339,6 +345,34 @@ export function DialogoEditar({
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
 
+  // Plantillas del estudio para ESTA marca + red (la `categoria` de la plantilla es la red). Se
+  // cargan al abrir la galería para no pedirlas si no se usan.
+  const plantillasQuery = useQuery({
+    queryKey: ["plantillas-diseno", publicacion?.marca, publicacion?.red],
+    queryFn: ({ signal }) =>
+      api.plantillasDiseno({ marca: publicacion?.marca, categoria: publicacion?.red }, signal),
+    enabled: galeriaPlantillas && !!publicacion?.marca,
+  });
+  const plantillas = plantillasQuery.data?.plantillas ?? [];
+
+  // Aplicar una plantilla del estudio: el servidor RE-RENDERIZA con la foto y el copy-in actuales
+  // (los del editor, aún sin guardar) y persiste. Actualizamos la previa al resultado.
+  const aplicarPlantilla = useMutation({
+    mutationFn: (idPlantilla: string) =>
+      api.aplicarPlantillaPublicacion(publicacion!.id, idPlantilla, { foto, copy_in: copyIn }),
+    onSuccess: ({ publicacion: p }) => {
+      setImagen(p.imagen ?? "");
+      setImagenUrl(p.imagen_url ?? "");
+      setFoto(p.foto ?? "");
+      setPlantillaId(p.plantilla_diseno_id ?? "");
+      setGaleriaPlantillas(false);
+      void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
+      void queryClient.invalidateQueries({ queryKey: ["contenido"] });
+      toast.success("Plantilla aplicada");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo aplicar la plantilla."),
+  });
+
   // Cargamos los valores cada vez que se abre con una publicación nueva.
   React.useEffect(() => {
     if (!publicacion) return;
@@ -352,6 +386,7 @@ export function DialogoEditar({
     setImagenUrl(publicacion.imagen_url ?? "");
     setFoto(publicacion.foto ?? "");
     setPlacaOculta(publicacion.placa_oculta ?? false);
+    setPlantillaId(publicacion.plantilla_diseno_id ?? "");
     setVista("previa");
   }, [publicacion]);
 
@@ -370,10 +405,11 @@ export function DialogoEditar({
   const guardar = useMutation({
     mutationFn: async () => {
       if (!publicacion) throw new Error("Sin publicación");
-      // Piezas de marca: HORNEAR el canvas de la placa a un media id publicable. Si falla, se
-      // conserva la imagen previa. La `foto` cruda se persiste para re-editar al reabrir.
+      // Piezas de marca SIN plantilla del estudio: HORNEAR el canvas de la placa (spec) a un media
+      // id publicable. CON plantilla del estudio la imagen ya es el render del documento (vía
+      // "aplicar plantilla"): NO se hornea el spec encima (lo pisaría). La `foto` cruda se persiste.
       let imagenFinal = imagen;
-      if (publicacion.marca && bakeRef.current) {
+      if (publicacion.marca && !plantillaId && bakeRef.current) {
         const horneada = await bakeRef.current();
         if (horneada) imagenFinal = horneada;
       }
@@ -388,6 +424,8 @@ export function DialogoEditar({
         imagen: imagenFinal,
         foto,
         placa_oculta: placaOculta,
+        // Recuerda (o limpia) la plantilla del estudio elegida.
+        plantilla_diseno_id: plantillaId,
       };
       return api.actualizarPublicacion(publicacion.id, cuerpo);
     },
@@ -501,21 +539,85 @@ export function DialogoEditar({
 
             {publicacion &&
               (publicacion.marca ? (
-                // Piezas de marca: editor INLINE en vivo (la placa se compone en el navegador a
-                // medida que se teclea el titular; al guardar se hornea a `imagen`).
-                <EditorPlacaInline
-                  marca={publicacion.marca}
-                  red={publicacion.red}
-                  copyIn={copyIn}
-                  foto={foto}
-                  onCambioFoto={setFoto}
-                  imagenFuente={publicacion.imagen_fuente}
-                  placaOculta={placaOculta}
-                  onPlacaOcultaCambio={setPlacaOculta}
-                  registrarBake={(fn) => {
-                    bakeRef.current = fn;
-                  }}
-                />
+                plantillaId ? (
+                  // MODO PLANTILLA DEL ESTUDIO: la imagen ya es el render del documento elegido
+                  // (con tu foto + copy-in). Muestra el resultado y deja cambiar/quitar plantilla.
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="flex items-center gap-1.5 text-sm font-medium">
+                        <LayoutTemplate className="h-4 w-4 text-muted-foreground" />
+                        Imagen <span className="font-normal text-muted-foreground">· plantilla del estudio</span>
+                      </span>
+                      <div className="flex gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1.5 px-2 text-xs"
+                          onClick={() => setGaleriaPlantillas(true)}
+                          disabled={aplicarPlantilla.isPending}
+                        >
+                          {aplicarPlantilla.isPending ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <LayoutTemplate className="h-3.5 w-3.5" />
+                          )}
+                          Cambiar plantilla
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setPlantillaId("")}
+                          title="Volver a la placa de marca por defecto y editar la foto"
+                        >
+                          Quitar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
+                      {imagenUrl ? (
+                        <img src={imagenUrl} alt="" className="max-h-[22rem] w-auto rounded-md" />
+                      ) : (
+                        <div className="flex h-56 items-center justify-center text-sm text-muted-foreground">
+                          Aplicando…
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Renderizada con tu foto y tu copy-in. Cambia de plantilla para comparar; «Quitar»
+                      vuelve al editor de placa por defecto.
+                    </p>
+                  </div>
+                ) : (
+                  // MODO EDITOR (placa de marca por defecto): editor INLINE en vivo + probar una
+                  // plantilla del estudio (diseñadas por marca y red en el estudio de diseño).
+                  <div className="space-y-2.5">
+                    <EditorPlacaInline
+                      marca={publicacion.marca}
+                      red={publicacion.red}
+                      copyIn={copyIn}
+                      foto={foto}
+                      onCambioFoto={setFoto}
+                      imagenFuente={publicacion.imagen_fuente}
+                      placaOculta={placaOculta}
+                      onPlacaOcultaCambio={setPlacaOculta}
+                      registrarBake={(fn) => {
+                        bakeRef.current = fn;
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setGaleriaPlantillas(true)}
+                    >
+                      <LayoutTemplate className="h-4 w-4" />
+                      Probar una plantilla del estudio
+                    </Button>
+                  </div>
+                )
               ) : (
                 // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.
                 <EditorImagen
@@ -710,6 +812,16 @@ export function DialogoEditar({
           onCerrar={() => setUtmAbierto(false)}
           onInsertar={(enlace) => setContenido((prev) => agregarEnlace(prev, enlace))}
         />
+
+        {/* Selector de plantilla del estudio (miniaturas) para ESTA marca+red. Al elegir, el
+            servidor re-renderiza la imagen de la pieza con la plantilla y tu foto+copy-in. */}
+        {galeriaPlantillas && (
+          <GaleriaPlantillas
+            plantillas={plantillas}
+            onCargar={(p) => aplicarPlantilla.mutate(p.id)}
+            onCerrar={() => setGaleriaPlantillas(false)}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -2631,6 +2631,8 @@ export interface CuerpoActualizarPublicacion {
   foto?: string;
   /** "Quitar plantilla": publicar solo la foto, sin la placa de marca encima. */
   placa_oculta?: boolean;
+  /** Plantilla del estudio elegida ("" para volver a la placa de marca por defecto). */
+  plantilla_diseno_id?: string;
 }
 
 /** Respuesta al reciclar una publicación perenne. */

@@ -623,6 +623,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         es_publicacion        INTEGER NOT NULL DEFAULT 0,
         copy_in_exento        INTEGER NOT NULL DEFAULT 0,
         placa_oculta          INTEGER NOT NULL DEFAULT 0,
+        plantilla_diseno_id   TEXT NOT NULL DEFAULT '',
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
@@ -1451,6 +1452,13 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS placa_oculta INTEGER NOT NULL DEFAULT 0"
+        )
+    # `plantilla_diseno_id`: la plantilla del estudio (PlantillaDiseno) que la pieza usa para
+    # componer su imagen. "" = sin plantilla del estudio (placa de marca por defecto).
+    if "plantilla_diseno_id" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS plantilla_diseno_id TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -4355,6 +4363,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "es_publicacion",
     "copy_in_exento",
     "placa_oculta",
+    "plantilla_diseno_id",
     "qa_auto_hash",
     "hora_post",
     "creado",
@@ -4428,6 +4437,7 @@ def crear_contenido_plataforma(
     es_publicacion: bool = False,
     copy_in_exento: bool = False,
     placa_oculta: bool = False,
+    plantilla_diseno_id: str = "",
     qa_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
@@ -4470,6 +4480,7 @@ def crear_contenido_plataforma(
         "es_publicacion": 1 if es_publicacion else 0,
         "copy_in_exento": 1 if copy_in_exento else 0,
         "placa_oculta": 1 if placa_oculta else 0,
+        "plantilla_diseno_id": plantilla_diseno_id or "",
         "qa_auto_hash": qa_auto_hash or "",
         "hora_post": hora_post or "",
         "creado": creado or ahora,
@@ -7564,7 +7575,7 @@ _SELECT_PUBLICACION = (
     "cp.falta_copy AS falta_copy, cp.falta_imagen AS falta_imagen, "
     "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
-    "cp.placa_oculta AS placa_oculta, "
+    "cp.placa_oculta AS placa_oculta, cp.plantilla_diseno_id AS plantilla_diseno_id, "
     "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
@@ -7623,6 +7634,8 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "copy_in_exento": bool(f["copy_in_exento"]),
         # "Quitar plantilla": publicar solo la foto, sin la placa de marca encima.
         "placa_oculta": bool(f["placa_oculta"]),
+        # Plantilla del estudio (PlantillaDiseno) que la pieza usa para componer. "" = ninguna.
+        "plantilla_diseno_id": f["plantilla_diseno_id"] or "",
         "qa_auto_hash": f["qa_auto_hash"] or "",
     }
 
@@ -7816,6 +7829,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "foto": "foto",
     "evergreen": "evergreen",
     "placa_oculta": "placa_oculta",
+    "plantilla_diseno_id": "plantilla_diseno_id",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",
     "revisor_nombre": "revisor_nombre",

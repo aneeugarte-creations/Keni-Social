@@ -834,6 +834,16 @@ export const api = {
       `/publicaciones/${encodeURIComponent(id)}/integrar-foto`,
       { metodo: "POST", json: copyIn === undefined ? { imagen } : { imagen, copy_in: copyIn } },
     ),
+  /** Aplica una plantilla del estudio a la pieza: renderiza con la foto+copy-in dados y persiste. */
+  aplicarPlantillaPublicacion: (
+    id: string,
+    plantillaId: string,
+    extra: { foto?: string; copy_in?: string } = {},
+  ) =>
+    peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/aplicar-plantilla`, {
+      metodo: "POST",
+      json: { plantilla_id: plantillaId, ...extra },
+    }),
 
   // --- Aprobación de PUBLICACIONES (#9): cola de revisión + decisión + programación ---
   // CONSOLIDACIÓN: la aprobación es ahora la MISMA cadena multinivel del tablero (una

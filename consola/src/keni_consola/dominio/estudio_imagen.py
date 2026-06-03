@@ -20,6 +20,7 @@ temporal que se borra al terminar; los nombres en el almacen los genera el servi
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import subprocess
@@ -636,6 +637,34 @@ def renderizar_documento(
         except media.MediaError as e:
             raise EstudioError(str(e)) from e
         return {"id": nombre, "url": f"/api/media/{nombre}"}
+
+
+def componer_desde_plantilla(
+    documento: dict[str, Any] | str, *, copy_in: str = "", foto: str = "",
+) -> dict[str, Any]:
+    """Renderiza el DOCUMENTO de una plantilla del estudio con la FOTO y el COPY-IN de una pieza.
+
+    El documento es la plantilla diseñada en el estudio (`PlantillaDiseno.documento`): trae un
+    layout de capas y, en la de imagen de fondo (la de MENOR `z`), una foto de muestra. Para
+    aplicarla a una pieza sustituimos esa foto de fondo por la `foto` real de la pieza (o "" para
+    dejar el hueco si aún no hay) y pasamos el `copy_in` como binding del titular. Devuelve
+    `{id, url}` del PNG resultante (lo publicable). Reusa `renderizar_documento` (motor Node).
+    `documento` puede venir como dict o como JSON string (lo que guarda `PlantillaDiseno`).
+    """
+    if isinstance(documento, str):
+        try:
+            documento = json.loads(documento or "{}")
+        except (ValueError, TypeError) as exc:
+            raise EstudioError("La plantilla no tiene un documento válido.") from exc
+    doc = copy.deepcopy(documento)
+    capas = doc.get("capas") or []
+    # Capa de imagen de FONDO = la imagen de menor z (sobre ella se apilan overlay/texto/logo).
+    # Es el "hueco de foto": ahí va la foto de la pieza.
+    fondos = [c for c in capas if isinstance(c, dict) and c.get("tipo") == "imagen"]
+    if fondos:
+        fondo = min(fondos, key=lambda c: c.get("z", 0))
+        fondo["objeto"] = foto or ""
+    return renderizar_documento(doc, bindings={"copy_in": copy_in})
 
 
 def validar_documento(documento: dict[str, Any]) -> dict[str, Any]:

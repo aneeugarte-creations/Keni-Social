@@ -114,6 +114,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # "Quitar plantilla": publicar solo la foto, sin la placa de marca encima. Persiste la
         # elección del editor entre reaperturas.
         "placa_oculta": bool(pub.get("placa_oculta", False)),
+        # Plantilla del estudio (PlantillaDiseno) elegida para esta pieza. "" = ninguna (placa de
+        # marca por defecto). La imagen ya compuesta con ella vive en `imagen`.
+        "plantilla_diseno_id": pub.get("plantilla_diseno_id") or "",
         # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
         # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
         "etapa_ia": etapa_ia,
