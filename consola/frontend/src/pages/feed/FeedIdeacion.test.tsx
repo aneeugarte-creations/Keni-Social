@@ -67,11 +67,27 @@ function stubFetch() {
         return new Response(JSON.stringify(OPCIONES), { status: 200 });
       }
       if (ruta.includes("/aprobacion")) {
+        // Cadena con UN nivel humano pendiente: el revisor de sesión (u1, ≠ autor u9) puede dar OK.
         return new Response(
           JSON.stringify({
-            niveles: [],
+            niveles: [
+              {
+                id: "n1",
+                plataforma_id: "p1",
+                contenido_id: "c1",
+                nivel: 1,
+                etiqueta: "Edición",
+                decision: "pendiente",
+                decisor_id: "",
+                decisor_nombre: "",
+                comentario: "",
+                creado: "",
+                decidido_en: "",
+                cargo_requerido: "",
+              },
+            ],
             estado: "pendiente",
-            nivel_actual: "",
+            nivel_actual: "n1",
             aprobados: 0,
             minimo_aprobaciones: 0,
             comentarios_sin_resolver: 0,
@@ -157,15 +173,18 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     expect(screen.getByText("Nada publicado ni programado")).toBeInTheDocument();
   });
 
-  it("renderiza la pieza como post con etapa IA y acciones de aprobación en línea", async () => {
+  it("renderiza la pieza como post con etapa IA y el 'me gusta' (OK) en línea", async () => {
     stubFetch();
     renderFeed();
     expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
     // Etapa IA en vivo: en revisión → lista para revisar.
     expect(screen.getByText("Lista para revisar")).toBeInTheDocument();
-    // El OK en línea (gate humano): aparece tras resolver la cadena de la pieza.
-    expect(await screen.findByRole("button", { name: /dar mi ok/i })).toBeInTheDocument();
+    // El OK en línea ("me gusta") está habilitado para el revisor elegible, con Rechazar al lado.
+    const like = await screen.findByRole("button", { name: /me gusta/i });
+    expect(like).toBeEnabled();
     expect(screen.getByRole("button", { name: /rechazar/i })).toBeInTheDocument();
+    // Panel de estado de la cadena (solo lectura): el recuento de OK.
+    expect(screen.getByText("OK 0/1")).toBeInTheDocument();
   });
 
   it("abre el hilo de comentarios en línea al pulsar Comentar", async () => {

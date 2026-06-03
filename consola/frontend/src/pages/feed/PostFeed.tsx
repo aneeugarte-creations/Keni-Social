@@ -2,23 +2,21 @@
  * Un POST del Feed de ideación (Flujo D, Fase 4): una pieza presentada como en una red
  * social interna, no como una tarjeta de kanban. Muestra, de arriba a abajo:
  *
- *  1. Cabecera: autor + marca + red + etapa IA en vivo (badge que pulsa mientras trabaja).
- *  2. Material original: el título del tema (lo que "posteó" el equipo).
- *  3. Copy generado por la IA: el cuerpo del post (`contenido`), tal como acompañará a la
- *     publicación, dentro de una previa fiel de la red (`VistaPreviaRed`) con su arte/formato.
- *  4. Acciones EN LÍNEA: aprobar / rechazar la pieza (gate humano) sin salir del feed, más
- *     un toggle para abrir el hilo de comentarios del equipo (reusa `Comentarios`).
+ *  1. Cabecera EN UNA LÍNEA: autor + marca + red (un solo logo) + formato + etapa IA en vivo.
+ *  2. Copy generado por la IA: el cuerpo del post (`contenido`), dentro de una previa fiel de la
+ *     red (`VistaPreviaRed`, variante limpia: sin chrome social falso ni cabecera duplicada).
+ *  3. Acciones EN LÍNEA, iguales en TODA pieza (como un post): "Me gusta" (el OK humano) y
+ *     "Comentar"; "Rechazar" cuando puedes decidir. El "me gusta" se habilita solo cuando te
+ *     toca el OK (`elegibilidadOK`); en otros estados se ve deshabilitado y el tooltip explica.
+ *  4. Panel de ESTADO de la cadena (`CadenaAprobacion`, solo lectura): veredicto de IA + OK del
+ *     equipo (cuántos y de quién) + lo que falta. La acción vive en la fila, no aquí.
  *
- * Reusa el motor existente: cuando la pieza tiene una CADENA de niveles, se pinta la UI
- * multinivel completa (`CadenaAprobacion`: estado por nivel + decisión por orden, respetando
- * "otro par de ojos" y "un rechazo para la cadena") sobre `api.decidirNivelAprobacion`. Si
- * NO hay cadena (pieza sin aprobación configurada), cae al camino SIMPLE aprobar/rechazar
- * (`aprobar`/`rechazar` de `api/aprobacion`, que forwardea a la cadena multinivel). En ambos
- * casos la cadena de gobernanza (`cadenaAprobacion`) avisa de firmas/comentarios pendientes.
- * NO crea backend nuevo.
+ * El OK/rechazo van por `aprobar`/`rechazar` de `api/aprobacion`, que forwardean al nivel ACTUAL
+ * de la cadena multinivel (respetando "otro par de ojos" y "un rechazo para la cadena"); el gate
+ * lo decide el backend, `elegibilidadOK` solo habilita/explica. NO crea backend nuevo.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, MessageSquare, XCircle } from "lucide-react";
+import { Check, Loader2, MessageSquare, ThumbsUp, XCircle } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -26,13 +24,15 @@ import { Autor } from "@/components/comunes/Autor";
 import { Comentarios } from "@/components/contenido/Comentarios";
 import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { Button } from "@/components/ui/button";
+import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import { plural } from "@/lib/formato";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import { EtiquetaRed } from "@/pages/publicaciones/insignias";
-import { tiempoRelativo } from "@/pages/publicaciones/meta";
+import { tamanoRed, tiempoRelativo } from "@/pages/publicaciones/meta";
 import type { Publicacion } from "@/types";
 
+import { elegibilidadOK } from "./aprobacion";
 import { CadenaAprobacion } from "./CadenaAprobacion";
 import { etapaDePublicacion } from "./etapa";
 import { BadgeEtapa } from "./TarjetaEtapa";
@@ -45,10 +45,13 @@ function mensajeError(error: unknown): string {
 
 export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   const queryClient = useQueryClient();
+  const { usuario } = useSesion();
   const [comentariosAbierto, setComentariosAbierto] = React.useState(false);
 
   const etapa = etapaDePublicacion(publicacion);
   const enRevision = publicacion.estado === "en_revision";
+  const yaAprobada = etapa === "aprobada" || etapa === "programada" || etapa === "publicada";
+  const tam = tamanoRed(publicacion.red);
 
   // Cadena de aprobación: alimenta tanto la UI MULTINIVEL (estado por nivel + decisión por
   // orden) como los avisos de gobernanza (firmas / comentarios sin resolver). Se carga
@@ -85,6 +88,21 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
   });
   const ocupado = aprobar.isPending || rechazar.isPending;
 
+  // ¿Puede ESTE usuario dar su "me gusta" (OK humano) ahora? Lo decide el backend; aquí
+  // habilitamos/explicamos antes de pedirlo. `aprobar`/`rechazar` (legado) forwardean al
+  // nivel ACTUAL de la cadena, así que un OK cierra el nivel humano que toca.
+  const { puedeDar, motivo } = elegibilidadOK(cadena, usuario, publicacion.autor_id);
+  // Texto del botón "Me gusta" según el estado de la pieza (tooltip cuando está deshabilitado).
+  const tituloLike = puedeDar
+    ? "Dale tu OK (me gusta) a esta pieza"
+    : yaAprobada
+      ? publicacion.revisor_nombre
+        ? `Aprobada · último OK: ${publicacion.revisor_nombre}`
+        : "Aprobada"
+      : enRevision
+        ? motivo || "Esperando turno para tu OK"
+        : "La IA aún prepara esta pieza; podrás darle tu OK cuando esté lista.";
+
   // El cuerpo del post: el copy que la IA generó (`contenido`); si aún no hay, mostramos
   // el material original como marcador para que el post no quede vacío en "generando copy".
   const cuerpo = publicacion.contenido || publicacion.titulo;
@@ -92,13 +110,23 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
 
   return (
     <article className="rounded-xl border border-border bg-background shadow-sm">
-      {/* Cabecera: quién posteó · marca · red · etapa IA en vivo. */}
+      {/* Cabecera EN UNA SOLA LÍNEA: quién posteó · marca · red (un solo logo) · formato · etapa.
+          El logo/red y el formato NO se repiten en la previa (va en variante limpia, sin su propia
+          cabecera): aquí están una vez y ya. */}
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 px-4 pb-2 pt-3 text-xs text-muted-foreground">
         <Autor nombre={publicacion.autor_nombre} className="text-xs font-medium text-foreground" />
         <span>·</span>
         <span>{publicacion.marca_nombre}</span>
         <span>·</span>
         <EtiquetaRed red={publicacion.red} nombre={publicacion.red_nombre} className="text-xs" />
+        {tam && (
+          <span
+            className="rounded-full border border-border px-2 py-0.5 tabular-nums"
+            title={`Imagen recomendada para ${publicacion.red_nombre}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
+          >
+            {tam.ratio} · {tam.px} px
+          </span>
+        )}
         {publicacion.enviado_a_revision_en && (
           <span className="ml-auto tabular-nums">{tiempoRelativo(publicacion.enviado_a_revision_en)}</span>
         )}
@@ -120,40 +148,38 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         />
       </div>
 
-      {/* Acciones en línea: dar OK (legado) / comentar. El gate vive en el panel. Una pieza
-          entra SOLA a revisión cuando está lista (copy out + copy in/exención + imagen con
-          formato + QA): no hay botón manual de "pedir OK". */}
+      {/* Acciones en línea, IGUAL en TODAS las piezas (como un post de red social): "Me gusta"
+          (el OK humano) y "Comentar". El "me gusta" se habilita solo cuando te toca dar el OK
+          (pieza en revisión y eres elegible); en los demás estados se ve igual pero deshabilitado,
+          con un tooltip que explica por qué (la IA aún la prepara, ya está aprobada, ya diste tu
+          OK…). "Rechazar" aparece solo cuando puedes decidir. */}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
-        {enRevision && !tieneCadena && !cadenaQuery.isLoading ? (
-          // Fallback (piezas legadas en revisión SIN cadena): aprobar/rechazar forwardea.
-          <>
-            <Button variant="positive" size="sm" onClick={() => aprobar.mutate()} disabled={ocupado}>
-              {aprobar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Check className="h-4 w-4" />
-              )}
-              Dar mi OK
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => rechazar.mutate()} disabled={ocupado}>
-              {rechazar.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <XCircle className="h-4 w-4" />
-              )}
-              Rechazar
-            </Button>
-          </>
-        ) : !enRevision &&
-          (etapa === "aprobada" || etapa === "programada" || etapa === "publicada") ? (
-          // Ya pasó el gate: solo el dato útil (quién dio el OK). Mientras la IA prepara la
-          // pieza NO ponemos texto: el label de etapa del encabezado ya dice en qué va.
-          <span className="text-sm text-muted-foreground">
-            {publicacion.revisor_nombre
-              ? `Lista para publicar · último OK: ${publicacion.revisor_nombre}`
-              : "Lista para publicar"}
-          </span>
-        ) : null}
+        <Button
+          variant={puedeDar ? "positive" : "ghost"}
+          size="sm"
+          onClick={() => aprobar.mutate()}
+          disabled={!puedeDar || ocupado}
+          title={tituloLike}
+        >
+          {aprobar.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : yaAprobada ? (
+            <Check className="h-4 w-4" />
+          ) : (
+            <ThumbsUp className="h-4 w-4" />
+          )}
+          Me gusta
+        </Button>
+        {puedeDar && (
+          <Button variant="outline" size="sm" onClick={() => rechazar.mutate()} disabled={ocupado}>
+            {rechazar.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <XCircle className="h-4 w-4" />
+            )}
+            Rechazar
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="sm"
@@ -166,14 +192,10 @@ export function PostFeed({ publicacion }: { publicacion: Publicacion }) {
         </Button>
       </div>
 
-      {/* Panel "dale el OK": veredicto de IA + OK del equipo (cuántos y de quién) + acción. */}
+      {/* Panel de ESTADO (solo en revisión y con cadena): veredicto de IA + OK del equipo
+          (cuántos y de quién) + lo que falta. La acción vive arriba, en la fila. */}
       {enRevision && tieneCadena && cadena && (
-        <CadenaAprobacion
-          cadena={cadena}
-          plataformaId={publicacion.id}
-          autorPiezaId={publicacion.autor_id}
-          veredictoIA={publicacion.veredicto}
-        />
+        <CadenaAprobacion cadena={cadena} veredictoIA={publicacion.veredicto} />
       )}
 
       {/* Aviso de comentarios sin resolver (bloquean programar). */}

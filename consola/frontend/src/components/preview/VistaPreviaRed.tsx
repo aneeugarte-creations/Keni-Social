@@ -398,20 +398,25 @@ export function VistaPreviaRed({
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <Icono className="h-4 w-4" aria-hidden="true" />
-        <span>
-          Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
-        </span>
-        {tam && (
-          <span
-            className="ml-auto rounded-full border border-border px-2 py-0.5 tabular-nums"
-            title={`Imagen recomendada para ${nombreRed(red)}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
-          >
-            {tam.ratio} · {tam.px} px
+      {/* Cabecera de la previa (logo de red + "Vista previa en …" + formato). En variante LIMPIA
+          NO se pinta: el contenedor (p. ej. el post del feed) ya enseña red y formato una vez, y
+          repetirlos aquí duplicaba el logo y la etiqueta. */}
+      {!limpia && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Icono className="h-4 w-4" aria-hidden="true" />
+          <span>
+            Vista previa en <span className="font-medium text-foreground">{nombreRed(red)}</span>
           </span>
-        )}
-      </div>
+          {tam && (
+            <span
+              className="ml-auto rounded-full border border-border px-2 py-0.5 tabular-nums"
+              title={`Imagen recomendada para ${nombreRed(red)}: relación ${tam.ratio}, ${tam.px} px. Cada red recorta a su formato.`}
+            >
+              {tam.ratio} · {tam.px} px
+            </span>
+          )}
+        </div>
+      )}
       {/* El overlay de simulación del copy-in solo cuando NO hay imagen: si ya hay una placa
           compuesta, el texto va horneado en la imagen y duplicarlo se vería doble. */}
       <Mockup
