@@ -9,7 +9,7 @@
 // guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Plus, Save, SaveAll, X } from "lucide-react";
+import { Check, FileUp, Loader2, Plus, Save, SaveAll, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -189,31 +189,55 @@ export default function EditorPro() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo exportar."),
   });
 
-  // AUTOGUARDADO local (crash-safety) + marca de "cambios sin guardar" para el indicador.
+  // Al editar: marca "sin guardar", autoguarda local (crash-safety, ~0.8 s) y, si la pestaña está
+  // atada a una plantilla, AUTOGUARDA en la plantilla tras 3 s de inactividad (estilo Word).
   useEffect(() => {
     if (!activa) return;
     const store = stores.current.get(activa);
     const p = pestanas.find((t) => t.id === activa);
     if (!store || !p) return;
     const clave = claveAuto(p);
-    let timer: number | undefined;
+    let tSession: number | undefined;
+    let tAuto: number | undefined;
     const unsub = store.subscribe((estado, previo) => {
       if (estado.documento === previo.documento) return;
       setDirty((d) => ({ ...d, [p.id]: true }));
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
+      // Borrador local.
+      window.clearTimeout(tSession);
+      tSession = window.setTimeout(() => {
         try {
           sessionStorage.setItem(clave, JSON.stringify(estado.documento));
         } catch {
           /* cuota llena: el trabajo sigue en memoria */
         }
       }, 800);
+      // Autoguardado a la plantilla tras 3 s sin tocar nada.
+      window.clearTimeout(tAuto);
+      tAuto = window.setTimeout(async () => {
+        if (!p.plantillaId) return; // sin plantilla atada no hay dónde guardar (usa «Guardar como»)
+        const st = stores.current.get(p.id);
+        if (!st) return;
+        const doc = st.getState().documento;
+        try {
+          // Solo el documento (sin re-render de miniatura, para no cargar el server cada 3 s; la
+          // miniatura se refresca al Guardar manual).
+          await api.actualizarPlantillaDiseno(p.plantillaId, { documento: doc });
+          // Solo marcar limpio si no se editó MIENTRAS guardaba (igualdad por referencia).
+          if (stores.current.get(p.id)?.getState().documento === doc) {
+            setDirty((d) => ({ ...d, [p.id]: false }));
+          }
+          qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+        } catch {
+          /* falló el autoguardado: el punto rojo permanece */
+        }
+      }, 3000);
     });
     return () => {
-      window.clearTimeout(timer);
+      window.clearTimeout(tSession);
+      window.clearTimeout(tAuto);
       unsub();
     };
-  }, [activa, pestanas]);
+  }, [activa, pestanas, qc]);
 
   // Genera la miniatura (render best-effort) del documento actual.
   const miniaturaDe = async (documento: Documento): Promise<string> => {
@@ -326,19 +350,32 @@ export default function EditorPro() {
                 <FileUp className="h-4 w-4" />
               </Button>
             )}
-            <Button size="sm" variant="outline" disabled={guardando} onClick={() => guardar.mutate()} title="Guardar (sobrescribe la plantilla)">
-              <Save className="mr-1 h-4 w-4" /> Guardar
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={guardando}
+              onClick={() => guardar.mutate()}
+              title={sucia ? "Guardar (cambios sin guardar)" : "Guardado — se autoguarda a los 3 s"}
+            >
+              <span className="relative mr-1 inline-flex">
+                <Save className="h-4 w-4" />
+                {/* Estado EN el icono: punto rojo si hay cambios; check verde si está guardado. */}
+                {guardando ? (
+                  <Loader2 className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 animate-spin text-muted-foreground" />
+                ) : sucia ? (
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500 ring-1 ring-background" />
+                ) : (
+                  <Check className="absolute -right-1.5 -top-1.5 h-3 w-3 rounded-full bg-background text-emerald-500" />
+                )}
+              </span>
+              Guardar
             </Button>
             <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "" })} title="Guardar como… (plantilla nueva)">
               <SaveAll className="h-4 w-4" />
             </Button>
           </>
         )}
-        {pestanaActiva && (
-          <span className={`ml-auto text-xs ${sucia ? "text-amber-500" : "text-muted-foreground"}`} title="Estado de guardado">
-            {sucia ? "● Sin guardar" : "Guardado ✓"}
-          </span>
-        )}
+        <span className="ml-auto" />
         {exportUrl && (
           <a href={exportUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
             Ver PNG exportado
@@ -360,7 +397,7 @@ export default function EditorPro() {
               >
                 <button onClick={() => setActiva(t.id)} className="max-w-[200px] truncate">
                   {t.nombre || marca}
-                  {dirty[t.id] && <span className="ml-1 text-amber-500">•</span>}
+                  {dirty[t.id] && <span className="ml-1 text-red-500">•</span>}
                 </button>
                 <button onClick={() => cerrarPestana(t.id)} className="opacity-60 hover:opacity-100" title="Cerrar">
                   <X className="h-3.5 w-3.5" />
