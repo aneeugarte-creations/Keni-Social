@@ -13,6 +13,7 @@ import { AnalisisDiario } from "./metricas/AnalisisDiario";
 import { BotonActualizar } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
 import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./metricas/Controles";
+import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
 import { Crosstab } from "./metricas/Crosstab";
@@ -190,6 +191,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           <div className="space-y-3">
             <h2 className="text-lg font-semibold tracking-tight">Por red</h2>
             <TablaRedes redes={reporteQuery.data.por_red} />
+            {/* Auditoría: TODAS las redes de cada marca (aunque no tengan datos) con
+                el motivo de por qué no aportan. Hace visibles las redes vacías. */}
+            <CoberturaRedes marcas={reporteQuery.data.cobertura_redes} />
           </div>
 
           {/* Estrategia digital: lectura de alto nivel (más allá del día a día),

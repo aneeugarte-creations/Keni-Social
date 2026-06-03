@@ -203,6 +203,90 @@ def _agregar_por_red(rep: dict) -> list[dict]:
     return por_red
 
 
+# Universo de redes sociales que Metricool mide a nivel de analítica (ids de
+# plataforma del contrato). "web" NO es una red de analítica de Metricool, así que se
+# excluye de la auditoría de cobertura. El orden es el de presentación en la UI.
+_REDES_AUDITABLES: tuple[str, ...] = ("facebook", "instagram", "x", "tiktok", "youtube")
+
+# Texto legible por estado de cobertura (lo que la UI muestra como explicación del
+# "por qué no hay datos"). `con_datos` no necesita motivo (None).
+_MOTIVO_COBERTURA: dict[str, str | None] = {
+    "con_datos": None,
+    "sin_metricas": "Conectada, pero sin actividad ni métricas en este rango.",
+    "sin_lectura": (
+        "No se pudo leer de Metricool: la red no está conectada o la métrica no está "
+        "disponible en el plan."
+    ),
+    "no_configurada": "Esta red no está dada de alta en Metricool para la marca.",
+    "sin_credenciales": "Faltan credenciales para leer esta red.",
+    "presupuesto_agotado": "Límite de la API de Metricool alcanzado; reintenta más tarde.",
+}
+
+
+def _cobertura_por_marca(rep: dict) -> list[dict]:
+    """Auditoría de cobertura: por cada marca, TODAS las redes auditables con su estado.
+
+    Deriva de lo que el reporte YA trae por cuenta (`resumen.por_plataforma` +
+    `resumen.cobertura`), sin llamadas extra a la API. Para cada red del universo
+    `_REDES_AUDITABLES` clasifica:
+
+      - en `por_plataforma` con vis/inter > 0 -> "con_datos" (con sus métricas).
+      - en `por_plataforma` pero todo a 0     -> "sin_metricas" (conectada, sin actividad).
+      - en `cobertura.omitidas`               -> el motivo de omisión ("error_api" se
+                                                 presenta como "sin_lectura").
+      - en ninguno de los dos                 -> "no_configurada" (la marca no la tiene).
+
+    Las métricas van `null` cuando la red no respondió (no se inventa un 0). Así el
+    operador ve TODAS las redes y por qué cada una aporta (o no) datos.
+    """
+    nombres = rep.get("nombres") or {}
+    salida: list[dict] = []
+    for fila in rep.get("cuentas", []):
+        r = fila.get("resumen") or {}
+        cid = r.get("cuenta", "")
+        por_plat = {p.get("plataforma", ""): p for p in (r.get("por_plataforma") or [])}
+        cob = r.get("cobertura") or {}
+        omitidas = set(cob.get("omitidas") or [])
+        motivos = cob.get("motivo") or {}
+        redes: list[dict] = []
+        for red in _REDES_AUDITABLES:
+            if red in por_plat:
+                p = por_plat[red]
+                vis = p.get("visualizaciones", 0) or 0
+                inter = p.get("interacciones", 0) or 0
+                estado = "con_datos" if (vis or inter) else "sin_metricas"
+                redes.append(
+                    {
+                        "red": red,
+                        "estado": estado,
+                        "visualizaciones": vis,
+                        "alcance": p.get("alcance"),
+                        "interacciones": inter,
+                        "engagement_pct": p.get("engagement_pct", 0.0),
+                        "motivo": _MOTIVO_COBERTURA[estado],
+                    }
+                )
+            else:
+                if red in omitidas:
+                    motivo_id = str(motivos.get(red, "error_api"))
+                    estado = "sin_lectura" if motivo_id == "error_api" else motivo_id
+                else:
+                    estado = "no_configurada"
+                redes.append(
+                    {
+                        "red": red,
+                        "estado": estado,
+                        "visualizaciones": None,
+                        "alcance": None,
+                        "interacciones": None,
+                        "engagement_pct": None,
+                        "motivo": _MOTIVO_COBERTURA.get(estado, _MOTIVO_COBERTURA["sin_lectura"]),
+                    }
+                )
+        salida.append({"marca_id": cid, "marca": _nombre_marca_id(cid, nombres), "redes": redes})
+    return salida
+
+
 def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
     """Forma JSON del reporte para el SPA: total + cuentas con nombres resueltos."""
     nombres = rep.get("nombres") or {}
@@ -238,6 +322,7 @@ def _reporte_serializable(rep: dict, rango: str, marca: str | None) -> dict:
         },
         "cuentas": cuentas,
         "por_red": por_red,
+        "cobertura_redes": _cobertura_por_marca(rep),
     }
 
 

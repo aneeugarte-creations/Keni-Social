@@ -41,6 +41,78 @@ def test_reporte_acotado_a_una_marca_sigue_trayendo_fuente(cliente):
     assert ids == {"claro_sports"}
 
 
+def test_reporte_trae_cobertura_por_marca_con_todas_las_redes(cliente):
+    # La auditoría de cobertura lista TODAS las redes auditables por marca (aunque no
+    # tengan datos), cada una con estado + motivo (responde a "¿por qué solo veo 1 red?").
+    r = cliente.get("/api/metricas/reporte?rango=mes")
+    assert r.status_code == 200
+    data = r.json()
+    assert "cobertura_redes" in data
+    auditables = {"facebook", "instagram", "x", "tiktok", "youtube"}
+    for marca in data["cobertura_redes"]:
+        assert {"marca_id", "marca", "redes"} <= marca.keys()
+        # Universo COMPLETO de redes, no solo las que tienen datos.
+        assert {red["red"] for red in marca["redes"]} == auditables
+        for red in marca["redes"]:
+            assert red["estado"]  # siempre clasificada
+            # Una red sin datos no inventa un 0: sus métricas van null + motivo.
+            if red["estado"] != "con_datos":
+                assert red["visualizaciones"] is None
+                assert red["motivo"]
+
+
+def test_cobertura_por_marca_clasifica_los_cuatro_estados():
+    from keni_consola.api.metricas import _cobertura_por_marca
+
+    rep = {
+        "nombres": {"unotv": "UnoTV"},
+        "cuentas": [
+            {
+                "resumen": {
+                    "cuenta": "unotv",
+                    "por_plataforma": [
+                        {
+                            "plataforma": "tiktok",
+                            "visualizaciones": 1000,
+                            "alcance": None,
+                            "interacciones": 50,
+                            "engagement_pct": 5.0,
+                        },
+                        {
+                            "plataforma": "instagram",
+                            "visualizaciones": 0,
+                            "alcance": None,
+                            "interacciones": 0,
+                            "engagement_pct": 0.0,
+                        },
+                    ],
+                    "cobertura": {
+                        "ok": ["tiktok", "instagram"],
+                        "omitidas": ["facebook"],
+                        "motivo": {"facebook": "error_api"},
+                    },
+                }
+            }
+        ],
+    }
+    salida = _cobertura_por_marca(rep)
+    assert len(salida) == 1
+    assert salida[0]["marca"] == "UnoTV"  # nombre resuelto, no el id crudo
+    por_red = {r["red"]: r for r in salida[0]["redes"]}
+    # con datos -> métricas reales.
+    assert por_red["tiktok"]["estado"] == "con_datos"
+    assert por_red["tiktok"]["visualizaciones"] == 1000
+    # respondió pero todo a 0 -> conectada sin métricas en el rango.
+    assert por_red["instagram"]["estado"] == "sin_metricas"
+    # omitida por error_api -> "sin lectura", métricas null.
+    assert por_red["facebook"]["estado"] == "sin_lectura"
+    assert por_red["facebook"]["visualizaciones"] is None
+    assert por_red["facebook"]["motivo"]
+    # ni respondió ni está configurada -> "no configurada".
+    assert por_red["x"]["estado"] == "no_configurada"
+    assert por_red["youtube"]["estado"] == "no_configurada"
+
+
 def test_opciones_trae_marcas_y_rangos(cliente):
     r = cliente.get("/api/metricas/opciones")
     assert r.status_code == 200

@@ -136,6 +136,46 @@ class RedMetrica(TypedDict):
     engagement_pct: float
 
 
+class RedCobertura(TypedDict):
+    """Estado de UNA red social para una marca en el rango (auditoría de cobertura).
+
+    Responde a la pregunta "¿por qué esta red no muestra datos?" sin esconder las
+    redes vacías. `estado` ∈ {"con_datos", "sin_metricas", "sin_lectura",
+    "no_configurada", "sin_credenciales", "presupuesto_agotado"}:
+
+      - con_datos:        respondió con métricas en el rango.
+      - sin_metricas:     conectada, pero sin actividad/métricas en el periodo.
+      - sin_lectura:      no se pudo leer (red no conectada en Metricool o métrica
+                          no disponible en el plan / error de la API).
+      - no_configurada:   la marca no tiene esta red dada de alta en Metricool.
+      - sin_credenciales / presupuesto_agotado: motivos de omisión heredados.
+
+    Las métricas son `null` cuando la red NO respondió (no se inventa un 0 falso);
+    `motivo` es el texto legible que la UI muestra como explicación.
+    """
+
+    red: str
+    estado: str
+    visualizaciones: int | None
+    alcance: int | None
+    interacciones: int | None
+    engagement_pct: float | None
+    motivo: str | None
+
+
+class MarcaCobertura(TypedDict):
+    """Cobertura de TODAS las redes auditables de una marca (auditoría por marca).
+
+    `redes` lista SIEMPRE el universo completo de redes sociales medibles (aunque no
+    tengan datos), cada una con su `estado` y `motivo`, para que el operador vea de un
+    vistazo qué falta y por qué.
+    """
+
+    marca_id: str
+    marca: str
+    redes: list[RedCobertura]
+
+
 class ReporteMetricas(TypedDict):
     """Respuesta de `GET /api/metricas/reporte`."""
 
@@ -150,6 +190,10 @@ class ReporteMetricas(TypedDict):
     # Las métricas agregadas POR RED (suma de todas las marcas del reporte por
     # plataforma). Acotada a la marca seleccionada cuando el filtro está activo.
     por_red: list[RedMetrica]
+    # Auditoría de cobertura: por cada marca del reporte, TODAS las redes auditables
+    # con su estado (con datos / sin métricas / sin lectura / no configurada) y el
+    # motivo legible. Hace visibles las redes vacías en vez de ocultarlas.
+    cobertura_redes: list[MarcaCobertura]
     # Cuándo se calculó este reporte (ISO). La UI lo muestra como "Actualizado hace X".
     # Sale de la cache de métricas (refresco en 2º plano + botón Actualizar).
     generado_en: str
@@ -1064,6 +1108,8 @@ MODELOS = [
     TotalMetricas,
     CuentaMetrica,
     RedMetrica,
+    RedCobertura,
+    MarcaCobertura,
     ReporteMetricas,
     ComparativaMetrica,
     ComparativaPorMarca,

@@ -32,6 +32,8 @@ export type {
   TotalMetricas,
   CuentaMetrica,
   RedMetrica,
+  RedCobertura,
+  MarcaCobertura,
   ReporteMetricas,
   ComparativaMetrica,
   ComparativaPorMarca,

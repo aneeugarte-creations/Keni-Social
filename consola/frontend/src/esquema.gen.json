@@ -324,6 +324,102 @@
         "engagement_pct"
       ]
     },
+    "RedCobertura": {
+      "type": "object",
+      "title": "RedCobertura",
+      "properties": {
+        "red": {
+          "type": "string"
+        },
+        "estado": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alcance": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interacciones": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "engagement_pct": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "motivo": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Estado de UNA red social para una marca en el rango (auditoría de cobertura).\n\nResponde a la pregunta \"¿por qué esta red no muestra datos?\" sin esconder las\nredes vacías. `estado` ∈ {\"con_datos\", \"sin_metricas\", \"sin_lectura\",\n\"no_configurada\", \"sin_credenciales\", \"presupuesto_agotado\"}:\n\n  - con_datos:        respondió con métricas en el rango.\n  - sin_metricas:     conectada, pero sin actividad/métricas en el periodo.\n  - sin_lectura:      no se pudo leer (red no conectada en Metricool o métrica\n                      no disponible en el plan / error de la API).\n  - no_configurada:   la marca no tiene esta red dada de alta en Metricool.\n  - sin_credenciales / presupuesto_agotado: motivos de omisión heredados.\n\nLas métricas son `null` cuando la red NO respondió (no se inventa un 0 falso);\n`motivo` es el texto legible que la UI muestra como explicación.",
+      "required": [
+        "red",
+        "estado",
+        "visualizaciones",
+        "alcance",
+        "interacciones",
+        "engagement_pct",
+        "motivo"
+      ]
+    },
+    "MarcaCobertura": {
+      "type": "object",
+      "title": "MarcaCobertura",
+      "properties": {
+        "marca_id": {
+          "type": "string"
+        },
+        "marca": {
+          "type": "string"
+        },
+        "redes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RedCobertura"
+          }
+        }
+      },
+      "description": "Cobertura de TODAS las redes auditables de una marca (auditoría por marca).\n\n`redes` lista SIEMPRE el universo completo de redes sociales medibles (aunque no\ntengan datos), cada una con su `estado` y `motivo`, para que el operador vea de un\nvistazo qué falta y por qué.",
+      "required": [
+        "marca_id",
+        "marca",
+        "redes"
+      ]
+    },
     "ReporteMetricas": {
       "type": "object",
       "title": "ReporteMetricas",
@@ -355,6 +451,12 @@
             "$ref": "#/$defs/RedMetrica"
           }
         },
+        "cobertura_redes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarcaCobertura"
+          }
+        },
         "generado_en": {
           "type": "string"
         }
@@ -368,6 +470,7 @@
         "total",
         "cuentas",
         "por_red",
+        "cobertura_redes",
         "generado_en"
       ]
     },
@@ -1986,6 +2089,9 @@
         },
         "evergreen": {
           "type": "boolean"
+        },
+        "copy_in_exento": {
+          "type": "boolean"
         }
       },
       "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca\nDRY-RUN del programador (instante en que quedo \"lista para publicar\"; el posteo real\nvia Metricool esta gated por `KENI_PUBLICAR_REAL`); \"\" hasta que vence su `fecha_programada`.",
@@ -2678,6 +2784,12 @@
     },
     {
       "$ref": "#/$defs/RedMetrica"
+    },
+    {
+      "$ref": "#/$defs/RedCobertura"
+    },
+    {
+      "$ref": "#/$defs/MarcaCobertura"
     },
     {
       "$ref": "#/$defs/ReporteMetricas"

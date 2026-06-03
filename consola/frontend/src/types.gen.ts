@@ -92,6 +92,44 @@ export interface RedMetrica {
   engagement_pct: number;
 }
 /**
+ * Estado de UNA red social para una marca en el rango (auditoría de cobertura).
+ *
+ * Responde a la pregunta "¿por qué esta red no muestra datos?" sin esconder las
+ * redes vacías. `estado` ∈ {"con_datos", "sin_metricas", "sin_lectura",
+ * "no_configurada", "sin_credenciales", "presupuesto_agotado"}:
+ *
+ *   - con_datos:        respondió con métricas en el rango.
+ *   - sin_metricas:     conectada, pero sin actividad/métricas en el periodo.
+ *   - sin_lectura:      no se pudo leer (red no conectada en Metricool o métrica
+ *                       no disponible en el plan / error de la API).
+ *   - no_configurada:   la marca no tiene esta red dada de alta en Metricool.
+ *   - sin_credenciales / presupuesto_agotado: motivos de omisión heredados.
+ *
+ * Las métricas son `null` cuando la red NO respondió (no se inventa un 0 falso);
+ * `motivo` es el texto legible que la UI muestra como explicación.
+ */
+export interface RedCobertura {
+  red: string;
+  estado: string;
+  visualizaciones: number | null;
+  alcance: number | null;
+  interacciones: number | null;
+  engagement_pct: number | null;
+  motivo: string | null;
+}
+/**
+ * Cobertura de TODAS las redes auditables de una marca (auditoría por marca).
+ *
+ * `redes` lista SIEMPRE el universo completo de redes sociales medibles (aunque no
+ * tengan datos), cada una con su `estado` y `motivo`, para que el operador vea de un
+ * vistazo qué falta y por qué.
+ */
+export interface MarcaCobertura {
+  marca_id: string;
+  marca: string;
+  redes: RedCobertura[];
+}
+/**
  * Respuesta de `GET /api/metricas/reporte`.
  */
 export interface ReporteMetricas {
@@ -102,6 +140,7 @@ export interface ReporteMetricas {
   total: TotalMetricas;
   cuentas: CuentaMetrica[];
   por_red: RedMetrica[];
+  cobertura_redes: MarcaCobertura[];
   generado_en: string;
 }
 export interface ComparativaMetrica {
