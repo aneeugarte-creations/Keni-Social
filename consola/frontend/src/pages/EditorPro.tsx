@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { Button } from "@/components/ui/button";
 import { EditorDocumento } from "@/editor/EditorDocumento";
+import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { documentoVacio, type Capa, type Documento } from "@/editor/documento";
 import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { api } from "@/lib/api";
@@ -71,6 +72,7 @@ export default function EditorPro() {
   // Stores por pestaña (persisten entre cambios de pestaña).
   const stores = useRef<Map<string, StoreEditor>>(new Map());
   const [exportUrl, setExportUrl] = useState<string | null>(null);
+  const [galeria, setGaleria] = useState(false);
 
   const marcaEfectiva = marcaNueva || marcas[0]?.id || "";
 
@@ -212,15 +214,24 @@ export default function EditorPro() {
   });
 
   const guardarPlantilla = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
       const nombre = window.prompt("Nombre de la plantilla")?.trim();
       if (!nombre) throw new Error("__cancelado__");
+      const documento = storeActivo.getState().documento;
+      // Miniatura: renderiza el documento (best-effort) para la galería visual.
+      let miniatura = "";
+      try {
+        miniatura = (await api.editorRender(documento)).id;
+      } catch {
+        /* sin miniatura: la galería muestra un marcador */
+      }
       return api.crearPlantillaDiseno({
         marca: pestanaActiva.marca,
         nombre,
         categoria: pestanaActiva.formato,
-        documento: storeActivo.getState().documento,
+        documento,
+        miniatura,
       });
     },
     onSuccess: () => {
@@ -240,6 +251,15 @@ export default function EditorPro() {
       toast.success(`Plantilla «${p.nombre}» cargada.`);
     }
   };
+
+  const borrarPlantilla = useMutation({
+    mutationFn: (id: string) => api.borrarPlantillaDiseno(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno", pestanaActiva?.marca ?? ""] });
+      toast.success("Plantilla borrada.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo borrar."),
+  });
 
   // Almacén de bloques (capas reutilizables) de la marca activa.
   const bloquesQ = useQuery({
@@ -332,23 +352,9 @@ export default function EditorPro() {
             >
               <Save className="mr-1 h-4 w-4" /> Guardar plantilla
             </Button>
-            {(plantillasQ.data?.plantillas.length ?? 0) > 0 && (
-              <select
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) cargarPlantilla(e.target.value);
-                }}
-                className="rounded border border-input bg-background px-2 py-1.5 text-sm"
-                aria-label="Cargar plantilla"
-              >
-                <option value="">Cargar plantilla…</option>
-                {plantillasQ.data!.plantillas.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre || "(sin nombre)"}
-                  </option>
-                ))}
-              </select>
-            )}
+            <Button variant="outline" size="sm" onClick={() => setGaleria(true)}>
+              Plantillas
+            </Button>
             <Button variant="outline" size="sm" disabled={guardarBloque.isPending} onClick={() => guardarBloque.mutate()}>
               Guardar bloque
             </Button>
@@ -422,6 +428,18 @@ export default function EditorPro() {
           </div>
         )}
       </div>
+
+      {galeria && (
+        <GaleriaPlantillas
+          plantillas={plantillasQ.data?.plantillas ?? []}
+          onCargar={(p) => {
+            cargarPlantilla(p.id);
+            setGaleria(false);
+          }}
+          onBorrar={(p) => borrarPlantilla.mutate(p.id)}
+          onCerrar={() => setGaleria(false)}
+        />
+      )}
     </div>
   );
 }
