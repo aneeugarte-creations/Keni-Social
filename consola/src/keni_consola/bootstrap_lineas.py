@@ -34,6 +34,39 @@ LINEAS_POR_MARCA: dict[str, list[str]] = {
         "Geek/Pop",
         "Eventos",
     ],
+    # Claro Sports (dadas por el equipo). Fútbol = una línea por competición; las
+    # competiciones extra "relevantes en México" se añaden cuando el equipo las confirme.
+    "claro-sports": [
+        # Fútbol — una línea por competición
+        "Liga MX",
+        "Premier League",
+        "LaLiga (España)",
+        "Mundial",
+        "Eurocopa",
+        "Concacaf",
+        "Copa América",
+        "Selección de México",
+        # Olímpicos (separados)
+        "Olímpicos Verano",
+        "Olímpicos Invierno",
+        # Otros deportes
+        "NFL",
+        "NBA",
+        "MLB",
+        "LMB",
+        "F1 Checo",
+        "F1 (no Checo)",
+        "NASCAR",
+        "Fórmula E",
+        "Ciclismo",
+        "TNA",
+        "Golf",
+        # Transversales
+        "Televisión",
+        "Portal web",
+        "Comercial",
+        "Virales",
+    ],
 }
 
 # Orígenes GLOBALES (marca=''): solo dos, interno y externo.
