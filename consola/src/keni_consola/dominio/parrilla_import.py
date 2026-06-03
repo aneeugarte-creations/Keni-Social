@@ -276,6 +276,24 @@ def _normalizar_op_validada(op: Operacion) -> dict[str, Any]:
     return op.model_dump(exclude_none=False)
 
 
+def _dedup_exactas(ops: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Quita operaciones EXACTAMENTE iguales (mismo contenido), preservando el orden.
+
+    Red de seguridad ante duplicados LITERALES (p.ej. una misma fila repetida en dos hojas
+    del Excel). NO fusiona operaciones distintas: el caso "mismo evento para varias redes"
+    (títulos distintos) lo resuelve el prompt agrupando por evento, no este dedup.
+    """
+    vistas: set[str] = set()
+    unicas: list[dict[str, Any]] = []
+    for op in ops:
+        clave = json.dumps(op, sort_keys=True, ensure_ascii=False)
+        if clave in vistas:
+            continue
+        vistas.add(clave)
+        unicas.append(op)
+    return unicas
+
+
 def _validar_semantica(op: Operacion, ctx: Contexto) -> str | None:
     """Valida una operacion YA tipada contra el contexto. Devuelve un mensaje de error o None.
 
@@ -416,7 +434,7 @@ def parsear_y_validar(
             errores.append({"indice": i, "error": problema})
             continue
         validas.append(_normalizar_op_validada(op))
-    return validas, errores
+    return _dedup_exactas(validas), errores
 
 
 def validar_operaciones(
@@ -444,7 +462,7 @@ def validar_operaciones(
             errores.append({"indice": i, "error": problema})
             continue
         validas.append(_normalizar_op_validada(op))
-    return validas, errores
+    return _dedup_exactas(validas), errores
 
 
 def _mensaje_validacion(exc: ValidationError) -> str:

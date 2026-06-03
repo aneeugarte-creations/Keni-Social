@@ -334,3 +334,27 @@ def test_sin_tope_de_operaciones_procesa_todas():
     validas, errores = pi.parsear_y_validar(__import__("json").dumps(ops), _ctx())
     assert errores == []
     assert len(validas) == 3000
+
+
+def test_dedup_operaciones_exactamente_iguales():
+    # Dos operaciones IDÉNTICAS (misma fecha+título) se colapsan a una (red de seguridad
+    # ante duplicados literales, p.ej. una fila repetida en dos hojas del Excel).
+    txt = (
+        '[{"tipo": "crear_evento", "fecha": "2026-06-01", "titulo": "Final Liga MX"},'
+        ' {"tipo": "crear_evento", "fecha": "2026-06-01", "titulo": "Final Liga MX"}]'
+    )
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert errores == []
+    assert len(validas) == 1
+
+
+def test_no_dedup_eventos_distintos_misma_fecha():
+    # Eventos DISTINTOS en la misma fecha (títulos diferentes) NO se deduplican: el dedup
+    # solo quita repetidos LITERALES, no fusiona operaciones distintas.
+    txt = (
+        '[{"tipo": "crear_evento", "fecha": "2026-06-01", "titulo": "A"},'
+        ' {"tipo": "crear_evento", "fecha": "2026-06-01", "titulo": "B"}]'
+    )
+    validas, errores = pi.parsear_y_validar(txt, _ctx())
+    assert errores == []
+    assert len(validas) == 2
