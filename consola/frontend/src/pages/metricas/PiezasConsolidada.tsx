@@ -97,36 +97,21 @@ export function PiezasConsolidada({
   marcaActual = MARCA_TODAS,
   rangoActual,
   marcas,
-  marcaFiltro,
-  onMarcaFiltroChange,
 }: {
-  /** Marca global del dashboard: acota la consulta (todas si "todas"). */
+  /** Marca global del dashboard (switch de la barra superior): acota la consulta. */
   marcaActual?: string;
   /** Rango global del dashboard: el periodo listado. */
   rangoActual?: string;
   /** Catálogo {id, nombre} para resolver el id crudo de marca de cada pieza. */
   marcas: MarcaDisponible[];
-  /** Filtro de marca controlado (lo fija el drill-down desde la tabla por marca). */
-  marcaFiltro?: string;
-  onMarcaFiltroChange?: (marca: string) => void;
 }) {
   const marca_ = marcaParam(marcaActual);
   const [busqueda, setBusqueda] = React.useState("");
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
   const [lineaFiltro, setLineaFiltro] = React.useState(TODAS);
-  const [marcaInterna, setMarcaInterna] = React.useState(TODAS);
   const [diaIdx, setDiaIdx] = React.useState(0);
   const [seleccion, setSeleccion] = React.useState<PiezaListado | null>(null);
   const [detalleAbierto, setDetalleAbierto] = React.useState(false);
-
-  // Filtro de marca: controlado por el padre (drill-down) si pasa `onMarcaFiltroChange`;
-  // si no, estado interno. En forma pública "" = todas; internamente el sentinela TODAS.
-  const controlado = onMarcaFiltroChange !== undefined;
-  const marcaSel = controlado ? (marcaFiltro ? marcaFiltro : TODAS) : marcaInterna;
-  const setMarcaSel = (v: string) => {
-    if (controlado) onMarcaFiltroChange?.(v === TODAS ? "" : v);
-    else setMarcaInterna(v);
-  };
 
   const { data, isPending, isError } = useQuery({
     queryKey: ["metricas", "piezas-listado", rangoActual ?? "", marca_ ?? "todas"],
@@ -155,17 +140,17 @@ export function PiezasConsolidada({
     );
   }, [piezas]);
 
-  // Filtro combinado: marca + línea + red + título.
+  // Filtro combinado: línea + red + título. La marca la acota el switch global (la
+  // consulta ya viene scopeada); aquí solo se filtra dentro de lo recibido.
   const filtradas = React.useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return piezas.filter((p) => {
-      if (marcaSel !== TODAS && p.cuenta !== marcaSel) return false;
       if (redFiltro !== TODAS && p.plataforma !== redFiltro) return false;
       if (lineaFiltro !== TODAS && (p.linea || SIN_LINEA) !== lineaFiltro) return false;
       if (q && !(p.titulo || "").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [piezas, marcaSel, redFiltro, lineaFiltro, busqueda]);
+  }, [piezas, redFiltro, lineaFiltro, busqueda]);
 
   // Estadísticas del conjunto FILTRADO (reflejan los filtros activos).
   const stats = React.useMemo(() => {
@@ -210,17 +195,14 @@ export function PiezasConsolidada({
 
   const variasMarcas = marcasDisponibles.length > 1;
   const hayFiltros =
-    busqueda.trim() !== "" ||
-    redFiltro !== TODAS ||
-    lineaFiltro !== TODAS ||
-    marcaSel !== TODAS;
+    busqueda.trim() !== "" || redFiltro !== TODAS || lineaFiltro !== TODAS;
 
   return (
     <>
       <SeccionColapsable
         titulo="Piezas del periodo"
         icono={ListChecks}
-        descripcion="Todas las piezas del rango. Filtra por marca, línea o red; ordena por columna (Vistas desc = top, asc = peores); navega día a día y toca una pieza para su detalle."
+        descripcion="Todas las piezas del rango (de la marca activa). Filtra por línea o red; ordena por columna (Vistas desc = top, asc = peores); navega día a día y toca una pieza para su detalle."
         contentClassName="px-0 pb-0"
       >
         <div className="space-y-3 px-6 pb-3">
@@ -239,21 +221,6 @@ export function PiezasConsolidada({
               aria-label="Buscar piezas por título"
             />
           </div>
-          {variasMarcas && (
-            <Select value={marcaSel} onValueChange={setMarcaSel}>
-              <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por marca">
-                <SelectValue placeholder="Marca" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={TODAS}>Todas las marcas</SelectItem>
-                {marcasDisponibles.map((m) => (
-                  <SelectItem key={m} value={m}>
-                    {nombreMarca(m, marcas)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
           <Select value={lineaFiltro} onValueChange={setLineaFiltro}>
             <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar por línea">
               <SelectValue placeholder="Línea" />

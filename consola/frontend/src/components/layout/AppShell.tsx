@@ -4,7 +4,6 @@ import * as React from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { FronteraError } from "@/components/comunes/FronteraError";
-import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SubnavHub } from "@/components/layout/SubnavHub";
@@ -213,12 +212,11 @@ export function AppShell() {
             })}
           </nav>
 
-          {/* Marca activa (workspace) + salud del sistema, a la derecha de la topbar.
-              El switch de marca manda en toda la consola: la marca activa filtra
-              implícitamente lo que se ve (deriva del perfil, ver SwitchMarca). */}
+          {/* Marca activa (workspace) a la derecha de la topbar. El switch de marca
+              manda en toda la consola: la marca activa filtra implícitamente lo que
+              se ve (deriva del perfil, ver SwitchMarca). */}
           <div className="ml-auto flex items-center gap-3">
             <SwitchMarca />
-            <IndicadorEstado />
           </div>
         </header>
 

@@ -3,17 +3,20 @@ import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { marcaMetricasDesdeCanonica, marcaParam } from "@/components/comunes/selectores";
+import {
+  marcaCanonicaDesdeMetricas,
+  marcaMetricasDesdeCanonica,
+  marcaParam,
+} from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
 
-import { AnalisisDiario } from "./metricas/AnalisisDiario";
 import { BotonActualizar } from "./metricas/BotonActualizar";
 import { CompararPeriodos } from "./metricas/CompararPeriodos";
-import { MARCA_TODAS, SelectorMarca, SelectorTiempo } from "./metricas/Controles";
+import { MARCA_TODAS, SelectorTiempo } from "./metricas/Controles";
 import { CoberturaRedes } from "./metricas/CoberturaRedes";
 import { Correlacion } from "./metricas/Correlacion";
 import { CrecimientoSeguidores } from "./metricas/CrecimientoSeguidores";
@@ -86,48 +89,46 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   const { marcas, rangos } = opciones;
   const location = useLocation();
   const navigate = useNavigate();
-  // Marca activa del workspace (id canónico); aquí se usa como DEFAULT. Analíticas
-  // permite comparar marcas, así que el selector local se mantiene: solo cambia el
-  // punto de partida (tu marca, no "Todas").
-  const { marcaActiva } = useMarcaActiva();
+  // La marca del dashboard la MANDA el switch global de la barra superior (workspace);
+  // Analíticas no tiene selector propio: respeta el global. `marcaActiva` es el id
+  // canónico (o null = "Todas", agregado solo para admin).
+  const { marcaActiva, cambiarMarca } = useMarcaActiva();
 
-  // A-5: usamos useState con inicializador lazy en vez de useMemo para capturar
-  // la marca inicial exactamente una vez al montar, sin recalcular en re-renders.
-  const [marca, setMarca] = React.useState(() => {
-    const estado = location.state as { marca?: string } | null;
-    const desdeQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
-    const candidata = estado?.marca ?? desdeQuery;
-    if (candidata && marcas.some((m) => m.id === candidata)) return candidata;
-    // Por defecto, la marca activa (en forma id_metricas que usa esta frontera).
-    if (marcaActiva) {
-      const idMetricas = marcaMetricasDesdeCanonica(marcaActiva);
-      if (marcas.some((m) => m.id === idMetricas)) return idMetricas;
-    }
-    return MARCA_TODAS;
-  });
-  const [rango, setRango] = React.useState(rangos[0]?.id ?? "");
-
-  // Limpiamos el `state` de navegación tras consumirlo, para que no reaparezca
-  // al volver atrás o refrescar (la query, si la hubiera, se deja intacta).
+  // Deep-link: si llegamos con una marca en el `state` de navegación (canónica), la
+  // fijamos en el switch global una vez y limpiamos el state para que no reaparezca al
+  // volver atrás o refrescar.
   React.useEffect(() => {
-    if ((location.state as { marca?: string } | null)?.marca != null) {
+    const estado = location.state as { marca?: string } | null;
+    if (estado?.marca != null) {
+      cambiarMarca(estado.marca);
       navigate(location.pathname + location.search, { replace: true, state: null });
     }
     // Solo al montar / cambiar el state de navegación.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state]);
 
+  // La marca acotada DERIVA de la marca activa global, en la forma id_metricas que usa
+  // esta frontera. Sin marca activa (o fuera del catálogo) → agregado ("Todas").
+  const marca = React.useMemo(() => {
+    if (!marcaActiva) return MARCA_TODAS;
+    const idMetricas = marcaMetricasDesdeCanonica(marcaActiva);
+    return marcas.some((m) => m.id === idMetricas) ? idMetricas : MARCA_TODAS;
+  }, [marcaActiva, marcas]);
+  const [rango, setRango] = React.useState(rangos[0]?.id ?? "");
+
   const marca_ = marcaParam(marca);
 
-  // Drill-down: al clicar una marca en "Por marca", fijamos el filtro de marca de la
-  // tabla consolidada "Piezas del periodo" y hacemos scroll a esa sección (lectura: del
-  // agregado al detalle). `tabPiezas` controla el filtro de marca de esa tabla.
-  const [tabPiezas, setTabPiezas] = React.useState<string>("todas");
+  // Drill-down: al clicar una marca en "Por marca", enfocamos TODO el dashboard en esa
+  // marca cambiando el switch global (lectura: del agregado al detalle) y hacemos scroll
+  // a la tabla de piezas.
   const piezasRef = React.useRef<HTMLDivElement>(null);
-  const verPiezasDeMarca = React.useCallback((marcaId: string) => {
-    setTabPiezas(marcaId);
-    piezasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
+  const verPiezasDeMarca = React.useCallback(
+    (marcaId: string) => {
+      cambiarMarca(marcaCanonicaDesdeMetricas(marcaId));
+      piezasRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [cambiarMarca],
+  );
 
   const reporteQuery = useQuery({
     queryKey: ["metricas", "reporte", rango, marca_ ?? "todas"],
@@ -145,7 +146,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
         marca={marca_}
         generadoEn={reporteQuery.data?.generado_en}
       />
-      <SelectorMarca marcas={marcas} valor={marca} onCambio={setMarca} />
       <SelectorTiempo rangos={rangos} valor={rango} onCambio={setRango} />
     </div>
   );
@@ -179,10 +179,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           </div>
 
           <Kpis total={reporteQuery.data.total} />
-          {/* Lectura "qué cambió y por qué" + siguiente paso (F6/#146): la
-              narrativa va arriba para que el día a día empiece por la lectura,
-              no por la tabla (principio UX #1: el veredicto primero). */}
-          <AnalisisDiario marcaActual={marca} rangoActual={rango} />
           <TendenciaDiaria marcaActual={marca} rangoActual={rango} />
 
           {/* Por marca: la comparativa visual y la tabla detallada son dos lecturas
@@ -230,13 +226,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               asc=peores), paginación por día y drill-down. El drill-down desde la tabla
               por marca fija su filtro de marca. */}
           <div ref={piezasRef} className="scroll-mt-6">
-            <PiezasConsolidada
-              marcaActual={marca}
-              rangoActual={rango}
-              marcas={marcas}
-              marcaFiltro={tabPiezas === "todas" ? "" : tabPiezas}
-              onMarcaFiltroChange={(m) => setTabPiezas(m === "" ? "todas" : m)}
-            />
+            <PiezasConsolidada marcaActual={marca} rangoActual={rango} marcas={marcas} />
           </div>
           {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
               BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}

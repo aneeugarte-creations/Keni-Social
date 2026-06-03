@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { Autor } from "@/components/comunes/Autor";
 import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
-import { marcaMetricasDesdeCanonica } from "@/components/comunes/selectores";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -209,7 +208,8 @@ function TarjetaPublicacion({
             icono: BarChart3,
             onClick: () =>
               navigate("/datos/analiticas/metricas", {
-                state: { marca: marcaMetricasDesdeCanonica(publicacion.marca) },
+                // Marca activa (workspace) en forma canónica: el switch global la fija.
+                state: { marca: publicacion.marca },
               }),
           },
         ]

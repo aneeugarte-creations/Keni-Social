@@ -122,23 +122,21 @@ describe("PiezasConsolidada", () => {
     expect(screen.queryByText("Pieza reciente")).not.toBeInTheDocument();
   });
 
-  it("el filtro de marca controlado (drill-down) acota a esa marca", async () => {
+  it("en vista agregada muestra todas las marcas recibidas (sin filtro propio de marca)", async () => {
+    // La marca la manda el switch global: la tabla ya no tiene filtro de marca y
+    // pinta cuanto devuelve la API (aquí, dos marcas mezcladas).
     const mezcla = [
       pieza({ id: "u1", titulo: "De UnoTV", cuenta: "unotv" }),
       pieza({ id: "c1", titulo: "De Claro", cuenta: "claro_sports" }),
     ];
     vi.spyOn(api, "metricasPiezasListado").mockResolvedValue(resp(mezcla));
     renderConProviders(
-      <PiezasConsolidada
-        marcaActual="__todas__"
-        rangoActual="mes"
-        marcas={MARCAS}
-        marcaFiltro="claro_sports"
-        onMarcaFiltroChange={() => {}}
-      />,
+      <PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />,
     );
     expect(await screen.findByText("De Claro")).toBeInTheDocument();
-    expect(screen.queryByText("De UnoTV")).not.toBeInTheDocument();
+    expect(screen.getByText("De UnoTV")).toBeInTheDocument();
+    // No hay control de filtrado por marca en la tabla.
+    expect(screen.queryByLabelText("Filtrar por marca")).not.toBeInTheDocument();
   });
 
   it("abre el detalle al clicar una fila", async () => {

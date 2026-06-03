@@ -75,60 +75,35 @@ export function DesgloseInteracciones({
     staleTime: 2 * 60_000,
   });
 
-  // Filtros client-side por red y marca, derivados de las celdas del periodo.
+  // Filtro client-side por red, derivado de las celdas del periodo. La marca la acota
+  // el switch global de la barra superior (la consulta ya viene scopeada).
   const [redFiltro, setRedFiltro] = React.useState(TODAS);
-  const [marcaFiltro, setMarcaFiltro] = React.useState(TODAS);
 
   const celdas = React.useMemo(() => data?.celdas ?? [], [data]);
   const redesDisp = React.useMemo(
     () => Array.from(new Set(celdas.map((c) => c.red))),
     [celdas],
   );
-  const marcasDisp = React.useMemo(
-    () => Array.from(new Set(celdas.map((c) => c.marca))),
-    [celdas],
-  );
   const celdasFiltradas = React.useMemo(
-    () =>
-      celdas.filter(
-        (c) =>
-          (redFiltro === TODAS || c.red === redFiltro) &&
-          (marcaFiltro === TODAS || c.marca === marcaFiltro),
-      ),
-    [celdas, redFiltro, marcaFiltro],
+    () => celdas.filter((c) => redFiltro === TODAS || c.red === redFiltro),
+    [celdas, redFiltro],
   );
 
-  const acciones =
-    redesDisp.length || marcasDisp.length ? (
-      <>
-        <Select value={redFiltro} onValueChange={setRedFiltro}>
-          <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
-            <SelectValue placeholder="Red" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODAS}>Todas las redes</SelectItem>
-            {redesDisp.map((r) => (
-              <SelectItem key={r} value={r}>
-                {nombreRed(r)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={marcaFiltro} onValueChange={setMarcaFiltro}>
-          <SelectTrigger className="w-full sm:w-44" aria-label="Filtrar por marca">
-            <SelectValue placeholder="Marca" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TODAS}>Todas las marcas</SelectItem>
-            {marcasDisp.map((m) => (
-              <SelectItem key={m} value={m}>
-                {nombreMarca(m, marcas)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </>
-    ) : undefined;
+  const acciones = redesDisp.length ? (
+    <Select value={redFiltro} onValueChange={setRedFiltro}>
+      <SelectTrigger className="w-full sm:w-40" aria-label="Filtrar por red">
+        <SelectValue placeholder="Red" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={TODAS}>Todas las redes</SelectItem>
+        {redesDisp.map((r) => (
+          <SelectItem key={r} value={r}>
+            {nombreRed(r)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  ) : undefined;
 
   return (
     <SeccionColapsable
