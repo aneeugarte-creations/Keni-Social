@@ -19,7 +19,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 
-import type { Capa, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
+import type { Capa, CapaImagen, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
 import { CATALOGO_FUENTES, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaTexto, zTope } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
@@ -196,18 +196,58 @@ function Num({
 export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   const store = useStoreEditor();
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
+  const fondo = useEditor((s) => s.documento.fondo);
   // Familias disponibles: catálogo embebido + tipografías propias de la marca (sin duplicar).
   const familias = [...CATALOGO_FUENTES, ...fuentesExtra.filter((f) => !CATALOGO_FUENTES.includes(f as never))];
 
+  // Sin capa seleccionada: editar el FONDO del documento.
   if (!capa) {
+    const setFondo = (f: typeof fondo) => store.getState().setFondo(f);
     return (
-      <div className="p-3 text-sm text-muted-foreground">
-        Selecciona una capa para editar sus propiedades.
+      <div className="flex flex-col gap-3 p-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
+        <Campo etiqueta="Tipo">
+          <select
+            value={fondo.tipo}
+            onChange={(e) => {
+              const tipo = e.target.value as typeof fondo.tipo;
+              if (tipo === "color") setFondo({ tipo: "color", color: fondo.color || "#111315" });
+              else if (tipo === "degradado")
+                setFondo({ tipo: "degradado", degradado: fondo.degradado || { desde: "#0a3d62", hasta: "#111315", angulo: 180 } });
+            }}
+            className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+          >
+            <option value="color">Color</option>
+            <option value="degradado">Degradado</option>
+          </select>
+        </Campo>
+        {fondo.tipo === "color" && (
+          <Campo etiqueta="Color">
+            <input type="color" value={fondo.color || "#111315"} onChange={(e) => setFondo({ tipo: "color", color: e.target.value })} className="h-6 w-10" />
+          </Campo>
+        )}
+        {fondo.tipo === "degradado" && fondo.degradado && (
+          <>
+            <Campo etiqueta="Desde">
+              <input type="color" value={fondo.degradado.desde} onChange={(e) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, desde: e.target.value } })} className="h-6 w-10" />
+            </Campo>
+            <Campo etiqueta="Hasta">
+              <input type="color" value={fondo.degradado.hasta} onChange={(e) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, hasta: e.target.value } })} className="h-6 w-10" />
+            </Campo>
+          </>
+        )}
+        <p className="text-xs text-muted-foreground">Selecciona una capa para editar sus propiedades, o arrastra un activo al lienzo.</p>
       </div>
     );
   }
 
   const set = (cambios: Partial<Capa>) => store.getState().actualizar(capa.id, cambios);
+  // Edita un filtro de imagen fusionando con el resto (neutros por defecto).
+  const setFiltro = (k: "brillo" | "contraste" | "saturacion" | "desenfoque", v: number) =>
+    set({
+      filtros: { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0, ...(capa as CapaImagen).filtros, [k]: v },
+    } as Partial<Capa>);
+  const fil = (capa as CapaImagen).filtros ?? { brillo: 1, contraste: 1, saturacion: 1, desenfoque: 0 };
 
   return (
     <div className="flex flex-col gap-3 p-3">
@@ -310,6 +350,37 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               />
             </Campo>
           )}
+        </div>
+      )}
+
+      {capa.tipo === "imagen" && (
+        <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <Campo etiqueta="Ajuste">
+            <select
+              value={(capa as CapaImagen).ajuste}
+              onChange={(e) => set({ ajuste: e.target.value as CapaImagen["ajuste"] } as Partial<Capa>)}
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              <option value="cover">Cubrir</option>
+              <option value="contain">Contener</option>
+            </select>
+          </Campo>
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Filtros</div>
+          <Campo etiqueta="Brillo">
+            <input type="range" min={0.2} max={1.8} step={0.05} value={fil.brillo ?? 1} onChange={(e) => setFiltro("brillo", Number(e.target.value))} className="w-24" />
+          </Campo>
+          <Campo etiqueta="Contraste">
+            <input type="range" min={0.2} max={1.8} step={0.05} value={fil.contraste ?? 1} onChange={(e) => setFiltro("contraste", Number(e.target.value))} className="w-24" />
+          </Campo>
+          <Campo etiqueta="Saturación">
+            <input type="range" min={0} max={2} step={0.05} value={fil.saturacion ?? 1} onChange={(e) => setFiltro("saturacion", Number(e.target.value))} className="w-24" />
+          </Campo>
+          <Campo etiqueta="Desenfoque">
+            <input type="range" min={0} max={20} step={1} value={fil.desenfoque ?? 0} onChange={(e) => setFiltro("desenfoque", Number(e.target.value))} className="w-24" />
+          </Campo>
+          <button onClick={() => set({ filtros: null } as Partial<Capa>)} className="self-start text-xs text-muted-foreground underline">
+            Quitar filtros
+          </button>
         </div>
       )}
 

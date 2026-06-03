@@ -3,6 +3,7 @@
 // Aquí priorizamos manipulación directa (seleccionar, arrastrar, escalar, rotar).
 
 import Konva from "konva";
+import { useEffect, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
 
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "../documento";
@@ -42,6 +43,51 @@ function cropCover(img: HTMLImageElement, boxW: number, boxH: number, foco: [num
     width: cw,
     height: ch,
   };
+}
+
+// Imagen con FILTROS Konva (brillo/contraste/saturación/desenfoque) para vista WYSIWYG. El export
+// final del servidor usa los mismos filtros (CSS filter, exacto); aquí damos feedback en vivo.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ImagenConFiltros({ img, c, props }: { img: HTMLImageElement; c: CapaImagen; props: any }) {
+  const ref = useRef<Konva.Image | null>(null);
+  const f = c.filtros;
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    if (!f) {
+      node.filters([]);
+      node.clearCache();
+      node.getLayer()?.batchDraw();
+      return;
+    }
+    const filtros: (typeof Konva.Filters.Brighten)[] = [];
+    if (f.brillo != null && f.brillo !== 1) filtros.push(Konva.Filters.Brighten);
+    if (f.contraste != null && f.contraste !== 1) filtros.push(Konva.Filters.Contrast);
+    if (f.saturacion != null && f.saturacion !== 1) filtros.push(Konva.Filters.HSL);
+    if (f.desenfoque) filtros.push(Konva.Filters.Blur);
+    node.filters(filtros);
+    node.brightness((f.brillo ?? 1) - 1);
+    node.contrast(((f.contraste ?? 1) - 1) * 100);
+    node.saturation((f.saturacion ?? 1) - 1);
+    node.blurRadius(f.desenfoque ?? 0);
+    try {
+      node.cache();
+    } catch {
+      /* imagen aún sin dimensiones: se reintenta en el próximo render */
+    }
+    node.getLayer()?.batchDraw();
+  }, [f, c.w, c.h, c.objeto, img]);
+
+  return (
+    <KonvaImage
+      ref={ref}
+      {...props}
+      image={img}
+      width={c.w}
+      height={c.h}
+      crop={c.ajuste === "cover" ? cropCover(img, c.w, c.h, c.foco) : undefined}
+    />
+  );
 }
 
 function textoMuestra(c: CapaTexto): string {
@@ -108,15 +154,7 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
       if (!img) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      return (
-        <KonvaImage
-          {...props}
-          image={img}
-          width={c.w}
-          height={c.h}
-          crop={c.ajuste === "cover" ? cropCover(img, c.w, c.h, c.foco) : undefined}
-        />
-      );
+      return <ImagenConFiltros img={img} c={c} props={props} />;
     }
     case "logo": {
       const c = capa as CapaLogo;
