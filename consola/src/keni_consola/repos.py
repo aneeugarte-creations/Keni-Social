@@ -1465,6 +1465,40 @@ def borrar_bloque(bloque_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Versiones de documento (historial del editor por pieza)                        #
+# --------------------------------------------------------------------------- #
+
+
+def crear_documento_version(
+    *,
+    contenido_id: str,
+    plataforma_id: str,
+    documento: str,
+    render_objeto: str = "",
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+) -> dict[str, Any]:
+    return db.crear_documento_version(
+        contenido_id=contenido_id,
+        plataforma_id=plataforma_id,
+        documento=documento,
+        render_objeto=render_objeto,
+        autor=autor,
+        id=id,
+        creado=creado,
+    )
+
+
+def listar_documento_versiones(contenido_id: str, plataforma_id: str) -> list[dict[str, Any]]:
+    return db.listar_documento_versiones(contenido_id, plataforma_id)
+
+
+def ultima_documento_version(contenido_id: str, plataforma_id: str) -> dict[str, Any] | None:
+    return db.ultima_documento_version(contenido_id, plataforma_id)
+
+
+# --------------------------------------------------------------------------- #
 # Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
 # --------------------------------------------------------------------------- #
 

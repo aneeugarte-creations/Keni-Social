@@ -63,6 +63,7 @@ _TABLAS = (
     "marca_activos",
     "plantillas_diseno",
     "bloques",
+    "documento_versiones",
     "webhooks",
     "eventos_internos",
     "jobs",

@@ -6,8 +6,9 @@
 // las ediciones (no recarga la plantilla).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Save, X } from "lucide-react";
-import { useRef, useState } from "react";
+import { FileUp, Plus, Save, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 
 import { SelectorMarca } from "@/components/comunes/SelectorMarca";
@@ -29,6 +30,9 @@ interface Pestana {
   id: string;
   marca: string;
   formato: string;
+  // Si la pestaña está anclada a una publicación (historial/versionado).
+  contenido?: string;
+  plataforma?: string;
 }
 
 let _seq = 0;
@@ -39,6 +43,8 @@ export default function EditorPro() {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opciones.data?.marcas ?? [];
+
+  const [searchParams] = useSearchParams();
 
   // Selectores para abrir una pestaña nueva.
   const [marcaNueva, setMarcaNueva] = useState("");
@@ -68,6 +74,42 @@ export default function EditorPro() {
       toast.error(e instanceof Error ? e.message : "No se pudo cargar la plantilla.");
     }
   };
+
+  // Abre una pestaña ANCLADA a una publicación: carga el documento guardado de la pieza, o la
+  // plantilla de su marca si aún no se editó. La invoca el efecto de apertura por URL.
+  const abrirPiezaTab = async (cid: string, pid: string, marca: string, formato: string) => {
+    _seq += 1;
+    const id = `tab-${_seq}`;
+    const store = crearStoreEditor(documentoVacio(DIMS[formato] ?? DIMS.feed, marca));
+    stores.current.set(id, store);
+    setPestanas((p) => [...p, { id, marca, formato, contenido: cid, plataforma: pid }]);
+    setActiva(id);
+    try {
+      const pieza = await api.editorPieza(cid, pid);
+      if (pieza.documento) {
+        store.getState().cargar(pieza.documento as Documento);
+      } else {
+        const res = await api.editorPlantilla(marca, formato);
+        store.getState().cargar(res.documento as Documento);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "No se pudo abrir la pieza.");
+    }
+  };
+
+  // Apertura por URL: /contenido/editor?contenido=&plataforma=&marca=&formato= abre la pieza una vez.
+  const abiertoUrl = useRef(false);
+  useEffect(() => {
+    if (abiertoUrl.current) return;
+    const cid = searchParams.get("contenido");
+    const pid = searchParams.get("plataforma");
+    const marca = searchParams.get("marca") || "";
+    const formato = searchParams.get("formato") || "feed";
+    if (cid && pid && marca) {
+      abiertoUrl.current = true;
+      void abrirPiezaTab(cid, pid, marca, formato);
+    }
+  }, [searchParams]);
 
   const cerrarPestana = (id: string) => {
     stores.current.delete(id);
@@ -168,6 +210,25 @@ export default function EditorPro() {
     }
   };
 
+  // Guarda el documento en la PUBLICACIÓN anclada (render + versión + fija su imagen).
+  const guardarEnPieza = useMutation({
+    mutationFn: () => {
+      if (!storeActivo || !pestanaActiva?.contenido || !pestanaActiva?.plataforma) {
+        throw new Error("Esta pestaña no está anclada a una publicación.");
+      }
+      return api.editorPiezaGuardar(
+        pestanaActiva.contenido,
+        pestanaActiva.plataforma,
+        storeActivo.getState().documento,
+      );
+    },
+    onSuccess: (res) => {
+      setExportUrl(`/api/media/${res.id}`);
+      toast.success(`Guardado en la pieza (v${res.version}).`);
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo guardar en la pieza."),
+  });
+
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       {/* Barra superior: abrir pestaña (marca + formato) + export. */}
@@ -192,6 +253,11 @@ export default function EditorPro() {
         {pestanaActiva && (
           <>
             <div className="mx-1 h-5 w-px bg-border" />
+            {pestanaActiva.contenido && (
+              <Button size="sm" disabled={guardarEnPieza.isPending} onClick={() => guardarEnPieza.mutate()}>
+                <FileUp className="mr-1 h-4 w-4" /> Guardar en la pieza
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"

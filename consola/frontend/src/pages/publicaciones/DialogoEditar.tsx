@@ -3,6 +3,7 @@ import {
   Check,
   Eye,
   History,
+  Layers,
   Link2,
   ListChecks,
   Loader2,
@@ -532,6 +533,30 @@ export function DialogoEditar({
                   imagenFuente={publicacion.imagen_fuente}
                 />
               ))}
+
+            {publicacion && (
+              <a
+                href={
+                  `/contenido/editor?contenido=${encodeURIComponent(publicacion.contenido_id)}` +
+                  `&plataforma=${encodeURIComponent(publicacion.id)}` +
+                  `&marca=${encodeURIComponent(publicacion.marca || "")}` +
+                  `&formato=${
+                    publicacion.red === "tiktok"
+                      ? "vertical"
+                      : publicacion.red === "instagram"
+                        ? "cuadrado"
+                        : publicacion.red === "x" || publicacion.red === "twitter"
+                          ? "horizontal"
+                          : "feed"
+                  }`
+                }
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary underline"
+              >
+                <Layers className="h-3.5 w-3.5" /> Abrir en el editor por capas
+              </a>
+            )}
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">

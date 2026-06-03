@@ -967,6 +967,18 @@ export const api = {
       `/editor/plantilla/${encodeURIComponent(marca)}/${encodeURIComponent(formato)}`,
       { signal },
     ),
+  // Editor anclado a una pieza (historial/versionado): cargar el documento guardado de la pieza
+  // y guardar (render + nueva versión + fija la imagen de la publicación).
+  editorPieza: (contenidoId: string, plataformaId: string, signal?: AbortSignal) =>
+    peticion<{ documento: unknown; versiones: number }>(
+      `/editor/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
+      { signal },
+    ),
+  editorPiezaGuardar: (contenidoId: string, plataformaId: string, documento: unknown) =>
+    peticion<{ id: string; url: string; version: number }>(
+      `/editor/pieza/${encodeURIComponent(contenidoId)}/${encodeURIComponent(plataformaId)}`,
+      { metodo: "POST", json: { documento } },
+    ),
 
   // --- Biblioteca de activos por marca (logos, tipografías, artes, infografías, …) ---
   marcaActivos: (

@@ -15,14 +15,17 @@ SEGURIDAD: el documento se valida en el dominio (`documento.validar`); los error
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from .. import repos
 from .._http_json import leer_json
 from ..dominio import estudio_imagen
+from ..seguridad import autor_de_peticion
 
 
 async def render(request: Request) -> Response:
@@ -53,7 +56,84 @@ async def plantilla(request: Request) -> Response:
     return JSONResponse({"documento": doc})
 
 
+def _doc_de_version(version: dict[str, Any] | None) -> Any:
+    if not version:
+        return None
+    try:
+        return json.loads(version.get("documento") or "{}")
+    except (ValueError, TypeError):
+        return None
+
+
+async def pieza_documento(request: Request) -> Response:
+    """GET /api/editor/pieza/{contenido_id}/{plataforma_id}: documento editable de la pieza.
+
+    Devuelve la ÚLTIMA versión guardada del documento (o `null` si aún no se editó con el editor),
+    más el número de versiones. El frontend, si es `null`, arranca de la plantilla de la marca.
+    """
+    cid = request.path_params["contenido_id"]
+    pid = request.path_params["plataforma_id"]
+    versiones = repos.listar_documento_versiones(cid, pid)
+    ultima = versiones[0] if versiones else None
+    return JSONResponse({"documento": _doc_de_version(ultima), "versiones": len(versiones)})
+
+
+async def pieza_guardar(request: Request) -> Response:
+    """POST /api/editor/pieza/{contenido_id}/{plataforma_id} {documento}: guarda el documento en la pieza.
+
+    Valida y renderiza el documento (PNG fiel), APENDE una versión al historial y fija la `imagen`
+    de la publicación al PNG renderizado. -> `{id, url, version}` | 400 | 404.
+    """
+    cid = request.path_params["contenido_id"]
+    pid = request.path_params["plataforma_id"]
+    datos = await leer_json(request)
+    doc = datos.get("documento") if isinstance(datos, dict) else None
+    if not isinstance(doc, dict):
+        return JSONResponse({"error": "Falta el 'documento'."}, status_code=400)
+    try:
+        doc_ok = estudio_imagen.validar_documento(doc)
+        render = estudio_imagen.renderizar_documento(doc_ok)
+    except estudio_imagen.EstudioError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    # Fija la imagen de la pieza (404 si la plataforma no existe).
+    actualizada = repos.actualizar_contenido_plataforma(pid, {"imagen": render["id"]})
+    if actualizada is None:
+        return JSONResponse({"error": "Esa publicación no existe."}, status_code=404)
+
+    version = repos.crear_documento_version(
+        contenido_id=cid,
+        plataforma_id=pid,
+        documento=json.dumps(doc_ok, ensure_ascii=False),
+        render_objeto=render["id"],
+        autor=autor_de_peticion(request),
+    )
+    return JSONResponse({"id": render["id"], "url": render["url"], "version": version["version"]})
+
+
+async def pieza_versiones(request: Request) -> Response:
+    """GET /api/editor/pieza/{contenido_id}/{plataforma_id}/versiones: historial (sin el documento)."""
+    cid = request.path_params["contenido_id"]
+    pid = request.path_params["plataforma_id"]
+    versiones = [
+        {
+            "id": v["id"],
+            "version": v["version"],
+            "render_objeto": v["render_objeto"],
+            "render_url": f"/api/media/{v['render_objeto']}" if v.get("render_objeto") else "",
+            "documento": _doc_de_version(v),
+            "autor_nombre": v["autor_nombre"],
+            "creado": v["creado"],
+        }
+        for v in repos.listar_documento_versiones(cid, pid)
+    ]
+    return JSONResponse({"versiones": versiones})
+
+
 RUTAS = [
     Route("/api/editor/render", render, methods=["POST"]),
     Route("/api/editor/plantilla/{marca}/{formato}", plantilla, methods=["GET"]),
+    Route("/api/editor/pieza/{contenido_id}/{plataforma_id}", pieza_documento, methods=["GET"]),
+    Route("/api/editor/pieza/{contenido_id}/{plataforma_id}", pieza_guardar, methods=["POST"]),
+    Route("/api/editor/pieza/{contenido_id}/{plataforma_id}/versiones", pieza_versiones, methods=["GET"]),
 ]

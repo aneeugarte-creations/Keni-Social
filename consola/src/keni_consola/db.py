@@ -1013,6 +1013,25 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_bloques_marca ON bloques (marca)",
+    # VERSIONES DE DOCUMENTO (historial del editor por pieza): cada vez que se guarda el editor
+    # sobre una publicación se APENDE una versión con el Documento de capas y el objeto del PNG
+    # renderizado. Append-only (nunca se pisa): la última versión es el estado actual; las previas
+    # permiten restaurar. Clave lógica (contenido_id, plataforma_id) -> N versiones incrementales.
+    """
+    CREATE TABLE IF NOT EXISTS documento_versiones (
+        id            TEXT PRIMARY KEY,
+        contenido_id  TEXT NOT NULL DEFAULT '',
+        plataforma_id TEXT NOT NULL DEFAULT '',
+        version       INTEGER NOT NULL DEFAULT 1,
+        documento     TEXT NOT NULL DEFAULT '{}',
+        render_objeto TEXT NOT NULL DEFAULT '',
+        autor_id      TEXT NOT NULL DEFAULT '',
+        autor_nombre  TEXT NOT NULL DEFAULT '',
+        creado        TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_documento_versiones_pieza "
+    "ON documento_versiones (contenido_id, plataforma_id, version)",
     # Webhooks SALIENTES (eventos internos del tablero): una fila por suscripcion. Cada
     # webhook escucha N tipos de evento (`eventos`, lista JSON; ""/[] = todos) y, al
     # dispararse, recibe un POST JSON a `url`. `secreto` (opcional) firma cada entrega con
@@ -5190,6 +5209,101 @@ def borrar_bloque(bloque_id: str) -> dict[str, Any] | None:
     finally:
         con.close()
     return item
+
+
+# --------------------------------------------------------------------------- #
+# Versiones de documento (historial del editor por pieza)                        #
+# --------------------------------------------------------------------------- #
+
+_COLS_DOC_VERSIONES = (
+    "id",
+    "contenido_id",
+    "plataforma_id",
+    "version",
+    "documento",
+    "render_objeto",
+    "autor_id",
+    "autor_nombre",
+    "creado",
+)
+_SELECT_DOC_VERSIONES = f"SELECT {', '.join(_COLS_DOC_VERSIONES)} FROM documento_versiones"
+
+
+def _fila_a_doc_version(fila: Any) -> dict[str, Any]:
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_DOC_VERSIONES}
+    item["documento"] = fila["documento"] or "{}"
+    return item
+
+
+def crear_documento_version(
+    *,
+    contenido_id: str,
+    plataforma_id: str,
+    documento: str,
+    render_objeto: str = "",
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+) -> dict[str, Any]:
+    """Apende una versión del documento de una pieza (version = max+1 para esa pieza)."""
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    con = _conectar()
+    try:
+        fila_max = con.execute(
+            "SELECT COALESCE(MAX(version), 0) AS m FROM documento_versiones "
+            "WHERE contenido_id = ? AND plataforma_id = ?",
+            (contenido_id, plataforma_id),
+        ).fetchone()
+        siguiente = int(fila_max["m"]) + 1
+        fila = {
+            "id": id or uuid.uuid4().hex[:12],
+            "contenido_id": contenido_id or "",
+            "plataforma_id": plataforma_id or "",
+            "version": siguiente,
+            "documento": documento or "{}",
+            "render_objeto": render_objeto or "",
+            "autor_id": autor.get("id", "") or "",
+            "autor_nombre": autor.get("usuario", "") or "",
+            "creado": creado or ahora,
+        }
+        marcadores = ", ".join("?" for _ in _COLS_DOC_VERSIONES)
+        con.execute(
+            f"INSERT INTO documento_versiones ({', '.join(_COLS_DOC_VERSIONES)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_DOC_VERSIONES),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_doc_version(fila)
+
+
+def listar_documento_versiones(contenido_id: str, plataforma_id: str) -> list[dict[str, Any]]:
+    """Versiones de una pieza, mas reciente primero."""
+    con = _conectar()
+    try:
+        filas = con.execute(
+            f"{_SELECT_DOC_VERSIONES} WHERE contenido_id = ? AND plataforma_id = ? "
+            "ORDER BY version DESC",
+            (contenido_id, plataforma_id),
+        ).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_doc_version(f) for f in filas]
+
+
+def ultima_documento_version(contenido_id: str, plataforma_id: str) -> dict[str, Any] | None:
+    """La última versión del documento de una pieza (None si no hay)."""
+    con = _conectar()
+    try:
+        fila = con.execute(
+            f"{_SELECT_DOC_VERSIONES} WHERE contenido_id = ? AND plataforma_id = ? "
+            "ORDER BY version DESC LIMIT 1",
+            (contenido_id, plataforma_id),
+        ).fetchone()
+    finally:
+        con.close()
+    return _fila_a_doc_version(fila) if fila is not None else None
 
 
 # --------------------------------------------------------------------------- #
