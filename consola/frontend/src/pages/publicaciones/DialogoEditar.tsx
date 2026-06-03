@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
-  Eye,
   History,
   Layers,
   LayoutTemplate,
@@ -25,7 +24,6 @@ import { ContadorCaracteres } from "@/components/editor/ContadorCaracteres";
 import { HerramientasHashtags } from "@/components/hashtags/HerramientasHashtags";
 import { EditorImagen } from "@/components/media/EditorImagen";
 import { EditorPlacaInline } from "@/components/media/EditorPlacaInline";
-import { VistaPreviaRed } from "@/components/preview/VistaPreviaRed";
 import { GaleriaPlantillas } from "@/editor/GaleriaPlantillas";
 import { ConstructorUtm } from "@/components/utm/ConstructorUtm";
 import { AutoTextarea } from "@/components/ui/auto-textarea";
@@ -299,7 +297,7 @@ function PanelAprobacion({ publicacion }: { publicacion: Publicacion }) {
 }
 
 /** Pestañas del editor: previsualización, edición, colaboración (comentarios) e historial. */
-type VistaEditor = "previa" | "editar" | "comentarios" | "versiones";
+type VistaEditor = "editar" | "comentarios" | "versiones";
 
 /** Diálogo de edición de una publicación: título, contenido, estado y fecha. */
 export function DialogoEditar({
@@ -332,7 +330,7 @@ export function DialogoEditar({
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
   // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
   const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
-  const [vista, setVista] = React.useState<VistaEditor>("previa");
+  const [vista, setVista] = React.useState<VistaEditor>("editar");
   const [gestionHashtags, setGestionHashtags] = React.useState(false);
   const [utmAbierto, setUtmAbierto] = React.useState(false);
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -387,7 +385,7 @@ export function DialogoEditar({
     setFoto(publicacion.foto ?? "");
     setPlacaOculta(publicacion.placa_oculta ?? false);
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
-    setVista("previa");
+    setVista("editar");
   }, [publicacion]);
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
@@ -464,10 +462,6 @@ export function DialogoEditar({
 
         <Tabs value={vista} onValueChange={(v) => setVista(v as VistaEditor)}>
           <TabsList>
-            <TabsTrigger value="previa" className="gap-1.5">
-              <Eye className="h-4 w-4" />
-              Previa
-            </TabsTrigger>
             <TabsTrigger value="editar" className="gap-1.5">
               <Pencil className="h-4 w-4" />
               Editar
@@ -761,19 +755,6 @@ export function DialogoEditar({
                 </p>
               </div>
             </div>
-          </TabsContent>
-
-
-          <TabsContent value="previa">
-            {publicacion && (
-              <VistaPreviaRed
-                red={publicacion.red}
-                marca={publicacion.marca_nombre}
-                contenido={contenido}
-                copy_in={copyIn}
-                imagen_url={imagenUrl || imagen}
-              />
-            )}
           </TabsContent>
 
           <TabsContent value="comentarios">
