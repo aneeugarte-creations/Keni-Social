@@ -7,6 +7,7 @@ import { PuertaSesion } from "@/components/auth/PuertaSesion";
 import { ContenedorConfirmacion } from "@/components/comunes/ContenedorConfirmacion";
 import { FronteraError } from "@/components/comunes/FronteraError";
 import { Toaster } from "@/components/ui/sonner";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import { SesionProvider } from "@/hooks/use-sesion";
 import { TemaProvider } from "@/hooks/use-tema";
 import { ApiError } from "@/lib/api";
@@ -36,7 +37,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <FronteraError>
           <SesionProvider>
             <PuertaSesion>
-              <RouterProvider router={router} />
+              <MarcaActivaProvider>
+                <RouterProvider router={router} />
+              </MarcaActivaProvider>
             </PuertaSesion>
           </SesionProvider>
         </FronteraError>

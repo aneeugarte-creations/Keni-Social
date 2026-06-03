@@ -8,6 +8,7 @@ import { IndicadorEstado } from "@/components/layout/IndicadorEstado";
 import { PaletaProvider } from "@/components/layout/PaletaComandos";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SubnavHub } from "@/components/layout/SubnavHub";
+import { SwitchMarca } from "@/components/layout/SwitchMarca";
 import { Wordmark } from "@/components/layout/Wordmark";
 import { pestanasDeRuta } from "@/components/layout/hub-tabs";
 import { Button } from "@/components/ui/button";
@@ -212,8 +213,11 @@ export function AppShell() {
             })}
           </nav>
 
-          {/* Indicador de salud del sistema, alineado a la derecha de la topbar. */}
-          <div className="ml-auto flex items-center">
+          {/* Marca activa (workspace) + salud del sistema, a la derecha de la topbar.
+              El switch de marca manda en toda la consola: la marca activa filtra
+              implícitamente lo que se ve (deriva del perfil, ver SwitchMarca). */}
+          <div className="ml-auto flex items-center gap-3">
+            <SwitchMarca />
             <IndicadorEstado />
           </div>
         </header>

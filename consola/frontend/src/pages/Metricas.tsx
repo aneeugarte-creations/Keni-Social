@@ -3,9 +3,10 @@ import * as React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
-import { marcaParam } from "@/components/comunes/selectores";
+import { marcaMetricasDesdeCanonica, marcaParam } from "@/components/comunes/selectores";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api } from "@/lib/api";
 import type { OpcionesMetricas } from "@/types";
 
@@ -85,6 +86,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
   const { marcas, rangos } = opciones;
   const location = useLocation();
   const navigate = useNavigate();
+  // Marca activa del workspace (id canónico); aquí se usa como DEFAULT. Analíticas
+  // permite comparar marcas, así que el selector local se mantiene: solo cambia el
+  // punto de partida (tu marca, no "Todas").
+  const { marcaActiva } = useMarcaActiva();
 
   // A-5: usamos useState con inicializador lazy en vez de useMemo para capturar
   // la marca inicial exactamente una vez al montar, sin recalcular en re-renders.
@@ -92,7 +97,13 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
     const estado = location.state as { marca?: string } | null;
     const desdeQuery = new URLSearchParams(location.search).get("marca") ?? undefined;
     const candidata = estado?.marca ?? desdeQuery;
-    return candidata && marcas.some((m) => m.id === candidata) ? candidata : MARCA_TODAS;
+    if (candidata && marcas.some((m) => m.id === candidata)) return candidata;
+    // Por defecto, la marca activa (en forma id_metricas que usa esta frontera).
+    if (marcaActiva) {
+      const idMetricas = marcaMetricasDesdeCanonica(marcaActiva);
+      if (marcas.some((m) => m.id === idMetricas)) return idMetricas;
+    }
+    return MARCA_TODAS;
   });
   const [rango, setRango] = React.useState(rangos[0]?.id ?? "");
 

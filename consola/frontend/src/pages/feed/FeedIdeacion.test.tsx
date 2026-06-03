@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import type { UsuarioSesion } from "@/types";
 
 import FeedIdeacion from "./FeedIdeacion";
@@ -114,9 +115,11 @@ function renderFeed(usuario: Partial<UsuarioSesion> = {}) {
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={valor}>
-        <MemoryRouter>
-          <FeedIdeacion />
-        </MemoryRouter>
+        <MarcaActivaProvider>
+          <MemoryRouter>
+            <FeedIdeacion />
+          </MemoryRouter>
+        </MarcaActivaProvider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );

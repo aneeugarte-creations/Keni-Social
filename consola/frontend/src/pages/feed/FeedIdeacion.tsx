@@ -29,12 +29,10 @@ import { RefreshCw } from "lucide-react";
 import * as React from "react";
 
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
-import { MARCA_TODAS, marcaParam } from "@/components/comunes/selectores";
-import { SelectorMarca } from "@/components/comunes/SelectorMarca";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSesion } from "@/hooks/sesion-contexto";
+import { MARCA_ACTIVA_TODAS, useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
 import type { Publicacion } from "@/types";
@@ -90,40 +88,25 @@ const VISTAS: {
 ];
 
 export default function FeedIdeacion() {
-  const { usuario } = useSesion();
   const queryClient = useQueryClient();
+  // La marca la manda el switch global de la barra superior (deriva del perfil).
+  // El feed se filtra implícitamente por la marca activa; no hay selector local.
+  const { marcaActiva } = useMarcaActiva();
 
   const [vista, setVista] = React.useState<Vista>("todo");
-  const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
-  const [marca, setMarca] = React.useState<string>(
-    marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS,
-  );
-
-  const opcionesQuery = useQuery({
-    queryKey: ["publicaciones", "opciones"],
-    queryFn: ({ signal }) => api.publicacionesOpciones(signal),
-  });
-  const catalogoMarcas = opcionesQuery.data?.marcas ?? [];
-  const marcas =
-    marcasUsuario.length > 0
-      ? catalogoMarcas.filter((m) => marcasUsuario.includes(m.id))
-      : catalogoMarcas;
 
   // UN solo fetch: TODAS las etapas mezcladas y ordenadas por fecha (el backend devuelve
   // `creado DESC` cuando no se filtra estado). Las pestañas filtran este listado en memoria.
   const feedQuery = useQuery({
-    queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion", marca],
-    queryFn: ({ signal }) => api.publicaciones({ marca: marcaParam(marca) }, signal),
+    queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion", marcaActiva ?? MARCA_ACTIVA_TODAS],
+    queryFn: ({ signal }) => api.publicaciones({ marca: marcaActiva ?? undefined }, signal),
   });
 
-  // Si el usuario tiene marcas y el filtro está en "todas", acota a sus marcas en cliente.
-  const piezas = React.useMemo(() => {
-    const todas = feedQuery.data?.publicaciones ?? [];
-    if (marca === MARCA_TODAS && marcasUsuario.length > 0) {
-      return todas.filter((p) => marcasUsuario.includes(p.marca));
-    }
-    return todas;
-  }, [feedQuery.data, marca, marcasUsuario]);
+  // El backend ya acota por la marca activa (o devuelve todo en la vista "Todas" de admin).
+  const piezas = React.useMemo(
+    () => feedQuery.data?.publicaciones ?? [],
+    [feedQuery.data],
+  );
 
   // Conteo por pestaña (sobre el listado ya acotado por marca) para el badge de cada tab.
   const conteos = React.useMemo(
@@ -160,8 +143,8 @@ export default function FeedIdeacion() {
         }
       />
 
-      {/* Filtros: pestañas (vistas del MISMO feed) + marca. Las pestañas no hacen otra
-          llamada: filtran en cliente el listado ya cargado. */}
+      {/* Pestañas: vistas del MISMO feed (la marca la fija el switch global de la
+          topbar). Las pestañas no hacen otra llamada: filtran en cliente lo ya cargado. */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex gap-1" role="tablist" aria-label="Vista del feed">
           {VISTAS.map((v) => (
@@ -190,14 +173,6 @@ export default function FeedIdeacion() {
             </button>
           ))}
         </div>
-        <SelectorMarca
-          marcas={marcas}
-          valor={marca}
-          onCambio={setMarca}
-          incluirTodas
-          etiquetaTodas={marcasUsuario.length > 0 ? "Todas mis marcas" : "Todas las marcas"}
-          className="w-auto min-w-48"
-        />
       </div>
 
       {/* Columna del feed (centrada, lectura cómoda). */}

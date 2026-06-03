@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 
 /** Catálogo mínimo con una app activa (espejo de un manifest). */
 const CATALOGO = {
@@ -105,6 +106,7 @@ function renderShell(ruta: string) {
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={sesion}>
+        <MarcaActivaProvider>
         <MemoryRouter initialEntries={[ruta]}>
           <Routes>
             <Route path="/" element={<AppShell />}>
@@ -116,6 +118,7 @@ function renderShell(ruta: string) {
             </Route>
           </Routes>
         </MemoryRouter>
+        </MarcaActivaProvider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
