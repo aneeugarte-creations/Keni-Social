@@ -174,6 +174,10 @@ def ejecutar_barrido() -> dict[str, int]:
     avanzadas = qa_lanzadas = bloqueadas = 0
     cap = config.auto_avance_max()
     for pub in repos.listar_publicaciones(estado="borrador"):
+        # Toggle por marca: si el auto-avance de esta marca está apagado, no se toca su pieza
+        # (ni avanza ni se le lanza QA). El override por-marca manda sobre el global.
+        if not config.auto_avance_activo_para_marca(pub.get("marca") or ""):
+            continue
         if not base_lista(pub):
             continue  # aún en producción (le falta copy/copy-in/imagen-formato)
         # ¿Hay veredicto de QA FRESCO para este copy? (None si no hay o si el copy cambió.)

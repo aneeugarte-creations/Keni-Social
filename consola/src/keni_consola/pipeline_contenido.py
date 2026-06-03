@@ -847,6 +847,10 @@ def ejecutar_barrido() -> dict[str, Any]:
     # --- Fase CI: crea los temas (sin copy) por marca. ---------------------------------------
     temas_nuevos: list[dict[str, Any]] = []
     for marca in marcas.ids():
+        # Toggle por marca: si la auto-producción de ESTA marca está apagada, no se ingiere
+        # nada suyo (no entran temas nuevos). El override por-marca manda sobre el global.
+        if not config.pipeline_activo_para_marca(marca):
+            continue
         try:
             trabajos = ingerir_marca(marca, maximo=maximo)
         except Exception:  # noqa: BLE001 -- un fallo de ingesta de una marca no rompe el barrido
@@ -914,6 +918,10 @@ def ejecutar_cd(*, autor: dict[str, str] | None = None) -> list[dict[str, Any]]:
     for tema in temas_para_copy():
         if contador >= _CD_LANZAR_MAX:
             break
+        # Toggle por marca: no generamos copy de temas de una marca con la auto-producción
+        # apagada (aunque ya estuvieran ingeridos antes de apagarla).
+        if not config.pipeline_activo_para_marca(tema.get("marca") or ""):
+            continue
         try:
             gen = lanzar_copy_de_tema(tema, autor=autor)
         except generaciones.ColaLlenaError:

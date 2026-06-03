@@ -99,6 +99,7 @@ CATALOGO de variables (todas opcionales salvo que se diga). Agrupadas por area:
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import quote
 
@@ -1148,6 +1149,55 @@ def auto_avance_activo() -> bool:
     con formato correcto + QA 🟢/🟡) y lanza la QA editorial de las que aún no la tienen.
     """
     return _crudo(ENV_AUTO_AVANCE).lower() in _VERDADEROS
+
+
+# --------------------------------------------------------------------------- #
+# Overrides POR MARCA de las etapas de auto-producción                         #
+# --------------------------------------------------------------------------- #
+#
+# Cada etapa (pipeline/ingesta, auto-copy, auto-arte, auto-avance) puede encenderse o apagarse
+# POR MARCA, para producir solo donde toca (p.ej. claro-sports ON, nacion-gamer OFF). El override
+# vive en el store de ajustes con la clave `f"{ENV}::{marca}"` (editable desde el panel Sistema,
+# ver `ajustes_catalogo`). Precedencia: si la clave por-marca está PUESTA, manda; si no, cae al
+# flag GLOBAL de la etapa. Así el global es el defecto y cada marca es una excepción explícita.
+
+# Separador de la clave por-marca. No aparece en los ids de marca (`claro-sports`, etc.).
+SEP_MARCA = "::"
+
+
+def clave_por_marca(env_flag: str, marca: str) -> str:
+    """Clave de store del override por-marca de una etapa: `KENI_AUTOGEN::claro-sports`."""
+    return f"{env_flag}{SEP_MARCA}{marca}"
+
+
+def _activo_para_marca(env_flag: str, global_fn: Callable[[], bool], marca: str) -> bool:
+    """¿La etapa `env_flag` está activa para `marca`? Override por-marca del store > global."""
+    from . import ajustes  # perezoso: evita el ciclo config <- ajustes
+
+    crudo = ajustes.obtener(clave_por_marca(env_flag, marca))
+    if crudo is not None and crudo.strip():
+        return crudo.strip().lower() in _VERDADEROS
+    return global_fn()
+
+
+def pipeline_activo_para_marca(marca: str) -> bool:
+    """¿La auto-producción (pipeline: ingesta→QA→copy) está activa para `marca`?"""
+    return _activo_para_marca(ENV_PIPELINE, pipeline_activo, marca)
+
+
+def autogen_activo_para_marca(marca: str) -> bool:
+    """¿El auto-copy (`autogen_copy`) está activo para `marca`?"""
+    return _activo_para_marca(ENV_AUTOGEN, autogen_activo, marca)
+
+
+def autogen_arte_activo_para_marca(marca: str) -> bool:
+    """¿El auto-arte (`autogen_arte`) está activo para `marca`?"""
+    return _activo_para_marca(ENV_AUTOGEN_ARTE, autogen_arte_activo, marca)
+
+
+def auto_avance_activo_para_marca(marca: str) -> bool:
+    """¿El auto-avance "dale el OK" está activo para `marca`?"""
+    return _activo_para_marca(ENV_AUTO_AVANCE, auto_avance_activo, marca)
 
 
 def auto_avance_intervalo_horas() -> int:

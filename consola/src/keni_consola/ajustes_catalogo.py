@@ -29,9 +29,49 @@ _FALSOS = frozenset({"0", "false", "no", "off", ""})
 # Titulos humanos de cada grupo (orden estable del contrato GET /api/ajustes).
 GRUPOS: tuple[tuple[str, str], ...] = (
     ("automatizacion", "Automatización"),
+    ("automatizacion_marca", "Automatización por marca"),
     ("tuning", "Ajustes finos"),
     ("publicacion", "Publicación"),
 )
+
+# Etapas de auto-producción que se encienden/apagan POR MARCA (clave `ENV::marca`). El defecto
+# de cada toggle es el valor GLOBAL actual de su etapa: si no se toca, la marca sigue al global;
+# tocarlo es una excepción explícita (p.ej. claro-sports ON, nacion-gamer OFF).
+_ETAPAS_MARCA: tuple[tuple[str, str, str], ...] = (
+    (config.ENV_PIPELINE, "Auto-producción", "Ingesta de fuentes + QA + copy automático de esta marca."),
+    (config.ENV_AUTOGEN, "Auto-copy", "Genera copy automático de los temas de esta marca que aún no lo tienen."),
+    (config.ENV_AUTOGEN_ARTE, "Auto-arte", "Genera imagen por IA para los temas de esta marca con copy y sin imagen."),
+    (config.ENV_AUTO_AVANCE, "Auto-avance", "Lleva solas a revisión las piezas listas de esta marca."),
+)
+
+
+def _global_de_etapa(env_flag: str) -> bool:
+    """Valor GLOBAL actual de una etapa (defecto de su toggle por-marca)."""
+    return {
+        config.ENV_PIPELINE: config.pipeline_activo,
+        config.ENV_AUTOGEN: config.autogen_activo,
+        config.ENV_AUTOGEN_ARTE: config.autogen_arte_activo,
+        config.ENV_AUTO_AVANCE: config.auto_avance_activo,
+    }[env_flag]()
+
+
+def _ajustes_por_marca() -> list[Ajuste]:
+    """Toggles `bool` por (marca × etapa) para la auto-producción. Se generan en caliente
+    desde el catálogo de marcas, así que añadir una marca añade sus toggles sin tocar código."""
+    salida: list[Ajuste] = []
+    for mid, nombre in marcas.opciones():
+        for env_flag, etiqueta_etapa, ayuda in _ETAPAS_MARCA:
+            salida.append(
+                Ajuste(
+                    clave=config.clave_por_marca(env_flag, mid),
+                    tipo="bool",
+                    etiqueta=f"{nombre} · {etiqueta_etapa}",
+                    ayuda=f"{ayuda} Si no se toca, sigue el valor global de la etapa.",
+                    grupo="automatizacion_marca",
+                    defecto=_global_de_etapa(env_flag),
+                )
+            )
+    return salida
 
 
 @dataclass(frozen=True)
@@ -289,7 +329,7 @@ def _construir_catalogo() -> list[Ajuste]:
 
 def catalogo() -> list[Ajuste]:
     """Lista completa de ajustes editables (la fuente de verdad)."""
-    return _construir_catalogo()
+    return _construir_catalogo() + _ajustes_por_marca()
 
 
 def por_clave(clave: str) -> Ajuste | None:
