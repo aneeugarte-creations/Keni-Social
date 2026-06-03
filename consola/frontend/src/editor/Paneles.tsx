@@ -20,7 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 import type { Capa, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
-import { nuevaCapaImagen, nuevaCapaMarco, nuevaCapaTexto, zTope } from "./documento";
+import { CATALOGO_FUENTES, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaTexto, zTope } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ETIQUETA_TIPO: Record<Capa["tipo"], string> = {
@@ -183,9 +183,11 @@ function Num({
   );
 }
 
-export function Inspector() {
+export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   const store = useStoreEditor();
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
+  // Familias disponibles: catálogo embebido + tipografías propias de la marca (sin duplicar).
+  const familias = [...CATALOGO_FUENTES, ...fuentesExtra.filter((f) => !CATALOGO_FUENTES.includes(f as never))];
 
   if (!capa) {
     return (
@@ -232,6 +234,23 @@ export function Inspector() {
               <input type="checkbox" checked={(capa as CapaTexto).mayusculas} onChange={(e) => set({ mayusculas: e.target.checked } as Partial<Capa>)} />
             </Campo>
           </div>
+          <Campo etiqueta="Fuente">
+            <select
+              value={(capa as CapaTexto).familia}
+              onChange={(e) => set({ familia: e.target.value } as Partial<Capa>)}
+              className="max-w-[140px] rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              {familias.map((f) => (
+                <option key={f} value={f}>
+                  {f}
+                </option>
+              ))}
+              {/* Si la capa usa una familia que ya no está en la lista, la mostramos igual. */}
+              {!familias.includes((capa as CapaTexto).familia) && (
+                <option value={(capa as CapaTexto).familia}>{(capa as CapaTexto).familia}</option>
+              )}
+            </select>
+          </Campo>
           <Campo etiqueta="Alineación">
             <select
               value={(capa as CapaTexto).alineacion}

@@ -36,6 +36,7 @@ from .. import (
     marcas,
     media,
     plantillas_marca,
+    repos,
 )
 from ..motores.estudio_imagen import documento as doc_capas
 from ..motores.estudio_imagen import spec_plantilla
@@ -561,6 +562,36 @@ def _refs_imagenes(capas: list[dict[str, Any]]) -> set[str]:
     return refs
 
 
+def _fuentes_extra_de_marca(marca: str, carpeta: Path) -> dict[str, str]:
+    """Tipografías propias de la marca (activos tipo 'tipografia') -> {familia: ruta_archivo}.
+
+    Materializa cada fuente subida (.woff2/.ttf) para que el renderer Node la registre y el PNG
+    final use la fuente real. La familia es `metadatos.familia` o, si falta, el `nombre` del activo
+    (mismo nombre con el que el editor la registra en cliente vía FontFace -> coinciden).
+    """
+    if not (marca or "").strip():
+        return {}
+    extra: dict[str, str] = {}
+    for activo in repos.listar_marca_activos(marca=marca, tipo="tipografia"):
+        objeto = (activo.get("objeto") or "").strip()
+        if not objeto:
+            continue
+        try:
+            meta = json.loads(activo.get("metadatos") or "{}")
+        except (ValueError, TypeError):
+            meta = {}
+        familia = ((meta.get("familia") if isinstance(meta, dict) else "") or activo.get("nombre") or "").strip()
+        if not familia:
+            continue
+        datos = media.leer_media(objeto)
+        if datos is None:
+            continue
+        ruta = carpeta / f"fuente-{objeto}"
+        ruta.write_bytes(datos)
+        extra[familia] = str(ruta)
+    return extra
+
+
 def renderizar_documento(
     documento: dict[str, Any], *, bindings: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -589,11 +620,14 @@ def renderizar_documento(
             if ruta:
                 assets[ref] = ruta
 
+        fuentes_extra = _fuentes_extra_de_marca(doc.get("marca", ""), carpeta)
+
         out = carpeta / "salida.png"
         payload = {
             "documento": doc,
             "assets": assets,
             "fuentes": doc.get("fuentes"),
+            "fuentes_extra": fuentes_extra,
             "bindings": bindings or {},
         }
         _correr_render_documento(payload, out)

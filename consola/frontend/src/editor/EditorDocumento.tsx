@@ -6,6 +6,7 @@ import { PanelBiblioteca } from "./PanelBiblioteca";
 import { BarraHerramientas, Inspector, PanelCapas } from "./Paneles";
 import { ProveedorEditor } from "./contexto";
 import type { StoreEditor } from "./store";
+import { useFuentesMarca } from "./useFuentesMarca";
 
 export function EditorDocumento({
   store,
@@ -16,6 +17,8 @@ export function EditorDocumento({
   marca: string;
   onExportar?: () => void;
 }) {
+  // Tipografías propias de la marca: cargadas como FontFace (lienzo) + disponibles en el inspector.
+  const fuentesExtra = useFuentesMarca(marca);
   return (
     <ProveedorEditor store={store}>
       <div className="flex h-full min-h-0 flex-col">
@@ -29,7 +32,7 @@ export function EditorDocumento({
           </div>
           <div className="flex w-72 shrink-0 flex-col border-l border-border">
             <div className="max-h-[55%] overflow-auto">
-              <Inspector />
+              <Inspector fuentesExtra={fuentesExtra} />
             </div>
             <div className="min-h-0 flex-1 overflow-auto border-t border-border">
               <PanelCapas />
