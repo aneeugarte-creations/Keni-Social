@@ -56,6 +56,7 @@ modulos_backend = [
 # test scoping y para que `router.tsx`/validaciones sepan qué paths son de A.
 rutas_frontend = [
   "/contenido/estudio",
+  "/contenido/editor",
   "/contenido/biblioteca",
   "/contenido/biblioteca/documentos",
   # "Activos" se fusionó como pestaña "Plantillas" de la Biblioteca.
@@ -90,6 +91,15 @@ descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) 
 grupo = "contenido"
 grupo_orden = 20
 orden = 10
+
+[[nav]]
+ruta = "/contenido/editor"
+etiqueta = "Editor"
+icono = "Layers"
+descripcion = "Editor por capas (texto, marcos, logos, imágenes) sobre la plantilla de la marca. Exporta el PNG final."
+grupo = "contenido"
+grupo_orden = 20
+orden = 15
 
 [[nav]]
 ruta = "/contenido/biblioteca"

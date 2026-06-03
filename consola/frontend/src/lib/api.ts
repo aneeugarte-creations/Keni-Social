@@ -861,6 +861,18 @@ export const api = {
   imagenesComponer: (cuerpo: CuerpoImagenesComponer) =>
     peticion<RespuestaGeneracion>("/imagenes/componer", { metodo: "POST", json: cuerpo }),
 
+  // --- Editor profesional (Documento de capas) ---
+  // Re-render server-side de un documento de capas a PNG (fidelidad exacta de fuentes/cover/
+  // degradados). El `documento` se valida en el backend (`motores/estudio_imagen/documento.py`).
+  editorRender: (documento: unknown) =>
+    peticion<{ id: string; url: string }>("/editor/render", { metodo: "POST", json: { documento } }),
+  // Documento de capas editable derivado de la plantilla de una marca (punto de partida del editor).
+  editorPlantilla: (marca: string, formato: string, signal?: AbortSignal) =>
+    peticion<{ documento: unknown }>(
+      `/editor/plantilla/${encodeURIComponent(marca)}/${encodeURIComponent(formato)}`,
+      { signal },
+    ),
+
   // --- Plantillas de marca (identidad visual con la que se estampa una imagen) ---
   // Solo lectura del catálogo + edición de la plantilla de una marca (logo, colores,
   // etiqueta/pleca, posición del logo, wordmark de respaldo). El logo se sube antes con

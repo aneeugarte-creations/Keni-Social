@@ -12,6 +12,7 @@ import { Loader2 } from "lucide-react";
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
 const Estudio = lazy(() => import("@/pages/Estudio"));
+const EditorPro = lazy(() => import("@/pages/EditorPro"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 const EstrategiaMarcas = lazy(() =>
   import("@/pages/biblioteca/GestionLineas").then((m) => ({ default: m.GestionLineas })),
@@ -131,6 +132,8 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <Navigate to="/contenido/estudio" replace /> },
           { path: "estudio", element: <Estudio /> },
+          // Editor profesional por capas (Konva): diseña/edita el Documento de la pieza.
+          { path: "editor", element: <EditorPro /> },
           // Hub Biblioteca: documentos (prompts + línea editorial) + plantillas de
           // contenido (antes su propia página "Activos", ahora una pestaña más).
           {
