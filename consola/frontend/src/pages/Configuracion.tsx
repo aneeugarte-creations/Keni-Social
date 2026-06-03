@@ -111,6 +111,59 @@ function EsqueletoConfig() {
   );
 }
 
+/** Tarjeta COLAPSABLE de configuración: cabecera clicable (título + descripción + chevron) que
+ *  pliega/despliega el contenido. Reduce el ruido de una página muy llena; cada tarjeta recuerda
+ *  su estado mientras la página está montada. `abiertaInicial` deja abierta la(s) más importante(s). */
+function TarjetaColapsable({
+  titulo,
+  descripcion,
+  abiertaInicial = false,
+  contentClassName = "pt-0",
+  children,
+}: {
+  titulo: string;
+  descripcion?: React.ReactNode;
+  abiertaInicial?: boolean;
+  contentClassName?: string;
+  children: React.ReactNode;
+}) {
+  const [abierta, setAbierta] = React.useState(abiertaInicial);
+  const alternar = () => setAbierta((v) => !v);
+  return (
+    <Card>
+      <CardHeader
+        role="button"
+        tabIndex={0}
+        aria-expanded={abierta}
+        onClick={alternar}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            alternar();
+          }
+        }}
+        className="cursor-pointer select-none pb-3"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-base">{titulo}</CardTitle>
+            {descripcion && <CardDescription className="mt-1">{descripcion}</CardDescription>}
+          </div>
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "mt-0.5 h-5 w-5 shrink-0 text-muted-foreground transition-transform",
+              abierta && "rotate-180",
+            )}
+          />
+        </div>
+      </CardHeader>
+      {abierta && <CardContent className={contentClassName}>{children}</CardContent>}
+    </Card>
+  );
+}
+
+
 /** Fuente de datos y alcance por marcas (con su botón de guardar). */
 function SeccionDatos() {
   const queryClient = useQueryClient();
@@ -164,13 +217,7 @@ function SeccionDatos() {
   }
 
   return (
-    <>
-      {/* Alcance (marcas) */}
-      <Card>
-        <CardHeader className="pb-1">
-          <CardTitle className="text-base">Alcance (marcas)</CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
+    <TarjetaColapsable titulo="Alcance (marcas)" abiertaInicial>
           <p className="mb-3 text-sm text-muted-foreground">
             Elige las marcas con las que trabajar. Sin selección, se incluyen todas.
           </p>
@@ -206,10 +253,7 @@ function SeccionDatos() {
               Sin marcas seleccionadas: se incluirán todas.
             </p>
           )}
-        </CardContent>
-      </Card>
-
-      <div className="flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3">
         <Button
           onClick={() => guardar.mutate()}
           disabled={guardar.isPending || !hayCambios}
@@ -221,7 +265,7 @@ function SeccionDatos() {
           <span className="text-xs text-muted-foreground">No hay cambios sin guardar.</span>
         )}
       </div>
-    </>
+    </TarjetaColapsable>
   );
 }
 
@@ -260,16 +304,17 @@ function SeccionEsfuerzo() {
   const hayCambios = data !== undefined && esfuerzo !== data.esfuerzo;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Esfuerzo de generación</CardTitle>
-        <CardDescription>
+    <TarjetaColapsable
+      titulo="Esfuerzo de generación"
+      contentClassName="space-y-2 pt-0"
+      descripcion={
+        <>
           Cuánto «piensa» la IA al generar copy, RSS, hashtags y agentes. Más esfuerzo mejora la
           calidad pero tarda más; menos responde antes. Se guarda{" "}
           <strong>solo en esta máquina</strong>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2 pt-0">
+        </>
+      }
+    >
         {isPending ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
@@ -322,8 +367,7 @@ function SeccionEsfuerzo() {
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+    </TarjetaColapsable>
   );
 }
 
@@ -618,15 +662,16 @@ function SeccionMetricool() {
   });
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">Métricas (Metricool)</CardTitle>
-        <CardDescription>
+    <TarjetaColapsable
+      titulo="Métricas (Metricool)"
+      contentClassName="space-y-4 pt-0"
+      descripcion={
+        <>
           Conecta cada marca con su cuenta de Metricool. Pega el token y el user ID, pulsa «Buscar
           marcas» y elige la marca; el blog ID se rellena solo.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-0">
+        </>
+      }
+    >
         <div className="flex items-start gap-3 rounded-lg border border-border bg-primary/5 p-3">
           <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">
@@ -661,8 +706,7 @@ function SeccionMetricool() {
             ))}
           </div>
         )}
-      </CardContent>
-    </Card>
+    </TarjetaColapsable>
   );
 }
 
@@ -740,16 +784,17 @@ function SeccionImagen() {
     guardar.isPending || probar.isPending || quitar.isPending || guardarModelo.isPending;
 
   return (
-    <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">Imagen con IA</CardTitle>
-        <CardDescription>
+    <TarjetaColapsable
+      titulo="Imagen con IA"
+      contentClassName="space-y-4 pt-0"
+      descripcion={
+        <>
           Configura la clave del proveedor para activar <strong>«Generar con IA»</strong> al crear
           imágenes en las publicaciones. La clave se guarda{" "}
           <strong>solo en esta máquina</strong> y nunca se muestra.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4 pt-0">
+        </>
+      }
+    >
         {isPending ? (
           <div className="space-y-3">
             <Skeleton className="h-9 w-full" />
@@ -900,7 +945,6 @@ function SeccionImagen() {
             </div>
           </>
         )}
-      </CardContent>
 
       <Dialog open={confirmarQuitar} onOpenChange={setConfirmarQuitar}>
         <DialogContent>
@@ -929,7 +973,7 @@ function SeccionImagen() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </Card>
+    </TarjetaColapsable>
   );
 }
 
@@ -947,15 +991,15 @@ function SeccionApariencia() {
   ];
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Apariencia</CardTitle>
-        <CardDescription>
+    <TarjetaColapsable
+      titulo="Apariencia"
+      descripcion={
+        <>
           Elige el tema de la consola. La preferencia se guarda{" "}
           <strong>solo en este equipo</strong>.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="pt-0">
+        </>
+      }
+    >
         <div role="radiogroup" aria-label="Tema" className="flex flex-wrap gap-2">
           {opciones.map((opcion) => {
             const Icono = opcion.icono;
@@ -975,8 +1019,7 @@ function SeccionApariencia() {
             );
           })}
         </div>
-      </CardContent>
-    </Card>
+    </TarjetaColapsable>
   );
 }
 
@@ -1212,16 +1255,18 @@ function SeccionFuncionalidad() {
   });
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Funcionalidad</CardTitle>
-        <CardDescription>
+    <TarjetaColapsable
+      titulo="Funcionalidad"
+      abiertaInicial
+      contentClassName="space-y-6 pt-0"
+      descripcion={
+        <>
           Activa o desactiva la automatización y ajusta sus parámetros. Los cambios aplican{" "}
           <strong>en caliente</strong> (sin reiniciar; tardan hasta ~1 minuto). El humano sigue
           aprobando antes de publicar.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6 pt-0">
+        </>
+      }
+    >
         {isPending ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -1263,8 +1308,7 @@ function SeccionFuncionalidad() {
             </div>
           ))
         )}
-      </CardContent>
-    </Card>
+    </TarjetaColapsable>
   );
 }
 
@@ -1308,14 +1352,16 @@ export default function Configuracion() {
         acciones={acciones}
       />
 
-      <div className="space-y-6">
+      {/* Tarjetas ordenadas por importancia (las más usadas arriba) y colapsables para no
+          saturar: Funcionalidad y Alcance abren por defecto; el resto arranca plegado. */}
+      <div className="space-y-4">
+        {/* Funcionalidad (automatización + toggles por marca): el control operativo del día. */}
+        {puedeVerConexiones && <SeccionFuncionalidad />}
         <SeccionDatos />
-        <SeccionEsfuerzo />
         {/* Metricool e Imagen IA: solo admin (secretos globales, #153). */}
         {puedeVerConexiones && <SeccionMetricool />}
         {puedeVerConexiones && <SeccionImagen />}
-        {/* Funcionalidad (toggles + tuning): solo admin, igual que las conexiones. */}
-        {puedeVerConexiones && <SeccionFuncionalidad />}
+        <SeccionEsfuerzo />
         <SeccionApariencia />
       </div>
     </>
