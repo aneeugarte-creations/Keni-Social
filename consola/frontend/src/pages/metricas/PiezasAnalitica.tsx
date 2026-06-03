@@ -18,7 +18,6 @@ import {
   ChevronDown,
   Clock,
   Download,
-  ExternalLink,
   Heart,
   Link2,
   MessageCircle,
@@ -27,13 +26,18 @@ import {
 import type { LucideIcon } from "lucide-react";
 import * as React from "react";
 
-import { FilaConAcciones } from "@/components/comunes/FilaConAcciones";
 import { MenuContextual } from "@/components/comunes/MenuContextual";
-import type { EntradaMenuContextual } from "@/components/comunes/MenuContextual";
 import { TarjetaKpi } from "@/components/comunes/TarjetaKpi";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -54,6 +58,9 @@ import type {
 } from "@/types";
 
 const TAB_TODAS = "todas";
+const RED_TODAS = "todas";
+// Redes auditables para el filtro (mismas que la cobertura). El backend valida estos ids.
+const REDES_FILTRO = ["facebook", "instagram", "x", "tiktok", "youtube"] as const;
 
 /** Porcentaje tolerante a null ("—" si no hay dato). */
 function pct(v: number | null): string {
@@ -113,6 +120,10 @@ export function PiezasAnalitica({
     setTabInterno(v);
     onTabChange?.(v);
   };
+  // Filtro por red, aplicado a la marca activa (el top/peores/estadísticas se recalculan
+  // SOLO sobre esa red en el backend). "todas" = sin filtro.
+  const [red, setRed] = React.useState<string>(RED_TODAS);
+  const redParam = red === RED_TODAS ? undefined : red;
 
   return (
     <Card>
@@ -131,12 +142,39 @@ export function PiezasAnalitica({
             ))}
           </TabsList>
 
+          {/* Filtro por red, debajo del filtro por marca. Aplica al tab activo. */}
+          <div className="mt-3">
+            <Select value={red} onValueChange={setRed}>
+              <SelectTrigger className="w-full sm:w-48" aria-label="Filtrar por red">
+                <SelectValue placeholder="Red" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={RED_TODAS}>Todas las redes</SelectItem>
+                {REDES_FILTRO.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {nombreRed(r)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <TabsContent value={TAB_TODAS}>
-            <ContenidoPiezas marca={undefined} rango={rangoActual} marcas={opciones.marcas} />
+            <ContenidoPiezas
+              marca={undefined}
+              red={redParam}
+              rango={rangoActual}
+              marcas={opciones.marcas}
+            />
           </TabsContent>
           {opciones.marcas.map((m) => (
             <TabsContent key={m.id} value={m.id}>
-              <ContenidoPiezas marca={m.id} rango={rangoActual} marcas={opciones.marcas} />
+              <ContenidoPiezas
+                marca={m.id}
+                red={redParam}
+                rango={rangoActual}
+                marcas={opciones.marcas}
+              />
             </TabsContent>
           ))}
         </Tabs>
@@ -147,17 +185,20 @@ export function PiezasAnalitica({
 
 function ContenidoPiezas({
   marca,
+  red,
   rango,
   marcas,
 }: {
   marca?: string;
+  /** Red seleccionada (id de plataforma) o undefined = todas. */
+  red?: string;
   rango?: string;
   /** Catálogo {id, nombre} para resolver el id crudo de marca de cada pieza. */
   marcas: MarcaDisponible[];
 }) {
   const { data, isPending, isError } = useQuery({
-    queryKey: ["metricas", "piezas", rango ?? "", marca ?? "todas"],
-    queryFn: ({ signal }) => api.metricasPiezas({ rango, marca }, signal),
+    queryKey: ["metricas", "piezas", rango ?? "", marca ?? "todas", red ?? "todas"],
+    queryFn: ({ signal }) => api.metricasPiezas({ rango, marca, red }, signal),
     enabled: Boolean(rango),
     // Tabs por marca: al alternar tabs queremos datos razonablemente frescos sin re-pedir
     // en cada click. 2 min equilibra frescura y coste; "Actualizar" invalida igualmente.
@@ -288,9 +329,6 @@ function TablaPiezas({
               <TableHead>Pieza</TableHead>
               <TableHead className="text-right">Vistas</TableHead>
               <TableHead className="text-right">Eng.</TableHead>
-              <TableHead className="w-10">
-                <span className="sr-only">Acciones</span>
-              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -305,14 +343,11 @@ function TablaPiezas({
 }
 
 function FilaAnalitica({ pieza, marcas }: { pieza: PiezaMetrica; marcas: MarcaDisponible[] }) {
-  // Acción primaria = abrir la pieza en la red (cuando hay url). "Abrir en la red"
-  // queda también como acción secundaria en el menú (click derecho / kebab).
+  // Clic en CUALQUIER parte de la fila abre la pieza en la red (cuando hay url). Sin
+  // icono de enlace ni columna de acciones: el área completa es el disparador.
   const abrir = pieza.url
     ? () => window.open(pieza.url!, "_blank", "noopener,noreferrer")
     : undefined;
-  const acciones: EntradaMenuContextual[] = pieza.url
-    ? [{ etiqueta: "Abrir en la red", icono: ExternalLink, onClick: abrir! }]
-    : [];
 
   // Marca de la pieza (`cuenta`, id crudo) + red, para ubicarla cuando el tab agrega
   // "Todas". Resolvemos ambos a su nombre legible (id desconocido se degrada honesto).
@@ -329,30 +364,27 @@ function FilaAnalitica({ pieza, marcas }: { pieza: PiezaMetrica; marcas: MarcaDi
   const clicsAltos = pieza.clics_enlace != null && pieza.clics_enlace >= 1000;
 
   return (
-    <FilaConAcciones
-      como="tr"
-      onPrimaria={abrir}
-      acciones={acciones}
-      etiquetaAcciones={`Acciones de "${pieza.titulo}"`}
-      kebab="hover"
+    <TableRow
+      onClick={abrir}
+      tabIndex={abrir ? 0 : undefined}
+      role={abrir ? "button" : undefined}
+      aria-label={abrir ? `Abrir "${pieza.titulo}" en la red` : undefined}
+      onKeyDown={
+        abrir
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                abrir();
+              }
+            }
+          : undefined
+      }
+      className={abrir ? "cursor-pointer" : undefined}
     >
       <TableCell className="max-w-[18rem]">
-        {pieza.url ? (
-          <a
-            href={pieza.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex max-w-full items-center gap-1 truncate font-medium text-foreground underline-offset-4 hover:underline"
-            title={pieza.titulo}
-          >
-            <span className="truncate">{pieza.titulo}</span>
-            <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
-          </a>
-        ) : (
-          <span className="block truncate" title={pieza.titulo}>
-            {pieza.titulo}
-          </span>
-        )}
+        <span className="block truncate font-medium text-foreground" title={pieza.titulo}>
+          {pieza.titulo}
+        </span>
         <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
           <span>{procedencia}</span>
           {pieza.rendimiento_relativo != null && (
@@ -409,7 +441,7 @@ function FilaAnalitica({ pieza, marcas }: { pieza: PiezaMetrica; marcas: MarcaDi
       <TableCell className="text-right tabular-nums">
         {porcentaje(pieza.engagement_pct)}
       </TableCell>
-    </FilaConAcciones>
+    </TableRow>
   );
 }
 

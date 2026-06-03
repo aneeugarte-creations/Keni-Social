@@ -214,19 +214,26 @@ def analisis_diario_markdown(rango: str = "semana", marca: str | None = None) ->
 _TOPE_PIEZAS = 100_000
 
 
-def construir_analitica_piezas(rango: str = "mes", marca: str | None = None) -> dict:
+def construir_analitica_piezas(
+    rango: str = "mes", marca: str | None = None, red: str | None = None
+) -> dict:
     """Analítica de piezas del periodo: estadísticas + top 10 + peores 10 + distribución.
 
     Coste 0 de API: reúsa las piezas que `mejores_piezas` ya descarga del periodo.
     `marca=None` agrega todas las cuentas en alcance (tab "Todas"); con marca, esa
-    cuenta. Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera
-    de alcance). Devuelve un dict JSON-serializable (`AnaliticaPiezas`).
+    cuenta. `red` (id de plataforma, p.ej. "tiktok") acota a UNA red: el top/peores y las
+    estadísticas se calculan SOLO sobre las piezas de esa red (None = todas las redes).
+    Propaga `ValueError` (rango inválido) y `CuentaNoEncontrada` (marca fuera de alcance).
+    Devuelve un dict JSON-serializable (`AnaliticaPiezas`).
     """
     fuente = _fuente(marca)
     desde, hasta, _ = resolver_rango(rango)
     piezas = []
     for c in fuente.cuentas():
         piezas.extend(fuente.mejores_piezas(c.id, rango, _TOPE_PIEZAS))
+    # Filtro por red: el top/peores y las estadísticas se calculan SOLO sobre esa red.
+    if red:
+        piezas = [p for p in piezas if p.plataforma.value == red]
 
     top, peores = _estadisticas.top_y_peores(piezas, n=10)
     analitica = AnaliticaPiezas(

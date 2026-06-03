@@ -74,3 +74,15 @@ def test_tendencia_diaria_muestra(muestra):
     p0 = t["puntos"][0]
     assert p0["fecha"] == "2026-05-01"
     assert p0["visualizaciones"] >= 0 and p0["interacciones"] >= 0
+
+
+def test_analitica_piezas_filtra_por_red(muestra):
+    # El filtro por red calcula top/peores/estadísticas SOLO sobre las piezas de esa red.
+    todas = servicio.construir_analitica_piezas("mes", "claro_sports")
+    red = todas["top"][0]["plataforma"]  # una red presente en el resultado sin filtrar
+    filtrado = servicio.construir_analitica_piezas("mes", "claro_sports", red)
+    assert filtrado["total"] >= 1
+    assert all(p["plataforma"] == red for p in filtrado["top"])
+    assert all(p["plataforma"] == red for p in filtrado["peores"])
+    # Acotar a una red nunca trae más piezas que todas las redes juntas.
+    assert filtrado["total"] <= todas["total"]

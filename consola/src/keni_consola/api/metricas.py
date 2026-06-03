@@ -493,21 +493,42 @@ async def analisis(request: Request) -> Response:
     return JSONResponse(salida)
 
 
+# Redes auditables para el filtro por red del top/peores (mismas que la cobertura).
+_REDES_FILTRO: frozenset[str] = frozenset({"facebook", "instagram", "x", "tiktok", "youtube"})
+
+
 async def piezas(request: Request) -> Response:
-    """GET /api/metricas/piezas: estadísticas + top 5 + peores 5 + distribución.
+    """GET /api/metricas/piezas: estadísticas + top 10 + peores 10 + distribución.
 
     `?marca=` acota a una marca (sus piezas); sin marca, agrega todas (tab "Todas").
-    Servido desde cache (lazy fill); incluye `etiqueta_rango` y `generado_en`.
+    `?red=` acota a UNA red (top/peores/estadísticas SOLO de esa red). Sin `red` se sirve
+    de cache (lazy fill); CON `red` se recomputa al vuelo (en executor) — es una vista
+    filtrada bajo demanda, no se cachea cada combinación marca×red. Incluye
+    `etiqueta_rango` y `generado_en`.
     """
     rango = _validar_rango(request.query_params.get("rango", "mes"))
     marca = request.query_params.get("marca") or None
+    red = request.query_params.get("red") or None
+    if red not in _REDES_FILTRO:
+        red = None  # red desconocida o ausente -> todas (sin filtro)
     try:
-        payload, generado_en = await metricas_cache.piezas_async(rango, marca)
+        if red:
+            # Vista filtrada por red: recálculo bajo demanda (trabajo bloqueante de la
+            # fuente) en executor para no congelar el event loop; no usa la cache por combo.
+            from datetime import datetime
+
+            payload = await asyncio.get_running_loop().run_in_executor(
+                None, servicio.construir_analitica_piezas, rango, marca, red
+            )
+            generado_en = datetime.now().isoformat(timespec="seconds")
+        else:
+            payload, generado_en = await metricas_cache.piezas_async(rango, marca)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
         _log.exception(
-            "Fallo al generar la analítica de piezas (rango=%s, marca=%s).", rango, marca or "todas"
+            "Fallo al generar la analítica de piezas (rango=%s, marca=%s, red=%s).",
+            rango, marca or "todas", red or "todas",
         )
         return JSONResponse({"error": "No se pudo generar la analítica de piezas."}, status_code=500)
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})

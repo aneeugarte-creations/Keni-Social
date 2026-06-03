@@ -1587,7 +1587,7 @@ export const api = {
   metricasAnalisis: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<AnalisisDiario>(`/metricas/analisis${query(params)}`, { signal }),
   // Analítica de piezas: estadísticas + top 5 + peores 5 + distribución del periodo.
-  metricasPiezas: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+  metricasPiezas: (params: { rango?: string; marca?: string; red?: string }, signal?: AbortSignal) =>
     peticion<AnaliticaPiezas>(`/metricas/piezas${query(params)}`, { signal }),
   // Serie diaria del periodo (visualizaciones + interacciones) para la tendencia.
   metricasTendencia: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -116,10 +116,13 @@ describe("PiezasAnalitica (enriquecida)", () => {
     expect(chipClics?.textContent).toContain("40");
     const chipTiempo = document.querySelector('[title="Tiempo medio de visualización"]');
     expect(chipTiempo?.textContent).toContain("12s");
-    // (e) el título ENLAZA al post real (nueva pestaña) cuando hay url.
-    const enlace = screen.getByRole("link", { name: /Gol de último minuto/ });
-    expect(enlace).toHaveAttribute("href", "https://example.com/p1");
-    expect(enlace).toHaveAttribute("target", "_blank");
+    // (e) clic en la FILA COMPLETA abre el post real en nueva pestaña (sin icono de
+    //     enlace ni columna de acciones): el área entera es el disparador.
+    expect(screen.queryByRole("link", { name: /Gol de último minuto/ })).not.toBeInTheDocument();
+    const abrir = vi.spyOn(window, "open").mockImplementation(() => null);
+    fireEvent.click(screen.getByRole("button", { name: /Abrir "Gol de último minuto" en la red/ }));
+    expect(abrir).toHaveBeenCalledWith("https://example.com/p1", "_blank", "noopener,noreferrer");
+    abrir.mockRestore();
   });
 
   it("no inventa desglose, badge ni riqueza cuando la fuente no los expone (null)", async () => {
