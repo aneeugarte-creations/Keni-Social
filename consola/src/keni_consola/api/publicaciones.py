@@ -25,7 +25,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import marcas, permisos, redes, repos
 from .._http_json import envoltura_paginacion, leer_json, paginacion_query
 from ..dominio.publicaciones import publicacion_a_dict
 from ..seguridad import autor_de_peticion
@@ -151,6 +151,10 @@ async def listar(request: Request) -> Response:
     """
     qp = request.query_params
     marca = qp.get("marca") or None
+    # Alcance por marca: un editor no puede pedir el feed de una marca que no es suya.
+    rechazo = permisos.rechazo_marca(request, marca)
+    if rechazo is not None:
+        return rechazo
     red = qp.get("red") or None
     estado = qp.get("estado") or None
     evergreen = _parsear_bool_query(qp.get("evergreen"))

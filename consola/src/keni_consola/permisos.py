@@ -81,3 +81,44 @@ def usuario_actual(request: Request) -> dict[str, Any] | None:
     """Usuario de la sesion (forma publica), o None si se entro por el token interino."""
     usuario = getattr(request.state, "usuario", None)
     return usuario if isinstance(usuario, dict) else None
+
+
+# --------------------------------------------------------------------------- #
+# Alcance por MARCA (la consola es por marca: cada quien ve la(s) suya(s))      #
+# --------------------------------------------------------------------------- #
+
+def marcas_visibles(request: Request) -> set[str] | None:
+    """Marcas (ids canonicos) que la sesion puede CONSULTAR, o None si sin restriccion.
+
+    None (sin restriccion) cuando: es admin, se entro por token (sin usuario de
+    sesion), o el usuario no tiene marcas asignadas (cobertura global). En otro caso,
+    el conjunto de ids canonicos de sus marcas (relacion N:M del organigrama AMX).
+
+    La sesion del middleware no arrastra las marcas (la cookie no carga la tabla N:M),
+    asi que se consultan al vuelo por id de usuario, igual que hace `GET /api/auth/me`.
+    """
+    usuario = usuario_actual(request)
+    if usuario is None:
+        return None
+    if usuario.get("rol") == ROL_ADMIN:
+        return None
+    from .auth import obtener_usuario_por_id  # lazy: evita ciclo de import con auth
+
+    refrescado = obtener_usuario_por_id(usuario["id"]) or {}
+    marcas = refrescado.get("marcas") or []
+    return set(marcas) if marcas else None
+
+
+def rechazo_marca(request: Request, marca: str | None) -> Response | None:
+    """403 si la sesion pide EXPLICITAMENTE una `marca` (id canonico) fuera de su alcance.
+
+    Devuelve None (sin bloqueo) cuando no se pide marca: en ese caso el filtro por marca
+    es implicito (la marca activa la fija el cliente desde el perfil). Solo se bloquea el
+    intento deliberado de consultar otra marca que no es la tuya (ni eres admin).
+    """
+    if not marca:
+        return None
+    visibles = marcas_visibles(request)
+    if visibles is None or marca in visibles:
+        return None
+    return JSONResponse({"error": "No tienes acceso a esa marca."}, status_code=403)

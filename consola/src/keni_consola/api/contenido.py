@@ -32,6 +32,7 @@ from .. import (
     marcas,
     media,
     metricas_pieza,
+    permisos,
     redes,
     repos,
     transcripcion,
@@ -180,6 +181,10 @@ async def listar(request: Request) -> Response:
     (por `fecha_objetivo`), `etiqueta` (id de una etiqueta).
     """
     q = request.query_params
+    # Alcance por marca: un editor no puede pedir contenido de una marca que no es suya.
+    rechazo = permisos.rechazo_marca(request, q.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     items = repos.listar_contenido(
         clase=q.get("clase") or None,
         flujo=q.get("flujo") or None,
@@ -659,6 +664,10 @@ async def metricas(request: Request) -> Response:
     Acepta los mismos filtros que `GET /api/contenido` para acotar el universo.
     """
     q = request.query_params
+    # Alcance por marca: un editor no puede pedir contenido de una marca que no es suya.
+    rechazo = permisos.rechazo_marca(request, q.get("marca") or None)
+    if rechazo is not None:
+        return rechazo
     items = repos.listar_contenido(
         clase=q.get("clase") or None,
         flujo=q.get("flujo") or None,

@@ -33,6 +33,7 @@ from .. import (
     marcas,
     metricas_cache,
     metricas_priorizacion,
+    permisos,
     pipeline_estado,
     priorizacion,
     repos,
@@ -113,6 +114,9 @@ async def resumen(request: Request) -> Response:
     if rango not in servicio.RANGOS_VALIDOS:
         rango = "semana"
     marca = request.query_params.get("marca") or None
+    rechazo = permisos.rechazo_marca(request, marca)
+    if rechazo is not None:
+        return rechazo
 
     metricas = _resumen_metricas(rango, marca)
 
@@ -228,6 +232,9 @@ def _lista_dia(marca: str | None) -> dict[str, Any]:
 async def lista_dia(request: Request) -> Response:
     """GET /api/panel/dia: la lista viva del dia (ordenada por score). `?marca=` opcional."""
     marca = request.query_params.get("marca") or None
+    rechazo = permisos.rechazo_marca(request, marca)
+    if rechazo is not None:
+        return rechazo
     return JSONResponse(_lista_dia(marca))
 
 
@@ -284,6 +291,9 @@ def _tuberia(marca: str | None) -> dict[str, Any]:
 async def tuberia(request: Request) -> Response:
     """GET /api/panel/tuberia: conteo de temas por etapa de la tuberia. `?marca=` opcional."""
     marca = request.query_params.get("marca") or None
+    rechazo = permisos.rechazo_marca(request, marca)
+    if rechazo is not None:
+        return rechazo
     return JSONResponse(_tuberia(marca))
 
 
