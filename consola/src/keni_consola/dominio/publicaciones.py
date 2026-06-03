@@ -239,7 +239,9 @@ def crear_borrador_en(
     Variante de `crear_borrador` que NIDA la pieza bajo un tema del tablero en vez de crear
     su propio padre (peticion de Angel: el borrador auto-generado cuelga del tema origen).
     Crea una fila `contenido_plataforma` con `es_publicacion=1`, estado `pendiente`
-    (== `borrador` editorial) y `falta_copy=False` (la pieza YA trae copy), de modo que:
+    (== `borrador` editorial) y `falta_copy` DERIVADO del copy real (no hardcodeado): con copy
+    es `False`, y si llega vacío (copy aún por generar) es `True`, para que el flag NO mienta
+    (era la causa de piezas "copy listo" sin copy → label y auto-avance erróneos). De modo que:
 
       - aparece en `/api/publicaciones` y en `cola_de_aprobacion` (ambos filtran
         `es_publicacion=1`), igual que cualquier borrador, y
@@ -257,7 +259,9 @@ def crear_borrador_en(
         contenido_id=contenido_id,
         red=red,
         estado="pendiente",
-        falta_copy=False,
+        # DERIVADO del copy real (no `False` fijo): un copy vacío => falta_copy=True. Evita el
+        # drift "copy listo" sin copy que mentía en el label del feed y el gate de auto-avance.
+        falta_copy=not (contenido or "").strip(),
         # Con imagen de fuente (URL del artículo) la pieza YA tiene imagen.
         falta_imagen=False if imagen_fuente else None,
         copy=contenido,
