@@ -133,8 +133,6 @@ import type {
   RespuestaPublicacion,
   RespuestaPublicaciones,
   RespuestaColaAprobacion,
-  RespuestaPanel,
-  RespuestaListaDia,
   RespuestaAlgoritmos,
   RespuestaRefrescarAlgoritmos,
   RespuestaSembrarAlgoritmos,
@@ -833,14 +831,6 @@ export const api = {
     peticion<RespuestaPublicacion>(`/aprobacion/${encodeURIComponent(id)}/rechazar`, {
       metodo: "POST",
     }),
-
-  // --- Panel ligero (#9): dashboard de un vistazo (métricas + cola + próximas) ---
-  panel: (params: { rango?: string; marca?: string } = {}, signal?: AbortSignal) =>
-    peticion<RespuestaPanel>(`/panel${query(params)}`, { signal }),
-
-  // --- Lista viva del día (H5): contenido del tablero ordenado por score dinámico ---
-  listaDia: (params: { marca?: string } = {}, signal?: AbortSignal) =>
-    peticion<RespuestaListaDia>(`/panel/dia${query(params)}`, { signal }),
 
   // --- Importar calendario (H1): sube un .xlsx/.csv al tablero (multipart). Con
   // `previsualizar` parsea sin escribir; sin él, crea el contenido y devuelve el resumen. ---

@@ -2,7 +2,7 @@
 
 PROBLEMA QUE RESUELVE
 =====================
-La "lista viva" del dia (`priorizacion`/`api.panel`) ordena por señales que el contenido YA
+La "lista viva" del dia (`priorizacion`) ordena por señales que el contenido YA
 tiene (prioridad, fecha, compromiso, frescura, viralidad). La Fase 5 quiere que, ADEMAS, lo
 que HISTORICAMENTE rinde por marca pese un poco mas: si las piezas de una marca consiguen mas
 engagement que las del resto, sus piezas del dia suben un escalon.
@@ -22,7 +22,7 @@ CONSERVADOR / DEGRADABLE (no rompe nada)
   - PURO el calculo: `bonus_desde_engagement` solo depende de sus argumentos (testeable sin red).
 
 La FRONTERA con metricas se respeta: NO se importan internals del router `metricas`; se usa la
-fachada `servicio` (lo mismo que hace `api.panel`) y la traduccion de id de marca de `marcas`.
+fachada `servicio` (infra de solo lectura) y la traduccion de id de marca de `marcas`.
 """
 
 from __future__ import annotations

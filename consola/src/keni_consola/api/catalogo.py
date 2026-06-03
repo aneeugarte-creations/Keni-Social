@@ -8,8 +8,8 @@ SPA hidrata el sidebar desde aquí: `navegacion.ts` deja de hardcodear las entra
 
 Desactivar el flag de una app (p. ej. `KENI_APP_METRICAS=0`) la oculta del catálogo
 SIN romper el arranque: el endpoint simplemente no la devuelve. El Shell NO es una
-app de catálogo (no aparece en `apps`), pero su entrada de nav (Panel) sí, para que
-el sidebar quede idéntico.
+app de catálogo (no aparece en `apps`) ni aporta entradas de nav: sus servicios
+cuelgan del dropdown del avatar.
 
 Solo lectura, sin estado, sin tocar la BD: lee los manifests + el entorno.
 """

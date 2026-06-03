@@ -250,8 +250,9 @@ los tres de producción y dejar el de publicar OFF**:
 | `KENI_PUBLICAR_REAL` | Publica de verdad a Metricool | **OFF** (queda en dry-run) |
 
 **Por qué es SEGURO encender los tres primeros:** la auto-producción solo PRODUCE hasta el
-borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de revisión** (`/api/panel`,
-`/revision/editorial`); el **gate humano** (aprobación multinivel) sigue intacto. **Nada sale a
+borrador. Cada pieza nace `borrador`/`pendiente` y **para en la cola de revisión**
+(`/api/aprobacion/cola`, UI `/operacion/revision/editorial`); el **gate humano** (aprobación
+multinivel) sigue intacto. **Nada sale a
 redes** sin que el humano lo autorice: el posteo real va por Metricool y está gated por
 `KENI_PUBLICAR_REAL`, que se queda **OFF**. Además todos los daemons tienen cap por barrido
 (`KENI_AUTOGEN_MAX`, `KENI_AUTOGEN_ARTE_MAX`, `KENI_RADAR_AUTO_MAX`, def 3) y dedup por
@@ -285,10 +286,10 @@ default**.
    docker compose up -d --no-deps daemons   # recrea solo el servicio de daemons
    ```
 
-**Observar el avance:** `GET /api/panel/tuberia` cuenta los temas por etapa de la cadena
-(`priorizada → generando_copy → generando_arte → lista_para_revisar`); `GET /api/panel/dia`
-muestra la lista del día ordenada por score. La cola de aprobación está en `GET /api/panel`
-(`cola.total`).
+**Observar el avance:** la UI **Pipelines** (`/datos/pipelines`) muestra los temas por etapa de
+la cadena (`priorizada → generando_copy → generando_arte → lista_para_revisar`) y el tablero
+(`/operacion/parrilla/pendientes`) la lista del día. La cola de aprobación está en
+`GET /api/aprobacion/cola` (`total`).
 
 ---
 
@@ -331,7 +332,7 @@ claude mcp add --transport http keni-social https://social.kenitech.io/mcp \
 ```
 
 Luego, en Claude Code, las tools aparecen como `keni_contexto`, `keni_crear_contenido`,
-`keni_cola_aprobacion`, `keni_aprobar`, `keni_panel`, `keni_metricas_reporte`, etc.
+`keni_cola_aprobacion`, `keni_aprobar`, `keni_metricas_reporte`, etc.
 
 ---
 

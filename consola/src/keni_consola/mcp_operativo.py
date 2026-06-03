@@ -469,33 +469,7 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
             return {"error": _MSG_NO_INIT}
         return await cli.post(f"/api/aprobacion/{publicacion_id}/rechazar")
 
-    # ---- Panel y métricas (análisis, solo lectura) --------------------- #
-
-    @mcp.tool()
-    async def keni_panel(rango: str = "semana", marca: str = "") -> dict:
-        """Panel operativo: total de métricas del rango, picos por marca, cola de
-        aprobación y próximas publicaciones. `rango` ∈ {semana,mes,7d,30d}."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.get("/api/panel", rango=rango, marca=marca)
-
-    @mcp.tool()
-    async def keni_tuberia(marca: str = "") -> dict:
-        """Tubería de producción: cuántas piezas hay en cada etapa (priorizada, generando
-        copy, generando arte, lista para revisar, ...)."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.get("/api/panel/tuberia", marca=marca)
-
-    @mcp.tool()
-    async def keni_resumen_dia(marca: str = "") -> dict:
-        """Lo que toca HOY: piezas priorizadas del día con su score, por fuente y estado."""
-        cli = _cli()
-        if cli is None:
-            return {"error": _MSG_NO_INIT}
-        return await cli.get("/api/panel/dia", marca=marca)
+    # ---- Métricas (análisis, solo lectura) ----------------------------- #
 
     @mcp.tool()
     async def keni_metricas_reporte(rango: str = "mes", marca: str = "") -> dict:

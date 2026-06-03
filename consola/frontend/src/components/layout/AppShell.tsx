@@ -29,7 +29,7 @@ function CargandoPagina() {
 /** Clave de localStorage del estado colapsado del sidebar (rail). */
 const CLAVE_SIDEBAR_COLAPSADO = "keni:sidebar-colapsado";
 
-/** Etiquetas de las pantallas de shell (fuera de apps) que no son Panel. */
+/** Etiquetas de las pantallas de shell (fuera de apps): ajustes del avatar. */
 const ETIQUETAS_SHELL: Record<string, string> = {
   "/configuracion": "Configuración",
   "/mi-cuenta": "Mi cuenta",
@@ -49,8 +49,8 @@ interface Migaja {
  * `navegacion` y busca la entrada (hub o página) que contiene la ruta:
  *   - hub con 2+ pestañas → `[hub (enlace), pestaña activa (actual)]`,
  *   - página suelta (o hub de una sola hoja) → `[página]`.
- * Las pantallas de shell (Panel mientras carga el catálogo, ajustes) caen a su
- * nombre; lo desconocido, a "Consola". El último segmento es el actual.
+ * Las pantallas de shell (ajustes del avatar) caen a su nombre; lo desconocido,
+ * a "Consola". El último segmento es el actual.
  */
 function migajaDeRuta(pathname: string, navegacion: GrupoNavCatalogo[]): Migaja[] {
   for (const bloque of navegacion) {
@@ -71,7 +71,6 @@ function migajaDeRuta(pathname: string, navegacion: GrupoNavCatalogo[]): Migaja[
       }
     }
   }
-  if (pathname.startsWith("/panel")) return [{ etiqueta: "Panel" }];
   for (const [ruta, etiqueta] of Object.entries(ETIQUETAS_SHELL)) {
     if (pathname === ruta || pathname.startsWith(`${ruta}/`)) return [{ etiqueta }];
   }

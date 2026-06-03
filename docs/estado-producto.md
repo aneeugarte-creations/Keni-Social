@@ -41,17 +41,17 @@ Construido, probado y en uso, sin depender de ninguna aprobación externa.
   [`arquitectura.md`](arquitectura.md) §3.
 - **Preview de publicación en dry-run.** Muestra exactamente qué se publicaría en cada red sin
   publicar ni subir media.
-- **Lista viva multi-fuente (tablero + Panel-9am).** El tablero de contenidos es una lista
+- **Lista viva multi-fuente (tablero).** El tablero de contenidos es una lista
   priorizada que se alimenta de varias fuentes y deja el trabajo operativo adelantado hasta el
   punto de validación humana. Ya construido y probado (ver
   [`contexto/2026-05-31-lista-viva-angel.md`](contexto/2026-05-31-lista-viva-angel.md)): el
   **importador de calendario Excel/CSV** (H1) que sube los temas al tablero con prioridad, fecha y
   etiqueta de compromiso; la **auto-generación de copy** al entrar un tema de una fuente (H2, por
   el mismo pipeline que el botón manual, dejando el borrador en la cola de revisión; gated por
-  `KENI_AUTOGEN`, **OFF por defecto**); el **score de prioridad dinámico** que re-ordena la vista
-  del día sin alterar el orden del kanban compartido (H3); y el **Panel-9am**, la lista curada del
-  día (`GET /api/panel/dia` + sección "Lista del día" en el panel) que reúne tablero ordenado por
-  score con contadores por fuente y estado (H5). El humano sigue validando los checkpoints
+  `KENI_AUTOGEN`, **OFF por defecto**); y el **score de prioridad dinámico** que re-ordena la vista
+  del día sin alterar el orden del kanban compartido (H3). La lista curada del día vive en el
+  propio **tablero** (`/operacion/parrilla/pendientes`), ordenado por score (el dashboard "Panel"
+  de un vistazo se retiró por no aportar sobre el tablero). El humano sigue validando los checkpoints
   (aprobar copy, autorizar publicación). Queda como follow-up: auto-arte, anidar el borrador bajo
   el tema origen y "green"/"compromiso" como conceptos de primera clase.
 - **Instalación como plugin de Claude Code.** Dos comandos, sin permisos de administrador, con

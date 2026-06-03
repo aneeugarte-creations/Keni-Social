@@ -5,7 +5,7 @@ Verifican el contrato de `apps/registro.py` (ADR 0005 / plan §1) SIN red ni BD:
   - el catálogo agrupa la nav por MOMENTO DEL FLUJO (Operación / Contenido / Datos),
     con encabezado de bloque visible, en el orden y con las etiquetas esperadas,
   - desactivar el flag de una app la OCULTA del catálogo sin romper nada,
-  - el shell NO figura como app de catálogo (pero sí aporta su nav: Panel).
+  - el shell NO figura como app de catálogo ni aporta entradas de nav.
 
 El endpoint `GET /api/catalogo` se prueba en su forma de payload aquí (la app
 completa necesita Postgres y se cubre vía el cliente en los tests de API que skipean
@@ -19,9 +19,9 @@ from keni_consola.apps import registro
 # Estructura ESPERADA del sidebar: 3 bloques agrupados por MOMENTO DEL FLUJO, en este
 # orden, con encabezado visible. El bloque es VISUAL y se desacopla del dueño de la app.
 _SIDEBAR_BLOQUES = [
-    # "Operación": los checkpoints que el equipo toca cada día — el vistazo (Panel), la
-    # columna vertebral (Parrilla/tablero) y la cola de aprobación (Revisión).
-    ["Panel", "Parrilla", "Revisión"],
+    # "Operación": los checkpoints que el equipo toca cada día — la columna vertebral
+    # (Parrilla/tablero) y la cola de aprobación (Revisión).
+    ["Parrilla", "Revisión"],
     # "Contenido": herramientas para crear/editar a mano una pieza (consumidas por el
     # pipeline cuando es automático). Estudio (editor de imagen por capas + IA; el antiguo
     # "Estudio" y el "Editor" se fusionaron en uno) y Biblioteca (prompts + plantillas).
@@ -87,7 +87,6 @@ def test_catalogo_agrupa_la_nav_por_flujo():
 def test_iconos_de_nav_son_strings_lucide():
     cat = registro.catalogo(_entorno())
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
-    assert iconos["/panel"] == "LayoutDashboard"
     assert iconos["/contenido/editor"] == "Palette"
     assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/operacion/revision"] == "ShieldCheck"
@@ -105,7 +104,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/datos/analiticas" not in rutas
     # Las demás siguen.
-    assert "/contenido/editor" in rutas and "/operacion/parrilla" in rutas and "/panel" in rutas
+    assert "/contenido/editor" in rutas and "/operacion/parrilla" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():
@@ -118,12 +117,15 @@ def test_flag_acepta_varias_formas_de_off():
         assert "operacion" in [a["id"] for a in cat["apps"]], on
 
 
-def test_panel_es_del_shell_pero_aparece_en_nav():
-    # El shell no es app de catálogo, pero su entrada Panel encabeza el sidebar.
+def test_shell_no_es_app_ni_aporta_nav():
+    # El shell no es app de catálogo y (tras retirar el Panel) ya no aporta nav: el
+    # sidebar lo encabeza el tablero (Parrilla), no una entrada del shell.
     cat = registro.catalogo(_entorno())
     assert "shell" not in [a["id"] for a in cat["apps"]]
     primer_bloque = cat["navegacion"][0]["items"]
-    assert primer_bloque[0]["ruta"] == "/panel"
+    assert primer_bloque[0]["ruta"] == "/operacion/parrilla"
+    rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
+    assert "/panel" not in rutas
 
 
 def test_modulo_a_app_cubre_todos_los_routers_sin_solapes():

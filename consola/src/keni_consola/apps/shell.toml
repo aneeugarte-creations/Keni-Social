@@ -7,9 +7,8 @@
 # `es_app = false` => `api/catalogo.py` lo EXCLUYE de las apps activas (no aparece
 # en `apps`). Se declara igualmente para que el lint de fronteras mapee sus módulos a
 # la unidad "shell" (todo→shell permitido; shell→app solo por los seams de la
-# allowlist) y para que SÍ aporte su entrada de nav (Panel).
-#
-# Claves de nivel superior ANTES de `[[nav]]` (regla TOML).
+# allowlist). El shell ya no aporta entradas de nav: todos sus servicios cuelgan del
+# dropdown del avatar.
 
 id = "shell"
 etiqueta = "Shell"
@@ -29,34 +28,19 @@ modulos_backend = [
   "limites",
   "media",
   "artes",
-  "panel",
   "alertas",
   "sugerencias",
   "carpetas",
   "proyectos",
 ]
 
-# Rutas frontend del shell (home + ajustes del dropdown del avatar). Salvo Panel, no
-# generan entradas de catálogo; se listan para el test scoping y para que
-# `router.tsx` sepa que son paths legítimos del shell.
+# Rutas frontend del shell (ajustes del dropdown del avatar). No generan entradas de
+# catálogo; se listan para el test scoping y para que `router.tsx` sepa que son paths
+# legítimos del shell.
 rutas_frontend = [
-  "/panel",
   "/mi-cuenta",
   "/configuracion",
   "/sugerencias",
   "/usuarios",
   "/sistema",
 ]
-
-# Panel es la única ruta del shell que SÍ vive en el sidebar (el "vistazo" inicial);
-# encabeza el bloque "operacion" (checkpoints diarios). El resto de servicios del shell
-# cuelgan del dropdown del avatar. Aunque el shell NO sea app de catálogo, SÍ aporta
-# esta entrada de nav.
-[[nav]]
-ruta = "/panel"
-etiqueta = "Panel"
-icono = "LayoutDashboard"
-descripcion = "Un vistazo: rendimiento del periodo, cola de aprobación y próximas publicaciones programadas."
-grupo = "operacion"
-grupo_orden = 10
-orden = 10

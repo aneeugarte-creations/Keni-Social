@@ -172,7 +172,6 @@ def test_tools_registradas(entorno):
         "keni_generar_copy", "keni_estado_generacion", "keni_listar_generaciones",
         "keni_listar_publicaciones", "keni_detalle_publicacion",
         "keni_cola_aprobacion", "keni_enviar_a_revision", "keni_aprobar", "keni_rechazar",
-        "keni_panel", "keni_tuberia", "keni_resumen_dia",
         "keni_metricas_reporte", "keni_metricas_analisis", "keni_metricas_piezas",
         "keni_metricas_seguidores", "keni_metricas_desglose",
         "keni_metricas_crosstab", "keni_metricas_correlacion",
@@ -183,7 +182,7 @@ def test_tools_registradas(entorno):
     assert not {n for n in tools if "publicar" in n or "programar" in n or "metricool" in n}
 
 
-@pytest.mark.parametrize("tool", ["keni_crear_contenido", "keni_aprobar", "keni_panel"])
+@pytest.mark.parametrize("tool", ["keni_crear_contenido", "keni_aprobar", "keni_listar_contenido"])
 def test_tools_invocables_via_call_tool(entorno, tool):
     """`call_tool` invoca las tools en proceso (humo del registro + holder del cliente)."""
     _crear_owner_admin()
@@ -194,7 +193,7 @@ def test_tools_invocables_via_call_tool(entorno, tool):
     args = {
         "keni_crear_contenido": {"titulo": "Desde call_tool", "prioridad": "media"},
         "keni_aprobar": {"publicacion_id": "no-existe"},
-        "keni_panel": {},
+        "keni_listar_contenido": {},
     }[tool]
 
     async def invocar():

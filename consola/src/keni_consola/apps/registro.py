@@ -12,8 +12,9 @@ CONTRATO de los manifests (un fichero por app, sin colisión entre tareas):
   id, etiqueta, icono (nombre de icono lucide como string), flag_activacion (env),
   permisos, modulos_backend (lista de `api/*`), rutas_frontend, y entradas `[[nav]]`
   con {ruta, etiqueta, icono, descripcion, grupo, grupo_orden, orden}. El Shell lleva
-  `es_app=false`: NO figura como app de catálogo, pero SÍ aporta su(s) entrada(s) de
-  nav (p. ej. Panel) y mapea sus módulos a la unidad "shell" para el lint.
+  `es_app=false`: NO figura como app de catálogo ni aporta entradas de nav (sus
+  servicios cuelgan del dropdown del avatar); solo mapea sus módulos a la unidad
+  "shell" para el lint.
 
 ACTIVACIÓN por flag (env var nombrada en `flag_activacion`):
   - ausente o vacía  -> ACTIVA (el repo arranca IGUAL que hoy: todo activo).
@@ -35,8 +36,8 @@ _DIR_MANIFESTS = Path(__file__).parent
 _VALORES_OFF = frozenset({"0", "false", "no", "off"})
 
 # Etiqueta humana de cada bloque del sidebar (encabezado visible). El sidebar agrupa por
-# MOMENTO DEL FLUJO, no por dueño de app: `operacion` = checkpoints diarios (Panel,
-# tablero, revisión); `contenido` = herramientas para crear/editar a mano (estudio,
+# MOMENTO DEL FLUJO, no por dueño de app: `operacion` = checkpoints diarios (tablero,
+# revisión); `contenido` = herramientas para crear/editar a mano (estudio,
 # biblioteca, plantillas); `datos` = entradas que alimentan o reflejan la automatización
 # (investigación, analíticas, actividad). Un `grupo` sin etiqueta aquí cae a "" (bloque
 # sin encabezado), así un manifest nuevo no rompe aunque estrene un bloque.
@@ -139,8 +140,7 @@ def entradas_nav_activas(entorno: dict[str, str] | None = None) -> list[dict]:
     Devuelve `[{etiqueta, items: [{ruta, etiqueta, icono, descripcion}, ...]}, ...]`,
     ordenado por bloque de flujo (`grupo_orden`) y, dentro de cada bloque, por `orden`.
     La `etiqueta` del bloque es su encabezado humano (`ETIQUETAS_BLOQUE`); un bloque sin
-    etiqueta declarada va sin encabezado (""). El Shell aporta su entrada (Panel) aunque
-    no sea app de catálogo.
+    etiqueta declarada va sin encabezado (""). El Shell ya no aporta entradas de nav.
     """
     # Recolecta todas las entradas de nav de las unidades activas.
     todas: list[EntradaNav] = []
@@ -198,7 +198,7 @@ def catalogo(entorno: dict[str, str] | None = None) -> dict:
     """Payload del catálogo para `GET /api/catalogo`: apps activas + nav agrupada.
 
     JSON serializable. `apps` son SOLO las apps de catálogo activas (sin el Shell);
-    `navegacion` incluye la entrada del Shell (Panel) para que el sidebar quede igual.
+    `navegacion` agrupa la nav de esas apps por bloque de flujo (el Shell ya no aporta nav).
     """
     apps = [
         {

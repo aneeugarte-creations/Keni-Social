@@ -16,9 +16,9 @@
  *     también es un deploy nuevo.
  *
  * Reacción:
- *  - Avisamos con un toast NO bloqueante ("versión nueva… actualizando") con acción
- *    "Actualizar ahora", y recargamos solos en la SIGUIENTE navegación de ruta (momento
- *    menos molesto: el usuario ya cambia de sección, el refresco es transparente).
+ *  - SIN aviso: recargamos solos y en silencio en la SIGUIENTE navegación de ruta
+ *    (momento menos molesto: el usuario ya cambia de sección, el refresco es transparente
+ *    y no se pierde nada a medio escribir). No mostramos toast ni pedimos confirmación.
  *  - `FronteraError` usa `recargaSegura()` como red de seguridad si el chunk ya no existe
  *    antes de que el poll lo detecte.
  *
@@ -28,14 +28,11 @@
  */
 import * as React from "react";
 import { useLocation } from "react-router-dom";
-import { toast } from "sonner";
 
 /** Clave en sessionStorage del instante de la última recarga automática (anti-bucle). */
 const CLAVE_ULTIMA_RECARGA = "keni:ultima-recarga-auto";
 /** Ventana mínima entre recargas automáticas (ms). Dos recargas más juntas = bucle. */
 const VENTANA_ANTIBUCLE_MS = 20_000;
-/** Id del toast de "versión nueva" (estable para no duplicarlo entre ciclos de poll). */
-const TOAST_VERSION = "keni:version-nueva";
 
 /** Id de ESTE bundle, horneado por Vite (`define`). "dev" o ausente fuera de build. */
 const ID_LOCAL: string =
@@ -109,38 +106,33 @@ async function hayVersionNueva(entrada: string | null, signal?: AbortSignal): Pr
 
 /**
  * Hook (móntalo UNA vez en el cascarón): vigila si hay una versión nueva desplegada y,
- * cuando la hay, avisa (toast no bloqueante) y recarga en la siguiente navegación de ruta.
- * No hace nada en desarrollo.
+ * cuando la hay, recarga sola y EN SILENCIO en la siguiente navegación de ruta (sin toast
+ * ni confirmación). No hace nada en desarrollo.
  */
 export function useDetectorActualizacion(): void {
   const location = useLocation();
   const entrada = React.useRef<string | null>(null);
   const pendiente = React.useRef(false);
-  const avisado = React.useRef(false);
+  const detectada = React.useRef(false);
 
   // Captura la entrada actual una sola vez, al montar (para el método alterno).
   React.useEffect(() => {
     entrada.current = entradaActual();
   }, []);
 
-  const avisar = React.useCallback(() => {
-    if (avisado.current) return;
-    avisado.current = true;
+  const marcarActualizable = React.useCallback(() => {
+    if (detectada.current) return;
+    detectada.current = true;
+    // Sin aviso: solo dejamos la recarga PENDIENTE; ocurre sola al cambiar de ruta.
     pendiente.current = true;
-    toast("Hay una versión nueva de la consola", {
-      id: TOAST_VERSION,
-      description: "Se actualizará sola al cambiar de sección.",
-      duration: Infinity,
-      action: { label: "Actualizar ahora", onClick: () => recargaSegura() },
-    });
   }, []);
 
   const comprobar = React.useCallback(
     async (signal?: AbortSignal) => {
-      if (avisado.current) return; // ya detectada: no hace falta seguir sondeando
-      if (await hayVersionNueva(entrada.current, signal)) avisar();
+      if (detectada.current) return; // ya detectada: no hace falta seguir sondeando
+      if (await hayVersionNueva(entrada.current, signal)) marcarActualizable();
     },
-    [avisar],
+    [marcarActualizable],
   );
 
   // Poll periódico + comprobación al recuperar foco/visibilidad (un usuario que vuelve

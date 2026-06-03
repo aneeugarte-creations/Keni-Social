@@ -73,14 +73,6 @@ export type {
   RespuestaPublicaciones,
   RespuestaPublicacion,
   RespuestaColaAprobacion,
-  TotalPanel,
-  PicoPanel,
-  MetricasPanel,
-  ColaPanel,
-  ProximaPanel,
-  ProximasPanel,
-  GatingPanel,
-  RespuestaPanel,
   ActualComercial,
   SnapshotComercial,
   PostSeleccionableComercial,
@@ -3795,30 +3787,6 @@ export interface AlertaRendimiento {
 /** Respuesta de `GET /api/alertas`. */
 export interface RespuestaAlertas {
   alertas: AlertaRendimiento[];
-}
-
-// ── Lista viva del dia (Panel-9am, H5) ──────────────────────────────────────
-// `GET /api/panel/dia` devuelve un dict ad-hoc (no un modelo de `esquema_api`),
-// asi que su tipo se mantiene a mano aqui (no en `types.gen.ts`).
-export interface ItemListaDia {
-  id: string;
-  titulo: string;
-  marca: string;
-  marca_nombre: string;
-  estado: string;
-  prioridad: string;
-  flujo: string;
-  fecha_objetivo: string;
-  origen: string;
-  etiquetas: string[];
-  score: number;
-}
-
-export interface RespuestaListaDia {
-  items: ItemListaDia[];
-  total: number;
-  por_fuente: Record<string, number>;
-  por_estado: Record<string, number>;
 }
 
 // ── Importador de calendario Excel/CSV (H1) ─────────────────────────────────

@@ -888,7 +888,7 @@ class RespuestaPublicacion(TypedDict):
 
 
 # --------------------------------------------------------------------------- #
-# Aprobacion de equipo + panel ligero — api/aprobacion.py + api/panel.py (#9)  #
+# Aprobacion de equipo — api/aprobacion.py (#9)                               #
 # --------------------------------------------------------------------------- #
 
 
@@ -901,92 +901,6 @@ class RespuestaColaAprobacion(TypedDict):
 
     cola: list[Publicacion]
     total: int
-
-
-class TotalPanel(TypedDict):
-    """Total consolidado de metricas para el panel (mismas 4 metricas que el reporte)."""
-
-    visualizaciones: int
-    alcance: int
-    interacciones: int
-    engagement_pct: float
-
-
-class PicoPanel(TypedDict):
-    """Un movimiento destacado ('pico') del periodo en el panel."""
-
-    marca: str
-    # direccion: "sube" | "baja" | "estable".
-    direccion: str
-    variacion_vis_pct: float
-    visualizaciones: int
-    pieza_titulo: str
-
-
-class MetricasPanel(TypedDict):
-    """Resumen de metricas del panel (REUSA `keni_metricas.servicio`, solo lectura).
-
-    `disponible` es False si la fuente de metricas falló (el resto del panel sigue útil);
-    en ese caso `total` es `null` y `picos` viene vacío. `rango` solo está cuando hay
-    datos, por eso es `NotRequired`. `fuente` marca muestra vs real (badge en la UI).
-    """
-
-    disponible: bool
-    fuente: str
-    total: TotalPanel | None
-    picos: list[PicoPanel]
-    rango: NotRequired[str]
-
-
-class ColaPanel(TypedDict):
-    """Bloque 'cola de aprobacion' del panel: cuántas piezas esperan revisión."""
-
-    total: int
-
-
-class ProximaPanel(TypedDict):
-    """Una pieza programada próxima (vista mínima del panel, nombres resueltos).
-
-    `preparado_en` viene con el instante DRY-RUN si el programador ya la preparó (venció);
-    "" si aún no vence. El posteo real vía Metricool está gated por `KENI_PUBLICAR_REAL`.
-    """
-
-    id: str
-    titulo: str
-    marca: str
-    marca_nombre: str
-    red: str
-    red_nombre: str
-    fecha_programada: str
-    preparado_en: str
-
-
-class ProximasPanel(TypedDict):
-    """Bloque 'próximas programadas' del panel: las más inminentes + el total."""
-
-    items: list[ProximaPanel]
-    total: int
-
-
-class GatingPanel(TypedDict):
-    """Aviso de frontera del producto: el sistema NO publica solo (gated por `KENI_PUBLICAR_REAL`)."""
-
-    publicacion_real_activa: bool
-    nota: str
-
-
-class RespuestaPanel(TypedDict):
-    """Respuesta de `GET /api/panel`: dashboard ligero de un vistazo (#9, Fase 3).
-
-    Agrega métricas/picos (reusa los caminos de lectura de Metricas, sin tocar su
-    página), el contador de la cola de aprobación y las próximas piezas programadas.
-    `gating` recuerda que el posteo real (vía Metricool) está gated por `KENI_PUBLICAR_REAL`.
-    """
-
-    metricas: MetricasPanel
-    cola: ColaPanel
-    proximas: ProximasPanel
-    gating: GatingPanel
 
 
 # --------------------------------------------------------------------------- #
@@ -1200,16 +1114,8 @@ MODELOS = [
     Publicacion,
     RespuestaPublicaciones,
     RespuestaPublicacion,
-    # Aprobacion de equipo + panel ligero (#9, Fase 3).
+    # Aprobacion de equipo (#9, Fase 3).
     RespuestaColaAprobacion,
-    TotalPanel,
-    PicoPanel,
-    MetricasPanel,
-    ColaPanel,
-    ProximaPanel,
-    ProximasPanel,
-    GatingPanel,
-    RespuestaPanel,
     # Generaciones: DEFERIDAS (ver bloque arriba). Se mantienen a mano en types.ts.
     # Comercial (#124: fuente/es_muestra).
     ActualComercial,

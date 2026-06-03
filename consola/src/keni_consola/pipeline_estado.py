@@ -13,7 +13,7 @@ DISENO
 ======
 PURO y testeable: `etapa_de_tema` y `contar_por_etapa` reciben dicts ya leidos (items del
 tablero + sus filas por plataforma + sus etiquetas resueltas a NOMBRES); no tocan la BD ni
-el disco. La capa `api/panel.py` lee `repos.*` y se las pasa. Determinista.
+el disco. El que las usa lee `repos.*` y se las pasa. Determinista.
 
 NO reescribe estados ni inventa un enum nuevo en `estados.py` (frontera con la coordinacion):
 las etapas son una LECTURA derivada, no un campo persistido. El ciclo de vida real de una

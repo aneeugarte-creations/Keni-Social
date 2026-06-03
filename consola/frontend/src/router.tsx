@@ -10,7 +10,6 @@ import { Loader2 } from "lucide-react";
 // y solo se descarga al entrar. Asi el arranque no carga, por ejemplo, las graficas
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
-const Panel = lazy(() => import("@/pages/Panel"));
 const EditorPro = lazy(() => import("@/pages/EditorPro"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 const EstrategiaMarcas = lazy(() =>
@@ -59,10 +58,11 @@ const Sistema = lazy(() => import("@/pages/Sistema"));
  * Rutas del SPA. El AppShell es el layout raiz (sidebar + topbar); las paginas
  * cuelgan de el. La navegación se agrupa por MOMENTO DEL FLUJO y ese bloque vive
  * TAMBIÉN en la URL: `/operacion/*` (checkpoints diarios), `/contenido/*`
- * (herramientas de creación) y `/datos/*` (entradas y señales). Panel es la home
- * transversal y se queda en `/panel`. Cada hub (Parrilla, Revisión, Investigación,
- * Analíticas, Biblioteca) es una ruta-layout sin componente: react-router renderiza
- * `<Outlet/>` y la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
+ * (herramientas de creación) y `/datos/*` (entradas y señales). La home es el
+ * tablero del equipo (`/operacion/parrilla/pendientes`). Cada hub (Parrilla,
+ * Revisión, Investigación, Analíticas, Biblioteca) es una ruta-layout sin
+ * componente: react-router renderiza `<Outlet/>` y la subnav entre sub-rutas vive
+ * in-page (SubnavHub, via HUB_TABS).
  *
  * Las rutas planas anteriores (`/estudio`, `/investigacion/...`, `/parrilla/...`, etc.)
  * se mantienen como redirecciones a su nuevo path con prefijo de bloque.
@@ -90,11 +90,10 @@ export const router = createBrowserRouter([
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <Navigate to="/panel" replace /> },
-
-      // Home transversal (shell): el vistazo del día. Encabeza el bloque Operación
-      // en el sidebar pero vive sin prefijo (es la landing, no una página de sección).
-      { path: "panel", element: <Panel /> },
+      // Home: el tablero del equipo (primer checkpoint del día). Ya no hay Panel.
+      { index: true, element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
+      // Compatibilidad: enlaces/markers antiguos a /panel caen en el tablero.
+      { path: "panel", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
 
       // ===== Bloque OPERACIÓN (checkpoints diarios) =====
       {
@@ -249,8 +248,8 @@ export const router = createBrowserRouter([
       { path: "proyectos", element: <Navigate to="/datos/actividad" replace /> },
       { path: "carpetas", element: <Navigate to="/datos/actividad" replace /> },
 
-      // Cualquier otra ruta: de vuelta al Panel (ya no hay launcher).
-      { path: "*", element: <Navigate to="/panel" replace /> },
+      // Cualquier otra ruta: de vuelta a la home (el tablero del equipo).
+      { path: "*", element: <Navigate to="/operacion/parrilla/pendientes" replace /> },
     ],
   },
 ]);

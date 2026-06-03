@@ -63,30 +63,25 @@ SEAMS_PERMITIDOS: frozenset[tuple[str, str]] = frozenset(
         # `dominio.copy.crear_publicaciones_desde_piezas` o directo). Es el handoff A→C de
         # siempre, ahora desde el módulo de historial (al retirar el sistema de skills).
         ("historial", "publicaciones"),
-        # Seam #3 (`panel` shell lee la cola de aprobación de C): tras T1.2, el panel
-        # lee C SOLO por las funciones-CONTRATO de solo lectura que C expone
-        # (`dominio.publicaciones.cola_de_aprobacion` / `proximas_programadas`), no por
-        # `repos` ni por los estados internos de C. Cruce shell→app LEGÍTIMO y por
-        # fachada: el router de `panel` importa esas funciones públicas de C, así que el
-        # lint SÍ lo detecta hoy. Se mantiene explícito aquí. (ADR 0005 §Seams #3.)
-        ("panel", "publicaciones"),
         # Seam #7 (operación C usa la infra de jobs de A): `api/parrilla_import.py` (C)
         # importa documento a la rota con un `claude -p` READ-ONLY en SEGUNDO PLANO, y
         # para ello usa la infraestructura de jobs `generaciones` (A) — encolar y leer el
         # estado del job. Mismo acoplamiento que el Seam #4 de `media`, ahora app→app.
         # T-futura puede moverlo tras la fachada de jobs del gateway. (ADR 0005 §Seams.)
         ("parrilla_import", "generaciones"),
-        # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2):
+        # NOTA — seams RETIRADOS de la allowlist (T1.1 / T1.2 / borra-panel):
         #   ("reciclaje", "publicaciones")  [T1.1]: `reciclaje` (A) ya NO lee el almacén
         #       de C en su router; pide el universo a la función-contrato de lectura de C
         #       `dominio.publicaciones.listar_para_reciclaje` a través de su propio
         #       `dominio.reciclaje`. El router quedó limpio: no hay cruce de frontera que
         #       permitir. (Era una entrada documental/precautoria; el seam sigue siendo
         #       legítimo pero ya no necesita allowlist porque no toca el router.)
-        #   ("panel", "metricas")  [T1.2]: el panel lee B por la FACHADA
+        #   ("panel", "metricas")  [T1.2]: el panel leía B por la FACHADA
         #       `keni_metricas.servicio` (infra de solo lectura, ADR 0005 §Seams #6), no
         #       por el router/internals de `metricas`. Nunca fue un cruce app↔app real;
-        #       era una entrada documental. Se retira: la infra compartida no es un seam.
+        #       era una entrada documental.
+        #   ("panel", "publicaciones") [borra-panel]: se retiró el dashboard `/api/panel`
+        #       y su router `api/panel.py`; ya no existe el cruce shell→C.
     }
 )
 

@@ -14,12 +14,12 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { PaletaContexto, type ValorPaleta } from "@/hooks/paleta-contexto";
 
-/** Una página navegable de la paleta (Panel o una hoja de una app). */
+/** Una página navegable de la paleta (una hoja de una app del catálogo). */
 interface Entrada {
   ruta: string;
-  /** Etiqueta de la hoja (o "Panel"). */
+  /** Etiqueta de la hoja. */
   etiqueta: string;
-  /** Nombre de la app a la que pertenece (vacío para Panel). */
+  /** Nombre de la app a la que pertenece. */
   app: string;
   /** Texto de búsqueda precomputado (app + página, en minúsculas, sin acentos). */
   busqueda: string;
@@ -36,7 +36,7 @@ function normalizar(s: string): string {
 /**
  * Paleta de comandos (⌘K / Ctrl-K), SOLO navegación. Diálogo accesible (sobre
  * `ui/dialog`, sin la dependencia `cmdk`): input de búsqueda + lista filtrable
- * de TODAS las páginas navegables (Panel + por cada app del catálogo, sus hojas
+ * de TODAS las páginas navegables (por cada app del catálogo, sus hojas
  * `hojasDeApp`, etiquetadas "App › Página"). ↑/↓ mueve, ↵ navega y cierra, Esc
  * cierra. El estado de apertura lo controla el provider (`PaletaProvider`).
  */
@@ -61,11 +61,9 @@ function PaletaDialogo({
   });
   const apps = catalogoQuery.data?.apps;
 
-  // TODAS las páginas navegables: Panel (global) + las hojas de cada app.
+  // TODAS las páginas navegables: las hojas de cada app del catálogo.
   const entradas = React.useMemo<Entrada[]>(() => {
-    const lista: Entrada[] = [
-      { ruta: "/panel", etiqueta: "Panel", app: "", busqueda: normalizar("Panel") },
-    ];
+    const lista: Entrada[] = [];
     for (const app of apps ?? []) {
       for (const hoja of hojasDeApp(app)) {
         lista.push({

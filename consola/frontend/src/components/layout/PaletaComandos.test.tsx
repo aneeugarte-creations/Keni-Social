@@ -65,7 +65,7 @@ function Sonda() {
   );
 }
 
-function renderPaleta(ruta = "/panel") {
+function renderPaleta(ruta = "/generacion") {
   stubCatalogo();
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -87,9 +87,8 @@ describe("PaletaComandos", () => {
     // ⌘K abre.
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
-    // Panel global + hojas de cada app.
-    expect(await screen.findByRole("option", { name: /panel/i })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: /producción.*generación/i })).toBeInTheDocument();
+    // Las hojas de cada app del catálogo.
+    expect(await screen.findByRole("option", { name: /producción.*generación/i })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /operación.*publicaciones/i })).toBeInTheDocument();
     // ⌘K de nuevo togglea cerrado.
     fireEvent.keyDown(window, { key: "k", metaKey: true });

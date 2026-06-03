@@ -22,13 +22,12 @@ const CATALOGO = {
       ],
     },
   ],
-  // El sidebar pinta los bloques de flujo de `navegacion` (Panel + la nav de las
-  // apps activas, ya agrupada por el backend).
+  // El sidebar pinta los bloques de flujo de `navegacion` (la nav de las apps
+  // activas, ya agrupada por el backend).
   navegacion: [
     {
       etiqueta: "Operación",
       items: [
-        { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "" },
         { ruta: "/generacion", etiqueta: "Generación", icono: "Sparkles", descripcion: "" },
       ],
     },
@@ -110,10 +109,10 @@ function renderShell(ruta: string) {
         <MemoryRouter initialEntries={[ruta]}>
           <Routes>
             <Route path="/" element={<AppShell />}>
-              {/* `/` ya no es launcher: redirige a /panel (como en el router real). */}
-              <Route index element={<Navigate to="/panel" replace />} />
+              {/* `/` ya no es launcher: redirige al tablero (como en el router real). */}
+              <Route index element={<Navigate to="/generacion" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
-              <Route path="panel" element={<div>contenido panel</div>} />
+              <Route path="configuracion" element={<div>contenido config</div>} />
               <Route
                 path="datos/investigacion/fuentes"
                 element={<div>contenido fuentes</div>}
@@ -128,25 +127,25 @@ function renderShell(ruta: string) {
 }
 
 describe("AppShell · sidebar siempre presente", () => {
-  it("`/` redirige a `/panel` (ya no hay launcher)", async () => {
+  it("`/` redirige al tablero (ya no hay launcher)", async () => {
     renderShell("/");
-    expect(await screen.findByText("contenido panel")).toBeInTheDocument();
+    expect(await screen.findByText("contenido app")).toBeInTheDocument();
   });
 
-  it("dentro de una app renderiza el sidebar (con Panel global)", async () => {
+  it("dentro de una app renderiza el sidebar", async () => {
     renderShell("/generacion");
     expect(await screen.findByText("contenido app")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole("link", { name: /^panel$/i })).toBeInTheDocument(),
+      expect(screen.getByRole("link", { name: /^generación$/i })).toBeInTheDocument(),
     );
     // Ya no hay control "⊞ Apps" (no hay launcher).
     expect(screen.queryByRole("link", { name: /^apps$/i })).not.toBeInTheDocument();
   });
 
-  it("en `/panel` también renderiza el sidebar", async () => {
-    renderShell("/panel");
-    expect(await screen.findByText("contenido panel")).toBeInTheDocument();
+  it("en una pantalla de shell (Configuración) también renderiza el sidebar", async () => {
+    renderShell("/configuracion");
+    expect(await screen.findByText("contenido config")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: /navegación principal/i })).toBeInTheDocument();
   });
 
@@ -178,19 +177,19 @@ describe("AppShell · sidebar siempre presente", () => {
     expect(within(ruta).getByText("Fuentes")).toHaveAttribute("aria-current", "page");
   });
 
-  it("fuera de apps (Panel) muestra solo 'Panel', sin '›' ni enlace", async () => {
-    renderShell("/panel");
-    await screen.findByText("contenido panel");
+  it("fuera de apps (Configuración) muestra solo su nombre, sin '›' ni enlace", async () => {
+    renderShell("/configuracion");
+    await screen.findByText("contenido config");
     const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
-    expect(ruta).toHaveTextContent("Panel");
-    // En el breadcrumb, "Panel" va como TEXTO (no como enlace) y no hay "›".
+    expect(ruta).toHaveTextContent("Configuración");
+    // En el breadcrumb, el nombre de la pantalla de shell va como TEXTO (no enlace) y sin "›".
     expect(ruta.querySelector("a")).toBeNull();
   });
 
   it("persiste el estado colapsado del rail en localStorage", async () => {
     localStorage.setItem("keni:sidebar-colapsado", "1");
-    renderShell("/panel");
-    await screen.findByText("contenido panel");
+    renderShell("/configuracion");
+    await screen.findByText("contenido config");
     // En rail (colapsado) aparece el botón "Expandir barra"; no el "Colapsar".
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument(),

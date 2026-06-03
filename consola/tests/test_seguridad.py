@@ -389,7 +389,7 @@ def test_mutacion_referer_externo_configurado_pasa(entorno, monkeypatch):
     r = c.post(
         "/api/config/esfuerzo",
         json={"esfuerzo": "high"},
-        headers={"Referer": "https://social.kenitech.io/panel"},
+        headers={"Referer": "https://social.kenitech.io/operacion/parrilla"},
     )
     assert r.status_code != 403
 

@@ -55,13 +55,12 @@ const CATALOGO = {
     },
   ],
   // Bloques de flujo tal como los entrega el backend (`entradas_nav_activas`):
-  // Panel (shell) encabeza "Operación"; los hubs van como UNA entrada (su sub-nav es
-  // in-page, no en el sidebar). El bloque vive también en el path (/operacion, /contenido, /datos).
+  // Parrilla (tablero) encabeza "Operación"; los hubs van como UNA entrada (su sub-nav
+  // es in-page, no en el sidebar). El bloque vive también en el path (/operacion, /contenido, /datos).
   navegacion: [
     {
       etiqueta: "Operación",
       items: [
-        { ruta: "/panel", etiqueta: "Panel", icono: "LayoutDashboard", descripcion: "El vistazo del día" },
         { ruta: "/operacion/parrilla", etiqueta: "Parrilla", icono: "CalendarClock", descripcion: "Tablero del equipo" },
         { ruta: "/operacion/revision", etiqueta: "Revisión", icono: "ShieldCheck", descripcion: "Cola de aprobación" },
       ],
@@ -150,7 +149,7 @@ function PathActual() {
  */
 function renderSidebar(
   rol: RolUsuario,
-  ruta = "/panel",
+  ruta = "/operacion/parrilla",
   props: { colapsado?: boolean; onToggleColapsar?: () => void } = {},
 ) {
   stubCatalogo();
@@ -182,17 +181,16 @@ function renderAvatarMenu(rol: RolUsuario) {
 
 describe("Sidebar · bloques de flujo", () => {
   it("pinta los 3 bloques de flujo con su encabezado", async () => {
-    renderSidebar("editor", "/panel");
+    renderSidebar("editor", "/operacion/parrilla");
     expect(await screen.findByText("Operación")).toBeInTheDocument();
     expect(screen.getByText("Contenido")).toBeInTheDocument();
     expect(screen.getByText("Datos")).toBeInTheDocument();
   });
 
   it("cada entrada es un enlace; los hubs van como UNA sola entrada (sin hojas sueltas)", async () => {
-    renderSidebar("editor", "/panel");
-    // Bloque "Operación": Panel + tablero + revisión, los checkpoints diarios.
-    expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
-    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
+    renderSidebar("editor", "/operacion/parrilla");
+    // Bloque "Operación": tablero + revisión, los checkpoints diarios.
+    expect(await screen.findByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
     expect(screen.getByRole("link", { name: /revisión/i })).toHaveAttribute("href", "/operacion/revision");
     // Bloque "Contenido".
     expect(screen.getByRole("link", { name: /estudio/i })).toHaveAttribute("href", "/contenido/estudio");
@@ -217,13 +215,13 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("las entradas llevan icono (no son texto plano)", async () => {
-    renderSidebar("editor", "/panel");
-    const panel = await screen.findByRole("link", { name: /panel/i });
-    expect(panel.querySelector("svg")).not.toBeNull();
+    renderSidebar("editor", "/operacion/parrilla");
+    const parrilla = await screen.findByRole("link", { name: /parrilla/i });
+    expect(parrilla.querySelector("svg")).not.toBeNull();
   });
 
   it("muestra un trigger de paleta (Buscar… + ⌘K) en vez del input falso 'F'", async () => {
-    renderSidebar("editor", "/panel");
+    renderSidebar("editor", "/operacion/parrilla");
     const trigger = await screen.findByRole("button", { name: /buscar páginas/i });
     expect(trigger).toBeInTheDocument();
     expect(trigger).toHaveTextContent("⌘K");
@@ -231,8 +229,8 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("no muestra los ajustes en el sidebar (cuelgan del avatar)", async () => {
-    renderSidebar("admin", "/panel");
-    await screen.findByRole("link", { name: /panel/i });
+    renderSidebar("admin", "/operacion/parrilla");
+    await screen.findByRole("link", { name: /parrilla/i });
     expect(screen.queryByRole("link", { name: /^configuración$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^usuarios$/i })).not.toBeInTheDocument();
   });
@@ -240,10 +238,9 @@ describe("Sidebar · bloques de flujo", () => {
 
 describe("Sidebar · rail colapsable", () => {
   it("colapsado muestra solo iconos (enlaces por entrada) y un botón para expandir", async () => {
-    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: () => {} });
+    renderSidebar("editor", "/operacion/parrilla", { colapsado: true, onToggleColapsar: () => {} });
     // Cada entrada sigue siendo un enlace, ahora solo-icono (nombre por aria-label).
-    expect(await screen.findByRole("link", { name: /panel/i })).toHaveAttribute("href", "/panel");
-    expect(screen.getByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
+    expect(await screen.findByRole("link", { name: /parrilla/i })).toHaveAttribute("href", "/operacion/parrilla");
     expect(screen.getByRole("link", { name: /investigación/i })).toHaveAttribute("href", "/datos/investigacion");
     // Botón para volver a expandir la barra.
     expect(screen.getByRole("button", { name: /expandir barra/i })).toBeInTheDocument();
@@ -253,20 +250,20 @@ describe("Sidebar · rail colapsable", () => {
 
   it("el toggle (colapsar / expandir) invoca onToggleColapsar", async () => {
     const onToggle = vi.fn();
-    const { unmount } = renderSidebar("editor", "/panel", {
+    const { unmount } = renderSidebar("editor", "/operacion/parrilla", {
       colapsado: false,
       onToggleColapsar: onToggle,
     });
     fireEvent.click(await screen.findByRole("button", { name: /colapsar/i }));
     expect(onToggle).toHaveBeenCalledTimes(1);
     unmount();
-    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: onToggle });
+    renderSidebar("editor", "/operacion/parrilla", { colapsado: true, onToggleColapsar: onToggle });
     fireEvent.click(await screen.findByRole("button", { name: /expandir barra/i }));
     expect(onToggle).toHaveBeenCalledTimes(2);
   });
 
   it("click en el icono de una entrada (en rail) navega a su ruta", async () => {
-    renderSidebar("editor", "/panel", { colapsado: true, onToggleColapsar: () => {} });
+    renderSidebar("editor", "/operacion/parrilla", { colapsado: true, onToggleColapsar: () => {} });
     fireEvent.click(await screen.findByRole("link", { name: /parrilla/i }));
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/operacion/parrilla"));
   });
@@ -308,7 +305,7 @@ describe("apps-scope · helpers", () => {
     expect(appDeRuta(apps, "/operacion/parrilla/turnos")?.id).toBe("operacion");
     // Fuera de toda app (raíz / shell): undefined.
     expect(appDeRuta(apps, "/")).toBeUndefined();
-    expect(appDeRuta(apps, "/panel")).toBeUndefined();
+    expect(appDeRuta(apps, "/configuracion")).toBeUndefined();
   });
 
   it("gruposDeApp respeta los bloques visuales por orden", () => {
