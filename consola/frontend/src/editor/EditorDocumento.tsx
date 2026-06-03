@@ -2,7 +2,7 @@
 // columnas laterales; en móvil el lienzo ocupa todo y los paneles se abren como cajones desde una
 // barra inferior. Recibe el store del documento (uno por pestaña del workspace).
 
-import { Image as ImageIcon, Layers, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Image as ImageIcon, Layers, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 
 import { Lienzo } from "./Lienzo";
@@ -28,6 +28,7 @@ export function EditorDocumento({
 }) {
   const fuentesExtra = useFuentesMarca(marca);
   const [panel, setPanel] = useState<PanelMovil>(null);
+  const [iaAbierta, setIaAbierta] = useState(false);
 
   const biblioteca = <PanelBiblioteca marca={marca} />;
   const ia = <PanelIA marca={marca} formato={formato} />;
@@ -46,10 +47,21 @@ export function EditorDocumento({
       <div className="flex h-full min-h-0 flex-col">
         <BarraHerramientas onExportar={onExportar} />
         <div className="relative flex min-h-0 flex-1 overflow-hidden">
-          {/* Columna izquierda (escritorio): biblioteca + IA. */}
+          {/* Columna izquierda (escritorio): biblioteca + IA (plegable). */}
           <div className="hidden w-56 shrink-0 flex-col border-r border-border md:flex">
             <div className="min-h-0 flex-1 overflow-auto">{biblioteca}</div>
-            <div className="max-h-[55%] shrink-0 overflow-auto border-t border-border">{ia}</div>
+            <div className="shrink-0 border-t border-border">
+              <button
+                onClick={() => setIaAbierta((v) => !v)}
+                className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:bg-accent/50"
+              >
+                <span className="flex items-center gap-1">
+                  <Sparkles className="h-3.5 w-3.5" /> IA
+                </span>
+                {iaAbierta ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              </button>
+              {iaAbierta && <div className="max-h-[55vh] overflow-auto border-t border-border">{ia}</div>}
+            </div>
           </div>
 
           {/* Lienzo (siempre). */}

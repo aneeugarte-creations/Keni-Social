@@ -24,69 +24,70 @@ const ALIN: Record<string, string> = {
   justificado: "justify",
 };
 
-// Recorte estilo object-fit:cover en píxeles de la imagen natural.
-function cropCover(img: HTMLImageElement, boxW: number, boxH: number, foco: [number, number]) {
-  const ar = boxW / boxH;
-  const iar = img.width / img.height;
-  let cw: number;
-  let ch: number;
-  if (iar > ar) {
-    ch = img.height;
-    cw = ch * ar;
-  } else {
-    cw = img.width;
-    ch = cw / ar;
-  }
-  return {
-    x: (img.width - cw) * (foco[0] ?? 0.5),
-    y: (img.height - ch) * (foco[1] ?? 0.5),
-    width: cw,
-    height: ch,
-  };
-}
+type Filtros = CapaImagen["filtros"];
 
-// Imagen con FILTROS Konva (brillo/contraste/saturación/desenfoque) para vista WYSIWYG. El export
-// final del servidor usa los mismos filtros (CSS filter, exacto); aquí damos feedback en vivo.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ImagenConFiltros({ img, c, props }: { img: HTMLImageElement; c: CapaImagen; props: any }) {
+// Imagen AJUSTADA a una caja SIN deformar: la caja (`Group`) recorta y la imagen se escala
+// preservando su proporción — `cover` la llena (desborde recortado), `contain` la encaja. El
+// `Group` es el nodo interactivo (drag/transform); la imagen interior aplica los filtros Konva
+// (WYSIWYG; el export del servidor usa los mismos, exactos).
+function NodoImagenAjustada({
+  img,
+  w,
+  h,
+  ajuste,
+  foco,
+  filtros,
+  props,
+}: {
+  img: HTMLImageElement;
+  w: number;
+  h: number;
+  ajuste: "cover" | "contain";
+  foco: [number, number];
+  filtros: Filtros;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  props: any;
+}) {
   const ref = useRef<Konva.Image | null>(null);
-  const f = c.filtros;
+  const iw = img.width || 1;
+  const ih = img.height || 1;
+  const escala = ajuste === "contain" ? Math.min(w / iw, h / ih) : Math.max(w / iw, h / ih);
+  const dw = iw * escala;
+  const dh = ih * escala;
+  const ix = (w - dw) * (foco[0] ?? 0.5);
+  const iy = (h - dh) * (foco[1] ?? 0.5);
+
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    if (!f) {
+    if (!filtros) {
       node.filters([]);
       node.clearCache();
       node.getLayer()?.batchDraw();
       return;
     }
-    const filtros: (typeof Konva.Filters.Brighten)[] = [];
-    if (f.brillo != null && f.brillo !== 1) filtros.push(Konva.Filters.Brighten);
-    if (f.contraste != null && f.contraste !== 1) filtros.push(Konva.Filters.Contrast);
-    if (f.saturacion != null && f.saturacion !== 1) filtros.push(Konva.Filters.HSL);
-    if (f.desenfoque) filtros.push(Konva.Filters.Blur);
-    node.filters(filtros);
-    node.brightness((f.brillo ?? 1) - 1);
-    node.contrast(((f.contraste ?? 1) - 1) * 100);
-    node.saturation((f.saturacion ?? 1) - 1);
-    node.blurRadius(f.desenfoque ?? 0);
+    const lista: (typeof Konva.Filters.Brighten)[] = [];
+    if (filtros.brillo != null && filtros.brillo !== 1) lista.push(Konva.Filters.Brighten);
+    if (filtros.contraste != null && filtros.contraste !== 1) lista.push(Konva.Filters.Contrast);
+    if (filtros.saturacion != null && filtros.saturacion !== 1) lista.push(Konva.Filters.HSL);
+    if (filtros.desenfoque) lista.push(Konva.Filters.Blur);
+    node.filters(lista);
+    node.brightness((filtros.brillo ?? 1) - 1);
+    node.contrast(((filtros.contraste ?? 1) - 1) * 100);
+    node.saturation((filtros.saturacion ?? 1) - 1);
+    node.blurRadius(filtros.desenfoque ?? 0);
     try {
       node.cache();
     } catch {
       /* imagen aún sin dimensiones: se reintenta en el próximo render */
     }
     node.getLayer()?.batchDraw();
-  }, [f, c.w, c.h, c.objeto, img]);
+  }, [filtros, dw, dh, img]);
 
   return (
-    <KonvaImage
-      ref={ref}
-      {...props}
-      image={img}
-      width={c.w}
-      height={c.h}
-      crop={c.ajuste === "cover" ? cropCover(img, c.w, c.h, c.foco) : undefined}
-    />
+    <Group {...props} clipX={0} clipY={0} clipWidth={w} clipHeight={h}>
+      <KonvaImage ref={ref} image={img} x={ix} y={iy} width={dw} height={dh} listening={false} />
+    </Group>
   );
 }
 
@@ -154,12 +155,13 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
       if (!img) {
         return <Rect {...props} width={c.w} height={c.h} fill="#2a2d31" stroke="#4b5158" dash={[8, 8]} />;
       }
-      return <ImagenConFiltros img={img} c={c} props={props} />;
+      return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste={c.ajuste} foco={c.foco} filtros={c.filtros} props={props} />;
     }
     case "logo": {
       const c = capa as CapaLogo;
       if (c.tipo_logo === "imagen" && img) {
-        return <KonvaImage {...props} image={img} width={c.w} height={c.h} />;
+        // Logo: SIEMPRE encajar (contain) — nunca deformar.
+        return <NodoImagenAjustada img={img} w={c.w} h={c.h} ajuste="contain" foco={[0.5, 0.5]} filtros={null} props={props} />;
       }
       return (
         <Group {...props}>

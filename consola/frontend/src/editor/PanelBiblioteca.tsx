@@ -3,7 +3,7 @@
 // permite subir un activo nuevo. Cierra el Frente C (los activos del backend, ya en S3).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Upload } from "lucide-react";
+import { Trash2, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -46,6 +46,15 @@ export function PanelBiblioteca({ marca }: { marca: string }) {
       toast.success("Activo añadido a la biblioteca.");
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo subir."),
+  });
+
+  const borrar = useMutation({
+    mutationFn: (id: string) => api.borrarMarcaActivo(id, true),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["marca-activos", marca] });
+      toast.success("Activo borrado.");
+    },
+    onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo borrar."),
   });
 
   const insertar = (a: ActivoMarca) => {
@@ -136,29 +145,36 @@ export function PanelBiblioteca({ marca }: { marca: string }) {
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               {lista.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => insertar(a)}
-                  draggable={a.tipo !== "paleta" && a.tipo !== "tipografia"}
-                  onDragStart={(e) => {
-                    // Arrastrar al lienzo: el Lienzo lo recoge en onDrop y lo coloca donde se suelte.
-                    e.dataTransfer.setData(
-                      "application/x-keni-activo",
-                      JSON.stringify({ objeto: a.objeto, tipo: a.tipo }),
-                    );
-                    e.dataTransfer.effectAllowed = "copy";
-                  }}
-                  title={`${a.nombre || a.tipo} — clic para insertar centrado, o arrástralo al lienzo`}
-                  className="group relative aspect-square overflow-hidden rounded border border-border bg-[repeating-conic-gradient(#0000_0_25%,#8884_0_50%)] bg-[length:16px_16px] hover:ring-2 hover:ring-primary"
-                >
-                  {a.objeto ? (
-                    <img src={urlMedia(a.objeto)} alt={a.nombre} className="h-full w-full object-contain" />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
-                      {a.tipo}
-                    </span>
-                  )}
-                </button>
+                <div key={a.id} className="group relative">
+                  <button
+                    onClick={() => insertar(a)}
+                    draggable={a.tipo !== "paleta" && a.tipo !== "tipografia"}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        "application/x-keni-activo",
+                        JSON.stringify({ objeto: a.objeto, tipo: a.tipo }),
+                      );
+                      e.dataTransfer.effectAllowed = "copy";
+                    }}
+                    title={`${a.nombre || a.tipo} — clic para insertar, o arrástralo al lienzo`}
+                    className="block aspect-square w-full overflow-hidden rounded border border-border bg-[repeating-conic-gradient(#0000_0_25%,#8884_0_50%)] bg-[length:16px_16px] hover:ring-2 hover:ring-primary"
+                  >
+                    {a.objeto ? (
+                      <img src={urlMedia(a.objeto)} alt={a.nombre} className="h-full w-full object-contain" />
+                    ) : (
+                      <span className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">
+                        {a.tipo}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => borrar.mutate(a.id)}
+                    title="Borrar activo"
+                    className="absolute right-0.5 top-0.5 rounded bg-background/80 p-0.5 text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>

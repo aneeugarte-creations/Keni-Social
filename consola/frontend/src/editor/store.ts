@@ -46,6 +46,7 @@ export interface EstadoEditor {
   // Alinea la capa respecto al lienzo (o, si se pasa, una caja de referencia).
   alinear: (id: string, modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => void;
   setFondo: (fondo: Documento["fondo"]) => void;
+  setFormato: (formato: Documento["formato"]) => void;
 
   // Historial. `comenzarGesto` toma una instantánea ANTES de un arrastre/transform para que
   // todo el gesto cuente como UN paso de deshacer (las actualizaciones intermedias van sin
@@ -270,6 +271,8 @@ export function crearStoreEditor(inicial: Documento) {
       },
 
       setFondo: (fondo) => aplicar((doc) => ({ ...doc, fondo })),
+
+      setFormato: (formato) => aplicar((doc) => ({ ...doc, formato })),
 
       comenzarGesto: () =>
         set((s) => ({ pasado: [...s.pasado, s.documento].slice(-LIMITE_HISTORIAL), futuro: [] })),

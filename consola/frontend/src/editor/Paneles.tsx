@@ -200,15 +200,40 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
   const store = useStoreEditor();
   const capa = useEditor((s) => s.documento.capas.find((c) => c.id === s.seleccion) ?? null);
   const fondo = useEditor((s) => s.documento.fondo);
+  const formato = useEditor((s) => s.documento.formato);
   // Familias disponibles: catálogo embebido + tipografías propias de la marca (sin duplicar).
   const familias = [...CATALOGO_FUENTES, ...fuentesExtra.filter((f) => !CATALOGO_FUENTES.includes(f as never))];
 
-  // Sin capa seleccionada: editar el FONDO del documento.
+  // Sin capa seleccionada: editar el LIENZO (tamaño/aspect ratio) y el FONDO del documento.
   if (!capa) {
     const setFondo = (f: typeof fondo) => store.getState().setFondo(f);
+    const setFmt = (f: typeof formato) => store.getState().setFormato(f);
+    const PRESETS: { etiqueta: string; f: typeof formato }[] = [
+      { etiqueta: "9:16", f: { w: 1080, h: 1920, safe_top: 220, safe_bottom: 420 } },
+      { etiqueta: "4:5", f: { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 } },
+      { etiqueta: "1:1", f: { w: 1080, h: 1080, safe_top: 60, safe_bottom: 96 } },
+      { etiqueta: "16:9", f: { w: 1600, h: 900, safe_top: 56, safe_bottom: 72 } },
+    ];
+    const activo = (f: typeof formato) => f.w === formato.w && f.h === formato.h;
     return (
       <div className="flex flex-col gap-3 p-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Lienzo</div>
+        <div className="flex flex-wrap gap-1">
+          {PRESETS.map((p) => (
+            <button
+              key={p.etiqueta}
+              onClick={() => setFmt(p.f)}
+              className={`rounded border px-2 py-1 text-xs ${activo(p.f) ? "border-primary bg-accent" : "border-input hover:bg-accent/50"}`}
+            >
+              {p.etiqueta}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Campo etiqueta="Ancho"><Num valor={formato.w} onChange={(v) => setFmt({ ...formato, w: Math.max(16, Math.round(v)) })} /></Campo>
+          <Campo etiqueta="Alto"><Num valor={formato.h} onChange={(v) => setFmt({ ...formato, h: Math.max(16, Math.round(v)) })} /></Campo>
+        </div>
+        <div className="mt-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fondo</div>
         <Campo etiqueta="Tipo">
           <select
             value={fondo.tipo}
