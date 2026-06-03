@@ -87,9 +87,11 @@ def materializar_snapshot(marca: str, geo: str) -> int:
         grupos, _fuentes = api_radar._radar_consolidado(geo, incluir_feeds=True, marca=marca)
         temas = radar.consolidar(*api_radar._grupos_para_consolidar(grupos))
 
+        # Vocabulario de marca SOLO para inclinar el score (`puntuar_tema`), NO para FILTRAR:
+        # el snapshot materializa TODO el radar consolidado y el FOCO se aplica al LEER (el
+        # endpoint ya descarta/cuenta fuera_foco, igual que en el camino en vivo). Filtrar aqui
+        # duplicaria el foco y perderia el conteo `total_fuera_foco` que el endpoint reporta.
         palabras = relevancia_marca.palabras_de_marca(marca)
-        if palabras:
-            temas = [t for t in temas if parrilla.tema_en_foco(t, palabras)]
 
         estados = _estado_por_clave(marca)
 
