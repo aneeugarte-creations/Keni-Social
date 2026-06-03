@@ -332,12 +332,16 @@ def _sin_acentos(texto: str) -> str:
 def _score_marca(tema: Tema, palabras_marca: frozenset[str]) -> float:
     """Relevancia para la MARCA activa [0, 1] segun sus palabras clave.
 
-    1.0 si una palabra de la marca esta en el TITULO; 0.6 si esta en el cuerpo
-    (por_que / titulos de enlaces); 0.0 si no aparece. Sin palabras → 0.0 (no aplica).
-    El texto se normaliza sin acentos para que 'fútbol' matchee la keyword 'futbol'.
+    1.0 si el tema es CURADO (de una fuente de la marca) o una palabra de la marca esta
+    en el TITULO; 0.6 si esta en el cuerpo (por_que / titulos de enlaces); 0.0 si no.
+    Sin palabras → 0.0 (no aplica). El texto se normaliza sin acentos para que 'fútbol'
+    matchee la keyword 'futbol'.
     """
     if not palabras_marca:
         return 0.0
+    # Tema de una fuente propia de la marca: en el foco por definicion (no se keyword-filtra).
+    if tema.curado:
+        return 1.0
     if _contiene_frase(_sin_acentos(tema.titulo), palabras_marca):
         return 1.0
     cuerpo = _sin_acentos(tema.por_que + " " + " ".join(e.titulo for e in tema.enlaces))

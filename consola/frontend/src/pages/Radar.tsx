@@ -286,6 +286,7 @@ function TarjetaTema({
           <div className="min-w-0 space-y-1.5">
             <CardTitle className="text-base leading-snug">{tema.titulo}</CardTitle>
             <div className="flex flex-wrap items-center gap-1.5">
+              {tema.curado && <Badge variant="ok">De tu fuente</Badge>}
               {tema.senal_texto && (
                 <Badge variant="aviso" className="gap-1">
                   <TrendingUp className="h-3 w-3" />

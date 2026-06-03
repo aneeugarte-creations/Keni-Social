@@ -749,6 +749,8 @@ export interface TemaRadar {
   senal: number;
   /** Señal tal cual la da la fuente, para mostrarla sin reinterpretar ("50 mil+"). */
   senal_texto: string;
+  /** `true` si viene de una fuente propia de la marca activa (curado: en su foco siempre). */
+  curado?: boolean;
   enlaces: EnlaceRadar[];
 }
 

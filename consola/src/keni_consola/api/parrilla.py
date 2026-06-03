@@ -119,8 +119,12 @@ def _tema_desde_dict(d: Any) -> radar.Tema | None:
     )
 
 
-def _obtener_temas_radar(geo: str) -> list[radar.Tema]:
-    """Trae temas del Radar (Trends + feeds RSS activos). Degrada honestamente si falla."""
+def _obtener_temas_radar(geo: str, marca: str | None = None) -> list[radar.Tema]:
+    """Trae temas del Radar (Trends + feeds RSS activos). Degrada honestamente si falla.
+
+    Con `marca`, los feeds se leen POR MARCA (los propios + los compartidos), y los
+    propios entran curados (al foco de la marca sin filtro de keywords).
+    """
     from . import radar as api_radar
 
     grupos: list[list[radar.Tema]] = []
@@ -128,7 +132,7 @@ def _obtener_temas_radar(geo: str) -> list[radar.Tema]:
     grupos.append(temas_trends)
 
     try:
-        temas_feeds, _ = api_radar._radar_feeds()
+        temas_feeds, _ = api_radar._radar_feeds(marca)
         grupos.append(temas_feeds)
     except Exception:  # noqa: BLE001 -- feeds opcionales; si fallan, seguimos sin ellos
         pass
@@ -160,7 +164,7 @@ async def obtener(request: Request) -> Response:
     geo = _geo_valido(request)
     marca = _marca_valida(request.query_params.get("marca"))
     palabras = relevancia_marca.palabras_de_marca(marca)
-    temas = _obtener_temas_radar(geo)
+    temas = _obtener_temas_radar(geo, marca)
     resultado = parrilla.armar_parrilla(temas, contexto=geo, palabras_marca=palabras)
     return JSONResponse(_construir_respuesta(resultado, geo, marca))
 
@@ -188,7 +192,10 @@ async def calcular(request: Request) -> Response:
     if not radar.es_geo(geo):
         geo = radar.GEO_DEFECTO
 
-    # temas: si vienen en el body, los usamos; si no, traemos del Radar
+    marca = _marca_valida(datos.get("marca", request.query_params.get("marca")))
+    palabras = relevancia_marca.palabras_de_marca(marca)
+
+    # temas: si vienen en el body, los usamos; si no, traemos del Radar (por marca)
     temas_raw = datos.get("temas")
     if isinstance(temas_raw, list) and temas_raw:
         temas_obj: list[radar.Tema] = []
@@ -204,10 +211,7 @@ async def calcular(request: Request) -> Response:
         temas = temas_obj
     else:
         # Sin temas en el body: traemos del Radar
-        temas = _obtener_temas_radar(geo)
-
-    marca = _marca_valida(datos.get("marca", request.query_params.get("marca")))
-    palabras = relevancia_marca.palabras_de_marca(marca)
+        temas = _obtener_temas_radar(geo, marca)
     resultado = parrilla.armar_parrilla(temas, contexto=geo, palabras_marca=palabras)
     return JSONResponse(_construir_respuesta(resultado, geo, marca))
 

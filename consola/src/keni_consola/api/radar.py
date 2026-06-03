@@ -105,12 +105,16 @@ def _radar_agencias() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
     return temas, estados
 
 
-def _radar_feeds() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
+def _radar_feeds(marca: str | None = None) -> tuple[list[radar.Tema], list[dict[str, Any]]]:
     """Trae temas de los feeds RSS ACTIVOS del equipo. Devuelve `(temas, estados)`.
 
     Reutiliza `api.rss._items_de_fuente` (mismos filtros del feed). Cada feed sale con
     su estado; uno que falla se OMITE con su motivo sin romper los demas. No marca items
     como usados (esto es descubrimiento, no la pagina Fuentes).
+
+    POR MARCA: si se pasa `marca`, se leen SOLO los feeds de esa marca + los compartidos
+    (sin marca). Los feeds propios de la marca producen temas CURADOS (entran a su foco
+    sin pasar por el filtro de keywords). Sin `marca`, se leen todos los feeds activos.
     """
     from .. import repos
 
@@ -119,6 +123,11 @@ def _radar_feeds() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
     for fuente in repos.listar_fuentes_rss():
         if not fuente.get("activo", True):
             continue
+        fuente_marca = (fuente.get("marca") or "").strip()
+        # Feed de OTRA marca: fuera del radar de la marca activa. Sin marca = compartido.
+        if marca and fuente_marca and fuente_marca != marca:
+            continue
+        es_de_marca = bool(marca and fuente_marca == marca)
         estado: dict[str, Any] = {
             "id": f"rss-{fuente['id']}",
             "nombre": fuente["nombre"],
@@ -129,7 +138,7 @@ def _radar_feeds() -> tuple[list[radar.Tema], list[dict[str, Any]]]:
         }
         try:
             items = rss._items_de_fuente(fuente, ocultar_usados=False)
-            propios = radar.temas_de_feeds(items)
+            propios = radar.temas_de_feeds(items, curado=es_de_marca)
             temas.extend(propios)
             estado["conteo"] = len(propios)
         except rss.RSSError as e:
@@ -165,7 +174,7 @@ async def obtener(request: Request) -> Response:
     fuentes.append(estado_trends)
 
     if incluir_feeds:
-        temas_feeds, estados_feeds = _radar_feeds()
+        temas_feeds, estados_feeds = _radar_feeds(marca)
         grupos.append(temas_feeds)
         fuentes.extend(estados_feeds)
         # Agencias (Reuters/AFP, item F): gateadas por credencial. Sin credencial salen como

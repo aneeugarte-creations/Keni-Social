@@ -329,3 +329,17 @@ class TestRelevanciaMarca:
         p = parrilla.armar_parrilla(temas)
         assert p.total_entrada == 2
         assert p.fuera_foco == 0
+
+    def test_tema_curado_entra_aunque_no_matchee_keyword(self):
+        # Un tema CURADO (de una fuente propia de la marca) entra al foco SIEMPRE,
+        # aunque su titulo no contenga ninguna palabra clave de la marca.
+        palabras = relevancia_marca.palabras_de_marca("claro-sports")
+        curado = _tema("Resumen de la jornada", senal=0)  # sin keyword deportiva en el titulo
+        curado.curado = True
+        normal = _tema("Receta de pastel", senal=0)
+        assert parrilla.tema_en_foco(curado, palabras) is True
+        assert parrilla.tema_en_foco(normal, palabras) is False
+        p = parrilla.armar_parrilla([curado, normal], palabras_marca=palabras)
+        titulos = [t.tema.titulo for t in p.posteos + p.editorial + p.sobrantes]
+        assert titulos == ["Resumen de la jornada"]
+        assert p.fuera_foco == 1

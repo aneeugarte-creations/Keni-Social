@@ -57,6 +57,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { ProgresoGeneracion } from "@/components/generaciones/ProgresoGeneracion";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -657,20 +658,37 @@ function GestionFuentes({
   // null = sin diálogo; "nuevo" = creando; objeto = editando ese feed.
   const [editando, setEditando] = React.useState<FuenteRss | "nuevo" | null>(null);
 
-  const fuentes = query.data?.fuentes ?? [];
+  // Por marca: cada equipo gestiona los feeds de SU marca + los compartidos (sin marca).
+  // El radar/plan de la marca lee exactamente este conjunto. Admin (sin marca activa) ve todo.
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
+  const todas = React.useMemo(() => query.data?.fuentes ?? [], [query.data]);
+  const fuentes = React.useMemo(
+    () => (marcaActiva ? todas.filter((f) => !f.marca || f.marca === marcaActiva) : todas),
+    [todas, marcaActiva],
+  );
+  const compartidas = React.useMemo(
+    () => fuentes.filter((f) => !f.marca).length,
+    [fuentes],
+  );
 
   return (
     <Card className="h-fit">
       <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Rss className="h-4 w-4" />
-          Feeds
+          Feeds{marcaActiva && nombreActiva ? ` de ${nombreActiva}` : ""}
         </CardTitle>
         <Button size="sm" variant="outline" onClick={() => setEditando("nuevo")}>
           <Plus className="h-4 w-4" />
           Añadir
         </Button>
       </CardHeader>
+      {marcaActiva && (
+        <div className="px-6 pb-1 text-xs text-muted-foreground">
+          Las fuentes de {nombreActiva ?? "tu marca"} y las compartidas alimentan su radar y plan
+          del día.{compartidas > 0 && ` ${compartidas} compartida(s).`}
+        </div>
+      )}
       <CardContent className="space-y-4">
         {query.isPending ? (
           <div className="space-y-2">
@@ -682,7 +700,11 @@ function GestionFuentes({
           <p className="py-4 text-center text-sm text-muted-foreground">{mensajeError(query.error)}</p>
         ) : fuentes.length === 0 ? (
           <EstadoVacioTexto
-            texto="Aún no hay feeds. Añade el primero con el botón de arriba."
+            texto={
+              marcaActiva
+                ? `Aún no hay feeds de ${nombreActiva ?? "tu marca"} ni compartidos. Añade el primero: nutrirá su radar y plan del día.`
+                : "Aún no hay feeds. Añade el primero con el botón de arriba."
+            }
             className="py-4"
           />
         ) : (
@@ -886,9 +908,14 @@ function FormularioFuente({
   onListo: () => void;
 }) {
   const queryClient = useQueryClient();
+  // Feed NUEVO: por defecto la marca activa (así nace tagueado y alimenta su radar).
+  // Editando: respeta la marca guardada del feed.
+  const { marcaActiva } = useMarcaActiva();
   const [nombre, setNombre] = React.useState(fuente?.nombre ?? "");
   const [url, setUrl] = React.useState(fuente?.url ?? "");
-  const [marca, setMarca] = React.useState(desdeMarca(fuente?.marca));
+  const [marca, setMarca] = React.useState(
+    fuente ? desdeMarca(fuente.marca) : desdeMarca(marcaActiva),
+  );
   const [incluir, setIncluir] = React.useState(fuente?.incluir ?? "");
   const [excluir, setExcluir] = React.useState(fuente?.excluir ?? "");
   const [activo, setActivo] = React.useState(fuente?.activo ?? true);

@@ -124,12 +124,16 @@ class Tema:
     senal: int = 0
     senal_texto: str = ""
     enlaces: list[Enlace] = field(default_factory=list)
+    # `True` si el tema viene de una fuente que el equipo etiquetó con la marca activa
+    # (curado): entra al foco de la marca SIEMPRE, sin pasar por el filtro de keywords.
+    curado: bool = False
     _claves_enlace: set[str] = field(default_factory=set, repr=False)
 
     def fusionar(self, otro: Tema) -> None:
         """Funde `otro` en este tema (mismo asunto detectado por clave normalizada)."""
         self.redes |= otro.redes
         self.fuentes |= otro.fuentes
+        self.curado = self.curado or otro.curado
         # Conserva la señal mas alta y su texto (la fuente con mas viralidad manda).
         if otro.senal > self.senal:
             self.senal = otro.senal
@@ -159,6 +163,7 @@ class Tema:
             "por_que": self.por_que,
             "senal": self.senal,
             "senal_texto": self.senal_texto,
+            "curado": self.curado,
             "enlaces": [e.a_dict() for e in self.enlaces],
         }
 
@@ -316,12 +321,13 @@ def parsear_trends(xml: str, *, geo: str) -> list[Tema]:
 _SENAL_FEED = 1
 
 
-def temas_de_feeds(items: list[dict[str, Any]]) -> list[Tema]:
+def temas_de_feeds(items: list[dict[str, Any]], *, curado: bool = False) -> list[Tema]:
     """Convierte items de feeds RSS del equipo en `Tema` (señal cualitativa).
 
     `items` son los que devuelve `api.rss._items_de_fuente` (router; {titulo, resumen, enlace,
     fuente_nombre, ...}). El "por que sube" es el resumen del feed (no un conteo), y se
-    deja claro que la señal es editorial, no de viralidad.
+    deja claro que la señal es editorial, no de viralidad. `curado=True` marca los temas
+    como propios de la marca activa (entran a su foco sin filtro de keywords).
     """
     temas: list[Tema] = []
     for item in items:
@@ -339,6 +345,7 @@ def temas_de_feeds(items: list[dict[str, Any]]) -> list[Tema]:
                 por_que=resumen,
                 senal=_SENAL_FEED,
                 senal_texto="",
+                curado=curado,
                 enlaces=[Enlace(titulo=titulo, url=enlace, fuente=fuente)] if enlace else [],
                 _claves_enlace={enlace.lower()} if enlace else set(),
             )
