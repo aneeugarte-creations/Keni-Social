@@ -22,10 +22,9 @@ const EstrategiaMarcas = lazy(() =>
 // la subnav entre sub-rutas vive in-page (SubnavHub, via HUB_TABS).
 const Fuentes = lazy(() => import("@/pages/Fuentes"));
 const Termometro = lazy(() => import("@/pages/Termometro"));
-// Plan del día: pestaña principal de Investigación (la lista de contenidos del día).
-const PlanDelDia = lazy(() => import("@/pages/ParrillaDia"));
-// Descubrimiento (antes "Radar"): tendencias + auto-promoción.
-const Descubrimiento = lazy(() => import("@/pages/Radar"));
+// Investigador: página única del hub de Investigación (índice). Reúne plan del día
+// + descubrimiento; el Termómetro se abre desde un botón dentro de ella.
+const Investigador = lazy(() => import("@/pages/Investigador"));
 // Algoritmos: inteligencia de plataforma; ahora pestaña de la Biblioteca.
 const Algoritmos = lazy(() => import("@/pages/Algoritmos"));
 
@@ -155,23 +154,22 @@ export const router = createBrowserRouter([
         path: "datos",
         children: [
           { index: true, element: <Navigate to="/datos/investigacion" replace /> },
-          // Hub Investigación = el loop diario de la marca: Plan del día (principal),
-          // Descubrimiento (tendencias/señales) y Fuentes. El Termómetro alimenta el
-          // plan y se entra desde ahí (sin pestaña propia).
+          // Hub Investigación, colapsado a DOS páginas: el Investigador (índice: plan
+          // del día + descubrimiento en una sola superficie) y Fuentes. El Termómetro
+          // alimenta el Investigador y se entra desde un botón dentro de él (ruta propia,
+          // sin pestaña en la subnav).
           {
             path: "investigacion",
             children: [
-              { index: true, element: <Navigate to="plan" replace /> },
-              { path: "plan", element: <PlanDelDia /> },
-              { path: "descubrimiento", element: <Descubrimiento /> },
+              { index: true, element: <Investigador /> },
               { path: "fuentes", element: <Fuentes /> },
               { path: "termometro", element: <Termometro /> },
-              // Compatibilidad con enlaces previos: "radar" → Descubrimiento;
-              // "algoritmos" se mudó a la Biblioteca.
-              {
-                path: "radar",
-                element: <Navigate to="/datos/investigacion/descubrimiento" replace />,
-              },
+              // Compatibilidad con enlaces previos: "plan", "descubrimiento" y "radar"
+              // se fusionaron en el Investigador (el índice); "algoritmos" se mudó a la
+              // Biblioteca.
+              { path: "plan", element: <Navigate to="/datos/investigacion" replace /> },
+              { path: "descubrimiento", element: <Navigate to="/datos/investigacion" replace /> },
+              { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
               {
                 path: "algoritmos",
                 element: <Navigate to="/contenido/biblioteca/algoritmos" replace />,
@@ -215,7 +213,7 @@ export const router = createBrowserRouter([
       { path: "imagenes", element: <Navigate to="/contenido/editor" replace /> },
       { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
       { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/biblioteca" /> },
-      { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion/plan" replace /> },
+      { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },
       { path: "revision/*", element: <RedirigirPrefijo a="/operacion/revision" /> },
       { path: "analiticas/*", element: <RedirigirPrefijo a="/datos/analiticas" /> },
@@ -230,7 +228,7 @@ export const router = createBrowserRouter([
       // Hojas planas antiguas (pre-hub) y fusiones previas:
       { path: "fuentes", element: <Navigate to="/datos/investigacion/fuentes" replace /> },
       { path: "termometro", element: <Navigate to="/datos/investigacion/termometro" replace /> },
-      { path: "radar", element: <Navigate to="/datos/investigacion/descubrimiento" replace /> },
+      { path: "radar", element: <Navigate to="/datos/investigacion" replace /> },
       { path: "revision-editorial", element: <Navigate to="/operacion/revision/editorial" replace /> },
       { path: "verificacion", element: <Navigate to="/operacion/revision/verificacion" replace /> },
       { path: "metricas", element: <Navigate to="/datos/analiticas/metricas" replace /> },

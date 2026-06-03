@@ -208,9 +208,9 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("marca activa la entrada del hub aun estando en una de sus sub-rutas", async () => {
-    renderSidebar("editor", "/datos/investigacion/descubrimiento");
+    renderSidebar("editor", "/datos/investigacion/fuentes");
     const investigacion = await screen.findByRole("link", { name: /investigación/i });
-    // NavLink marca `aria-current=page` por prefijo (/datos/investigacion ⊇ …/radar).
+    // NavLink marca `aria-current=page` por prefijo (/datos/investigacion ⊇ …/fuentes).
     expect(investigacion).toHaveAttribute("aria-current", "page");
     // Y una entrada de otro bloque NO está activa.
     expect(screen.getByRole("link", { name: /estudio/i })).not.toHaveAttribute("aria-current");
@@ -292,9 +292,8 @@ describe("apps-scope · helpers", () => {
       "/contenido/biblioteca/documentos",
       "/contenido/biblioteca/estrategia",
       "/contenido/biblioteca/algoritmos",
-      // /datos/investigacion (hub) → sus 3 sub-pestañas
-      "/datos/investigacion/plan",
-      "/datos/investigacion/descubrimiento",
+      // /datos/investigacion (hub) → sus 2 sub-pestañas (Investigador = índice + Fuentes)
+      "/datos/investigacion",
       "/datos/investigacion/fuentes",
       // /operacion/revision (hub) → sus 2 sub-pestañas
       "/operacion/revision/editorial",

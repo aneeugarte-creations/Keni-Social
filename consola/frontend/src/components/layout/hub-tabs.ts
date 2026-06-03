@@ -1,14 +1,12 @@
 import {
   BarChart3,
   BookText,
-  CalendarCheck,
   CalendarClock,
   LayoutGrid,
   ListTodo,
   Megaphone,
   Newspaper,
   Presentation,
-  Radar,
   Rss,
   ScanSearch,
   ScanText,
@@ -39,14 +37,15 @@ export interface ItemTabHub {
  * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
  * `/datos`).
  */
-// Investigación = el loop diario de la marca: el Plan del día (lo más importante:
-// la lista definitiva de contenidos de hoy) se alimenta del Descubrimiento
-// (tendencias y señales) y de las Fuentes que cada marca gestiona. Todo por marca.
-// (Termómetro alimenta el Plan del día y se entra desde ahí; Algoritmos pasó a la
-// Biblioteca, porque su salida son las fichas de plataforma.)
+// Investigación = el loop diario de la marca, colapsado a DOS páginas: el
+// Investigador (plan del día + descubrimiento en una sola superficie; es el índice
+// del hub) y las Fuentes que cada marca gestiona. Todo por marca. (Termómetro
+// alimenta el Investigador y se entra desde un botón dentro de él; Algoritmos pasó
+// a la Biblioteca, porque su salida son las fichas de plataforma.)
 export const TABS_INVESTIGACION: ItemTabHub[] = [
-  { ruta: "/datos/investigacion/plan", etiqueta: "Plan del día", icono: CalendarCheck },
-  { ruta: "/datos/investigacion/descubrimiento", etiqueta: "Descubrimiento", icono: Radar },
+  // `end: true`: comparte prefijo con `/fuentes`, así que el tab raíz solo se marca
+  // activo en la coincidencia exacta del índice.
+  { ruta: "/datos/investigacion", etiqueta: "Investigador", icono: ScanSearch, end: true },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
 ];
 

@@ -100,7 +100,7 @@ function etiquetaRed(red: string): string {
  * momento). Sin PageHeader (lo pinta el contenedor); muestra su propia barra de
  * acciones (país + actualizar) e intro.
  */
-function PanelTendencias() {
+export function PanelTendencias() {
   const [geo, setGeo] = React.useState("MX");
   // Marca activa: las tendencias se filtran a su foco (deriva del perfil / switch).
   const { marcaActiva, nombreActiva } = useMarcaActiva();
