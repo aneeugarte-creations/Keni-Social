@@ -1,15 +1,50 @@
 /// <reference types="vitest/config" />
+import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { type Plugin, defineConfig } from "vite";
+
+// Identificador único de ESTE build. Cambia en cada `vite build` (cada deploy), así el
+// SPA en una pestaña vieja detecta que hay una versión nueva comparando su `__BUILD_ID__`
+// (horneado en el bundle) con `/version.json` (servido por nginx, `no-store`). Override
+// opcional con VITE_BUILD_ID (p. ej. el commit en CI).
+const BUILD_ID = process.env.VITE_BUILD_ID || String(Date.now());
+
+/**
+ * Escribe `version.json` (`{ "buildId": ... }`) en el outDir tras el bundle, con el MISMO
+ * id que se hornea en el código. Es el "endpoint" barato de versión del front (sin backend):
+ * `lib/version.ts` lo consulta para recargar sola tras un deploy. Solo en build.
+ */
+function pluginVersionJson(buildId: string): Plugin {
+  let outDir = "dist";
+  return {
+    name: "keni-version-json",
+    apply: "build",
+    configResolved(cfg) {
+      outDir = cfg.build.outDir;
+    },
+    closeBundle() {
+      try {
+        writeFileSync(path.join(outDir, "version.json"), `${JSON.stringify({ buildId })}\n`);
+      } catch {
+        // No romper el build por no poder escribir el manifiesto de versión.
+      }
+    },
+  };
+}
 
 // La Consola Keni se sirve desde el mismo origen que el backend Starlette local
 // (127.0.0.1:8765). En produccion el bundle vive dentro del paquete Python en
 // `src/keni_consola/webapp/`; por eso `outDir` apunta alli y `base` es "/".
 // En `npm run dev` proxeamos `/api` al backend para desarrollar contra datos reales.
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), pluginVersionJson(BUILD_ID)],
+  // Horneado del id de build para que el bundle sepa qué versión ES (lo compara con
+  // `/version.json`). En `vite serve` (dev) vale igual, pero el detector lo ignora.
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+  },
   base: "/",
   resolve: {
     alias: {

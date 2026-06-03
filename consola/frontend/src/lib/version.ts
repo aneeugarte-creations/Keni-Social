@@ -4,18 +4,23 @@
  * Contexto: los assets llevan hash en el nombre y se cachean inmutables; `index.html`
  * es `no-store`. Tras un deploy, una pestaña abierta sigue con el bundle viejo en
  * memoria y, al navegar a una página cuyo chunk cambió de hash, el `import()` falla
- * (404) y `FronteraError` tenía que pedir al usuario que recargara A MANO. Eso es la UX
- * fea que queremos eliminar.
+ * (404). Antes había que recargar A MANO ("hay una versión nueva, recarga"): esa es la
+ * UX fea que eliminamos.
  *
- * Estrategia (sin service worker, sin endpoint nuevo):
- *  1) Al arrancar guardamos el `src` del <script type="module"> de entrada
- *     (en producción: `/assets/index-<hash>.js`).
- *  2) Periódicamente (y al volver el foco a la pestaña) pedimos `/index.html` fresco
- *     y extraemos su script de entrada. Si el hash cambió => hay una versión nueva.
- *  3) Recargamos en el MOMENTO MENOS molesto: en la siguiente navegación de ruta
- *     (el usuario ya está cambiando de sección, así que el refresco es transparente).
- *  4) `FronteraError` usa `recargaSegura()` como red de seguridad para el caso en que
- *     el chunk ya no exista antes de que el poll lo detecte.
+ * Detección (preferente → alterna):
+ *  1) `/version.json` (lo escribe Vite en cada build con un `buildId` único; nginx lo
+ *     sirve `no-store`). Comparamos su `buildId` con `__BUILD_ID__`, horneado en ESTE
+ *     bundle. Distinto ⇒ hay deploy nuevo. Es lo más preciso (un id por build).
+ *  2) Si `version.json` no está disponible (build/instancia sin él), caemos al `src` del
+ *     <script type="module"> de entrada del `/index.html` desplegado: si su hash cambió,
+ *     también es un deploy nuevo.
+ *
+ * Reacción:
+ *  - Avisamos con un toast NO bloqueante ("versión nueva… actualizando") con acción
+ *    "Actualizar ahora", y recargamos solos en la SIGUIENTE navegación de ruta (momento
+ *    menos molesto: el usuario ya cambia de sección, el refresco es transparente).
+ *  - `FronteraError` usa `recargaSegura()` como red de seguridad si el chunk ya no existe
+ *    antes de que el poll lo detecte.
  *
  * `recargaSegura()` lleva un guard anti-bucle: si algo recarga en bucle (p. ej. un chunk
  * que falla por un bug real, no por un deploy), tras la primera recarga deja de insistir
@@ -23,11 +28,18 @@
  */
 import * as React from "react";
 import { useLocation } from "react-router-dom";
+import { toast } from "sonner";
 
 /** Clave en sessionStorage del instante de la última recarga automática (anti-bucle). */
 const CLAVE_ULTIMA_RECARGA = "keni:ultima-recarga-auto";
 /** Ventana mínima entre recargas automáticas (ms). Dos recargas más juntas = bucle. */
 const VENTANA_ANTIBUCLE_MS = 20_000;
+/** Id del toast de "versión nueva" (estable para no duplicarlo entre ciclos de poll). */
+const TOAST_VERSION = "keni:version-nueva";
+
+/** Id de ESTE bundle, horneado por Vite (`define`). "dev" o ausente fuera de build. */
+const ID_LOCAL: string =
+  typeof __BUILD_ID__ === "string" && __BUILD_ID__ ? __BUILD_ID__ : "dev";
 
 /**
  * Recarga la página de forma segura (una sola vez por ventana anti-bucle). Devuelve
@@ -63,41 +75,73 @@ function entradaActual(): string | null {
   return s?.getAttribute("src") ?? null;
 }
 
-/** Pide `/index.html` fresco y extrae el `src` de su <script type="module"> de entrada. */
-async function entradaDesplegada(signal?: AbortSignal): Promise<string | null> {
-  const res = await fetch("/index.html", { cache: "no-store", signal });
-  if (!res.ok) return null;
-  const html = await res.text();
-  const m = html.match(/<script[^>]+type="module"[^>]+src="([^"]+)"/i);
-  return m?.[1] ?? null;
+/**
+ * ¿Hay una versión nueva desplegada? Prefiere `/version.json` (preciso por build) y, si no
+ * está, cae al hash del <script> de entrada del `/index.html` desplegado. No lanza.
+ */
+async function hayVersionNueva(entrada: string | null, signal?: AbortSignal): Promise<boolean> {
+  // 1) version.json (preciso). Exigimos JSON real: si nginx cae al fallback SPA (HTML)
+  //    o no existe (404), ignoramos y probamos el método alterno.
+  try {
+    const res = await fetch("/version.json", { cache: "no-store", signal });
+    if (res.ok && (res.headers.get("content-type") ?? "").includes("json")) {
+      const datos: unknown = await res.json();
+      const buildId = (datos as { buildId?: unknown } | null)?.buildId;
+      if (typeof buildId === "string" && ID_LOCAL !== "dev") {
+        return buildId !== ID_LOCAL;
+      }
+    }
+  } catch {
+    // Sin version.json (o red caída): probamos el método alterno.
+  }
+  // 2) Alterno: el <script> de entrada del index.html desplegado cambió de hash.
+  //    Solo aplica en producción (entrada = /assets/index-<hash>.js); en dev no.
+  if (!entrada || !entrada.includes("/assets/")) return false;
+  try {
+    const res = await fetch("/index.html", { cache: "no-store", signal });
+    if (!res.ok) return false;
+    const m = (await res.text()).match(/<script[^>]+type="module"[^>]+src="([^"]+)"/i);
+    return !!m && m[1] !== entrada;
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Hook (móntalo UNA vez en el cascarón): vigila si hay una versión nueva desplegada y,
- * cuando la hay, recarga en la siguiente navegación de ruta (transparente). No hace nada
- * en desarrollo (la entrada es `/src/main.tsx`, no un asset con hash).
+ * cuando la hay, avisa (toast no bloqueante) y recarga en la siguiente navegación de ruta.
+ * No hace nada en desarrollo.
  */
 export function useDetectorActualizacion(): void {
   const location = useLocation();
-  const base = React.useRef<string | null>(null);
+  const entrada = React.useRef<string | null>(null);
   const pendiente = React.useRef(false);
+  const avisado = React.useRef(false);
 
-  // Captura la entrada actual una sola vez, al montar.
+  // Captura la entrada actual una sola vez, al montar (para el método alterno).
   React.useEffect(() => {
-    base.current = entradaActual();
+    entrada.current = entradaActual();
   }, []);
 
-  const comprobar = React.useCallback(async (signal?: AbortSignal) => {
-    const actual = base.current;
-    // Solo aplica a builds de producción (assets con hash). En dev no hay nada que hacer.
-    if (!actual || !actual.includes("/assets/")) return;
-    try {
-      const desplegada = await entradaDesplegada(signal);
-      if (desplegada && desplegada !== actual) pendiente.current = true;
-    } catch {
-      // Red caída / offline / petición abortada: reintentaremos en el próximo ciclo.
-    }
+  const avisar = React.useCallback(() => {
+    if (avisado.current) return;
+    avisado.current = true;
+    pendiente.current = true;
+    toast("Hay una versión nueva de la consola", {
+      id: TOAST_VERSION,
+      description: "Se actualizará sola al cambiar de sección.",
+      duration: Infinity,
+      action: { label: "Actualizar ahora", onClick: () => recargaSegura() },
+    });
   }, []);
+
+  const comprobar = React.useCallback(
+    async (signal?: AbortSignal) => {
+      if (avisado.current) return; // ya detectada: no hace falta seguir sondeando
+      if (await hayVersionNueva(entrada.current, signal)) avisar();
+    },
+    [avisar],
+  );
 
   // Poll periódico + comprobación al recuperar foco/visibilidad (un usuario que vuelve
   // a la pestaña es el caso típico tras un deploy).
@@ -118,8 +162,8 @@ export function useDetectorActualizacion(): void {
     };
   }, [comprobar]);
 
-  // Recarga SUAVE: al cambiar de ruta, si ya detectamos versión nueva, recargamos ahora
-  // (el usuario está navegando de todos modos, así que trae los chunks nuevos sin fricción).
+  // Recarga SUAVE: al cambiar de ruta, si ya hay versión nueva, recargamos ahora (el
+  // usuario está navegando de todos modos, así que trae los chunks nuevos sin fricción).
   React.useEffect(() => {
     if (pendiente.current) recargaSegura();
   }, [location.pathname]);
