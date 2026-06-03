@@ -59,6 +59,14 @@ export function EditorWysiwyg({
   // `null` fuerza la carga inicial (el primer efecto hace setContent). Luego guarda lo último
   // emitido al teclear para no re-cargar (evita bucle setContent->salto de cursor).
   const ultimoEmitido = React.useRef<string | null>(null);
+  // `onContenido` por REF: `useEditor` fija `onUpdate` UNA sola vez (deps []); sin esto el
+  // handler llamaría al callback VIEJO (capturado al montar) -> al cambiar de documento se
+  // guardaba en el ANTERIOR y la selección saltaba ("aparece y desaparece"). El ref apunta al actual.
+  const onContenidoRef = React.useRef(onContenido);
+  onContenidoRef.current = onContenido;
+  // Marca el `onUpdate` que dispara NUESTRO setContent programático (cargar/cambiar de doc).
+  // ProseMirror lo emite SÍNCRONO dentro de setContent, así que basta un flag a su alrededor.
+  const cargando = React.useRef(false);
 
   const editor = useEditor({
     extensions: [
@@ -70,20 +78,24 @@ export function EditorWysiwyg({
       attributes: { class: "tiptap", "data-placeholder": placeholder ?? "" },
     },
     onUpdate: ({ editor }) => {
+      if (cargando.current) return; // update provocado por el setContent de carga, no por el usuario
       const md = aMarkdown(editor);
       ultimoEmitido.current = md;
-      onContenido(md);
+      onContenidoRef.current(md);
     },
   });
 
   // Carga inicial + cambios EXTERNOS de `value` (cambio de documento) vía `setContent`, que
   // tiptap-markdown parchea para PARSEAR markdown. Se salta si `value` es lo último que
-  // emitimos al teclear (no recargamos nuestro propio cambio).
+  // emitimos al teclear (no recargamos nuestro propio cambio). El flag `cargando` evita que el
+  // `onUpdate` de este setContent se trate como edición (y guarde el doc solo por abrirlo).
   React.useEffect(() => {
     if (!editor) return;
     if (value === ultimoEmitido.current) return;
     ultimoEmitido.current = value;
+    cargando.current = true;
     editor.commands.setContent(value);
+    cargando.current = false;
   }, [value, editor]);
 
   return <EditorContent editor={editor} className={ESTILO_CONTENIDO} />;
