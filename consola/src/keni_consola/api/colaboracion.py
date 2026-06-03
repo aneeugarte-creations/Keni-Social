@@ -33,6 +33,8 @@ autor de la pieza (salvo admin), igual que el flujo legado (#9). Se decide POR O
 
 from __future__ import annotations
 
+import logging
+
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -42,6 +44,8 @@ from .._http_json import leer_json
 from ..dominio import colaboracion
 from ..estados import CADENA_APROBACION_DEFECTO, ROL_ADMIN
 from ..seguridad import autor_de_peticion
+
+_log = logging.getLogger("keni_consola.api.colaboracion")
 
 _MAX_TEXTO = 8000
 _MAX_NIVELES = 6
@@ -455,6 +459,15 @@ async def decidir_nivel(request: Request) -> Response:
         repos.actualizar_contenido_plataforma(
             plataforma_id, {"estado": "aprobado", "falta_revision": False}
         )
+        # Aprobado => programado: la pieza se encola SOLA a su próximo hueco (def ON,
+        # `KENI_AUTO_PROGRAMAR`), respetando los gates de la programación manual. Sin franja
+        # se queda aprobado. NO publica. Best-effort: un fallo aquí no tumba la aprobación.
+        from .. import auto_programar
+
+        try:
+            auto_programar.programar_si_aprobada(plataforma_id)
+        except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
+            _log.exception("Auto-programación falló para %s (queda aprobada).", plataforma_id)
     return JSONResponse(
         {"nivel": actualizado, "estado": estado_global, "niveles": cadena}
     )

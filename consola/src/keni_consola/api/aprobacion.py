@@ -27,6 +27,7 @@ PREPARA (dry-run) al vencer. "El humano aprueba; el sistema no publica solo."
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -47,6 +48,8 @@ from ..estados import (
 )
 from ..seguridad import autor_de_peticion
 from .colaboracion import montar_cadena_aprobacion
+
+_log = logging.getLogger("keni_consola.api.aprobacion")
 
 
 def _rol_de_peticion(request: Request) -> str | None:
@@ -121,6 +124,18 @@ async def _decidir(request: Request, decision: str) -> Response:
     actualizada = _reflejar_estado_pieza(publicacion_id, nivel_decidido)
     if actualizada is None:
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)
+    # Aprobado => programado: si la cadena quedó aprobada, encola SOLA al próximo hueco (mismos
+    # gates que `programar`; def ON `KENI_AUTO_PROGRAMAR`). Best-effort; no publica. Devolvemos la
+    # pieza ya programada para que el llamante vea el estado final.
+    if actualizada.get("estado") == ESTADO_APROBADO:
+        from .. import auto_programar
+
+        try:
+            programada = auto_programar.programar_si_aprobada(publicacion_id)
+            if programada is not None:
+                actualizada = programada
+        except Exception:  # noqa: BLE001 — encolar es secundario al OK ya registrado.
+            _log.exception("Auto-programación falló para %s (queda aprobada).", publicacion_id)
     return JSONResponse({"publicacion": publicacion_a_dict(actualizada)})
 
 

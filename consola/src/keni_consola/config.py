@@ -276,6 +276,13 @@ ENV_AUTO_AVANCE = "KENI_AUTO_AVANCE"
 ENV_AUTO_AVANCE_INTERVALO_HORAS = "KENI_AUTO_AVANCE_INTERVALO_HORAS"
 ENV_AUTO_AVANCE_MAX = "KENI_AUTO_AVANCE_MAX"
 
+# Auto-programación: una pieza APROBADA (cerrada toda su cadena humana) pasa SOLA a `programado`
+# en su próximo hueco de franja. A diferencia del resto de etapas de auto-producción (que gastan
+# `claude -p` o podrían postear), programar es bookkeeping interno, reversible y NO publica (el
+# posteo sigue gated por KENI_PUBLICAR_REAL), así que su default es ON: el OK humano es el gate;
+# aprobado => programado es el flujo deseado. `KENI_AUTO_PROGRAMAR=0` lo apaga (kill switch).
+ENV_AUTO_PROGRAMAR = "KENI_AUTO_PROGRAMAR"
+
 # Reaper de generaciones zombi: una generacion `ejecutando` cuyo proceso murio (reinicio/
 # OOM/cuelgue) queda colgada para siempre. El reaper la cierra como `error` pasada una
 # antigüedad MUY superior al wall-timeout (asi nunca mata una viva). Siempre activo.
@@ -1138,6 +1145,19 @@ def autogen_arte_intervalo_horas() -> int:
     return _entero(
         ENV_AUTOGEN_ARTE_INTERVALO_HORAS, AUTOGEN_ARTE_INTERVALO_HORAS_DEF, minimo=1
     )
+
+
+def auto_programar_activo() -> bool:
+    """True si una pieza APROBADA debe encolarse SOLA a su próximo hueco (`KENI_AUTO_PROGRAMAR`).
+
+    Def ON (a diferencia de las demás etapas auto, que son OFF): programar no gasta recursos ni
+    publica —solo asigna un hueco, reversible—, y "aprobado => programado" es el flujo deseado.
+    Respeta precedencia store>env>defecto; `KENI_AUTO_PROGRAMAR=0`/`no`/`off` lo apaga.
+    """
+    crudo = _crudo(ENV_AUTO_PROGRAMAR).lower()
+    if not crudo:
+        return True
+    return crudo not in _FALSOS
 
 
 def auto_avance_activo() -> bool:
