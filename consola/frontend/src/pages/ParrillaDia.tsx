@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { ItemParrilla, RespuestaParrilla, SubtipoParrilla } from "@/types";
 
@@ -110,9 +111,11 @@ export default function PlanDelDia() {
 
 export function PanelPlanDelDia() {
   const [geo, setGeo] = React.useState("MX");
+  // El plan se arma para la MARCA ACTIVA: prioriza sus temas (no lo viral en general).
+  const { marcaActiva } = useMarcaActiva();
   const query = useQuery({
-    queryKey: ["parrilla-dia", geo],
-    queryFn: ({ signal }) => api.parrillaDia(geo, signal),
+    queryKey: ["parrilla-dia", geo, marcaActiva],
+    queryFn: ({ signal }) => api.parrillaDia(geo, marcaActiva ?? undefined, signal),
   });
 
   return (

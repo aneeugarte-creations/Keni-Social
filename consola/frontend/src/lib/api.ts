@@ -1259,8 +1259,8 @@ export const api = {
 
   // --- Parrilla del día (clasifica 13 posteos + 6 editoriales y los jerarquiza) ---
   // Solo lectura: deriva del Radar. PROPONE el orden; publicar lo decide el humano.
-  parrillaDia: (geo?: string, signal?: AbortSignal) =>
-    peticion<RespuestaParrilla>(`/parrilla-dia${query({ geo })}`, { signal }),
+  parrillaDia: (geo?: string, marca?: string, signal?: AbortSignal) =>
+    peticion<RespuestaParrilla>(`/parrilla-dia${query({ geo, marca })}`, { signal }),
 
   // --- Programar/previsualizar una pieza en Metricool (respeta KENI_PUBLICAR_REAL) ---
   // Con el gate OFF (default) es DRY-RUN: previsualiza el cuerpo, NO publica nada.

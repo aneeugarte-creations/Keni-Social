@@ -47,7 +47,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import parrilla, radar
+from .. import marcas, parrilla, radar, relevancia_marca
 from .._http_json import leer_json
 
 # --------------------------------------------------------------------------- #
@@ -58,6 +58,18 @@ def _geo_valido(request: Request) -> str:
     """Lee y valida el parametro `geo`; cae a GEO_DEFECTO si es invalido."""
     crudo = (request.query_params.get("geo") or radar.GEO_DEFECTO).strip().upper()
     return crudo if radar.es_geo(crudo) else radar.GEO_DEFECTO
+
+
+def _marca_valida(crudo: Any) -> str | None:
+    """Normaliza y valida un id de marca canonico; None si vacio/desconocido.
+
+    La investigacion es POR MARCA: el Plan del dia se arma con la relevancia de la
+    marca activa. Una marca invalida se ignora (cae al Plan general), no es un error.
+    """
+    if not isinstance(crudo, str):
+        return None
+    marca = crudo.strip()
+    return marca if marca and marcas.es_marca(marca) else None
 
 
 def _tema_desde_dict(d: Any) -> radar.Tema | None:
@@ -124,9 +136,13 @@ def _obtener_temas_radar(geo: str) -> list[radar.Tema]:
     return radar.consolidar(*grupos)
 
 
-def _construir_respuesta(parrilla_dia: parrilla.ParrillaDia, geo: str) -> dict[str, Any]:
+def _construir_respuesta(
+    parrilla_dia: parrilla.ParrillaDia, geo: str, marca: str | None = None
+) -> dict[str, Any]:
     datos = parrilla_dia.a_dict()
     datos["geo"] = geo
+    # Marca con la que se armo el plan (None = plan general, sin relevancia de marca).
+    datos["marca"] = marca
     # Geos disponibles para el selector de la UI (mismo catalogo que el Radar).
     datos["geos_disponibles"] = [{"id": k, "nombre": v} for k, v in radar.GEOS.items()]
     return datos
@@ -137,11 +153,16 @@ def _construir_respuesta(parrilla_dia: parrilla.ParrillaDia, geo: str) -> dict[s
 # --------------------------------------------------------------------------- #
 
 async def obtener(request: Request) -> Response:
-    """`GET /api/parrilla-dia?geo=MX` -> parrilla del dia a partir del Radar en vivo."""
+    """`GET /api/parrilla-dia?geo=MX&marca=claro-sports` -> parrilla del dia (Radar en vivo).
+
+    `marca` (opcional, id canonico) inclina la parrilla hacia los temas de esa marca.
+    """
     geo = _geo_valido(request)
+    marca = _marca_valida(request.query_params.get("marca"))
+    palabras = relevancia_marca.palabras_de_marca(marca)
     temas = _obtener_temas_radar(geo)
-    resultado = parrilla.armar_parrilla(temas, contexto=geo)
-    return JSONResponse(_construir_respuesta(resultado, geo))
+    resultado = parrilla.armar_parrilla(temas, contexto=geo, palabras_marca=palabras)
+    return JSONResponse(_construir_respuesta(resultado, geo, marca))
 
 
 async def calcular(request: Request) -> Response:
@@ -185,8 +206,10 @@ async def calcular(request: Request) -> Response:
         # Sin temas en el body: traemos del Radar
         temas = _obtener_temas_radar(geo)
 
-    resultado = parrilla.armar_parrilla(temas, contexto=geo)
-    return JSONResponse(_construir_respuesta(resultado, geo))
+    marca = _marca_valida(datos.get("marca", request.query_params.get("marca")))
+    palabras = relevancia_marca.palabras_de_marca(marca)
+    resultado = parrilla.armar_parrilla(temas, contexto=geo, palabras_marca=palabras)
+    return JSONResponse(_construir_respuesta(resultado, geo, marca))
 
 
 # --------------------------------------------------------------------------- #

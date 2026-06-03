@@ -316,10 +316,33 @@ def _score_multi_red(tema: Tema) -> float:
     return min(1.0, (n - 1) / 4)
 
 
-def puntuar_tema(tema: Tema, contexto: str = "MX") -> tuple[float, str]:
+def _score_marca(tema: Tema, palabras_marca: frozenset[str]) -> float:
+    """Relevancia para la MARCA activa [0, 1] segun sus palabras clave.
+
+    1.0 si una palabra de la marca esta en el TITULO; 0.6 si esta en el cuerpo
+    (por_que / titulos de enlaces); 0.0 si no aparece. Sin palabras → 0.0 (no aplica).
+    """
+    if not palabras_marca:
+        return 0.0
+    if _contiene_frase(tema.titulo.lower(), palabras_marca):
+        return 1.0
+    cuerpo = (tema.por_que + " " + " ".join(e.titulo for e in tema.enlaces)).lower()
+    if _contiene_frase(cuerpo, palabras_marca):
+        return 0.6
+    return 0.0
+
+
+def puntuar_tema(
+    tema: Tema,
+    contexto: str = "MX",
+    palabras_marca: frozenset[str] = frozenset(),
+) -> tuple[float, str]:
     """Funcion PURA: devuelve (score, razon) para un tema dado su contexto.
 
     `score` en [0, 1]: combina viralidad, relevancia MX, novedad, impacto y multi-red.
+    Si se pasan `palabras_marca` (la investigacion es POR MARCA), el score se inclina
+    hacia la relevancia de la marca: `0.6·relevancia_marca + 0.4·newsworthiness`, de
+    modo que el Plan del dia de una marca priorice SUS temas, no lo viral en general.
     `razon` es una frase en español que explica el score (transparencia editorial).
 
     La funcion es deterministica: misma entrada → mismo output.
@@ -331,7 +354,7 @@ def puntuar_tema(tema: Tema, contexto: str = "MX") -> tuple[float, str]:
     s_impacto = _score_impacto(tema)
     s_multi = _score_multi_red(tema)
 
-    score = (
+    base = (
         _PESO_VIRALIDAD * s_viral
         + _PESO_MX * s_mx
         + _PESO_NOVEDAD * s_novedad
@@ -339,8 +362,20 @@ def puntuar_tema(tema: Tema, contexto: str = "MX") -> tuple[float, str]:
         + _PESO_MULTI_RED * s_multi
     )
 
+    # Relevancia de marca: con marca activa con vocabulario, domina el score (el Plan
+    # del dia es de la marca). Sin marca, el score es el general (base).
+    s_marca = _score_marca(tema, palabras_marca)
+    score = (0.6 * s_marca + 0.4 * base) if palabras_marca else base
+
     # Construir la razon en español
     partes: list[str] = []
+    if palabras_marca:
+        if s_marca >= 1.0:
+            partes.append("en el foco de la marca")
+        elif s_marca > 0:
+            partes.append("relacionado con la marca")
+        else:
+            partes.append("fuera del foco de la marca")
     if s_viral > 0:
         nivel = "alta" if s_viral >= 0.6 else "media"
         partes.append(f"viralidad {nivel} ({tema.senal_texto or str(tema.senal)} búsquedas)")
@@ -368,6 +403,7 @@ def puntuar_tema(tema: Tema, contexto: str = "MX") -> tuple[float, str]:
 def armar_parrilla(
     temas: list[Tema],
     contexto: str = "MX",
+    palabras_marca: frozenset[str] = frozenset(),
 ) -> ParrillaDia:
     """Clasifica y jerarquiza una lista de temas del Radar en la Parrilla del dia.
 
@@ -391,7 +427,7 @@ def armar_parrilla(
     # --- 1. Puntuar y clasificar todos los temas ---
     clasificados: list[TemaClasificado] = []
     for tema in temas:
-        score, razon = puntuar_tema(tema, contexto)
+        score, razon = puntuar_tema(tema, contexto, palabras_marca)
         tipo, subtipo = _clasificar_tipo(tema)
         clasificados.append(
             TemaClasificado(

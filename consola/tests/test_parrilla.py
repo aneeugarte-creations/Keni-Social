@@ -8,7 +8,7 @@ Cubre:
 
 from __future__ import annotations
 
-from keni_consola import parrilla
+from keni_consola import parrilla, relevancia_marca
 from keni_consola.radar import Enlace, Tema
 
 # --------------------------------------------------------------------------- #
@@ -267,3 +267,43 @@ class TestArmarParrilla:
         p = parrilla.armar_parrilla(temas, contexto="US")
         assert p.contexto == "US"
         assert p.a_dict()["contexto"] == "US"
+
+
+# --------------------------------------------------------------------------- #
+# Relevancia POR MARCA: la investigacion es por marca, no global                #
+# --------------------------------------------------------------------------- #
+
+class TestRelevanciaMarca:
+    def test_palabras_de_marca_conocida_y_desconocida(self):
+        assert relevancia_marca.palabras_de_marca("claro-sports")  # no vacio
+        assert relevancia_marca.palabras_de_marca("inexistente") == frozenset()
+        assert relevancia_marca.palabras_de_marca(None) == frozenset()
+        assert relevancia_marca.palabras_de_marca("") == frozenset()
+
+    def test_sin_palabras_score_es_el_general(self):
+        # Sin palabras de marca, el score debe ser EXACTO al scoring general (base).
+        tema = _tema("Final de futbol", senal=5000, por_que="gol en Mexico")
+        base, _ = parrilla.puntuar_tema(tema, contexto="MX")
+        con_vacio, _ = parrilla.puntuar_tema(tema, contexto="MX", palabras_marca=frozenset())
+        assert base == con_vacio
+
+    def test_tema_en_foco_supera_a_fuera_de_foco(self):
+        # Con la marca Claro Sports, un tema deportivo gana a uno NO deportivo, aunque
+        # el no deportivo sea mas viral: la investigacion es POR MARCA.
+        palabras = relevancia_marca.palabras_de_marca("claro-sports")
+        deportivo = _tema("Gran final de futbol", senal=1000)
+        viral_no_marca = _tema("Receta de pastel viral", senal=900000)
+        s_dep, razon_dep = parrilla.puntuar_tema(deportivo, palabras_marca=palabras)
+        s_otro, _ = parrilla.puntuar_tema(viral_no_marca, palabras_marca=palabras)
+        assert s_dep > s_otro
+        assert "marca" in razon_dep
+
+    def test_armar_parrilla_prioriza_la_marca(self):
+        palabras = relevancia_marca.palabras_de_marca("claro-sports")
+        temas = [
+            _tema("Receta viral de la semana", senal=900000),
+            _tema("Boxeo: pelea estelar", senal=1500),
+        ]
+        p = parrilla.armar_parrilla(temas, palabras_marca=palabras)
+        primero = (p.posteos + p.editorial)[0]
+        assert "Boxeo" in primero.tema.titulo
