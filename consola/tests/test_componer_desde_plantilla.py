@@ -11,11 +11,11 @@ from keni_consola.dominio import estudio_imagen as ei
 
 
 def _doc():
-    # Plantilla del estudio: imagen de fondo (z 0) con una foto de MUESTRA + un texto con binding.
+    # Plantilla del estudio: HUECO DE FOTO (es_foto, z 0) con una foto de MUESTRA + texto con binding.
     return {
         "formato": {"w": 1080, "h": 1080},
         "capas": [
-            {"tipo": "imagen", "z": 0, "objeto": "muestra.png"},
+            {"tipo": "imagen", "z": 0, "objeto": "muestra.png", "es_foto": True},
             {"tipo": "texto", "z": 1, "binding": "copy_in", "texto": ""},
         ],
     }
@@ -82,6 +82,51 @@ def test_sin_reencuadre_no_toca_foco(monkeypatch):
     ei.componer_desde_plantilla(_doc(), copy_in="", foto="f.png")
     fondo = next(c for c in capturado["doc"]["capas"] if c["tipo"] == "imagen")
     assert "foco" not in fondo and "zoom" not in fondo
+
+
+def test_no_pisa_logo_pequeno_sin_hueco(monkeypatch):
+    """Plantilla de solo texto + logo pequeño (sin hueco de foto): la foto NO entra, el logo queda."""
+    capturado: dict = {}
+    monkeypatch.setattr(
+        ei, "renderizar_documento",
+        lambda doc, bindings=None: (capturado.update(doc=doc), {"id": "o.png", "url": "/x"})[1],
+    )
+    doc = {
+        "formato": {"w": 1080, "h": 1350},
+        "capas": [
+            # Logo chico en la esquina (NO es_foto, área ínfima): no es el hueco de foto.
+            {"tipo": "imagen", "z": 1, "objeto": "logo.png", "w": 110, "h": 110},
+            {"tipo": "texto", "z": 2, "binding": "copy_in", "texto": ""},
+        ],
+    }
+    ei.componer_desde_plantilla(doc, copy_in="HOLA", foto="real.png")
+    img = next(c for c in capturado["doc"]["capas"] if c["tipo"] == "imagen")
+    assert img["objeto"] == "logo.png"  # el logo NO se sustituye por la foto
+
+
+def test_capa_foto_prefiere_es_foto_y_respalda_en_fondo_grande():
+    from keni_consola.motores.estudio_imagen import documento as dc
+    # Marcada gana aunque haya otra imagen.
+    doc = {
+        "formato": {"w": 1080, "h": 1350},
+        "capas": [
+            {"tipo": "imagen", "z": 0, "objeto": "bg.png", "w": 1080, "h": 1350},
+            {"tipo": "imagen", "z": 2, "objeto": "marca.png", "w": 200, "h": 200, "es_foto": True},
+        ],
+    }
+    assert dc.capa_foto(doc)["objeto"] == "marca.png"
+    # Sin marcar: respalda en la imagen que cubre casi todo el lienzo (fondo a sangre).
+    doc2 = {
+        "formato": {"w": 1080, "h": 1350},
+        "capas": [
+            {"tipo": "imagen", "z": 0, "objeto": "bg.png", "w": 1080, "h": 1350},
+            {"tipo": "imagen", "z": 2, "objeto": "logo.png", "w": 110, "h": 110},
+        ],
+    }
+    assert dc.capa_foto(doc2)["objeto"] == "bg.png"
+    # Solo logo pequeño: no hay hueco de foto.
+    doc3 = {"formato": {"w": 1080, "h": 1350}, "capas": [{"tipo": "imagen", "z": 1, "w": 110, "h": 110}]}
+    assert dc.capa_foto(doc3) is None
 
 
 def test_parsear_encuadre():

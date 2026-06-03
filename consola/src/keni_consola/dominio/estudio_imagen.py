@@ -667,18 +667,17 @@ def componer_desde_plantilla(
         except (ValueError, TypeError) as exc:
             raise EstudioError("La plantilla no tiene un documento válido.") from exc
     doc = copy.deepcopy(documento)
-    capas = doc.get("capas") or []
-    # Capa de imagen de FONDO = la imagen de menor z (sobre ella se apilan overlay/texto/logo).
-    # Es el "hueco de foto": ahí va la foto de la pieza.
-    fondos = [c for c in capas if isinstance(c, dict) and c.get("tipo") == "imagen"]
-    if fondos:
-        fondo = min(fondos, key=lambda c: c.get("z", 0))
-        fondo["objeto"] = foto or ""
+    # HUECO DE FOTO designado (`es_foto`): la ÚNICA capa donde entra la foto de la pieza. Las
+    # plantillas de solo texto/gráfica (cita, infografía…) no tienen hueco -> la foto no entra y no
+    # se pisa ningún logo. (Antes se metía en la imagen de menor z, que podía ser un logo pequeño.)
+    hueco = doc_capas.capa_foto(doc)
+    if hueco is not None:
+        hueco["objeto"] = foto or ""
         # Reencuadre manual de la pieza: pisa el encuadre de muestra de la plantilla.
         if foco is not None and len(foco) == 2:
-            fondo["foco"] = [float(foco[0]), float(foco[1])]
+            hueco["foco"] = [float(foco[0]), float(foco[1])]
         if zoom and zoom > 0:
-            fondo["zoom"] = float(zoom)
+            hueco["zoom"] = float(zoom)
     return renderizar_documento(doc, bindings={"copy_in": copy_in})
 
 

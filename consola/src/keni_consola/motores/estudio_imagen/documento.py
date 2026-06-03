@@ -129,6 +129,10 @@ def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
         "foco": [float(foco[0]), float(foco[1])],
         # Reencuadre dentro del marco: factor de acercamiento (1 = ajuste base). Acotado a [1, 6].
         "zoom": min(6.0, max(1.0, float(zoom))) if _num(zoom) else 1.0,
+        # `es_foto`: ESTA capa es el HUECO DE FOTO de la plantilla — la única donde entra la foto de
+        # la pieza al aplicarla. Toda plantilla del estudio tiene exactamente una (obligatoria y
+        # bloqueada en el editor). `objeto` guarda una foto de muestra para la miniatura.
+        "es_foto": bool(c.get("es_foto", False)),
         "filtros": _filtros(c.get("filtros")),
     }
 
@@ -275,12 +279,31 @@ def _validar_formato(f: Any) -> dict[str, int]:
     }
 
 
+def _normalizar_hueco_foto(capas: list[dict[str, Any]]) -> None:
+    """Garantiza COMO MUCHO un hueco de foto (`es_foto`) entre las capas imagen, IN PLACE.
+
+    Si varias capas imagen vienen marcadas, conserva la de MENOR z (el fondo) y desmarca el resto:
+    el hueco de foto es único por plantilla. NO auto-designa una si no hay ninguna marcada —esa es
+    decisión del diseñador (el estudio la exige y la bloquea); aquí solo se evita el estado ambiguo
+    de tener dos. `componer` usa luego `capa_foto` (con respaldo al fondo) para colocar la foto.
+    """
+    marcadas = [c for c in capas if c.get("tipo") == "imagen" and c.get("es_foto")]
+    if len(marcadas) <= 1:
+        return
+    conservar = min(marcadas, key=lambda c: c.get("z", 0))
+    for c in marcadas:
+        if c is not conservar:
+            c["es_foto"] = False
+
+
 def validar(doc: Any) -> dict[str, Any]:
     """Valida y normaliza un Documento completo. Lanza `DocumentoError` (español) si algo falla."""
     _exige_doc(isinstance(doc, dict), "El documento debe ser un objeto JSON.")
     capas = doc.get("capas")
     _exige_doc(isinstance(capas, list), "El documento necesita una lista 'capas'.")
     fuentes = doc.get("fuentes") or {}
+    capas_ok = [_validar_capa(c) for c in capas]
+    _normalizar_hueco_foto(capas_ok)
     return {
         "version": VERSION,
         "marca": str(doc.get("marca", "")),
@@ -290,8 +313,31 @@ def validar(doc: Any) -> dict[str, Any]:
         },
         "formato": _validar_formato(doc.get("formato")),
         "fondo": _spec._validar_fondo(doc.get("fondo") or {"tipo": "color", "color": "#111315"}),
-        "capas": [_validar_capa(c) for c in capas],
+        "capas": capas_ok,
     }
+
+
+def capa_foto(doc: dict[str, Any]) -> dict[str, Any] | None:
+    """Devuelve la capa que es el HUECO DE FOTO de un documento, o None si la plantilla no lleva foto.
+
+    Preferencia: la capa imagen marcada `es_foto`. Respaldo (plantillas antiguas sin marcar): la
+    capa imagen de MAYOR área que cubra casi todo el lienzo (un fondo a sangre), nunca un logo
+    pequeño. Si no hay ninguna imagen grande, la plantilla es de solo texto/gráfica: None.
+    """
+    capas = [c for c in (doc.get("capas") or []) if isinstance(c, dict) and c.get("tipo") == "imagen"]
+    marcada = next((c for c in capas if c.get("es_foto")), None)
+    if marcada is not None:
+        return marcada
+    fmt = doc.get("formato") or {}
+    area_lienzo = float(fmt.get("w", 0)) * float(fmt.get("h", 0))
+    if area_lienzo <= 0:
+        return None
+    # Respaldo SOLO para plantillas legadas: una imagen que cubra ≥60% del lienzo es un fondo de foto;
+    # un logo pequeño (como el de la esquina) nunca lo cubre, así que no se confunde con el hueco.
+    grandes = [c for c in capas if (float(c.get("w", 0)) * float(c.get("h", 0))) >= 0.6 * area_lienzo]
+    if not grandes:
+        return None
+    return max(grandes, key=lambda c: float(c.get("w", 0)) * float(c.get("h", 0)))
 
 
 def migrar(doc: dict[str, Any]) -> dict[str, Any]:
@@ -323,6 +369,7 @@ def desde_spec(spec: dict[str, Any], formato: str) -> dict[str, Any]:
         "id": "foto", "tipo": "imagen", "objeto": "",
         "x": s["x"], "y": s["y"], "w": s["w"], "h": s["h"],
         "ajuste": s.get("ajuste", "cover"), "foco": s.get("foco", [0.5, 0.45]),
+        "es_foto": True,  # el foto_slot del spec ES el hueco de foto (obligatorio).
         "z": int(s.get("z", 0)),
     })
 
