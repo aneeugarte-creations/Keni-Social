@@ -12,7 +12,10 @@ const LIMITE_HISTORIAL = 50;
 
 export interface EstadoEditor {
   documento: Documento;
+  // `seleccion` = capa PRIMARIA (la que edita el inspector). `seleccionMulti` = TODAS las
+  // seleccionadas (siempre incluye la primaria); las operaciones múltiples usan esta.
   seleccion: string | null;
+  seleccionMulti: string[];
   pasado: Documento[];
   futuro: Documento[];
 
@@ -22,6 +25,15 @@ export interface EstadoEditor {
   // Mutaciones (registran historial salvo que se diga lo contrario).
   cargar: (doc: Documento) => void;
   seleccionar: (id: string | null) => void;
+  // Alterna una capa en la selección múltiple (shift/cmd-clic).
+  alternar: (id: string) => void;
+  seleccionarMuchas: (ids: string[]) => void;
+  // Operaciones sobre la selección múltiple (un solo paso de historial).
+  quitarMulti: () => void;
+  duplicarMulti: () => void;
+  aplicarPosiciones: (pos: { id: string; x: number; y: number }[]) => void;
+  alinearMulti: (modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => void;
+  distribuir: (eje: "h" | "v") => void;
   agregar: (capa: Capa) => void;
   // Inserta VARIAS capas (un bloque) en un solo paso de historial, encima de todo, con ids frescos.
   insertarBloque: (capas: Capa[]) => void;
@@ -72,6 +84,7 @@ export function crearStoreEditor(inicial: Documento) {
     return {
       documento: inicial,
       seleccion: null,
+      seleccionMulti: [],
       pasado: [],
       futuro: [],
 
@@ -80,9 +93,20 @@ export function crearStoreEditor(inicial: Documento) {
         return documento.capas.find((c) => c.id === seleccion) ?? null;
       },
 
-      cargar: (doc) => set({ documento: doc, seleccion: null, pasado: [], futuro: [] }),
+      cargar: (doc) => set({ documento: doc, seleccion: null, seleccionMulti: [], pasado: [], futuro: [] }),
 
-      seleccionar: (id) => set({ seleccion: id }),
+      seleccionar: (id) => set({ seleccion: id, seleccionMulti: id ? [id] : [] }),
+
+      alternar: (id) =>
+        set((s) => {
+          if (s.seleccionMulti.includes(id)) {
+            const resto = s.seleccionMulti.filter((x) => x !== id);
+            return { seleccionMulti: resto, seleccion: s.seleccion === id ? (resto[resto.length - 1] ?? null) : s.seleccion };
+          }
+          return { seleccionMulti: [...s.seleccionMulti, id], seleccion: id };
+        }),
+
+      seleccionarMuchas: (ids) => set({ seleccionMulti: ids, seleccion: ids[ids.length - 1] ?? null }),
 
       agregar: (capa) =>
         aplicar((doc) => conCapas(doc, [...doc.capas, capa])),
@@ -110,7 +134,10 @@ export function crearStoreEditor(inicial: Documento) {
 
       quitar: (id) => {
         aplicar((doc) => conCapas(doc, doc.capas.filter((c) => c.id !== id)));
-        if (get().seleccion === id) set({ seleccion: null });
+        set((s) => ({
+          seleccion: s.seleccion === id ? null : s.seleccion,
+          seleccionMulti: s.seleccionMulti.filter((x) => x !== id),
+        }));
       },
 
       duplicar: (id) => {
@@ -163,6 +190,84 @@ export function crearStoreEditor(inicial: Documento) {
             }),
           );
         }),
+
+      quitarMulti: () => {
+        const ids = new Set(get().seleccionMulti);
+        if (ids.size === 0) return;
+        aplicar((doc) => conCapas(doc, doc.capas.filter((c) => !ids.has(c.id))));
+        set({ seleccion: null, seleccionMulti: [] });
+      },
+
+      duplicarMulti: () => {
+        const sel = get().seleccionMulti;
+        if (sel.length === 0) return;
+        const capas = get().documento.capas.filter((c) => sel.includes(c.id));
+        let z = get().documento.capas.reduce((m, c) => Math.max(m, c.z), 0);
+        const copias = capas.map((c, i) => ({
+          ...clonar(c),
+          id: `${c.tipo}-${Date.now().toString(36)}-${i}`,
+          x: c.x + 24,
+          y: c.y + 24,
+          z: ++z,
+        })) as Capa[];
+        aplicar((doc) => conCapas(doc, [...doc.capas, ...copias]));
+        set({ seleccionMulti: copias.map((c) => c.id), seleccion: copias[copias.length - 1]?.id ?? null });
+      },
+
+      aplicarPosiciones: (pos) => {
+        const mapa = new Map(pos.map((p) => [p.id, p]));
+        aplicar((doc) =>
+          conCapas(
+            doc,
+            doc.capas.map((c) => {
+              const p = mapa.get(c.id);
+              return p ? ({ ...c, x: p.x, y: p.y } as Capa) : c;
+            }),
+          ),
+        );
+      },
+
+      alinearMulti: (modo) => {
+        const ids = new Set(get().seleccionMulti);
+        if (ids.size === 0) return;
+        aplicar((doc) => {
+          const f = doc.formato;
+          return conCapas(
+            doc,
+            doc.capas.map((c) => {
+              if (!ids.has(c.id)) return c;
+              if (modo === "izq") return { ...c, x: 0 } as Capa;
+              if (modo === "centroH") return { ...c, x: Math.round((f.w - c.w) / 2) } as Capa;
+              if (modo === "der") return { ...c, x: f.w - c.w } as Capa;
+              if (modo === "arriba") return { ...c, y: 0 } as Capa;
+              if (modo === "centroV") return { ...c, y: Math.round((f.h - c.h) / 2) } as Capa;
+              return { ...c, y: f.h - c.h } as Capa;
+            }),
+          );
+        });
+      },
+
+      distribuir: (eje) => {
+        const sel = get().seleccionMulti;
+        if (sel.length < 3) return;
+        aplicar((doc) => {
+          const elegidas = doc.capas.filter((c) => sel.includes(c.id));
+          const orden = [...elegidas].sort((a, b) => (eje === "h" ? a.x - b.x : a.y - b.y));
+          const primero = orden[0];
+          const ultimo = orden[orden.length - 1];
+          const ini = eje === "h" ? primero.x : primero.y;
+          const fin = eje === "h" ? ultimo.x : ultimo.y;
+          const paso = (fin - ini) / (orden.length - 1);
+          const nuevaPos = new Map<string, number>();
+          orden.forEach((c, i) => nuevaPos.set(c.id, Math.round(ini + paso * i)));
+          return conCapas(
+            doc,
+            doc.capas.map((c) =>
+              nuevaPos.has(c.id) ? ({ ...c, [eje === "h" ? "x" : "y"]: nuevaPos.get(c.id) } as Capa) : c,
+            ),
+          );
+        });
+      },
 
       setFondo: (fondo) => aplicar((doc) => ({ ...doc, fondo })),
 

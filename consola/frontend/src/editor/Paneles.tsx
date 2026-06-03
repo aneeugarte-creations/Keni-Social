@@ -82,7 +82,7 @@ export function BarraHerramientas({ onExportar }: { onExportar?: () => void }) {
 export function PanelCapas() {
   const store = useStoreEditor();
   const capas = useEditor((s) => s.documento.capas);
-  const seleccion = useEditor((s) => s.seleccion);
+  const seleccionMulti = useEditor((s) => s.seleccionMulti);
   // Más alta (z mayor) arriba en la lista.
   const ordenadas = [...capas].sort((a, b) => b.z - a.z);
 
@@ -98,9 +98,12 @@ export function PanelCapas() {
         {ordenadas.map((capa) => (
           <div
             key={capa.id}
-            onClick={() => store.getState().seleccionar(capa.id)}
+            onClick={(e) => {
+              if (e.shiftKey || e.metaKey || e.ctrlKey) store.getState().alternar(capa.id);
+              else store.getState().seleccionar(capa.id);
+            }}
             className={`flex items-center gap-1 border-b border-border/50 px-2 py-1.5 text-sm ${
-              capa.id === seleccion ? "bg-accent" : "hover:bg-accent/50"
+              seleccionMulti.includes(capa.id) ? "bg-accent" : "hover:bg-accent/50"
             }`}
           >
             <button

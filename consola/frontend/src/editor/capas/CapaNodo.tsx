@@ -12,7 +12,7 @@ import { useImagen } from "../useImagen";
 export interface CapaNodoProps {
   capa: Capa;
   seleccionada: boolean;
-  onSelect: () => void;
+  onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onChange: (cambios: Partial<Capa>) => void;
   onGesto: () => void;
 }

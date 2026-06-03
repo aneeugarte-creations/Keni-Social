@@ -9,6 +9,8 @@ import {
   AlignCenterVertical,
   AlignEndHorizontal,
   AlignEndVertical,
+  AlignHorizontalDistributeCenter,
+  AlignVerticalDistributeCenter,
   AlignStartHorizontal,
   AlignStartVertical,
   BringToFront,
@@ -58,6 +60,7 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
   const store = useStoreEditor();
   const documento = useEditor((s) => s.documento);
   const seleccion = useEditor((s) => s.seleccion);
+  const seleccionMulti = useEditor((s) => s.seleccionMulti);
   const { w, h } = documento.formato;
 
   // Mide el espacio disponible para AJUSTAR el lienzo (responsive: llena el ancho en móvil y el
@@ -82,6 +85,8 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // Arrastre múltiple: posiciones iniciales de todas las capas seleccionadas al empezar a mover.
+  const multiDrag = useRef<{ dragId: string; ini: Map<string, { x: number; y: number }> } | null>(null);
   const [guias, setGuias] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const [arrastrando, setArrastrando] = useState(false);
   const [rectSel, setRectSel] = useState<{ x: number; y: number; w: number } | null>(null);
@@ -92,32 +97,41 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
   const capaSel = documento.capas.find((c) => c.id === seleccion) ?? null;
   const ratioFijo = capaSel ? RATIO_FIJO.has(capaSel.tipo) : false;
 
-  // Adjunta el Transformer al nodo seleccionado.
+  // Adjunta el Transformer a TODAS las capas seleccionadas.
   useEffect(() => {
     const tr = trRef.current;
     const stage = stageRef.current;
     if (!tr || !stage) return;
-    const nodo = seleccion ? stage.findOne<Konva.Node>(`#${seleccion}`) : null;
-    tr.nodes(nodo ? [nodo] : []);
+    const nodos = seleccionMulti
+      .map((id) => stage.findOne<Konva.Node>(`#${id}`))
+      .filter((n): n is Konva.Node => !!n);
+    tr.nodes(nodos);
     tr.getLayer()?.batchDraw();
-  }, [seleccion, documento, zoom]);
+  }, [seleccionMulti, documento, zoom]);
 
-  // Rect en pantalla de la capa seleccionada (para la barra flotante). Recalcula al cambiar
-  // selección/documento/zoom (tras soltar un arrastre el documento cambia y se recoloca).
+  // Rect en pantalla que ENVUELVE la selección (para la barra flotante). Unión de las capas
+  // seleccionadas; recalcula al cambiar selección/documento/zoom.
   useEffect(() => {
     const stage = stageRef.current;
-    if (!stage || !seleccion) {
+    if (!stage || seleccionMulti.length === 0) {
       setRectSel(null);
       return;
     }
-    const nodo = stage.findOne<Konva.Node>(`#${seleccion}`);
-    if (!nodo) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity;
+    for (const id of seleccionMulti) {
+      const nodo = stage.findOne<Konva.Node>(`#${id}`);
+      if (!nodo) continue;
+      const r = nodo.getClientRect();
+      minX = Math.min(minX, r.x);
+      minY = Math.min(minY, r.y);
+      maxX = Math.max(maxX, r.x + r.width);
+    }
+    if (minX === Infinity) {
       setRectSel(null);
       return;
     }
-    const r = nodo.getClientRect();
-    setRectSel({ x: r.x, y: r.y, w: r.width });
-  }, [seleccion, documento, zoom]);
+    setRectSel({ x: minX, y: minY, w: maxX - minX });
+  }, [seleccionMulti, documento, zoom]);
 
   // Atajos de teclado (ignora si se está escribiendo en un input/textarea).
   useEffect(() => {
@@ -134,9 +148,13 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
         return;
       }
       if (e.key === "Escape") return st.seleccionar(null);
+      if (meta && (e.key === "a" || e.key === "A")) {
+        e.preventDefault();
+        return st.seleccionarMuchas(st.documento.capas.map((c) => c.id));
+      }
       if (!sel) return;
       const capa = st.documento.capas.find((c) => c.id === sel);
-      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); return st.quitar(sel); }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); return st.quitarMulti(); }
       if (meta && (e.key === "c" || e.key === "C")) {
         const capa = st.documento.capas.find((c) => c.id === sel);
         if (capa) _portapapeles = structuredClone(capa);
@@ -157,7 +175,7 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
         st.seleccionar(copia.id);
         return;
       }
-      if (meta && (e.key === "d" || e.key === "D")) { e.preventDefault(); return st.duplicar(sel); }
+      if (meta && (e.key === "d" || e.key === "D")) { e.preventDefault(); return st.duplicarMulti(); }
       if (meta && e.key === "]") { e.preventDefault(); return st.traerAlFrente(sel); }
       if (meta && e.key === "[") { e.preventDefault(); return st.enviarAlFondo(sel); }
       if (capa && e.key.startsWith("Arrow")) {
@@ -165,7 +183,13 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
         const d = e.shiftKey ? 10 : 1;
         const dx = e.key === "ArrowLeft" ? -d : e.key === "ArrowRight" ? d : 0;
         const dy = e.key === "ArrowUp" ? -d : e.key === "ArrowDown" ? d : 0;
-        st.actualizar(sel, { x: capa.x + dx, y: capa.y + dy } as Partial<Capa>);
+        const ids = st.seleccionMulti.length > 1 ? st.seleccionMulti : [sel];
+        st.aplicarPosiciones(
+          ids
+            .map((id) => st.documento.capas.find((c) => c.id === id))
+            .filter((c): c is Capa => !!c)
+            .map((c) => ({ id: c.id, x: c.x + dx, y: c.y + dy })),
+        );
       }
     };
     window.addEventListener("keydown", onKey);
@@ -179,9 +203,60 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
     setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z * (e.evt.deltaY < 0 ? 1.1 : 0.9))));
   };
 
-  // SMART GUIDES al arrastrar.
+  const onDragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
+    setArrastrando(true);
+    const id = e.target.id();
+    const st = store.getState();
+    if (st.seleccionMulti.length > 1 && st.seleccionMulti.includes(id)) {
+      const ini = new Map<string, { x: number; y: number }>();
+      for (const sid of st.seleccionMulti) {
+        const n = stageRef.current?.findOne<Konva.Node>(`#${sid}`);
+        if (n) ini.set(sid, { x: n.x(), y: n.y() });
+      }
+      multiDrag.current = { dragId: id, ini };
+    } else {
+      multiDrag.current = null;
+    }
+  };
+
+  const onDragEnd = () => {
+    setArrastrando(false);
+    setGuias({ x: null, y: null });
+    const md = multiDrag.current;
+    if (md) {
+      const stage = stageRef.current;
+      const pos: { id: string; x: number; y: number }[] = [];
+      md.ini.forEach((_p, sid) => {
+        const n = stage?.findOne<Konva.Node>(`#${sid}`);
+        if (n) pos.push({ id: sid, x: n.x(), y: n.y() });
+      });
+      store.getState().aplicarPosiciones(pos);
+      multiDrag.current = null;
+    }
+  };
+
+  // SMART GUIDES al arrastrar (y MOVER en grupo si hay selección múltiple).
   const onDragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
     const nodo = e.target;
+    const md = multiDrag.current;
+    if (md && md.dragId === nodo.id()) {
+      const start = md.ini.get(nodo.id());
+      if (start) {
+        const dx = nodo.x() - start.x;
+        const dy = nodo.y() - start.y;
+        const stage = stageRef.current;
+        md.ini.forEach((p, sid) => {
+          if (sid === nodo.id()) return;
+          const n = stage?.findOne<Konva.Node>(`#${sid}`);
+          if (n) {
+            n.x(p.x + dx);
+            n.y(p.y + dy);
+          }
+        });
+      }
+      setGuias({ x: null, y: null });
+      return;
+    }
     const capa = documento.capas.find((c) => c.id === nodo.id());
     if (!capa) return;
     const umbral = 6 / escala;
@@ -250,20 +325,37 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
     st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
   };
 
-  const acciones: { icono: typeof Trash2; titulo: string; onClick: () => void }[] = seleccion
-    ? [
-        { icono: AlignStartVertical, titulo: "Alinear izquierda", onClick: () => store.getState().alinear(seleccion, "izq") },
-        { icono: AlignCenterVertical, titulo: "Centrar horizontal", onClick: () => store.getState().alinear(seleccion, "centroH") },
-        { icono: AlignEndVertical, titulo: "Alinear derecha", onClick: () => store.getState().alinear(seleccion, "der") },
-        { icono: AlignStartHorizontal, titulo: "Alinear arriba", onClick: () => store.getState().alinear(seleccion, "arriba") },
-        { icono: AlignCenterHorizontal, titulo: "Centrar vertical", onClick: () => store.getState().alinear(seleccion, "centroV") },
-        { icono: AlignEndHorizontal, titulo: "Alinear abajo", onClick: () => store.getState().alinear(seleccion, "abajo") },
-        { icono: BringToFront, titulo: "Traer al frente", onClick: () => store.getState().traerAlFrente(seleccion) },
-        { icono: SendToBack, titulo: "Enviar al fondo", onClick: () => store.getState().enviarAlFondo(seleccion) },
-        { icono: Copy, titulo: "Duplicar", onClick: () => store.getState().duplicar(seleccion) },
-        { icono: Trash2, titulo: "Borrar", onClick: () => store.getState().quitar(seleccion) },
-      ]
-    : [];
+  const multi = seleccionMulti.length > 1;
+  const alinearFn = (modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => {
+    const st = store.getState();
+    if (multi) st.alinearMulti(modo);
+    else if (seleccion) st.alinear(seleccion, modo);
+  };
+  const acciones: { icono: typeof Trash2; titulo: string; onClick: () => void }[] =
+    seleccionMulti.length > 0
+      ? [
+          { icono: AlignStartVertical, titulo: "Alinear izquierda", onClick: () => alinearFn("izq") },
+          { icono: AlignCenterVertical, titulo: "Centrar horizontal", onClick: () => alinearFn("centroH") },
+          { icono: AlignEndVertical, titulo: "Alinear derecha", onClick: () => alinearFn("der") },
+          { icono: AlignStartHorizontal, titulo: "Alinear arriba", onClick: () => alinearFn("arriba") },
+          { icono: AlignCenterHorizontal, titulo: "Centrar vertical", onClick: () => alinearFn("centroV") },
+          { icono: AlignEndHorizontal, titulo: "Alinear abajo", onClick: () => alinearFn("abajo") },
+          ...(seleccionMulti.length > 2
+            ? [
+                { icono: AlignHorizontalDistributeCenter, titulo: "Distribuir horizontal", onClick: () => store.getState().distribuir("h") },
+                { icono: AlignVerticalDistributeCenter, titulo: "Distribuir vertical", onClick: () => store.getState().distribuir("v") },
+              ]
+            : []),
+          ...(!multi && seleccion
+            ? [
+                { icono: BringToFront, titulo: "Traer al frente", onClick: () => store.getState().traerAlFrente(seleccion) },
+                { icono: SendToBack, titulo: "Enviar al fondo", onClick: () => store.getState().enviarAlFondo(seleccion) },
+              ]
+            : []),
+          { icono: Copy, titulo: "Duplicar", onClick: () => store.getState().duplicarMulti() },
+          { icono: Trash2, titulo: "Borrar", onClick: () => store.getState().quitarMulti() },
+        ]
+      : [];
 
   return (
     <div ref={medirRef} className="flex h-full w-full items-center justify-center overflow-hidden">
@@ -286,9 +378,9 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
           onWheel={onWheel}
           onDblClick={(e) => { const id = e.target.id?.(); if (id) abrirEdicionTexto(id); }}
           onDblTap={(e) => { const id = e.target.id?.(); if (id) abrirEdicionTexto(id); }}
-          onDragStart={() => setArrastrando(true)}
+          onDragStart={onDragStart}
           onDragMove={onDragMove}
-          onDragEnd={() => { setArrastrando(false); setGuias({ x: null, y: null }); }}
+          onDragEnd={onDragEnd}
         >
           <Layer>
             <FondoNodo fondo={documento.fondo} w={w} h={h} />
@@ -297,7 +389,12 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
                 key={capa.id}
                 capa={capa}
                 seleccionada={capa.id === seleccion}
-                onSelect={() => store.getState().seleccionar(capa.id)}
+                onSelect={(e) => {
+                  const add = e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey;
+                  const st = store.getState();
+                  if (add) st.alternar(capa.id);
+                  else if (!st.seleccionMulti.includes(capa.id)) st.seleccionar(capa.id);
+                }}
                 onChange={(cambios) => store.getState().actualizar(capa.id, cambios)}
                 onGesto={() => store.getState().comenzarGesto()}
               />
