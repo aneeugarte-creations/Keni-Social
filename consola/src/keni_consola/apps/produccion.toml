@@ -29,6 +29,7 @@ permisos = ["editor", "admin"]
 modulos_backend = [
   "actividad",
   "biblioteca",
+  "editor",
   "generaciones",
   "green",
   "hashtags",

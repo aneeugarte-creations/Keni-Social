@@ -19,3 +19,14 @@ export interface DibujarSpecArgs {
 }
 
 export function dibujarSpec(ctx: CanvasRenderingContext2D, args: DibujarSpecArgs): void;
+
+// Render del DOCUMENTO de capas (editor profesional). Misma rutina canvas-2D, sobre una lista de
+// capas arbitrarias. `imgs` mapea objeto|media_id -> imagen ya cargada (o null).
+export interface DibujarDocumentoArgs {
+  documento: import("../../editor/documento").Documento;
+  imgs: Record<string, CanvasImageSource | null>;
+  bindings?: { copy_in?: string; etiqueta_default?: string };
+  familiaReal: (logica: string) => string;
+}
+
+export function dibujarDocumento(ctx: CanvasRenderingContext2D, args: DibujarDocumentoArgs): void;
