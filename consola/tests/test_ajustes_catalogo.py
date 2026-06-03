@@ -48,6 +48,7 @@ def test_catalogo_tiene_las_claves_esperadas(store):
         config.ENV_MAX_JOBS,
         config.ENV_MEDIA_GC, config.ENV_MEDIA_GC_INTERVALO_HORAS,
         config.ENV_MEDIA_GC_ANTIGUEDAD_HORAS,
+        config.ENV_PIPELINE_LINEAS,
     }
     assert claves == esperadas
 
