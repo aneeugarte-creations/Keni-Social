@@ -105,12 +105,14 @@ def marca_tiene_plantilla(marca: str) -> bool:
     return plantillas_marca.tiene_spec_guardado(marca)
 
 
-# Formato de placa por red. El compositor solo entiende vertical|feed|cuadrado; se elige el
-# encaje editorial mas cercano al aspecto de cada red (tiktok 9:16 -> vertical; ig 1:1 ->
-# cuadrado; el resto -> feed 4:5). Una red desconocida cae a `feed`.
+# Formato de placa por red para POSTS DE FOTO. Regla de producto: toda foto que el equipo
+# publica va en 4:5 (`feed`, 1080x1350) sea cual sea la red — es el encuadre canonico del post.
+# Solo el video nativo vertical (tiktok) cae a `vertical` 9:16; los reels/stories/shorts no pasan
+# por esta placa de foto, los genera el set multi-formato (`formatos_red.MATRIZ`). Red desconocida
+# -> `feed`. (Antes IG iba a `cuadrado` 1:1, lo que descuadraba el post: ya no.)
 _FORMATO_POR_RED = {
     "tiktok": "vertical",
-    "instagram": "cuadrado",
+    "instagram": "feed",
     "facebook": "feed",
     "x": "feed",
     "youtube": "feed",

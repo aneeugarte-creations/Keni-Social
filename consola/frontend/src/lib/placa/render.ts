@@ -22,11 +22,12 @@ export function familiaRealDe(
   };
 }
 
-/** Formato de placa para una red (espejo de `estudio_imagen.formato_por_red`). */
+/** Formato de placa para una red (espejo de `estudio_imagen.formato_por_red`).
+ *  Regla de producto: todo POST DE FOTO va en 4:5 (`feed`) sea cual sea la red. Solo el video
+ *  nativo vertical (tiktok) cae a 9:16; los reels/stories no pasan por esta placa de foto. */
 export function formatoPorRed(red: string | undefined): FormatoId {
   if (red === "tiktok") return "vertical";
-  if (red === "instagram") return "cuadrado";
-  return "feed"; // facebook, x, youtube y desconocidas
+  return "feed"; // instagram, facebook, x, youtube y desconocidas -> 4:5
 }
 
 /** Dibuja la placa (o solo la foto si `imgs.placeholder`/sin marca) en el contexto dado. */

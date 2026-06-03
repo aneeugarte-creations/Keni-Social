@@ -162,9 +162,11 @@ def test_marca_tiene_plantilla(entorno):
 
 
 def test_formato_por_red():
-    assert e.formato_por_red("tiktok") == "vertical"
-    assert e.formato_por_red("instagram") == "cuadrado"
+    # Regla de producto: todo post de foto va en 4:5 (`feed`), incluido Instagram.
+    assert e.formato_por_red("tiktok") == "vertical"  # video vertical nativo
+    assert e.formato_por_red("instagram") == "feed"
     assert e.formato_por_red("facebook") == "feed"
+    assert e.formato_por_red("x") == "feed"
     assert e.formato_por_red("desconocida") == "feed"  # default
 
 

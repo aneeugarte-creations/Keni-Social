@@ -84,38 +84,35 @@ export const ORDEN_REDES = ["x", "instagram", "facebook", "tiktok", "youtube"] a
 
 /**
  * Relación de aspecto del LIENZO de imagen de cada red, como clase Tailwind, para que
- * la vista previa del feed se parezca a cómo se ve el post en esa plataforma:
- *   - Instagram: 1:1 (feed clásico cuadrado).
- *   - Facebook:  1.91:1 (enlace/imagen horizontal).
- *   - X:         16:9.
- *   - TikTok:    9:16 (vertical).
- *   - YouTube:   16:9 (miniatura).
- * Fallback 1:1 para redes desconocidas.
+ * la vista previa del feed se parezca a cómo se ve el post en esa plataforma.
+ * Regla de producto: todo POST DE FOTO es 4:5 sea cual sea la red, así que la previa va
+ * en 4:5 para todas las redes de foto (ig/fb/x/yt). Solo TikTok (video vertical) es 9:16.
+ * Fallback 4:5 para redes desconocidas.
  */
 const _ASPECTO_REDES: Record<string, string> = {
-  instagram: "aspect-square",
-  facebook: "aspect-[1.91/1]",
-  x: "aspect-[16/9]",
+  instagram: "aspect-[4/5]",
+  facebook: "aspect-[4/5]",
+  x: "aspect-[4/5]",
   tiktok: "aspect-[9/16]",
-  youtube: "aspect-video",
+  youtube: "aspect-[4/5]",
 };
 
 /** Clase Tailwind de relación de aspecto del lienzo de imagen de una red. */
 export function aspectoRed(id: string): string {
-  return _ASPECTO_REDES[id] ?? "aspect-square";
+  return _ASPECTO_REDES[id] ?? "aspect-[4/5]";
 }
 
 /**
  * Tamaño de imagen recomendado por red (relación de aspecto + píxeles sugeridos), para
- * guiar al usuario a adaptar la foto a cada plataforma. Cada red recorta a su propio
- * formato, así que conviene subir una imagen ya pensada para ese tamaño.
+ * guiar al usuario. Regla de producto: el post de foto es 4:5 (1080×1350) en todas las
+ * redes; solo el video vertical de TikTok usa 9:16.
  */
 const _TAMANO_REDES: Record<string, { ratio: string; px: string }> = {
-  instagram: { ratio: "1:1", px: "1080×1080" },
-  facebook: { ratio: "1.91:1", px: "1200×630" },
-  x: { ratio: "16:9", px: "1600×900" },
+  instagram: { ratio: "4:5", px: "1080×1350" },
+  facebook: { ratio: "4:5", px: "1080×1350" },
+  x: { ratio: "4:5", px: "1080×1350" },
   tiktok: { ratio: "9:16", px: "1080×1920" },
-  youtube: { ratio: "16:9", px: "1280×720" },
+  youtube: { ratio: "4:5", px: "1080×1350" },
 };
 
 /** Relación de aspecto y píxeles recomendados de la imagen de una red (o `null`). */
