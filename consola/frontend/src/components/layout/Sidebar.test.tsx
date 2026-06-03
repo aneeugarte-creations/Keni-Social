@@ -288,9 +288,10 @@ describe("apps-scope · helpers", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
       "/contenido/estudio",
-      // /contenido/biblioteca (hub) → sus 2 sub-pestañas (Activos se fusionó aquí)
+      // /contenido/biblioteca (hub) → sus 3 sub-pestañas (Activos se fusionó aquí)
       "/contenido/biblioteca/documentos",
       "/contenido/biblioteca/plantillas",
+      "/contenido/biblioteca/estrategia",
       // /datos/investigacion (hub) → sus 4 sub-pestañas
       "/datos/investigacion/fuentes",
       "/datos/investigacion/termometro",
