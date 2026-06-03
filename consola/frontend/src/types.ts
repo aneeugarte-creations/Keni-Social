@@ -53,6 +53,7 @@ export type {
   TendenciaDiaria,
   PiezaRendimiento,
   PiezasRendimiento,
+  PiezaListado,
   PiezasListado,
   PuntoHistorico,
   VelocidadPieza,

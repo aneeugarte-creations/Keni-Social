@@ -175,3 +175,32 @@ def test_valor_por_contenido_toma_solo_etiquetas_de_la_clase():
     verticales = {"et-fut": "Futbol"}  # solo las de clase vertical
     out = metricas_linea._valor_por_contenido(asignaciones, verticales)
     assert out == {"c1": "Futbol"}  # c2 no tiene etiqueta vertical
+
+
+def test_lineas_por_pieza_mapea_solo_las_atribuibles(monkeypatch):
+    """`lineas_por_pieza` resuelve la LÍNEA de cada pieza vía BD (monkeypatcheada).
+
+    Cruza por `id_post_metricool` -> contenido -> etiqueta vertical. Una pieza sin
+    contenido enlazado NO aparece en el mapa (el llamante usa "Sin línea"): honesto.
+    """
+    from keni_consola import repos
+
+    monkeypatch.setattr(
+        repos,
+        "listar_contenido",
+        lambda marca=None: [{"id": "c1", "titulo": "Gol", "id_post_metricool": "M1"}],
+    )
+    monkeypatch.setattr(repos, "listar_contenido_plataforma", lambda: [])
+    monkeypatch.setattr(
+        repos,
+        "listar_etiquetas",
+        lambda marca=None, clase=None: [{"id": "et-vir", "nombre": "Virales"}],
+    )
+    monkeypatch.setattr(repos, "etiquetas_por_contenido", lambda: {"c1": ["et-vir"]})
+
+    piezas = [
+        {"id": "M1", "titulo": "Gol"},
+        {"id": "M2", "titulo": "Pieza sin contenido"},
+    ]
+    salida = metricas_linea.lineas_por_pieza("unotv", piezas)
+    assert salida == {"M1": "Virales"}  # M2 no enlaza -> no aparece (Sin línea aguas arriba)

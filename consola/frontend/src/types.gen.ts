@@ -381,13 +381,43 @@ export interface PiezasRendimiento {
   piezas: PiezaRendimiento[];
 }
 /**
+ * Una pieza del listado COMPLETO del periodo (tabla "Todas las piezas").
+ *
+ * Misma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la
+ * LÍNEA editorial (etiqueta clase `vertical`) a la que pertenece la pieza, resuelto
+ * cruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene
+ * línea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra
+ * "Sin línea". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.
+ */
+export interface PiezaListado {
+  id: string;
+  plataforma: string;
+  titulo: string;
+  publicado: string;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+  url: string | null;
+  likes: number | null;
+  comentarios: number | null;
+  compartidos: number | null;
+  guardados: number | null;
+  video_views: number | null;
+  tiempo_medio_vis_s: number | null;
+  clics_enlace: number | null;
+  formato: string | null;
+  cuenta: string | null;
+  rendimiento_relativo: number | null;
+  linea: string | null;
+}
+/**
  * Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.
  *
  * TODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única
- * (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaMetrica` trae
- * su `id` (de Metricool), granulares y url. Es el insumo de la tabla "Todas las piezas
- * del periodo" (buscador + orden + detalle por pieza). Coste 0 de API: reúsa lo que el
- * dashboard ya descarga.
+ * (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaListado` trae
+ * su `id` (de Metricool), granulares, url y su `linea` editorial. Es el insumo de la
+ * tabla "Todas las piezas del periodo" (filtros + orden + paginación por día + detalle
+ * por pieza). Coste 0 de API: reúsa lo que el dashboard ya descarga.
  */
 export interface PiezasListado {
   rango: string;
@@ -395,7 +425,7 @@ export interface PiezasListado {
   marca: string;
   periodo: PeriodoMetricas;
   fuente: string;
-  piezas: PiezaMetrica[];
+  piezas: PiezaListado[];
   total: number;
   generado_en: string;
 }

@@ -481,14 +481,46 @@ class PiezasRendimiento(TypedDict):
     piezas: list[PiezaRendimiento]
 
 
+class PiezaListado(TypedDict):
+    """Una pieza del listado COMPLETO del periodo (tabla "Todas las piezas").
+
+    Misma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la
+    LÍNEA editorial (etiqueta clase `vertical`) a la que pertenece la pieza, resuelto
+    cruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene
+    línea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra
+    "Sin línea". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.
+    """
+
+    id: str
+    plataforma: str
+    titulo: str
+    publicado: str
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+    url: str | None
+    likes: int | None
+    comentarios: int | None
+    compartidos: int | None
+    guardados: int | None
+    video_views: int | None
+    tiempo_medio_vis_s: int | None
+    clics_enlace: int | None
+    formato: str | None
+    cuenta: str | None
+    rendimiento_relativo: float | None
+    # linea: nombre de la línea editorial de la pieza; null si no es atribuible.
+    linea: str | None
+
+
 class PiezasListado(TypedDict):
     """Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.
 
     TODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única
-    (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaMetrica` trae
-    su `id` (de Metricool), granulares y url. Es el insumo de la tabla "Todas las piezas
-    del periodo" (buscador + orden + detalle por pieza). Coste 0 de API: reúsa lo que el
-    dashboard ya descarga.
+    (`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaListado` trae
+    su `id` (de Metricool), granulares, url y su `linea` editorial. Es el insumo de la
+    tabla "Todas las piezas del periodo" (filtros + orden + paginación por día + detalle
+    por pieza). Coste 0 de API: reúsa lo que el dashboard ya descarga.
     """
 
     rango: str
@@ -497,7 +529,7 @@ class PiezasListado(TypedDict):
     marca: str
     periodo: PeriodoMetricas
     fuente: str
-    piezas: list[PiezaMetrica]
+    piezas: list[PiezaListado]
     total: int
     generado_en: str
 
@@ -1134,6 +1166,7 @@ MODELOS = [
     PiezaRendimiento,
     PiezasRendimiento,
     # Listado completo de piezas del periodo + histórico por pieza + velocidad.
+    PiezaListado,
     PiezasListado,
     PuntoHistorico,
     VelocidadPieza,

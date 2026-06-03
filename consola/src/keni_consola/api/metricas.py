@@ -692,6 +692,20 @@ async def piezas_listado(request: Request) -> Response:
         return JSONResponse(
             {"error": "No se pudo generar el listado de piezas."}, status_code=500
         )
+    piezas_crudas = payload.get("piezas", [])
+    # Enriquecemos cada pieza con su LÍNEA editorial (cruce con la BD) y normalizamos el
+    # campo `red` -> `plataforma` (contrato `PiezaListado`). El cruce de líneas es trabajo
+    # bloqueante de BD: va en el executor para no congelar el event loop. La cache guarda
+    # el listado crudo; la línea se resuelve aquí (lectura de BD barata, sin volver a Metricool).
+    marca_consola = _marca_consola_de_metricas(marca)
+    try:
+        linea_map = await asyncio.get_running_loop().run_in_executor(
+            None, metricas_linea.lineas_por_pieza, marca_consola, piezas_crudas
+        )
+    except Exception:  # noqa: BLE001 -- la línea es best-effort; sin ella, todo "Sin línea"
+        _log.exception("Fallo al resolver líneas del listado (marca=%s).", marca or "todas")
+        linea_map = {}
+    piezas = [_pieza_listado_serializable(p, linea_map) for p in piezas_crudas]
     return JSONResponse(
         {
             "rango": rango,
@@ -699,11 +713,26 @@ async def piezas_listado(request: Request) -> Response:
             "marca": marca or "",
             "periodo": payload.get("periodo") or {"desde": "", "hasta": ""},
             "fuente": payload.get("fuente") or "muestra",
-            "piezas": payload.get("piezas", []),
+            "piezas": piezas,
             "total": payload.get("total", 0),
             "generado_en": generado_en,
         }
     )
+
+
+def _pieza_listado_serializable(p: dict, linea_map: dict[str, str]) -> dict:
+    """Adapta una pieza del listado crudo al contrato `PiezaListado`.
+
+    El listado de la fuente (`construir_listado_piezas`) emite la red como `red`; el
+    contrato (y la UI) la esperan como `plataforma`. Además añade `linea` (nombre de la
+    línea editorial, o `null` si no es atribuible — `linea_map` solo trae las resueltas).
+    El resto de campos (granulares, url, cuenta, rendimiento_relativo) pasa tal cual.
+    """
+    salida = dict(p)
+    salida["plataforma"] = p.get("plataforma") or p.get("red") or ""
+    salida.pop("red", None)
+    salida["linea"] = linea_map.get(str(p.get("id") or "")) or None
+    return salida
 
 
 def _velocidad_pieza(serie: list[dict]) -> dict | None:

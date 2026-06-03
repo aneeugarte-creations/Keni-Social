@@ -1358,6 +1358,175 @@
         "piezas"
       ]
     },
+    "PiezaListado": {
+      "type": "object",
+      "title": "PiezaListado",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "plataforma": {
+          "type": "string"
+        },
+        "titulo": {
+          "type": "string"
+        },
+        "publicado": {
+          "type": "string"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "likes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "comentarios": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compartidos": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "guardados": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "video_views": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tiempo_medio_vis_s": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clics_enlace": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formato": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cuenta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rendimiento_relativo": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "linea": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "description": "Una pieza del listado COMPLETO del periodo (tabla \"Todas las piezas\").\n\nMisma forma que `PiezaMetrica` (granulares incluidos) MÁS `linea`: el nombre de la\nLÍNEA editorial (etiqueta clase `vertical`) a la que pertenece la pieza, resuelto\ncruzándola con su contenido de la Consola. `linea` es `null` cuando la pieza no tiene\nlínea atribuible (la mayoría de piezas que no nacieron en la Consola): la UI muestra\n\"Sin línea\". Se separa de `PiezaMetrica` para no forzar `linea` en top/peores.",
+      "required": [
+        "id",
+        "plataforma",
+        "titulo",
+        "publicado",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct",
+        "url",
+        "likes",
+        "comentarios",
+        "compartidos",
+        "guardados",
+        "video_views",
+        "tiempo_medio_vis_s",
+        "clics_enlace",
+        "formato",
+        "cuenta",
+        "rendimiento_relativo",
+        "linea"
+      ]
+    },
     "PiezasListado": {
       "type": "object",
       "title": "PiezasListado",
@@ -1380,7 +1549,7 @@
         "piezas": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/PiezaMetrica"
+            "$ref": "#/$defs/PiezaListado"
           }
         },
         "total": {
@@ -1390,7 +1559,7 @@
           "type": "string"
         }
       },
-      "description": "Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.\n\nTODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única\n(`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaMetrica` trae\nsu `id` (de Metricool), granulares y url. Es el insumo de la tabla \"Todas las piezas\ndel periodo\" (buscador + orden + detalle por pieza). Coste 0 de API: reúsa lo que el\ndashboard ya descarga.",
+      "description": "Respuesta de `GET /api/metricas/piezas-listado`: listado COMPLETO de piezas del periodo.\n\nTODAS las piezas de la(s) cuenta(s) del periodo tal como las emite la fuente única\n(`servicio.construir_listado_piezas`), no solo top/peores. Cada `PiezaListado` trae\nsu `id` (de Metricool), granulares, url y su `linea` editorial. Es el insumo de la\ntabla \"Todas las piezas del periodo\" (filtros + orden + paginación por día + detalle\npor pieza). Coste 0 de API: reúsa lo que el dashboard ya descarga.",
       "required": [
         "rango",
         "etiqueta_rango",
@@ -2847,6 +3016,9 @@
     },
     {
       "$ref": "#/$defs/PiezasRendimiento"
+    },
+    {
+      "$ref": "#/$defs/PiezaListado"
     },
     {
       "$ref": "#/$defs/PiezasListado"

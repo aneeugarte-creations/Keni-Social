@@ -178,6 +178,41 @@ def _valor_por_contenido(
     return salida
 
 
+def lineas_por_pieza(
+    marca_consola: str | None, piezas: list[dict[str, Any]]
+) -> dict[str, str]:
+    """Mapa `id de pieza -> nombre de su LÍNEA editorial` (clase `vertical`), best-effort.
+
+    Cruza cada pieza con su `contenido` de la Consola por el MISMO criterio que
+    `lineas_y_origenes` (enlace fuerte por `id_post_metricool`; fallback fuzzy por
+    título) y devuelve la línea de ESE contenido. Recibe las `piezas` ya leídas (de
+    `servicio.construir_listado_piezas`), así que NO vuelve a golpear Metricool: solo
+    lee la BD (contenidos, plataformas, etiquetas) para resolver la línea.
+
+    Las piezas SIN línea atribuible NO aparecen en el mapa (el llamante usa "Sin
+    línea"): honesto, no se inventa una línea. La clave es el `id` de la pieza.
+    """
+    contenidos = repos.listar_contenido(marca=marca_consola)
+    plataformas = repos.listar_contenido_plataforma()
+    enlace_por_id, enlace_por_titulo = _indice_contenido_por_post(contenidos, plataformas)
+    vertical_por_id = {
+        e.get("id", ""): e.get("nombre", "")
+        for e in repos.listar_etiquetas(marca=marca_consola, clase=CLASE_VERTICAL)
+        if e.get("id")
+    }
+    linea_por_contenido = _valor_por_contenido(repos.etiquetas_por_contenido(), vertical_por_id)
+    salida: dict[str, str] = {}
+    for p in piezas:
+        pid = str(p.get("id") or "")
+        if not pid:
+            continue
+        cid = enlace_por_id.get(pid) or enlace_por_titulo.get(_normalizar_titulo(p.get("titulo", "")))
+        nombre = (linea_por_contenido.get(cid or "") or "").strip()
+        if nombre:
+            salida[pid] = nombre
+    return salida
+
+
 def lineas_y_origenes(
     rango: str, marca_consola: str | None, marca_metricas: str | None
 ) -> dict[str, Any]:
