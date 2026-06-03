@@ -19,11 +19,12 @@ import {
   SendToBack,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type DragEvent as DragEventReact, useEffect, useRef, useState } from "react";
 import { Layer, Line, Rect, Stage, Transformer } from "react-konva";
 
 import { CapaNodo } from "./capas/CapaNodo";
 import type { Capa, CapaTexto, Documento } from "./documento";
+import { nuevaCapaImagen, nuevaCapaLogo } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 import { useImagen } from "./useImagen";
 
@@ -77,6 +78,7 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
 
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [guias, setGuias] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
   const [arrastrando, setArrastrando] = useState(false);
   const [rectSel, setRectSel] = useState<{ x: number; y: number; w: number } | null>(null);
@@ -196,6 +198,35 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
 
   const ajustarZoom = () => setZoom(1);
 
+  // Soltar un activo arrastrado desde la Biblioteca: lo inserta como capa DONDE se suelta.
+  const onDrop = (e: DragEventReact<HTMLDivElement>) => {
+    const raw = e.dataTransfer.getData("application/x-keni-activo");
+    if (!raw) return;
+    e.preventDefault();
+    let asset: { objeto: string; tipo: string };
+    try {
+      asset = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const cont = scrollRef.current;
+    if (!cont || !asset.objeto) return;
+    const rect = cont.getBoundingClientRect();
+    const dx = (e.clientX - rect.left + cont.scrollLeft) / escala;
+    const dy = (e.clientY - rect.top + cont.scrollTop) / escala;
+    const st = store.getState();
+    const z = Math.max(0, ...st.documento.capas.map((c) => c.z)) + 1;
+    if (asset.tipo === "logo") {
+      const cw = 320, ch = 120;
+      st.agregar(nuevaCapaLogo(asset.objeto, { x: Math.round(dx - cw / 2), y: Math.round(dy - ch / 2), w: cw, h: ch, z }));
+    } else {
+      const cw = Math.round(documento.formato.w * 0.4);
+      st.agregar(nuevaCapaImagen(asset.objeto, { x: Math.round(dx - cw / 2), y: Math.round(dy - cw / 2), w: cw, h: cw, z }));
+    }
+    const nuevas = st.documento.capas;
+    st.seleccionar(nuevas[nuevas.length - 1]?.id ?? null);
+  };
+
   const acciones: { icono: typeof Trash2; titulo: string; onClick: () => void }[] = seleccion
     ? [
         { icono: AlignStartVertical, titulo: "Alinear izquierda", onClick: () => store.getState().alinear(seleccion, "izq") },
@@ -214,7 +245,14 @@ export function Lienzo({ maxAncho = 620, maxAlto = 760 }: { maxAncho?: number; m
   return (
     <div ref={medirRef} className="flex h-full w-full items-center justify-center overflow-hidden">
     <div className="relative" style={{ width: baseFit * w, height: baseFit * h }}>
-      <div className="h-full w-full overflow-auto rounded-md border border-border shadow-sm">
+      <div
+        ref={scrollRef}
+        className="h-full w-full overflow-auto rounded-md border border-border shadow-sm"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes("application/x-keni-activo")) e.preventDefault();
+        }}
+        onDrop={onDrop}
+      >
         <Stage
           ref={stageRef}
           width={w * escala}

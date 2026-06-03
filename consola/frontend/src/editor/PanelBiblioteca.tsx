@@ -139,7 +139,16 @@ export function PanelBiblioteca({ marca }: { marca: string }) {
                 <button
                   key={a.id}
                   onClick={() => insertar(a)}
-                  title={a.nombre || a.tipo}
+                  draggable={a.tipo !== "paleta" && a.tipo !== "tipografia"}
+                  onDragStart={(e) => {
+                    // Arrastrar al lienzo: el Lienzo lo recoge en onDrop y lo coloca donde se suelte.
+                    e.dataTransfer.setData(
+                      "application/x-keni-activo",
+                      JSON.stringify({ objeto: a.objeto, tipo: a.tipo }),
+                    );
+                    e.dataTransfer.effectAllowed = "copy";
+                  }}
+                  title={`${a.nombre || a.tipo} — clic para insertar centrado, o arrástralo al lienzo`}
                   className="group relative aspect-square overflow-hidden rounded border border-border bg-[repeating-conic-gradient(#0000_0_25%,#8884_0_50%)] bg-[length:16px_16px] hover:ring-2 hover:ring-primary"
                 >
                   {a.objeto ? (
