@@ -5,8 +5,9 @@
  *   - Filtros (client-side): marca, línea editorial, red y buscador por título.
  *   - Estadísticas del conjunto filtrado: nº de piezas, vistas media/mediana y
  *     engagement medio/mediana (top/peores = ordenar por la columna Vistas).
- *   - Columnas ordenables (vistas / engagement / comentarios / compartidos / guardados,
- *     estas tres con icono en la cabecera) reusando `useOrdenTabla`.
+ *   - Columnas ordenables (vistas / engagement / comentarios / compartidos / guardados /
+ *     clics a enlace, estas con icono en la cabecera) reusando `useOrdenTabla`. Los clics
+ *     a enlace (tráfico fuera de la red) absorben la antigua tabla "Tráfico web".
  *   - Paginación POR DÍA (un día por página, pager Prev/Siguiente).
  *   - Cada fila muestra "Plataforma · Línea (· Marca)" + badge de rendimiento relativo y
  *     es ABRIBLE: drill-down al `DetallePieza` (métricas + granulares + histórico + velocidad).
@@ -24,6 +25,7 @@ import {
   ListChecks,
   type LucideIcon,
   MessageCircle,
+  MousePointerClick,
   Search,
   Share2,
 } from "lucide-react";
@@ -72,7 +74,8 @@ type ClaveOrden =
   | "engagement_pct"
   | "comentarios"
   | "compartidos"
-  | "guardados";
+  | "guardados"
+  | "clics_enlace";
 
 const ACCESORES: Record<ClaveOrden, (p: PiezaListado) => number | string | null> = {
   visualizaciones: (p) => p.visualizaciones,
@@ -80,13 +83,16 @@ const ACCESORES: Record<ClaveOrden, (p: PiezaListado) => number | string | null>
   comentarios: (p) => p.comentarios,
   compartidos: (p) => p.compartidos,
   guardados: (p) => p.guardados,
+  clics_enlace: (p) => p.clics_enlace,
 };
 
-/** Columnas de interacción granular: icono (logo) en la cabecera + número por fila. */
+/** Columnas con icono (logo) en la cabecera + número por fila, ordenables: el desglose
+ * de interacción más los clics a enlace (tráfico fuera de la red, clave en Facebook). */
 const COLS_INTERACCION: Array<{ clave: ClaveOrden; etiqueta: string; icono: LucideIcon }> = [
   { clave: "comentarios", etiqueta: "Comentarios", icono: MessageCircle },
   { clave: "compartidos", etiqueta: "Compartidos", icono: Share2 },
   { clave: "guardados", etiqueta: "Guardados", icono: Bookmark },
+  { clave: "clics_enlace", etiqueta: "Clics a enlace", icono: MousePointerClick },
 ];
 
 const TODAS = "__todas__";

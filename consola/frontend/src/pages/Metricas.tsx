@@ -31,7 +31,6 @@ import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
-import { TraficoWeb } from "./metricas/TraficoWeb";
 
 /** Etiqueta legible cuando el reporte no acota marca (backend devuelve `""`). */
 const ETIQUETA_TODAS = "Todas las marcas";
@@ -203,20 +202,20 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
           {/* Estrategia digital: lectura de alto nivel (más allá del día a día),
               ANTES del detalle granular de piezas. Crecimiento de audiencia, de qué
-              se compone el engagement, qué formatos rinden, tráfico web y
-              correlación. Siguen marca/rango global como el resto del dashboard. */}
+              se compone el engagement, qué formatos rinden y correlación. El tráfico
+              web (clics a enlace) vive ahora como columna en "Piezas del periodo".
+              Siguen marca/rango global como el resto del dashboard. */}
           <section className="space-y-4">
             <div className="space-y-1">
               <h2 className="text-lg font-semibold tracking-tight">Estrategia digital</h2>
               <p className="text-sm text-muted-foreground">
-                Crecimiento de audiencia, composición del engagement, qué formatos
-                rinden mejor y qué piezas llevan tráfico fuera de la red.
+                Crecimiento de audiencia, composición del engagement y qué formatos
+                rinden mejor.
               </p>
             </div>
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
-            <TraficoWeb marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </section>
 

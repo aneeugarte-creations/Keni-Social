@@ -95,7 +95,7 @@ describe("PiezasConsolidada", () => {
     expect(within(filas[0]).getByText("Noticia local")).toBeInTheDocument(); // 9000 vistas
   });
 
-  it("muestra columnas de comentarios/compartidos/guardados y ordena por ellas; sin columna de clics", async () => {
+  it("muestra columnas de comentarios/compartidos/guardados/clics y ordena por ellas", async () => {
     const datos = [
       pieza({ id: "a", titulo: "Pocos comentarios", comentarios: 2 }),
       pieza({ id: "b", titulo: "Muchos comentarios", comentarios: 99 }),
@@ -104,9 +104,10 @@ describe("PiezasConsolidada", () => {
     renderConProviders(<PiezasConsolidada marcaActual="__todas__" rangoActual="mes" marcas={MARCAS} />);
     await screen.findByText("Muchos comentarios");
 
-    // El número de comentarios se ve y ya NO hay cabecera de Clics.
+    // El número de comentarios se ve y la columna de clics a enlace (tráfico web
+    // fusionado) está presente como cabecera ordenable.
     expect(screen.getByText("99")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Clics/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clics a enlace" })).toBeInTheDocument();
 
     // Orden por comentarios (clic en columna nueva = desc): la de más comentarios primero.
     // Nombre EXACTO "Comentarios" (la cabecera); los botones de fila contienen el título.
