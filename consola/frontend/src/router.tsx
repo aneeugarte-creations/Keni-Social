@@ -13,6 +13,9 @@ import { Loader2 } from "lucide-react";
 const Panel = lazy(() => import("@/pages/Panel"));
 const Estudio = lazy(() => import("@/pages/Estudio"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
+const EstrategiaMarcas = lazy(() =>
+  import("@/pages/biblioteca/GestionLineas").then((m) => ({ default: m.GestionLineas })),
+);
 
 // Sub-paginas de cada hub. Los hubs no tienen componente wrapper propio: la
 // ruta-padre se deja sin `element` y react-router renderiza `<Outlet/>` por defecto;
@@ -136,6 +139,7 @@ export const router = createBrowserRouter([
               { index: true, element: <Navigate to="documentos" replace /> },
               { path: "documentos", element: <Biblioteca /> },
               { path: "plantillas", element: <PlantillasContenido /> },
+              { path: "estrategia", element: <EstrategiaMarcas /> },
             ],
           },
         ],

@@ -13,6 +13,7 @@ import {
   Rss,
   ScanSearch,
   ScanText,
+  Target,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +69,7 @@ export const TABS_PARRILLA: ItemTabHub[] = [
 export const TABS_BIBLIOTECA: ItemTabHub[] = [
   { ruta: "/contenido/biblioteca/documentos", etiqueta: "Documentos", icono: BookText },
   { ruta: "/contenido/biblioteca/plantillas", etiqueta: "Plantillas", icono: FileText },
+  { ruta: "/contenido/biblioteca/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
 ];
 
 /**

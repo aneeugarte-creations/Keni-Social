@@ -72,7 +72,6 @@ import {
   ORDEN_REDES,
   tiempoRelativo,
 } from "./publicaciones/meta";
-import { GestionLineas } from "./fuentes/GestionLineas";
 import { TallerGreen } from "./fuentes/TallerGreen";
 
 const CLAVE_FUENTES = ["rss", "fuentes"] as const;
@@ -127,7 +126,6 @@ const PESTANAS_TIPO: PestanaTipo[] = [
   { valor: "enlace", etiqueta: "Enlaces" },
   { valor: "interna", etiqueta: "Interno AMX" },
   { valor: "green", etiqueta: "Green" },
-  { valor: "lineas", etiqueta: "Líneas" },
 ];
 
 /**
@@ -187,9 +185,6 @@ export default function Fuentes() {
         </TabsContent>
         <TabsContent value="green">
           <TallerGreen marcas={marcas} redes={opcionesRedes} />
-        </TabsContent>
-        <TabsContent value="lineas">
-          <GestionLineas />
         </TabsContent>
       </Tabs>
     </>
