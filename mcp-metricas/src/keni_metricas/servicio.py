@@ -419,14 +419,21 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
             PuntoSeguidores(fecha=fecha, total=sum(por_red.values()), por_red=por_red)
         )
 
-    # Neto del periodo: último − primero (la serie de followers es un STOCK).
-    neto = 0
-    neto_por_red: dict[str, int] = {}
-    if len(puntos_out) >= 2:
-        primero, ultimo = puntos_out[0], puntos_out[-1]
-        neto = ultimo.total - primero.total
-        for red in set(primero.por_red) | set(ultimo.por_red):
-            neto_por_red[red] = ultimo.por_red.get(red, 0) - primero.por_red.get(red, 0)
+    # Neto del periodo POR RED: último − primer valor DE CADA RED en los días que tiene
+    # dato (la serie de followers es un STOCK). Clave: el primer/último de CADA red por
+    # separado, NO el total del primer/último día. Metricool no siempre trae todos los días
+    # para todas las redes; con el total global, una red ausente en un extremo restaba todo
+    # su stock (p.ej. −4.97M de YouTube), dando netos absurdos. El neto global = suma de los
+    # netos por red. Una red con un solo punto -> 0 (sin variación medible), pero SE CONSERVA
+    # para que aparezca en el desglose del gráfico.
+    serie_por_red: dict[str, list[int]] = {}
+    for p in puntos_out:  # ya ordenados por fecha
+        for red, valor in p.por_red.items():
+            serie_por_red.setdefault(red, []).append(int(valor))
+    neto_por_red: dict[str, int] = {
+        red: (vals[-1] - vals[0] if len(vals) >= 2 else 0) for red, vals in serie_por_red.items()
+    }
+    neto = sum(neto_por_red.values())
 
     serie = SerieSeguidores(
         cuenta=marca,

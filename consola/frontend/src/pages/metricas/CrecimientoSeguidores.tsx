@@ -17,10 +17,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { api } from "@/lib/api";
-import { nombreRed, numeroCompacto, numeroCompleto, variacion } from "@/lib/formato";
+import { nombreRed, numeroCompacto, numeroCompleto } from "@/lib/formato";
 import type { PuntoSeguidores } from "@/types";
 
 import { MARCA_TODAS } from "./Controles";
+
+/** Neto de seguidores con signo: es un CONTEO (`+1.2K` / `−5K`), NO un porcentaje. */
+function netoSeguidores(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "0";
+  return `${n > 0 ? "+" : "−"}${numeroCompacto(Math.abs(n))}`;
+}
 
 /** "12 may" a partir de una fecha ISO (AAAA-MM-DD), en es-MX. */
 function fechaCorta(iso: string): string {
@@ -133,11 +139,16 @@ function KpisNeto({
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       <TarjetaKpi
         etiqueta="Neto del periodo"
-        valor={variacion(neto)}
+        valor={netoSeguidores(neto)}
         titulo={`${numeroCompleto(neto)} seguidores`}
       />
       {redes.map((red) => (
-        <TarjetaKpi key={red} etiqueta={nombreRed(red)} valor={variacion(netoPorRed[red])} />
+        <TarjetaKpi
+          key={red}
+          etiqueta={nombreRed(red)}
+          valor={netoSeguidores(netoPorRed[red])}
+          titulo={`${numeroCompleto(netoPorRed[red])} seguidores`}
+        />
       ))}
     </div>
   );

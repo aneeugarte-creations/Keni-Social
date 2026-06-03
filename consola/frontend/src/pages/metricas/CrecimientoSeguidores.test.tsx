@@ -44,8 +44,11 @@ describe("CrecimientoSeguidores", () => {
     renderConProviders(<CrecimientoSeguidores marcaActual="__todas__" rangoActual="semana" />);
 
     expect(await screen.findByText("Neto del periodo")).toBeInTheDocument();
-    // neto global como variación con signo.
-    expect(screen.getByText("+1,234.0 %")).toBeInTheDocument();
+    // REGRESIÓN: el neto de seguidores es un CONTEO, NUNCA un porcentaje (antes el bug
+    // lo pintaba con `variacion()` -> "+1,234.0 %", incluso "−4,979,127.0 %").
+    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
+    // El KPI del neto lleva el conteo exacto en su tooltip ("1,234 seguidores").
+    expect(screen.getByTitle("1,234 seguidores")).toBeInTheDocument();
     // un KPI por red presente en neto_por_red, con la etiqueta de red LEGIBLE
     // (instagram → "Instagram", x → "X"), no el id crudo.
     expect(screen.getByText("Instagram")).toBeInTheDocument();

@@ -349,3 +349,34 @@ def test_metricol_correlacion_usa_serie_y_marca_nota():
     assert it["n_posts"] == 0
     assert it["seguidores_por_post"] is None
     assert it["post_estrella"] is None
+
+
+def test_serie_seguidores_neto_por_red_ignora_huecos():
+    """Una red con dato al inicio pero AUSENTE el último día no debe restar su stock.
+
+    Regresión del bug "−4,979,127": antes `neto = último_total − primer_total` y, con
+    huecos de Metricool (p.ej. YouTube falta el último día), restaba todo su stock. Ahora
+    el neto es POR RED (primer/último de cada red en sus propios días) y se suma.
+    """
+
+    class _Cuenta:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "stub"
+
+        def cuentas(self):
+            return [_Cuenta()]
+
+        def serie_seguidores(self, cuenta_id, rango):
+            return [
+                {"fecha": "2026-05-20", "por_red": {"youtube": 4_970_000, "instagram": 100}},
+                {"fecha": "2026-05-26", "por_red": {"instagram": 130}},  # youtube ausente (hueco)
+            ]
+
+    s = servicio.serie_seguidores_desde_fuente(_Fuente(), "mes:2026-05")
+    # youtube: un solo punto -> 0 (NO −4.97M). instagram: 130 − 100 = 30.
+    assert s["neto_por_red"]["youtube"] == 0
+    assert s["neto_por_red"]["instagram"] == 30
+    # neto global = suma de netos por red (30), no el total global (que daría ≈ −4.96M).
+    assert s["neto"] == 30
