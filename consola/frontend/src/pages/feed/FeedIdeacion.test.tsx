@@ -130,14 +130,28 @@ describe("FeedIdeacion · feed de ideación interno", () => {
     vi.unstubAllGlobals();
   });
 
-  it("muestra la cabecera y un feed único sin bandejas (una sola línea por fecha)", async () => {
+  it("muestra la cabecera y 3 pestañas-vista del mismo feed (todo / por aprobar / publicado)", async () => {
     stubFetch();
     renderFeed();
     expect(await screen.findByText("Feed de ideación")).toBeInTheDocument();
-    // Ya NO hay tabs por estado: el flujo va en una sola línea, no en bandejas separadas.
-    expect(screen.queryByRole("tab", { name: "Por revisar" })).not.toBeInTheDocument();
+    // 3 vistas del mismo listado (no las bandejas viejas por estado).
+    expect(screen.getByRole("tab", { name: /Todo el feed/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Por aprobar/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Publicado y programado/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "En proceso" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Aprobadas" })).not.toBeInTheDocument();
+  });
+
+  it("la pestaña filtra el feed en cliente: 'Publicado y programado' oculta lo que está por aprobar", async () => {
+    stubFetch();
+    renderFeed();
+    // La única pieza (en_revision) se ve en 'Todo'.
+    expect(await screen.findByText("¡Increíble remontada!")).toBeInTheDocument();
+    // Al cambiar a 'Publicado y programado' desaparece (no está publicada ni programada).
+    fireEvent.click(screen.getByRole("tab", { name: /Publicado y programado/ }));
+    await waitFor(() =>
+      expect(screen.queryByText("¡Increíble remontada!")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("Nada publicado ni programado")).toBeInTheDocument();
   });
 
   it("renderiza la pieza como post con etapa IA y acciones de aprobación en línea", async () => {

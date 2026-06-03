@@ -5,17 +5,21 @@
  * arte/formato), con un LABEL de su etapa en la tubería, y APRUEBA en línea —como quien
  * interactúa con un post— sin abrir el kanban.
  *
- * UNA SOLA LÍNEA, sin bandejas: el flujo no se separa por estado (autogeneración → auto QA →
- * tu OK → programada → publicada), va todo mezclado y ordenado por fecha (lo más reciente
- * primero). No hay tabs "por revisar / en proceso / aprobadas": la etapa la dice el label de
- * cada pieza, y el OK aparece en línea solo cuando te toca.
+ * UN SOLO feed por fecha, con 3 PESTAÑAS que son VISTAS del mismo listado (no bandejas que
+ * fragmenten el flujo ni hagan fetches distintos): se pide TODO una vez (`creado DESC`) y la
+ * pestaña solo FILTRA en cliente qué se enseña —
+ *   - "Todo el feed": todas las piezas, mezcladas y por fecha (la vista por defecto).
+ *   - "Por aprobar": las que esperan tu OK (`estado = en_revision`).
+ *   - "Publicado y programado": lo que ya salió o tiene hueco (`estado ∈ {publicado, programado}`).
+ * Cada pieza enseña en qué va con su label de etapa, y el OK aparece en línea cuando te toca.
  *
  * Vive DENTRO del AppShell (a diferencia del feed móvil `/feed`, que es de una columna y sin
  * sidebar para revisores en el móvil). Aquí es una pestaña del hub Parrilla, pensada para
  * trabajar el día entero desde el feed.
  *
  * Reutiliza lo existente sin tocar backend:
- *  - `GET /api/publicaciones?marca=` (sin `estado`) para listar TODAS las piezas por fecha.
+ *  - `GET /api/publicaciones?marca=` (sin `estado`) para listar TODAS las piezas por fecha;
+ *    las pestañas filtran ese único listado en memoria (sin más llamadas).
  *  - `PostFeed`: cada pieza como post + aprobación en línea (forwardea a la cadena multinivel)
  *    + comentarios (`Comentarios`).
  *  - El alta de material la implementa el Flujo A (acción de alta): este feed NO la duplica.
@@ -33,6 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import { CLAVE_PUBLICACIONES } from "@/pages/publicaciones/claves";
+import type { Publicacion } from "@/types";
 
 import { PostFeed } from "./PostFeed";
 
@@ -42,10 +47,53 @@ function mensajeError(error: unknown): string {
   return "Ocurrió un problema. Vuelve a intentarlo.";
 }
 
+/**
+ * Pestañas del feed: NO son bandejas (un fetch por estado), son VISTAS del mismo listado
+ * único. `filtra` decide qué piezas se enseñan; `vacio` el mensaje cuando esa vista no tiene.
+ */
+type Vista = "todo" | "por_aprobar" | "publicado";
+
+const VISTAS: {
+  id: Vista;
+  etiqueta: string;
+  filtra: (p: Publicacion) => boolean;
+  vacio: { titulo: string; texto: string };
+}[] = [
+  {
+    id: "todo",
+    etiqueta: "Todo el feed",
+    filtra: () => true,
+    vacio: {
+      titulo: "El feed está vacío",
+      texto:
+        "El equipo postea material y la IA lo convierte en piezas; aparecerán aquí, las más recientes primero, y aprobarás en línea cuando alguna esté lista.",
+    },
+  },
+  {
+    id: "por_aprobar",
+    etiqueta: "Por aprobar",
+    filtra: (p) => p.estado === "en_revision",
+    vacio: {
+      titulo: "Nada por aprobar",
+      texto: "Cuando la IA deje una pieza lista, aparecerá aquí para tu visto bueno (los 2 OK).",
+    },
+  },
+  {
+    id: "publicado",
+    etiqueta: "Publicado y programado",
+    filtra: (p) => p.estado === "publicado" || p.estado === "programado",
+    vacio: {
+      titulo: "Nada publicado ni programado",
+      texto: "Las piezas que apruebes y tengan hueco en la parrilla saldrán aquí.",
+    },
+  },
+];
+
 export default function FeedIdeacion() {
   const { usuario } = useSesion();
   const queryClient = useQueryClient();
 
+  const [vista, setVista] = React.useState<Vista>("todo");
   const marcasUsuario = React.useMemo(() => usuario?.marcas ?? [], [usuario?.marcas]);
   const [marca, setMarca] = React.useState<string>(
     marcasUsuario.length === 1 ? marcasUsuario[0] : MARCA_TODAS,
@@ -61,10 +109,8 @@ export default function FeedIdeacion() {
       ? catalogoMarcas.filter((m) => marcasUsuario.includes(m.id))
       : catalogoMarcas;
 
-  // UN solo feed, TODAS las etapas mezcladas y ordenadas por fecha (el backend devuelve
-  // `creado DESC` cuando no se filtra estado). El flujo es una sola línea —autogeneración →
-  // auto QA → tu OK (2 likes) → programada/publicada—, no bandejas que separen las etapas:
-  // cada pieza enseña en qué va con su label de etapa y, si te toca, su OK en línea.
+  // UN solo fetch: TODAS las etapas mezcladas y ordenadas por fecha (el backend devuelve
+  // `creado DESC` cuando no se filtra estado). Las pestañas filtran este listado en memoria.
   const feedQuery = useQuery({
     queryKey: [...CLAVE_PUBLICACIONES, "feed-ideacion", marca],
     queryFn: ({ signal }) => api.publicaciones({ marca: marcaParam(marca) }, signal),
@@ -78,6 +124,21 @@ export default function FeedIdeacion() {
     }
     return todas;
   }, [feedQuery.data, marca, marcasUsuario]);
+
+  // Conteo por pestaña (sobre el listado ya acotado por marca) para el badge de cada tab.
+  const conteos = React.useMemo(
+    () =>
+      Object.fromEntries(VISTAS.map((v) => [v.id, piezas.filter(v.filtra).length])) as Record<
+        Vista,
+        number
+      >,
+    [piezas],
+  );
+  const vistaActual = VISTAS.find((v) => v.id === vista) ?? VISTAS[0];
+  const piezasVista = React.useMemo(
+    () => piezas.filter(vistaActual.filtra),
+    [piezas, vistaActual],
+  );
 
   const refrescar = () => void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
 
@@ -99,9 +160,36 @@ export default function FeedIdeacion() {
         }
       />
 
-      {/* Filtro: solo marca. El feed NO separa por etapa (no es bandejas): todas las piezas
-          van en una línea por fecha, cada una con su label de etapa. */}
+      {/* Filtros: pestañas (vistas del MISMO feed) + marca. Las pestañas no hacen otra
+          llamada: filtran en cliente el listado ya cargado. */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex gap-1" role="tablist" aria-label="Vista del feed">
+          {VISTAS.map((v) => (
+            <button
+              key={v.id}
+              type="button"
+              role="tab"
+              aria-selected={vista === v.id}
+              onClick={() => setVista(v.id)}
+              className={
+                vista === v.id
+                  ? "inline-flex items-center gap-1.5 rounded-full bg-primary px-3 py-1 text-sm font-medium text-primary-foreground"
+                  : "inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted"
+              }
+            >
+              {v.etiqueta}
+              <span
+                className={
+                  vista === v.id
+                    ? "rounded-full bg-primary-foreground/20 px-1.5 text-xs tabular-nums"
+                    : "rounded-full bg-muted px-1.5 text-xs tabular-nums"
+                }
+              >
+                {conteos[v.id]}
+              </span>
+            </button>
+          ))}
+        </div>
         <SelectorMarca
           marcas={marcas}
           valor={marca}
@@ -120,13 +208,10 @@ export default function FeedIdeacion() {
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm text-destructive">
             No se pudo cargar el feed. {mensajeError(feedQuery.error)}
           </div>
-        ) : piezas.length === 0 ? (
-          <EstadoVacio
-            titulo="El feed está vacío"
-            texto="El equipo postea material y la IA lo convierte en piezas; aparecerán aquí, las más recientes primero, y aprobarás en línea cuando alguna esté lista."
-          />
+        ) : piezasVista.length === 0 ? (
+          <EstadoVacio titulo={vistaActual.vacio.titulo} texto={vistaActual.vacio.texto} />
         ) : (
-          piezas.map((p) => <PostFeed key={p.id} publicacion={p} />)
+          piezasVista.map((p) => <PostFeed key={p.id} publicacion={p} />)
         )}
       </div>
     </div>
