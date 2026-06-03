@@ -22,10 +22,8 @@ import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
-import { ListaPiezas } from "./metricas/ListaPiezas";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
-import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
-import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
+import { PiezasConsolidada } from "./metricas/PiezasConsolidada";
 import { TablaCuentas } from "./metricas/TablaCuentas";
 import { TablaRedes } from "./metricas/TablaRedes";
 import { TendenciaDiaria } from "./metricas/TendenciaDiaria";
@@ -110,9 +108,9 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
   const marca_ = marcaParam(marca);
 
-  // Drill-down: al clicar una marca en "Por marca", seleccionamos su tab en
-  // "Piezas del periodo" y hacemos scroll a esa sección (lectura: del agregado al
-  // detalle). El tab de PiezasAnalitica pasa a estar controlado por esta página.
+  // Drill-down: al clicar una marca en "Por marca", fijamos el filtro de marca de la
+  // tabla consolidada "Piezas del periodo" y hacemos scroll a esa sección (lectura: del
+  // agregado al detalle). `tabPiezas` controla el filtro de marca de esa tabla.
   const [tabPiezas, setTabPiezas] = React.useState<string>("todas");
   const piezasRef = React.useRef<HTMLDivElement>(null);
   const verPiezasDeMarca = React.useCallback((marcaId: string) => {
@@ -215,13 +213,18 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </section>
 
-          {/* Detalle granular de piezas: del alto nivel al caso concreto. */}
+          {/* Detalle granular de piezas: del alto nivel al caso concreto. UNA tabla
+              consolidada (fusiona Lista + Top/Peores + Rendimiento): filtros marca/línea/
+              red + búsqueda, stats media/mediana, orden por columna (Vistas desc=top,
+              asc=peores), paginación por día y drill-down. El drill-down desde la tabla
+              por marca fija su filtro de marca. */}
           <div ref={piezasRef} className="scroll-mt-6">
-            <PiezasAnalitica
-              opciones={opciones}
+            <PiezasConsolidada
+              marcaActual={marca}
               rangoActual={rango}
-              tab={tabPiezas}
-              onTabChange={setTabPiezas}
+              marcas={marcas}
+              marcaFiltro={tabPiezas === "todas" ? "" : tabPiezas}
+              onMarcaFiltroChange={(m) => setTabPiezas(m === "" ? "todas" : m)}
             />
           </div>
           {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
@@ -231,13 +234,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
               dos tablas con piezas/visualizaciones/interacciones/engagement. Sigue
               marca/rango global como el resto del dashboard. */}
           <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
-          {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
-              (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
-          <PiezasRendimiento opciones={opciones} />
-          {/* Lista COMPLETA de piezas del periodo (todas, no solo top/peores): buscador
-              + orden + detalle por pieza con su curva histórica y velocidad. Sigue la
-              marca/rango global como el resto de las secciones de detalle. */}
-          <ListaPiezas marcaActual={marca} rangoActual={rango} />
 
           <CompararPeriodos opciones={opciones} marcaActual={marca} rangoActual={rango} />
         </div>
