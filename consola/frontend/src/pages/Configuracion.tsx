@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { useTema } from "@/hooks/tema-contexto";
 import { ApiError, api } from "@/lib/api";
@@ -1125,6 +1126,63 @@ function FilaAjuste({
   );
 }
 
+/** Toggles de auto-producción por MARCA, en una pestaña por marca (en vez de lista plana).
+ *
+ * Cada ajuste del grupo "Automatización por marca" tiene clave `ENV::marca` y etiqueta
+ * "Nombre · Etapa"; agrupamos por marca (orden de aparición) y, dentro de su pestaña, la fila
+ * muestra solo la ETAPA (el nombre ya lo da la pestaña). Reutiliza `FilaAjuste`. */
+function AjustesPorMarca({
+  ajustes,
+  onGuardar,
+  guardando,
+}: {
+  ajustes: AjusteAdmin[];
+  onGuardar: (cuerpo: { clave: string; valor?: boolean | number | string }) => void;
+  guardando: boolean;
+}) {
+  const porMarca = React.useMemo(() => {
+    const orden: string[] = [];
+    const mapa = new Map<string, { nombre: string; ajustes: AjusteAdmin[] }>();
+    for (const a of ajustes) {
+      const marcaId = a.clave.split("::")[1] ?? a.clave;
+      const [nombre, etapa] = a.etiqueta.split(" · ");
+      if (!mapa.has(marcaId)) {
+        mapa.set(marcaId, { nombre: nombre || marcaId, ajustes: [] });
+        orden.push(marcaId);
+      }
+      // En la pestaña de la marca, la fila muestra solo la etapa (no repite el nombre).
+      mapa.get(marcaId)!.ajustes.push({ ...a, etiqueta: etapa || a.etiqueta });
+    }
+    return orden.map((id) => ({ id, ...mapa.get(id)! }));
+  }, [ajustes]);
+
+  const [activa, setActiva] = React.useState(porMarca[0]?.id ?? "");
+  React.useEffect(() => {
+    if (porMarca.length && !porMarca.some((m) => m.id === activa)) setActiva(porMarca[0].id);
+  }, [porMarca, activa]);
+
+  if (!porMarca.length) return null;
+  return (
+    <Tabs value={activa} onValueChange={setActiva} className="mt-1">
+      <TabsList className="flex-wrap">
+        {porMarca.map((m) => (
+          <TabsTrigger key={m.id} value={m.id}>
+            {m.nombre}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      {porMarca.map((m) => (
+        <TabsContent key={m.id} value={m.id}>
+          {m.ajustes.map((a) => (
+            <FilaAjuste key={a.clave} ajuste={a} onGuardar={onGuardar} guardando={guardando} />
+          ))}
+        </TabsContent>
+      ))}
+    </Tabs>
+  );
+}
+
+
 /** Sección admin: toggles + ajustes finos de funcionalidad (aplican en caliente). */
 function SeccionFuncionalidad() {
   const queryClient = useQueryClient();
@@ -1183,16 +1241,25 @@ function SeccionFuncionalidad() {
               <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 {grupo.titulo}
               </h4>
-              <div>
-                {grupo.ajustes.map((ajuste) => (
-                  <FilaAjuste
-                    key={ajuste.clave}
-                    ajuste={ajuste}
-                    onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
-                    guardando={guardar.isPending}
-                  />
-                ))}
-              </div>
+              {grupo.id === "automatizacion_marca" ? (
+                // Muchos toggles (marca × etapa): en vez de una lista plana, una pestaña por marca.
+                <AjustesPorMarca
+                  ajustes={grupo.ajustes}
+                  onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+                  guardando={guardar.isPending}
+                />
+              ) : (
+                <div>
+                  {grupo.ajustes.map((ajuste) => (
+                    <FilaAjuste
+                      key={ajuste.clave}
+                      ajuste={ajuste}
+                      onGuardar={(cuerpo) => guardar.mutate(cuerpo)}
+                      guardando={guardar.isPending}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ))
         )}
