@@ -13,7 +13,16 @@
  *    PNG, lo sube a media y devuelve su id, que se fija como `imagen` (lo publicable).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Crop, Eye, EyeOff, ImagePlus, Library, Loader2, Move, Upload } from "lucide-react";
+import {
+  Crop,
+  ImagePlus,
+  LayoutTemplate,
+  Library,
+  Loader2,
+  Move,
+  Slash,
+  Upload,
+} from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -26,8 +35,22 @@ import { api, ApiError, urlMedia } from "@/lib/api";
 import { ENCUADRE_DEFECTO, normalizarEncuadre, type EncuadreFoto } from "@/lib/placa/encuadre";
 import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
 import { dibujarPlaca, formatoPorRed } from "@/lib/placa/render";
-import type { FormatoSpec, PlantillaSpec } from "@/lib/specPlantilla";
+import type { CapaTexto, FormatoSpec, PlantillaSpec } from "@/lib/specPlantilla";
 import type { Arte } from "@/types";
+
+/**
+ * Caja (en px de lienzo) que ocupa la capa del titular, para situar el editor in place encima. La
+ * capa de texto NO guarda alto (se ajusta al contenido): lo estimamos por nº de líneas e
+ * interlineado. Si la capa está anclada "abajo", `y` es su borde inferior y el bloque crece hacia
+ * arriba (espejo de `dibujarTexto`).
+ */
+function cajaTitularLienzo(c: CapaTexto): { x: number; y: number; w: number; h: number } {
+  const interlineado = c.interlineado || 1.14;
+  const maxLineas = Math.max(1, c.auto_ajuste?.max_lineas ?? 2);
+  const h = Math.round(c.tamano * interlineado * maxLineas);
+  const ancla = (c as { ancla?: string }).ancla;
+  return { x: c.x, y: ancla === "abajo" ? c.y - h : c.y, w: c.w, h };
+}
 
 function mensajeError(error: unknown): string {
   if (error instanceof ApiError || error instanceof Error) return error.message;
@@ -58,8 +81,10 @@ function familiasDeFormato(spec: PlantillaSpec, fmt: FormatoSpec): string[] {
 export interface EditorPlacaInlineProps {
   marca: string;
   red: string;
-  /** Titular en vivo (campo "Texto en imagen" de la pieza). */
+  /** Titular en vivo (texto DENTRO de la imagen / copy-in de la pieza). */
   copyIn: string;
+  /** Edita el titular: el copy-in es clicable y reescribible IN PLACE sobre la placa. */
+  onCopyInCambio?: (valor: string) => void;
   /** Media id de la FOTO de fondo cruda ("" = sin foto, se muestra el hueco). */
   foto: string;
   /** Notifica un cambio de foto (nuevo media id + url). */
@@ -74,6 +99,8 @@ export interface EditorPlacaInlineProps {
   encuadre?: EncuadreFoto | null;
   /** Notifica un cambio de reencuadre (arrastre/zoom) para persistirlo al guardar. */
   onEncuadreCambio?: (encuadre: EncuadreFoto) => void;
+  /** Abre la galería de plantillas del estudio (selector nativo en la cabecera). */
+  onAbrirGaleria?: () => void;
   /**
    * Registra (o limpia con null) la función de "bake": el padre la invoca al guardar para
    * hornear el canvas actual a un media id publicable. Devuelve null si no hay nada que hornear.
@@ -85,6 +112,7 @@ export function EditorPlacaInline({
   marca,
   red,
   copyIn,
+  onCopyInCambio,
   foto,
   onCambioFoto,
   imagenFuente,
@@ -92,6 +120,7 @@ export function EditorPlacaInline({
   onPlacaOcultaCambio,
   encuadre = null,
   onEncuadreCambio,
+  onAbrirGaleria,
   registrarBake,
 }: EditorPlacaInlineProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -124,6 +153,15 @@ export function EditorPlacaInline({
   // Ref con el encuadre vivo para los handlers de arrastre (evita closures obsoletas entre renders).
   const encRef = React.useRef(enc);
   encRef.current = enc;
+
+  // Edición IN PLACE del titular: la capa de texto del copy-in es clicable sobre la placa. Solo con
+  // plantilla de marca (en "sin plantilla" no hay titular) y si el padre permite editarlo.
+  const capaTitular = mostrarMarca ? fmt?.textos?.find((t) => t.binding === "copy_in") : undefined;
+  const [editandoTitular, setEditandoTitular] = React.useState(false);
+  const [cajaTitular, setCajaTitular] = React.useState<
+    { left: number; top: number; width: number; height: number } | null
+  >(null);
+  const titularEditable = !!capaTitular && !!onCopyInCambio;
 
   // Precarga de fuentes (una vez por formato): sin ellas el ajuste de líneas no cuadra.
   React.useEffect(() => {
@@ -182,7 +220,8 @@ export function EditorPlacaInline({
       dibujarPlaca(ctx, {
         formato,
         fuentes: spec.fuentes,
-        bindings: { copy_in: copyIn, etiqueta_default: "" },
+        // Mientras se edita el titular in place, el canvas NO lo dibuja: lo muestra el overlay.
+        bindings: { copy_in: editandoTitular ? "" : copyIn, etiqueta_default: "" },
         placeholder: !imgs.foto,
         imgs,
       });
@@ -199,7 +238,7 @@ export function EditorPlacaInline({
         ctx.drawImage(imgs.foto, (w - dw) * enc.foco[0], (h - dh) * enc.foco[1], dw, dh);
       }
     }
-  }, [spec, fmt, copyIn, imgs, mostrarMarca, tieneEncuadre, enc]);
+  }, [spec, fmt, copyIn, imgs, mostrarMarca, tieneEncuadre, enc, editandoTitular]);
 
   React.useEffect(() => {
     if (!fuentesListas) return;
@@ -284,16 +323,26 @@ export function EditorPlacaInline({
     return { w: 0, h: 0 };
   }, [mostrarMarca, fmt]);
   const arrastre = React.useRef<{ x: number; y: number } | null>(null);
+  const inicioPunt = React.useRef<{ x: number; y: number } | null>(null);
+  const arrastrado = React.useRef(false); // ¿hubo movimiento real? (distingue arrastre de clic)
 
   function onPointerDownFoto(e: React.PointerEvent<HTMLCanvasElement>) {
-    if (!imgs.foto || !onEncuadreCambio) return;
-    arrastre.current = { x: e.clientX, y: e.clientY };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    if (editandoTitular) return;
+    inicioPunt.current = { x: e.clientX, y: e.clientY };
+    arrastrado.current = false;
+    if (imgs.foto && onEncuadreCambio) {
+      arrastre.current = { x: e.clientX, y: e.clientY };
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
   }
   function onPointerMoveFoto(e: React.PointerEvent<HTMLCanvasElement>) {
-    const inicio = arrastre.current;
+    const inicio = inicioPunt.current;
+    if (inicio && Math.hypot(e.clientX - inicio.x, e.clientY - inicio.y) > 4) {
+      arrastrado.current = true;
+    }
+    const ancla = arrastre.current;
     const canvas = canvasRef.current;
-    if (!inicio || !imgs.foto || !canvas || !onEncuadreCambio) return;
+    if (!ancla || !imgs.foto || !canvas || !onEncuadreCambio) return;
     const caja = cajaFoto();
     if (!caja.w) return;
     const rect = canvas.getBoundingClientRect();
@@ -304,8 +353,8 @@ export function EditorPlacaInline({
     const esc = Math.max(caja.w / iw, caja.h / ih) * actual.zoom;
     const sobranteX = iw * esc - caja.w;
     const sobranteY = ih * esc - caja.h;
-    const dxLienzo = (e.clientX - inicio.x) * escalaCss;
-    const dyLienzo = (e.clientY - inicio.y) * escalaCss;
+    const dxLienzo = (e.clientX - ancla.x) * escalaCss;
+    const dyLienzo = (e.clientY - ancla.y) * escalaCss;
     // Arrastrar la foto a la derecha muestra su parte izquierda → el foco DISMINUYE.
     const dFx = sobranteX > 0 ? -dxLienzo / sobranteX : 0;
     const dFy = sobranteY > 0 ? -dyLienzo / sobranteY : 0;
@@ -315,16 +364,55 @@ export function EditorPlacaInline({
     );
   }
   function onPointerUpFoto(e: React.PointerEvent<HTMLCanvasElement>) {
+    const fueArrastre = arrastrado.current;
     arrastre.current = null;
+    inicioPunt.current = null;
+    arrastrado.current = false;
     try {
       e.currentTarget.releasePointerCapture(e.pointerId);
     } catch {
       /* el puntero pudo soltarse fuera del canvas */
     }
+    // Un CLIC (sin arrastre) sobre la caja del titular abre la edición in place del copy-in.
+    if (fueArrastre || !titularEditable || !capaTitular || !fmt) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = ((e.clientX - rect.left) / rect.width) * fmt.lienzo.w;
+    const cy = ((e.clientY - rect.top) / rect.height) * fmt.lienzo.h;
+    const box = cajaTitularLienzo(capaTitular);
+    if (cx >= box.x && cx <= box.x + box.w && cy >= box.y && cy <= box.y + box.h) {
+      setEditandoTitular(true);
+    }
   }
   function onZoom(valor: number) {
     onEncuadreCambio?.(normalizarEncuadre({ foco: encRef.current.foco, zoom: valor }));
   }
+
+  // Caja en pantalla (px CSS) de la capa del titular, para posicionar el editor in place encima.
+  const recalcularCajaTitular = React.useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !capaTitular || !fmt) {
+      setCajaTitular(null);
+      return;
+    }
+    const sx = canvas.clientWidth / fmt.lienzo.w;
+    const sy = canvas.clientHeight / fmt.lienzo.h;
+    const box = cajaTitularLienzo(capaTitular);
+    setCajaTitular({
+      left: box.x * sx,
+      top: box.y * sy,
+      width: box.w * sx,
+      height: box.h * sy,
+    });
+  }, [capaTitular, fmt]);
+
+  React.useEffect(() => {
+    if (!editandoTitular) return;
+    recalcularCajaTitular();
+    window.addEventListener("resize", recalcularCajaTitular);
+    return () => window.removeEventListener("resize", recalcularCajaTitular);
+  }, [editandoTitular, recalcularCajaTitular]);
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
@@ -352,47 +440,97 @@ export function EditorPlacaInline({
       <div className="flex items-center justify-between gap-2">
         <span className="flex items-center gap-1.5 text-sm font-medium">
           <ImagePlus className="h-4 w-4 text-muted-foreground" />
-          Imagen <span className="font-normal text-muted-foreground">· se compone en vivo</span>
+          Imagen
         </span>
-        <Button
-          type="button"
-          variant={mostrarMarca ? "ghost" : "outline"}
-          size="sm"
-          className="h-7 gap-1.5 px-2 text-xs"
-          onClick={alternarPlantilla}
-          title={
-            mostrarMarca
-              ? "Quitar la plantilla: publicar solo la foto, sin placa ni titular encima"
-              : "Plantilla quitada: se publicará solo la foto. Toca para volver a aplicarla"
-          }
-        >
-          {mostrarMarca ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-          {mostrarMarca ? "Con plantilla" : "Sin plantilla"}
-        </Button>
+        {/* Selector nativo de plantilla: quitar plantilla (publicar solo la foto) · elegir plantilla
+            del estudio (galería por marca). Todo es 4:5, así que la plantilla la dicta la MARCA. */}
+        <div className="flex items-center gap-1">
+          <Button
+            type="button"
+            variant={mostrarMarca ? "outline" : "secondary"}
+            size="icon"
+            className="h-7 w-7"
+            onClick={alternarPlantilla}
+            title={
+              mostrarMarca
+                ? "Quitar la plantilla: publicar solo la foto, sin placa ni titular encima"
+                : "Plantilla quitada: se publica solo la foto. Toca para volver a la placa de marca"
+            }
+            aria-pressed={!mostrarMarca}
+          >
+            <span className="relative inline-flex">
+              <LayoutTemplate className="h-3.5 w-3.5" />
+              <Slash className="absolute inset-0 h-3.5 w-3.5 text-destructive" />
+            </span>
+          </Button>
+          {onAbrirGaleria && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onAbrirGaleria}
+              title="Elegir una plantilla del estudio (por marca)"
+            >
+              <LayoutTemplate className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Lienzo en vivo: resolución real, escalado por CSS. Arrastrable para reencuadrar la foto. */}
+      {/* Lienzo en vivo: resolución real, escalado por CSS. Arrastrable para reencuadrar la foto;
+          el titular es clicable y reescribible in place. */}
       <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
         {specQuery.isPending || !fuentesListas ? (
           <div className="flex h-56 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <canvas
-            ref={canvasRef}
-            className="max-h-[22rem] w-auto rounded-md"
-            style={{
-              aspectRatio: fmt ? `${fmt.lienzo.w} / ${fmt.lienzo.h}` : undefined,
-              cursor: imgs.foto && onEncuadreCambio ? "move" : "default",
-              touchAction: "none",
-            }}
-            onPointerDown={onPointerDownFoto}
-            onPointerMove={onPointerMoveFoto}
-            onPointerUp={onPointerUpFoto}
-            onPointerCancel={onPointerUpFoto}
-          />
+          <div className="relative">
+            <canvas
+              ref={canvasRef}
+              className="max-h-[22rem] w-auto rounded-md"
+              style={{
+                aspectRatio: fmt ? `${fmt.lienzo.w} / ${fmt.lienzo.h}` : undefined,
+                cursor: imgs.foto && onEncuadreCambio ? "move" : "default",
+                touchAction: "none",
+              }}
+              onPointerDown={onPointerDownFoto}
+              onPointerMove={onPointerMoveFoto}
+              onPointerUp={onPointerUpFoto}
+              onPointerCancel={onPointerUpFoto}
+            />
+            {editandoTitular && cajaTitular && (
+              <textarea
+                autoFocus
+                value={copyIn}
+                onChange={(e) => onCopyInCambio?.(e.target.value)}
+                onBlur={() => setEditandoTitular(false)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    setEditandoTitular(false);
+                  }
+                }}
+                placeholder="Escribe el titular…"
+                className="absolute resize-none overflow-hidden rounded-sm bg-black/55 p-1 text-center font-bold uppercase leading-tight text-white shadow-lg outline-none ring-2 ring-primary placeholder:text-white/60"
+                style={{
+                  left: cajaTitular.left,
+                  top: cajaTitular.top,
+                  width: cajaTitular.width,
+                  height: cajaTitular.height,
+                  fontSize: Math.max(11, cajaTitular.height * 0.16),
+                }}
+              />
+            )}
+          </div>
         )}
       </div>
+      {titularEditable && (
+        <p className="text-xs text-muted-foreground">
+          Toca el titular sobre la imagen para reescribirlo. No afecta a la foto ni a la plantilla.
+        </p>
+      )}
 
       {/* Reencuadre 4:5: arrastra la foto en el lienzo + zoom. Solo si hay foto y se puede persistir. */}
       {imgs.foto && onEncuadreCambio && (
@@ -506,10 +644,6 @@ export function EditorPlacaInline({
             {avisoGenerar}
           </p>
         )}
-        <p className="text-xs text-muted-foreground">
-          El titular y la plantilla de marca se dibujan encima automáticamente, en vivo. ¿Solo la
-          foto? Usa «Sin plantilla» arriba para publicarla sin la placa.
-        </p>
       </div>
 
       <SelectorArtes

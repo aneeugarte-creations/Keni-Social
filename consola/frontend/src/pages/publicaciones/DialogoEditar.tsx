@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
   History,
-  Layers,
   LayoutTemplate,
   Link2,
   ListChecks,
@@ -350,12 +349,13 @@ export function DialogoEditar({
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
 
-  // Plantillas del estudio para ESTA marca + red (la `categoria` de la plantilla es la red). Se
-  // cargan al abrir la galería para no pedirlas si no se usan.
+  // Plantillas del estudio por MARCA: como todo es 4:5 y se postea lo mismo a todas las redes, la
+  // plantilla la dicta la marca (no la red). Distintas plantillas cubren los tipos de post
+  // (breaking, infografía con logo, cita textual, logo del mundial, sin nada…). Se cargan al abrir
+  // la galería para no pedirlas si no se usan.
   const plantillasQuery = useQuery({
-    queryKey: ["plantillas-diseno", publicacion?.marca, publicacion?.red],
-    queryFn: ({ signal }) =>
-      api.plantillasDiseno({ marca: publicacion?.marca, categoria: publicacion?.red }, signal),
+    queryKey: ["plantillas-diseno", publicacion?.marca],
+    queryFn: ({ signal }) => api.plantillasDiseno({ marca: publicacion?.marca }, signal),
     enabled: galeriaPlantillas && !!publicacion?.marca,
   });
   const plantillas = plantillasQuery.data?.plantillas ?? [];
@@ -403,6 +403,10 @@ export function DialogoEditar({
 
   const limite = publicacion ? metaRed(publicacion.red).limite : null;
   const programado = estado === "programado";
+  // El editor de placa en vivo está activo (marca con placa, sin plantilla del estudio): el titular
+  // se edita IN PLACE sobre la imagen, así que el campo "Texto en imagen" separado sobra. Para
+  // plantilla del estudio o piezas sin marca, sí se muestra el campo.
+  const editorPlacaActivo = !!publicacion?.marca && !plantillaId;
 
   // El desplegable de estado NO ofrece los estados de la cadena de aprobación
   // (`en_revision`/`aprobado`): esos se alcanzan SOLO por los botones del panel de
@@ -600,34 +604,25 @@ export function DialogoEditar({
                     </p>
                   </div>
                 ) : (
-                  // MODO EDITOR (placa de marca por defecto): editor INLINE en vivo + probar una
-                  // plantilla del estudio (diseñadas por marca y red en el estudio de diseño).
-                  <div className="space-y-2.5">
-                    <EditorPlacaInline
-                      marca={publicacion.marca}
-                      red={publicacion.red}
-                      copyIn={copyIn}
-                      foto={foto}
-                      onCambioFoto={setFoto}
-                      imagenFuente={publicacion.imagen_fuente}
-                      placaOculta={placaOculta}
-                      onPlacaOcultaCambio={setPlacaOculta}
-                      encuadre={encuadre}
-                      onEncuadreCambio={setEncuadre}
-                      registrarBake={(fn) => {
-                        bakeRef.current = fn;
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setGaleriaPlantillas(true)}
-                    >
-                      <LayoutTemplate className="h-4 w-4" />
-                      Probar una plantilla del estudio
-                    </Button>
-                  </div>
+                  // MODO EDITOR (placa de marca por defecto): editor INLINE en vivo. El selector de
+                  // plantilla del estudio (por marca) es nativo, en la cabecera del editor.
+                  <EditorPlacaInline
+                    marca={publicacion.marca}
+                    red={publicacion.red}
+                    copyIn={copyIn}
+                    onCopyInCambio={setCopyIn}
+                    foto={foto}
+                    onCambioFoto={setFoto}
+                    imagenFuente={publicacion.imagen_fuente}
+                    placaOculta={placaOculta}
+                    onPlacaOcultaCambio={setPlacaOculta}
+                    encuadre={encuadre}
+                    onEncuadreCambio={setEncuadre}
+                    onAbrirGaleria={() => setGaleriaPlantillas(true)}
+                    registrarBake={(fn) => {
+                      bakeRef.current = fn;
+                    }}
+                  />
                 )
               ) : (
                 // Pieza sin marca: foto cruda (sin placa) con el editor de imagen clásico.
@@ -647,48 +642,28 @@ export function DialogoEditar({
                 />
               ))}
 
-            {publicacion && (
-              <a
-                href={
-                  `/contenido/editor?contenido=${encodeURIComponent(publicacion.contenido_id)}` +
-                  `&plataforma=${encodeURIComponent(publicacion.id)}` +
-                  `&marca=${encodeURIComponent(publicacion.marca || "")}` +
-                  `&formato=${
-                    publicacion.red === "tiktok"
-                      ? "vertical"
-                      : publicacion.red === "instagram"
-                        ? "cuadrado"
-                        : publicacion.red === "x" || publicacion.red === "twitter"
-                          ? "horizontal"
-                          : "feed"
-                  }`
-                }
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary underline"
-              >
-                <Layers className="h-3.5 w-3.5" /> Abrir en el editor por capas
-              </a>
-            )}
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="editar-copy-in">Texto en imagen</Label>
-                <span className="text-xs text-muted-foreground">{copyIn.length} car.</span>
+            {/* "Texto en imagen" separado: solo cuando el titular NO se edita in place (plantilla del
+                estudio o pieza sin marca). En el editor de placa en vivo se reescribe sobre la imagen. */}
+            {!editorPlacaActivo && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="editar-copy-in">Texto en imagen</Label>
+                  <span className="text-xs text-muted-foreground">{copyIn.length} car.</span>
+                </div>
+                <AutoTextarea
+                  id="editar-copy-in"
+                  value={copyIn}
+                  onChange={(e) => setCopyIn(e.target.value)}
+                  maxHeight={200}
+                  className="min-h-[4rem] font-mono text-sm"
+                  placeholder="Titular o frase que va DENTRO de la imagen (placa)."
+                />
+                <p className="text-xs text-muted-foreground">
+                  El texto sobre la imagen, distinto del contenido que la acompaña. Sigue las
+                  reglas de texto-en-imagen de la marca.
+                </p>
               </div>
-              <AutoTextarea
-                id="editar-copy-in"
-                value={copyIn}
-                onChange={(e) => setCopyIn(e.target.value)}
-                maxHeight={200}
-                className="min-h-[4rem] font-mono text-sm"
-                placeholder="Titular o frase que va DENTRO de la imagen (placa)."
-              />
-              <p className="text-xs text-muted-foreground">
-                El texto sobre la imagen, distinto del contenido que la acompaña. Sigue las
-                reglas de texto-en-imagen de la marca.
-              </p>
-            </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
