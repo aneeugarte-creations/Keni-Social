@@ -34,7 +34,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, redes, repos
+from .. import marcas, plantillas_doc, redes
 from .._http_json import leer_json
 from ..seguridad import autor_de_peticion
 
@@ -151,7 +151,7 @@ async def listar(request: Request) -> Response:
     marca = qp.get("marca") or None
     tipo = qp.get("tipo") or None
     solo_activas = qp.get("solo_activas") in ("1", "true", "si")
-    plantillas = repos.listar_plantillas_contenido(
+    plantillas = plantillas_doc.listar_plantillas_contenido(
         marca=marca, tipo_nota=tipo, solo_activas=solo_activas
     )
     return JSONResponse({"plantillas": [_plantilla_a_dict(p) for p in plantillas]})
@@ -203,7 +203,7 @@ async def crear(request: Request) -> Response:
         return JSONResponse({"error": "El tipo de nota y la descripción deben ser texto."}, status_code=400)
 
     autor = autor_de_peticion(request) or {}
-    plantilla = repos.crear_plantilla_contenido(
+    plantilla = plantillas_doc.crear_plantilla_contenido(
         nombre=nombre.strip(),
         modo=modo,
         tipo_nota=tipo_nota.strip(),
@@ -276,7 +276,7 @@ async def actualizar(request: Request) -> Response:
     # Coherencia modo<->cuerpo: el cuerpo obligatorio del modo RESULTANTE no puede quedar
     # vacío (mezclando lo que cambia ahora con lo ya guardado).
     if "modo" in campos or "contenido" in campos or "estructura" in campos:
-        actual = repos.obtener_plantilla_contenido(plantilla_id)
+        actual = plantillas_doc.obtener_plantilla_contenido(plantilla_id)
         if actual is None:
             return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
         modo_final = campos.get("modo", actual.get("modo") or "estructura")
@@ -293,7 +293,7 @@ async def actualizar(request: Request) -> Response:
                     {"error": "La estructura de la plantilla es obligatoria."}, status_code=400
                 )
 
-    plantilla = repos.actualizar_plantilla_contenido(plantilla_id, campos)
+    plantilla = plantillas_doc.actualizar_plantilla_contenido(plantilla_id, campos)
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
     return JSONResponse({"plantilla": _plantilla_a_dict(plantilla)})
@@ -301,7 +301,7 @@ async def actualizar(request: Request) -> Response:
 
 async def borrar(request: Request) -> Response:
     plantilla_id = request.path_params["plantilla_id"]
-    if not repos.borrar_plantilla_contenido(plantilla_id):
+    if not plantillas_doc.borrar_plantilla_contenido(plantilla_id):
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
     return JSONResponse({"mensaje": "Plantilla borrada."})
 
@@ -314,7 +314,7 @@ async def aplicar(request: Request) -> Response:
     render se hace EN SERVIDOR para que la sustitucion sea la fuente de verdad.
     """
     plantilla_id = request.path_params["plantilla_id"]
-    plantilla = repos.obtener_plantilla_contenido(plantilla_id)
+    plantilla = plantillas_doc.obtener_plantilla_contenido(plantilla_id)
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
 
