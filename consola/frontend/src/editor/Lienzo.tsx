@@ -186,6 +186,8 @@ export function Lienzo({
   const capas: Capa[] = [...documento.capas].sort((a, b) => a.z - b.z);
   const capaSel = documento.capas.find((c) => c.id === seleccion) ?? null;
   const ratioFijo = capaSel ? RATIO_FIJO.has(capaSel.tipo) : false;
+  // El grupo solo se mueve (resize/rotación se hacen desagrupando).
+  const esGrupo = capaSel?.tipo === "grupo";
 
   // Adjunta el Transformer a TODAS las capas seleccionadas.
   useEffect(() => {
@@ -247,6 +249,16 @@ export function Lienzo({
       if (meta && (e.key === "a" || e.key === "A")) {
         e.preventDefault();
         return st.seleccionarMuchas(st.documento.capas.map((c) => c.id));
+      }
+      if (meta && (e.key === "g" || e.key === "G")) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          const c = st.documento.capas.find((x) => x.id === st.seleccion);
+          if (c?.tipo === "grupo") st.desagrupar(c.id);
+        } else {
+          st.agrupar();
+        }
+        return;
       }
       if (!sel) return;
       const capa = st.documento.capas.find((c) => c.id === sel);
@@ -506,9 +518,10 @@ export function Lienzo({
           <Layer>
             <Transformer
               ref={trRef}
-              rotateEnabled
+              rotateEnabled={!esGrupo}
+              resizeEnabled={!esGrupo}
               keepRatio={ratioFijo}
-              enabledAnchors={ratioFijo ? ["top-left", "top-right", "bottom-left", "bottom-right"] : undefined}
+              enabledAnchors={esGrupo ? [] : ratioFijo ? ["top-left", "top-right", "bottom-left", "bottom-right"] : undefined}
               ignoreStroke
               boundBoxFunc={(o, n) => (n.width < 8 || n.height < 8 ? o : n)}
             />

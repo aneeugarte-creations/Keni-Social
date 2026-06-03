@@ -41,8 +41,14 @@ export interface EstadoEditor {
   quitar: (id: string) => void;
   duplicar: (id: string) => void;
   reordenar: (id: string, delta: number) => void;
+  // Reasigna `z` para que el orden de pila coincida con `ids` (primero = más arriba). Para el
+  // arrastre-reordenar del panel de capas.
+  ordenarZ: (idsArribaPrimero: string[]) => void;
   traerAlFrente: (id: string) => void;
   enviarAlFondo: (id: string) => void;
+  // Agrupa la selección múltiple en una capa `grupo` (hijos en coordenadas absolutas) / la deshace.
+  agrupar: () => void;
+  desagrupar: (id: string) => void;
   // Alinea la capa respecto al lienzo (o, si se pasa, una caja de referencia).
   alinear: (id: string, modo: "izq" | "centroH" | "der" | "arriba" | "centroV" | "abajo") => void;
   setFondo: (fondo: Documento["fondo"]) => void;
@@ -163,6 +169,16 @@ export function crearStoreEditor(inicial: Documento) {
           ),
         ),
 
+      ordenarZ: (idsArribaPrimero) =>
+        aplicar((doc) => {
+          const n = idsArribaPrimero.length;
+          const zPorId = new Map(idsArribaPrimero.map((id, i) => [id, n - i]));
+          return conCapas(
+            doc,
+            doc.capas.map((c) => (zPorId.has(c.id) ? ({ ...c, z: zPorId.get(c.id)! } as Capa) : c)),
+          );
+        }),
+
       traerAlFrente: (id) =>
         aplicar((doc) => {
           const max = doc.capas.reduce((m, c) => Math.max(m, c.z), 0);
@@ -268,6 +284,37 @@ export function crearStoreEditor(inicial: Documento) {
             ),
           );
         });
+      },
+
+      agrupar: () => {
+        const sel = get().seleccionMulti;
+        if (sel.length < 2) return;
+        const elegidas = get().documento.capas.filter((c) => sel.includes(c.id)).sort((a, b) => a.z - b.z);
+        if (elegidas.length < 2) return;
+        // BBox que envuelve a las hijas (coordenadas absolutas, que se conservan dentro del grupo).
+        const minX = Math.min(...elegidas.map((c) => c.x));
+        const minY = Math.min(...elegidas.map((c) => c.y));
+        const maxX = Math.max(...elegidas.map((c) => c.x + c.w));
+        const maxY = Math.max(...elegidas.map((c) => c.y + c.h));
+        const z = Math.max(...elegidas.map((c) => c.z));
+        const grupo = {
+          id: `grupo-${Date.now().toString(36)}`,
+          tipo: "grupo" as const,
+          x: minX, y: minY, w: maxX - minX, h: maxY - minY,
+          rotacion: 0, opacidad: 1, z, visible: true, bloqueada: false,
+          capas: elegidas.map((c) => clonar(c)),
+        };
+        const ids = new Set(sel);
+        aplicar((doc) => conCapas(doc, [...doc.capas.filter((c) => !ids.has(c.id)), grupo as Capa]));
+        set({ seleccion: grupo.id, seleccionMulti: [grupo.id] });
+      },
+
+      desagrupar: (id) => {
+        const grupo = get().documento.capas.find((c) => c.id === id);
+        if (!grupo || grupo.tipo !== "grupo") return;
+        const hijas = grupo.capas.map((c) => clonar(c)) as Capa[];
+        aplicar((doc) => conCapas(doc, [...doc.capas.filter((c) => c.id !== id), ...hijas]));
+        set({ seleccion: hijas[hijas.length - 1]?.id ?? null, seleccionMulti: hijas.map((c) => c.id) });
       },
 
       setFondo: (fondo) => aplicar((doc) => ({ ...doc, fondo })),

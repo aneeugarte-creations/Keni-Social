@@ -6,7 +6,7 @@ import Konva from "konva";
 import { useEffect, useRef } from "react";
 import { Ellipse, Group, Image as KonvaImage, Line, Rect, Text } from "react-konva";
 
-import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "../documento";
+import type { Capa, CapaGrupo, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "../documento";
 import { useImagen } from "../useImagen";
 
 export interface CapaNodoProps {
@@ -15,6 +15,8 @@ export interface CapaNodoProps {
   onSelect: (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => void;
   onChange: (cambios: Partial<Capa>) => void;
   onGesto: () => void;
+  // Hijas de un grupo: no son arrastrables ni transformables por separado (el grupo manda).
+  interactivo?: boolean;
 }
 
 const ALIN: Record<string, string> = {
@@ -103,7 +105,7 @@ function textoMuestra(c: CapaTexto): string {
   return c.mayusculas ? base.toUpperCase() : base;
 }
 
-export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
+export function CapaNodo({ capa, onSelect, onChange, onGesto, interactivo = true }: CapaNodoProps) {
   // Hook SIEMPRE llamado (regla de hooks); null para capas sin imagen.
   const objetoImg = capa.tipo === "imagen" ? capa.objeto : capa.tipo === "logo" ? capa.media_id : null;
   const img = useImagen(objetoImg);
@@ -114,13 +116,18 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
     y: capa.y,
     rotation: capa.rotacion,
     opacity: capa.opacidad,
-    draggable: !capa.bloqueada,
+    draggable: interactivo && !capa.bloqueada,
     onMouseDown: onSelect,
     onTap: onSelect,
-    onDragStart: onGesto,
-    onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
-      onChange({ x: e.target.x(), y: e.target.y() });
-    },
+    listening: interactivo,
+    ...(interactivo
+      ? {
+          onDragStart: onGesto,
+          onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
+            onChange({ x: e.target.x(), y: e.target.y() });
+          },
+        }
+      : {}),
   };
 
   // Transform genérico: convierte escala -> w/h (y tamaño de fuente en textos), resetea escala.
@@ -261,22 +268,40 @@ export function CapaNodo({ capa, onSelect, onChange, onGesto }: CapaNodoProps) {
         />
       );
     }
-    case "grupo":
-      // Los grupos se pintan pero no se editan capa a capa en esta versión.
+    case "grupo": {
+      // El grupo se arrastra como bloque: las hijas se pintan en coordenadas ABSOLUTAS (igual que
+      // en el servidor) y el nodo Group vive en (0,0). Al soltar, se hornea el desplazamiento en
+      // las coordenadas absolutas de cada hija (y en la bbox del grupo) y se resetea el nodo.
+      const c = capa as CapaGrupo;
+      const onDragEndGrupo = (e: Konva.KonvaEventObject<DragEvent>) => {
+        const node = e.target;
+        const dx = node.x();
+        const dy = node.y();
+        node.position({ x: 0, y: 0 });
+        onChange({
+          x: c.x + dx,
+          y: c.y + dy,
+          capas: c.capas.map((s) => ({ ...s, x: s.x + dx, y: s.y + dy })),
+        } as Partial<Capa>);
+      };
       return (
-        <Group {...comun}>
-          {capa.capas.map((sub) => (
-            <CapaNodo
-              key={sub.id}
-              capa={sub}
-              seleccionada={false}
-              onSelect={onSelect}
-              onChange={() => {}}
-              onGesto={onGesto}
-            />
+        <Group
+          id={c.id}
+          x={0}
+          y={0}
+          opacity={c.opacidad}
+          draggable={!c.bloqueada}
+          onMouseDown={onSelect}
+          onTap={onSelect}
+          onDragStart={onGesto}
+          onDragEnd={onDragEndGrupo}
+        >
+          {c.capas.map((sub) => (
+            <CapaNodo key={sub.id} capa={sub} seleccionada={false} onSelect={onSelect} onChange={() => {}} onGesto={onGesto} interactivo={false} />
           ))}
         </Group>
       );
+    }
     default:
       return null;
   }
