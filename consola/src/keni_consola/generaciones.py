@@ -248,6 +248,9 @@ def _publico(datos: dict[str, Any], gen_id: str) -> dict[str, Any]:
         "fase": _str("fase"),
         "motivo": _str("motivo"),
         "salida": _str("salida"),
+        # Razonamiento (thinking) en vivo, cola acotada: feedback mientras el modelo piensa.
+        # Como el prompt, se expone en el detalle y `_todas_ordenadas` lo quita del listado.
+        "razonamiento": _str("razonamiento"),
         # Prompt EXACTO enviado a `claude -p` (visibilidad/control). Se persiste pero se
         # expone SOLO en el detalle (`obtener`); `_todas_ordenadas` lo quita del listado
         # para no engordar Actividad. Ausente en registros legados => "".
@@ -335,9 +338,10 @@ def _todas_ordenadas() -> list[dict[str, Any]]:
         if datos is None:
             continue
         pub = _publico(datos, ruta_fichero.stem)
-        # El prompt puede pesar (KB); solo se expone en el detalle (`obtener`), no en el
-        # listado de Actividad. Lo quitamos aquí para que la lista quede liviana.
+        # Prompt y razonamiento pueden pesar (KB); solo se exponen en el detalle (`obtener`),
+        # no en el listado de Actividad. Los quitamos aquí para que la lista quede liviana.
         pub.pop("prompt", None)
+        pub.pop("razonamiento", None)
         items.append(pub)
     items.sort(key=lambda g: (g["fecha_inicio"], g["id"]), reverse=True)
     return items
@@ -630,6 +634,8 @@ def lanzar_job_claude(
                     # Etapa de progreso (en que etapa va): razonando → generando.
                     "fase": acumulador.fase(),
                     "salida": acumulador.texto,
+                    # Razonamiento en vivo (cola acotada): feedback inmediato mientras piensa.
+                    "razonamiento": acumulador.razonamiento,
                     "metricas": stream.metricas_a_dict(acumulador.metricas_parciales()),
                 },
             )

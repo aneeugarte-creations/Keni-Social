@@ -572,6 +572,12 @@ export interface Generacion {
    * detalle `GET /api/generaciones/{id}`, no el listado de Actividad. Ausente => sin dato.
    */
   prompt?: string;
+  /**
+   * Razonamiento (thinking) EN VIVO: cola acotada de los últimos tokens de pensamiento,
+   * para feedback inmediato mientras el modelo aún no escribe la respuesta. Como el prompt,
+   * solo en el detalle, no en el listado. Ausente => sin dato.
+   */
+  razonamiento?: string;
   /** Métricas (tokens/coste/turnos/duración); `null` mientras no hay. */
   metricas: MetricasRun | null;
   /** Payload al completar; `null` mientras corre o si falla. */

@@ -299,6 +299,12 @@ FASE_RAZONANDO = "razonando"
 FASE_GENERANDO = "generando"
 FASE_COMPLETADO = "completado"
 
+# Tope de la cola de razonamiento (thinking) que retenemos para mostrar en vivo: el
+# pensamiento entero puede ser ENORME (decenas de miles de tokens); con la cola de los
+# últimos ~6 KB basta para dar feedback inmediato ("qué está pensando") sin inflar el
+# registro que se persiste en cada avance.
+_MAX_RAZONAMIENTO = 6000
+
 
 @dataclass
 class AcumuladorStream:
@@ -336,6 +342,10 @@ class AcumuladorStream:
     session_id: str | None = None
     final: MetricasRun | None = None
     texto: str = ""
+    # Razonamiento (thinking) en vivo: cola ACOTADA (`_MAX_RAZONAMIENTO`) de los últimos
+    # tokens de pensamiento, para dar feedback inmediato mientras el modelo "piensa" antes
+    # de escribir la respuesta (si no, la UI se queda en "Razonando…" sin nada).
+    razonamiento: str = ""
     terminado: bool = False
     error: bool = False
     mensaje_error: str = ""
@@ -425,6 +435,12 @@ class AcumuladorStream:
                 t = delta.get("text")
                 if isinstance(t, str):
                     self.texto += t
+            elif isinstance(delta, dict) and delta.get("type") == "thinking_delta":
+                # Razonamiento en vivo: acumulamos el thinking en una cola ACOTADA (solo el
+                # final) para feedback inmediato sin retener el pensamiento entero.
+                th = delta.get("thinking")
+                if isinstance(th, str) and th:
+                    self.razonamiento = (self.razonamiento + th)[-_MAX_RAZONAMIENTO:]
         elif et == "message_delta":
             uso = evt.get("usage")
             if isinstance(uso, dict):

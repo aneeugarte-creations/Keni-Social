@@ -94,6 +94,34 @@ function StreamTexto({ texto, ejecutando }: { texto: string; ejecutando: boolean
   );
 }
 
+/** Razonamiento (thinking) EN VIVO mientras el modelo aún no escribe la respuesta.
+ * Muestra la cola de pensamiento token a token para dar feedback inmediato (si no, la UI
+ * se quedaría en "Pensando…" en seco durante minutos en tareas que razonan mucho). */
+function RazonamientoVivo({ texto, ejecutando }: { texto: string; ejecutando: boolean }) {
+  const ref = React.useRef<HTMLPreElement>(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [texto]);
+  return (
+    <div className="space-y-1">
+      <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+        Razonando…
+      </p>
+      <pre
+        ref={ref}
+        className="max-h-[260px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs italic leading-relaxed text-muted-foreground"
+      >
+        {texto}
+        {ejecutando && (
+          <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse bg-foreground/40 align-middle" />
+        )}
+      </pre>
+    </div>
+  );
+}
+
 /**
  * Tarjeta reutilizable de progreso de una generación en segundo plano. Mientras
  * corre muestra el texto en vivo + métricas parciales (y, si se pasa `onCancelar`, un
@@ -166,6 +194,9 @@ export function ProgresoGeneracion({
               </Button>
             )}
           </>
+        ) : !generacion.salida && generacion.razonamiento ? (
+          // Aún no hay respuesta pero el modelo ya razona: mostramos el thinking en vivo.
+          <RazonamientoVivo texto={generacion.razonamiento} ejecutando={ejecutando} />
         ) : (
           <StreamTexto texto={generacion.salida} ejecutando={ejecutando} />
         )}
