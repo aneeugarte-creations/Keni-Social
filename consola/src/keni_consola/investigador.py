@@ -68,6 +68,44 @@ def _estado_por_clave(marca: str) -> dict[str, str]:
     return estados
 
 
+def umbral_prioritario() -> int:
+    """Umbral de señal a partir del cual un tema es PRIORITARIO (muy viral / atender primero).
+
+    REUSA `config.radar_auto_umbral()` (def 50000): el MISMO umbral con el que el daemon de
+    auto-promocion del Radar decide que un tema es "lo suficientemente viral" para empujarlo
+    solo al tablero. Asi el badge de prioridad y la auto-promocion comparten una unica nocion
+    de "tema fuerte" (un solo numero que tunear, en BACKEND, via `KENI_RADAR_AUTO_UMBRAL`).
+    """
+    return config.radar_auto_umbral()
+
+
+def prioritario_de_senal(senal: Any) -> bool:
+    """True si la `senal` del tema alcanza el umbral de prioridad (best-effort ante tipos raros)."""
+    try:
+        return int(senal) >= umbral_prioritario()
+    except (TypeError, ValueError):
+        return False
+
+
+def anotar_estado_prioritario(temas: list[dict[str, Any]], marca: str | None) -> None:
+    """Anota IN-PLACE cada tema serializado con `estado` y `prioritario` (campos ADITIVOS).
+
+    - `estado`: `'publicado' | 'en_parrilla' | 'nuevo'`, cruzando el titulo del tema contra el
+      estado editorial reciente de la marca (`_estado_por_clave`). Se calcula AL LEER, asi el
+      badge funciona AUNQUE el daemon del Investigador este OFF. UNA sola query al tablero por
+      request (no N+1): el mapa clave->estado se computa una vez y se consulta en memoria.
+    - `prioritario`: `senal >= umbral_prioritario()` (tema muy viral, atenderlo primero).
+
+    BEST-EFFORT / CERO REGRESION: si el cruce al tablero falla (o no hay marca), todo cae a
+    `estado='nuevo'`; nunca lanza, nunca rompe el endpoint. No toca los campos existentes.
+    """
+    estados = _estado_por_clave(marca) if marca else {}
+    for tema in temas:
+        clave = dedup.clave(str(tema.get("titulo", "")))
+        tema["estado"] = estados.get(clave, "nuevo") if clave else "nuevo"
+        tema["prioritario"] = prioritario_de_senal(tema.get("senal", 0))
+
+
 def materializar_snapshot(marca: str, geo: str) -> int:
     """Consolida el Radar de una marca, lo puntua y lo PERSISTE como snapshot. Devuelve nº escritos.
 

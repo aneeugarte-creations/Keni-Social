@@ -736,9 +736,23 @@ export interface EnlaceRadar {
   fuente: string;
 }
 
+/**
+ * Estado de gestión de un tema/ítem del Investigador (Fase 2b): refleja si el tema
+ * sigue sin tocar, ya está en la parrilla del CM, o ya se publicó. La UI pinta un
+ * badge solo para `en_parrilla`/`publicado` (lo `nuevo` es lo normal, no se ensucia).
+ */
+export type EstadoTema = "nuevo" | "en_parrilla" | "publicado";
+
 /** Un tema en tendencia, consolidado de una o varias fuentes y deduplicado. */
 export interface TemaRadar {
   titulo: string;
+  /**
+   * Estado de gestión del tema (Investigador F2b). Opcional/retrocompat: si falta se
+   * trata como "nuevo" (sin badge). Lo provee el backend.
+   */
+  estado?: EstadoTema;
+  /** `true` si el tema es prioritario (algo fuerte que debe salir rápido). Opcional. */
+  prioritario?: boolean;
   /** Redes/superficies donde aparece (p. ej. "busquedas-mx", "rss"). */
   redes: string[];
   /** Fuentes que lo reportan (p. ej. "Google Trends", el nombre del feed). */
@@ -979,6 +993,13 @@ export type SubtipoParrilla = "clip" | "galeria" | "infografia" | "normal" | "";
 /** Un tema clasificado y jerarquizado para la parrilla del día. */
 export interface ItemParrilla {
   titulo: string;
+  /**
+   * Estado de gestión del ítem (Investigador F2b). Opcional/retrocompat: si falta se
+   * trata como "nuevo" (sin badge). Lo provee el backend.
+   */
+  estado?: EstadoTema;
+  /** `true` si el ítem es prioritario (algo fuerte que debe salir rápido). Opcional. */
+  prioritario?: boolean;
   /** "posteo" (clip/galería/infografía/normal) o "editorial" (video con carnita). */
   tipo: "posteo" | "editorial";
   subtipo: SubtipoParrilla;

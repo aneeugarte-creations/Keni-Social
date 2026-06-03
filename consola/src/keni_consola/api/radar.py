@@ -29,7 +29,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agencias, config, marcas, parrilla, radar, relevancia_marca
+from .. import agencias, config, investigador, marcas, parrilla, radar, relevancia_marca
 from . import rss
 
 # --------------------------------------------------------------------------- #
@@ -338,12 +338,18 @@ async def obtener(request: Request) -> Response:
         fuera_foco = len(temas) - len(en_foco)
         temas = en_foco
 
+    # Badges por tema (Investigador F2b): `estado` (cruzando el tablero de la marca AL LEER,
+    # asi funciona aunque el daemon este OFF) y `prioritario` (señal >= umbral muy-viral).
+    # Campos ADITIVOS; una sola query al tablero por request (best-effort, ver investigador).
+    temas_dict = [t.a_dict() for t in temas]
+    investigador.anotar_estado_prioritario(temas_dict, marca)
+
     return JSONResponse(
         {
             "geo": geo,
             "marca": marca,
             "geos_disponibles": [{"id": gid, "nombre": nombre} for gid, nombre in radar.GEOS.items()],
-            "temas": [t.a_dict() for t in temas],
+            "temas": temas_dict,
             "fuentes": fuentes,
             "fuentes_pendientes": radar.fuentes_pendientes(),
             "total": len(temas),

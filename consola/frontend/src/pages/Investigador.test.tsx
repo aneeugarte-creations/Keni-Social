@@ -13,8 +13,8 @@ import Investigador from "./Investigador";
 // Respuesta de `/parrilla-dia` (Plan de hoy): un único posteo jerarquizado.
 const PARRILLA = {
   marca: "unotv",
-  total_entrada: 1,
-  total_posteos: 1,
+  total_entrada: 2,
+  total_posteos: 2,
   total_editorial: 0,
   total_sobrantes: 0,
   total_fuera_foco: 0,
@@ -33,6 +33,24 @@ const PARRILLA = {
       por_que: "Pico de búsquedas.",
       redes: ["x"],
       enlaces: [],
+      // Investigador F2b: prioritario (algo fuerte) y aún sin gestionar (nuevo => sin badge de estado).
+      estado: "nuevo",
+      prioritario: true,
+    },
+    {
+      tipo: "posteo",
+      subtipo: "normal",
+      orden: 2,
+      score: 0.7,
+      titulo: "Nota ya gestionada",
+      senal_texto: "Tendencia Y",
+      razon: "Ya en la parrilla.",
+      por_que: "Cobertura programada.",
+      redes: ["x"],
+      enlaces: [],
+      // En parrilla y no prioritario => badge "En parrilla", sin "Prioritario".
+      estado: "en_parrilla",
+      prioritario: false,
     },
   ],
   editorial: [],
@@ -42,7 +60,7 @@ const PARRILLA = {
 // Respuesta de `/radar` (Descubrimiento): una tendencia cruda.
 const RADAR = {
   marca: "unotv",
-  total: 1,
+  total: 2,
   total_fuera_foco: 0,
   geos_disponibles: [{ id: "MX", nombre: "México" }],
   temas: [
@@ -54,6 +72,21 @@ const RADAR = {
       fuentes: ["Google Trends"],
       por_que: "Pico de interés.",
       enlaces: [],
+      // Investigador F2b: ya publicado y prioritario => badges "Publicado" + "Prioritario".
+      estado: "publicado",
+      prioritario: true,
+    },
+    {
+      titulo: "Tendencia nueva sin marcar",
+      curado: false,
+      senal_texto: "Apenas asoma",
+      redes: ["x"],
+      fuentes: ["Google Trends"],
+      por_que: "Empieza a moverse.",
+      enlaces: [],
+      // Nuevo + no prioritario => ningún badge de estado/prioridad.
+      estado: "nuevo",
+      prioritario: false,
     },
   ],
   fuentes: [{ id: "trends", nombre: "Google Trends", disponible: true, conteo: 1, motivo: "" }],
@@ -142,5 +175,37 @@ describe("Investigador", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Descubrimiento" }), { button: 0 });
 
     expect(await screen.findByText("Tendencia viral de prueba")).toBeInTheDocument();
+  });
+
+  it("pinta los badges de estado y prioridad en el Plan de hoy (F2b)", async () => {
+    stubFetch();
+    renderConProviders(<Investigador />);
+
+    // El ítem prioritario y nuevo: badge "Prioritario", sin "En parrilla" ni "Publicado".
+    await screen.findByText("Sismo en CDMX");
+    expect(screen.getByText("Prioritario")).toBeInTheDocument();
+    // El segundo ítem está en parrilla y no es prioritario: badge "En parrilla".
+    expect(screen.getByText("En parrilla")).toBeInTheDocument();
+    // No hay ningún ítem publicado en el Plan: no aparece el badge "Publicado".
+    expect(screen.queryByText("Publicado")).not.toBeInTheDocument();
+    // Solo un ítem es prioritario (el primero); no hay un segundo badge "Prioritario".
+    expect(screen.getAllByText("Prioritario")).toHaveLength(1);
+  });
+
+  it("pinta los badges de estado y prioridad en Descubrimiento (F2b)", async () => {
+    stubFetch();
+    renderConProviders(<Investigador />);
+
+    await screen.findByText("Sismo en CDMX");
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Descubrimiento" }), { button: 0 });
+
+    // Tema publicado + prioritario => badges "Publicado" y "Prioritario".
+    await screen.findByText("Tendencia viral de prueba");
+    expect(screen.getByText("Publicado")).toBeInTheDocument();
+    expect(screen.getByText("Prioritario")).toBeInTheDocument();
+    // El tema nuevo y no prioritario NO añade badges: solo hay uno de cada.
+    expect(screen.getByText("Tendencia nueva sin marcar")).toBeInTheDocument();
+    expect(screen.getAllByText("Prioritario")).toHaveLength(1);
+    expect(screen.queryByText("En parrilla")).not.toBeInTheDocument();
   });
 });

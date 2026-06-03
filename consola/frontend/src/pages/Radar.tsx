@@ -13,6 +13,7 @@ import {
 import * as React from "react";
 import { toast } from "sonner";
 
+import { BadgeEstadoTema, BadgePrioridadTema } from "@/components/comunes/BadgesTema";
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { BotonExportarLista } from "@/components/comunes/BotonExportarLista";
 import type { ItemExportable } from "@/components/comunes/exportarLista";
@@ -244,6 +245,8 @@ function TarjetaTema({ tema }: { tema: TemaRadar }) {
         <div className="min-w-0 space-y-1.5">
           <CardTitle className="text-base leading-snug">{tema.titulo}</CardTitle>
           <div className="flex flex-wrap items-center gap-1.5">
+            <BadgePrioridadTema prioritario={tema.prioritario} />
+            <BadgeEstadoTema estado={tema.estado} />
             {tema.curado && <Badge variant="ok">De tu fuente</Badge>}
             {tema.senal_texto && (
               <Badge variant="aviso" className="gap-1">

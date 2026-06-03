@@ -47,7 +47,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import marcas, parrilla, radar, relevancia_marca
+from .. import investigador, marcas, parrilla, radar, relevancia_marca
 from .._http_json import leer_json
 
 # --------------------------------------------------------------------------- #
@@ -151,6 +151,11 @@ def _construir_respuesta(
     datos["marca"] = marca
     # Geos disponibles para el selector de la UI (mismo catalogo que el Radar).
     datos["geos_disponibles"] = [{"id": k, "nombre": v} for k, v in radar.GEOS.items()]
+    # Badges por item (Investigador F2b): `estado` (cruzando el tablero de la marca AL LEER) y
+    # `prioritario` (señal >= umbral muy-viral). Mismo helper que el Radar; campos ADITIVOS. El
+    # estado se cruza UNA sola vez (best-effort) y se aplica a las tres listas del plan.
+    items = [*datos["posteos"], *datos["editorial"], *datos["sobrantes"]]
+    investigador.anotar_estado_prioritario(items, marca)
     return datos
 
 
