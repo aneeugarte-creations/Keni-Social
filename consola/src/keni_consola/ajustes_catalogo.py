@@ -100,6 +100,16 @@ def _construir_catalogo() -> list[Ajuste]:
             defecto=False,
         ),
         Ajuste(
+            clave=config.ENV_PIPELINE_LINEAS,
+            tipo="bool",
+            etiqueta="Auto-etiquetar líneas",
+            ayuda="Al ingerir, clasifica cada pieza en su línea (vertical) y su origen "
+            "(interno / petición externa) por palabras clave. Sin línea queda con un aviso; "
+            "nunca se descarta.",
+            grupo="automatizacion",
+            defecto=False,
+        ),
+        Ajuste(
             clave=config.ENV_ALERTAS_ACTIVAS,
             tipo="bool",
             etiqueta="Alertas de rendimiento",
