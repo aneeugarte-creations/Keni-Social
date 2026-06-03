@@ -1,9 +1,9 @@
 import {
   BarChart3,
   BookText,
+  CalendarCheck,
   CalendarClock,
   FileText,
-  Globe,
   LayoutGrid,
   ListTodo,
   Megaphone,
@@ -40,11 +40,15 @@ export interface ItemTabHub {
  * la ruta PADRE del hub (con su prefijo de bloque: `/operacion`, `/contenido`,
  * `/datos`).
  */
+// Investigación = el loop diario de la marca: el Plan del día (lo más importante:
+// la lista definitiva de contenidos de hoy) se alimenta del Descubrimiento
+// (tendencias y señales) y de las Fuentes que cada marca gestiona. Todo por marca.
+// (Termómetro alimenta el Plan del día y se entra desde ahí; Algoritmos pasó a la
+// Biblioteca, porque su salida son las fichas de plataforma.)
 export const TABS_INVESTIGACION: ItemTabHub[] = [
+  { ruta: "/datos/investigacion/plan", etiqueta: "Plan del día", icono: CalendarCheck },
+  { ruta: "/datos/investigacion/descubrimiento", etiqueta: "Descubrimiento", icono: Radar },
   { ruta: "/datos/investigacion/fuentes", etiqueta: "Fuentes", icono: Rss },
-  { ruta: "/datos/investigacion/termometro", etiqueta: "Termómetro", icono: Globe },
-  { ruta: "/datos/investigacion/radar", etiqueta: "Radar", icono: Radar },
-  { ruta: "/datos/investigacion/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
 export const TABS_REVISION: ItemTabHub[] = [
@@ -70,6 +74,9 @@ export const TABS_BIBLIOTECA: ItemTabHub[] = [
   { ruta: "/contenido/biblioteca/documentos", etiqueta: "Documentos", icono: BookText },
   { ruta: "/contenido/biblioteca/plantillas", etiqueta: "Plantillas", icono: FileText },
   { ruta: "/contenido/biblioteca/estrategia", etiqueta: "Estrategia de marcas", icono: Target },
+  // Algoritmos: inteligencia de plataforma (cambios de algoritmo por red). Vive en
+  // la Biblioteca porque su salida son las fichas editoriales de cada plataforma.
+  { ruta: "/contenido/biblioteca/algoritmos", etiqueta: "Algoritmos", icono: Newspaper },
 ];
 
 /**

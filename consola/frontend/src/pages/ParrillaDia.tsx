@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ExternalLink,
   Film,
+  Globe,
   Images,
   LayoutList,
   ListOrdered,
@@ -13,12 +14,13 @@ import {
   Video,
 } from "lucide-react";
 import * as React from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { BloqueError } from "@/components/comunes/BloqueError";
 import { BotonExportarLista } from "@/components/comunes/BotonExportarLista";
 import type { ItemExportable } from "@/components/comunes/exportarLista";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -80,6 +82,32 @@ function planExportable(datos: RespuestaParrilla): ItemExportable[] {
  * pinta PageHeader (lo hace el contenedor Radar); muestra su propia barra de
  * acciones (país + actualizar) y una intro corta.
  */
+/**
+ * Página "Plan del día": la pestaña principal de Investigación y la pieza más
+ * importante del flujo — la lista de contenidos del día. Monta la cabecera y el
+ * panel del plan, y ofrece el acceso al Termómetro mundial (que alimenta el plan
+ * con el posteo de galería de noticias internacionales).
+ */
+export default function PlanDelDia() {
+  return (
+    <>
+      <PageHeader
+        titulo="Plan del día"
+        descripcion="La lista de contenidos del día: posteos y video-editoriales jerarquizados por importancia. Llévalos al tablero o genera el copy. El Termómetro mundial aporta su galería al plan."
+        acciones={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/datos/investigacion/termometro">
+              <Globe className="h-4 w-4" />
+              Termómetro mundial
+            </Link>
+          </Button>
+        }
+      />
+      <PanelPlanDelDia />
+    </>
+  );
+}
+
 export function PanelPlanDelDia() {
   const [geo, setGeo] = React.useState("MX");
   const query = useQuery({

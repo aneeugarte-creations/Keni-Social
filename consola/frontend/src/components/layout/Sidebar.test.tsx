@@ -208,7 +208,7 @@ describe("Sidebar · bloques de flujo", () => {
   });
 
   it("marca activa la entrada del hub aun estando en una de sus sub-rutas", async () => {
-    renderSidebar("editor", "/datos/investigacion/radar");
+    renderSidebar("editor", "/datos/investigacion/descubrimiento");
     const investigacion = await screen.findByRole("link", { name: /investigación/i });
     // NavLink marca `aria-current=page` por prefijo (/datos/investigacion ⊇ …/radar).
     expect(investigacion).toHaveAttribute("aria-current", "page");
@@ -288,15 +288,15 @@ describe("apps-scope · helpers", () => {
     const hojas = hojasDeApp(apps[0]).map((h) => h.ruta);
     expect(hojas).toEqual([
       "/contenido/estudio",
-      // /contenido/biblioteca (hub) → sus 3 sub-pestañas (Activos se fusionó aquí)
+      // /contenido/biblioteca (hub) → sus 4 sub-pestañas (Algoritmos se mudó aquí)
       "/contenido/biblioteca/documentos",
       "/contenido/biblioteca/plantillas",
       "/contenido/biblioteca/estrategia",
-      // /datos/investigacion (hub) → sus 4 sub-pestañas
+      "/contenido/biblioteca/algoritmos",
+      // /datos/investigacion (hub) → sus 3 sub-pestañas
+      "/datos/investigacion/plan",
+      "/datos/investigacion/descubrimiento",
       "/datos/investigacion/fuentes",
-      "/datos/investigacion/termometro",
-      "/datos/investigacion/radar",
-      "/datos/investigacion/algoritmos",
       // /operacion/revision (hub) → sus 2 sub-pestañas
       "/operacion/revision/editorial",
       "/operacion/revision/verificacion",

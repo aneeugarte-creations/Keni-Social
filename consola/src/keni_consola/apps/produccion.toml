@@ -63,11 +63,14 @@ rutas_frontend = [
   "/contenido/biblioteca/documentos",
   # "Activos" se fusionó como pestaña "Plantillas" de la Biblioteca.
   "/contenido/biblioteca/plantillas",
+  "/contenido/biblioteca/estrategia",
+  # Algoritmos (inteligencia de plataforma) pasó de Investigación a la Biblioteca.
+  "/contenido/biblioteca/algoritmos",
   "/datos/investigacion",
+  "/datos/investigacion/plan",
+  "/datos/investigacion/descubrimiento",
   "/datos/investigacion/fuentes",
   "/datos/investigacion/termometro",
-  "/datos/investigacion/radar",
-  "/datos/investigacion/algoritmos",
   "/operacion/revision",
   "/operacion/revision/editorial",
   "/operacion/revision/verificacion",
@@ -98,7 +101,7 @@ orden = 10
 ruta = "/contenido/biblioteca"
 etiqueta = "Biblioteca"
 icono = "Library"
-descripcion = "Prompts y línea editorial + plantillas de contenido reutilizables. Pestañas Documentos / Plantillas."
+descripcion = "Prompts y línea editorial, plantillas de contenido, estrategia de marcas e inteligencia de plataforma. Pestañas Documentos / Plantillas / Estrategia / Algoritmos."
 grupo = "contenido"
 grupo_orden = 20
 orden = 20
@@ -107,7 +110,7 @@ orden = 20
 ruta = "/datos/investigacion"
 etiqueta = "Investigación"
 icono = "Search"
-descripcion = "Fuentes RSS, panorama mundial, tendencias virales y cambios de algoritmo. Pestañas Fuentes / Termómetro / Radar / Algoritmos."
+descripcion = "El loop diario de la marca: el Plan del día (la lista de contenidos de hoy) a partir del Descubrimiento de tendencias y de las Fuentes de cada marca. Pestañas Plan del día / Descubrimiento / Fuentes."
 grupo = "datos"
 grupo_orden = 30
 orden = 10

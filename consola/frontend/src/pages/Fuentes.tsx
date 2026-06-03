@@ -358,8 +358,11 @@ function FuenteTrends() {
           <p className="text-muted-foreground">
             Tendencias de búsqueda de Google como señal del Radar. Es una fuente única
             (built-in), no se dan de alta varias: se configura globalmente y alimenta el{" "}
-            <Link to="/datos/investigacion/radar" className="underline hover:text-foreground">
-              Radar
+            <Link
+              to="/datos/investigacion/descubrimiento"
+              className="underline hover:text-foreground"
+            >
+              Descubrimiento
             </Link>{" "}
             y la auto-promoción del día.
           </p>

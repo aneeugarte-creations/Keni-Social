@@ -114,7 +114,10 @@ function renderShell(ruta: string) {
               <Route index element={<Navigate to="/panel" replace />} />
               <Route path="generacion" element={<div>contenido app</div>} />
               <Route path="panel" element={<div>contenido panel</div>} />
-              <Route path="datos/investigacion/radar" element={<div>contenido radar</div>} />
+              <Route
+                path="datos/investigacion/descubrimiento"
+                element={<div>contenido descubrimiento</div>}
+              />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -162,8 +165,8 @@ describe("AppShell · sidebar siempre presente", () => {
   });
 
   it("breadcrumb en una hoja de hub: 'Hub › Pestaña' con el hub enlazable", async () => {
-    renderShell("/datos/investigacion/radar");
-    await screen.findByText("contenido radar");
+    renderShell("/datos/investigacion/descubrimiento");
+    await screen.findByText("contenido descubrimiento");
     const ruta = screen.getByRole("navigation", { name: /^ruta$/i });
     // El hub es un enlace a su ruta; la pestaña activa es el segmento actual.
     await waitFor(() =>
@@ -172,7 +175,7 @@ describe("AppShell · sidebar siempre presente", () => {
         "/datos/investigacion",
       ),
     );
-    expect(within(ruta).getByText("Radar")).toHaveAttribute("aria-current", "page");
+    expect(within(ruta).getByText("Descubrimiento")).toHaveAttribute("aria-current", "page");
   });
 
   it("fuera de apps (Panel) muestra solo 'Panel', sin '›' ni enlace", async () => {

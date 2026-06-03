@@ -35,12 +35,10 @@ import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { FuenteRadar, RespuestaRadar, TemaRadar } from "@/types";
 
-import { PanelPlanDelDia } from "./ParrillaDia";
-
 const CABECERA = {
-  titulo: "Radar",
+  titulo: "Descubrimiento",
   descripcion:
-    "Tendencias virales y el plan editorial del día, a partir de las mismas fuentes reales. El radar SOLO propone: marca lo relevante; publicar lo decides tú.",
+    "Tendencias virales y señales del momento, a partir de fuentes reales. SOLO propone: marca lo relevante y aliméntalo al Plan del día; publicar lo decides tú.",
 };
 
 /** Texto introductorio del panel "Tendencias" (antes la descripción de la página Radar). */
@@ -48,11 +46,11 @@ const INTRO_TENDENCIAS =
   "Lo más viral del momento, multi-red, agrupado por tema con su “por qué sube” y enlaces. El radar SOLO propone: marca lo relevante; publicar lo decides tú. No inventa nada: solo muestra lo que devuelven las fuentes reales.";
 
 /**
- * Página Radar: fusiona tres vistas que derivan de las mismas fuentes en pestañas
- * internas — "Tendencias" (lo viral del momento), "Plan del día" (la antigua
- * página /investigacion/parrilla-dia) y "Auto" (la bandeja de auto-promoción del
- * Radar). Cada panel monta su propio fetch y lógica; la pestaña vive en el estado
- * local (no en la URL: la ruta sigue siendo /radar).
+ * Página Descubrimiento: dos vistas que derivan de las mismas fuentes reales en
+ * pestañas internas — "Tendencias" (lo viral del momento) y "Auto" (la bandeja de
+ * auto-promoción del Radar). El Plan del día es ahora su propia pestaña de
+ * Investigación (consume estas señales). Cada panel monta su propio fetch; la
+ * pestaña vive en estado local (no en la URL).
  */
 export default function Radar() {
   return (
@@ -61,14 +59,10 @@ export default function Radar() {
       <Tabs defaultValue="tendencias" className="space-y-4">
         <TabsList>
           <TabsTrigger value="tendencias">Tendencias</TabsTrigger>
-          <TabsTrigger value="plan-dia">Plan del día</TabsTrigger>
           <TabsTrigger value="auto">Auto</TabsTrigger>
         </TabsList>
         <TabsContent value="tendencias">
           <PanelTendencias />
-        </TabsContent>
-        <TabsContent value="plan-dia">
-          <PanelPlanDelDia />
         </TabsContent>
         <TabsContent value="auto">
           <PanelRadarAuto />
