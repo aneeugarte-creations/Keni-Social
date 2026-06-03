@@ -380,3 +380,37 @@ def test_serie_seguidores_neto_por_red_ignora_huecos():
     assert s["neto_por_red"]["instagram"] == 30
     # neto global = suma de netos por red (30), no el total global (que daría ≈ −4.96M).
     assert s["neto"] == 30
+
+
+def test_serie_seguidores_descarta_dia_incompleto():
+    """Un último día con valor ~0 (incompleto, sin consolidar) NO debe dar neto negativo.
+
+    Regresión del "−14M": Metricool reporta hoy aún sin consolidar (followers ~0 para
+    algunas redes). Como el stock PERSISTE, ese día se descarta y se arrastra el último
+    valor válido; el neto usa primer/último valor VÁLIDO.
+    """
+
+    class _Cuenta:
+        id = "claro_sports"
+
+    class _Fuente:
+        nombre = "stub"
+
+        def cuentas(self):
+            return [_Cuenta()]
+
+        def serie_seguidores(self, cuenta_id, rango):
+            return [
+                {"fecha": "2026-05-28", "por_red": {"facebook": 8_700_000, "youtube": 4_970_000}},
+                {"fecha": "2026-05-30", "por_red": {"facebook": 8_710_000, "youtube": 4_970_000}},
+                {"fecha": "2026-06-03", "por_red": {"facebook": 0, "youtube": 4_970_000}},  # hoy, incompleto
+            ]
+
+    s = servicio.serie_seguidores_desde_fuente(_Fuente(), "mes:2026-05")
+    # facebook: el 0 de hoy se descarta -> neto = 8.71M − 8.70M = +10k (NO −8.7M).
+    assert s["neto_por_red"]["facebook"] == 10_000
+    assert s["neto_por_red"]["youtube"] == 0
+    assert s["neto"] == 10_000
+    # El chart NO se hunde el último día: arrastra el último facebook válido (8.71M).
+    assert s["puntos"][-1]["por_red"]["facebook"] == 8_710_000
+    assert s["puntos"][-1]["total"] == 8_710_000 + 4_970_000

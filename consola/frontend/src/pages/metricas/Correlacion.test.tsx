@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -51,7 +51,7 @@ const RESP: CorrelacionSeguidores = {
     {
       marca: "claro_sports",
       red: "x",
-      fecha: "2026-05-28",
+      fecha: "2026-05-27",
       seguidores_ganados: 10,
       n_posts: 0,
       seguidores_por_post: null,
@@ -85,6 +85,32 @@ describe("Correlacion (seguidores vs publicación)", () => {
     expect(screen.queryByText("instagram")).not.toBeInTheDocument();
     // El día sin posts no inventa ratio; claro_sports → "Claro Sports".
     expect(screen.getByText("Claro Sports")).toBeInTheDocument();
+    // Seguidores ganados = CONTEO con signo ("+320"), NUNCA un porcentaje ("+320.0 %").
+    expect(screen.getByText("+320")).toBeInTheDocument();
+    expect(screen.queryByText("+320.0 %")).not.toBeInTheDocument();
+  });
+
+  it("pagina por día (un día por página) y navega entre días", async () => {
+    const dosDias: CorrelacionSeguidores = {
+      ...RESP,
+      items: [
+        { ...RESP.items[0], fecha: "2026-05-28", marca: "unotv", red: "instagram" },
+        { ...RESP.items[1], fecha: "2026-05-27", marca: "claro_sports", red: "x" },
+      ],
+    };
+    vi.spyOn(api, "metricasCorrelacion").mockResolvedValue(dosDias);
+    renderConProviders(
+      <Correlacion marcas={MARCAS} marcaActual="__todas__" rangoActual="semana" />,
+    );
+
+    // Primera página = día más reciente (2026-05-28 → UnoTV); el otro día no se ve.
+    expect(await screen.findByText("UnoTV")).toBeInTheDocument();
+    expect(screen.queryByText("Claro Sports")).not.toBeInTheDocument();
+    expect(screen.getByText(/día 1 de 2/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Día más antiguo" }));
+    expect(await screen.findByText("Claro Sports")).toBeInTheDocument();
+    expect(screen.queryByText("UnoTV")).not.toBeInTheDocument();
   });
 
   it("dice con honestidad cuando no hay seguidores", async () => {

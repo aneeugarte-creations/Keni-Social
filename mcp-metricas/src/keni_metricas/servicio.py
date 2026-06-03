@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import statistics
 from pathlib import Path
 
 from . import analisis_diario as _analisis
@@ -412,27 +413,50 @@ def serie_seguidores_desde_fuente(fuente, rango: str, marca: str | None = None) 
             for red, valor in (punto.get("por_red") or {}).items():
                 dest[red] = dest.get(red, 0) + int(valor)
 
+    fechas = sorted(por_dia)
+    todas_redes = set().union(*(set(d) for d in por_dia.values())) if por_dia else set()
+    # Stock REPORTADO por red y fecha (lo que trajo Metricool ese día, si lo trajo).
+    reportado: dict[str, dict[str, int]] = {}
+    for f in fechas:
+        for red, v in por_dia[f].items():
+            reportado.setdefault(red, {})[f] = int(v)
+
+    # VALIDEZ de un punto: la serie de followers es un STOCK enorme y estable; un valor 0 o
+    # ANÓMALAMENTE BAJO (< la mitad de la mediana de la red) es un día INCOMPLETO de Metricool
+    # —típicamente HOY, aún sin consolidar—, no una pérdida real de seguidores. Sin esto, el
+    # último día caía a ~0 y el neto salía absurdo (p.ej. −14M en 3 días).
+    umbral: dict[str, float] = {
+        red: (0.5 * statistics.median(list(fv.values())) if fv else 0.0)
+        for red, fv in reportado.items()
+    }
+
+    def _valido(red: str, v: int) -> bool:
+        return v > 0 and v >= umbral.get(red, 0.0)
+
+    # Chart: stock por día con CARRY-FORWARD. Los followers PERSISTEN día a día; si un día no
+    # es válido para una red (incompleto), se arrastra su último valor válido en vez de hundir
+    # el total. La red no aparece hasta su primer valor válido (no se inventa stock previo).
     puntos_out: list[PuntoSeguidores] = []
-    for fecha in sorted(por_dia):
-        por_red = por_dia[fecha]
+    ultimo: dict[str, int] = {}
+    for f in fechas:
+        por_red_dia: dict[str, int] = {}
+        for red in sorted(todas_redes):
+            v = por_dia[f].get(red)
+            if v is not None and _valido(red, int(v)):
+                ultimo[red] = int(v)
+            if red in ultimo:
+                por_red_dia[red] = ultimo[red]
         puntos_out.append(
-            PuntoSeguidores(fecha=fecha, total=sum(por_red.values()), por_red=por_red)
+            PuntoSeguidores(fecha=f, total=sum(por_red_dia.values()), por_red=por_red_dia)
         )
 
-    # Neto del periodo POR RED: último − primer valor DE CADA RED en los días que tiene
-    # dato (la serie de followers es un STOCK). Clave: el primer/último de CADA red por
-    # separado, NO el total del primer/último día. Metricool no siempre trae todos los días
-    # para todas las redes; con el total global, una red ausente en un extremo restaba todo
-    # su stock (p.ej. −4.97M de YouTube), dando netos absurdos. El neto global = suma de los
-    # netos por red. Una red con un solo punto -> 0 (sin variación medible), pero SE CONSERVA
-    # para que aparezca en el desglose del gráfico.
-    serie_por_red: dict[str, list[int]] = {}
-    for p in puntos_out:  # ya ordenados por fecha
-        for red, valor in p.por_red.items():
-            serie_por_red.setdefault(red, []).append(int(valor))
-    neto_por_red: dict[str, int] = {
-        red: (vals[-1] - vals[0] if len(vals) >= 2 else 0) for red, vals in serie_por_red.items()
-    }
+    # Neto del periodo POR RED: último − primer valor VÁLIDO de cada red (ignora días
+    # incompletos). El neto global = suma de los netos por red. Una red con <2 puntos válidos
+    # -> 0 (sin variación medible), pero SE CONSERVA para el desglose del gráfico.
+    neto_por_red: dict[str, int] = {}
+    for red, fv in reportado.items():
+        validos = [fv[f] for f in sorted(fv) if _valido(red, fv[f])]
+        neto_por_red[red] = (validos[-1] - validos[0]) if len(validos) >= 2 else 0
     neto = sum(neto_por_red.values())
 
     serie = SerieSeguidores(

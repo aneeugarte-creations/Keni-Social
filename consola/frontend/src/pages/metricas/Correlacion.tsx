@@ -11,10 +11,11 @@
  * fuente no expone los datos (sin seguidores), lo dice en vez de inventar.
  */
 import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, GitCompareArrows, Info } from "lucide-react";
+import { ChevronLeft, ChevronRight, ExternalLink, GitCompareArrows, Info } from "lucide-react";
 import * as React from "react";
 
 import { marcaParam } from "@/components/comunes/selectores";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -32,7 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { nombreMarca, nombreRed, porcentaje, variacion } from "@/lib/formato";
+import { nombreMarca, nombreRed, numeroCompleto, porcentaje } from "@/lib/formato";
 import type { ItemCorrelacion, MarcaDisponible, PostEstrella } from "@/types";
 
 import { CabeceraOrdenable } from "./CabeceraOrdenable";
@@ -42,16 +43,27 @@ import { useOrdenTabla } from "./useOrdenTabla";
 
 const RED_TODAS = "__todas__";
 
-/** "12 may" a partir de una fecha ISO (AAAA-MM-DD), en es-MX. */
-function fechaCorta(iso: string): string {
-  const d = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("es-MX", { day: "2-digit", month: "short" }).format(d);
-}
-
 /** Seguidores por post: ratio crudo con un decimal ("—" si no aplica). */
 function ratio(v: number | null): string {
   return v == null ? "—" : v.toLocaleString("es-MX", { maximumFractionDigits: 1 });
+}
+
+/** Seguidores ganados: un CONTEO con signo (NO un porcentaje). Ej.: "+1,234" / "−56". */
+function seguidoresNeto(n: number): string {
+  if (!Number.isFinite(n) || n === 0) return "0";
+  return `${n > 0 ? "+" : "−"}${numeroCompleto(Math.abs(n))}`;
+}
+
+/** "lun 1 jun 2026" a partir de una fecha ISO (AAAA-MM-DD), en es-MX (cabecera del pager). */
+function etiquetaDia(iso: string): string {
+  const [a, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  if (!a || !m || !d) return iso;
+  return new Date(a, m - 1, d).toLocaleDateString("es-MX", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export function Correlacion({
@@ -141,71 +153,123 @@ function TablaCorrelacion({
   marcas: MarcaDisponible[];
   redFiltro: string;
 }) {
-  // Filtro de red (cliente) antes de ordenar.
-  const visibles =
-    redFiltro === RED_TODAS ? items : items.filter((it) => it.red === redFiltro);
+  // Filtro de red (cliente) antes de paginar/ordenar.
+  const visibles = React.useMemo(
+    () => (redFiltro === RED_TODAS ? items : items.filter((it) => it.red === redFiltro)),
+    [items, redFiltro],
+  );
+
+  // Paginación POR DÍA: un día por página, del más reciente al más antiguo.
+  const dias = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const it of visibles) if (it.fecha) set.add(it.fecha);
+    return Array.from(set).sort((a, b) => (a < b ? 1 : a > b ? -1 : 0));
+  }, [visibles]);
+
+  const [diaIdx, setDiaIdx] = React.useState(0);
+  React.useEffect(() => {
+    setDiaIdx((i) => (i >= dias.length ? 0 : i));
+  }, [dias.length]);
+
+  const diaActual = dias[Math.min(diaIdx, Math.max(dias.length - 1, 0))] ?? "";
+  const itemsDelDia = React.useMemo(
+    () => visibles.filter((it) => it.fecha === diaActual),
+    [visibles, diaActual],
+  );
 
   const { filasOrdenadas, estado, alClicar } = useOrdenTabla<ItemCorrelacion, ClaveCorrelacion>(
-    visibles,
+    itemsDelDia,
     {
       seguidores_ganados: (it) => it.seguidores_ganados,
       n_posts: (it) => it.n_posts,
       seguidores_por_post: (it) => it.seguidores_por_post,
     },
+    { clave: "seguidores_ganados", direccion: "desc" },
   );
 
+  if (dias.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        No hay datos para la red seleccionada.
+      </p>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Fecha</TableHead>
-            <TableHead>Marca</TableHead>
-            <TableHead>Red</TableHead>
-            <CabeceraOrdenable
-              activa={estado.clave === "seguidores_ganados"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("seguidores_ganados")}
-              alinear="right"
-            >
-              Seguidores
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={estado.clave === "n_posts"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("n_posts")}
-              alinear="right"
-            >
-              Posts
-            </CabeceraOrdenable>
-            <CabeceraOrdenable
-              activa={estado.clave === "seguidores_por_post"}
-              direccion={estado.direccion}
-              onClick={() => alClicar("seguidores_por_post")}
-              alinear="right"
-            >
-              Seg./post
-            </CabeceraOrdenable>
-            <TableHead>Pieza estrella</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filasOrdenadas.length === 0 ? (
+    <div className="space-y-3">
+      {/* Pager por día */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold capitalize text-foreground">{etiquetaDia(diaActual)}</p>
+          <p className="text-xs text-muted-foreground">
+            {itemsDelDia.length} {itemsDelDia.length === 1 ? "marca·red" : "marca·red"} · día{" "}
+            {diaIdx + 1} de {dias.length}
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setDiaIdx((i) => Math.max(0, i - 1))}
+            disabled={diaIdx <= 0}
+            aria-label="Día más reciente"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setDiaIdx((i) => Math.min(dias.length - 1, i + 1))}
+            disabled={diaIdx >= dias.length - 1}
+            aria-label="Día más antiguo"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
-                No hay datos para la red seleccionada.
-              </TableCell>
+              <TableHead>Marca</TableHead>
+              <TableHead>Red</TableHead>
+              <CabeceraOrdenable
+                activa={estado.clave === "seguidores_ganados"}
+                direccion={estado.direccion}
+                onClick={() => alClicar("seguidores_ganados")}
+                alinear="right"
+              >
+                Seguidores
+              </CabeceraOrdenable>
+              <CabeceraOrdenable
+                activa={estado.clave === "n_posts"}
+                direccion={estado.direccion}
+                onClick={() => alClicar("n_posts")}
+                alinear="right"
+              >
+                Posts
+              </CabeceraOrdenable>
+              <CabeceraOrdenable
+                activa={estado.clave === "seguidores_por_post"}
+                direccion={estado.direccion}
+                onClick={() => alClicar("seguidores_por_post")}
+                alinear="right"
+              >
+                Seg./post
+              </CabeceraOrdenable>
+              <TableHead>Pieza estrella</TableHead>
             </TableRow>
-          ) : (
-            filasOrdenadas.map((it) => (
+          </TableHeader>
+          <TableBody>
+            {filasOrdenadas.map((it) => (
               <TableRow key={`${it.marca}-${it.red}-${it.fecha}`}>
-                <TableCell className="whitespace-nowrap text-muted-foreground">
-                  {fechaCorta(it.fecha)}
-                </TableCell>
                 <TableCell className="font-medium">{nombreMarca(it.marca, marcas)}</TableCell>
                 <TableCell className="text-muted-foreground">{nombreRed(it.red)}</TableCell>
                 <TableCell className="text-right tabular-nums">
-                  {variacion(it.seguidores_ganados)}
+                  {seguidoresNeto(it.seguidores_ganados)}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{it.n_posts}</TableCell>
                 <TableCell className="text-right tabular-nums">
@@ -215,10 +279,10 @@ function TablaCorrelacion({
                   <PiezaEstrella post={it.post_estrella} />
                 </TableCell>
               </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }
