@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from dataclasses import dataclass
 from typing import Any
 
@@ -160,8 +161,9 @@ class ParrillaDia:
     posteos: list[TemaClasificado]      # hasta CUOTA_POSTEOS (13 objetivo)
     editorial: list[TemaClasificado]    # hasta CUOTA_EDITORIAL (6 objetivo)
     sobrantes: list[TemaClasificado]    # temas que superan la cuota (igualmente jerarquizados)
-    total_entrada: int                  # cuantos temas entraron
+    total_entrada: int                  # cuantos temas entraron (ya filtrados por marca)
     contexto: str                       # geo / contexto del scoring
+    fuera_foco: int = 0                 # temas descartados por NO ser de la marca (0 sin marca)
 
     def a_dict(self) -> dict[str, Any]:
         return {
@@ -172,6 +174,7 @@ class ParrillaDia:
             "total_posteos": len(self.posteos),
             "total_editorial": len(self.editorial),
             "total_sobrantes": len(self.sobrantes),
+            "total_fuera_foco": self.fuera_foco,
             "contexto": self.contexto,
             "cuota_posteos": CUOTA_POSTEOS,
             "cuota_editorial": CUOTA_EDITORIAL,
@@ -316,20 +319,40 @@ def _score_multi_red(tema: Tema) -> float:
     return min(1.0, (n - 1) / 4)
 
 
+def _sin_acentos(texto: str) -> str:
+    """Minusculas sin acentos (NFD + descarta diacriticos): 'Fútbol' → 'futbol'.
+
+    Las palabras clave de marca se escriben sin acentos; los titulos reales del Radar
+    SI los llevan ('fútbol', 'elección'), asi que normalizamos el texto antes de matchear.
+    """
+    desc = unicodedata.normalize("NFD", texto.lower())
+    return "".join(c for c in desc if unicodedata.category(c) != "Mn")
+
+
 def _score_marca(tema: Tema, palabras_marca: frozenset[str]) -> float:
     """Relevancia para la MARCA activa [0, 1] segun sus palabras clave.
 
     1.0 si una palabra de la marca esta en el TITULO; 0.6 si esta en el cuerpo
     (por_que / titulos de enlaces); 0.0 si no aparece. Sin palabras → 0.0 (no aplica).
+    El texto se normaliza sin acentos para que 'fútbol' matchee la keyword 'futbol'.
     """
     if not palabras_marca:
         return 0.0
-    if _contiene_frase(tema.titulo.lower(), palabras_marca):
+    if _contiene_frase(_sin_acentos(tema.titulo), palabras_marca):
         return 1.0
-    cuerpo = (tema.por_que + " " + " ".join(e.titulo for e in tema.enlaces)).lower()
+    cuerpo = _sin_acentos(tema.por_que + " " + " ".join(e.titulo for e in tema.enlaces))
     if _contiene_frase(cuerpo, palabras_marca):
         return 0.6
     return 0.0
+
+
+def tema_en_foco(tema: Tema, palabras_marca: frozenset[str]) -> bool:
+    """True si el tema entra en el FOCO de la marca (alguna palabra clave aparece).
+
+    Con `palabras_marca` vacio devuelve False (no hay foco que aplicar): por eso el
+    filtrado en `armar_parrilla`/Radar solo se hace cuando hay marca activa.
+    """
+    return _score_marca(tema, palabras_marca) > 0.0
 
 
 def puntuar_tema(
@@ -413,8 +436,19 @@ def armar_parrilla(
     4. Asigna orden global 1-based: primero editorial (por importancia), luego posteos.
     5. Limita a las cuotas (13 posteos / 6 editorial); el resto va a `sobrantes`.
 
+    Si hay `palabras_marca` (marca activa), la parrilla se FILTRA a los temas en el
+    foco de la marca: los que no contienen ninguna palabra clave NO entran al plan
+    (se reportan como `fuera_foco`). El Plan del dia de una marca muestra LO SUYO.
+
     Devuelve una `ParrillaDia` con los tres grupos ya ordenados y con metadata.
     """
+    # Filtro por marca: solo los temas en el foco de la marca entran al plan.
+    fuera_foco = 0
+    if palabras_marca:
+        en_foco = [t for t in temas if tema_en_foco(t, palabras_marca)]
+        fuera_foco = len(temas) - len(en_foco)
+        temas = en_foco
+
     if not temas:
         return ParrillaDia(
             posteos=[],
@@ -422,6 +456,7 @@ def armar_parrilla(
             sobrantes=[],
             total_entrada=0,
             contexto=contexto,
+            fuera_foco=fuera_foco,
         )
 
     # --- 1. Puntuar y clasificar todos los temas ---
@@ -467,4 +502,5 @@ def armar_parrilla(
         sobrantes=sorted(sobrantes, key=lambda t: t.orden),
         total_entrada=len(temas),
         contexto=contexto,
+        fuera_foco=fuera_foco,
     )

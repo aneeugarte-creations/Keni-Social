@@ -298,12 +298,34 @@ class TestRelevanciaMarca:
         assert s_dep > s_otro
         assert "marca" in razon_dep
 
-    def test_armar_parrilla_prioriza_la_marca(self):
+    def test_armar_parrilla_filtra_fuera_de_foco(self):
+        # Con marca, el plan SOLO incluye los temas de la marca; el resto NO entra
+        # (se reporta como fuera_foco). El Plan del dia muestra LO SUYO.
         palabras = relevancia_marca.palabras_de_marca("claro-sports")
         temas = [
             _tema("Receta viral de la semana", senal=900000),
             _tema("Boxeo: pelea estelar", senal=1500),
+            _tema("Chismes de la farandula", senal=50000),
         ]
         p = parrilla.armar_parrilla(temas, palabras_marca=palabras)
-        primero = (p.posteos + p.editorial)[0]
-        assert "Boxeo" in primero.tema.titulo
+        titulos = [t.tema.titulo for t in p.posteos + p.editorial + p.sobrantes]
+        assert titulos == ["Boxeo: pelea estelar"]
+        assert p.total_entrada == 1
+        assert p.fuera_foco == 2
+        assert p.a_dict()["total_fuera_foco"] == 2
+
+    def test_tema_en_foco(self):
+        palabras = relevancia_marca.palabras_de_marca("claro-sports")
+        assert parrilla.tema_en_foco(_tema("Final de futbol"), palabras) is True
+        # Acentos: 'fútbol' (como llega del Radar) debe matchear la keyword 'futbol'.
+        assert parrilla.tema_en_foco(_tema("Gran final de fútbol"), palabras) is True
+        assert parrilla.tema_en_foco(_tema("Receta de pastel"), palabras) is False
+        # Sin palabras no hay foco que aplicar.
+        assert parrilla.tema_en_foco(_tema("Final de futbol"), frozenset()) is False
+
+    def test_sin_marca_no_filtra(self):
+        # Sin marca, NO se filtra nada (fuera_foco 0; entran todos).
+        temas = [_tema("A", senal=100), _tema("B", senal=200)]
+        p = parrilla.armar_parrilla(temas)
+        assert p.total_entrada == 2
+        assert p.fuera_foco == 0

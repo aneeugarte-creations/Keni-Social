@@ -1190,9 +1190,9 @@ export const api = {
 
   // --- Radar de tendencias (lo más viral del momento, multi-red · #147) ---
   // Solo lectura: consolida tendencias por tema con su estado HONESTO por fuente.
-  radar: (geo?: string, feeds?: boolean, signal?: AbortSignal) =>
+  radar: (geo?: string, feeds?: boolean, marca?: string, signal?: AbortSignal) =>
     peticion<RespuestaRadar>(
-      `/radar${query({ geo, feeds: feeds === false ? "0" : undefined })}`,
+      `/radar${query({ geo, feeds: feeds === false ? "0" : undefined, marca })}`,
       { signal },
     ),
 

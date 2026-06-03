@@ -31,6 +31,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EstadoVacio } from "@/components/comunes/EstadoVacio";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useSesion } from "@/hooks/sesion-contexto";
 import { api, ApiError } from "@/lib/api";
 import type { FuenteRadar, RespuestaRadar, TemaRadar } from "@/types";
@@ -105,9 +106,11 @@ function etiquetaRed(red: string): string {
  */
 function PanelTendencias() {
   const [geo, setGeo] = React.useState("MX");
+  // Marca activa: las tendencias se filtran a su foco (deriva del perfil / switch).
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const query = useQuery({
-    queryKey: ["radar", geo],
-    queryFn: ({ signal }) => api.radar(geo, true, signal),
+    queryKey: ["radar", geo, marcaActiva],
+    queryFn: ({ signal }) => api.radar(geo, true, marcaActiva ?? undefined, signal),
   });
 
   // Selección del equipo (qué temas son relevantes). SOLO marca; no publica nada.
@@ -184,6 +187,7 @@ function PanelTendencias() {
             datos={query.data}
             relevantes={relevantes}
             onAlternar={alternarRelevante}
+            nombreMarca={nombreActiva}
           />
           <PanelFuentes datos={query.data} />
         </div>
@@ -198,13 +202,18 @@ function ListaTemas({
   datos,
   relevantes,
   onAlternar,
+  nombreMarca,
 }: {
   datos: RespuestaRadar;
   relevantes: Set<string>;
   onAlternar: (titulo: string) => void;
+  nombreMarca: string | null;
 }) {
   const sinDatos = datos.temas.length === 0;
   const algunaFuenteCaida = datos.fuentes.some((f) => !f.disponible);
+  const fueraFoco = datos.total_fuera_foco ?? 0;
+  // Hay marca activa y se descartaron tendencias por no ser suyas (filtro real).
+  const filtradoPorMarca = Boolean(datos.marca) && (sinDatos ? fueraFoco > 0 : true);
 
   return (
     <div className="space-y-4">
@@ -212,19 +221,37 @@ function ListaTemas({
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
             <RadarIcon className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-            <p className="text-sm font-medium">No hay tendencias que mostrar ahora mismo.</p>
-            <p className="max-w-md text-sm text-muted-foreground">
-              {algunaFuenteCaida
-                ? "Alguna fuente no está disponible (mira el panel de la derecha). No se inventa nada: cuando haya datos reales, aparecerán aquí."
-                : "Las fuentes respondieron sin tendencias. Da de alta feeds en Fuentes o cambia el país."}
-            </p>
+            {filtradoPorMarca ? (
+              <>
+                <p className="text-sm font-medium">
+                  No hay tendencias de {nombreMarca ?? "tu marca"} ahora mismo.
+                </p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  Había {fueraFoco} tendencia(s) generales, pero ninguna del foco de la marca. El
+                  radar mira tendencias generales (Google Trends); da de alta fuentes de la marca
+                  en Fuentes para nutrir su descubrimiento.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium">No hay tendencias que mostrar ahora mismo.</p>
+                <p className="max-w-md text-sm text-muted-foreground">
+                  {algunaFuenteCaida
+                    ? "Alguna fuente no está disponible (mira el panel de la derecha). No se inventa nada: cuando haya datos reales, aparecerán aquí."
+                    : "Las fuentes respondieron sin tendencias. Da de alta feeds en Fuentes o cambia el país."}
+                </p>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
         <>
           <p className="text-xs text-muted-foreground">
-            {datos.total} {datos.total === 1 ? "tema" : "temas"} · ordenados por señal (lo más viral
-            arriba). {relevantes.size > 0 && `${relevantes.size} marcado(s) como relevante.`}
+            {datos.total} {datos.total === 1 ? "tema" : "temas"}
+            {filtradoPorMarca && nombreMarca ? ` de ${nombreMarca}` : ""} · ordenados por señal (lo
+            más viral arriba).{" "}
+            {filtradoPorMarca && fueraFoco > 0 && `${fueraFoco} fuera del foco de la marca. `}
+            {relevantes.size > 0 && `${relevantes.size} marcado(s) como relevante.`}
           </p>
           <ul className="space-y-3">
             {datos.temas.map((tema) => (

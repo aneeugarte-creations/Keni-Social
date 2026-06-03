@@ -27,7 +27,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .. import agencias, radar
+from .. import agencias, marcas, parrilla, radar, relevancia_marca
 from . import rss
 
 
@@ -152,6 +152,10 @@ async def obtener(request: Request) -> Response:
     geo_crudo = (request.query_params.get("geo") or radar.GEO_DEFECTO).strip().upper()
     geo = geo_crudo if radar.es_geo(geo_crudo) else radar.GEO_DEFECTO
     incluir_feeds = _flag(request, "feeds", defecto=True)
+    # Marca activa: si se pide, las tendencias se FILTRAN al foco de la marca.
+    marca_crudo = (request.query_params.get("marca") or "").strip()
+    marca = marca_crudo if marca_crudo and marcas.es_marca(marca_crudo) else None
+    palabras = relevancia_marca.palabras_de_marca(marca)
 
     grupos: list[list[radar.Tema]] = []
     fuentes: list[dict[str, Any]] = []
@@ -171,14 +175,25 @@ async def obtener(request: Request) -> Response:
         fuentes.extend(estados_agencias)
 
     temas = radar.consolidar(*grupos)
+
+    # Filtro por marca: solo las tendencias en el foco de la marca (las demas se
+    # reportan como `total_fuera_foco`, no se inventan ni se ocultan en silencio).
+    fuera_foco = 0
+    if palabras:
+        en_foco = [t for t in temas if parrilla.tema_en_foco(t, palabras)]
+        fuera_foco = len(temas) - len(en_foco)
+        temas = en_foco
+
     return JSONResponse(
         {
             "geo": geo,
+            "marca": marca,
             "geos_disponibles": [{"id": gid, "nombre": nombre} for gid, nombre in radar.GEOS.items()],
             "temas": [t.a_dict() for t in temas],
             "fuentes": fuentes,
             "fuentes_pendientes": radar.fuentes_pendientes(),
             "total": len(temas),
+            "total_fuera_foco": fuera_foco,
         }
     )
 

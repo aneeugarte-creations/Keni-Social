@@ -790,8 +790,12 @@ export interface RespuestaRadar {
   fuentes: FuenteRadar[];
   /** Redes aún no cubiertas, con el motivo (no se inventan datos). */
   fuentes_pendientes: FuentePendienteRadar[];
-  /** Nº total de temas consolidados. */
+  /** Nº total de temas (ya filtrados por marca si la hay). */
   total: number;
+  /** Marca con la que se filtró (id canónico), o `null`/ausente si sin marca. */
+  marca?: string | null;
+  /** Temas descartados por NO ser de la marca activa (0 sin marca). */
+  total_fuera_foco?: number;
 }
 
 // ── Algoritmos: inteligencia de plataforma (cambios de algoritmo + tendencias) ──
@@ -1005,10 +1009,14 @@ export interface RespuestaParrilla {
   total_posteos: number;
   total_editorial: number;
   total_sobrantes: number;
+  /** Temas descartados por NO ser de la marca activa (0 sin marca). */
+  total_fuera_foco?: number;
   cuota_posteos: number;
   cuota_editorial: number;
   /** Geo/contexto usado en el scoring. */
   contexto: string;
+  /** Marca con la que se armó el plan (id canónico), o `null`/ausente si general. */
+  marca?: string | null;
 }
 
 /** Resultado de programar una pieza en Metricool (preview dry-run o publicación real). */

@@ -111,8 +111,8 @@ export default function PlanDelDia() {
 
 export function PanelPlanDelDia() {
   const [geo, setGeo] = React.useState("MX");
-  // El plan se arma para la MARCA ACTIVA: prioriza sus temas (no lo viral en general).
-  const { marcaActiva } = useMarcaActiva();
+  // El plan se arma para la MARCA ACTIVA: solo entran sus temas (no lo viral en general).
+  const { marcaActiva, nombreActiva } = useMarcaActiva();
   const query = useQuery({
     queryKey: ["parrilla-dia", geo, marcaActiva],
     queryFn: ({ signal }) => api.parrillaDia(geo, marcaActiva ?? undefined, signal),
@@ -163,23 +163,48 @@ export function PanelPlanDelDia() {
           cargando={query.isFetching}
         />
       ) : (
-        <Contenido datos={query.data} />
+        <Contenido datos={query.data} nombreMarca={nombreActiva} />
       )}
     </div>
   );
 }
 
-function Contenido({ datos }: { datos: RespuestaParrilla }) {
+function Contenido({
+  datos,
+  nombreMarca,
+}: {
+  datos: RespuestaParrilla;
+  nombreMarca: string | null;
+}) {
+  const fueraFoco = datos.total_fuera_foco ?? 0;
+  // Hay marca activa y se descartaron temas por no ser suyos (filtro real por marca).
+  const filtradoPorMarca = Boolean(datos.marca);
+
   if (datos.total_entrada === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
           <ListOrdered className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-          <p className="text-sm font-medium">No hay temas para armar la parrilla ahora mismo.</p>
-          <p className="max-w-md text-sm text-muted-foreground">
-            El Radar respondió sin tendencias (o sus fuentes no están disponibles). No se inventan
-            temas: cuando haya datos reales, la parrilla aparecerá aquí.
-          </p>
+          {filtradoPorMarca && fueraFoco > 0 ? (
+            <>
+              <p className="text-sm font-medium">
+                No hay temas de {nombreMarca ?? "tu marca"} para el plan de hoy.
+              </p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                Había {fueraFoco} tema(s) en tendencias, pero ninguno del foco de la marca. El plan
+                deriva de tendencias generales (Google Trends); da de alta fuentes de la marca en
+                Fuentes para nutrir su plan del día.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">No hay temas para armar la parrilla ahora mismo.</p>
+              <p className="max-w-md text-sm text-muted-foreground">
+                El Radar respondió sin tendencias (o sus fuentes no están disponibles). No se
+                inventan temas: cuando haya datos reales, la parrilla aparecerá aquí.
+              </p>
+            </>
+          )}
         </CardContent>
       </Card>
     );
@@ -188,11 +213,13 @@ function Contenido({ datos }: { datos: RespuestaParrilla }) {
   return (
     <div className="space-y-6">
       <p className="text-xs text-muted-foreground">
-        {datos.total_entrada} {datos.total_entrada === 1 ? "tema" : "temas"} del Radar →{" "}
+        {datos.total_entrada} {datos.total_entrada === 1 ? "tema" : "temas"}
+        {filtradoPorMarca && nombreMarca ? ` de ${nombreMarca}` : " del Radar"} →{" "}
         <strong className="text-foreground">{datos.total_posteos}</strong> posteos +{" "}
         <strong className="text-foreground">{datos.total_editorial}</strong> editoriales
-        {datos.total_sobrantes > 0 && ` · ${datos.total_sobrantes} sobrante(s)`}. Ordenados por
-        importancia (1 = se publica primero).
+        {datos.total_sobrantes > 0 && ` · ${datos.total_sobrantes} sobrante(s)`}
+        {filtradoPorMarca && fueraFoco > 0 && ` · ${fueraFoco} fuera del foco de la marca`}.
+        Ordenados por importancia (1 = se publica primero).
       </p>
 
       <div className="grid gap-6 lg:grid-cols-2">
