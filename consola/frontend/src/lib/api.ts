@@ -16,6 +16,9 @@ import type {
   ValidacionEditorial,
   RespuestaAreas,
   RespuestaMarcasBiblioteca,
+  RespuestaPipelinesBiblioteca,
+  PreviewPipeline,
+  RespuestaHistorialBiblioteca,
   CuerpoCrearDocumento,
   CuerpoGuardarDocumento,
   CuerpoLanzarBiblioteca,
@@ -665,9 +668,30 @@ export const api = {
     }),
 
   // --- Biblioteca de documentos (prompts + línea editorial) ---
-  biblioteca: (filtros?: { tipo?: string; carpeta?: string; q?: string }, signal?: AbortSignal) =>
+  biblioteca: (
+    filtros?: {
+      tipo?: string;
+      carpeta?: string;
+      q?: string;
+      estado?: string;
+      etiqueta?: string;
+      marca?: string;
+      clase?: string;
+      pipeline?: string;
+    },
+    signal?: AbortSignal,
+  ) =>
     peticion<RespuestaBiblioteca>(
-      `/biblioteca${query({ tipo: filtros?.tipo, carpeta: filtros?.carpeta, q: filtros?.q })}`,
+      `/biblioteca${query({
+        tipo: filtros?.tipo,
+        carpeta: filtros?.carpeta,
+        q: filtros?.q,
+        estado: filtros?.estado,
+        etiqueta: filtros?.etiqueta,
+        marca: filtros?.marca,
+        clase: filtros?.clase,
+        pipeline: filtros?.pipeline,
+      })}`,
       { signal },
     ),
   crearDocumento: (cuerpo: CuerpoCrearDocumento) =>
@@ -686,8 +710,23 @@ export const api = {
     peticion<RespuestaDocumento>(`/biblioteca/papelera/${encodeURIComponent(id)}/restaurar`, {
       metodo: "POST",
     }),
-  editorialesBiblioteca: (marca: string, signal?: AbortSignal) =>
-    peticion<RespuestaEditoriales>(`/biblioteca/editoriales${query({ marca })}`, { signal }),
+  editorialesBiblioteca: (marca: string, pipeline?: string, signal?: AbortSignal) =>
+    peticion<RespuestaEditoriales>(`/biblioteca/editoriales${query({ marca, pipeline })}`, { signal }),
+  // --- Pipelines: registro + preview del prompt ensamblado (atribución) ---
+  pipelinesBiblioteca: (signal?: AbortSignal) =>
+    peticion<RespuestaPipelinesBiblioteca>("/biblioteca/pipelines", { signal }),
+  previewPipeline: (pipeline: string, marca: string, contexto?: string, signal?: AbortSignal) =>
+    peticion<PreviewPipeline>(
+      `/biblioteca/pipelines/${pipeline}/preview${query({ marca, contexto })}`,
+      { signal },
+    ),
+  // --- Versionado git: historial, una versión y rollback no destructivo ---
+  historialBiblioteca: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaHistorialBiblioteca>(`/biblioteca/${id}/historial`, { signal }),
+  versionBiblioteca: (id: string, sha: string, signal?: AbortSignal) =>
+    peticion<RespuestaDocumento>(`/biblioteca/${id}/version/${sha}`, { signal }),
+  revertirBiblioteca: (id: string, sha: string) =>
+    peticion<RespuestaDocumento>(`/biblioteca/${id}/revertir/${sha}`, { metodo: "POST" }),
   validacionBiblioteca: (marca: string, signal?: AbortSignal) =>
     peticion<ValidacionEditorial>(`/biblioteca/validacion${query({ marca })}`, { signal }),
   areasBiblioteca: (signal?: AbortSignal) =>

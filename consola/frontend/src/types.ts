@@ -3740,12 +3740,65 @@ export interface DocumentoBiblioteca {
   marcas: string[];
   /** Solo prompt: "" | "documento" (texto) | "piezas" (copy por red -> borradores). */
   salida?: string;
+  /** Ciclo de vida: activo | borrador | archivado. Solo `activo` se inyecta en pipelines. */
+  estado?: string;
+  /** Tags transversales (navegación / facetas). */
+  etiquetas?: string[];
+  /** Pipelines a los que se ata el doc (atribución). [] = aplica a todos los pipelines. */
+  pipelines?: string[];
+  /** Solo prompt: rol que ata el prompt a un pipeline (copy | qa | green | arte | ""). */
+  rol?: string;
+  /** Orden de ensamblaje del auto-adjunto (menor = antes). */
+  prioridad?: number;
 }
 
-/** `GET /api/biblioteca`: documentos filtrados + carpetas existentes. */
+/** Resumen de facetas para poblar los filtros de navegación. */
+export interface FacetasBiblioteca {
+  etiquetas: { valor: string; total: number }[];
+  estados: Record<string, number>;
+  pipelines: Record<string, number>;
+}
+
+/** Un pipeline de generación (registro): su prompt base efectivo y rol esperado. */
+export interface PipelineBiblioteca {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  rol: string;
+  prompt_base_id: string;
+}
+
+export interface RespuestaPipelinesBiblioteca {
+  pipelines: PipelineBiblioteca[];
+}
+
+/** Preview del prompt ENSAMBLADO de un pipeline (lo que recibiría claude -p). */
+export interface PreviewPipeline {
+  pipeline: string;
+  prompt_base_id: string;
+  falta_base: boolean;
+  prompt_efectivo: string;
+  adjuntos: { id: string; titulo: string; clase: string; prioridad: number }[];
+}
+
+/** Una entrada del historial de versiones (git) de un documento. */
+export interface VersionBiblioteca {
+  sha: string;
+  sha_corto: string;
+  fecha: string;
+  autor: string;
+  mensaje: string;
+}
+
+export interface RespuestaHistorialBiblioteca {
+  historial: VersionBiblioteca[];
+}
+
+/** `GET /api/biblioteca`: documentos filtrados + carpetas existentes + facetas. */
 export interface RespuestaBiblioteca {
   documentos: DocumentoBiblioteca[];
   carpetas: string[];
+  facetas?: FacetasBiblioteca;
 }
 
 export interface RespuestaDocumento {
@@ -3796,6 +3849,11 @@ export interface CuerpoCrearDocumento {
   cuerpo?: string;
   clase?: string;
   marcas?: string[];
+  estado?: string;
+  etiquetas?: string[];
+  pipelines?: string[];
+  rol?: string;
+  prioridad?: number;
 }
 
 export interface CuerpoGuardarDocumento {
@@ -3804,6 +3862,11 @@ export interface CuerpoGuardarDocumento {
   carpeta?: string;
   clase?: string;
   marcas?: string[];
+  estado?: string;
+  etiquetas?: string[];
+  pipelines?: string[];
+  rol?: string;
+  prioridad?: number;
 }
 
 /** Target sobre el que se lanza un prompt. */

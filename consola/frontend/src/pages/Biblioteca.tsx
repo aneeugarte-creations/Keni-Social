@@ -18,6 +18,7 @@ import {
   Eye,
   FileText,
   Folder,
+  History,
   Loader2,
   Pencil,
   Plus,
@@ -60,8 +61,17 @@ import type { DocumentoBiblioteca, TargetLanzamiento } from "@/types";
 
 type Filtro = "todo" | "prompt" | "editorial";
 type TipoTarget = TargetLanzamiento["tipo"] | "archivo";
+type FiltroEstado = "todo" | "activo" | "borrador" | "archivado";
 
 const CLASES_EDITORIAL = ["marca", "voz", "plataforma", "tropicalizacion", "reglas"] as const;
+const ESTADOS_DOC = ["activo", "borrador", "archivado"] as const;
+const ROLES_PROMPT = ["", "copy", "qa", "green", "arte"] as const;
+// Pipelines del registro backend (mismo orden/ids que `biblioteca.PIPELINES`).
+const PIPELINES = [
+  { id: "copy", nombre: "Copy" },
+  { id: "qa", nombre: "QA fuente" },
+  { id: "green", nombre: "GREEN" },
+] as const;
 
 /**
  * Separa un bloque de "frontmatter" al INICIO del cuerpo (un bloque `---\n…\n---`) del
@@ -86,9 +96,13 @@ export default function Biblioteca() {
   // --- Navegación / lista ---
   const [filtro, setFiltro] = React.useState<Filtro>("todo");
   const [q, setQ] = React.useState("");
+  const [estadoFiltro, setEstadoFiltro] = React.useState<FiltroEstado>("todo");
+  const [etiquetaFiltro, setEtiquetaFiltro] = React.useState<string | null>(null);
   const [enPapelera, setEnPapelera] = React.useState(false);
   const [seleccionId, setSeleccionId] = React.useState<string | null>(null);
-  const [preview, setPreview] = React.useState(false);
+  // Por defecto se EDITA en modo renderizado (vista); el toggle pasa al markdown crudo.
+  const [preview, setPreview] = React.useState(true);
+  const [historialAbierto, setHistorialAbierto] = React.useState(false);
   const [carpetasCerradas, setCarpetasCerradas] = React.useState<Set<string>>(new Set());
   const [lanzarAbierto, setLanzarAbierto] = React.useState(false);
   // Frontmatter del cuerpo que ocultamos en el editor (se readjunta al guardar).
@@ -104,9 +118,17 @@ export default function Biblioteca() {
   const enRenRef = React.useRef(false);
 
   const docsQuery = useQuery({
-    queryKey: ["biblioteca", filtro, q],
+    queryKey: ["biblioteca", filtro, q, estadoFiltro, etiquetaFiltro],
     queryFn: ({ signal }) =>
-      api.biblioteca({ tipo: filtro === "todo" ? undefined : filtro, q: q || undefined }, signal),
+      api.biblioteca(
+        {
+          tipo: filtro === "todo" ? undefined : filtro,
+          q: q || undefined,
+          estado: estadoFiltro === "todo" ? undefined : estadoFiltro,
+          etiqueta: etiquetaFiltro || undefined,
+        },
+        signal,
+      ),
   });
   const papeleraQuery = useQuery({
     queryKey: ["biblioteca-papelera"],
@@ -123,6 +145,7 @@ export default function Biblioteca() {
   });
 
   const documentos = React.useMemo(() => docsQuery.data?.documentos ?? [], [docsQuery.data]);
+  const facetas = docsQuery.data?.facetas;
   const buscando = q.trim().length > 0;
 
   // Agrupa por carpeta: la jerarquía ES la navegación. Raíz ("") primero, resto alfabético.
@@ -216,8 +239,9 @@ export default function Biblioteca() {
       setBorrador(null);
       setFrontmatterOculto("");
     }
-    setPreview(false);
+    setPreview(true); // se abre en modo renderizado por defecto
     setLanzarAbierto(false);
+    setHistorialAbierto(false);
   }, [seleccionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const areaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -321,6 +345,11 @@ export default function Biblioteca() {
           carpeta: siguiente.carpeta,
           clase: siguiente.clase,
           marcas: siguiente.marcas,
+          estado: siguiente.estado,
+          etiquetas: siguiente.etiquetas,
+          pipelines: siguiente.pipelines,
+          rol: siguiente.rol,
+          prioridad: siguiente.prioridad,
         },
       });
     }, 600);
@@ -364,6 +393,39 @@ export default function Biblioteca() {
           </Tabs>
         </div>
         <Input placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} />
+        {/* Facetas: estado del ciclo de vida + etiquetas transversales. */}
+        <div className="flex items-center gap-2">
+          <Select value={estadoFiltro} onValueChange={(v) => setEstadoFiltro(v as FiltroEstado)}>
+            <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todo">Todos los estados</SelectItem>
+              <SelectItem value="activo">Activos</SelectItem>
+              <SelectItem value="borrador">Borradores</SelectItem>
+              <SelectItem value="archivado">Archivados</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {etiquetaFiltro ? (
+          <button
+            onClick={() => setEtiquetaFiltro(null)}
+            className="flex items-center gap-1 self-start rounded bg-primary/10 px-2 py-0.5 text-xs text-primary"
+          >
+            #{etiquetaFiltro} <X className="h-3 w-3" />
+          </button>
+        ) : facetas && facetas.etiquetas.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {facetas.etiquetas.slice(0, 8).map((e) => (
+              <button
+                key={e.valor}
+                onClick={() => setEtiquetaFiltro(e.valor)}
+                className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted/70"
+                title={`${e.total} documento(s)`}
+              >
+                #{e.valor}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="flex gap-2">
           <Button size="sm" variant="outline" className="flex-1" onClick={() => crearMut.mutate("prompt")}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Prompt
@@ -536,6 +598,14 @@ export default function Biblioteca() {
                 {preview ? "Editar" : "Vista"}
               </Button>
               <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setHistorialAbierto(true)}
+                title="Historial de versiones"
+              >
+                <History className="mr-1 h-3.5 w-3.5" /> Historial
+              </Button>
+              <Button
                 size="icon"
                 variant="ghost"
                 aria-label="Eliminar documento"
@@ -550,26 +620,93 @@ export default function Biblioteca() {
               </Button>
             </div>
 
-            {borrador.tipo === "editorial" ? (
-              <div className="flex flex-wrap items-center gap-2">
-                <Select value={borrador.clase || "marca"} onValueChange={(v) => editar({ clase: v })}>
-                  <SelectTrigger className="w-44"><SelectValue placeholder="Clase" /></SelectTrigger>
+            {/* Metadatos unificados: estado/etiquetas (todos) + clase/marcas (editorial) +
+                rol (prompt) + atribución a pipelines (todos) + prioridad de ensamblaje. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={borrador.estado || "activo"} onValueChange={(v) => editar({ estado: v })}>
+                <SelectTrigger className="w-32" title="Estado del ciclo de vida"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ESTADOS_DOC.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Input
+                value={(borrador.etiquetas ?? []).join(", ")}
+                onChange={(e) =>
+                  editar({ etiquetas: e.target.value.split(",").map((t) => t.trim()).filter(Boolean) })
+                }
+                placeholder="etiquetas (coma)"
+                className="w-44"
+                title="Tags transversales para navegación"
+              />
+              {borrador.tipo === "editorial" ? (
+                <>
+                  <Select value={borrador.clase || "marca"} onValueChange={(v) => editar({ clase: v })}>
+                    <SelectTrigger className="w-36"><SelectValue placeholder="Clase" /></SelectTrigger>
+                    <SelectContent>
+                      {CLASES_EDITORIAL.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    value={borrador.marcas.join(", ")}
+                    onChange={(e) =>
+                      editar({ marcas: e.target.value.split(",").map((m) => m.trim()).filter(Boolean) })
+                    }
+                    placeholder="marcas (coma)"
+                    className="w-40"
+                  />
+                </>
+              ) : (
+                <Select value={borrador.rol || "_"} onValueChange={(v) => editar({ rol: v === "_" ? "" : v })}>
+                  <SelectTrigger className="w-36" title="Rol: ata el prompt a un pipeline">
+                    <SelectValue placeholder="rol" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {CLASES_EDITORIAL.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    {ROLES_PROMPT.map((r) => (
+                      <SelectItem key={r || "_"} value={r || "_"}>{r || "sin rol"}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  value={borrador.marcas.join(", ")}
-                  onChange={(e) =>
-                    editar({ marcas: e.target.value.split(",").map((m) => m.trim()).filter(Boolean) })
-                  }
-                  placeholder="marcas (ids separados por coma)"
-                  className="flex-1"
-                />
-              </div>
-            ) : null}
+              )}
+              <Input
+                type="number"
+                value={borrador.prioridad ?? 0}
+                onChange={(e) => editar({ prioridad: Number(e.target.value) || 0 })}
+                className="w-20"
+                title="Prioridad de ensamblaje (menor = antes)"
+              />
+            </div>
+
+            {/* Atribución a pipelines: en qué procesos entra este documento (toggle). */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">Se inyecta en:</span>
+              {PIPELINES.map((p) => {
+                const sel = (borrador.pipelines ?? []).includes(p.id);
+                return (
+                  <Badge
+                    key={p.id}
+                    variant={sel ? "default" : "outline"}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      const actual = borrador.pipelines ?? [];
+                      editar({
+                        pipelines: sel ? actual.filter((x) => x !== p.id) : [...actual, p.id],
+                      });
+                    }}
+                  >
+                    {p.nombre}
+                  </Badge>
+                );
+              })}
+              {(borrador.pipelines ?? []).length === 0 ? (
+                <span className="text-xs text-muted-foreground">
+                  {borrador.tipo === "editorial" ? "(todos los pipelines)" : "(ninguno)"}
+                </span>
+              ) : null}
+            </div>
 
             {!preview && <BarraFormato refArea={areaRef} valor={borrador.cuerpo} onContenido={(v) => editar({ cuerpo: v })} />}
 
@@ -609,7 +746,137 @@ export default function Biblioteca() {
           onOpenChange={setLanzarAbierto}
         />
       ) : null}
+
+      {/* ───────── Historial de versiones (git) ───────── */}
+      {borrador ? (
+        <DialogHistorial
+          key={`hist-${borrador.id}`}
+          docId={borrador.id}
+          open={historialAbierto}
+          onOpenChange={setHistorialAbierto}
+          onRevertido={() => {
+            qc.invalidateQueries({ queryKey: ["biblioteca"] });
+            setHistorialAbierto(false);
+          }}
+        />
+      ) : null}
     </div>
+  );
+}
+
+// --------------------------------------------------------------------------- //
+// Historial de versiones (git)                                                //
+// --------------------------------------------------------------------------- //
+
+function DialogHistorial({
+  docId,
+  open,
+  onOpenChange,
+  onRevertido,
+}: {
+  docId: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  onRevertido: () => void;
+}) {
+  const [verSha, setVerSha] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!open) setVerSha(null);
+  }, [open]);
+
+  const histQuery = useQuery({
+    queryKey: ["biblioteca-historial", docId],
+    queryFn: ({ signal }) => api.historialBiblioteca(docId, signal),
+    enabled: open,
+  });
+  const versionQuery = useQuery({
+    queryKey: ["biblioteca-version", docId, verSha],
+    queryFn: ({ signal }) => api.versionBiblioteca(docId, verSha as string, signal),
+    enabled: open && !!verSha,
+  });
+  const revertirMut = useMutation({
+    mutationFn: (sha: string) => api.revertirBiblioteca(docId, sha),
+    onSuccess: onRevertido,
+  });
+
+  const historial = histQuery.data?.historial ?? [];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col gap-3 overflow-hidden">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="h-4 w-4" /> Historial de versiones
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-1 gap-3">
+          <div className="w-64 shrink-0 overflow-y-auto rounded-md border border-border">
+            {histQuery.isPending ? (
+              <div className="p-3"><Skeleton className="h-8 w-full" /></div>
+            ) : historial.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">
+                Sin versiones registradas. (El versionado git puede estar desactivado.)
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {historial.map((v) => (
+                  <li key={v.sha}>
+                    <button
+                      onClick={() => setVerSha(v.sha)}
+                      className={`w-full px-3 py-2 text-left text-xs hover:bg-muted ${
+                        v.sha === verSha ? "bg-muted" : ""
+                      }`}
+                    >
+                      <span className="block font-medium">{v.mensaje}</span>
+                      <span className="mt-0.5 block text-muted-foreground">
+                        {v.autor} · {v.fecha.slice(0, 16).replace("T", " ")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            {!verSha ? (
+              <p className="text-sm text-muted-foreground">
+                Elige una versión para verla y, si quieres, restaurarla.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Versión {verSha.slice(0, 8)}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={revertirMut.isPending}
+                    onClick={async () => {
+                      if (
+                        await confirmar({
+                          mensaje: "¿Restaurar esta versión? Se guarda como un cambio nuevo (no se pierde el historial).",
+                          textoConfirmar: "Restaurar",
+                        })
+                      )
+                        revertirMut.mutate(verSha);
+                    }}
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Restaurar
+                  </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
+                  {versionQuery.isPending ? (
+                    <Skeleton className="h-24 w-full" />
+                  ) : (
+                    <Markdown>{versionQuery.data?.documento.cuerpo || "_Sin contenido_"}</Markdown>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -660,7 +927,7 @@ function PanelLanzar({
   // Línea editorial auto-resuelta por marca (selección inicial = todas).
   const editorialesQuery = useQuery({
     queryKey: ["biblioteca-editoriales", marca],
-    queryFn: ({ signal }) => api.editorialesBiblioteca(marca, signal),
+    queryFn: ({ signal }) => api.editorialesBiblioteca(marca, undefined, signal),
     enabled: !!marca,
   });
   // Diagnóstico de los 4 pilares editoriales de la marca elegida: avisa si la línea
