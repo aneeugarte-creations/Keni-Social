@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
 import type { FormatoImagen, Generacion, ImagenActiva } from "@/types";
@@ -214,10 +215,12 @@ export default function Estudio() {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opcionesQuery.data?.marcas ?? [];
+  // Marca activa del workspace: default de la generación cuando no viene de la pieza.
+  const { marcaActiva } = useMarcaActiva();
 
-  // --- Estado de configuración (sesión > contexto de la pieza > por defecto) ---
+  // --- Estado de configuración (sesión > contexto de la pieza > marca activa > vacío) ---
   const [prompt, setPrompt] = React.useState(() => sesion0.prompt ?? "");
-  const [marca, setMarca] = React.useState(() => sesion0.marca ?? ctx.marca ?? "");
+  const [marca, setMarca] = React.useState(() => sesion0.marca ?? ctx.marca ?? marcaActiva ?? "");
   const [formato, setFormato] = React.useState<FormatoImagen>(
     () => sesion0.formato ?? formatoPorRed(ctx.red),
   );

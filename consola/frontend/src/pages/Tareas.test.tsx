@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SesionContexto, type ValorSesion } from "@/hooks/sesion-contexto";
+import { MarcaActivaProvider } from "@/hooks/use-marca-activa";
 import type { UsuarioSesion } from "@/types";
 
 import Tablero from "./Tareas";
@@ -186,8 +187,8 @@ function sesionValor(usuario: UsuarioSesion | null): ValorSesion {
   };
 }
 
-// Por defecto, usuario MULTIMARCA => el workspace arranca en "Todas" (comportamiento
-// histórico de estos tests). Los casos de marca por defecto pasan un usuario monomarca.
+// El workspace del tablero ES la marca activa global (deriva del perfil): por defecto
+// FUERTE arranca en la marca primaria (primera asignada). Un editor no ve "Todas".
 function renderConProviders(
   ui: React.ReactElement,
   { usuario = usuarioConMarcas(["unotv", "claro-sports"]) }: { usuario?: UsuarioSesion | null } = {},
@@ -196,7 +197,9 @@ function renderConProviders(
   return render(
     <QueryClientProvider client={client}>
       <SesionContexto.Provider value={sesionValor(usuario)}>
-        <MemoryRouter>{ui}</MemoryRouter>
+        <MarcaActivaProvider>
+          <MemoryRouter>{ui}</MemoryRouter>
+        </MarcaActivaProvider>
       </SesionContexto.Provider>
     </QueryClientProvider>,
   );
@@ -356,14 +359,15 @@ describe("Tablero de contenido", () => {
     expect(screen.getByText(/Hola X/).closest("button")).not.toBeNull();
   });
 
-  it("usuario MULTIMARCA: el workspace arranca en Todas (ve ambas marcas)", async () => {
+  it("usuario MULTIMARCA: el workspace arranca aislado en su marca primaria (no mezcla)", async () => {
     stubFetch([
       contenido(),
       contenido({ id: "c2", titulo: "Final Champions", marca: "claro-sports", marca_nombre: "Claro Sports" }),
     ]);
+    // Marca primaria = la primera asignada (unotv): el tablero arranca en ella, no en "Todas".
     renderConProviders(<Tablero />, { usuario: usuarioConMarcas(["unotv", "claro-sports"]) });
 
     expect(await screen.findByText("Sismo CDMX")).toBeInTheDocument();
-    expect(screen.getByText("Final Champions")).toBeInTheDocument();
+    expect(screen.queryByText("Final Champions")).not.toBeInTheDocument();
   });
 });

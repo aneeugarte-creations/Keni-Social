@@ -72,7 +72,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useGeneracion } from "@/hooks/use-generacion";
-import { useSesion } from "@/hooks/sesion-contexto";
+import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, ApiError } from "@/lib/api";
 import { iconoRed, limiteRed, nombreRed } from "@/pages/publicaciones/meta";
 import { GestionFranjas } from "@/pages/publicaciones/GestionFranjas";
@@ -131,10 +131,10 @@ const TODOS = "__todos__";
 function etiquetaEvento(e: { titulo: string; fecha: string }): string {
   return [e.titulo, e.fecha].filter(Boolean).join(" · ") || "(evento)";
 }
-/** Workspace "todas las marcas" (sin aislar). */
+/** Workspace "todas las marcas" (sin aislar): coincide con el centinela global de marca. */
 const WORKSPACE_TODAS = "__todas__";
-/** localStorage: workspace (marca) activo + vista activa, para que sobrevivan al refresco. */
-const CLAVE_WORKSPACE = "keni.tablero.workspace";
+/** localStorage: vista activa del tablero, para que sobreviva al refresco. (La marca
+ * activa ya la persiste el contexto global de marca, no el tablero.) */
 const CLAVE_MODO = "keni.tablero.modo";
 
 /**
@@ -194,15 +194,6 @@ function leerLS(clave: string, defecto: string): string {
   }
 }
 
-/** Lee una clave de localStorage devolviendo `null` si NO existe (sin valor por defecto). */
-function leerLSOpcional(clave: string): string | null {
-  try {
-    return localStorage.getItem(clave);
-  } catch {
-    return null;
-  }
-}
-
 export default function Tablero() {
   const query = useQuery({
     queryKey: CLAVE,
@@ -231,35 +222,30 @@ export default function Tablero() {
   // la pestaña Contenido de un agente para abrir el tablero ya filtrado por esa marca).
   const location = useLocation();
   const navigate = useNavigate();
-  const { usuario } = useSesion();
-  // Workspace por defecto = la MARCA del usuario. Si la persona pertenece a una sola
-  // marca, el tablero nace aislado en ella (y el contenido nuevo también); si pertenece
-  // a varias (p. ej. Yustine) o a ninguna, arranca en "Todas". El `?marca=` y la última
-  // elección guardada mandan sobre ese defecto. `sinPreferenciaInicial` recuerda si al
-  // montar NO había ni `?marca=` ni elección previa, para poder adoptar la marca del
-  // usuario cuando la sesión resuelve DESPUÉS del primer render (el `me` es asíncrono).
-  const sinPreferenciaInicial = React.useRef(
-    leerLSOpcional(CLAVE_WORKSPACE) === null &&
-      !new URLSearchParams(location.search).get("marca"),
+  // El workspace del tablero ES la marca activa global (switch de la topbar): el
+  // tablero nace aislado en tu marca y el contenido nuevo también. No hay estado ni
+  // persistencia local de marca aquí; cambiar el workspace cambia la marca activa.
+  const { marcaActiva, cambiarMarca } = useMarcaActiva();
+  const workspace = marcaActiva ?? WORKSPACE_TODAS;
+  const setWorkspace = React.useCallback(
+    (v: string) => cambiarMarca(v === WORKSPACE_TODAS ? null : v),
+    [cambiarMarca],
   );
-  const [workspace, setWorkspace] = React.useState<string>(() => {
-    const desdeUrl = new URLSearchParams(location.search).get("marca");
-    if (desdeUrl) return desdeUrl;
-    const guardado = leerLSOpcional(CLAVE_WORKSPACE);
-    if (guardado) return guardado;
-    const marcas = usuario?.marcas ?? [];
-    return marcas.length === 1 ? marcas[0] : WORKSPACE_TODAS;
-  });
-  // La sesión puede resolver tras el montaje: si no había preferencia previa y el usuario
-  // es monomarca, adopta su marca una sola vez (sin pisar una elección deliberada).
+  // Deep-link `?marca=` (p. ej. desde la pestaña Contenido de un agente): cambia la
+  // marca activa una vez y limpia el parámetro. cambiarMarca ignora marcas fuera del
+  // alcance del perfil (enforcement de marca).
+  const marcaDeUrlConsumida = React.useRef(false);
   React.useEffect(() => {
-    if (!sinPreferenciaInicial.current) return;
-    const marcas = usuario?.marcas ?? [];
-    if (marcas.length === 1 && workspace === WORKSPACE_TODAS) {
-      setWorkspace(marcas[0]);
+    if (marcaDeUrlConsumida.current) return;
+    const desdeUrl = new URLSearchParams(location.search).get("marca");
+    if (desdeUrl) {
+      cambiarMarca(desdeUrl);
+      const params = new URLSearchParams(location.search);
+      params.delete("marca");
+      navigate({ search: params.toString() }, { replace: true });
     }
-    if (usuario) sinPreferenciaInicial.current = false;
-  }, [usuario, workspace]);
+    marcaDeUrlConsumida.current = true;
+  }, [location.search, cambiarMarca, navigate]);
   const [modo, setModo] = React.useState<Modo>(() => {
     // Compat de valores antiguos: `tablero`→`feed`, `publicaciones`→`lista`.
     const migrar = (v: string | null): Modo | null =>
@@ -287,16 +273,9 @@ export default function Tablero() {
 
   React.useEffect(() => {
     try {
-      localStorage.setItem(CLAVE_WORKSPACE, workspace);
-    } catch {
-      /* localStorage no disponible: no es crítico */
-    }
-  }, [workspace]);
-  React.useEffect(() => {
-    try {
       localStorage.setItem(CLAVE_MODO, modo);
     } catch {
-      /* idem */
+      /* localStorage no disponible: no es crítico */
     }
   }, [modo]);
 
@@ -859,6 +838,9 @@ function BarraControles({
   onFlujo: (v: string) => void;
   etiquetasWorkspace: EtiquetaCatalogo[];
 }) {
+  // Opciones del workspace = las mismas que el switch global (las marcas del perfil,
+  // o todas si admin). "Todas" solo para quien puede agregarlas.
+  const { marcasParaSwitch, puedeTodas } = useMarcaActiva();
   // Al cambiar de workspace, si la etiqueta del filtro deja de pertenecer, se resetea.
   React.useEffect(() => {
     if (
@@ -884,8 +866,8 @@ function BarraControles({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={WORKSPACE_TODAS}>Todas las marcas</SelectItem>
-            {catalogos.marcas.map((m) => (
+            {puedeTodas && <SelectItem value={WORKSPACE_TODAS}>Todas las marcas</SelectItem>}
+            {marcasParaSwitch.map((m) => (
               <SelectItem key={m.id} value={m.id}>
                 {m.nombre}
               </SelectItem>
