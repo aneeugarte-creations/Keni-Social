@@ -1112,11 +1112,12 @@ def test_publicacion_a_dict_expone_etapa_ia():
     """La pieza serializa `etapa_ia` derivada por `pipeline_estado.etapa_de_pieza` (Flujo C #3)."""
     from keni_consola import pipeline_estado as pe
 
-    # borrador, falta copy -> generando_copy
-    d = publicacion_a_dict({**_PUB_BASE, "falta_copy": True, "falta_imagen": True})
+    # La etapa se deriva del CONTENIDO REAL (¿hay copy?, ¿hay imagen?), no de los flags
+    # almacenados (a54a3267): sin copy real -> generando_copy.
+    d = publicacion_a_dict({**_PUB_BASE, "contenido": ""})
     assert d["etapa_ia"] == pe.ETAPA_GENERANDO_COPY
-    # con copy pero falta imagen -> generando_arte
-    d = publicacion_a_dict({**_PUB_BASE, "falta_copy": False, "falta_imagen": True})
+    # con copy (el contenido de _PUB_BASE) pero sin imagen compuesta -> generando_arte
+    d = publicacion_a_dict({**_PUB_BASE})
     assert d["etapa_ia"] == pe.ETAPA_GENERANDO_ARTE
     # estado terminal manda sobre la checklist
     d = publicacion_a_dict({**_PUB_BASE, "estado": "publicado"})
