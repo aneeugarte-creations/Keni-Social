@@ -105,21 +105,21 @@ def test_editoriales_ordena_por_prioridad():
 
 
 def test_editoriales_scoping_por_carpeta():
-    # La marca se deriva de la CARPETA (sin campo `marcas`): bajo `<marca>/...` aplica a esa marca.
-    biblioteca.crear("Voz", tipo="editorial", carpeta="unotv", cuerpo="v")
-    biblioteca.crear("Reglas", tipo="editorial", carpeta="claro-sports/legal", cuerpo="r")
-    # Carpeta global aplica a TODAS las marcas.
-    biblioteca.crear("Plataformas", tipo="editorial", carpeta="global", cuerpo="p")
+    # Estructura rrss -> marca -> categoria: la marca se deriva de la CARPETA (sin campo `marcas`).
+    biblioteca.crear("Marca", tipo="editorial", carpeta="rrss/unotv", cuerpo="v")
+    biblioteca.crear("Reglas", tipo="editorial", carpeta="rrss/claro-sports/legal", cuerpo="r")
+    # `global` en cualquier segmento (p. ej. rrss/global) aplica a TODAS las marcas.
+    biblioteca.crear("Plataformas", tipo="editorial", carpeta="rrss/global", cuerpo="p")
 
     ids_unotv = {d.id for d in biblioteca.editoriales_de_marca("unotv")}
-    assert "editorial/unotv/voz" in ids_unotv
-    assert "editorial/global/plataformas" in ids_unotv  # global, para todas
-    assert "editorial/claro-sports/legal/reglas" not in ids_unotv  # otra marca
+    assert "editorial/rrss/unotv/marca" in ids_unotv
+    assert "editorial/rrss/global/plataformas" in ids_unotv  # global, para todas
+    assert "editorial/rrss/claro-sports/legal/reglas" not in ids_unotv  # otra marca
 
     ids_claro = {d.id for d in biblioteca.editoriales_de_marca("claro-sports")}
-    assert "editorial/claro-sports/legal/reglas" in ids_claro
-    assert "editorial/global/plataformas" in ids_claro
-    assert "editorial/unotv/voz" not in ids_claro
+    assert "editorial/rrss/claro-sports/legal/reglas" in ids_claro
+    assert "editorial/rrss/global/plataformas" in ids_claro
+    assert "editorial/rrss/unotv/marca" not in ids_claro
 
 
 # --------------------------------------------------------------------------- #

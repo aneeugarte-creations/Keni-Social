@@ -772,7 +772,7 @@ def editoriales_de_marca(marca: str, *, pipeline: str | None = None) -> list[Doc
         # `…/<marca>/…` aplica a esa marca; uno bajo `global/` (o comun/general/todas) aplica a
         # TODAS. Se conservan `clase`/`marcas` por retrocompatibilidad con los docs existentes.
         segmentos = doc.carpeta.split("/") if doc.carpeta else []
-        es_global = doc.clase in _CLASES_GLOBALES or (bool(segmentos) and segmentos[0] in _CARPETAS_GLOBALES)
+        es_global = doc.clase in _CLASES_GLOBALES or any(s in _CARPETAS_GLOBALES for s in segmentos)
         es_de_marca = bool(marca) and (marca in doc.marcas or marca in segmentos)
         if es_global or es_de_marca:
             seleccion.append(doc)
