@@ -945,6 +945,31 @@ _DDL_ESQUEMA: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_marca ON biblioteca_media (marca)",
     "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_tipo ON biblioteca_media (tipo)",
     "CREATE INDEX IF NOT EXISTS idx_biblioteca_media_aprobado ON biblioteca_media (aprobado)",
+    # ACTIVOS DE MARCA (editor profesional): el kit visual reutilizable de cada marca, agrupado
+    # por `tipo` (logo | tipografia | arte | infografia | icono | paleta | fondo). Generaliza
+    # `marca_assets.py` (que solo conocia 3 PNGs en disco) a un catalogo en Postgres + objetos en
+    # S3/almacen (`objeto`, uuid+ext del servidor). `metadatos` (JSON) lleva datos por tipo (p.ej.
+    # familia/peso de una tipografia, lista de hex de una paleta); `lineas` (JSON de ids de
+    # `etiquetas` clase=vertical) etiqueta el activo por linea editorial. Para tipografias el
+    # `objeto` es el .woff2/.ttf y `metadatos.familia` el nombre a registrar en el render.
+    """
+    CREATE TABLE IF NOT EXISTS marca_activos (
+        id           TEXT PRIMARY KEY,
+        marca        TEXT NOT NULL DEFAULT '',
+        tipo         TEXT NOT NULL DEFAULT 'arte',
+        nombre       TEXT NOT NULL DEFAULT '',
+        objeto       TEXT NOT NULL DEFAULT '',
+        metadatos    TEXT NOT NULL DEFAULT '{}',
+        lineas       TEXT NOT NULL DEFAULT '[]',
+        aprobado     INTEGER NOT NULL DEFAULT 1,
+        autor_id     TEXT NOT NULL DEFAULT '',
+        autor_nombre TEXT NOT NULL DEFAULT '',
+        creado       TEXT NOT NULL DEFAULT '',
+        actualizado  TEXT NOT NULL DEFAULT ''
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_marca_activos_marca ON marca_activos (marca)",
+    "CREATE INDEX IF NOT EXISTS idx_marca_activos_tipo ON marca_activos (tipo)",
     # Webhooks SALIENTES (eventos internos del tablero): una fila por suscripcion. Cada
     # webhook escucha N tipos de evento (`eventos`, lista JSON; ""/[] = todos) y, al
     # dispararse, recibe un POST JSON a `url`. `secreto` (opcional) firma cada entrega con
@@ -4669,6 +4694,167 @@ def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
     con = _conectar()
     try:
         con.execute("DELETE FROM biblioteca_media WHERE id = ?", (media_id,))
+        con.commit()
+    finally:
+        con.close()
+    return item
+
+
+# --------------------------------------------------------------------------- #
+# Activos de marca (editor profesional: kit visual reutilizable por marca)       #
+# --------------------------------------------------------------------------- #
+
+_COLS_MARCA_ACTIVOS = (
+    "id",
+    "marca",
+    "tipo",
+    "nombre",
+    "objeto",
+    "metadatos",
+    "lineas",
+    "aprobado",
+    "autor_id",
+    "autor_nombre",
+    "creado",
+    "actualizado",
+)
+_SELECT_MARCA_ACTIVOS = f"SELECT {', '.join(_COLS_MARCA_ACTIVOS)} FROM marca_activos"
+
+# Campos editables via `actualizar_marca_activo` (lista blanca). `id`, `marca`, `objeto`,
+# `autor_*` y `creado` no son editables (un activo nuevo se cataloga aparte).
+_CAMPOS_EDITABLES_MARCA_ACTIVOS: tuple[str, ...] = (
+    "tipo",
+    "nombre",
+    "metadatos",
+    "lineas",
+    "aprobado",
+)
+
+
+def _fila_a_marca_activo(fila: Any) -> dict[str, Any]:
+    """Convierte una fila de `marca_activos` en dict (con defaults defensivos)."""
+    item: dict[str, Any] = {col: fila[col] for col in _COLS_MARCA_ACTIVOS}
+    item["aprobado"] = bool(fila["aprobado"])
+    item["metadatos"] = fila["metadatos"] or "{}"
+    item["lineas"] = fila["lineas"] or "[]"
+    item["tipo"] = fila["tipo"] or "arte"
+    return item
+
+
+def crear_marca_activo(
+    *,
+    marca: str,
+    tipo: str = "arte",
+    nombre: str = "",
+    objeto: str = "",
+    metadatos: str = "{}",
+    lineas: str = "[]",
+    aprobado: bool = True,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+    creado: str = "",
+    actualizado: str = "",
+) -> dict[str, Any]:
+    """Cataloga un activo de marca y lo devuelve. NO valida (lo hace la API)."""
+    autor = autor or {}
+    ahora = datetime.now().isoformat(timespec="seconds")
+    fila = {
+        "id": id or uuid.uuid4().hex[:12],
+        "marca": marca or "",
+        "tipo": tipo or "arte",
+        "nombre": nombre or "",
+        "objeto": objeto or "",
+        "metadatos": metadatos or "{}",
+        "lineas": lineas or "[]",
+        "aprobado": 1 if aprobado else 0,
+        "autor_id": autor.get("id", "") or "",
+        "autor_nombre": autor.get("usuario", "") or "",
+        "creado": creado or ahora,
+        "actualizado": actualizado or ahora,
+    }
+    con = _conectar()
+    try:
+        marcadores = ", ".join("?" for _ in _COLS_MARCA_ACTIVOS)
+        con.execute(
+            f"INSERT INTO marca_activos ({', '.join(_COLS_MARCA_ACTIVOS)}) VALUES ({marcadores})",
+            tuple(fila[col] for col in _COLS_MARCA_ACTIVOS),
+        )
+        con.commit()
+    finally:
+        con.close()
+    return _fila_a_marca_activo(fila)
+
+
+def listar_marca_activos(
+    *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
+) -> list[dict[str, Any]]:
+    """Activos de marca, filtros combinables (AND). Mas recientes primero."""
+    clausulas: list[str] = []
+    params: list[Any] = []
+    if marca:
+        clausulas.append("marca = ?")
+        params.append(marca)
+    if tipo:
+        clausulas.append("tipo = ?")
+        params.append(tipo)
+    if solo_aprobados:
+        clausulas.append("aprobado = 1")
+    sql = _SELECT_MARCA_ACTIVOS
+    if clausulas:
+        sql += " WHERE " + " AND ".join(clausulas)
+    sql += " ORDER BY creado DESC, id DESC"
+    con = _conectar()
+    try:
+        filas = con.execute(sql, tuple(params)).fetchall()
+    finally:
+        con.close()
+    return [_fila_a_marca_activo(f) for f in filas]
+
+
+def obtener_marca_activo(activo_id: str) -> dict[str, Any] | None:
+    """Un activo de marca por id (None si no existe)."""
+    con = _conectar()
+    try:
+        fila = con.execute(f"{_SELECT_MARCA_ACTIVOS} WHERE id = ?", (activo_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_marca_activo(fila) if fila is not None else None
+
+
+def actualizar_marca_activo(activo_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    """Edita parcialmente; None si el id no existe. Filtra a la lista blanca."""
+    cambios = {k: v for k, v in campos.items() if k in _CAMPOS_EDITABLES_MARCA_ACTIVOS}
+    if "aprobado" in cambios:
+        cambios["aprobado"] = 1 if cambios["aprobado"] else 0
+    if not cambios:
+        return obtener_marca_activo(activo_id)
+    ahora = datetime.now().isoformat(timespec="seconds")
+    asignaciones = [f"{k} = ?" for k in cambios]
+    asignaciones.append("actualizado = ?")
+    params: list[Any] = [*cambios.values(), ahora, activo_id]
+    con = _conectar()
+    try:
+        cur = con.execute(
+            f"UPDATE marca_activos SET {', '.join(asignaciones)} WHERE id = ?",  # noqa: S608 -- allowlist
+            tuple(params),
+        )
+        con.commit()
+        if cur.rowcount == 0:
+            return None
+        fila = con.execute(f"{_SELECT_MARCA_ACTIVOS} WHERE id = ?", (activo_id,)).fetchone()
+    finally:
+        con.close()
+    return _fila_a_marca_activo(fila) if fila is not None else None
+
+
+def borrar_marca_activo(activo_id: str) -> dict[str, Any] | None:
+    """Borra un activo de marca; devuelve el borrado (para limpiar el binario) o None."""
+    item = obtener_marca_activo(activo_id)
+    if item is None:
+        return None
+    con = _conectar()
+    try:
+        con.execute("DELETE FROM marca_activos WHERE id = ?", (activo_id,))
         con.commit()
     finally:
         con.close()

@@ -1315,6 +1315,54 @@ def borrar_media_biblioteca(media_id: str) -> dict[str, Any] | None:
 
 
 # --------------------------------------------------------------------------- #
+# Activos de marca (editor profesional)                                          #
+# --------------------------------------------------------------------------- #
+
+
+def crear_marca_activo(
+    *,
+    marca: str,
+    tipo: str = "arte",
+    nombre: str = "",
+    objeto: str = "",
+    metadatos: str = "{}",
+    lineas: str = "[]",
+    aprobado: bool = True,
+    autor: dict[str, str] | None = None,
+    id: str = "",
+) -> dict[str, Any]:
+    return db.crear_marca_activo(
+        marca=marca,
+        tipo=tipo,
+        nombre=nombre,
+        objeto=objeto,
+        metadatos=metadatos,
+        lineas=lineas,
+        aprobado=aprobado,
+        autor=autor,
+        id=id,
+    )
+
+
+def listar_marca_activos(
+    *, marca: str | None = None, tipo: str | None = None, solo_aprobados: bool = False
+) -> list[dict[str, Any]]:
+    return db.listar_marca_activos(marca=marca, tipo=tipo, solo_aprobados=solo_aprobados)
+
+
+def obtener_marca_activo(activo_id: str) -> dict[str, Any] | None:
+    return db.obtener_marca_activo(activo_id)
+
+
+def actualizar_marca_activo(activo_id: str, campos: dict[str, Any]) -> dict[str, Any] | None:
+    return db.actualizar_marca_activo(activo_id, campos)
+
+
+def borrar_marca_activo(activo_id: str) -> dict[str, Any] | None:
+    return db.borrar_marca_activo(activo_id)
+
+
+# --------------------------------------------------------------------------- #
 # Webhooks salientes + bitacora de eventos internos (OPERACIONAL: Postgres)      #
 # --------------------------------------------------------------------------- #
 

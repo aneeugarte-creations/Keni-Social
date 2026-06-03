@@ -35,6 +35,7 @@ modulos_backend = [
   "hashtags",
   "historial",
   "imagenes",
+  "marca_activos",
   "plantillas",
   "plantillas_marca",
   "qa_editorial",
