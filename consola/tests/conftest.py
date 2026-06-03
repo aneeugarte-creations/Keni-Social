@@ -41,6 +41,17 @@ pytest_plugins = ["tests._postgres"]
 
 
 @pytest.fixture(autouse=True)
+def _versionado_git_desactivado(monkeypatch):
+    """Desactiva por defecto el versionado git de la Biblioteca en la suite.
+
+    El versionado (commit por guardado) es BEST-EFFORT en produccion, pero en la suite cada
+    `crear`/`guardar` lanzaria subprocesos git: lento y ruidoso. Lo apagamos por defecto; los
+    tests que lo EJERCITAN lo reactivan con `monkeypatch.setenv('KENI_BIBLIOTECA_GIT', '1')`.
+    """
+    monkeypatch.setenv("KENI_BIBLIOTECA_GIT", "0")
+
+
+@pytest.fixture(autouse=True)
 def _esquema_fresco_por_test():
     """Limpia el memo de esquema de `db` al inicio de CADA test (#perf de la suite).
 

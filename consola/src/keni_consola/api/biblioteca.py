@@ -48,15 +48,46 @@ _RE_EXT = re.compile(r"^\.[a-z0-9]{1,8}$")
 # --------------------------------------------------------------------------- #
 
 
+def _facetas(docs: list[biblioteca.Documento]) -> dict[str, object]:
+    """Resumen de facetas (conteos) para poblar los filtros de navegacion del SPA."""
+    etiquetas: dict[str, int] = {}
+    estados: dict[str, int] = {}
+    pipelines: dict[str, int] = {}
+    for d in docs:
+        estados[d.estado] = estados.get(d.estado, 0) + 1
+        for e in d.etiquetas:
+            etiquetas[e] = etiquetas.get(e, 0) + 1
+        for p in d.pipelines:
+            pipelines[p] = pipelines.get(p, 0) + 1
+    return {
+        "etiquetas": sorted(({"valor": k, "total": v} for k, v in etiquetas.items()), key=lambda x: x["valor"]),
+        "estados": estados,
+        "pipelines": pipelines,
+    }
+
+
 async def listar(request: Request) -> Response:
-    """`GET /api/biblioteca?tipo=&carpeta=&q=` -> `{documentos: [...], carpetas: [...]}`."""
-    tipo = request.query_params.get("tipo") or None
-    carpeta = request.query_params.get("carpeta") or None
-    q = request.query_params.get("q") or None
-    docs = biblioteca.listar(tipo=tipo, carpeta=carpeta, q=q)
+    """`GET /api/biblioteca` -> `{documentos, carpetas, facetas}` con facetas opcionales.
+
+    Filtros (query, todos opcionales): `tipo`, `carpeta`, `q`, `estado`, `etiqueta`, `marca`,
+    `clase`, `pipeline`. Las `facetas` resumen etiquetas/estados/pipelines del resultado para
+    poblar los filtros de la nueva navegacion.
+    """
+    qp = request.query_params
+    docs = biblioteca.listar(
+        tipo=qp.get("tipo") or None,
+        carpeta=qp.get("carpeta") or None,
+        q=qp.get("q") or None,
+        estado=qp.get("estado") or None,
+        etiqueta=qp.get("etiqueta") or None,
+        marca=qp.get("marca") or None,
+        clase=qp.get("clase") or None,
+        pipeline=qp.get("pipeline") or None,
+    )
     return JSONResponse({
         "documentos": [d.a_dict() for d in docs],
-        "carpetas": biblioteca.listar_carpetas(tipo=tipo),
+        "carpetas": biblioteca.listar_carpetas(tipo=qp.get("tipo") or None),
+        "facetas": _facetas(docs),
     })
 
 
@@ -67,12 +98,15 @@ async def crear(request: Request) -> Response:
     if not isinstance(titulo, str) or not titulo.strip():
         return JSONResponse({"error": "El título es obligatorio."}, status_code=400)
     kwargs: dict[str, object] = {}
-    for clave in ("tipo", "carpeta", "cuerpo", "clase"):
+    for clave in ("tipo", "carpeta", "cuerpo", "clase", "estado", "rol"):
         valor = datos.get(clave)
         if isinstance(valor, str):
             kwargs[clave] = valor
-    if isinstance(datos.get("marcas"), list):
-        kwargs["marcas"] = [m for m in datos["marcas"] if isinstance(m, str)]
+    for clave in ("marcas", "etiquetas", "pipelines"):
+        if isinstance(datos.get(clave), list):
+            kwargs[clave] = [m for m in datos[clave] if isinstance(m, str)]
+    if isinstance(datos.get("prioridad"), int) and not isinstance(datos.get("prioridad"), bool):
+        kwargs["prioridad"] = datos["prioridad"]
     try:
         doc = biblioteca.crear(titulo, **kwargs)
     except biblioteca.BibliotecaError as e:
@@ -93,12 +127,15 @@ async def guardar(request: Request) -> Response:
     doc_id = request.path_params["doc_id"]
     datos = await leer_json(request)
     kwargs: dict[str, object] = {}
-    for clave in ("titulo", "cuerpo", "carpeta", "clase"):
+    for clave in ("titulo", "cuerpo", "carpeta", "clase", "estado", "rol"):
         valor = datos.get(clave)
         if isinstance(valor, str):
             kwargs[clave] = valor
-    if isinstance(datos.get("marcas"), list):
-        kwargs["marcas"] = [m for m in datos["marcas"] if isinstance(m, str)]
+    for clave in ("marcas", "etiquetas", "pipelines"):
+        if isinstance(datos.get(clave), list):
+            kwargs[clave] = [m for m in datos[clave] if isinstance(m, str)]
+    if isinstance(datos.get("prioridad"), int) and not isinstance(datos.get("prioridad"), bool):
+        kwargs["prioridad"] = datos["prioridad"]
     try:
         doc = biblioteca.guardar(doc_id, **kwargs)
     except biblioteca.BibliotecaError as e:
@@ -143,9 +180,15 @@ async def papelera_restaurar(request: Request) -> Response:
 
 
 async def editoriales(request: Request) -> Response:
-    """`GET /api/biblioteca/editoriales?marca=` -> `{editoriales: [...]}` (auto-adjunto)."""
+    """`GET /api/biblioteca/editoriales?marca=&pipeline=` -> `{editoriales: [...]}` (auto-adjunto).
+
+    `pipeline` (opcional) acota el auto-adjunto al conjunto que entra en ese proceso.
+    """
     marca = request.query_params.get("marca") or ""
-    docs = biblioteca.editoriales_de_marca(marca)
+    pipeline = request.query_params.get("pipeline") or None
+    if pipeline is not None and pipeline not in biblioteca.PIPELINES:
+        return JSONResponse({"error": "Pipeline desconocido."}, status_code=404)
+    docs = biblioteca.editoriales_de_marca(marca, pipeline=pipeline)
     return JSONResponse({"editoriales": [d.a_dict() for d in docs]})
 
 
@@ -172,6 +215,82 @@ async def marcas_disponibles(request: Request) -> Response:
     depender del endpoint de skills, que se retira) para poblar el selector del SPA.
     """
     return JSONResponse({"marcas": [{"id": mid, "nombre": nombre} for mid, nombre in marcas.opciones()]})
+
+
+# --------------------------------------------------------------------------- #
+# Pipelines: registro, atribucion y preview del prompt ensamblado              #
+# --------------------------------------------------------------------------- #
+
+
+async def pipelines_listar(request: Request) -> Response:
+    """`GET /api/biblioteca/pipelines` -> `{pipelines: [{id, titulo, descripcion, rol, prompt_base_id}]}`.
+
+    Es el catalogo de procesos de generacion: para cada uno, su prompt base EFECTIVO (resuelto
+    por el registro, considerando rebindeos en la Biblioteca). Sostiene la vista de atribucion.
+    """
+    items = []
+    for pid, spec in biblioteca.PIPELINES.items():
+        try:
+            base = biblioteca.prompt_base_de(pid)
+        except biblioteca.BibliotecaError:
+            base = spec.get("prompt_defecto", "")
+        items.append({
+            "id": pid,
+            "titulo": spec.get("titulo", pid),
+            "descripcion": spec.get("descripcion", ""),
+            "rol": spec.get("rol", ""),
+            "prompt_base_id": base,
+        })
+    return JSONResponse({"pipelines": items})
+
+
+async def pipeline_preview(request: Request) -> Response:
+    """`GET /api/biblioteca/pipelines/{pid}/preview?marca=&contexto=` -> prompt ENSAMBLADO.
+
+    "Lo que inyectas es lo que ves": muestra el prompt final (base + editoriales + contexto)
+    que recibiria `claude -p`, SIN lanzar nada. Resuelve de raiz "no se que se inyecta donde".
+    """
+    pid = request.path_params["pid"]
+    if pid not in biblioteca.PIPELINES:
+        return JSONResponse({"error": "Pipeline desconocido."}, status_code=404)
+    marca = request.query_params.get("marca") or ""
+    contexto = request.query_params.get("contexto") or ""
+    return JSONResponse(biblioteca.previsualizar_pipeline(pid, marca, contexto[:_MAX_TEXTO]))
+
+
+# --------------------------------------------------------------------------- #
+# Historial de versiones (git)                                                 #
+# --------------------------------------------------------------------------- #
+
+
+async def historial(request: Request) -> Response:
+    """`GET /api/biblioteca/{doc_id}/historial` -> `{historial: [{sha, fecha, autor, mensaje}]}`."""
+    try:
+        items = biblioteca.historial(request.path_params["doc_id"])
+    except biblioteca.BibliotecaError as e:
+        return JSONResponse({"error": str(e)}, status_code=404)
+    return JSONResponse({"historial": items})
+
+
+async def version(request: Request) -> Response:
+    """`GET /api/biblioteca/{doc_id}/version/{sha}` -> `{documento}` de esa version (404)."""
+    doc = biblioteca.version(request.path_params["doc_id"], request.path_params["sha"])
+    if doc is None:
+        return JSONResponse({"error": "No se encontró esa versión."}, status_code=404)
+    return JSONResponse({"documento": doc.a_dict()})
+
+
+async def revertir(request: Request) -> Response:
+    """`POST /api/biblioteca/{doc_id}/revertir/{sha}` -> revierte (commit nuevo) -> `{documento}`."""
+    try:
+        doc = biblioteca.restaurar_version(
+            request.path_params["doc_id"], request.path_params["sha"],
+            autor=autor_de_peticion(request),
+        )
+    except biblioteca.BibliotecaError as e:
+        codigo = 404 if ("no existe" in str(e) or "esa versión" in str(e)) else 400
+        return JSONResponse({"error": str(e)}, status_code=codigo)
+    return JSONResponse({"documento": doc.a_dict()})
 
 
 # --------------------------------------------------------------------------- #
@@ -371,7 +490,7 @@ async def lanzar_archivo(request: Request) -> Response:
     return JSONResponse({"generacion": gen})
 
 
-# Rutas: estaticas ANTES que la parametrica `/{doc_id:path}` (captura barras).
+# Rutas: estaticas y multi-segmento ANTES que la parametrica `/{doc_id:path}` (captura barras).
 RUTAS = [
     Route("/api/biblioteca", listar, methods=["GET"]),
     Route("/api/biblioteca", crear, methods=["POST"]),
@@ -381,8 +500,14 @@ RUTAS = [
     Route("/api/biblioteca/validacion", validacion, methods=["GET"]),
     Route("/api/biblioteca/areas", areas, methods=["GET"]),
     Route("/api/biblioteca/marcas", marcas_disponibles, methods=["GET"]),
+    Route("/api/biblioteca/pipelines", pipelines_listar, methods=["GET"]),
+    Route("/api/biblioteca/pipelines/{pid}/preview", pipeline_preview, methods=["GET"]),
     Route("/api/biblioteca/lanzar", lanzar, methods=["POST"]),
     Route("/api/biblioteca/lanzar-archivo", lanzar_archivo, methods=["POST"]),
+    # Multi-segmento de versionado: el sufijo literal ancla la captura del `doc_id:path`.
+    Route("/api/biblioteca/{doc_id:path}/historial", historial, methods=["GET"]),
+    Route("/api/biblioteca/{doc_id:path}/version/{sha}", version, methods=["GET"]),
+    Route("/api/biblioteca/{doc_id:path}/revertir/{sha}", revertir, methods=["POST"]),
     Route("/api/biblioteca/{doc_id:path}", obtener, methods=["GET"]),
     Route("/api/biblioteca/{doc_id:path}", guardar, methods=["PUT"]),
     Route("/api/biblioteca/{doc_id:path}", borrar, methods=["DELETE"]),

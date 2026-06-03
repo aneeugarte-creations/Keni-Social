@@ -127,13 +127,13 @@ def lanzar_propuesta(
     `procesar` solo desde el spec (no recibe el id). Es un enlace de trazabilidad opcional; las
     ideas se crean igual. Wirearlo requeriria que el worker inyecte el gen_id al `procesar`.
     """
-    cuerpo = biblioteca.cuerpo_efectivo(PROMPT_BRAINSTORMING)
+    cuerpo = biblioteca.cuerpo_efectivo(biblioteca.prompt_base_de("green"))
     if cuerpo is None:
         raise biblioteca.BibliotecaError(
             "No está disponible el prompt de brainstorming. Reinstala la Consola."
         )
     prompt = generar.componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca), contexto, sin_emojis=True
+        cuerpo, biblioteca.editoriales_de_marca(marca, pipeline="green"), contexto, sin_emojis=True
     )
     # Import perezoso del jobspec para no acoplar; el spec NO lleva la generacion_id real (la
     # crea `generar.lanzar`), pero el worker la inyecta al reconstruir el procesar.

@@ -240,11 +240,15 @@ def lanzar_copy(
     NIDA bajo ese tema (cuelga de su tarjeta) en vez de nacer como contenido suelto. Lo usa
     el auto-copy (`autogen_copy`); sin el (default ""), borrador suelto como hoy.
     """
-    cuerpo = biblioteca.cuerpo_efectivo(prompt_id)
+    # Resolucion por REGISTRO: si el caller no rebindea (usa el id por defecto), el pipeline
+    # "copy" decide su prompt base (que puede haberse re-bindeado en la Biblioteca sin tocar
+    # codigo). Si el caller pasa un prompt_id distinto, se respeta tal cual.
+    prompt_efectivo = biblioteca.prompt_base_de("copy") if prompt_id == PROMPT_COPY else prompt_id
+    cuerpo = biblioteca.cuerpo_efectivo(prompt_efectivo)
     if cuerpo is None:
         raise biblioteca.BibliotecaError("No está disponible el prompt de copy. Reinstala la Consola.")
     prompt = componer(
-        cuerpo, biblioteca.editoriales_de_marca(marca), contexto,
+        cuerpo, biblioteca.editoriales_de_marca(marca, pipeline="copy"), contexto,
         sin_emojis=True, redes_ids=redes_ids,
     )
     # Defensivo: solo propagamos fuente_id/clave si AMBOS vienen (un caso parcial no debe

@@ -852,7 +852,7 @@ def lanzar_qa_fuente(
     titulo = (tema.get("titulo") or "").strip() or dom_qa_titulo(nota)
     prompt = gen_dom.componer(
         cuerpo,
-        biblioteca.editoriales_de_marca(marca),
+        biblioteca.editoriales_de_marca(marca, pipeline="qa"),
         _contexto_qa_fuente(nota),
     )
     # Marca el tema en curso ANTES de lanzar (para que la fase QA no lo re-lance). CLAVE con el
