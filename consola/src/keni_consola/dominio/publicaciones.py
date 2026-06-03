@@ -117,6 +117,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Plantilla del estudio (PlantillaDiseno) elegida para esta pieza. "" = ninguna (placa de
         # marca por defecto). La imagen ya compuesta con ella vive en `imagen`.
         "plantilla_diseno_id": pub.get("plantilla_diseno_id") or "",
+        # Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`;
+        # "" = sin reencuadre). El editor lo edita; persiste la elección humana del recorte.
+        "foto_encuadre": pub.get("foto_encuadre") or "",
         # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
         # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
         "etapa_ia": etapa_ia,

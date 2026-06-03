@@ -838,7 +838,7 @@ export const api = {
   aplicarPlantillaPublicacion: (
     id: string,
     plantillaId: string,
-    extra: { foto?: string; copy_in?: string } = {},
+    extra: { foto?: string; copy_in?: string; foto_encuadre?: string } = {},
   ) =>
     peticion<RespuestaPublicacion>(`/publicaciones/${encodeURIComponent(id)}/aplicar-plantilla`, {
       metodo: "POST",

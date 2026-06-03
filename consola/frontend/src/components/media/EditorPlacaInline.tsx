@@ -13,7 +13,7 @@
  *    PNG, lo sube a media y devuelve su id, que se fija como `imagen` (lo publicable).
  */
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Eye, EyeOff, ImagePlus, Library, Loader2, Upload } from "lucide-react";
+import { Crop, Eye, EyeOff, ImagePlus, Library, Loader2, Move, Upload } from "lucide-react";
 import * as React from "react";
 import { toast } from "sonner";
 
@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useGeneracion } from "@/hooks/use-generacion";
 import { api, ApiError, urlMedia } from "@/lib/api";
+import { ENCUADRE_DEFECTO, normalizarEncuadre, type EncuadreFoto } from "@/lib/placa/encuadre";
 import { cargarFuentesPlaca } from "@/lib/placa/fuentes";
 import { dibujarPlaca, formatoPorRed } from "@/lib/placa/render";
 import type { FormatoSpec, PlantillaSpec } from "@/lib/specPlantilla";
@@ -69,6 +70,10 @@ export interface EditorPlacaInlineProps {
   placaOculta?: boolean;
   /** Notifica al padre cuando se quita/pone la plantilla, para persistirlo al guardar. */
   onPlacaOcultaCambio?: (oculta: boolean) => void;
+  /** Reencuadre manual actual de la foto dentro del marco 4:5 (null = sin reencuadre = por defecto). */
+  encuadre?: EncuadreFoto | null;
+  /** Notifica un cambio de reencuadre (arrastre/zoom) para persistirlo al guardar. */
+  onEncuadreCambio?: (encuadre: EncuadreFoto) => void;
   /**
    * Registra (o limpia con null) la función de "bake": el padre la invoca al guardar para
    * hornear el canvas actual a un media id publicable. Devuelve null si no hay nada que hornear.
@@ -85,6 +90,8 @@ export function EditorPlacaInline({
   imagenFuente,
   placaOculta = false,
   onPlacaOcultaCambio,
+  encuadre = null,
+  onEncuadreCambio,
   registrarBake,
 }: EditorPlacaInlineProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
@@ -109,6 +116,14 @@ export function EditorPlacaInline({
   const spec = specQuery.data?.spec;
   const formatoNombre = formatoPorRed(red);
   const fmt = spec?.formatos[formatoNombre];
+
+  // Reencuadre vigente (foco+zoom). `tieneEncuadre` = el humano lo tocó (hay valor persistido o de
+  // sesión): solo entonces PISAMOS el foco de diseño de la placa; sin tocar, se respeta el del spec.
+  const tieneEncuadre = !!encuadre;
+  const enc = encuadre ?? ENCUADRE_DEFECTO;
+  // Ref con el encuadre vivo para los handlers de arrastre (evita closures obsoletas entre renders).
+  const encRef = React.useRef(enc);
+  encRef.current = enc;
 
   // Precarga de fuentes (una vez por formato): sin ellas el ajuste de líneas no cuadra.
   React.useEffect(() => {
@@ -158,27 +173,33 @@ export function EditorPlacaInline({
     if (!ctx) return;
     ctx.clearRect(0, 0, w, h);
     if (mostrarMarca) {
+      // Con plantilla: pisamos el encuadre del hueco de foto SOLO si el humano reencuadró, para no
+      // alterar el encaje de diseño de las piezas que nadie tocó.
+      const formato =
+        tieneEncuadre && fmt.foto_slot
+          ? { ...fmt, foto_slot: { ...fmt.foto_slot, foco: enc.foco, zoom: enc.zoom } }
+          : fmt;
       dibujarPlaca(ctx, {
-        formato: fmt,
+        formato,
         fuentes: spec.fuentes,
         bindings: { copy_in: copyIn, etiqueta_default: "" },
         placeholder: !imgs.foto,
         imgs,
       });
     } else {
-      // Capa de marca OCULTA: solo la foto (cover) o un fondo neutro si no hay foto.
+      // Capa de marca OCULTA: solo la foto (cover con el reencuadre) o un fondo neutro si no hay foto.
       ctx.fillStyle = "#111315";
       ctx.fillRect(0, 0, w, h);
       if (imgs.foto) {
         const iw = imgs.foto.width;
         const ih = imgs.foto.height;
-        const esc = Math.max(w / iw, h / ih);
+        const esc = Math.max(w / iw, h / ih) * enc.zoom;
         const dw = iw * esc;
         const dh = ih * esc;
-        ctx.drawImage(imgs.foto, (w - dw) / 2, (h - dh) / 2, dw, dh);
+        ctx.drawImage(imgs.foto, (w - dw) * enc.foco[0], (h - dh) * enc.foco[1], dw, dh);
       }
     }
-  }, [spec, fmt, copyIn, imgs, mostrarMarca]);
+  }, [spec, fmt, copyIn, imgs, mostrarMarca, tieneEncuadre, enc]);
 
   React.useEffect(() => {
     if (!fuentesListas) return;
@@ -255,6 +276,56 @@ export function EditorPlacaInline({
     }
   }, [genIA, onCambioFoto]);
 
+  // --- Reencuadre manual: arrastrar para encuadrar + zoom dentro del marco 4:5 --- //
+  // La caja donde vive la foto: el hueco del spec (con plantilla) o el lienzo entero (sin plantilla).
+  const cajaFoto = React.useCallback((): { w: number; h: number } => {
+    if (mostrarMarca && fmt?.foto_slot) return { w: fmt.foto_slot.w, h: fmt.foto_slot.h };
+    if (fmt) return { w: fmt.lienzo.w, h: fmt.lienzo.h };
+    return { w: 0, h: 0 };
+  }, [mostrarMarca, fmt]);
+  const arrastre = React.useRef<{ x: number; y: number } | null>(null);
+
+  function onPointerDownFoto(e: React.PointerEvent<HTMLCanvasElement>) {
+    if (!imgs.foto || !onEncuadreCambio) return;
+    arrastre.current = { x: e.clientX, y: e.clientY };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onPointerMoveFoto(e: React.PointerEvent<HTMLCanvasElement>) {
+    const inicio = arrastre.current;
+    const canvas = canvasRef.current;
+    if (!inicio || !imgs.foto || !canvas || !onEncuadreCambio) return;
+    const caja = cajaFoto();
+    if (!caja.w) return;
+    const rect = canvas.getBoundingClientRect();
+    const escalaCss = rect.width ? canvas.width / rect.width : 1; // px de lienzo por px de pantalla
+    const iw = imgs.foto.width;
+    const ih = imgs.foto.height;
+    const actual = encRef.current;
+    const esc = Math.max(caja.w / iw, caja.h / ih) * actual.zoom;
+    const sobranteX = iw * esc - caja.w;
+    const sobranteY = ih * esc - caja.h;
+    const dxLienzo = (e.clientX - inicio.x) * escalaCss;
+    const dyLienzo = (e.clientY - inicio.y) * escalaCss;
+    // Arrastrar la foto a la derecha muestra su parte izquierda → el foco DISMINUYE.
+    const dFx = sobranteX > 0 ? -dxLienzo / sobranteX : 0;
+    const dFy = sobranteY > 0 ? -dyLienzo / sobranteY : 0;
+    arrastre.current = { x: e.clientX, y: e.clientY };
+    onEncuadreCambio(
+      normalizarEncuadre({ foco: [actual.foco[0] + dFx, actual.foco[1] + dFy], zoom: actual.zoom }),
+    );
+  }
+  function onPointerUpFoto(e: React.PointerEvent<HTMLCanvasElement>) {
+    arrastre.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* el puntero pudo soltarse fuera del canvas */
+    }
+  }
+  function onZoom(valor: number) {
+    onEncuadreCambio?.(normalizarEncuadre({ foco: encRef.current.foco, zoom: valor }));
+  }
+
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
     if (archivo) subir.mutate(archivo);
@@ -300,7 +371,7 @@ export function EditorPlacaInline({
         </Button>
       </div>
 
-      {/* Lienzo en vivo: resolución real, escalado por CSS. */}
+      {/* Lienzo en vivo: resolución real, escalado por CSS. Arrastrable para reencuadrar la foto. */}
       <div className="flex justify-center rounded-md border border-border bg-muted/20 p-2">
         {specQuery.isPending || !fuentesListas ? (
           <div className="flex h-56 items-center justify-center">
@@ -310,10 +381,51 @@ export function EditorPlacaInline({
           <canvas
             ref={canvasRef}
             className="max-h-[22rem] w-auto rounded-md"
-            style={{ aspectRatio: fmt ? `${fmt.lienzo.w} / ${fmt.lienzo.h}` : undefined }}
+            style={{
+              aspectRatio: fmt ? `${fmt.lienzo.w} / ${fmt.lienzo.h}` : undefined,
+              cursor: imgs.foto && onEncuadreCambio ? "move" : "default",
+              touchAction: "none",
+            }}
+            onPointerDown={onPointerDownFoto}
+            onPointerMove={onPointerMoveFoto}
+            onPointerUp={onPointerUpFoto}
+            onPointerCancel={onPointerUpFoto}
           />
         )}
       </div>
+
+      {/* Reencuadre 4:5: arrastra la foto en el lienzo + zoom. Solo si hay foto y se puede persistir. */}
+      {imgs.foto && onEncuadreCambio && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <Move className="h-3.5 w-3.5" />
+            Arrastra la foto para encuadrarla
+          </span>
+          <span className="flex flex-1 items-center gap-2">
+            <Crop className="h-3.5 w-3.5 shrink-0" />
+            <input
+              type="range"
+              min={1}
+              max={3}
+              step={0.02}
+              value={enc.zoom}
+              onChange={(e) => onZoom(Number(e.target.value))}
+              aria-label="Zoom de la foto"
+              className="h-1.5 w-full min-w-[6rem] max-w-[16rem] cursor-pointer accent-primary"
+            />
+          </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={enc.foco[0] === 0.5 && enc.foco[1] === 0.5 && enc.zoom === 1}
+            onClick={() => onEncuadreCambio(ENCUADRE_DEFECTO)}
+          >
+            Centrar
+          </Button>
+        </div>
+      )}
 
       <input
         ref={inputRef}

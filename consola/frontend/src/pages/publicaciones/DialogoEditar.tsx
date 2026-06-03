@@ -48,6 +48,11 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api, ApiError } from "@/lib/api";
+import {
+  parsearEncuadre,
+  serializarEncuadre,
+  type EncuadreFoto,
+} from "@/lib/placa/encuadre";
 import { plural } from "@/lib/formato";
 import type {
   CuerpoActualizarPlataforma,
@@ -327,6 +332,8 @@ export function DialogoEditar({
   // Plantilla del estudio elegida ("" = placa de marca por defecto / editor en vivo). La pieza la
   // recuerda (`plantilla_diseno_id`); en modo plantilla el editor muestra el resultado renderizado.
   const [plantillaId, setPlantillaId] = React.useState("");
+  // Reencuadre manual de la foto dentro del marco 4:5 (null = sin reencuadre). La pieza lo persiste.
+  const [encuadre, setEncuadre] = React.useState<EncuadreFoto | null>(null);
   const [galeriaPlantillas, setGaleriaPlantillas] = React.useState(false);
   // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
   const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
@@ -357,12 +364,17 @@ export function DialogoEditar({
   // (los del editor, aún sin guardar) y persiste. Actualizamos la previa al resultado.
   const aplicarPlantilla = useMutation({
     mutationFn: (idPlantilla: string) =>
-      api.aplicarPlantillaPublicacion(publicacion!.id, idPlantilla, { foto, copy_in: copyIn }),
+      api.aplicarPlantillaPublicacion(publicacion!.id, idPlantilla, {
+        foto,
+        copy_in: copyIn,
+        foto_encuadre: serializarEncuadre(encuadre),
+      }),
     onSuccess: ({ publicacion: p }) => {
       setImagen(p.imagen ?? "");
       setImagenUrl(p.imagen_url ?? "");
       setFoto(p.foto ?? "");
       setPlantillaId(p.plantilla_diseno_id ?? "");
+      setEncuadre(parsearEncuadre(p.foto_encuadre));
       setGaleriaPlantillas(false);
       void queryClient.invalidateQueries({ queryKey: CLAVE_PUBLICACIONES });
       void queryClient.invalidateQueries({ queryKey: ["contenido"] });
@@ -385,6 +397,7 @@ export function DialogoEditar({
     setFoto(publicacion.foto ?? "");
     setPlacaOculta(publicacion.placa_oculta ?? false);
     setPlantillaId(publicacion.plantilla_diseno_id ?? "");
+    setEncuadre(parsearEncuadre(publicacion.foto_encuadre));
     setVista("editar");
   }, [publicacion]);
 
@@ -424,6 +437,8 @@ export function DialogoEditar({
         placa_oculta: placaOculta,
         // Recuerda (o limpia) la plantilla del estudio elegida.
         plantilla_diseno_id: plantillaId,
+        // Reencuadre manual de la foto ("" si está centrada sin zoom).
+        foto_encuadre: serializarEncuadre(encuadre),
       };
       return api.actualizarPublicacion(publicacion.id, cuerpo);
     },
@@ -597,6 +612,8 @@ export function DialogoEditar({
                       imagenFuente={publicacion.imagen_fuente}
                       placaOculta={placaOculta}
                       onPlacaOcultaCambio={setPlacaOculta}
+                      encuadre={encuadre}
+                      onEncuadreCambio={setEncuadre}
                       registrarBake={(fn) => {
                         bakeRef.current = fn;
                       }}

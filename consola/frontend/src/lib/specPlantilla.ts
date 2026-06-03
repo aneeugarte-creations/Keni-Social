@@ -67,6 +67,8 @@ export interface FotoSlot {
   h: number;
   ajuste: Ajuste;
   foco: [number, number];
+  /** Acercamiento del reencuadre manual (≥1). Opcional; ausente/0 = sin zoom (1). */
+  zoom?: number;
   z: number;
 }
 

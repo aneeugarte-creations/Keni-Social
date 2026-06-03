@@ -289,6 +289,13 @@ async def actualizar(request: Request) -> Response:
         if not isinstance(plantilla_diseno_id, str):
             return JSONResponse({"error": "La plantilla debe ser texto."}, status_code=400)
         campos["plantilla_diseno_id"] = plantilla_diseno_id.strip()
+    if "foto_encuadre" in datos:
+        foto_encuadre = datos.get("foto_encuadre")
+        if not isinstance(foto_encuadre, str):
+            return JSONResponse(
+                {"error": "El reencuadre de la foto debe ser texto."}, status_code=400
+            )
+        campos["foto_encuadre"] = foto_encuadre.strip()
 
     if not campos:
         return JSONResponse(
@@ -554,23 +561,35 @@ async def aplicar_plantilla(request: Request) -> Response:
     if plantilla is None:
         return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
 
-    # `foto`/`copy_in` opcionales: el SPA manda los valores VIGENTES del editor (aún sin guardar)
-    # para componer con ellos; si no vienen, se usan los persistidos de la pieza.
+    # `foto`/`copy_in`/`foto_encuadre` opcionales: el SPA manda los valores VIGENTES del editor
+    # (aún sin guardar) para componer con ellos; si no vienen, se usan los persistidos de la pieza.
     foto_req = datos.get("foto")
     foto = foto_req if isinstance(foto_req, str) else (pub.get("foto") or "")
     copy_in_req = datos.get("copy_in")
     copy_in = copy_in_req if isinstance(copy_in_req, str) else (pub.get("copy_in") or "")
+    enc_req = datos.get("foto_encuadre")
+    foto_encuadre = enc_req if isinstance(enc_req, str) else (pub.get("foto_encuadre") or "")
+    foco, zoom = estudio_imagen.parsear_encuadre(foto_encuadre)
 
     try:
         resultado = estudio_imagen.componer_desde_plantilla(
-            plantilla.get("documento") or "{}", copy_in=copy_in, foto=foto,
+            plantilla.get("documento") or "{}",
+            copy_in=copy_in,
+            foto=foto,
+            foco=foco,
+            zoom=zoom,
         )
     except estudio_imagen.EstudioError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
     actualizada = repos.actualizar_publicacion(
         publicacion_id,
-        {"imagen": resultado["id"], "plantilla_diseno_id": plantilla_id, "foto": foto},
+        {
+            "imagen": resultado["id"],
+            "plantilla_diseno_id": plantilla_id,
+            "foto": foto,
+            "foto_encuadre": foto_encuadre,
+        },
     )
     if actualizada is None:  # carrera: borrada entre el obtener y el actualizar
         return JSONResponse({"error": "Esa publicación ya no existe."}, status_code=404)

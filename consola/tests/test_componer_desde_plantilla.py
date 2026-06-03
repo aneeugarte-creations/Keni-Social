@@ -57,3 +57,42 @@ def test_acepta_documento_como_json_string(monkeypatch):
     import json
     # No revienta si el documento llega como JSON string (lo que guarda PlantillaDiseno).
     assert ei.componer_desde_plantilla(json.dumps(_doc()), copy_in="x", foto="f.png")["id"] == "o"
+
+
+def test_reencuadre_pisa_foco_y_zoom_del_fondo(monkeypatch):
+    capturado: dict = {}
+    monkeypatch.setattr(
+        ei, "renderizar_documento",
+        lambda doc, bindings=None: (capturado.update(doc=doc), {"id": "o.png", "url": "/x"})[1],
+    )
+    # foco/zoom de la pieza pisan el encuadre de muestra de la capa de fondo.
+    ei.componer_desde_plantilla(_doc(), copy_in="", foto="f.png", foco=(0.2, 0.8), zoom=1.5)
+    fondo = next(c for c in capturado["doc"]["capas"] if c["tipo"] == "imagen")
+    assert fondo["foco"] == [0.2, 0.8]
+    assert fondo["zoom"] == 1.5
+
+
+def test_sin_reencuadre_no_toca_foco(monkeypatch):
+    capturado: dict = {}
+    monkeypatch.setattr(
+        ei, "renderizar_documento",
+        lambda doc, bindings=None: (capturado.update(doc=doc), {"id": "o.png", "url": "/x"})[1],
+    )
+    # Sin foco/zoom (None/0) no se inyecta encuadre: la capa de fondo no gana esas claves.
+    ei.componer_desde_plantilla(_doc(), copy_in="", foto="f.png")
+    fondo = next(c for c in capturado["doc"]["capas"] if c["tipo"] == "imagen")
+    assert "foco" not in fondo and "zoom" not in fondo
+
+
+def test_parsear_encuadre():
+    # "" o JSON inválido -> sin reencuadre.
+    assert ei.parsear_encuadre("") == (None, 0.0)
+    assert ei.parsear_encuadre("no-json") == (None, 0.0)
+    # Válido: foco recortado a [0,1], zoom a [1,6].
+    foco, zoom = ei.parsear_encuadre('{"foco": [0.3, 1.9], "zoom": 12}')
+    assert foco == [0.3, 1.0]
+    assert zoom == 6.0
+    # Sin zoom -> 0.0 (el render usa su defecto).
+    foco, zoom = ei.parsear_encuadre('{"foco": [0.5, 0.5]}')
+    assert foco == [0.5, 0.5]
+    assert zoom == 0.0

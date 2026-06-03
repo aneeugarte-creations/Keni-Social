@@ -625,6 +625,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         copy_in_exento        INTEGER NOT NULL DEFAULT 0,
         placa_oculta          INTEGER NOT NULL DEFAULT 0,
         plantilla_diseno_id   TEXT NOT NULL DEFAULT '',
+        foto_encuadre         TEXT NOT NULL DEFAULT '',
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
@@ -1462,6 +1463,14 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS plantilla_diseno_id TEXT NOT NULL DEFAULT ''"
+        )
+    # `foto_encuadre`: reencuadre manual de la foto dentro del marco 4:5 (JSON
+    # `{"foco":[x,y],"zoom":z}`; "" = sin reencuadre = encuadre por defecto del path). Persiste
+    # la elección humana del recorte entre reaperturas y se aplica también al render por plantilla.
+    if "foto_encuadre" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS foto_encuadre TEXT NOT NULL DEFAULT ''"
         )
 
 
@@ -4424,6 +4433,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "copy_in_exento",
     "placa_oculta",
     "plantilla_diseno_id",
+    "foto_encuadre",
     "qa_auto_hash",
     "hora_post",
     "creado",
@@ -4498,6 +4508,7 @@ def crear_contenido_plataforma(
     copy_in_exento: bool = False,
     placa_oculta: bool = False,
     plantilla_diseno_id: str = "",
+    foto_encuadre: str = "",
     qa_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
@@ -4541,6 +4552,7 @@ def crear_contenido_plataforma(
         "copy_in_exento": 1 if copy_in_exento else 0,
         "placa_oculta": 1 if placa_oculta else 0,
         "plantilla_diseno_id": plantilla_diseno_id or "",
+        "foto_encuadre": foto_encuadre or "",
         "qa_auto_hash": qa_auto_hash or "",
         "hora_post": hora_post or "",
         "creado": creado or ahora,
@@ -7636,6 +7648,7 @@ _SELECT_PUBLICACION = (
     "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
     "cp.placa_oculta AS placa_oculta, cp.plantilla_diseno_id AS plantilla_diseno_id, "
+    "cp.foto_encuadre AS foto_encuadre, "
     "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
@@ -7696,6 +7709,8 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "placa_oculta": bool(f["placa_oculta"]),
         # Plantilla del estudio (PlantillaDiseno) que la pieza usa para componer. "" = ninguna.
         "plantilla_diseno_id": f["plantilla_diseno_id"] or "",
+        # Reencuadre manual de la foto (JSON `{"foco":[x,y],"zoom":z}`; "" = sin reencuadre).
+        "foto_encuadre": f["foto_encuadre"] or "",
         "qa_auto_hash": f["qa_auto_hash"] or "",
     }
 
@@ -7890,6 +7905,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "evergreen": "evergreen",
     "placa_oculta": "placa_oculta",
     "plantilla_diseno_id": "plantilla_diseno_id",
+    "foto_encuadre": "foto_encuadre",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",
     "revisor_nombre": "revisor_nombre",

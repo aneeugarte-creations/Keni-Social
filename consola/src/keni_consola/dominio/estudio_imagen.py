@@ -642,7 +642,12 @@ def renderizar_documento(
 
 
 def componer_desde_plantilla(
-    documento: dict[str, Any] | str, *, copy_in: str = "", foto: str = "",
+    documento: dict[str, Any] | str,
+    *,
+    copy_in: str = "",
+    foto: str = "",
+    foco: tuple[float, float] | list[float] | None = None,
+    zoom: float = 0.0,
 ) -> dict[str, Any]:
     """Renderiza el DOCUMENTO de una plantilla del estudio con la FOTO y el COPY-IN de una pieza.
 
@@ -652,6 +657,9 @@ def componer_desde_plantilla(
     dejar el hueco si aún no hay) y pasamos el `copy_in` como binding del titular. Devuelve
     `{id, url}` del PNG resultante (lo publicable). Reusa `renderizar_documento` (motor Node).
     `documento` puede venir como dict o como JSON string (lo que guarda `PlantillaDiseno`).
+
+    `foco`/`zoom` = reencuadre manual de la pieza (foco en [0,1]², zoom ≥ 1). Si se pasan, pisan
+    el encuadre de la capa de fondo para que el recorte 4:5 coincida con el del editor en vivo.
     """
     if isinstance(documento, str):
         try:
@@ -666,7 +674,45 @@ def componer_desde_plantilla(
     if fondos:
         fondo = min(fondos, key=lambda c: c.get("z", 0))
         fondo["objeto"] = foto or ""
+        # Reencuadre manual de la pieza: pisa el encuadre de muestra de la plantilla.
+        if foco is not None and len(foco) == 2:
+            fondo["foco"] = [float(foco[0]), float(foco[1])]
+        if zoom and zoom > 0:
+            fondo["zoom"] = float(zoom)
     return renderizar_documento(doc, bindings={"copy_in": copy_in})
+
+
+def parsear_encuadre(encuadre: str) -> tuple[list[float] | None, float]:
+    """Parsea el JSON de reencuadre de una pieza (`{"foco":[x,y],"zoom":z}`).
+
+    Devuelve `(foco | None, zoom)`. Tolerante: "" o JSON inválido → `(None, 0.0)` (sin
+    reencuadre). El foco se recorta a [0,1] y el zoom a [1, 6] para no romper el render.
+    """
+    if not (encuadre or "").strip():
+        return None, 0.0
+    try:
+        datos = json.loads(encuadre)
+    except (ValueError, TypeError):
+        return None, 0.0
+    if not isinstance(datos, dict):
+        return None, 0.0
+    foco_bruto = datos.get("foco")
+    foco: list[float] | None = None
+    if isinstance(foco_bruto, (list, tuple)) and len(foco_bruto) == 2:
+        try:
+            foco = [
+                min(1.0, max(0.0, float(foco_bruto[0]))),
+                min(1.0, max(0.0, float(foco_bruto[1]))),
+            ]
+        except (ValueError, TypeError):
+            foco = None
+    try:
+        zoom = float(datos.get("zoom") or 0.0)
+    except (ValueError, TypeError):
+        zoom = 0.0
+    if zoom:
+        zoom = min(6.0, max(1.0, zoom))
+    return foco, zoom
 
 
 def validar_documento(documento: dict[str, Any]) -> dict[str, Any]:

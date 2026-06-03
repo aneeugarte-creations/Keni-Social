@@ -265,7 +265,7 @@ export function dibujarSpec(ctx, { formato, fuentes, bindings, placeholder, imgs
   } else {
     dibujarFondo(ctx, formato.fondo, w, h, I.fondo);
     const s = formato.foto_slot;
-    dibujarImagenEnCaja(ctx, I.foto, s.x, s.y, s.w, s.h, s.ajuste || "cover", s.foco);
+    dibujarImagenEnCaja(ctx, I.foto, s.x, s.y, s.w, s.h, s.ajuste || "cover", s.foco, s.zoom);
   }
 
   // 2) Overlay de legibilidad (solo si hay textos visibles, como en Pillow).

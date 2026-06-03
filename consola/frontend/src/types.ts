@@ -2637,6 +2637,8 @@ export interface CuerpoActualizarPublicacion {
   placa_oculta?: boolean;
   /** Plantilla del estudio elegida ("" para volver a la placa de marca por defecto). */
   plantilla_diseno_id?: string;
+  /** Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`; "" = sin reencuadre). */
+  foto_encuadre?: string;
 }
 
 /** Respuesta al reciclar una publicación perenne. */

@@ -869,6 +869,9 @@ class Publicacion(TypedDict):
     placa_oculta: NotRequired[bool]
     # Plantilla del estudio (PlantillaDiseno) elegida para esta pieza; "" = ninguna. Opcional.
     plantilla_diseno_id: NotRequired[str]
+    # Reencuadre manual de la foto dentro del marco 4:5 (JSON `{"foco":[x,y],"zoom":z}`; "" = sin
+    # reencuadre). Persiste la elección humana del recorte. Opcional (piezas legadas no lo traen).
+    foto_encuadre: NotRequired[str]
 
 
 class RespuestaPublicaciones(TypedDict):

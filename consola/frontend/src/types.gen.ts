@@ -678,6 +678,7 @@ export interface Publicacion {
   copy_in_exento?: boolean;
   placa_oculta?: boolean;
   plantilla_diseno_id?: string;
+  foto_encuadre?: string;
 }
 /**
  * Listado de `GET /api/publicaciones` con el envelope de paginacion (#121).

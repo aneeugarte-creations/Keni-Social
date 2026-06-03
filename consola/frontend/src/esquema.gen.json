@@ -2270,6 +2270,9 @@
         },
         "plantilla_diseno_id": {
           "type": "string"
+        },
+        "foto_encuadre": {
+          "type": "string"
         }
       },
       "description": "Una publicacion serializada (`dominio.publicaciones.publicacion_a_dict`).\n\n`marca_nombre`/`red_nombre` se resuelven en servidor. `imagen` es el nombre de\narchivo (\"\" si no hay) e `imagen_url` su ruta servible (\"\" si no hay).\n`autor_id`/`autor_nombre` (atribucion por usuario, #130 Fase 1) identifican a quien\ncreo la pieza; \"\" en piezas legadas/anonimas (la UI las muestra como \"desconocido\").\n\nFlujo de aprobacion de equipo (#9, Fase 3): `enviado_a_revision_en`/`revisor_id`/\n`revisor_nombre`/`revisado_en` registran quien la envio/reviso y cuando; \"\" mientras\nno haya pasado por revision (incluidas las piezas legadas). `preparado_en` es la marca\nDRY-RUN del programador (instante en que quedo \"lista para publicar\"; el posteo real\nvia Metricool esta gated por `KENI_PUBLICAR_REAL`); \"\" hasta que vence su `fecha_programada`.",
