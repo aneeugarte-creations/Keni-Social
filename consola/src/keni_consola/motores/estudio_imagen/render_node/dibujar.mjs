@@ -263,3 +263,119 @@ export function dibujarSpec(ctx, { formato, fuentes, bindings, placeholder, imgs
   capas.sort((a, b) => a.z - b.z);
   for (const c of capas) c.draw();
 }
+
+// ===========================================================================
+// Render del DOCUMENTO de capas (editor profesional). Misma rutina canvas-2D,
+// pero sobre una lista de capas arbitrarias en vez de slots fijos. Comparte
+// TODOS los dibujantes de arriba: única fuente de verdad cliente/servidor.
+// ===========================================================================
+
+// Traza un rectángulo (redondeado si r>0) en el path actual.
+function rutaRect(ctx, x, y, w, h, r) {
+  if (!r) { ctx.rect(x, y, w, h); return; }
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+// Cadena CSS `filter` para una capa imagen (brillo/contraste/saturación/desenfoque). El navegador
+// la respeta siempre; @napi-rs/canvas la aplica si su build lo soporta (si no, la ignora).
+function cssFiltro(f) {
+  if (!f) return "";
+  const partes = [];
+  if (f.brillo != null && f.brillo !== 1) partes.push(`brightness(${f.brillo})`);
+  if (f.contraste != null && f.contraste !== 1) partes.push(`contrast(${f.contraste})`);
+  if (f.saturacion != null && f.saturacion !== 1) partes.push(`saturate(${f.saturacion})`);
+  if (f.desenfoque) partes.push(`blur(${f.desenfoque}px)`);
+  return partes.join(" ");
+}
+
+function dibujarMarco(ctx, m) {
+  const { x, y, w, h } = m;
+  if (m.forma === "linea") {
+    if (m.borde && m.borde.grosor > 0) {
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineWidth = m.borde.grosor;
+      ctx.strokeStyle = m.borde.color || "#000000";
+      ctx.stroke();
+    }
+    return;
+  }
+  ctx.beginPath();
+  if (m.forma === "elipse") ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else rutaRect(ctx, x, y, w, h, m.radio || 0);
+  if (m.relleno) { ctx.fillStyle = m.relleno; ctx.fill(); }
+  if (m.borde && m.borde.grosor > 0) {
+    ctx.lineWidth = m.borde.grosor;
+    ctx.strokeStyle = m.borde.color || "#000000";
+    ctx.stroke();
+  }
+}
+
+// Dibuja UNA capa (con su opacidad/rotación). `env` = {I: imágenes por objeto/media_id, B: bindings, F: familiaReal}.
+function dibujarCapa(ctx, capa, env) {
+  if (capa.visible === false) return;
+  ctx.save();
+  const op = capa.opacidad ?? 1;
+  if (op < 1) ctx.globalAlpha = op;
+  const rot = capa.rotacion || 0;
+  if (rot) {
+    const cx = capa.x + capa.w / 2, cy = capa.y + capa.h / 2;
+    ctx.translate(cx, cy);
+    ctx.rotate((rot * Math.PI) / 180);
+    ctx.translate(-cx, -cy);
+  }
+  switch (capa.tipo) {
+    case "imagen": {
+      const img = env.I[capa.objeto];
+      const filtro = cssFiltro(capa.filtros);
+      if (filtro) ctx.filter = filtro;
+      dibujarImagenEnCaja(ctx, img, capa.x, capa.y, capa.w, capa.h, capa.ajuste || "cover", capa.foco);
+      if (filtro) ctx.filter = "none";
+      break;
+    }
+    case "texto": {
+      const v = capa.binding === "copy_in" ? env.B.copy_in
+        : capa.binding === "etiqueta_default" ? env.B.etiqueta_default : capa.texto;
+      dibujarTexto(ctx, capa, v ?? "", null, env.F);
+      break;
+    }
+    case "logo":
+      // `dibujarLogo` espera `logo.tipo` ∈ {imagen,wordmark}; en el documento ese campo es
+      // `tipo_logo` (porque `tipo` ya es "logo"). Adaptamos sin tocar el dibujante compartido.
+      dibujarLogo(ctx, { ...capa, tipo: capa.tipo_logo }, env.I[capa.media_id], null, env.F);
+      break;
+    case "marco":
+      dibujarMarco(ctx, capa);
+      break;
+    case "overlay":
+      dibujarOverlayInferior(ctx, capa, capa.w, capa.h);
+      break;
+    case "grupo":
+      for (const sub of capa.capas || []) dibujarCapa(ctx, sub, env);
+      break;
+    default:
+      break;
+  }
+  ctx.restore();
+}
+
+// Dibuja un DOCUMENTO completo. `imgs` = mapa {objeto|media_id -> Image cargada (o null)}.
+export function dibujarDocumento(ctx, { documento, imgs, bindings, familiaReal }) {
+  const F = familiaReal || ((l) => (l === "condensada" ? "Barlow Condensed" : "Barlow"));
+  const env = { I: imgs || {}, B: bindings || {}, F };
+  const { formato, fondo } = documento;
+  const w = formato.w, h = formato.h;
+
+  const fondoImg = fondo && fondo.tipo === "imagen" ? env.I[(fondo.imagen || {}).media_id] : null;
+  dibujarFondo(ctx, fondo, w, h, fondoImg);
+
+  const capas = [...(documento.capas || [])].sort((a, b) => (a.z ?? 0) - (b.z ?? 0));
+  for (const capa of capas) dibujarCapa(ctx, capa, env);
+}

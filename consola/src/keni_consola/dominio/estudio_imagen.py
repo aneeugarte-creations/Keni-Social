@@ -37,6 +37,7 @@ from .. import (
     media,
     plantillas_marca,
 )
+from ..motores.estudio_imagen import documento as doc_capas
 from ..motores.estudio_imagen import spec_plantilla
 from . import generar, jobspec
 
@@ -513,6 +514,111 @@ def componer(
     return _componer_node(
         imagen, marca=marca, fmt=fmt, titular=titular, etiqueta=etiqueta, logo_path=logo_path
     )
+
+
+# --------------------------------------------------------------------------- #
+# Render del DOCUMENTO de capas (editor profesional)                           #
+# --------------------------------------------------------------------------- #
+
+
+def _ruta_render_documento() -> Path:
+    return _ruta_motor("render_node") / "render_documento.mjs"
+
+
+def _correr_render_documento(payload: dict[str, Any], out: Path) -> None:
+    """Corre `render_documento.mjs` con `payload` por stdin y `--salida out`.
+
+    Módulo-nivel para que los tests lo monkeypatcheen sin ejecutar Node real. Espeja
+    `_correr_render_node` (mismo timeout y manejo de errores en español).
+    """
+    cmd = [_node_bin(), str(_ruta_render_documento()), "--salida", str(out)]
+    try:
+        proc = subprocess.run(  # noqa: S603 -- argv lista, sin shell; payload por stdin
+            cmd, input=json.dumps(payload), capture_output=True, text=True,
+            timeout=_TIMEOUT_COMPONER_S, check=False,
+        )
+    except FileNotFoundError as e:  # node no instalado
+        raise EstudioError("El renderer del editor (Node) no está disponible.") from e
+    except subprocess.TimeoutExpired as e:
+        raise EstudioError(
+            f"El render del documento tardó demasiado (más de {_TIMEOUT_COMPONER_S} s) y se canceló."
+        ) from e
+    if proc.returncode != 0 or not out.is_file():
+        detalle = (proc.stderr or "").strip()[-300:]
+        raise EstudioError("El renderer del editor no produjo un resultado. " + detalle)
+
+
+def _refs_imagenes(capas: list[dict[str, Any]]) -> set[str]:
+    """Ids de media referenciados por las capas (imagen.objeto + logo.media_id), recursivo en grupos."""
+    refs: set[str] = set()
+    for c in capas:
+        if c.get("tipo") == "imagen" and (c.get("objeto") or "").strip():
+            refs.add(c["objeto"])
+        elif c.get("tipo") == "logo" and c.get("tipo_logo") == "imagen" and (c.get("media_id") or "").strip():
+            refs.add(c["media_id"])
+        elif c.get("tipo") == "grupo":
+            refs |= _refs_imagenes(c.get("capas") or [])
+    return refs
+
+
+def renderizar_documento(
+    documento: dict[str, Any], *, bindings: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Valida y renderiza un DOCUMENTO de capas a PNG (motor Node) -> `{id, url}`.
+
+    Materializa cada imagen referenciada (capas imagen/logo y fondo imagen) a un PNG temporal y se
+    las pasa al renderer por ruta (igual que `componer`, compatible con el almacén S3). Lanza
+    `EstudioError` (español) si el documento no valida o el render falla.
+    """
+    try:
+        doc = doc_capas.validar(documento)
+    except doc_capas.DocumentoError as exc:
+        raise EstudioError(str(exc)) from exc
+
+    with tempfile.TemporaryDirectory(prefix="keni-doc-") as tmp:
+        carpeta = Path(tmp)
+        assets: dict[str, str] = {}
+        refs = _refs_imagenes(doc["capas"])
+        fondo = doc.get("fondo") or {}
+        if fondo.get("tipo") == "imagen":
+            mid = (fondo.get("imagen") or {}).get("media_id", "")
+            if mid:
+                refs.add(mid)
+        for ref in refs:
+            ruta = _materializar_logo(ref, carpeta)
+            if ruta:
+                assets[ref] = ruta
+
+        out = carpeta / "salida.png"
+        payload = {
+            "documento": doc,
+            "assets": assets,
+            "fuentes": doc.get("fuentes"),
+            "bindings": bindings or {},
+        }
+        _correr_render_documento(payload, out)
+        try:
+            nombre = media.importar_imagen(str(out))
+        except media.MediaError as e:
+            raise EstudioError(str(e)) from e
+        return {"id": nombre, "url": f"/api/media/{nombre}"}
+
+
+def documento_desde_plantilla(marca: str, formato: str) -> dict[str, Any]:
+    """Documento de capas EDITABLE derivado de la plantilla de marca (punto de partida del editor).
+
+    Toma el spec efectivo de la marca y adapta el formato pedido a un documento de capas. Así el
+    editor abre una marca con su layout actual (foto + overlay + textos + logo) ya como capas.
+    """
+    if not marcas.es_marca(marca):
+        raise EstudioError("Marca desconocida.")
+    if formato not in _FORMATOS_COMPONER:
+        raise EstudioError("Formato no soportado. Usa: " + ", ".join(_FORMATOS_COMPONER) + ".")
+    spec = plantillas_marca.obtener_spec(marca)
+    try:
+        return doc_capas.desde_spec(spec, formato)
+    except doc_capas.DocumentoError as exc:
+        raise EstudioError(str(exc)) from exc
 
 
 # --------------------------------------------------------------------------- #

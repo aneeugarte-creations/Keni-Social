@@ -1,0 +1,351 @@
+"""Esquema del DOCUMENTO de capas: el formato canónico del editor profesional.
+
+Generaliza el SPEC de plantilla de marca (`spec_plantilla.py`, de slots fijos: 1 foto + 1 logo +
+3 textos) a un **documento de capas arbitrarias** que el editor (navegador, react-konva) y el
+servidor (Node + @napi-rs/canvas) renderizan idéntico. Es la base del editor tipo Canva: capas
+de tipo `imagen`, `texto`, `logo`, `marco`, `overlay` y `grupo`, apiladas por `z`.
+
+    Documento = {
+      version, marca?, fuentes?:{sans,condensada},
+      formato: {w, h, safe_top, safe_bottom},
+      fondo:   Fondo,                 # color | degradado | imagen (mismo contrato que el spec)
+      capas:   [ Capa, ... ]          # orden de pintado = z ascendente
+    }
+
+    Capa base = { id, tipo, x, y, w, h, rotacion, opacidad, z, visible, bloqueada }
+      imagen  -> { objeto, ajuste:cover|contain, foco:[fx,fy], filtros:{brillo,contraste,saturacion,desenfoque} }
+      texto   -> { texto, binding:copy_in|etiqueta_default|null, familia, tamano, peso, color,
+                   alineacion, mayusculas, interlineado, auto_ajuste:{max_lineas,tam_min},
+                   sombra:{dx,dy,color}|null, chip:{color,pad_x,pad_y,radio}|null, ancla:arriba|abajo }
+      logo    -> { tipo_logo:imagen|wordmark, media_id, wordmark:{texto,color,fondo,familia,peso} }
+      marco   -> { forma:rect|elipse|linea, relleno|null, borde:{color,grosor}|null, radio }
+      overlay -> { color, alto_frac, alpha }            # degradado de legibilidad (banda inferior)
+      grupo   -> { capas:[ Capa, ... ] }                # bloque reutilizable (almacén de capas)
+
+NO depende de Pillow ni de red: solo dicts. El renderer Node (`render_node/dibujar.mjs::
+dibujarDocumento`) y el editor TS (`editor/documento.ts`) consumen el mismo JSON. Los mensajes
+de error salen en español (la API los devuelve como 400).
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Any
+
+from . import spec_plantilla as _spec
+
+# Versión del esquema (para migraciones futuras vía `migrar`).
+VERSION = 1
+
+TIPOS_CAPA = ("imagen", "texto", "logo", "marco", "overlay", "grupo")
+_FORMAS_MARCO = ("rect", "elipse", "linea")
+
+# Reutilizamos los predicados y constantes del spec (única fuente de verdad de validación
+# elemental): hex, número, alineaciones, ajustes, fondo, chip/pad por defecto.
+_es_hex = _spec._es_hex
+_num = _spec._num
+_exige = _spec._exige
+_ALINEACIONES = _spec._ALINEACIONES
+_AJUSTES = _spec._AJUSTES
+_CHIP_PAD_X = _spec._CHIP_PAD_X
+_CHIP_PAD_Y = _spec._CHIP_PAD_Y
+
+
+class DocumentoError(ValueError):
+    """Error de validación del documento de capas, con mensaje en español para la UI."""
+
+
+# --------------------------------------------------------------------------- #
+# Validación                                                                   #
+# --------------------------------------------------------------------------- #
+
+
+def _exige_doc(cond: bool, msg: str) -> None:
+    if not cond:
+        raise DocumentoError(msg)
+
+
+def _id(c: dict[str, Any]) -> str:
+    v = c.get("id")
+    return v if isinstance(v, str) and v else uuid.uuid4().hex[:12]
+
+
+def _caja(c: Any, ctx: str) -> dict[str, float]:
+    _exige_doc(isinstance(c, dict), f"{ctx} debe ser un objeto con x,y,w,h.")
+    for k in ("x", "y", "w", "h"):
+        _exige_doc(_num(c.get(k)), f"{ctx}: '{k}' debe ser numérico.")
+    return {k: float(c[k]) for k in ("x", "y", "w", "h")}
+
+
+def _base(c: dict[str, Any]) -> dict[str, Any]:
+    """Campos comunes a toda capa (geometría + estado)."""
+    caja = _caja(c, "La capa")
+    op = c.get("opacidad", 1)
+    return {
+        "id": _id(c),
+        **caja,
+        "rotacion": float(c.get("rotacion", 0) or 0),
+        "opacidad": float(op) if _num(op) and 0 <= float(op) <= 1 else 1.0,
+        "z": int(c.get("z", 0)),
+        "visible": bool(c.get("visible", True)),
+        "bloqueada": bool(c.get("bloqueada", False)),
+    }
+
+
+def _filtros(f: Any) -> dict[str, float] | None:
+    if not isinstance(f, dict):
+        return None
+    out: dict[str, float] = {}
+    for k, defecto in (("brillo", 1.0), ("contraste", 1.0), ("saturacion", 1.0), ("desenfoque", 0.0)):
+        v = f.get(k)
+        if _num(v):
+            out[k] = float(v)
+        else:
+            out[k] = defecto
+    # Solo persistir si algo se aparta del neutro (evita ruido en el JSON).
+    if out["brillo"] == 1 and out["contraste"] == 1 and out["saturacion"] == 1 and out["desenfoque"] == 0:
+        return None
+    return out
+
+
+def _capa_imagen(c: dict[str, Any]) -> dict[str, Any]:
+    foco = c.get("foco") or [0.5, 0.5]
+    _exige_doc(
+        isinstance(foco, (list, tuple)) and len(foco) == 2 and all(_num(f) for f in foco),
+        "El foco de la imagen debe ser [x,y] entre 0 y 1.",
+    )
+    return {
+        **_base(c),
+        "tipo": "imagen",
+        "objeto": str(c.get("objeto", "") or ""),
+        "ajuste": c.get("ajuste") if c.get("ajuste") in _AJUSTES else "cover",
+        "foco": [float(foco[0]), float(foco[1])],
+        "filtros": _filtros(c.get("filtros")),
+    }
+
+
+def _capa_texto(c: dict[str, Any]) -> dict[str, Any]:
+    _exige_doc(c.get("binding") in _spec._BINDINGS, "El binding debe ser copy_in, etiqueta_default o nulo.")
+    _exige_doc(_es_hex(c.get("color")), "El color del texto debe ser hex #RRGGBB.")
+    chip = c.get("chip")
+    chip_limpio = None
+    if isinstance(chip, dict):
+        _exige_doc(_es_hex(chip.get("color")), "El color del chip debe ser hex #RRGGBB.")
+        chip_limpio = {
+            "color": chip["color"],
+            "pad_x": int(chip.get("pad_x", _CHIP_PAD_X)),
+            "pad_y": int(chip.get("pad_y", _CHIP_PAD_Y)),
+            "radio": int(chip.get("radio", 0)),
+        }
+    sombra = c.get("sombra")
+    sombra_limpia = None
+    if isinstance(sombra, dict):
+        sombra_limpia = {
+            "dx": int(sombra.get("dx", 2)),
+            "dy": int(sombra.get("dy", 2)),
+            "color": sombra["color"] if _es_hex(sombra.get("color")) else "#000000",
+        }
+    aj = c.get("auto_ajuste") or {}
+    familia = c["familia"] if isinstance(c.get("familia"), str) and c.get("familia") else "sans"
+    return {
+        **_base(c),
+        "tipo": "texto",
+        "texto": str(c.get("texto", "")),
+        "binding": c.get("binding"),
+        "familia": familia,
+        "tamano": int(c.get("tamano", 64)),
+        "peso": int(c.get("peso", 700)),
+        "color": c["color"],
+        "alineacion": c.get("alineacion") if c.get("alineacion") in _ALINEACIONES else "izquierda",
+        "mayusculas": bool(c.get("mayusculas", False)),
+        "interlineado": float(c.get("interlineado", 1.14)),
+        "auto_ajuste": {
+            "max_lineas": int(aj.get("max_lineas", 4)),
+            "tam_min": int(aj.get("tam_min", 40)),
+        },
+        "sombra": sombra_limpia,
+        "chip": chip_limpio,
+        "ancla": c.get("ancla") if c.get("ancla") in ("arriba", "abajo") else "arriba",
+    }
+
+
+def _capa_logo(c: dict[str, Any]) -> dict[str, Any]:
+    tipo_logo = c.get("tipo_logo")
+    _exige_doc(tipo_logo in _spec._TIPOS_LOGO, "El tipo de logo debe ser imagen o wordmark.")
+    wm = c.get("wordmark") or {}
+    return {
+        **_base(c),
+        "tipo": "logo",
+        "tipo_logo": tipo_logo,
+        "media_id": str(c.get("media_id", "") or ""),
+        "wordmark": {
+            "texto": str(wm.get("texto", "")),
+            "color": wm["color"] if _es_hex(wm.get("color")) else "#FFFFFF",
+            "fondo": wm["fondo"] if _es_hex(wm.get("fondo")) else "#E30613",
+            "familia": wm["familia"] if isinstance(wm.get("familia"), str) and wm.get("familia") else "sans",
+            "peso": int(wm.get("peso", 700)),
+        },
+    }
+
+
+def _capa_marco(c: dict[str, Any]) -> dict[str, Any]:
+    forma = c.get("forma") if c.get("forma") in _FORMAS_MARCO else "rect"
+    relleno = c.get("relleno")
+    borde = c.get("borde")
+    borde_limpio = None
+    if isinstance(borde, dict) and _num(borde.get("grosor")) and float(borde["grosor"]) > 0:
+        borde_limpio = {
+            "color": borde["color"] if _es_hex(borde.get("color")) else "#000000",
+            "grosor": float(borde["grosor"]),
+        }
+    return {
+        **_base(c),
+        "tipo": "marco",
+        "forma": forma,
+        "relleno": relleno if _es_hex(relleno) else None,
+        "borde": borde_limpio,
+        "radio": int(c.get("radio", 0)),
+    }
+
+
+def _capa_overlay(c: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **_base(c),
+        "tipo": "overlay",
+        "color": c["color"] if _es_hex(c.get("color")) else "#111315",
+        "alto_frac": float(c.get("alto_frac", _spec._DEGRADADO_ALTO_FRAC)),
+        "alpha": int(c.get("alpha", _spec._DEGRADADO_ALPHA)),
+    }
+
+
+def _capa_grupo(c: dict[str, Any]) -> dict[str, Any]:
+    hijas = c.get("capas")
+    _exige_doc(isinstance(hijas, list), "Un grupo debe tener una lista 'capas'.")
+    return {
+        **_base(c),
+        "tipo": "grupo",
+        "capas": [_validar_capa(h) for h in hijas],
+    }
+
+
+_DESPACHO = {
+    "imagen": _capa_imagen,
+    "texto": _capa_texto,
+    "logo": _capa_logo,
+    "marco": _capa_marco,
+    "overlay": _capa_overlay,
+    "grupo": _capa_grupo,
+}
+
+
+def _validar_capa(c: Any) -> dict[str, Any]:
+    _exige_doc(isinstance(c, dict), "Cada capa debe ser un objeto.")
+    tipo = c.get("tipo")
+    _exige_doc(tipo in TIPOS_CAPA, "El tipo de capa debe ser: " + ", ".join(TIPOS_CAPA) + ".")
+    return _DESPACHO[tipo](c)
+
+
+def _validar_formato(f: Any) -> dict[str, int]:
+    _exige_doc(isinstance(f, dict), "El documento necesita un objeto 'formato' con w,h.")
+    _exige_doc(_num(f.get("w")) and _num(f.get("h")), "El formato necesita 'w' y 'h' numéricos.")
+    return {
+        "w": int(f["w"]),
+        "h": int(f["h"]),
+        "safe_top": int(f.get("safe_top", 0)),
+        "safe_bottom": int(f.get("safe_bottom", 0)),
+    }
+
+
+def validar(doc: Any) -> dict[str, Any]:
+    """Valida y normaliza un Documento completo. Lanza `DocumentoError` (español) si algo falla."""
+    _exige_doc(isinstance(doc, dict), "El documento debe ser un objeto JSON.")
+    capas = doc.get("capas")
+    _exige_doc(isinstance(capas, list), "El documento necesita una lista 'capas'.")
+    fuentes = doc.get("fuentes") or {}
+    return {
+        "version": VERSION,
+        "marca": str(doc.get("marca", "")),
+        "fuentes": {
+            "sans": str(fuentes.get("sans", "Barlow")),
+            "condensada": str(fuentes.get("condensada", "Barlow Condensed")),
+        },
+        "formato": _validar_formato(doc.get("formato")),
+        "fondo": _spec._validar_fondo(doc.get("fondo") or {"tipo": "color", "color": "#111315"}),
+        "capas": [_validar_capa(c) for c in capas],
+    }
+
+
+def migrar(doc: dict[str, Any]) -> dict[str, Any]:
+    """Gancho de migración entre versiones del esquema. v1: identidad."""
+    return doc
+
+
+# --------------------------------------------------------------------------- #
+# Adaptador: un FORMATO del spec de plantilla -> Documento de capas            #
+# --------------------------------------------------------------------------- #
+
+
+def desde_spec(spec: dict[str, Any], formato: str) -> dict[str, Any]:
+    """Convierte un FORMATO del spec de plantilla de marca en un Documento de capas equivalente.
+
+    Preserva el render: el `foto_slot` pasa a una capa imagen (z 0), el `overlay_inferior` a una
+    capa overlay, cada bloque de `textos` a una capa texto, y el `logo` a una capa logo —
+    conservando sus `z`. Así una plantilla existente se edita y renderiza por el mismo camino que
+    un documento nuevo, sin migración explícita del store. `spec` debe estar ya validado
+    (`spec_plantilla.validar`).
+    """
+    f = (spec.get("formatos") or {}).get(formato)
+    _exige_doc(isinstance(f, dict), f"El spec no tiene el formato '{formato}'.")
+    lienzo = f["lienzo"]
+    capas: list[dict[str, Any]] = []
+
+    s = f["foto_slot"]
+    capas.append({
+        "id": "foto", "tipo": "imagen", "objeto": "",
+        "x": s["x"], "y": s["y"], "w": s["w"], "h": s["h"],
+        "ajuste": s.get("ajuste", "cover"), "foco": s.get("foco", [0.5, 0.45]),
+        "z": int(s.get("z", 0)),
+    })
+
+    ov = f.get("overlay_inferior")
+    if ov:
+        capas.append({
+            "id": "overlay", "tipo": "overlay",
+            "x": 0, "y": 0, "w": lienzo["w"], "h": lienzo["h"],
+            "color": ov["color"], "alto_frac": ov["alto_frac"], "alpha": ov["alpha"],
+            "z": 10,
+        })
+
+    for t in f.get("textos", []):
+        capas.append({
+            **{k: t[k] for k in ("x", "y", "w") if k in t},
+            "id": t.get("id", "texto"), "tipo": "texto", "h": 0,
+            "texto": t.get("texto", ""), "binding": t.get("binding"),
+            "familia": t.get("familia", "sans"), "tamano": t.get("tamano", 64),
+            "peso": t.get("peso", 700), "color": t.get("color", "#FFFFFF"),
+            "alineacion": t.get("alineacion", "izquierda"), "mayusculas": t.get("mayusculas", False),
+            "interlineado": t.get("interlineado", 1.14), "auto_ajuste": t.get("auto_ajuste"),
+            "sombra": t.get("sombra"), "chip": t.get("chip"), "ancla": t.get("ancla", "arriba"),
+            "z": int(t.get("z", 20)),
+        })
+
+    lg = f.get("logo")
+    if lg:
+        capas.append({
+            "id": "logo", "tipo": "logo", "tipo_logo": lg.get("tipo", "wordmark"),
+            "media_id": lg.get("media_id", ""), "wordmark": lg.get("wordmark"),
+            "x": lg["x"], "y": lg["y"], "w": lg["w"], "h": lg["h"],
+            "z": int(lg.get("z", 30)),
+        })
+
+    return validar({
+        "version": VERSION,
+        "marca": spec.get("marca", ""),
+        "fuentes": spec.get("fuentes"),
+        "formato": {
+            "w": lienzo["w"], "h": lienzo["h"],
+            "safe_top": lienzo.get("safe_top", 0), "safe_bottom": lienzo.get("safe_bottom", 0),
+        },
+        "fondo": f.get("fondo"),
+        "capas": capas,
+    })
