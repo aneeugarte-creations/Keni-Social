@@ -162,7 +162,7 @@ def test_piezas_devuelve_estadisticas_y_top(cliente):
     data = r.json()
     assert data["cuenta"] == "claro_sports"
     assert data["total"] > 0
-    assert len(data["top"]) == 5 and len(data["peores"]) == 5
+    assert len(data["top"]) == 10 and len(data["peores"]) == 10
     assert data["engagement"]["media"] is not None
     assert data["generado_en"]
     assert data["etiqueta_rango"]
@@ -273,7 +273,7 @@ def test_piezas_export_json_trae_top_y_peores(cliente):
     import json
 
     data = json.loads(r.text)
-    assert len(data["top"]) == 5 and len(data["peores"]) == 5
+    assert len(data["top"]) == 10 and len(data["peores"]) == 10
     assert len(data["filas"]) == 10
 
 
