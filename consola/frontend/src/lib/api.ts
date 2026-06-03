@@ -1028,6 +1028,11 @@ export const api = {
     miniatura?: string;
     lineas?: string[];
   }) => peticion<{ plantilla: PlantillaDiseno }>("/plantillas-diseno", { metodo: "POST", json: cuerpo }),
+  // Actualiza una plantilla existente (PATCH): «Guardar» sobre la plantilla ya creada.
+  actualizarPlantillaDiseno: (
+    id: string,
+    cuerpo: { nombre?: string; categoria?: string; documento?: unknown; miniatura?: string; lineas?: string[]; activo?: boolean },
+  ) => peticion<{ plantilla: PlantillaDiseno }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "PATCH", json: cuerpo }),
   borrarPlantillaDiseno: (id: string) =>
     peticion<{ mensaje: string }>(`/plantillas-diseno/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 

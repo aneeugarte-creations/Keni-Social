@@ -1,15 +1,15 @@
 // Página del Editor profesional — WORKSPACE multi-marca.
 //
-// Cada PESTAÑA es un documento independiente (marca + RED) con su PROPIO store Zustand e historial,
-// así editar la plantilla de UnoTV/Instagram no toca la de Claro Sports/X y no hay que cerrar una
-// para abrir otra. Los stores persisten en un ref por id de pestaña.
+// Cada PESTAÑA es un documento independiente (por MARCA) con su PROPIO store Zustand e historial;
+// los stores persisten en un ref por id de pestaña. Todo post es 4:5 y una misma plantilla sirve
+// para todas las redes (no hay dimensión ni filtro por red).
 //
-// Las plantillas se guardan POR MARCA Y POR RED (la `categoria` de la plantilla es la red). Sin
-// pestañas se muestra la GALERÍA de plantillas de la marca; si no hay ninguna, se abre un lienzo en
-// blanco automáticamente. El tamaño/formato del lienzo se ajusta DENTRO del editor (Ajustes).
+// PLANTILLAS por marca: «Guardar» actualiza la plantilla a la que está atada la pestaña (sin pedir
+// nombre); «Guardar como» crea una nueva. Un indicador estilo Word muestra si hay cambios sin
+// guardar. Sin pestañas se ve la GALERÍA de plantillas de la marca (o lienzo en blanco si no hay).
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileUp, Plus, Save, X } from "lucide-react";
+import { FileUp, Plus, Save, SaveAll, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
@@ -25,14 +25,14 @@ import { crearStoreEditor, type StoreEditor } from "@/editor/store";
 import { useMarcaActiva } from "@/hooks/marca-activa-contexto";
 import { api, urlMedia, type PlantillaDiseno } from "@/lib/api";
 
-// Dimensiones por defecto del lienzo (4:5, el post de noticias/deportes más común). El tamaño real
-// se ajusta luego en «Ajustes del lienzo»; la red NO fija una dimensión rígida.
+// Todo post es 4:5 (1080×1350). El tamaño se puede ajustar en «Ajustes del lienzo».
 const DIMS_DEFECTO: Documento["formato"] = { w: 1080, h: 1350, safe_top: 60, safe_bottom: 96 };
 
 interface Pestana {
   id: string;
   marca: string;
-  red: string;
+  nombre?: string; // nombre de la plantilla atada (si la hay)
+  plantillaId?: string; // plantilla de diseño a la que «Guardar» sobrescribe
   // Si la pestaña está anclada a una publicación (historial/versionado).
   contenido?: string;
   plataforma?: string;
@@ -40,11 +40,11 @@ interface Pestana {
 
 let _seq = 0;
 
-// Clave de autoguardado por pestaña: estable entre recargas (por pieza, o por marca+red).
-function claveAuto(p: { marca: string; red: string; contenido?: string; plataforma?: string }): string {
-  return p.contenido && p.plataforma
-    ? `keni:editor:pieza:${p.contenido}:${p.plataforma}`
-    : `keni:editor:doc:${p.marca}:${p.red}`;
+// Clave de autoguardado local (crash-safety): por pieza, por plantilla, o por marca.
+function claveAuto(p: Pestana): string {
+  if (p.contenido && p.plataforma) return `keni:editor:pieza:${p.contenido}:${p.plataforma}`;
+  if (p.plantillaId) return `keni:editor:plantilla:${p.plantillaId}`;
+  return `keni:editor:doc:${p.marca}`;
 }
 
 function leerAuto(clave: string): Documento | null {
@@ -62,65 +62,66 @@ export default function EditorPro() {
     queryFn: ({ signal }) => api.publicacionesOpciones(signal),
   });
   const marcas = opciones.data?.marcas ?? [];
-  const redes = opciones.data?.redes ?? [];
-  const redNombre = (id: string) => redes.find((r) => r.id === id)?.nombre ?? id;
 
   const { marcaActiva } = useMarcaActiva();
   const marcaInicial = marcaActiva && marcas.some((m) => m.id === marcaActiva) ? marcaActiva : marcas[0]?.id;
 
   const [searchParams] = useSearchParams();
 
-  // Marca y red elegidas en la barra (para abrir pestaña nueva / ver su galería).
   const [marcaNueva, setMarcaNueva] = useState("");
-  const [redNueva, setRedNueva] = useState("");
 
   const [pestanas, setPestanas] = useState<Pestana[]>([]);
   const [activa, setActiva] = useState<string | null>(null);
   const stores = useRef<Map<string, StoreEditor>>(new Map());
   const [exportUrl, setExportUrl] = useState<string | null>(null);
   const [galeria, setGaleria] = useState(false);
-  // Diálogo de nombre al guardar plantilla — in-app, no window.prompt.
+  // Diálogo de «Guardar como» (nombre de plantilla nueva), in-app.
   const [dialogo, setDialogo] = useState<{ nombre: string } | null>(null);
+  // Cambios sin guardar en la plantilla, por pestaña (indicador estilo Word).
+  const [dirty, setDirty] = useState<Record<string, boolean>>({});
 
   const marcaEfectiva = marcaNueva || marcaInicial || "";
-  const redEfectiva = redNueva || redes[0]?.id || "";
 
   const pestanaActiva = pestanas.find((t) => t.id === activa) ?? null;
   const storeActivo = activa ? stores.current.get(activa) ?? null : null;
   const marcaPanel = pestanaActiva?.marca || marcaEfectiva;
+  const sucia = activa ? dirty[activa] : false;
 
-  const nuevaPestana = (marca: string, red: string, doc?: Documento, ancla?: { contenido: string; plataforma: string }): StoreEditor => {
+  const marcarLimpia = (id: string) => setDirty((d) => ({ ...d, [id]: false }));
+  const bindPlantilla = (id: string, plantillaId: string, nombre: string) =>
+    setPestanas((p) => p.map((t) => (t.id === id ? { ...t, plantillaId, nombre } : t)));
+
+  const nuevaPestana = (marca: string, doc?: Documento, extra?: Partial<Pestana>): { id: string; store: StoreEditor } => {
     _seq += 1;
     const id = `tab-${_seq}`;
     const store = crearStoreEditor(doc ?? documentoVacio(DIMS_DEFECTO, marca));
     stores.current.set(id, store);
-    setPestanas((p) => [...p, { id, marca, red, ...ancla }]);
+    setPestanas((p) => [...p, { id, marca, ...extra }]);
     setActiva(id);
-    return store;
+    setDirty((d) => ({ ...d, [id]: false }));
+    return { id, store };
   };
 
-  // Lienzo EN BLANCO de verdad: documento vacío (sin las capas de la plantilla de marca, que el
-  // usuario tenía que borrar). Solo restaura un autoguardado previo de ese marca+red si existe.
-  const abrirPestana = (marcaArg?: string, redArg?: string) => {
+  // Lienzo EN BLANCO de verdad (documento vacío). Solo restaura un autoguardado previo si existe.
+  const abrirPestana = (marcaArg?: string) => {
     const marca = marcaArg || marcaEfectiva;
-    const red = redArg || redEfectiva;
     if (!marca) return;
-    const store = nuevaPestana(marca, red);
-    const guardado = leerAuto(claveAuto({ marca, red }));
+    const { store } = nuevaPestana(marca);
+    const guardado = leerAuto(claveAuto({ id: "", marca }));
     if (guardado) store.getState().cargar(guardado);
   };
 
-  // Abre una plantilla guardada EN UNA PESTAÑA NUEVA (su red = categoria de la plantilla).
+  // Abre una plantilla guardada EN UNA PESTAÑA NUEVA, atada a esa plantilla.
   const abrirPlantilla = (p: PlantillaDiseno) => {
-    nuevaPestana(p.marca, p.categoria || redEfectiva, p.documento as Documento);
+    nuevaPestana(p.marca, p.documento as Documento, { nombre: p.nombre, plantillaId: p.id });
     setGaleria(false);
     toast.success(`Plantilla «${p.nombre}» abierta.`);
   };
 
-  // Abre una pestaña ANCLADA a una publicación (su red = la plataforma de la pieza).
+  // Abre una pestaña ANCLADA a una publicación.
   const abrirPiezaTab = async (cid: string, pid: string, marca: string) => {
-    const store = nuevaPestana(marca, pid, undefined, { contenido: cid, plataforma: pid });
-    const guardado = leerAuto(claveAuto({ marca, red: pid, contenido: cid, plataforma: pid }));
+    const { store } = nuevaPestana(marca, undefined, { contenido: cid, plataforma: pid });
+    const guardado = leerAuto(claveAuto({ id: "", marca, contenido: cid, plataforma: pid }));
     if (guardado) {
       store.getState().cargar(guardado);
       return;
@@ -140,8 +141,6 @@ export default function EditorPro() {
 
   const qc = useQueryClient();
 
-  // Plantillas de la marca de referencia (funciona SIN pestaña activa: la galería del estado vacío
-  // las muestra y no se "pierden" al cerrar todas las pestañas).
   const plantillasQ = useQuery({
     queryKey: ["plantillas-diseno", marcaPanel],
     queryFn: ({ signal }) => api.plantillasDiseno({ marca: marcaPanel || undefined }, signal),
@@ -163,7 +162,7 @@ export default function EditorPro() {
     if (marcas.length === 0 || !plantillasQ.isSuccess) return;
     abiertoInicial.current = true;
     if ((plantillasQ.data?.plantillas.length ?? 0) === 0) {
-      void abrirPestana(marcaInicial ?? marcas[0].id, redEfectiva);
+      void abrirPestana(marcaInicial ?? marcas[0].id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, marcas, plantillasQ.isSuccess, plantillasQ.data]);
@@ -190,8 +189,7 @@ export default function EditorPro() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo exportar."),
   });
 
-  // AUTOGUARDADO: persiste el documento de la pestaña activa en sessionStorage (debounce 800 ms).
-  const [guardado, setGuardado] = useState(true);
+  // AUTOGUARDADO local (crash-safety) + marca de "cambios sin guardar" para el indicador.
   useEffect(() => {
     if (!activa) return;
     const store = stores.current.get(activa);
@@ -201,12 +199,11 @@ export default function EditorPro() {
     let timer: number | undefined;
     const unsub = store.subscribe((estado, previo) => {
       if (estado.documento === previo.documento) return;
-      setGuardado(false);
+      setDirty((d) => ({ ...d, [p.id]: true }));
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         try {
           sessionStorage.setItem(clave, JSON.stringify(estado.documento));
-          setGuardado(true);
         } catch {
           /* cuota llena: el trabajo sigue en memoria */
         }
@@ -218,29 +215,71 @@ export default function EditorPro() {
     };
   }, [activa, pestanas]);
 
-  const guardarPlantilla = useMutation({
+  // Genera la miniatura (render best-effort) del documento actual.
+  const miniaturaDe = async (documento: Documento): Promise<string> => {
+    try {
+      return (await api.editorRender(documento)).id;
+    } catch {
+      return "";
+    }
+  };
+
+  // GUARDAR: si la pestaña ya está atada a una plantilla, la sobrescribe (sin pedir nombre);
+  // si no, abre «Guardar como».
+  const guardar = useMutation({
+    mutationFn: async () => {
+      if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
+      if (!pestanaActiva.plantillaId) throw new Error("__sin_plantilla__");
+      const documento = storeActivo.getState().documento;
+      const miniatura = await miniaturaDe(documento);
+      return api.actualizarPlantillaDiseno(pestanaActiva.plantillaId, { documento, miniatura });
+    },
+    onSuccess: () => {
+      if (activa) marcarLimpia(activa);
+      qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
+      toast.success("Guardado.");
+    },
+    onError: (e: unknown) => {
+      if (e instanceof Error && e.message === "__sin_plantilla__") {
+        setDialogo({ nombre: pestanaActiva?.nombre ?? "" });
+        return;
+      }
+      toast.error(e instanceof Error ? e.message : "No se pudo guardar.");
+    },
+  });
+
+  // GUARDAR COMO: crea una plantilla nueva con el nombre dado y ata la pestaña a ella.
+  const guardarComo = useMutation({
     mutationFn: async (nombre: string) => {
       if (!storeActivo || !pestanaActiva) throw new Error("No hay pestaña activa.");
       const documento = storeActivo.getState().documento;
-      let miniatura = "";
-      try {
-        miniatura = (await api.editorRender(documento)).id;
-      } catch {
-        /* sin miniatura: la galería muestra un marcador */
-      }
-      // La plantilla queda etiquetada por marca + RED (categoria = red).
-      return api.crearPlantillaDiseno({ marca: pestanaActiva.marca, nombre, categoria: pestanaActiva.red, documento, miniatura });
+      const miniatura = await miniaturaDe(documento);
+      return api.crearPlantillaDiseno({ marca: pestanaActiva.marca, nombre, categoria: "post", documento, miniatura });
     },
-    onSuccess: () => {
+    onSuccess: (res, nombre) => {
+      if (activa) {
+        bindPlantilla(activa, res.plantilla.id, nombre);
+        marcarLimpia(activa);
+      }
       qc.invalidateQueries({ queryKey: ["plantillas-diseno"] });
       toast.success("Plantilla guardada.");
     },
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo guardar."),
   });
 
+  const confirmarNombre = () => {
+    const nombre = dialogo?.nombre.trim();
+    if (!nombre) return;
+    guardarComo.mutate(nombre);
+    setDialogo(null);
+  };
+
+  // Carga una plantilla en la pestaña ACTIVA (la ata a ella).
   const cargarPlantillaEnActiva = (p: PlantillaDiseno) => {
-    if (storeActivo) {
+    if (storeActivo && activa) {
       storeActivo.getState().cargar(p.documento as Documento);
+      bindPlantilla(activa, p.id, p.nombre);
+      marcarLimpia(activa);
       toast.success(`Plantilla «${p.nombre}» cargada.`);
     }
   };
@@ -254,13 +293,6 @@ export default function EditorPro() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "No se pudo borrar."),
   });
 
-  const confirmarNombre = () => {
-    const nombre = dialogo?.nombre.trim();
-    if (!nombre) return;
-    guardarPlantilla.mutate(nombre);
-    setDialogo(null);
-  };
-
   // Guarda el documento en la PUBLICACIÓN anclada (render + versión + fija su imagen).
   const guardarEnPieza = useMutation({
     mutationFn: () => {
@@ -270,6 +302,7 @@ export default function EditorPro() {
       return api.editorPiezaGuardar(pestanaActiva.contenido, pestanaActiva.plataforma, storeActivo.getState().documento);
     },
     onSuccess: (res) => {
+      if (activa) marcarLimpia(activa);
       setExportUrl(`/api/media/${res.id}`);
       toast.success(`Guardado en la pieza (v${res.version}).`);
     },
@@ -277,26 +310,14 @@ export default function EditorPro() {
   });
 
   const plantillas = plantillasQ.data?.plantillas ?? [];
+  const guardando = guardar.isPending || guardarComo.isPending;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      {/* Barra superior: marca + red (a qué red diseñar) + acciones de pieza/plantilla + export. */}
+      {/* Barra superior: marca + acciones (guardar / guardar como / pieza) + estado + export. */}
       <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
         <h1 className="mr-1 text-base font-semibold">Editor</h1>
         <SelectorMarca marcas={marcas} valor={marcaEfectiva} onCambio={setMarcaNueva} incluirTodas={false} />
-        {redes.length > 0 && (
-          <select
-            value={redEfectiva}
-            onChange={(e) => setRedNueva(e.target.value)}
-            className="rounded border border-input bg-background px-2 py-1.5 text-sm"
-            aria-label="Red"
-            title="Red para la que diseñar la plantilla"
-          >
-            {redes.map((r) => (
-              <option key={r.id} value={r.id}>{r.nombre}</option>
-            ))}
-          </select>
-        )}
         {pestanaActiva && (
           <>
             <div className="mx-1 h-5 w-px bg-border" />
@@ -305,14 +326,17 @@ export default function EditorPro() {
                 <FileUp className="h-4 w-4" />
               </Button>
             )}
-            <Button size="icon" variant="outline" disabled={guardarPlantilla.isPending} onClick={() => setDialogo({ nombre: "" })} title="Guardar como plantilla">
-              <Save className="h-4 w-4" />
+            <Button size="sm" variant="outline" disabled={guardando} onClick={() => guardar.mutate()} title="Guardar (sobrescribe la plantilla)">
+              <Save className="mr-1 h-4 w-4" /> Guardar
+            </Button>
+            <Button size="icon" variant="ghost" disabled={guardando} onClick={() => setDialogo({ nombre: "" })} title="Guardar como… (plantilla nueva)">
+              <SaveAll className="h-4 w-4" />
             </Button>
           </>
         )}
         {pestanaActiva && (
-          <span className="ml-auto text-xs text-muted-foreground" title="Autoguardado local">
-            {guardado ? "Guardado ✓" : "Guardando…"}
+          <span className={`ml-auto text-xs ${sucia ? "text-amber-500" : "text-muted-foreground"}`} title="Estado de guardado">
+            {sucia ? "● Sin guardar" : "Guardado ✓"}
           </span>
         )}
         {exportUrl && (
@@ -334,7 +358,10 @@ export default function EditorPro() {
                   t.id === activa ? "border-primary font-medium" : "border-transparent text-muted-foreground"
                 }`}
               >
-                <button onClick={() => setActiva(t.id)}>{marca} · {redNombre(t.red)}</button>
+                <button onClick={() => setActiva(t.id)} className="max-w-[200px] truncate">
+                  {t.nombre || marca}
+                  {dirty[t.id] && <span className="ml-1 text-amber-500">•</span>}
+                </button>
                 <button onClick={() => cerrarPestana(t.id)} className="opacity-60 hover:opacity-100" title="Cerrar">
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -366,7 +393,6 @@ export default function EditorPro() {
             marca={marcas.find((m) => m.id === marcaPanel)?.nombre ?? marcaPanel}
             plantillas={plantillas}
             cargando={plantillasQ.isLoading}
-            redNombre={redNombre}
             onAbrir={abrirPlantilla}
             onBorrar={(p) => borrarPlantilla.mutate(p.id)}
             onBlanco={() => abrirPestana()}
@@ -374,7 +400,7 @@ export default function EditorPro() {
         )}
       </div>
 
-      {/* Galería modal: cambiar la plantilla de la pestaña ACTIVA (desde el rail). */}
+      {/* Galería modal: aplicar una plantilla a la pestaña ACTIVA (desde el rail). */}
       {galeria && (
         <GaleriaPlantillas
           plantillas={plantillas}
@@ -384,11 +410,11 @@ export default function EditorPro() {
         />
       )}
 
-      {/* Diálogo de nombre (in-app) para guardar plantilla. */}
+      {/* Diálogo «Guardar como» (nombre de plantilla nueva). */}
       <Dialog open={!!dialogo} onOpenChange={(o) => !o && setDialogo(null)}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Guardar plantilla</DialogTitle>
+            <DialogTitle>Guardar como plantilla</DialogTitle>
           </DialogHeader>
           <Input
             autoFocus
@@ -407,13 +433,11 @@ export default function EditorPro() {
   );
 }
 
-// Galería del estado vacío: rejilla de plantillas (por marca, etiquetadas por red) + tarjeta de
-// «lienzo en blanco» (único acceso a empezar de cero aquí).
+// Galería del estado vacío: rejilla de plantillas de la marca + tarjeta de «lienzo en blanco».
 function GaleriaInline({
   marca,
   plantillas,
   cargando,
-  redNombre,
   onAbrir,
   onBorrar,
   onBlanco,
@@ -421,7 +445,6 @@ function GaleriaInline({
   marca: string;
   plantillas: PlantillaDiseno[];
   cargando: boolean;
-  redNombre: (id: string) => string;
   onAbrir: (p: PlantillaDiseno) => void;
   onBorrar: (p: PlantillaDiseno) => void;
   onBlanco: () => void;
@@ -451,13 +474,10 @@ function GaleriaInline({
                   {p.miniatura ? (
                     <img src={urlMedia(p.miniatura)} alt={p.nombre} draggable={false} className="pointer-events-none h-full w-full object-contain" />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">{redNombre(p.categoria)}</div>
+                    <div className="flex h-full w-full items-center justify-center text-xs text-muted-foreground">Sin vista previa</div>
                   )}
                 </div>
-                <div className="flex items-center justify-between gap-1 px-1.5 py-1 text-left">
-                  <span className="truncate text-xs">{p.nombre || "(sin nombre)"}</span>
-                  {p.categoria && <span className="shrink-0 rounded bg-muted px-1 text-[9px] uppercase text-muted-foreground">{redNombre(p.categoria)}</span>}
-                </div>
+                <div className="truncate px-1.5 py-1 text-left text-xs">{p.nombre || "(sin nombre)"}</div>
               </button>
               <button
                 onClick={() => onBorrar(p)}
