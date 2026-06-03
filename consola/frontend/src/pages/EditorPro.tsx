@@ -37,6 +37,22 @@ interface Pestana {
 
 let _seq = 0;
 
+// Clave de autoguardado por pestaña: estable entre recargas (por pieza, o por marca+formato).
+function claveAuto(p: { marca: string; formato: string; contenido?: string; plataforma?: string }): string {
+  return p.contenido && p.plataforma
+    ? `keni:editor:pieza:${p.contenido}:${p.plataforma}`
+    : `keni:editor:doc:${p.marca}:${p.formato}`;
+}
+
+function leerAuto(clave: string): Documento | null {
+  try {
+    const s = sessionStorage.getItem(clave);
+    return s ? (JSON.parse(s) as Documento) : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function EditorPro() {
   const opciones = useQuery({
     queryKey: ["publicaciones", "opciones"],
@@ -58,17 +74,24 @@ export default function EditorPro() {
 
   const marcaEfectiva = marcaNueva || marcas[0]?.id || "";
 
-  const abrirPestana = async () => {
-    if (!marcaEfectiva) return;
+  const abrirPestana = async (marcaArg?: string, formatoArg?: string) => {
+    const marca = marcaArg || marcaEfectiva;
+    const formato = formatoArg || formatoNuevo;
+    if (!marca) return;
     _seq += 1;
     const id = `tab-${_seq}`;
-    const store = crearStoreEditor(documentoVacio(DIMS[formatoNuevo] ?? DIMS.feed, marcaEfectiva));
+    const store = crearStoreEditor(documentoVacio(DIMS[formato] ?? DIMS.feed, marca));
     stores.current.set(id, store);
-    setPestanas((p) => [...p, { id, marca: marcaEfectiva, formato: formatoNuevo }]);
+    setPestanas((p) => [...p, { id, marca, formato }]);
     setActiva(id);
-    // Carga la plantilla de la marca en el store de ESTA pestaña (una sola vez).
+    // Restaura el autoguardado si existe; si no, carga la plantilla de la marca.
+    const guardado = leerAuto(claveAuto({ marca, formato }));
+    if (guardado) {
+      store.getState().cargar(guardado);
+      return;
+    }
     try {
-      const res = await api.editorPlantilla(marcaEfectiva, formatoNuevo);
+      const res = await api.editorPlantilla(marca, formato);
       store.getState().cargar(res.documento as Documento);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "No se pudo cargar la plantilla.");
@@ -84,6 +107,13 @@ export default function EditorPro() {
     stores.current.set(id, store);
     setPestanas((p) => [...p, { id, marca, formato, contenido: cid, plataforma: pid }]);
     setActiva(id);
+    // Prioridad: autoguardado local (ediciones sin guardar) > documento guardado de la pieza >
+    // plantilla de la marca.
+    const guardado = leerAuto(claveAuto({ marca, formato, contenido: cid, plataforma: pid }));
+    if (guardado) {
+      store.getState().cargar(guardado);
+      return;
+    }
     try {
       const pieza = await api.editorPieza(cid, pid);
       if (pieza.documento) {
@@ -97,19 +127,26 @@ export default function EditorPro() {
     }
   };
 
-  // Apertura por URL: /contenido/editor?contenido=&plataforma=&marca=&formato= abre la pieza una vez.
-  const abiertoUrl = useRef(false);
+  // Apertura inicial AUTOMÁTICA (una vez): si la URL trae una pieza, la abre anclada; si no,
+  // abre una pestaña por defecto (primera marca, formato feed) en cuanto llega el catálogo, para
+  // aterrizar directo en un lienzo sin tener que pulsar nada.
+  const abiertoInicial = useRef(false);
   useEffect(() => {
-    if (abiertoUrl.current) return;
+    if (abiertoInicial.current) return;
     const cid = searchParams.get("contenido");
     const pid = searchParams.get("plataforma");
-    const marca = searchParams.get("marca") || "";
-    const formato = searchParams.get("formato") || "feed";
-    if (cid && pid && marca) {
-      abiertoUrl.current = true;
-      void abrirPiezaTab(cid, pid, marca, formato);
+    if (cid && pid) {
+      abiertoInicial.current = true;
+      const marca = searchParams.get("marca") || marcas[0]?.id || "";
+      void abrirPiezaTab(cid, pid, marca, searchParams.get("formato") || "feed");
+      return;
     }
-  }, [searchParams]);
+    if (marcas.length > 0) {
+      abiertoInicial.current = true;
+      void abrirPestana(marcas[0].id, "feed");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, marcas]);
 
   const cerrarPestana = (id: string) => {
     stores.current.delete(id);
@@ -135,6 +172,35 @@ export default function EditorPro() {
 
   const pestanaActiva = pestanas.find((t) => t.id === activa) ?? null;
   const storeActivo = activa ? stores.current.get(activa) ?? null : null;
+
+  // AUTOGUARDADO: persiste el documento de la pestaña activa en sessionStorage (debounce 800 ms)
+  // para no perder trabajo al recargar o cambiar de pestaña. La restauración ocurre al abrir.
+  const [guardado, setGuardado] = useState(true);
+  useEffect(() => {
+    if (!activa) return;
+    const store = stores.current.get(activa);
+    const p = pestanas.find((t) => t.id === activa);
+    if (!store || !p) return;
+    const clave = claveAuto(p);
+    let timer: number | undefined;
+    const unsub = store.subscribe((estado, previo) => {
+      if (estado.documento === previo.documento) return;
+      setGuardado(false);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        try {
+          sessionStorage.setItem(clave, JSON.stringify(estado.documento));
+          setGuardado(true);
+        } catch {
+          /* cuota llena: el trabajo sigue en memoria */
+        }
+      }, 800);
+    });
+    return () => {
+      window.clearTimeout(timer);
+      unsub();
+    };
+  }, [activa, pestanas]);
 
   const qc = useQueryClient();
 
@@ -247,8 +313,8 @@ export default function EditorPro() {
             </option>
           ))}
         </select>
-        <Button variant="outline" size="sm" onClick={abrirPestana} disabled={!marcaEfectiva}>
-          <Plus className="mr-1 h-4 w-4" /> Abrir
+        <Button variant="outline" size="sm" onClick={() => abrirPestana()} disabled={!marcaEfectiva}>
+          <Plus className="mr-1 h-4 w-4" /> Nueva pestaña
         </Button>
         {pestanaActiva && (
           <>
@@ -305,8 +371,13 @@ export default function EditorPro() {
             )}
           </>
         )}
+        {pestanaActiva && (
+          <span className="ml-auto text-xs text-muted-foreground" title="Autoguardado local">
+            {guardado ? "Guardado ✓" : "Guardando…"}
+          </span>
+        )}
         {exportUrl && (
-          <a href={exportUrl} target="_blank" rel="noreferrer" className="ml-auto text-sm text-primary underline">
+          <a href={exportUrl} target="_blank" rel="noreferrer" className="text-sm text-primary underline">
             Ver PNG exportado
           </a>
         )}
@@ -342,11 +413,12 @@ export default function EditorPro() {
             key={pestanaActiva.id}
             store={storeActivo}
             marca={pestanaActiva.marca}
+            formato={pestanaActiva.formato}
             onExportar={() => exportar.mutate()}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            Elige una marca y un formato, y pulsa «Abrir» para empezar a editar.
+            Elige una marca y un formato, y pulsa «Nueva pestaña» para empezar a editar.
           </div>
         )}
       </div>

@@ -147,6 +147,16 @@ export function PanelCapas() {
             >
               <ArrowDown className="h-3.5 w-3.5" />
             </button>
+            <button
+              className="text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                store.getState().quitar(capa.id);
+              }}
+              title="Borrar capa"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           </div>
         ))}
       </div>

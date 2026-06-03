@@ -11,7 +11,6 @@ import { Loader2 } from "lucide-react";
 // de Metricas (Tremor/recharts, el grueso del bundle) hasta que se visitan. El
 // <Suspense> que muestra el fallback mientras carga vive en el AppShell.
 const Panel = lazy(() => import("@/pages/Panel"));
-const Estudio = lazy(() => import("@/pages/Estudio"));
 const EditorPro = lazy(() => import("@/pages/EditorPro"));
 const Biblioteca = lazy(() => import("@/pages/Biblioteca"));
 const EstrategiaMarcas = lazy(() =>
@@ -130,8 +129,9 @@ export const router = createBrowserRouter([
       {
         path: "contenido",
         children: [
-          { index: true, element: <Navigate to="/contenido/estudio" replace /> },
-          { path: "estudio", element: <Estudio /> },
+          { index: true, element: <Navigate to="/contenido/editor" replace /> },
+          // "Estudio" se fusionó en el "Editor" (la IA es ahora un panel del editor): redirige.
+          { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
           // Editor profesional por capas (Konva): diseña/edita el Documento de la pieza.
           { path: "editor", element: <EditorPro /> },
           // Hub Biblioteca: documentos (prompts + línea editorial) + plantillas de
@@ -198,8 +198,8 @@ export const router = createBrowserRouter([
       // ===== Redirecciones de rutas legacy =====
       // Rutas planas anteriores → su nuevo path con prefijo de bloque (preservando
       // la pestaña con `RedirigirPrefijo` donde aplica).
-      { path: "imagenes", element: <Navigate to="/contenido/estudio" replace /> },
-      { path: "estudio", element: <Navigate to="/contenido/estudio" replace /> },
+      { path: "imagenes", element: <Navigate to="/contenido/editor" replace /> },
+      { path: "estudio", element: <Navigate to="/contenido/editor" replace /> },
       { path: "biblioteca/*", element: <RedirigirPrefijo a="/contenido/biblioteca" /> },
       { path: "investigacion/parrilla-dia", element: <Navigate to="/datos/investigacion/radar" replace /> },
       { path: "investigacion/*", element: <RedirigirPrefijo a="/datos/investigacion" /> },

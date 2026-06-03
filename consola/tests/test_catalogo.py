@@ -23,9 +23,9 @@ _SIDEBAR_BLOQUES = [
     # columna vertebral (Parrilla/tablero) y la cola de aprobación (Revisión).
     ["Panel", "Parrilla", "Revisión"],
     # "Contenido": herramientas para crear/editar a mano una pieza (consumidas por el
-    # pipeline cuando es automático). Estudio (imagen), Editor (lienzo por capas) y
-    # Biblioteca (prompts + plantillas; "Activos" se fusionó como pestaña de la Biblioteca).
-    ["Estudio", "Editor", "Biblioteca"],
+    # pipeline cuando es automático). Estudio (editor de imagen por capas + IA; el antiguo
+    # "Estudio" y el "Editor" se fusionaron en uno) y Biblioteca (prompts + plantillas).
+    ["Estudio", "Biblioteca"],
     # "Datos": lo que alimenta o refleja la automatización — Investigación (fuentes/radar),
     # Analíticas (medición que cierra el loop), Actividad IA (qué hizo), Pipelines (CI/CD).
     ["Investigación", "Analíticas", "Actividad IA", "Pipelines"],
@@ -88,7 +88,7 @@ def test_iconos_de_nav_son_strings_lucide():
     cat = registro.catalogo(_entorno())
     iconos = {i["ruta"]: i["icono"] for g in cat["navegacion"] for i in g["items"]}
     assert iconos["/panel"] == "LayoutDashboard"
-    assert iconos["/contenido/estudio"] == "Palette"
+    assert iconos["/contenido/editor"] == "Palette"
     assert iconos["/datos/investigacion"] == "Search"
     assert iconos["/operacion/revision"] == "ShieldCheck"
     assert iconos["/datos/analiticas"] == "BarChart3"
@@ -105,7 +105,7 @@ def test_desactivar_flag_oculta_la_app_del_catalogo():
     rutas = [i["ruta"] for g in cat["navegacion"] for i in g["items"]]
     assert "/datos/analiticas" not in rutas
     # Las demás siguen.
-    assert "/contenido/estudio" in rutas and "/operacion/parrilla" in rutas and "/panel" in rutas
+    assert "/contenido/editor" in rutas and "/operacion/parrilla" in rutas and "/panel" in rutas
 
 
 def test_flag_acepta_varias_formas_de_off():

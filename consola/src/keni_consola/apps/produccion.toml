@@ -86,22 +86,13 @@ rutas_frontend = [
 # para crear/editar a mano · datos(30) = entradas que alimentan o reflejan la automatización.
 
 [[nav]]
-ruta = "/contenido/estudio"
+ruta = "/contenido/editor"
 etiqueta = "Estudio"
 icono = "Palette"
-descripcion = "Lienzo de imagen: genera variantes, edita (recorte, peso, placa) y expande. Úsala en la pieza o descárgala."
+descripcion = "Estudio de imagen por capas: texto, logos, marcos, plantillas y bloques por marca; genera/expande/retoca con IA y exporta el arte de la pieza."
 grupo = "contenido"
 grupo_orden = 20
 orden = 10
-
-[[nav]]
-ruta = "/contenido/editor"
-etiqueta = "Editor"
-icono = "Layers"
-descripcion = "Editor por capas (texto, marcos, logos, imágenes) sobre la plantilla de la marca. Exporta el PNG final."
-grupo = "contenido"
-grupo_orden = 20
-orden = 15
 
 [[nav]]
 ruta = "/contenido/biblioteca"
