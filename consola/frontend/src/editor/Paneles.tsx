@@ -533,6 +533,17 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
               <option value="contain">Contener</option>
             </select>
           </Campo>
+          <Campo etiqueta="Zoom (reencuadre)">
+            <input
+              type="range"
+              min={1}
+              max={6}
+              step={0.05}
+              value={(capa as CapaImagen).zoom ?? 1}
+              onChange={(e) => set({ zoom: Number(e.target.value) } as Partial<Capa>)}
+              className="w-24"
+            />
+          </Campo>
           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Filtros</div>
           <Campo etiqueta="Brillo">
             <input type="range" min={0.2} max={1.8} step={0.05} value={fil.brillo ?? 1} onChange={(e) => setFiltro("brillo", Number(e.target.value))} className="w-24" />

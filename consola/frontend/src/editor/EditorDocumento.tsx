@@ -129,8 +129,9 @@ export function EditorDocumento({
           </>
         )}
 
-        {/* COLUMNA CENTRAL: barra contextual + acciones + lienzo. */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        {/* COLUMNA CENTRAL: barra contextual + acciones + lienzo. En móvil deja hueco inferior
+            para que el rail fijo (h-16) no tape el lienzo. */}
+        <div className="flex min-w-0 flex-1 flex-col max-md:pb-16">
           <div className="flex items-stretch border-b border-border">
             <div className="min-w-0 flex-1">
               <BarraContextual
@@ -196,8 +197,6 @@ export function EditorDocumento({
             <RailBtnMovil key={h.clave} etiqueta={h.etiqueta} Icono={h.Icono} activo={tool === h.clave} onClick={() => abrirTool(h.clave)} />
           ))}
         </nav>
-        {/* Hueco para que el rail móvil no tape el lienzo. */}
-        <div className="h-16 shrink-0 md:hidden" aria-hidden />
       </div>
     </ProveedorEditor>
   );
