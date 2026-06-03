@@ -22,6 +22,7 @@ import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { MejoresHorarios } from "./metricas/MejoresHorarios";
+import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
 import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
 import { TablaCuentas } from "./metricas/TablaCuentas";
@@ -223,6 +224,10 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
           {/* Rendimiento por serie/tipo: cruza piezas de Metricool con el tablero de la
               BD para clasificarlas (tipo_contenido + etiquetas). Sigue marca/rango global. */}
           <GraficaPorSerie marcaActual={marca} rangoActual={rango} />
+          {/* Rendimiento por LÍNEA de contenido (vertical) y por ORIGEN del periodo:
+              dos tablas con piezas/visualizaciones/interacciones/engagement. Sigue
+              marca/rango global como el resto del dashboard. */}
+          <MetricaPorLinea marcaActual={marca} rangoActual={rango} />
           {/* Drill-down marca -> pieza: piezas publicadas con su rendimiento real
               (misma fuente única, Metricool) y enlace a la pieza en el tablero. */}
           <PiezasRendimiento opciones={opciones} />

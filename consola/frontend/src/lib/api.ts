@@ -182,6 +182,13 @@ import type {
   RespuestaEtiquetas,
   RespuestaEtiqueta,
   RespuestaEtiquetasContenido,
+  RespuestaIdeasGreen,
+  RespuestaIdeaGreen,
+  CuerpoCrearIdeaGreen,
+  CuerpoActualizarIdeaGreen,
+  CuerpoProponerGreen,
+  CuerpoGenerarIdeaGreen,
+  MetricasLineas,
   RespuestaPreviewContenido,
   RespuestaEquipoRota,
   RespuestaEventosRota,
@@ -1190,6 +1197,30 @@ export const api = {
   eliminarEtiqueta: (id: string) =>
     peticion<RespuestaMensaje>(`/etiquetas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
 
+  // --- Green: banco de ideas de contenido evergreen (perenne) por marca ---
+  // Las ideas se proponen a mano o con IA (`proponerGreen` lanza un trabajo en 2º plano que
+  // se SONDEA con `useGeneracion`); al aprobar una idea se puede generar la pieza evergreen.
+  ideasGreen: (
+    params: { marca?: string; estado?: string } = {},
+    signal?: AbortSignal,
+  ) => peticion<RespuestaIdeasGreen>(`/green/ideas${query(params)}`, { signal }),
+  crearIdeaGreen: (cuerpo: CuerpoCrearIdeaGreen) =>
+    peticion<RespuestaIdeaGreen>("/green/ideas", { metodo: "POST", json: cuerpo }),
+  actualizarIdeaGreen: (id: string, cuerpo: CuerpoActualizarIdeaGreen) =>
+    peticion<RespuestaIdeaGreen>(`/green/ideas/${encodeURIComponent(id)}`, {
+      metodo: "PATCH",
+      json: cuerpo,
+    }),
+  eliminarIdeaGreen: (id: string) =>
+    peticion<RespuestaMensaje>(`/green/ideas/${encodeURIComponent(id)}`, { metodo: "DELETE" }),
+  proponerGreen: (cuerpo: CuerpoProponerGreen) =>
+    peticion<RespuestaGeneracion>("/green/proponer", { metodo: "POST", json: cuerpo }),
+  generarIdeaGreen: (id: string, cuerpo: CuerpoGenerarIdeaGreen = {}) =>
+    peticion<RespuestaGeneracion>(`/green/ideas/${encodeURIComponent(id)}/generar`, {
+      metodo: "POST",
+      json: cuerpo,
+    }),
+
   // --- Webhooks salientes + eventos internos del tablero ---
   webhooks: (signal?: AbortSignal) =>
     peticion<RespuestaWebhooks>("/webhooks", { signal }),
@@ -1568,6 +1599,10 @@ export const api = {
   // con el contenido de la BD para resolver tipo_contenido + etiquetas.
   metricasPiezasPorEtiqueta: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<PiezasPorEtiqueta>(`/metricas/piezas-por-etiqueta${query(params)}`, { signal }),
+  // Rendimiento del periodo agregado por LÍNEA de contenido (vertical) y por ORIGEN.
+  // `marca` viaja en forma `id_metricas` (guion_bajo), igual que el resto de Métricas.
+  metricasLineas: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<MetricasLineas>(`/metricas/lineas${query(params)}`, { signal }),
   // --- Estrategia digital ---
   // Evolución de seguidores del periodo (total + por red) con el neto ganado/perdido.
   metricasSeguidores: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>

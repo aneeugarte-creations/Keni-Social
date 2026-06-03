@@ -1146,8 +1146,12 @@ export interface RespuestaMetricasContenido {
   metricas: Record<string, MetricaPieza>;
 }
 
-/** Eje (clase) de una etiqueta editorial: campaña, vertical/sección, o tipo de formato. */
-export type ClaseEtiqueta = "campania" | "vertical" | "tipo";
+/**
+ * Eje (clase) de una etiqueta editorial: campaña, vertical (= LÍNEA de contenido),
+ * tipo de formato, u origen (interno / petición externa). `string` deja pasar ejes
+ * nuevos del backend sin romper el tipado.
+ */
+export type ClaseEtiqueta = "campania" | "vertical" | "tipo" | "origen" | string;
 
 /** Una etiqueta editorial del catálogo (clasifica transversalmente las piezas del tablero).
  *
@@ -1161,6 +1165,8 @@ export interface Etiqueta {
   marca: string;
   marca_nombre: string;
   color: string;
+  /** CSV de palabras clave para auto-clasificar piezas en esta etiqueta. */
+  keywords: string;
   activo: boolean;
 }
 
@@ -1184,6 +1190,8 @@ export interface CuerpoCrearEtiqueta {
   clase?: ClaseEtiqueta;
   marca?: string;
   color?: string;
+  /** CSV de palabras clave para auto-clasificar. */
+  keywords?: string;
 }
 
 export interface CuerpoActualizarEtiqueta {
@@ -1191,11 +1199,84 @@ export interface CuerpoActualizarEtiqueta {
   clase?: ClaseEtiqueta;
   marca?: string;
   color?: string;
+  keywords?: string;
   activo?: boolean;
 }
 
 export interface RespuestaEtiqueta {
   etiqueta: Etiqueta;
+}
+
+// --- Green: ideas de contenido evergreen (perenne) ---------------------------
+
+/** Estado de una idea Green: propuesta → aprobada / descartada. */
+export type EstadoIdeaGreen = "propuesta" | "aprobada" | "descartada" | string;
+
+/** Una idea de contenido evergreen (banco de ideas perennes por marca). */
+export interface IdeaGreen {
+  id: string;
+  marca: string;
+  titulo: string;
+  descripcion: string;
+  estado: EstadoIdeaGreen;
+  /** De dónde salió la idea (p. ej. "ia" cuando la propuso el asistente, "manual"). */
+  origen: string;
+  /** Id del contenido generado a partir de la idea (vacío si aún no se generó). */
+  contenido_id: string;
+  creado: string;
+}
+
+export interface RespuestaIdeasGreen {
+  ideas: IdeaGreen[];
+  estados: EstadoIdeaGreen[];
+  marcas: { id: string; nombre: string }[];
+}
+
+export interface CuerpoCrearIdeaGreen {
+  marca: string;
+  titulo: string;
+  descripcion?: string;
+}
+
+export interface CuerpoActualizarIdeaGreen {
+  estado?: EstadoIdeaGreen;
+  titulo?: string;
+  descripcion?: string;
+}
+
+export interface CuerpoProponerGreen {
+  marca: string;
+  contexto?: string;
+}
+
+export interface CuerpoGenerarIdeaGreen {
+  redes?: string[];
+}
+
+export interface RespuestaIdeaGreen {
+  idea: IdeaGreen;
+}
+
+// --- Métrica por línea (vertical) y por origen -------------------------------
+
+/** Rendimiento agregado de una LÍNEA (o un ORIGEN) en el periodo. */
+export interface FilaMetricaLinea {
+  id: string;
+  nombre: string;
+  piezas: number;
+  visualizaciones: number;
+  interacciones: number;
+  engagement_pct: number;
+}
+
+export interface MetricasLineas {
+  marca: string;
+  rango: string;
+  etiqueta_rango: string;
+  lineas: FilaMetricaLinea[];
+  origenes: FilaMetricaLinea[];
+  total: FilaMetricaLinea;
+  fuente: string;
 }
 
 /** Un item del tablero: contenido publicable (con plataformas) o tarea libre del equipo. */
