@@ -66,6 +66,7 @@ import threading
 from typing import Any
 
 from . import biblioteca, config, daemon_util, generaciones, marcas, redes, repos
+from .dominio import dedup
 from .dominio import generar as gen_dom
 from .dominio import jobspec
 from .dominio import qa_editorial as dom_qa
@@ -104,6 +105,12 @@ _QA_LANZAR_MAX = 4
 # CAP de LANZAMIENTOS de COPY (CD) por barrido: la fase CD también encola `claude -p` (uno por
 # tema `no_verificado`); mismo motivo de anti-ráfaga que la QA. El resto entra en el siguiente.
 _CD_LANZAR_MAX = 4
+
+# DEDUP de contenido: ventana (días) hacia atrás para considerar que una noticia "ya está" en la
+# marca. Un tema nuevo cuyo título coincide (normalizado) con otro contenido de la MISMA marca
+# creado en esta ventana NO se crea: cubre el duplicado en la cola (misma noticia por dos fuentes)
+# y el republicado de lo ya salido hace poco. Fuera de la ventana, una noticia recurrente sí entra.
+_DIAS_DEDUP = 60
 
 # Redes objetivo por defecto del pipeline: subconjunto sensato de las canónicas (las que el
 # piloto AMX usa a diario), intersecado con `redes.ids()` por si el catálogo cambiara.
@@ -445,13 +452,20 @@ def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> No
         )
 
 
-def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
+def crear_tema_de(
+    trabajo: dict[str, Any], *, claves_vistas: set[str] | None = None
+) -> dict[str, Any] | None:
     """CI — crea el `contenido` (tema) de UN trabajo de ingesta SIN generar copy, y marca el item.
 
     Rediseño QPC: el copy se genera DESPUÉS, en la fase CD, y SOLO si la QA de la fuente pasa.
     El tema nace con `origen=ORIGEN_PIPELINE` (para que la vista Pipelines y las fases QA/CD lo
     encuentren), la nota en `descripcion` y los parámetros de copy pendiente en `copy_pendiente`
     (JSON). Marca el item del feed como USADO (dedup) para no re-ingerirlo. None si se omite.
+
+    `claves_vistas` (opcional): claves de dedup (`dominio.dedup.clave`) del contenido reciente de
+    la marca. Si el título de este trabajo ya está ahí (misma noticia en cola o publicada hace
+    poco), NO se crea el tema (se marca el item usado y se devuelve None). Tras crear, la clave
+    nueva se añade al conjunto para dedup también dentro del mismo barrido. Sin él, no hay dedup.
     """
     item = trabajo["item"]
     fuente = trabajo["fuente"]
@@ -462,6 +476,16 @@ def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
     if not marca or not marcas.es_marca(marca):
         return None
     clave = (item.get("clave") or "").strip()
+    # Dedup de contenido: misma noticia (título normalizado) ya en la cola o publicada hace poco
+    # para esta marca -> no se crea otro tema. Se marca el item usado para no re-evaluarlo.
+    if claves_vistas is not None and dedup.es_duplicado(titulo, claves_vistas):
+        if clave:
+            try:
+                repos.marcar_item(fuente["id"], clave, True)
+            except Exception:  # noqa: BLE001 -- best-effort
+                _log.warning("pipeline: no se pudo marcar item dup usado (%s)", clave, exc_info=True)
+        _log.info("pipeline: omito duplicado «%s» (%s)", titulo[:60], marca)
+        return None
     nota = _nota_de_item(item)[: gen_dom.MAX_TEXTO]
     redes_ids = _redes_de_fuente(fuente)
     try:
@@ -481,6 +505,10 @@ def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
         return None
     # Auto-etiquetado de línea (vertical) y origen — gated por KENI_PIPELINE_LINEAS.
     _auto_etiquetar_linea(tema, titulo, (item.get("resumen") or "").strip())
+    # Dedup intra-barrido: registra el título recién creado para que otro item con el mismo
+    # título (otra fuente) en este MISMO barrido no cree un segundo tema.
+    if claves_vistas is not None:
+        claves_vistas.add(dedup.clave(titulo))
     # Dedup: marca el item del feed como usado tras crear el tema, para que un re-barrido
     # inmediato no lo vuelva a elegir. Best-effort.
     if clave:
@@ -489,6 +517,24 @@ def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
         except Exception:  # noqa: BLE001 -- el marcado es dedup; un fallo no debe romper el barrido
             _log.warning("pipeline: no se pudo marcar el item usado (%s)", clave, exc_info=True)
     return tema
+
+
+def _claves_dedup_marca(marca: str) -> set[str]:
+    """Claves de dedup (títulos normalizados) del contenido reciente de `marca` (`_DIAS_DEDUP`).
+
+    Best-effort: si la lectura falla, devuelve un set vacío (no se deduplica, no se rompe el
+    barrido). Cubre el duplicado en cola y el republicado: todo contenido de la marca creado en
+    la ventana entra (esté en borrador, en revisión o ya publicado).
+    """
+    from datetime import date, timedelta
+
+    desde = (date.today() - timedelta(days=_DIAS_DEDUP)).isoformat()
+    try:
+        titulos = repos.titulos_recientes_marca(marca, desde)
+    except Exception:  # noqa: BLE001 -- sin títulos legibles, no dedup (no rompe el barrido)
+        _log.warning("pipeline: no se pudieron leer títulos para dedup (%s)", marca, exc_info=True)
+        return set()
+    return {k for t in titulos if (k := dedup.clave(t))}
 
 
 def _nota_de_item(item: dict[str, Any]) -> str:
@@ -856,9 +902,13 @@ def ejecutar_barrido() -> dict[str, Any]:
         except Exception:  # noqa: BLE001 -- un fallo de ingesta de una marca no rompe el barrido
             _log.exception("pipeline: fallo la ingesta (CI) de la marca %s", marca)
             continue
+        # Dedup: claves de los títulos del contenido reciente de la marca (ventana `_DIAS_DEDUP`).
+        # `crear_tema_de` salta los trabajos cuyo título ya esté aquí (duplicado en cola o
+        # republicado) y va añadiendo los nuevos, para dedup también DENTRO de este barrido.
+        claves_vistas = _claves_dedup_marca(marca)
         for trabajo in trabajos:
             try:
-                tema = crear_tema_de(trabajo)
+                tema = crear_tema_de(trabajo, claves_vistas=claves_vistas)
             except Exception:  # noqa: BLE001 -- un fallo por item no debe matar el barrido
                 _log.exception("pipeline: fallo la creación del tema (CI) de un item.")
                 continue

@@ -1078,6 +1078,11 @@ def listar_contenido(
     )
 
 
+def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
+    """Títulos del contenido reciente de una marca (dedup del pipeline). Delegado en `db.py`."""
+    return db.titulos_recientes_marca(marca, desde_iso)
+
+
 def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
     return db.obtener_contenido(contenido_id)
 

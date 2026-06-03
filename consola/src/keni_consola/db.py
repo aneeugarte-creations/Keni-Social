@@ -3945,6 +3945,25 @@ def listar_contenido(
     return [_fila_a_contenido(f) for f in filas]
 
 
+def titulos_recientes_marca(marca: str, desde_iso: str) -> list[str]:
+    """Títulos del contenido (temas) de `marca` creados desde `desde_iso` (ISO inclusivo).
+
+    Consulta ligera (solo `titulo`) para el dedup del pipeline: detectar que una noticia ya
+    está en la cola o se creó/publicó hace poco. `clase='contenido'` excluye tareas. Acotada
+    por `creado` (no `fecha_objetivo`): es "creado recientemente". Lista vacía si no hay.
+    """
+    con = _conectar()
+    try:
+        filas = con.execute(
+            "SELECT titulo FROM contenido "
+            "WHERE marca = ? AND clase = 'contenido' AND creado >= ?",
+            (marca, desde_iso),
+        ).fetchall()
+    finally:
+        con.close()
+    return [(f["titulo"] or "") for f in filas]
+
+
 def obtener_contenido(contenido_id: str) -> dict[str, Any] | None:
     """Un item del tablero por id (None si no existe)."""
     con = _conectar()
