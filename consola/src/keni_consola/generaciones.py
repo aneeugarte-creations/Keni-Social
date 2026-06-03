@@ -471,6 +471,16 @@ def _argv_claude(
     else:
         arg_budget = stream.arg_presupuesto()
 
+    # Esfuerzo (thinking): override del job si viene y es un nivel válido; si no, el global
+    # de preferencias. Un job mecánico (p.ej. importar parrilla = transcribir filas a JSON)
+    # pasa `esfuerzo="low"` para no "pensar" de más (3× más rápido, misma cobertura) SIN
+    # tocar la preferencia global de copy/otros.
+    nivel = str(endurecer.get("esfuerzo") or "")
+    if nivel in preferencias.ESFUERZOS_VALIDOS:
+        arg_effort = ["--effort", nivel]
+    else:
+        arg_effort = preferencias.arg_esfuerzo()
+
     return [
         "claude", "-p", prompt,
         "--output-format", "stream-json", "--verbose", "--include-partial-messages",
@@ -480,7 +490,7 @@ def _argv_claude(
         # Defensa en profundidad anti prompt-injection: veta herramientas peligrosas (por
         # defecto `Bash`, mas las extra del job). Va DESPUES de skip-permisos para tener efecto.
         *arg_tools,
-        *preferencias.arg_esfuerzo(),
+        *arg_effort,
         *arg_budget,
         *arg_turns,
         *extra,

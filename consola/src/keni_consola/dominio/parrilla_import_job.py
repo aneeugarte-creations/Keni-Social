@@ -67,12 +67,19 @@ _TOOLS_LECTURA: tuple[str, ...] = ("Read", "Glob", "Grep")
 
 def _endurecer(*, lee_fichero: bool) -> dict[str, Any]:
     """Config de endurecimiento del job. `lee_fichero=False` (texto embebido) veta tambien las
-    tools de lectura: el modelo solo transforma el texto del prompt en JSON."""
+    tools de lectura: el modelo solo transforma el texto del prompt en JSON.
+
+    `esfuerzo="low"`: la importacion es MECANICA (transcribir filas a JSON), no necesita
+    razonamiento profundo. Medido en el server: con effort `low` el run es ~3× mas rapido
+    (primer token y total) con la MISMA cobertura de operaciones; con el default el modelo
+    "piensa" minutos sobre el documento antes de emitir nada. Override por-job: NO toca el
+    effort global (copy/otros siguen con su preferencia)."""
     vetadas = list(_TOOLS_VETADAS) + ([] if lee_fichero else list(_TOOLS_LECTURA))
     return {
         "disallowed_tools": vetadas,
         "max_turns": 40,
         "max_budget_usd": 10.0,
+        "esfuerzo": "low",
     }
 
 
