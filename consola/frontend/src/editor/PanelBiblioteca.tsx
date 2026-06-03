@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { api, urlMedia, type ActivoMarca } from "@/lib/api";
 
+import type { Capa } from "./documento";
 import { nuevaCapaImagen, nuevaCapaLogo, zTope } from "./documento";
 import { useStoreEditor } from "./usarEditor";
 
@@ -18,7 +19,17 @@ const TIPOS_IMAGEN = new Set(["arte", "infografia", "icono", "fondo"]);
 
 const TIPOS_SUBIDA = ["logo", "arte", "infografia", "icono", "fondo"] as const;
 
-export function PanelBiblioteca({ marca }: { marca: string }) {
+export function PanelBiblioteca({
+  marca,
+  reemplazarId = null,
+  onReemplazado,
+}: {
+  marca: string;
+  // Si está activo, hacer clic en un activo de imagen REEMPLAZA el `objeto` de esta capa en vez
+  // de insertar una nueva (modo «Reemplazar imagen» de la barra contextual).
+  reemplazarId?: string | null;
+  onReemplazado?: () => void;
+}) {
   const store = useStoreEditor();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -61,6 +72,16 @@ export function PanelBiblioteca({ marca }: { marca: string }) {
     const st = store.getState();
     const doc = st.documento;
     const z = zTope(doc);
+    // Modo reemplazo: cambia el objeto de la capa imagen seleccionada y sale del modo.
+    if (reemplazarId && a.objeto && (a.tipo === "logo" || TIPOS_IMAGEN.has(a.tipo))) {
+      const capa = doc.capas.find((c) => c.id === reemplazarId);
+      if (capa?.tipo === "imagen") {
+        st.actualizar(reemplazarId, { objeto: a.objeto } as Partial<Capa>);
+        toast.success("Imagen reemplazada.");
+        onReemplazado?.();
+        return;
+      }
+    }
     if (a.tipo === "logo") {
       st.agregar(nuevaCapaLogo(a.objeto, { z, x: 56, y: 56, w: 320, h: 120 }));
     } else if (TIPOS_IMAGEN.has(a.tipo)) {
@@ -130,6 +151,12 @@ export function PanelBiblioteca({ marca }: { marca: string }) {
           />
         </div>
       </div>
+
+      {reemplazarId && (
+        <div className="border-b border-border bg-primary/10 px-3 py-1.5 text-xs text-primary">
+          Elige una imagen para reemplazar la capa seleccionada.
+        </div>
+      )}
 
       <div className="flex-1 overflow-auto p-2">
         {activosQuery.isLoading && <p className="p-2 text-sm text-muted-foreground">Cargando…</p>}

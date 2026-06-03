@@ -427,6 +427,7 @@ export default function EditorPro() {
             marca={pestanaActiva.marca}
             formato={pestanaActiva.formato}
             onExportar={() => exportar.mutate()}
+            onPlantillas={() => setGaleria(true)}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">

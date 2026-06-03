@@ -211,6 +211,17 @@ export function nuevaCapaLogo(media_id: string, parcial: Partial<CapaLogo> = {})
   };
 }
 
+export function nuevaCapaOverlay(parcial: Partial<CapaOverlay> = {}): CapaOverlay {
+  return {
+    ...base("overlay", 0, 0, 1080, 1080, 10),
+    tipo: "overlay",
+    color: "#000000",
+    alto_frac: 0.45,
+    alpha: 200,
+    ...parcial,
+  };
+}
+
 export function documentoVacio(
   formato: { w: number; h: number; safe_top: number; safe_bottom: number },
   marca = "",
