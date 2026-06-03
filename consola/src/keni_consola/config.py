@@ -213,6 +213,13 @@ ENV_RADAR_AUTO_INTERVALO_HORAS = "KENI_RADAR_AUTO_INTERVALO_HORAS"
 ENV_RADAR_AUTO_MAX = "KENI_RADAR_AUTO_MAX"
 ENV_RADAR_AUTO_MARCA = "KENI_RADAR_AUTO_MARCA"
 
+# `KENI_PIPELINE_LINEAS=1` activa el auto-etiquetado de la ingesta: cada pieza nueva se
+# clasifica en su LÍNEA (etiqueta clase 'vertical') y su ORIGEN (clase 'origen') por
+# palabras clave. CONSERVADOR por defecto (OFF): sin el flag, la ingesta no etiqueta nada
+# (comportamiento previo intacto). Una pieza sin línea NO se descarta: queda marcada con
+# un aviso para que el equipo la clasifique o la deseche a mano.
+ENV_PIPELINE_LINEAS = "KENI_PIPELINE_LINEAS"
+
 # Loop de aprendizaje (Fase 5): el score de priorizacion tiene en cuenta lo que
 # HISTORICAMENTE rinde por marca (engagement de la fachada de metricas). Gateado OFF por
 # defecto (conservador): sin el flag, la lista del dia ordena EXACTAMENTE como hoy. Con el
@@ -944,6 +951,15 @@ def radar_auto_activo() -> bool:
     el umbral de señal a `flujo='importante'` (origen 'radar-auto'), revisable en el tablero.
     """
     return _crudo(ENV_RADAR_AUTO).lower() in _VERDADEROS
+
+
+def pipeline_lineas_activo() -> bool:
+    """True si la ingesta debe auto-etiquetar línea (vertical) y origen (`KENI_PIPELINE_LINEAS`).
+
+    Def OFF (conservador): sin el flag, la ingesta no toca etiquetas (comportamiento previo).
+    Con el flag, cada pieza nueva se clasifica por palabras clave; sin línea queda con aviso.
+    """
+    return _crudo(ENV_PIPELINE_LINEAS).lower() in _VERDADEROS
 
 
 def radar_auto_umbral() -> int:

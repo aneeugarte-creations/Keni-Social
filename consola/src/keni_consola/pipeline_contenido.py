@@ -418,6 +418,33 @@ def _copy_pendiente_de(trabajo: dict[str, Any], nota: str, redes_ids: list[str])
         return ""
 
 
+_AVISO_SIN_LINEA = "⚠ Sin línea: clasifícala a una línea o deséchala."
+
+
+def _auto_etiquetar_linea(tema: dict[str, Any], titulo: str, resumen: str) -> None:
+    """Auto-etiqueta la pieza con su LÍNEA (vertical) y ORIGEN si `KENI_PIPELINE_LINEAS`.
+
+    Sin el flag no hace nada (comportamiento previo). Sin línea → deja un aviso en `notas`
+    (la pieza NO se descarta). Best-effort: un fallo no rompe la ingesta.
+    """
+    if not config.pipeline_lineas_activo():
+        return
+    try:
+        from .dominio import clasificador_lineas
+
+        res = clasificador_lineas.clasificar_pieza(titulo, resumen, tema.get("marca", ""))
+        if res.get("vertical"):
+            repos.asignar_etiqueta(tema["id"], str(res["vertical"]))
+        else:
+            repos.actualizar_contenido(tema["id"], {"notas": _AVISO_SIN_LINEA})
+        if res.get("origen"):
+            repos.asignar_etiqueta(tema["id"], str(res["origen"]))
+    except Exception:  # noqa: BLE001 -- el etiquetado es best-effort; nunca rompe el barrido
+        _log.warning(
+            "pipeline: auto-etiquetado de línea falló (%s)", tema.get("id"), exc_info=True
+        )
+
+
 def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
     """CI — crea el `contenido` (tema) de UN trabajo de ingesta SIN generar copy, y marca el item.
 
@@ -452,6 +479,8 @@ def crear_tema_de(trabajo: dict[str, Any]) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 -- sin tema, este item no produce nada (no rompe el barrido)
         _log.warning("pipeline: no se pudo crear el tema (%s)", marca, exc_info=True)
         return None
+    # Auto-etiquetado de línea (vertical) y origen — gated por KENI_PIPELINE_LINEAS.
+    _auto_etiquetar_linea(tema, titulo, (item.get("resumen") or "").strip())
     # Dedup: marca el item del feed como usado tras crear el tema, para que un re-barrido
     # inmediato no lo vuelva a elegir. Best-effort.
     if clave:
