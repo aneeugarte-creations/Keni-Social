@@ -322,6 +322,8 @@ export function DialogoEditar({
   const [imagenUrl, setImagenUrl] = React.useState("");
   // Foto cruda de fondo (media id) para el editor inline de placa; se hornea a `imagen` al guardar.
   const [foto, setFoto] = React.useState("");
+  // "Quitar plantilla": publicar solo la foto, sin placa. Se persiste en la pieza (`placa_oculta`).
+  const [placaOculta, setPlacaOculta] = React.useState(false);
   // Función de "bake" que registra el editor inline (hornea el canvas a un media id al guardar).
   const bakeRef = React.useRef<(() => Promise<string | null>) | null>(null);
   const [vista, setVista] = React.useState<VistaEditor>("previa");
@@ -349,6 +351,7 @@ export function DialogoEditar({
     setImagen(publicacion.imagen ?? "");
     setImagenUrl(publicacion.imagen_url ?? "");
     setFoto(publicacion.foto ?? "");
+    setPlacaOculta(publicacion.placa_oculta ?? false);
     setVista("previa");
   }, [publicacion]);
 
@@ -384,6 +387,7 @@ export function DialogoEditar({
         fecha_programada: programado ? datetimeLocalAIso(fechaLocal) : null,
         imagen: imagenFinal,
         foto,
+        placa_oculta: placaOculta,
       };
       return api.actualizarPublicacion(publicacion.id, cuerpo);
     },
@@ -506,6 +510,8 @@ export function DialogoEditar({
                   foto={foto}
                   onCambioFoto={setFoto}
                   imagenFuente={publicacion.imagen_fuente}
+                  placaOculta={placaOculta}
+                  onPlacaOcultaCambio={setPlacaOculta}
                   registrarBake={(fn) => {
                     bakeRef.current = fn;
                   }}

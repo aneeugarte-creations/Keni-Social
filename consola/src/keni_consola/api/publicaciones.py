@@ -277,6 +277,13 @@ async def actualizar(request: Request) -> Response:
         if not isinstance(evergreen, bool):
             return JSONResponse({"error": "El campo evergreen debe ser verdadero o falso."}, status_code=400)
         campos["evergreen"] = evergreen
+    if "placa_oculta" in datos:
+        placa_oculta = datos.get("placa_oculta")
+        if not isinstance(placa_oculta, bool):
+            return JSONResponse(
+                {"error": "El campo placa_oculta debe ser verdadero o falso."}, status_code=400
+            )
+        campos["placa_oculta"] = placa_oculta
 
     if not campos:
         return JSONResponse(

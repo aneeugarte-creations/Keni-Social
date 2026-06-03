@@ -111,6 +111,9 @@ def publicacion_a_dict(pub: dict[str, Any]) -> dict[str, Any]:
         # Auto-avance: la pieza está exenta de copy-in (imagen dramática/autoexplicativa que
         # no lo necesita). El editor lo marca; el gate de auto-avance lo respeta.
         "copy_in_exento": bool(pub.get("copy_in_exento", False)),
+        # "Quitar plantilla": publicar solo la foto, sin la placa de marca encima. Persiste la
+        # elección del editor entre reaperturas.
+        "placa_oculta": bool(pub.get("placa_oculta", False)),
         # Etapa IA real de la tubería (Flujo C): generando_copy | generando_arte |
         # lista_para_revisar | aprobada | programada | publicada. La consume el Feed.
         "etapa_ia": etapa_ia,

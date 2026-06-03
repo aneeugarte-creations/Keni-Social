@@ -864,6 +864,9 @@ class Publicacion(TypedDict):
     # Auto-avance: la pieza esta EXENTA de copy-in (imagen dramatica/autoexplicativa que no lo
     # necesita). Opcional: las piezas legadas no lo traen y el feed lo lee como False.
     copy_in_exento: NotRequired[bool]
+    # "Quitar plantilla": publicar SOLO la foto, sin la placa de marca encima. Opcional: las
+    # piezas legadas no lo traen y se lee como False (con plantilla).
+    placa_oculta: NotRequired[bool]
 
 
 class RespuestaPublicaciones(TypedDict):

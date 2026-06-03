@@ -68,6 +68,21 @@ def test_imagen_no_texto_400(cliente):
     assert cliente.put(f"/api/publicaciones/{pid}", json={"imagen": 5}).status_code == 400
 
 
+def test_placa_oculta_persiste(cliente):
+    # "Quitar plantilla": se guarda y PERSISTE (se lee en el detalle posterior).
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    assert cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]["placa_oculta"] is False
+    r = cliente.put(f"/api/publicaciones/{pid}", json={"placa_oculta": True})
+    assert r.status_code == 200
+    assert r.json()["publicacion"]["placa_oculta"] is True
+    assert cliente.get(f"/api/publicaciones/{pid}").json()["publicacion"]["placa_oculta"] is True
+
+
+def test_placa_oculta_no_bool_400(cliente):
+    pid = _crear(cliente).json()["publicacion"]["id"]
+    assert cliente.put(f"/api/publicaciones/{pid}", json={"placa_oculta": "si"}).status_code == 400
+
+
 # --------------------------------------------------------------------------- #
 # Encolar                                                                     #
 # --------------------------------------------------------------------------- #

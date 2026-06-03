@@ -65,6 +65,10 @@ export interface EditorPlacaInlineProps {
   onCambioFoto: (id: string) => void;
   /** URL de la imagen original (RSS de marca propia), si la pieza la trae. */
   imagenFuente?: string;
+  /** Estado INICIAL de "quitar plantilla" (la pieza lo persiste). Default: con plantilla. */
+  placaOculta?: boolean;
+  /** Notifica al padre cuando se quita/pone la plantilla, para persistirlo al guardar. */
+  onPlacaOcultaCambio?: (oculta: boolean) => void;
   /**
    * Registra (o limpia con null) la función de "bake": el padre la invoca al guardar para
    * hornear el canvas actual a un media id publicable. Devuelve null si no hay nada que hornear.
@@ -79,11 +83,19 @@ export function EditorPlacaInline({
   foto,
   onCambioFoto,
   imagenFuente,
+  placaOculta = false,
+  onPlacaOcultaCambio,
   registrarBake,
 }: EditorPlacaInlineProps) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const [mostrarMarca, setMostrarMarca] = React.useState(true);
+  // "Con plantilla" = mostrar la placa. Arranca desde la elección persistida de la pieza.
+  const [mostrarMarca, setMostrarMarca] = React.useState(!placaOculta);
+  const alternarPlantilla = () => {
+    const nuevoMostrar = !mostrarMarca;
+    setMostrarMarca(nuevoMostrar);
+    onPlacaOcultaCambio?.(!nuevoMostrar);
+  };
   const [galeriaAbierta, setGaleriaAbierta] = React.useState(false);
   const [prompt, setPrompt] = React.useState("");
   const [avisoGenerar, setAvisoGenerar] = React.useState("");
@@ -276,7 +288,7 @@ export function EditorPlacaInline({
           variant={mostrarMarca ? "ghost" : "outline"}
           size="sm"
           className="h-7 gap-1.5 px-2 text-xs"
-          onClick={() => setMostrarMarca((v) => !v)}
+          onClick={alternarPlantilla}
           title={
             mostrarMarca
               ? "Quitar la plantilla: publicar solo la foto, sin placa ni titular encima"

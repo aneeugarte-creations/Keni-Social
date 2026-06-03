@@ -2608,6 +2608,8 @@ export interface CuerpoActualizarPublicacion {
   imagen?: string;
   /** Media id de la FOTO CRUDA de fondo (separada de la placa compuesta `imagen`). */
   foto?: string;
+  /** "Quitar plantilla": publicar solo la foto, sin la placa de marca encima. */
+  placa_oculta?: boolean;
 }
 
 /** Respuesta al reciclar una publicación perenne. */

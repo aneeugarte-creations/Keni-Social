@@ -622,6 +622,7 @@ _DDL_ESQUEMA: tuple[str, ...] = (
         evergreen             INTEGER NOT NULL DEFAULT 0,
         es_publicacion        INTEGER NOT NULL DEFAULT 0,
         copy_in_exento        INTEGER NOT NULL DEFAULT 0,
+        placa_oculta          INTEGER NOT NULL DEFAULT 0,
         qa_auto_hash          TEXT NOT NULL DEFAULT '',
         hora_post             TEXT NOT NULL DEFAULT '',
         creado                TEXT NOT NULL DEFAULT '',
@@ -1409,6 +1410,13 @@ def _migrar_columnas_contenido_plataforma(con: Any) -> None:
         con.execute(
             "ALTER TABLE contenido_plataforma "
             "ADD COLUMN IF NOT EXISTS qa_auto_hash TEXT NOT NULL DEFAULT ''"
+        )
+    # `placa_oculta`: la pieza se publica SOLO con la foto, sin la plantilla/placa de marca
+    # encima ("quitar plantilla" del editor). Persiste la elección entre reaperturas.
+    if "placa_oculta" not in cols:
+        con.execute(
+            "ALTER TABLE contenido_plataforma "
+            "ADD COLUMN IF NOT EXISTS placa_oculta INTEGER NOT NULL DEFAULT 0"
         )
 
 
@@ -4115,6 +4123,7 @@ _COLS_CONTENIDO_PLATAFORMA = (
     "evergreen",
     "es_publicacion",
     "copy_in_exento",
+    "placa_oculta",
     "qa_auto_hash",
     "hora_post",
     "creado",
@@ -4131,6 +4140,7 @@ _BOOLS_CONTENIDO_PLATAFORMA = (
     "evergreen",
     "es_publicacion",
     "copy_in_exento",
+    "placa_oculta",
 )
 # Campos editables de una fila por plataforma (lista blanca). `id`, `contenido_id`,
 # `red`, `es_publicacion`, `creado` y `actualizado` no se editan (los dos ultimos los
@@ -4186,6 +4196,7 @@ def crear_contenido_plataforma(
     evergreen: bool = False,
     es_publicacion: bool = False,
     copy_in_exento: bool = False,
+    placa_oculta: bool = False,
     qa_auto_hash: str = "",
     hora_post: str = "",
     creado: str = "",
@@ -4227,6 +4238,7 @@ def crear_contenido_plataforma(
         "evergreen": 1 if evergreen else 0,
         "es_publicacion": 1 if es_publicacion else 0,
         "copy_in_exento": 1 if copy_in_exento else 0,
+        "placa_oculta": 1 if placa_oculta else 0,
         "qa_auto_hash": qa_auto_hash or "",
         "hora_post": hora_post or "",
         "creado": creado or ahora,
@@ -7321,6 +7333,7 @@ _SELECT_PUBLICACION = (
     "cp.falta_copy AS falta_copy, cp.falta_imagen AS falta_imagen, "
     "cp.falta_revision AS falta_revision, cp.falta_publicar AS falta_publicar, "
     "cp.evergreen AS evergreen, cp.copy_in_exento AS copy_in_exento, "
+    "cp.placa_oculta AS placa_oculta, "
     "cp.qa_auto_hash AS qa_auto_hash, cp.actualizado AS pactualizado, "
     "c.id AS cid, c.titulo AS titulo, c.marca AS marca, c.autor_id AS autor_id, "
     "c.autor_nombre AS autor_nombre, c.origen AS origen, c.creado AS ccreado, "
@@ -7377,6 +7390,8 @@ def _fila_a_publicacion(f: Any) -> dict[str, Any]:
         "evergreen": bool(f["evergreen"]),
         # Auto-avance: exencion de copy-in + hash del copy con QA auto lanzada.
         "copy_in_exento": bool(f["copy_in_exento"]),
+        # "Quitar plantilla": publicar solo la foto, sin la placa de marca encima.
+        "placa_oculta": bool(f["placa_oculta"]),
         "qa_auto_hash": f["qa_auto_hash"] or "",
     }
 
@@ -7569,6 +7584,7 @@ _CAMPOS_PUB_A_PLAT: dict[str, str] = {
     "imagen": "imagen",
     "foto": "foto",
     "evergreen": "evergreen",
+    "placa_oculta": "placa_oculta",
     "enviado_a_revision_en": "enviado_a_revision_en",
     "revisor_id": "revisor_id",
     "revisor_nombre": "revisor_nombre",
@@ -7593,7 +7609,7 @@ def actualizar_publicacion(
     for clave, columna in _CAMPOS_PUB_A_PLAT.items():
         if clave in campos:
             cambios_plat[columna] = (
-                bool(campos[clave]) if clave == "evergreen" else campos[clave]
+                bool(campos[clave]) if clave in ("evergreen", "placa_oculta") else campos[clave]
             )
     if "estado" in campos:
         cambios_plat["estado"] = _ESTADO_PUB_A_PLAT.get(campos["estado"], "pendiente")
