@@ -16,6 +16,7 @@ import {
   BringToFront,
   Check,
   Copy,
+  Grid3x3,
   Maximize,
   Minus,
   Move,
@@ -171,6 +172,9 @@ export function Lienzo({
 
   const [zoom, setZoom] = useState(1);
   const escala = baseFit * zoom;
+  // Cuadrícula + snap (12 columnas del ancho). Toggle desde los controles de zoom.
+  const [grid, setGrid] = useState(false);
+  const paso = Math.max(8, Math.round(w / 12));
 
   const trRef = useRef<Konva.Transformer | null>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
@@ -381,6 +385,11 @@ export function Lienzo({
     let lx: number | null = null, ly: number | null = null;
     for (let i = 0; i < 3 && lx === null; i++) for (const t of objX) if (Math.abs(bx[i] - t) <= umbral) { nodo.x(x + (t - bx[i])); lx = t; break; }
     for (let i = 0; i < 3 && ly === null; i++) for (const t of objY) if (Math.abs(by[i] - t) <= umbral) { nodo.y(y + (t - by[i])); ly = t; break; }
+    // Snap a la cuadrícula en los ejes que NINGÚN objeto haya fijado.
+    if (grid) {
+      if (lx === null) nodo.x(Math.round(nodo.x() / paso) * paso);
+      if (ly === null) nodo.y(Math.round(nodo.y() / paso) * paso);
+    }
     setGuias({ x: lx, y: ly });
   };
 
@@ -510,6 +519,14 @@ export function Lienzo({
             ))}
           </Layer>
           <Layer listening={false}>
+            {grid &&
+              Array.from({ length: Math.floor(w / paso) }, (_, i) => (
+                <Line key={`gx${i}`} points={[(i + 1) * paso, 0, (i + 1) * paso, h]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.12} />
+              ))}
+            {grid &&
+              Array.from({ length: Math.floor(h / paso) }, (_, i) => (
+                <Line key={`gy${i}`} points={[0, (i + 1) * paso, w, (i + 1) * paso]} stroke="#ffffff" strokeWidth={1 / escala} opacity={0.12} />
+              ))}
             {documento.formato.safe_top > 0 && <Rect x={0} y={documento.formato.safe_top} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
             {documento.formato.safe_bottom > 0 && <Rect x={0} y={h - documento.formato.safe_bottom} width={w} height={1} fill="#22d3ee" opacity={0.4} />}
             {guias.x !== null && <Line points={[guias.x, 0, guias.x, h]} stroke="#ec4899" strokeWidth={1 / escala} dash={[6 / escala, 4 / escala]} />}
@@ -583,6 +600,14 @@ export function Lienzo({
 
       {/* Controles de zoom. */}
       <div className="absolute bottom-2 right-2 z-10 flex items-center gap-0.5 rounded-md border border-border bg-popover/90 p-0.5 shadow">
+        <button
+          title="Cuadrícula y ajuste a rejilla"
+          onClick={() => setGrid((g) => !g)}
+          className={`rounded p-1 hover:bg-accent ${grid ? "bg-accent text-foreground" : ""}`}
+        >
+          <Grid3x3 className="h-3.5 w-3.5" />
+        </button>
+        <div className="mx-0.5 h-4 w-px bg-border" />
         <button title="Alejar" onClick={() => setZoom((z) => Math.max(ZOOM_MIN, z * 0.9))} className="rounded p-1 hover:bg-accent">
           <Minus className="h-3.5 w-3.5" />
         </button>

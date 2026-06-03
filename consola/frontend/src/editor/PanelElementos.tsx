@@ -9,11 +9,13 @@ import { nuevaCapaImagen, nuevaCapaMarco, nuevaCapaOverlay, nuevaCapaTexto, zTop
 import { useStoreEditor } from "./usarEditor";
 
 // Presets de texto: tamaños/pesos típicos de un post de noticias/deportes.
+// Los presets de Titular y Pleca quedan ENLAZADOS al copy de la pieza (binding): al aplicar la
+// plantilla a una publicación se rellenan solos. Subtítulo y Cuerpo son texto fijo.
 const TEXTOS: { etiqueta: string; clase: string; parcial: Parameters<typeof nuevaCapaTexto>[0] }[] = [
-  { etiqueta: "Titular", clase: "text-2xl font-extrabold", parcial: { texto: "TITULAR", tamano: 96, peso: 800, mayusculas: true, ancla: "abajo" } },
+  { etiqueta: "Titular (copy)", clase: "text-2xl font-extrabold", parcial: { texto: "TITULAR", tamano: 96, peso: 800, mayusculas: true, ancla: "abajo", binding: "copy_in" } },
   { etiqueta: "Subtítulo", clase: "text-lg font-bold", parcial: { texto: "Subtítulo", tamano: 56, peso: 700 } },
   { etiqueta: "Cuerpo", clase: "text-sm", parcial: { texto: "Texto de cuerpo", tamano: 40, peso: 400 } },
-  { etiqueta: "Pleca / etiqueta", clase: "text-xs font-bold", parcial: { texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } } },
+  { etiqueta: "Pleca / etiqueta", clase: "text-xs font-bold", parcial: { texto: "EN VIVO", tamano: 38, peso: 700, mayusculas: true, binding: "etiqueta_default", chip: { color: "#E30613", pad_x: 24, pad_y: 14, radio: 0 } } },
 ];
 
 const FORMAS: { etiqueta: string; Icono: typeof Square; parcial: Parameters<typeof nuevaCapaMarco>[0] }[] = [

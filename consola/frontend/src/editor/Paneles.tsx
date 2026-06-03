@@ -24,8 +24,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { urlMedia } from "@/lib/api";
 
+import { ColorControl } from "./ColorControl";
+
 import type { Capa, CapaImagen, CapaLogo, CapaMarco, CapaOverlay, CapaTexto } from "./documento";
-import { CATALOGO_FUENTES, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaTexto, zTope } from "./documento";
+import { CATALOGO_FUENTES, ETIQUETA_BINDING, nuevaCapaImagen, nuevaCapaMarco, nuevaCapaTexto, zTope } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ETIQUETA_TIPO: Record<Capa["tipo"], string> = {
@@ -176,11 +178,16 @@ export function PanelCapas() {
         />
       ) : (
         <span
-          className="min-w-0 flex-1 truncate"
+          className="flex min-w-0 flex-1 items-center gap-1 truncate"
           onDoubleClick={(e) => { e.stopPropagation(); setRenombrando(capa.id); }}
           title="Doble clic para renombrar"
         >
-          {nombreCapa(capa)}
+          <span className="truncate">{nombreCapa(capa)}</span>
+          {capa.tipo === "texto" && (capa as CapaTexto).binding && (
+            <span className="shrink-0 rounded bg-primary/15 px-1 text-[9px] font-semibold uppercase text-primary">
+              {(capa as CapaTexto).binding === "copy_in" ? "copy" : "pleca"}
+            </span>
+          )}
         </span>
       )}
       <button
@@ -344,16 +351,16 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
         </Campo>
         {fondo.tipo === "color" && (
           <Campo etiqueta="Color">
-            <input type="color" value={fondo.color || "#111315"} onChange={(e) => setFondo({ tipo: "color", color: e.target.value })} className="h-6 w-10" />
+            <ColorControl valor={fondo.color || "#111315"} onChange={(c) => setFondo({ tipo: "color", color: c })} />
           </Campo>
         )}
         {fondo.tipo === "degradado" && fondo.degradado && (
           <>
             <Campo etiqueta="Desde">
-              <input type="color" value={fondo.degradado.desde} onChange={(e) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, desde: e.target.value } })} className="h-6 w-10" />
+              <ColorControl valor={fondo.degradado.desde} onChange={(c) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, desde: c } })} />
             </Campo>
             <Campo etiqueta="Hasta">
-              <input type="color" value={fondo.degradado.hasta} onChange={(e) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, hasta: e.target.value } })} className="h-6 w-10" />
+              <ColorControl valor={fondo.degradado.hasta} onChange={(c) => setFondo({ tipo: "degradado", degradado: { ...fondo.degradado!, hasta: c } })} />
             </Campo>
           </>
         )}
@@ -397,17 +404,33 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
 
       {capa.tipo === "texto" && (
         <div className="flex flex-col gap-2 border-t border-border pt-3">
+          <Campo etiqueta="Rol en la plantilla">
+            <select
+              value={(capa as CapaTexto).binding ?? "fijo"}
+              onChange={(e) => set({ binding: e.target.value === "fijo" ? null : (e.target.value as CapaTexto["binding"]) } as Partial<Capa>)}
+              className="rounded border border-input bg-background px-1.5 py-0.5 text-xs"
+            >
+              <option value="fijo">{ETIQUETA_BINDING.fijo}</option>
+              <option value="copy_in">{ETIQUETA_BINDING.copy_in}</option>
+              <option value="etiqueta_default">{ETIQUETA_BINDING.etiqueta_default}</option>
+            </select>
+          </Campo>
+          {(capa as CapaTexto).binding && (
+            <p className="-mt-1 text-[11px] text-muted-foreground">
+              Se rellena con {(capa as CapaTexto).binding === "copy_in" ? "el titular" : "la pleca"} de la pieza al aplicar la plantilla.
+            </p>
+          )}
           <textarea
             value={(capa as CapaTexto).texto}
             onChange={(e) => set({ texto: e.target.value } as Partial<Capa>)}
-            placeholder="Texto…"
+            placeholder={(capa as CapaTexto).binding ? "Texto de ejemplo (se sustituye por el de la pieza)…" : "Texto…"}
             className="min-h-[60px] rounded border border-input bg-background p-1.5 text-sm"
           />
           <div className="grid grid-cols-2 gap-2">
             <Campo etiqueta="Tamaño"><Num valor={(capa as CapaTexto).tamano} onChange={(v) => set({ tamano: v } as Partial<Capa>)} /></Campo>
             <Campo etiqueta="Peso"><Num valor={(capa as CapaTexto).peso} paso={100} onChange={(v) => set({ peso: v } as Partial<Capa>)} /></Campo>
             <Campo etiqueta="Color">
-              <input type="color" value={(capa as CapaTexto).color} onChange={(e) => set({ color: e.target.value } as Partial<Capa>)} className="h-6 w-10" />
+              <ColorControl valor={(capa as CapaTexto).color} onChange={(c) => set({ color: c } as Partial<Capa>)} />
             </Campo>
             <Campo etiqueta="Mayúsculas">
               <input type="checkbox" checked={(capa as CapaTexto).mayusculas} onChange={(e) => set({ mayusculas: e.target.checked } as Partial<Capa>)} />
@@ -445,6 +468,32 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           <Campo etiqueta="Interlineado">
             <Num valor={(capa as CapaTexto).interlineado} paso={0.05} onChange={(v) => set({ interlineado: v } as Partial<Capa>)} />
           </Campo>
+          <Campo etiqueta="Interletra">
+            <Num valor={(capa as CapaTexto).interletra ?? 0} paso={0.5} onChange={(v) => set({ interletra: v } as Partial<Capa>)} />
+          </Campo>
+          <Campo etiqueta="Contorno">
+            <input
+              type="checkbox"
+              checked={!!(capa as CapaTexto).contorno}
+              onChange={(e) => set({ contorno: e.target.checked ? { color: "#000000", grosor: 6 } : null } as Partial<Capa>)}
+            />
+          </Campo>
+          {(capa as CapaTexto).contorno && (
+            <>
+              <Campo etiqueta="Color del contorno">
+                <ColorControl
+                  valor={(capa as CapaTexto).contorno!.color}
+                  onChange={(c) => set({ contorno: { ...(capa as CapaTexto).contorno!, color: c } } as Partial<Capa>)}
+                />
+              </Campo>
+              <Campo etiqueta="Grosor del contorno">
+                <Num
+                  valor={(capa as CapaTexto).contorno!.grosor}
+                  onChange={(v) => set({ contorno: { ...(capa as CapaTexto).contorno!, grosor: Math.max(0, v) } } as Partial<Capa>)}
+                />
+              </Campo>
+            </>
+          )}
           <Campo etiqueta="Sombra">
             <input
               type="checkbox"
@@ -463,11 +512,9 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
           </Campo>
           {(capa as CapaTexto).chip && (
             <Campo etiqueta="Color del chip">
-              <input
-                type="color"
-                value={(capa as CapaTexto).chip!.color}
-                onChange={(e) => set({ chip: { ...(capa as CapaTexto).chip!, color: e.target.value } } as Partial<Capa>)}
-                className="h-6 w-10"
+              <ColorControl
+                valor={(capa as CapaTexto).chip!.color}
+                onChange={(c) => set({ chip: { ...(capa as CapaTexto).chip!, color: c } } as Partial<Capa>)}
               />
             </Campo>
           )}
@@ -519,21 +566,12 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
             </select>
           </Campo>
           <Campo etiqueta="Relleno">
-            <input
-              type="color"
-              value={(capa as CapaMarco).relleno ?? "#000000"}
-              onChange={(e) => set({ relleno: e.target.value } as Partial<Capa>)}
-              className="h-6 w-10"
-            />
+            <ColorControl valor={(capa as CapaMarco).relleno ?? "#000000"} onChange={(c) => set({ relleno: c } as Partial<Capa>)} />
           </Campo>
           <Campo etiqueta="Borde">
-            <input
-              type="color"
-              value={(capa as CapaMarco).borde?.color ?? "#FFFFFF"}
-              onChange={(e) =>
-                set({ borde: { color: e.target.value, grosor: (capa as CapaMarco).borde?.grosor ?? 6 } } as Partial<Capa>)
-              }
-              className="h-6 w-10"
+            <ColorControl
+              valor={(capa as CapaMarco).borde?.color ?? "#FFFFFF"}
+              onChange={(c) => set({ borde: { color: c, grosor: (capa as CapaMarco).borde?.grosor ?? 6 } } as Partial<Capa>)}
             />
           </Campo>
           <Campo etiqueta="Grosor">
@@ -549,7 +587,7 @@ export function Inspector({ fuentesExtra = [] }: { fuentesExtra?: string[] }) {
       {capa.tipo === "overlay" && (
         <div className="flex flex-col gap-2 border-t border-border pt-3">
           <Campo etiqueta="Color">
-            <input type="color" value={(capa as CapaOverlay).color} onChange={(e) => set({ color: e.target.value } as Partial<Capa>)} className="h-6 w-10" />
+            <ColorControl valor={(capa as CapaOverlay).color} onChange={(c) => set({ color: c } as Partial<Capa>)} />
           </Campo>
           <Campo etiqueta="Altura (frac)">
             <Num valor={(capa as CapaOverlay).alto_frac} paso={0.05} onChange={(v) => set({ alto_frac: v } as Partial<Capa>)} />

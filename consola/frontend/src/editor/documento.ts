@@ -13,6 +13,13 @@ export type Alineacion = "izquierda" | "centro" | "derecha" | "justificado";
 export type FormaMarco = "rect" | "elipse" | "linea";
 export type BindingTexto = "copy_in" | "etiqueta_default" | null;
 
+// Rol de un texto en la plantilla: qué dato de la pieza lo rellena al aplicarla. `null` = texto fijo.
+export const ETIQUETA_BINDING: Record<"fijo" | "copy_in" | "etiqueta_default", string> = {
+  fijo: "Texto fijo",
+  copy_in: "Titular (copy)",
+  etiqueta_default: "Pleca / etiqueta",
+};
+
 export interface Fondo {
   tipo: "color" | "degradado" | "imagen";
   color?: string;

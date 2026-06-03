@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 import type { Capa, CapaImagen, CapaMarco, CapaTexto } from "./documento";
-import { CATALOGO_FUENTES } from "./documento";
+import { CATALOGO_FUENTES, ETIQUETA_BINDING } from "./documento";
 import { useEditor, useStoreEditor } from "./usarEditor";
 
 const ALIN_ICONO = { izquierda: AlignLeft, centro: AlignCenter, derecha: AlignRight, justificado: AlignRight } as const;
@@ -162,6 +162,17 @@ export function BarraContextual({
               </BotonIcono>
             );
           })()}
+          <Sep />
+          <select
+            value={(capa as CapaTexto).binding ?? "fijo"}
+            onChange={(e) => set({ binding: e.target.value === "fijo" ? null : (e.target.value as CapaTexto["binding"]) } as Partial<Capa>)}
+            className="h-8 shrink-0 rounded-md border border-input bg-background px-2 text-sm"
+            title="Rol en la plantilla (qué dato de la pieza rellena este texto)"
+          >
+            <option value="fijo">{ETIQUETA_BINDING.fijo}</option>
+            <option value="copy_in">{ETIQUETA_BINDING.copy_in}</option>
+            <option value="etiqueta_default">{ETIQUETA_BINDING.etiqueta_default}</option>
+          </select>
         </>
       )}
 
