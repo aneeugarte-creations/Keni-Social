@@ -6229,7 +6229,11 @@ def crear_green_idea(
     id: str = "",
 ) -> dict[str, Any]:
     """Inserta una idea de contenido evergreen y la devuelve. NO valida (lo hace la API)."""
-    ahora = datetime.now().isoformat(timespec="seconds")
+    # Precisión de MICROSEGUNDOS en `creado`: el listado ordena por `creado DESC, id DESC`,
+    # pero `id` es un uuid aleatorio (no monotónico), así que dos ideas creadas en el MISMO
+    # segundo quedaban en orden indefinido ("recientes primero" no determinista). Los
+    # microsegundos desempatan creaciones consecutivas sin añadir un campo de secuencia.
+    ahora = datetime.now().isoformat(timespec="microseconds")
     fila = {
         "id": id or uuid.uuid4().hex[:12],
         "marca": marca or "",

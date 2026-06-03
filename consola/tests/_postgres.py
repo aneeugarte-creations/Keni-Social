@@ -77,6 +77,9 @@ _TABLAS = (
     "sugerencias_editoriales",
     # Hub generico de fuentes (item G): TODAS las fuentes de insumo por tipo.
     "fuentes",
+    # Taller Green: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,
+    # las ideas se acumulan entre tests del mismo worker y rompen el aislamiento.
+    "green_ideas",
 )
 
 
