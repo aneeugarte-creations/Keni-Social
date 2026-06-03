@@ -351,16 +351,12 @@ def _pieza(
     vistas = int(base_mes * _PESO[plat] * (dias / 30) * _entre(_rand(cuenta_id, rango, "pv", plat, idx), 0.04, 0.22))
     inter = int(vistas * eng / 100)
     dia = desde + timedelta(days=int(_rand(cuenta_id, rango, "pd", plat, idx) * dias))
-    # Hora de publicación sembrada (0-23): sesgada a la franja de tarde/noche para que
-    # el heatmap "mejores horas" tenga una forma realista en modo muestra.
-    hora = int(_entre(_rand(cuenta_id, rango, "ph", plat, idx), 7, 23))
     pid = hashlib.sha256(f"{cuenta_id}{rango}{plat}{idx}".encode()).hexdigest()[:11]
     return Pieza(
         id=f"p_{pid}",
         plataforma=plat,
         titulo=titulo,
         publicado=dia,
-        publicado_hora=hora,
         visualizaciones=vistas,
         interacciones=inter,
         engagement_pct=eng,

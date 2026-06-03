@@ -485,23 +485,6 @@ async def crosstab(request: Request) -> Response:
     return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
 
 
-async def horarios(request: Request) -> Response:
-    """GET /api/metricas/horarios: heatmap día×hora de "mejores horas para publicar".
-
-    `?marca=` acota a una marca; sin marca, todas. Servido desde cache (lazy fill).
-    """
-    rango = _validar_rango(request.query_params.get("rango", "mes"))
-    marca = request.query_params.get("marca") or None
-    try:
-        payload, generado_en = await metricas_cache.horarios_async(rango, marca)
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-    except Exception:  # noqa: BLE001 -- nunca un traceback crudo al cliente
-        _log.exception("Fallo al generar los horarios (rango=%s, marca=%s).", rango, marca or "todas")
-        return JSONResponse({"error": "No se pudieron generar los mejores horarios."}, status_code=500)
-    return JSONResponse({**payload, "etiqueta_rango": _etiqueta_rango(rango), "generado_en": generado_en})
-
-
 async def correlacion(request: Request) -> Response:
     """GET /api/metricas/correlacion: correlación seguidores ganados ↔ piezas publicadas.
 
@@ -1052,7 +1035,6 @@ RUTAS = [
     Route("/api/metricas/seguidores", seguidores, methods=["GET"]),
     Route("/api/metricas/desglose", desglose, methods=["GET"]),
     Route("/api/metricas/crosstab", crosstab, methods=["GET"]),
-    Route("/api/metricas/horarios", horarios, methods=["GET"]),
     Route("/api/metricas/correlacion", correlacion, methods=["GET"]),
     Route("/api/metricas/estado", estado, methods=["GET"]),
     Route("/api/metricas/refrescar", refrescar, methods=["POST"]),

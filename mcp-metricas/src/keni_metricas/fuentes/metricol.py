@@ -284,45 +284,6 @@ def _fecha(v) -> date | None:
     return None
 
 
-def _hora(v) -> int | None:
-    """Hora (0-23) de publicación del post, o None si no se puede determinar.
-
-    Misma forma de entrada que `_fecha`: Metricool devuelve `publishedAt` como OBJETO
-    `{'dateTime': 'AAAA-MM-DDTHH:MM:SS', 'timezone': '...'}`. Se extrae la HORA del
-    `dateTime` (o de un string ISO con hora, o de un epoch). Devuelve None cuando NO
-    hay componente horaria fiable (un string solo-fecha 'AAAA-MM-DD', o ausencia): el
-    heatmap OMITE las piezas sin hora en vez de fabricar la medianoche (degradación
-    honesta, igual que el resto de la fuente)."""
-    if isinstance(v, dict):
-        v = v.get("dateTime") or v.get("date") or v.get("value") or v.get("iso")
-    if isinstance(v, bool):  # bool es subclase de int: no es una fecha/hora
-        return None
-    if isinstance(v, (int, float)):
-        try:
-            ts = float(v)
-            if ts > 1e11:  # epoch en milisegundos
-                ts /= 1000.0
-            return datetime.fromtimestamp(ts).hour
-        except (ValueError, OSError, OverflowError):
-            return None
-    if isinstance(v, str):
-        s = v.strip()
-        if s.isdigit():
-            return _hora(int(s))
-        # Necesita componente horaria: 'AAAA-MM-DDTHH...' (T o espacio + al menos HH).
-        if len(s) >= 13 and s[10] in ("T", " "):
-            try:
-                return datetime.fromisoformat(s).hour
-            except ValueError:
-                pass
-            hh = s[11:13]
-            if hh.isdigit():
-                h = int(hh)
-                if 0 <= h <= 23:
-                    return h
-    return None
-
-
 class FuenteMetricol:
     """Implementa `FuenteMetricas` leyendo de la API REST de Metricool.
 
@@ -676,8 +637,7 @@ class FuenteMetricol:
         vis = _entero(_primero(post, _ALIAS_VIS, 0))
         if not vis:
             return None  # sin visualizaciones no es una "mejor pieza" útil
-        crudo_fecha = _primero(post, _ALIAS_FECHA)
-        fecha = _fecha(crudo_fecha)
+        fecha = _fecha(_primero(post, _ALIAS_FECHA))
         if fecha is None:
             return None  # sin fecha real no se ubica en el rango (no se fabrica)
         inter = _entero(_primero(post, _ALIAS_INT, 0))
@@ -688,7 +648,6 @@ class FuenteMetricol:
             plataforma=plat,
             titulo=(str(_primero(post, _ALIAS_TEXTO, "(sin texto)")))[:120],
             publicado=fecha,
-            publicado_hora=_hora(crudo_fecha),
             visualizaciones=vis,
             interacciones=inter,
             engagement_pct=engagement_pct(inter, vis),
@@ -746,7 +705,6 @@ class FuenteMetricol:
                 engagement_pct=engagement_pct(inter, vis),
                 url=_primero(post, _ALIAS_URL),
                 publicado=_fecha(_primero(post, _ALIAS_FECHA)),
-                publicado_hora=_hora(_primero(post, _ALIAS_FECHA)),
                 fuente=self.nombre,
                 **gran,
                 # Seguidores atribuidos al post: casi seguro Metricool no lo da a

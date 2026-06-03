@@ -22,7 +22,6 @@ import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
 import { ListaPiezas } from "./metricas/ListaPiezas";
-import { MejoresHorarios } from "./metricas/MejoresHorarios";
 import { MetricaPorLinea } from "./metricas/MetricaPorLinea";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
 import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
@@ -195,7 +194,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
 
           {/* Estrategia digital: lectura de alto nivel (más allá del día a día),
               ANTES del detalle granular de piezas. Crecimiento de audiencia, de qué
-              se compone el engagement, qué formatos rinden, horarios, tráfico web y
+              se compone el engagement, qué formatos rinden, tráfico web y
               correlación. Siguen marca/rango global como el resto del dashboard. */}
           <section className="space-y-4">
             <div className="space-y-1">
@@ -208,7 +207,6 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
-            <MejoresHorarios marcaActual={marca} rangoActual={rango} />
             <TraficoWeb marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </section>

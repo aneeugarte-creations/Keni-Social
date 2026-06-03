@@ -496,30 +496,6 @@ export interface Crosstab {
   generado_en: string;
 }
 /**
- * Una celda del heatmap día-de-la-semana × hora (mejores horas para publicar).
- */
-export interface CeldaHorario {
-  dia_semana: number;
-  hora: number;
-  n_piezas: number;
-  visualizaciones: number;
-  interacciones: number;
-  engagement_pct: number;
-}
-/**
- * Respuesta de `GET /api/metricas/horarios`: heatmap día×hora del rendimiento.
- */
-export interface Horarios {
-  cuenta: string | null;
-  rango: string;
-  etiqueta_rango: string;
-  periodo: PeriodoMetricas;
-  fuente: string;
-  celdas: CeldaHorario[];
-  mejor: CeldaHorario | null;
-  generado_en: string;
-}
-/**
  * La pieza que mejor rindió de una marca×red×fecha (apuntala la correlación).
  */
 export interface PostEstrella {
