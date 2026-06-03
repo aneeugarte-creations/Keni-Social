@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileText,
+  History,
   Loader2,
   Pencil,
   Plus,
+  RotateCcw,
   Trash2,
   Wand2,
   X,
@@ -107,6 +109,8 @@ export default function PlantillasContenido() {
   const [abierto, setAbierto] = React.useState(false);
   const [editId, setEditId] = React.useState<string | null>(null);
   const [form, setForm] = React.useState<FormPlantilla>(FORM_VACIO);
+  // Diálogo de historial de versiones (git) de la plantilla en edición.
+  const [historialAbierto, setHistorialAbierto] = React.useState(false);
 
   function abrirCrear() {
     setEditId(null);
@@ -429,6 +433,16 @@ export default function PlantillasContenido() {
           </div>
 
           <DialogFooter>
+            {editId && (
+              <Button
+                variant="outline"
+                className="mr-auto"
+                onClick={() => setHistorialAbierto(true)}
+                title="Historial de versiones"
+              >
+                <History className="mr-1.5 h-4 w-4" /> Historial
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setAbierto(false)}>
               Cancelar
             </Button>
@@ -439,7 +453,149 @@ export default function PlantillasContenido() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {editId && (
+        <DialogHistorialPlantilla
+          plantillaId={editId}
+          abierto={historialAbierto}
+          onCerrar={() => setHistorialAbierto(false)}
+          onRestaurada={(p) => {
+            // Refleja la versión restaurada en el formulario abierto y refresca la lista.
+            setForm({
+              nombre: p.nombre,
+              modo: p.modo,
+              tipo_nota: p.tipo_nota,
+              descripcion: p.descripcion,
+              marca: desdeMarca(p.marca),
+              red: desdeRed(p.red),
+              contenido: p.contenido,
+              estructura: p.estructura,
+              variables: p.variables,
+            });
+            qc.invalidateQueries({ queryKey: CLAVE_PLANTILLAS_CONTENIDO });
+            setHistorialAbierto(false);
+            toast.success("Versión restaurada.");
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+/** Historial de versiones (git) de una plantilla: lista de commits + ver versión + restaurar. */
+function DialogHistorialPlantilla({
+  plantillaId,
+  abierto,
+  onCerrar,
+  onRestaurada,
+}: {
+  plantillaId: string;
+  abierto: boolean;
+  onCerrar: () => void;
+  onRestaurada: (p: PlantillaContenido) => void;
+}) {
+  const [verSha, setVerSha] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!abierto) setVerSha(null);
+  }, [abierto]);
+
+  const histQuery = useQuery({
+    queryKey: ["plantilla-historial", plantillaId],
+    queryFn: ({ signal }) => api.historialPlantilla(plantillaId, signal),
+    enabled: abierto,
+  });
+  const versionQuery = useQuery({
+    queryKey: ["plantilla-version", plantillaId, verSha],
+    queryFn: ({ signal }) => api.versionPlantilla(plantillaId, verSha as string, signal),
+    enabled: abierto && !!verSha,
+  });
+  const revertir = useMutation({
+    mutationFn: (sha: string) => api.revertirPlantilla(plantillaId, sha),
+    onSuccess: (r) => onRestaurada(r.plantilla),
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "No se pudo restaurar."),
+  });
+
+  const historial = histQuery.data?.historial ?? [];
+  const ver = versionQuery.data?.plantilla;
+
+  return (
+    <Dialog open={abierto} onOpenChange={(v) => !v && onCerrar()}>
+      <DialogContent className="flex max-h-[88vh] flex-col gap-3 overflow-hidden sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="h-4 w-4" /> Historial de versiones
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-1 gap-3">
+          <div className="w-64 shrink-0 overflow-y-auto rounded-md border border-border">
+            {histQuery.isPending ? (
+              <div className="p-3"><Skeleton className="h-8 w-full" /></div>
+            ) : historial.length === 0 ? (
+              <p className="p-3 text-sm text-muted-foreground">
+                Sin versiones registradas. (El versionado git puede estar desactivado.)
+              </p>
+            ) : (
+              <ul className="divide-y divide-border">
+                {historial.map((v) => (
+                  <li key={v.sha}>
+                    <button
+                      onClick={() => setVerSha(v.sha)}
+                      className={`w-full px-3 py-2 text-left text-xs hover:bg-muted ${
+                        v.sha === verSha ? "bg-muted" : ""
+                      }`}
+                    >
+                      <span className="block font-medium">{v.mensaje}</span>
+                      <span className="mt-0.5 block text-muted-foreground">
+                        {v.autor} · {v.fecha.slice(0, 16).replace("T", " ")}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-2">
+            {!verSha ? (
+              <p className="text-sm text-muted-foreground">
+                Elige una versión para verla y, si quieres, restaurarla.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Versión {verSha.slice(0, 8)}</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="ml-auto"
+                    disabled={revertir.isPending}
+                    onClick={async () => {
+                      if (
+                        await confirmar({
+                          mensaje: "¿Restaurar esta versión? Se guarda como un cambio nuevo (no se pierde el historial).",
+                          textoConfirmar: "Restaurar",
+                        })
+                      )
+                        revertir.mutate(verSha);
+                    }}
+                  >
+                    <RotateCcw className="mr-1 h-3.5 w-3.5" /> Restaurar
+                  </Button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border p-3">
+                  {versionQuery.isPending ? (
+                    <Skeleton className="h-24 w-full" />
+                  ) : (
+                    <pre className="whitespace-pre-wrap text-xs">
+                      {ver ? (ver.modo === "plano" ? ver.contenido : ver.estructura) || "—" : "—"}
+                    </pre>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -1126,6 +1126,22 @@ export const api = {
       `/plantillas-contenido/${encodeURIComponent(id)}/aplicar`,
       { metodo: "POST", json: cuerpo },
     ),
+  // --- Versionado git de plantillas (paridad con los documentos) ---
+  historialPlantilla: (id: string, signal?: AbortSignal) =>
+    peticion<RespuestaHistorialBiblioteca>(
+      `/plantillas-contenido/${encodeURIComponent(id)}/historial`,
+      { signal },
+    ),
+  versionPlantilla: (id: string, sha: string, signal?: AbortSignal) =>
+    peticion<RespuestaPlantillaContenido>(
+      `/plantillas-contenido/${encodeURIComponent(id)}/version/${sha}`,
+      { signal },
+    ),
+  revertirPlantilla: (id: string, sha: string) =>
+    peticion<RespuestaPlantillaContenido>(
+      `/plantillas-contenido/${encodeURIComponent(id)}/revertir/${sha}`,
+      { metodo: "POST" },
+    ),
 
   // --- RSS (fuentes + items) ---
   fuentesRss: (signal?: AbortSignal) => peticion<RespuestaFuentesRss>("/rss/fuentes", { signal }),

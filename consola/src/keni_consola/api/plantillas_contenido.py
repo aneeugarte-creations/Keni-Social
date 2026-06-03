@@ -342,10 +342,41 @@ async def aplicar(request: Request) -> Response:
     return JSONResponse({"copy": copy, "faltan": faltan})
 
 
+async def historial(request: Request) -> Response:
+    """`GET /api/plantillas-contenido/{id}/historial` -> `{historial: [...]}` (versiones git)."""
+    plantilla_id = request.path_params["plantilla_id"]
+    if plantillas_doc.obtener_plantilla_contenido(plantilla_id) is None:
+        return JSONResponse({"error": "Esa plantilla ya no existe."}, status_code=404)
+    return JSONResponse({"historial": plantillas_doc.historial(plantilla_id)})
+
+
+async def version(request: Request) -> Response:
+    """`GET /api/plantillas-contenido/{id}/version/{sha}` -> `{plantilla}` de esa versión."""
+    p = plantillas_doc.version(request.path_params["plantilla_id"], request.path_params["sha"])
+    if p is None:
+        return JSONResponse({"error": "No se encontró esa versión."}, status_code=404)
+    return JSONResponse({"plantilla": _plantilla_a_dict(p)})
+
+
+async def revertir(request: Request) -> Response:
+    """`POST /api/plantillas-contenido/{id}/revertir/{sha}` -> revierte (commit nuevo)."""
+    p = plantillas_doc.restaurar_version(
+        request.path_params["plantilla_id"], request.path_params["sha"],
+        autor=autor_de_peticion(request),
+    )
+    if p is None:
+        return JSONResponse({"error": "No se pudo restaurar esa versión."}, status_code=404)
+    return JSONResponse({"plantilla": _plantilla_a_dict(p)})
+
+
 RUTAS = [
     Route("/api/plantillas-contenido", listar, methods=["GET"]),
     Route("/api/plantillas-contenido", crear, methods=["POST"]),
+    # Multi-segmento ANTES que `/{plantilla_id}` (claridad y robustez de matching).
+    Route("/api/plantillas-contenido/{plantilla_id}/aplicar", aplicar, methods=["POST"]),
+    Route("/api/plantillas-contenido/{plantilla_id}/historial", historial, methods=["GET"]),
+    Route("/api/plantillas-contenido/{plantilla_id}/version/{sha}", version, methods=["GET"]),
+    Route("/api/plantillas-contenido/{plantilla_id}/revertir/{sha}", revertir, methods=["POST"]),
     Route("/api/plantillas-contenido/{plantilla_id}", actualizar, methods=["PUT"]),
     Route("/api/plantillas-contenido/{plantilla_id}", borrar, methods=["DELETE"]),
-    Route("/api/plantillas-contenido/{plantilla_id}/aplicar", aplicar, methods=["POST"]),
 ]

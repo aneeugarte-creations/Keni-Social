@@ -107,13 +107,8 @@ def _variables_norm(valor: Any) -> list[dict[str, str]]:
     return salida
 
 
-def _leer(ruta: Path) -> dict[str, Any] | None:
-    """Lee un `.md` de plantilla como dict con la forma del repos (variables = JSON string)."""
-    try:
-        texto = ruta.read_text(encoding="utf-8")
-    except OSError:
-        return None
-    meta, cuerpo = _parsear(texto)
+def _row(plantilla_id: str, meta: dict[str, Any], cuerpo: str) -> dict[str, Any]:
+    """Construye el dict (forma repos) desde frontmatter + cuerpo ya parseados."""
     modo = meta.get("modo") if meta.get("modo") in ("plano", "estructura") else "estructura"
     variables = _variables_norm(meta.get("variables"))
 
@@ -122,8 +117,8 @@ def _leer(ruta: Path) -> dict[str, Any] | None:
         return v if isinstance(v, str) else ""
 
     return {
-        "id": ruta.stem,
-        "nombre": _s("nombre") or ruta.stem.replace("-", " "),
+        "id": plantilla_id,
+        "nombre": _s("nombre") or plantilla_id.replace("-", " "),
         "modo": modo,
         "tipo_nota": _s("tipo_nota"),
         "descripcion": _s("descripcion"),
@@ -140,6 +135,16 @@ def _leer(ruta: Path) -> dict[str, Any] | None:
         "actualizado": _s("actualizado"),
         "origen_pg": _s("origen_pg"),
     }
+
+
+def _leer(ruta: Path) -> dict[str, Any] | None:
+    """Lee un `.md` de plantilla como dict con la forma del repos (variables = JSON string)."""
+    try:
+        texto = ruta.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    meta, cuerpo = _parsear(texto)
+    return _row(ruta.stem, meta, cuerpo)
 
 
 def _serializar(row: dict[str, Any]) -> str:
@@ -283,6 +288,49 @@ def borrar_plantilla_contenido(plantilla_id: str) -> bool:
     ruta.unlink(missing_ok=True)
     versionado.registrar(ruta, f"borrar plantilla {plantilla_id}")
     return True
+
+
+# --------------------------------------------------------------------------- #
+# Historial de versiones (git) — paridad con los documentos de la Biblioteca   #
+# --------------------------------------------------------------------------- #
+
+
+def _doc_id(plantilla_id: str) -> str:
+    """Id de versionado: la ruta relativa de la plantilla dentro del repo de la Biblioteca."""
+    return f"{_SUBDIR}/{plantilla_id}"
+
+
+def historial(plantilla_id: str, *, limite: int = 50) -> list[dict[str, str]]:
+    """Historial de versiones de una plantilla (recientes primero). [] si no existe/sin git."""
+    if obtener_plantilla_contenido(plantilla_id) is None:
+        return []
+    return versionado.historial(_doc_id(plantilla_id), limite=limite)
+
+
+def version(plantilla_id: str, sha: str) -> dict[str, Any] | None:
+    """La plantilla tal y como estaba en la versión `sha` (forma repos). None si no existe."""
+    texto = versionado.version(_doc_id(plantilla_id), sha)
+    if texto is None:
+        return None
+    meta, cuerpo = _parsear(texto)
+    return _row(plantilla_id, meta, cuerpo)
+
+
+def restaurar_version(
+    plantilla_id: str, sha: str, *, autor: dict[str, str] | None = None
+) -> dict[str, Any] | None:
+    """Devuelve la plantilla al contenido de `sha` (commit nuevo encima; rollback no destructivo)."""
+    texto = versionado.version(_doc_id(plantilla_id), sha)
+    if texto is None:
+        return None
+    ruta = _ruta(plantilla_id)
+    if ruta is None or not ruta.is_file():
+        return None
+    meta, cuerpo = _parsear(texto)
+    row = _row(plantilla_id, meta, cuerpo)
+    row["actualizado"] = _ahora_iso()
+    _escribir(plantilla_id, row, mensaje=f"revertir plantilla {plantilla_id} a {sha[:8]}", autor=autor)
+    return obtener_plantilla_contenido(plantilla_id)
 
 
 # --------------------------------------------------------------------------- #

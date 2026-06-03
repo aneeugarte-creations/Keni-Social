@@ -8,6 +8,7 @@ el filtrado del listado y la migración idempotente desde Postgres (con un repos
 from __future__ import annotations
 
 import json
+import shutil
 
 import pytest
 
@@ -109,3 +110,36 @@ def test_importar_sin_bd_no_revienta(monkeypatch):
         raise RuntimeError("sin postgres")
     monkeypatch.setattr(repos, "listar_plantillas_contenido", _boom)
     assert plantillas_doc.importar_de_postgres() == 0
+
+
+# --------------------------------------------------------------------------- #
+# Historial de versiones (git; se salta si no hay git)                        #
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def _git_activo(monkeypatch):
+    if shutil.which("git") is None:
+        pytest.skip("git no disponible")
+    monkeypatch.setenv("KENI_BIBLIOTECA_GIT", "1")
+
+
+def test_historial_version_y_rollback(_git_activo):
+    p = plantillas_doc.crear_plantilla_contenido(nombre="Ver", modo="estructura", estructura="V1 {{x}}")
+    plantillas_doc.actualizar_plantilla_contenido(p["id"], {"estructura": "V2 {{x}}"})
+
+    hist = plantillas_doc.historial(p["id"])
+    assert len(hist) >= 2
+    sha = hist[-1]["sha"]
+    antiguo = plantillas_doc.version(p["id"], sha)
+    assert antiguo is not None and "V1" in antiguo["estructura"]
+
+    revertido = plantillas_doc.restaurar_version(p["id"], sha)
+    assert "V1" in revertido["estructura"]
+    assert "V1" in plantillas_doc.obtener_plantilla_contenido(p["id"])["estructura"]
+
+
+def test_historial_sin_git_vacio(monkeypatch):
+    monkeypatch.setenv("KENI_BIBLIOTECA_GIT", "0")
+    p = plantillas_doc.crear_plantilla_contenido(nombre="NoGit", modo="plano", contenido="x")
+    assert plantillas_doc.historial(p["id"]) == []
