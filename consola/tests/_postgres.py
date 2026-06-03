@@ -83,6 +83,9 @@ _TABLAS = (
     # Taller Green: ideas de contenido evergreen (propuesta/aprobada/descartada). Sin esto,
     # las ideas se acumulan entre tests del mismo worker y rompen el aislamiento.
     "green_ideas",
+    # Investigador (Fase 1): snapshot del Radar por marca. Sin esto, las filas se acumulan
+    # entre tests del mismo worker (marca/geo compartidos) y rompen el aislamiento.
+    "radar_items",
 )
 
 
