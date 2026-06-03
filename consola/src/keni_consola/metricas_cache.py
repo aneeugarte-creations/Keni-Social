@@ -53,6 +53,7 @@ TIPO_TENDENCIA = "tendencia"
 TIPO_SEGUIDORES = "seguidores"
 TIPO_DESGLOSE = "desglose"
 TIPO_CROSSTAB = "crosstab"
+TIPO_HORARIOS = "horarios"
 TIPO_CORRELACION = "correlacion"
 
 # Estado del refresco en curso (en memoria; un solo proceso del back). Lo leen el
@@ -123,6 +124,8 @@ def _calcular(tipo: str, rango: str, marca: str | None) -> dict:
         return servicio.construir_desglose_interacciones(rango, marca)
     if tipo == TIPO_CROSSTAB:
         return servicio.construir_crosstab(rango, marca)
+    if tipo == TIPO_HORARIOS:
+        return servicio.construir_horarios(rango, marca)
     if tipo == TIPO_CORRELACION:
         return servicio.construir_correlacion_seguidores(rango, marca)
     raise ValueError(f"Tipo de cache desconocido: {tipo!r}.")
@@ -199,6 +202,11 @@ def crosstab(rango: str, marca: str | None) -> tuple[dict, str]:
     return _leer_o_calcular(TIPO_CROSSTAB, rango, marca)
 
 
+def horarios(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Heatmap día×hora (mejores horas para publicar) desde cache (lazy fill)."""
+    return _leer_o_calcular(TIPO_HORARIOS, rango, marca)
+
+
 def correlacion(rango: str, marca: str | None) -> tuple[dict, str]:
     """Correlación seguidores↔piezas desde cache (lazy fill)."""
     return _leer_o_calcular(TIPO_CORRELACION, rango, marca)
@@ -261,6 +269,11 @@ async def desglose_async(rango: str, marca: str | None) -> tuple[dict, str]:
 async def crosstab_async(rango: str, marca: str | None) -> tuple[dict, str]:
     """Crosstab marca×red×formato desde cache (lazy fill) sin bloquear el event loop."""
     return await _leer_o_calcular_async(TIPO_CROSSTAB, rango, marca)
+
+
+async def horarios_async(rango: str, marca: str | None) -> tuple[dict, str]:
+    """Heatmap día×hora desde cache (lazy fill) sin bloquear el event loop."""
+    return await _leer_o_calcular_async(TIPO_HORARIOS, rango, marca)
 
 
 async def correlacion_async(rango: str, marca: str | None) -> tuple[dict, str]:

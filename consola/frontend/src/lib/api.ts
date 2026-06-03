@@ -29,6 +29,7 @@ import type {
   SerieSeguidores,
   DesgloseInteracciones,
   Crosstab,
+  Horarios,
   CorrelacionSeguidores,
   CuerpoActualizarFuenteRss,
   CuerpoActualizarPublicacion,
@@ -1577,6 +1578,9 @@ export const api = {
   // Rendimiento cruzado marca×red×formato (n_piezas, engagement, rendimiento relativo medio).
   metricasCrosstab: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<Crosstab>(`/metricas/crosstab${query(params)}`, { signal }),
+  // Heatmap día×hora "mejores horas para publicar" (n_piezas, vistas, engagement por franja).
+  metricasHorarios: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
+    peticion<Horarios>(`/metricas/horarios${query(params)}`, { signal }),
   // Correlación seguidores ganados ↔ piezas publicadas por día (con la pieza estrella).
   metricasCorrelacion: (params: { rango?: string; marca?: string }, signal?: AbortSignal) =>
     peticion<CorrelacionSeguidores>(`/metricas/correlacion${query(params)}`, { signal }),

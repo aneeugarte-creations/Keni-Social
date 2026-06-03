@@ -57,6 +57,8 @@ export type {
   DesgloseInteracciones,
   CeldaCrosstab,
   Crosstab,
+  CeldaHorario,
+  Horarios,
   PostEstrella,
   ItemCorrelacion,
   CorrelacionSeguidores,

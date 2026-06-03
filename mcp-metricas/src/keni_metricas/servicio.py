@@ -38,9 +38,11 @@ from .schema import (
     AnaliticaPiezas,
     CeldaCrosstab,
     CeldaDesglose,
+    CeldaHorario,
     CorrelacionSeguidores,
     Crosstab,
     DesgloseInteracciones,
+    Horarios,
     ItemCorrelacion,
     MetricaPieza,
     Periodo,
@@ -101,6 +103,7 @@ __all__ = [
     "construir_serie_seguidores",
     "construir_desglose_interacciones",
     "construir_crosstab",
+    "construir_horarios",
     "construir_correlacion_seguidores",
     "construir_metricas_pieza",
     "etiqueta_rango",
@@ -558,6 +561,70 @@ def crosstab_desde_fuente(fuente, rango: str) -> dict:
         celdas=celdas,
     )
     return crosstab.model_dump(mode="json")
+
+
+# Mínimo de piezas para que una celda del heatmap sea candidata a "mejor": evita que
+# una franja con 1 sola pieza de engagement atípico se proclame la mejor hora.
+_MIN_PIEZAS_MEJOR_HORARIO = 3
+
+
+def construir_horarios(rango: str = "mes", marca: str | None = None) -> dict:
+    """Heatmap día-de-la-semana × hora del rendimiento de las piezas del periodo.
+
+    Responde "¿cuándo conviene publicar?": agrupa las piezas del periodo por
+    (día_semana, hora_de_publicación) y suma visualizaciones/interacciones. Reúsa el
+    mismo camino que `construir_analitica_piezas`/`construir_crosstab` (coste 0 de API:
+    las piezas ya las descarga el dashboard). Las piezas SIN hora conocida
+    (`publicado_hora is None`) se OMITEN del heatmap (degradación honesta: no se
+    fabrica la medianoche). `mejor` = la celda con mayor engagement entre las que
+    superan `_MIN_PIEZAS_MEJOR_HORARIO`. Devuelve un dict JSON-serializable (`Horarios`).
+    """
+    return horarios_desde_fuente(_fuente(marca), rango, marca)
+
+
+def horarios_desde_fuente(fuente, rango: str, marca: str | None = None) -> dict:
+    """Worker de `construir_horarios` sobre una `fuente` explícita (lo usa el MCP)."""
+    desde, hasta, _ = resolver_rango(rango)
+    piezas = _piezas_periodo(fuente, rango)
+
+    acc: dict[tuple[int, int], dict] = {}
+    for p in piezas:
+        if p.publicado_hora is None:
+            continue  # sin hora no entra al heatmap (no se inventa la medianoche)
+        clave = (p.publicado.weekday(), p.publicado_hora)
+        grupo = acc.setdefault(clave, {"n_piezas": 0, "visualizaciones": 0, "interacciones": 0})
+        grupo["n_piezas"] += 1
+        grupo["visualizaciones"] += p.visualizaciones or 0
+        grupo["interacciones"] += p.interacciones or 0
+
+    celdas: list[CeldaHorario] = []
+    for (dia, hora) in sorted(acc):
+        g = acc[(dia, hora)]
+        vis = g["visualizaciones"]
+        celdas.append(
+            CeldaHorario(
+                dia_semana=dia,
+                hora=hora,
+                n_piezas=g["n_piezas"],
+                visualizaciones=vis,
+                interacciones=g["interacciones"],
+                engagement_pct=round(g["interacciones"] / vis * 100, 2) if vis else 0.0,
+            )
+        )
+
+    candidatas = [c for c in celdas if c.n_piezas >= _MIN_PIEZAS_MEJOR_HORARIO]
+    mejor = max(candidatas, key=lambda c: c.engagement_pct, default=None)
+
+    horarios = Horarios(
+        cuenta=marca,
+        rango=rango,
+        etiqueta_rango=etiqueta_rango(rango),
+        periodo=Periodo(desde=desde, hasta=hasta),
+        fuente=fuente.nombre,
+        celdas=celdas,
+        mejor=mejor,
+    )
+    return horarios.model_dump(mode="json")
 
 
 # Caveat de atribución para la correlación seguidores↔posts. Honesto a propósito:

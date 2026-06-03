@@ -540,6 +540,34 @@ class Crosstab(TypedDict):
     generado_en: str
 
 
+class CeldaHorario(TypedDict):
+    """Una celda del heatmap día-de-la-semana × hora (mejores horas para publicar)."""
+
+    # dia_semana: 0=lunes … 6=domingo (convención date.weekday()).
+    dia_semana: int
+    # hora: 0-23 (hora local de publicación).
+    hora: int
+    n_piezas: int
+    visualizaciones: int
+    interacciones: int
+    engagement_pct: float
+
+
+class Horarios(TypedDict):
+    """Respuesta de `GET /api/metricas/horarios`: heatmap día×hora del rendimiento."""
+
+    # cuenta: id_metricas de la marca; null cuando agrega todas las marcas.
+    cuenta: str | None
+    rango: str
+    etiqueta_rango: str
+    periodo: PeriodoMetricas
+    fuente: str
+    celdas: list[CeldaHorario]
+    # mejor: la franja con mayor engagement (mínimo de piezas); null si ninguna lo alcanza.
+    mejor: CeldaHorario | None
+    generado_en: str
+
+
 class PostEstrella(TypedDict):
     """La pieza que mejor rindió de una marca×red×fecha (apuntala la correlación)."""
 
@@ -1017,6 +1045,8 @@ MODELOS = [
     DesgloseInteracciones,
     CeldaCrosstab,
     Crosstab,
+    CeldaHorario,
+    Horarios,
     PostEstrella,
     ItemCorrelacion,
     CorrelacionSeguidores,

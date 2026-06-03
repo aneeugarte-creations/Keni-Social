@@ -554,6 +554,18 @@ def _registrar_tools(mcp, holder: _Holder) -> None:  # noqa: C901 -- registro pl
         return await cli.get("/api/metricas/crosstab", rango=rango, marca=marca)
 
     @mcp.tool()
+    async def keni_metricas_horarios(rango: str = "mes", marca: str = "") -> dict:
+        """Mejores días y horas para publicar: heatmap día-de-la-semana × hora con
+        nº de piezas, visualizaciones, interacciones y engagement por franja, más la
+        celda 'mejor' (mayor engagement con un mínimo de piezas). Las piezas sin hora
+        de publicación se omiten. `rango` ∈ {semana,mes,7d,30d}; `marca` acota a una
+        marca, vacío = todas."""
+        cli = _cli()
+        if cli is None:
+            return {"error": _MSG_NO_INIT}
+        return await cli.get("/api/metricas/horarios", rango=rango, marca=marca)
+
+    @mcp.tool()
     async def keni_metricas_correlacion(rango: str = "mes", marca: str = "") -> dict:
         """Correlación seguidores ganados ↔ piezas publicadas (no causalidad): por
         marca×red×fecha, seguidores ganados, nº de posts, ratio por post y el post estrella

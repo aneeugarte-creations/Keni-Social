@@ -1524,6 +1524,97 @@
         "generado_en"
       ]
     },
+    "CeldaHorario": {
+      "type": "object",
+      "title": "CeldaHorario",
+      "properties": {
+        "dia_semana": {
+          "type": "integer"
+        },
+        "hora": {
+          "type": "integer"
+        },
+        "n_piezas": {
+          "type": "integer"
+        },
+        "visualizaciones": {
+          "type": "integer"
+        },
+        "interacciones": {
+          "type": "integer"
+        },
+        "engagement_pct": {
+          "type": "number"
+        }
+      },
+      "description": "Una celda del heatmap día-de-la-semana × hora (mejores horas para publicar).",
+      "required": [
+        "dia_semana",
+        "hora",
+        "n_piezas",
+        "visualizaciones",
+        "interacciones",
+        "engagement_pct"
+      ]
+    },
+    "Horarios": {
+      "type": "object",
+      "title": "Horarios",
+      "properties": {
+        "cuenta": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rango": {
+          "type": "string"
+        },
+        "etiqueta_rango": {
+          "type": "string"
+        },
+        "periodo": {
+          "$ref": "#/$defs/PeriodoMetricas"
+        },
+        "fuente": {
+          "type": "string"
+        },
+        "celdas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CeldaHorario"
+          }
+        },
+        "mejor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CeldaHorario"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generado_en": {
+          "type": "string"
+        }
+      },
+      "description": "Respuesta de `GET /api/metricas/horarios`: heatmap día×hora del rendimiento.",
+      "required": [
+        "cuenta",
+        "rango",
+        "etiqueta_rango",
+        "periodo",
+        "fuente",
+        "celdas",
+        "mejor",
+        "generado_en"
+      ]
+    },
     "PostEstrella": {
       "type": "object",
       "title": "PostEstrella",
@@ -2586,6 +2677,12 @@
     },
     {
       "$ref": "#/$defs/Crosstab"
+    },
+    {
+      "$ref": "#/$defs/CeldaHorario"
+    },
+    {
+      "$ref": "#/$defs/Horarios"
     },
     {
       "$ref": "#/$defs/PostEstrella"

@@ -162,6 +162,11 @@ class Pieza(BaseModel):
     plataforma: Plataforma
     titulo: str
     publicado: date
+    # hora de publicación (0-23) extraída del `publishedAt` de la fuente. OPCIONAL:
+    # None cuando la fuente no trae componente horaria (p.ej. solo-fecha). Permite el
+    # heatmap día×hora ("mejores horas para publicar"); las piezas sin hora se OMITEN
+    # del heatmap (no se fabrica la medianoche). Ver `servicio.construir_horarios`.
+    publicado_hora: int | None = None
     visualizaciones: int
     interacciones: int
     engagement_pct: float
@@ -216,6 +221,8 @@ class MetricaPieza(BaseModel):
     engagement_pct: float = 0.0
     url: str | None = None
     publicado: date | None = None
+    # hora de publicación (0-23), None si la fuente no trae componente horaria.
+    publicado_hora: int | None = None
     fuente: str = "desconocida"
     # --- Métricas granulares por pieza (issue métricas granulares) -----------
     # OPCIONALES y con default None: degradación honesta. Si Metricool no trae el
@@ -400,6 +407,43 @@ class Crosstab(BaseModel):
     periodo: Periodo
     fuente: str = "desconocida"
     celdas: list[CeldaCrosstab] = Field(default_factory=list)
+
+
+class CeldaHorario(BaseModel):
+    """Una celda del heatmap día-de-la-semana × hora ("¿cuándo conviene publicar?").
+
+    Agrega TODAS las piezas publicadas en ese (día, hora) del periodo. `dia_semana`
+    sigue la convención de `date.weekday()`: 0=lunes … 6=domingo. `hora` es la hora
+    local de publicación 0-23. `engagement_pct` = interacciones/visualizaciones×100
+    (0 si no hubo visualizaciones). Solo existen celdas con al menos una pieza CON
+    hora conocida (las piezas sin hora se omiten del heatmap).
+    """
+
+    dia_semana: int
+    hora: int
+    n_piezas: int = 0
+    visualizaciones: int = 0
+    interacciones: int = 0
+    engagement_pct: float = 0.0
+
+
+class Horarios(BaseModel):
+    """Heatmap día×hora del rendimiento de las piezas del periodo.
+
+    `cuenta` es None cuando agrega todas las marcas en alcance. `celdas` trae solo
+    las combinaciones (día, hora) con piezas; un heatmap vacío significa que la
+    fuente no aporta hora de publicación (degradación honesta). `mejor` = la celda
+    con MAYOR engagement entre las que superan un mínimo de piezas (para evitar que
+    una celda de 1 pieza con engagement atípico gane); None si ninguna lo alcanza.
+    """
+
+    cuenta: str | None
+    rango: str
+    etiqueta_rango: str
+    periodo: Periodo
+    fuente: str = "desconocida"
+    celdas: list[CeldaHorario] = Field(default_factory=list)
+    mejor: CeldaHorario | None = None
 
 
 class PostEstrella(BaseModel):

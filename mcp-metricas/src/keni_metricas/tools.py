@@ -167,6 +167,20 @@ def registrar(mcp: FastMCP, fuente: FuenteMetricas, historico: Historico | None 
             return {"error": str(e)}
 
     @mcp.tool()
+    def horarios(rango: str = "mes") -> dict:
+        """Mejores días y horas para publicar: heatmap día-de-la-semana × hora del
+        rango con nº de piezas, visualizaciones, interacciones y engagement_pct por
+        franja, más la celda 'mejor' (mayor engagement con un mínimo de piezas).
+        Las piezas sin hora de publicación se omiten. Responde '¿cuándo conviene
+        publicar?'."""
+        from . import servicio
+
+        try:
+            return servicio.horarios_desde_fuente(fuente, rango)
+        except (CuentaNoEncontrada, ValueError) as e:
+            return {"error": str(e)}
+
+    @mcp.tool()
     def correlacion_seguidores(rango: str = "mes") -> dict:
         """Correlación (NO causalidad) entre crecimiento de seguidores y
         publicaciones: por marca×red×día, seguidores ganados, nº de posts,

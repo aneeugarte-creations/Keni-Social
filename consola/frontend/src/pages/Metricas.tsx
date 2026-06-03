@@ -21,6 +21,7 @@ import { DesgloseInteracciones } from "./metricas/DesgloseInteracciones";
 import { GraficaMarcas } from "./metricas/GraficaMarcas";
 import { GraficaPorSerie } from "./metricas/GraficaPorSerie";
 import { Kpis } from "./metricas/Kpis";
+import { MejoresHorarios } from "./metricas/MejoresHorarios";
 import { PiezasAnalitica } from "./metricas/PiezasAnalitica";
 import { PiezasRendimiento } from "./metricas/PiezasRendimiento";
 import { TablaCuentas } from "./metricas/TablaCuentas";
@@ -195,6 +196,7 @@ function DashboardMetricas({ opciones }: { opciones: OpcionesMetricas }) {
             <CrecimientoSeguidores marcaActual={marca} rangoActual={rango} />
             <DesgloseInteracciones marcas={marcas} marcaActual={marca} rangoActual={rango} />
             <Crosstab marcas={marcas} marcaActual={marca} rangoActual={rango} />
+            <MejoresHorarios marcaActual={marca} rangoActual={rango} />
             <Correlacion marcas={marcas} marcaActual={marca} rangoActual={rango} />
           </section>
 
