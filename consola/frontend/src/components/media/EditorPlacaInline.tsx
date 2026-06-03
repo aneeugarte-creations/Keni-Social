@@ -4,7 +4,9 @@
  * teclea el titular. Sin round-trips de "aplicar/quitar marca": la composición es local.
  *
  *  - El titular (`copyIn`) se dibuja sobre la placa al instante (debounced).
- *  - Toggle "Mostrar marca" (visibilidad de capa): con la marca oculta se ve sólo la foto.
+ *  - Toggle "Con plantilla / Sin plantilla" (QUITAR LA PLANTILLA): "Sin plantilla" oculta la placa
+ *    y, al guardar, se publica SOLO la foto cruda (sin placa ni titular encima). La plantilla es
+ *    parte del copy-in; quitarla = publicar la imagen tal cual.
  *  - Origen de la FOTO de fondo: Subir · Biblioteca · IA · Usar imagen original (cada uno fija
  *    un media id en `foto`; la pieza recuerda la foto cruda para re-editar al reabrir).
  *  - Al guardar, el padre llama al "bake" (registrado via `registrarBake`): hornea el canvas a
@@ -271,13 +273,18 @@ export function EditorPlacaInline({
         </span>
         <Button
           type="button"
-          variant="ghost"
+          variant={mostrarMarca ? "ghost" : "outline"}
           size="sm"
           className="h-7 gap-1.5 px-2 text-xs"
           onClick={() => setMostrarMarca((v) => !v)}
+          title={
+            mostrarMarca
+              ? "Quitar la plantilla: publicar solo la foto, sin placa ni titular encima"
+              : "Plantilla quitada: se publicará solo la foto. Toca para volver a aplicarla"
+          }
         >
           {mostrarMarca ? <Eye className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-          {mostrarMarca ? "Marca visible" : "Marca oculta"}
+          {mostrarMarca ? "Con plantilla" : "Sin plantilla"}
         </Button>
       </div>
 
@@ -376,7 +383,8 @@ export function EditorPlacaInline({
           </p>
         )}
         <p className="text-xs text-muted-foreground">
-          El titular y la placa de marca se dibujan encima automáticamente, en vivo.
+          El titular y la plantilla de marca se dibujan encima automáticamente, en vivo. ¿Solo la
+          foto? Usa «Sin plantilla» arriba para publicarla sin la placa.
         </p>
       </div>
 
